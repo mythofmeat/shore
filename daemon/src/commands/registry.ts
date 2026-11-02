@@ -28,8 +28,8 @@ import { characterWorkspace } from "../tools/character_workspace.ts";
 import { config, configCheck, configSchemaCommand, configReload, tools } from "./config.ts";
 import { listProviderModels, refreshProviderModels, refreshAllProviderModels, type ProvidersContext } from "./providers.ts";
 import {
-  addCredential, addProvider, listProviderStatuses, orderCredentials, providerDetail, providerPresets, removeCredential, removeProvider,
-  selectCredential, setCredentialLimit, testCredential, updateCredential, updateProvider, type ProviderAdminContext,
+  addCredential, addProvider, cancelSignIn, finishSignIn, listProviderStatuses, orderCredentials, providerPresets, refreshedProviderDetail, removeCredential, removeProvider,
+  selectCredential, setCredentialLimit, startSignIn, testCredential, updateCredential, updateProvider, type ProviderAdminContext,
 } from "./provider_admin.ts";
 
 export interface CommandOperationContext {
@@ -101,7 +101,7 @@ const providerPresentation = {
 } as const;
 const providerField = { label: "Provider", choices: "providers" } as const;
 const providerWrite = { ...providerPresentation, effects: ["config_write"] } as const;
-const credentialField = { label: "Key", hint: "The key's name, as `shore provider <name> auth` lists it" } as const;
+const credentialField = { label: "Key or login", hint: "Its name, as `shore provider <name> auth` lists it; a Claude login also goes by its email" } as const;
 const secretField = { label: "API key", hint: "Sent to the daemon and saved in a file only it can read; never shown again", secret: true } as const;
 const plainOnly = { label: "Allow an unencrypted connection", hint: "Send the key even though this connection is neither local nor encrypted; only on a private network" } as const;
 const noCheck = { label: "Skip the check", hint: "Save the key without asking the provider whether it works" } as const;
@@ -271,7 +271,7 @@ export const commandOperations: OperationRegistry<CommandOperationContext> = {
   list_providers: register("list_providers", { ...providerPresentation, label: "Browse providers", fields: {} },
     (context) => listProviderStatuses(adminContext(context))),
   provider_detail: register("provider_detail", { ...providerPresentation, label: "Inspect provider", fields: { provider: providerField } },
-    (context, args) => providerDetail(adminContext(context), args)),
+    (context, args) => refreshedProviderDetail(adminContext(context), args)),
   provider_presets: register("provider_presets", { ...providerPresentation, label: "Browse known providers", fields: {} },
     ({ session }) => providerPresets(session)),
   add_provider: register("add_provider", { ...providerWrite, label: "Add provider", fields: {
@@ -295,24 +295,36 @@ export const commandOperations: OperationRegistry<CommandOperationContext> = {
     env: { label: "Environment variable", hint: "Instead of the key itself: a variable in the daemon's environment that holds it" },
     no_check: noCheck, allow_unencrypted: plainOnly,
   }, policies: [{ condition: { kind: "equals", field: "no_check", value: true }, effects: ["config_write"], confirmation: "none" }] }, (context, args) => addCredential(adminContext(context), args)),
-  update_credential: register("update_credential", { ...providerWrite, label: "Change API key", fields: {
+  update_credential: register("update_credential", { ...providerWrite, label: "Change key or login", fields: {
     provider: providerField, credential: credentialField, enabled: { label: "Enabled" }, rename: { label: "New name" },
     secret: { ...secretField, label: "Replacement key" }, warn_on_fallback: { label: "Warn when calls move past it" }, no_check: noCheck, allow_unencrypted: plainOnly,
   } }, (context, args) => updateCredential(adminContext(context), args)),
-  remove_credential: register("remove_credential", { ...providerWrite, confirmation: "delete", label: "Remove API key", fields: { provider: providerField, credential: credentialField } },
+  remove_credential: register("remove_credential", { ...providerWrite, confirmation: "delete", label: "Remove key or login", fields: { provider: providerField, credential: credentialField } },
     (context, args) => removeCredential(adminContext(context), args)),
-  test_credential: register("test_credential", { ...providerPresentation, effects: ["provider_call"], label: "Test API key", fields: { provider: providerField, credential: credentialField } },
+  test_credential: register("test_credential", { ...providerPresentation, effects: ["provider_call"], label: "Test key or login", fields: { provider: providerField, credential: credentialField } },
     (context, args) => testCredential(adminContext(context), args)),
   order_credentials: register("order_credentials", { ...providerWrite, label: "Order API keys", fields: {
     provider: providerField, order: { label: "Order", hint: "Key names, first tried first; keys left out keep their order after these" },
   } }, (context, args) => orderCredentials(adminContext(context), args)),
-  select_credential: register("select_credential", { ...providerWrite, label: "Pin API key", fields: {
-    provider: providerField, credential: { ...credentialField, hint: "Null goes back to automatic: the first key that works, in order" },
+  select_credential: register("select_credential", { ...providerWrite, label: "Pin key or login", fields: {
+    provider: providerField, credential: { ...credentialField, hint: "Null goes back to automatic: the first key that works, in order, or a login with room" },
   } }, (context, args) => selectCredential(adminContext(context), args)),
-  set_credential_limit: register("set_credential_limit", { ...providerWrite, label: "Limit API key spending", fields: {
-    provider: providerField, credential: credentialField, cost_usd: { label: "Limit (USD)", hint: "Null removes the limit" },
+  set_credential_limit: register("set_credential_limit", { ...providerWrite, label: "Limit key or login", fields: {
+    provider: providerField, credential: credentialField, cost_usd: { label: "Limit (USD)", hint: "A key's spending; null removes the limit" },
     period: { label: "Period", hint: "hour, day, week or month; defaults to month" },
+    windows: { label: "Window limits", hint: "A login's share of its session and weekly windows, as a fraction; null returns a window to the default" },
   } }, (context, args) => setCredentialLimit(adminContext(context), args)),
+  start_sign_in: register("start_sign_in", { ...providerPresentation, effects: ["runtime_write"], label: "Start signing in a login", fields: {
+    provider: providerField, credential: { label: "Login", hint: "The login to sign in, or the name for a new one; a new one left unnamed goes by its email" },
+    add: { label: "New login", hint: "Create a login rather than signing in one that exists" },
+  } }, (context, args) => startSignIn(adminContext(context), args)),
+  finish_sign_in: register("finish_sign_in", { ...providerWrite, effects: ["config_write", "provider_call"], label: "Finish signing in a login", fields: {
+    provider: providerField, credential: { label: "Login", hint: "The login start_sign_in named" },
+    code: { label: "Code", hint: "The code the sign-in page shows", secret: true },
+  } }, (context, args) => finishSignIn(adminContext(context), args)),
+  cancel_sign_in: register("cancel_sign_in", { ...providerPresentation, effects: ["runtime_write"], label: "Stop signing in a login", fields: {
+    provider: providerField, credential: { label: "Login", hint: "The login start_sign_in named" },
+  } }, (context, args) => cancelSignIn(adminContext(context), args)),
   list_provider_models: register("list_provider_models", { ...providerPresentation, label: "Browse provider models", fields: {
     provider: providerField, include_hidden: { label: "Include hidden models", hint: "Include models excluded by discovery filters" },
   } }, (context, args) => listProviderModels(providersContext(context), args)),

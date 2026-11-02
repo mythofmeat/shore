@@ -210,8 +210,7 @@ test("shore stays on the account in use while it has room, then moves to the usa
   expect(report?.accounts.map((account) => [account.name, account.state, account.in_use])).toEqual([
     ["busy@example.com", "limited", false], ["gone", "out", false], ["later@example.com", "ok", false], ["soon@example.com", "ok", true],
   ]);
-  expect(report?.accounts.find((account) => account.name === "gone")?.login_command)
-    .toContain(`CLAUDE_CONFIG_DIR=${join(claudeAccountsRoot(home), "gone")} claude auth login`);
+  expect(report?.accounts.find((account) => account.name === "gone")?.login_command).toBe("shore provider claude_agent auth gone --login");
 
   await writeFile(join(claudeAccountsRoot(home), "x1", ".claude.json"), "{");
   await signIn(home, "new", "fresh");
@@ -219,3 +218,144 @@ test("shore stays on the account in use while it has room, then moves to the usa
   expect(rescanned[0]).toBe("soon@example.com");
   expect(rescanned).toContain("fresh@example.com");
 });
+
+test("with every login disabled a reply fails, naming why, without a call", async () => {
+  const home = await mkdtemp(join(tmpdir(), "shore-accounts-"));
+  await signIn(home, "qwfp", "first");
+  const logins = [{ name: "first@example.com", enabled: false, limits: {} }];
+  configureClaudePlanLimits({ home, cacheDir: home, settings: () => ({ provider: "claude_agent", logins }) });
+  const mock = await startMockAnthropic({ fallback: () => ({ text: "Hello." }) });
+  try {
+    const failure = await conversation(home, mock)("Hello?").catch((e: unknown) => e);
+    expect((failure as Error).message).toContain('"first@example.com": disabled');
+    expect(tokensSeen(mock)).toEqual([]);
+  } finally {
+    await mock.stop();
+  }
+}, 60_000);
+
+function atWeek(account: string, used: number): void {
+  observeClaudeRateLimit({ status: "allowed", rateLimitType: "seven_day", utilization: used, resetsAt: Math.floor((Date.now() + DAY) / 1000) }, account);
+}
+
+test("a login past its own limit hands the reply to one with room, and with none left the reply is refused, without a call, saying when it frees up", async () => {
+  const home = await mkdtemp(join(tmpdir(), "shore-accounts-"));
+  await signIn(home, "qwfp", "first");
+  await signIn(home, "arst", "second");
+  const logins = [
+    { name: "first@example.com", enabled: true, limits: { weekly: 0.5 } },
+    { name: "second@example.com", enabled: true, limits: { weekly: 0.5 } },
+  ];
+  configureClaudePlanLimits({ home, cacheDir: home, settings: () => ({ provider: "claude_agent", logins }) });
+  atWeek("first@example.com", 0.52);
+  const mock = await startMockAnthropic({ fallback: () => ({ text: "Hello from the next account." }) });
+  try {
+    const say = conversation(home, mock);
+    expect(await say("Hello?")).toBe("Hello from the next account.");
+    expect(tokensSeen(mock)).toEqual(["Bearer token-second"]);
+
+    atWeek("second@example.com", 0.5);
+    const failure = await say("Still there?").catch((e: unknown) => e);
+    expect(failure).toBeInstanceOf(Error);
+    expect((failure as Error).message).toContain("its limit is 50%");
+    expect(tokensSeen(mock)).toEqual(["Bearer token-second"]);
+    expect(Date.parse(resetAtIn(failure) ?? "")).toBeGreaterThan(Date.now());
+  } finally {
+    await mock.stop();
+  }
+}, 60_000);
+
+test("a pinned login takes every reply while others have more room, and at its own limit the reply is refused rather than moved", async () => {
+  const home = await mkdtemp(join(tmpdir(), "shore-accounts-"));
+  await signIn(home, "qwfp", "first");
+  await signIn(home, "arst", "second");
+  const logins = [{ name: "second@example.com", enabled: true, limits: { weekly: 0.5 } }];
+  configureClaudePlanLimits({ home, cacheDir: home, settings: () => ({ provider: "claude_agent", pin: "second@example.com", logins }) });
+  atWeek("second@example.com", 0.2);
+  atWeek("first@example.com", 0);
+  const mock = await startMockAnthropic({ fallback: () => ({ text: "Hello." }) });
+  try {
+    const say = conversation(home, mock);
+    expect(await say("Hello?")).toBe("Hello.");
+    expect(tokensSeen(mock)).toEqual(["Bearer token-second"]);
+
+    atWeek("second@example.com", 0.5);
+    const failure = await say("Still there?").catch((e: unknown) => e);
+    expect((failure as Error).message).toContain("its limit is 50%");
+    expect(tokensSeen(mock)).toEqual(["Bearer token-second"]);
+  } finally {
+    await mock.stop();
+  }
+}, 60_000);
+
+test("a login with no limit of its own stays usable past the switch points when no other login has room", async () => {
+  const home = await mkdtemp(join(tmpdir(), "shore-accounts-"));
+  await signIn(home, "qwfp", "first");
+  await signIn(home, "arst", "second");
+  configureClaudePlanLimits({ home, cacheDir: home });
+  atWeek("first@example.com", 0.99);
+  atWeek("second@example.com", 0.99);
+  const mock = await startMockAnthropic({ fallback: () => ({ text: "Still going." }) });
+  try {
+    expect(await conversation(home, mock)("Hello?")).toBe("Still going.");
+    expect(tokensSeen(mock)).toHaveLength(1);
+  } finally {
+    await mock.stop();
+  }
+}, 60_000);
+
+test("a reply that crosses its login's own limit partway finishes on that login, with all its tool calls", async () => {
+  const home = await mkdtemp(join(tmpdir(), "shore-accounts-"));
+  await signIn(home, "qwfp", "first");
+  await signIn(home, "arst", "second");
+  const logins = [{ name: "first@example.com", enabled: true, limits: { weekly: 0.5 } }];
+  configureClaudePlanLimits({ home, cacheDir: home, settings: () => ({ provider: "claude_agent", logins }) });
+  atWeek("first@example.com", 0.1);
+  atWeek("second@example.com", 0.1);
+  const results = (request: AnthropicRequestRecord): number => (JSON.stringify(request.body.messages).match(/noted: /g) ?? []).length;
+  const mock = await startMockAnthropic({
+    fallback: (request) => results(request) < 2
+      ? { toolUses: [{ id: `toolu_round_${String(results(request))}`, name: "mcp__shore__note", input: { text: `round ${String(results(request))}` } }] }
+      : { text: "All noted." },
+  });
+  const ran: unknown[] = [];
+  try {
+    const provider = new ClaudeAgentProvider({
+      bookPath: () => join(home, "sessions.json"),
+      runQuery: (params) => query({ ...params, options: { ...params.options, env: { ...params.options.env, HOME: home } } }),
+    });
+    const { result } = await runGeneration({
+      sdk: "claude_agent", api_key: "", base_url: mock.url, model: "claude-opus-5-5",
+      messages: [{ role: "user", content: [{ type: "text", text: "Note twice." }] }],
+      max_tokens: 256, replay_prior_thinking: "all",
+      tools: [{ name: "note", description: "Write a note.", input_schema: { type: "object", properties: { text: { type: "string" } } } }],
+      context: { character: "ada", workspace_dir: home, thinking_enabled: false, call_type: "message" },
+    }, { providerKey: "claude_agent" }, {
+      config: {
+        app: defaultAppConfig(), models: emptyCatalog(), providers: ProviderRegistry.empty(), rawTable: undefined,
+        dirs: { config: home, data: home, cache: home, runtime: home },
+      },
+      providers: { claude_agent: provider },
+      retry: { maxRetries: 0, backoffBaseMs: 0 },
+    }, {
+      signal: AbortSignal.timeout(30_000),
+      sink: () => {},
+      tools: {
+        messages: [],
+        runTool: (use) => {
+          ran.push(use.input);
+          atWeek("first@example.com", 0.9);
+          return Promise.resolve({ type: "tool_result", tool_use_id: use.id, content: `noted: ${String(ran.length)}` });
+        },
+        recordTurn: () => {},
+      },
+    });
+
+    expect(result.content).toBe("All noted.");
+    expect(ran).toHaveLength(2);
+    expect(new Set(tokensSeen(mock))).toEqual(new Set(["Bearer token-first"]));
+    expect(claudeAccountOrder().map((account) => account.name)).toEqual(["second@example.com"]);
+  } finally {
+    await mock.stop();
+  }
+}, 60_000);

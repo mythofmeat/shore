@@ -13,7 +13,7 @@ const openai = new OpenAIProvider();
 
 export const DEFAULT_PROVIDERS: Partial<Record<SidecarRequest["sdk"], SidecarProvider>> = {
   anthropic: new AnthropicProvider(),
-  claude_agent: new ClaudeAgentProvider({ planQuery: query }),
+  claude_agent: new ClaudeAgentProvider({ planQuery: query, signInQuery: query }),
   gemini: new GeminiProvider(),
   openrouter: vercel,
   openai,

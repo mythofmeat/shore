@@ -9567,6 +9567,22 @@
                 "null"
               ]
             },
+            "credential_kind": {
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/CredentialKind"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "selection_detail": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
             "credentials": {
               "type": "array",
               "items": {
@@ -9621,6 +9637,15 @@
           "enum": [
             "order",
             "room"
+          ]
+        },
+        "CredentialKind": {
+          "type": "string",
+          "enum": [
+            "api_key",
+            "env",
+            "login",
+            "none"
           ]
         },
         "CredentialStatus": {
@@ -9696,6 +9721,19 @@
                 "string",
                 "null"
               ]
+            },
+            "windows": {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/CredentialWindow"
+              },
+              "default": []
+            },
+            "plan": {
+              "type": [
+                "string",
+                "null"
+              ]
             }
           },
           "required": [
@@ -9711,16 +9749,8 @@
             "in_use",
             "warn_on_fallback",
             "limit",
-            "usage"
-          ]
-        },
-        "CredentialKind": {
-          "type": "string",
-          "enum": [
-            "api_key",
-            "env",
-            "login",
-            "none"
+            "usage",
+            "windows"
           ]
         },
         "CredentialStanding": {
@@ -9792,6 +9822,46 @@
             "cost_usd",
             "calls",
             "since"
+          ]
+        },
+        "CredentialWindow": {
+          "type": "object",
+          "properties": {
+            "window": {
+              "type": "string"
+            },
+            "label": {
+              "type": "string"
+            },
+            "percent_used": {
+              "type": "number",
+              "format": "double"
+            },
+            "resets_at": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "limit": {
+              "type": "number",
+              "format": "double"
+            },
+            "limit_set": {
+              "type": "boolean"
+            },
+            "at_limit": {
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "window",
+            "label",
+            "percent_used",
+            "resets_at",
+            "limit",
+            "limit_set",
+            "at_limit"
           ]
         },
         "ProviderCacheStatus": {
@@ -10290,6 +10360,22 @@
             "null"
           ]
         },
+        "credential_kind": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/CredentialKind"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "selection_detail": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
         "credentials": {
           "type": "array",
           "items": {
@@ -10344,6 +10430,15 @@
           "enum": [
             "order",
             "room"
+          ]
+        },
+        "CredentialKind": {
+          "type": "string",
+          "enum": [
+            "api_key",
+            "env",
+            "login",
+            "none"
           ]
         },
         "CredentialStatus": {
@@ -10419,6 +10514,19 @@
                 "string",
                 "null"
               ]
+            },
+            "windows": {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/CredentialWindow"
+              },
+              "default": []
+            },
+            "plan": {
+              "type": [
+                "string",
+                "null"
+              ]
             }
           },
           "required": [
@@ -10434,16 +10542,8 @@
             "in_use",
             "warn_on_fallback",
             "limit",
-            "usage"
-          ]
-        },
-        "CredentialKind": {
-          "type": "string",
-          "enum": [
-            "api_key",
-            "env",
-            "login",
-            "none"
+            "usage",
+            "windows"
           ]
         },
         "CredentialStanding": {
@@ -10515,6 +10615,46 @@
             "cost_usd",
             "calls",
             "since"
+          ]
+        },
+        "CredentialWindow": {
+          "type": "object",
+          "properties": {
+            "window": {
+              "type": "string"
+            },
+            "label": {
+              "type": "string"
+            },
+            "percent_used": {
+              "type": "number",
+              "format": "double"
+            },
+            "resets_at": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "limit": {
+              "type": "number",
+              "format": "double"
+            },
+            "limit_set": {
+              "type": "boolean"
+            },
+            "at_limit": {
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "window",
+            "label",
+            "percent_used",
+            "resets_at",
+            "limit",
+            "limit_set",
+            "at_limit"
           ]
         },
         "ProviderCacheStatus": {
@@ -10749,6 +10889,22 @@
                 "null"
               ]
             },
+            "credential_kind": {
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/CredentialKind"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "selection_detail": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
             "credentials": {
               "type": "array",
               "items": {
@@ -10803,6 +10959,15 @@
           "enum": [
             "order",
             "room"
+          ]
+        },
+        "CredentialKind": {
+          "type": "string",
+          "enum": [
+            "api_key",
+            "env",
+            "login",
+            "none"
           ]
         },
         "CredentialStatus": {
@@ -10878,6 +11043,19 @@
                 "string",
                 "null"
               ]
+            },
+            "windows": {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/CredentialWindow"
+              },
+              "default": []
+            },
+            "plan": {
+              "type": [
+                "string",
+                "null"
+              ]
             }
           },
           "required": [
@@ -10893,16 +11071,8 @@
             "in_use",
             "warn_on_fallback",
             "limit",
-            "usage"
-          ]
-        },
-        "CredentialKind": {
-          "type": "string",
-          "enum": [
-            "api_key",
-            "env",
-            "login",
-            "none"
+            "usage",
+            "windows"
           ]
         },
         "CredentialStanding": {
@@ -10974,6 +11144,46 @@
             "cost_usd",
             "calls",
             "since"
+          ]
+        },
+        "CredentialWindow": {
+          "type": "object",
+          "properties": {
+            "window": {
+              "type": "string"
+            },
+            "label": {
+              "type": "string"
+            },
+            "percent_used": {
+              "type": "number",
+              "format": "double"
+            },
+            "resets_at": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "limit": {
+              "type": "number",
+              "format": "double"
+            },
+            "limit_set": {
+              "type": "boolean"
+            },
+            "at_limit": {
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "window",
+            "label",
+            "percent_used",
+            "resets_at",
+            "limit",
+            "limit_set",
+            "at_limit"
           ]
         },
         "ProviderCacheStatus": {
@@ -11157,6 +11367,22 @@
                 "null"
               ]
             },
+            "credential_kind": {
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/CredentialKind"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "selection_detail": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
             "credentials": {
               "type": "array",
               "items": {
@@ -11211,6 +11437,15 @@
           "enum": [
             "order",
             "room"
+          ]
+        },
+        "CredentialKind": {
+          "type": "string",
+          "enum": [
+            "api_key",
+            "env",
+            "login",
+            "none"
           ]
         },
         "CredentialStatus": {
@@ -11286,6 +11521,19 @@
                 "string",
                 "null"
               ]
+            },
+            "windows": {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/CredentialWindow"
+              },
+              "default": []
+            },
+            "plan": {
+              "type": [
+                "string",
+                "null"
+              ]
             }
           },
           "required": [
@@ -11301,16 +11549,8 @@
             "in_use",
             "warn_on_fallback",
             "limit",
-            "usage"
-          ]
-        },
-        "CredentialKind": {
-          "type": "string",
-          "enum": [
-            "api_key",
-            "env",
-            "login",
-            "none"
+            "usage",
+            "windows"
           ]
         },
         "CredentialStanding": {
@@ -11382,6 +11622,46 @@
             "cost_usd",
             "calls",
             "since"
+          ]
+        },
+        "CredentialWindow": {
+          "type": "object",
+          "properties": {
+            "window": {
+              "type": "string"
+            },
+            "label": {
+              "type": "string"
+            },
+            "percent_used": {
+              "type": "number",
+              "format": "double"
+            },
+            "resets_at": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "limit": {
+              "type": "number",
+              "format": "double"
+            },
+            "limit_set": {
+              "type": "boolean"
+            },
+            "at_limit": {
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "window",
+            "label",
+            "percent_used",
+            "resets_at",
+            "limit",
+            "limit_set",
+            "at_limit"
           ]
         },
         "ProviderCacheStatus": {
@@ -11584,6 +11864,22 @@
                 "null"
               ]
             },
+            "credential_kind": {
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/CredentialKind"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "selection_detail": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
             "credentials": {
               "type": "array",
               "items": {
@@ -11638,6 +11934,15 @@
           "enum": [
             "order",
             "room"
+          ]
+        },
+        "CredentialKind": {
+          "type": "string",
+          "enum": [
+            "api_key",
+            "env",
+            "login",
+            "none"
           ]
         },
         "CredentialStatus": {
@@ -11713,6 +12018,19 @@
                 "string",
                 "null"
               ]
+            },
+            "windows": {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/CredentialWindow"
+              },
+              "default": []
+            },
+            "plan": {
+              "type": [
+                "string",
+                "null"
+              ]
             }
           },
           "required": [
@@ -11728,16 +12046,8 @@
             "in_use",
             "warn_on_fallback",
             "limit",
-            "usage"
-          ]
-        },
-        "CredentialKind": {
-          "type": "string",
-          "enum": [
-            "api_key",
-            "env",
-            "login",
-            "none"
+            "usage",
+            "windows"
           ]
         },
         "CredentialStanding": {
@@ -11809,6 +12119,46 @@
             "cost_usd",
             "calls",
             "since"
+          ]
+        },
+        "CredentialWindow": {
+          "type": "object",
+          "properties": {
+            "window": {
+              "type": "string"
+            },
+            "label": {
+              "type": "string"
+            },
+            "percent_used": {
+              "type": "number",
+              "format": "double"
+            },
+            "resets_at": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "limit": {
+              "type": "number",
+              "format": "double"
+            },
+            "limit_set": {
+              "type": "boolean"
+            },
+            "at_limit": {
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "window",
+            "label",
+            "percent_used",
+            "resets_at",
+            "limit",
+            "limit_set",
+            "at_limit"
           ]
         },
         "ProviderCacheStatus": {
@@ -11975,6 +12325,22 @@
                 "null"
               ]
             },
+            "credential_kind": {
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/CredentialKind"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "selection_detail": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
             "credentials": {
               "type": "array",
               "items": {
@@ -12029,6 +12395,15 @@
           "enum": [
             "order",
             "room"
+          ]
+        },
+        "CredentialKind": {
+          "type": "string",
+          "enum": [
+            "api_key",
+            "env",
+            "login",
+            "none"
           ]
         },
         "CredentialStatus": {
@@ -12104,6 +12479,19 @@
                 "string",
                 "null"
               ]
+            },
+            "windows": {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/CredentialWindow"
+              },
+              "default": []
+            },
+            "plan": {
+              "type": [
+                "string",
+                "null"
+              ]
             }
           },
           "required": [
@@ -12119,16 +12507,8 @@
             "in_use",
             "warn_on_fallback",
             "limit",
-            "usage"
-          ]
-        },
-        "CredentialKind": {
-          "type": "string",
-          "enum": [
-            "api_key",
-            "env",
-            "login",
-            "none"
+            "usage",
+            "windows"
           ]
         },
         "CredentialStanding": {
@@ -12200,6 +12580,46 @@
             "cost_usd",
             "calls",
             "since"
+          ]
+        },
+        "CredentialWindow": {
+          "type": "object",
+          "properties": {
+            "window": {
+              "type": "string"
+            },
+            "label": {
+              "type": "string"
+            },
+            "percent_used": {
+              "type": "number",
+              "format": "double"
+            },
+            "resets_at": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "limit": {
+              "type": "number",
+              "format": "double"
+            },
+            "limit_set": {
+              "type": "boolean"
+            },
+            "at_limit": {
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "window",
+            "label",
+            "percent_used",
+            "resets_at",
+            "limit",
+            "limit_set",
+            "at_limit"
           ]
         },
         "ProviderCacheStatus": {
@@ -12330,6 +12750,22 @@
                 "null"
               ]
             },
+            "credential_kind": {
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/CredentialKind"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "selection_detail": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
             "credentials": {
               "type": "array",
               "items": {
@@ -12384,6 +12820,15 @@
           "enum": [
             "order",
             "room"
+          ]
+        },
+        "CredentialKind": {
+          "type": "string",
+          "enum": [
+            "api_key",
+            "env",
+            "login",
+            "none"
           ]
         },
         "CredentialStatus": {
@@ -12459,6 +12904,19 @@
                 "string",
                 "null"
               ]
+            },
+            "windows": {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/CredentialWindow"
+              },
+              "default": []
+            },
+            "plan": {
+              "type": [
+                "string",
+                "null"
+              ]
             }
           },
           "required": [
@@ -12474,16 +12932,8 @@
             "in_use",
             "warn_on_fallback",
             "limit",
-            "usage"
-          ]
-        },
-        "CredentialKind": {
-          "type": "string",
-          "enum": [
-            "api_key",
-            "env",
-            "login",
-            "none"
+            "usage",
+            "windows"
           ]
         },
         "CredentialStanding": {
@@ -12555,6 +13005,46 @@
             "cost_usd",
             "calls",
             "since"
+          ]
+        },
+        "CredentialWindow": {
+          "type": "object",
+          "properties": {
+            "window": {
+              "type": "string"
+            },
+            "label": {
+              "type": "string"
+            },
+            "percent_used": {
+              "type": "number",
+              "format": "double"
+            },
+            "resets_at": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "limit": {
+              "type": "number",
+              "format": "double"
+            },
+            "limit_set": {
+              "type": "boolean"
+            },
+            "at_limit": {
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "window",
+            "label",
+            "percent_used",
+            "resets_at",
+            "limit",
+            "limit_set",
+            "at_limit"
           ]
         },
         "ProviderCacheStatus": {
@@ -12760,6 +13250,22 @@
                 "null"
               ]
             },
+            "credential_kind": {
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/CredentialKind"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "selection_detail": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
             "credentials": {
               "type": "array",
               "items": {
@@ -12814,6 +13320,15 @@
           "enum": [
             "order",
             "room"
+          ]
+        },
+        "CredentialKind": {
+          "type": "string",
+          "enum": [
+            "api_key",
+            "env",
+            "login",
+            "none"
           ]
         },
         "CredentialStatus": {
@@ -12889,6 +13404,19 @@
                 "string",
                 "null"
               ]
+            },
+            "windows": {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/CredentialWindow"
+              },
+              "default": []
+            },
+            "plan": {
+              "type": [
+                "string",
+                "null"
+              ]
             }
           },
           "required": [
@@ -12904,16 +13432,8 @@
             "in_use",
             "warn_on_fallback",
             "limit",
-            "usage"
-          ]
-        },
-        "CredentialKind": {
-          "type": "string",
-          "enum": [
-            "api_key",
-            "env",
-            "login",
-            "none"
+            "usage",
+            "windows"
           ]
         },
         "CredentialStanding": {
@@ -12985,6 +13505,46 @@
             "cost_usd",
             "calls",
             "since"
+          ]
+        },
+        "CredentialWindow": {
+          "type": "object",
+          "properties": {
+            "window": {
+              "type": "string"
+            },
+            "label": {
+              "type": "string"
+            },
+            "percent_used": {
+              "type": "number",
+              "format": "double"
+            },
+            "resets_at": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "limit": {
+              "type": "number",
+              "format": "double"
+            },
+            "limit_set": {
+              "type": "boolean"
+            },
+            "at_limit": {
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "window",
+            "label",
+            "percent_used",
+            "resets_at",
+            "limit",
+            "limit_set",
+            "at_limit"
           ]
         },
         "ProviderCacheStatus": {
@@ -13117,6 +13677,22 @@
                 "null"
               ]
             },
+            "credential_kind": {
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/CredentialKind"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "selection_detail": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
             "credentials": {
               "type": "array",
               "items": {
@@ -13171,6 +13747,15 @@
           "enum": [
             "order",
             "room"
+          ]
+        },
+        "CredentialKind": {
+          "type": "string",
+          "enum": [
+            "api_key",
+            "env",
+            "login",
+            "none"
           ]
         },
         "CredentialStatus": {
@@ -13246,6 +13831,19 @@
                 "string",
                 "null"
               ]
+            },
+            "windows": {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/CredentialWindow"
+              },
+              "default": []
+            },
+            "plan": {
+              "type": [
+                "string",
+                "null"
+              ]
             }
           },
           "required": [
@@ -13261,16 +13859,8 @@
             "in_use",
             "warn_on_fallback",
             "limit",
-            "usage"
-          ]
-        },
-        "CredentialKind": {
-          "type": "string",
-          "enum": [
-            "api_key",
-            "env",
-            "login",
-            "none"
+            "usage",
+            "windows"
           ]
         },
         "CredentialStanding": {
@@ -13344,6 +13934,46 @@
             "since"
           ]
         },
+        "CredentialWindow": {
+          "type": "object",
+          "properties": {
+            "window": {
+              "type": "string"
+            },
+            "label": {
+              "type": "string"
+            },
+            "percent_used": {
+              "type": "number",
+              "format": "double"
+            },
+            "resets_at": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "limit": {
+              "type": "number",
+              "format": "double"
+            },
+            "limit_set": {
+              "type": "boolean"
+            },
+            "at_limit": {
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "window",
+            "label",
+            "percent_used",
+            "resets_at",
+            "limit",
+            "limit_set",
+            "at_limit"
+          ]
+        },
         "ProviderCacheStatus": {
           "type": "object",
           "properties": {
@@ -13412,6 +14042,15 @@
               "type": "null"
             }
           ]
+        },
+        "windows": {
+          "type": [
+            "array",
+            "null"
+          ],
+          "items": {
+            "$ref": "#/$defs/CredentialWindowLimit"
+          }
         }
       },
       "additionalProperties": false,
@@ -13427,6 +14066,25 @@
             "day",
             "week",
             "month"
+          ]
+        },
+        "CredentialWindowLimit": {
+          "type": "object",
+          "properties": {
+            "window": {
+              "type": "string"
+            },
+            "limit": {
+              "type": [
+                "number",
+                "null"
+              ],
+              "format": "double"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "window"
           ]
         }
       }
@@ -13500,6 +14158,22 @@
                 "null"
               ]
             },
+            "credential_kind": {
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/CredentialKind"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "selection_detail": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
             "credentials": {
               "type": "array",
               "items": {
@@ -13554,6 +14228,15 @@
           "enum": [
             "order",
             "room"
+          ]
+        },
+        "CredentialKind": {
+          "type": "string",
+          "enum": [
+            "api_key",
+            "env",
+            "login",
+            "none"
           ]
         },
         "CredentialStatus": {
@@ -13629,6 +14312,19 @@
                 "string",
                 "null"
               ]
+            },
+            "windows": {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/CredentialWindow"
+              },
+              "default": []
+            },
+            "plan": {
+              "type": [
+                "string",
+                "null"
+              ]
             }
           },
           "required": [
@@ -13644,16 +14340,8 @@
             "in_use",
             "warn_on_fallback",
             "limit",
-            "usage"
-          ]
-        },
-        "CredentialKind": {
-          "type": "string",
-          "enum": [
-            "api_key",
-            "env",
-            "login",
-            "none"
+            "usage",
+            "windows"
           ]
         },
         "CredentialStanding": {
@@ -13727,6 +14415,46 @@
             "since"
           ]
         },
+        "CredentialWindow": {
+          "type": "object",
+          "properties": {
+            "window": {
+              "type": "string"
+            },
+            "label": {
+              "type": "string"
+            },
+            "percent_used": {
+              "type": "number",
+              "format": "double"
+            },
+            "resets_at": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "limit": {
+              "type": "number",
+              "format": "double"
+            },
+            "limit_set": {
+              "type": "boolean"
+            },
+            "at_limit": {
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "window",
+            "label",
+            "percent_used",
+            "resets_at",
+            "limit",
+            "limit_set",
+            "at_limit"
+          ]
+        },
         "ProviderCacheStatus": {
           "type": "object",
           "properties": {
@@ -13764,6 +14492,535 @@
           ]
         }
       }
+    }
+  },
+  {
+    "name": "start_sign_in",
+    "input": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "title": "StartSignInArgs",
+      "type": "object",
+      "properties": {
+        "provider": {
+          "type": "string"
+        },
+        "credential": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "add": {
+          "type": [
+            "boolean",
+            "null"
+          ]
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "provider"
+      ]
+    },
+    "output": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "title": "SignInStarted",
+      "type": "object",
+      "properties": {
+        "provider": {
+          "type": "string"
+        },
+        "credential": {
+          "type": "string"
+        },
+        "url": {
+          "type": "string"
+        },
+        "expires_at": {
+          "type": "string"
+        },
+        "message": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "provider",
+        "credential",
+        "url",
+        "expires_at",
+        "message"
+      ]
+    }
+  },
+  {
+    "name": "finish_sign_in",
+    "input": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "title": "FinishSignInArgs",
+      "type": "object",
+      "properties": {
+        "provider": {
+          "type": "string"
+        },
+        "credential": {
+          "type": "string"
+        },
+        "code": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "provider",
+        "credential",
+        "code"
+      ]
+    },
+    "output": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "title": "ProviderChanged",
+      "type": "object",
+      "properties": {
+        "provider": {
+          "$ref": "#/$defs/ProviderStatus"
+        },
+        "message": {
+          "type": "string"
+        },
+        "file": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "provider",
+        "message",
+        "file"
+      ],
+      "$defs": {
+        "ProviderStatus": {
+          "type": "object",
+          "properties": {
+            "name": {
+              "type": "string"
+            },
+            "enabled": {
+              "type": "boolean"
+            },
+            "sdk": {
+              "type": "string"
+            },
+            "base_url": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "discovery_enabled": {
+              "type": "boolean"
+            },
+            "keys": {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/ProviderKeyStatus"
+              }
+            },
+            "ignore_models": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "subscription": {
+              "type": "boolean"
+            },
+            "no_auth": {
+              "type": "boolean"
+            },
+            "selection": {
+              "$ref": "#/$defs/CredentialSelection"
+            },
+            "pinned": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "credential_kind": {
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/CredentialKind"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "selection_detail": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "credentials": {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/CredentialStatus"
+              }
+            },
+            "cache": {
+              "$ref": "#/$defs/ProviderCacheStatus"
+            }
+          },
+          "required": [
+            "name",
+            "enabled",
+            "sdk",
+            "base_url",
+            "discovery_enabled",
+            "keys",
+            "ignore_models",
+            "subscription",
+            "no_auth",
+            "selection",
+            "pinned",
+            "credentials",
+            "cache"
+          ]
+        },
+        "ProviderKeyStatus": {
+          "type": "object",
+          "properties": {
+            "name": {
+              "type": "string"
+            },
+            "enabled": {
+              "type": "boolean"
+            },
+            "warn_on_fallback": {
+              "type": "boolean"
+            },
+            "env_set": {
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "name",
+            "enabled",
+            "warn_on_fallback",
+            "env_set"
+          ]
+        },
+        "CredentialSelection": {
+          "type": "string",
+          "enum": [
+            "order",
+            "room"
+          ]
+        },
+        "CredentialKind": {
+          "type": "string",
+          "enum": [
+            "api_key",
+            "env",
+            "login",
+            "none"
+          ]
+        },
+        "CredentialStatus": {
+          "type": "object",
+          "properties": {
+            "name": {
+              "type": "string"
+            },
+            "kind": {
+              "$ref": "#/$defs/CredentialKind"
+            },
+            "enabled": {
+              "type": "boolean"
+            },
+            "standing": {
+              "$ref": "#/$defs/CredentialStanding"
+            },
+            "detail": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "hint": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "env": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "checked_at": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "pinned": {
+              "type": "boolean"
+            },
+            "in_use": {
+              "type": "boolean"
+            },
+            "warn_on_fallback": {
+              "type": "boolean"
+            },
+            "limit": {
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/CredentialLimit"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "usage": {
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/CredentialUsage"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "login_command": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "windows": {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/CredentialWindow"
+              },
+              "default": []
+            },
+            "plan": {
+              "type": [
+                "string",
+                "null"
+              ]
+            }
+          },
+          "required": [
+            "name",
+            "kind",
+            "enabled",
+            "standing",
+            "detail",
+            "hint",
+            "env",
+            "checked_at",
+            "pinned",
+            "in_use",
+            "warn_on_fallback",
+            "limit",
+            "usage",
+            "windows"
+          ]
+        },
+        "CredentialStanding": {
+          "type": "string",
+          "enum": [
+            "works",
+            "invalid",
+            "over_quota",
+            "signed_out",
+            "missing",
+            "not_checked"
+          ]
+        },
+        "CredentialLimit": {
+          "type": "object",
+          "properties": {
+            "cost_usd": {
+              "type": "number",
+              "format": "double"
+            },
+            "period": {
+              "$ref": "#/$defs/UsageBudgetPeriod"
+            },
+            "spent_usd": {
+              "type": "number",
+              "format": "double"
+            },
+            "at_limit": {
+              "type": "boolean"
+            },
+            "resets_at": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "cost_usd",
+            "period",
+            "spent_usd",
+            "at_limit",
+            "resets_at"
+          ]
+        },
+        "UsageBudgetPeriod": {
+          "type": "string",
+          "enum": [
+            "hour",
+            "day",
+            "week",
+            "month"
+          ]
+        },
+        "CredentialUsage": {
+          "type": "object",
+          "properties": {
+            "cost_usd": {
+              "type": "number",
+              "format": "double"
+            },
+            "calls": {
+              "type": "integer",
+              "format": "uint",
+              "minimum": 0
+            },
+            "since": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "cost_usd",
+            "calls",
+            "since"
+          ]
+        },
+        "CredentialWindow": {
+          "type": "object",
+          "properties": {
+            "window": {
+              "type": "string"
+            },
+            "label": {
+              "type": "string"
+            },
+            "percent_used": {
+              "type": "number",
+              "format": "double"
+            },
+            "resets_at": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "limit": {
+              "type": "number",
+              "format": "double"
+            },
+            "limit_set": {
+              "type": "boolean"
+            },
+            "at_limit": {
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "window",
+            "label",
+            "percent_used",
+            "resets_at",
+            "limit",
+            "limit_set",
+            "at_limit"
+          ]
+        },
+        "ProviderCacheStatus": {
+          "type": "object",
+          "properties": {
+            "present": {
+              "type": "boolean"
+            },
+            "models": {
+              "type": "integer",
+              "format": "uint",
+              "minimum": 0
+            },
+            "visible": {
+              "type": "integer",
+              "format": "uint",
+              "minimum": 0
+            },
+            "hidden": {
+              "type": "integer",
+              "format": "uint",
+              "minimum": 0
+            },
+            "fetched_at": {
+              "type": [
+                "string",
+                "null"
+              ]
+            }
+          },
+          "required": [
+            "present",
+            "models",
+            "visible",
+            "hidden",
+            "fetched_at"
+          ]
+        }
+      }
+    }
+  },
+  {
+    "name": "cancel_sign_in",
+    "input": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "title": "CredentialArgs",
+      "type": "object",
+      "properties": {
+        "provider": {
+          "type": "string"
+        },
+        "credential": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "provider",
+        "credential"
+      ]
+    },
+    "output": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "title": "SignInCancelled",
+      "type": "object",
+      "properties": {
+        "provider": {
+          "type": "string"
+        },
+        "credential": {
+          "type": "string"
+        },
+        "message": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "provider",
+        "credential",
+        "message"
+      ]
     }
   },
   {

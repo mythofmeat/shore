@@ -2,12 +2,12 @@ import { budgetStatuses, usageConfigView } from "../ledger/budget.ts";
 import { ledgerFor } from "../ledger/record.ts";
 import { usageSummaryBy } from "../ledger/query.ts";
 import { toRfc3339 } from "../ledger/zoned.ts";
-import { claudeAccountReports } from "../ledger/plan_limits.ts";
+import { CLAUDE_PLAN_REPORT_REFRESH_MS, claudeLoginOverview, refreshClaudePlanLimits } from "../ledger/plan_limits.ts";
 import { discoverCharacters } from "../config/dirs.ts";
 import { loadCharacterConfig, type LoadedConfig } from "../config/loader.ts";
 import { defaultSdk, hardcodedProviderDefaults } from "../config/models.ts";
 import { loadForCharacter } from "../config/preferences.ts";
-import { findProviderName, isCredentialBudget, isVisible, SPEND_PERIODS, type ProviderEntry, type ProviderKeyEntry } from "../config/providers.ts";
+import { findProviderName, isCredentialBudget, isVisible, signsIn, SPEND_PERIODS, type ProviderEntry, type ProviderKeyEntry } from "../config/providers.ts";
 import { findSchemaEntry } from "../config/schema.ts";
 import { schemaValueLiteral, SchemaValueError } from "../config/schema_value.ts";
 import { parseConfigPath } from "../config/surface.ts";
@@ -33,6 +33,10 @@ import { secretStoreFor } from "../llm/secret_store.ts";
 import { SDK_VARIANTS, sdkFromWire } from "../llm/types.ts";
 import { commitConfigEdits, configFiles, readConfigFile, schemaOf, type ConfigContext } from "./config.ts";
 import { invalidRequest, notFound } from "./errors.ts";
+import {
+  cancelLoginSignIn, finishLoginSignIn, limitLogin, loginStanding, pinLogin, refuseOtherLoginProvider, removeLogin, startLoginSignIn, testLogin, updateLogin,
+  type LoginChange, type LoginTarget,
+} from "./provider_logins.ts";
 import type { CredentialKind } from "../protocol/CredentialKind.ts";
 import type { CredentialStanding } from "../protocol/CredentialStanding.ts";
 import type { CredentialStatus } from "../protocol/CredentialStatus.ts";
@@ -141,13 +145,6 @@ function secretOf(ctx: ProviderAdminContext, provider: string, key: ProviderKeyE
   return value === undefined || value.trim() === "" ? undefined : value;
 }
 
-function loginStanding(state: string, detail: string): CredentialStanding {
-  if (state === "ok") return "works";
-  if (state === "limited") return "over_quota";
-  if (state === "out") return detail === "not logged in" ? "signed_out" : "invalid";
-  return "not_checked";
-}
-
 function usageByKey(ctx: ProviderAdminContext, provider: string): Map<string, { cost_usd: number; calls: number; since: string }> {
   const out = new Map<string, { cost_usd: number; calls: number; since: string }>();
   const ledger = ctx.ledgerPath === undefined ? null : ledgerFor(ctx.ledgerPath);
@@ -185,28 +182,31 @@ function limitOf(ctx: ProviderAdminContext, provider: string, key: ProviderKeyEn
 function credentialsOf(ctx: ProviderAdminContext, name: string, entry: ProviderEntry): CredentialStatus[] {
   const sdk = sdkOf(name, entry);
   if (isKeylessSdk(sdk)) {
-    return claudeAccountReports(now(ctx)).map((report) => ({
-      name: report.name,
+    const usage = usageByKey(ctx, name);
+    return claudeLoginOverview(now(ctx)).logins.map((login) => ({
+      name: login.account.name,
       kind: "login",
-      enabled: true,
-      standing: loginStanding(report.state, report.detail),
-      detail: report.detail,
-      hint: report.email,
+      enabled: login.enabled,
+      standing: loginStanding(login),
+      detail: login.detail,
+      hint: login.email,
       env: null,
-      checked_at: null,
-      pinned: false,
-      in_use: report.in_use,
+      checked_at: login.checked_at,
+      pinned: login.pinned,
+      in_use: login.in_use,
       warn_on_fallback: false,
       limit: null,
-      usage: null,
-      ...(report.login_command === undefined ? {} : { login_command: report.login_command }),
+      usage: usage.get(login.account.name) ?? null,
+      windows: login.windows,
+      ...(login.plan === null ? {} : { plan: login.plan }),
+      ...(login.login_command === undefined ? {} : { login_command: login.login_command }),
     }));
   }
   if (entry.noAuth) {
     const recorded = credentialStanding(name, "none");
     return [{
       name: "none", kind: "none", enabled: true, standing: recorded?.standing ?? "not_checked", detail: recorded?.detail ?? null, hint: null, env: null,
-      checked_at: recorded?.checked_at ?? null, pinned: false, in_use: true, warn_on_fallback: false, limit: null, usage: null,
+      checked_at: recorded?.checked_at ?? null, pinned: false, in_use: true, warn_on_fallback: false, limit: null, usage: null, windows: [],
     }];
   }
   const usage = usageByKey(ctx, name);
@@ -231,6 +231,7 @@ function credentialsOf(ctx: ProviderAdminContext, name: string, entry: ProviderE
       warn_on_fallback: key.warnOnFallback,
       limit: limitOf(ctx, name, key),
       usage: usage.get(key.name) ?? null,
+      windows: [],
     };
   });
 }
@@ -254,6 +255,8 @@ export function providerStatus(ctx: ProviderAdminContext, name: string, entry: P
     no_auth: entry.noAuth,
     selection: isKeylessSdk(sdk) ? "room" : "order",
     pinned: entry.pin ?? null,
+    credential_kind: isKeylessSdk(sdk) ? "login" : entry.noAuth ? "none" : "api_key",
+    ...(isKeylessSdk(sdk) ? { selection_detail: claudeLoginOverview(now(ctx)).reason } : {}),
     credentials,
     cache: cache === undefined
       ? { present: false, models: 0, visible: 0, hidden: 0, fetched_at: null }
@@ -262,12 +265,20 @@ export function providerStatus(ctx: ProviderAdminContext, name: string, entry: P
 }
 
 export function listProviderStatuses(ctx: ProviderAdminContext): OperationResult<"list_providers"> {
-  return { providers: ctx.config.config.providers.entries().map(([name, entry]) => providerStatus(ctx, name, entry)) };
+  const providers = ctx.config.config.providers.entries();
+  if (providers.some(([name, entry]) => signsIn(name, entry))) void refreshClaudePlanLimits(CLAUDE_PLAN_REPORT_REFRESH_MS, now(ctx));
+  return { providers: providers.map(([name, entry]) => providerStatus(ctx, name, entry)) };
 }
 
 export function providerDetail(ctx: ProviderAdminContext, args: OperationInput<"provider_detail">): OperationResult<"provider_detail"> {
   const { name, entry } = resolveProvider(ctx.config.config, args.provider);
   return providerStatus(ctx, name, entry);
+}
+
+export async function refreshedProviderDetail(ctx: ProviderAdminContext, args: OperationInput<"provider_detail">): Promise<OperationResult<"provider_detail">> {
+  const { name, entry } = resolveProvider(ctx.config.config, args.provider);
+  if (signsIn(name, entry)) await refreshClaudePlanLimits(CLAUDE_PLAN_REPORT_REFRESH_MS, now(ctx));
+  return providerDetail(ctx, args);
 }
 
 function changed(ctx: ProviderAdminContext, name: string, file: string, message: string): OperationResult<"add_provider"> {
@@ -322,7 +333,7 @@ export function addProvider(ctx: ProviderAdminContext, args: OperationInput<"add
     file,
     edit: (before) => fields.reduce((text, [key, literal]) => setTomlValue(text, [...providerPath(name), key], literal).text, before),
   }], `adding provider ${name}`);
-  return changed(ctx, name, file, `Added provider ${name}`);
+  return changed(ctx, name, file, `Added provider ${name}${isKeylessSdk(effectiveSdk) ? `; sign a Claude login in with \`shore provider ${name} auth --add NAME\`` : ""}`);
 }
 
 function settingLiteral(ctx: ProviderAdminContext, name: string, setting: string, value: string): { path: string[]; literal: string } {
@@ -471,10 +482,34 @@ export function removeProvider(ctx: ProviderAdminContext, args: OperationInput<"
   return { provider: name, keys_removed: keysRemoved, limits_removed: entry.keys.filter((k) => k.spendLimit !== undefined).length, file: files[0] as string };
 }
 
-function refuseLogins(name: string, entry: ProviderEntry, action: string): void {
-  if (isKeylessSdk(sdkOf(name, entry))) {
-    throw invalidRequest(`${name} signs in with Claude logins, kept in ~/.claude-accounts on the daemon's host; shore can't ${action} yet`);
-  }
+function loginTarget(ctx: ProviderAdminContext, name: string, entry: ProviderEntry): LoginTarget | undefined {
+  if (!signsIn(name, entry)) return undefined;
+  refuseOtherLoginProvider(name);
+  return { provider: name, entry, file: providerFile(ctx.config, name) };
+}
+
+function requireLoginTarget(ctx: ProviderAdminContext, raw: string): LoginTarget {
+  const { name, entry } = resolveProvider(ctx.config.config, raw);
+  const target = loginTarget(ctx, name, entry);
+  if (target === undefined) throw invalidRequest(`${name} uses keys rather than signing in; add one with \`shore provider ${name} auth --add\``);
+  return target;
+}
+
+function loginChanged(ctx: ProviderAdminContext, target: LoginTarget, change: LoginChange): OperationResult<"add_provider"> {
+  return changed(ctx, target.provider, change.file, change.message);
+}
+
+export function startSignIn(ctx: ProviderAdminContext, args: OperationInput<"start_sign_in">): Promise<OperationResult<"start_sign_in">> {
+  return startLoginSignIn(ctx, requireLoginTarget(ctx, args.provider), args);
+}
+
+export async function finishSignIn(ctx: ProviderAdminContext, args: OperationInput<"finish_sign_in">): Promise<OperationResult<"finish_sign_in">> {
+  const target = requireLoginTarget(ctx, args.provider);
+  return loginChanged(ctx, target, await finishLoginSignIn(ctx, target, args));
+}
+
+export function cancelSignIn(ctx: ProviderAdminContext, args: OperationInput<"cancel_sign_in">): OperationResult<"cancel_sign_in"> {
+  return cancelLoginSignIn(requireLoginTarget(ctx, args.provider), args.credential);
 }
 
 function keyIndex(name: string, entry: ProviderEntry, raw: string): number {
@@ -582,7 +617,7 @@ function described(check: Check | undefined): string {
 
 export async function addCredential(ctx: ProviderAdminContext, args: OperationInput<"add_credential">): Promise<OperationResult<"add_credential">> {
   const { name, entry } = resolveProvider(ctx.config.config, args.provider);
-  refuseLogins(name, entry, "add one");
+  if (signsIn(name, entry)) throw invalidRequest(`${name} signs in with Claude logins instead of keys; add one with \`shore provider ${name} auth --add NAME\``);
   if (entry.noAuth) throw invalidRequest(`${name} is set to need no key; turn that off first with \`shore provider ${name} set no-auth false\``);
   if ((args.secret === undefined) === (args.env === undefined)) throw invalidRequest("give the key itself or the name of an environment variable that holds it, not both");
   const implicit = entry.keys.length === 0 ? keysOf(name, entry)[0]?.key : undefined;
@@ -633,7 +668,8 @@ export async function addCredential(ctx: ProviderAdminContext, args: OperationIn
 
 export async function updateCredential(ctx: ProviderAdminContext, args: OperationInput<"update_credential">): Promise<OperationResult<"update_credential">> {
   const { name, entry } = resolveProvider(ctx.config.config, args.provider);
-  refuseLogins(name, entry, "change one");
+  const login = loginTarget(ctx, name, entry);
+  if (login !== undefined) return loginChanged(ctx, login, updateLogin(ctx, login, args));
   const index = keyIndex(name, entry, args.credential);
   const key = entry.keys[index] as ProviderKeyEntry;
   const file = providerFile(ctx.config, name);
@@ -699,7 +735,8 @@ export async function updateCredential(ctx: ProviderAdminContext, args: Operatio
 
 export function removeCredential(ctx: ProviderAdminContext, args: OperationInput<"remove_credential">): OperationResult<"remove_credential"> {
   const { name, entry } = resolveProvider(ctx.config.config, args.provider);
-  refuseLogins(name, entry, "remove one");
+  const login = loginTarget(ctx, name, entry);
+  if (login !== undefined) return loginChanged(ctx, login, removeLogin(ctx, login, args.credential));
   const index = keyIndex(name, entry, args.credential);
   const key = entry.keys[index] as ProviderKeyEntry;
   const file = providerFile(ctx.config, name);
@@ -720,7 +757,8 @@ export function removeCredential(ctx: ProviderAdminContext, args: OperationInput
 
 export async function testCredential(ctx: ProviderAdminContext, args: OperationInput<"test_credential">): Promise<OperationResult<"test_credential">> {
   const { name, entry } = resolveProvider(ctx.config.config, args.provider);
-  refuseLogins(name, entry, "test one");
+  const login = loginTarget(ctx, name, entry);
+  if (login !== undefined) return testLogin(ctx, login, args.credential);
   const implicit = entry.keys.length === 0 ? keysOf(name, entry)[0]?.key : undefined;
   const key = implicit !== undefined && implicit.name === args.credential ? implicit : entry.keys[keyIndex(name, entry, args.credential)] as ProviderKeyEntry;
   const secret = secretOf(ctx, name, key);
@@ -734,7 +772,7 @@ export async function testCredential(ctx: ProviderAdminContext, args: OperationI
 
 export function orderCredentials(ctx: ProviderAdminContext, args: OperationInput<"order_credentials">): OperationResult<"order_credentials"> {
   const { name, entry } = resolveProvider(ctx.config.config, args.provider);
-  refuseLogins(name, entry, "order them");
+  if (signsIn(name, entry)) throw invalidRequest(`${name} has no order of logins: it uses one with room, preferring the one whose week resets soonest. Pin one with \`shore provider ${name} use NAME\``);
   const wanted = args.order.map((raw) => keyIndex(name, entry, raw.trim()));
   if (new Set(wanted).size !== wanted.length) throw invalidRequest("each key can appear once in the order");
   const order = [...wanted, ...entry.keys.map((_, i) => i).filter((i) => !wanted.includes(i))];
@@ -746,7 +784,8 @@ export function orderCredentials(ctx: ProviderAdminContext, args: OperationInput
 
 export function selectCredential(ctx: ProviderAdminContext, args: OperationInput<"select_credential">): OperationResult<"select_credential"> {
   const { name, entry } = resolveProvider(ctx.config.config, args.provider);
-  refuseLogins(name, entry, "pin one");
+  const login = loginTarget(ctx, name, entry);
+  if (login !== undefined) return loginChanged(ctx, login, pinLogin(ctx, login, args.credential));
   const file = providerFile(ctx.config, name);
   if (args.credential === null) {
     commitConfigEdits(ctx.config, [{ file, edit: (before) => unsetTomlValue(before, [...providerPath(name), "pin"]).text }], `unpinning ${name}`);
@@ -760,7 +799,10 @@ export function selectCredential(ctx: ProviderAdminContext, args: OperationInput
 
 export function setCredentialLimit(ctx: ProviderAdminContext, args: OperationInput<"set_credential_limit">): OperationResult<"set_credential_limit"> {
   const { name, entry } = resolveProvider(ctx.config.config, args.provider);
-  refuseLogins(name, entry, "limit one's spending");
+  const login = loginTarget(ctx, name, entry);
+  if (login !== undefined) return loginChanged(ctx, login, limitLogin(ctx, login, args));
+  if (args.windows !== undefined) throw invalidRequest(`only a Claude login has session and weekly windows; limit a key's spending instead, e.g. \`shore provider ${name} limit ${args.credential} --spend 20/month\``);
+  if (args.cost_usd === undefined) throw invalidRequest("say how much this key may spend, or null to remove its limit");
   const index = keyIndex(name, entry, args.credential);
   const key = entry.keys[index] as ProviderKeyEntry;
   const file = providerFile(ctx.config, name);

@@ -51,6 +51,10 @@ fn handle_paste(app: &mut App, text: &str) -> Action {
         prompt.typed.push_str(text.trim());
         return Action::Redraw;
     }
+    if let Some(prompt) = app.sign_in_prompt.as_mut() {
+        prompt.typed.push_str(text.trim());
+        return Action::Redraw;
+    }
     if app.show_help
         || app.fullscreen.is_some()
         || app.subagent_panel.is_some()
@@ -85,6 +89,9 @@ fn handle_paste(app: &mut App, text: &str) -> Action {
 fn handle_key(app: &mut App, key: KeyEvent) -> Action {
     if app.secret_prompt.is_some() {
         return handle_secret_prompt(app, key);
+    }
+    if app.sign_in_prompt.is_some() {
+        return handle_sign_in_prompt(app, key);
     }
     if app.show_help {
         return handle_help_overlay(app, key);
@@ -754,6 +761,85 @@ fn handle_secret_prompt(app: &mut App, key: KeyEvent) -> Action {
     }
 }
 
+fn handle_sign_in_prompt(app: &mut App, key: KeyEvent) -> Action {
+    let Some(prompt) = app.sign_in_prompt.as_mut() else {
+        return Action::None;
+    };
+    match (key.modifiers, key.code) {
+        (_, KeyCode::Esc) | (KeyModifiers::CONTROL, KeyCode::Char('c')) => {
+            let Some(done) = app.sign_in_prompt.take() else {
+                return Action::None;
+            };
+            let args =
+                serde_json::json!({ "provider": done.provider, "credential": done.credential });
+            palette_swp_command(app, &done.label, "cancel_sign_in", args)
+        }
+        (KeyModifiers::CONTROL, KeyCode::Char('u')) => {
+            prompt.typed.clear();
+            Action::Redraw
+        }
+        (KeyModifiers::CONTROL, KeyCode::Char('y')) => {
+            let copied = crate::tui::clipboard::copy_text_to_terminal_clipboard(&prompt.url);
+            match copied {
+                Ok(()) => app.set_status("sign-in link copied"),
+                Err(error) => app.set_error(format!("couldn't copy the link: {error}")),
+            }
+            Action::Redraw
+        }
+        (KeyModifiers::CONTROL, KeyCode::Char('o')) => {
+            let opened = crate::tui::clipboard::open_in_browser(&prompt.url);
+            match opened {
+                Ok(()) => app.set_status("opening the sign-in link"),
+                Err(error) => app.set_error(format!("couldn't open a browser: {error}")),
+            }
+            Action::Redraw
+        }
+        (_, KeyCode::Backspace) => {
+            _ = prompt.typed.pop();
+            Action::Redraw
+        }
+        (_, KeyCode::Enter) => {
+            if prompt.typed.trim().is_empty() {
+                app.set_status("paste the code the sign-in page shows, or Esc to stop");
+                return Action::Redraw;
+            }
+            let Some(done) = app.sign_in_prompt.take() else {
+                return Action::None;
+            };
+            let args = serde_json::json!({
+                "provider": done.provider,
+                "credential": done.credential,
+                "code": done.typed.trim(),
+            });
+            palette_swp_command(app, &done.label, "finish_sign_in", args)
+        }
+        (KeyModifiers::NONE | KeyModifiers::SHIFT, KeyCode::Char(c)) => {
+            prompt.typed.push(c);
+            Action::Redraw
+        }
+        _ => Action::None,
+    }
+}
+
+fn auth_add_request(
+    app: &mut App,
+    label: &str,
+    request: crate::cli::KeyRequest,
+) -> Option<ConnCommand> {
+    if !request.asks_for_a_key() {
+        return key_request(app, label, request);
+    }
+    let rid = app.next_request_id("auth_check");
+    let args = serde_json::json!({ "provider": request.provider });
+    app.pending_auth_check = Some((rid.clone(), label.to_owned(), request));
+    app.input.exit_command_mode();
+    Some(ConnCommand::Send(ClientMessage::Command(Command {
+        rid: Some(rid),
+        name: "provider_detail".to_owned(),
+        args,
+    })))
+}
+
 pub(crate) fn key_request(
     app: &mut App,
     label: &str,
@@ -824,10 +910,13 @@ fn provider_palette(app: &mut App, input: &str, command: &crate::cli::ProviderCo
         | crate::cli::ProviderPlan::Confirm { name, args, .. } => {
             palette_swp_command(app, input, name, args)
         }
-        crate::cli::ProviderPlan::Key(request) => match key_request(app, input, request) {
+        crate::cli::ProviderPlan::Key(request) => match auth_add_request(app, input, request) {
             Some(send) => Action::Send(send),
             None => Action::Redraw,
         },
+        crate::cli::ProviderPlan::SignIn(request) => {
+            palette_swp_command(app, input, "start_sign_in", request.args())
+        }
         crate::cli::ProviderPlan::Add { args, key } => {
             app.pending_provider_key = key.map(|request| (input.to_owned(), request));
             palette_swp_command(app, input, "add_provider", args)

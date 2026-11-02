@@ -2051,6 +2051,17 @@ wire_types! {
         pub since: String,
     }
 
+    pub struct CredentialWindow {
+        pub window: String,
+        pub label: String,
+        pub percent_used: f64,
+        #[serde(deserialize_with = "deserialize_nullable")]
+        pub resets_at: Option<String>,
+        pub limit: f64,
+        pub limit_set: bool,
+        pub at_limit: bool,
+    }
+
     pub struct CredentialStatus {
         pub name: String,
         pub kind: CredentialKind,
@@ -2074,6 +2085,11 @@ wire_types! {
         #[serde(default, skip_serializing_if = "Option::is_none")]
         #[ts(optional)]
         pub login_command: Option<String>,
+        #[serde(default)]
+        pub windows: Vec<CredentialWindow>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        #[ts(optional)]
+        pub plan: Option<String>,
     }
 
     pub struct ProviderCacheStatus {
@@ -2099,6 +2115,12 @@ wire_types! {
         pub selection: CredentialSelection,
         #[serde(deserialize_with = "deserialize_nullable")]
         pub pinned: Option<String>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        #[ts(optional)]
+        pub credential_kind: Option<CredentialKind>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        #[ts(optional)]
+        pub selection_detail: Option<String>,
         pub credentials: Vec<CredentialStatus>,
         pub cache: ProviderCacheStatus,
     }
@@ -2242,11 +2264,54 @@ wire_types! {
     pub struct SetCredentialLimitArgs {
         pub provider: String,
         pub credential: String,
-        #[serde(deserialize_with = "deserialize_nullable")]
-        pub cost_usd: Option<f64>,
+        #[serde(default, deserialize_with = "deserialize_present", skip_serializing_if = "Option::is_none")]
+        #[ts(optional)]
+        pub cost_usd: Option<Option<f64>>,
         #[serde(default, skip_serializing_if = "Option::is_none")]
         #[ts(optional)]
         pub period: Option<UsageBudgetPeriod>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        #[ts(optional)]
+        pub windows: Option<Vec<CredentialWindowLimit>>,
+    }
+
+    #[serde(deny_unknown_fields)]
+    pub struct CredentialWindowLimit {
+        pub window: String,
+        #[serde(deserialize_with = "deserialize_nullable")]
+        pub limit: Option<f64>,
+    }
+
+    #[serde(deny_unknown_fields)]
+    pub struct StartSignInArgs {
+        pub provider: String,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        #[ts(optional)]
+        pub credential: Option<String>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        #[ts(optional)]
+        pub add: Option<bool>,
+    }
+
+    pub struct SignInStarted {
+        pub provider: String,
+        pub credential: String,
+        pub url: String,
+        pub expires_at: String,
+        pub message: String,
+    }
+
+    #[serde(deny_unknown_fields)]
+    pub struct FinishSignInArgs {
+        pub provider: String,
+        pub credential: String,
+        pub code: String,
+    }
+
+    pub struct SignInCancelled {
+        pub provider: String,
+        pub credential: String,
+        pub message: String,
     }
 
     pub struct CredentialTested {
@@ -2878,6 +2943,9 @@ operations! {
     OrderCredentials: "order_credentials" (OrderCredentialsArgs) => ProviderChanged,
     SelectCredential: "select_credential" (SelectCredentialArgs) => ProviderChanged,
     SetCredentialLimit: "set_credential_limit" (SetCredentialLimitArgs) => ProviderChanged,
+    StartSignIn: "start_sign_in" (StartSignInArgs) => SignInStarted,
+    FinishSignIn: "finish_sign_in" (FinishSignInArgs) => ProviderChanged,
+    CancelSignIn: "cancel_sign_in" (CredentialArgs) => SignInCancelled,
     ConversationLog: "log" (ConversationLogArgs) => ConversationPage,
     HistoryPage: "history_page" (HistoryPageArgs) => ConversationPage,
     GetMessage: "get" (GetMessageArgs) => Message,

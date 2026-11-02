@@ -62,7 +62,7 @@ export async function fetchClaudePlanLimits(
   }
 }
 
-function silentUntil(done: Promise<void>): AsyncIterable<SDKUserMessage> {
+export function silentUntil(done: Promise<void>): AsyncIterable<SDKUserMessage> {
   return {
     [Symbol.asyncIterator]: () => ({
       next: async (): Promise<IteratorResult<SDKUserMessage>> => {

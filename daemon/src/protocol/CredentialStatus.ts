@@ -3,5 +3,6 @@ import type { CredentialKind } from "./CredentialKind";
 import type { CredentialLimit } from "./CredentialLimit";
 import type { CredentialStanding } from "./CredentialStanding";
 import type { CredentialUsage } from "./CredentialUsage";
+import type { CredentialWindow } from "./CredentialWindow";
 
-export type CredentialStatus = { name: string, kind: CredentialKind, enabled: boolean, standing: CredentialStanding, detail: string | null, hint: string | null, env: string | null, checked_at: string | null, pinned: boolean, in_use: boolean, warn_on_fallback: boolean, limit: CredentialLimit | null, usage: CredentialUsage | null, login_command?: string, };
+export type CredentialStatus = { name: string, kind: CredentialKind, enabled: boolean, standing: CredentialStanding, detail: string | null, hint: string | null, env: string | null, checked_at: string | null, pinned: boolean, in_use: boolean, warn_on_fallback: boolean, limit: CredentialLimit | null, usage: CredentialUsage | null, login_command?: string, windows: Array<CredentialWindow>, plan?: string, };

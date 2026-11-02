@@ -28,7 +28,9 @@ pub(crate) fn draw(frame: &mut Frame<'_>, app: &mut App) {
         .saturating_add(1)
         .min(8);
 
-    let confirming = app.palette_confirmation.is_some() || app.secret_prompt.is_some();
+    let confirming = app.palette_confirmation.is_some()
+        || app.secret_prompt.is_some()
+        || app.sign_in_prompt.is_some();
     let show_value_editor =
         app.input.mode == InputMode::Command && !confirming && app.is_value_editor_open();
     let show_config_panel = config_panel_is_open(app);
@@ -1420,6 +1422,18 @@ fn draw_input(frame: &mut Frame<'_>, app: &App, area: Rect) {
         let display = format!(
             "{}: {hidden}  Enter: save · Esc: cancel · not shown as you type",
             prompt.title
+        );
+        frame.render_widget(Paragraph::new(display).block(block), area);
+        return;
+    }
+    if let Some(prompt) = &app.sign_in_prompt {
+        let block = Block::default()
+            .borders(Borders::TOP)
+            .title(" [CODE] ")
+            .border_style(Style::default().fg(Color::Yellow));
+        let display = format!(
+            "{}: {}  Ctrl-O: open the link · Ctrl-Y: copy it · Enter: finish · Esc: stop",
+            prompt.credential, prompt.typed
         );
         frame.render_widget(Paragraph::new(display).block(block), area);
         return;

@@ -442,8 +442,15 @@ pub(crate) fn render(
         | "remove_credential"
         | "order_credentials"
         | "select_credential"
-        | "set_credential_limit" => Some(written(|out| {
+        | "set_credential_limit"
+        | "finish_sign_in" => Some(written(|out| {
             crate::output::catalog::write_provider_changed(out, data);
+        })),
+        "start_sign_in" => Some(written(|out| {
+            crate::output::catalog::write_sign_in_started(out, data);
+        })),
+        "cancel_sign_in" => Some(written(|out| {
+            crate::output::catalog::write_sign_in_cancelled(out, data);
         })),
         "remove_provider" => Some(written(|out| {
             crate::output::catalog::write_provider_removed(out, data);

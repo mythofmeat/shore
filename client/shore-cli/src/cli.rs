@@ -521,11 +521,11 @@ pub(crate) enum CliCommand {
         reset: bool,
     },
 
-    /// List providers and their keys; add, change or remove one
+    /// List providers with their keys and logins; add, change or remove one
     #[command(args_conflicts_with_subcommands = true)]
     #[command(display_order = 5)]
     #[command(
-        after_help = "One provider:\n  shore provider <name>                      its transport, keys and catalog\n  shore provider <name> auth [--add [NAME]]  list its keys, or add one (asked for without echo)\n  shore provider <name> auth <key> --test | --disable | --enable | --rename NEW | --replace | --remove\n  shore provider <name> auth --order a,b     the order keys are tried in\n  shore provider <name> use <key> | --auto   pin a key, or go back to the first that works\n  shore provider <name> limit <key> --spend 20/month | off\n  shore provider <name> set <setting> <value>  base-url, sdk, discover, ignore-models, ...\n  shore provider <name> enable | disable | remove | models | refresh\n\n`shore provider <name> --help` has the details."
+        after_help = "One provider:\n  shore provider <name>                      its transport, keys or logins, and catalog\n  shore provider <name> auth [--add [NAME]]  list its keys or logins, or add one (a key is asked for without echo; a login signs in through a link)\n  shore provider <name> auth <key> --test | --disable | --enable | --rename NEW | --replace | --remove\n  shore provider <name> auth <login> --login  sign a login in again\n  shore provider <name> auth --order a,b     the order keys are tried in\n  shore provider <name> use <key> | --auto   pin a key or login, or go back to choosing\n  shore provider <name> limit <key> --spend 20/month | off\n  shore provider <name> limit <login> --session 80% --weekly 50% | off\n  shore provider <name> set <setting> <value>  base-url, sdk, discover, ignore-models, ...\n  shore provider <name> enable | disable | remove | models | refresh\n\n`shore provider <name> --help` has the details."
     )]
     Provider {
         #[command(subcommand)]
@@ -1599,19 +1599,26 @@ pub(crate) enum ProviderAction {
         #[arg(long, short)]
         yes: bool,
     },
-    /// List its keys, or add, test, rename, reorder, disable or remove one
+    /// List its keys or logins, or add, test, rename, reorder, disable or remove one
     Auth(AuthArgs),
-    /// Use only one key, or --auto to go back to the first that works
+    /// Use only one key or login, or --auto to go back to choosing
     Use {
         credential: Option<String>,
         #[arg(long, conflicts_with = "credential")]
         auto: bool,
     },
-    /// Cap what one key may spend: --spend 20/month, 5/day, or off
+    /// Cap what one key may spend, or how much of its windows one login may use
     Limit {
         credential: String,
-        #[arg(long, value_name = "USD[/PERIOD]")]
-        spend: String,
+        /// A key's spending: 20/month, 5/day, or off
+        #[arg(long, value_name = "USD[/PERIOD]", conflicts_with_all = ["session", "weekly"])]
+        spend: Option<String>,
+        /// A login's share of its 5-hour window: 80%, or off for the default
+        #[arg(long, value_name = "PERCENT")]
+        session: Option<String>,
+        /// A login's share of its weekly window: 50%, or off for the default
+        #[arg(long, value_name = "PERCENT")]
+        weekly: Option<String>,
     },
     /// List the provider's models
     Models {
@@ -1625,17 +1632,23 @@ pub(crate) enum ProviderAction {
 
 #[derive(clap::Args, Debug)]
 pub(crate) struct AuthArgs {
-    /// The key to act on, by name
+    /// The key or login to act on, by name; a login also goes by its email
     pub(crate) credential: Option<String>,
 
-    /// Add a key named NAME (default, then key2, ...); asks for it without echoing
+    /// Add a key named NAME (default, then key2, ...), asked for without echoing,
+    /// or a login named NAME, signed in through a link. A login left unnamed goes
+    /// by its email
     #[arg(long, num_args = 0..=1, default_missing_value = "", value_name = "NAME", conflicts_with = "credential")]
     pub(crate) add: Option<String>,
+
+    /// Sign the login in again, through a link you open wherever you are
+    #[arg(long, requires = "credential")]
+    pub(crate) login: bool,
 
     #[command(flatten)]
     pub(crate) key: KeySourceArgs,
 
-    /// Ask the provider whether the key works
+    /// Ask the provider whether the key or login works
     #[arg(long, requires = "credential")]
     pub(crate) test: bool,
 
@@ -1643,19 +1656,19 @@ pub(crate) struct AuthArgs {
     #[arg(long, requires = "credential")]
     pub(crate) replace: bool,
 
-    /// Stop using the key without removing it
+    /// Stop using the key or login without removing it
     #[arg(long, requires = "credential", conflicts_with = "enable")]
     pub(crate) disable: bool,
 
-    /// Use the key again
+    /// Use the key or login again
     #[arg(long, requires = "credential")]
     pub(crate) enable: bool,
 
-    /// Give the key a new name
+    /// Give the key or login a new name
     #[arg(long, requires = "credential", value_name = "NEW")]
     pub(crate) rename: Option<String>,
 
-    /// Remove the key, and its stored value
+    /// Remove the key and its stored value, or the login and its saved sign-in
     #[arg(long, requires = "credential")]
     pub(crate) remove: bool,
 
@@ -1685,7 +1698,40 @@ pub(crate) struct KeyRequest {
     pub(crate) allow_unencrypted: bool,
 }
 
+#[derive(Debug, Clone)]
+pub(crate) struct SignInRequest {
+    pub(crate) provider: String,
+    pub(crate) credential: Option<String>,
+    pub(crate) add: bool,
+}
+
+impl SignInRequest {
+    pub(crate) fn args(&self) -> serde_json::Value {
+        let mut args = serde_json::Map::new();
+        _ = args.insert("provider".to_owned(), self.provider.clone().into());
+        if let Some(credential) = self.credential.as_deref().filter(|name| !name.is_empty()) {
+            _ = args.insert("credential".to_owned(), credential.into());
+        }
+        if self.add {
+            _ = args.insert("add".to_owned(), true.into());
+        }
+        serde_json::Value::Object(args)
+    }
+}
+
 impl KeyRequest {
+    pub(crate) fn asks_for_a_key(&self) -> bool {
+        self.replace.is_none() && self.input == KeyInput::Prompt
+    }
+
+    pub(crate) fn sign_in(&self) -> SignInRequest {
+        SignInRequest {
+            provider: self.provider.clone(),
+            credential: self.name.clone(),
+            add: true,
+        }
+    }
+
     pub(crate) fn operation(&self, secret: Option<&str>) -> (&'static str, serde_json::Value) {
         let mut args = serde_json::Map::new();
         _ = args.insert("provider".to_owned(), self.provider.clone().into());
@@ -1725,6 +1771,7 @@ pub(crate) enum ProviderPlan {
         args: serde_json::Value,
     },
     Key(KeyRequest),
+    SignIn(SignInRequest),
     Add {
         args: serde_json::Value,
         key: Option<KeyRequest>,
@@ -1766,6 +1813,42 @@ fn spend_limit(raw: &str) -> Result<serde_json::Value, String> {
         || serde_json::json!({ "cost_usd": cost }),
         |window| serde_json::json!({ "cost_usd": cost, "period": window }),
     ))
+}
+
+#[expect(
+    clippy::float_arithmetic,
+    reason = "a window limit is typed as a percentage and sent as a fraction"
+)]
+fn window_limit(flag: &str, raw: &str) -> Result<serde_json::Value, String> {
+    let trimmed = raw.trim();
+    if matches!(trimmed, "off" | "none" | "default") {
+        return Ok(serde_json::Value::Null);
+    }
+    let percent: f64 = trimmed
+        .trim_end_matches('%')
+        .trim()
+        .parse()
+        .map_err(|_| format!("--{flag} takes a percentage like 80%, or off; got {raw:?}"))?;
+    if !(percent > 0.0 && percent <= 100.0) {
+        return Err(format!(
+            "--{flag} takes a percentage above 0 and at most 100, or off; got {raw:?}"
+        ));
+    }
+    Ok((percent / 100.0).into())
+}
+
+fn window_limits(session: Option<&str>, weekly: Option<&str>) -> Result<serde_json::Value, String> {
+    let mut windows = Vec::new();
+    if let Some(raw) = session {
+        windows.push(
+            serde_json::json!({ "window": "session", "limit": window_limit("session", raw)? }),
+        );
+    }
+    if let Some(raw) = weekly {
+        windows
+            .push(serde_json::json!({ "window": "weekly", "limit": window_limit("weekly", raw)? }));
+    }
+    Ok(serde_json::json!({ "windows": windows }))
 }
 
 fn provider_setting(
@@ -1907,11 +1990,25 @@ fn named_plan(provider: &str, action: Option<ProviderAction>) -> Result<Provider
                 serde_json::json!({ "provider": provider, "credential": null }),
             ),
             _ => Err(format!(
-                "name the key to use, or --auto: `shore provider {provider} use <key>`"
+                "name the key or login to use, or --auto: `shore provider {provider} use <name>`"
             )),
         },
-        Some(ProviderAction::Limit { credential, spend }) => {
-            let mut args = spend_limit(&spend)?;
+        Some(ProviderAction::Limit {
+            credential,
+            spend,
+            session,
+            weekly,
+        }) => {
+            let mut args = match (&spend, &session, &weekly) {
+                (Some(amount), _, _) => spend_limit(amount)?,
+                (None, None, None) => {
+                    return Err(
+                        "say what to limit: --spend for a key, --session or --weekly for a login"
+                            .to_owned(),
+                    );
+                }
+                (None, _, _) => window_limits(session.as_deref(), weekly.as_deref())?,
+            };
             if let Some(fields) = args.as_object_mut() {
                 _ = fields.insert("provider".to_owned(), provider.into());
                 _ = fields.insert("credential".to_owned(), credential.into());
@@ -1957,14 +2054,23 @@ fn auth_plan(provider: &str, auth: AuthArgs) -> Result<ProviderPlan, String> {
         auth.enable,
         auth.rename.is_some(),
         auth.remove,
+        auth.login,
     ]
     .iter()
     .filter(|on| **on)
     .count();
     if chosen > 1 {
         return Err(
-            "pick one of --test, --replace, --disable, --enable, --rename and --remove".to_owned(),
+            "pick one of --test, --replace, --disable, --enable, --rename, --login and --remove"
+                .to_owned(),
         );
+    }
+    if auth.login {
+        return Ok(ProviderPlan::SignIn(SignInRequest {
+            provider: provider.to_owned(),
+            credential: Some(credential),
+            add: false,
+        }));
     }
     if auth.replace {
         if auth.key.env.is_some() {
@@ -1975,7 +2081,7 @@ fn auth_plan(provider: &str, auth: AuthArgs) -> Result<ProviderPlan, String> {
     let both = serde_json::json!({ "provider": provider, "credential": credential });
     if auth.remove {
         return Ok(ProviderPlan::Confirm {
-            prompt: format!("Remove {provider} key {credential}?"),
+            prompt: format!("Remove {credential} from {provider}?"),
             yes: auth.yes,
             name: "remove_credential",
             args: both,
@@ -3296,6 +3402,7 @@ fn provider_to_swp(cmd: &CliCommand) -> Option<(&'static str, serde_json::Value)
                 Some((name, args))
             }
             ProviderPlan::Add { args, .. } => Some(("add_provider", args)),
+            ProviderPlan::SignIn(request) => Some(("start_sign_in", request.args())),
             ProviderPlan::Key(_) => None,
         };
     }

@@ -249,6 +249,44 @@ fn plan_window_meters<W: Write>(out: &mut W, windows: &[Value]) {
     }
 }
 
+pub(crate) fn write_login_windows<W: Write>(out: &mut W, windows: &[Value]) {
+    let width = windows
+        .iter()
+        .map(|window| text(window, "label").chars().count())
+        .max()
+        .unwrap_or(0);
+    for window in windows {
+        let mut detail = Vec::new();
+        let reset = text(window, "resets_at");
+        if !reset.is_empty() {
+            detail.push(format!("resets {}", short_when(reset)));
+        }
+        let own = window
+            .get("limit_set")
+            .and_then(Value::as_bool)
+            .unwrap_or(false);
+        let at_limit = window
+            .get("at_limit")
+            .and_then(Value::as_bool)
+            .unwrap_or(false);
+        match (own, at_limit) {
+            (true, reached) => detail.push(format!(
+                "limit {}%{}",
+                whole_percent(decimal(window, "limit")),
+                if reached { ", reached" } else { "" }
+            )),
+            (false, true) => detail.push("moves on when another login has room".to_owned()),
+            (false, false) => {}
+        }
+        Meter::new(decimal(window, "percent_used"), 1.0).write_row(
+            out,
+            text(window, "label"),
+            width,
+            &detail.join(" \u{00b7} "),
+        );
+    }
+}
+
 fn account_tone(state: &str) -> Tone {
     match state {
         "ok" => Tone::Good,
