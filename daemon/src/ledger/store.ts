@@ -549,10 +549,6 @@ function sqlitePricingStore(db: Database, now: () => number = () => Date.now()):
         .get(url) as { fetched_at: number } | null;
       return row?.fetched_at;
     },
-    putCatalogFetchedAt(url, at) {
-      db.query("INSERT OR REPLACE INTO pricing_catalog_checks (url, fetched_at) VALUES (?1, ?2)")
-        .run(url, at);
-    },
     get(modelId) {
       const row = db
         .query(
@@ -571,20 +567,28 @@ function sqlitePricingStore(db: Database, now: () => number = () => Date.now()):
         cache_write_per_token: row.cache_write_per_token,
       };
     },
-    put(modelId, pricing) {
-      db.query(
+    putCatalog(url, rates, fetchedAt) {
+      const putRate = db.query(
         `INSERT OR REPLACE INTO pricing
            (model_id, input_per_token, output_per_token,
             cache_read_per_token, cache_write_per_token, fetched_at)
          VALUES ($id, $input, $output, $read, $write, $at)`,
-      ).run({
-        $id: modelId,
-        $input: pricing.input_per_token,
-        $output: pricing.output_per_token,
-        $read: pricing.cache_read_per_token,
-        $write: pricing.cache_write_per_token,
-        $at: new Date().toISOString(),
-      });
+      );
+      const at = new Date(fetchedAt).toISOString();
+      db.transaction(() => {
+        for (const [modelId, pricing] of rates) {
+          putRate.run({
+            $id: modelId,
+            $input: pricing.input_per_token,
+            $output: pricing.output_per_token,
+            $read: pricing.cache_read_per_token,
+            $write: pricing.cache_write_per_token,
+            $at: at,
+          });
+        }
+        db.query("INSERT OR REPLACE INTO pricing_catalog_checks (url, fetched_at) VALUES (?1, ?2)")
+          .run(url, fetchedAt);
+      })();
     },
     dropExpired() {
       db.query(

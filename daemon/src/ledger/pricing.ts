@@ -114,10 +114,9 @@ export type CatalogFetch = (url: string) => Promise<Response>;
 
 export interface PricingStore {
   get(modelId: string): ModelPricing | undefined;
-  put(modelId: string, pricing: ModelPricing): void;
+  putCatalog(url: string, rates: ReadonlyArray<readonly [string, ModelPricing]>, fetchedAt: number): void;
   dropExpired(): void;
-  catalogFetchedAt?(url: string): number | undefined;
-  putCatalogFetchedAt?(url: string, at: number): void;
+  catalogFetchedAt(url: string): number | undefined;
 }
 
 const PER_MILLION = 1e-6;
@@ -190,7 +189,6 @@ export class PricingEngine {
   readonly #fetch: CatalogFetch;
   readonly #inflight = new Map<string, Promise<void>>();
   readonly #warnedUnusable = new Set<string>();
-  readonly #catalogFetchedAt = new Map<string, number>();
   readonly #catalogTriedAt = new Map<string, number>();
   readonly #now: () => number;
 
@@ -247,8 +245,7 @@ export class PricingEngine {
   }
 
   async #refreshCatalog(source: CatalogSource, maxAgeMs: number): Promise<void> {
-    const fetchedAt = this.#store.catalogFetchedAt?.(source.url) ?? this.#catalogFetchedAt.get(source.url);
-    if (this.#isWithin(fetchedAt, maxAgeMs)) return;
+    if (this.#isWithin(this.#store.catalogFetchedAt(source.url), maxAgeMs)) return;
     let pending = this.#inflight.get(source.url);
     if (pending === undefined) {
       if (this.#isWithin(this.#catalogTriedAt.get(source.url), CATALOG_RETRY_MS)) return;
@@ -281,14 +278,13 @@ export class PricingEngine {
       return;
     }
 
+    const rates: Array<readonly [string, ModelPricing]> = [];
     for (const entry of data) {
       const model = entry as { id?: unknown; pricing?: Record<string, unknown> };
       if (typeof model.id !== "string" || !model.pricing) continue;
-      this.#store.put(source.key(model.id), source.read(model.id, model.pricing));
+      rates.push([source.key(model.id), source.read(model.id, model.pricing)]);
     }
-    const fetchedAt = this.#now();
-    this.#store.putCatalogFetchedAt?.(source.url, fetchedAt);
-    this.#catalogFetchedAt.set(source.url, fetchedAt);
+    this.#store.putCatalog(source.url, rates, this.#now());
     this.#catalogTriedAt.delete(source.url);
   }
 

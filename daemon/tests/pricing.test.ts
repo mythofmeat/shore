@@ -200,6 +200,20 @@ describe("the pricing table", () => {
     close(required(oneHour.total_cost), 32.2);
   });
 
+  test("a catalog refresh writes its models together, not in a commit each", async () => {
+    const { ledger } = ledgerAt();
+    const models = Array.from({ length: 200 }, (_, i) => ({
+      id: `vendor/model-${String(i)}`,
+      pricing: { prompt: "0.000001", completion: "0.000002" },
+    }));
+    catalogAnswers(models);
+    await ledger.pricing.getOrFetch("openrouter", "vendor/model-0");
+
+    expect(ratedModels(ledger)).toHaveLength(models.length);
+    const { log: framesWritten } = ledger.database.query("PRAGMA wal_checkpoint(PASSIVE)").get() as { log: number };
+    expect(framesWritten).toBeLessThan(models.length);
+  });
+
   test("a call that lands after a rate expires gets the catalog's new rate, never the old one", async () => {
     const { ledger, path } = ledgerAt();
     seedRate(ledger, "anthropic/claude-opus-5.5", 5, new Date(Date.now() - PRICING_TTL_MS - 1000).toISOString());
