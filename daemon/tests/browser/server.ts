@@ -6,10 +6,12 @@ import type { SidecarProvider } from "../../src/llm/types.ts";
 import { seedDiagnosticFixture } from "../support/diagnostic_fixture.ts";
 import { restoreTestEnv, setTestEnv } from "../support/env.ts";
 import { cacheFixture, compactionFixture, seedArchivedSegment } from "../support/memory_fixture.ts";
+import { answerPricingCatalogsWithNoModels } from "../support/pricing_catalogs.ts";
 import { toolFixture } from "../support/tool_fixture.ts";
 import { seedUsageFixture, USAGE_FIXTURE_CONFIG } from "../support/usage_fixture.ts";
 import { sizedImage } from "../support/sized_image.ts";
 
+answerPricingCatalogsWithNoModels();
 const root = await mkdtemp(join(tmpdir(), "shore-gui-test-"));
 await mkdir(join(root, "config"));
 const configPath = join(root, "config", "shore.toml");
