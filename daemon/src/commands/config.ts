@@ -31,7 +31,8 @@ import { characterWorkspace } from "../tools/character_workspace.ts";
 import { ALL_TOOLS, toolEnabled } from "../tools/registry.ts";
 import { internalError, invalidRequest, notFound } from "./errors.ts";
 import { credentialEntry } from "../handler/tool_context.ts";
-import { isKeylessSdk, readCandidateEnv, resolveKeyCandidates } from "../llm/credentials.ts";
+import { isCredentialBudget } from "../config/providers.ts";
+import { describeCandidateSource, isKeylessSdk, readCandidateEnv, resolveKeyCandidates } from "../llm/credentials.ts";
 import { formatConfigPath, parseConfigPath, publicConfig } from "../config/surface.ts";
 import type { OperationInput, OperationResult } from "../operations/types.ts";
 import type { ConfigSources } from "../protocol/ConfigSources.ts";
@@ -151,11 +152,11 @@ export function configCheck(ctx: ConfigContext, env: NodeJS.ProcessEnv = process
     const entry = ctx.config.providers.get(model.providerKey);
     const candidates = resolveKeyCandidates(model.providerKey, entry === undefined ? undefined : credentialEntry(entry), model.apiKeyEnv);
     if (candidates.some((candidate) => readCandidateEnv(candidate, env) !== undefined)) continue;
-    const names = candidates.map((candidate) => `$${candidate.env}`).join(", ");
+    const names = candidates.map((candidate) => candidate.stored === true ? describeCandidateSource(candidate) : `$${candidate.env}`).join(", ");
     warnings.push(
       candidates.length === 0
         ? `Provider '${model.providerKey}' has no enabled keys (needed by model ${model.qualifiedName})`
-        : `API key env var ${names} not set (needed by model ${model.qualifiedName})`,
+        : `API key ${names} not set (needed by model ${model.qualifiedName})`,
     );
   }
   for (const [name, server] of ctx.config.app.mcp) {
@@ -202,8 +203,10 @@ function catalogSections(ctx: ConfigContext): Record<string, unknown> {
 }
 
 function reportedConfig(ctx: ConfigContext): Record<string, unknown> {
+  const app = ctx.config.app;
+  const written = { ...app, usage: { ...app.usage, budgets: app.usage.budgets.filter((budget) => !isCredentialBudget(budget)) } };
   return redactSecrets(publicConfig({
-    ...(serializeConfigValue(ctx.config.app) as Record<string, unknown>),
+    ...(serializeConfigValue(written) as Record<string, unknown>),
     ...catalogSections(ctx),
   })) as Record<string, unknown>;
 }
@@ -377,6 +380,56 @@ function commitConfigKey(
     restart_required: restart,
     masked_by_preference: preferredModelMask(ctx, key),
   };
+}
+
+export interface ConfigFileEdit {
+  file: string;
+  edit: (before: string) => string;
+}
+
+export function configFiles(ctx: ConfigContext): string[] {
+  return [...new Set([ctx.configPath, ...(ctx.config.files ?? [])])];
+}
+
+export function readConfigFile(file: string): string {
+  return readOrEmpty(file);
+}
+
+export function commitConfigEdits(ctx: ConfigContext, edits: readonly ConfigFileEdit[], rejection: string): { fresh: LoadedConfig; restart_required: string[] } {
+  const planned = edits.map(({ file, edit }) => {
+    const before = readOrEmpty(file);
+    let text: string;
+    try {
+      text = edit(before);
+    } catch (e) {
+      if (e instanceof TomlEditError) throw invalidRequest(e.message);
+      throw e;
+    }
+    return { file, before, text, existed: existsSync(file) };
+  }).filter((plan) => plan.text !== plan.before);
+  const written: typeof planned = [];
+  const restore = () => {
+    for (const plan of written.reverse()) restoreConfigFile(plan.file, plan.before, plan.existed);
+  };
+  for (const plan of planned) {
+    try {
+      atomicWriteSync(plan.file, plan.text);
+      written.push(plan);
+    } catch (e) {
+      restore();
+      throw internalError(`failed to write ${plan.file}: ${(e as Error).message}`);
+    }
+  }
+  let fresh: LoadedConfig;
+  try {
+    fresh = loadConfig(ctx.configPath, loaderOptions(ctx));
+  } catch (e) {
+    restore();
+    throw invalidRequest(`${rejection} was rejected: ${message(e)}`);
+  }
+  const restart = restartRequiredChanges(ctx.runtime.globalConfig?.() ?? ctx.config, fresh);
+  adopt(ctx, fresh);
+  return { fresh, restart_required: restart };
 }
 
 export function setConfigKey(

@@ -1242,6 +1242,198 @@
             "properties": {
               "name": {
                 "type": "string",
+                "const": "provider_detail"
+              },
+              "data": {
+                "$ref": "#/$defs/ProviderStatus"
+              }
+            },
+            "required": [
+              "name",
+              "data"
+            ]
+          },
+          {
+            "type": "object",
+            "properties": {
+              "name": {
+                "type": "string",
+                "const": "provider_presets"
+              },
+              "data": {
+                "$ref": "#/$defs/ProviderPresetListing"
+              }
+            },
+            "required": [
+              "name",
+              "data"
+            ]
+          },
+          {
+            "type": "object",
+            "properties": {
+              "name": {
+                "type": "string",
+                "const": "add_provider"
+              },
+              "data": {
+                "$ref": "#/$defs/ProviderChanged"
+              }
+            },
+            "required": [
+              "name",
+              "data"
+            ]
+          },
+          {
+            "type": "object",
+            "properties": {
+              "name": {
+                "type": "string",
+                "const": "update_provider"
+              },
+              "data": {
+                "$ref": "#/$defs/ProviderChanged"
+              }
+            },
+            "required": [
+              "name",
+              "data"
+            ]
+          },
+          {
+            "type": "object",
+            "properties": {
+              "name": {
+                "type": "string",
+                "const": "remove_provider"
+              },
+              "data": {
+                "$ref": "#/$defs/ProviderRemoved"
+              }
+            },
+            "required": [
+              "name",
+              "data"
+            ]
+          },
+          {
+            "type": "object",
+            "properties": {
+              "name": {
+                "type": "string",
+                "const": "add_credential"
+              },
+              "data": {
+                "$ref": "#/$defs/ProviderChanged"
+              }
+            },
+            "required": [
+              "name",
+              "data"
+            ]
+          },
+          {
+            "type": "object",
+            "properties": {
+              "name": {
+                "type": "string",
+                "const": "update_credential"
+              },
+              "data": {
+                "$ref": "#/$defs/ProviderChanged"
+              }
+            },
+            "required": [
+              "name",
+              "data"
+            ]
+          },
+          {
+            "type": "object",
+            "properties": {
+              "name": {
+                "type": "string",
+                "const": "remove_credential"
+              },
+              "data": {
+                "$ref": "#/$defs/ProviderChanged"
+              }
+            },
+            "required": [
+              "name",
+              "data"
+            ]
+          },
+          {
+            "type": "object",
+            "properties": {
+              "name": {
+                "type": "string",
+                "const": "test_credential"
+              },
+              "data": {
+                "$ref": "#/$defs/CredentialTested"
+              }
+            },
+            "required": [
+              "name",
+              "data"
+            ]
+          },
+          {
+            "type": "object",
+            "properties": {
+              "name": {
+                "type": "string",
+                "const": "order_credentials"
+              },
+              "data": {
+                "$ref": "#/$defs/ProviderChanged"
+              }
+            },
+            "required": [
+              "name",
+              "data"
+            ]
+          },
+          {
+            "type": "object",
+            "properties": {
+              "name": {
+                "type": "string",
+                "const": "select_credential"
+              },
+              "data": {
+                "$ref": "#/$defs/ProviderChanged"
+              }
+            },
+            "required": [
+              "name",
+              "data"
+            ]
+          },
+          {
+            "type": "object",
+            "properties": {
+              "name": {
+                "type": "string",
+                "const": "set_credential_limit"
+              },
+              "data": {
+                "$ref": "#/$defs/ProviderChanged"
+              }
+            },
+            "required": [
+              "name",
+              "data"
+            ]
+          },
+          {
+            "type": "object",
+            "properties": {
+              "name": {
+                "type": "string",
                 "const": "log"
               },
               "data": {
@@ -1757,6 +1949,12 @@
             "format": "uint",
             "minimum": 0,
             "default": 0
+          },
+          "secrets_left_out": {
+            "type": [
+              "boolean",
+              "null"
+            ]
           }
         },
         "required": [
@@ -1796,6 +1994,12 @@
             "items": {
               "type": "string"
             }
+          },
+          "secrets_left_out": {
+            "type": [
+              "boolean",
+              "null"
+            ]
           }
         },
         "required": [
@@ -6347,6 +6551,12 @@
               "boolean",
               "null"
             ]
+          },
+          "secret": {
+            "type": [
+              "boolean",
+              "null"
+            ]
           }
         },
         "required": [
@@ -7970,6 +8180,33 @@
               "$ref": "#/$defs/ProviderKeyStatus"
             }
           },
+          "ignore_models": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "subscription": {
+            "type": "boolean"
+          },
+          "no_auth": {
+            "type": "boolean"
+          },
+          "selection": {
+            "$ref": "#/$defs/CredentialSelection"
+          },
+          "pinned": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "credentials": {
+            "type": "array",
+            "items": {
+              "$ref": "#/$defs/CredentialStatus"
+            }
+          },
           "cache": {
             "$ref": "#/$defs/ProviderCacheStatus"
           }
@@ -7981,6 +8218,12 @@
           "base_url",
           "discovery_enabled",
           "keys",
+          "ignore_models",
+          "subscription",
+          "no_auth",
+          "selection",
+          "pinned",
+          "credentials",
           "cache"
         ]
       },
@@ -8005,6 +8248,175 @@
           "enabled",
           "warn_on_fallback",
           "env_set"
+        ]
+      },
+      "CredentialSelection": {
+        "type": "string",
+        "enum": [
+          "order",
+          "room"
+        ]
+      },
+      "CredentialStatus": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "kind": {
+            "$ref": "#/$defs/CredentialKind"
+          },
+          "enabled": {
+            "type": "boolean"
+          },
+          "standing": {
+            "$ref": "#/$defs/CredentialStanding"
+          },
+          "detail": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "hint": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "env": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "checked_at": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "pinned": {
+            "type": "boolean"
+          },
+          "in_use": {
+            "type": "boolean"
+          },
+          "warn_on_fallback": {
+            "type": "boolean"
+          },
+          "limit": {
+            "anyOf": [
+              {
+                "$ref": "#/$defs/CredentialLimit"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "usage": {
+            "anyOf": [
+              {
+                "$ref": "#/$defs/CredentialUsage"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "login_command": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "name",
+          "kind",
+          "enabled",
+          "standing",
+          "detail",
+          "hint",
+          "env",
+          "checked_at",
+          "pinned",
+          "in_use",
+          "warn_on_fallback",
+          "limit",
+          "usage"
+        ]
+      },
+      "CredentialKind": {
+        "type": "string",
+        "enum": [
+          "api_key",
+          "env",
+          "login",
+          "none"
+        ]
+      },
+      "CredentialStanding": {
+        "type": "string",
+        "enum": [
+          "works",
+          "invalid",
+          "over_quota",
+          "signed_out",
+          "missing",
+          "not_checked"
+        ]
+      },
+      "CredentialLimit": {
+        "type": "object",
+        "properties": {
+          "cost_usd": {
+            "type": "number",
+            "format": "double"
+          },
+          "period": {
+            "$ref": "#/$defs/UsageBudgetPeriod"
+          },
+          "spent_usd": {
+            "type": "number",
+            "format": "double"
+          },
+          "at_limit": {
+            "type": "boolean"
+          },
+          "resets_at": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "cost_usd",
+          "period",
+          "spent_usd",
+          "at_limit",
+          "resets_at"
+        ]
+      },
+      "CredentialUsage": {
+        "type": "object",
+        "properties": {
+          "cost_usd": {
+            "type": "number",
+            "format": "double"
+          },
+          "calls": {
+            "type": "integer",
+            "format": "uint",
+            "minimum": 0
+          },
+          "since": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "cost_usd",
+          "calls",
+          "since"
         ]
       },
       "ProviderCacheStatus": {
@@ -8373,6 +8785,150 @@
         "enum": [
           "disabled",
           "discovery disabled"
+        ]
+      },
+      "ProviderPresetListing": {
+        "type": "object",
+        "properties": {
+          "presets": {
+            "type": "array",
+            "items": {
+              "$ref": "#/$defs/ProviderPreset"
+            }
+          },
+          "sdks": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        },
+        "required": [
+          "presets",
+          "sdks"
+        ]
+      },
+      "ProviderPreset": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "sdk": {
+            "type": "string"
+          },
+          "base_url": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "credential_kind": {
+            "$ref": "#/$defs/CredentialKind"
+          },
+          "api_key_env": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "discover": {
+            "type": "boolean"
+          },
+          "configured": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "name",
+          "sdk",
+          "base_url",
+          "credential_kind",
+          "api_key_env",
+          "discover",
+          "configured"
+        ]
+      },
+      "ProviderChanged": {
+        "type": "object",
+        "properties": {
+          "provider": {
+            "$ref": "#/$defs/ProviderStatus"
+          },
+          "message": {
+            "type": "string"
+          },
+          "file": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "provider",
+          "message",
+          "file"
+        ]
+      },
+      "ProviderRemoved": {
+        "type": "object",
+        "properties": {
+          "provider": {
+            "type": "string"
+          },
+          "keys_removed": {
+            "type": "integer",
+            "format": "uint",
+            "minimum": 0
+          },
+          "limits_removed": {
+            "type": "integer",
+            "format": "uint",
+            "minimum": 0
+          },
+          "file": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "provider",
+          "keys_removed",
+          "limits_removed",
+          "file"
+        ]
+      },
+      "CredentialTested": {
+        "type": "object",
+        "properties": {
+          "provider": {
+            "type": "string"
+          },
+          "credential": {
+            "type": "string"
+          },
+          "ok": {
+            "type": "boolean"
+          },
+          "standing": {
+            "$ref": "#/$defs/CredentialStanding"
+          },
+          "detail": {
+            "type": "string"
+          },
+          "model_count": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "uint",
+            "minimum": 0
+          }
+        },
+        "required": [
+          "provider",
+          "credential",
+          "ok",
+          "standing",
+          "detail",
+          "model_count"
         ]
       },
       "ConversationPage": {
@@ -10015,6 +10571,198 @@
             "properties": {
               "name": {
                 "type": "string",
+                "const": "provider_detail"
+              },
+              "data": {
+                "$ref": "#/$defs/ProviderStatus"
+              }
+            },
+            "required": [
+              "name",
+              "data"
+            ]
+          },
+          {
+            "type": "object",
+            "properties": {
+              "name": {
+                "type": "string",
+                "const": "provider_presets"
+              },
+              "data": {
+                "$ref": "#/$defs/ProviderPresetListing"
+              }
+            },
+            "required": [
+              "name",
+              "data"
+            ]
+          },
+          {
+            "type": "object",
+            "properties": {
+              "name": {
+                "type": "string",
+                "const": "add_provider"
+              },
+              "data": {
+                "$ref": "#/$defs/ProviderChanged"
+              }
+            },
+            "required": [
+              "name",
+              "data"
+            ]
+          },
+          {
+            "type": "object",
+            "properties": {
+              "name": {
+                "type": "string",
+                "const": "update_provider"
+              },
+              "data": {
+                "$ref": "#/$defs/ProviderChanged"
+              }
+            },
+            "required": [
+              "name",
+              "data"
+            ]
+          },
+          {
+            "type": "object",
+            "properties": {
+              "name": {
+                "type": "string",
+                "const": "remove_provider"
+              },
+              "data": {
+                "$ref": "#/$defs/ProviderRemoved"
+              }
+            },
+            "required": [
+              "name",
+              "data"
+            ]
+          },
+          {
+            "type": "object",
+            "properties": {
+              "name": {
+                "type": "string",
+                "const": "add_credential"
+              },
+              "data": {
+                "$ref": "#/$defs/ProviderChanged"
+              }
+            },
+            "required": [
+              "name",
+              "data"
+            ]
+          },
+          {
+            "type": "object",
+            "properties": {
+              "name": {
+                "type": "string",
+                "const": "update_credential"
+              },
+              "data": {
+                "$ref": "#/$defs/ProviderChanged"
+              }
+            },
+            "required": [
+              "name",
+              "data"
+            ]
+          },
+          {
+            "type": "object",
+            "properties": {
+              "name": {
+                "type": "string",
+                "const": "remove_credential"
+              },
+              "data": {
+                "$ref": "#/$defs/ProviderChanged"
+              }
+            },
+            "required": [
+              "name",
+              "data"
+            ]
+          },
+          {
+            "type": "object",
+            "properties": {
+              "name": {
+                "type": "string",
+                "const": "test_credential"
+              },
+              "data": {
+                "$ref": "#/$defs/CredentialTested"
+              }
+            },
+            "required": [
+              "name",
+              "data"
+            ]
+          },
+          {
+            "type": "object",
+            "properties": {
+              "name": {
+                "type": "string",
+                "const": "order_credentials"
+              },
+              "data": {
+                "$ref": "#/$defs/ProviderChanged"
+              }
+            },
+            "required": [
+              "name",
+              "data"
+            ]
+          },
+          {
+            "type": "object",
+            "properties": {
+              "name": {
+                "type": "string",
+                "const": "select_credential"
+              },
+              "data": {
+                "$ref": "#/$defs/ProviderChanged"
+              }
+            },
+            "required": [
+              "name",
+              "data"
+            ]
+          },
+          {
+            "type": "object",
+            "properties": {
+              "name": {
+                "type": "string",
+                "const": "set_credential_limit"
+              },
+              "data": {
+                "$ref": "#/$defs/ProviderChanged"
+              }
+            },
+            "required": [
+              "name",
+              "data"
+            ]
+          },
+          {
+            "type": "object",
+            "properties": {
+              "name": {
+                "type": "string",
                 "const": "log"
               },
               "data": {
@@ -10530,6 +11278,12 @@
             "format": "uint",
             "minimum": 0,
             "default": 0
+          },
+          "secrets_left_out": {
+            "type": [
+              "boolean",
+              "null"
+            ]
           }
         },
         "required": [
@@ -10569,6 +11323,12 @@
             "items": {
               "type": "string"
             }
+          },
+          "secrets_left_out": {
+            "type": [
+              "boolean",
+              "null"
+            ]
           }
         },
         "required": [
@@ -15120,6 +15880,12 @@
               "boolean",
               "null"
             ]
+          },
+          "secret": {
+            "type": [
+              "boolean",
+              "null"
+            ]
           }
         },
         "required": [
@@ -16743,6 +17509,33 @@
               "$ref": "#/$defs/ProviderKeyStatus"
             }
           },
+          "ignore_models": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "subscription": {
+            "type": "boolean"
+          },
+          "no_auth": {
+            "type": "boolean"
+          },
+          "selection": {
+            "$ref": "#/$defs/CredentialSelection"
+          },
+          "pinned": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "credentials": {
+            "type": "array",
+            "items": {
+              "$ref": "#/$defs/CredentialStatus"
+            }
+          },
           "cache": {
             "$ref": "#/$defs/ProviderCacheStatus"
           }
@@ -16754,6 +17547,12 @@
           "base_url",
           "discovery_enabled",
           "keys",
+          "ignore_models",
+          "subscription",
+          "no_auth",
+          "selection",
+          "pinned",
+          "credentials",
           "cache"
         ]
       },
@@ -16778,6 +17577,175 @@
           "enabled",
           "warn_on_fallback",
           "env_set"
+        ]
+      },
+      "CredentialSelection": {
+        "type": "string",
+        "enum": [
+          "order",
+          "room"
+        ]
+      },
+      "CredentialStatus": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "kind": {
+            "$ref": "#/$defs/CredentialKind"
+          },
+          "enabled": {
+            "type": "boolean"
+          },
+          "standing": {
+            "$ref": "#/$defs/CredentialStanding"
+          },
+          "detail": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "hint": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "env": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "checked_at": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "pinned": {
+            "type": "boolean"
+          },
+          "in_use": {
+            "type": "boolean"
+          },
+          "warn_on_fallback": {
+            "type": "boolean"
+          },
+          "limit": {
+            "anyOf": [
+              {
+                "$ref": "#/$defs/CredentialLimit"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "usage": {
+            "anyOf": [
+              {
+                "$ref": "#/$defs/CredentialUsage"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "login_command": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "name",
+          "kind",
+          "enabled",
+          "standing",
+          "detail",
+          "hint",
+          "env",
+          "checked_at",
+          "pinned",
+          "in_use",
+          "warn_on_fallback",
+          "limit",
+          "usage"
+        ]
+      },
+      "CredentialKind": {
+        "type": "string",
+        "enum": [
+          "api_key",
+          "env",
+          "login",
+          "none"
+        ]
+      },
+      "CredentialStanding": {
+        "type": "string",
+        "enum": [
+          "works",
+          "invalid",
+          "over_quota",
+          "signed_out",
+          "missing",
+          "not_checked"
+        ]
+      },
+      "CredentialLimit": {
+        "type": "object",
+        "properties": {
+          "cost_usd": {
+            "type": "number",
+            "format": "double"
+          },
+          "period": {
+            "$ref": "#/$defs/UsageBudgetPeriod"
+          },
+          "spent_usd": {
+            "type": "number",
+            "format": "double"
+          },
+          "at_limit": {
+            "type": "boolean"
+          },
+          "resets_at": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "cost_usd",
+          "period",
+          "spent_usd",
+          "at_limit",
+          "resets_at"
+        ]
+      },
+      "CredentialUsage": {
+        "type": "object",
+        "properties": {
+          "cost_usd": {
+            "type": "number",
+            "format": "double"
+          },
+          "calls": {
+            "type": "integer",
+            "format": "uint",
+            "minimum": 0
+          },
+          "since": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "cost_usd",
+          "calls",
+          "since"
         ]
       },
       "ProviderCacheStatus": {
@@ -17146,6 +18114,150 @@
         "enum": [
           "disabled",
           "discovery disabled"
+        ]
+      },
+      "ProviderPresetListing": {
+        "type": "object",
+        "properties": {
+          "presets": {
+            "type": "array",
+            "items": {
+              "$ref": "#/$defs/ProviderPreset"
+            }
+          },
+          "sdks": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        },
+        "required": [
+          "presets",
+          "sdks"
+        ]
+      },
+      "ProviderPreset": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "sdk": {
+            "type": "string"
+          },
+          "base_url": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "credential_kind": {
+            "$ref": "#/$defs/CredentialKind"
+          },
+          "api_key_env": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "discover": {
+            "type": "boolean"
+          },
+          "configured": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "name",
+          "sdk",
+          "base_url",
+          "credential_kind",
+          "api_key_env",
+          "discover",
+          "configured"
+        ]
+      },
+      "ProviderChanged": {
+        "type": "object",
+        "properties": {
+          "provider": {
+            "$ref": "#/$defs/ProviderStatus"
+          },
+          "message": {
+            "type": "string"
+          },
+          "file": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "provider",
+          "message",
+          "file"
+        ]
+      },
+      "ProviderRemoved": {
+        "type": "object",
+        "properties": {
+          "provider": {
+            "type": "string"
+          },
+          "keys_removed": {
+            "type": "integer",
+            "format": "uint",
+            "minimum": 0
+          },
+          "limits_removed": {
+            "type": "integer",
+            "format": "uint",
+            "minimum": 0
+          },
+          "file": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "provider",
+          "keys_removed",
+          "limits_removed",
+          "file"
+        ]
+      },
+      "CredentialTested": {
+        "type": "object",
+        "properties": {
+          "provider": {
+            "type": "string"
+          },
+          "credential": {
+            "type": "string"
+          },
+          "ok": {
+            "type": "boolean"
+          },
+          "standing": {
+            "$ref": "#/$defs/CredentialStanding"
+          },
+          "detail": {
+            "type": "string"
+          },
+          "model_count": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "uint",
+            "minimum": 0
+          }
+        },
+        "required": [
+          "provider",
+          "credential",
+          "ok",
+          "standing",
+          "detail",
+          "model_count"
         ]
       },
       "ConversationPage": {

@@ -39,6 +39,7 @@ export interface CommandSession {
   signal?: AbortSignal;
   env?: NodeJS.ProcessEnv;
   emit?: FrameSink;
+  confidential?: boolean;
 }
 
 export interface CommandDeps {

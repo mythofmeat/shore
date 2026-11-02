@@ -28,7 +28,7 @@ pub(crate) fn draw(frame: &mut Frame<'_>, app: &mut App) {
         .saturating_add(1)
         .min(8);
 
-    let confirming = app.palette_confirmation.is_some();
+    let confirming = app.palette_confirmation.is_some() || app.secret_prompt.is_some();
     let show_value_editor =
         app.input.mode == InputMode::Command && !confirming && app.is_value_editor_open();
     let show_config_panel = config_panel_is_open(app);
@@ -1411,6 +1411,19 @@ fn usage_shown(display: crate::tui::app::UsageDisplay, in_warning: bool) -> bool
 }
 
 fn draw_input(frame: &mut Frame<'_>, app: &App, area: Rect) {
+    if let Some(prompt) = &app.secret_prompt {
+        let block = Block::default()
+            .borders(Borders::TOP)
+            .title(" [KEY] ")
+            .border_style(Style::default().fg(Color::Yellow));
+        let hidden = "\u{2022}".repeat(prompt.typed.chars().count());
+        let display = format!(
+            "{}: {hidden}  Enter: save · Esc: cancel · not shown as you type",
+            prompt.title
+        );
+        frame.render_widget(Paragraph::new(display).block(block), area);
+        return;
+    }
     if app.input.mode == InputMode::Command {
         if let Some(confirmation) = &app.palette_confirmation {
             let block = Block::default()

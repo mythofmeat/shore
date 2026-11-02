@@ -2908,6 +2908,24 @@ pub(crate) fn handle_server_message(app: &mut App, msg: ServerMessage) -> UiEffe
                 | "thread_files" | "thread_lock" => {
                     absorb_thread_listing(app, &co.data);
                 }
+                "add_provider" => {
+                    if let Some((label, request)) = app.pending_provider_key.take() {
+                        let missing = co
+                            .data
+                            .get("provider")
+                            .and_then(|provider| provider.get("credentials"))
+                            .and_then(serde_json::Value::as_array)
+                            .is_some_and(|credentials| {
+                                credentials.iter().all(|c| {
+                                    c.get("standing").and_then(serde_json::Value::as_str)
+                                        == Some("missing")
+                                })
+                            });
+                        if missing && let Some(command) = input::key_request(app, &label, request) {
+                            follow_up.push(command);
+                        }
+                    }
+                }
                 "mark_thread_read" => {
                     if app.pending_read_mark_rid.is_some()
                         && app.pending_read_mark_rid.as_deref() == co.rid.as_deref()

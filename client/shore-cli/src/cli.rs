@@ -446,6 +446,11 @@ pub(crate) enum CliCommand {
         #[arg(long, requires = "all")]
         full: bool,
 
+        /// With --all, also back up the provider keys stored on the daemon;
+        /// the backup then holds them in plain text
+        #[arg(long, requires = "all")]
+        include_secrets: bool,
+
         /// Where to save it on this machine (defaults to `<character>.shore.tar`,
         /// or the folder `shore-backup` with --all)
         #[arg(short, long)]
@@ -516,9 +521,12 @@ pub(crate) enum CliCommand {
         reset: bool,
     },
 
-    /// List configured providers with key and cache status, or refresh a catalog
+    /// List providers and their keys; add, change or remove one
     #[command(args_conflicts_with_subcommands = true)]
     #[command(display_order = 5)]
+    #[command(
+        after_help = "One provider:\n  shore provider <name>                      its transport, keys and catalog\n  shore provider <name> auth [--add [NAME]]  list its keys, or add one (asked for without echo)\n  shore provider <name> auth <key> --test | --disable | --enable | --rename NEW | --replace | --remove\n  shore provider <name> auth --order a,b     the order keys are tried in\n  shore provider <name> use <key> | --auto   pin a key, or go back to the first that works\n  shore provider <name> limit <key> --spend 20/month | off\n  shore provider <name> set <setting> <value>  base-url, sdk, discover, ignore-models, ...\n  shore provider <name> enable | disable | remove | models | refresh\n\n`shore provider <name> --help` has the details."
+    )]
     Provider {
         #[command(subcommand)]
         subcommand: Option<ProviderCommand>,
@@ -1491,6 +1499,501 @@ pub(crate) enum ProviderCommand {
         #[arg(long)]
         json: bool,
     },
+
+    /// Add a provider; bare, lists the providers shore knows
+    ///
+    /// A known provider needs only its name, then asks for its key. A
+    /// provider of your own needs --sdk and --base-url.
+    Add(ProviderAddArgs),
+
+    #[command(external_subcommand)]
+    Named(Vec<String>),
+}
+
+#[derive(clap::Args, Debug, Clone, Default)]
+pub(crate) struct KeySourceArgs {
+    /// Read the key from standard input, e.g. piped from a password manager
+    #[arg(long, conflicts_with = "env")]
+    pub(crate) stdin: bool,
+
+    /// Use the key in this environment variable on the daemon's host instead
+    #[arg(long, value_name = "VAR")]
+    pub(crate) env: Option<String>,
+
+    /// Save the key without asking the provider whether it works
+    #[arg(long)]
+    pub(crate) no_check: bool,
+
+    /// Send the key even though the connection to the daemon is neither local
+    /// nor encrypted; only on a private network such as a VPN
+    #[arg(long)]
+    pub(crate) allow_unencrypted: bool,
+}
+
+#[derive(clap::Args, Debug, Clone)]
+pub(crate) struct ProviderAddArgs {
+    /// A known provider such as openrouter, or a name of your own
+    pub(crate) name: Option<String>,
+
+    /// SDK for a provider of your own: openai suits most OpenAI-compatible servers
+    #[arg(long)]
+    pub(crate) sdk: Option<String>,
+
+    /// Endpoint for a provider of your own, e.g. http://localhost:11434/v1
+    #[arg(long)]
+    pub(crate) base_url: Option<String>,
+
+    /// The endpoint takes no API key
+    #[arg(long, conflicts_with_all = ["env", "stdin", "no_key"])]
+    pub(crate) no_auth: bool,
+
+    /// Don't discover the provider's models
+    #[arg(long)]
+    pub(crate) no_discover: bool,
+
+    /// Add the provider without asking for a key
+    #[arg(long, conflicts_with_all = ["env", "stdin"])]
+    pub(crate) no_key: bool,
+
+    #[command(flatten)]
+    pub(crate) key: KeySourceArgs,
+
+    /// Output raw JSON
+    #[arg(long)]
+    pub(crate) json: bool,
+}
+
+#[derive(Parser, Debug)]
+#[command(
+    name = "shore provider <name>",
+    about = "Show or change one provider",
+    disable_help_subcommand = true
+)]
+pub(crate) struct ProviderTarget {
+    #[command(subcommand)]
+    pub(crate) action: Option<ProviderAction>,
+
+    /// Output raw JSON
+    #[arg(long, global = true)]
+    pub(crate) json: bool,
+}
+
+#[derive(Subcommand, Debug)]
+pub(crate) enum ProviderAction {
+    /// Change a setting: base-url, sdk, discover, ignore-models, subscription,
+    /// no-auth, or a default for its models such as max-output-tokens
+    Set {
+        setting: String,
+        #[arg(required = true, num_args = 1..)]
+        value: Vec<String>,
+    },
+    /// Return a setting to its default
+    Unset { setting: String },
+    /// Turn the provider on
+    Enable,
+    /// Turn the provider off without removing it
+    Disable,
+    /// Remove the provider with its keys and their limits
+    Remove {
+        /// Don't ask first
+        #[arg(long, short)]
+        yes: bool,
+    },
+    /// List its keys, or add, test, rename, reorder, disable or remove one
+    Auth(AuthArgs),
+    /// Use only one key, or --auto to go back to the first that works
+    Use {
+        credential: Option<String>,
+        #[arg(long, conflicts_with = "credential")]
+        auto: bool,
+    },
+    /// Cap what one key may spend: --spend 20/month, 5/day, or off
+    Limit {
+        credential: String,
+        #[arg(long, value_name = "USD[/PERIOD]")]
+        spend: String,
+    },
+    /// List the provider's models
+    Models {
+        /// Include hidden models
+        #[arg(long)]
+        all: bool,
+    },
+    /// Re-fetch its model catalog
+    Refresh,
+}
+
+#[derive(clap::Args, Debug)]
+pub(crate) struct AuthArgs {
+    /// The key to act on, by name
+    pub(crate) credential: Option<String>,
+
+    /// Add a key named NAME (default, then key2, ...); asks for it without echoing
+    #[arg(long, num_args = 0..=1, default_missing_value = "", value_name = "NAME", conflicts_with = "credential")]
+    pub(crate) add: Option<String>,
+
+    #[command(flatten)]
+    pub(crate) key: KeySourceArgs,
+
+    /// Ask the provider whether the key works
+    #[arg(long, requires = "credential")]
+    pub(crate) test: bool,
+
+    /// Replace the stored key with a new one; asks for it without echoing
+    #[arg(long, requires = "credential")]
+    pub(crate) replace: bool,
+
+    /// Stop using the key without removing it
+    #[arg(long, requires = "credential", conflicts_with = "enable")]
+    pub(crate) disable: bool,
+
+    /// Use the key again
+    #[arg(long, requires = "credential")]
+    pub(crate) enable: bool,
+
+    /// Give the key a new name
+    #[arg(long, requires = "credential", value_name = "NEW")]
+    pub(crate) rename: Option<String>,
+
+    /// Remove the key, and its stored value
+    #[arg(long, requires = "credential")]
+    pub(crate) remove: bool,
+
+    /// Try keys in this order, e.g. --order work,personal
+    #[arg(long, value_delimiter = ',', value_name = "NAMES", conflicts_with_all = ["credential", "add"])]
+    pub(crate) order: Vec<String>,
+
+    /// Don't ask before removing
+    #[arg(long, short)]
+    pub(crate) yes: bool,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) enum KeyInput {
+    Prompt,
+    Stdin,
+    Env(String),
+}
+
+#[derive(Debug, Clone)]
+pub(crate) struct KeyRequest {
+    pub(crate) provider: String,
+    pub(crate) name: Option<String>,
+    pub(crate) replace: Option<String>,
+    pub(crate) input: KeyInput,
+    pub(crate) no_check: bool,
+    pub(crate) allow_unencrypted: bool,
+}
+
+impl KeyRequest {
+    pub(crate) fn operation(&self, secret: Option<&str>) -> (&'static str, serde_json::Value) {
+        let mut args = serde_json::Map::new();
+        _ = args.insert("provider".to_owned(), self.provider.clone().into());
+        if self.no_check {
+            _ = args.insert("no_check".to_owned(), true.into());
+        }
+        if self.allow_unencrypted {
+            _ = args.insert("allow_unencrypted".to_owned(), true.into());
+        }
+        if let Some(value) = secret {
+            _ = args.insert("secret".to_owned(), value.into());
+        }
+        if let Some(credential) = &self.replace {
+            _ = args.insert("credential".to_owned(), credential.clone().into());
+            return ("update_credential", serde_json::Value::Object(args));
+        }
+        if let Some(name) = self.name.as_deref().filter(|name| !name.is_empty()) {
+            _ = args.insert("name".to_owned(), name.into());
+        }
+        if let KeyInput::Env(var) = &self.input {
+            _ = args.insert("env".to_owned(), var.clone().into());
+        }
+        ("add_credential", serde_json::Value::Object(args))
+    }
+}
+
+#[derive(Debug, Clone)]
+pub(crate) enum ProviderPlan {
+    Op {
+        name: &'static str,
+        args: serde_json::Value,
+    },
+    Confirm {
+        prompt: String,
+        yes: bool,
+        name: &'static str,
+        args: serde_json::Value,
+    },
+    Key(KeyRequest),
+    Add {
+        args: serde_json::Value,
+        key: Option<KeyRequest>,
+    },
+}
+
+fn key_input(key: &KeySourceArgs) -> KeyInput {
+    match (&key.env, key.stdin) {
+        (Some(var), _) => KeyInput::Env(var.clone()),
+        (None, true) => KeyInput::Stdin,
+        (None, false) => KeyInput::Prompt,
+    }
+}
+
+fn spend_limit(raw: &str) -> Result<serde_json::Value, String> {
+    let trimmed = raw.trim().trim_start_matches('$');
+    if matches!(trimmed, "off" | "none" | "0") {
+        return Ok(serde_json::json!({ "cost_usd": null }));
+    }
+    let (amount, every) = trimmed.split_once('/').unwrap_or((trimmed, ""));
+    let cost: f64 = amount.trim().parse().map_err(|_| {
+        format!(
+            "--spend takes an amount in dollars and a period, like 20/month, or off; got {raw:?}"
+        )
+    })?;
+    let period = match every.trim() {
+        "" => None,
+        "h" | "hour" | "hourly" => Some("hour"),
+        "d" | "day" | "daily" => Some("day"),
+        "w" | "wk" | "week" | "weekly" => Some("week"),
+        "m" | "mo" | "month" | "monthly" => Some("month"),
+        other => {
+            return Err(format!(
+                "--spend periods are hour, day, week or month; got {other:?}"
+            ));
+        }
+    };
+    Ok(period.map_or_else(
+        || serde_json::json!({ "cost_usd": cost }),
+        |window| serde_json::json!({ "cost_usd": cost, "period": window }),
+    ))
+}
+
+fn provider_setting(
+    provider: &str,
+    setting: &str,
+    given: Option<String>,
+) -> Result<serde_json::Value, String> {
+    let key = setting.trim().replace('-', "_");
+    let Some(value) = given else {
+        return Ok(serde_json::json!({ "provider": provider, "setting": key, "value": null }));
+    };
+    Ok(match key.as_str() {
+        "base_url" | "sdk" => serde_json::json!({ "provider": provider, key: value }),
+        "discover" | "subscription" | "no_auth" | "enabled" => {
+            let on = match value.trim().to_ascii_lowercase().as_str() {
+                "true" | "on" | "yes" | "1" => true,
+                "false" | "off" | "no" | "0" => false,
+                other => return Err(format!("{setting} is on or off; got {other:?}")),
+            };
+            serde_json::json!({ "provider": provider, key: on })
+        }
+        "ignore_models" => serde_json::json!({
+            "provider": provider,
+            "ignore_models": value.split(',').map(|p| p.trim().to_owned()).filter(|p| !p.is_empty()).collect::<Vec<_>>(),
+        }),
+        _ => serde_json::json!({ "provider": provider, "setting": key, "value": value }),
+    })
+}
+
+pub(crate) fn provider_target(rest: &[String]) -> Result<(String, ProviderTarget), clap::Error> {
+    let name = rest.first().cloned().unwrap_or_default();
+    let target = ProviderTarget::try_parse_from(
+        std::iter::once(format!("shore provider {name}")).chain(rest.iter().skip(1).cloned()),
+    )?;
+    Ok((name, target))
+}
+
+pub(crate) fn provider_plan(command: &ProviderCommand) -> Result<ProviderPlan, String> {
+    let op = |name: &'static str, args: serde_json::Value| Ok(ProviderPlan::Op { name, args });
+    match command {
+        ProviderCommand::Models { name, all, .. } => op(
+            "list_provider_models",
+            serde_json::json!({ "provider": name, "include_hidden": all }),
+        ),
+        ProviderCommand::Refresh {
+            name: Some(name), ..
+        } => op(
+            "refresh_provider_models",
+            serde_json::json!({ "provider": name }),
+        ),
+        ProviderCommand::Refresh { name: None, .. } => {
+            op("refresh_all_provider_models", serde_json::json!({}))
+        }
+        ProviderCommand::Add(ProviderAddArgs { name: None, .. }) => {
+            op("provider_presets", serde_json::json!({}))
+        }
+        ProviderCommand::Add(
+            add @ ProviderAddArgs {
+                name: Some(name), ..
+            },
+        ) => {
+            let mut args = serde_json::Map::new();
+            _ = args.insert("name".to_owned(), name.clone().into());
+            if let Some(sdk) = &add.sdk {
+                _ = args.insert("sdk".to_owned(), sdk.clone().into());
+            }
+            if let Some(base_url) = &add.base_url {
+                _ = args.insert("base_url".to_owned(), base_url.clone().into());
+            }
+            if add.no_auth {
+                _ = args.insert("no_auth".to_owned(), true.into());
+            }
+            if add.no_discover {
+                _ = args.insert("discover".to_owned(), false.into());
+            }
+            let key = (!add.no_auth
+                && !add.no_key
+                && add.sdk.as_deref() != Some("claude_agent")
+                && name != "claude_agent")
+                .then(|| KeyRequest {
+                    provider: name.clone(),
+                    name: None,
+                    replace: None,
+                    input: key_input(&add.key),
+                    no_check: add.key.no_check,
+                    allow_unencrypted: add.key.allow_unencrypted,
+                });
+            Ok(ProviderPlan::Add {
+                args: serde_json::Value::Object(args),
+                key,
+            })
+        }
+        ProviderCommand::Named(rest) => {
+            let (provider, target) = provider_target(rest).map_err(|error| error.to_string())?;
+            named_plan(&provider, target.action)
+        }
+    }
+}
+
+fn named_plan(provider: &str, action: Option<ProviderAction>) -> Result<ProviderPlan, String> {
+    let op = |name: &'static str, args: serde_json::Value| Ok(ProviderPlan::Op { name, args });
+    let one = serde_json::json!({ "provider": provider });
+    match action {
+        None => op("provider_detail", one),
+        Some(ProviderAction::Models { all }) => op(
+            "list_provider_models",
+            serde_json::json!({ "provider": provider, "include_hidden": all }),
+        ),
+        Some(ProviderAction::Refresh) => op("refresh_provider_models", one),
+        Some(ProviderAction::Enable) => op(
+            "update_provider",
+            serde_json::json!({ "provider": provider, "enabled": true }),
+        ),
+        Some(ProviderAction::Disable) => op(
+            "update_provider",
+            serde_json::json!({ "provider": provider, "enabled": false }),
+        ),
+        Some(ProviderAction::Set { setting, value }) => op(
+            "update_provider",
+            provider_setting(provider, &setting, Some(value.join(" ")))?,
+        ),
+        Some(ProviderAction::Unset { setting }) => op(
+            "update_provider",
+            provider_setting(provider, &setting, None)?,
+        ),
+        Some(ProviderAction::Remove { yes }) => Ok(ProviderPlan::Confirm {
+            prompt: format!("Remove provider {provider}, its stored keys and their limits?"),
+            yes,
+            name: "remove_provider",
+            args: one,
+        }),
+        Some(ProviderAction::Use { credential, auto }) => match (credential, auto) {
+            (Some(key), false) => op(
+                "select_credential",
+                serde_json::json!({ "provider": provider, "credential": key }),
+            ),
+            (None, true) => op(
+                "select_credential",
+                serde_json::json!({ "provider": provider, "credential": null }),
+            ),
+            _ => Err(format!(
+                "name the key to use, or --auto: `shore provider {provider} use <key>`"
+            )),
+        },
+        Some(ProviderAction::Limit { credential, spend }) => {
+            let mut args = spend_limit(&spend)?;
+            if let Some(fields) = args.as_object_mut() {
+                _ = fields.insert("provider".to_owned(), provider.into());
+                _ = fields.insert("credential".to_owned(), credential.into());
+            }
+            op("set_credential_limit", args)
+        }
+        Some(ProviderAction::Auth(auth)) => auth_plan(provider, auth),
+    }
+}
+
+fn auth_plan(provider: &str, auth: AuthArgs) -> Result<ProviderPlan, String> {
+    let op = |name: &'static str, args: serde_json::Value| Ok(ProviderPlan::Op { name, args });
+    if !auth.order.is_empty() {
+        return op(
+            "order_credentials",
+            serde_json::json!({ "provider": provider, "order": auth.order }),
+        );
+    }
+    let request = |name: Option<String>, replace: Option<String>| KeyRequest {
+        provider: provider.to_owned(),
+        name,
+        replace,
+        input: key_input(&auth.key),
+        no_check: auth.key.no_check,
+        allow_unencrypted: auth.key.allow_unencrypted,
+    };
+    if let Some(name) = auth.add {
+        return Ok(ProviderPlan::Key(request(Some(name), None)));
+    }
+    let Some(credential) = auth.credential else {
+        if auth.key.env.is_some() || auth.key.stdin {
+            return Ok(ProviderPlan::Key(request(None, None)));
+        }
+        return op(
+            "provider_detail",
+            serde_json::json!({ "provider": provider }),
+        );
+    };
+    let chosen = [
+        auth.test,
+        auth.replace,
+        auth.disable,
+        auth.enable,
+        auth.rename.is_some(),
+        auth.remove,
+    ]
+    .iter()
+    .filter(|on| **on)
+    .count();
+    if chosen > 1 {
+        return Err(
+            "pick one of --test, --replace, --disable, --enable, --rename and --remove".to_owned(),
+        );
+    }
+    if auth.replace {
+        if auth.key.env.is_some() {
+            return Err("--replace takes the new key itself; to read one from the environment, remove this key and add it with --env".to_owned());
+        }
+        return Ok(ProviderPlan::Key(request(None, Some(credential))));
+    }
+    let both = serde_json::json!({ "provider": provider, "credential": credential });
+    if auth.remove {
+        return Ok(ProviderPlan::Confirm {
+            prompt: format!("Remove {provider} key {credential}?"),
+            yes: auth.yes,
+            name: "remove_credential",
+            args: both,
+        });
+    }
+    if auth.disable || auth.enable {
+        return op(
+            "update_credential",
+            serde_json::json!({ "provider": provider, "credential": credential, "enabled": auth.enable }),
+        );
+    }
+    if let Some(rename) = auth.rename {
+        return op(
+            "update_credential",
+            serde_json::json!({ "provider": provider, "credential": credential, "rename": rename }),
+        );
+    }
+    op("test_credential", both)
 }
 
 #[derive(Subcommand, Debug)]
@@ -2779,6 +3282,23 @@ fn model_to_swp(cmd: &CliCommand) -> Option<(&'static str, serde_json::Value)> {
 }
 
 fn provider_to_swp(cmd: &CliCommand) -> Option<(&'static str, serde_json::Value)> {
+    if let CliCommand::Provider {
+        subcommand: Some(subcommand),
+        ..
+    } = cmd
+        && matches!(
+            subcommand,
+            ProviderCommand::Add(_) | ProviderCommand::Named(_)
+        )
+    {
+        return match provider_plan(subcommand).ok()? {
+            ProviderPlan::Op { name, args } | ProviderPlan::Confirm { name, args, .. } => {
+                Some((name, args))
+            }
+            ProviderPlan::Add { args, .. } => Some(("add_provider", args)),
+            ProviderPlan::Key(_) => None,
+        };
+    }
     let CliCommand::Provider { subcommand, .. } = cmd else {
         return None;
     };
@@ -2797,6 +3317,7 @@ fn provider_to_swp(cmd: &CliCommand) -> Option<(&'static str, serde_json::Value)
         Some(ProviderCommand::Refresh { name: None, .. }) => {
             operation_to_swp::<RefreshAllProviderModels>(EmptyOperationArgs {})
         }
+        Some(ProviderCommand::Add(_) | ProviderCommand::Named(_)) => None,
         None => operation_to_swp::<ListProviders>(EmptyOperationArgs {}),
     }
 }
@@ -2876,6 +3397,140 @@ fn usage_to_swp(
         export_csv: Some(tab_separated == Some(false)),
         export_tsv: Some(tab_separated == Some(true)),
     })
+}
+
+#[cfg(test)]
+mod provider_key_tests {
+    use super::{Cli, CliCommand, KeyInput, ProviderPlan, provider_plan};
+    use clap::Parser;
+    use serde_json::json;
+
+    fn plan(argv: &[&str]) -> ProviderPlan {
+        let cli = Cli::try_parse_from(std::iter::once("shore").chain(argv.iter().copied()))
+            .unwrap_or_else(|error| panic!("{argv:?}: {error}"));
+        let Some(CliCommand::Provider {
+            subcommand: Some(subcommand),
+            ..
+        }) = cli.command
+        else {
+            panic!("{argv:?} is not a provider command");
+        };
+        provider_plan(&subcommand).unwrap_or_else(|error| panic!("{argv:?}: {error}"))
+    }
+
+    #[test]
+    fn keys_are_asked_for_rather_than_taken_from_the_command_line() {
+        let ProviderPlan::Key(request) = plan(&["provider", "openrouter", "auth", "--add", "work"])
+        else {
+            panic!("auth --add should ask for the key");
+        };
+        assert_eq!(
+            request.input,
+            KeyInput::Prompt,
+            "the key is prompted for by default"
+        );
+        assert_eq!(
+            request.operation(Some("sk-typed")),
+            (
+                "add_credential",
+                json!({"provider": "openrouter", "name": "work", "secret": "sk-typed"})
+            ),
+            "the typed key travels only in the request",
+        );
+        let ProviderPlan::Key(piped) = plan(&[
+            "provider",
+            "openrouter",
+            "auth",
+            "--add",
+            "--stdin",
+            "--no-check",
+        ]) else {
+            panic!("--stdin should read the key");
+        };
+        assert_eq!(piped.input, KeyInput::Stdin, "--stdin reads standard input");
+        let ProviderPlan::Key(env) = plan(&[
+            "provider",
+            "openrouter",
+            "auth",
+            "--add",
+            "ci",
+            "--env",
+            "OPENROUTER_CI_KEY",
+        ]) else {
+            panic!("--env should point at a variable");
+        };
+        assert_eq!(
+            env.operation(None),
+            (
+                "add_credential",
+                json!({"provider": "openrouter", "name": "ci", "env": "OPENROUTER_CI_KEY"})
+            ),
+            "--env sends only the variable's name",
+        );
+        let ProviderPlan::Key(replace) =
+            plan(&["provider", "openrouter", "auth", "work", "--replace"])
+        else {
+            panic!("--replace should ask for the new key");
+        };
+        assert_eq!(
+            replace.operation(Some("sk-new")),
+            (
+                "update_credential",
+                json!({"provider": "openrouter", "credential": "work", "secret": "sk-new"})
+            ),
+            "--replace changes the stored value",
+        );
+    }
+
+    #[test]
+    fn adding_a_known_provider_goes_on_to_its_key() {
+        let ProviderPlan::Add {
+            args,
+            key: Some(key),
+        } = plan(&["provider", "add", "openrouter"])
+        else {
+            panic!("adding openrouter should go on to its key");
+        };
+        assert_eq!(
+            args,
+            json!({"name": "openrouter"}),
+            "a known provider needs only its name"
+        );
+        assert_eq!(key.input, KeyInput::Prompt, "then its key is asked for");
+        let ProviderPlan::Add { key: None, .. } = plan(&[
+            "provider",
+            "add",
+            "local",
+            "--sdk",
+            "openai",
+            "--base-url",
+            "http://x/v1",
+            "--no-auth",
+        ]) else {
+            panic!("a provider without auth should not ask for a key");
+        };
+        let ProviderPlan::Add { key: None, .. } = plan(&["provider", "add", "claude_agent"]) else {
+            panic!("claude_agent signs in with logins, not keys");
+        };
+    }
+
+    #[test]
+    fn removals_ask_first_unless_told_not_to() {
+        let ProviderPlan::Confirm { yes: false, .. } = plan(&["provider", "openrouter", "remove"])
+        else {
+            panic!("removing a provider should ask first");
+        };
+        let ProviderPlan::Confirm { yes: true, .. } = plan(&[
+            "provider",
+            "openrouter",
+            "auth",
+            "work",
+            "--remove",
+            "--yes",
+        ]) else {
+            panic!("--yes should skip the question");
+        };
+    }
 }
 
 #[cfg(test)]
@@ -3123,6 +3778,145 @@ mod tests {
             (
                 &["provider", "refresh"],
                 Some(("refresh_all_provider_models", json!({}))),
+            ),
+            (&["provider", "add"], Some(("provider_presets", json!({})))),
+            (
+                &["provider", "add", "openrouter"],
+                Some(("add_provider", json!({"name": "openrouter"}))),
+            ),
+            (
+                &[
+                    "provider",
+                    "add",
+                    "local",
+                    "--sdk",
+                    "openai",
+                    "--base-url",
+                    "http://localhost:11434/v1",
+                    "--no-auth",
+                ],
+                Some((
+                    "add_provider",
+                    json!({"name": "local", "sdk": "openai", "base_url": "http://localhost:11434/v1", "no_auth": true}),
+                )),
+            ),
+            (
+                &["provider", "claude-agent"],
+                Some(("provider_detail", json!({"provider": "claude-agent"}))),
+            ),
+            (
+                &[
+                    "provider",
+                    "openrouter",
+                    "set",
+                    "base-url",
+                    "https://example.com/v1",
+                ],
+                Some((
+                    "update_provider",
+                    json!({"provider": "openrouter", "base_url": "https://example.com/v1"}),
+                )),
+            ),
+            (
+                &["provider", "openrouter", "set", "discover", "off"],
+                Some((
+                    "update_provider",
+                    json!({"provider": "openrouter", "discover": false}),
+                )),
+            ),
+            (
+                &["provider", "openrouter", "set", "max-output-tokens", "8192"],
+                Some((
+                    "update_provider",
+                    json!({"provider": "openrouter", "setting": "max_output_tokens", "value": "8192"}),
+                )),
+            ),
+            (
+                &["provider", "openrouter", "disable"],
+                Some((
+                    "update_provider",
+                    json!({"provider": "openrouter", "enabled": false}),
+                )),
+            ),
+            (
+                &["provider", "openrouter", "remove", "--yes"],
+                Some(("remove_provider", json!({"provider": "openrouter"}))),
+            ),
+            (&["provider", "openrouter", "auth", "--add", "work"], None),
+            (
+                &[
+                    "provider",
+                    "openrouter",
+                    "auth",
+                    "--add",
+                    "ci",
+                    "--env",
+                    "OPENROUTER_CI_KEY",
+                ],
+                None,
+            ),
+            (
+                &["provider", "openrouter", "auth", "work", "--test"],
+                Some((
+                    "test_credential",
+                    json!({"provider": "openrouter", "credential": "work"}),
+                )),
+            ),
+            (
+                &[
+                    "provider",
+                    "openrouter",
+                    "auth",
+                    "work",
+                    "--rename",
+                    "office",
+                ],
+                Some((
+                    "update_credential",
+                    json!({"provider": "openrouter", "credential": "work", "rename": "office"}),
+                )),
+            ),
+            (
+                &["provider", "openrouter", "auth", "--order", "work,personal"],
+                Some((
+                    "order_credentials",
+                    json!({"provider": "openrouter", "order": ["work", "personal"]}),
+                )),
+            ),
+            (
+                &["provider", "openrouter", "use", "work"],
+                Some((
+                    "select_credential",
+                    json!({"provider": "openrouter", "credential": "work"}),
+                )),
+            ),
+            (
+                &["provider", "openrouter", "use", "--auto"],
+                Some((
+                    "select_credential",
+                    json!({"provider": "openrouter", "credential": null}),
+                )),
+            ),
+            (
+                &[
+                    "provider",
+                    "openrouter",
+                    "limit",
+                    "work",
+                    "--spend",
+                    "20/month",
+                ],
+                Some((
+                    "set_credential_limit",
+                    json!({"provider": "openrouter", "credential": "work", "cost_usd": 20.0, "period": "month"}),
+                )),
+            ),
+            (
+                &["provider", "openrouter", "limit", "work", "--spend", "off"],
+                Some((
+                    "set_credential_limit",
+                    json!({"provider": "openrouter", "credential": "work", "cost_usd": null}),
+                )),
             ),
             (
                 &["segments", "show", "4"],

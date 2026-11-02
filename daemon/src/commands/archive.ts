@@ -27,6 +27,7 @@ import { isolatedTurnsRepo } from "../tools/workspace_turns.ts";
 import type { ArchiveSpool, SpoolEntry } from "./archive_spool.ts";
 import { TarWriter } from "../storage/tar_writer.ts";
 import { BACKUP_FORMAT, captureTree, DATABASE_ENTRY, finished, readTreeManifest, TREE_TOP_LEVEL, treeManifest, type TreeManifest } from "./backup.ts";
+import { SECRET_STORE_FILE, secretStorePath } from "../llm/secret_store.ts";
 import { CommandError, internalError, invalidRequest, notFound } from "./errors.ts";
 import type { Args } from "./navigation.ts";
 import type { ExportCharacterResult } from "../protocol/ExportCharacterResult.ts";
@@ -160,6 +161,7 @@ export async function exportBackup(ctx: ArchiveContext, args: Args = {}): Promis
       capture = await captureTree({
         dirs: ctx.dirs,
         characters: ctx.characters(),
+        includeSecrets: args["include_secrets"] === true,
         isolated: (character) => isolatedWorkspace(ctx, character),
         withSnapshot: async (run) => await ctx.withSnapshot(run),
       }, writer, base);
@@ -283,12 +285,23 @@ async function restoreTree(ctx: ArchiveContext, stage: string, manifest: TreeMan
     await mkdir(join(ctx.dirs.data, name), { recursive: true });
     await restoreMissing(source, join(ctx.dirs.data, name), `data/${name}`, restored, kept);
   }
+  const secrets = join(stage, "data", SECRET_STORE_FILE);
+  if (await exists(secrets)) {
+    const target = secretStorePath(ctx.dirs.data);
+    if (await exists(target)) kept.push(`data/${SECRET_STORE_FILE}`);
+    else {
+      await cp(secrets, target, copyOptions());
+      await chmod(target, 0o600);
+      restored.push(`data/${SECRET_STORE_FILE}`);
+    }
+  }
   const tree: ShoreDirs = { config: join(stage, "config"), data: join(stage, "data"), cache: join(stage, "cache"), runtime: join(stage, "runtime"), workspace: join(stage, "workspace") };
   const database = new Database(databasePath(tree.data));
   try { database.run("PRAGMA journal_mode = DELETE"); } finally { database.close(); }
-  return await restoreCharacters(ctx, manifest.characters, scratch, restored, kept, async (name, inner) => {
+  const imported = await restoreCharacters(ctx, manifest.characters, scratch, restored, kept, async (name, inner) => {
     await stageCharacter(tree, name, inner, ctx.limits, undefined, manifest.source);
   });
+  return manifest.secrets_left_out === true ? { ...imported, secrets_left_out: true } : imported;
 }
 
 async function backedUpArchive(stage: string, name: string): Promise<string> {

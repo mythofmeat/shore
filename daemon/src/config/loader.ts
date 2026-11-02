@@ -17,6 +17,7 @@ import {
   type AppConfig,
   type UsageBudgetConfig,
   type UsageConfig,
+  newUsageBudget,
 } from "./app.ts";
 import {
   rustJoin,
@@ -28,7 +29,7 @@ import {
 import { prepareDotenv } from "./dotenv.ts";
 import { rustTrim } from "./duration.ts";
 import { catalogFromSections, findModel, readModelConfigFields, CatalogError, type ModelCatalog } from "./models.ts";
-import { ProviderRegistry, ProviderRegistryError } from "./providers.ts";
+import { credentialBudgets, isCredentialBudget, markCredentialBudget, ProviderRegistry, ProviderRegistryError } from "./providers.ts";
 import { renderStarterConfig } from "./starter.ts";
 import { formatConfigPath, normalizeConfigSource } from "./surface.ts";
 
@@ -355,6 +356,9 @@ export function parseConfigTable(
     if (!(e instanceof ProviderRegistryError)) throw e;
     throw new ConfigError("provider_registry", e.message);
   }
+  for (const limit of credentialBudgets(providers)) {
+    app.usage.budgets.push(markCredentialBudget({ ...newUsageBudget(), ...limit, limit: "block" }));
+  }
 
   let models: ModelCatalog;
   try {
@@ -419,6 +423,7 @@ function scopeOverlayBudgetsToCharacter(
 ): void {
   if (!overlayDeclaresBudgets(overlay)) return;
   for (const budget of usage.budgets) {
+    if (isCredentialBudget(budget)) continue;
     budget.character ??= characterName;
   }
 }

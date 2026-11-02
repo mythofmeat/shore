@@ -1,6 +1,14 @@
 {
   "format": 1,
   "operations": {
+    "add_credential": [
+      "registry",
+      "scope:global"
+    ],
+    "add_provider": [
+      "registry",
+      "scope:global"
+    ],
     "alt": [
       "registry",
       "scope:character"
@@ -173,6 +181,18 @@
       "registry",
       "scope:optional_character"
     ],
+    "order_credentials": [
+      "registry",
+      "scope:global"
+    ],
+    "provider_detail": [
+      "registry",
+      "scope:global"
+    ],
+    "provider_presets": [
+      "registry",
+      "scope:global"
+    ],
     "read_transfer": [
       "registry",
       "scope:global"
@@ -182,6 +202,14 @@
       "scope:global"
     ],
     "refresh_provider_models": [
+      "registry",
+      "scope:global"
+    ],
+    "remove_credential": [
+      "registry",
+      "scope:global"
+    ],
+    "remove_provider": [
       "registry",
       "scope:global"
     ],
@@ -197,9 +225,17 @@
       "registry",
       "scope:character"
     ],
+    "select_credential": [
+      "registry",
+      "scope:global"
+    ],
     "session_activate": [
       "registry",
       "scope:character"
+    ],
+    "set_credential_limit": [
+      "registry",
+      "scope:global"
     ],
     "set_model_setting": [
       "registry",
@@ -224,6 +260,10 @@
     "switch_thread": [
       "registry",
       "scope:character"
+    ],
+    "test_credential": [
+      "registry",
+      "scope:global"
     ],
     "thread_files": [
       "registry",
@@ -256,6 +296,14 @@
     "transcript": [
       "registry",
       "scope:character"
+    ],
+    "update_credential": [
+      "registry",
+      "scope:global"
+    ],
+    "update_provider": [
+      "registry",
+      "scope:global"
     ],
     "usage": [
       "registry",
@@ -3660,15 +3708,17 @@
     "ActivatedHeartbeat": "{ state: AutonomyHeartbeatState, next_wake_at?: string, seconds_until_wake?: number, }",
     "ActivityHourClass": "\"peak\" | \"trough\" | \"normal\"",
     "ActivityStatusReport": "{ hour_histogram: Array<number>, hour_classifications: Array<ActivityHourClass>, has_sufficient_heatmap: boolean, engagement_score: number, sessions_per_day: number, message_count: number, turn_count: number, }",
+    "AddCredentialArgs": "{ provider: string, name?: string, secret?: string, env?: string, no_check?: boolean, allow_unencrypted?: boolean, }",
+    "AddProviderArgs": "{ name: string, sdk?: string, base_url?: string, no_auth?: boolean, discover?: boolean, }",
     "AlternativeDirection": "\"next\" | \"prev\" | \"previous\" | \"first\" | \"last\"",
     "AlternativeListing": "{ ref: string, alt_index: number | null, position: number | null, alt_count: number, alternatives: Array<AlternativeView>, }",
     "AlternativeSelected": "{ ref: string, alt_index: number, position: number, alt_count: number, content: string, workspace?: WorkspaceRewind, }",
     "AlternativeView": "{ index: number, position: number, active: boolean, content: string, images: Array<ImageRef>, timestamp: string, }",
-    "ArchiveImported": "{ characters: Array<string>, skipped: Array<string>, restored: Array<string>, kept: Array<string>, }",
+    "ArchiveImported": "{ characters: Array<string>, skipped: Array<string>, restored: Array<string>, kept: Array<string>, secrets_left_out?: boolean, }",
     "AutonomyHeartbeatState": "\"Active\" | \"Dormant\"",
     "AutonomyStatusReport": "{ heartbeat_state: AutonomyHeartbeatState, ticks_without_user: number, dormant_after_heartbeat_turns: number, default_interval_secs: number, next_wake_at?: string, seconds_until_wake?: number, last_user_at?: string, seconds_since_user?: number, min_interval_secs: number, max_interval_secs: number, dormant_after_idle_time_secs: number, recent_events: Array<HeartbeatEvent>, }",
     "BackgroundModelTarget": "\"all\" | \"heartbeat\" | \"compaction\"",
-    "BackupExported": "{ characters: Array<string>, archive: string, bytes: number, transfer: string, files: number, files_sent: number, blocks: number, blocks_sent: number, }",
+    "BackupExported": "{ characters: Array<string>, archive: string, bytes: number, transfer: string, files: number, files_sent: number, blocks: number, blocks_sent: number, secrets_left_out?: boolean, }",
     "CacheInvalidation": "{ cached_request: boolean, }",
     "CacheWarning": "{ expected_tokens: number, message: string, }",
     "CallDetail": "{ request: unknown, response: unknown, id: number, call_id: string, ts: string, call_type: string | null, character: string | null, model: string | null, provider: string | null, finish_reason: string | null, usage: DiagnosticUsage, duration_ms: number | null, error: string | null, request_bytes: number, response_bytes: number, }",
@@ -3731,6 +3781,14 @@
     "ConversationLogArgs": "{ turns?: number | null, count?: number | null, role?: Role, segment?: number | null, }",
     "ConversationPage": "{ messages: Array<Message>, cursor: number, next_before: number, has_more_before: boolean, total_turns: number, segment: SegmentSummary | null, previous_segment: SegmentSummary | null, next_segment: SegmentSummary | null, }",
     "CreateThreadArgs": "{ name: string, label?: string | null, purpose?: string | null, files?: Array<string> | null, model?: string | null, compaction?: boolean | null, }",
+    "CredentialArgs": "{ provider: string, credential: string, }",
+    "CredentialKind": "\"api_key\" | \"env\" | \"login\" | \"none\"",
+    "CredentialLimit": "{ cost_usd: number, period: UsageBudgetPeriod, spent_usd: number, at_limit: boolean, resets_at: string, }",
+    "CredentialSelection": "\"order\" | \"room\"",
+    "CredentialStanding": "\"works\" | \"invalid\" | \"over_quota\" | \"signed_out\" | \"missing\" | \"not_checked\"",
+    "CredentialStatus": "{ name: string, kind: CredentialKind, enabled: boolean, standing: CredentialStanding, detail: string | null, hint: string | null, env: string | null, checked_at: string | null, pinned: boolean, in_use: boolean, warn_on_fallback: boolean, limit: CredentialLimit | null, usage: CredentialUsage | null, login_command?: string, }",
+    "CredentialTested": "{ provider: string, credential: string, ok: boolean, standing: CredentialStanding, detail: string, model_count: number | null, }",
+    "CredentialUsage": "{ cost_usd: number, calls: number, since: string, }",
     "DeleteCharacterArgs": "{ character: string, confirm: string, archive?: string, }",
     "DeleteCharacterResult": "{ character: string, deleted: boolean, removed: Array<string>, archive: string | null, }",
     "DeleteMessagesArgs": "{ refs: MessageReferences, }",
@@ -3747,7 +3805,7 @@
     "Error": "{ rid?: string | null, code: ErrorCode, message: string, retry_after_ms?: number | null, }",
     "ErrorCode": "\"protocol_error\" | \"invalid_request\" | \"not_found\" | \"busy\" | \"provider_error\" | \"timeout\" | \"internal_error\" | \"unauthorized\"",
     "ErrorLogResult": "{ errors: DiagnosticErrorRing, key_fallbacks: DiagnosticKeyFallbackRing, }",
-    "ExportBackupArgs": "{ base?: string, }",
+    "ExportBackupArgs": "{ base?: string, include_secrets?: boolean, }",
     "ExportCharacterArgs": "{ character: string, output?: string, }",
     "ExportCharacterResult": "{ character: string, archive: string, bytes: number, live: boolean, call_diagnostics: string, external_memory: string, transfer?: string, }",
     "FavoriteModelArgs": "{ name: string, favorite?: boolean | null, }",
@@ -3832,13 +3890,14 @@
     "OperationConfirmation": "\"none\" | \"archive\" | \"delete\" | \"execute\"",
     "OperationDescriptor": "{ name: string, label: string, category: OperationCategory, scope: OperationScope, prerequisites: Array<OperationPrerequisite>, effects: Array<OperationEffect>, confirmation: OperationConfirmation, policies?: Array<OperationPolicy>, fields: { [key in string]: OperationField }, input: unknown, output: unknown, available?: boolean, }",
     "OperationEffect": "\"read\" | \"workspace_write\" | \"history_write\" | \"selection\" | \"model_selection\" | \"provider_discovery\" | \"config_write\" | \"runtime_write\" | \"provider_call\"",
-    "OperationField": "{ label: string, hint?: string, choices?: OperationChoices, multiline?: boolean, }",
+    "OperationField": "{ label: string, hint?: string, choices?: OperationChoices, multiline?: boolean, secret?: boolean, }",
     "OperationPolicy": "{ condition: OperationCondition, effects: Array<OperationEffect>, confirmation: OperationConfirmation, }",
     "OperationPrerequisite": "\"threads\" | \"autonomy\" | \"keepalive\" | \"session_activation\" | \"compaction\" | \"tool_execution\" | \"ledger\" | \"archive\"",
-    "OperationRequest": "{ \"name\": \"export_character\", \"args\": ExportCharacterArgs } | { \"name\": \"import_character\", \"args\": ImportCharacterArgs } | { \"name\": \"delete_character\", \"args\": DeleteCharacterArgs } | { \"name\": \"export_backup\", \"args\": ExportBackupArgs } | { \"name\": \"import_archive\", \"args\": ImportArchiveArgs } | { \"name\": \"read_transfer\", \"args\": ReadTransferArgs } | { \"name\": \"write_transfer\", \"args\": WriteTransferArgs } | { \"name\": \"usage\", \"args\": UsageArgs } | { \"name\": \"run_tool\", \"args\": RunToolArgs } | { \"name\": \"compact\", \"args\": CompactArgs } | { \"name\": \"compact_watch\", \"args\": EmptyOperationArgs } | { \"name\": \"compact_cancel\", \"args\": EmptyOperationArgs } | { \"name\": \"segments\", \"args\": SegmentsArgs } | { \"name\": \"clear\", \"args\": ClearArgs } | { \"name\": \"status\", \"args\": EmptyOperationArgs } | { \"name\": \"error_log\", \"args\": DiagnosticCountArgs } | { \"name\": \"heartbeat_log\", \"args\": DiagnosticCountArgs } | { \"name\": \"call_log\", \"args\": CallLogArgs } | { \"name\": \"transcript\", \"args\": TranscriptArgs } | { \"name\": \"subagent_trace\", \"args\": SubagentTraceArgs } | { \"name\": \"heartbeat_tick_now\", \"args\": EmptyOperationArgs } | { \"name\": \"heartbeat_set_dormant\", \"args\": EmptyOperationArgs } | { \"name\": \"heartbeat_set_active\", \"args\": EmptyOperationArgs } | { \"name\": \"keepalive_ping_now\", \"args\": EmptyOperationArgs } | { \"name\": \"session_activate\", \"args\": EmptyOperationArgs } | { \"name\": \"discover_operations\", \"args\": EmptyOperationArgs } | { \"name\": \"list_models\", \"args\": ListModelsArgs } | { \"name\": \"favorite_model\", \"args\": FavoriteModelArgs } | { \"name\": \"model_info\", \"args\": ModelInfoArgs } | { \"name\": \"switch_model\", \"args\": SwitchModelArgs } | { \"name\": \"reset_model\", \"args\": ResetModelArgs } | { \"name\": \"model_settings\", \"args\": ModelSettingsArgs } | { \"name\": \"set_model_setting\", \"args\": SetModelSettingArgs } | { \"name\": \"config\", \"args\": ConfigArgs } | { \"name\": \"config_check\", \"args\": EmptyOperationArgs } | { \"name\": \"config_schema\", \"args\": EmptyOperationArgs } | { \"name\": \"config_reload\", \"args\": ConfigReloadArgs } | { \"name\": \"tools\", \"args\": EmptyOperationArgs } | { \"name\": \"list_providers\", \"args\": EmptyOperationArgs } | { \"name\": \"list_provider_models\", \"args\": ProviderModelsArgs } | { \"name\": \"refresh_provider_models\", \"args\": ProviderArgs } | { \"name\": \"refresh_all_provider_models\", \"args\": EmptyOperationArgs } | { \"name\": \"log\", \"args\": ConversationLogArgs } | { \"name\": \"history_page\", \"args\": HistoryPageArgs } | { \"name\": \"get\", \"args\": GetMessageArgs } | { \"name\": \"edit\", \"args\": EditMessageArgs } | { \"name\": \"delete\", \"args\": DeleteMessagesArgs } | { \"name\": \"list_alternatives\", \"args\": ListAlternativesArgs } | { \"name\": \"alt\", \"args\": SelectAlternativeArgs } | { \"name\": \"inject_system\", \"args\": InjectSystemArgs } | { \"name\": \"list_characters\", \"args\": EmptyOperationArgs } | { \"name\": \"create_character\", \"args\": NamedOperationArgs } | { \"name\": \"switch_character\", \"args\": NamedOperationArgs } | { \"name\": \"character_info\", \"args\": CharacterInfoArgs } | { \"name\": \"list_threads\", \"args\": EmptyOperationArgs } | { \"name\": \"switch_thread\", \"args\": SwitchThreadArgs } | { \"name\": \"create_thread\", \"args\": CreateThreadArgs } | { \"name\": \"archive_thread\", \"args\": NamedOperationArgs } | { \"name\": \"fork_thread\", \"args\": ForkThreadArgs } | { \"name\": \"thread_home\", \"args\": NamedOperationArgs } | { \"name\": \"thread_label\", \"args\": ThreadLabelArgs } | { \"name\": \"thread_purpose\", \"args\": ThreadPurposeArgs } | { \"name\": \"thread_files\", \"args\": ThreadFilesArgs } | { \"name\": \"thread_lock\", \"args\": ThreadLockArgs } | { \"name\": \"thread_model\", \"args\": ThreadModelArgs } | { \"name\": \"mark_thread_read\", \"args\": MarkThreadReadArgs }",
-    "OperationResponse": "{ \"name\": \"export_character\", \"data\": ExportCharacterResult } | { \"name\": \"import_character\", \"data\": ImportCharacterResult } | { \"name\": \"delete_character\", \"data\": DeleteCharacterResult } | { \"name\": \"export_backup\", \"data\": BackupExported } | { \"name\": \"import_archive\", \"data\": ArchiveImported } | { \"name\": \"read_transfer\", \"data\": TransferChunk } | { \"name\": \"write_transfer\", \"data\": TransferWritten } | { \"name\": \"usage\", \"data\": UsageResult } | { \"name\": \"run_tool\", \"data\": RunToolResult } | { \"name\": \"compact\", \"data\": CompactionReport } | { \"name\": \"compact_watch\", \"data\": CompactionWatchResult } | { \"name\": \"compact_cancel\", \"data\": CompactionWatchResult } | { \"name\": \"segments\", \"data\": SegmentsResult } | { \"name\": \"clear\", \"data\": ClearResult } | { \"name\": \"status\", \"data\": StatusReport } | { \"name\": \"error_log\", \"data\": ErrorLogResult } | { \"name\": \"heartbeat_log\", \"data\": HeartbeatLogResult } | { \"name\": \"call_log\", \"data\": CallLogResult } | { \"name\": \"transcript\", \"data\": TranscriptResult } | { \"name\": \"subagent_trace\", \"data\": SubagentTraceResult } | { \"name\": \"heartbeat_tick_now\", \"data\": HeartbeatControlResult } | { \"name\": \"heartbeat_set_dormant\", \"data\": HeartbeatControlResult } | { \"name\": \"heartbeat_set_active\", \"data\": HeartbeatControlResult } | { \"name\": \"keepalive_ping_now\", \"data\": KeepalivePingResult } | { \"name\": \"session_activate\", \"data\": SessionActivated } | { \"name\": \"discover_operations\", \"data\": OperationCatalogue } | { \"name\": \"list_models\", \"data\": ModelListing } | { \"name\": \"favorite_model\", \"data\": ModelFavorite } | { \"name\": \"model_info\", \"data\": ModelInfoResult } | { \"name\": \"switch_model\", \"data\": ModelSwitchResult } | { \"name\": \"reset_model\", \"data\": ModelResetResult } | { \"name\": \"model_settings\", \"data\": ModelSettingsResult } | { \"name\": \"set_model_setting\", \"data\": ModelSettingChanged } | { \"name\": \"config\", \"data\": ConfigResult } | { \"name\": \"config_check\", \"data\": ConfigCheckResult } | { \"name\": \"config_schema\", \"data\": ConfigSchemaResult } | { \"name\": \"config_reload\", \"data\": ConfigReloadResult } | { \"name\": \"tools\", \"data\": ToolAccessResult } | { \"name\": \"list_providers\", \"data\": ProviderListing } | { \"name\": \"list_provider_models\", \"data\": ProviderModelListing } | { \"name\": \"refresh_provider_models\", \"data\": ProviderRefreshed } | { \"name\": \"refresh_all_provider_models\", \"data\": ProvidersRefreshed } | { \"name\": \"log\", \"data\": ConversationPage } | { \"name\": \"history_page\", \"data\": ConversationPage } | { \"name\": \"get\", \"data\": Message } | { \"name\": \"edit\", \"data\": MessageEdited } | { \"name\": \"delete\", \"data\": MessagesDeleted } | { \"name\": \"list_alternatives\", \"data\": AlternativeListing } | { \"name\": \"alt\", \"data\": AlternativeSelected } | { \"name\": \"inject_system\", \"data\": SystemInjected } | { \"name\": \"list_characters\", \"data\": CharacterListing } | { \"name\": \"create_character\", \"data\": CharacterCreated } | { \"name\": \"switch_character\", \"data\": CharacterSelection } | { \"name\": \"character_info\", \"data\": CharacterDetails } | { \"name\": \"list_threads\", \"data\": ThreadListing } | { \"name\": \"switch_thread\", \"data\": ThreadSelection } | { \"name\": \"create_thread\", \"data\": ThreadListing } | { \"name\": \"archive_thread\", \"data\": ThreadListing } | { \"name\": \"fork_thread\", \"data\": ThreadForkResult } | { \"name\": \"thread_home\", \"data\": ThreadListing } | { \"name\": \"thread_label\", \"data\": ThreadListing } | { \"name\": \"thread_purpose\", \"data\": ThreadListing } | { \"name\": \"thread_files\", \"data\": ThreadListing } | { \"name\": \"thread_lock\", \"data\": ThreadListing } | { \"name\": \"thread_model\", \"data\": ThreadListing } | { \"name\": \"mark_thread_read\", \"data\": ThreadUnread }",
+    "OperationRequest": "{ \"name\": \"export_character\", \"args\": ExportCharacterArgs } | { \"name\": \"import_character\", \"args\": ImportCharacterArgs } | { \"name\": \"delete_character\", \"args\": DeleteCharacterArgs } | { \"name\": \"export_backup\", \"args\": ExportBackupArgs } | { \"name\": \"import_archive\", \"args\": ImportArchiveArgs } | { \"name\": \"read_transfer\", \"args\": ReadTransferArgs } | { \"name\": \"write_transfer\", \"args\": WriteTransferArgs } | { \"name\": \"usage\", \"args\": UsageArgs } | { \"name\": \"run_tool\", \"args\": RunToolArgs } | { \"name\": \"compact\", \"args\": CompactArgs } | { \"name\": \"compact_watch\", \"args\": EmptyOperationArgs } | { \"name\": \"compact_cancel\", \"args\": EmptyOperationArgs } | { \"name\": \"segments\", \"args\": SegmentsArgs } | { \"name\": \"clear\", \"args\": ClearArgs } | { \"name\": \"status\", \"args\": EmptyOperationArgs } | { \"name\": \"error_log\", \"args\": DiagnosticCountArgs } | { \"name\": \"heartbeat_log\", \"args\": DiagnosticCountArgs } | { \"name\": \"call_log\", \"args\": CallLogArgs } | { \"name\": \"transcript\", \"args\": TranscriptArgs } | { \"name\": \"subagent_trace\", \"args\": SubagentTraceArgs } | { \"name\": \"heartbeat_tick_now\", \"args\": EmptyOperationArgs } | { \"name\": \"heartbeat_set_dormant\", \"args\": EmptyOperationArgs } | { \"name\": \"heartbeat_set_active\", \"args\": EmptyOperationArgs } | { \"name\": \"keepalive_ping_now\", \"args\": EmptyOperationArgs } | { \"name\": \"session_activate\", \"args\": EmptyOperationArgs } | { \"name\": \"discover_operations\", \"args\": EmptyOperationArgs } | { \"name\": \"list_models\", \"args\": ListModelsArgs } | { \"name\": \"favorite_model\", \"args\": FavoriteModelArgs } | { \"name\": \"model_info\", \"args\": ModelInfoArgs } | { \"name\": \"switch_model\", \"args\": SwitchModelArgs } | { \"name\": \"reset_model\", \"args\": ResetModelArgs } | { \"name\": \"model_settings\", \"args\": ModelSettingsArgs } | { \"name\": \"set_model_setting\", \"args\": SetModelSettingArgs } | { \"name\": \"config\", \"args\": ConfigArgs } | { \"name\": \"config_check\", \"args\": EmptyOperationArgs } | { \"name\": \"config_schema\", \"args\": EmptyOperationArgs } | { \"name\": \"config_reload\", \"args\": ConfigReloadArgs } | { \"name\": \"tools\", \"args\": EmptyOperationArgs } | { \"name\": \"list_providers\", \"args\": EmptyOperationArgs } | { \"name\": \"list_provider_models\", \"args\": ProviderModelsArgs } | { \"name\": \"refresh_provider_models\", \"args\": ProviderArgs } | { \"name\": \"refresh_all_provider_models\", \"args\": EmptyOperationArgs } | { \"name\": \"provider_detail\", \"args\": ProviderArgs } | { \"name\": \"provider_presets\", \"args\": EmptyOperationArgs } | { \"name\": \"add_provider\", \"args\": AddProviderArgs } | { \"name\": \"update_provider\", \"args\": UpdateProviderArgs } | { \"name\": \"remove_provider\", \"args\": ProviderArgs } | { \"name\": \"add_credential\", \"args\": AddCredentialArgs } | { \"name\": \"update_credential\", \"args\": UpdateCredentialArgs } | { \"name\": \"remove_credential\", \"args\": CredentialArgs } | { \"name\": \"test_credential\", \"args\": CredentialArgs } | { \"name\": \"order_credentials\", \"args\": OrderCredentialsArgs } | { \"name\": \"select_credential\", \"args\": SelectCredentialArgs } | { \"name\": \"set_credential_limit\", \"args\": SetCredentialLimitArgs } | { \"name\": \"log\", \"args\": ConversationLogArgs } | { \"name\": \"history_page\", \"args\": HistoryPageArgs } | { \"name\": \"get\", \"args\": GetMessageArgs } | { \"name\": \"edit\", \"args\": EditMessageArgs } | { \"name\": \"delete\", \"args\": DeleteMessagesArgs } | { \"name\": \"list_alternatives\", \"args\": ListAlternativesArgs } | { \"name\": \"alt\", \"args\": SelectAlternativeArgs } | { \"name\": \"inject_system\", \"args\": InjectSystemArgs } | { \"name\": \"list_characters\", \"args\": EmptyOperationArgs } | { \"name\": \"create_character\", \"args\": NamedOperationArgs } | { \"name\": \"switch_character\", \"args\": NamedOperationArgs } | { \"name\": \"character_info\", \"args\": CharacterInfoArgs } | { \"name\": \"list_threads\", \"args\": EmptyOperationArgs } | { \"name\": \"switch_thread\", \"args\": SwitchThreadArgs } | { \"name\": \"create_thread\", \"args\": CreateThreadArgs } | { \"name\": \"archive_thread\", \"args\": NamedOperationArgs } | { \"name\": \"fork_thread\", \"args\": ForkThreadArgs } | { \"name\": \"thread_home\", \"args\": NamedOperationArgs } | { \"name\": \"thread_label\", \"args\": ThreadLabelArgs } | { \"name\": \"thread_purpose\", \"args\": ThreadPurposeArgs } | { \"name\": \"thread_files\", \"args\": ThreadFilesArgs } | { \"name\": \"thread_lock\", \"args\": ThreadLockArgs } | { \"name\": \"thread_model\", \"args\": ThreadModelArgs } | { \"name\": \"mark_thread_read\", \"args\": MarkThreadReadArgs }",
+    "OperationResponse": "{ \"name\": \"export_character\", \"data\": ExportCharacterResult } | { \"name\": \"import_character\", \"data\": ImportCharacterResult } | { \"name\": \"delete_character\", \"data\": DeleteCharacterResult } | { \"name\": \"export_backup\", \"data\": BackupExported } | { \"name\": \"import_archive\", \"data\": ArchiveImported } | { \"name\": \"read_transfer\", \"data\": TransferChunk } | { \"name\": \"write_transfer\", \"data\": TransferWritten } | { \"name\": \"usage\", \"data\": UsageResult } | { \"name\": \"run_tool\", \"data\": RunToolResult } | { \"name\": \"compact\", \"data\": CompactionReport } | { \"name\": \"compact_watch\", \"data\": CompactionWatchResult } | { \"name\": \"compact_cancel\", \"data\": CompactionWatchResult } | { \"name\": \"segments\", \"data\": SegmentsResult } | { \"name\": \"clear\", \"data\": ClearResult } | { \"name\": \"status\", \"data\": StatusReport } | { \"name\": \"error_log\", \"data\": ErrorLogResult } | { \"name\": \"heartbeat_log\", \"data\": HeartbeatLogResult } | { \"name\": \"call_log\", \"data\": CallLogResult } | { \"name\": \"transcript\", \"data\": TranscriptResult } | { \"name\": \"subagent_trace\", \"data\": SubagentTraceResult } | { \"name\": \"heartbeat_tick_now\", \"data\": HeartbeatControlResult } | { \"name\": \"heartbeat_set_dormant\", \"data\": HeartbeatControlResult } | { \"name\": \"heartbeat_set_active\", \"data\": HeartbeatControlResult } | { \"name\": \"keepalive_ping_now\", \"data\": KeepalivePingResult } | { \"name\": \"session_activate\", \"data\": SessionActivated } | { \"name\": \"discover_operations\", \"data\": OperationCatalogue } | { \"name\": \"list_models\", \"data\": ModelListing } | { \"name\": \"favorite_model\", \"data\": ModelFavorite } | { \"name\": \"model_info\", \"data\": ModelInfoResult } | { \"name\": \"switch_model\", \"data\": ModelSwitchResult } | { \"name\": \"reset_model\", \"data\": ModelResetResult } | { \"name\": \"model_settings\", \"data\": ModelSettingsResult } | { \"name\": \"set_model_setting\", \"data\": ModelSettingChanged } | { \"name\": \"config\", \"data\": ConfigResult } | { \"name\": \"config_check\", \"data\": ConfigCheckResult } | { \"name\": \"config_schema\", \"data\": ConfigSchemaResult } | { \"name\": \"config_reload\", \"data\": ConfigReloadResult } | { \"name\": \"tools\", \"data\": ToolAccessResult } | { \"name\": \"list_providers\", \"data\": ProviderListing } | { \"name\": \"list_provider_models\", \"data\": ProviderModelListing } | { \"name\": \"refresh_provider_models\", \"data\": ProviderRefreshed } | { \"name\": \"refresh_all_provider_models\", \"data\": ProvidersRefreshed } | { \"name\": \"provider_detail\", \"data\": ProviderStatus } | { \"name\": \"provider_presets\", \"data\": ProviderPresetListing } | { \"name\": \"add_provider\", \"data\": ProviderChanged } | { \"name\": \"update_provider\", \"data\": ProviderChanged } | { \"name\": \"remove_provider\", \"data\": ProviderRemoved } | { \"name\": \"add_credential\", \"data\": ProviderChanged } | { \"name\": \"update_credential\", \"data\": ProviderChanged } | { \"name\": \"remove_credential\", \"data\": ProviderChanged } | { \"name\": \"test_credential\", \"data\": CredentialTested } | { \"name\": \"order_credentials\", \"data\": ProviderChanged } | { \"name\": \"select_credential\", \"data\": ProviderChanged } | { \"name\": \"set_credential_limit\", \"data\": ProviderChanged } | { \"name\": \"log\", \"data\": ConversationPage } | { \"name\": \"history_page\", \"data\": ConversationPage } | { \"name\": \"get\", \"data\": Message } | { \"name\": \"edit\", \"data\": MessageEdited } | { \"name\": \"delete\", \"data\": MessagesDeleted } | { \"name\": \"list_alternatives\", \"data\": AlternativeListing } | { \"name\": \"alt\", \"data\": AlternativeSelected } | { \"name\": \"inject_system\", \"data\": SystemInjected } | { \"name\": \"list_characters\", \"data\": CharacterListing } | { \"name\": \"create_character\", \"data\": CharacterCreated } | { \"name\": \"switch_character\", \"data\": CharacterSelection } | { \"name\": \"character_info\", \"data\": CharacterDetails } | { \"name\": \"list_threads\", \"data\": ThreadListing } | { \"name\": \"switch_thread\", \"data\": ThreadSelection } | { \"name\": \"create_thread\", \"data\": ThreadListing } | { \"name\": \"archive_thread\", \"data\": ThreadListing } | { \"name\": \"fork_thread\", \"data\": ThreadForkResult } | { \"name\": \"thread_home\", \"data\": ThreadListing } | { \"name\": \"thread_label\", \"data\": ThreadListing } | { \"name\": \"thread_purpose\", \"data\": ThreadListing } | { \"name\": \"thread_files\", \"data\": ThreadListing } | { \"name\": \"thread_lock\", \"data\": ThreadListing } | { \"name\": \"thread_model\", \"data\": ThreadListing } | { \"name\": \"mark_thread_read\", \"data\": ThreadUnread }",
     "OperationScalar": "boolean | string | number | null",
     "OperationScope": "\"global\" | \"selection\" | \"character\" | \"optional_character\"",
+    "OrderCredentialsArgs": "{ provider: string, order: Array<string>, }",
     "PayloadDiffCounts": "{ equal: number, added: number, removed: number, }",
     "PayloadDiffEntry": "{ op: PayloadDiffOperation, hash: string, bytes: number, text: string | null, }",
     "PayloadDiffOperation": "\"equal\" | \"added\" | \"removed\"",
@@ -3848,6 +3907,7 @@
     "PrimedKeepalivePing": "{ input_tokens: number, cache_read_tokens: number, cache_creation_tokens: number, wrote_cache: boolean, interval_secs: number, next_ping_at: string, seconds_until_ping: number, }",
     "ProviderArgs": "{ provider: string, }",
     "ProviderCacheStatus": "{ present: boolean, models: number, visible: number, hidden: number, fetched_at: string | null, }",
+    "ProviderChanged": "{ provider: ProviderStatus, message: string, file: string, }",
     "ProviderDiscoveredModel": "{ source: DiscoveredModelSource, model_id: string, display_name: string | null, sdk: string, owned_by: string | null, context_length: number | null, max_output_tokens: number | null, supports_tools: boolean | null, supports_images: boolean | null, supports_reasoning: boolean | null, supports_prompt_cache: boolean | null, subscription_included?: boolean, subscription_input_multiplier?: number, discovered_at: string, }",
     "ProviderFallbackWarning": "{ rid?: string | null, provider: string, from_key: string, to_key: string, kind: string, status?: number | null, message: string, }",
     "ProviderKeyStatus": "{ name: string, enabled: boolean, warn_on_fallback: boolean, env_set: boolean, }",
@@ -3855,13 +3915,16 @@
     "ProviderModelCache": "{ fetched_at: string | null, model_count: number, }",
     "ProviderModelListing": "{ provider: string, discovered: Array<ProviderDiscoveredModel>, hidden: Array<ProviderDiscoveredModel>, static: Array<ProviderStaticModel>, include_hidden: boolean, cache: ProviderModelCache, }",
     "ProviderModelsArgs": "{ provider: string, include_hidden?: boolean | null, }",
+    "ProviderPreset": "{ name: string, sdk: string, base_url: string | null, credential_kind: CredentialKind, api_key_env: string | null, discover: boolean, configured: boolean, }",
+    "ProviderPresetListing": "{ presets: Array<ProviderPreset>, sdks: Array<string>, }",
     "ProviderRefreshed": "{ provider: string, model_count: number, fetched_at: string, cache_path: string, }",
     "ProviderRefreshResult": "{ ok: true, provider: string, model_count: number, fetched_at: string, cache_path: string, } | { provider: string, ok: false, error: string, }",
+    "ProviderRemoved": "{ provider: string, keys_removed: number, limits_removed: number, file: string, }",
     "ProviderSkipped": "{ provider: string, reason: ProviderSkipReason, }",
     "ProviderSkipReason": "\"disabled\" | \"discovery disabled\"",
     "ProvidersRefreshed": "{ results: Array<ProviderRefreshResult>, skipped: Array<ProviderSkipped>, }",
     "ProviderStaticModel": "{ source: StaticModelSource, name: string, qualified_name: string, model_id: string, sdk: string, max_output_tokens: number | null, }",
-    "ProviderStatus": "{ name: string, enabled: boolean, sdk: string, base_url: string | null, discovery_enabled: boolean, keys: Array<ProviderKeyStatus>, cache: ProviderCacheStatus, }",
+    "ProviderStatus": "{ name: string, enabled: boolean, sdk: string, base_url: string | null, discovery_enabled: boolean, keys: Array<ProviderKeyStatus>, ignore_models: Array<string>, subscription: boolean, no_auth: boolean, selection: CredentialSelection, pinned: string | null, credentials: Array<CredentialStatus>, cache: ProviderCacheStatus, }",
     "ProviderWarning": "{ rid?: string | null, message: string, }",
     "RateLimitSnapshot": "{ requests_remaining?: number, requests_limit?: number, input_tokens_remaining?: number, input_tokens_limit?: number, output_tokens_remaining?: number, output_tokens_limit?: number, resets_at?: string, }",
     "ReadTransferArgs": "{ transfer: string, offset: number, }",
@@ -3889,10 +3952,12 @@
     "SegmentsResult": "SegmentsListing | SegmentInspection | SegmentChanged",
     "SegmentSummary": "{ index: number, first_message_at: string | null, last_message_at: string | null, compacted_at: string, message_count: number, excluded: boolean, label: string | null, note: string | null, memory_before: string | null, memory_after: string | null, }",
     "SelectAlternativeArgs": "{ ref?: string | null, index?: number | null, position?: number | null, direction?: AlternativeDirection | null, }",
+    "SelectCredentialArgs": "{ provider: string, credential: string | null, }",
     "SendImage": "{ rid?: string | null, path: string, caption?: string | null, data?: string | null, subagent?: string | null, task_id?: string | null, }",
     "ServerHello": "{ v: number, server_name: string, server_version?: string | null, characters: Array<CharacterInfo>, }",
     "ServerMessage": "{ \"type\": \"hello\" } & ServerHello | { \"type\": \"history\" } & History | { \"type\": \"shutdown\" } & Shutdown | { \"type\": \"ping\" } & Ping | { \"type\": \"command_output\" } & CommandOutput | { \"type\": \"error\" } & Error | { \"type\": \"stream_start\" } & StreamStart | { \"type\": \"stream_chunk\" } & StreamChunk | { \"type\": \"stream_end\" } & StreamEnd | { \"type\": \"phase\" } & Phase | { \"type\": \"new_message\" } & NewMessage | { \"type\": \"tool_call\" } & ToolCall | { \"type\": \"tool_result\" } & ToolResult | { \"type\": \"send_image\" } & SendImage | { \"type\": \"cache_warning\" } & CacheWarning | { \"type\": \"provider_warning\" } & ProviderWarning | { \"type\": \"provider_fallback_warning\" } & ProviderFallbackWarning | { \"type\": \"usage_warning\" } & UsageWarning | { \"type\": \"plan_limit_warning\" } & PlanLimitWarning | { \"type\": \"config_warning\" } & ConfigWarning | { \"type\": \"request_accepted\" } & RequestAccepted | { \"type\": \"request_finished\" } & RequestFinished | { \"type\": \"threads_changed\" } & ThreadsChanged | { \"type\": \"thread_unread\" } & ThreadUnread",
     "SessionActivated": "{ character: string, registered: boolean, keepalive: KeepaliveActivation, heartbeat: ActivatedHeartbeat | null, }",
+    "SetCredentialLimitArgs": "{ provider: string, credential: string, cost_usd: number | null, period?: UsageBudgetPeriod, }",
     "SetModelSettingArgs": "{ name?: string | null, background_task?: BackgroundModelTarget | null, subagent?: string | null, key: string, scope?: ModelPreferenceScope | null, value?: unknown, }",
     "Shutdown": "Record<symbol, never>",
     "ShutdownWindow": "{ requested_at: string, deadline: string, }",
@@ -3941,6 +4006,8 @@
     "TranscriptToolCall": "{ name: string, input: unknown, output: string, is_error: boolean, }",
     "TransferChunk": "{ data: string, offset: number, bytes: number, }",
     "TransferWritten": "{ transfer: string, bytes: number, }",
+    "UpdateCredentialArgs": "{ provider: string, credential: string, enabled?: boolean, rename?: string, secret?: string, warn_on_fallback?: boolean, no_check?: boolean, allow_unencrypted?: boolean, }",
+    "UpdateProviderArgs": "{ provider: string, enabled?: boolean, sdk?: string | null, base_url?: string | null, discover?: boolean, ignore_models?: Array<string>, subscription?: boolean, no_auth?: boolean, setting?: string, value?: string | null, }",
     "UsageAnomaliesReport": "{ anomalies: Array<UsageAnomaly>, }",
     "UsageAnomaly": "{ ts: string, character: string, model: string, call_type: string, anomaly: string | null, cache_read_tokens: number, cache_write_tokens: number, }",
     "UsageAnomalyCount": "{ anomaly: string, calls: number, cache_write_tokens: number, }",

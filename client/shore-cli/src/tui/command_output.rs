@@ -429,6 +429,28 @@ pub(crate) fn render(
         "list_provider_models" => Some(written(|out| {
             crate::output::catalog::write_provider_models(out, data);
         })),
+        "provider_detail" => Some(written(|out| {
+            crate::output::catalog::write_provider_detail(out, data);
+        })),
+        "provider_presets" => Some(written(|out| {
+            crate::output::catalog::write_provider_presets(out, data);
+        })),
+        "add_provider"
+        | "update_provider"
+        | "add_credential"
+        | "update_credential"
+        | "remove_credential"
+        | "order_credentials"
+        | "select_credential"
+        | "set_credential_limit" => Some(written(|out| {
+            crate::output::catalog::write_provider_changed(out, data);
+        })),
+        "remove_provider" => Some(written(|out| {
+            crate::output::catalog::write_provider_removed(out, data);
+        })),
+        "test_credential" => Some(written(|out| {
+            crate::output::catalog::write_credential_tested(out, data);
+        })),
         "usage" => {
             if matches!(
                 data.get("mode").and_then(serde_json::Value::as_str),

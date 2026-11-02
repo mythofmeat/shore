@@ -200,6 +200,7 @@ export interface CallBlock {
   reset_at?: string;
   message: string;
   summary: string;
+  api_key?: string;
 }
 
 export interface BudgetBlock extends CallBlock {
@@ -886,6 +887,7 @@ export function enforceBudgetForCall(
     ) {
       return withMessage({
         budget_name: status.name,
+        ...(budget.api_key === null || budget.api_key === undefined ? {} : { api_key: budget.api_key }),
         action: status.action,
         current_cost: status.current_cost,
         cost_limit: status.cost_limit,
@@ -903,6 +905,7 @@ export function enforceBudgetForCall(
     ) {
       return withMessage({
         budget_name: status.name,
+        ...(budget.api_key === null || budget.api_key === undefined ? {} : { api_key: budget.api_key }),
         action: pace.action,
         current_cost: pace.current_cost,
         cost_limit: pace.allowance,
@@ -925,6 +928,7 @@ export function enforceBudgetForCall(
     ) {
       return withMessage({
         budget_name: status.name,
+        ...(budget.api_key === null || budget.api_key === undefined ? {} : { api_key: budget.api_key }),
         action: warnAction,
         current_cost: status.current_cost,
         cost_limit: status.cost_limit,
@@ -948,6 +952,7 @@ export function enforceBudgetForCall(
     ) {
       return withMessage({
         budget_name: status.name,
+        ...(budget.api_key === null || budget.api_key === undefined ? {} : { api_key: budget.api_key }),
         action: paceWarn,
         current_cost: pace.current_cost,
         cost_limit: pace.allowance,

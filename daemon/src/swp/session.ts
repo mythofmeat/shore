@@ -3,6 +3,12 @@ import type { Command } from "../protocol/Command";
 import type { ServerMessage } from "../protocol/ServerMessage";
 import type { ArchiveLimits } from "../commands/archive.ts";
 
+export function isLoopbackAddress(address: string | undefined): boolean {
+  if (address === undefined || address === "") return false;
+  const bare = address.replace(/^\[|\]$/g, "").replace(/^::ffff:/i, "");
+  return bare === "::1" || /^127\.\d{1,3}\.\d{1,3}\.\d{1,3}$/.test(bare);
+}
+
 export type RequestKind = "message" | "regen" | "command" | "cancel";
 
 const ALL_CHARACTERS_CAPABILITY = "all_characters";
@@ -14,6 +20,7 @@ export interface ClientInfo {
   readonly clientType: string;
   readonly clientName: string;
   readonly capabilities: readonly string[];
+  readonly confidential?: boolean;
   character: string | null;
   thread: string | null;
 }
@@ -25,6 +32,7 @@ export interface SessionMeta {
   readonly clientType: string;
   readonly clientName: string;
   readonly capabilities: readonly string[];
+  readonly confidential?: boolean;
   readonly selectedCharacter: string | null;
   readonly selectedThread: string | null;
 }
@@ -64,6 +72,7 @@ export function sessionMetaOf(client: ClientInfo): SessionMeta {
     clientType: client.clientType,
     clientName: client.clientName,
     capabilities: [...client.capabilities],
+    confidential: client.confidential === true,
     selectedCharacter: client.character,
     selectedThread: client.thread,
   };

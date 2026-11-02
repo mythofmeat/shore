@@ -1,3 +1,4 @@
+import { missingKeyText } from "./errors.ts";
 import { shoreLog } from "../log.ts";
 
 import {
@@ -60,7 +61,7 @@ export class MissingApiKey extends Error {
   readonly variable: string;
 
   constructor(variable: string) {
-    super(`API key environment variable ${variable} is not set`);
+    super(missingKeyText(variable));
     this.name = "MissingApiKey";
     this.variable = variable;
   }

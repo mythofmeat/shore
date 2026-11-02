@@ -4,7 +4,7 @@ import OpenAI from "openai";
 import type { ChatCompletionCreateParams } from "openai/resources/chat/completions";
 import type { ImageGenerateParams } from "openai/resources/images";
 
-import { readCandidateEnv, resolveKeyCandidates, type ProviderEntry } from "./credentials.ts";
+import { describeCandidateSource, readCandidateEnv, resolveKeyCandidates, type ProviderEntry } from "./credentials.ts";
 import { hardcodedProviderBaseUrl } from "./request.ts";
 import type { ImageRequest, ImageResponse } from "./types.ts";
 import { compareRustStrings } from "../memory/lines.ts";
@@ -229,7 +229,7 @@ export function resolveImageGenConfig(
     return {
       err:
         `image generation API key not set for provider '${providerKey}'; ` +
-        `set one of these env vars: ${candidates.map((c) => c.env).join(", ")}`,
+        `set one of these: ${candidates.map((c) => describeCandidateSource(c)).join(", ")}`,
     };
   }
 

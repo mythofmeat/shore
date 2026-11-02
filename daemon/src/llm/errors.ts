@@ -20,7 +20,7 @@ export type LlmError =
   | { kind: "missing_api_key"; var: string }
   | { kind: "launch_failed"; message: string }
   | { kind: "provider"; message: string }
-  | { kind: "budget_blocked"; message: string; scope?: string }
+  | { kind: "budget_blocked"; message: string; scope?: string; credential?: string }
   | { kind: "aborted"; message: string };
 
 const LLM_ERROR_KINDS: ReadonlySet<string> = new Set([
@@ -41,6 +41,10 @@ export function isLlmError(value: unknown): value is LlmError {
   if (typeof value !== "object" || value === null) return false;
   const kind = (value as { kind?: unknown }).kind;
   return typeof kind === "string" && LLM_ERROR_KINDS.has(kind);
+}
+
+export function missingKeyText(source: string): string {
+  return source.startsWith("stored key ") ? `the ${source} has no value saved on the daemon` : `API key environment variable ${source} is not set`;
 }
 
 export function describeError(e: unknown): string {
@@ -64,7 +68,7 @@ export function describeLlmError(error: LlmError): string {
     case "stream_errored":
       return `stream errored after partial usage: ${error.message}`;
     case "missing_api_key":
-      return `API key environment variable ${error.var} is not set`;
+      return missingKeyText(error.var);
     case "launch_failed":
       return error.message;
     case "provider":

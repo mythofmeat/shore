@@ -115,6 +115,9 @@ wire_types! {
         #[serde(default, skip_serializing_if = "Option::is_none")]
         #[ts(optional)]
         pub multiline: Option<bool>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        #[ts(optional)]
+        pub secret: Option<bool>,
     }
 
     #[serde(untagged)]
@@ -233,6 +236,9 @@ wire_types! {
         #[schemars(with = "String")]
         #[ts(optional)]
         pub base: Option<String>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        #[ts(optional)]
+        pub include_secrets: Option<bool>,
     }
 
     pub struct BackupExported {
@@ -248,6 +254,9 @@ wire_types! {
         pub blocks: usize,
         #[serde(default)]
         pub blocks_sent: usize,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        #[ts(optional)]
+        pub secrets_left_out: Option<bool>,
     }
 
     #[serde(deny_unknown_fields)]
@@ -260,6 +269,9 @@ wire_types! {
         pub skipped: Vec<String>,
         pub restored: Vec<String>,
         pub kept: Vec<String>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        #[ts(optional)]
+        pub secrets_left_out: Option<bool>,
     }
 
     #[serde(deny_unknown_fields)]
@@ -2016,6 +2028,54 @@ wire_types! {
         pub env_set: bool,
     }
 
+    #[serde(rename_all = "snake_case")]
+    pub enum CredentialKind { ApiKey, Env, Login, None }
+
+    #[serde(rename_all = "snake_case")]
+    pub enum CredentialStanding { Works, Invalid, OverQuota, SignedOut, Missing, NotChecked }
+
+    #[serde(rename_all = "snake_case")]
+    pub enum CredentialSelection { Order, Room }
+
+    pub struct CredentialLimit {
+        pub cost_usd: f64,
+        pub period: UsageBudgetPeriod,
+        pub spent_usd: f64,
+        pub at_limit: bool,
+        pub resets_at: String,
+    }
+
+    pub struct CredentialUsage {
+        pub cost_usd: f64,
+        pub calls: usize,
+        pub since: String,
+    }
+
+    pub struct CredentialStatus {
+        pub name: String,
+        pub kind: CredentialKind,
+        pub enabled: bool,
+        pub standing: CredentialStanding,
+        #[serde(deserialize_with = "deserialize_nullable")]
+        pub detail: Option<String>,
+        #[serde(deserialize_with = "deserialize_nullable")]
+        pub hint: Option<String>,
+        #[serde(deserialize_with = "deserialize_nullable")]
+        pub env: Option<String>,
+        #[serde(deserialize_with = "deserialize_nullable")]
+        pub checked_at: Option<String>,
+        pub pinned: bool,
+        pub in_use: bool,
+        pub warn_on_fallback: bool,
+        #[serde(deserialize_with = "deserialize_nullable")]
+        pub limit: Option<CredentialLimit>,
+        #[serde(deserialize_with = "deserialize_nullable")]
+        pub usage: Option<CredentialUsage>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        #[ts(optional)]
+        pub login_command: Option<String>,
+    }
+
     pub struct ProviderCacheStatus {
         pub present: bool,
         pub models: usize,
@@ -2033,10 +2093,171 @@ wire_types! {
         pub base_url: Option<String>,
         pub discovery_enabled: bool,
         pub keys: Vec<ProviderKeyStatus>,
+        pub ignore_models: Vec<String>,
+        pub subscription: bool,
+        pub no_auth: bool,
+        pub selection: CredentialSelection,
+        #[serde(deserialize_with = "deserialize_nullable")]
+        pub pinned: Option<String>,
+        pub credentials: Vec<CredentialStatus>,
         pub cache: ProviderCacheStatus,
     }
 
     pub struct ProviderListing { pub providers: Vec<ProviderStatus> }
+
+    pub struct ProviderPreset {
+        pub name: String,
+        pub sdk: String,
+        #[serde(deserialize_with = "deserialize_nullable")]
+        pub base_url: Option<String>,
+        pub credential_kind: CredentialKind,
+        #[serde(deserialize_with = "deserialize_nullable")]
+        pub api_key_env: Option<String>,
+        pub discover: bool,
+        pub configured: bool,
+    }
+
+    pub struct ProviderPresetListing { pub presets: Vec<ProviderPreset>, pub sdks: Vec<String> }
+
+    #[serde(deny_unknown_fields)]
+    pub struct AddProviderArgs {
+        pub name: String,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        #[ts(optional)]
+        pub sdk: Option<String>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        #[ts(optional)]
+        pub base_url: Option<String>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        #[ts(optional)]
+        pub no_auth: Option<bool>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        #[ts(optional)]
+        pub discover: Option<bool>,
+    }
+
+    #[serde(deny_unknown_fields)]
+    pub struct UpdateProviderArgs {
+        pub provider: String,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        #[ts(optional)]
+        pub enabled: Option<bool>,
+        #[serde(default, deserialize_with = "deserialize_present", skip_serializing_if = "Option::is_none")]
+        #[ts(optional)]
+        pub sdk: Option<Option<String>>,
+        #[serde(default, deserialize_with = "deserialize_present", skip_serializing_if = "Option::is_none")]
+        #[ts(optional)]
+        pub base_url: Option<Option<String>>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        #[ts(optional)]
+        pub discover: Option<bool>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        #[ts(optional)]
+        pub ignore_models: Option<Vec<String>>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        #[ts(optional)]
+        pub subscription: Option<bool>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        #[ts(optional)]
+        pub no_auth: Option<bool>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        #[ts(optional)]
+        pub setting: Option<String>,
+        #[serde(default, deserialize_with = "deserialize_present", skip_serializing_if = "Option::is_none")]
+        #[ts(optional)]
+        pub value: Option<Option<String>>,
+    }
+
+    pub struct ProviderChanged {
+        pub provider: ProviderStatus,
+        pub message: String,
+        pub file: String,
+    }
+
+    pub struct ProviderRemoved {
+        pub provider: String,
+        pub keys_removed: usize,
+        pub limits_removed: usize,
+        pub file: String,
+    }
+
+    #[serde(deny_unknown_fields)]
+    pub struct AddCredentialArgs {
+        pub provider: String,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        #[ts(optional)]
+        pub name: Option<String>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        #[ts(optional)]
+        pub secret: Option<String>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        #[ts(optional)]
+        pub env: Option<String>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        #[ts(optional)]
+        pub no_check: Option<bool>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        #[ts(optional)]
+        pub allow_unencrypted: Option<bool>,
+    }
+
+    #[serde(deny_unknown_fields)]
+    pub struct UpdateCredentialArgs {
+        pub provider: String,
+        pub credential: String,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        #[ts(optional)]
+        pub enabled: Option<bool>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        #[ts(optional)]
+        pub rename: Option<String>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        #[ts(optional)]
+        pub secret: Option<String>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        #[ts(optional)]
+        pub warn_on_fallback: Option<bool>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        #[ts(optional)]
+        pub no_check: Option<bool>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        #[ts(optional)]
+        pub allow_unencrypted: Option<bool>,
+    }
+
+    #[serde(deny_unknown_fields)]
+    pub struct CredentialArgs { pub provider: String, pub credential: String }
+
+    #[serde(deny_unknown_fields)]
+    pub struct OrderCredentialsArgs { pub provider: String, pub order: Vec<String> }
+
+    #[serde(deny_unknown_fields)]
+    pub struct SelectCredentialArgs {
+        pub provider: String,
+        #[serde(deserialize_with = "deserialize_nullable")]
+        pub credential: Option<String>,
+    }
+
+    #[serde(deny_unknown_fields)]
+    pub struct SetCredentialLimitArgs {
+        pub provider: String,
+        pub credential: String,
+        #[serde(deserialize_with = "deserialize_nullable")]
+        pub cost_usd: Option<f64>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        #[ts(optional)]
+        pub period: Option<UsageBudgetPeriod>,
+    }
+
+    pub struct CredentialTested {
+        pub provider: String,
+        pub credential: String,
+        pub ok: bool,
+        pub standing: CredentialStanding,
+        pub detail: String,
+        #[serde(deserialize_with = "deserialize_nullable")]
+        pub model_count: Option<usize>,
+    }
 
     #[serde(rename_all = "snake_case")]
     pub enum DiscoveredModelSource { Discovered }
@@ -2645,6 +2866,18 @@ operations! {
     ListProviderModels: "list_provider_models" (ProviderModelsArgs) => ProviderModelListing,
     RefreshProviderModels: "refresh_provider_models" (ProviderArgs) => ProviderRefreshed,
     RefreshAllProviderModels: "refresh_all_provider_models" (EmptyOperationArgs) => ProvidersRefreshed,
+    InspectProvider: "provider_detail" (ProviderArgs) => ProviderStatus,
+    ListProviderPresets: "provider_presets" (EmptyOperationArgs) => ProviderPresetListing,
+    AddProvider: "add_provider" (AddProviderArgs) => ProviderChanged,
+    UpdateProvider: "update_provider" (UpdateProviderArgs) => ProviderChanged,
+    RemoveProvider: "remove_provider" (ProviderArgs) => ProviderRemoved,
+    AddCredential: "add_credential" (AddCredentialArgs) => ProviderChanged,
+    UpdateCredential: "update_credential" (UpdateCredentialArgs) => ProviderChanged,
+    RemoveCredential: "remove_credential" (CredentialArgs) => ProviderChanged,
+    TestCredential: "test_credential" (CredentialArgs) => CredentialTested,
+    OrderCredentials: "order_credentials" (OrderCredentialsArgs) => ProviderChanged,
+    SelectCredential: "select_credential" (SelectCredentialArgs) => ProviderChanged,
+    SetCredentialLimit: "set_credential_limit" (SetCredentialLimitArgs) => ProviderChanged,
     ConversationLog: "log" (ConversationLogArgs) => ConversationPage,
     HistoryPage: "history_page" (HistoryPageArgs) => ConversationPage,
     GetMessage: "get" (GetMessageArgs) => Message,

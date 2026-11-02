@@ -16,9 +16,12 @@ import type { ThreadView } from "../protocol/ThreadView.ts";
 import { BrowserConnection, type ConnectionUpdate } from "./connection.ts";
 import { OperationClient } from "./operations.ts";
 
+const SECRET_ARGS: Readonly<Record<string, string>> = { config: "value", add_credential: "secret", update_credential: "secret" };
+
 export function inspectableRequest(request: Extract<ConnectionUpdate, { kind: "uncertain" }>["request"]): Extract<ConnectionUpdate, { kind: "uncertain" }>["request"] {
-  if (request.type !== "command" || request.name !== "config" || typeof request.args !== "object" || request.args === null || Array.isArray(request.args)) return request;
-  return { ...request, args: { ...request.args, ...(Object.hasOwn(request.args, "value") ? { value: "<redacted>" } : {}) } };
+  const secret = request.type === "command" ? SECRET_ARGS[request.name] : undefined;
+  if (request.type !== "command" || secret === undefined || typeof request.args !== "object" || request.args === null || Array.isArray(request.args)) return request;
+  return { ...request, args: { ...request.args, ...(Object.hasOwn(request.args, secret) ? { [secret]: "<redacted>" } : {}) } };
 }
 
 export interface LiveRound { reasoning: string; text: string; tools: string[] }

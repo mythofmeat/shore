@@ -462,6 +462,11 @@ export function claudePlanLimitsReport(
   };
 }
 
+export function claudeAccountReports(now: number = Date.now()): ClaudeAccountReport[] {
+  rescanClaudeAccounts(now);
+  return plans.map((plan) => accountReport(plan, now));
+}
+
 function accountReport(plan: AccountPlan, now: number): ClaudeAccountReport {
   const assessment = assessClaudeAccount(standingOf(plan), now);
   return {
