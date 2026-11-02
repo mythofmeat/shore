@@ -108,7 +108,7 @@ export function setSubscriptionProviders(names: Iterable<string>, characters: It
   characterSubscriptionProviders = new Map([...characters].map(([character, providers]) => [character, new Set(providers)]));
 }
 
-const isSubscriptionProvider = (provider: string, character?: string): boolean =>
+export const isSubscriptionProvider = (provider: string, character?: string): boolean =>
   (character === undefined ? subscriptionProviders : characterSubscriptionProviders.get(character) ?? subscriptionProviders).has(provider);
 
 let nanoGptCoveredModels = new Set<string>();
