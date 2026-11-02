@@ -37,3 +37,9 @@ export type FolderDialogRequest = { kind: "new" } | { kind: "rename" | "delete";
 export function openFolderDialog(request: FolderDialogRequest): void {
   dispatchEvent(new CustomEvent<FolderDialogRequest>(FOLDER_DIALOG_EVENT, { detail: request }));
 }
+
+export const COMPACTION_VIEW_EVENT = "shore:compaction-view";
+
+export function openCompactionView(): void {
+  dispatchEvent(new CustomEvent(COMPACTION_VIEW_EVENT));
+}

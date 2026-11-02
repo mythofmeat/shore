@@ -12,6 +12,7 @@ import type { ConversationPage } from "../protocol/ConversationPage.ts";
 import type { SegmentSummary } from "../protocol/SegmentSummary.ts";
 import type { ServerMessage } from "../protocol/ServerMessage.ts";
 import type { ThreadUnread } from "../protocol/ThreadUnread.ts";
+import type { RunningCompaction } from "../protocol/RunningCompaction.ts";
 import type { ThreadFolderView } from "../protocol/ThreadFolderView.ts";
 import type { ThreadListing } from "../protocol/ThreadListing.ts";
 import type { ThreadView } from "../protocol/ThreadView.ts";
@@ -37,7 +38,7 @@ export interface WorkspaceSnapshot {
   messages: Message[]; metadata: Record<string, StreamMetadata>; streams: LiveTurn[]; media: LiveImage[]; mediaLimited: boolean; activity: Activity[];
   config: unknown; error: string; status: string; detail: string;
   character: string | null; thread: string | null; previousSegment: SegmentSummary | null; segmentView: SegmentView | null; uncertain: Extract<ConnectionUpdate, { kind: "uncertain" }>[];
-  opening: OpeningTarget | null; folders: ThreadFolderView[]; manualOrder: boolean;
+  opening: OpeningTarget | null; folders: ThreadFolderView[]; manualOrder: boolean; compaction: RunningCompaction | null;
 }
 
 export interface OpeningTarget { character: string | null; thread: string | null }
@@ -96,7 +97,7 @@ export class Workspace {
   #loadingEarlier = false;
   #unreadSeq = 0;
   #unread = new Map<string, { seq: number; update: ThreadUnread }>();
-  #state: WorkspaceSnapshot = { characters: [], threads: [], operations: [], requests: [], messages: [], metadata: {}, streams: [], media: [], mediaLimited: false, activity: [], config: {}, error: "", status: "idle", detail: "", character: null, thread: null, previousSegment: null, segmentView: null, uncertain: [], opening: null, folders: [], manualOrder: false };
+  #state: WorkspaceSnapshot = { characters: [], threads: [], operations: [], requests: [], messages: [], metadata: {}, streams: [], media: [], mediaLimited: false, activity: [], config: {}, error: "", status: "idle", detail: "", character: null, thread: null, previousSegment: null, segmentView: null, uncertain: [], opening: null, folders: [], manualOrder: false, compaction: null };
   constructor(readonly connection: BrowserConnection, frame: FrameScheduler = (callback) => { callback(); }) {
     this.#frame = frame;
     this.actions = new OperationClient(connection);
@@ -179,14 +180,14 @@ export class Workspace {
     const generation = ++this.#threadListing;
     const since = this.#unreadSeq;
     try {
-      if (this.#state.character === null) { this.#patch({ threads: [], folders: [], manualOrder: false }); return; }
+      if (this.#state.character === null) { this.#patch({ threads: [], folders: [], manualOrder: false, compaction: null }); return; }
       const listing = await this.actions.run("list_threads", {});
       if (generation !== this.#threadListing) return;
       this.#applyListing(listing, since);
     } catch (error) { if (generation === this.#threadListing && this.connection.status === "ready") this.report(error); }
   }
   #applyListing(listing: ThreadListing, since: number): void {
-    this.#patch({ threads: this.#laterUnread(listing.threads, since), folders: listing.folders ?? [], manualOrder: listing.manual_order === true });
+    this.#patch({ threads: this.#laterUnread(listing.threads, since), folders: listing.folders ?? [], manualOrder: listing.manual_order === true, compaction: listing.compaction ?? null });
   }
   applyThreadListing(listing: ThreadListing): void {
     this.#threadListing += 1;
@@ -277,11 +278,15 @@ export class Workspace {
       ? Object.fromEntries([...Object.entries(this.#state.metadata).filter(([id]) => id !== next.msgId), [next.msgId, next.metadata] as const].slice(-256)) : this.#state.metadata;
     this.#patch({ metadata, media, mediaLimited, streams: manual && next.subagent === null ? this.#state.streams : [...this.#state.streams.filter((stream) => stream.key !== key), next].slice(-32) }, message.type === "stream_chunk");
   }
+  #fromCompactionPass(message: { rid?: string | null }): boolean {
+    const operation = this.actions.pendingOperation(message.rid);
+    return operation === "compact" || operation === "compact_watch";
+  }
   #receive(update: ConnectionUpdate): void {
     if (update.kind === "status") {
       if (update.status !== "ready") { this.#navigation += 1; this.#threadListing += 1; }
       if (update.status === "signed_out") this.#segmentEpoch += 1;
-      this.#patch({ status: update.status, detail: update.detail, streams: update.status === "ready" ? this.#state.streams : [], ...(update.status === "signed_out" ? { error: "", messages: [], metadata: {}, config: {}, media: [], mediaLimited: false, activity: [], operations: [], requests: [], threads: [], characters: [], uncertain: [], previousSegment: null, segmentView: null, opening: null, folders: [], manualOrder: false } : {}) });
+      this.#patch({ status: update.status, detail: update.detail, streams: update.status === "ready" ? this.#state.streams : [], ...(update.status === "signed_out" ? { error: "", messages: [], metadata: {}, config: {}, media: [], mediaLimited: false, activity: [], operations: [], requests: [], threads: [], characters: [], uncertain: [], previousSegment: null, segmentView: null, opening: null, folders: [], manualOrder: false, compaction: null } : {}) });
       if (update.status === "ready") void this.refreshNavigation();
       return;
     }
@@ -319,6 +324,7 @@ export class Workspace {
         this.#patch({ messages: retainImages(messages, this.#state.messages, this.#state.media), media: reconcileImages(this.#state.media, messages, this.#state.messages), threads: touchThread(this.#state.threads, this.#state.character, message) }); return;
       }
       case "stream_start": case "stream_chunk": case "stream_end": case "tool_call": case "tool_result":
+        if (this.#fromCompactionPass(message)) return;
         this.#stream(message);
         if (message.type !== "stream_chunk") this.#activity(message.type, message);
         return;
@@ -337,7 +343,10 @@ export class Workspace {
         this.#patch({ media: retained.items, mediaLimited: this.#state.mediaLimited || retained.limited });
         this.#activity(message.type, message); return;
       }
-      case "command_output": case "phase": case "cache_warning": case "provider_warning": case "request_accepted":
+      case "phase":
+        if (!this.#fromCompactionPass(message)) this.#activity(message.type, message);
+        break;
+      case "command_output": case "cache_warning": case "provider_warning": case "request_accepted":
       case "provider_fallback_warning": case "usage_warning": case "plan_limit_warning": case "config_warning": case "shutdown":
         this.#activity(message.type, message); break;
       case "threads_changed":

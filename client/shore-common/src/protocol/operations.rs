@@ -2826,6 +2826,21 @@ wire_types! {
         pub last_active: Option<String>,
     }
 
+    pub struct RunningCompaction {
+        pub thread: String,
+        pub trigger: CompactionTrigger,
+        pub started_at: String,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        #[ts(optional, type = "number")]
+        pub turns: Option<u64>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        #[ts(optional)]
+        pub first_at: Option<String>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        #[ts(optional)]
+        pub last_at: Option<String>,
+    }
+
     pub struct ThreadFolderView {
         pub name: String,
         #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -2847,6 +2862,9 @@ wire_types! {
         #[serde(default, skip_serializing_if = "Option::is_none")]
         #[ts(optional)]
         pub manual_order: Option<bool>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        #[ts(optional)]
+        pub compaction: Option<RunningCompaction>,
         #[serde(default, skip_serializing_if = "Option::is_none")]
         #[ts(optional)]
         pub invalidated: Option<CacheInvalidation>,

@@ -17247,6 +17247,16 @@
             "null"
           ]
         },
+        "compaction": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/RunningCompaction"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
         "invalidated": {
           "anyOf": [
             {
@@ -17435,6 +17445,54 @@
           },
           "required": [
             "name"
+          ]
+        },
+        "RunningCompaction": {
+          "type": "object",
+          "properties": {
+            "thread": {
+              "type": "string"
+            },
+            "trigger": {
+              "$ref": "#/$defs/CompactionTrigger"
+            },
+            "started_at": {
+              "type": "string"
+            },
+            "turns": {
+              "type": [
+                "integer",
+                "null"
+              ],
+              "format": "uint64",
+              "minimum": 0
+            },
+            "first_at": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "last_at": {
+              "type": [
+                "string",
+                "null"
+              ]
+            }
+          },
+          "required": [
+            "thread",
+            "trigger",
+            "started_at"
+          ]
+        },
+        "CompactionTrigger": {
+          "type": "string",
+          "enum": [
+            "manual",
+            "idle",
+            "turn",
+            "deep_archive"
           ]
         },
         "CacheInvalidation": {
@@ -17614,6 +17672,16 @@
             "null"
           ]
         },
+        "compaction": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/RunningCompaction"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
         "invalidated": {
           "anyOf": [
             {
@@ -17802,6 +17870,54 @@
           },
           "required": [
             "name"
+          ]
+        },
+        "RunningCompaction": {
+          "type": "object",
+          "properties": {
+            "thread": {
+              "type": "string"
+            },
+            "trigger": {
+              "$ref": "#/$defs/CompactionTrigger"
+            },
+            "started_at": {
+              "type": "string"
+            },
+            "turns": {
+              "type": [
+                "integer",
+                "null"
+              ],
+              "format": "uint64",
+              "minimum": 0
+            },
+            "first_at": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "last_at": {
+              "type": [
+                "string",
+                "null"
+              ]
+            }
+          },
+          "required": [
+            "thread",
+            "trigger",
+            "started_at"
+          ]
+        },
+        "CompactionTrigger": {
+          "type": "string",
+          "enum": [
+            "manual",
+            "idle",
+            "turn",
+            "deep_archive"
           ]
         },
         "CacheInvalidation": {
@@ -17875,6 +17991,16 @@
             "null"
           ]
         },
+        "compaction": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/RunningCompaction"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
         "invalidated": {
           "anyOf": [
             {
@@ -18063,6 +18189,54 @@
           },
           "required": [
             "name"
+          ]
+        },
+        "RunningCompaction": {
+          "type": "object",
+          "properties": {
+            "thread": {
+              "type": "string"
+            },
+            "trigger": {
+              "$ref": "#/$defs/CompactionTrigger"
+            },
+            "started_at": {
+              "type": "string"
+            },
+            "turns": {
+              "type": [
+                "integer",
+                "null"
+              ],
+              "format": "uint64",
+              "minimum": 0
+            },
+            "first_at": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "last_at": {
+              "type": [
+                "string",
+                "null"
+              ]
+            }
+          },
+          "required": [
+            "thread",
+            "trigger",
+            "started_at"
+          ]
+        },
+        "CompactionTrigger": {
+          "type": "string",
+          "enum": [
+            "manual",
+            "idle",
+            "turn",
+            "deep_archive"
           ]
         },
         "CacheInvalidation": {
@@ -18149,6 +18323,16 @@
           "type": [
             "boolean",
             "null"
+          ]
+        },
+        "compaction": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/RunningCompaction"
+            },
+            {
+              "type": "null"
+            }
           ]
         },
         "invalidated": {
@@ -18345,6 +18529,54 @@
             "name"
           ]
         },
+        "RunningCompaction": {
+          "type": "object",
+          "properties": {
+            "thread": {
+              "type": "string"
+            },
+            "trigger": {
+              "$ref": "#/$defs/CompactionTrigger"
+            },
+            "started_at": {
+              "type": "string"
+            },
+            "turns": {
+              "type": [
+                "integer",
+                "null"
+              ],
+              "format": "uint64",
+              "minimum": 0
+            },
+            "first_at": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "last_at": {
+              "type": [
+                "string",
+                "null"
+              ]
+            }
+          },
+          "required": [
+            "thread",
+            "trigger",
+            "started_at"
+          ]
+        },
+        "CompactionTrigger": {
+          "type": "string",
+          "enum": [
+            "manual",
+            "idle",
+            "turn",
+            "deep_archive"
+          ]
+        },
         "CacheInvalidation": {
           "type": "object",
           "properties": {
@@ -18470,6 +18702,16 @@
             "null"
           ]
         },
+        "compaction": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/RunningCompaction"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
         "invalidated": {
           "anyOf": [
             {
@@ -18658,6 +18900,54 @@
           },
           "required": [
             "name"
+          ]
+        },
+        "RunningCompaction": {
+          "type": "object",
+          "properties": {
+            "thread": {
+              "type": "string"
+            },
+            "trigger": {
+              "$ref": "#/$defs/CompactionTrigger"
+            },
+            "started_at": {
+              "type": "string"
+            },
+            "turns": {
+              "type": [
+                "integer",
+                "null"
+              ],
+              "format": "uint64",
+              "minimum": 0
+            },
+            "first_at": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "last_at": {
+              "type": [
+                "string",
+                "null"
+              ]
+            }
+          },
+          "required": [
+            "thread",
+            "trigger",
+            "started_at"
+          ]
+        },
+        "CompactionTrigger": {
+          "type": "string",
+          "enum": [
+            "manual",
+            "idle",
+            "turn",
+            "deep_archive"
           ]
         },
         "CacheInvalidation": {
@@ -18737,6 +19027,16 @@
             "null"
           ]
         },
+        "compaction": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/RunningCompaction"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
         "invalidated": {
           "anyOf": [
             {
@@ -18925,6 +19225,54 @@
           },
           "required": [
             "name"
+          ]
+        },
+        "RunningCompaction": {
+          "type": "object",
+          "properties": {
+            "thread": {
+              "type": "string"
+            },
+            "trigger": {
+              "$ref": "#/$defs/CompactionTrigger"
+            },
+            "started_at": {
+              "type": "string"
+            },
+            "turns": {
+              "type": [
+                "integer",
+                "null"
+              ],
+              "format": "uint64",
+              "minimum": 0
+            },
+            "first_at": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "last_at": {
+              "type": [
+                "string",
+                "null"
+              ]
+            }
+          },
+          "required": [
+            "thread",
+            "trigger",
+            "started_at"
+          ]
+        },
+        "CompactionTrigger": {
+          "type": "string",
+          "enum": [
+            "manual",
+            "idle",
+            "turn",
+            "deep_archive"
           ]
         },
         "CacheInvalidation": {
@@ -19004,6 +19352,16 @@
             "null"
           ]
         },
+        "compaction": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/RunningCompaction"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
         "invalidated": {
           "anyOf": [
             {
@@ -19192,6 +19550,54 @@
           },
           "required": [
             "name"
+          ]
+        },
+        "RunningCompaction": {
+          "type": "object",
+          "properties": {
+            "thread": {
+              "type": "string"
+            },
+            "trigger": {
+              "$ref": "#/$defs/CompactionTrigger"
+            },
+            "started_at": {
+              "type": "string"
+            },
+            "turns": {
+              "type": [
+                "integer",
+                "null"
+              ],
+              "format": "uint64",
+              "minimum": 0
+            },
+            "first_at": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "last_at": {
+              "type": [
+                "string",
+                "null"
+              ]
+            }
+          },
+          "required": [
+            "thread",
+            "trigger",
+            "started_at"
+          ]
+        },
+        "CompactionTrigger": {
+          "type": "string",
+          "enum": [
+            "manual",
+            "idle",
+            "turn",
+            "deep_archive"
           ]
         },
         "CacheInvalidation": {
@@ -19274,6 +19680,16 @@
             "null"
           ]
         },
+        "compaction": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/RunningCompaction"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
         "invalidated": {
           "anyOf": [
             {
@@ -19462,6 +19878,54 @@
           },
           "required": [
             "name"
+          ]
+        },
+        "RunningCompaction": {
+          "type": "object",
+          "properties": {
+            "thread": {
+              "type": "string"
+            },
+            "trigger": {
+              "$ref": "#/$defs/CompactionTrigger"
+            },
+            "started_at": {
+              "type": "string"
+            },
+            "turns": {
+              "type": [
+                "integer",
+                "null"
+              ],
+              "format": "uint64",
+              "minimum": 0
+            },
+            "first_at": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "last_at": {
+              "type": [
+                "string",
+                "null"
+              ]
+            }
+          },
+          "required": [
+            "thread",
+            "trigger",
+            "started_at"
+          ]
+        },
+        "CompactionTrigger": {
+          "type": "string",
+          "enum": [
+            "manual",
+            "idle",
+            "turn",
+            "deep_archive"
           ]
         },
         "CacheInvalidation": {
@@ -19539,6 +20003,16 @@
             "null"
           ]
         },
+        "compaction": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/RunningCompaction"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
         "invalidated": {
           "anyOf": [
             {
@@ -19727,6 +20201,54 @@
           },
           "required": [
             "name"
+          ]
+        },
+        "RunningCompaction": {
+          "type": "object",
+          "properties": {
+            "thread": {
+              "type": "string"
+            },
+            "trigger": {
+              "$ref": "#/$defs/CompactionTrigger"
+            },
+            "started_at": {
+              "type": "string"
+            },
+            "turns": {
+              "type": [
+                "integer",
+                "null"
+              ],
+              "format": "uint64",
+              "minimum": 0
+            },
+            "first_at": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "last_at": {
+              "type": [
+                "string",
+                "null"
+              ]
+            }
+          },
+          "required": [
+            "thread",
+            "trigger",
+            "started_at"
+          ]
+        },
+        "CompactionTrigger": {
+          "type": "string",
+          "enum": [
+            "manual",
+            "idle",
+            "turn",
+            "deep_archive"
           ]
         },
         "CacheInvalidation": {
@@ -19804,6 +20326,16 @@
             "null"
           ]
         },
+        "compaction": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/RunningCompaction"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
         "invalidated": {
           "anyOf": [
             {
@@ -19992,6 +20524,54 @@
           },
           "required": [
             "name"
+          ]
+        },
+        "RunningCompaction": {
+          "type": "object",
+          "properties": {
+            "thread": {
+              "type": "string"
+            },
+            "trigger": {
+              "$ref": "#/$defs/CompactionTrigger"
+            },
+            "started_at": {
+              "type": "string"
+            },
+            "turns": {
+              "type": [
+                "integer",
+                "null"
+              ],
+              "format": "uint64",
+              "minimum": 0
+            },
+            "first_at": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "last_at": {
+              "type": [
+                "string",
+                "null"
+              ]
+            }
+          },
+          "required": [
+            "thread",
+            "trigger",
+            "started_at"
+          ]
+        },
+        "CompactionTrigger": {
+          "type": "string",
+          "enum": [
+            "manual",
+            "idle",
+            "turn",
+            "deep_archive"
           ]
         },
         "CacheInvalidation": {
@@ -20077,6 +20657,16 @@
             "null"
           ]
         },
+        "compaction": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/RunningCompaction"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
         "invalidated": {
           "anyOf": [
             {
@@ -20265,6 +20855,54 @@
           },
           "required": [
             "name"
+          ]
+        },
+        "RunningCompaction": {
+          "type": "object",
+          "properties": {
+            "thread": {
+              "type": "string"
+            },
+            "trigger": {
+              "$ref": "#/$defs/CompactionTrigger"
+            },
+            "started_at": {
+              "type": "string"
+            },
+            "turns": {
+              "type": [
+                "integer",
+                "null"
+              ],
+              "format": "uint64",
+              "minimum": 0
+            },
+            "first_at": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "last_at": {
+              "type": [
+                "string",
+                "null"
+              ]
+            }
+          },
+          "required": [
+            "thread",
+            "trigger",
+            "started_at"
+          ]
+        },
+        "CompactionTrigger": {
+          "type": "string",
+          "enum": [
+            "manual",
+            "idle",
+            "turn",
+            "deep_archive"
           ]
         },
         "CacheInvalidation": {
@@ -20338,6 +20976,16 @@
             "null"
           ]
         },
+        "compaction": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/RunningCompaction"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
         "invalidated": {
           "anyOf": [
             {
@@ -20526,6 +21174,54 @@
           },
           "required": [
             "name"
+          ]
+        },
+        "RunningCompaction": {
+          "type": "object",
+          "properties": {
+            "thread": {
+              "type": "string"
+            },
+            "trigger": {
+              "$ref": "#/$defs/CompactionTrigger"
+            },
+            "started_at": {
+              "type": "string"
+            },
+            "turns": {
+              "type": [
+                "integer",
+                "null"
+              ],
+              "format": "uint64",
+              "minimum": 0
+            },
+            "first_at": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "last_at": {
+              "type": [
+                "string",
+                "null"
+              ]
+            }
+          },
+          "required": [
+            "thread",
+            "trigger",
+            "started_at"
+          ]
+        },
+        "CompactionTrigger": {
+          "type": "string",
+          "enum": [
+            "manual",
+            "idle",
+            "turn",
+            "deep_archive"
           ]
         },
         "CacheInvalidation": {
@@ -20599,6 +21295,16 @@
             "null"
           ]
         },
+        "compaction": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/RunningCompaction"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
         "invalidated": {
           "anyOf": [
             {
@@ -20787,6 +21493,54 @@
           },
           "required": [
             "name"
+          ]
+        },
+        "RunningCompaction": {
+          "type": "object",
+          "properties": {
+            "thread": {
+              "type": "string"
+            },
+            "trigger": {
+              "$ref": "#/$defs/CompactionTrigger"
+            },
+            "started_at": {
+              "type": "string"
+            },
+            "turns": {
+              "type": [
+                "integer",
+                "null"
+              ],
+              "format": "uint64",
+              "minimum": 0
+            },
+            "first_at": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "last_at": {
+              "type": [
+                "string",
+                "null"
+              ]
+            }
+          },
+          "required": [
+            "thread",
+            "trigger",
+            "started_at"
+          ]
+        },
+        "CompactionTrigger": {
+          "type": "string",
+          "enum": [
+            "manual",
+            "idle",
+            "turn",
+            "deep_archive"
           ]
         },
         "CacheInvalidation": {
@@ -20864,6 +21618,16 @@
             "null"
           ]
         },
+        "compaction": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/RunningCompaction"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
         "invalidated": {
           "anyOf": [
             {
@@ -21052,6 +21816,54 @@
           },
           "required": [
             "name"
+          ]
+        },
+        "RunningCompaction": {
+          "type": "object",
+          "properties": {
+            "thread": {
+              "type": "string"
+            },
+            "trigger": {
+              "$ref": "#/$defs/CompactionTrigger"
+            },
+            "started_at": {
+              "type": "string"
+            },
+            "turns": {
+              "type": [
+                "integer",
+                "null"
+              ],
+              "format": "uint64",
+              "minimum": 0
+            },
+            "first_at": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "last_at": {
+              "type": [
+                "string",
+                "null"
+              ]
+            }
+          },
+          "required": [
+            "thread",
+            "trigger",
+            "started_at"
+          ]
+        },
+        "CompactionTrigger": {
+          "type": "string",
+          "enum": [
+            "manual",
+            "idle",
+            "turn",
+            "deep_archive"
           ]
         },
         "CacheInvalidation": {
@@ -21125,6 +21937,16 @@
             "null"
           ]
         },
+        "compaction": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/RunningCompaction"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
         "invalidated": {
           "anyOf": [
             {
@@ -21313,6 +22135,54 @@
           },
           "required": [
             "name"
+          ]
+        },
+        "RunningCompaction": {
+          "type": "object",
+          "properties": {
+            "thread": {
+              "type": "string"
+            },
+            "trigger": {
+              "$ref": "#/$defs/CompactionTrigger"
+            },
+            "started_at": {
+              "type": "string"
+            },
+            "turns": {
+              "type": [
+                "integer",
+                "null"
+              ],
+              "format": "uint64",
+              "minimum": 0
+            },
+            "first_at": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "last_at": {
+              "type": [
+                "string",
+                "null"
+              ]
+            }
+          },
+          "required": [
+            "thread",
+            "trigger",
+            "started_at"
+          ]
+        },
+        "CompactionTrigger": {
+          "type": "string",
+          "enum": [
+            "manual",
+            "idle",
+            "turn",
+            "deep_archive"
           ]
         },
         "CacheInvalidation": {
@@ -21392,6 +22262,16 @@
             "null"
           ]
         },
+        "compaction": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/RunningCompaction"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
         "invalidated": {
           "anyOf": [
             {
@@ -21580,6 +22460,54 @@
           },
           "required": [
             "name"
+          ]
+        },
+        "RunningCompaction": {
+          "type": "object",
+          "properties": {
+            "thread": {
+              "type": "string"
+            },
+            "trigger": {
+              "$ref": "#/$defs/CompactionTrigger"
+            },
+            "started_at": {
+              "type": "string"
+            },
+            "turns": {
+              "type": [
+                "integer",
+                "null"
+              ],
+              "format": "uint64",
+              "minimum": 0
+            },
+            "first_at": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "last_at": {
+              "type": [
+                "string",
+                "null"
+              ]
+            }
+          },
+          "required": [
+            "thread",
+            "trigger",
+            "started_at"
+          ]
+        },
+        "CompactionTrigger": {
+          "type": "string",
+          "enum": [
+            "manual",
+            "idle",
+            "turn",
+            "deep_archive"
           ]
         },
         "CacheInvalidation": {
@@ -21657,6 +22585,16 @@
             "null"
           ]
         },
+        "compaction": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/RunningCompaction"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
         "invalidated": {
           "anyOf": [
             {
@@ -21845,6 +22783,54 @@
           },
           "required": [
             "name"
+          ]
+        },
+        "RunningCompaction": {
+          "type": "object",
+          "properties": {
+            "thread": {
+              "type": "string"
+            },
+            "trigger": {
+              "$ref": "#/$defs/CompactionTrigger"
+            },
+            "started_at": {
+              "type": "string"
+            },
+            "turns": {
+              "type": [
+                "integer",
+                "null"
+              ],
+              "format": "uint64",
+              "minimum": 0
+            },
+            "first_at": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "last_at": {
+              "type": [
+                "string",
+                "null"
+              ]
+            }
+          },
+          "required": [
+            "thread",
+            "trigger",
+            "started_at"
+          ]
+        },
+        "CompactionTrigger": {
+          "type": "string",
+          "enum": [
+            "manual",
+            "idle",
+            "turn",
+            "deep_archive"
           ]
         },
         "CacheInvalidation": {
@@ -21924,6 +22910,16 @@
             "null"
           ]
         },
+        "compaction": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/RunningCompaction"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
         "invalidated": {
           "anyOf": [
             {
@@ -22112,6 +23108,54 @@
           },
           "required": [
             "name"
+          ]
+        },
+        "RunningCompaction": {
+          "type": "object",
+          "properties": {
+            "thread": {
+              "type": "string"
+            },
+            "trigger": {
+              "$ref": "#/$defs/CompactionTrigger"
+            },
+            "started_at": {
+              "type": "string"
+            },
+            "turns": {
+              "type": [
+                "integer",
+                "null"
+              ],
+              "format": "uint64",
+              "minimum": 0
+            },
+            "first_at": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "last_at": {
+              "type": [
+                "string",
+                "null"
+              ]
+            }
+          },
+          "required": [
+            "thread",
+            "trigger",
+            "started_at"
+          ]
+        },
+        "CompactionTrigger": {
+          "type": "string",
+          "enum": [
+            "manual",
+            "idle",
+            "turn",
+            "deep_archive"
           ]
         },
         "CacheInvalidation": {

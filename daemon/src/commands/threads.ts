@@ -1,3 +1,4 @@
+import type { RunningCompaction } from "../protocol/RunningCompaction.ts";
 import type { ThreadView } from "../protocol/ThreadView.ts";
 import type { ThreadListing } from "../protocol/ThreadListing.ts";
 import type { ThreadSelection } from "../protocol/ThreadSelection.ts";
@@ -110,6 +111,7 @@ export interface ThreadContext {
   current: string;
   activity?: ReadonlyMap<string, ThreadActivity>;
   warm?: string;
+  compaction?: RunningCompaction;
   signal?: AbortSignal;
   withSnapshot?: <T>(run: () => Promise<T>) => Promise<T>;
 }
@@ -154,6 +156,7 @@ function listing(ctx: ThreadContext, index?: ThreadsIndex): ThreadListing {
     current,
     ...(known?.folders === undefined || known.folders.length === 0 ? {} : { folders: known.folders.map((folder) => ({ name: folder.name, ...(folder.by_activity === true ? { by_activity: true } : {}) })) }),
     ...(known?.order === undefined ? {} : { manual_order: true }),
+    ...(ctx.compaction === undefined ? {} : { compaction: ctx.compaction }),
   };
 }
 

@@ -4,7 +4,7 @@ import { Dialog } from "../ui/controls.tsx";
 import { toasts } from "../ui/toast.tsx";
 import { conversation, errorText, streamReplies, workspace } from "../app/state.ts";
 import { threadLabel } from "../sidebar/Sidebar.tsx";
-import { compactionSummary, compactionWatchSummary } from "./transcript.ts";
+import { compactionSummary } from "./transcript.ts";
 
 export type ConversationDialog = "compact" | "clear" | "guidance" | "system";
 
@@ -54,27 +54,19 @@ export function ConversationDialogs({ dialog, state, close }: { dialog: Conversa
   const [text, setText] = useState("");
   const [turns, setTurns] = useState("");
   const [restart, setRestart] = useState(false);
-  const [running, setRunning] = useState<"compact" | "watch" | "cancel">("compact");
   const label = thread === undefined ? state.thread ?? "" : threadLabel(thread);
   switch (dialog) {
-    case "compact": return <Form title="Compact context" close={close} busy={busy} error={error} action={{ compact: "Compact", watch: "Follow", cancel: "Stop" }[running]} danger={running === "cancel"} submit={() => {
-      if (running === "cancel") { run(async () => compactionWatchSummary(await workspace.actions.run("compact_cancel", {}))); return; }
+    case "compact": return <Form title="Compact context" close={close} busy={busy} error={error} action="Compact" submit={() => {
       close();
       void compactInBackground(state, label, async () => {
-        if (running === "watch") return compactionWatchSummary(await workspace.actions.run("compact_watch", {}));
         const report = await workspace.actions.run("compact", { ...(turns === "" ? {} : { keep_turns: Number(turns) }), ...(restart ? { restart: true } : {}) });
         if (viewing(state)) await resync(state);
         return compactionSummary(report);
       });
     }}>
       <p className="form-text">Summarizes older turns into memory so the thread fits the model’s context. Recent turns stay as they are. It runs in the background, so you can keep chatting in other threads, and closing this tab doesn’t stop it.</p>
-      <label className="field"><span>What to do</span><select className="select" value={running} onChange={(event) => setRunning(event.target.value as "compact" | "watch" | "cancel")}>
-        <option value="compact">Compact now</option><option value="watch">Follow the compaction already running</option><option value="cancel">Stop the running compaction</option>
-      </select></label>
-      {running === "compact" ? <>
-        <label className="field"><span>Turns to keep <span className="muted">(optional)</span></span><input className="input" inputMode="numeric" placeholder="Configured default" value={turns} onChange={(event) => setTurns(event.target.value.replace(/\D/g, ""))} /></label>
-        <label className="check"><input type="checkbox" checked={restart} onChange={(event) => setRestart(event.target.checked)} />Restart a paused compaction instead of resuming it</label>
-      </> : <p className="form-hint">{running === "watch" ? "Shows the running compaction’s progress until it ends, whoever started it." : "The compaction pauses with its progress kept; compact again to resume it."}</p>}
+      <label className="field"><span>Turns to keep <span className="muted">(optional)</span></span><input className="input" inputMode="numeric" placeholder="Configured default" value={turns} onChange={(event) => setTurns(event.target.value.replace(/\D/g, ""))} /></label>
+      <label className="check"><input type="checkbox" checked={restart} onChange={(event) => setRestart(event.target.checked)} />Restart a paused compaction instead of resuming it</label>
     </Form>;
     case "clear": return <Form title="Clear context" close={close} busy={busy} error={error} action="Clear" danger submit={() => run(async () => {
       const result = await workspace.actions.run("clear", { ...(text.trim() === "" ? {} : { note: text.trim() }), ...(restart ? { exclude: true } : {}) });

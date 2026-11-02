@@ -1,5 +1,5 @@
 import { useEffect, useLayoutEffect, useState } from "react";
-import { CONVERSATION_DIALOG_EVENT, openThreadDialog } from "../app/intents.ts";
+import { CONVERSATION_DIALOG_EVENT, openCompactionView, openThreadDialog } from "../app/intents.ts";
 import type { WorkspaceSnapshot } from "../workspace.ts";
 import { Avatar } from "../ui/avatar.tsx";
 import { IconButton, Menu, type MenuItem } from "../ui/controls.tsx";
@@ -9,6 +9,7 @@ import { threadLabel } from "../sidebar/Sidebar.tsx";
 import { readMarks, useConversationActive, workspace } from "../app/state.ts";
 import { makeHome } from "./actions.ts";
 import { BudgetChip } from "./budget.tsx";
+import { CompactionChip } from "./CompactionView.tsx";
 import { GalleryDialog } from "./gallery.tsx";
 import { Composer } from "./Composer.tsx";
 import { ConversationDialogs, type ConversationDialog } from "./dialogs.tsx";
@@ -51,7 +52,9 @@ function ChatTopbar({ state, sidebarOpen, toggleSidebar, mobile }: { state: Work
   const items: MenuItem[] = [
     { label: "Thread settings…", icon: "settings", onSelect: () => openThreadDialog("settings", threadId), disabled: !ready },
     { label: "Images…", icon: "image", onSelect: () => setDialog("gallery") },
-    { label: "Compact context…", icon: "compact", onSelect: () => setDialog("compact"), disabled: !ready || busy },
+    state.compaction === null
+      ? { label: "Compact context…", icon: "compact", onSelect: () => setDialog("compact"), disabled: !ready || busy }
+      : { label: "Show the compaction…", icon: "compact", onSelect: openCompactionView },
     { label: "Fork…", icon: "branch", onSelect: () => openThreadDialog("fork", threadId), disabled: !ready },
     "separator",
     { label: "Regenerate with guidance…", icon: "regenerate", onSelect: () => setDialog("guidance"), disabled: !ready || busy || !state.messages.some((message) => message.role !== "system") },
@@ -68,6 +71,7 @@ function ChatTopbar({ state, sidebarOpen, toggleSidebar, mobile }: { state: Work
         <span className="topbar-name">{state.opening?.character ?? state.character}</span>
         {state.thread === null || (state.opening !== null && state.opening.thread === null) ? null : <><span className="topbar-separator">/</span><span className="topbar-thread">{shownThread === undefined ? state.thread : threadLabel(shownThread)}</span></>}
       </div>
+      <CompactionChip state={state} open={openCompactionView} />
       {mobile ? null : <BudgetChip state={state} />}
       {mobile ? null : <button type="button" className={`model-chip ${pendingModel === undefined ? "" : "pending"}`} aria-label={`Chat model: ${shownModel ?? "unknown"}${pendingModel === undefined ? "" : ", saving"}. Change model`} title="Change model" disabled={!ready} onClick={() => setDialog("model")}>
         <span className="mono">{listing === undefined && pendingModel === undefined ? "…" : shortModel(shownModel)}</span>{pendingModel === undefined ? <Icon name="chevronDown" size={14} /> : <span className="spinner chip-spinner" aria-hidden="true" />}

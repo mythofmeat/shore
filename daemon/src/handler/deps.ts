@@ -299,7 +299,7 @@ export function buildMessageHandlerDeps(a: HandlerAssembly): MessageHandlerDeps 
     registry: handlerRegistry(a.runtime.registry),
     commandChangesState,
     commandOnlyReads,
-    compactions: compactionViewers(a.runtime.config.dirs.data),
+    compactions: compactionViewers(a.runtime.config.dirs.data, a.emitEvent),
     notifier: handlerNotifier(a.runtime.notifier),
     dispatchCommand: async (command, meta, signal) => {
       const run = async () => {
@@ -702,10 +702,14 @@ function compactionPhase(phase: string | undefined): ServerMessage {
   return { type: "phase", rid: null, phase: phase !== undefined && phase.startsWith("compacting") ? phase : "compacting", model: null };
 }
 
-function compactionViewers(dataDir: string): NonNullable<MessageHandlerDeps["compactions"]> {
+function compactionViewers(dataDir: string, emitEvent: (message: ServerMessage) => void): NonNullable<MessageHandlerDeps["compactions"]> {
   return {
     observe: (listener) => observePasses((from, event) => {
       if (from !== dataDir) return;
+      if (event.kind === "started" || event.kind === "described") {
+        emitEvent({ type: "threads_changed", character: event.pass.character, thread: event.pass.thread });
+        return;
+      }
       if (event.kind === "phase") {
         if (event.pass.phase?.startsWith("compacting") === true) listener(event.pass.character, event.pass.thread, compactionPhase(event.pass.phase));
         return;
@@ -713,6 +717,7 @@ function compactionViewers(dataDir: string): NonNullable<MessageHandlerDeps["com
       const { character, thread } = event.ended;
       const data: CompactionWatchResult = { character, state: "finished", pass: passEnd(event.ended) };
       listener(character, thread, { type: "command_output", rid: null, name: "compact_watch", data });
+      emitEvent({ type: "threads_changed", character, thread });
     }),
     running: (character) => {
       const pass = runningPass(dataDir, character);

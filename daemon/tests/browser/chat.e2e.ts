@@ -319,18 +319,29 @@ test("compacting from the palette starts on Enter and leaves other threads usabl
 
   await createThread(page, "wren", "side");
   await expect(compacting).toBeHidden();
+  const threadList = page.getByRole("group", { name: "wren threads" });
+  await expect(threadList.getByRole("button", { name: "main (compacting)", exact: true })).toBeVisible();
   await send(page, "Chatting while main compacts");
 
-  await page.getByRole("group", { name: "wren threads" }).getByRole("button", { name: "main", exact: true }).click();
+  await threadList.getByRole("button", { name: "main (compacting)", exact: true }).click();
   await expect(page.locator(".topbar-thread")).toHaveText("main");
   await expect(compacting).toBeVisible();
-  await page.keyboard.press("Control+k");
-  await page.getByLabel("Search commands").fill("Compact context");
-  await page.keyboard.press("Enter");
-  await dialog.getByLabel("What to do").selectOption("cancel");
-  await dialog.getByRole("button", { name: "Stop", exact: true }).click();
-  await expect(page.getByText(/Compaction paused/).first()).toBeVisible();
+  await compacting.getByRole("button", { name: /Compacting context/ }).click();
+  const view = page.getByRole("dialog", { name: "Compaction" });
+  await expect(view.getByText("You started it")).toBeVisible();
+  await expect(view.getByText("Compacting", { exact: true })).toBeVisible();
+  await expect(view.getByLabel("What the compaction is doing")).toContainText("bash");
+  await view.getByRole("button", { name: "Stop", exact: true }).click();
+  await expect(view.getByText(/Compaction paused/)).toBeVisible();
+  await expect(view.getByRole("button", { name: "Stop", exact: true })).toHaveCount(0);
   await expect(compacting).toBeHidden();
+  await view.getByRole("button", { name: "Close", exact: true }).last().click();
+  await expect(view).toBeHidden();
+  await page.getByRole("button", { name: "Compaction finished. Show the compaction" }).click();
+  await expect(view.getByText(/Compaction paused/)).toBeVisible();
+  await view.getByRole("button", { name: "Dismiss", exact: true }).click();
+  await expect(view).toBeHidden();
+  await expect(page.getByRole("button", { name: "Compaction finished. Show the compaction" })).toHaveCount(0);
   await check();
 });
 

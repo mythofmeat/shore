@@ -43,7 +43,8 @@ import { conversationManager, hasCompactionOperation, segmentCount } from "./arc
 import { type CompactionCompletion, handleCompactionOutcome, loadMessagesForCompaction, pushAfterCompaction } from "./background.ts";
 import { RealCompactionLlm, type RealCompactionLlmOptions } from "./llm.ts";
 import { compact, compactSegment, countTurns, tryBeginCompaction, type CompactionRunGuard } from "./manager.ts";
-import { startPass } from "./activity.ts";
+import { startPass, type PassScope } from "./activity.ts";
+import { isRealUserTurn } from "../../engine/versions.ts";
 import type { CompactionTrigger } from "../../protocol/CompactionTrigger.ts";
 import { DEFAULT_COMPACT_PROMPT } from "./prompts.ts";
 import { renderToolValue } from "../../tools/media.ts";
@@ -83,6 +84,7 @@ export interface CompactionRunDeps {
   now?: () => string;
   newId?: () => string;
   emit?: FrameSink;
+  describePass?: (scope: PassScope) => void;
   signal?: AbortSignal;
   afterArchive?: (thread: string) => Promise<void>;
 }
@@ -217,7 +219,7 @@ export async function runCompactionPass(
   }
   const pass = startPass(dataDir, { character, thread, trigger, startedAt: Date.now() }, deps.emit, deps.signal);
   try {
-    const outcome = await passUnderGuard(character, { ...deps, emit: pass.emit, signal: pass.signal }, { ...options, trigger }, thread, guard);
+    const outcome = await passUnderGuard(character, { ...deps, emit: pass.emit, signal: pass.signal, describePass: pass.describe }, { ...options, trigger }, thread, guard);
     pass.finish(outcome);
     return outcome;
   } catch (e) {
@@ -284,6 +286,9 @@ async function passUnderGuard(
       restart: options.restart ?? false,
     });
     if (plan === undefined) throw CompactionError.insufficientMessages();
+    const first = plan.archival[0]?.timestamp;
+    const last = plan.archival.at(-1)?.timestamp;
+    deps.describePass?.({ turns: plan.archival.filter(isRealUserTurn).length, ...(first === undefined ? {} : { firstAt: first }), ...(last === undefined ? {} : { lastAt: last }) });
 
     if (!compaction.write_memory) {
       return await rotateWithoutMemoryWrite(

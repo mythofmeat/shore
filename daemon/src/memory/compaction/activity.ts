@@ -22,9 +22,16 @@ export interface EndedPass extends PassInfo {
   end: PassEnd;
 }
 
+export interface PassScope {
+  turns: number;
+  firstAt?: string;
+  lastAt?: string;
+}
+
 export interface RunningPassView extends PassInfo {
   phase: string | undefined;
   lastTool: string | undefined;
+  scope: PassScope | undefined;
 }
 
 interface RunningPass extends RunningPassView {
@@ -39,6 +46,7 @@ interface RunningPass extends RunningPassView {
 export interface PassHandle {
   readonly emit: FrameSink;
   readonly signal: AbortSignal;
+  readonly describe: (scope: PassScope) => void;
   finish(outcome: CompactionOutcome | undefined): void;
   fail(error: unknown): void;
 }
@@ -47,6 +55,8 @@ const running = new Map<string, RunningPass>();
 const lastEnded = new Map<string, EndedPass>();
 
 export type PassEvent =
+  | { kind: "started"; pass: RunningPassView }
+  | { kind: "described"; pass: RunningPassView }
   | { kind: "phase"; pass: RunningPassView }
   | { kind: "ended"; ended: EndedPass };
 
@@ -79,10 +89,11 @@ export function startPass(
   const controller = new AbortController();
   const { promise: ended, resolve: settle } = Promise.withResolvers<EndedPass>();
   const pass: RunningPass = {
-    ...info, dataDir, phase: "compacting", lastTool: undefined,
+    ...info, dataDir, phase: "compacting", lastTool: undefined, scope: undefined,
     frames: [], watchers: new Set(), controller, ended, settle,
   };
   running.set(key, pass);
+  tell(dataDir, { kind: "started", pass: passView(pass) });
   tell(dataDir, { kind: "phase", pass: passView(pass) });
   let closed = false;
   const close = (end: PassEnd): void => {
@@ -100,6 +111,10 @@ export function startPass(
       upstream?.(frame);
     },
     signal: signal === undefined ? controller.signal : AbortSignal.any([signal, controller.signal]),
+    describe: (scope) => {
+      pass.scope = scope;
+      tell(dataDir, { kind: "described", pass: passView(pass) });
+    },
     finish: (outcome) => close({ kind: "outcome", outcome }),
     fail: (error) => close({ kind: "failed", error: error instanceof Error ? error.message : String(error) }),
   };
@@ -173,7 +188,7 @@ export function runningPasses(dataDir: string): RunningPassView[] {
 }
 
 function passView(pass: RunningPass): RunningPassView {
-  return { character: pass.character, thread: pass.thread, trigger: pass.trigger, startedAt: pass.startedAt, phase: pass.phase, lastTool: pass.lastTool };
+  return { character: pass.character, thread: pass.thread, trigger: pass.trigger, startedAt: pass.startedAt, phase: pass.phase, lastTool: pass.lastTool, scope: pass.scope };
 }
 
 export function lastPass(dataDir: string, character: string): EndedPass | undefined {

@@ -186,6 +186,7 @@ interface ActiveCommand {
   readonly sessionId: number;
   readonly scope: string;
   readonly changesState: boolean;
+  readonly outlivesStop: boolean;
 }
 
 function recordReplay(generation: ActiveGeneration, msg: ServerMessage): void {
@@ -350,6 +351,7 @@ export class MessageHandler {
       sessionId: meta.session.sessionId,
       scope: this.#scope(meta.session.selectedCharacter, meta.session.selectedThread),
       changesState: this.#deps.commandChangesState?.(cmd) ?? true,
+      outlivesStop: UNQUEUED_COMMANDS.has(cmd.name) && meta.session.capabilities.includes(REQUEST_LIFECYCLE_CAPABILITY),
     };
     this.#commands.add(command);
     return command;
@@ -422,8 +424,8 @@ export class MessageHandler {
   async #cancel(sessionId: number, rid: string | null): Promise<void> {
     const scope = this.#sessionScope(sessionId);
     this.#abortCommands(
-      (command) => command.sessionId === sessionId ||
-        (command.changesState && command.scope === scope && !this.#deps.router.has(command.sessionId)),
+      (command) => (command.sessionId === sessionId && !command.outlivesStop) ||
+        (command.changesState && !command.outlivesStop && command.scope === scope && !this.#deps.router.has(command.sessionId)),
       "User requested cancellation",
     );
     await this.cancelGeneration(sessionId, rid, "user cancelled");

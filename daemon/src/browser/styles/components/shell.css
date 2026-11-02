@@ -253,6 +253,43 @@
   flex-shrink: 0;
 }
 
+.sidebar-compacting {
+  display: inline-flex;
+  flex-shrink: 0;
+  color: var(--accent);
+}
+
+.compaction-chip {
+  display: inline-flex;
+  flex-shrink: 0;
+  align-items: center;
+  gap: 6px;
+  max-width: 260px;
+  height: 30px;
+  padding: 0 10px;
+  border: 1px solid var(--line-2);
+  border-radius: var(--radius-pill);
+  background: transparent;
+  color: var(--text-2);
+  font-size: var(--text-sm);
+  white-space: nowrap;
+}
+
+.compaction-chip span:not(.spinner):first-of-type {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.compaction-chip:hover {
+  background: var(--surface);
+  color: var(--text);
+}
+
+.compaction-elapsed {
+  color: var(--text-3);
+  font-variant-numeric: tabular-nums;
+}
+
 .sidebar-locked {
   display: inline-flex;
   flex-shrink: 0;

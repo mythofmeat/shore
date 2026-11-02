@@ -2,7 +2,7 @@ import { describe, expect, test } from "bun:test";
 
 import { afterCommand, type DispatchContext } from "../src/handler/command_dispatch.ts";
 import { MessageHandler, type GenerationParams, type HandlerRegistry } from "../src/handler/router.ts";
-import { REQUEST_LIFECYCLE_CAPABILITY, SessionRouter, type RequestMeta } from "../src/swp/session.ts";
+import { REQUEST_LIFECYCLE_CAPABILITY, SessionRouter, type RequestMeta, type RoutedMessage } from "../src/swp/session.ts";
 import type { ClientMessage } from "../src/protocol/ClientMessage.ts";
 import type { Command } from "../src/protocol/Command.ts";
 import { required } from "../src/util/required.ts";
@@ -395,6 +395,33 @@ describe("per-session routing queues", () => {
     gate("refresh_all_provider_models").resolve();
     gate("compact_cancel").resolve();
     await handler.drain();
+  });
+
+  test("stopping a reply in a browser tab leaves a compaction and its watcher running, and a client without request tracking can still stop one", async () => {
+    const { dispatch, gate, signals } = gatedDispatch();
+    const { handler } = harness(["ada"], 1, undefined, dispatch, reads);
+    const stop: RoutedMessage = { kind: "engine", msg: { type: "cancel" }, meta: browserTab() };
+
+    handler.enqueueRouted({ kind: "command", cmd: command("compact"), meta: browserTab() });
+    handler.enqueueRouted({ kind: "command", cmd: command("compact_watch"), meta: browserTab() });
+    await settle();
+    handler.enqueueRouted(stop);
+    await settle();
+    expect(signals.get("compact")?.aborted).toBe(false);
+    expect(signals.get("compact_watch")?.aborted).toBe(false);
+    gate("compact").resolve();
+    gate("compact_watch").resolve();
+    await handler.drain();
+
+    const old = gatedDispatch();
+    const { handler: oldHandler } = harness(["ada"], 1, undefined, old.dispatch, reads);
+    oldHandler.enqueueRouted({ kind: "command", cmd: command("compact"), meta: meta("ada", 1, null, "command") });
+    await settle();
+    oldHandler.enqueueRouted({ kind: "engine", msg: { type: "cancel" }, meta: meta("ada", 1, null, "command") });
+    await settle();
+    expect(old.signals.get("compact")?.aborted).toBe(true);
+    old.gate("compact").resolve();
+    await oldHandler.drain();
   });
 
   test("a compaction leaves the session free to switch threads while it runs", async () => {

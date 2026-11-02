@@ -9,6 +9,7 @@ import { Icon } from "../ui/icons.tsx";
 import { Markdown } from "../markdown.tsx";
 import { FullPicture } from "../pictures.tsx";
 import { conversation, perform, useActiveRequests, useDisplay, workspace } from "../app/state.ts";
+import { openCompactionView } from "../app/intents.ts";
 import { navigate } from "../app/route.ts";
 import { ImageThumb, MessageBody, MessageRow, type OpenImage } from "./Message.tsx";
 import { compactionPhase, regenReplaces, replyBlocks, savedPart, segmentDetail, segmentName, transcriptItems, visibleStreams } from "./transcript.ts";
@@ -184,7 +185,7 @@ export function Transcript({ state, character, mobile }: { state: WorkspaceSnaps
         })}
         {streams.map((stream, index) => <StreamingMessage key={stream.key} stream={stream} saved={savedParts[index]} character={character} state={state} openImage={openImage} mobile={mobile} />)}
         {waiting === undefined ? null : <StreamingMessage stream={liveTurn(waiting, waiting, null)} saved={undefined} character={character} state={state} openImage={openImage} mobile={mobile} />}
-        {compacting === null ? null : <div className="divider context" role="status"><span className="spinner" aria-hidden="true" />{compacting}</div>}
+        {compacting === null ? null : <div className="divider context" role="status"><button type="button" className="divider-action" title="Show the compaction" onClick={openCompactionView}><span className="spinner" aria-hidden="true" />{compacting}</button></div>}
         {view === null ? null : <SegmentLink lead="After this:" segment={view.next} ready={ready} />}
         {state.uncertain.map((item) => <div key={item.rid} className="notice-card" role="alert">
           <Icon name="alert" size={16} /><span>The connection dropped while a request was in flight. Shore keeps working on it, and this notice clears when it finishes.</span>

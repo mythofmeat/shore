@@ -31,7 +31,7 @@ function ThreadList({ state, shownThread, ready, select, newThread }: { state: W
   const unreadOf = (thread: ThreadView) => thread.id === state.thread ? 0 : thread.unread ?? 0;
   const replyingIn = (thread: ThreadView) => thread.id !== state.thread && conversation.activeIn({ character: state.character, thread: thread.id });
   const row = (thread: ThreadView, ids: readonly string[], byActivity: boolean, folder?: string) => <ThreadRow key={thread.id} thread={thread} label={threadLabel(thread)} current={thread.id === shownThread} unread={unreadOf(thread)} replying={replyingIn(thread)}
-    opening={state.opening?.thread === thread.id && thread.id !== state.thread} ready={ready} select={() => select(thread.id)} neighbours={neighboursIn(ids, thread.id, byActivity)}
+    opening={state.opening?.thread === thread.id && thread.id !== state.thread} compacting={state.compaction?.thread === thread.id} ready={ready} select={() => select(thread.id)} neighbours={neighboursIn(ids, thread.id, byActivity)}
     drop={(id, after) => { void moveThreadTo(id, { folder: folder ?? "", ...placeRelative(ids, thread.id, id, after) }); }} />;
   return <div className="sidebar-threads" role="group" aria-label={`${character} threads`}
     onDragOver={(event) => { if (event.dataTransfer.types.includes(THREAD_DRAG_TYPE)) event.preventDefault(); }}
