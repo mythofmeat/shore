@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useLayoutEffect, useState } from "react";
 import { CONVERSATION_DIALOG_EVENT } from "../app/intents.ts";
 import type { WorkspaceSnapshot } from "../workspace.ts";
 import { Avatar } from "../ui/avatar.tsx";
@@ -37,6 +37,7 @@ function ChatTopbar({ state, sidebarOpen, toggleSidebar, mobile }: { state: Work
     addEventListener(CONVERSATION_DIALOG_EVENT, open);
     return () => removeEventListener(CONVERSATION_DIALOG_EVENT, open);
   }, []);
+  useLayoutEffect(() => { setDialog(null); }, [state.character, state.thread]);
   const busy = useConversationActive({ character: state.character, thread: state.thread });
   const character = state.characters.find((item) => item.name === state.character);
   const thread = state.threads.find((item) => item.id === state.thread);

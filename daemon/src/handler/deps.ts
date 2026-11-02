@@ -367,6 +367,7 @@ export interface CommandAssembly {
   providers: Partial<Record<SidecarRequest["sdk"], SidecarProvider>>;
   env?: NodeJS.ProcessEnv | undefined;
   running?: () => RunningStatusReport;
+  emitEvent?: (message: ServerMessage) => void;
 }
 
 export function buildCommandPathDeps(a: CommandAssembly): CommandPathDeps {
@@ -437,6 +438,10 @@ function dispatchRuntime(a: CommandAssembly): DispatchRuntime {
     cachedCharacters: () => runtime.cache.cachedCharacters(),
 
     warmThread: (character) => runtime.keepalive.warmThread(character),
+
+    threadsChanged: (character, thread) => {
+      a.emitEvent?.({ type: "threads_changed", character, thread });
+    },
 
     refreshCachedRequest: async (character, reason = "model_change", thread) => {
       runtime.keepalive.disarm(character);

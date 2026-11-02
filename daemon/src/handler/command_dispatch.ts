@@ -1,3 +1,4 @@
+import { shoreLog } from "../log.ts";
 import type { LoadedConfig } from "../config/loader.ts";
 import type { InvalidationReason } from "../cache/last_request.ts";
 import { restartRequiredChanges } from "../config/restart.ts";
@@ -29,6 +30,8 @@ export interface DispatchRuntime {
   cachedCharacters(): string[];
 
   warmThread(character: string): string | undefined;
+
+  threadsChanged(character: string, thread: string): void;
 
   applyReloadedConfig(config: LoadedConfig): Promise<ReloadSummary>;
 }
@@ -86,6 +89,9 @@ async function annotations(
       return await afterSwitchThread(args, data, ctx);
     case "thread_model":
       return await afterThreadModelChange(args, data, ctx);
+    case "archive_thread":
+      await afterArchiveThread(args, ctx);
+      return undefined;
     default:
       return undefined;
   }
@@ -206,6 +212,39 @@ async function afterSwitchThread(
     selected_thread: selected,
     ...invalidated(data, { cached_request: true }),
   };
+}
+
+async function afterArchiveThread(args: unknown, ctx: DispatchContext): Promise<void> {
+  const archived = isRecord(args) ? args["name"] : undefined;
+  if (typeof archived !== "string") return;
+
+  const home = ctx.runtime.homeThread(ctx.character);
+  const viewers = ctx.router.sessions().flatMap(([sessionId, character]) =>
+    character === ctx.character && ctx.router.threadFor(sessionId) === archived ? [sessionId] : []);
+  for (const sessionId of viewers) ctx.router.setSelectedThread(sessionId, home);
+
+  if (viewers.length > 0) await showHomeToMovedViewers(viewers, home, ctx);
+  if (ctx.runtime.warmThread(ctx.character) === archived) {
+    await ctx.runtime.refreshCachedRequest(ctx.character, "thread_change", home);
+  }
+  ctx.runtime.threadsChanged(ctx.character, archived);
+}
+
+async function showHomeToMovedViewers(viewers: readonly number[], home: string, ctx: DispatchContext): Promise<void> {
+  let snapshot: HistorySnapshot;
+  try {
+    snapshot = await ctx.handshake.history(ctx.character, home);
+  } catch (e) {
+    shoreLog.warn(`shore: could not show ${ctx.character}'s home thread to sessions moved off an archived thread: ${String(e)}`);
+    return;
+  }
+  for (const sessionId of viewers) {
+    if (ctx.router.threadFor(sessionId) !== home) continue;
+    void ctx.router.sendToSession(sessionId, historyMessage(snapshot, sessionId === ctx.sessionId ? ctx.rid : undefined)).catch((e: unknown) => {
+      shoreLog.warn(`shore: could not move session ${String(sessionId)} off an archived thread: ${String(e)}`);
+    });
+    if (sessionId !== ctx.sessionId) ctx.router.reportMove(sessionId);
+  }
 }
 
 async function afterThreadModelChange(

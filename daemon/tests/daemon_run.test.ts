@@ -12,6 +12,7 @@ import { DATA_DIRECTORY_LEASE_FILE } from "../src/daemon/data_directory_lease.ts
 import type { InstanceInfo } from "../src/daemon/instances.ts";
 import type { SidecarProvider, SidecarRequest } from "../src/llm/types.ts";
 import { compactionFixture } from "./support/memory_fixture.ts";
+import { until } from "./support/until.ts";
 
 const running: RunningDaemon[] = [];
 
@@ -204,6 +205,109 @@ class Client {
     this.socket.destroy();
   }
 }
+
+describe("archiving a conversation", () => {
+  async function runCommand(client: Client, name: string, args: unknown): Promise<Record<string, unknown>> {
+    client.frames.length = 0;
+    client.send({ type: "command", name, args });
+    return await client.awaitFrame("command_output");
+  }
+
+  async function finishTurn(client: Client, text: string): Promise<void> {
+    client.frames.length = 0;
+    client.send({ type: "message", rid: text, text, stream: true, images: [] });
+    await client.awaitFrame("request_finished");
+  }
+
+  const homeArrival = (client: Client): Record<string, unknown> | undefined =>
+    client.frames.find((frame) => frame["type"] === "history" && frame["selected_thread"] === "main");
+
+  const heard = (client: Client, content: string): boolean =>
+    client.frames.some((frame) => frame["type"] === "new_message" && frame["content"] === content);
+
+  test("moves everyone viewing it home, where they see the reply running and their next message lands in sight", async () => {
+    let release = (): void => {};
+    const held = new Promise<void>((resolve) => { release = resolve; });
+    const place = await layout(MODEL_CONFIG);
+    const daemon = await start(place, [], { anthropic: heldProvider(held, "hello back", () => {}) });
+    const archiver = await Client.open(daemon.port, "ada");
+    const viewer = await Client.open(daemon.port, "ada", ["request-lifecycle"]);
+    const atHome = await Client.open(daemon.port, "ada");
+    const elsewhere = await Client.open(daemon.port, "ada");
+    const clients = [archiver, viewer, atHome, elsewhere];
+    try {
+      for (const client of clients) await client.awaitFrame("history");
+      await runCommand(archiver, "create_thread", { name: "side" });
+      await runCommand(archiver, "create_thread", { name: "other" });
+      await runCommand(archiver, "switch_thread", { name: "side" });
+      await runCommand(viewer, "switch_thread", { name: "side" });
+      await runCommand(elsewhere, "switch_thread", { name: "other" });
+      atHome.send({ type: "message", text: "hi", stream: true, images: [] });
+      await atHome.awaitFrame("stream_start");
+      for (const client of clients) client.frames.length = 0;
+
+      archiver.send({ type: "command", rid: "archive", name: "archive_thread", args: { name: "side" } });
+
+      const reply = await archiver.awaitFrame("command_output");
+      expect((reply["data"] as { current: string })["current"]).toBe("main");
+      for (const client of clients) expect(await client.awaitFrame("threads_changed")).toMatchObject({ character: "ada", thread: "side" });
+      for (const moved of [archiver, viewer]) {
+        await until(() => homeArrival(moved) !== undefined, "a viewer of the archived thread being told it moved home");
+        const arrival = required(homeArrival(moved));
+        expect((arrival["messages"] as { content: string }[]).map((message) => message.content)).toEqual(["hi"]);
+        expect(await moved.awaitFrame("stream_start")).toBeDefined();
+      }
+      expect(homeArrival(archiver)?.["rid"]).toBe("archive");
+      expect(homeArrival(viewer)?.["rid"]).toBeUndefined();
+      expect(elsewhere.frames.filter((frame) => frame["type"] === "history")).toEqual([]);
+
+      release();
+      await until(() => heard(viewer, "hello back"), "the moved viewer hearing the reply");
+
+      await finishTurn(viewer, "typed after archiving");
+      expect(heard(viewer, "typed after archiving")).toBe(true);
+      await until(() => heard(archiver, "typed after archiving"), "the other moved viewer seeing that message");
+      const home = await daemon.runtime.registry.getOrCreate("ada");
+      expect(home.historySnapshot({}).messages.map((message) => message.content)).toEqual(["hi", "hello back", "typed after archiving", "hello back"]);
+      expect(await runCommand(elsewhere, "list_threads", {})).toMatchObject({ data: { current: "other" } });
+      expect(daemon.runtime.registry.listThreads("ada").map((thread) => thread.id).sort()).toEqual(["main", "other"]);
+    } finally {
+      release();
+      for (const client of clients) client.close();
+    }
+  });
+
+  test("stops paying to keep the archived thread warm, and leaves another thread's cache slot alone", async () => {
+    const place = await layout(MODEL_CONFIG);
+    const daemon = await start(place, [], { anthropic: scriptedProvider("hello back") });
+    const client = await Client.open(daemon.port, "ada", ["request-lifecycle"]);
+    const { keepalive } = daemon.runtime;
+    try {
+      await client.awaitFrame("history");
+      await runCommand(client, "set_model_setting", { key: "cache_keepalive", value: "55m" });
+      await finishTurn(client, "hi");
+      expect(keepalive.warmThread("ada")).toBe("main");
+      expect(keepalive.nextPingAt("ada")).toBeDefined();
+
+      await runCommand(client, "create_thread", { name: "unwatched" });
+      await runCommand(client, "archive_thread", { name: "unwatched" });
+      expect(keepalive.warmThread("ada")).toBe("main");
+      expect(keepalive.nextPingAt("ada")).toBeDefined();
+
+      await runCommand(client, "create_thread", { name: "side" });
+      await runCommand(client, "switch_thread", { name: "side" });
+      await finishTurn(client, "over here");
+      expect(keepalive.warmThread("ada")).toBe("side");
+      expect(keepalive.nextPingAt("ada")).toBeDefined();
+
+      await runCommand(client, "archive_thread", { name: "side" });
+      expect(keepalive.warmThread("ada")).toBe("main");
+      expect(keepalive.nextPingAt("ada")).toBeUndefined();
+    } finally {
+      client.close();
+    }
+  });
+});
 
 describe("what a client gets", () => {
   test("the handshake names the characters actually on disk", async () => {
