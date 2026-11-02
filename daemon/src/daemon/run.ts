@@ -37,6 +37,7 @@ import { parseArgs, resolveStartup, sourceLabel, StartupError } from "./startup.
 import { findSentPicture } from "../storage/sent_pictures.ts";
 import { startCharacterInits } from "../tools/character_init.ts";
 import { stopBackgroundCompactions } from "../memory/compaction/background.ts";
+import { adoptHomeThreadModels } from "../config/home_model.ts";
 
 const SHUTDOWN_TIMEOUT_MS = 10_000;
 
@@ -287,6 +288,7 @@ export async function startDaemon(options: DaemonOptions): Promise<RunningDaemon
       running,
       ...(log === undefined ? {} : { log }),
     };
+    await adoptHomeThreadModels(runtime.registry);
     await registerKnownCharacters(runtime, assembly.autonomy, log);
     seedActivityInBackground(runtime, assembly.autonomy, log);
     startCharacterInits(runtime.config, runtime.registry.availableCharacters(), log);

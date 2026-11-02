@@ -12,7 +12,7 @@ import { subagentTrace } from "./subagent_trace.ts";
 import { keepalivePingNowCommand } from "./keepalive.ts";
 import { sessionActivateCommand } from "./activate.ts";
 import type { OperationPrerequisite } from "../protocol/OperationPrerequisite.ts";
-import { changeThreadModel, effectiveChatModel, listModels, favoriteModel, modelInfo, modelSettings, resetModel, setModelSetting, switchModel } from "./models.ts";
+import { effectiveChatModel, listModels, favoriteModel, modelInfo, modelSettings, qualifiedModelName, resetModel, setModelSetting, switchModel } from "./models.ts";
 import type { ConversationEngine } from "../engine/conversation.ts";
 import type { OperationInput, OperationName, OperationResult } from "../operations/contracts.ts";
 import { assertContractBindings } from "../operations/contracts.ts";
@@ -221,22 +221,10 @@ export const commandOperations: OperationRegistry<CommandOperationContext> = {
     ({ session }, args) => favoriteModel(session, args)),
   model_info: register("model_info", { ...modelPresentation, label: "Inspect model", fields: modelTargetFields },
     ({ session }, args) => modelInfo(session, args)),
-  switch_model: register("switch_model", { ...modelPresentation, label: "Select model", effects: ["model_selection", "config_write"], fields: { ...modelTargetFields, name: { ...modelTargetFields.name, hint: "Model to select. Chat selection pins the current thread; roles write global configuration." }, include_hidden: modelHiddenField } },
-    async ({ session, deps, engine }, args) => {
-      const threads = deps.threads;
-      if (engine !== undefined && threads !== undefined && args["background_task"] === undefined && args["subagent"] === undefined) {
-        return await changeThreadModel(session, args, (model) => threads.setThreadModel(engine.characterName, engine.thread, model, session.signal));
-      }
-      return switchModel(session, args);
-    }),
+  switch_model: register("switch_model", { ...modelPresentation, label: "Select model", effects: ["model_selection", "config_write"], fields: { ...modelTargetFields, name: { ...modelTargetFields.name, hint: "Model to select. Chat selection sets the character's model, which every thread without its own model uses; roles write global configuration." }, include_hidden: modelHiddenField } },
+    ({ session }, args) => switchModel(session, args)),
   reset_model: register("reset_model", { ...modelPresentation, label: "Reset model selection", effects: ["model_selection", "config_write"], fields: { background_task: modelTargetFields.background_task, subagent: modelTargetFields.subagent } },
-    async ({ session, deps, engine }, args) => {
-      const threads = deps.threads;
-      if (engine !== undefined && threads !== undefined && args["background_task"] === undefined && args["subagent"] === undefined) {
-        return await changeThreadModel(session, args, (model) => threads.setThreadModel(engine.characterName, engine.thread, model, session.signal), true);
-      }
-      return resetModel(session, args);
-    }),
+    ({ session }, args) => resetModel(session, args)),
   model_settings: register("model_settings", { ...modelPresentation, label: "Inspect model settings", fields: { ...modelTargetFields, key: modelSettingField, overview: { label: "Role overview", hint: "Show saved settings across roles" } } },
     ({ session }, args) => modelSettings(session, args)),
   set_model_setting: register("set_model_setting", { ...modelPresentation, label: "Change model setting", effects: ["model_selection"], fields: { ...modelTargetFields, key: modelSettingField, scope: { label: "Preference scope", hint: "character (default), or global to save across characters" }, value: { label: "Setting value", hint: "Omit or explicitly unset to clear the saved setting. Vendor object values have structured fields." } } },
@@ -379,7 +367,10 @@ export const commandOperations: OperationRegistry<CommandOperationContext> = {
   thread_model: register("thread_model", {
     ...threadPresentation, label: "Pin thread model", effects: ["model_selection"],
     fields: { name: threadName, model: { label: "Chat model", choices: "models", hint: "Leave empty to inherit the character default" } },
-  }, async (context, args) => threadModel(await threadListingContext(context.deps, engineOf(context), context.session), args)),
+  }, async (context, args) => {
+    const model = typeof args.model === "string" && args.model !== "" ? qualifiedModelName(context.session, args.model) : args.model;
+    return threadModel(await threadListingContext(context.deps, engineOf(context), context.session), { ...args, model });
+  }),
   mark_thread_read: register("mark_thread_read", {
     ...threadPresentation, label: "Mark thread read", effects: ["runtime_write"],
     fields: { name: threadName, through: { label: "Read through", hint: "Timestamp of the last message shown; omit for everything so far" } },

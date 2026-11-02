@@ -64,16 +64,16 @@ async function applyModel(state: WorkspaceSnapshot, target: ModelTarget, model: 
   }
 }
 
-export function ModelPicker({ state, close, target: initial = { kind: "thread" }, changed, scopes = true, current }: {
+export function ModelPicker({ state, close, target: initial, changed, scopes = true, current }: {
   state: WorkspaceSnapshot; close: () => void; target?: ModelTarget; changed: () => void; scopes?: boolean; current?: string | null;
 }) {
   const [hidden, setHidden] = useState(false);
   const [favorites, setFavorites] = useState(false);
   const { listing, refresh, error } = useModelListing(state, hidden, favorites);
   const [query, setQuery] = useState("");
-  const [target, setTarget] = useState<ModelTarget>(initial);
-  const [busy, setBusy] = useState(false);
   const thread = state.threads.find((item) => item.id === state.thread);
+  const [target, setTarget] = useState<ModelTarget>(initial ?? (thread?.chat_model === undefined ? { kind: "character" } : { kind: "thread" }));
+  const [busy, setBusy] = useState(false);
   const needle = query.trim().toLowerCase();
   const models = useMemo(() => flattenModels(listing).filter((model) => model.qualified_name.toLowerCase().includes(needle) || model.name.toLowerCase().includes(needle)), [listing, needle]);
   const active = current !== undefined ? current : listing?.active ?? null;

@@ -1,9 +1,9 @@
 use shore_common::protocol::operations::{
     CancelCompaction, ConfigReloadArgs, ConversationLog, ConversationLogArgs, ConversationPage,
     CreateCharacter, DeleteCharacter, DeleteCharacterArgs, EmptyOperationArgs, GetMessage,
-    GetMessageArgs, NamedOperationArgs, Operation, OperationResponse, ReadStatus,
+    GetMessageArgs, NamedOperationArgs, Operation, OperationResponse, PinThreadModel, ReadStatus,
     ReloadConfiguration, ResetModel, ResetModelArgs, SwitchCharacter, SwitchModel, SwitchModelArgs,
-    SwitchThread, SwitchThreadArgs, is_registered_operation,
+    SwitchThread, SwitchThreadArgs, ThreadModelArgs, is_registered_operation,
 };
 use std::io::{self, IsTerminal, Read as _};
 use std::path::{Path, PathBuf};
@@ -269,7 +269,7 @@ pub(crate) async fn execute(
             let Some(change) = model_change(command_ref) else {
                 return Ok(());
             };
-            apply_model_change(&mut conn, command_ref, change).await?;
+            apply_model_change(&mut conn, command_ref, change, cli.thread.as_deref()).await?;
         }
         refused @ (CliCommand::View { .. } | CliCommand::Ui { .. }) => {
             return Err(tui_only_refusal(refused)
@@ -1094,14 +1094,48 @@ fn model_change(cmd: &CliCommand) -> Option<ModelChange<'_>> {
     }
 }
 
+fn thread_pin(change: &ModelChange<'_>, thread: Option<&str>) -> Option<ThreadModelArgs> {
+    let named = thread.filter(|name| !name.is_empty())?;
+    let (role, model) = match change {
+        ModelChange::SwitchTo(name, target) => (Some(*target), Some((*name).to_owned())),
+        ModelChange::Reset(target) => (*target, None),
+    };
+    if role.is_some_and(|picked| picked.background.is_some() || picked.subagent.is_some()) {
+        return None;
+    }
+    Some(ThreadModelArgs {
+        name: named.to_owned(),
+        model,
+    })
+}
+
 async fn apply_model_change(
     conn: &mut SWPConnection,
     cmd: &CliCommand,
     change: ModelChange<'_>,
+    thread: Option<&str>,
 ) -> Result<(), Box<dyn std::error::Error>> {
     let CliCommand::Model { all, json, .. } = cmd else {
         return Ok(());
     };
+    if let Some(pin) = thread_pin(&change, thread) {
+        let name = pin.name.clone();
+        let (listing, data) = execute_operation_with_raw::<PinThreadModel>(conn, pin).await?;
+        if *json {
+            cli_out!("{}", serde_json::to_string_pretty(&data)?);
+            return Ok(());
+        }
+        match listing
+            .threads
+            .iter()
+            .find(|view| view.id == name)
+            .and_then(|view| view.chat_model.as_deref())
+        {
+            Some(model) => cli_out!("Pinned thread {name} to: {model}"),
+            None => cli_out!("Thread {name} now uses the character's model"),
+        }
+        return Ok(());
+    }
     let target = match change {
         ModelChange::Reset(target) => target,
         ModelChange::SwitchTo(_, target) => Some(target),
@@ -2185,6 +2219,58 @@ mod tests {
                 args.join(" "),
             );
         }
+    }
+
+    #[test]
+    fn only_a_named_thread_gets_a_model_of_its_own() {
+        let pin = |args: &[&str], thread: Option<&str>| {
+            let mut full = vec!["shore"];
+            full.extend_from_slice(args);
+            let cli = <Cli as clap::Parser>::parse_from(full);
+            let command = cli.command.as_ref().expect("a command");
+            let change = super::model_change(command).expect("a model change");
+            let named = thread.or(cli.thread.as_deref());
+            super::thread_pin(&change, named).map(|pin| (pin.name, pin.model))
+        };
+        assert_eq!(
+            pin(
+                &[
+                    "--thread",
+                    "lighthouse",
+                    "model",
+                    "use",
+                    "openrouter:glm-5-3"
+                ],
+                None
+            ),
+            Some((
+                "lighthouse".to_owned(),
+                Some("openrouter:glm-5-3".to_owned())
+            ))
+        );
+        assert_eq!(
+            pin(&["-t", "lighthouse", "model", "reset"], None),
+            Some(("lighthouse".to_owned(), None))
+        );
+        assert_eq!(
+            pin(
+                &[
+                    "-t",
+                    "lighthouse",
+                    "model",
+                    "use",
+                    "haiku",
+                    "--background=compaction"
+                ],
+                None
+            ),
+            None
+        );
+        let bare =
+            <Cli as clap::Parser>::parse_from(["shore", "model", "use", "openrouter:glm-5-3"]);
+        let change =
+            super::model_change(bare.command.as_ref().expect("a command")).expect("a model change");
+        assert!(super::thread_pin(&change, None).is_none());
     }
 
     #[test]

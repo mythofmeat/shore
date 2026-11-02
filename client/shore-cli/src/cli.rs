@@ -1188,7 +1188,8 @@ pub(crate) enum ModelCommand {
     /// Spell out `use` when a model's name would otherwise read as one of
     /// these subcommands. An unknown name is an error, never a fallback.
     ///
-    /// Bare, this pins the chat model for the current thread until changed or reset.
+    /// Bare, this sets the character's chat model, which every thread without a model of its
+    /// own uses. With --thread (or SHORE_THREAD) it gives just that thread its own model.
     /// Every other target writes the config file,
     /// which is global: `--background=<task>` writes `<task>.model`,
     /// bare `--background` writes both `heartbeat.model` and `compaction.model`; `--subagent=<name>` writes `subagents.<name>.model`,
@@ -1295,7 +1296,9 @@ pub(crate) enum ModelCommand {
 
     /// Drop a saved selection and fall back to what it would inherit
     ///
-    /// Bare, this clears the thread's pin to inherit the character default. Other targets clear
+    /// Bare, this clears the character's chat model, so it falls back to chat.model or the first
+    /// configured model. With --thread (or SHORE_THREAD) it clears just that thread's own
+    /// model, so the thread uses the character's again. Other targets clear
     /// the config keys `use` would have written, so the role falls back the
     /// way it did before anything was pinned. Bare --background clears both
     /// task model keys; bare --subagent clears subagents.model
