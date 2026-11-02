@@ -500,5 +500,7 @@ export async function backfillLedgerCosts(
 ): Promise<CostBackfill> {
   const ledger = ledgerFor(ledgerPath);
   if (ledger === null) return { updated: 0, total: 0, failures: [] };
-  return await backfillMissingCosts(ledger.database, ledger.pricing, force);
+  const backfill = await backfillMissingCosts(ledger.database, ledger.pricing, force);
+  ledger.pricing.dropExpired();
+  return backfill;
 }

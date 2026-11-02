@@ -109,6 +109,7 @@ export type CatalogFetch = (url: string) => Promise<Response>;
 export interface PricingStore {
   get(modelId: string): ModelPricing | undefined;
   put(modelId: string, pricing: ModelPricing): void;
+  dropExpired(): void;
   catalogFetchedAt?(url: string): number | undefined;
   putCatalogFetchedAt?(url: string, at: number): void;
 }
@@ -222,6 +223,10 @@ export class PricingEngine {
   cost(request: CostRequest): CostBreakdown | undefined {
     const pricing = this.cached(request.provider, request.model);
     return pricing ? calculateCost(pricing, request) : undefined;
+  }
+
+  dropExpired(): void {
+    this.#store.dropExpired();
   }
 
   async #refreshCatalog(source: CatalogSource): Promise<void> {

@@ -586,5 +586,11 @@ function sqlitePricingStore(db: Database, now: () => number = () => Date.now()):
         $at: new Date().toISOString(),
       });
     },
+    dropExpired() {
+      db.query(
+        `DELETE FROM pricing
+          WHERE julianday(fetched_at) IS NULL OR julianday(fetched_at) <= julianday(?1)`,
+      ).run(new Date(now() - PRICING_TTL_MS).toISOString());
+    },
   };
 }
