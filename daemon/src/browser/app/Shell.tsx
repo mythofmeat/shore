@@ -1,18 +1,18 @@
 import { useCallback, useEffect, useState } from "react";
 import type { WorkspaceSnapshot } from "../workspace.ts";
 import { Sidebar } from "../sidebar/Sidebar.tsx";
-import { sortThreads } from "../sidebar/order.ts";
+import { sortThreads, threadsOnScreen } from "../sidebar/order.ts";
 import { Chat } from "../chat/Chat.tsx";
 import { Settings } from "../settings/Settings.tsx";
 import { NewCharacterDialog, NewThreadDialog } from "../sidebar/dialogs.tsx";
 import { Toasts, toasts } from "../ui/toast.tsx";
 import { useEscape, useMediaQuery, useStoredFlag } from "../ui/hooks.ts";
-import { ThreadDialogs } from "../chat/thread_dialogs.tsx";
-import { THREAD_DIALOG_EVENT, type ThreadDialogRequest } from "./intents.ts";
+import { FolderDialogs, ThreadDialogs } from "../chat/thread_dialogs.tsx";
+import { FOLDER_DIALOG_EVENT, THREAD_DIALOG_EVENT, type FolderDialogRequest, type ThreadDialogRequest } from "./intents.ts";
 import { Palette } from "./Palette.tsx";
 import { navigate, useRoute } from "./route.ts";
 import { adjacent, globalAction, nextUnread } from "./shortcuts.ts";
-import { perform, useNotifications, workspace } from "./state.ts";
+import { perform, useCollapsedFolders, useNotifications, workspace } from "./state.ts";
 
 export function Shell({ state }: { state: WorkspaceSnapshot }) {
   const route = useRoute();
@@ -21,11 +21,15 @@ export function Shell({ state }: { state: WorkspaceSnapshot }) {
   const [drawer, setDrawer] = useState(false);
   const [dialog, setDialog] = useState<"character" | "thread" | "palette" | null>(null);
   const [threadDialog, setThreadDialog] = useState<ThreadDialogRequest | null>(null);
+  const [folderDialog, setFolderDialog] = useState<FolderDialogRequest | null>(null);
+  const collapsed = useCollapsedFolders(state.character);
   const { unread } = useNotifications();
   useEffect(() => {
     const open = (event: Event) => { setThreadDialog((event as CustomEvent<ThreadDialogRequest>).detail); };
+    const openFolder = (event: Event) => { setFolderDialog((event as CustomEvent<FolderDialogRequest>).detail); };
     addEventListener(THREAD_DIALOG_EVENT, open);
-    return () => removeEventListener(THREAD_DIALOG_EVENT, open);
+    addEventListener(FOLDER_DIALOG_EVENT, openFolder);
+    return () => { removeEventListener(THREAD_DIALOG_EVENT, open); removeEventListener(FOLDER_DIALOG_EVENT, openFolder); };
   }, []);
   const open = mobile ? drawer : expanded;
   const closeDrawer = useCallback(() => setDrawer(false), []);
@@ -64,13 +68,13 @@ export function Shell({ state }: { state: WorkspaceSnapshot }) {
         case "settings": navigate({ view: "settings", page: "models" }); break;
         case "help": navigate({ view: "settings", page: "keyboard" }); break;
         case "previous-thread": case "next-thread": {
-          const ids = sortThreads(state.threads).map((thread) => thread.id);
+          const ids = threadsOnScreen(state.threads, state.folders, collapsed, state.thread).map((thread) => thread.id);
           const next = adjacent(ids, state.thread ?? undefined, action === "next-thread" ? 1 : -1);
           if (next !== undefined && next !== state.thread && state.status === "ready") perform(() => workspace.openThread(next));
           break;
         }
         case "next-unread-thread": {
-          const next = nextUnread(sortThreads(state.threads), state.thread);
+          const next = nextUnread(sortThreads(state.threads, state.folders), state.thread);
           if (next === undefined) toasts.show("No unread messages in other conversations");
           else if (state.status === "ready") perform(() => workspace.openThread(next));
           break;
@@ -90,6 +94,7 @@ export function Shell({ state }: { state: WorkspaceSnapshot }) {
     {dialog === "thread" && state.character !== null ? <NewThreadDialog character={state.character} close={() => setDialog(null)} /> : null}
     {dialog === "palette" ? <Palette state={state} close={() => setDialog(null)} newThread={() => setDialog("thread")} newCharacter={() => setDialog("character")} /> : null}
     {threadDialog === null ? null : <ThreadDialogs state={state} request={threadDialog} close={() => setThreadDialog(null)} />}
+    {folderDialog === null ? null : <FolderDialogs request={folderDialog} close={() => setFolderDialog(null)} />}
     <Toasts />
   </div>;
 }

@@ -1,23 +1,34 @@
-import { useRef, useState, type MouseEvent, type PointerEvent } from "react";
+import { useState, type DragEvent } from "react";
 import type { ThreadView } from "../../protocol/ThreadView.ts";
 import { openThreadDialog } from "../app/intents.ts";
-import { markRead, makeHome } from "../chat/actions.ts";
+import { markRead, makeHome, moveThreadTo } from "../chat/actions.ts";
 import { IconButton, PointMenu, type MenuItem } from "../ui/controls.tsx";
 import { Icon } from "../ui/icons.tsx";
+import { useRowMenu } from "./row_menu.ts";
 
-const LONG_PRESS_MS = 500;
-const LONG_PRESS_SLOP = 10;
+export const THREAD_DRAG_TYPE = "application/x-shore-thread";
 
-export function threadMenuItems(thread: ThreadView, ready: boolean): MenuItem[] {
+const TOUCH_ONLY = typeof matchMedia === "function" && matchMedia("(hover: none)").matches;
+
+export function threadMenuItems(thread: ThreadView, ready: boolean, neighbours: ThreadNeighbours): MenuItem[] {
+  const movable = !thread.home && thread.heartbeat !== true;
   return [
     { label: "Thread settings…", icon: "settings", onSelect: () => openThreadDialog("settings", thread.id), disabled: !ready },
     { label: "Fork…", icon: "branch", onSelect: () => openThreadDialog("fork", thread.id), disabled: !ready },
     { label: "Mark as read", icon: "check", onSelect: () => void markRead(thread), disabled: !ready || (thread.unread ?? 0) === 0 },
-    ...(thread.home || thread.heartbeat === true ? [] : [{ label: "Make home", icon: "home" as const, onSelect: () => void makeHome(thread), disabled: !ready }]),
+    ...(movable ? [
+      { label: "Make home", icon: "home" as const, onSelect: () => void makeHome(thread), disabled: !ready },
+      "separator" as const,
+      { label: "Move up", icon: "chevronUp" as const, onSelect: () => void moveThreadTo(thread.id, neighbours.up === undefined ? {} : { before: neighbours.up }), disabled: !ready || neighbours.up === undefined || neighbours.byActivity },
+      { label: "Move down", icon: "chevronDown" as const, onSelect: () => void moveThreadTo(thread.id, neighbours.down === undefined ? {} : { before: neighbours.down }), disabled: !ready || neighbours.atEnd || neighbours.byActivity },
+      { label: "Move to folder…", icon: "archive" as const, onSelect: () => openThreadDialog("move", thread.id), disabled: !ready },
+    ] : []),
     "separator",
     { label: "Archive…", icon: "archive", onSelect: () => openThreadDialog("archive", thread.id), disabled: !ready || thread.home, danger: true },
   ];
 }
+
+export interface ThreadNeighbours { up: string | undefined; down: string | undefined; atEnd: boolean; byActivity: boolean }
 
 function UnreadBadge({ count }: { count: number }) {
   return <span className="sidebar-unread">
@@ -26,41 +37,38 @@ function UnreadBadge({ count }: { count: number }) {
   </span>;
 }
 
-export function ThreadRow({ thread, label, current, unread, replying, opening, ready, select }: {
-  thread: ThreadView; label: string; current: boolean; unread: number; replying: boolean; opening: boolean; ready: boolean; select: () => void;
+export function ThreadRow({ thread, label, current, unread, replying, opening, ready, select, neighbours, drop }: {
+  thread: ThreadView; label: string; current: boolean; unread: number; replying: boolean; opening: boolean; ready: boolean; select: () => void; neighbours: ThreadNeighbours;
+  drop: (dragged: string, after: boolean) => void;
 }) {
-  const [menu, setMenu] = useState<{ x: number; y: number } | null>(null);
-  const press = useRef<{ timer: ReturnType<typeof setTimeout>; x: number; y: number } | null>(null);
-  const pressed = useRef(false);
-  const release = () => { if (press.current !== null) clearTimeout(press.current.timer); press.current = null; };
-  const onPointerDown = (event: PointerEvent<HTMLDivElement>) => {
-    if (event.pointerType !== "touch") return;
-    const { clientX: x, clientY: y } = event;
-    pressed.current = false;
-    release();
-    press.current = { x, y, timer: setTimeout(() => { pressed.current = true; press.current = null; setMenu({ x, y }); }, LONG_PRESS_MS) };
-  };
-  const onPointerMove = (event: PointerEvent<HTMLDivElement>) => {
-    if (press.current !== null && Math.hypot(event.clientX - press.current.x, event.clientY - press.current.y) > LONG_PRESS_SLOP) release();
-  };
-  const onContextMenu = (event: MouseEvent<HTMLDivElement>) => {
-    event.preventDefault();
-    release();
+  const menu = useRowMenu();
+  const [target, setTarget] = useState<"before" | "after" | null>(null);
+  const movable = !thread.home && thread.heartbeat !== true;
+  const open = () => { if (ready && !menu.swallowClick()) select(); };
+  const place = (event: DragEvent<HTMLDivElement>): "before" | "after" => {
     const box = event.currentTarget.getBoundingClientRect();
-    setMenu(event.clientX === 0 && event.clientY === 0 ? { x: box.left + 24, y: box.bottom } : { x: event.clientX, y: event.clientY });
+    return event.clientY > box.top + box.height / 2 ? "after" : "before";
   };
-  const onMore = (event: MouseEvent<HTMLButtonElement>) => {
-    const box = event.currentTarget.getBoundingClientRect();
-    setMenu({ x: box.left, y: box.bottom + 4 });
-  };
-  return <div className={`thread-row ${menu === null ? "" : "menu-open"}`} onContextMenu={onContextMenu} onPointerDown={onPointerDown} onPointerMove={onPointerMove} onPointerUp={release} onPointerCancel={release}>
-    <button type="button" className={`sidebar-item thread ${current ? "on" : ""} ${unread > 0 ? "unread" : ""}`} aria-current={current ? "page" : undefined} aria-busy={opening} disabled={!ready} onClick={() => { if (pressed.current) { pressed.current = false; return; } select(); }}>
+  return <div className={`thread-row ${menu.at === null ? "" : "menu-open"} ${target === null ? "" : `drop-${target}`}`} draggable={movable && ready && !TOUCH_ONLY} {...menu.handlers}
+    onDragStart={(event) => { event.dataTransfer.setData(THREAD_DRAG_TYPE, thread.id); event.dataTransfer.effectAllowed = "move"; }}
+    onDragOver={(event) => { if (!movable || !event.dataTransfer.types.includes(THREAD_DRAG_TYPE)) return; event.preventDefault(); event.stopPropagation(); event.dataTransfer.dropEffect = "move"; setTarget(place(event)); }}
+    onDragLeave={() => setTarget(null)}
+    onDrop={(event) => {
+      const dragged = event.dataTransfer.getData(THREAD_DRAG_TYPE);
+      setTarget(null);
+      if (dragged === "" || !movable) return;
+      event.preventDefault();
+      event.stopPropagation();
+      if (dragged !== thread.id) drop(dragged, place(event) === "after");
+    }}>
+    <div role="button" tabIndex={ready ? 0 : -1} className={`sidebar-item thread ${current ? "on" : ""} ${unread > 0 ? "unread" : ""}`} aria-current={current ? "page" : undefined} aria-busy={opening} aria-disabled={!ready} onClick={open}
+      onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); open(); } }}>
       <Icon name={thread.home ? "home" : thread.heartbeat === true ? "heartbeat" : "chat"} size={14} /><span className="sidebar-name">{label}</span>
       {thread.locked === true ? <span className="sidebar-locked" title="Locked: only you change its label, purpose and files"><Icon name="lock" size={12} /><span className="sr-only">(locked)</span></span> : null}
       {replying || opening ? <span className="sidebar-replying"><span className="spinner" aria-hidden="true" /><span className="sr-only">{opening ? "(opening)" : "(replying)"}</span></span> : null}
       {unread > 0 ? <UnreadBadge count={unread} /> : null}
-    </button>
-    <IconButton icon="more" size={16} className="thread-more" label={`Options for ${label}`} aria-haspopup="menu" aria-expanded={menu !== null} onClick={onMore} />
-    {menu === null ? null : <PointMenu label={`Options for ${label}`} items={threadMenuItems(thread, ready)} at={menu} close={() => setMenu(null)} />}
+    </div>
+    <IconButton icon="more" size={16} className="thread-more" label={`Options for ${label}`} aria-haspopup="menu" aria-expanded={menu.at !== null} onClick={menu.openFrom} />
+    {menu.at === null ? null : <PointMenu label={`Options for ${label}`} items={threadMenuItems(thread, ready, neighbours)} at={menu.at} close={menu.close} />}
   </div>;
 }

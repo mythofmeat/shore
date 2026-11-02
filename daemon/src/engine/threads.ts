@@ -26,7 +26,7 @@ export const MAX_THREAD_FILES = 20;
 
 const THREAD_ID = /^[A-Za-z0-9][A-Za-z0-9._-]*$/;
 
-export type ThreadErrorKind = "invalid_id" | "invalid_files" | "exists" | "not_found" | "is_home" | "is_heartbeat" | "locked";
+export type ThreadErrorKind = "invalid_id" | "invalid_files" | "invalid_folder" | "exists" | "not_found" | "is_home" | "is_heartbeat" | "is_pinned" | "locked";
 
 export class ThreadError extends Error {
   constructor(
@@ -73,11 +73,19 @@ export interface ThreadRecord {
   forked_from?: ThreadForkOrigin;
 }
 
+export interface ThreadFolder {
+  name: string;
+  threads: string[];
+  by_activity?: true;
+}
+
 export interface ThreadsIndex {
   version: 1;
   home: string;
   heartbeat?: string;
   threads: ThreadRecord[];
+  order?: string[];
+  folders?: ThreadFolder[];
 }
 
 const HEARTBEAT_THREAD = "heartbeat";
@@ -646,6 +654,12 @@ export async function threadChatModel(
   return threadRecord(index, thread ?? homeThread(index))?.chat_model;
 }
 
+function withoutThread(index: ThreadsIndex, id: string): ThreadsIndex {
+  const folders = index.folders?.map((folder) => ({ ...folder, threads: folder.threads.filter((other) => other !== id) }));
+  const order = index.order?.filter((other) => other !== id);
+  return { ...index, ...(folders === undefined ? {} : { folders }), ...(order === undefined ? {} : { order }) };
+}
+
 export interface ArchiveThreadOptions {
   now?: () => string;
   newId?: () => string;
@@ -695,7 +709,7 @@ export async function archiveThread(
     await rm(dir, { recursive: true, force: true });
     deleteThreadState(data, character, id);
     forgetThreadSessions(data, character, id);
-    const { heartbeat, ...rest } = index;
+    const { heartbeat, ...rest } = withoutThread(index, id);
     const next: ThreadsIndex = {
       ...rest,
       ...(heartbeat === undefined || heartbeat === id ? {} : { heartbeat }),

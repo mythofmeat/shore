@@ -378,3 +378,65 @@ test("a thread's menu changes its settings without opening it, and archiving the
   await expect(page.locator("article.message.user").last()).toContainText("after the archive");
   await finish();
 });
+
+test("threads can be dragged into order and into folders, the layout survives a reload, and a collapsed folder still shows its unread count", async ({ page }) => {
+  const finish = await watchPage(page);
+  await signIn(page);
+  await createCharacter(page, "marten");
+  for (const name of ["first", "second", "third"]) await createThread(page, "marten", name);
+  const threads = page.getByRole("group", { name: "marten threads" });
+  const rows = () => threads.locator(".thread-row:not(.folder-row) .sidebar-name");
+  await expect(rows()).toHaveText(["main", "third", "second", "first"]);
+
+  await threads.getByRole("button", { name: "first", exact: true }).dragTo(threads.getByRole("button", { name: "third", exact: true }), { targetPosition: { x: 40, y: 2 } });
+  await expect(rows()).toHaveText(["main", "first", "third", "second"]);
+
+  await threads.getByRole("button", { name: "third", exact: true }).click({ button: "right" });
+  await page.getByRole("menuitem", { name: "Move down" }).click();
+  await expect(rows()).toHaveText(["main", "first", "second", "third"]);
+
+  await page.getByRole("button", { name: "marten", exact: true }).click({ button: "right" });
+  await page.getByRole("menuitem", { name: "New folder…" }).click();
+  const newFolder = page.getByRole("dialog", { name: "New folder" });
+  await newFolder.getByLabel("Name").fill("Stories");
+  await newFolder.getByRole("button", { name: "Create", exact: true }).click();
+  await expect(newFolder).toBeHidden();
+
+  const folder = page.getByRole("group", { name: "Folder Stories" });
+  await threads.getByRole("button", { name: "second", exact: true }).dragTo(folder.getByRole("button", { name: "Stories", exact: true }));
+  await expect(folder.locator(".thread-row:not(.folder-row) .sidebar-name")).toHaveText(["second"]);
+
+  await threads.getByRole("button", { name: "first", exact: true }).click({ button: "right" });
+  await page.getByRole("menuitem", { name: "Move to folder…" }).click();
+  const move = page.getByRole("dialog", { name: "Move “first”" });
+  await move.getByLabel("Folder").selectOption("Stories");
+  await move.getByRole("button", { name: "Move", exact: true }).click();
+  await expect(move).toBeHidden();
+  await expect(folder.locator(".thread-row:not(.folder-row) .sidebar-name")).toHaveText(["second", "first"]);
+  await expect(rows()).toHaveText(["main", "third", "second", "first"]);
+
+  await page.reload();
+  await expect(page.getByText("Connected", { exact: true })).toBeVisible();
+  await expect(folder.locator(".thread-row:not(.folder-row) .sidebar-name")).toHaveText(["second", "first"]);
+  await expect(rows()).toHaveText(["main", "third", "second", "first"]);
+
+  await page.keyboard.press("Alt+ArrowDown");
+  await expect(page.locator(".topbar-thread")).toHaveText("second");
+  await page.keyboard.press("Alt+ArrowUp");
+  await expect(page.locator(".topbar-thread")).toHaveText("third");
+
+  await folder.getByRole("button", { name: "Stories", exact: true }).click();
+  await expect(rows()).toHaveText(["main", "third"]);
+  await page.keyboard.press("Alt+ArrowDown");
+  await expect(page.locator(".topbar-thread")).toHaveText("main");
+  await page.keyboard.press("Alt+ArrowDown");
+  await expect(page.locator(".topbar-thread")).toHaveText("third");
+
+  const other = await page.context().newPage();
+  await other.addInitScript("document.hasFocus = () => false");
+  await other.goto("/workspace/marten/second");
+  await send(other, "written from another tab");
+  await other.close();
+  await expect(folder.getByRole("button", { name: "Stories (1 unread message)" })).toBeVisible();
+  await finish();
+});

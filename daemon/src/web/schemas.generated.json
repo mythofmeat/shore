@@ -1850,6 +1850,118 @@
             "properties": {
               "name": {
                 "type": "string",
+                "const": "thread_move"
+              },
+              "data": {
+                "$ref": "#/$defs/ThreadListing"
+              }
+            },
+            "required": [
+              "name",
+              "data"
+            ]
+          },
+          {
+            "type": "object",
+            "properties": {
+              "name": {
+                "type": "string",
+                "const": "thread_sort"
+              },
+              "data": {
+                "$ref": "#/$defs/ThreadListing"
+              }
+            },
+            "required": [
+              "name",
+              "data"
+            ]
+          },
+          {
+            "type": "object",
+            "properties": {
+              "name": {
+                "type": "string",
+                "const": "thread_folder_create"
+              },
+              "data": {
+                "$ref": "#/$defs/ThreadListing"
+              }
+            },
+            "required": [
+              "name",
+              "data"
+            ]
+          },
+          {
+            "type": "object",
+            "properties": {
+              "name": {
+                "type": "string",
+                "const": "thread_folder_rename"
+              },
+              "data": {
+                "$ref": "#/$defs/ThreadListing"
+              }
+            },
+            "required": [
+              "name",
+              "data"
+            ]
+          },
+          {
+            "type": "object",
+            "properties": {
+              "name": {
+                "type": "string",
+                "const": "thread_folder_delete"
+              },
+              "data": {
+                "$ref": "#/$defs/ThreadListing"
+              }
+            },
+            "required": [
+              "name",
+              "data"
+            ]
+          },
+          {
+            "type": "object",
+            "properties": {
+              "name": {
+                "type": "string",
+                "const": "thread_folder_move"
+              },
+              "data": {
+                "$ref": "#/$defs/ThreadListing"
+              }
+            },
+            "required": [
+              "name",
+              "data"
+            ]
+          },
+          {
+            "type": "object",
+            "properties": {
+              "name": {
+                "type": "string",
+                "const": "thread_folder_sort"
+              },
+              "data": {
+                "$ref": "#/$defs/ThreadListing"
+              }
+            },
+            "required": [
+              "name",
+              "data"
+            ]
+          },
+          {
+            "type": "object",
+            "properties": {
+              "name": {
+                "type": "string",
                 "const": "thread_model"
               },
               "data": {
@@ -9577,6 +9689,21 @@
           "current": {
             "type": "string"
           },
+          "folders": {
+            "type": [
+              "array",
+              "null"
+            ],
+            "items": {
+              "$ref": "#/$defs/ThreadFolderView"
+            }
+          },
+          "manual_order": {
+            "type": [
+              "boolean",
+              "null"
+            ]
+          },
           "invalidated": {
             "anyOf": [
               {
@@ -9651,6 +9778,20 @@
               "boolean",
               "null"
             ]
+          },
+          "folder": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "position": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "uint64",
+            "minimum": 0
           },
           "home": {
             "type": "boolean"
@@ -9736,6 +9877,23 @@
           "turns"
         ]
       },
+      "ThreadFolderView": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "by_activity": {
+            "type": [
+              "boolean",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "name"
+        ]
+      },
       "CacheInvalidation": {
         "type": "object",
         "properties": {
@@ -9805,6 +9963,21 @@
           },
           "current": {
             "type": "string"
+          },
+          "folders": {
+            "type": [
+              "array",
+              "null"
+            ],
+            "items": {
+              "$ref": "#/$defs/ThreadFolderView"
+            }
+          },
+          "manual_order": {
+            "type": [
+              "boolean",
+              "null"
+            ]
           },
           "invalidated": {
             "anyOf": [
@@ -11359,6 +11532,118 @@
             "properties": {
               "name": {
                 "type": "string",
+                "const": "thread_move"
+              },
+              "data": {
+                "$ref": "#/$defs/ThreadListing"
+              }
+            },
+            "required": [
+              "name",
+              "data"
+            ]
+          },
+          {
+            "type": "object",
+            "properties": {
+              "name": {
+                "type": "string",
+                "const": "thread_sort"
+              },
+              "data": {
+                "$ref": "#/$defs/ThreadListing"
+              }
+            },
+            "required": [
+              "name",
+              "data"
+            ]
+          },
+          {
+            "type": "object",
+            "properties": {
+              "name": {
+                "type": "string",
+                "const": "thread_folder_create"
+              },
+              "data": {
+                "$ref": "#/$defs/ThreadListing"
+              }
+            },
+            "required": [
+              "name",
+              "data"
+            ]
+          },
+          {
+            "type": "object",
+            "properties": {
+              "name": {
+                "type": "string",
+                "const": "thread_folder_rename"
+              },
+              "data": {
+                "$ref": "#/$defs/ThreadListing"
+              }
+            },
+            "required": [
+              "name",
+              "data"
+            ]
+          },
+          {
+            "type": "object",
+            "properties": {
+              "name": {
+                "type": "string",
+                "const": "thread_folder_delete"
+              },
+              "data": {
+                "$ref": "#/$defs/ThreadListing"
+              }
+            },
+            "required": [
+              "name",
+              "data"
+            ]
+          },
+          {
+            "type": "object",
+            "properties": {
+              "name": {
+                "type": "string",
+                "const": "thread_folder_move"
+              },
+              "data": {
+                "$ref": "#/$defs/ThreadListing"
+              }
+            },
+            "required": [
+              "name",
+              "data"
+            ]
+          },
+          {
+            "type": "object",
+            "properties": {
+              "name": {
+                "type": "string",
+                "const": "thread_folder_sort"
+              },
+              "data": {
+                "$ref": "#/$defs/ThreadListing"
+              }
+            },
+            "required": [
+              "name",
+              "data"
+            ]
+          },
+          {
+            "type": "object",
+            "properties": {
+              "name": {
+                "type": "string",
                 "const": "thread_model"
               },
               "data": {
@@ -19086,6 +19371,21 @@
           "current": {
             "type": "string"
           },
+          "folders": {
+            "type": [
+              "array",
+              "null"
+            ],
+            "items": {
+              "$ref": "#/$defs/ThreadFolderView"
+            }
+          },
+          "manual_order": {
+            "type": [
+              "boolean",
+              "null"
+            ]
+          },
           "invalidated": {
             "anyOf": [
               {
@@ -19160,6 +19460,20 @@
               "boolean",
               "null"
             ]
+          },
+          "folder": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "position": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "uint64",
+            "minimum": 0
           },
           "home": {
             "type": "boolean"
@@ -19245,6 +19559,23 @@
           "turns"
         ]
       },
+      "ThreadFolderView": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "by_activity": {
+            "type": [
+              "boolean",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "name"
+        ]
+      },
       "CacheInvalidation": {
         "type": "object",
         "properties": {
@@ -19314,6 +19645,21 @@
           },
           "current": {
             "type": "string"
+          },
+          "folders": {
+            "type": [
+              "array",
+              "null"
+            ],
+            "items": {
+              "$ref": "#/$defs/ThreadFolderView"
+            }
+          },
+          "manual_order": {
+            "type": [
+              "boolean",
+              "null"
+            ]
           },
           "invalidated": {
             "anyOf": [

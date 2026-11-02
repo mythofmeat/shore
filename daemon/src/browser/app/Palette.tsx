@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import type { WorkspaceSnapshot } from "../workspace.ts";
 import { Dialog } from "../ui/controls.tsx";
 import { Icon, type IconName } from "../ui/icons.tsx";
+import { sortThreads } from "../sidebar/order.ts";
 import { threadLabel } from "../sidebar/Sidebar.tsx";
 import { openConversationDialog, openEffortMenu, openThreadDialog, requestConfigSearch } from "./intents.ts";
 import { navigate, SETTINGS_PAGES } from "./route.ts";
@@ -38,7 +39,7 @@ export function Palette({ state, close, newThread, newCharacter, initialScope = 
         label: { guidance: "Regenerate with guidance", system: "Add system message", compact: "Compact context", clear: "Clear context", gallery: "Images", model: "Choose a model" }[name],
       })),
       { id: "effort", label: "Change reasoning effort", icon: "chat" as const, group: "Thread", run: run(() => { navigate({ view: "chat" }); requestAnimationFrame(openEffortMenu); }) },
-      ...state.threads.map((thread) => ({ id: `thread:${thread.id}`, label: `Open ${threadLabel(thread)}`, detail: state.character ?? "", icon: "chat" as const, group: "Threads", run: run(() => { navigate({ view: "chat" }); perform(() => workspace.openThread(thread.id)); }) })),
+      ...sortThreads(state.threads, state.folders).map((thread) => ({ id: `thread:${thread.id}`, label: `Open ${threadLabel(thread)}`, detail: state.character ?? "", icon: "chat" as const, group: "Threads", run: run(() => { navigate({ view: "chat" }); perform(() => workspace.openThread(thread.id)); }) })),
     ];
     return [
       ...conversation,
@@ -46,7 +47,7 @@ export function Palette({ state, close, newThread, newCharacter, initialScope = 
       { id: "new-character", label: "New character", icon: "plus", group: "Characters", run: run(newCharacter) },
       ...SETTINGS_PAGES.map((page) => ({ id: `settings:${page.id}`, label: page.label, detail: `Settings · ${page.group}`, icon: "settings" as const, group: "Settings", run: run(() => navigate({ view: "settings", page: page.id })) })),
     ];
-  }, [scope, keys, state.characters, state.threads, state.character, state.thread, close, newThread, newCharacter]);
+  }, [scope, keys, state.characters, state.threads, state.folders, state.character, state.thread, close, newThread, newCharacter]);
   const visible = paletteMatches(commands, query).map((index) => commands[index]).filter((item): item is Command => item !== undefined).slice(0, 60);
   const current = Math.min(active, Math.max(visible.length - 1, 0));
   useEffect(() => { list.current?.querySelector(`[data-index="${String(current)}"]`)?.scrollIntoView({ block: "nearest" }); }, [current]);

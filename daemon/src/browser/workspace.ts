@@ -12,6 +12,8 @@ import type { ConversationPage } from "../protocol/ConversationPage.ts";
 import type { SegmentSummary } from "../protocol/SegmentSummary.ts";
 import type { ServerMessage } from "../protocol/ServerMessage.ts";
 import type { ThreadUnread } from "../protocol/ThreadUnread.ts";
+import type { ThreadFolderView } from "../protocol/ThreadFolderView.ts";
+import type { ThreadListing } from "../protocol/ThreadListing.ts";
 import type { ThreadView } from "../protocol/ThreadView.ts";
 import { BrowserConnection, type ConnectionUpdate } from "./connection.ts";
 import { OperationClient } from "./operations.ts";
@@ -35,7 +37,7 @@ export interface WorkspaceSnapshot {
   messages: Message[]; metadata: Record<string, StreamMetadata>; streams: LiveTurn[]; media: LiveImage[]; mediaLimited: boolean; activity: Activity[];
   config: unknown; error: string; status: string; detail: string;
   character: string | null; thread: string | null; previousSegment: SegmentSummary | null; segmentView: SegmentView | null; uncertain: Extract<ConnectionUpdate, { kind: "uncertain" }>[];
-  opening: OpeningTarget | null;
+  opening: OpeningTarget | null; folders: ThreadFolderView[]; manualOrder: boolean;
 }
 
 export interface OpeningTarget { character: string | null; thread: string | null }
@@ -94,7 +96,7 @@ export class Workspace {
   #loadingEarlier = false;
   #unreadSeq = 0;
   #unread = new Map<string, { seq: number; update: ThreadUnread }>();
-  #state: WorkspaceSnapshot = { characters: [], threads: [], operations: [], requests: [], messages: [], metadata: {}, streams: [], media: [], mediaLimited: false, activity: [], config: {}, error: "", status: "idle", detail: "", character: null, thread: null, previousSegment: null, segmentView: null, uncertain: [], opening: null };
+  #state: WorkspaceSnapshot = { characters: [], threads: [], operations: [], requests: [], messages: [], metadata: {}, streams: [], media: [], mediaLimited: false, activity: [], config: {}, error: "", status: "idle", detail: "", character: null, thread: null, previousSegment: null, segmentView: null, uncertain: [], opening: null, folders: [], manualOrder: false };
   constructor(readonly connection: BrowserConnection, frame: FrameScheduler = (callback) => { callback(); }) {
     this.#frame = frame;
     this.actions = new OperationClient(connection);
@@ -177,11 +179,21 @@ export class Workspace {
     const generation = ++this.#threadListing;
     const since = this.#unreadSeq;
     try {
-      if (this.#state.character === null) { this.#patch({ threads: [] }); return; }
+      if (this.#state.character === null) { this.#patch({ threads: [], folders: [], manualOrder: false }); return; }
       const listing = await this.actions.run("list_threads", {});
       if (generation !== this.#threadListing) return;
-      this.#patch({ threads: this.#laterUnread(listing.threads, since) });
+      this.#applyListing(listing, since);
     } catch (error) { if (generation === this.#threadListing && this.connection.status === "ready") this.report(error); }
+  }
+  #applyListing(listing: ThreadListing, since: number): void {
+    this.#patch({ threads: this.#laterUnread(listing.threads, since), folders: listing.folders ?? [], manualOrder: listing.manual_order === true });
+  }
+  applyThreadListing(listing: ThreadListing): void {
+    this.#threadListing += 1;
+    this.#applyListing(listing, this.#unreadSeq);
+  }
+  noteThreads(threads: ThreadView[]): void {
+    this.#patch({ threads });
   }
   noteThreadRead(id: string): void {
     this.#patch({ threads: this.#state.threads.map((thread) => thread.id === id ? { ...thread, unread: 0 } : thread) });
@@ -269,7 +281,7 @@ export class Workspace {
     if (update.kind === "status") {
       if (update.status !== "ready") { this.#navigation += 1; this.#threadListing += 1; }
       if (update.status === "signed_out") this.#segmentEpoch += 1;
-      this.#patch({ status: update.status, detail: update.detail, streams: update.status === "ready" ? this.#state.streams : [], ...(update.status === "signed_out" ? { error: "", messages: [], metadata: {}, config: {}, media: [], mediaLimited: false, activity: [], operations: [], requests: [], threads: [], characters: [], uncertain: [], previousSegment: null, segmentView: null, opening: null } : {}) });
+      this.#patch({ status: update.status, detail: update.detail, streams: update.status === "ready" ? this.#state.streams : [], ...(update.status === "signed_out" ? { error: "", messages: [], metadata: {}, config: {}, media: [], mediaLimited: false, activity: [], operations: [], requests: [], threads: [], characters: [], uncertain: [], previousSegment: null, segmentView: null, opening: null, folders: [], manualOrder: false } : {}) });
       if (update.status === "ready") void this.refreshNavigation();
       return;
     }

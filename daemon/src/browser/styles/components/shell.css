@@ -158,9 +158,56 @@
   -webkit-touch-callout: none;
 }
 
-.thread-row .sidebar-item.thread {
+.thread-row .sidebar-item {
   flex: 1;
   min-width: 0;
+  cursor: pointer;
+}
+
+.thread-row .sidebar-item[aria-disabled="true"] {
+  cursor: default;
+}
+
+.thread-row[draggable="true"]:active {
+  cursor: grabbing;
+}
+
+.thread-row.drop-before::before,
+.thread-row.drop-after::after {
+  content: "";
+  position: absolute;
+  z-index: 1;
+  left: 40px;
+  right: 4px;
+  height: 2px;
+  border-radius: 1px;
+  background: var(--accent);
+  pointer-events: none;
+}
+
+.thread-row.drop-before::before {
+  top: -1px;
+}
+
+.thread-row.drop-after::after {
+  bottom: -1px;
+}
+
+.thread-row.drop-into .sidebar-item {
+  outline: 2px solid var(--accent);
+  outline-offset: -2px;
+  background: var(--selected);
+}
+
+.sidebar-item.thread.folder {
+  padding-left: 48px;
+  color: var(--text-3);
+  font-size: var(--text-sm);
+  font-weight: 600;
+}
+
+.thread-folder .thread-row:not(.folder-row) .sidebar-item.thread {
+  padding-left: 62px;
 }
 
 .thread-more {

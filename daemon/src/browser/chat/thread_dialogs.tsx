@@ -4,7 +4,9 @@ import type { WorkspaceSnapshot } from "../workspace.ts";
 import { workspace } from "../app/state.ts";
 import { threadFileList } from "../sidebar/dialogs.tsx";
 import { threadLabel } from "../sidebar/Sidebar.tsx";
-import type { ThreadDialogRequest } from "../app/intents.ts";
+import type { FolderDialogRequest, ThreadDialogRequest } from "../app/intents.ts";
+import { threadSections } from "../sidebar/order.ts";
+import { moveThreadTo } from "./actions.ts";
 import { Form, useSubmit } from "./dialogs.tsx";
 import { ModelPicker, shortModel } from "./models.tsx";
 
@@ -77,6 +79,47 @@ function ArchiveDialog({ state, thread, close }: { state: WorkspaceSnapshot; thr
   </Form>;
 }
 
+function MoveToFolderDialog({ state, thread, close }: { state: WorkspaceSnapshot; thread: ThreadView; close: () => void }) {
+  const { busy, error, run } = useSubmit(close);
+  const [choice, setChoice] = useState(thread.folder ?? "");
+  const [name, setName] = useState("");
+  const fresh = choice === NEW_FOLDER;
+  const firstLoose = threadSections(state.threads, state.folders).loose.find((item) => item.id !== thread.id)?.id;
+  return <Form title={`Move “${threadLabel(thread)}”`} close={close} busy={busy} error={error} action="Move" disabled={fresh && name.trim() === ""} submit={() => run(async () => {
+    if (fresh) workspace.applyThreadListing(await workspace.actions.run("thread_folder_create", { name: name.trim() }));
+    const folder = fresh ? name.trim() : choice;
+    await moveThreadTo(thread.id, { folder, ...(folder === "" && firstLoose !== undefined ? { before: firstLoose } : {}) });
+    return undefined;
+  })}>
+    <label className="field"><span>Folder</span><select className="select" data-autofocus value={choice} onChange={(event) => setChoice(event.target.value)}>
+      <option value="">No folder</option>
+      {state.folders.map((folder) => <option key={folder.name} value={folder.name}>{folder.name}</option>)}
+      <option value={NEW_FOLDER}>New folder…</option>
+    </select></label>
+    {fresh ? <label className="field"><span>New folder name</span><input className="input" value={name} onChange={(event) => setName(event.target.value)} /></label> : null}
+  </Form>;
+}
+
+const NEW_FOLDER = "\u0000new";
+
+export function FolderDialogs({ request, close }: { request: FolderDialogRequest; close: () => void }) {
+  const { busy, error, run } = useSubmit(close);
+  const [name, setName] = useState(request.kind === "rename" ? request.folder : "");
+  const apply = async (work: () => ReturnType<typeof workspace.actions.run<"thread_folder_create">>) => { workspace.applyThreadListing(await work()); return undefined; };
+  switch (request.kind) {
+    case "new": return <Form title="New folder" close={close} busy={busy} error={error} action="Create" disabled={name.trim() === ""} submit={() => run(() => apply(() => workspace.actions.run("thread_folder_create", { name: name.trim() })))}>
+      <label className="field"><span>Name</span><input className="input" data-autofocus value={name} onChange={(event) => setName(event.target.value)} /></label>
+      <p className="form-hint">Drag threads onto the folder, or use Move to folder… in a thread’s menu.</p>
+    </Form>;
+    case "rename": return <Form title={`Rename “${request.folder}”`} close={close} busy={busy} error={error} action="Rename" disabled={name.trim() === ""} submit={() => run(() => apply(() => workspace.actions.run("thread_folder_rename", { name: request.folder, to: name.trim() })))}>
+      <label className="field"><span>Name</span><input className="input" data-autofocus value={name} onChange={(event) => setName(event.target.value)} /></label>
+    </Form>;
+    case "delete": return <Form title={`Delete “${request.folder}”?`} close={close} busy={busy} error={error} action="Delete" danger submit={() => run(() => apply(() => workspace.actions.run("thread_folder_delete", { name: request.folder })))}>
+      <p className="form-text">Its threads go back to the list outside folders. None of them is archived.</p>
+    </Form>;
+  }
+}
+
 export function ThreadDialogs({ state, request, close }: { state: WorkspaceSnapshot; request: ThreadDialogRequest; close: () => void }) {
   const thread = state.threads.find((item) => item.id === request.thread);
   if (thread === undefined) return null;
@@ -84,5 +127,6 @@ export function ThreadDialogs({ state, request, close }: { state: WorkspaceSnaps
     case "settings": return <ThreadSettingsDialog state={state} thread={thread} close={close} />;
     case "fork": return <ForkDialog thread={thread} close={close} />;
     case "archive": return <ArchiveDialog state={state} thread={thread} close={close} />;
+    case "move": return <MoveToFolderDialog state={state} thread={thread} close={close} />;
   }
 }

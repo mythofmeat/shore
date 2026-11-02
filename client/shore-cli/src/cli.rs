@@ -1436,6 +1436,34 @@ pub(crate) enum ThreadCommand {
         mode: String,
     },
 
+    /// Move a thread to another place in the list, or into or out of a folder. The home and heartbeat threads stay at the top
+    Move {
+        /// Thread id
+        name: String,
+
+        /// Folder to put it in
+        #[arg(long, conflicts_with = "no_folder")]
+        folder: Option<String>,
+
+        /// Take it out of its folder
+        #[arg(long)]
+        no_folder: bool,
+
+        /// Thread to place it above; omit for the end of the list
+        #[arg(long)]
+        before: Option<String>,
+    },
+
+    /// Choose how threads outside folders are listed: by last activity, or in the order you put them
+    Sort {
+        #[arg(value_parser = ["activity", "manual"])]
+        mode: String,
+    },
+
+    /// Named groups of threads
+    #[command(subcommand)]
+    Folder(ThreadFolderCommand),
+
     /// Pin a thread to its own chat model, or clear the pin to inherit the character's
     #[command(hide = true)]
     Model {
@@ -1477,6 +1505,49 @@ pub(crate) enum ThreadCommand {
         /// Omit to copy the complete active context
         #[arg(long)]
         turns: Option<u32>,
+    },
+}
+
+#[derive(Subcommand, Debug)]
+pub(crate) enum ThreadFolderCommand {
+    /// Make a folder. It starts empty, at the end of the list
+    New {
+        /// Folder name
+        name: String,
+    },
+
+    /// Rename a folder
+    Rename {
+        /// Folder name
+        name: String,
+
+        /// New name
+        to: String,
+    },
+
+    /// Delete a folder. Its threads go back to the list outside folders; none is archived
+    Delete {
+        /// Folder name
+        name: String,
+    },
+
+    /// Move a folder to another place among the folders
+    Move {
+        /// Folder name
+        name: String,
+
+        /// Folder to place it above; omit for the end
+        #[arg(long)]
+        before: Option<String>,
+    },
+
+    /// Choose how a folder lists its threads: by last activity, or in the order you put them
+    Sort {
+        /// Folder name
+        name: String,
+
+        #[arg(value_parser = ["activity", "manual"])]
+        mode: String,
     },
 }
 
@@ -3052,6 +3123,44 @@ pub(crate) fn to_swp_command(
                 "thread_compaction",
                 json!({ "name": name, "compaction": mode == "on" }),
             )),
+            ThreadCommand::Move {
+                name,
+                folder,
+                no_folder,
+                before,
+            } => {
+                let target = if *no_folder {
+                    Some("")
+                } else {
+                    folder.as_deref()
+                };
+                Some((
+                    "thread_move",
+                    json!({ "name": name, "folder": target, "before": before }),
+                ))
+            }
+            ThreadCommand::Sort { mode } => {
+                Some(("thread_sort", json!({ "by_activity": mode == "activity" })))
+            }
+            ThreadCommand::Folder(folder) => Some(match folder {
+                ThreadFolderCommand::New { name } => {
+                    ("thread_folder_create", json!({ "name": name }))
+                }
+                ThreadFolderCommand::Rename { name, to } => {
+                    ("thread_folder_rename", json!({ "name": name, "to": to }))
+                }
+                ThreadFolderCommand::Delete { name } => {
+                    ("thread_folder_delete", json!({ "name": name }))
+                }
+                ThreadFolderCommand::Move { name, before } => (
+                    "thread_folder_move",
+                    json!({ "name": name, "before": before }),
+                ),
+                ThreadFolderCommand::Sort { name, mode } => (
+                    "thread_folder_sort",
+                    json!({ "name": name, "by_activity": mode == "activity" }),
+                ),
+            }),
             ThreadCommand::Model { name, model } => {
                 Some(("thread_model", json!({ "name": name, "model": model })))
             }
@@ -3823,6 +3932,43 @@ mod tests {
                 Some((
                     "thread_compaction",
                     json!({"name": "lighthouse", "compaction": true}),
+                )),
+            ),
+            (
+                &[
+                    "thread",
+                    "move",
+                    "lighthouse",
+                    "--folder",
+                    "Stories",
+                    "--before",
+                    "tide",
+                ],
+                Some((
+                    "thread_move",
+                    json!({"name": "lighthouse", "folder": "Stories", "before": "tide"}),
+                )),
+            ),
+            (
+                &["thread", "move", "lighthouse", "--no-folder"],
+                Some((
+                    "thread_move",
+                    json!({"name": "lighthouse", "folder": "", "before": null}),
+                )),
+            ),
+            (
+                &["thread", "sort", "activity"],
+                Some(("thread_sort", json!({"by_activity": true}))),
+            ),
+            (
+                &["thread", "folder", "new", "Stories"],
+                Some(("thread_folder_create", json!({"name": "Stories"}))),
+            ),
+            (
+                &["thread", "folder", "sort", "Stories", "manual"],
+                Some((
+                    "thread_folder_sort",
+                    json!({"name": "Stories", "by_activity": false}),
                 )),
             ),
             (

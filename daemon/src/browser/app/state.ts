@@ -86,6 +86,49 @@ export function enterSends(): boolean {
 
 export const VIM_MODE_KEY = "shore.vim-mode";
 
+const COLLAPSED_FOLDERS_KEY = "shore.folders.collapsed";
+
+class CollapsedFolders {
+  readonly #listeners = new Set<() => void>();
+  #raw: string | null = null;
+  #all: Record<string, string[]> = {};
+  #sets = new Map<string, ReadonlySet<string>>();
+  constructor(readonly storage: Pick<Storage, "getItem" | "setItem">) { this.reload(); }
+  subscribe = (listener: () => void): (() => void) => { this.#listeners.add(listener); return () => { this.#listeners.delete(listener); }; };
+  reload(): void {
+    const raw = this.storage.getItem(COLLAPSED_FOLDERS_KEY);
+    if (raw === this.#raw) return;
+    this.#raw = raw;
+    try { const parsed: unknown = JSON.parse(raw ?? "{}"); this.#all = typeof parsed === "object" && parsed !== null ? parsed as Record<string, string[]> : {}; } catch { this.#all = {}; }
+    this.#sets.clear();
+    for (const listener of this.#listeners) listener();
+  }
+  of = (character: string | null): ReadonlySet<string> => {
+    const key = character ?? "";
+    const known = this.#sets.get(key);
+    if (known !== undefined) return known;
+    const set = new Set(Array.isArray(this.#all[key]) ? this.#all[key] : []);
+    this.#sets.set(key, set);
+    return set;
+  };
+  toggle(character: string, folder: string): void {
+    const next = new Set(this.of(character));
+    if (!next.delete(folder)) next.add(folder);
+    this.#all = { ...this.#all, [character]: [...next] };
+    this.#raw = JSON.stringify(this.#all);
+    try { this.storage.setItem(COLLAPSED_FOLDERS_KEY, this.#raw); } catch { void 0; }
+    this.#sets.set(character, next);
+    for (const listener of this.#listeners) listener();
+  }
+}
+
+export const collapsedFolders = new CollapsedFolders(browserStorage());
+addEventListener("storage", () => { collapsedFolders.reload(); });
+
+export function useCollapsedFolders(character: string | null): ReadonlySet<string> {
+  return useSyncExternalStore(collapsedFolders.subscribe, () => collapsedFolders.of(character));
+}
+
 export function errorText(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
 }

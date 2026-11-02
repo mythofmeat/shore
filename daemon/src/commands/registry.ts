@@ -20,7 +20,7 @@ import { defineOperation, discoverOperations, type OperationPresentation, type O
 import type { CommandDeps, CommandSession } from "./dispatch.ts";
 import { internalError, invalidRequest } from "./errors.ts";
 import { characterInfo, createCharacterAs, listCharacters, switchCharacter } from "./navigation.ts";
-import { archiveThread, forkThread, listThreads, markRead, newThread, switchThread, threadCompaction, threadFiles, threadHome, threadLabel, threadLock, threadModel, threadPurpose } from "./threads.ts";
+import { archiveThread, forkThread, listThreads, markRead, newThread, switchThread, threadCompaction, threadFiles, threadFolderCreate, threadFolderDelete, threadFolderMove, threadFolderRename, threadFolderSort, threadHome, threadLabel, threadLock, threadModel, threadMove, threadPurpose, threadSort } from "./threads.ts";
 import { archiveWithSignal, threadContext, threadListingContext } from "./thread_context.ts";
 import { alt, deleteMessages, edit, get, historyPage, injectSystem, listAlternatives, log } from "./conversation.ts";
 import { workspaceTurnsFor, type WorkspaceTurns } from "../tools/workspace_turns.ts";
@@ -109,6 +109,7 @@ const threadPresentation = {
   category: "Threads", scope: "character", prerequisites: ["threads"], effects: ["read"], confirmation: "none",
 } as const;
 const threadName = { label: "Thread", choices: "threads" } as const;
+const folderName = { label: "Folder" } as const;
 const conversationPresentation = {
   category: "Conversation", scope: "character", prerequisites: [], effects: ["read"], confirmation: "none",
 } as const;
@@ -444,6 +445,29 @@ export const commandOperations: OperationRegistry<CommandOperationContext> = {
     ...threadPresentation, label: "Set whether a thread compacts", effects: ["history_write"],
     fields: { name: threadName, compaction: { label: "Compact", hint: "When the thread gets long, compact it into memory; off trims its oldest turns into the archive" } },
   }, async (context, args) => threadCompaction(await threadListingContext(context.deps, engineOf(context), context.session), args)),
+  thread_move: register("thread_move", {
+    ...threadPresentation, label: "Move a thread in the list", effects: ["history_write"],
+    fields: { name: threadName, folder: { label: "Folder", hint: "Folder to put it in; empty takes it out of its folder; omit to stay" }, before: { label: "Place above", choices: "threads", hint: "Thread to place it above; omit for the end of the list" } },
+  }, async (context, args) => threadMove(await threadListingContext(context.deps, engineOf(context), context.session), args)),
+  thread_sort: register("thread_sort", {
+    ...threadPresentation, label: "Choose how threads are listed", effects: ["history_write"],
+    fields: { by_activity: { label: "By activity", hint: "List threads outside folders by last activity; off keeps the order you put them in" } },
+  }, async (context, args) => threadSort(await threadListingContext(context.deps, engineOf(context), context.session), args)),
+  thread_folder_create: register("thread_folder_create", {
+    ...threadPresentation, label: "Make a thread folder", effects: ["history_write"], fields: { name: folderName },
+  }, async (context, args) => threadFolderCreate(await threadListingContext(context.deps, engineOf(context), context.session), args)),
+  thread_folder_rename: register("thread_folder_rename", {
+    ...threadPresentation, label: "Rename a thread folder", effects: ["history_write"], fields: { name: folderName, to: { label: "New name" } },
+  }, async (context, args) => threadFolderRename(await threadListingContext(context.deps, engineOf(context), context.session), args)),
+  thread_folder_delete: register("thread_folder_delete", {
+    ...threadPresentation, label: "Delete a thread folder", effects: ["history_write"], fields: { name: folderName },
+  }, async (context, args) => threadFolderDelete(await threadListingContext(context.deps, engineOf(context), context.session), args)),
+  thread_folder_move: register("thread_folder_move", {
+    ...threadPresentation, label: "Move a thread folder", effects: ["history_write"], fields: { name: folderName, before: { label: "Place above", hint: "Folder to place it above; omit for the end" } },
+  }, async (context, args) => threadFolderMove(await threadListingContext(context.deps, engineOf(context), context.session), args)),
+  thread_folder_sort: register("thread_folder_sort", {
+    ...threadPresentation, label: "Choose how a thread folder is listed", effects: ["history_write"], fields: { name: folderName, by_activity: { label: "By activity", hint: "List this folder's threads by last activity; off keeps the order you put them in" } },
+  }, async (context, args) => threadFolderSort(await threadListingContext(context.deps, engineOf(context), context.session), args)),
   thread_model: register("thread_model", {
     ...threadPresentation, label: "Pin thread model", effects: ["model_selection"],
     fields: { name: threadName, model: { label: "Chat model", choices: "models", hint: "Leave empty to inherit the character default" } },
@@ -493,6 +517,7 @@ export function runRegisteredOperation<N extends OperationName>(
 
 const THREAD_CHANGES: ReadonlySet<string> = new Set([
   "create_thread", "fork_thread", "thread_home", "thread_label", "thread_purpose", "thread_files", "thread_lock", "thread_compaction", "thread_model",
+  "thread_move", "thread_sort", "thread_folder_create", "thread_folder_rename", "thread_folder_delete", "thread_folder_move", "thread_folder_sort",
 ]);
 
 async function announced<T>(context: CommandOperationContext, args: unknown, result: T | Promise<T>): Promise<T> {

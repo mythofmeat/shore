@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test";
-import { MAX_THREAD_ID_LENGTH, assertThreadId, isValidThreadId, createThread, ensureHeartbeatThread, ensureThreads, heartbeatThread, markThreadRead, readThreadsIndex, setThreadCompaction, threadActivityNow } from "../src/engine/threads.ts";
+import { createFolder, deleteFolder, moveFolder, moveThread, placedThreads, renameFolder, setFolderSort } from "../src/engine/thread_layout.ts";
+import { MAX_THREAD_ID_LENGTH, archiveThread, assertThreadId, isValidThreadId, createThread, ensureHeartbeatThread, ensureThreads, heartbeatThread, markThreadRead, readThreadsIndex, setThreadCompaction, threadActivityNow, writeThreadsIndex, type ThreadsIndex } from "../src/engine/threads.ts";
 import { readFileSync, readFile } from "./support/stored_files.ts";
 import { mkdirSync, mkdtempSync, writeFileSync, existsSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -342,5 +343,87 @@ describe("thread compaction setting", () => {
     const heartbeat = heartbeatThread(index) ?? "";
     expect(await outcomeOf(setThreadCompaction(data, "ada", heartbeat, true, now))).toThrow("never compacts");
     expect(await compacts(heartbeat)).toBe(false);
+  });
+});
+
+describe("thread order and folders", () => {
+  const now = "2026-11-03T00:00:00.000Z";
+
+  function indexOf(...ids: string[]): ThreadsIndex {
+    return {
+      version: 1,
+      home: "main",
+      heartbeat: "beats",
+      threads: ["main", "beats", ...ids].map((id, at) => ({ id, created_at: `2026-11-0${String(at + 1)}T00:00:00.000Z`, compaction: false })),
+    };
+  }
+  const noActivity = (): undefined => undefined;
+  const shown = (index: ThreadsIndex, activity: (id: string) => string | undefined = noActivity): string[] =>
+    placedThreads(index, activity).map(({ record, folder }) => folder === undefined ? record.id : `${folder}/${record.id}`);
+
+  test("with nothing moved the list stays by activity, home and heartbeat on top", () => {
+    const active: Record<string, string> = { a: "2026-11-20T00:00:00.000Z", c: "2026-11-21T00:00:00.000Z" };
+    expect(shown(indexOf("a", "b", "c"), (id) => active[id])).toEqual(["main", "beats", "c", "a", "b"]);
+  });
+
+  test("the first move keeps the order on screen, then the list stays put when threads get new messages", () => {
+    const moved = moveThread(indexOf("a", "b", "c"), "ada", "a", { before: "b" }, noActivity);
+    expect(shown(moved)).toEqual(["main", "beats", "c", "a", "b"]);
+    expect(shown(moved, (id) => id === "b" ? "2026-12-01T00:00:00.000Z" : undefined)).toEqual(["main", "beats", "c", "a", "b"]);
+  });
+
+  test("a new thread lands at the top of the list, outside any folder, whoever made it", () => {
+    const foldered = moveThread(createFolder(moveThread(indexOf("a", "b"), "ada", "b", { before: "a" }, noActivity), "Stories"), "ada", "a", { folder: "Stories" }, noActivity);
+    const fresh: ThreadsIndex = { ...foldered, threads: [...foldered.threads, { id: "new", created_at: "2026-12-01T00:00:00.000Z", compaction: false, created_by: "character" }] };
+    expect(shown(fresh)).toEqual(["main", "beats", "new", "b", "Stories/a"]);
+  });
+
+  test("home and the heartbeat thread stay at the top and can't move or go in a folder", () => {
+    const foldered = createFolder(indexOf("a"), "Stories");
+    expect(() => moveThread(foldered, "ada", "main", { before: "a" }, noActivity)).toThrow("stay at the top");
+    expect(() => moveThread(foldered, "ada", "beats", { folder: "Stories" }, noActivity)).toThrow("stay at the top");
+    expect(() => moveThread(foldered, "ada", "a", { folder: "Nowhere" }, noActivity)).toThrow("no thread folder");
+  });
+
+  test("a thread that becomes home leaves its folder's list on screen, and comes back if it stops being home", () => {
+    const foldered = moveThread(createFolder(indexOf("a"), "Stories"), "ada", "a", { folder: "Stories" }, noActivity);
+    expect(shown({ ...foldered, home: "a" })).toEqual(["a", "beats", "main"]);
+    expect(shown(foldered)).toEqual(["main", "beats", "Stories/a"]);
+  });
+
+  test("a folder can sort by activity, keeps its hand order for when that's turned off, and folders can be reordered", () => {
+    let index = createFolder(createFolder(indexOf("a", "b"), "One"), "Two");
+    index = moveThread(moveThread(index, "ada", "a", { folder: "One" }, noActivity), "ada", "b", { folder: "One" }, noActivity);
+    const active = (id: string): string | undefined => id === "b" ? "2026-12-01T00:00:00.000Z" : undefined;
+    expect(shown(index, active)).toEqual(["main", "beats", "One/a", "One/b"]);
+    const sorted = setFolderSort(index, "ada", "One", true);
+    expect(shown(sorted, active)).toEqual(["main", "beats", "One/b", "One/a"]);
+    expect(shown(setFolderSort(sorted, "ada", "One", false), active)).toEqual(["main", "beats", "One/a", "One/b"]);
+    expect(moveFolder(index, "ada", "Two", "One").folders?.map((folder) => folder.name)).toEqual(["Two", "One"]);
+    expect(moveFolder(index, "ada", "One", undefined).folders?.map((folder) => folder.name)).toEqual(["Two", "One"]);
+  });
+
+  test("folder names are unique and tidy, and deleting a folder puts its threads back without archiving any", () => {
+    const index = moveThread(createFolder(indexOf("a", "b"), " Stories "), "ada", "a", { folder: "Stories" }, noActivity);
+    expect(index.folders?.[0]?.name).toBe("Stories");
+    expect(() => createFolder(index, "stories")).toThrow("already");
+    expect(() => createFolder(index, "  ")).toThrow("needs a name");
+    expect(() => renameFolder(index, "ada", "Stories", "x".repeat(65))).toThrow("at most");
+    const renamed = renameFolder(index, "ada", "Stories", "Tales");
+    expect(shown(renamed)).toEqual(["main", "beats", "b", "Tales/a"]);
+    expect(shown(deleteFolder(renamed, "ada", "Tales"))).toEqual(["main", "beats", "b", "a"]);
+    expect(deleteFolder(renamed, "ada", "Tales").threads.map((thread) => thread.id)).toEqual(["main", "beats", "a", "b"]);
+  });
+
+  test("archiving a thread takes it out of its folder for good, and the empty folder stays until deleted", async () => {
+    const data = join(mkdtempSync(testTmp("shore-thread-folders-")), "data");
+    await createThread(data, "ada", "side", now);
+    const start = await readThreadsIndex(data, "ada");
+    if (start === undefined) throw new Error("no index");
+    await writeThreadsIndex(data, "ada", moveThread(createFolder(start, "Stories"), "ada", "side", { folder: "Stories" }, noActivity));
+    const archived = await archiveThread(data, "ada", "side");
+    expect(archived.folders).toEqual([{ name: "Stories", threads: [] }]);
+    const remade = await createThread(data, "ada", "side", now);
+    expect(shown(remade)).toEqual(["main", "side"]);
   });
 });

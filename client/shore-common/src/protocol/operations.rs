@@ -2642,6 +2642,39 @@ wire_types! {
     }
 
     #[serde(deny_unknown_fields)]
+    pub struct ThreadMoveArgs {
+        pub name: String,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        pub folder: Option<String>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        pub before: Option<String>,
+    }
+
+    #[serde(deny_unknown_fields)]
+    pub struct ThreadSortArgs {
+        pub by_activity: bool,
+    }
+
+    #[serde(deny_unknown_fields)]
+    pub struct ThreadFolderRenameArgs {
+        pub name: String,
+        pub to: String,
+    }
+
+    #[serde(deny_unknown_fields)]
+    pub struct ThreadFolderMoveArgs {
+        pub name: String,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        pub before: Option<String>,
+    }
+
+    #[serde(deny_unknown_fields)]
+    pub struct ThreadFolderSortArgs {
+        pub name: String,
+        pub by_activity: bool,
+    }
+
+    #[serde(deny_unknown_fields)]
     pub struct ThreadCompactionArgs {
         pub name: String,
         pub compaction: bool,
@@ -2758,6 +2791,12 @@ wire_types! {
         #[serde(default, skip_serializing_if = "Option::is_none")]
         #[ts(optional)]
         pub locked: Option<bool>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        #[ts(optional)]
+        pub folder: Option<String>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        #[ts(optional, type = "number")]
+        pub position: Option<u64>,
         pub home: bool,
         #[serde(default, skip_serializing_if = "Option::is_none")]
         #[ts(optional)]
@@ -2787,6 +2826,13 @@ wire_types! {
         pub last_active: Option<String>,
     }
 
+    pub struct ThreadFolderView {
+        pub name: String,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        #[ts(optional)]
+        pub by_activity: Option<bool>,
+    }
+
     pub struct ThreadListing {
         pub character: String,
         pub threads: Vec<ThreadView>,
@@ -2795,6 +2841,12 @@ wire_types! {
         #[ts(optional)]
         pub heartbeat: Option<String>,
         pub current: String,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        #[ts(optional)]
+        pub folders: Option<Vec<ThreadFolderView>>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        #[ts(optional)]
+        pub manual_order: Option<bool>,
         #[serde(default, skip_serializing_if = "Option::is_none")]
         #[ts(optional)]
         pub invalidated: Option<CacheInvalidation>,
@@ -2975,6 +3027,13 @@ operations! {
     SetThreadFiles: "thread_files" (ThreadFilesArgs) => ThreadListing,
     LockThread: "thread_lock" (ThreadLockArgs) => ThreadListing,
     SetThreadCompaction: "thread_compaction" (ThreadCompactionArgs) => ThreadListing,
+    MoveThread: "thread_move" (ThreadMoveArgs) => ThreadListing,
+    SortThreads: "thread_sort" (ThreadSortArgs) => ThreadListing,
+    CreateThreadFolder: "thread_folder_create" (NamedOperationArgs) => ThreadListing,
+    RenameThreadFolder: "thread_folder_rename" (ThreadFolderRenameArgs) => ThreadListing,
+    DeleteThreadFolder: "thread_folder_delete" (NamedOperationArgs) => ThreadListing,
+    MoveThreadFolder: "thread_folder_move" (ThreadFolderMoveArgs) => ThreadListing,
+    SortThreadFolder: "thread_folder_sort" (ThreadFolderSortArgs) => ThreadListing,
     PinThreadModel: "thread_model" (ThreadModelArgs) => ThreadListing,
     MarkThreadRead: "mark_thread_read" (MarkThreadReadArgs) => ThreadUnread,
 }

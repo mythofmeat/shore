@@ -4,6 +4,7 @@ import { workspaceNote } from "./workspace_note.ts";
 import type { ThreadView } from "../../protocol/ThreadView.ts";
 import { toasts } from "../ui/toast.tsx";
 import { conversation, errorText, streamReplies, workspace } from "../app/state.ts";
+import { moveInThreads } from "../sidebar/order.ts";
 import { swipeState } from "./transcript.ts";
 
 export async function swipe(message: Message, direction: "prev" | "next", last: boolean): Promise<void> {
@@ -37,6 +38,17 @@ export async function markRead(thread: Pick<ThreadView, "id">): Promise<void> {
   try {
     workspace.noteThreadRead(thread.id);
     await workspace.actions.run("mark_thread_read", { name: thread.id });
+  } catch (error) {
+    await workspace.refreshThreads();
+    toasts.show(errorText(error), "error");
+  }
+}
+
+export async function moveThreadTo(id: string, move: { folder?: string; before?: string }): Promise<void> {
+  const state = workspace.getSnapshot();
+  workspace.noteThreads(moveInThreads(state.threads, state.folders, id, move));
+  try {
+    workspace.applyThreadListing(await workspace.actions.run("thread_move", { name: id, ...move }));
   } catch (error) {
     await workspace.refreshThreads();
     toasts.show(errorText(error), "error");

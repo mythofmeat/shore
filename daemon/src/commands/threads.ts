@@ -6,8 +6,10 @@ import type { ThreadUnread } from "../protocol/ThreadUnread.ts";
 export type { ThreadListing, ThreadForkResult };
 import type { Args } from "./navigation.ts";
 import { busy, internalError, invalidRequest, notFound } from "./errors.ts";
+import { createFolder, deleteFolder, moveFolder, moveThread, placedThreads, renameFolder, setFolderSort, setThreadsSort, type PlacedThread } from "../engine/thread_layout.ts";
 import {
   heartbeatThread,
+  homeThread,
   ThreadError,
   type ArchiveThreadOptions,
   type NewThread,
@@ -87,6 +89,12 @@ export interface ThreadRegistry {
     compaction: boolean,
     signal?: AbortSignal,
   ): Promise<ThreadsIndex>;
+  threads?(character: string): ThreadsIndex | undefined;
+  changeThreadLayout(
+    character: string,
+    change: (index: ThreadsIndex) => ThreadsIndex,
+    signal?: AbortSignal,
+  ): Promise<ThreadsIndex>;
   forkThread(
     character: string,
     source: string,
@@ -112,10 +120,12 @@ function threadCommandError(e: unknown): unknown {
   return e.kind === "not_found" ? notFound(e.message) : invalidRequest(e.message);
 }
 
-function view(ctx: ThreadContext, record: ThreadRecord, home: string, heartbeat: string | undefined, current: string): ThreadView {
+function view(ctx: ThreadContext, { record, folder, position }: PlacedThread, home: string, heartbeat: string | undefined, current: string): ThreadView {
   const activity = ctx.activity?.get(record.id);
   return {
     ...record,
+    ...(folder === undefined ? {} : { folder }),
+    ...(position === undefined ? {} : { position }),
     home: record.id === home,
     ...(record.id === heartbeat ? { heartbeat: true } : {}),
     current: record.id === current,
@@ -125,17 +135,25 @@ function view(ctx: ThreadContext, record: ThreadRecord, home: string, heartbeat:
   };
 }
 
+function lastActivity(ctx: ThreadContext): (id: string) => string | undefined {
+  return (id) => ctx.activity?.get(id)?.last_active;
+}
+
 function listing(ctx: ThreadContext, index?: ThreadsIndex): ThreadListing {
-  const home = index?.home ?? ctx.registry.homeThread(ctx.character);
-  const heartbeat = index === undefined ? ctx.registry.heartbeatThread?.(ctx.character) : heartbeatThread(index);
-  const records = index?.threads ?? ctx.registry.listThreads(ctx.character);
+  const known = index ?? ctx.registry.threads?.(ctx.character);
+  const home = known === undefined ? ctx.registry.homeThread(ctx.character) : homeThread(known);
+  const heartbeat = known === undefined ? ctx.registry.heartbeatThread?.(ctx.character) : heartbeatThread(known);
+  const records = known?.threads ?? ctx.registry.listThreads(ctx.character);
   const current = records.some((t) => t.id === ctx.current) ? ctx.current : home;
+  const placed: readonly PlacedThread[] = known === undefined ? records.map((record) => ({ record })) : placedThreads(known, lastActivity(ctx));
   return {
     character: ctx.character,
-    threads: records.map((record) => view(ctx, record, home, heartbeat, current)),
+    threads: placed.map((item) => view(ctx, item, home, heartbeat, current)),
     home,
     ...(heartbeat === undefined ? {} : { heartbeat }),
     current,
+    ...(known?.folders === undefined || known.folders.length === 0 ? {} : { folders: known.folders.map((folder) => ({ name: folder.name, ...(folder.by_activity === true ? { by_activity: true } : {}) })) }),
+    ...(known?.order === undefined ? {} : { manual_order: true }),
   };
 }
 
@@ -248,6 +266,66 @@ export async function threadCompaction(ctx: ThreadContext, args: Args): Promise<
   } catch (e) {
     throw threadCommandError(e);
   }
+}
+
+async function changeLayout(ctx: ThreadContext, change: (index: ThreadsIndex) => ThreadsIndex): Promise<ThreadListing> {
+  try {
+    return listing(ctx, await ctx.registry.changeThreadLayout(ctx.character, change, ctx.signal));
+  } catch (e) {
+    throw threadCommandError(e);
+  }
+}
+
+function requiredText(args: Args, field: string): string {
+  const value = asStr(args[field]);
+  if (value === undefined) throw invalidRequest(`Missing required argument: ${field}`);
+  return value;
+}
+
+function requiredFlag(args: Args, field: string): boolean {
+  const value = args[field];
+  if (typeof value !== "boolean") throw invalidRequest(`${field} must be true or false`);
+  return value;
+}
+
+export async function threadMove(ctx: ThreadContext, args: Args): Promise<ThreadListing> {
+  const id = requiredId(args);
+  const folder = asStr(args["folder"]);
+  const before = asStr(args["before"]);
+  return await changeLayout(ctx, (index) => moveThread(index, ctx.character, id, { ...(folder === undefined ? {} : { folder }), ...(before === undefined ? {} : { before }) }, lastActivity(ctx)));
+}
+
+export async function threadSort(ctx: ThreadContext, args: Args): Promise<ThreadListing> {
+  const byActivity = requiredFlag(args, "by_activity");
+  return await changeLayout(ctx, (index) => setThreadsSort(index, byActivity, lastActivity(ctx)));
+}
+
+export async function threadFolderCreate(ctx: ThreadContext, args: Args): Promise<ThreadListing> {
+  const name = requiredId(args);
+  return await changeLayout(ctx, (index) => createFolder(index, name));
+}
+
+export async function threadFolderRename(ctx: ThreadContext, args: Args): Promise<ThreadListing> {
+  const name = requiredId(args);
+  const to = requiredText(args, "to");
+  return await changeLayout(ctx, (index) => renameFolder(index, ctx.character, name, to));
+}
+
+export async function threadFolderDelete(ctx: ThreadContext, args: Args): Promise<ThreadListing> {
+  const name = requiredId(args);
+  return await changeLayout(ctx, (index) => deleteFolder(index, ctx.character, name));
+}
+
+export async function threadFolderMove(ctx: ThreadContext, args: Args): Promise<ThreadListing> {
+  const name = requiredId(args);
+  const before = asStr(args["before"]);
+  return await changeLayout(ctx, (index) => moveFolder(index, ctx.character, name, before));
+}
+
+export async function threadFolderSort(ctx: ThreadContext, args: Args): Promise<ThreadListing> {
+  const name = requiredId(args);
+  const byActivity = requiredFlag(args, "by_activity");
+  return await changeLayout(ctx, (index) => setFolderSort(index, ctx.character, name, byActivity));
 }
 
 export async function threadModel(ctx: ThreadContext, args: Args): Promise<ThreadListing> {
