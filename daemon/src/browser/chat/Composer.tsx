@@ -7,7 +7,7 @@ import { browserDraft, forgetSending, handOverSending, type DraftContent } from 
 import { randomUUID } from "../platform.ts";
 import { checkAttachments, imageUpload } from "../request_forms.ts";
 import { MAX_ATTACHMENT_BYTES, MAX_ATTACHMENTS } from "../../swp/limits.ts";
-import { IconButton } from "../ui/controls.tsx";
+import { IconButton, whenNoDialogOpen } from "../ui/controls.tsx";
 import { Icon } from "../ui/icons.tsx";
 import { toasts } from "../ui/toast.tsx";
 import { conversation, enterSends, errorText, streamReplies, useConversationActive, VIM_MODE_KEY, workspace } from "../app/state.ts";
@@ -72,7 +72,10 @@ export function Composer({ state, character, mobile }: { state: WorkspaceSnapsho
     node.style.height = "auto";
     node.style.height = `${String(Math.min(node.scrollHeight, mobile ? 160 : 280))}px`;
   }, [draft.text, mobile]);
-  useEffect(() => { if (loaded && !mobile) area.current?.focus(); }, [loaded, mobile, key]);
+  useEffect(() => {
+    if (!loaded || mobile) return;
+    return whenNoDialogOpen(() => (vimInput.current ?? area.current)?.focus());
+  }, [loaded, mobile, key]);
   useEffect(() => {
     if (!vim || VimEditor !== undefined || vimFailed) return;
     let alive = true;

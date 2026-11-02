@@ -27,6 +27,15 @@ export async function createCharacter(page: Page, name: string): Promise<void> {
   await expect(page.locator(".topbar-name")).toHaveText(name);
 }
 
+export async function createConversation(page: Page, character: string, name: string): Promise<void> {
+  await page.getByRole("button", { name: "New conversation", exact: true }).click();
+  const dialog = page.getByRole("dialog", { name: `New conversation with ${character}` });
+  await dialog.getByLabel("Name").fill(name);
+  await dialog.getByRole("button", { name: "Create", exact: true }).click();
+  await expect(dialog).toBeHidden();
+  await expect(page.locator(".topbar-thread")).toHaveText(name);
+}
+
 export async function send(page: Page, text: string): Promise<void> {
   const box = page.getByLabel("Message", { exact: true });
   await box.fill(text);
