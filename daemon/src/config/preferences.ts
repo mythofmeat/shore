@@ -816,7 +816,7 @@ export function resolveBackgroundModel(
   return overlayForCharacter(config.dirs.data, character, base, task);
 }
 
-function pinnedModel(
+export function pinnedModel(
   config: LoadedConfigView,
   pinned: string,
   findEffective: FindEffectiveModel,

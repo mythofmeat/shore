@@ -674,34 +674,8 @@ function unpinSubagentModel(ctx: ModelsContext, selector: string): OperationResu
   };
 }
 
-export function changeThreadModel(ctx: ModelsContext, args: OperationInput<"switch_model">, setModel: (model: string | undefined) => Promise<unknown>, reset?: false): Promise<OperationResult<"switch_model">>;
-export function changeThreadModel(ctx: ModelsContext, args: OperationInput<"switch_model">, setModel: (model: string | undefined) => Promise<unknown>, reset: true): Promise<OperationResult<"reset_model">>;
-export async function changeThreadModel(
-  ctx: ModelsContext,
-  args: OperationInput<"switch_model">,
-  setModel: (model: string | undefined) => Promise<unknown>,
-  reset = false,
-): Promise<OperationResult<"switch_model"> | OperationResult<"reset_model">> {
-  if (reset) {
-    await setModel(undefined);
-    return {
-      target: "thread",
-      active: effectiveChatModel(ctx.config, ctx.characterName)?.qualifiedName ?? null,
-      reset_to: "character default",
-    };
-  }
-  const name = asStr(args["name"]);
-  if (name === undefined) return switchModel(ctx, args);
-  const resolved = resolve(ctx, name, asBool(args["include_hidden"]) ?? false);
-  await setModel(resolved.qualifiedName);
-  return {
-    target: "thread",
-    active: resolved.qualifiedName,
-    qualified_name: resolved.qualifiedName,
-    provider: resolved.providerKey,
-    model_id: resolved.modelId,
-    changed: true,
-  };
+export function qualifiedModelName(ctx: ModelsContext, name: string): string {
+  return resolve(ctx, name, true).qualifiedName;
 }
 
 export function switchModel(ctx: ModelsContext, args: OperationInput<"switch_model">): OperationResult<"switch_model"> {
@@ -731,7 +705,7 @@ export function switchModel(ctx: ModelsContext, args: OperationInput<"switch_mod
 
   return {
     target: "character",
-    active: name,
+    active: resolved.qualifiedName,
     qualified_name: resolved.qualifiedName,
     provider: resolved.providerKey,
     model_id: resolved.modelId,
