@@ -403,14 +403,21 @@ export async function ensureHeartbeatThread(
   now: string,
 ): Promise<{ index: ThreadsIndex; created: boolean }> {
   const index = await ensureThreads(data, character, now);
-  if (heartbeatThread(index) !== undefined) return { index, created: false };
+  const existing = heartbeatThread(index);
+  if (existing !== undefined) {
+    const record = threadRecord(index, existing);
+    if (record === undefined || !record.compaction) return { index, created: false };
+    const trimmed = replaceThread(index, { ...record, compaction: false });
+    await writeThreadsIndex(data, character, trimmed);
+    return { index: trimmed, created: false };
+  }
   let id = HEARTBEAT_THREAD;
   for (let n = 2; threadRecord(index, id) !== undefined; n += 1) id = `${HEARTBEAT_THREAD}-${String(n)}`;
   await mkdir(threadDataDir(data, character, id), { recursive: true });
   const next: ThreadsIndex = {
     ...index,
     heartbeat: id,
-    threads: [...index.threads, { id, label: HEARTBEAT_THREAD_LABEL, created_at: now, compaction: true }],
+    threads: [...index.threads, { id, label: HEARTBEAT_THREAD_LABEL, created_at: now, compaction: false }],
   };
   await writeThreadsIndex(data, character, next);
   return { index: next, created: true };

@@ -727,7 +727,7 @@ function sideThreadAutonomy(config: LoadedConfig, home: GenerationDeps["autonomy
     onUserMessage: (character) => home.onUserActivityElsewhere?.(character),
     onCompactionComplete: () => {},
     onCompactionFailed: () => {},
-    notifyAssistantMessage: () => {},
+    notifyAssistantMessage: (character) => home.onReplyElsewhere?.(character),
     notifyLastRequest: () => {},
     shouldCompactNow: (_character, turns, tokens, crowded) => threadShouldCompact(config, turns, tokens, crowded === true),
   };

@@ -12,7 +12,7 @@ import { ProviderRegistry } from "../src/config/providers.ts";
 import { HISTORY_DB_FILE } from "../src/engine/history_store.ts";
 import { serializeMessages } from "../src/engine/message_store.ts";
 import { assemblePrompt } from "../src/engine/prompt.ts";
-import { createThread, readThreadsIndex } from "../src/engine/threads.ts";
+import { createThread, ensureHeartbeatThread, readThreadsIndex } from "../src/engine/threads.ts";
 import type { Message } from "../src/engine/types.ts";
 import { buildGenerationRequest } from "../src/handler/setup.ts";
 import { archiveAndRetain } from "../src/memory/compaction/archive.ts";
@@ -355,5 +355,24 @@ describe("chat logs across threads", () => {
     const fromStory = await handleSearchChatLogs({ query: "Mara", all_time: true }, threadDataDir(data, "frank", "story"), options("story"));
     expect(fromStory).toContain("u2");
     expect(fromStory).not.toContain("u1");
+  });
+
+  test("a heartbeat finds what earlier heartbeats did in its own thread, since none of it is in its context", async () => {
+    const config = await setup();
+    const data = config.dirs.data;
+    await ensureHeartbeatThread(data, "frank", NOW);
+    writeDurable(threadFile(data, "frank", "heartbeat", "active.jsonl"), serializeMessages([
+      message("a1", "I repainted the lighthouse door", NOW),
+    ]));
+    const found = await handleSearchChatLogs({ query: "lighthouse door", all_time: true }, threadDataDir(data, "frank", "heartbeat"), {
+      character: "frank",
+      dbPath: join(data, HISTORY_DB_FILE),
+      dataDir: data,
+      thread: "heartbeat",
+      indexPath: join(config.dirs.cache, "chat_logs.db"),
+      timeZone: "UTC",
+    });
+    expect(found).toContain("[heartbeat]");
+    expect(found).toContain("a1");
   });
 });

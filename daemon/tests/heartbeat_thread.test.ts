@@ -3,7 +3,7 @@ import { mkdir, mkdtemp, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 
 import { TurnAutonomyBridge } from "../src/autonomy/registration.ts";
-import { defaultAppConfig } from "../src/config/app.ts";
+import { defaultAppConfig, type AppConfig } from "../src/config/app.ts";
 import type { LoadedConfig } from "../src/config/loader.ts";
 import { emptyCatalog } from "../src/config/models.ts";
 import { ProviderRegistry } from "../src/config/providers.ts";
@@ -14,6 +14,7 @@ import type { Message } from "../src/engine/types.ts";
 import { buildGenerationDeps } from "../src/handler/deps.ts";
 import { runGeneration } from "../src/handler/generation.ts";
 import type { GenerateResponse, SidecarProvider, SidecarRequest } from "../src/llm/types.ts";
+import { runCompactionPass } from "../src/memory/compaction/run.ts";
 import { createRuntime, type ShoreRuntime } from "../src/runtime.ts";
 import { eventsForResponse } from "./support/stream.ts";
 import { restoreTestEnv, setTestEnv } from "./support/env.ts";
@@ -37,6 +38,7 @@ function textOf(request: SidecarRequest): string {
 
 interface Script {
   heartbeats: SidecarRequest[];
+  calls: string[];
   held: { started: PromiseWithResolvers<void>; release: PromiseWithResolvers<void> } | undefined;
 }
 
@@ -50,8 +52,12 @@ function scriptedProvider(script: Script): SidecarProvider {
     timing: { total_ms: 1, time_to_first_token_ms: 1 },
   });
   return {
-    generate: async (request) => respond(request, [{ type: "text", text: "hello" }]),
+    generate: async (request) => {
+      script.calls.push(request.context?.call_type ?? "");
+      return respond(request, [{ type: "text", text: "hello" }]);
+    },
     stream: async function* (request) {
+      script.calls.push(request.context?.call_type ?? "");
       if (request.context?.call_type.startsWith("heartbeat") !== true) {
         const held = script.held;
         if (held !== undefined) {
@@ -90,7 +96,7 @@ interface Harness {
   shown: (thread: string, match: (message: Message) => boolean) => Promise<void>;
 }
 
-async function withCharacter(run: (h: Harness) => Promise<void>): Promise<void> {
+async function withCharacter(run: (h: Harness) => Promise<void>, configure?: (app: AppConfig) => void): Promise<void> {
   setTestEnv(KEY_ENV, "fixture-key");
   at(0);
   const root = await mkdtemp(testTmp("shore-heartbeat-thread-"));
@@ -100,12 +106,15 @@ async function withCharacter(run: (h: Harness) => Promise<void>): Promise<void> 
   app.memory.compaction.enabled = false;
   app.tools.enabled_tools = ["read", "set_next_wake"];
   app.behavior.autonomy.enabled = true;
+  configure?.(app);
   const models = emptyCatalog();
-  models.chat.set("chat.fixture", {
-    name: "fixture", qualifiedName: "chat.fixture", category: "chat", providerKey: "anthropic",
-    sdk: "anthropic", modelId: "claude-fixture", apiKeyEnv: KEY_ENV,
-    maxContextTokens: 200_000, maxOutputTokens: 4096,
-  });
+  for (const name of ["fixture", "pinned"]) {
+    models.chat.set(`chat.${name}`, {
+      name, qualifiedName: `chat.${name}`, category: "chat", providerKey: "anthropic",
+      sdk: "anthropic", modelId: `claude-${name}`, apiKeyEnv: KEY_ENV,
+      maxContextTokens: 200_000, maxOutputTokens: 4096,
+    });
+  }
   const config: LoadedConfig = {
     app, models, providers: ProviderRegistry.empty(), rawTable: undefined,
     dirs: { config: join(root, "config"), data: join(root, "data"), cache: join(root, "cache"), runtime: join(root, "runtime") },
@@ -113,7 +122,7 @@ async function withCharacter(run: (h: Harness) => Promise<void>): Promise<void> 
   const workspace = join(config.dirs.config, "characters", "ada", "workspace");
   await mkdir(workspace, { recursive: true });
   await writeFile(join(workspace, "SOUL.md"), "Ada");
-  const script: Script = { heartbeats: [], held: undefined };
+  const script: Script = { heartbeats: [], calls: [], held: undefined };
   const emitted: Emitted[] = [];
   const histories: History[] = [];
   const waiting: { thread: string; match: (message: Message) => boolean; resolve: () => void }[] = [];
@@ -202,7 +211,7 @@ test("a heartbeat runs while a reply in home is still generating, and its messag
   });
 });
 
-test("the heartbeat's own turn stays in its thread, and the next one opens with what was said in home since", async () => {
+test("the heartbeat's own turn stays in its thread for the user to read, and the next one starts fresh with only what was said in home since", async () => {
   await withCharacter(async ({ script, say, heartbeat, thread }) => {
     await say("the keeper's name is Mara");
     at(10);
@@ -230,7 +239,63 @@ test("the heartbeat's own turn stays in its thread, and the next one opens with 
     expect(opener).toContain("she keeps a cat too");
     expect(opener).toContain("reply to: she keeps a cat too");
     expect(opener).not.toContain("the keeper's name is Mara");
-    expect(textOf(script.heartbeats.at(-2) as SidecarRequest)).toContain("the keeper's name is Mara");
+    const next = script.heartbeats.at(-2) as SidecarRequest;
+    expect(textOf(next)).not.toContain("the keeper's name is Mara");
+    expect(textOf(next)).not.toContain("She asked about the lamp");
+    expect(next.messages.flatMap((message) => message.content).filter((block) => block.type === "tool_use" || block.type === "tool_result")).toEqual([]);
+  });
+});
+
+test("a heartbeat runs on home's model, and its thread is never compacted, however many heartbeats it holds, not even by hand", async () => {
+  await withCharacter(async ({ runtime, script, say, heartbeat, thread }) => {
+    await runtime.registry.setThreadModel("ada", "main", "pinned");
+    await say("hello");
+    at(10);
+    await heartbeat();
+    at(20);
+    await heartbeat();
+
+    expect(script.heartbeats.map((request) => request.model)).toEqual(["claude-pinned", "claude-pinned", "claude-pinned", "claude-pinned"]);
+    expect(script.calls).not.toContain("compaction");
+    expect((await thread("heartbeat")).filter((message) => message.role === "user" && message.origin === "autonomous")).toHaveLength(2);
+    expect(runtime.registry.listThreads("ada").find((record) => record.id === "heartbeat")?.compaction).toBe(false);
+    const byHand = runCompactionPass("ada", {
+      config: runtime.config,
+      generate: () => Promise.reject(new Error("compacting the heartbeat thread called the model")),
+    }, { thread: "heartbeat" });
+    expect(await outcomeOf(byHand)).toThrow("never compacted");
+  }, (app) => {
+    app.memory.compaction.enabled = true;
+    app.memory.compaction.keep_recent_turns = 0;
+    app.memory.compaction.min_turns = 1;
+    app.memory.compaction.max_turns = 2;
+  });
+});
+
+test("with defer_on_activity, each message and the end of each reply push the next heartbeat to min_interval after them, in a side thread too", async () => {
+  await withCharacter(async ({ runtime, script, say }) => {
+    const wake = (): number | undefined => runtime.autonomy.status("ada")?.next_wake_at;
+    await say("hello");
+    await runtime.autonomy.tick();
+    expect(wake()).toBe(T0 + 60 * MINUTE);
+
+    at(50);
+    await say("are you there?");
+    expect(wake()).toBe(T0 + 110 * MINUTE);
+
+    await runtime.registry.createThread("ada", "side");
+    at(70);
+    const held = { started: Promise.withResolvers<void>(), release: Promise.withResolvers<void>() };
+    script.held = held;
+    const replying = say("psst", "side");
+    await held.started.promise;
+    expect(wake()).toBe(T0 + 130 * MINUTE);
+    at(80);
+    held.release.resolve();
+    await replying;
+    expect(wake()).toBe(T0 + 140 * MINUTE);
+  }, (app) => {
+    app.behavior.autonomy.heartbeat.defer_on_activity = true;
   });
 });
 

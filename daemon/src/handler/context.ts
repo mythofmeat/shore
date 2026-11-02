@@ -167,7 +167,7 @@ export async function prepareChatContext(
 
   const toolDefs = toolsAvailable
     ? assembleToolSurface(
-        renderToolDefs(config.app.tools, character, displayName),
+        renderToolDefs(config.app.tools, character, displayName, config.app.behavior.autonomy.heartbeat.defer_on_activity),
         subagentToolDefs(
           config.app.subagents,
           config.app.tools.enabled_subagents,

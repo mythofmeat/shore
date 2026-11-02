@@ -285,9 +285,10 @@ export function templateVars(charName: string, userName: string): Map<string, st
   ]);
 }
 
-export function toolTemplateVars(cfg: ToolsConfigView, charName: string, userName: string): Map<string, string> {
+export function toolTemplateVars(cfg: ToolsConfigView, charName: string, userName: string, wakeDefers = false): Map<string, string> {
   const vars = templateVars(charName, userName);
   for (const tool of availableTools(cfg)) vars.set(tool.name, tool.name);
+  vars.set(wakeDefers ? "wake_defers" : "wake_stays", "yes");
   return vars;
 }
 
@@ -295,8 +296,9 @@ export function renderToolDefs(
   cfg: ToolsConfigView,
   charName: string,
   userName: string,
+  wakeDefers = false,
 ): ToolDefinition[] {
-  const vars = toolTemplateVars(cfg, charName, userName);
+  const vars = toolTemplateVars(cfg, charName, userName, wakeDefers);
   return availableTools(cfg).map((t) => ({
     name: t.name,
     description: renderTemplate(t.description, vars),

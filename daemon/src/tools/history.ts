@@ -2,7 +2,7 @@ import { join } from "node:path";
 
 import { asNaive, hostZone, naiveInZone, resolveInZone } from "../ledger/zoned.ts";
 import { MessageStore } from "../engine/message_store.ts";
-import { readThreadsIndex } from "../engine/threads.ts";
+import { heartbeatThread, readThreadsIndex } from "../engine/threads.ts";
 import { threadFile } from "../storage/files.ts";
 import {
   HISTORY_INDEX_FILE,
@@ -128,9 +128,10 @@ async function otherThreads(options: ChatLogOptions): Promise<LiveThread[]> {
   if (options.dataDir === undefined) return [];
   const dataDir = options.dataDir;
   const index = await readThreadsIndex(dataDir, options.character);
+  const heartbeat = heartbeatThread(index);
   const live: LiveThread[] = [];
   for (const record of index?.threads ?? []) {
-    if (record.id === (options.thread ?? "main")) continue;
+    if (record.id === (options.thread ?? "main") && record.id !== heartbeat) continue;
     try {
       const { store, raw } = await MessageStore.loadWithRaw(threadFile(dataDir, options.character, record.id, "active.jsonl"));
       live.push({ thread: record.id, raw, messages: store.messages() });

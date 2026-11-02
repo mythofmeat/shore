@@ -36,6 +36,7 @@ export function clockConfigFor(config: LoadedConfig): HeartbeatClockConfig {
     maxSilentMs: Number(heartbeat.dormant_after_idle_time.asMillisExact()),
     minIntervalMs: Number(heartbeat.min_interval.asMillisExact()),
     maxIntervalMs: Number(heartbeat.max_interval.asMillisExact()),
+    deferOnActivity: heartbeat.defer_on_activity,
   };
 }
 
@@ -57,6 +58,7 @@ type ServiceSlice = Pick<
   | "onUserMessage"
   | "onUserActivityElsewhere"
   | "onAssistantMessage"
+  | "onReplyElsewhere"
   | "shouldCompactNow"
   | "onCompactionComplete"
   | "onCompactionFailed"
@@ -138,6 +140,12 @@ export class TurnAutonomyBridge {
   onAssistantMessage(character: string, turnCount: number): void {
     this.#after(character, () => {
       this.#service.onAssistantMessage(character, turnCount);
+    });
+  }
+
+  onReplyElsewhere(character: string): void {
+    this.#after(character, () => {
+      this.#service.onReplyElsewhere(character);
     });
   }
 

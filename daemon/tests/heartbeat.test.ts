@@ -69,6 +69,31 @@ describe("messages from the user don't move a heartbeat", () => {
   });
 });
 
+describe("with defer_on_activity, the user's activity pushes a heartbeat back", () => {
+  test("a message or the end of a reply moves the wake to min_interval after it, and never brings it closer", () => {
+    const clock = new HeartbeatClock(config({ minIntervalMs: 2 * HOUR, deferOnActivity: true }), T0);
+    clock.schedule(T0 + 3 * HOUR, T0);
+    clock.onUserMessage(T0 + 2 * HOUR);
+    expect(clock.nextWakeAt).toBe(T0 + 4 * HOUR);
+    clock.onActivity(T0 + 2.5 * HOUR);
+    expect(clock.nextWakeAt).toBe(T0 + 4.5 * HOUR);
+    clock.onUserMessage(T0 + 2.5 * HOUR - 1);
+    expect(clock.nextWakeAt).toBe(T0 + 4.5 * HOUR);
+    expect(clock.tick(T0 + 4.5 * HOUR - 1)).toBe("none");
+    expect(clock.tick(T0 + 4.5 * HOUR)).toBe("run_tick");
+  });
+
+  test("activity just after a heartbeat leaves the next default wake where it was", () => {
+    const clock = new HeartbeatClock(config({ defaultIntervalMs: 3 * HOUR, deferOnActivity: true }), T0);
+    clock.schedule(T0 + HOUR, T0);
+    expect(clock.tick(T0 + HOUR)).toBe("run_tick");
+    clock.onUserMessage(T0 + HOUR + 60_000);
+    expect(clock.nextWakeAt).toBeUndefined();
+    expect(clock.tick(T0 + 2 * HOUR)).toBe("none");
+    expect(clock.nextWakeAt).toBe(T0 + 4 * HOUR);
+  });
+});
+
 describe("the abandonment guards trip at the threshold, not past it", () => {
   test("silence: exactly at the ceiling is already too silent", () => {
     const maxSilentMs = 2 * HOUR;

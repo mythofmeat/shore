@@ -373,6 +373,7 @@ export interface HeartbeatConfig {
   min_interval: ConfigDuration;
   max_interval: ConfigDuration;
   wrap_up_grace_rounds: number;
+  defer_on_activity: boolean;
 }
 
 const defaultHeartbeatConfig = (): HeartbeatConfig => ({
@@ -382,6 +383,7 @@ const defaultHeartbeatConfig = (): HeartbeatConfig => ({
   min_interval: ConfigDuration.fromSecs(3600),
   max_interval: ConfigDuration.fromSecs(172_800),
   wrap_up_grace_rounds: 3,
+  defer_on_activity: false,
 });
 
 export function validateHeartbeat(heartbeat: HeartbeatConfig): string | undefined {
@@ -413,6 +415,7 @@ const HEARTBEAT: StructSpec<HeartbeatConfig> = {
     min_interval: readDuration,
     max_interval: readDuration,
     wrap_up_grace_rounds: readU32,
+    defer_on_activity: readBool,
   },
 };
 

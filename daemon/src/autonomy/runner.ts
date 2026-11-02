@@ -157,6 +157,12 @@ export class CharacterAutonomy {
   onAssistantMessage(turnCount: number, now: number): void {
     this.#state.activeTurnCount = turnCount;
     this.#state.lastActivityAt = now;
+    this.#clock.onActivity(now);
+    this.#state.dirty = true;
+  }
+
+  onReplyElsewhere(now: number): void {
+    this.#clock.onActivity(now);
     this.#state.dirty = true;
   }
 
