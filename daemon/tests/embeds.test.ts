@@ -25,6 +25,20 @@ test("embeds in code, escaped embeds and plain links are left as text", () => {
   expect(embedsIn("no pictures here")).toEqual([]);
 });
 
+test("an embed inside a block-level tag is an embed like any other, unless it is code", () => {
+  for (const text of [
+    "<sendMessage>\n![[lighthouse]]\n</sendMessage>",
+    "<sendMessage>\nThe lamp tonight\n![[lighthouse]]\n</sendMessage>",
+    "<sendMessage>\n![[lighthouse]]\n\nAnd the lamp tonight\n</sendMessage>",
+    "A note to myself.\n\n<sendMessage>\n![[lighthouse]]\n</sendMessage>",
+    "<div>\n![[lighthouse]]\n</div>",
+  ]) {
+    expect(embedsIn(text).map((embed) => embed.source)).toEqual(["![[lighthouse]]"]);
+    expect(pictureText(text, [{ embed: "![[lighthouse]]", name: "lighthouse.png" }])).toBe(text.replace("![[lighthouse]]", "[picture: lighthouse.png]"));
+  }
+  expect(embedsIn("<sendMessage>\n`![[lighthouse]]`\n</sendMessage>")).toEqual([]);
+});
+
 test("a text node splits around its embeds, matching the source even when an escaped copy comes first", () => {
   const parts = splitText("![[x]] and ![[x]] end", "\\![[x]] and ![[x]] end");
   expect(parts.map((part) => typeof part === "string" ? part : part.source)).toEqual(["![[x]] and ", "![[x]]", " end"]);

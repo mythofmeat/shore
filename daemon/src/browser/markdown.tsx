@@ -1,7 +1,6 @@
-import { fromMarkdown } from "mdast-util-from-markdown";
 import type { Nodes, Parents, RootContent } from "mdast";
 import { memo, useRef, type ReactNode } from "react";
-import { imageEmbed, splitText } from "../engine/embeds.ts";
+import { imageEmbed, parseMessage, splitText } from "../engine/embeds.ts";
 import { EmbeddedPicture } from "./pictures.tsx";
 
 const SAFE_LINK = /^(https?:|mailto:)/i;
@@ -70,7 +69,7 @@ function defines(node: Nodes): boolean {
 export function markdownBlocks(text: string, previous: SettledMarkdown = UNSETTLED): { blocks: ReactNode[]; settled: SettledMarkdown } {
   const base = text.startsWith(previous.text) ? previous : UNSETTLED;
   const tail = text.slice(base.text.length);
-  const tree = fromMarkdown(tail);
+  const tree = parseMessage(tail);
   const defined = defines(tree);
   if (defined && base !== UNSETTLED) return markdownBlocks(text);
   const blocks = [...base.blocks, ...tree.children.map((child, index) => render(child, `m.${String(base.blocks.length + index)}`, tail))];

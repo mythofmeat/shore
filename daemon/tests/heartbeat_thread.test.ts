@@ -17,6 +17,7 @@ import { runGeneration } from "../src/handler/generation.ts";
 import type { GenerateResponse, SidecarProvider, SidecarRequest } from "../src/llm/types.ts";
 import { runCompactionPass } from "../src/memory/compaction/run.ts";
 import { createRuntime, type ShoreRuntime } from "../src/runtime.ts";
+import { sizedImage } from "./support/sized_image.ts";
 import { eventsForResponse } from "./support/stream.ts";
 import { restoreTestEnv, setTestEnv } from "./support/env.ts";
 import { outcomeOf } from "./support/outcome.ts";
@@ -42,6 +43,7 @@ interface Script {
   replies: SidecarRequest[];
   calls: string[];
   held: { started: PromiseWithResolvers<void>; release: PromiseWithResolvers<void> } | undefined;
+  closing: string;
 }
 
 function scriptedProvider(script: Script): SidecarProvider {
@@ -76,7 +78,7 @@ function scriptedProvider(script: Script): SidecarProvider {
       yield* eventsForResponse(respond(request, resultsIn
         ? [
             { type: "thinking", thinking: "She asked about the lamp, so I'll tell her.", signature: "sig-1" },
-            { type: "text", text: "<sendMessage>I found the keeper's log.</sendMessage>" },
+            { type: "text", text: script.closing },
           ]
         : [{ type: "tool_use", id: `read-${String(script.heartbeats.length)}`, name: "read", input: { file_path: "SOUL.md" } }]));
     },
@@ -92,6 +94,7 @@ interface Harness {
   runtime: ShoreRuntime;
   script: Script;
   data: string;
+  workspace: string;
   emitted: Emitted[];
   say: (text: string, thread?: string) => Promise<void>;
   heartbeat: () => Promise<void>;
@@ -125,7 +128,7 @@ async function withCharacter(run: (h: Harness) => Promise<void>, configure?: (ap
   const workspace = join(config.dirs.config, "characters", "ada", "workspace");
   await mkdir(workspace, { recursive: true });
   await writeFile(join(workspace, "SOUL.md"), "Ada");
-  const script: Script = { heartbeats: [], replies: [], calls: [], held: undefined };
+  const script: Script = { heartbeats: [], replies: [], calls: [], held: undefined, closing: "<sendMessage>I found the keeper's log.</sendMessage>" };
   const emitted: Emitted[] = [];
   const histories: History[] = [];
   const waiting: { thread: string; match: (message: Message) => boolean; resolve: () => void }[] = [];
@@ -147,6 +150,7 @@ async function withCharacter(run: (h: Harness) => Promise<void>, configure?: (ap
       runtime,
       script,
       data: config.dirs.data,
+      workspace,
       emitted,
       shown: async (thread, match) => {
         if (histories.some((history) => history.selected_thread === thread && history.messages.some(match))) return;
@@ -319,6 +323,22 @@ test("a heartbeat's own turn notifies nobody and leaves its thread with nothing 
     ]);
     expect(threadActivityNow(data, "ada", "heartbeat").unread).toBe(0);
     expect(threadActivityNow(data, "ada", "main").unread).toBe(1);
+  });
+});
+
+test("a picture a heartbeat sends is in its thread as well as home, and one it only mentions is in neither", async () => {
+  await withCharacter(async ({ script, workspace, say, heartbeat, thread }) => {
+    await writeFile(join(workspace, "lamp.png"), await sizedImage(8, 8));
+    await writeFile(join(workspace, "sketch.png"), await sizedImage(16, 16));
+    script.closing = "I kept ![[sketch.png]] to myself.\n\n<sendMessage>\nThe lamp tonight\n![[lamp.png]]\n</sendMessage>";
+    await say("hello");
+    at(10);
+    await heartbeat();
+
+    const delivered = (await thread("main")).at(-1);
+    expect(delivered?.content).toBe("The lamp tonight\n![[lamp.png]]");
+    expect(delivered?.images).toEqual([{ path: expect.stringContaining("/sent/") as string, embed: "![[lamp.png]]", name: "lamp.png" }]);
+    expect((await thread("heartbeat")).at(-1)?.images).toEqual(delivered?.images ?? []);
   });
 });
 
