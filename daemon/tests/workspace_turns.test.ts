@@ -36,6 +36,18 @@ const write = (turns: WorkspaceTurns, path: string, text: string): void => {
 const gitIn = (turns: WorkspaceTurns, ...args: string[]): string =>
   execFileSync("git", args, { cwd: turns.workspace, encoding: "utf8" }).trim();
 
+const commit = (turns: WorkspaceTurns, message: string): void => {
+  gitIn(turns, "-c", "user.name=Ada", "-c", "user.email=ada@shore.local", "commit", "--quiet", "-m", message);
+};
+
+async function startedRepo(): Promise<{ turns: WorkspaceTurns; start: string | undefined }> {
+  const turns = setup();
+  await ensureWorkspaceGitRepo(turns.workspace);
+  write(turns, "SOUL.md", "soul\n");
+  await gitCommitAll(turns.workspace, "Ada", "start");
+  return { turns, start: await gitHead(turns.workspace) };
+}
+
 async function turn(turns: WorkspaceTurns, version: string, change: () => void, thread = "main"): Promise<void> {
   const recorder = new WorkspaceRecorder(turns);
   await recorder.track(async () => change());
@@ -291,6 +303,143 @@ describe("workspace turns", () => {
     expect(existsSync(file(turns, "a.md"))).toBe(false);
     expect(read(turns, "memory/fact.md")).toBe("remembered\n");
     expect(await gitHead(turns.workspace)).toBe(compacted);
+  });
+
+  test("undoing a reply leaves a file written by another reply whose tool call outlasted its own", async () => {
+    const turns = setup();
+    write(turns, "a.md", "a0\n");
+    write(turns, "b.md", "b0\n");
+    const first = new WorkspaceRecorder(turns);
+    const second = new WorkspaceRecorder(turns);
+    const wrote = Promise.withResolvers<void>();
+    const finish = Promise.withResolvers<void>();
+    let other: Promise<void> = Promise.resolve();
+    await first.track(async () => {
+      other = second.track(async () => {
+        write(turns, "b.md", "b1 from the other thread\n");
+        wrote.resolve();
+        await finish.promise;
+      });
+      await wrote.promise;
+      write(turns, "a.md", "a1\n");
+    });
+    finish.resolve();
+    await other;
+    await first.settle("main", "mv_1");
+    await second.settle("side", "mv_2");
+
+    expect((await undoTurns(turns, "main", ["mv_1"])).skipped).toContain("b.md");
+    expect(read(turns, "b.md")).toBe("b1 from the other thread\n");
+  });
+
+  test("undoing a reply keeps a commit another reply made while its tool call ran", async () => {
+    const { turns } = await startedRepo();
+    const first = new WorkspaceRecorder(turns);
+    const second = new WorkspaceRecorder(turns);
+    await first.track(async () => {
+      write(turns, "a.md", "a\n");
+      await second.track(async () => {
+        write(turns, "b.md", "b\n");
+        gitIn(turns, "add", "b.md");
+        commit(turns, "b");
+      });
+    });
+    await first.settle("main", "mv_1");
+    await second.settle("side", "mv_2");
+    const committed = await gitHead(turns.workspace);
+
+    await undoTurns(turns, "main", ["mv_1"]);
+    expect(existsSync(file(turns, "a.md"))).toBe(false);
+    expect(read(turns, "b.md")).toBe("b\n");
+    expect(await gitHead(turns.workspace)).toBe(committed);
+  });
+
+  test("an alias of a reply with several tool calls undoes all of them", async () => {
+    const turns = setup();
+    const recorder = new WorkspaceRecorder(turns);
+    await recorder.track(async () => write(turns, "x.md", "x\n"));
+    await recorder.track(async () => write(turns, "y.md", "y\n"));
+    await recorder.settle("main", "mv_1");
+    await aliasTurn(turns, "main", "mv_1", "mv_edited");
+
+    await undoTurns(turns, "main", ["mv_edited"]);
+    expect(existsSync(file(turns, "x.md"))).toBe(false);
+    expect(existsSync(file(turns, "y.md"))).toBe(false);
+  });
+
+  test("undoing a reply whose dozen tool calls each rewrote one file puts back the original, and redo the last", async () => {
+    const turns = setup();
+    write(turns, "log.md", "0\n");
+    const recorder = new WorkspaceRecorder(turns);
+    for (let call = 1; call <= 12; call += 1) {
+      await recorder.track(async () => write(turns, "log.md", `${String(call)}\n`));
+    }
+    await recorder.settle("main", "mv_1");
+
+    await undoTurns(turns, "main", ["mv_1"]);
+    expect(read(turns, "log.md")).toBe("0\n");
+    await redoTurns(turns, "main", ["mv_1"]);
+    expect(read(turns, "log.md")).toBe("12\n");
+  });
+
+  test("undoing a reply that committed in two tool calls moves HEAD back past both, and redo forward past both", async () => {
+    const { turns, start } = await startedRepo();
+    const recorder = new WorkspaceRecorder(turns);
+    for (const name of ["a", "b"]) {
+      await recorder.track(async () => {
+        write(turns, `${name}.md`, `${name}\n`);
+        gitIn(turns, "add", "-A");
+        commit(turns, name);
+      });
+    }
+    await recorder.settle("main", "mv_1");
+    const end = await gitHead(turns.workspace);
+
+    await undoTurns(turns, "main", ["mv_1"]);
+    expect(await gitHead(turns.workspace)).toBe(start);
+    expect(gitIn(turns, "status", "--porcelain")).toBe("");
+
+    await redoTurns(turns, "main", ["mv_1"]);
+    expect(await gitHead(turns.workspace)).toBe(end);
+    expect(gitIn(turns, "status", "--porcelain")).toBe("");
+  });
+
+  test("undoing a reply whose tool call ran while an undo moved HEAD does not bring the undone commit back", async () => {
+    const { turns, start } = await startedRepo();
+    await turn(turns, "mv_1", () => {
+      write(turns, "a.md", "a\n");
+      gitIn(turns, "add", "-A");
+      commit(turns, "a");
+    });
+    const recorder = new WorkspaceRecorder(turns);
+    await recorder.track(async () => {
+      write(turns, "c.md", "c\n");
+      await undoTurns(turns, "main", ["mv_1"]);
+    });
+    await recorder.settle("side", "mv_2");
+    expect(await gitHead(turns.workspace)).toBe(start);
+
+    await undoTurns(turns, "side", ["mv_2"]);
+    expect(existsSync(file(turns, "c.md"))).toBe(false);
+    expect(await gitHead(turns.workspace)).toBe(start);
+  });
+
+  test("undoing a reply that committed while an undo of file changes ran still moves HEAD back", async () => {
+    const { turns, start } = await startedRepo();
+    await turn(turns, "mv_1", () => write(turns, "x.md", "x\n"));
+    const recorder = new WorkspaceRecorder(turns);
+    await recorder.track(async () => {
+      await undoTurns(turns, "main", ["mv_1"]);
+      write(turns, "b.md", "b\n");
+      gitIn(turns, "add", "b.md");
+      commit(turns, "b");
+    });
+    await recorder.settle("side", "mv_2");
+
+    await undoTurns(turns, "side", ["mv_2"]);
+    expect(existsSync(file(turns, "b.md"))).toBe(false);
+    expect(existsSync(file(turns, "x.md"))).toBe(false);
+    expect(await gitHead(turns.workspace)).toBe(start);
   });
 
   test("reply versions follow merged tool loops", () => {
