@@ -1,6 +1,6 @@
 import type { Page } from "@playwright/test";
 import { expect, test } from "./fixtures.ts";
-import { createCharacter, createConversation, send, signIn, watchPage } from "./helpers.ts";
+import { createCharacter, createThread, send, signIn, watchPage } from "./helpers.ts";
 
 test("sending clears the message box at once and regenerating replaces the reply in place", async ({ page }) => {
   const check = await watchPage(page);
@@ -158,7 +158,7 @@ test("reloading between sending and the daemon saving the message never loses it
   await check();
 });
 
-test("a message the daemon saved is never brought back when the conversation switches mid-send, the echo comes late and the reply fails", async ({ page }) => {
+test("a message the daemon saved is never brought back when the thread switches mid-send, the echo comes late and the reply fails", async ({ page }) => {
   const check = await watchPage(page);
   let holding = false;
   let sent: string | undefined;
@@ -180,7 +180,7 @@ test("a message the daemon saved is never brought back when the conversation swi
   });
   await signIn(page);
   await createCharacter(page, "tern");
-  await createConversation(page, "tern", "side");
+  await createThread(page, "tern", "side");
 
   const box = page.getByLabel("Message", { exact: true });
   await expect(box).toBeFocused();
@@ -189,7 +189,7 @@ test("a message the daemon saved is never brought back when the conversation swi
   await box.press("Enter");
   await expect.poll(() => held.length).toBe(1);
   holding = false;
-  const threads = page.getByRole("group", { name: "tern conversations" });
+  const threads = page.getByRole("group", { name: "tern threads" });
   await threads.getByRole("button", { name: "main", exact: true }).click();
   await expect(page.locator(".topbar-thread")).toHaveText("main");
   await expect(page.getByRole("alert").filter({ hasText: "Fixture reply failure" })).toBeVisible();
@@ -204,24 +204,24 @@ test("a message the daemon saved is never brought back when the conversation swi
   await check();
 });
 
-test("archiving the open conversation takes every tab on it home, closes what was open there and shows the next message", async ({ page, context }) => {
+test("archiving the open thread takes every tab on it home, closes what was open there and shows the next message", async ({ page, context }) => {
   const check = await watchPage(page);
   await signIn(page);
   await createCharacter(page, "wren");
   await send(page, "A message for home");
-  await createConversation(page, "wren", "side");
-  await send(page, "A message for the side conversation");
+  await createThread(page, "wren", "side");
+  await send(page, "A message for the side thread");
 
   const otherTab = await context.newPage();
   await otherTab.goto("/workspace/wren/side");
-  await expect(otherTab.locator("article.message.user")).toContainText("A message for the side conversation");
-  await otherTab.getByRole("button", { name: "Conversation options" }).click();
+  await expect(otherTab.locator("article.message.user")).toContainText("A message for the side thread");
+  await otherTab.getByRole("button", { name: "Thread options" }).click();
   await otherTab.getByRole("menuitem", { name: "Clear context…" }).click();
   await expect(otherTab.getByRole("dialog", { name: "Clear context" })).toBeVisible();
 
   await page.bringToFront();
-  await page.getByRole("button", { name: "Conversation options" }).click();
-  await page.getByRole("menuitem", { name: "Archive conversation…" }).click();
+  await page.getByRole("button", { name: "Thread options" }).click();
+  await page.getByRole("menuitem", { name: "Archive…" }).click();
   const dialog = page.getByRole("dialog", { name: "Archive “side”?" });
   await dialog.getByRole("button", { name: "Archive", exact: true }).click();
   await expect(dialog).toBeHidden();
@@ -231,7 +231,7 @@ test("archiving the open conversation takes every tab on it home, closes what wa
   for (const tab of [page, otherTab]) {
     await expect(tab.locator(".topbar-thread")).toHaveText("main");
     await expect(tab).toHaveURL(/\/workspace\/wren\/main$/);
-    await expect(tab.getByRole("group", { name: "wren conversations" }).getByRole("button", { name: "side", exact: true })).toHaveCount(0);
+    await expect(tab.getByRole("group", { name: "wren threads" }).getByRole("button", { name: "side", exact: true })).toHaveCount(0);
     await expect(tab.locator("dialog[open]")).toHaveCount(0);
     await expect(tab.locator("article.message.user")).toContainText("A message for home");
   }
@@ -294,12 +294,12 @@ test("vim mode edits with vim keys, keeps the draft over a reload, attaches past
   await expect(page.locator("article.message.user")).toHaveCount(2);
   await expect(page.locator("article.message.user").last()).toContainText(/two\s*lines/);
 
-  await createConversation(page, "vesper", "side");
+  await createThread(page, "vesper", "side");
   await expect(box).toBeFocused();
   await check();
 });
 
-test("compacting from the palette starts on Enter and leaves other conversations usable while it runs", async ({ page }) => {
+test("compacting from the palette starts on Enter and leaves other threads usable while it runs", async ({ page }) => {
   const check = await watchPage(page);
   await signIn(page);
   await createCharacter(page, "wren");
@@ -317,11 +317,11 @@ test("compacting from the palette starts on Enter and leaves other conversations
   const compacting = page.getByRole("status").filter({ hasText: "Compacting context" });
   await expect(compacting).toBeVisible();
 
-  await createConversation(page, "wren", "side");
+  await createThread(page, "wren", "side");
   await expect(compacting).toBeHidden();
   await send(page, "Chatting while main compacts");
 
-  await page.getByRole("group", { name: "wren conversations" }).getByRole("button", { name: "main", exact: true }).click();
+  await page.getByRole("group", { name: "wren threads" }).getByRole("button", { name: "main", exact: true }).click();
   await expect(page.locator(".topbar-thread")).toHaveText("main");
   await expect(compacting).toBeVisible();
   await page.keyboard.press("Control+k");
@@ -332,4 +332,49 @@ test("compacting from the palette starts on Enter and leaves other conversations
   await expect(page.getByText(/Compaction paused/).first()).toBeVisible();
   await expect(compacting).toBeHidden();
   await check();
+});
+
+test("a thread's menu changes its settings without opening it, and archiving the open thread lands on home", async ({ page }) => {
+  const finish = await watchPage(page);
+  await signIn(page);
+  await createCharacter(page, "plover");
+  await createThread(page, "plover", "side");
+  await send(page, "written in side");
+  const threads = page.getByRole("group", { name: "plover threads" });
+
+  await threads.getByRole("button", { name: "main", exact: true }).click({ button: "right" });
+  const menu = page.getByRole("menu", { name: "Options for main" });
+  await expect(menu.getByRole("menuitem", { name: "Make home" })).toHaveCount(0);
+  await expect(menu.getByRole("menuitem", { name: "Archive…" })).toBeDisabled();
+  await page.keyboard.press("Escape");
+  await expect(menu).toBeHidden();
+
+  await threads.getByRole("button", { name: "main", exact: true }).hover();
+  await threads.getByRole("button", { name: "Options for main" }).click();
+  await page.getByRole("menuitem", { name: "Thread settings…" }).click();
+  const settings = page.getByRole("dialog", { name: "Thread settings" });
+  await settings.getByLabel("Label", { exact: true }).fill("Everyday");
+  await settings.getByLabel("When it gets long").selectOption("trim");
+  await settings.getByRole("button", { name: "Save", exact: true }).click();
+  await expect(settings).toBeHidden();
+  await expect(threads.getByRole("button", { name: "Everyday", exact: true })).toBeVisible();
+  await expect(page.locator(".topbar-thread")).toHaveText("side");
+
+  await threads.getByRole("button", { name: "Everyday", exact: true }).click({ button: "right" });
+  await page.getByRole("menuitem", { name: "Thread settings…" }).click();
+  await expect(settings.getByLabel("When it gets long")).toHaveValue("trim");
+  await settings.getByRole("button", { name: "Cancel", exact: true }).click();
+  await expect(settings).toBeHidden();
+
+  await threads.getByRole("button", { name: "side", exact: true }).click({ button: "right" });
+  await page.getByRole("menuitem", { name: "Archive…" }).click();
+  const archive = page.getByRole("dialog", { name: "Archive “side”?" });
+  await archive.getByRole("button", { name: "Archive", exact: true }).click();
+  await expect(archive).toBeHidden();
+  await expect(page.locator(".topbar-thread")).toHaveText("Everyday");
+  await expect(page).toHaveURL(/\/workspace\/plover\/main$/);
+  await expect(threads.getByRole("button", { name: "side", exact: true })).toHaveCount(0);
+  await send(page, "after the archive");
+  await expect(page.locator("article.message.user").last()).toContainText("after the archive");
+  await finish();
 });

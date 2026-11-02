@@ -7,6 +7,8 @@ import { Settings } from "../settings/Settings.tsx";
 import { NewCharacterDialog, NewThreadDialog } from "../sidebar/dialogs.tsx";
 import { Toasts, toasts } from "../ui/toast.tsx";
 import { useEscape, useMediaQuery, useStoredFlag } from "../ui/hooks.ts";
+import { ThreadDialogs } from "../chat/thread_dialogs.tsx";
+import { THREAD_DIALOG_EVENT, type ThreadDialogRequest } from "./intents.ts";
 import { Palette } from "./Palette.tsx";
 import { navigate, useRoute } from "./route.ts";
 import { adjacent, globalAction, nextUnread } from "./shortcuts.ts";
@@ -18,7 +20,13 @@ export function Shell({ state }: { state: WorkspaceSnapshot }) {
   const [expanded, setExpanded] = useStoredFlag("shore.sidebar", true);
   const [drawer, setDrawer] = useState(false);
   const [dialog, setDialog] = useState<"character" | "thread" | "palette" | null>(null);
+  const [threadDialog, setThreadDialog] = useState<ThreadDialogRequest | null>(null);
   const { unread } = useNotifications();
+  useEffect(() => {
+    const open = (event: Event) => { setThreadDialog((event as CustomEvent<ThreadDialogRequest>).detail); };
+    addEventListener(THREAD_DIALOG_EVENT, open);
+    return () => removeEventListener(THREAD_DIALOG_EVENT, open);
+  }, []);
   const open = mobile ? drawer : expanded;
   const closeDrawer = useCallback(() => setDrawer(false), []);
   useEscape(mobile && drawer, closeDrawer);
@@ -81,6 +89,7 @@ export function Shell({ state }: { state: WorkspaceSnapshot }) {
     {dialog === "character" ? <NewCharacterDialog close={() => setDialog(null)} /> : null}
     {dialog === "thread" && state.character !== null ? <NewThreadDialog character={state.character} close={() => setDialog(null)} /> : null}
     {dialog === "palette" ? <Palette state={state} close={() => setDialog(null)} newThread={() => setDialog("thread")} newCharacter={() => setDialog("character")} /> : null}
+    {threadDialog === null ? null : <ThreadDialogs state={state} request={threadDialog} close={() => setThreadDialog(null)} />}
     <Toasts />
   </div>;
 }

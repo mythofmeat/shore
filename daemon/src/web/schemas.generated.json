@@ -1834,6 +1834,22 @@
             "properties": {
               "name": {
                 "type": "string",
+                "const": "thread_compaction"
+              },
+              "data": {
+                "$ref": "#/$defs/ThreadListing"
+              }
+            },
+            "required": [
+              "name",
+              "data"
+            ]
+          },
+          {
+            "type": "object",
+            "properties": {
+              "name": {
+                "type": "string",
                 "const": "thread_model"
               },
               "data": {
@@ -11312,6 +11328,22 @@
               "name": {
                 "type": "string",
                 "const": "thread_lock"
+              },
+              "data": {
+                "$ref": "#/$defs/ThreadListing"
+              }
+            },
+            "required": [
+              "name",
+              "data"
+            ]
+          },
+          {
+            "type": "object",
+            "properties": {
+              "name": {
+                "type": "string",
+                "const": "thread_compaction"
               },
               "data": {
                 "$ref": "#/$defs/ThreadListing"

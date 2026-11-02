@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { MAX_THREAD_ID_LENGTH, assertThreadId, isValidThreadId, createThread, ensureThreads, markThreadRead, readThreadsIndex, threadActivityNow } from "../src/engine/threads.ts";
+import { MAX_THREAD_ID_LENGTH, assertThreadId, isValidThreadId, createThread, ensureHeartbeatThread, ensureThreads, heartbeatThread, markThreadRead, readThreadsIndex, setThreadCompaction, threadActivityNow } from "../src/engine/threads.ts";
 import { readFileSync, readFile } from "./support/stored_files.ts";
 import { mkdirSync, mkdtempSync, writeFileSync, existsSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -323,5 +323,24 @@ describe("thread activity", () => {
       writeDurable(file, "");
       expect(activity().turns).toBe(0);
     });
+  });
+});
+
+describe("thread compaction setting", () => {
+  test("a thread's choice can change after it was made, and the heartbeat thread can't be made to compact", async () => {
+    const data = join(mkdtempSync(testTmp("shore-thread-compaction-")), "data");
+    const now = "2026-11-03T00:00:00.000Z";
+    await createThread(data, "ada", "side", now);
+    const compacts = async (id: string): Promise<boolean | undefined> => (await readThreadsIndex(data, "ada"))?.threads.find((thread) => thread.id === id)?.compaction;
+    expect(await compacts("side")).toBe(false);
+    await setThreadCompaction(data, "ada", "side", true, now);
+    expect(await compacts("side")).toBe(true);
+    await setThreadCompaction(data, "ada", "side", false, now);
+    expect(await compacts("side")).toBe(false);
+
+    const { index } = await ensureHeartbeatThread(data, "ada", now);
+    const heartbeat = heartbeatThread(index) ?? "";
+    expect(await outcomeOf(setThreadCompaction(data, "ada", heartbeat, true, now))).toThrow("never compacts");
+    expect(await compacts(heartbeat)).toBe(false);
   });
 });

@@ -688,6 +688,7 @@ function commandDeps(a: CommandAssembly): CommandDeps {
     },
     mcpStatus: () => runtime.mcp.current.serverStatus(),
     ...(a.running === undefined ? {} : { running: a.running }),
+    ...(a.emitEvent === undefined ? {} : { threadsChanged: (character: string, thread: string) => a.emitEvent?.({ type: "threads_changed", character, thread }) }),
     historyIndex: {
       progressFor: (character) => runtime.historyIndex.progress(character),
       noteMutation: (character) => {

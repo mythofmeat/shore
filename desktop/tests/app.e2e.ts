@@ -71,6 +71,35 @@ test("right-clicking selected reply text offers Quote, which puts it in the mess
   await expect(box).toBeFocused();
 });
 
+test("right-clicking a thread opens the page's own menu, with no native menu on top of it", async ({ daemon, launch }) => {
+  const { app, page } = await launch({ address: daemon.origin });
+  await signIn(page);
+  await page.getByRole("button", { name: "New character", exact: true }).click();
+  const dialog = page.getByRole("dialog", { name: "New character" });
+  await dialog.getByLabel("Name").fill("Sable");
+  await dialog.getByRole("button", { name: "Create", exact: true }).click();
+  await expect(dialog).toBeHidden();
+  const box = page.getByLabel("Message", { exact: true });
+  await box.fill("hello");
+  await box.press("Enter");
+  await expect(page.locator("article.message.assistant").last()).toContainText("hello");
+  await app.evaluate(({ webContents }) => {
+    const seen = { count: 0 };
+    Object.assign(globalThis, { nativeMenus: seen });
+    for (const contents of webContents.getAllWebContents()) contents.on("context-menu", () => { seen.count += 1; });
+  });
+  const nativeMenus = async () => await app.evaluate(() => (globalThis as unknown as { nativeMenus: { count: number } }).nativeMenus.count);
+
+  await page.getByRole("group", { name: "Sable threads" }).getByRole("button", { name: "main", exact: true }).click({ button: "right" });
+  await expect(page.getByRole("menu", { name: "Options for main" })).toBeVisible();
+  await page.keyboard.press("Escape");
+  await expect(page.getByRole("menu", { name: "Options for main" })).toBeHidden();
+  expect(await nativeMenus()).toBe(0);
+
+  await page.locator("article.message.assistant .message-body").last().click({ button: "right" });
+  await expect.poll(nativeMenus).toBe(1);
+});
+
 test("plain HTTP to another host still gets a secure context and notifications", async ({ daemon, launch }) => {
   const { page } = await launch({ address: `http://shore.test:${String(daemon.port)}` });
   await expect(page.getByLabel("Access token")).toBeVisible();

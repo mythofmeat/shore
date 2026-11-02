@@ -1,5 +1,5 @@
 import { useEffect, useLayoutEffect, useState } from "react";
-import { CONVERSATION_DIALOG_EVENT } from "../app/intents.ts";
+import { CONVERSATION_DIALOG_EVENT, openThreadDialog } from "../app/intents.ts";
 import type { WorkspaceSnapshot } from "../workspace.ts";
 import { Avatar } from "../ui/avatar.tsx";
 import { IconButton, Menu, type MenuItem } from "../ui/controls.tsx";
@@ -24,7 +24,7 @@ function SidebarToggle({ open, mobile, toggle, unread }: { open: boolean; mobile
   if (open) return null;
   const label = mobile ? "Open sidebar" : "Expand sidebar";
   return <span className="sidebar-toggle">
-    <IconButton icon={mobile ? "menu" : "panel"} label={unread ? `${label} (unread messages in another conversation)` : label} onClick={toggle} />
+    <IconButton icon={mobile ? "menu" : "panel"} label={unread ? `${label} (unread messages in another thread)` : label} onClick={toggle} />
     {unread ? <span className="unread-dot" aria-hidden="true" /> : null}
   </span>;
 }
@@ -36,7 +36,7 @@ function ChatTopbar({ state, sidebarOpen, toggleSidebar, mobile }: { state: Work
   const shownModel = pendingModel === undefined ? listing?.active : pendingModel.model ?? listing?.active;
   const modelChanged = async () => { workspace.noteActiveModel((await reload()).active ?? null); };
   useEffect(() => {
-    const open = (event: Event) => { const name = (event as CustomEvent<string>).detail; if (["rename", "fork", "guidance", "system", "compact", "clear", "archive", "model", "gallery"].includes(name)) setDialog(name as ConversationDialog | "model" | "gallery"); };
+    const open = (event: Event) => { const name = (event as CustomEvent<string>).detail; if (["guidance", "system", "compact", "clear", "model", "gallery"].includes(name)) setDialog(name as ConversationDialog | "model" | "gallery"); };
     addEventListener(CONVERSATION_DIALOG_EVENT, open);
     return () => removeEventListener(CONVERSATION_DIALOG_EVENT, open);
   }, []);
@@ -47,18 +47,18 @@ function ChatTopbar({ state, sidebarOpen, toggleSidebar, mobile }: { state: Work
   const openingThread = state.opening?.thread === null || state.opening === null ? undefined : state.threads.find((item) => item.id === state.opening?.thread);
   const shownThread = openingThread ?? thread;
   const ready = state.status === "ready";
+  const threadId = thread?.id ?? state.thread ?? "";
   const items: MenuItem[] = [
+    { label: "Thread settings…", icon: "settings", onSelect: () => openThreadDialog("settings", threadId), disabled: !ready },
     { label: "Images…", icon: "image", onSelect: () => setDialog("gallery") },
-    { label: "Rename…", icon: "label", onSelect: () => setDialog("rename"), disabled: !ready },
-    { label: "Fork conversation…", icon: "branch", onSelect: () => setDialog("fork"), disabled: !ready },
-    { label: "Regenerate with guidance…", icon: "regenerate", onSelect: () => setDialog("guidance"), disabled: !ready || busy || !state.messages.some((message) => message.role !== "system") },
-    { label: "Add system message…", icon: "info", onSelect: () => setDialog("system"), disabled: !ready },
-    "separator",
     { label: "Compact context…", icon: "compact", onSelect: () => setDialog("compact"), disabled: !ready || busy },
+    { label: "Fork…", icon: "branch", onSelect: () => openThreadDialog("fork", threadId), disabled: !ready },
+    "separator",
+    { label: "Regenerate with guidance…", icon: "regenerate", onSelect: () => setDialog("guidance"), disabled: !ready || busy || !state.messages.some((message) => message.role !== "system") },
     { label: "Clear context…", icon: "refresh", onSelect: () => setDialog("clear"), disabled: !ready || busy },
     "separator",
-    ...(thread?.home === true ? [] : [{ label: "Make home conversation", icon: "home" as const, onSelect: () => { void makeHome(state); }, disabled: !ready }]),
-    { label: "Archive conversation…", icon: "archive", onSelect: () => setDialog("archive"), disabled: !ready || thread?.home === true, danger: true },
+    ...(thread === undefined || thread.home || thread.heartbeat === true ? [] : [{ label: "Make home", icon: "home" as const, onSelect: () => { void makeHome(thread); }, disabled: !ready }]),
+    { label: "Archive…", icon: "archive", onSelect: () => openThreadDialog("archive", threadId), disabled: !ready || thread?.home === true, danger: true },
   ];
   return <header className="topbar">
     <SidebarToggle open={sidebarOpen} mobile={mobile} toggle={toggleSidebar} unread={unreadElsewhere(state)} />
@@ -72,7 +72,7 @@ function ChatTopbar({ state, sidebarOpen, toggleSidebar, mobile }: { state: Work
       {mobile ? null : <button type="button" className={`model-chip ${pendingModel === undefined ? "" : "pending"}`} aria-label={`Chat model: ${shownModel ?? "unknown"}${pendingModel === undefined ? "" : ", saving"}. Change model`} title="Change model" disabled={!ready} onClick={() => setDialog("model")}>
         <span className="mono">{listing === undefined && pendingModel === undefined ? "…" : shortModel(shownModel)}</span>{pendingModel === undefined ? <Icon name="chevronDown" size={14} /> : <span className="spinner chip-spinner" aria-hidden="true" />}
       </button>}
-      <Menu label="Conversation options" items={mobile ? [{ label: `Model: ${shortModel(shownModel)}`, icon: "settings", onSelect: () => setDialog("model"), disabled: !ready }, "separator", ...items] : items} />
+      <Menu label="Thread options" items={mobile ? [{ label: `Model: ${shortModel(shownModel)}`, icon: "settings", onSelect: () => setDialog("model"), disabled: !ready }, "separator", ...items] : items} />
     </>}
     {dialog === "model" ? <ModelPicker state={state} close={() => setDialog(null)} changed={modelChanged} /> : dialog === "gallery" ? <GalleryDialog state={state} close={() => setDialog(null)} /> : dialog === null ? null : <ConversationDialogs dialog={dialog} state={state} close={() => setDialog(null)} />}
   </header>;
@@ -81,7 +81,7 @@ function ChatTopbar({ state, sidebarOpen, toggleSidebar, mobile }: { state: Work
 function NoCharacter({ state }: { state: WorkspaceSnapshot }) {
   return <div className="empty">
     <p className="empty-title">{state.characters.length === 0 ? "No characters yet" : "Choose a character"}</p>
-    <p className="empty-text">{state.characters.length === 0 ? "Create a character with the + button in the sidebar." : "Pick a character in the sidebar to open their conversations."}</p>
+    <p className="empty-text">{state.characters.length === 0 ? "Create a character with the + button in the sidebar." : "Pick a character in the sidebar to open their threads."}</p>
   </div>;
 }
 
@@ -101,7 +101,7 @@ export function Chat({ state, sidebarOpen, toggleSidebar, mobile }: { state: Wor
     {state.character === null ? <NoCharacter state={state} /> : <>
       <Transcript key={`${state.character}/${state.thread ?? ""}/${String(state.segmentView?.segment.index ?? "current")}`} state={state} character={state.character} mobile={mobile} />
       {state.threads.find((thread) => thread.id === state.thread)?.heartbeat === true
-        ? <div className="composer-wrap"><p className="composer composer-note" role="note">{`${state.character}'s heartbeats run here. You can read along, and write to ${state.character} in another conversation.`}</p></div>
+        ? <div className="composer-wrap"><p className="composer composer-note" role="note">{`${state.character}'s heartbeats run here. You can read along, and write to ${state.character} in another thread.`}</p></div>
         : <Composer key={JSON.stringify([state.character, state.thread])} state={state} character={state.character} mobile={mobile} />}
       <QuoteButton />
     </>}

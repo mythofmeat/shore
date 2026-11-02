@@ -2642,6 +2642,12 @@ wire_types! {
     }
 
     #[serde(deny_unknown_fields)]
+    pub struct ThreadCompactionArgs {
+        pub name: String,
+        pub compaction: bool,
+    }
+
+    #[serde(deny_unknown_fields)]
     pub struct ThreadModelArgs {
         pub name: String,
         #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -2968,6 +2974,7 @@ operations! {
     SetThreadPurpose: "thread_purpose" (ThreadPurposeArgs) => ThreadListing,
     SetThreadFiles: "thread_files" (ThreadFilesArgs) => ThreadListing,
     LockThread: "thread_lock" (ThreadLockArgs) => ThreadListing,
+    SetThreadCompaction: "thread_compaction" (ThreadCompactionArgs) => ThreadListing,
     PinThreadModel: "thread_model" (ThreadModelArgs) => ThreadListing,
     MarkThreadRead: "mark_thread_read" (MarkThreadReadArgs) => ThreadUnread,
 }

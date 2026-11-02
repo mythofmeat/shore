@@ -7,16 +7,10 @@ import { Icon } from "../ui/icons.tsx";
 import { navigate } from "../app/route.ts";
 import { conversation, perform, useActiveRequests, workspace } from "../app/state.ts";
 import { sortThreads } from "./order.ts";
+import { ThreadRow } from "./ThreadRow.tsx";
 
 export function threadLabel(thread: Pick<ThreadView, "id" | "label">): string {
   return thread.label !== undefined && thread.label !== "" ? thread.label : thread.id;
-}
-
-function UnreadBadge({ count }: { count: number }) {
-  return <span className="sidebar-unread">
-    <span aria-hidden="true">{count > 99 ? "99+" : String(count)}</span>
-    <span className="sr-only">{count === 1 ? "(1 unread message)" : `(${String(count)} unread messages)`}</span>
-  </span>;
 }
 
 function ConnectionStatus({ status }: { status: WorkspaceSnapshot["status"] }) {
@@ -45,7 +39,7 @@ export function Sidebar({ state, mobile, close, collapse, newCharacter, newThrea
     if (mobile) close();
     if (name !== state.thread) perform(() => workspace.openThread(name));
   };
-  return <aside className="sidebar" aria-label="Characters and conversations">
+  return <aside className="sidebar" aria-label="Characters and threads">
     <div className="sidebar-header">
       <span className="wordmark">shore</span>
       <div className="sidebar-header-actions">
@@ -66,20 +60,10 @@ export function Sidebar({ state, mobile, close, collapse, newCharacter, newThrea
             <Avatar name={character.name} avatar={character.avatar} size={30} selected={selected} /><span className="sidebar-name">{character.name}</span>
             {openingThis ? <span className="sidebar-replying"><span className="spinner" aria-hidden="true" /><span className="sr-only">(opening)</span></span> : null}
           </button>
-          {character.name === state.character ? <div className="sidebar-threads" role="group" aria-label={`${character.name} conversations`}>
-            {sortThreads(state.threads).map((thread) => {
-              const current = thread.id === shownThread;
-              const unread = thread.id === state.thread ? 0 : thread.unread ?? 0;
-              const replying = thread.id !== state.thread && conversation.activeIn({ character: state.character, thread: thread.id });
-              const openingThread = opening?.thread === thread.id && thread.id !== state.thread;
-              return <button key={thread.id} type="button" className={`sidebar-item thread ${current ? "on" : ""} ${unread > 0 ? "unread" : ""}`} aria-current={current ? "page" : undefined} aria-busy={openingThread} disabled={!ready} onClick={() => selectThread(thread.id)}>
-                <Icon name={thread.home ? "home" : thread.heartbeat === true ? "heartbeat" : "chat"} size={14} /><span className="sidebar-name">{threadLabel(thread)}</span>
-                {thread.locked === true ? <span className="sidebar-locked" title="Locked: only you change its label, purpose and files"><Icon name="lock" size={12} /><span className="sr-only">(locked)</span></span> : null}
-                {replying || openingThread ? <span className="sidebar-replying"><span className="spinner" aria-hidden="true" /><span className="sr-only">{openingThread ? "(opening)" : "(replying)"}</span></span> : null}
-                {unread > 0 ? <UnreadBadge count={unread} /> : null}
-              </button>;
-            })}
-            <button type="button" className="sidebar-item thread muted" disabled={!ready} onClick={newThread}><Icon name="plus" size={14} /><span className="sidebar-name">New conversation</span></button>
+          {character.name === state.character ? <div className="sidebar-threads" role="group" aria-label={`${character.name} threads`}>
+            {sortThreads(state.threads).map((thread) => <ThreadRow key={thread.id} thread={thread} label={threadLabel(thread)} current={thread.id === shownThread} unread={thread.id === state.thread ? 0 : thread.unread ?? 0}
+              replying={thread.id !== state.thread && conversation.activeIn({ character: state.character, thread: thread.id })} opening={opening?.thread === thread.id && thread.id !== state.thread} ready={ready} select={() => selectThread(thread.id)} />)}
+            <button type="button" className="sidebar-item thread muted" disabled={!ready} onClick={newThread}><Icon name="plus" size={14} /><span className="sidebar-name">New thread</span></button>
           </div> : null}
         </div>;
       })}

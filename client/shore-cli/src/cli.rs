@@ -1426,6 +1426,16 @@ pub(crate) enum ThreadCommand {
         name: String,
     },
 
+    /// Choose what happens when a thread gets long: compact it into memory, or trim its oldest turns into the archive
+    Compaction {
+        /// Thread id
+        name: String,
+
+        /// `on` compacts into memory, as the home thread does; `off` trims into the archive
+        #[arg(value_parser = ["on", "off"])]
+        mode: String,
+    },
+
     /// Pin a thread to its own chat model, or clear the pin to inherit the character's
     #[command(hide = true)]
     Model {
@@ -3038,6 +3048,10 @@ pub(crate) fn to_swp_command(
             ThreadCommand::Unlock { name } => {
                 Some(("thread_lock", json!({ "name": name, "locked": false })))
             }
+            ThreadCommand::Compaction { name, mode } => Some((
+                "thread_compaction",
+                json!({ "name": name, "compaction": mode == "on" }),
+            )),
             ThreadCommand::Model { name, model } => {
                 Some(("thread_model", json!({ "name": name, "model": model })))
             }
@@ -3802,6 +3816,13 @@ mod tests {
                 Some((
                     "thread_lock",
                     json!({"name": "lighthouse", "locked": false}),
+                )),
+            ),
+            (
+                &["thread", "compaction", "lighthouse", "on"],
+                Some((
+                    "thread_compaction",
+                    json!({"name": "lighthouse", "compaction": true}),
                 )),
             ),
             (

@@ -579,6 +579,23 @@ export async function setThreadLocked(
   return await setThreadField(data, character, id, "locked", locked ? true : undefined, now);
 }
 
+export async function setThreadCompaction(
+  data: string,
+  character: string,
+  id: string,
+  compaction: boolean,
+  now: string,
+): Promise<ThreadsIndex> {
+  const index = await ensureThreads(data, character, now);
+  const record = requireThread(index, character, id);
+  if (compaction && id === heartbeatThread(index)) {
+    throw new ThreadError("is_heartbeat", `thread ${JSON.stringify(id)} is where ${character}'s heartbeats run, and a heartbeat thread never compacts`);
+  }
+  const next = replaceThread(index, { ...record, compaction });
+  await writeThreadsIndex(data, character, next);
+  return next;
+}
+
 export interface ThreadEdit {
   label?: string | null;
   purpose?: string | null;

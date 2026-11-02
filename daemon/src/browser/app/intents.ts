@@ -19,3 +19,13 @@ export const EFFORT_MENU_EVENT = "shore:effort-menu";
 export function openEffortMenu(): void {
   dispatchEvent(new CustomEvent(EFFORT_MENU_EVENT));
 }
+
+export const THREAD_DIALOG_EVENT = "shore:thread-dialog";
+
+export type ThreadDialogKind = "settings" | "fork" | "archive";
+
+export interface ThreadDialogRequest { kind: ThreadDialogKind; thread: string }
+
+export function openThreadDialog(kind: ThreadDialogKind, thread: string): void {
+  dispatchEvent(new CustomEvent<ThreadDialogRequest>(THREAD_DIALOG_EVENT, { detail: { kind, thread } }));
+}

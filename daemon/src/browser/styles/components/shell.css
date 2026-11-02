@@ -151,6 +151,39 @@
   color: var(--accent);
 }
 
+.thread-row {
+  position: relative;
+  display: flex;
+  align-items: center;
+  -webkit-touch-callout: none;
+}
+
+.thread-row .sidebar-item.thread {
+  flex: 1;
+  min-width: 0;
+}
+
+.thread-more {
+  position: absolute;
+  right: 4px;
+  width: 26px;
+  height: 26px;
+  opacity: 0;
+  background: var(--surface-3);
+}
+
+.thread-row:hover .thread-more,
+.thread-row:focus-within .thread-more,
+.thread-row.menu-open .thread-more {
+  opacity: 1;
+}
+
+@media (hover: none) {
+  .thread-more {
+    display: none;
+  }
+}
+
 .sidebar-item.muted {
   color: var(--text-3);
 }

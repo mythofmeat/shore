@@ -3139,6 +3139,101 @@
       ]
     },
     {
+      "path": "shore thread compaction",
+      "about": "Choose what happens when a thread gets long: compact it into memory, or trim its oldest turns into the archive",
+      "long_about": null,
+      "hidden": false,
+      "aliases": [],
+      "subcommand_required": false,
+      "arguments": [
+        {
+          "id": "name",
+          "short": null,
+          "long": null,
+          "aliases": [],
+          "short_aliases": [],
+          "help": "Thread id",
+          "long_help": null,
+          "action": "Set",
+          "required": true,
+          "global": false,
+          "hidden": false,
+          "require_equals": false,
+          "min_values": 1,
+          "max_values": 1,
+          "defaults": [],
+          "choices": [],
+          "conflicts": [],
+          "env": null
+        },
+        {
+          "id": "mode",
+          "short": null,
+          "long": null,
+          "aliases": [],
+          "short_aliases": [],
+          "help": "`on` compacts into memory, as the home thread does; `off` trims into the archive",
+          "long_help": null,
+          "action": "Set",
+          "required": true,
+          "global": false,
+          "hidden": false,
+          "require_equals": false,
+          "min_values": 1,
+          "max_values": 1,
+          "defaults": [],
+          "choices": [
+            "on",
+            "off"
+          ],
+          "conflicts": [],
+          "env": null
+        },
+        {
+          "id": "json",
+          "short": null,
+          "long": "json",
+          "aliases": [],
+          "short_aliases": [],
+          "help": "Output raw JSON",
+          "long_help": null,
+          "action": "SetTrue",
+          "required": false,
+          "global": true,
+          "hidden": false,
+          "require_equals": false,
+          "min_values": 0,
+          "max_values": 0,
+          "defaults": [
+            "false"
+          ],
+          "choices": [],
+          "conflicts": [],
+          "env": null
+        },
+        {
+          "id": "help",
+          "short": "h",
+          "long": "help",
+          "aliases": [],
+          "short_aliases": [],
+          "help": "Print help",
+          "long_help": null,
+          "action": "Help",
+          "required": false,
+          "global": false,
+          "hidden": false,
+          "require_equals": false,
+          "min_values": 0,
+          "max_values": 0,
+          "defaults": [],
+          "choices": [],
+          "conflicts": [],
+          "env": null
+        }
+      ]
+    },
+    {
       "path": "shore thread model",
       "about": "Pin a thread to its own chat model, or clear the pin to inherit the character's",
       "long_about": null,
@@ -8714,6 +8809,21 @@
         "args": {
           "name": "work",
           "label": null
+        }
+      }
+    },
+    {
+      "argv": [
+        "thread",
+        "compaction",
+        "work",
+        "on"
+      ],
+      "mapping": {
+        "name": "thread_compaction",
+        "args": {
+          "name": "work",
+          "compaction": true
         }
       }
     },

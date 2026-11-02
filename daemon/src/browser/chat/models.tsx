@@ -8,7 +8,7 @@ import { Icon } from "../ui/icons.tsx";
 import { toasts } from "../ui/toast.tsx";
 import { errorText, workspace } from "../app/state.ts";
 
-export type ModelTarget = { kind: "thread" } | { kind: "character" } | { kind: "background"; task: BackgroundModelTarget } | { kind: "subagent"; name: string };
+export type ModelTarget = { kind: "thread"; id?: string } | { kind: "character" } | { kind: "background"; task: BackgroundModelTarget } | { kind: "subagent"; name: string };
 
 export function useModelListing(state: WorkspaceSnapshot, includeHidden = false, favoritesOnly = false): { listing: ModelListing | undefined; refresh: () => void; reload: () => Promise<ModelListing>; error: string } {
   const [listing, setListing] = useState<ModelListing>();
@@ -57,7 +57,7 @@ export function flattenModels(listing: ModelListing | undefined): ModelSummary[]
 
 export function targetLabel(target: ModelTarget, character: string | null): string {
   switch (target.kind) {
-    case "thread": return "This conversation";
+    case "thread": return target.id === undefined ? "This thread" : `Thread ${target.id}`;
     case "character": return `${character ?? "Character"}’s default`;
     case "background": return target.task === "all" ? "All background tasks" : `${target.task[0]?.toUpperCase() ?? ""}${target.task.slice(1)}`;
     case "subagent": return `Subagent ${target.name}`;
@@ -66,7 +66,7 @@ export function targetLabel(target: ModelTarget, character: string | null): stri
 
 async function applyModel(state: WorkspaceSnapshot, target: ModelTarget, model: string | null, includeHidden: boolean): Promise<void> {
   switch (target.kind) {
-    case "thread": await workspace.actions.run("thread_model", { name: state.thread ?? "", model }); break;
+    case "thread": await workspace.actions.run("thread_model", { name: target.id ?? state.thread ?? "", model }); break;
     case "character":
       if (model === null) await workspace.actions.run("reset_model", {});
       else await workspace.actions.run("switch_model", { name: model, include_hidden: includeHidden });
@@ -82,8 +82,8 @@ async function applyModel(state: WorkspaceSnapshot, target: ModelTarget, model: 
   }
 }
 
-export function ModelPicker({ state, close, target: initial, changed, scopes = true, current }: {
-  state: WorkspaceSnapshot; close: () => void; target?: ModelTarget; changed: () => void | Promise<void>; scopes?: boolean; current?: string | null;
+export function ModelPicker({ state, close, target: initial, changed, scopes = true, current, pick }: {
+  state: WorkspaceSnapshot; close: () => void; target?: ModelTarget; changed?: () => void | Promise<void>; scopes?: boolean; current?: string | null; pick?: (model: string | null) => void;
 }) {
   const [hidden, setHidden] = useState(false);
   const [favorites, setFavorites] = useState(false);
@@ -104,18 +104,19 @@ export function ModelPicker({ state, close, target: initial, changed, scopes = t
       try {
         await applyModel(state, target, model, hidden);
         await workspace.refreshThreads();
-        await changed();
+        await changed?.();
         toasts.show(chosenToast(model));
       } catch (failure) { toasts.show(errorText(failure), "error"); }
       finally { if (pendingModel?.attempt === attempt) setPendingModel(null); }
     })();
   };
   const choose = async (model: string | null) => {
-    if (target.kind === "thread" || target.kind === "character") { chooseForChat(model); return; }
+    if (pick !== undefined) { pick(model); close(); return; }
+    if ((target.kind === "thread" && (target.id ?? state.thread) === state.thread) || target.kind === "character") { chooseForChat(model); return; }
     setBusy(true);
     try {
       await applyModel(state, target, model, hidden);
-      await changed();
+      await changed?.();
       toasts.show(chosenToast(model));
       close();
     } catch (failure) { toasts.show(errorText(failure), "error"); } finally { setBusy(false); }
@@ -124,10 +125,10 @@ export function ModelPicker({ state, close, target: initial, changed, scopes = t
     try { await workspace.actions.run("favorite_model", { name: model.qualified_name, favorite: !model.favorite }); refresh(); }
     catch (failure) { toasts.show(errorText(failure), "error"); }
   };
-  const resettable = target.kind !== "thread" || thread?.chat_model !== undefined;
+  const resettable = pick !== undefined || target.kind !== "thread" || thread?.chat_model !== undefined;
   return <Dialog title={scopes ? "Choose a model" : `Model for ${targetLabel(target, state.character).toLowerCase()}`} close={close} wide>
     {scopes ? <div className="segmented" role="radiogroup" aria-label="Apply to">
-      <button type="button" role="radio" aria-checked={target.kind === "thread"} onClick={() => setTarget({ kind: "thread" })}>This conversation</button>
+      <button type="button" role="radio" aria-checked={target.kind === "thread"} onClick={() => setTarget({ kind: "thread" })}>This thread</button>
       <button type="button" role="radio" aria-checked={target.kind === "character"} onClick={() => setTarget({ kind: "character" })}>{state.character ?? "Character"}’s default</button>
     </div> : null}
     <p className="form-text">Currently using <span className="mono">{active ?? "the configured default"}</span>.</p>

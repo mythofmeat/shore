@@ -62,6 +62,7 @@ const WIRE_EXAMPLES: &[&[&str]] = &[
     ],
     &["thread", "label", "work", "Work"],
     &["thread", "label", "work"],
+    &["thread", "compaction", "work", "on"],
     &["thread", "model", "work", "fixture:model"],
     &["thread", "model", "work"],
     &["thread", "home", "work"],

@@ -177,9 +177,17 @@ export class Workspace {
     const generation = ++this.#threadListing;
     const since = this.#unreadSeq;
     try {
-      const threads = this.#state.character === null ? [] : (await this.actions.run("list_threads", {})).threads;
-      if (generation === this.#threadListing) this.#patch({ threads: this.#laterUnread(threads, since) });
+      if (this.#state.character === null) { this.#patch({ threads: [] }); return; }
+      const listing = await this.actions.run("list_threads", {});
+      if (generation !== this.#threadListing) return;
+      this.#patch({ threads: this.#laterUnread(listing.threads, since) });
     } catch (error) { if (generation === this.#threadListing && this.connection.status === "ready") this.report(error); }
+  }
+  noteThreadRead(id: string): void {
+    this.#patch({ threads: this.#state.threads.map((thread) => thread.id === id ? { ...thread, unread: 0 } : thread) });
+  }
+  noteHomeThread(id: string): void {
+    this.#patch({ threads: this.#state.threads.map((thread) => ({ ...thread, home: thread.id === id })) });
   }
   async openThread(name: string): Promise<void> {
     await this.#open({ character: this.#state.character, thread: name }, async () => { await this.actions.run("switch_thread", { name, resync: true }); });

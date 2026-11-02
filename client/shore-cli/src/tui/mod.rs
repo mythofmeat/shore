@@ -2931,7 +2931,7 @@ pub(crate) fn handle_server_message(app: &mut App, msg: ServerMessage) -> UiEffe
                     }
                 }
                 "archive_thread" | "thread_home" | "thread_label" | "thread_purpose"
-                | "thread_files" | "thread_lock" => {
+                | "thread_files" | "thread_lock" | "thread_compaction" => {
                     absorb_thread_listing(app, &co.data);
                 }
                 "start_sign_in" => {

@@ -1,4 +1,5 @@
-import { useEffect, useId, useRef, useState, type ButtonHTMLAttributes, type ReactNode } from "react";
+import { useEffect, useId, useLayoutEffect, useRef, useState, type ButtonHTMLAttributes, type KeyboardEvent, type ReactNode } from "react";
+import { createPortal } from "react-dom";
 import { Icon, type IconName } from "./icons.tsx";
 
 export function IconButton({ icon, label, size = 18, className = "", ...props }: { icon: IconName; label: string; size?: number } & Omit<ButtonHTMLAttributes<HTMLButtonElement>, "children" | "aria-label">) {
@@ -48,6 +49,50 @@ export function Menu({ label, items, trigger, triggerLabel, triggerClassName = "
         </button>)}
     </div> : null}
   </div>;
+}
+
+export function PointMenu({ label, items, at, close }: { label: string; items: readonly MenuItem[]; at: { x: number; y: number }; close: () => void }) {
+  const list = useRef<HTMLDivElement>(null);
+  const [place, setPlace] = useState(at);
+  const closing = useRef(close);
+  closing.current = close;
+  useLayoutEffect(() => {
+    const box = list.current?.getBoundingClientRect();
+    if (box === undefined) return;
+    setPlace({ x: Math.max(8, Math.min(at.x, innerWidth - box.width - 8)), y: Math.max(8, Math.min(at.y, innerHeight - box.height - 8)) });
+  }, [at.x, at.y]);
+  useEffect(() => {
+    const opener = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    const outside = (event: PointerEvent) => { if (!list.current?.contains(event.target as Node)) closing.current(); };
+    const dismissed = () => { closing.current(); };
+    document.addEventListener("pointerdown", outside);
+    addEventListener("blur", dismissed);
+    addEventListener("resize", dismissed);
+    list.current?.querySelector<HTMLButtonElement>("button:not(:disabled)")?.focus();
+    return () => {
+      document.removeEventListener("pointerdown", outside);
+      removeEventListener("blur", dismissed);
+      removeEventListener("resize", dismissed);
+      if (opener?.isConnected === true) opener.focus();
+    };
+  }, []);
+  const move = (step: number) => {
+    const buttons = [...(list.current?.querySelectorAll<HTMLButtonElement>("button:not(:disabled)") ?? [])];
+    const index = buttons.indexOf(document.activeElement as HTMLButtonElement);
+    buttons.at((index + step + buttons.length) % buttons.length)?.focus();
+  };
+  const onKeyDown = (event: KeyboardEvent<HTMLDivElement>) => {
+    event.stopPropagation();
+    if (event.key === "Escape" || event.key === "Tab") { event.preventDefault(); close(); }
+    if (event.key === "ArrowDown") { event.preventDefault(); move(1); }
+    if (event.key === "ArrowUp") { event.preventDefault(); move(-1); }
+  };
+  return createPortal(<div className="menu-list point" role="menu" aria-label={label} ref={list} style={{ left: place.x, top: place.y }} onKeyDown={onKeyDown} onContextMenu={(event) => event.preventDefault()}>
+    {items.map((item, index) => item === "separator" ? <div key={index} className="menu-separator" role="separator" /> :
+      <button key={index} type="button" role="menuitem" className={item.danger === true ? "danger" : ""} disabled={item.disabled} onClick={() => { close(); item.onSelect(); }}>
+        {item.icon === undefined ? null : <Icon name={item.icon} size={16} />}<span className="menu-label">{item.label}</span>{item.detail === undefined ? null : <span className="menu-detail">{item.detail}</span>}
+      </button>)}
+  </div>, document.body);
 }
 
 function isSearchBox(target: EventTarget): boolean {
