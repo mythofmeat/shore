@@ -4,7 +4,7 @@ use crossterm::event::{self, Event, KeyCode, KeyEvent, KeyEventKind, KeyModifier
 use serde_json::Value;
 use shore_common::swp_client::SWPConnection;
 
-use crate::cli::{KeyInput, KeyRequest, ProviderCommand, ProviderPlan};
+use crate::cli::{KeyInput, KeyRequest, ProviderCommand, ProviderPlan, SignInRequest};
 
 type Failure = Box<dyn std::error::Error>;
 
@@ -79,7 +79,13 @@ pub(crate) async fn run(
             let data = command(conn, name, args).await?;
             render(name, &data, json)
         }
-        ProviderPlan::Key(request) => add_key(conn, &request, json).await,
+        ProviderPlan::Key(request) => {
+            if request.asks_for_a_key() && signs_in(conn, &request.provider).await? {
+                return sign_in(conn, &request.sign_in(), json).await;
+            }
+            add_key(conn, &request, json).await
+        }
+        ProviderPlan::SignIn(request) => sign_in(conn, &request, json).await,
         ProviderPlan::Add { args, key } => {
             let data = command(conn, "add_provider", args).await?;
             render("add_provider", &data, json)?;
@@ -121,6 +127,75 @@ pub(crate) async fn run(
                     add_key(conn, &request, json).await
                 }
             }
+        }
+    }
+}
+
+async fn signs_in(conn: &mut SWPConnection, provider: &str) -> Result<bool, Failure> {
+    let detail = command(
+        conn,
+        "provider_detail",
+        serde_json::json!({ "provider": provider }),
+    )
+    .await?;
+    Ok(detail.get("credential_kind").and_then(Value::as_str) == Some("login"))
+}
+
+async fn sign_in(
+    conn: &mut SWPConnection,
+    request: &SignInRequest,
+    json: bool,
+) -> Result<(), Failure> {
+    let started = command(conn, "start_sign_in", request.args()).await?;
+    let field = |key: &str| {
+        started
+            .get(key)
+            .and_then(Value::as_str)
+            .unwrap_or_default()
+            .to_owned()
+    };
+    let (provider, credential) = (field("provider"), field("credential"));
+    cli_err!("{}:", field("message"));
+    cli_err!();
+    cli_err!("{}", field("url"));
+    cli_err!();
+    let Some(code) = read_code().await? else {
+        _ = command(
+            conn,
+            "cancel_sign_in",
+            serde_json::json!({ "provider": provider, "credential": credential }),
+        )
+        .await;
+        return Err("stopped signing in; nothing changed".into());
+    };
+    let data = command(
+        conn,
+        "finish_sign_in",
+        serde_json::json!({ "provider": provider, "credential": credential, "code": code }),
+    )
+    .await
+    .inspect_err(|_| cli_err!("Run the same command again to pick the sign-in back up."))?;
+    render("finish_sign_in", &data, json)
+}
+
+async fn read_code() -> Result<Option<String>, Failure> {
+    let mut stderr = io::stderr();
+    write!(stderr, "Paste the code here: ")?;
+    stderr.flush()?;
+    let (sender, receiver) = tokio::sync::oneshot::channel();
+    _ = std::thread::spawn(move || {
+        let mut line = String::new();
+        let read = io::stdin().read_line(&mut line);
+        _ = sender.send(read.map(|_| line));
+    });
+    tokio::select! {
+        read = receiver => {
+            let code = read??.trim().to_owned();
+            Ok((!code.is_empty()).then_some(code))
+        }
+        _ = tokio::signal::ctrl_c() => {
+            writeln!(stderr)?;
+            Ok(None)
         }
     }
 }

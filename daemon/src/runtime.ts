@@ -43,11 +43,12 @@ import { subagentRunner } from "./tools/subagent_loop.ts";
 import { Ledger } from "./ledger/store.ts";
 import { backfillLedgerCosts } from "./ledger/usage.ts";
 import { setNanoGptSubscription, setSubscriptionProviders } from "./ledger/store.ts";
-import { DEFAULT_SUBSCRIPTION_PROVIDERS } from "./config/providers.ts";
+import { claudeLoginSettingsOf, DEFAULT_SUBSCRIPTION_PROVIDERS } from "./config/providers.ts";
 import { ledgerFor, setNanoGptSubscriptionCacheDir } from "./ledger/record.ts";
 import { closeLedgers, setCallObserver } from "./ledger/record.ts";
 import { modelUsageSummary } from "./ledger/query.ts";
 import { configureClaudePlanLimits, type ClaudePlanLimitsOptions } from "./ledger/plan_limits.ts";
+import { closeSignIns } from "./llm/sign_in.ts";
 import { configureSecretStore } from "./llm/secret_store.ts";
 import { configureCredentialStanding } from "./llm/credential_standing.ts";
 import { captureProviders } from "./llm/capture.ts";
@@ -147,7 +148,11 @@ export async function createRuntime(options: RuntimeOptions): Promise<ShoreRunti
 
   applySubscriptionProviders(registry);
   for (const character of registry.availableCharacters()) removeWorkspaceIndex(config.dirs.cache, character);
-  configureClaudePlanLimits({ cacheDir: config.dirs.cache, ...claudePlanFetcher(options.providers.claude_agent) });
+  configureClaudePlanLimits({
+    cacheDir: config.dirs.cache,
+    settings: () => claudeLoginSettingsOf(registry.globalConfig().providers),
+    ...claudePlanFetcher(options.providers.claude_agent),
+  });
   configureSecretStore(config.dirs.data);
   configureCredentialStanding(config.dirs.cache);
 
@@ -266,6 +271,7 @@ export async function createRuntime(options: RuntimeOptions): Promise<ShoreRunti
     refreshHistoryIndexes,
     refreshMcpCaches,
     async shutdown() {
+      closeSignIns();
       await historyIndex.shutdown();
       await mcp.current.shutdown();
       closeWorkspaceHelpers();
@@ -516,8 +522,11 @@ export function sharedToolDeps(
   };
 }
 
-function claudePlanFetcher(provider: SidecarProvider | undefined): Pick<ClaudePlanLimitsOptions, "fetch"> {
-  return provider === undefined ? {} : { fetch: (account) => provider.planLimits?.(account) ?? Promise.resolve({ status: "unavailable" }) };
+function claudePlanFetcher(provider: SidecarProvider | undefined): Pick<ClaudePlanLimitsOptions, "fetch" | "signIn"> {
+  return provider === undefined ? {} : {
+    fetch: (account) => provider.planLimits?.(account) ?? Promise.resolve({ status: "unavailable" }),
+    signIn: (configDir) => provider.signIn?.(configDir) ?? Promise.reject(new Error("this daemon can't sign Claude logins in")),
+  };
 }
 
 export function applySubscriptionProviders(registry: CharacterRegistry): void {

@@ -434,16 +434,28 @@ fn credential_value(credential: &Value) -> String {
             });
         }
         "login" => {
-            let email = text(credential, "hint");
-            parts.push(if email.is_empty() {
+            let who = [text(credential, "hint"), text(credential, "plan")]
+                .into_iter()
+                .filter(|part| !part.is_empty() && *part != text(credential, "name"))
+                .collect::<Vec<_>>()
+                .join(" \u{00b7} ");
+            parts.push(if who.is_empty() {
                 "login".to_owned()
             } else {
-                format!("login {email}")
+                format!("login {who}")
             });
         }
         _ => parts.push("no key".to_owned()),
     }
-    parts.push(standing_words(text(credential, "standing")).to_owned());
+    let standing = text(credential, "standing");
+    parts.push(
+        if text(credential, "kind") == "login" && standing == "over_quota" {
+            "at a limit"
+        } else {
+            standing_words(standing)
+        }
+        .to_owned(),
+    );
     if !flag(credential, "enabled") {
         parts.push("disabled".to_owned());
     }
@@ -456,9 +468,8 @@ fn credential_value(credential: &Value) -> String {
 fn credential_note(credential: &Value) -> String {
     let mut parts = Vec::new();
     let detail = text(credential, "detail");
-    if !detail.is_empty()
-        && (text(credential, "standing") != "works" || text(credential, "kind") == "login")
-    {
+    let standing = text(credential, "standing");
+    if !detail.is_empty() && standing != "works" && detail != standing_words(standing) {
         parts.push(detail.to_owned());
     }
     if let Some(limit) = credential.get("limit").filter(|v| !v.is_null()) {
@@ -507,11 +518,15 @@ pub(crate) fn write_provider_detail<W: Write>(out: &mut W, provider: &Value) {
         rows.add("billing", "subscription");
     }
     let selection = match (text(provider, "selection"), text(provider, "pinned")) {
-        (_, pinned) if !pinned.is_empty() => format!("pinned to {pinned}"),
-        ("room", _) => "the login with the most room left".to_owned(),
+        (_, pinned) if !pinned.is_empty() => format!("only {pinned}"),
+        ("room", _) => "a login with room, preferring the week that resets soonest".to_owned(),
         _ => "first that works, in order".to_owned(),
     };
     rows.add("uses", &selection);
+    let why = text(provider, "selection_detail");
+    if !why.is_empty() {
+        rows.add("right now", why);
+    }
     if let Some(cache) = data_cache(provider) {
         rows.add("catalog", &cache);
     }
@@ -550,20 +565,39 @@ pub(crate) fn write_provider_detail<W: Write>(out: &mut W, provider: &Value) {
             &credential_note(credential),
             tone,
         );
-    }
-    keys.write(out);
-    for credential in credentials {
+        let windows = rows_of(credential, "windows");
         let command = text(credential, "login_command");
-        if !command.is_empty() {
-            note(
-                out,
-                &format!(
-                    "sign {} in on the daemon's host: {command}",
-                    text(credential, "name")
-                ),
-            );
+        if !windows.is_empty() || !command.is_empty() {
+            keys.write(out);
+            keys = Rows::new();
+            super::usage::write_login_windows(out, windows);
+            if !command.is_empty() {
+                note(out, &format!("sign in with: {command}"));
+            }
         }
     }
+    keys.write(out);
+}
+
+pub(crate) fn write_sign_in_started<W: Write>(out: &mut W, data: &Value) {
+    note(out, &format!("{}:", text(data, "message")));
+    note(out, text(data, "url"));
+}
+
+pub(crate) fn print_sign_in_started(data: &Value) {
+    let stdout = crate::output::stdout();
+    let mut out = stdout.lock();
+    write_sign_in_started(&mut out, data);
+}
+
+pub(crate) fn write_sign_in_cancelled<W: Write>(out: &mut W, data: &Value) {
+    note(out, text(data, "message"));
+}
+
+pub(crate) fn print_sign_in_cancelled(data: &Value) {
+    let stdout = crate::output::stdout();
+    let mut out = stdout.lock();
+    write_sign_in_cancelled(&mut out, data);
 }
 
 pub(crate) fn write_provider_changed<W: Write>(out: &mut W, data: &Value) {

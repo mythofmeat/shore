@@ -4,6 +4,7 @@ import { join } from "node:path";
 
 import type { ClaudePlanReading } from "../ledger/plan_limits.ts";
 import { shoreLog } from "../log.ts";
+import { rankByRoom, roomLeft, type Standing, type UsageWindow } from "./credential_room.ts";
 
 export const DEFAULT_CLAUDE_ACCOUNT = "subscription";
 
@@ -15,6 +16,29 @@ export interface ClaudeAccount {
   name: string;
   configDir?: string;
   email?: string;
+  folder?: string;
+  missing?: boolean;
+}
+
+export interface ClaudeLoginEntry {
+  name: string;
+  dir?: string;
+}
+
+export interface ClaudeLoginLimits {
+  session?: number;
+  weekly?: number;
+}
+
+export interface ClaudeLoginSetting extends ClaudeLoginEntry {
+  enabled: boolean;
+  limits: ClaudeLoginLimits;
+}
+
+export interface ClaudeLoginSettings {
+  provider: string;
+  pin?: string;
+  logins: readonly ClaudeLoginSetting[];
 }
 
 export function claudeAccountsRoot(home: string = process.env.HOME ?? homedir()): string {
@@ -39,7 +63,19 @@ function isDirectory(path: string): boolean {
   }
 }
 
-export function discoverClaudeAccounts(home?: string, known: ReadonlyMap<string, string> = new Map()): ClaudeAccount[] {
+function byName(a: ClaudeAccount, b: ClaudeAccount): number {
+  return a.name < b.name ? -1 : a.name > b.name ? 1 : 0;
+}
+
+function loginFolderOf(entry: ClaudeLoginEntry): string | undefined {
+  return entry.dir ?? (entry.name === DEFAULT_CLAUDE_ACCOUNT ? undefined : entry.name);
+}
+
+export function discoverClaudeAccounts(
+  home?: string,
+  known: ReadonlyMap<string, string> = new Map(),
+  entries: readonly ClaudeLoginEntry[] = [],
+): ClaudeAccount[] {
   const root = claudeAccountsRoot(home);
   let folders: string[];
   try {
@@ -48,25 +84,40 @@ export function discoverClaudeAccounts(home?: string, known: ReadonlyMap<string,
     if ((e as NodeJS.ErrnoException).code !== "ENOENT") shoreLog.warn(`shore: could not list Claude accounts in ${root}: ${String(e)}`);
     folders = [];
   }
+  const bound = new Map(entries.flatMap((entry) => {
+    const folder = loginFolderOf(entry);
+    return folder === undefined ? [] : [[folder, entry.name] as const];
+  }));
   const found = new Map<string, ClaudeAccount>();
   for (const folder of folders) {
     const configDir = join(root, folder);
     if (!isDirectory(configDir)) continue;
     const email = signedInEmail(configDir);
-    const name = email ?? known.get(configDir) ?? folder;
+    const name = bound.get(folder) ?? email ?? known.get(configDir) ?? folder;
     const twin = found.get(name);
     if (twin !== undefined) {
       shoreLog.warn(`shore: ${configDir} and ${String(twin.configDir)} are both signed in as ${name}; using the first`);
       continue;
     }
-    found.set(name, { name, configDir, ...(email === undefined ? {} : { email }) });
+    found.set(name, { name, configDir, folder, ...(email === undefined ? {} : { email }) });
   }
-  return found.size === 0 ? [{ name: DEFAULT_CLAUDE_ACCOUNT }] : [...found.values()].sort((a, b) => (a.name < b.name ? -1 : a.name > b.name ? 1 : 0));
+  const signedIn = found.size;
+  for (const entry of entries) {
+    const folder = loginFolderOf(entry);
+    if (folder === undefined || found.has(entry.name) || [...found.values()].some((account) => account.folder === folder)) continue;
+    found.set(entry.name, { name: entry.name, configDir: join(root, folder), folder, missing: true });
+  }
+  const accounts = [...found.values()];
+  if (signedIn === 0) accounts.push({ name: DEFAULT_CLAUDE_ACCOUNT });
+  return accounts.sort(byName);
 }
 
-export function claudeLoginCommand(account: ClaudeAccount, user: string, claude = "claude"): string {
-  const dir = account.configDir === undefined ? "" : `env CLAUDE_CONFIG_DIR=${account.configDir} `;
-  return `sudo -u ${user} ${dir}${claude} auth login`;
+function shellWord(word: string): string {
+  return /^[A-Za-z0-9_.@+%=:,/-]+$/.test(word) ? word : `'${word.replaceAll("'", "'\\''")}'`;
+}
+
+export function claudeLoginCommand(account: ClaudeAccount, provider = "claude_agent"): string {
+  return `shore provider ${provider} auth ${shellWord(account.name)} --login`;
 }
 
 export type ClaudeLogin = "ok" | "logged_out" | "unavailable" | "unchecked" | { error: string };
@@ -78,90 +129,30 @@ export interface ClaudeAccountStanding {
   seven_day: ClaudePlanReading | null;
 }
 
-interface Limit {
-  window: "five_hour" | "seven_day";
-  reading: ClaudePlanReading;
-  cutoff: number;
+export interface Assessment {
+  account: ClaudeAccount;
+  name: string;
+  standing: Standing;
 }
 
-export type Assessment =
-  | { account: ClaudeAccount; state: "ok"; weekResets: number | null; room: number; reason: string }
-  | { account: ClaudeAccount; state: "limited"; reason: string; availableAt: number | null }
-  | { account: ClaudeAccount; state: "out"; reason: string }
-  | { account: ClaudeAccount; state: "unknown"; reason: string };
-
-const WINDOW_LABELS = { five_hour: "session", seven_day: "weekly" } as const;
-
-function used(reading: ClaudePlanReading, now: number): number {
-  if (reading.resets_at !== null && Date.parse(reading.resets_at) <= now) return 0;
-  return Math.min(Math.max(reading.percent_used, 0), 1);
+export function claudeUsageWindows(standing: Pick<ClaudeAccountStanding, "five_hour" | "seven_day">, limits: ClaudeLoginLimits = {}): UsageWindow[] {
+  return [
+    { window: "five_hour", label: "session", reading: standing.five_hour, cutoff: limits.session ?? SESSION_CUTOFF, own: limits.session !== undefined, longest: false },
+    { window: "seven_day", label: "weekly", reading: standing.seven_day, cutoff: limits.weekly ?? WEEKLY_CUTOFF, own: limits.weekly !== undefined, longest: true },
+  ];
 }
 
-function percent(fraction: number): string {
-  return `${String(Math.round(fraction * 100))}%`;
-}
-
-function resetTime(reading: ClaudePlanReading): number | null {
-  if (reading.resets_at === null) return null;
-  const at = Date.parse(reading.resets_at);
-  return Number.isFinite(at) ? at : null;
-}
-
-export function assessClaudeAccount(standing: ClaudeAccountStanding, now: number): Assessment {
+export function assessClaudeAccount(standing: ClaudeAccountStanding, now: number, limits: ClaudeLoginLimits = {}): Assessment {
   const { account, login } = standing;
-  if (login === "logged_out") return { account, state: "out", reason: "not logged in" };
-  if (login === "unavailable") return { account, state: "out", reason: "its login has no Claude plan limits" };
-  const limits: Limit[] = [];
-  if (standing.five_hour !== null) limits.push({ window: "five_hour", reading: standing.five_hour, cutoff: SESSION_CUTOFF });
-  if (standing.seven_day !== null) limits.push({ window: "seven_day", reading: standing.seven_day, cutoff: WEEKLY_CUTOFF });
-  if (limits.length === 0) {
-    return { account, state: "unknown", reason: typeof login === "object" ? `couldn't check: ${login.error}` : "not checked yet" };
-  }
-  const over = limits.filter((limit) => used(limit.reading, now) >= limit.cutoff);
-  if (over.length > 0) {
-    const resets = over.map((limit) => resetTime(limit.reading));
-    return {
-      account,
-      state: "limited",
-      reason: over.map((limit) => `${WINDOW_LABELS[limit.window]} ${percent(used(limit.reading, now))} ≥ ${percent(limit.cutoff)}`).join(", "),
-      availableAt: resets.every((at) => at !== null) ? Math.max(...resets) : null,
-    };
-  }
-  const week = standing.seven_day === null ? null : resetTime(standing.seven_day);
-  return {
-    account,
-    state: "ok",
-    weekResets: week !== null && week > now ? week : null,
-    room: Math.min(...limits.map((limit) => limit.cutoff - used(limit.reading, now))),
-    reason: limits.map((limit) => `${WINDOW_LABELS[limit.window]} ${percent(used(limit.reading, now))}`).join(" · "),
-  };
-}
-
-const STATE_ORDER = { ok: 0, limited: 1, unknown: 2, out: 3 } as const;
-
-function minute(at: number | null): number {
-  return at === null ? Infinity : Math.floor(at / 60_000);
+  const assessed = (result: Standing): Assessment => ({ account, name: account.name, standing: result });
+  if (account.missing === true) return assessed({ state: "out", reason: "not signed in yet" });
+  if (login === "logged_out") return assessed({ state: "out", reason: "not logged in" });
+  if (login === "unavailable") return assessed({ state: "out", reason: "its login has no Claude plan limits" });
+  return assessed(roomLeft(claudeUsageWindows(standing, limits), now, typeof login === "object" ? `couldn't check: ${login.error}` : "not checked yet"));
 }
 
 export function rankClaudeAccounts(assessments: readonly Assessment[], current: string | undefined): Assessment[] {
-  const isCurrent = (a: Assessment): number => Number(a.account.name === current);
-  const freeAt = (a: Assessment): number => (a.state === "limited" ? minute(a.availableAt) : Infinity);
-  return assessments
-    .map((a, i) => ({ a, i }))
-    .sort(({ a, i }, { a: b, i: j }) => {
-      const byState = STATE_ORDER[a.state] - STATE_ORDER[b.state];
-      if (byState !== 0) return byState;
-      if (a.state === "ok" && b.state === "ok") {
-        const ra = minute(a.weekResets);
-        const rb = minute(b.weekResets);
-        if (ra !== rb) return ra < rb ? -1 : 1;
-        return isCurrent(b) - isCurrent(a) || b.room - a.room || i - j;
-      }
-      const fa = freeAt(a);
-      const fb = freeAt(b);
-      return fa === fb ? i - j : fa < fb ? -1 : 1;
-    })
-    .map(({ a }) => a);
+  return rankByRoom(assessments, current);
 }
 
 export interface AccountDecision {
@@ -181,14 +172,14 @@ function inWords(ms: number): string {
 
 export function decideClaudeAccount(assessments: readonly Assessment[], current: string | undefined, now: number): AccountDecision {
   const ranked = rankClaudeAccounts(assessments, current);
-  const best = ranked[0]?.state === "ok" ? ranked[0] : undefined;
-  const cur = assessments.find((a) => a.account.name === current);
+  const best = ranked[0]?.standing.state === "ok" ? ranked[0] : undefined;
+  const cur = assessments.find((a) => a.name === current)?.standing;
   if (cur?.state === "unknown") return { reason: `"${String(current)}" ${cur.reason}` };
   if (cur?.state === "ok") return { reason: `"${String(current)}" still has room (${cur.reason})` };
-  if (best?.state !== "ok") {
-    const next = ranked.find((a) => a.state === "limited" && a.availableAt !== null);
-    if (next?.state !== "limited" || next.availableAt === null) return { reason: "no Claude account can be used right now" };
-    return { reason: `every Claude account is at a limit; "${next.account.name}" frees up first, in ${inWords(next.availableAt - now)}` };
+  if (best?.standing.state !== "ok") {
+    const next = ranked.find((a) => a.standing.state === "limited" && a.standing.availableAt !== null);
+    if (next?.standing.state !== "limited" || next.standing.availableAt === null) return { reason: "no Claude account can be used right now" };
+    return { reason: `every Claude account is at a limit; "${next.name}" frees up first, in ${inWords(next.standing.availableAt - now)}` };
   }
   const leaving =
     cur?.state === "limited"
@@ -196,8 +187,8 @@ export function decideClaudeAccount(assessments: readonly Assessment[], current:
       : cur?.state === "out"
         ? `"${String(current)}" can't be used: ${cur.reason}`
         : "no Claude account was in use";
-  const why = best.weekResets === null
+  const why = best.standing.resetsAt === null
     ? "no account with room has started its week yet"
-    : `its week resets soonest, in ${inWords(best.weekResets - now)}`;
-  return { to: best.account, reason: `${leaving}; "${best.account.name}" is next: ${why}` };
+    : `its week resets soonest, in ${inWords(best.standing.resetsAt - now)}`;
+  return { to: best.account, reason: `${leaving}; "${best.name}" is next: ${why}` };
 }

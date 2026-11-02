@@ -201,6 +201,7 @@ export interface CallBlock {
   message: string;
   summary: string;
   api_key?: string;
+  login_limit?: true;
 }
 
 export interface BudgetBlock extends CallBlock {

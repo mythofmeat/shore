@@ -569,9 +569,12 @@ pub(crate) fn catalog_render(name: &str) -> Option<fn(&serde_json::Value)> {
         | "remove_credential"
         | "order_credentials"
         | "select_credential"
-        | "set_credential_limit" => Some(output::catalog::print_provider_changed),
+        | "set_credential_limit"
+        | "finish_sign_in" => Some(output::catalog::print_provider_changed),
         "remove_provider" => Some(output::catalog::print_provider_removed),
         "test_credential" => Some(output::catalog::print_credential_tested),
+        "start_sign_in" => Some(output::catalog::print_sign_in_started),
+        "cancel_sign_in" => Some(output::catalog::print_sign_in_cancelled),
         _ => None,
     }
 }

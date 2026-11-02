@@ -1434,6 +1434,54 @@
             "properties": {
               "name": {
                 "type": "string",
+                "const": "start_sign_in"
+              },
+              "data": {
+                "$ref": "#/$defs/SignInStarted"
+              }
+            },
+            "required": [
+              "name",
+              "data"
+            ]
+          },
+          {
+            "type": "object",
+            "properties": {
+              "name": {
+                "type": "string",
+                "const": "finish_sign_in"
+              },
+              "data": {
+                "$ref": "#/$defs/ProviderChanged"
+              }
+            },
+            "required": [
+              "name",
+              "data"
+            ]
+          },
+          {
+            "type": "object",
+            "properties": {
+              "name": {
+                "type": "string",
+                "const": "cancel_sign_in"
+              },
+              "data": {
+                "$ref": "#/$defs/SignInCancelled"
+              }
+            },
+            "required": [
+              "name",
+              "data"
+            ]
+          },
+          {
+            "type": "object",
+            "properties": {
+              "name": {
+                "type": "string",
                 "const": "log"
               },
               "data": {
@@ -8201,6 +8249,22 @@
               "null"
             ]
           },
+          "credential_kind": {
+            "anyOf": [
+              {
+                "$ref": "#/$defs/CredentialKind"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "selection_detail": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
           "credentials": {
             "type": "array",
             "items": {
@@ -8255,6 +8319,15 @@
         "enum": [
           "order",
           "room"
+        ]
+      },
+      "CredentialKind": {
+        "type": "string",
+        "enum": [
+          "api_key",
+          "env",
+          "login",
+          "none"
         ]
       },
       "CredentialStatus": {
@@ -8330,6 +8403,19 @@
               "string",
               "null"
             ]
+          },
+          "windows": {
+            "type": "array",
+            "items": {
+              "$ref": "#/$defs/CredentialWindow"
+            },
+            "default": []
+          },
+          "plan": {
+            "type": [
+              "string",
+              "null"
+            ]
           }
         },
         "required": [
@@ -8345,16 +8431,8 @@
           "in_use",
           "warn_on_fallback",
           "limit",
-          "usage"
-        ]
-      },
-      "CredentialKind": {
-        "type": "string",
-        "enum": [
-          "api_key",
-          "env",
-          "login",
-          "none"
+          "usage",
+          "windows"
         ]
       },
       "CredentialStanding": {
@@ -8417,6 +8495,46 @@
           "cost_usd",
           "calls",
           "since"
+        ]
+      },
+      "CredentialWindow": {
+        "type": "object",
+        "properties": {
+          "window": {
+            "type": "string"
+          },
+          "label": {
+            "type": "string"
+          },
+          "percent_used": {
+            "type": "number",
+            "format": "double"
+          },
+          "resets_at": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "limit": {
+            "type": "number",
+            "format": "double"
+          },
+          "limit_set": {
+            "type": "boolean"
+          },
+          "at_limit": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "window",
+          "label",
+          "percent_used",
+          "resets_at",
+          "limit",
+          "limit_set",
+          "at_limit"
         ]
       },
       "ProviderCacheStatus": {
@@ -8929,6 +9047,52 @@
           "standing",
           "detail",
           "model_count"
+        ]
+      },
+      "SignInStarted": {
+        "type": "object",
+        "properties": {
+          "provider": {
+            "type": "string"
+          },
+          "credential": {
+            "type": "string"
+          },
+          "url": {
+            "type": "string"
+          },
+          "expires_at": {
+            "type": "string"
+          },
+          "message": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "provider",
+          "credential",
+          "url",
+          "expires_at",
+          "message"
+        ]
+      },
+      "SignInCancelled": {
+        "type": "object",
+        "properties": {
+          "provider": {
+            "type": "string"
+          },
+          "credential": {
+            "type": "string"
+          },
+          "message": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "provider",
+          "credential",
+          "message"
         ]
       },
       "ConversationPage": {
@@ -10763,6 +10927,54 @@
             "properties": {
               "name": {
                 "type": "string",
+                "const": "start_sign_in"
+              },
+              "data": {
+                "$ref": "#/$defs/SignInStarted"
+              }
+            },
+            "required": [
+              "name",
+              "data"
+            ]
+          },
+          {
+            "type": "object",
+            "properties": {
+              "name": {
+                "type": "string",
+                "const": "finish_sign_in"
+              },
+              "data": {
+                "$ref": "#/$defs/ProviderChanged"
+              }
+            },
+            "required": [
+              "name",
+              "data"
+            ]
+          },
+          {
+            "type": "object",
+            "properties": {
+              "name": {
+                "type": "string",
+                "const": "cancel_sign_in"
+              },
+              "data": {
+                "$ref": "#/$defs/SignInCancelled"
+              }
+            },
+            "required": [
+              "name",
+              "data"
+            ]
+          },
+          {
+            "type": "object",
+            "properties": {
+              "name": {
+                "type": "string",
                 "const": "log"
               },
               "data": {
@@ -17530,6 +17742,22 @@
               "null"
             ]
           },
+          "credential_kind": {
+            "anyOf": [
+              {
+                "$ref": "#/$defs/CredentialKind"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "selection_detail": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
           "credentials": {
             "type": "array",
             "items": {
@@ -17584,6 +17812,15 @@
         "enum": [
           "order",
           "room"
+        ]
+      },
+      "CredentialKind": {
+        "type": "string",
+        "enum": [
+          "api_key",
+          "env",
+          "login",
+          "none"
         ]
       },
       "CredentialStatus": {
@@ -17659,6 +17896,19 @@
               "string",
               "null"
             ]
+          },
+          "windows": {
+            "type": "array",
+            "items": {
+              "$ref": "#/$defs/CredentialWindow"
+            },
+            "default": []
+          },
+          "plan": {
+            "type": [
+              "string",
+              "null"
+            ]
           }
         },
         "required": [
@@ -17674,16 +17924,8 @@
           "in_use",
           "warn_on_fallback",
           "limit",
-          "usage"
-        ]
-      },
-      "CredentialKind": {
-        "type": "string",
-        "enum": [
-          "api_key",
-          "env",
-          "login",
-          "none"
+          "usage",
+          "windows"
         ]
       },
       "CredentialStanding": {
@@ -17746,6 +17988,46 @@
           "cost_usd",
           "calls",
           "since"
+        ]
+      },
+      "CredentialWindow": {
+        "type": "object",
+        "properties": {
+          "window": {
+            "type": "string"
+          },
+          "label": {
+            "type": "string"
+          },
+          "percent_used": {
+            "type": "number",
+            "format": "double"
+          },
+          "resets_at": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "limit": {
+            "type": "number",
+            "format": "double"
+          },
+          "limit_set": {
+            "type": "boolean"
+          },
+          "at_limit": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "window",
+          "label",
+          "percent_used",
+          "resets_at",
+          "limit",
+          "limit_set",
+          "at_limit"
         ]
       },
       "ProviderCacheStatus": {
@@ -18258,6 +18540,52 @@
           "standing",
           "detail",
           "model_count"
+        ]
+      },
+      "SignInStarted": {
+        "type": "object",
+        "properties": {
+          "provider": {
+            "type": "string"
+          },
+          "credential": {
+            "type": "string"
+          },
+          "url": {
+            "type": "string"
+          },
+          "expires_at": {
+            "type": "string"
+          },
+          "message": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "provider",
+          "credential",
+          "url",
+          "expires_at",
+          "message"
+        ]
+      },
+      "SignInCancelled": {
+        "type": "object",
+        "properties": {
+          "provider": {
+            "type": "string"
+          },
+          "credential": {
+            "type": "string"
+          },
+          "message": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "provider",
+          "credential",
+          "message"
         ]
       },
       "ConversationPage": {

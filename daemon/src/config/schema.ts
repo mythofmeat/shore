@@ -168,6 +168,8 @@ export function configSchema(live: LiveInstances): SchemaEntry[] {
     for (const field of ["enabled", "warn_on_fallback"]) add([...prefix, "keys", "<index>", field], { kind: "boolean" });
     add([...prefix, "keys", "<index>", "spend_limit_usd"], { kind: "float", optional: true });
     add([...prefix, "keys", "<index>", "spend_period"], { kind: "enum", variants: ["hour", "day", "week", "month"], optional: true });
+    add([...prefix, "keys", "<index>", "dir"], { kind: "string", optional: true });
+    for (const field of ["session_limit", "weekly_limit"]) add([...prefix, "keys", "<index>", field], { kind: "float", optional: true });
     for (const field of MODEL_FIELDS) add([...prefix, canonicalSettingKey(field)], modelInfo(field));
   }
   for (const section of ["chat", "image"]) {
@@ -255,7 +257,10 @@ function describeOption(path: readonly string[]): string {
     events: "Notification events to deliver; a list replaces the inherited selection.",
     discover: "Discover this provider's models; false by default.",
     no_auth: "The provider's endpoint takes no API key, as with a model server on this machine.",
-    pin: "Name of the key every call to this provider uses. Without it, calls use the first key that works, in order.",
+    pin: "Name of the key or login every call to this provider uses. Without it, calls use the first key that works, in order, or the login with room left.",
+    dir: "Folder in ~/.claude-accounts that holds this login, when it differs from the login's name.",
+    session_limit: "Fraction of its 5-hour window this login may use before calls move on to another login, or are refused if none has room. Without it, shore moves on at 0.95 when another login has room.",
+    weekly_limit: "Fraction of its weekly window this login may use before calls move on to another login, or are refused if none has room. Without it, shore moves on at 0.98 when another login has room.",
     spend_limit_usd: "Most this key may spend per spend_period, in US dollars. At the limit, calls move on to the provider's next key.",
     spend_period: "Window for spend_limit_usd: hour, day, week or month (the default).",
     reasoning_budget_tokens: "Maximum reasoning token budget, where supported by the model SDK.",

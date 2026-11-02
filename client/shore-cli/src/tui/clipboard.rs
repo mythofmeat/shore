@@ -1,12 +1,36 @@
 use std::io;
 use std::io::Write;
 use std::path::PathBuf;
-use std::process::Command;
+use std::process::{Command, Stdio};
 
 use image::{DynamicImage, ImageEncoder, ImageFormat};
 
 const MAX_IMAGE_EDGE: u32 = 2000;
 const MAX_IMAGE_BYTES: usize = 750_000;
+
+pub(crate) fn copy_text_to_terminal_clipboard(text: &str) -> io::Result<()> {
+    use base64::Engine as _;
+    let encoded = base64::engine::general_purpose::STANDARD.encode(text);
+    let mut out = io::stdout();
+    write!(out, "\x1b]52;c;{encoded}\x07")?;
+    out.flush()
+}
+
+pub(crate) fn open_in_browser(url: &str) -> io::Result<()> {
+    let opener = if cfg!(target_os = "macos") {
+        "open"
+    } else {
+        "xdg-open"
+    };
+    let mut child = Command::new(opener)
+        .arg(url)
+        .stdin(Stdio::null())
+        .stdout(Stdio::null())
+        .stderr(Stdio::null())
+        .spawn()?;
+    _ = std::thread::spawn(move || child.wait());
+    Ok(())
+}
 
 #[derive(Debug)]
 pub(crate) enum ClipboardError {

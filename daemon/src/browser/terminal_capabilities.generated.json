@@ -5058,7 +5058,7 @@
     },
     {
       "path": "shore provider",
-      "about": "List providers and their keys; add, change or remove one",
+      "about": "List providers with their keys and logins; add, change or remove one",
       "long_about": null,
       "hidden": false,
       "aliases": [],
@@ -9269,6 +9269,51 @@
         "args": {
           "cost_usd": 20.0,
           "period": "month",
+          "provider": "fixture",
+          "credential": "work"
+        }
+      }
+    },
+    {
+      "argv": [
+        "provider",
+        "fixture",
+        "limit",
+        "work",
+        "--session",
+        "80%",
+        "--weekly",
+        "50%"
+      ],
+      "mapping": {
+        "name": "set_credential_limit",
+        "args": {
+          "windows": [
+            {
+              "window": "session",
+              "limit": 0.8
+            },
+            {
+              "window": "weekly",
+              "limit": 0.5
+            }
+          ],
+          "provider": "fixture",
+          "credential": "work"
+        }
+      }
+    },
+    {
+      "argv": [
+        "provider",
+        "fixture",
+        "auth",
+        "work",
+        "--login"
+      ],
+      "mapping": {
+        "name": "start_sign_in",
+        "args": {
           "provider": "fixture",
           "credential": "work"
         }

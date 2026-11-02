@@ -4,22 +4,29 @@ import type { Database } from "bun:sqlite";
 import type { SDKRateLimitInfo } from "@anthropic-ai/claude-agent-sdk";
 import { mkdirSync, readFileSync, renameSync, writeFileSync } from "node:fs";
 import { mkdir, rename, writeFile } from "node:fs/promises";
-import { homedir, userInfo } from "node:os";
+import { homedir } from "node:os";
 import { dirname, join } from "node:path";
 
 import { defaultPlanLimitPolicy, type PlanLimitPolicyConfig } from "../config/app.ts";
 import {
   assessClaudeAccount,
+  claudeAccountsRoot,
   claudeLoginCommand,
+  claudeUsageWindows,
   decideClaudeAccount,
   DEFAULT_CLAUDE_ACCOUNT,
   discoverClaudeAccounts,
   rankClaudeAccounts,
+  type Assessment,
   type ClaudeAccount,
   type ClaudeAccountStanding,
   type ClaudeLogin,
+  type ClaudeLoginEntry,
+  type ClaudeLoginSetting,
+  type ClaudeLoginSettings,
 } from "../llm/claude_accounts.ts";
-import { claudeCodeExecutable } from "../llm/providers/claude_code.ts";
+import { usedFraction, type Standing } from "../llm/credential_room.ts";
+import type { SignInFlow } from "../llm/claude_sign_in.ts";
 import type { SidecarRequest } from "../llm/types.ts";
 import type { ClaudeAccountReport } from "../protocol/ClaudeAccountReport.ts";
 import type { ClaudePlanLimit } from "../protocol/ClaudePlanLimit.ts";
@@ -73,10 +80,14 @@ export type ClaudePlanCheck =
 
 type ClaudePlanFetcher = (account: ClaudeAccount) => Promise<ClaudePlanCheck>;
 
+const NO_SETTINGS: ClaudeLoginSettings = { provider: "claude_agent", logins: [] };
+
 export interface ClaudePlanLimitsOptions {
   cacheDir?: string;
   fetch?: ClaudePlanFetcher;
   home?: string;
+  settings?: () => ClaudeLoginSettings;
+  signIn?: (configDir: string | undefined) => Promise<SignInFlow>;
 }
 
 const WINDOW_NAMES: Record<ClaudePlanWindow, string> = {
@@ -113,6 +124,10 @@ let switching = false;
 let inUse = DEFAULT_CLAUDE_ACCOUNT;
 let home: string | undefined;
 let scannedAt = Number.NEGATIVE_INFINITY;
+let settingsOf: () => ClaudeLoginSettings = () => NO_SETTINGS;
+let scannedEntries = "";
+let signInStarter: ClaudePlanLimitsOptions["signIn"];
+const holds = new Map<string, number>();
 
 function freshPlan(account: ClaudeAccount, state?: ClaudePlanLimitsState): AccountPlan {
   return {
@@ -141,26 +156,79 @@ export function configureClaudePlanLimits(options: ClaudePlanLimitsOptions = {})
   cacheDir = options.cacheDir;
   fetcher = options.fetch;
   home = options.home;
+  settingsOf = options.settings ?? (() => NO_SETTINGS);
+  signInStarter = options.signIn;
   plans = [];
+  holds.clear();
   scanClaudeAccounts(Date.now());
   const remembered = cacheDir === undefined ? undefined : readAccountInUse(claudeAccountInUsePath(cacheDir));
   inUse = plans.find((plan) => plan.account.name === remembered)?.account.name ?? required(plans[0]).account.name;
 }
 
+export function claudeLoginsRoot(): string {
+  return claudeAccountsRoot(home);
+}
+
+export function claudeLoginSettings(): ClaudeLoginSettings {
+  return settingsOf();
+}
+
+export function startClaudeLoginFlow(configDir: string | undefined): Promise<SignInFlow> {
+  return signInStarter === undefined ? Promise.reject(new Error("this daemon can't sign Claude logins in")) : signInStarter(configDir);
+}
+
+function entriesKey(entries: readonly ClaudeLoginEntry[]): string {
+  return JSON.stringify(entries.map((entry) => [entry.name, entry.dir ?? null]));
+}
+
 function scanClaudeAccounts(now: number): void {
   scannedAt = now;
+  const entries = settingsOf().logins;
+  scannedEntries = entriesKey(entries);
   const known = new Map(plans.flatMap((plan) => (plan.account.configDir === undefined ? [] : [[plan.account.configDir, plan.account.name] as const])));
-  const accounts = discoverClaudeAccounts(home, known);
+  const accounts = discoverClaudeAccounts(home, known, entries);
   switching = accounts.some((account) => account.configDir !== undefined);
   const dir = cacheDir;
-  plans = accounts.map((account) =>
-    plans.find((plan) => plan.account.name === account.name && plan.account.configDir === account.configDir) ??
-      freshPlan(account, dir === undefined ? undefined : readClaudePlanLimits(claudePlanLimitsPath(dir, account.name))));
+  plans = accounts.map((account) => {
+    const kept = plans.find((plan) => plan.account.name === account.name && plan.account.configDir === account.configDir);
+    if (kept === undefined) return freshPlan(account, dir === undefined || account.missing === true ? undefined : readClaudePlanLimits(claudePlanLimitsPath(dir, account.name)));
+    kept.account = account;
+    return kept;
+  });
   if (planOf(inUse) === undefined) inUse = required(plans[0]).account.name;
 }
 
-export function rescanClaudeAccounts(now: number = Date.now()): void {
-  if (now - scannedAt >= RESCAN_MS) scanClaudeAccounts(now);
+export function rescanClaudeAccounts(now: number = Date.now(), force = false): void {
+  if (force || now - scannedAt >= RESCAN_MS || entriesKey(settingsOf().logins) !== scannedEntries) scanClaudeAccounts(now);
+}
+
+function holdKey(account: Pick<ClaudeAccount, "configDir">): string {
+  return account.configDir ?? "";
+}
+
+export function holdClaudeAccount(account: Pick<ClaudeAccount, "configDir">): () => void {
+  const key = holdKey(account);
+  holds.set(key, (holds.get(key) ?? 0) + 1);
+  let held = true;
+  return () => {
+    if (!held) return;
+    held = false;
+    const left = (holds.get(key) ?? 1) - 1;
+    if (left <= 0) holds.delete(key);
+    else holds.set(key, left);
+  };
+}
+
+export function claudeAccountBusy(account: Pick<ClaudeAccount, "configDir">): boolean {
+  return (holds.get(holdKey(account)) ?? 0) > 0;
+}
+
+export function renameClaudeAccount(from: string, to: string): void {
+  const plan = planOf(from);
+  if (plan === undefined || from === to) return;
+  plan.account = { ...plan.account, name: to };
+  if (inUse === from) useClaudeAccount(to, `"${from}" was renamed`);
+  void persist(plan);
 }
 
 function readAccountInUse(path: string): string | undefined {
@@ -182,11 +250,13 @@ export function claudeAccounts(): ClaudeAccount[] {
 
 export function claudeConfigDirs(): string[] {
   const own = process.env.CLAUDE_CONFIG_DIR ?? join(process.env.HOME ?? homedir(), ".claude");
-  return [...new Set([own, ...plans.flatMap((plan) => (plan.account.configDir === undefined ? [] : [plan.account.configDir]))])];
+  return [...new Set([own, ...plans.flatMap((plan) => (plan.account.configDir === undefined || plan.account.missing === true ? [] : [plan.account.configDir]))])];
 }
 
 export function claudeAccountInUse(): ClaudeAccount {
-  return required(planOf(inUse)).account;
+  const plan = planOf(inUse);
+  if (plan !== undefined && plan.account.missing !== true) return plan.account;
+  return (plans.find((other) => other.account.missing !== true) ?? required(plans[0])).account;
 }
 
 export function claudeAccountNamed(name: string | undefined): ClaudeAccount | undefined {
@@ -210,20 +280,69 @@ function standingOf(plan: AccountPlan): ClaudeAccountStanding {
   };
 }
 
+function settingOf(settings: ClaudeLoginSettings, name: string): ClaudeLoginSetting | undefined {
+  return settings.logins.find((login) => login.name === name);
+}
+
+function unusable(plan: AccountPlan, settings: ClaudeLoginSettings): string | undefined {
+  if (plan.account.missing === true) return "not signed in yet";
+  if (settingOf(settings, plan.account.name)?.enabled === false) return "disabled";
+  return undefined;
+}
+
+function assessAll(settings: ClaudeLoginSettings, now: number): Assessment[] {
+  return plans.map((plan) => {
+    const reason = unusable(plan, settings);
+    if (reason !== undefined) return { account: plan.account, name: plan.account.name, standing: { state: "out", reason } };
+    return assessClaudeAccount(standingOf(plan), now, settingOf(settings, plan.account.name)?.limits);
+  });
+}
+
 export function claudeAccountOrder(now: number = Date.now()): ClaudeAccount[] {
   rescanClaudeAccounts(now);
-  if (plans.length === 1) return [required(plans[0]).account];
-  const assessments = plans.map((plan) => assessClaudeAccount(standingOf(plan), now));
+  const settings = settingsOf();
+  if (settings.pin !== undefined) {
+    const pinned = plans.find((plan) => plan.account.name === settings.pin);
+    if (pinned === undefined || unusable(pinned, settings) !== undefined) return [];
+    useClaudeAccount(pinned.account.name, `pinned to "${pinned.account.name}"`);
+    return [pinned.account];
+  }
+  const only = plans.length === 1 ? required(plans[0]) : undefined;
+  if (only !== undefined) return unusable(only, settings) === undefined ? [only.account] : [];
+  const assessments = assessAll(settings, now);
   const decision = decideClaudeAccount(assessments, inUse, now);
   if (decision.to !== undefined) useClaudeAccount(decision.to.name, decision.reason);
+  const current = plans.find((plan) => plan.account.name === inUse);
   const rest = rankClaudeAccounts(assessments, inUse)
-    .filter((a) => a.account.name !== inUse && (a.state === "ok" || a.state === "unknown"))
+    .filter((a) => a.name !== inUse && (a.standing.state === "ok" || a.standing.state === "unknown"))
     .map((a) => a.account);
-  return [claudeAccountInUse(), ...rest];
+  return current === undefined || unusable(current, settings) !== undefined ? rest : [current.account, ...rest];
 }
 
 export function nextClaudeAccount(refused: ReadonlySet<string>, now: number = Date.now()): ClaudeAccount | undefined {
   return claudeAccountOrder(now).find((account) => !refused.has(account.name));
+}
+
+export function claudeAccountRemoved(name: string, now: number = Date.now()): string | undefined {
+  if (inUse === name) {
+    const others = assessAll(settingsOf(), now).filter((a) => a.name !== name && a.account.missing !== true);
+    const best = rankClaudeAccounts(others, undefined).find((a) => a.standing.state !== "out") ?? others[0];
+    if (best !== undefined) useClaudeAccount(best.name, `"${name}" was removed`);
+  }
+  rescanClaudeAccounts(now, true);
+  return inUse === name ? undefined : inUse;
+}
+
+export function noClaudeLoginReason(): string {
+  const settings = settingsOf();
+  const provider = settings.provider;
+  if (settings.pin !== undefined) {
+    const pinned = plans.find((plan) => plan.account.name === settings.pin);
+    const why = pinned === undefined ? "there's no such login" : unusable(pinned, settings) ?? "it can't be used";
+    return `${provider} is pinned to the Claude login "${settings.pin}", but ${why}. Sign it in with \`shore provider ${provider} auth ${settings.pin} --login\`, or go back to choosing with \`shore provider ${provider} use --auto\``;
+  }
+  const reasons = assessAll(settings, Date.now()).map((a) => `"${a.name}": ${a.standing.reason}`);
+  return `no Claude login can be used (${reasons.join("; ")}). Sign one in with \`shore provider ${provider} auth --add NAME\``;
 }
 
 export function claudeAccountSignedOut(name: string): void {
@@ -232,9 +351,10 @@ export function claudeAccountSignedOut(name: string): void {
 }
 
 export function claudeAccountsFreeAt(now: number = Date.now()): string | undefined {
-  const assessments = plans.map((plan) => assessClaudeAccount(standingOf(plan), now));
-  if (assessments.some((a) => a.state === "ok" || a.state === "unknown")) return undefined;
-  const free = assessments.flatMap((a) => (a.state === "limited" && a.availableAt !== null ? [a.availableAt] : []));
+  const settings = settingsOf();
+  const assessments = assessAll(settings, now).filter((a) => settings.pin === undefined || a.name === settings.pin);
+  if (assessments.some((a) => a.standing.state === "ok" || a.standing.state === "unknown")) return undefined;
+  const free = assessments.flatMap((a) => (a.standing.state === "limited" && a.standing.availableAt !== null ? [a.standing.availableAt] : []));
   return free.length === 0 ? undefined : toRfc3339(Math.min(...free));
 }
 
@@ -258,7 +378,7 @@ export async function refreshClaudePlanLimits(maxAgeMs: number, now: number = Da
   const fetch = fetcher;
   if (fetch === undefined) return;
   rescanClaudeAccounts(now);
-  const due = plans.filter((plan) => plan.refreshing !== undefined || now - lastAttempt(plan) >= maxAgeMs);
+  const due = plans.filter((plan) => plan.account.missing !== true && (plan.refreshing !== undefined || now - lastAttempt(plan) >= maxAgeMs));
   let next = 0;
   const worker = async (): Promise<void> => {
     while (next < due.length) {
@@ -278,10 +398,25 @@ function lastAttempt(plan: AccountPlan): number {
   return Number.isFinite(at) ? Math.max(plan.attemptedAt, at) : plan.attemptedAt;
 }
 
+export async function refreshClaudeAccount(name: string, now: number = Date.now()): Promise<ClaudeLogin> {
+  rescanClaudeAccounts(now, true);
+  const plan = planOf(name);
+  const fetch = fetcher;
+  if (plan === undefined) return "unchecked";
+  if (plan.account.missing === true) return "logged_out";
+  if (fetch === undefined) return plan.login;
+  plan.refreshing ??= pollClaudePlanLimits(plan, fetch, now).finally(() => {
+    plan.refreshing = undefined;
+  });
+  await plan.refreshing;
+  return plan.login;
+}
+
 async function pollClaudePlanLimits(plan: AccountPlan, fetch: ClaudePlanFetcher, now: number): Promise<void> {
   plan.attemptedAt = now;
   const seen = { ...plan.observed };
   let check: ClaudePlanCheck;
+  const release = holdClaudeAccount(plan.account);
   try {
     check = await fetch(plan.account);
   } catch (e) {
@@ -289,6 +424,8 @@ async function pollClaudePlanLimits(plan: AccountPlan, fetch: ClaudePlanFetcher,
     plan.login = { error: message };
     shoreLog.warn(`shore: could not read Claude plan limits${switching ? ` for ${plan.account.name}` : ""}: ${message}`);
     return;
+  } finally {
+    release();
   }
   plan.login = check.status;
   if (check.status !== "logged_out") plan.email = check.email;
@@ -462,39 +599,102 @@ export function claudePlanLimitsReport(
   };
 }
 
-export function claudeAccountReports(now: number = Date.now()): ClaudeAccountReport[] {
-  rescanClaudeAccounts(now);
-  return plans.map((plan) => accountReport(plan, now));
+function signedOut(plan: AccountPlan): boolean {
+  return plan.login === "logged_out" || plan.account.missing === true;
 }
 
 function accountReport(plan: AccountPlan, now: number): ClaudeAccountReport {
-  const assessment = assessClaudeAccount(standingOf(plan), now);
+  const settings = settingsOf();
+  const reason = unusable(plan, settings);
+  const assessed = reason === undefined
+    ? assessClaudeAccount(standingOf(plan), now, settingOf(settings, plan.account.name)?.limits).standing
+    : { state: "out" as const, reason };
   return {
     name: plan.account.name,
     in_use: plan.account.name === inUse,
-    state: assessment.state,
-    detail: assessment.reason,
+    state: assessed.state,
+    detail: assessed.reason,
     email: plan.email ?? plan.account.email ?? null,
     subscription_type: plan.state?.subscription_type ?? null,
     windows: CLAUDE_PLAN_WINDOWS.flatMap((window) => {
       const reading = liveReading(plan.state?.[window] ?? null, now);
       return reading === undefined ? [] : [{ window, percent_used: reading.percent_used, resets_at: reading.resets_at }];
     }),
-    ...(plan.login === "logged_out" ? { login_command: claudeLoginCommand(plan.account, daemonUser(), claudeBinary()) } : {}),
+    ...(signedOut(plan) ? { login_command: claudeLoginCommand(plan.account, settings.provider) } : {}),
   };
 }
 
-function daemonUser(): string {
-  const name = process.env.USER ?? process.env.LOGNAME ?? userInfo().username;
-  return name === "" || name === "unknown" ? `'#${String(process.getuid?.() ?? 0)}'` : name;
+export interface ClaudeLoginWindow {
+  window: ClaudePlanWindow;
+  label: string;
+  percent_used: number;
+  resets_at: string | null;
+  limit: number;
+  limit_set: boolean;
+  at_limit: boolean;
 }
 
-function claudeBinary(): string {
-  try {
-    return claudeCodeExecutable() ?? "claude";
-  } catch {
-    return "claude";
-  }
+export interface ClaudeLoginReport {
+  account: ClaudeAccount;
+  email: string | null;
+  plan: string | null;
+  enabled: boolean;
+  pinned: boolean;
+  in_use: boolean;
+  busy: boolean;
+  signed_out: boolean;
+  state: Standing["state"];
+  detail: string;
+  checked_at: string | null;
+  login_command?: string;
+  windows: ClaudeLoginWindow[];
+}
+
+export interface ClaudeLoginOverview {
+  logins: ClaudeLoginReport[];
+  reason: string;
+}
+
+export function claudeLoginOverview(now: number = Date.now()): ClaudeLoginOverview {
+  rescanClaudeAccounts(now, true);
+  const settings = settingsOf();
+  const assessments = assessAll(settings, now);
+  const pinned = settings.pin === undefined ? undefined : plans.find((plan) => plan.account.name === settings.pin);
+  const reason = settings.pin === undefined
+    ? decideClaudeAccount(assessments, inUse, now).reason
+    : pinned === undefined || unusable(pinned, settings) !== undefined ? noClaudeLoginReason() : `pinned to "${settings.pin}"`;
+  return {
+    reason: plans.length === 1 && settings.pin === undefined ? `"${inUse}" is the only Claude login` : reason,
+    logins: plans.map((plan) => {
+      const setting = settingOf(settings, plan.account.name);
+      const standing = assessClaudeAccount(standingOf(plan), now, setting?.limits).standing;
+      const windows = claudeUsageWindows({ five_hour: plan.state?.five_hour ?? null, seven_day: plan.state?.seven_day ?? null }, setting?.limits);
+      return {
+        account: plan.account,
+        email: plan.email ?? plan.account.email ?? null,
+        plan: plan.state?.subscription_type ?? null,
+        enabled: setting?.enabled !== false,
+        pinned: settings.pin === plan.account.name,
+        in_use: plan.account.name === inUse,
+        busy: claudeAccountBusy(plan.account),
+        signed_out: signedOut(plan),
+        state: standing.state,
+        detail: standing.reason,
+        checked_at: plan.state?.updated_at ?? null,
+        ...(signedOut(plan) ? { login_command: claudeLoginCommand(plan.account, settings.provider) } : {}),
+        windows: windows.flatMap((window): ClaudeLoginWindow[] => {
+          const name = CLAUDE_PLAN_WINDOWS.find((id) => id === window.window);
+          if (name === undefined) return [];
+          const reading = liveReading(plan.state?.[name] ?? null, now) ?? (window.own ? { percent_used: 0, resets_at: null } : undefined);
+          if (reading === undefined) return [];
+          return [{
+            window: name, label: window.label, percent_used: reading.percent_used, resets_at: reading.resets_at,
+            limit: window.cutoff, limit_set: window.own, at_limit: usedFraction(reading, now) >= window.cutoff,
+          }];
+        }),
+      };
+    }),
+  };
 }
 
 export function runsOnClaudePlan(request: Pick<SidecarRequest, "sdk">): boolean {
@@ -504,9 +704,37 @@ export function runsOnClaudePlan(request: Pick<SidecarRequest, "sdk">): boolean 
 export function claudePlanBlockFor(request: SidecarRequest, now: number = Date.now()): CallBlock | undefined {
   const context = request.context;
   if (!runsOnClaudePlan(request) || context === undefined) return undefined;
+  const zone = zoneFor(context.usage?.timezone ?? "local");
+  const own = loginLimitBlock(context.api_key_name, now, zone);
+  if (own !== undefined) return own;
   const report = claudePlanLimitsReport(context.usage, now, context.api_key_name);
   const limit = report?.windows.find((item) => item.over_limit && actionBlocks(item.action, context));
-  return limit === undefined ? undefined : planBlock(limit, zoneFor(context.usage?.timezone ?? "local"), report?.account);
+  return limit === undefined ? undefined : planBlock(limit, zone, report?.account);
+}
+
+function loginLimitBlock(account: string | undefined, now: number, zone: string): CallBlock | undefined {
+  const plan = planOf(account);
+  if (plan === undefined) return undefined;
+  const limits = settingOf(settingsOf(), plan.account.name)?.limits;
+  if (limits === undefined) return undefined;
+  const name = plan.account.name;
+  for (const window of claudeUsageWindows({ five_hour: plan.state?.five_hour ?? null, seven_day: plan.state?.seven_day ?? null }, limits)) {
+    if (!window.own || window.reading === null) continue;
+    const used = usedFraction(window.reading, now);
+    if (used < window.cutoff) continue;
+    const resets = window.reading.resets_at;
+    const standing = `has used ${percentOf(used)}% of its ${window.label} window, and its limit is ${percentOf(window.cutoff)}%`;
+    return {
+      budget_name: `${name} ${window.label} limit`,
+      scope: "plan",
+      login_limit: true,
+      api_key: name,
+      ...(resets === null ? {} : { reset_at: resets }),
+      message: `Claude login "${name}" ${standing}${resets === null ? "" : `; it resets at ${resets}`}`,
+      summary: `Claude login ${name} ${standing}${resets === null ? "" : `; resets ${formatLocalAmPm(resets, zone)}`}`,
+    };
+  }
+  return undefined;
 }
 
 function limitName(window: ClaudePlanWindow, account: string | undefined): string {

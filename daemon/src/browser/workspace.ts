@@ -16,7 +16,7 @@ import type { ThreadView } from "../protocol/ThreadView.ts";
 import { BrowserConnection, type ConnectionUpdate } from "./connection.ts";
 import { OperationClient } from "./operations.ts";
 
-const SECRET_ARGS: Readonly<Record<string, string>> = { config: "value", add_credential: "secret", update_credential: "secret" };
+const SECRET_ARGS: Readonly<Record<string, string>> = { config: "value", add_credential: "secret", update_credential: "secret", finish_sign_in: "code" };
 
 export function inspectableRequest(request: Extract<ConnectionUpdate, { kind: "uncertain" }>["request"]): Extract<ConnectionUpdate, { kind: "uncertain" }>["request"] {
   const secret = request.type === "command" ? SECRET_ARGS[request.name] : undefined;

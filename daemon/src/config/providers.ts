@@ -1,4 +1,5 @@
 import {
+  defaultSdk,
   mergeFrom,
   readModelConfigFields,
   sdkFromWire,
@@ -8,6 +9,7 @@ import {
 } from "./models.ts";
 import { compareByCodePoint, sortedKeys } from "../util/sort.ts";
 import { isKeylessSdk, type ProviderEntry as CredentialsProviderEntry } from "../llm/credentials.ts";
+import type { ClaudeLoginSettings } from "../llm/claude_accounts.ts";
 import { ZAI_SUB_PROVIDER } from "../llm/providers/zai_config.ts";
 
 export type ProviderRegistryErrorKind =
@@ -17,7 +19,8 @@ export type ProviderRegistryErrorKind =
   | "duplicate_key_name"
   | "transport_in_defaults"
   | "unknown_pin"
-  | "keys_without_auth";
+  | "keys_without_auth"
+  | "login_field_on_key";
 
 export class ProviderRegistryError extends Error {
   constructor(
@@ -71,6 +74,13 @@ export class ProviderRegistryError extends Error {
     return new ProviderRegistryError(
       "keys_without_auth",
       `[providers.${provider}] sets \`no_auth = true\` and also lists keys; use one or the other`,
+    );
+  }
+
+  static loginFieldOnKey(provider: string, key: string, field: string): ProviderRegistryError {
+    return new ProviderRegistryError(
+      "login_field_on_key",
+      `[providers.${provider}] key ${JSON.stringify(key)} sets \`${field}\`, which only a login of a provider that signs in (claude_agent) has`,
     );
   }
 
@@ -128,6 +138,13 @@ export type SpendPeriod = "hour" | "day" | "week" | "month";
 
 export const SPEND_PERIODS: readonly SpendPeriod[] = ["hour", "day", "week", "month"];
 
+export interface WindowLimits {
+  session?: number;
+  weekly?: number;
+}
+
+export const WINDOW_LIMIT_FIELDS = { session: "session_limit", weekly: "weekly_limit" } as const;
+
 export interface ProviderKeyEntry {
   name: string;
   env: string;
@@ -135,6 +152,16 @@ export interface ProviderKeyEntry {
   enabled: boolean;
   warnOnFallback: boolean;
   spendLimit?: { costUsd: number; period: SpendPeriod };
+  dir?: string;
+  windowLimits?: WindowLimits;
+}
+
+export function isLoginFolderName(name: string): boolean {
+  return /^[A-Za-z0-9][A-Za-z0-9_.@+-]{0,63}$/.test(name);
+}
+
+function staysInLoginsFolder(folder: string): boolean {
+  return folder !== "" && !folder.startsWith(".") && !/[/\\\0]/.test(folder);
 }
 
 export interface ProviderEntry extends ProviderRegistryEntry {
@@ -184,6 +211,30 @@ export function toCredentialsEntry(entry: ProviderEntry): CredentialsProviderEnt
       stored: k.stored,
       enabled: k.enabled,
       warn_on_fallback: k.warnOnFallback,
+    })),
+  };
+}
+
+export function signsIn(name: string, entry: Pick<ProviderEntry, "sdk">): boolean {
+  return isKeylessSdk(entry.sdk ?? defaultSdk(name));
+}
+
+function loginProviderName(registry: ProviderRegistry): string | undefined {
+  const signing = registry.entries().filter(([name, entry]) => signsIn(name, entry)).map(([name]) => name);
+  return signing.includes("claude_agent") ? "claude_agent" : signing[0];
+}
+
+export function claudeLoginSettingsOf(registry: ProviderRegistry): ClaudeLoginSettings {
+  const provider = loginProviderName(registry);
+  const entry = provider === undefined ? undefined : registry.get(provider);
+  return {
+    provider: provider ?? "claude_agent",
+    ...(entry?.pin === undefined ? {} : { pin: entry.pin }),
+    logins: (entry?.keys ?? []).map((key) => ({
+      name: key.name,
+      ...(key.dir === undefined ? {} : { dir: key.dir }),
+      enabled: key.enabled,
+      limits: key.windowLimits ?? {},
     })),
   };
 }
@@ -299,6 +350,21 @@ function parseEntry(provider: string, value: unknown): ProviderEntry {
   }
 
   if (parsed.noAuth && parsed.keys.length > 0) throw ProviderRegistryError.keysWithoutAuth(provider);
+  if (!isKeylessSdk(parsed.sdk ?? defaultSdk(provider))) {
+    for (const key of parsed.keys) {
+      const field = key.dir !== undefined ? "dir" : key.windowLimits?.session !== undefined ? WINDOW_LIMIT_FIELDS.session : key.windowLimits?.weekly !== undefined ? WINDOW_LIMIT_FIELDS.weekly : undefined;
+      if (field !== undefined) throw ProviderRegistryError.loginFieldOnKey(provider, key.name, field);
+    }
+  } else {
+    const folders = new Map<string, string>();
+    for (const key of parsed.keys) {
+      const folder = key.dir ?? key.name;
+      if (!staysInLoginsFolder(folder)) throw ProviderRegistryError.parseEntry(provider, `login ${JSON.stringify(key.name)} must name a folder directly inside ~/.claude-accounts, not ${JSON.stringify(folder)}`);
+      const twin = folders.get(folder);
+      if (twin !== undefined) throw ProviderRegistryError.parseEntry(provider, `logins ${JSON.stringify(twin)} and ${JSON.stringify(key.name)} both use the folder ${JSON.stringify(folder)}`);
+      folders.set(folder, key.name);
+    }
+  }
   if (parsed.pin !== undefined) {
     const pinned = parsed.keys.find((key) => key.name === parsed.pin);
     if (pinned === undefined || !pinned.enabled) throw ProviderRegistryError.unknownPin(provider, parsed.pin, pinned !== undefined);
@@ -329,7 +395,7 @@ const ENTRY_KEYS = [
   "defaults",
 ];
 const DISCOVERY_KEYS = ["enabled", "ignore"];
-const KEY_KEYS = ["name", "env", "enabled", "warn_on_fallback", "spend_limit_usd", "spend_period"];
+const KEY_KEYS = ["name", "env", "enabled", "warn_on_fallback", "spend_limit_usd", "spend_period", "dir", WINDOW_LIMIT_FIELDS.session, WINDOW_LIMIT_FIELDS.weekly];
 
 function unknownField(table: Record<string, unknown>, known: readonly string[]): string | undefined {
   for (const key of sortedKeys(table)) {
@@ -458,6 +524,20 @@ function readKey(value: unknown): ReadResult<ProviderKeyEntry> {
       return { err: "invalid type: expected a boolean" };
     }
     out.warnOnFallback = value["warn_on_fallback"];
+  }
+  const dir = value["dir"];
+  if (dir !== undefined) {
+    if (typeof dir !== "string") return { err: "invalid type: expected a string" };
+    out.dir = dir;
+  }
+  for (const [window, field] of Object.entries(WINDOW_LIMIT_FIELDS) as [keyof WindowLimits, string][]) {
+    const raw = value[field];
+    if (raw === undefined) continue;
+    const fraction = typeof raw === "bigint" ? Number(raw) : raw;
+    if (typeof fraction !== "number" || !Number.isFinite(fraction) || fraction <= 0 || fraction > 1) {
+      return { err: `\`${field}\` must be a fraction above 0 and at most 1 (0.5 is half the window)` };
+    }
+    out.windowLimits = { ...out.windowLimits, [window]: fraction };
   }
   return { ok: out };
 }

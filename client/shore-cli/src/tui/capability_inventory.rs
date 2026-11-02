@@ -123,6 +123,17 @@ const WIRE_EXAMPLES: &[&[&str]] = &[
     &[
         "provider", "fixture", "limit", "work", "--spend", "20/month",
     ],
+    &[
+        "provider",
+        "fixture",
+        "limit",
+        "work",
+        "--session",
+        "80%",
+        "--weekly",
+        "50%",
+    ],
+    &["provider", "fixture", "auth", "work", "--login"],
     &["config"],
     &["config", "--check"],
     &["config", "--path"],

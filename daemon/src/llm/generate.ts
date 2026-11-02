@@ -18,7 +18,7 @@ import type { ResolvedModel } from "../config/models.ts";
 import { credentialEntry } from "../handler/tool_context.ts";
 import { describeCandidateSource, isKeylessSdk, readCandidateEnv, resolveKeyCandidates, type KeyCandidate } from "./credentials.ts";
 import { noteCredentialStanding, standingForFailure } from "./credential_standing.ts";
-import { claudeAccountOrder, useClaudeAccount } from "../ledger/plan_limits.ts";
+import { claudeAccountOrder, noClaudeLoginReason, useClaudeAccount } from "../ledger/plan_limits.ts";
 import { MissingApiKey } from "./request.ts";
 import {
   streamWithCredentialFallback,
@@ -287,7 +287,9 @@ export async function runGeneration(
 }
 
 function claudeAccountCandidates(): KeyCandidate[] {
-  return claudeAccountOrder().map((account) => ({ name: account.name, env: "", warn_on_fallback: false }));
+  const order = claudeAccountOrder();
+  if (order.length === 0) throw new Error(noClaudeLoginReason());
+  return order.map((account) => ({ name: account.name, env: "", warn_on_fallback: false }));
 }
 
 export async function generateViaStream(

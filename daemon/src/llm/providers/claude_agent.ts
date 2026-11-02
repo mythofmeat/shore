@@ -53,11 +53,13 @@ import {
   claudeAccountNamed,
   claudeAccountSignedOut,
   claudeAccountsFreeAt,
+  holdClaudeAccount,
   nextClaudeAccount,
   observeClaudeRateLimit,
   useClaudeAccount,
   type ClaudePlanCheck,
 } from "../../ledger/plan_limits.ts";
+import { startClaudeSignIn, type ClaudeSignInQuery, type SignInFlow } from "../claude_sign_in.ts";
 import type { ClaudeAccount } from "../claude_accounts.ts";
 import { claudePlanUsageEnvironment, fetchClaudePlanLimits, type ClaudePlanUsageQuery } from "../claude_plan_limits.ts";
 import { cacheTtlTier } from "../cache_capability.ts";
@@ -847,23 +849,32 @@ export interface ClaudeAgentDeps {
   runQuery?: AgentQuery;
   bookPath?: () => string;
   planQuery?: ClaudePlanUsageQuery;
+  signInQuery?: ClaudeSignInQuery;
 }
 
 export class ClaudeAgentProvider implements SidecarProvider {
   readonly #runQuery: AgentQuery;
   readonly #bookPath: () => string;
   readonly #planQuery: ClaudePlanUsageQuery | undefined;
+  readonly #signInQuery: ClaudeSignInQuery | undefined;
 
   constructor(deps: ClaudeAgentDeps = {}) {
     this.#runQuery = deps.runQuery ?? query;
     this.#bookPath = deps.bookPath ?? bookPath;
     this.#planQuery = deps.planQuery;
+    this.#signInQuery = deps.signInQuery;
   }
 
   planLimits(account: ClaudeAccount): Promise<ClaudePlanCheck> {
     const planQuery = this.#planQuery;
     if (planQuery === undefined) return Promise.resolve({ status: "unavailable" });
     return fetchClaudePlanLimits(planQuery, claudePlanUsageEnvironment(claudeAgentEnvironment(undefined, "", account.configDir)));
+  }
+
+  signIn(configDir: string | undefined): Promise<SignInFlow> {
+    const signInQuery = this.#signInQuery;
+    if (signInQuery === undefined) return Promise.reject(new Error("this daemon can't sign Claude logins in"));
+    return startClaudeSignIn(signInQuery, claudeAgentEnvironment(undefined, "", configDir));
   }
 
   async *stream(req: SidecarRequest, signal?: AbortSignal): AsyncIterable<StreamEvent> {
@@ -889,6 +900,7 @@ export class ClaudeAgentProvider implements SidecarProvider {
     const abort = new AbortController();
     if (signal?.aborted) abort.abort();
     signal?.addEventListener("abort", () => abort.abort(), { once: true });
+    const release = holdClaudeAccount(accountFor(req));
 
     try {
       if ((req.tools?.length ?? 0) > 0) {
@@ -949,6 +961,8 @@ export class ClaudeAgentProvider implements SidecarProvider {
         ...streamErrorEvent(launch ?? e, seen.usage ?? acc.usage, startedAt, firstTokenAt, Date.now),
         ...(cause === undefined ? {} : { cause }),
       };
+    } finally {
+      release();
     }
   }
 
@@ -970,6 +984,7 @@ export class ClaudeAgentProvider implements SidecarProvider {
     const abort = new AbortController();
     if (signal?.aborted) abort.abort();
     signal?.addEventListener("abort", () => abort.abort(), { once: true });
+    const release = holdClaudeAccount(accountFor(req));
     try {
       const run = this.#runQuery({
         prompt: agentPrompt(plan),
@@ -989,6 +1004,7 @@ export class ClaudeAgentProvider implements SidecarProvider {
       throw claudeCodeLaunchFailure(e) ?? e;
     } finally {
       abort.abort();
+      release();
     }
   }
 
@@ -1277,12 +1293,13 @@ export async function* claudeAgentToolLoopEvents(
       return Promise.resolve({ behavior: "deny", message: TOOL_BUDGET_SPENT });
     }
     const blocked = budgetBlockFor(current);
-    if (blocked !== undefined) {
+    if (blocked !== undefined && blocked.login_limit !== true) {
       return Promise.resolve({ behavior: "deny", message: blocked.message });
     }
     return Promise.resolve({ behavior: "allow" });
   };
 
+  let release = holdClaudeAccount(accountFor(req));
   try {
     yield { type: "start", model: req.model };
     await tools.beforeTurn?.(req);
@@ -1337,6 +1354,8 @@ export async function* claudeAgentToolLoopEvents(
         abort.signal.removeEventListener("abort", stopLeg);
         stopLeg();
         const why = e.message.replace(/^claude_agent: /, "");
+        release();
+        release = holdClaudeAccount(next);
         useClaudeAccount(next.name, `"${seen.account}" refused a call partway through a turn: ${why}`);
         yield { type: "provider_warning", message: `Claude account ${seen.account} refused to go on (${why}); carrying on with ${next.name}` };
         spent = usageSoFar();
@@ -1406,5 +1425,6 @@ export async function* claudeAgentToolLoopEvents(
     yield { ...streamErrorEvent(failure, usageSoFar(), startedAt, firstTokenAt, Date.now), cause: toolFailure ?? failure };
   } finally {
     abort.abort();
+    release();
   }
 }

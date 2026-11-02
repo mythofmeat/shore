@@ -2734,6 +2734,32 @@ pub(crate) fn handle_server_message(app: &mut App, msg: ServerMessage) -> UiEffe
                 absorb_palette_catalog(app, &kind, &co.data);
                 return UiEffect::redraw(RedrawEffect::Immediate);
             }
+            if app
+                .pending_auth_check
+                .as_ref()
+                .is_some_and(|(rid, ..)| Some(rid.as_str()) == co.rid.as_deref())
+                && let Some((_, label, request)) = app.pending_auth_check.take()
+            {
+                let signs_in = co
+                    .data
+                    .get("credential_kind")
+                    .and_then(serde_json::Value::as_str)
+                    == Some("login");
+                let command = if signs_in {
+                    let rid = app.begin_palette_command(&label);
+                    Some(ConnCommand::Send(ClientMessage::Command(Command {
+                        rid: Some(rid),
+                        name: "start_sign_in".to_owned(),
+                        args: request.sign_in().args(),
+                    })))
+                } else {
+                    input::key_request(app, &label, request)
+                };
+                return UiEffect {
+                    cmds: command.into_iter().collect(),
+                    redraw: RedrawEffect::Immediate,
+                };
+            }
             let palette_command = app.take_palette_command(co.rid.as_deref());
             if co.name == "config_reload"
                 && co.data.get("applied").and_then(serde_json::Value::as_bool) == Some(false)
@@ -2907,6 +2933,23 @@ pub(crate) fn handle_server_message(app: &mut App, msg: ServerMessage) -> UiEffe
                 "archive_thread" | "thread_home" | "thread_label" | "thread_purpose"
                 | "thread_files" | "thread_lock" => {
                     absorb_thread_listing(app, &co.data);
+                }
+                "start_sign_in" => {
+                    let field = |key: &str| {
+                        co.data
+                            .get(key)
+                            .and_then(serde_json::Value::as_str)
+                            .unwrap_or_default()
+                            .to_owned()
+                    };
+                    app.input.exit_command_mode();
+                    app.sign_in_prompt = Some(app::SignInPrompt {
+                        provider: field("provider"),
+                        credential: field("credential"),
+                        url: field("url"),
+                        label: palette_command.clone().unwrap_or_default(),
+                        typed: String::new(),
+                    });
                 }
                 "add_provider" => {
                     if let Some((label, request)) = app.pending_provider_key.take() {
@@ -3391,6 +3434,13 @@ pub(crate) fn handle_server_message(app: &mut App, msg: ServerMessage) -> UiEffe
                 .is_some()
             {
                 app.palette_catalog_loaded = false;
+            }
+            if app
+                .pending_auth_check
+                .as_ref()
+                .is_some_and(|(rid, ..)| Some(rid.as_str()) == err.rid.as_deref())
+            {
+                app.pending_auth_check = None;
             }
             if app
                 .pending_segment_page

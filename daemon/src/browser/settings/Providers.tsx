@@ -2,6 +2,7 @@ import { useState, type ReactNode } from "react";
 import type { CredentialStatus } from "../../protocol/CredentialStatus.ts";
 import type { ProviderPreset } from "../../protocol/ProviderPreset.ts";
 import type { ProviderStatus } from "../../protocol/ProviderStatus.ts";
+import type { SignInStarted } from "../../protocol/SignInStarted.ts";
 import type { OperationInput } from "../../operations/types.ts";
 import type { WorkspaceSnapshot } from "../workspace.ts";
 import { Dialog, Menu, Spinner, Switch } from "../ui/controls.tsx";
@@ -129,7 +130,7 @@ function AddProviderDialog({ presets, sdks, close, done }: { presets: readonly P
       <label className="check"><input type="checkbox" checked={noAuth} onChange={(event) => setNoAuth(event.target.checked)} />It takes no API key</label>
     </> : <p className="form-text">{preset.sdk}{preset.base_url === null ? "" : ` · ${preset.base_url}`}</p>}
     <label className="check"><input type="checkbox" checked={discover} onChange={(event) => setDiscover(event.target.checked)} />Discover its models</label>
-    {login ? <p className="form-text">This provider signs in with Claude logins, which live in ~/.claude-accounts on the daemon’s machine.</p> : null}
+    {login ? <p className="form-text">This provider signs in with Claude logins instead of keys. Once it’s added, sign one in from its card here.</p> : null}
     {wantsKey ? <KeyFields source={source} setSource={setSource} secret={secret} setSecret={setSecret} env={env} setEnv={setEnv} noCheck={noCheck} setNoCheck={setNoCheck} later envHint={preset?.api_key_env ?? "LLM_API_KEY"} /> : null}
   </FormDialog>;
 }
@@ -179,6 +180,99 @@ function LimitDialog({ provider, credential, close, done }: { provider: string; 
   </FormDialog>;
 }
 
+function SignInDialog({ provider, credential, close, done }: { provider: string; credential?: CredentialStatus; close: () => void; done: () => void }) {
+  const [name, setName] = useState("");
+  const [started, setStarted] = useState<SignInStarted>();
+  const [code, setCode] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
+  const start = async () => {
+    setBusy(true); setError("");
+    try {
+      const flow = await workspace.actions.run("start_sign_in", credential === undefined
+        ? { provider, add: true, ...(name.trim() === "" ? {} : { credential: name.trim() }) }
+        : { provider, credential: credential.name });
+      setStarted(flow);
+      window.open(flow.url, "_blank", "noopener,noreferrer");
+    } catch (failure) {
+      setError(errorText(failure));
+    } finally {
+      setBusy(false);
+    }
+  };
+  const stop = () => {
+    if (started !== undefined) void workspace.actions.run("cancel_sign_in", { provider, credential: started.credential }).catch(() => undefined);
+    close();
+  };
+  const finish = async () => {
+    if (started === undefined) return;
+    setBusy(true); setError("");
+    try {
+      const result = await workspace.actions.run("finish_sign_in", { provider, credential: started.credential, code: code.trim() });
+      done();
+      toasts.show(result.message);
+      close();
+    } catch (failure) {
+      setError(errorText(failure));
+    } finally {
+      setBusy(false);
+    }
+  };
+  const again = async () => {
+    if (started === undefined) return;
+    await workspace.actions.run("cancel_sign_in", { provider, credential: started.credential }).catch(() => undefined);
+    setStarted(undefined);
+    setCode("");
+    await start();
+  };
+  const title = credential === undefined ? "Sign in a Claude login" : `Sign ${credential.name} in again`;
+  if (started === undefined) {
+    return <Dialog title={title} close={stop}>
+      <form className="form" autoComplete="off" onSubmit={(event) => { event.preventDefault(); void start(); }}>
+        {credential === undefined ? <label className="field"><span>Name <span className="muted">(optional; without one it goes by its email)</span></span><input className="input mono" spellCheck={false} placeholder="work" data-autofocus value={name} onChange={(event) => setName(event.target.value)} /></label> : null}
+        <p className="form-text">This opens Claude’s sign-in page in a new tab. Sign in there to the account you want, then paste back the code it shows. A private window helps if the page signs you straight in to another account.</p>
+        {error === "" ? null : <p className="form-error" role="alert">{error}</p>}
+        <div className="form-actions"><button type="button" className="button" onClick={close}>Cancel</button><button type="submit" className="button primary" disabled={busy}>{busy ? "Working…" : "Open the sign-in page"}</button></div>
+      </form>
+    </Dialog>;
+  }
+  return <Dialog title={title} close={stop}>
+    <form className="form" autoComplete="off" onSubmit={(event) => { event.preventDefault(); void finish(); }}>
+      <p className="form-text">Claude’s sign-in page should have opened in a new tab. If it didn’t, <a href={started.url} target="_blank" rel="noopener noreferrer">open it here</a>. Once you’ve signed in, it shows a code to paste below.</p>
+      <label className="field"><span>Code</span><input className="input mono" spellCheck={false} autoComplete="off" data-autofocus value={code} onChange={(event) => setCode(event.target.value)} /></label>
+      <p className="form-text">This sign-in waits until {formatTime(started.expires_at)}.</p>
+      {error === "" ? null : <p className="form-error" role="alert">{error}</p>}
+      <div className="form-actions">
+        <button type="button" className="button" onClick={stop}>Cancel</button>
+        {error === "" ? null : <button type="button" className="button" disabled={busy} onClick={() => void again()}>Start over</button>}
+        <button type="submit" className="button primary" disabled={busy || code.trim() === ""}>{busy ? "Working…" : "Finish"}</button>
+      </div>
+    </form>
+  </Dialog>;
+}
+
+function LoginLimitDialog({ provider, credential, close, done }: { provider: string; credential: CredentialStatus; close: () => void; done: () => void }) {
+  const own = (label: string): string => {
+    const window = credential.windows.find((item) => item.label === label);
+    return window?.limit_set === true ? String(Math.round(window.limit * 100)) : "";
+  };
+  const [session, setSession] = useState(own("session"));
+  const [weekly, setWeekly] = useState(own("weekly"));
+  const valid = (text: string): boolean => text === "" || (Number(text) > 0 && Number(text) <= 100);
+  const limit = (text: string): number | null => (text === "" ? null : Number(text) / 100);
+  return <FormDialog title={`Limits for ${credential.name}`} close={close} action="Save limits" disabled={!valid(session) || !valid(weekly)} submit={async () => {
+    const result = await workspace.actions.run("set_credential_limit", { provider, credential: credential.name, windows: [{ window: "session", limit: limit(session) }, { window: "weekly", limit: limit(weekly) }] });
+    done();
+    return result.message;
+  }}>
+    <p className="form-text">Past a limit, calls move on to a login with room, or are refused if none has any; a reply already running finishes first. Left empty, shore moves on near the end of the window when another login has room, and otherwise uses it until Claude refuses.</p>
+    <div className="inline-form">
+      <label className="field"><span>5-hour session (%)</span><input className="input" inputMode="decimal" placeholder="95" data-autofocus value={session} onChange={(event) => setSession(event.target.value.replace(/[^\d.]/g, ""))} /></label>
+      <label className="field"><span>Week (%)</span><input className="input" inputMode="decimal" placeholder="98" value={weekly} onChange={(event) => setWeekly(event.target.value.replace(/[^\d.]/g, ""))} /></label>
+    </div>
+  </FormDialog>;
+}
+
 function RenameDialog({ provider, credential, close, done }: { provider: string; credential: CredentialStatus; close: () => void; done: () => void }) {
   const [name, setName] = useState(credential.name);
   return <FormDialog title={`Rename ${credential.name}`} close={close} action="Rename" disabled={name.trim() === "" || name.trim() === credential.name} submit={async () => {
@@ -207,17 +301,27 @@ const STANDING: Record<CredentialStatus["standing"], { label: string; tone: stri
 function credentialSource(credential: CredentialStatus): string {
   if (credential.kind === "api_key") return `Saved on the daemon ${credential.hint ?? ""}`.trim();
   if (credential.kind === "env") return `$${credential.env ?? ""}${credential.hint === null ? "" : ` ${credential.hint}`}`;
-  if (credential.kind === "login") return credential.hint === null ? "Claude login" : `Claude login · ${credential.hint}`;
+  if (credential.kind === "login") return ["Claude login", credential.hint === credential.name ? null : credential.hint, credential.plan].filter((part) => part !== null && part !== undefined).join(" · ");
   return "No key needed";
 }
 
-type CredentialDialog = { kind: "add" } | { kind: "replace" | "limit" | "rename" | "remove"; credential: CredentialStatus } | { kind: "remove-provider" };
+function windowLine(window: CredentialStatus["windows"][number]): string {
+  const name = window.label === "session" ? "Session" : window.label === "weekly" ? "Week" : window.label;
+  return [
+    `${name} ${String(Math.round(window.percent_used * 100))}%`,
+    window.limit_set ? `limit ${String(Math.round(window.limit * 100))}%${window.at_limit ? ", reached" : ""}` : "",
+    window.resets_at === null ? "" : `resets ${formatTime(window.resets_at)}`,
+  ].filter(Boolean).join(", ");
+}
+
+type CredentialDialog = { kind: "add" | "sign-in" } | { kind: "replace" | "limit" | "login-limit" | "rename" | "remove" | "sign-in-again"; credential: CredentialStatus } | { kind: "remove-provider" };
 
 function CredentialRow({ provider, credential, index, count, open, refreshed }: {
   provider: ProviderStatus; credential: CredentialStatus; index: number; count: number; open: (dialog: CredentialDialog) => void; refreshed: () => void;
 }) {
   const { busy, run } = useAction();
-  const standing = STANDING[credential.standing];
+  const login = credential.kind === "login";
+  const standing = login && credential.standing === "over_quota" ? { label: "At a limit", tone: "warn" } : STANDING[credential.standing];
   const keys = provider.credentials.filter((item) => item.kind === "api_key" || item.kind === "env").map((item) => item.name);
   const act = (work: () => Promise<{ message: string }>) => void run(async () => { const result = await work(); refreshed(); return result.message; });
   const move = (step: number) => {
@@ -237,7 +341,8 @@ function CredentialRow({ provider, credential, index, count, open, refreshed }: 
         {credential.enabled ? null : <span className="tag muted-tag">Disabled</span>}
       </div>
       <span className="setting-description">{credentialSource(credential)}</span>
-      {credential.detail === null || (credential.standing === "works" && credential.kind !== "login") ? null : <span className="setting-description">{credential.detail}</span>}
+      {credential.detail === null || credential.standing === "works" || (login && credential.standing === "over_quota") || credential.detail.toLowerCase() === standing.label.toLowerCase() ? null : <span className="setting-description">{credential.detail}</span>}
+      {credential.windows.map((window) => <span key={window.window} className="setting-description">{windowLine(window)}</span>)}
       <span className="setting-description">
         {[
           credential.usage === null ? "" : `${formatCost(credential.usage.cost_usd)} in the last 30 days, ${formatNumber(credential.usage.calls)} calls`,
@@ -245,7 +350,6 @@ function CredentialRow({ provider, credential, index, count, open, refreshed }: 
           credential.checked_at === null ? "" : `Checked ${formatTime(credential.checked_at)}`,
         ].filter(Boolean).join(" · ")}
       </span>
-      {credential.login_command === undefined ? null : <span className="setting-description">Sign in on the daemon’s machine: <code>{credential.login_command}</code></span>}
     </div>
     <span className={`status-pill ${standing.tone}`}>{standing.label}</span>
     {editable ? <div className="actions-row">
@@ -265,6 +369,24 @@ function CredentialRow({ provider, credential, index, count, open, refreshed }: 
         ...(credential.kind === "api_key" ? [{ label: "Replace key…", onSelect: () => open({ kind: "replace", credential }) }] : []),
         "separator",
         { label: "Remove…", danger: true, onSelect: () => open({ kind: "remove", credential }) },
+      ]} />
+    </div> : null}
+    {login ? <div className="actions-row">
+      {credential.standing === "signed_out"
+        ? <button type="button" className="button" onClick={() => open({ kind: "sign-in-again", credential })}>Sign in</button>
+        : <button type="button" className="button ghost" disabled={busy} onClick={() => act(() => workspace.actions.run("test_credential", { provider: provider.name, credential: credential.name }).then((result) => ({ message: `${credential.name}: ${result.detail}` })))}>{busy ? "Working…" : "Check"}</button>}
+      <Menu label={`Actions for ${credential.name}`} items={[
+        credential.pinned
+          ? { label: "Pick logins automatically", detail: "One with room, whose week resets soonest", onSelect: () => act(() => workspace.actions.run("select_credential", { provider: provider.name, credential: null })) }
+          : { label: "Use only this login", disabled: !credential.enabled || credential.standing === "signed_out", onSelect: () => act(() => workspace.actions.run("select_credential", { provider: provider.name, credential: credential.name })) },
+        { label: "Set limits…", onSelect: () => open({ kind: "login-limit", credential }) },
+        { label: "Sign in again…", onSelect: () => open({ kind: "sign-in-again", credential }) },
+        ...(credential.name === "subscription" ? [] : [{ label: "Rename…", onSelect: () => open({ kind: "rename", credential }) }]),
+        "separator",
+        credential.enabled
+          ? { label: "Disable", onSelect: () => act(() => workspace.actions.run("update_credential", { provider: provider.name, credential: credential.name, enabled: false })) }
+          : { label: "Enable", onSelect: () => act(() => workspace.actions.run("update_credential", { provider: provider.name, credential: credential.name, enabled: true })) },
+        ...(credential.name === "subscription" ? [] : ["separator" as const, { label: "Remove…", danger: true, onSelect: () => open({ kind: "remove", credential }) }]),
       ]} />
     </div> : null}
   </li>;
@@ -325,7 +447,8 @@ function ProviderCard({ state, provider, sdks, refreshed }: { state: WorkspaceSn
       </div>
     </div>
     <dl className="kv">
-      <div className="kv-row"><dt>Uses</dt><dd>{provider.no_auth ? "No key" : provider.pinned !== null ? `Only ${provider.pinned}` : provider.selection === "room" ? "The login with the most room left" : "The first key that works, in this order"}</dd></div>
+      <div className="kv-row"><dt>Uses</dt><dd>{provider.no_auth ? "No key" : provider.pinned !== null ? `Only ${provider.pinned}` : provider.selection === "room" ? "A login with room, preferring the week that resets soonest" : "The first key that works, in this order"}</dd></div>
+      {provider.selection_detail === undefined ? null : <div className="kv-row"><dt>Right now</dt><dd>{provider.selection_detail}</dd></div>}
       <div className="kv-row"><dt>Model discovery</dt><dd>{provider.discovery_enabled ? provider.cache.present ? `${String(provider.cache.visible)} models (${String(provider.cache.hidden)} hidden), refreshed ${formatTime(provider.cache.fetched_at)}` : "On, not refreshed yet" : "Off"}</dd></div>
       {provider.ignore_models.length === 0 ? null : <div className="kv-row"><dt>Ignored models</dt><dd className="mono">{provider.ignore_models.join(", ")}</dd></div>}
     </dl>
@@ -333,6 +456,7 @@ function ProviderCard({ state, provider, sdks, refreshed }: { state: WorkspaceSn
       {provider.credentials.map((credential, index) => <CredentialRow key={credential.name} provider={provider} credential={credential} index={index} count={keyCount} open={setDialog} refreshed={refreshed} />)}
     </ul>}
     <div className="actions-row">
+      {provider.credential_kind === "login" ? <button type="button" className="button" onClick={() => setDialog({ kind: "sign-in" })}>Sign in a login</button> : null}
       {logins || provider.no_auth ? null : <button type="button" className="button" onClick={() => setDialog({ kind: "add" })}>Add key</button>}
       <button type="button" className="button ghost" aria-expanded={models} onClick={() => setModels(!models)}>{models ? "Hide models" : "Show models"}</button>
       {provider.discovery_enabled && provider.enabled ? <button type="button" className="button ghost" disabled={busy} onClick={() => void run(async () => {
@@ -344,9 +468,12 @@ function ProviderCard({ state, provider, sdks, refreshed }: { state: WorkspaceSn
     {dialog?.kind === "add" ? <KeyDialog provider={provider} close={close} done={refreshed} /> : null}
     {dialog?.kind === "replace" ? <KeyDialog provider={provider} replace={dialog.credential} close={close} done={refreshed} /> : null}
     {dialog?.kind === "limit" ? <LimitDialog provider={provider.name} credential={dialog.credential} close={close} done={refreshed} /> : null}
+    {dialog?.kind === "login-limit" ? <LoginLimitDialog provider={provider.name} credential={dialog.credential} close={close} done={refreshed} /> : null}
+    {dialog?.kind === "sign-in" ? <SignInDialog provider={provider.name} close={close} done={refreshed} /> : null}
+    {dialog?.kind === "sign-in-again" ? <SignInDialog provider={provider.name} credential={dialog.credential} close={close} done={refreshed} /> : null}
     {dialog?.kind === "rename" ? <RenameDialog provider={provider.name} credential={dialog.credential} close={close} done={refreshed} /> : null}
-    {dialog?.kind === "remove" ? <ConfirmDialog title={`Remove ${dialog.credential.name}?`} action="Remove key" close={close}
-      text={dialog.credential.kind === "api_key" ? `${provider.name} stops using this key and the daemon deletes its saved copy.` : `${provider.name} stops reading $${dialog.credential.env ?? ""}; the variable itself stays set.`}
+    {dialog?.kind === "remove" ? <ConfirmDialog title={`Remove ${dialog.credential.name}?`} action={dialog.credential.kind === "login" ? "Remove login" : "Remove key"} close={close}
+      text={dialog.credential.kind === "login" ? `${provider.name} stops using this login. The daemon deletes its saved sign-in and moves the rest of its folder aside.` : dialog.credential.kind === "api_key" ? `${provider.name} stops using this key and the daemon deletes its saved copy.` : `${provider.name} stops reading $${dialog.credential.env ?? ""}; the variable itself stays set.`}
       run={async () => { const result = await workspace.actions.run("remove_credential", { provider: provider.name, credential: dialog.credential.name }); refreshed(); return result.message; }} /> : null}
     {dialog?.kind === "remove-provider" ? <ConfirmDialog title={`Remove ${provider.name}?`} action="Remove provider" close={close}
       text={`This takes ${provider.name} out of the configuration with its keys and their limits. Shore refuses if a character, thread or background task still uses one of its models.`}
@@ -361,7 +488,7 @@ export function ProvidersPage({ state }: { state: WorkspaceSnapshot }) {
   const { busy, run } = useAction();
   const sdks = presets.data?.sdks ?? [];
   return <>
-    <p className="settings-description">Model providers on the daemon and the keys they use. A key added here is saved on the daemon in a file only it can read, and is never shown again; a key can also come from an environment variable on the daemon’s machine.</p>
+    <p className="settings-description">Model providers on the daemon and the keys or logins they use. A key added here is saved on the daemon in a file only it can read, and is never shown again; a key can also come from an environment variable on the daemon’s machine. A Claude login signs in through a link you open here, wherever the daemon runs.</p>
     <SettingsSection title="Providers" actions={<div className="actions-row">
       <button type="button" className="button primary" disabled={presets.data === undefined} onClick={() => setAdding(true)}>Add provider</button>
       <button type="button" className="button" disabled={busy} onClick={() => void run(async () => {
