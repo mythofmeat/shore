@@ -167,7 +167,7 @@ export function Transcript({ state, character, mobile }: { state: WorkspaceSnaps
     follow.current = true; setAway(false);
     node.scrollTo({ top: node.scrollHeight, behavior: "smooth" });
   };
-  return <div className="transcript-wrap">
+  return <div className="transcript-wrap" data-opening={state.opening !== null} aria-busy={state.opening !== null}>
     {view === null ? null : <SegmentBanner view={view} state={state} />}
     <div className="transcript" ref={scroller} onScroll={onScroll} tabIndex={-1} role="log" aria-label={view === null ? `Conversation with ${character}` : `${segmentName(view.segment)} with ${character}`} aria-live="off">
       <div className="transcript-column">

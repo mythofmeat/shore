@@ -198,6 +198,28 @@ export function replaceCollection(db: Database, path: string, character: string,
   appendCollection(db, path, entries);
 }
 
+export interface StateMark { stored: number; lines: number; last: number; bytes: number }
+
+export function stateMark(data: string, path: string): StateMark | undefined {
+  return withStorage(data, (db) => {
+    const file = db.query("SELECT length(content) AS stored FROM state_files WHERE path = ?1").get(path) as { stored: number } | null;
+    if (file === null) return undefined;
+    const lines = db.query("SELECT count(*) AS lines, coalesce(max(seq), -1) AS last, coalesce(sum(length(content)), 0) AS bytes FROM state_lines WHERE path = ?1").get(path) as Omit<StateMark, "stored">;
+    return { stored: file.stored, ...lines };
+  });
+}
+
+export function statePrefixUnchanged(data: string, path: string, mark: StateMark): boolean {
+  return withStorage(data, (db) => {
+    const prefix = db.query("SELECT count(*) AS lines, coalesce(sum(length(content)), 0) AS bytes FROM state_lines WHERE path = ?1 AND seq <= ?2").get(path, mark.last) as { lines: number; bytes: number };
+    return prefix.lines === mark.lines && prefix.bytes === mark.bytes;
+  });
+}
+
+export function stateLinesAfter(data: string, path: string, last: number): string[] {
+  return withStorage(data, (db) => (db.query("SELECT content FROM state_lines WHERE path = ?1 AND seq > ?2 ORDER BY seq").all(path, last) as { content: Uint8Array }[]).map((row) => unpack(row.content)));
+}
+
 export function appendCollection(db: Database, path: string, entries: readonly { text: string; key?: string }[]): void {
   let seq = (db.query("SELECT coalesce(max(seq), -1) AS seq FROM state_lines WHERE path = ?1").get(path) as { seq: number }).seq + 1;
   const insert = db.query("INSERT INTO state_lines(path, seq, entry_key, content) VALUES (?1, ?2, ?3, ?4) ON CONFLICT(path, entry_key) DO UPDATE SET content = excluded.content");

@@ -32,16 +32,19 @@ export function Sidebar({ state, mobile, close, collapse, newCharacter, newThrea
   const ready = state.status === "ready";
   const needle = query.trim().toLowerCase();
   const characters = state.characters.filter((character) => character.name.toLowerCase().includes(needle));
-  const selectCharacter = (name: string) => perform(async () => {
-    if (name !== state.character) await workspace.actions.run("switch_character", { name });
+  const opening = state.opening;
+  const shownCharacter = opening?.character ?? state.character;
+  const shownThread = opening === null ? state.thread : opening.thread;
+  const selectCharacter = (name: string) => {
     navigate({ view: "chat" });
     if (mobile) close();
-  });
-  const selectThread = (name: string) => perform(async () => {
-    if (name !== state.thread) await workspace.actions.run("switch_thread", { name, resync: true });
+    if (name !== state.character) perform(() => workspace.openCharacter(name));
+  };
+  const selectThread = (name: string) => {
     navigate({ view: "chat" });
     if (mobile) close();
-  });
+    if (name !== state.thread) perform(() => workspace.openThread(name));
+  };
   return <aside className="sidebar" aria-label="Characters and conversations">
     <div className="sidebar-header">
       <span className="wordmark">shore</span>
@@ -56,20 +59,23 @@ export function Sidebar({ state, mobile, close, collapse, newCharacter, newThrea
     </label>
     <nav className="sidebar-list" aria-label="Characters">
       {characters.map((character) => {
-        const selected = character.name === state.character;
+        const selected = character.name === shownCharacter;
+        const openingThis = opening !== null && opening.character === character.name && character.name !== state.character;
         return <div key={character.name} className="sidebar-group">
-          <button type="button" className={`sidebar-item character ${selected ? "on" : ""}`} aria-current={selected ? "true" : undefined} disabled={!ready} onClick={() => selectCharacter(character.name)}>
+          <button type="button" className={`sidebar-item character ${selected ? "on" : ""}`} aria-current={selected ? "true" : undefined} aria-busy={openingThis} disabled={!ready} onClick={() => selectCharacter(character.name)}>
             <Avatar name={character.name} avatar={character.avatar} size={30} selected={selected} /><span className="sidebar-name">{character.name}</span>
+            {openingThis ? <span className="sidebar-replying"><span className="spinner" aria-hidden="true" /><span className="sr-only">(opening)</span></span> : null}
           </button>
-          {selected ? <div className="sidebar-threads" role="group" aria-label={`${character.name} conversations`}>
+          {character.name === state.character ? <div className="sidebar-threads" role="group" aria-label={`${character.name} conversations`}>
             {sortThreads(state.threads).map((thread) => {
-              const current = thread.id === state.thread;
-              const unread = current ? 0 : thread.unread ?? 0;
-              const replying = !current && conversation.activeIn({ character: state.character, thread: thread.id });
-              return <button key={thread.id} type="button" className={`sidebar-item thread ${current ? "on" : ""} ${unread > 0 ? "unread" : ""}`} aria-current={current ? "page" : undefined} disabled={!ready} onClick={() => selectThread(thread.id)}>
+              const current = thread.id === shownThread;
+              const unread = thread.id === state.thread ? 0 : thread.unread ?? 0;
+              const replying = thread.id !== state.thread && conversation.activeIn({ character: state.character, thread: thread.id });
+              const openingThread = opening?.thread === thread.id && thread.id !== state.thread;
+              return <button key={thread.id} type="button" className={`sidebar-item thread ${current ? "on" : ""} ${unread > 0 ? "unread" : ""}`} aria-current={current ? "page" : undefined} aria-busy={openingThread} disabled={!ready} onClick={() => selectThread(thread.id)}>
                 <Icon name={thread.home ? "home" : thread.heartbeat === true ? "heartbeat" : "chat"} size={14} /><span className="sidebar-name">{threadLabel(thread)}</span>
                 {thread.locked === true ? <span className="sidebar-locked" title="Locked: only you change its label, purpose and files"><Icon name="lock" size={12} /><span className="sr-only">(locked)</span></span> : null}
-                {replying ? <span className="sidebar-replying"><span className="spinner" aria-hidden="true" /><span className="sr-only">(replying)</span></span> : null}
+                {replying || openingThread ? <span className="sidebar-replying"><span className="spinner" aria-hidden="true" /><span className="sr-only">{openingThread ? "(opening)" : "(replying)"}</span></span> : null}
                 {unread > 0 ? <UnreadBadge count={unread} /> : null}
               </button>;
             })}

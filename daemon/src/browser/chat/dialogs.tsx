@@ -81,7 +81,7 @@ export function ConversationDialogs({ dialog, state, close }: { dialog: Conversa
     </Form>;
     case "fork": return <Form title={`Fork “${label}”`} close={close} busy={busy} error={error} action="Fork" disabled={name.trim() === "" || (turns !== "" && !(Number(turns) >= 1))} submit={() => run(async () => {
       const result = await workspace.actions.run("fork_thread", { name: name.trim(), from: state.thread, ...(turns === "" ? {} : { turns: Number(turns) }) });
-      await workspace.actions.run("switch_thread", { name: result.fork.thread, resync: true }); await workspace.refreshNavigation();
+      await workspace.openThread(result.fork.thread);
       return `Forked ${String(result.fork.turns)} turns into “${result.fork.thread}”`;
     })}>
       <label className="field"><span>New conversation name</span><input className="input" data-autofocus value={name} onChange={(event) => setName(event.target.value)} /></label>

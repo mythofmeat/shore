@@ -1,5 +1,5 @@
 import { basename, dirname, relative, sep, join } from "node:path";
-import { pack, replaceCollection, appendCollection, ensureCollection, deleteState, readState, writeState, withStorage } from "./store.ts";
+import { pack, replaceCollection, appendCollection, ensureCollection, deleteState, readState, stateLinesAfter, stateMark, statePrefixUnchanged, writeState, withStorage, type StateMark } from "./store.ts";
 
 export interface StateFile { data: string; key: string; character: string }
 export type DurableFile = string | StateFile;
@@ -35,6 +35,21 @@ export function readDurable(path: DurableFile): string {
   const value = readState(scope.data, scope.key);
   if (value === undefined) throw Object.assign(new Error(`No stored file: ${durablePath(path)}`), { code: "ENOENT" });
   return value;
+}
+
+export function durableMark(path: DurableFile): StateMark | undefined {
+  const scope = fileScope(path);
+  return stateMark(scope.data, scope.key);
+}
+
+export function durablePrefixUnchanged(path: DurableFile, mark: StateMark): boolean {
+  const scope = fileScope(path);
+  return statePrefixUnchanged(scope.data, scope.key, mark);
+}
+
+export function durableLinesAfter(path: DurableFile, last: number): string[] {
+  const scope = fileScope(path);
+  return stateLinesAfter(scope.data, scope.key, last);
 }
 
 export function writeDurable(path: DurableFile, content: string): void {

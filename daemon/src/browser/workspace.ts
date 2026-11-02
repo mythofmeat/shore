@@ -35,7 +35,10 @@ export interface WorkspaceSnapshot {
   messages: Message[]; metadata: Record<string, StreamMetadata>; streams: LiveTurn[]; media: LiveImage[]; mediaLimited: boolean; activity: Activity[];
   config: unknown; error: string; status: string; detail: string;
   character: string | null; thread: string | null; previousSegment: SegmentSummary | null; segmentView: SegmentView | null; uncertain: Extract<ConnectionUpdate, { kind: "uncertain" }>[];
+  opening: OpeningTarget | null;
 }
+
+export interface OpeningTarget { character: string | null; thread: string | null }
 
 export const EVENT_POLICIES = {
   hello: "navigation", history: "conversation", new_message: "conversation",
@@ -85,12 +88,13 @@ export class Workspace {
   #frame: FrameScheduler;
   #framePending = false;
   #navigation = 0;
+  #threadListing = 0;
   #eventId = 0;
   #segmentEpoch = 0;
   #loadingEarlier = false;
   #unreadSeq = 0;
   #unread = new Map<string, { seq: number; update: ThreadUnread }>();
-  #state: WorkspaceSnapshot = { characters: [], threads: [], operations: [], requests: [], messages: [], metadata: {}, streams: [], media: [], mediaLimited: false, activity: [], config: {}, error: "", status: "idle", detail: "", character: null, thread: null, previousSegment: null, segmentView: null, uncertain: [] };
+  #state: WorkspaceSnapshot = { characters: [], threads: [], operations: [], requests: [], messages: [], metadata: {}, streams: [], media: [], mediaLimited: false, activity: [], config: {}, error: "", status: "idle", detail: "", character: null, thread: null, previousSegment: null, segmentView: null, uncertain: [], opening: null };
   constructor(readonly connection: BrowserConnection, frame: FrameScheduler = (callback) => { callback(); }) {
     this.#frame = frame;
     this.actions = new OperationClient(connection);
@@ -161,13 +165,35 @@ export class Workspace {
   }
   async refreshNavigation(): Promise<void> {
     const generation = ++this.#navigation;
+    await Promise.all([this.refreshThreads(), this.#refreshCatalogues(generation)]);
+  }
+  async #refreshCatalogues(generation: number): Promise<void> {
+    try {
+      const [catalogue, characters] = await Promise.all([this.actions.run("discover_operations", {}), this.actions.run("list_characters", {})]);
+      if (generation === this.#navigation) this.#patch({ operations: catalogue.operations, requests: catalogue.requests, characters: characters.characters });
+    } catch (error) { if (generation === this.#navigation && this.connection.status === "ready") this.report(error); }
+  }
+  async refreshThreads(): Promise<void> {
+    const generation = ++this.#threadListing;
     const since = this.#unreadSeq;
     try {
-      const catalogue = await this.actions.run("discover_operations", {});
-      const characters = await this.actions.run("list_characters", {});
-      const threads = catalogue.operations.find((operation) => operation.name === "list_threads")?.available === true ? (await this.actions.run("list_threads", {})).threads : [];
-      if (generation === this.#navigation) this.#patch({ operations: catalogue.operations, requests: catalogue.requests, characters: characters.characters, threads: this.#laterUnread(threads, since) });
-    } catch (error) { if (generation === this.#navigation && this.connection.status === "ready") this.report(error); }
+      const threads = this.#state.character === null ? [] : (await this.actions.run("list_threads", {})).threads;
+      if (generation === this.#threadListing) this.#patch({ threads: this.#laterUnread(threads, since) });
+    } catch (error) { if (generation === this.#threadListing && this.connection.status === "ready") this.report(error); }
+  }
+  async openThread(name: string): Promise<void> {
+    await this.#open({ character: this.#state.character, thread: name }, async () => { await this.actions.run("switch_thread", { name, resync: true }); });
+  }
+  async openCharacter(name: string): Promise<void> {
+    await this.#open({ character: name, thread: null }, async () => { await this.actions.run("switch_character", { name }); });
+  }
+  async #open(target: OpeningTarget, work: () => Promise<void>): Promise<void> {
+    this.#patch({ opening: target });
+    try { await work(); } finally { if (this.#state.opening === target) this.#patch({ opening: null }); }
+  }
+  noteActiveModel(model: string | null): void {
+    const config = this.#state.config;
+    this.#patch({ config: { ...(typeof config === "object" && config !== null ? config : {}), active_model: model } });
   }
   #laterUnread(threads: ThreadView[], since: number): ThreadView[] {
     let merged = threads;
@@ -233,9 +259,9 @@ export class Workspace {
   }
   #receive(update: ConnectionUpdate): void {
     if (update.kind === "status") {
-      if (update.status !== "ready") this.#navigation += 1;
+      if (update.status !== "ready") { this.#navigation += 1; this.#threadListing += 1; }
       if (update.status === "signed_out") this.#segmentEpoch += 1;
-      this.#patch({ status: update.status, detail: update.detail, streams: update.status === "ready" ? this.#state.streams : [], ...(update.status === "signed_out" ? { error: "", messages: [], metadata: {}, config: {}, media: [], mediaLimited: false, activity: [], operations: [], requests: [], threads: [], characters: [], uncertain: [], previousSegment: null, segmentView: null } : {}) });
+      this.#patch({ status: update.status, detail: update.detail, streams: update.status === "ready" ? this.#state.streams : [], ...(update.status === "signed_out" ? { error: "", messages: [], metadata: {}, config: {}, media: [], mediaLimited: false, activity: [], operations: [], requests: [], threads: [], characters: [], uncertain: [], previousSegment: null, segmentView: null, opening: null } : {}) });
       if (update.status === "ready") void this.refreshNavigation();
       return;
     }
@@ -259,9 +285,10 @@ export class Workspace {
         const moved = previousSegment?.index !== this.#state.previousSegment?.index;
         if (changed) this.#segmentEpoch += 1;
         if (character !== this.#state.character) this.#unread.clear();
-        this.#patch({ messages: changed ? messages : retainImages(messages, this.#state.messages, this.#state.media), media: changed ? [] : reconcileImages(this.#state.media, messages, this.#state.messages), previousSegment, segmentView: changed ? null : this.#state.segmentView,
+        const sameCharacter = character === this.#state.character;
+        this.#patch({ opening: changed ? null : this.#state.opening, messages: changed ? messages : retainImages(messages, this.#state.messages, this.#state.media), media: changed ? [] : reconcileImages(this.#state.media, messages, this.#state.messages), previousSegment, segmentView: changed ? null : this.#state.segmentView,
           character, thread, mediaLimited: changed ? false : this.#state.mediaLimited, metadata: changed ? {} : Object.fromEntries(Object.entries(this.#state.metadata).filter(([id]) => messages.some((item) => item.msg_id === id))), config: !changed && historyOnly ? this.#state.config : message.config, activity: changed ? this.#state.activity.filter((item) => item.type !== "phase") : this.#state.activity, streams: changed ? [] : this.#state.streams.filter((stream) => !stream.final || !messages.some((item) => item.msg_id === stream.msgId)) });
-        if (changed && this.connection.status === "ready") void this.refreshNavigation();
+        if (changed && this.connection.status === "ready") void (sameCharacter ? this.refreshThreads() : this.refreshNavigation());
         if (!changed && moved) void this.#refreshSegmentNeighbours();
         return;
       }
@@ -294,7 +321,7 @@ export class Workspace {
       case "provider_fallback_warning": case "usage_warning": case "plan_limit_warning": case "config_warning": case "shutdown":
         this.#activity(message.type, message); break;
       case "threads_changed":
-        if (message.character === this.#state.character && this.connection.status === "ready") void this.refreshNavigation();
+        if (message.character === this.#state.character && this.connection.status === "ready") void this.refreshThreads();
         this.#activity(message.type, message); break;
       case "thread_unread":
         if (message.character === this.#state.character) {

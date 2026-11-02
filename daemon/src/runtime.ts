@@ -15,6 +15,7 @@ import { InProcessAutonomyExecutor } from "./autonomy/in_process.ts";
 import { localWallClock } from "./autonomy/activity.ts";
 import { KeepaliveService, startKeepaliveTimer } from "./cache/keepalive.ts";
 import { LastRequestCache } from "./cache/last_request.ts";
+import { CachedRequestRefresher } from "./cache/refresh.ts";
 import { AutonomyService, startAutonomyTimer } from "./autonomy/service.ts";
 import { CallStore } from "./call_store.ts";
 import { CharacterRegistry } from "./characters.ts";
@@ -95,6 +96,7 @@ export interface ShoreRuntime {
   readonly configPath: string;
   readonly registry: CharacterRegistry;
   readonly cache: LastRequestCache;
+  readonly cacheRefresh: CachedRequestRefresher;
   readonly mcp: McpHolder;
   readonly connectMcp: (spec: McpServerSpec) => Promise<McpClient>;
   readonly callStore: CallStore | undefined;
@@ -209,6 +211,22 @@ export async function createRuntime(options: RuntimeOptions): Promise<ShoreRunti
     ),
   );
 
+  const cacheRefresh = new CachedRequestRefresher({
+    disarm: (character) => { keepalive.disarm(character); },
+    invalidate: (character, reason) => { cache.invalidate(character, reason); },
+    changesTo: (character) => cache.changesTo(character),
+    rebuild: async (character, thread) => await snapshotGate.withActivity(async () => await cache.reprimeFromDisk(
+      character,
+      config.dirs.data,
+      registry.effectiveConfig(character),
+      {
+        mcpRegistry: { toolDefsFiltered: (patterns) => mcp.current.toolDefsFiltered(patterns) },
+        ...(thread === undefined ? {} : { thread }),
+        ...(options.env === undefined ? {} : { env: options.env }),
+      },
+    )),
+  });
+
   const autonomy: AutonomyService = new AutonomyService(
     new InProcessAutonomyExecutor({
       registry,
@@ -259,6 +277,7 @@ export async function createRuntime(options: RuntimeOptions): Promise<ShoreRunti
     configPath: options.configPath ?? rustJoin(config.dirs.config, "config.toml"),
     registry,
     cache,
+    cacheRefresh,
     mcp,
     connectMcp,
     callStore,
@@ -271,6 +290,7 @@ export async function createRuntime(options: RuntimeOptions): Promise<ShoreRunti
     refreshHistoryIndexes,
     refreshMcpCaches,
     async shutdown() {
+      await cacheRefresh.stop();
       closeSignIns();
       await historyIndex.shutdown();
       await mcp.current.shutdown();

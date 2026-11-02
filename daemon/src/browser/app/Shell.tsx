@@ -58,13 +58,13 @@ export function Shell({ state }: { state: WorkspaceSnapshot }) {
         case "previous-thread": case "next-thread": {
           const ids = sortThreads(state.threads).map((thread) => thread.id);
           const next = adjacent(ids, state.thread ?? undefined, action === "next-thread" ? 1 : -1);
-          if (next !== undefined && next !== state.thread && state.status === "ready") perform(() => workspace.actions.run("switch_thread", { name: next, resync: true }));
+          if (next !== undefined && next !== state.thread && state.status === "ready") perform(() => workspace.openThread(next));
           break;
         }
         case "next-unread-thread": {
           const next = nextUnread(sortThreads(state.threads), state.thread);
           if (next === undefined) toasts.show("No unread messages in other conversations");
-          else if (state.status === "ready") perform(() => workspace.actions.run("switch_thread", { name: next, resync: true }));
+          else if (state.status === "ready") perform(() => workspace.openThread(next));
           break;
         }
       }

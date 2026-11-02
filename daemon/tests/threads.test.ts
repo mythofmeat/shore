@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { MAX_THREAD_ID_LENGTH, assertThreadId, isValidThreadId, createThread, ensureThreads, readThreadsIndex } from "../src/engine/threads.ts";
+import { MAX_THREAD_ID_LENGTH, assertThreadId, isValidThreadId, createThread, ensureThreads, markThreadRead, readThreadsIndex, threadActivityNow } from "../src/engine/threads.ts";
 import { readFileSync, readFile } from "./support/stored_files.ts";
 import { mkdirSync, mkdtempSync, writeFileSync, existsSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -10,7 +10,7 @@ import { MAIN_THREAD, characterThreadsIndex } from "../src/config/dirs.ts";
 import { emptyCatalog } from "../src/config/models.ts";
 import { ProviderRegistry } from "../src/config/providers.ts";
 import { type LoadedConfig } from "../src/config/loader.ts";
-import { writeDurable } from "../src/storage/files.ts";
+import { appendDurableLine, initializeDurableLines, readDurable, replaceDurableSuffix, updateDurableLine, writeDurable } from "../src/storage/files.ts";
 import { mkdir, rm } from "node:fs/promises";
 import { HISTORY_DB_FILE, HistoryStore } from "../src/engine/history_store.ts";
 import { FORK_MARKER_FILE, forkThread, recoverForks, selectForkContext } from "../src/engine/fork.ts";
@@ -277,5 +277,51 @@ describe("recovering an interrupted fork", () => {
     ]);
     expect(outcomes.filter((o) => o.status === "fulfilled")).toHaveLength(1);
     expect((await readThreadsIndex(root, "ada"))?.threads.map((t) => t.id)).toEqual(["main", "spin"]);
+  });
+});
+
+describe("thread activity", () => {
+  const line = (fields: Partial<Message>): string => `${JSON.stringify({ msg_id: crypto.randomUUID(), images: [], alternatives: [], ...fields })}\n`;
+  const asked = (timestamp: string, text = "hello"): string => line({ role: "user", timestamp, content_blocks: [{ type: "text", text }] });
+  const reply = (timestamp: string, text = "hi"): string => line({ role: "assistant", timestamp, content_blocks: [{ type: "text", text }] });
+
+  async function scanned(run: (data: string, file: string) => Promise<void>): Promise<void> {
+    const data = join(mkdtempSync(testTmp("shore-thread-activity-")), "data");
+    await mkdir(join(data, "ada", "threads", "side"), { recursive: true });
+    await run(data, join(data, "ada", "threads", "side", "active.jsonl"));
+  }
+
+  test("every kind of write to a thread shows in its counts on the next read", async () => {
+    await scanned(async (data, file) => {
+      const activity = () => threadActivityNow(data, "ada", "side");
+      expect(activity().turns).toBe(0);
+
+      writeDurable(file, asked("2026-10-01T10:00:00.000Z") + reply("2026-10-01T10:01:00.000Z"));
+      expect(activity()).toMatchObject({ turns: 1, last_active: "2026-10-01T10:01:00.000Z", last_user: "2026-10-01T10:00:00.000Z" });
+
+      initializeDurableLines(file, () => readDurable(file));
+      appendDurableLine(file, asked("2026-10-01T11:00:00.000Z"));
+      expect(activity()).toMatchObject({ turns: 2, last_active: "2026-10-01T11:00:00.000Z", last_user: "2026-10-01T11:00:00.000Z" });
+
+      markThreadRead(data, "ada", "side", Date.parse("2026-10-01T11:00:00.000Z"));
+      appendDurableLine(file, reply("2026-10-01T11:01:00.000Z"));
+      appendDurableLine(file, reply("2026-10-01T11:02:00.000Z"));
+      expect(activity()).toMatchObject({ turns: 2, last_active: "2026-10-01T11:02:00.000Z", unread: 2 });
+
+      markThreadRead(data, "ada", "side", Date.parse("2026-10-01T11:01:00.000Z"));
+      expect(activity().unread).toBe(1);
+
+      replaceDurableSuffix(file, 4, [reply("2026-10-01T11:03:00.000Z", "a different reply that is longer than the last one")]);
+      expect(activity()).toMatchObject({ turns: 2, last_active: "2026-10-01T11:03:00.000Z", unread: 1 });
+
+      updateDurableLine(file, 0, asked("2026-10-01T09:00:00.000Z", "an edit changes the first line and its length"));
+      expect(activity()).toMatchObject({ turns: 2, last_active: "2026-10-01T11:03:00.000Z" });
+
+      writeDurable(file, asked("2026-10-02T10:00:00.000Z"));
+      expect(activity()).toMatchObject({ turns: 1, last_active: "2026-10-02T10:00:00.000Z", unread: 0 });
+
+      writeDurable(file, "");
+      expect(activity().turns).toBe(0);
+    });
   });
 });

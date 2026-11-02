@@ -6,13 +6,13 @@ import { IconButton, Menu, type MenuItem } from "../ui/controls.tsx";
 import { Icon } from "../ui/icons.tsx";
 import { ConnectionBanner } from "../app/banner.tsx";
 import { threadLabel } from "../sidebar/Sidebar.tsx";
-import { readMarks, useConversationActive } from "../app/state.ts";
+import { readMarks, useConversationActive, workspace } from "../app/state.ts";
 import { makeHome } from "./actions.ts";
 import { BudgetChip } from "./budget.tsx";
 import { GalleryDialog } from "./gallery.tsx";
 import { Composer } from "./Composer.tsx";
 import { ConversationDialogs, type ConversationDialog } from "./dialogs.tsx";
-import { ModelPicker, shortModel, useModelListing } from "./models.tsx";
+import { ModelPicker, shortModel, useModelListing, usePendingModel } from "./models.tsx";
 import { QuoteButton } from "./QuoteButton.tsx";
 import { Transcript } from "./Transcript.tsx";
 
@@ -31,7 +31,10 @@ function SidebarToggle({ open, mobile, toggle, unread }: { open: boolean; mobile
 
 function ChatTopbar({ state, sidebarOpen, toggleSidebar, mobile }: { state: WorkspaceSnapshot; sidebarOpen: boolean; toggleSidebar: () => void; mobile: boolean }) {
   const [dialog, setDialog] = useState<ConversationDialog | "model" | "gallery" | null>(null);
-  const { listing, refresh } = useModelListing(state);
+  const { listing, reload } = useModelListing(state);
+  const pendingModel = usePendingModel(state);
+  const shownModel = pendingModel === undefined ? listing?.active : pendingModel.model ?? listing?.active;
+  const modelChanged = async () => { workspace.noteActiveModel((await reload()).active ?? null); };
   useEffect(() => {
     const open = (event: Event) => { const name = (event as CustomEvent<string>).detail; if (["rename", "fork", "guidance", "system", "compact", "clear", "archive", "model", "gallery"].includes(name)) setDialog(name as ConversationDialog | "model" | "gallery"); };
     addEventListener(CONVERSATION_DIALOG_EVENT, open);
@@ -41,6 +44,8 @@ function ChatTopbar({ state, sidebarOpen, toggleSidebar, mobile }: { state: Work
   const busy = useConversationActive({ character: state.character, thread: state.thread });
   const character = state.characters.find((item) => item.name === state.character);
   const thread = state.threads.find((item) => item.id === state.thread);
+  const openingThread = state.opening?.thread === null || state.opening === null ? undefined : state.threads.find((item) => item.id === state.opening?.thread);
+  const shownThread = openingThread ?? thread;
   const ready = state.status === "ready";
   const items: MenuItem[] = [
     { label: "Images…", icon: "image", onSelect: () => setDialog("gallery") },
@@ -60,16 +65,16 @@ function ChatTopbar({ state, sidebarOpen, toggleSidebar, mobile }: { state: Work
     {state.character === null ? <div className="topbar-title"><span className="topbar-name">Shore</span></div> : <>
       <Avatar name={state.character} avatar={character?.avatar} size={30} />
       <div className="topbar-title">
-        <span className="topbar-name">{state.character}</span>
-        {state.thread === null ? null : <><span className="topbar-separator">/</span><span className="topbar-thread">{thread === undefined ? state.thread : threadLabel(thread)}</span></>}
+        <span className="topbar-name">{state.opening?.character ?? state.character}</span>
+        {state.thread === null || (state.opening !== null && state.opening.thread === null) ? null : <><span className="topbar-separator">/</span><span className="topbar-thread">{shownThread === undefined ? state.thread : threadLabel(shownThread)}</span></>}
       </div>
       {mobile ? null : <BudgetChip state={state} />}
-      {mobile ? null : <button type="button" className="model-chip" aria-label={`Chat model: ${listing?.active ?? "unknown"}. Change model`} title="Change model" disabled={!ready} onClick={() => setDialog("model")}>
-        <span className="mono">{listing === undefined ? "…" : shortModel(listing.active)}</span><Icon name="chevronDown" size={14} />
+      {mobile ? null : <button type="button" className={`model-chip ${pendingModel === undefined ? "" : "pending"}`} aria-label={`Chat model: ${shownModel ?? "unknown"}${pendingModel === undefined ? "" : ", saving"}. Change model`} title="Change model" disabled={!ready} onClick={() => setDialog("model")}>
+        <span className="mono">{listing === undefined && pendingModel === undefined ? "…" : shortModel(shownModel)}</span>{pendingModel === undefined ? <Icon name="chevronDown" size={14} /> : <span className="spinner chip-spinner" aria-hidden="true" />}
       </button>}
-      <Menu label="Conversation options" items={mobile ? [{ label: `Model: ${shortModel(listing?.active)}`, icon: "settings", onSelect: () => setDialog("model"), disabled: !ready }, "separator", ...items] : items} />
+      <Menu label="Conversation options" items={mobile ? [{ label: `Model: ${shortModel(shownModel)}`, icon: "settings", onSelect: () => setDialog("model"), disabled: !ready }, "separator", ...items] : items} />
     </>}
-    {dialog === "model" ? <ModelPicker state={state} close={() => setDialog(null)} changed={refresh} /> : dialog === "gallery" ? <GalleryDialog state={state} close={() => setDialog(null)} /> : dialog === null ? null : <ConversationDialogs dialog={dialog} state={state} close={() => setDialog(null)} />}
+    {dialog === "model" ? <ModelPicker state={state} close={() => setDialog(null)} changed={modelChanged} /> : dialog === "gallery" ? <GalleryDialog state={state} close={() => setDialog(null)} /> : dialog === null ? null : <ConversationDialogs dialog={dialog} state={state} close={() => setDialog(null)} />}
   </header>;
 }
 

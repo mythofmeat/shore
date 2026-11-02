@@ -40,7 +40,7 @@ import { resumesOnStart } from "../memory/compaction/checkpoint.ts";
 import { compactAfterTurn } from "./turn.ts";
 import { passEnd } from "../commands/compact.ts";
 import { commandCatalogue } from "../commands/registry.ts";
-import { changesState } from "../operations/policy.ts";
+import { changesState, operationPolicy } from "../operations/policy.ts";
 import {
   applySubscriptionProviders,
   mcpConfigView,
@@ -298,6 +298,7 @@ export function buildMessageHandlerDeps(a: HandlerAssembly): MessageHandlerDeps 
     router: a.router,
     registry: handlerRegistry(a.runtime.registry),
     commandChangesState,
+    commandOnlyReads,
     compactions: compactionViewers(a.runtime.config.dirs.data),
     notifier: handlerNotifier(a.runtime.notifier),
     dispatchCommand: async (command, meta, signal) => {
@@ -345,6 +346,13 @@ export function commandChangesState(cmd: Command): boolean {
   if (descriptor === undefined) return true;
   const input = typeof cmd.args === "object" && cmd.args !== null && !Array.isArray(cmd.args) ? cmd.args as Record<string, unknown> : {};
   return changesState(descriptor, input);
+}
+
+export function commandOnlyReads(cmd: Command): boolean {
+  const descriptor = commandDescriptors.get(cmd.name);
+  if (descriptor === undefined) return false;
+  const input = typeof cmd.args === "object" && cmd.args !== null && !Array.isArray(cmd.args) ? cmd.args as Record<string, unknown> : {};
+  return operationPolicy(descriptor, input).effects.every((effect) => effect === "read");
 }
 
 export function handlerNotifier(
@@ -437,31 +445,14 @@ function dispatchRuntime(a: CommandAssembly): DispatchRuntime {
 
     cachedCharacters: () => runtime.cache.cachedCharacters(),
 
-    warmThread: (character) => runtime.keepalive.warmThread(character),
+    warmThread: (character) => runtime.cacheRefresh.targetThread(character) ?? runtime.keepalive.warmThread(character),
 
     threadsChanged: (character, thread) => {
       a.emitEvent?.({ type: "threads_changed", character, thread });
     },
 
-    refreshCachedRequest: async (character, reason = "model_change", thread) => {
-      runtime.keepalive.disarm(character);
-      runtime.cache.invalidate(character, reason);
-      try {
-        await runtime.cache.reprimeFromDisk(
-          character,
-          runtime.config.dirs.data,
-          runtime.registry.effectiveConfig(character),
-          {
-            mcpRegistry: runtime.mcp.current,
-            ...(thread === undefined ? {} : { thread }),
-            ...(a.env === undefined ? {} : { env: a.env }),
-          },
-        );
-      } catch (e) {
-        shoreLog.warn(
-          `shore: request cache refresh after model change failed for ${character}: ${String(e)}`,
-        );
-      }
+    refreshCachedRequest: (character, reason = "model_change", thread) => {
+      runtime.cacheRefresh.refresh(character, reason, thread);
     },
 
     applyReloadedConfig: async (config) => await applyReloadedConfig(a, config),

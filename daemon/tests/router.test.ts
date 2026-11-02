@@ -2,7 +2,7 @@ import { describe, expect, test } from "bun:test";
 
 import { afterCommand, type DispatchContext } from "../src/handler/command_dispatch.ts";
 import { MessageHandler, type GenerationParams, type HandlerRegistry } from "../src/handler/router.ts";
-import { SessionRouter, type RequestMeta } from "../src/swp/session.ts";
+import { REQUEST_LIFECYCLE_CAPABILITY, SessionRouter, type RequestMeta } from "../src/swp/session.ts";
 import type { ClientMessage } from "../src/protocol/ClientMessage.ts";
 import type { Command } from "../src/protocol/Command.ts";
 import { required } from "../src/util/required.ts";
@@ -37,6 +37,7 @@ function harness(
     meta: RequestMeta,
     signal: AbortSignal,
   ) => Promise<ServerMessage>,
+  commandOnlyReads?: (cmd: Command) => boolean,
 ) {
   const router = new SessionRouter();
   const frames = new Map<number, ServerMessage[]>();
@@ -62,6 +63,7 @@ function harness(
       });
     },
     log: { error: () => {} },
+    ...(commandOnlyReads === undefined ? {} : { commandOnlyReads }),
   });
 
   return { handler, router, frames, started };
@@ -333,6 +335,66 @@ describe("per-session routing queues", () => {
     gate("first").resolve();
     await handler.drain();
     expect(names(required(frames.get(1)))).toEqual(["first", "second", "third"]);
+  });
+
+  const browserTab = (): RequestMeta => {
+    const base = meta("ada", 1, null, "command");
+    return { ...base, session: { ...base.session, capabilities: ["streaming", REQUEST_LIFECYCLE_CAPABILITY] } };
+  };
+  const reads = (cmd: Command): boolean => cmd.name.startsWith("list_");
+
+  test("in a browser tab a read overtakes a slow change, and a change of selection still waits its turn", async () => {
+    const { dispatch, gate, started } = gatedDispatch();
+    const { handler, frames } = harness(["ada"], 1, undefined, dispatch, reads);
+
+    for (const name of ["thread_label", "list_threads", "switch_thread"]) {
+      handler.enqueueRouted({ kind: "command", cmd: command(name), meta: browserTab() });
+    }
+    gate("list_threads").resolve();
+    gate("switch_thread").resolve();
+    await settle();
+
+    expect(started).toEqual(["thread_label", "list_threads"]);
+    expect(names(required(frames.get(1)))).toEqual(["list_threads"]);
+
+    gate("thread_label").resolve();
+    await handler.drain();
+    expect(names(required(frames.get(1)))).toEqual(["list_threads", "thread_label", "switch_thread"]);
+  });
+
+  test("a client that matches replies by order keeps them in order, reads included", async () => {
+    const { dispatch, gate, started } = gatedDispatch();
+    const { handler } = harness(["ada"], 1, undefined, dispatch, reads);
+
+    for (const name of ["thread_label", "list_threads"]) {
+      handler.enqueueRouted({ kind: "command", cmd: command(name), meta: meta("ada", 1, null, "command") });
+    }
+    gate("list_threads").resolve();
+    await settle();
+
+    expect(started).toEqual(["thread_label"]);
+
+    gate("thread_label").resolve();
+    await handler.drain();
+    expect(started).toEqual(["thread_label", "list_threads"]);
+  });
+
+  test("a model refresh over the network and a stopping compaction leave the tab free to switch threads", async () => {
+    const { dispatch, gate, started } = gatedDispatch();
+    const { handler, frames } = harness(["ada"], 1, undefined, dispatch, reads);
+
+    for (const name of ["refresh_all_provider_models", "compact_cancel", "switch_thread"]) {
+      handler.enqueueRouted({ kind: "command", cmd: command(name), meta: browserTab() });
+    }
+    gate("switch_thread").resolve();
+    await settle();
+
+    expect(started).toEqual(["refresh_all_provider_models", "compact_cancel", "switch_thread"]);
+    expect(names(required(frames.get(1)))).toEqual(["switch_thread"]);
+
+    gate("refresh_all_provider_models").resolve();
+    gate("compact_cancel").resolve();
+    await handler.drain();
   });
 
   test("a compaction leaves the session free to switch threads while it runs", async () => {

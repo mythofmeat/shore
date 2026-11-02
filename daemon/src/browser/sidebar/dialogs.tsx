@@ -52,8 +52,7 @@ export function NewThreadDialog({ character, close }: { character: string; close
       const id = name.trim();
       const paths = threadFileList(files);
       await workspace.actions.run("create_thread", { name: id, ...(label.trim() === "" ? {} : { label: label.trim() }), ...(purpose.trim() === "" ? {} : { purpose: purpose.trim() }), ...(paths.length === 0 ? {} : { files: paths }), ...(model.trim() === "" ? {} : { model: model.trim() }), ...(compaction ? { compaction: true } : {}) });
-      await workspace.actions.run("switch_thread", { name: id, resync: true });
-      await workspace.refreshNavigation();
+      await workspace.openThread(id);
       navigate({ view: "chat" });
       close();
     } catch (failure) { setError(errorText(failure)); } finally { setBusy(false); }

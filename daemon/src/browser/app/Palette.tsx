@@ -33,11 +33,11 @@ export function Palette({ state, close, newThread, newCharacter, initialScope = 
         label: { rename: "Rename conversation", fork: "Fork conversation", guidance: "Regenerate with guidance", system: "Add a system message", compact: "Compact context", clear: "Clear context", gallery: "Show images", model: "Choose a model" }[name],
       })),
       { id: "effort", label: "Change reasoning effort", icon: "chat" as const, group: "Conversation", run: run(() => { navigate({ view: "chat" }); requestAnimationFrame(openEffortMenu); }) },
-      ...state.threads.map((thread) => ({ id: `thread:${thread.id}`, label: `Open ${threadLabel(thread)}`, detail: state.character ?? "", icon: "chat" as const, group: "Conversations", run: run(() => { navigate({ view: "chat" }); perform(() => workspace.actions.run("switch_thread", { name: thread.id, resync: true })); }) })),
+      ...state.threads.map((thread) => ({ id: `thread:${thread.id}`, label: `Open ${threadLabel(thread)}`, detail: state.character ?? "", icon: "chat" as const, group: "Conversations", run: run(() => { navigate({ view: "chat" }); perform(() => workspace.openThread(thread.id)); }) })),
     ];
     return [
       ...conversation,
-      ...state.characters.map((character) => ({ id: `character:${character.name}`, label: `Go to ${character.name}`, icon: "person" as const, group: "Characters", run: run(() => { navigate({ view: "chat" }); perform(() => workspace.actions.run("switch_character", { name: character.name })); }) })),
+      ...state.characters.map((character) => ({ id: `character:${character.name}`, label: `Go to ${character.name}`, icon: "person" as const, group: "Characters", run: run(() => { navigate({ view: "chat" }); perform(() => workspace.openCharacter(character.name)); }) })),
       { id: "new-character", label: "New character", icon: "plus", group: "Characters", run: run(newCharacter) },
       ...SETTINGS_PAGES.map((page) => ({ id: `settings:${page.id}`, label: page.label, detail: `Settings · ${page.group}`, icon: "settings" as const, group: "Settings", run: run(() => navigate({ view: "settings", page: page.id })) })),
     ];
