@@ -26,6 +26,7 @@ mod archives;
 mod backups;
 mod cli;
 mod output;
+mod providers;
 mod run;
 mod state;
 mod terminal_images;

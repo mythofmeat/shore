@@ -159,12 +159,15 @@ export function configSchema(live: LiveInstances): SchemaEntry[] {
   add(["notifications", "events"], { kind: "list", item: { kind: "enum", variants: NOTIFICATION_EVENTS } });
   for (const name of new Set(["<name>", ...live.instancesAt("providers")])) {
     const prefix = ["providers", name];
-    for (const field of ["enabled", "subscription", "discover"]) add([...prefix, field], { kind: "boolean" });
-    for (const field of ["sdk", "base_url", "api_key_env"]) add([...prefix, field], { kind: "string", optional: true });
+    for (const field of ["enabled", "subscription", "discover", "no_auth"]) add([...prefix, field], { kind: "boolean" });
+    for (const field of ["sdk", "base_url", "api_key_env", "pin"]) add([...prefix, field], { kind: "string", optional: true });
     add([...prefix, "ignore_models"], { kind: "list", item: { kind: "string" } });
     add([...prefix, "keys"], { kind: "list", item: { kind: "table" } });
-    for (const field of ["name", "api_key_env"]) add([...prefix, "keys", "<index>", field], { kind: "string" });
+    add([...prefix, "keys", "<index>", "name"], { kind: "string" });
+    add([...prefix, "keys", "<index>", "api_key_env"], { kind: "string", optional: true });
     for (const field of ["enabled", "warn_on_fallback"]) add([...prefix, "keys", "<index>", field], { kind: "boolean" });
+    add([...prefix, "keys", "<index>", "spend_limit_usd"], { kind: "float", optional: true });
+    add([...prefix, "keys", "<index>", "spend_period"], { kind: "enum", variants: ["hour", "day", "week", "month"], optional: true });
     for (const field of MODEL_FIELDS) add([...prefix, canonicalSettingKey(field)], modelInfo(field));
   }
   for (const section of ["chat", "image"]) {
@@ -251,6 +254,10 @@ function describeOption(path: readonly string[]): string {
     via: "Notification delivery method; off disables delivery.",
     events: "Notification events to deliver; a list replaces the inherited selection.",
     discover: "Discover this provider's models; false by default.",
+    no_auth: "The provider's endpoint takes no API key, as with a model server on this machine.",
+    pin: "Name of the key every call to this provider uses. Without it, calls use the first key that works, in order.",
+    spend_limit_usd: "Most this key may spend per spend_period, in US dollars. At the limit, calls move on to the provider's next key.",
+    spend_period: "Window for spend_limit_usd: hour, day, week or month (the default).",
     reasoning_budget_tokens: "Maximum reasoning token budget, where supported by the model SDK.",
     max_tool_rounds: "Maximum model/tool iterations; positive integer.",
     system_prompt: "Markdown file opening the system prompt, relative to the config directory. A chat model's own setting wins over its provider's, which wins over chat.system_prompt; with none set, the built-in prompt is used. Read fresh on every request.",

@@ -301,3 +301,149 @@ export function unsetTomlValue(source: string, path: readonly string[]): TomlRem
   const next = [...lines.slice(0, existing.startLine), ...lines.slice(existing.endLine + 1)];
   return { text: next.join("\n"), removed: true };
 }
+
+interface Block {
+  start: number;
+  contentEnd: number;
+  end: number;
+  header: Header;
+}
+
+function nextHeaderLine(scan: Scan, after: number, total: number): number {
+  return scan.headers.filter((h) => h.line > after).reduce<number>((best, h) => Math.min(best, h.line), total);
+}
+
+function blockOf(scan: Scan, lines: readonly string[], header: Header): Block {
+  const limit = nextHeaderLine(scan, header.line, lines.length);
+  let contentEnd = header.line + 1;
+  for (const a of scan.assignments) {
+    if (a.startLine > header.line && a.startLine < limit) contentEnd = Math.max(contentEnd, a.endLine + 1);
+  }
+  let end = contentEnd;
+  while (end < limit && (lines[end] as string).trim() === "") end += 1;
+  if (end === limit && limit === lines.length) end = lines.length;
+  let start = header.line;
+  while (start > 0 && (lines[start - 1] as string).trim().startsWith("#")) start -= 1;
+  return { start, contentEnd, end, header };
+}
+
+function arrayBlocks(scan: Scan, lines: readonly string[], path: readonly string[]): Block[] {
+  return scan.headers.filter((h) => h.arrayOfTables && samePath(h.path, path)).map((h) => blockOf(scan, lines, h));
+}
+
+function refuseInline(scan: Scan, path: readonly string[]): void {
+  const inline = scan.assignments.find((a) => a.path.length <= path.length && isPrefix(a.path, path));
+  if (inline !== undefined) {
+    throw new TomlEditError(
+      `\`${renderKey(path)}\` is written inline as \`${renderKey(inline.path)}\` on line ${inline.startLine + 1}; edit that line by hand`,
+    );
+  }
+}
+
+export function tomlArrayTableCount(source: string, path: readonly string[]): number {
+  return scanToml(source).headers.filter((h) => h.arrayOfTables && samePath(h.path, path)).length;
+}
+
+export function tomlDefinesTable(source: string, path: readonly string[]): boolean {
+  const scan = scanToml(source);
+  return scan.headers.some((h) => isPrefix(path, h.path)) || scan.assignments.some((a) => isPrefix(path, a.path));
+}
+
+export function appendTomlArrayTable(
+  source: string,
+  path: readonly string[],
+  fields: readonly (readonly [string, string])[],
+  anchor?: readonly string[],
+): string {
+  const scan = scanToml(source);
+  refuseInline(scan, path);
+  const lines = source.split("\n");
+  const body = [`[[${renderKey(path)}]]`, ...fields.map(([key, literal]) => `${quoteKey(key)} = ${literal}`)];
+  const blocks = arrayBlocks(scan, lines, path);
+  const last = blocks.at(-1);
+  const anchorHeader = anchor === undefined ? undefined : scan.headers.find((h) => !h.arrayOfTables && samePath(h.path, anchor));
+  const after = last?.contentEnd ?? (anchorHeader === undefined ? undefined : blockOf(scan, lines, anchorHeader).contentEnd);
+  if (after === undefined) {
+    const trailing = source === "" || source.endsWith("\n") ? "" : "\n";
+    const gap = source.trim() === "" ? "" : "\n";
+    return `${source}${trailing}${gap}${body.join("\n")}\n`;
+  }
+  return [...lines.slice(0, after), "", ...body, ...lines.slice(after)].join("\n");
+}
+
+function blockAt(scan: Scan, lines: readonly string[], path: readonly string[], index: number): Block {
+  const block = arrayBlocks(scan, lines, path)[index];
+  if (block === undefined) throw new TomlEditError(`\`${renderKey(path)}\` has no entry #${String(index + 1)}`);
+  return block;
+}
+
+export function setTomlArrayTableValue(source: string, path: readonly string[], index: number, key: string, literal: string): string {
+  const scan = scanToml(source);
+  const lines = source.split("\n");
+  const block = blockAt(scan, lines, path, index);
+  const existing = scan.assignments.find((a) => a.startLine > block.header.line && a.startLine < block.contentEnd && samePath(a.path, [...path, key]));
+  if (existing !== undefined) {
+    return [...lines.slice(0, existing.startLine), `${existing.indent}${existing.keyText} = ${literal}`, ...lines.slice(existing.endLine + 1)].join("\n");
+  }
+  return [...lines.slice(0, block.contentEnd), `${quoteKey(key)} = ${literal}`, ...lines.slice(block.contentEnd)].join("\n");
+}
+
+export function unsetTomlArrayTableValue(source: string, path: readonly string[], index: number, key: string): string {
+  const scan = scanToml(source);
+  const lines = source.split("\n");
+  const block = blockAt(scan, lines, path, index);
+  const existing = scan.assignments.find((a) => a.startLine > block.header.line && a.startLine < block.contentEnd && samePath(a.path, [...path, key]));
+  if (existing === undefined) return source;
+  return [...lines.slice(0, existing.startLine), ...lines.slice(existing.endLine + 1)].join("\n");
+}
+
+function dropRanges(lines: readonly string[], ranges: readonly { start: number; end: number }[]): string {
+  const drop = new Set<number>();
+  for (const range of ranges) for (let line = range.start; line < range.end; line += 1) drop.add(line);
+  const out: string[] = [];
+  for (const [i, line] of lines.entries()) {
+    if (drop.has(i)) continue;
+    if (line.trim() === "" && drop.has(i - 1) && (out.at(-1)?.trim() ?? "") === "") continue;
+    out.push(line);
+  }
+  while (out.length > 1 && (out.at(-1) as string) === "" && (out.at(-2) as string).trim() === "") out.pop();
+  return out.join("\n");
+}
+
+export function removeTomlArrayTable(source: string, path: readonly string[], index: number): string {
+  const scan = scanToml(source);
+  const lines = source.split("\n");
+  return dropRanges(lines, [blockAt(scan, lines, path, index)]);
+}
+
+export function reorderTomlArrayTables(source: string, path: readonly string[], order: readonly number[]): string {
+  const scan = scanToml(source);
+  const lines = source.split("\n");
+  const blocks = arrayBlocks(scan, lines, path);
+  if (order.length !== blocks.length || new Set(order).size !== blocks.length || order.some((i) => blocks[i] === undefined)) {
+    throw new TomlEditError(`a new order for \`${renderKey(path)}\` must name each of its ${String(blocks.length)} entries once`);
+  }
+  const out: string[] = [];
+  let cursor = 0;
+  for (const [slot, block] of blocks.entries()) {
+    out.push(...lines.slice(cursor, block.start));
+    const moved = blocks[order[slot] as number] as Block;
+    out.push(...lines.slice(moved.start, moved.contentEnd));
+    cursor = block.contentEnd;
+  }
+  out.push(...lines.slice(cursor));
+  return out.join("\n");
+}
+
+export function removeTomlTable(source: string, path: readonly string[]): string {
+  const scan = scanToml(source);
+  const lines = source.split("\n");
+  const ranges = scan.headers.filter((h) => isPrefix(path, h.path)).map((h) => blockOf(scan, lines, h));
+  const owned = (line: number) => ranges.some((r) => line >= r.start && line < r.end);
+  for (const a of scan.assignments) {
+    if (isPrefix(path, a.path) || (a.path.length < path.length && isPrefix(a.path, path))) {
+      if (!owned(a.startLine)) ranges.push({ start: a.startLine, contentEnd: a.endLine + 1, end: a.endLine + 1, header: { path: a.path, line: a.startLine, arrayOfTables: false } });
+    }
+  }
+  return dropRanges(lines, ranges);
+}

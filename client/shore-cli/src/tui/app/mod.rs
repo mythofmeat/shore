@@ -36,6 +36,13 @@ pub(crate) struct PaletteConfirmation {
     pub prompt: String,
 }
 
+pub(crate) struct SecretPrompt {
+    pub request: crate::cli::KeyRequest,
+    pub label: String,
+    pub title: String,
+    pub typed: String,
+}
+
 #[derive(Clone, Copy, PartialEq, Eq)]
 pub(crate) enum ConnectionStatus {
     Disconnected,
@@ -375,6 +382,8 @@ pub(crate) struct App {
     pub palette_catalog_loaded: bool,
     pub pending_palette_catalog: std::collections::HashMap<String, String>,
     pub palette_confirmation: Option<PaletteConfirmation>,
+    pub secret_prompt: Option<SecretPrompt>,
+    pub pending_provider_key: Option<(String, crate::cli::KeyRequest)>,
     pub confirmed_palette_command: Option<String>,
     pub tokens: TokenCounts,
     pub is_private: bool,
@@ -469,6 +478,8 @@ impl Default for App {
             palette_catalog_loaded: false,
             pending_palette_catalog: std::collections::HashMap::new(),
             palette_confirmation: None,
+            secret_prompt: None,
+            pending_provider_key: None,
             confirmed_palette_command: None,
             tokens: TokenCounts {
                 input: 0,

@@ -303,57 +303,348 @@ pub(crate) fn write_provider_list<W: Write>(out: &mut W, data: &Value) {
     section(out, "providers", None);
     let providers = rows_of(data, "providers");
     if providers.is_empty() {
-        empty(out, "no providers configured");
+        empty(
+            out,
+            "no providers configured; `shore provider add` lists the ones shore knows",
+        );
         return;
     }
     for (index, provider) in providers.iter().enumerate() {
         if index > 0 {
             blank(out);
         }
-        let on = flag(provider, "enabled");
-        let mut head = Rows::new();
-        let discovery = if flag(provider, "discovery_enabled") {
-            " \u{00b7} discovery"
-        } else {
-            ""
-        };
-        head.add_marked(
-            if on { Mark::On } else { Mark::Off },
-            text(provider, "name"),
-            &format!("{}{discovery}", text(provider, "sdk")),
-            if on { Tone::Plain } else { Tone::Muted },
-        );
-        head.write(out);
-
+        provider_head(out, provider);
         let mut rows = Rows::at_depth(1);
         let base = text(provider, "base_url");
         if !base.is_empty() {
             rows.add("base url", base);
         }
-        let keys = rows_of(provider, "keys");
-        if !keys.is_empty() {
-            let missing: Vec<&str> = keys
-                .iter()
-                .filter(|k| !flag(k, "env_set"))
-                .map(|k| text(k, "name"))
-                .collect();
-            let value = if missing.is_empty() {
-                format!("{} set", keys.len())
-            } else {
-                format!("{} missing: {}", missing.len(), missing.join(", "))
-            };
-            let tone = if missing.is_empty() {
-                Tone::Plain
-            } else {
-                Tone::Warn
-            };
-            rows.add_toned("keys", &value, tone);
-        }
+        let (summary, tone) = credential_summary(provider);
+        rows.add_toned(credential_label(provider), &summary, tone);
         if let Some(cache) = data_cache(provider) {
             rows.add("catalog", &cache);
         }
         rows.write(out);
     }
+}
+
+fn provider_head<W: Write>(out: &mut W, provider: &Value) {
+    let on = flag(provider, "enabled");
+    let mut head = Rows::new();
+    let discovery = if flag(provider, "discovery_enabled") {
+        " \u{00b7} discovery"
+    } else {
+        ""
+    };
+    head.add_marked(
+        if on { Mark::On } else { Mark::Off },
+        text(provider, "name"),
+        &format!("{}{discovery}", text(provider, "sdk")),
+        if on { Tone::Plain } else { Tone::Muted },
+    );
+    head.write(out);
+}
+
+fn credentials_of(provider: &Value) -> &[Value] {
+    rows_of(provider, "credentials")
+}
+
+fn credential_label(provider: &Value) -> &'static str {
+    if credentials_of(provider)
+        .iter()
+        .any(|c| text(c, "kind") == "login")
+    {
+        "logins"
+    } else {
+        "keys"
+    }
+}
+
+fn credential_summary(provider: &Value) -> (String, Tone) {
+    let credentials = credentials_of(provider);
+    if flag(provider, "no_auth") {
+        return ("none needed".to_owned(), Tone::Plain);
+    }
+    let missing: Vec<&str> = credentials
+        .iter()
+        .filter(|c| flag(c, "enabled") && text(c, "standing") == "missing")
+        .map(|c| text(c, "name"))
+        .collect();
+    let bad: Vec<&str> = credentials
+        .iter()
+        .filter(|c| flag(c, "enabled") && matches!(text(c, "standing"), "invalid" | "signed_out"))
+        .map(|c| text(c, "name"))
+        .collect();
+    let using = credentials
+        .iter()
+        .find(|c| flag(c, "in_use"))
+        .map(|c| text(c, "name"));
+    let mut parts = vec![format!("{}", credentials.len())];
+    if let Some(name) = using {
+        parts.push(format!("using {name}"));
+    }
+    if !missing.is_empty() {
+        parts.push(format!("{} missing: {}", missing.len(), missing.join(", ")));
+    }
+    if !bad.is_empty() {
+        parts.push(format!("rejected: {}", bad.join(", ")));
+    }
+    let tone = if !bad.is_empty() || (using.is_none() && !missing.is_empty()) {
+        Tone::Warn
+    } else {
+        Tone::Plain
+    };
+    (parts.join(" \u{00b7} "), tone)
+}
+
+fn standing_words(standing: &str) -> &str {
+    match standing {
+        "works" => "works",
+        "invalid" => "rejected",
+        "over_quota" => "over quota",
+        "signed_out" => "signed out",
+        "missing" => "missing",
+        _ => "not checked yet",
+    }
+}
+
+fn standing_tone(standing: &str) -> Tone {
+    match standing {
+        "works" => Tone::Good,
+        "invalid" | "signed_out" | "missing" => Tone::Bad,
+        "over_quota" => Tone::Warn,
+        _ => Tone::Muted,
+    }
+}
+
+fn money(value: f64) -> String {
+    format!("${value:.2}")
+}
+
+fn credential_value(credential: &Value) -> String {
+    let mut parts = Vec::new();
+    match text(credential, "kind") {
+        "api_key" => parts.push(format!("stored {}", text(credential, "hint"))),
+        "env" => {
+            let hint = text(credential, "hint");
+            parts.push(if hint.is_empty() {
+                format!("${}", text(credential, "env"))
+            } else {
+                format!("${} {hint}", text(credential, "env"))
+            });
+        }
+        "login" => {
+            let email = text(credential, "hint");
+            parts.push(if email.is_empty() {
+                "login".to_owned()
+            } else {
+                format!("login {email}")
+            });
+        }
+        _ => parts.push("no key".to_owned()),
+    }
+    parts.push(standing_words(text(credential, "standing")).to_owned());
+    if !flag(credential, "enabled") {
+        parts.push("disabled".to_owned());
+    }
+    if flag(credential, "pinned") {
+        parts.push("pinned".to_owned());
+    }
+    parts.join(" \u{00b7} ")
+}
+
+fn credential_note(credential: &Value) -> String {
+    let mut parts = Vec::new();
+    let detail = text(credential, "detail");
+    if !detail.is_empty()
+        && (text(credential, "standing") != "works" || text(credential, "kind") == "login")
+    {
+        parts.push(detail.to_owned());
+    }
+    if let Some(limit) = credential.get("limit").filter(|v| !v.is_null()) {
+        let spent = limit
+            .get("spent_usd")
+            .and_then(Value::as_f64)
+            .unwrap_or(0.0);
+        let cap = limit.get("cost_usd").and_then(Value::as_f64).unwrap_or(0.0);
+        let period = text(limit, "period");
+        let at = if flag(limit, "at_limit") {
+            " (at limit)"
+        } else {
+            ""
+        };
+        parts.push(format!("{} of {}/{period}{at}", money(spent), money(cap)));
+    }
+    if let Some(usage) = credential.get("usage").filter(|v| !v.is_null()) {
+        let calls = number(usage, "calls");
+        let cost = usage.get("cost_usd").and_then(Value::as_f64).unwrap_or(0.0);
+        parts.push(format!("{} in 30d, {} calls", money(cost), count(calls)));
+    }
+    parts.join(" \u{00b7} ")
+}
+
+pub(crate) fn write_provider_detail<W: Write>(out: &mut W, provider: &Value) {
+    section(out, "provider", Some(text(provider, "name")));
+    provider_head(out, provider);
+    let mut rows = Rows::at_depth(1);
+    let base = text(provider, "base_url");
+    rows.add(
+        "base url",
+        if base.is_empty() {
+            "(sdk default)"
+        } else {
+            base
+        },
+    );
+    let ignored = rows_of(provider, "ignore_models")
+        .iter()
+        .filter_map(Value::as_str)
+        .collect::<Vec<_>>();
+    if !ignored.is_empty() {
+        rows.add("ignores", &ignored.join(", "));
+    }
+    if flag(provider, "subscription") {
+        rows.add("billing", "subscription");
+    }
+    let selection = match (text(provider, "selection"), text(provider, "pinned")) {
+        (_, pinned) if !pinned.is_empty() => format!("pinned to {pinned}"),
+        ("room", _) => "the login with the most room left".to_owned(),
+        _ => "first that works, in order".to_owned(),
+    };
+    rows.add("uses", &selection);
+    if let Some(cache) = data_cache(provider) {
+        rows.add("catalog", &cache);
+    }
+    rows.write(out);
+    blank(out);
+    section(out, credential_label(provider), None);
+    let credentials = credentials_of(provider);
+    if credentials.is_empty() {
+        empty(out, "none");
+        return;
+    }
+    let mut keys = Rows::new();
+    for credential in credentials {
+        let standing = text(credential, "standing");
+        let mark = if flag(credential, "in_use") {
+            Mark::Active
+        } else if !flag(credential, "enabled") {
+            Mark::Off
+        } else if matches!(
+            standing,
+            "invalid" | "missing" | "signed_out" | "over_quota"
+        ) {
+            Mark::Warn
+        } else {
+            Mark::None
+        };
+        let tone = if flag(credential, "enabled") {
+            standing_tone(standing)
+        } else {
+            Tone::Muted
+        };
+        keys.add_marked_noted(
+            mark,
+            text(credential, "name"),
+            &credential_value(credential),
+            &credential_note(credential),
+            tone,
+        );
+    }
+    keys.write(out);
+    for credential in credentials {
+        let command = text(credential, "login_command");
+        if !command.is_empty() {
+            note(
+                out,
+                &format!(
+                    "sign {} in on the daemon's host: {command}",
+                    text(credential, "name")
+                ),
+            );
+        }
+    }
+}
+
+pub(crate) fn write_provider_changed<W: Write>(out: &mut W, data: &Value) {
+    note(out, text(data, "message"));
+    blank(out);
+    if let Some(provider) = data.get("provider") {
+        write_provider_detail(out, provider);
+    }
+}
+
+pub(crate) fn write_provider_presets<W: Write>(out: &mut W, data: &Value) {
+    section(out, "known providers", None);
+    let mut rows = Rows::new();
+    for preset in rows_of(data, "presets") {
+        let configured = flag(preset, "configured");
+        let auth = match text(preset, "credential_kind") {
+            "login" => "Claude login".to_owned(),
+            _ => format!("key in ${}", text(preset, "api_key_env")),
+        };
+        rows.add_marked_noted(
+            if configured { Mark::On } else { Mark::None },
+            text(preset, "name"),
+            &format!("{} \u{00b7} {auth}", text(preset, "sdk")),
+            if configured { "added" } else { "" },
+            if configured { Tone::Muted } else { Tone::Plain },
+        );
+    }
+    rows.write(out);
+    blank(out);
+    note(
+        out,
+        "Add one with `shore provider add <name>`, or your own with `shore provider add <name> --sdk openai --base-url <url>`.",
+    );
+}
+
+pub(crate) fn write_credential_tested<W: Write>(out: &mut W, data: &Value) {
+    let standing = text(data, "standing");
+    let mut rows = Rows::new();
+    rows.add_marked_noted(
+        if flag(data, "ok") {
+            Mark::On
+        } else {
+            Mark::Warn
+        },
+        &format!("{} {}", text(data, "provider"), text(data, "credential")),
+        standing_words(standing),
+        text(data, "detail"),
+        standing_tone(standing),
+    );
+    rows.write(out);
+}
+
+pub(crate) fn write_provider_removed<W: Write>(out: &mut W, data: &Value) {
+    let keys = number(data, "keys_removed");
+    let limits = number(data, "limits_removed");
+    let mut extra = Vec::new();
+    if keys > 0 {
+        extra.push(format!(
+            "{keys} stored key{}",
+            if keys == 1 { "" } else { "s" }
+        ));
+    }
+    if limits > 0 {
+        extra.push(format!(
+            "{limits} spend limit{}",
+            if limits == 1 { "" } else { "s" }
+        ));
+    }
+    let with = if extra.is_empty() {
+        String::new()
+    } else {
+        format!(" with its {}", extra.join(" and "))
+    };
+    note(
+        out,
+        &format!(
+            "Removed provider {}{with} from {}.",
+            text(data, "provider"),
+            text(data, "file")
+        ),
+    );
 }
 
 fn data_cache(provider: &Value) -> Option<String> {
@@ -597,6 +888,36 @@ pub(crate) fn print_provider_list(data: &Value) {
     let stdout = crate::output::stdout();
     let mut out = stdout.lock();
     write_provider_list(&mut out, data);
+}
+
+pub(crate) fn print_provider_detail(data: &Value) {
+    let stdout = crate::output::stdout();
+    let mut out = stdout.lock();
+    write_provider_detail(&mut out, data);
+}
+
+pub(crate) fn print_provider_changed(data: &Value) {
+    let stdout = crate::output::stdout();
+    let mut out = stdout.lock();
+    write_provider_changed(&mut out, data);
+}
+
+pub(crate) fn print_provider_presets(data: &Value) {
+    let stdout = crate::output::stdout();
+    let mut out = stdout.lock();
+    write_provider_presets(&mut out, data);
+}
+
+pub(crate) fn print_credential_tested(data: &Value) {
+    let stdout = crate::output::stdout();
+    let mut out = stdout.lock();
+    write_credential_tested(&mut out, data);
+}
+
+pub(crate) fn print_provider_removed(data: &Value) {
+    let stdout = crate::output::stdout();
+    let mut out = stdout.lock();
+    write_provider_removed(&mut out, data);
 }
 
 pub(crate) fn print_provider_models(data: &Value) {

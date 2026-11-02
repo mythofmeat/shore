@@ -1,7 +1,7 @@
 import { characterMediaDir } from "../storage/media.ts";
 
 import type { LoadedConfig } from "../config/loader.ts";
-import type { ProviderEntry as RegistryEntry } from "../config/providers.ts";
+import { toCredentialsEntry, type ProviderEntry as RegistryEntry } from "../config/providers.ts";
 import {
   characterDataDir,
   rustJoin,
@@ -137,13 +137,5 @@ function providerRecord(
 }
 
 export function credentialEntry(entry: RegistryEntry): ProviderEntry {
-  return {
-    enabled: entry.enabled,
-    keys: entry.keys.map((k) => ({
-      name: k.name,
-      env: k.env,
-      enabled: k.enabled,
-      warn_on_fallback: k.warnOnFallback,
-    })),
-  };
+  return toCredentialsEntry(entry);
 }

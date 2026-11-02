@@ -48,6 +48,8 @@ import { ledgerFor, setNanoGptSubscriptionCacheDir } from "./ledger/record.ts";
 import { closeLedgers, setCallObserver } from "./ledger/record.ts";
 import { modelUsageSummary } from "./ledger/query.ts";
 import { configureClaudePlanLimits, type ClaudePlanLimitsOptions } from "./ledger/plan_limits.ts";
+import { configureSecretStore } from "./llm/secret_store.ts";
+import { configureCredentialStanding } from "./llm/credential_standing.ts";
 import { captureProviders } from "./llm/capture.ts";
 import { withResolvedCredential, withWorkspaceDir } from "./llm/generate.ts";
 import { generateImage } from "./llm/image_generate.ts";
@@ -146,6 +148,8 @@ export async function createRuntime(options: RuntimeOptions): Promise<ShoreRunti
   applySubscriptionProviders(registry);
   for (const character of registry.availableCharacters()) removeWorkspaceIndex(config.dirs.cache, character);
   configureClaudePlanLimits({ cacheDir: config.dirs.cache, ...claudePlanFetcher(options.providers.claude_agent) });
+  configureSecretStore(config.dirs.data);
+  configureCredentialStanding(config.dirs.cache);
 
   historyIndex = new HistoryIndexService();
   const refreshHistoryIndexes = async () => {

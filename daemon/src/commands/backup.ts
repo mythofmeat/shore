@@ -16,6 +16,7 @@ import { databasePath, openStorage } from "../storage/store.ts";
 import type { TarWriter } from "../storage/tar_writer.ts";
 import type { CharacterWorkspace } from "../tools/character_workspace.ts";
 import { indexTree, type IndexedEntry } from "../tools/tree_index.ts";
+import { SECRET_STORE_FILE, secretStorePath } from "../llm/secret_store.ts";
 import { CommandError, invalidRequest } from "./errors.ts";
 
 export const BACKUP_FORMAT = "shore-backup";
@@ -37,6 +38,7 @@ export interface TreeManifest {
   source: { data: string; cache: string };
   entries: IndexedEntry[];
   database: { bytes: number; block_bytes: number; blocks: string[] };
+  secrets_left_out?: boolean;
 }
 
 export interface TreeCapture {
@@ -45,11 +47,13 @@ export interface TreeCapture {
   files_sent: number;
   blocks: number;
   blocks_sent: number;
+  secrets_left_out?: boolean;
 }
 
 export interface TreeSources {
   readonly dirs: ShoreDirs;
   readonly characters: readonly string[];
+  readonly includeSecrets?: boolean;
   isolated(character: string): CharacterWorkspace | undefined;
   withSnapshot<T>(run: () => Promise<T>): Promise<T>;
 }
@@ -76,7 +80,7 @@ export async function captureTree(sources: TreeSources, writer: TarWriter, base?
       const held = await freezeDatabase(path);
       database = held;
       const frozenAt = new Date();
-      for (const source of treeSources(dirs, characters, (character) => sources.isolated(character))) {
+      for (const source of treeSources(dirs, characters, (character) => sources.isolated(character), sources.includeSecrets === true)) {
         const found = source.workspace === undefined
           ? await indexTree(source.root, source.skip)
           : await source.workspace.call("index", { root: source.root });
@@ -114,6 +118,7 @@ export async function captureTree(sources: TreeSources, writer: TarWriter, base?
         blocksSent += 1;
       }
     }
+    const leftOut = sources.includeSecrets !== true && existsSync(secretStorePath(dirs.data));
     const manifest: TreeManifest = {
       format: BACKUP_FORMAT,
       version: TREE_VERSION,
@@ -122,6 +127,7 @@ export async function captureTree(sources: TreeSources, writer: TarWriter, base?
       source: { data: resolve(dirs.data), cache: resolve(dirs.cache) },
       entries,
       database: { bytes: frozen.bytes, block_bytes: DATABASE_BLOCK_BYTES, blocks },
+      ...(leftOut ? { secrets_left_out: true } : {}),
     };
     const text = Buffer.from(`${JSON.stringify(manifest)}\n`, "utf8");
     await writer.add({ path: "manifest.json", size: text.length, mode: 0o600, mtime: createdAt }, [text]);
@@ -131,13 +137,14 @@ export async function captureTree(sources: TreeSources, writer: TarWriter, base?
       files_sent: sent,
       blocks: blocks.length,
       blocks_sent: blocksSent,
+      ...(leftOut ? { secrets_left_out: true } : {}),
     };
   } finally {
     database?.release();
   }
 }
 
-function treeSources(dirs: ShoreDirs, characters: readonly string[], isolated: (character: string) => CharacterWorkspace | undefined): Source[] {
+function treeSources(dirs: ShoreDirs, characters: readonly string[], isolated: (character: string) => CharacterWorkspace | undefined, includeSecrets: boolean): Source[] {
   const workspaces = characters.map((name) => ({ name, root: resolve(characterWorkspaceDir(dirs.config, name, dirs.workspace)) }));
   const roots = [dirs.config, dirs.data, dirs.cache, dirs.runtime, dirs.workspace]
     .filter((root): root is string => root !== undefined)
@@ -149,7 +156,7 @@ function treeSources(dirs: ShoreDirs, characters: readonly string[], isolated: (
   const live = ["shore.db", "shore.db-wal", "shore.db-shm", "shore.db-journal", DATA_DIRECTORY_LEASE_FILE, DATA_DIRECTORY_LOCK_FILE, `${DATA_DIRECTORY_LOCK_FILE}-journal`];
   return [
     { prefix: "config", root: config, skip: nested(config) },
-    { prefix: "data", root: data, skip: [...nested(data), ...live.map((name) => join(data, name))] },
+    { prefix: "data", root: data, skip: [...nested(data), ...live.map((name) => join(data, name)), ...(includeSecrets ? [] : [join(data, SECRET_STORE_FILE)])] },
     ...workspaces.map((workspace) => ({ prefix: `workspace/${workspace.name}`, root: workspace.root, skip: [], workspace: isolated(workspace.name) })),
     ...characters.flatMap((name) => [
       { prefix: `cache/characters/${name}/images/blobs`, root: resolve(imageBlobDir(dirs.cache, name)), skip: [] },

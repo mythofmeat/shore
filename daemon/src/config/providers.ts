@@ -15,7 +15,9 @@ export type ProviderRegistryErrorKind =
   | "conflicting_key_forms"
   | "missing_key_field"
   | "duplicate_key_name"
-  | "transport_in_defaults";
+  | "transport_in_defaults"
+  | "unknown_pin"
+  | "keys_without_auth";
 
 export class ProviderRegistryError extends Error {
   constructor(
@@ -53,6 +55,22 @@ export class ProviderRegistryError extends Error {
       "duplicate_key_name",
       `[providers.${provider}] has duplicate key name ${JSON.stringify(name)}; ` +
         `each key under a provider must have a unique name`,
+    );
+  }
+
+  static unknownPin(provider: string, pin: string, disabled: boolean): ProviderRegistryError {
+    return new ProviderRegistryError(
+      "unknown_pin",
+      disabled
+        ? `[providers.${provider}] pins key ${JSON.stringify(pin)}, which is disabled; enable it or clear \`pin\``
+        : `[providers.${provider}] pins key ${JSON.stringify(pin)}, but it has no key by that name`,
+    );
+  }
+
+  static keysWithoutAuth(provider: string): ProviderRegistryError {
+    return new ProviderRegistryError(
+      "keys_without_auth",
+      `[providers.${provider}] sets \`no_auth = true\` and also lists keys; use one or the other`,
     );
   }
 
@@ -106,16 +124,24 @@ export function globMatches(pattern: string, s: string): boolean {
   return true;
 }
 
+export type SpendPeriod = "hour" | "day" | "week" | "month";
+
+export const SPEND_PERIODS: readonly SpendPeriod[] = ["hour", "day", "week", "month"];
+
 export interface ProviderKeyEntry {
   name: string;
   env: string;
+  stored: boolean;
   enabled: boolean;
   warnOnFallback: boolean;
+  spendLimit?: { costUsd: number; period: SpendPeriod };
 }
 
 export interface ProviderEntry extends ProviderRegistryEntry {
   enabled: boolean;
   subscription: boolean;
+  noAuth: boolean;
+  pin?: string;
   sdk?: Sdk;
   baseUrl?: string;
   apiKeyEnv?: string;
@@ -136,6 +162,7 @@ function defaultProviderEntry(name?: string): ProviderEntry {
   return {
     enabled: true,
     subscription: name !== undefined && DEFAULT_SUBSCRIPTION_SET.has(name),
+    noAuth: false,
     keys: [],
     discovery: defaultDiscovery(),
     defaults: {},
@@ -149,13 +176,44 @@ export function enabledKeys(entry: ProviderEntry): ProviderKeyEntry[] {
 export function toCredentialsEntry(entry: ProviderEntry): CredentialsProviderEntry {
   return {
     enabled: entry.enabled,
+    no_auth: entry.noAuth,
+    ...(entry.pin === undefined ? {} : { pin: entry.pin }),
     keys: entry.keys.map((k) => ({
       name: k.name,
       env: k.env,
+      stored: k.stored,
       enabled: k.enabled,
       warn_on_fallback: k.warnOnFallback,
     })),
   };
+}
+
+export function normalizedProviderName(name: string): string {
+  return name.toLowerCase().replaceAll("-", "_");
+}
+
+export function findProviderName(names: Iterable<string>, raw: string): string | undefined {
+  const all = [...names];
+  if (all.includes(raw)) return raw;
+  const wanted = normalizedProviderName(raw);
+  const matches = all.filter((name) => normalizedProviderName(name) === wanted);
+  return matches.length === 1 ? matches[0] : undefined;
+}
+
+const CREDENTIAL_LIMIT_BUDGETS = new WeakSet<object>();
+
+export function markCredentialBudget<T extends object>(budget: T): T {
+  CREDENTIAL_LIMIT_BUDGETS.add(budget);
+  return budget;
+}
+
+export function isCredentialBudget(budget: object): boolean {
+  return CREDENTIAL_LIMIT_BUDGETS.has(budget);
+}
+
+export function credentialBudgets(registry: ProviderRegistry): { name: string; provider: string; api_key: string; cost_usd: number; period: SpendPeriod }[] {
+  return registry.entries().flatMap(([provider, entry]) => entry.keys.flatMap((key) =>
+    key.spendLimit === undefined ? [] : [{ name: `${provider} key ${key.name}`, provider, api_key: key.name, cost_usd: key.spendLimit.costUsd, period: key.spendLimit.period }]));
 }
 
 export class ProviderRegistry {
@@ -225,7 +283,6 @@ function parseEntry(provider: string, value: unknown): ProviderEntry {
   const seen = new Set<string>();
   for (const [idx, key] of parsed.keys.entries()) {
     if (key.name === "") throw ProviderRegistryError.missingKeyField(provider, idx, "name");
-    if (key.env === "") throw ProviderRegistryError.missingKeyField(provider, idx, "env");
     if (seen.has(key.name)) throw ProviderRegistryError.duplicateKeyName(provider, key.name);
     seen.add(key.name);
   }
@@ -234,10 +291,17 @@ function parseEntry(provider: string, value: unknown): ProviderEntry {
     parsed.keys.push({
       name: "default",
       env: parsed.apiKeyEnv,
+      stored: false,
       enabled: true,
       warnOnFallback: false,
     });
     delete parsed.apiKeyEnv;
+  }
+
+  if (parsed.noAuth && parsed.keys.length > 0) throw ProviderRegistryError.keysWithoutAuth(provider);
+  if (parsed.pin !== undefined) {
+    const pinned = parsed.keys.find((key) => key.name === parsed.pin);
+    if (pinned === undefined || !pinned.enabled) throw ProviderRegistryError.unknownPin(provider, parsed.pin, pinned !== undefined);
   }
 
   return parsed;
@@ -255,6 +319,8 @@ type ReadResult<T> = { ok: T } | { err: string };
 const ENTRY_KEYS = [
   "enabled",
   "subscription",
+  "no_auth",
+  "pin",
   "sdk",
   "base_url",
   "api_key_env",
@@ -263,7 +329,7 @@ const ENTRY_KEYS = [
   "defaults",
 ];
 const DISCOVERY_KEYS = ["enabled", "ignore"];
-const KEY_KEYS = ["name", "env", "enabled", "warn_on_fallback"];
+const KEY_KEYS = ["name", "env", "enabled", "warn_on_fallback", "spend_limit_usd", "spend_period"];
 
 function unknownField(table: Record<string, unknown>, known: readonly string[]): string | undefined {
   for (const key of sortedKeys(table)) {
@@ -285,6 +351,14 @@ function readEntry(value: unknown, name?: string): ReadResult<ProviderEntry> {
     if (value[field] === undefined) continue;
     if (typeof value[field] !== "boolean") return { err: "invalid type: expected a boolean" };
     out[field] = value[field];
+  }
+  if (value["no_auth"] !== undefined) {
+    if (typeof value["no_auth"] !== "boolean") return { err: "invalid type: expected a boolean" };
+    out.noAuth = value["no_auth"];
+  }
+  if (value["pin"] !== undefined) {
+    if (typeof value["pin"] !== "string") return { err: "invalid type: expected a string" };
+    out.pin = value["pin"];
   }
   if (value["sdk"] !== undefined) {
     if (typeof value["sdk"] !== "string") return { err: "invalid type: expected a string" };
@@ -360,9 +434,21 @@ function readKey(value: unknown): ReadResult<ProviderKeyEntry> {
   const name = value["name"];
   const env = value["env"];
   if (typeof name !== "string") return { err: "missing field `name`" };
-  if (typeof env !== "string") return { err: "missing field `env`" };
+  if (env !== undefined && (typeof env !== "string" || env.trim() === "")) return { err: "`api_key_env` must name an environment variable" };
 
-  const out: ProviderKeyEntry = { name, env, enabled: true, warnOnFallback: false };
+  const out: ProviderKeyEntry = { name, env: env ?? "", stored: env === undefined, enabled: true, warnOnFallback: false };
+  const limit = value["spend_limit_usd"];
+  const period = value["spend_period"];
+  if (limit !== undefined) {
+    const cost = typeof limit === "bigint" ? Number(limit) : limit;
+    if (typeof cost !== "number" || !Number.isFinite(cost) || cost <= 0) return { err: "`spend_limit_usd` must be a positive number" };
+    if (period !== undefined && (typeof period !== "string" || !(SPEND_PERIODS as readonly string[]).includes(period))) {
+      return { err: `\`spend_period\` must be one of ${SPEND_PERIODS.join(", ")}` };
+    }
+    out.spendLimit = { costUsd: cost, period: (period ?? "month") as SpendPeriod };
+  } else if (period !== undefined) {
+    return { err: "`spend_period` needs `spend_limit_usd`" };
+  }
   if (value["enabled"] !== undefined) {
     if (typeof value["enabled"] !== "boolean") return { err: "invalid type: expected a boolean" };
     out.enabled = value["enabled"];

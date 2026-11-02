@@ -22,7 +22,7 @@ import {
   routeClientMessage,
   sessionReceives,
 } from "./routing";
-import { sessionMetaOf, type ClientInfo, type RoutedMessage, type SessionMeta, type SessionRouter } from "./session";
+import { isLoopbackAddress, sessionMetaOf, type ClientInfo, type RoutedMessage, type SessionMeta, type SessionRouter } from "./session";
 
 export const SWP_V1 = 1;
 
@@ -202,6 +202,7 @@ export async function performHandshake(
     clientType: admitted.client_type,
     clientName: admitted.client_name,
     capabilities: admitted.capabilities,
+    confidential: isLoopbackAddress(ctx.peer),
     character: history.selectedCharacter,
     thread: history.selectedThread,
   };

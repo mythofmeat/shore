@@ -33,6 +33,11 @@ describe("a fallback reason names the failure without leaking the credential", (
     expect(missingKeyReason("SOME_KEY")).toBe('env "SOME_KEY" unset or empty');
   });
 
+  test("a key stored by the daemon is named as such, not as an environment variable", () => {
+    expect(missingKeyReason('stored key "work"')).toBe('stored key "work" not saved');
+    expect(sanitizeReason({ kind: "missing_api_key", var: 'stored key "work"' })).toBe('stored key "work" not saved');
+  });
+
   test("every other failure carries its own message", () => {
     const cases: [LlmError, string][] = [
       [{ kind: "provider", message: "quota exceeded" }, "quota exceeded"],

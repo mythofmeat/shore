@@ -250,6 +250,32 @@ describe("character archives", () => {
     finally { history.close(); }
   });
 
+  test("a backup leaves stored provider keys out unless asked, and importing it says so", async () => {
+    const source = await root("secrets-source"); await seedCharacter(source, "ada", "ada history");
+    await writeFile(join(source.data, "provider_secrets.json"), JSON.stringify({ version: 1, providers: { openrouter: { work: "sk-or-v1-secretvalue1234" } } }), { mode: 0o600 });
+    const sending = spooling(source, new Set(["ada"]), 1);
+    const plain = await exportBackup(sending);
+    const plainTar = await tarEntries(await download(sending, plain.transfer));
+    expect(plainTar.has("data/provider_secrets.json")).toBe(false);
+    expect([...plainTar.values()].some((bytes) => bytes.toString().includes("sk-or-v1-secretvalue1234"))).toBe(false);
+    expect(plain.secrets_left_out).toBe(true);
+
+    const target = await root("secrets-target");
+    const receiving = spooling(target, new Set(), 2);
+    expect(await importArchive(receiving, { transfer: await uploaded(receiving, plainTar.size === 0 ? Buffer.alloc(0) : await download(sending, (await exportBackup(sending)).transfer)) }))
+      .toMatchObject({ characters: ["ada"], secrets_left_out: true });
+    expect(existsSync(join(target.data, "provider_secrets.json"))).toBe(false);
+
+    const withKeys = await exportBackup(sending, { include_secrets: true });
+    expect(withKeys.secrets_left_out).toBeUndefined();
+    const other = await root("secrets-included");
+    const restoring = spooling(other, new Set(), 3);
+    const imported = await importArchive(restoring, { transfer: await uploaded(restoring, await download(sending, withKeys.transfer)) });
+    expect(imported.restored).toContain("data/provider_secrets.json");
+    expect(imported.secrets_left_out).toBeUndefined();
+    expect((await stat(join(other.data, "provider_secrets.json"))).mode & 0o777).toBe(0o600);
+  });
+
   test("a backup against the previous one's manifest sends only what changed and rebuilds the same database", async () => {
     const source = await root("incremental"); await seedCharacter(source, "ada", "first segment");
     await writeFile(join(source.workspace as string, "ada", "notes.md"), "one\n");

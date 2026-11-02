@@ -22,7 +22,8 @@ import { readLearnedImageSupport } from "../llm/image_support.ts";
 import { toRfc3339 } from "../ledger/zoned.ts";
 import { defaultSdk } from "../config/models.ts";
 import type { LoadedConfig } from "../config/loader.ts";
-import { enabledKeys, isVisible, type ProviderEntry } from "../config/providers.ts";
+import { isVisible, toCredentialsEntry, type ProviderEntry } from "../config/providers.ts";
+import { readCandidateEnv, resolveKeyCandidates } from "../llm/credentials.ts";
 import { internalError, invalidRequest, notFound, providerError } from "./errors.ts";
 import { setNanoGptSubscription } from "../ledger/store.ts";
 import { discoverClaudeAgent, type ClaudeAgentModelQuery } from "../llm/providers/claude_agent_models.ts";
@@ -45,44 +46,6 @@ function requireProvider(args: OperationInput<"refresh_provider_models">): strin
   return provider;
 }
 
-const envSet = (name: string): boolean => (process.env[name]?.trim() ?? "") !== "";
-
-export function listProviders(ctx: ProvidersContext): OperationResult<"list_providers"> {
-  const providers = ctx.config.providers.entries().map(([name, entry]) => {
-    const cache = readCacheSync(cachePath(ctx.config.dirs.cache, name));
-    const hidden =
-      cache === undefined
-        ? 0
-        : cache.models.filter((m) => !isVisible(entry.discovery, m.model_id)).length;
-
-    return {
-      name,
-      enabled: entry.enabled,
-      sdk: entry.sdk ?? defaultSdk(name),
-      base_url: entry.baseUrl ?? defaultBaseUrl(name) ?? null,
-      discovery_enabled: entry.discovery.enabled,
-      keys: entry.keys.map((k) => ({
-        name: k.name,
-        enabled: k.enabled,
-        warn_on_fallback: k.warnOnFallback,
-        env_set: envSet(k.env),
-      })),
-      cache:
-        cache === undefined
-          ? { present: false, models: 0, visible: 0, hidden: 0, fetched_at: null }
-          : {
-              present: true,
-              models: cache.models.length,
-              visible: cache.models.length - hidden,
-              hidden,
-              fetched_at: cache.fetched_at,
-            },
-    };
-  });
-
-  return { providers };
-}
-
 export interface RefreshOutcome {
   cache: ProviderModelsCache;
   cachePath: string;
@@ -103,7 +66,7 @@ export async function refreshOne(
   }
 
   const baseUrl = entry.baseUrl ?? defaultBaseUrl(provider);
-  const key = firstUsableKey(entry);
+  const key = firstUsableKey(provider, entry);
   const discovered = await discoverProviderModels(provider, entry, baseUrl, key, fetchImpl, runClaudeAgentQuery);
   if ("err" in discovered) {
     throw internalError(describeDiscoveryError(discovered.err));
@@ -166,10 +129,10 @@ async function discoverProviderModels(
     : await discoverOpenAiCompatible(provider, baseUrl, key, fetchImpl);
 }
 
-function firstUsableKey(entry: ProviderEntry): string | undefined {
-  for (const k of enabledKeys(entry)) {
-    const value = process.env[k.env];
-    if (value !== undefined && value.trim() !== "") return value;
+function firstUsableKey(provider: string, entry: ProviderEntry): string | undefined {
+  for (const candidate of resolveKeyCandidates(provider, toCredentialsEntry(entry))) {
+    const value = readCandidateEnv(candidate);
+    if (value !== undefined && (value !== "" || candidate.none === true)) return value;
   }
   return undefined;
 }

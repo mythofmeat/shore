@@ -1065,6 +1065,8 @@ const BUDGET: StructSpec<UsageBudgetConfig> = {
   },
 };
 
+export const newUsageBudget = (): UsageBudgetConfig => BUDGET.make();
+
 export function budgetPaceAction(budget: UsageBudgetConfig): UsageBudgetAction {
   return budget.pace_action ?? "warn";
 }

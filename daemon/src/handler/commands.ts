@@ -74,8 +74,9 @@ export async function dispatchCommand(
     }
   }
 
+  const confidential = meta.session.confidential === true;
   if (isCharacterless(cmd.name) && !(cmd.name === "list_models" && selected !== undefined)) {
-    return characterlessCommand(deps, cmd, sessionId, selected, rid, signal);
+    return characterlessCommand(deps, cmd, sessionId, selected, rid, signal, confidential);
   }
   if (cmd.name === "switch_character") {
     return await switchCharacterCommand(deps, cmd, sessionId, rid, selected);
@@ -86,7 +87,7 @@ export async function dispatchCommand(
   try {
     character = deps.registry.resolveCharacter(selected);
   } catch (e) {
-    if (optionalCharacter) return characterlessCommand(deps, cmd, sessionId, selected, rid, signal);
+    if (optionalCharacter) return characterlessCommand(deps, cmd, sessionId, selected, rid, signal, confidential);
     const message = e instanceof CharacterError ? e.message : String(e);
     return frameWithRid(commandFrame(cmd.name, { err: invalidRequest(message) }), rid);
   }
@@ -98,12 +99,12 @@ export async function dispatchCommand(
     const thread = liveThread(deps.registry, character, meta.session.selectedThread);
     engine = await deps.registry.getOrCreate(character, thread);
   } catch (e) {
-    if (optionalCharacter) return characterlessCommand(deps, cmd, sessionId, selected, rid, signal);
+    if (optionalCharacter) return characterlessCommand(deps, cmd, sessionId, selected, rid, signal, confidential);
     const message = e instanceof Error ? e.message : String(e);
     return frameWithRid(commandFrame(cmd.name, { err: internalError(message) }), rid);
   }
 
-  const session = characterSession(deps, character, config, sessionId, rid, signal, engine.thread);
+  const session = { ...characterSession(deps, character, config, sessionId, rid, signal, engine.thread), confidential };
 
   let frame: ServerMessage;
   try {
@@ -180,8 +181,10 @@ async function characterlessCommand(
   selected: string | undefined,
   rid: string | undefined,
   signal: AbortSignal,
+  confidential = false,
 ): Promise<ServerMessage> {
   const session: CommandSession = {
+    confidential,
     config: deps.globalConfig(),
     configPath: deps.configPath,
     dataDir: deps.dataDir,

@@ -1,5 +1,6 @@
 import { toLlmError } from "./errors";
 import { isZaiProvider } from "./providers/zai_config";
+import { storedSecret } from "./secret_store";
 
 export const CREDENTIAL_FAILURE_KINDS = [
   "missing_key",
@@ -42,8 +43,9 @@ export function classifyCredentialFailure(
     case "deserialize":
     case "provider":
       return "not_credential_failure";
-    case "launch_failed":
     case "budget_blocked":
+      return error.credential === undefined ? "not_credential_failure" : "budget_exhausted";
+    case "launch_failed":
     case "aborted":
       return "not_credential_failure";
     default:
@@ -118,17 +120,23 @@ export interface KeyCandidate {
   name: string;
   env: string;
   warn_on_fallback: boolean;
+  provider?: string;
+  stored?: boolean;
+  none?: boolean;
 }
 
 interface ProviderKeyEntry {
   name: string;
   env: string;
+  stored?: boolean;
   enabled: boolean;
   warn_on_fallback: boolean;
 }
 
 export interface ProviderEntry {
   enabled: boolean;
+  no_auth?: boolean;
+  pin?: string;
   keys: ProviderKeyEntry[];
 }
 
@@ -172,6 +180,14 @@ export function isKeylessSdk(sdk: string): boolean {
   return KEYLESS_SDKS.has(sdk);
 }
 
+export const NO_AUTH_CANDIDATE: KeyCandidate = { name: "none", env: "", warn_on_fallback: false, none: true };
+
+function candidateOf(providerKey: string, k: ProviderKeyEntry): KeyCandidate {
+  return k.stored === true
+    ? { name: k.name, env: "", warn_on_fallback: k.warn_on_fallback, provider: providerKey, stored: true }
+    : { name: k.name, env: k.env, warn_on_fallback: k.warn_on_fallback };
+}
+
 export function resolveKeyCandidates(
   providerKey: string,
   entry: ProviderEntry | undefined,
@@ -179,9 +195,10 @@ export function resolveKeyCandidates(
 ): KeyCandidate[] {
   if (entry !== undefined) {
     if (!entry.enabled) return [];
-    const candidates = entry.keys
-      .filter((k) => k.enabled)
-      .map((k) => ({ name: k.name, env: k.env, warn_on_fallback: k.warn_on_fallback }));
+    if (entry.no_auth === true) return [NO_AUTH_CANDIDATE];
+    const enabled = entry.keys.filter((k) => k.enabled);
+    const pinned = entry.pin === undefined ? undefined : enabled.find((k) => k.name === entry.pin);
+    const candidates = (pinned === undefined ? enabled : [pinned]).map((k) => candidateOf(providerKey, k));
     if (candidates.length > 0) return candidates;
   }
 
@@ -194,10 +211,17 @@ export function resolveKeyCandidates(
   ];
 }
 
+export function describeCandidateSource(candidate: KeyCandidate): string {
+  if (candidate.stored === true) return `stored key ${JSON.stringify(candidate.name)}`;
+  return candidate.env;
+}
+
 export function readCandidateEnv(
   candidate: KeyCandidate,
   env: Record<string, string | undefined> = process.env,
 ): string | undefined {
+  if (candidate.none === true) return "";
+  if (candidate.stored === true) return storedSecret(candidate.provider ?? "", candidate.name);
   const value = env[candidate.env];
   if (value === undefined) return undefined;
   return value.trim() === "" ? undefined : value;

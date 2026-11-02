@@ -2,7 +2,7 @@ import { AbortError, abortRejection, isAbortError } from "./abort";
 import { classifyCredentialFailure, shouldRotate, type CredentialFailureKind } from "./credentials";
 import { shouldRetryError } from "./retry";
 import { retryAfterMsFromError } from "./retry_after";
-import type { KeyCandidate } from "./credentials";
+import { describeCandidateSource, type KeyCandidate } from "./credentials";
 import { describeError, toLlmError, type LlmError } from "./errors";
 
 export const DEFAULT_MAX_RETRIES = 5;
@@ -25,7 +25,7 @@ export function sanitizeReason(raw: unknown): string {
     case "http_status":
       return `HTTP ${error.status}`;
     case "missing_api_key":
-      return `env ${debugString(error.var)} not set`;
+      return error.var.startsWith("stored key ") ? `${error.var} not saved` : `env ${debugString(error.var)} not set`;
     case "launch_failed":
       return truncateBytes(error.message, MAX_REASON_BYTES);
     case "provider":
@@ -49,8 +49,8 @@ export function sanitizeReason(raw: unknown): string {
   }
 }
 
-export function missingKeyReason(envVar: string): string {
-  return `env ${debugString(envVar)} unset or empty`;
+export function missingKeyReason(source: string): string {
+  return source.startsWith("stored key ") ? `${source} not saved` : `env ${debugString(source)} unset or empty`;
 }
 
 function debugString(s: string): string {
@@ -75,7 +75,7 @@ export function buildWarningMessage(
   const t = debugString(to.name);
   switch (kind) {
     case "budget_exhausted":
-      return `Budget warning: ${provider} key ${f} appears exhausted. Continuing with fallback key ${t}.`;
+      return `Budget warning: ${provider} key ${f} is at its spending limit. Continuing with fallback key ${t}.`;
     case "quota_exhausted":
       return `Quota warning: ${provider} key ${f} appears over quota. Continuing with fallback key ${t}.`;
     case "missing_key":
@@ -235,8 +235,9 @@ export async function streamWithCredentialFallback<T>(
 
     const apiKey = readEnv(candidate);
     if (apiKey === undefined) {
-      const error = missingApiKey(candidate.env);
-      record(hooks, providerKey, candidate, next, "missing_key", undefined, missingKeyReason(candidate.env));
+      const source = describeCandidateSource(candidate);
+      const error = missingApiKey(source);
+      record(hooks, providerKey, candidate, next, "missing_key", undefined, missingKeyReason(source));
       lastError = error;
       continue;
     }

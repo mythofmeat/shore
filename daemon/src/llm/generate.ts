@@ -16,7 +16,8 @@ import {
 import type { LoadedConfig } from "../config/loader.ts";
 import type { ResolvedModel } from "../config/models.ts";
 import { credentialEntry } from "../handler/tool_context.ts";
-import { isKeylessSdk, readCandidateEnv, resolveKeyCandidates, type KeyCandidate } from "./credentials.ts";
+import { describeCandidateSource, isKeylessSdk, readCandidateEnv, resolveKeyCandidates, type KeyCandidate } from "./credentials.ts";
+import { noteCredentialStanding, standingForFailure } from "./credential_standing.ts";
 import { claudeAccountOrder, useClaudeAccount } from "../ledger/plan_limits.ts";
 import { MissingApiKey } from "./request.ts";
 import {
@@ -38,17 +39,19 @@ export class BudgetBlocked extends Error {
   readonly scope: string | undefined;
   readonly resetAt: string | undefined;
   readonly summary: string | undefined;
+  readonly credential: string | undefined;
 
-  constructor(message: string, scope?: string, resetAt?: string, summary?: string) {
+  constructor(message: string, scope?: string, resetAt?: string, summary?: string, credential?: string) {
     super(message);
     this.name = "BudgetBlocked";
     this.scope = scope;
     this.resetAt = resetAt;
     this.summary = summary;
+    this.credential = credential;
   }
 
   static from(block: CallBlock): BudgetBlocked {
-    return new BudgetBlocked(block.message, block.scope, block.reset_at, block.summary);
+    return new BudgetBlocked(block.message, block.scope, block.reset_at, block.summary, block.api_key);
   }
 }
 
@@ -89,7 +92,7 @@ export function withResolvedCredential(
     if (apiKey !== undefined) return { ...request, api_key: apiKey };
   }
   if (request.api_key !== "") return request;
-  throw new MissingApiKey(candidates[0]?.env ?? providerKey);
+  throw new MissingApiKey(candidates[0] === undefined ? providerKey : describeCandidateSource(candidates[0]));
 }
 
 export function resolveModelForRequest(
@@ -246,14 +249,15 @@ export async function runGeneration(
     if ("err" in outcome) throw outcome.err.kind === "stream_errored" ? outcome.err.cause ?? outcome.err : outcome.err;
     return outcome.ok;
   };
+  const tracked = entry !== undefined && !isKeylessSdk(request.sdk) && options.useRequestKey !== true;
   const result = await streamWithCredentialFallback(
     resolved.providerKey,
     candidates,
-    (candidate) => candidate.env === ""
+    (candidate) => candidate.env === "" && candidate.stored !== true && candidate.none !== true
       ? (isKeylessSdk(request.sdk) ? "" : request.api_key)
       : readCandidateEnv(candidate, deps.env ?? process.env),
-    (apiKey, candidate) => {
-      return streamWithRetry(
+    async (apiKey, candidate) => {
+      const outcome = await streamWithRetry(
         () => attempt(apiKey, candidate.name),
         retry,
         (error, attemptIndex, maxRetries) => !toolLoopUsed && replaySafe &&
@@ -264,9 +268,16 @@ export async function runGeneration(
           ...(options.onRetry === undefined ? {} : { onRetry: options.onRetry }),
         },
       );
+      if (tracked && candidate.none !== true) noteCredentialStanding(resolved.providerKey, candidate.name, "works", null);
+      return outcome;
     },
     {
-      record: (event) => { fallbacks.push(event); options.onFallback?.(event); },
+      record: (event) => {
+        fallbacks.push(event);
+        const standing = tracked ? standingForFailure(event.kind) : undefined;
+        if (standing !== undefined && event.status !== undefined) noteCredentialStanding(resolved.providerKey, event.from.name, standing, event.reason);
+        options.onFallback?.(event);
+      },
       canFallback: () => replaySafe,
     },
   );

@@ -47,6 +47,10 @@ pub(crate) fn handle_event(app: &mut App, event: Event) -> Action {
 }
 
 fn handle_paste(app: &mut App, text: &str) -> Action {
+    if let Some(prompt) = app.secret_prompt.as_mut() {
+        prompt.typed.push_str(text.trim());
+        return Action::Redraw;
+    }
     if app.show_help
         || app.fullscreen.is_some()
         || app.subagent_panel.is_some()
@@ -79,6 +83,9 @@ fn handle_paste(app: &mut App, text: &str) -> Action {
 }
 
 fn handle_key(app: &mut App, key: KeyEvent) -> Action {
+    if app.secret_prompt.is_some() {
+        return handle_secret_prompt(app, key);
+    }
     if app.show_help {
         return handle_help_overlay(app, key);
     }
@@ -707,6 +714,125 @@ fn run_selected_shortcut(app: &mut App) -> Action {
     }
     app.input.exit_command_mode();
     dispatch_cli_command(app, &command)
+}
+
+fn handle_secret_prompt(app: &mut App, key: KeyEvent) -> Action {
+    let Some(prompt) = app.secret_prompt.as_mut() else {
+        return Action::None;
+    };
+    match (key.modifiers, key.code) {
+        (_, KeyCode::Esc) | (KeyModifiers::CONTROL, KeyCode::Char('c')) => {
+            app.secret_prompt = None;
+            app.set_status("no key added");
+            Action::Redraw
+        }
+        (KeyModifiers::CONTROL, KeyCode::Char('u')) => {
+            prompt.typed.clear();
+            Action::Redraw
+        }
+        (_, KeyCode::Backspace) => {
+            _ = prompt.typed.pop();
+            Action::Redraw
+        }
+        (_, KeyCode::Enter) => {
+            let Some(done) = app.secret_prompt.take() else {
+                return Action::None;
+            };
+            let secret = done.typed.trim();
+            if secret.is_empty() {
+                app.set_status("no key typed; nothing changed");
+                return Action::Redraw;
+            }
+            let (name, args) = done.request.operation(Some(secret));
+            palette_swp_command(app, &done.label, name, args)
+        }
+        (KeyModifiers::NONE | KeyModifiers::SHIFT, KeyCode::Char(c)) => {
+            prompt.typed.push(c);
+            Action::Redraw
+        }
+        _ => Action::None,
+    }
+}
+
+pub(crate) fn key_request(
+    app: &mut App,
+    label: &str,
+    request: crate::cli::KeyRequest,
+) -> Option<ConnCommand> {
+    if matches!(request.input, crate::cli::KeyInput::Env(_)) {
+        let (name, args) = request.operation(None);
+        let rid = app.begin_palette_command(label);
+        return Some(ConnCommand::Send(ClientMessage::Command(Command {
+            rid: Some(rid),
+            name: name.to_owned(),
+            args,
+        })));
+    }
+    let title = match (
+        &request.replace,
+        request.name.as_deref().filter(|n| !n.is_empty()),
+    ) {
+        (Some(credential), _) => format!("new key for {} {credential}", request.provider),
+        (None, Some(name)) => format!("{} key {name}", request.provider),
+        (None, None) => format!("{} API key", request.provider),
+    };
+    app.input.exit_command_mode();
+    app.secret_prompt = Some(crate::tui::app::SecretPrompt {
+        request,
+        label: label.to_owned(),
+        title,
+        typed: String::new(),
+    });
+    None
+}
+
+fn provider_palette(app: &mut App, input: &str, command: &crate::cli::ProviderCommand) -> Action {
+    if let crate::cli::ProviderCommand::Named(rest) = command
+        && let Err(error) = crate::cli::provider_target(rest)
+    {
+        let rendered = error.render().to_string();
+        if matches!(error.kind(), clap::error::ErrorKind::DisplayHelp) {
+            app.push_command_text(input, rendered);
+        } else {
+            app.set_error(
+                rendered
+                    .lines()
+                    .find(|line| !line.trim().is_empty())
+                    .unwrap_or("invalid command")
+                    .trim()
+                    .to_owned(),
+            );
+        }
+        return Action::Redraw;
+    }
+    let plan = match crate::cli::provider_plan(command) {
+        Ok(plan) => plan,
+        Err(error) => {
+            app.set_error(
+                error
+                    .lines()
+                    .find(|line| !line.trim().is_empty())
+                    .unwrap_or("invalid command")
+                    .trim()
+                    .to_owned(),
+            );
+            return Action::Redraw;
+        }
+    };
+    match plan {
+        crate::cli::ProviderPlan::Op { name, args }
+        | crate::cli::ProviderPlan::Confirm { name, args, .. } => {
+            palette_swp_command(app, input, name, args)
+        }
+        crate::cli::ProviderPlan::Key(request) => match key_request(app, input, request) {
+            Some(send) => Action::Send(send),
+            None => Action::Redraw,
+        },
+        crate::cli::ProviderPlan::Add { args, key } => {
+            app.pending_provider_key = key.map(|request| (input.to_owned(), request));
+            palette_swp_command(app, input, "add_provider", args)
+        }
+    }
 }
 
 fn handle_palette_confirmation(app: &mut App, key: KeyEvent) -> Action {
@@ -1578,6 +1704,18 @@ fn dispatch_cli_command(app: &mut App, raw_input: &str) -> Action {
         app.confirmed_palette_command = None;
     }
 
+    if let CliCommand::Provider {
+        subcommand:
+            Some(
+                subcommand @ (crate::cli::ProviderCommand::Add(_)
+                | crate::cli::ProviderCommand::Named(_)),
+            ),
+        ..
+    } = &command
+    {
+        return provider_palette(app, input, subcommand);
+    }
+
     match &command {
         CliCommand::Msg {
             command:
@@ -1787,6 +1925,15 @@ fn delete_target_description(app: &App, msg_ref: &str) -> String {
 )]
 fn palette_confirmation_prompt(app: &App, command: &CliCommand) -> Option<String> {
     match command {
+        CliCommand::Provider {
+            subcommand: Some(subcommand @ crate::cli::ProviderCommand::Named(_)),
+            ..
+        } => match crate::cli::provider_plan(subcommand) {
+            Ok(crate::cli::ProviderPlan::Confirm {
+                prompt, yes: false, ..
+            }) => Some(prompt),
+            Ok(_) | Err(_) => None,
+        },
         CliCommand::Msg {
             command: MsgCommand::Delete { msg_refs, .. },
         } if msg_refs.len() == 1 => Some(format!(

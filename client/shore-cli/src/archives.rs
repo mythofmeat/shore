@@ -23,10 +23,11 @@ pub(crate) async fn handle_export(
     character: Option<&str>,
     output: Option<&Path>,
     full: bool,
+    include_secrets: bool,
     json: bool,
 ) -> Result<(), Failure> {
     let Some(name) = character else {
-        return handle_backup(conn, output, full, json).await;
+        return handle_backup(conn, output, full, include_secrets, json).await;
     };
     let target = archive_target(output, name)?;
     let raw = export_to(conn, name, &target).await?;
@@ -46,6 +47,7 @@ async fn handle_backup(
     conn: &mut SWPConnection,
     output: Option<&Path>,
     full: bool,
+    include_secrets: bool,
     json: bool,
 ) -> Result<(), Failure> {
     let folder = PathBuf::from(crate::cli::absolute_path(
@@ -73,8 +75,14 @@ async fn handle_backup(
     } else {
         "Collecting everything for the first export into this folder..."
     });
-    let (data, mut raw) =
-        execute_operation_with_raw::<ExportBackup>(conn, ExportBackupArgs { base }).await?;
+    let (data, mut raw) = execute_operation_with_raw::<ExportBackup>(
+        conn,
+        ExportBackupArgs {
+            base,
+            include_secrets: include_secrets.then_some(true),
+        },
+    )
+    .await?;
     let delta = fetch(conn, &data.transfer, &folder).await?;
     status("Updating the folder...");
     let manifest = crate::backups::commit_update(&folder, delta)?;
@@ -96,6 +104,11 @@ async fn handle_backup(
         folder.display()
     );
     cli_out!("{}", backup_summary(&data, previous.is_some()));
+    if data.secrets_left_out == Some(true) {
+        cli_out!(
+            "The provider keys stored on the daemon were left out; --include-secrets backs them up too, in plain text."
+        );
+    }
     Ok(())
 }
 
@@ -146,6 +159,11 @@ pub(crate) async fn handle_import(
         for path in &data.kept {
             cli_out!("  {path}");
         }
+    }
+    if data.secrets_left_out == Some(true) {
+        cli_out!(
+            "This backup left out the provider keys that were stored on the daemon; add them again with `shore provider <name> auth --add`."
+        );
     }
     if data.characters.is_empty() && data.restored.is_empty() {
         cli_out!(

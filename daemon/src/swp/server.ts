@@ -80,6 +80,7 @@ export interface LocalClientOptions {
   readonly clientType: string;
   readonly clientName: string;
   readonly capabilities?: readonly string[];
+  readonly confidential?: boolean;
   readonly character?: string | null | undefined;
   readonly thread?: string | undefined;
   readonly onLag?: (skipped: number) => void;
@@ -240,6 +241,7 @@ export class Server {
       clientType: options.clientType,
       clientName: options.clientName,
       capabilities,
+      confidential: options.confidential === true,
       character: history.selectedCharacter,
       thread: history.selectedThread,
     };

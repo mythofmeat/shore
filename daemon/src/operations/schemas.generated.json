@@ -166,6 +166,12 @@
       "properties": {
         "base": {
           "type": "string"
+        },
+        "include_secrets": {
+          "type": [
+            "boolean",
+            "null"
+          ]
         }
       },
       "additionalProperties": false
@@ -215,6 +221,12 @@
           "format": "uint",
           "minimum": 0,
           "default": 0
+        },
+        "secrets_left_out": {
+          "type": [
+            "boolean",
+            "null"
+          ]
         }
       },
       "required": [
@@ -273,6 +285,12 @@
           "items": {
             "type": "string"
           }
+        },
+        "secrets_left_out": {
+          "type": [
+            "boolean",
+            "null"
+          ]
         }
       },
       "required": [
@@ -7395,6 +7413,12 @@
                 "boolean",
                 "null"
               ]
+            },
+            "secret": {
+              "type": [
+                "boolean",
+                "null"
+              ]
             }
           },
           "required": [
@@ -9522,6 +9546,33 @@
                 "$ref": "#/$defs/ProviderKeyStatus"
               }
             },
+            "ignore_models": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "subscription": {
+              "type": "boolean"
+            },
+            "no_auth": {
+              "type": "boolean"
+            },
+            "selection": {
+              "$ref": "#/$defs/CredentialSelection"
+            },
+            "pinned": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "credentials": {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/CredentialStatus"
+              }
+            },
             "cache": {
               "$ref": "#/$defs/ProviderCacheStatus"
             }
@@ -9533,6 +9584,12 @@
             "base_url",
             "discovery_enabled",
             "keys",
+            "ignore_models",
+            "subscription",
+            "no_auth",
+            "selection",
+            "pinned",
+            "credentials",
             "cache"
           ]
         },
@@ -9557,6 +9614,184 @@
             "enabled",
             "warn_on_fallback",
             "env_set"
+          ]
+        },
+        "CredentialSelection": {
+          "type": "string",
+          "enum": [
+            "order",
+            "room"
+          ]
+        },
+        "CredentialStatus": {
+          "type": "object",
+          "properties": {
+            "name": {
+              "type": "string"
+            },
+            "kind": {
+              "$ref": "#/$defs/CredentialKind"
+            },
+            "enabled": {
+              "type": "boolean"
+            },
+            "standing": {
+              "$ref": "#/$defs/CredentialStanding"
+            },
+            "detail": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "hint": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "env": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "checked_at": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "pinned": {
+              "type": "boolean"
+            },
+            "in_use": {
+              "type": "boolean"
+            },
+            "warn_on_fallback": {
+              "type": "boolean"
+            },
+            "limit": {
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/CredentialLimit"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "usage": {
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/CredentialUsage"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "login_command": {
+              "type": [
+                "string",
+                "null"
+              ]
+            }
+          },
+          "required": [
+            "name",
+            "kind",
+            "enabled",
+            "standing",
+            "detail",
+            "hint",
+            "env",
+            "checked_at",
+            "pinned",
+            "in_use",
+            "warn_on_fallback",
+            "limit",
+            "usage"
+          ]
+        },
+        "CredentialKind": {
+          "type": "string",
+          "enum": [
+            "api_key",
+            "env",
+            "login",
+            "none"
+          ]
+        },
+        "CredentialStanding": {
+          "type": "string",
+          "enum": [
+            "works",
+            "invalid",
+            "over_quota",
+            "signed_out",
+            "missing",
+            "not_checked"
+          ]
+        },
+        "CredentialLimit": {
+          "type": "object",
+          "properties": {
+            "cost_usd": {
+              "type": "number",
+              "format": "double"
+            },
+            "period": {
+              "$ref": "#/$defs/UsageBudgetPeriod"
+            },
+            "spent_usd": {
+              "type": "number",
+              "format": "double"
+            },
+            "at_limit": {
+              "type": "boolean"
+            },
+            "resets_at": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "cost_usd",
+            "period",
+            "spent_usd",
+            "at_limit",
+            "resets_at"
+          ]
+        },
+        "UsageBudgetPeriod": {
+          "type": "string",
+          "enum": [
+            "hour",
+            "day",
+            "week",
+            "month"
+          ]
+        },
+        "CredentialUsage": {
+          "type": "object",
+          "properties": {
+            "cost_usd": {
+              "type": "number",
+              "format": "double"
+            },
+            "calls": {
+              "type": "integer",
+              "format": "uint",
+              "minimum": 0
+            },
+            "since": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "cost_usd",
+            "calls",
+            "since"
           ]
         },
         "ProviderCacheStatus": {
@@ -9984,6 +10219,3548 @@
           "enum": [
             "disabled",
             "discovery disabled"
+          ]
+        }
+      }
+    }
+  },
+  {
+    "name": "provider_detail",
+    "input": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "title": "ProviderArgs",
+      "type": "object",
+      "properties": {
+        "provider": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "provider"
+      ]
+    },
+    "output": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "title": "ProviderStatus",
+      "type": "object",
+      "properties": {
+        "name": {
+          "type": "string"
+        },
+        "enabled": {
+          "type": "boolean"
+        },
+        "sdk": {
+          "type": "string"
+        },
+        "base_url": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "discovery_enabled": {
+          "type": "boolean"
+        },
+        "keys": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/ProviderKeyStatus"
+          }
+        },
+        "ignore_models": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "subscription": {
+          "type": "boolean"
+        },
+        "no_auth": {
+          "type": "boolean"
+        },
+        "selection": {
+          "$ref": "#/$defs/CredentialSelection"
+        },
+        "pinned": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "credentials": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/CredentialStatus"
+          }
+        },
+        "cache": {
+          "$ref": "#/$defs/ProviderCacheStatus"
+        }
+      },
+      "required": [
+        "name",
+        "enabled",
+        "sdk",
+        "base_url",
+        "discovery_enabled",
+        "keys",
+        "ignore_models",
+        "subscription",
+        "no_auth",
+        "selection",
+        "pinned",
+        "credentials",
+        "cache"
+      ],
+      "$defs": {
+        "ProviderKeyStatus": {
+          "type": "object",
+          "properties": {
+            "name": {
+              "type": "string"
+            },
+            "enabled": {
+              "type": "boolean"
+            },
+            "warn_on_fallback": {
+              "type": "boolean"
+            },
+            "env_set": {
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "name",
+            "enabled",
+            "warn_on_fallback",
+            "env_set"
+          ]
+        },
+        "CredentialSelection": {
+          "type": "string",
+          "enum": [
+            "order",
+            "room"
+          ]
+        },
+        "CredentialStatus": {
+          "type": "object",
+          "properties": {
+            "name": {
+              "type": "string"
+            },
+            "kind": {
+              "$ref": "#/$defs/CredentialKind"
+            },
+            "enabled": {
+              "type": "boolean"
+            },
+            "standing": {
+              "$ref": "#/$defs/CredentialStanding"
+            },
+            "detail": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "hint": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "env": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "checked_at": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "pinned": {
+              "type": "boolean"
+            },
+            "in_use": {
+              "type": "boolean"
+            },
+            "warn_on_fallback": {
+              "type": "boolean"
+            },
+            "limit": {
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/CredentialLimit"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "usage": {
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/CredentialUsage"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "login_command": {
+              "type": [
+                "string",
+                "null"
+              ]
+            }
+          },
+          "required": [
+            "name",
+            "kind",
+            "enabled",
+            "standing",
+            "detail",
+            "hint",
+            "env",
+            "checked_at",
+            "pinned",
+            "in_use",
+            "warn_on_fallback",
+            "limit",
+            "usage"
+          ]
+        },
+        "CredentialKind": {
+          "type": "string",
+          "enum": [
+            "api_key",
+            "env",
+            "login",
+            "none"
+          ]
+        },
+        "CredentialStanding": {
+          "type": "string",
+          "enum": [
+            "works",
+            "invalid",
+            "over_quota",
+            "signed_out",
+            "missing",
+            "not_checked"
+          ]
+        },
+        "CredentialLimit": {
+          "type": "object",
+          "properties": {
+            "cost_usd": {
+              "type": "number",
+              "format": "double"
+            },
+            "period": {
+              "$ref": "#/$defs/UsageBudgetPeriod"
+            },
+            "spent_usd": {
+              "type": "number",
+              "format": "double"
+            },
+            "at_limit": {
+              "type": "boolean"
+            },
+            "resets_at": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "cost_usd",
+            "period",
+            "spent_usd",
+            "at_limit",
+            "resets_at"
+          ]
+        },
+        "UsageBudgetPeriod": {
+          "type": "string",
+          "enum": [
+            "hour",
+            "day",
+            "week",
+            "month"
+          ]
+        },
+        "CredentialUsage": {
+          "type": "object",
+          "properties": {
+            "cost_usd": {
+              "type": "number",
+              "format": "double"
+            },
+            "calls": {
+              "type": "integer",
+              "format": "uint",
+              "minimum": 0
+            },
+            "since": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "cost_usd",
+            "calls",
+            "since"
+          ]
+        },
+        "ProviderCacheStatus": {
+          "type": "object",
+          "properties": {
+            "present": {
+              "type": "boolean"
+            },
+            "models": {
+              "type": "integer",
+              "format": "uint",
+              "minimum": 0
+            },
+            "visible": {
+              "type": "integer",
+              "format": "uint",
+              "minimum": 0
+            },
+            "hidden": {
+              "type": "integer",
+              "format": "uint",
+              "minimum": 0
+            },
+            "fetched_at": {
+              "type": [
+                "string",
+                "null"
+              ]
+            }
+          },
+          "required": [
+            "present",
+            "models",
+            "visible",
+            "hidden",
+            "fetched_at"
+          ]
+        }
+      }
+    }
+  },
+  {
+    "name": "provider_presets",
+    "input": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "title": "EmptyOperationArgs",
+      "type": "object",
+      "additionalProperties": false
+    },
+    "output": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "title": "ProviderPresetListing",
+      "type": "object",
+      "properties": {
+        "presets": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/ProviderPreset"
+          }
+        },
+        "sdks": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      },
+      "required": [
+        "presets",
+        "sdks"
+      ],
+      "$defs": {
+        "ProviderPreset": {
+          "type": "object",
+          "properties": {
+            "name": {
+              "type": "string"
+            },
+            "sdk": {
+              "type": "string"
+            },
+            "base_url": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "credential_kind": {
+              "$ref": "#/$defs/CredentialKind"
+            },
+            "api_key_env": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "discover": {
+              "type": "boolean"
+            },
+            "configured": {
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "name",
+            "sdk",
+            "base_url",
+            "credential_kind",
+            "api_key_env",
+            "discover",
+            "configured"
+          ]
+        },
+        "CredentialKind": {
+          "type": "string",
+          "enum": [
+            "api_key",
+            "env",
+            "login",
+            "none"
+          ]
+        }
+      }
+    }
+  },
+  {
+    "name": "add_provider",
+    "input": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "title": "AddProviderArgs",
+      "type": "object",
+      "properties": {
+        "name": {
+          "type": "string"
+        },
+        "sdk": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "base_url": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "no_auth": {
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "discover": {
+          "type": [
+            "boolean",
+            "null"
+          ]
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "name"
+      ]
+    },
+    "output": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "title": "ProviderChanged",
+      "type": "object",
+      "properties": {
+        "provider": {
+          "$ref": "#/$defs/ProviderStatus"
+        },
+        "message": {
+          "type": "string"
+        },
+        "file": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "provider",
+        "message",
+        "file"
+      ],
+      "$defs": {
+        "ProviderStatus": {
+          "type": "object",
+          "properties": {
+            "name": {
+              "type": "string"
+            },
+            "enabled": {
+              "type": "boolean"
+            },
+            "sdk": {
+              "type": "string"
+            },
+            "base_url": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "discovery_enabled": {
+              "type": "boolean"
+            },
+            "keys": {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/ProviderKeyStatus"
+              }
+            },
+            "ignore_models": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "subscription": {
+              "type": "boolean"
+            },
+            "no_auth": {
+              "type": "boolean"
+            },
+            "selection": {
+              "$ref": "#/$defs/CredentialSelection"
+            },
+            "pinned": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "credentials": {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/CredentialStatus"
+              }
+            },
+            "cache": {
+              "$ref": "#/$defs/ProviderCacheStatus"
+            }
+          },
+          "required": [
+            "name",
+            "enabled",
+            "sdk",
+            "base_url",
+            "discovery_enabled",
+            "keys",
+            "ignore_models",
+            "subscription",
+            "no_auth",
+            "selection",
+            "pinned",
+            "credentials",
+            "cache"
+          ]
+        },
+        "ProviderKeyStatus": {
+          "type": "object",
+          "properties": {
+            "name": {
+              "type": "string"
+            },
+            "enabled": {
+              "type": "boolean"
+            },
+            "warn_on_fallback": {
+              "type": "boolean"
+            },
+            "env_set": {
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "name",
+            "enabled",
+            "warn_on_fallback",
+            "env_set"
+          ]
+        },
+        "CredentialSelection": {
+          "type": "string",
+          "enum": [
+            "order",
+            "room"
+          ]
+        },
+        "CredentialStatus": {
+          "type": "object",
+          "properties": {
+            "name": {
+              "type": "string"
+            },
+            "kind": {
+              "$ref": "#/$defs/CredentialKind"
+            },
+            "enabled": {
+              "type": "boolean"
+            },
+            "standing": {
+              "$ref": "#/$defs/CredentialStanding"
+            },
+            "detail": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "hint": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "env": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "checked_at": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "pinned": {
+              "type": "boolean"
+            },
+            "in_use": {
+              "type": "boolean"
+            },
+            "warn_on_fallback": {
+              "type": "boolean"
+            },
+            "limit": {
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/CredentialLimit"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "usage": {
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/CredentialUsage"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "login_command": {
+              "type": [
+                "string",
+                "null"
+              ]
+            }
+          },
+          "required": [
+            "name",
+            "kind",
+            "enabled",
+            "standing",
+            "detail",
+            "hint",
+            "env",
+            "checked_at",
+            "pinned",
+            "in_use",
+            "warn_on_fallback",
+            "limit",
+            "usage"
+          ]
+        },
+        "CredentialKind": {
+          "type": "string",
+          "enum": [
+            "api_key",
+            "env",
+            "login",
+            "none"
+          ]
+        },
+        "CredentialStanding": {
+          "type": "string",
+          "enum": [
+            "works",
+            "invalid",
+            "over_quota",
+            "signed_out",
+            "missing",
+            "not_checked"
+          ]
+        },
+        "CredentialLimit": {
+          "type": "object",
+          "properties": {
+            "cost_usd": {
+              "type": "number",
+              "format": "double"
+            },
+            "period": {
+              "$ref": "#/$defs/UsageBudgetPeriod"
+            },
+            "spent_usd": {
+              "type": "number",
+              "format": "double"
+            },
+            "at_limit": {
+              "type": "boolean"
+            },
+            "resets_at": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "cost_usd",
+            "period",
+            "spent_usd",
+            "at_limit",
+            "resets_at"
+          ]
+        },
+        "UsageBudgetPeriod": {
+          "type": "string",
+          "enum": [
+            "hour",
+            "day",
+            "week",
+            "month"
+          ]
+        },
+        "CredentialUsage": {
+          "type": "object",
+          "properties": {
+            "cost_usd": {
+              "type": "number",
+              "format": "double"
+            },
+            "calls": {
+              "type": "integer",
+              "format": "uint",
+              "minimum": 0
+            },
+            "since": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "cost_usd",
+            "calls",
+            "since"
+          ]
+        },
+        "ProviderCacheStatus": {
+          "type": "object",
+          "properties": {
+            "present": {
+              "type": "boolean"
+            },
+            "models": {
+              "type": "integer",
+              "format": "uint",
+              "minimum": 0
+            },
+            "visible": {
+              "type": "integer",
+              "format": "uint",
+              "minimum": 0
+            },
+            "hidden": {
+              "type": "integer",
+              "format": "uint",
+              "minimum": 0
+            },
+            "fetched_at": {
+              "type": [
+                "string",
+                "null"
+              ]
+            }
+          },
+          "required": [
+            "present",
+            "models",
+            "visible",
+            "hidden",
+            "fetched_at"
+          ]
+        }
+      }
+    }
+  },
+  {
+    "name": "update_provider",
+    "input": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "title": "UpdateProviderArgs",
+      "type": "object",
+      "properties": {
+        "provider": {
+          "type": "string"
+        },
+        "enabled": {
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "sdk": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "base_url": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "discover": {
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "ignore_models": {
+          "type": [
+            "array",
+            "null"
+          ],
+          "items": {
+            "type": "string"
+          }
+        },
+        "subscription": {
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "no_auth": {
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "setting": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "value": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "provider"
+      ]
+    },
+    "output": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "title": "ProviderChanged",
+      "type": "object",
+      "properties": {
+        "provider": {
+          "$ref": "#/$defs/ProviderStatus"
+        },
+        "message": {
+          "type": "string"
+        },
+        "file": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "provider",
+        "message",
+        "file"
+      ],
+      "$defs": {
+        "ProviderStatus": {
+          "type": "object",
+          "properties": {
+            "name": {
+              "type": "string"
+            },
+            "enabled": {
+              "type": "boolean"
+            },
+            "sdk": {
+              "type": "string"
+            },
+            "base_url": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "discovery_enabled": {
+              "type": "boolean"
+            },
+            "keys": {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/ProviderKeyStatus"
+              }
+            },
+            "ignore_models": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "subscription": {
+              "type": "boolean"
+            },
+            "no_auth": {
+              "type": "boolean"
+            },
+            "selection": {
+              "$ref": "#/$defs/CredentialSelection"
+            },
+            "pinned": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "credentials": {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/CredentialStatus"
+              }
+            },
+            "cache": {
+              "$ref": "#/$defs/ProviderCacheStatus"
+            }
+          },
+          "required": [
+            "name",
+            "enabled",
+            "sdk",
+            "base_url",
+            "discovery_enabled",
+            "keys",
+            "ignore_models",
+            "subscription",
+            "no_auth",
+            "selection",
+            "pinned",
+            "credentials",
+            "cache"
+          ]
+        },
+        "ProviderKeyStatus": {
+          "type": "object",
+          "properties": {
+            "name": {
+              "type": "string"
+            },
+            "enabled": {
+              "type": "boolean"
+            },
+            "warn_on_fallback": {
+              "type": "boolean"
+            },
+            "env_set": {
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "name",
+            "enabled",
+            "warn_on_fallback",
+            "env_set"
+          ]
+        },
+        "CredentialSelection": {
+          "type": "string",
+          "enum": [
+            "order",
+            "room"
+          ]
+        },
+        "CredentialStatus": {
+          "type": "object",
+          "properties": {
+            "name": {
+              "type": "string"
+            },
+            "kind": {
+              "$ref": "#/$defs/CredentialKind"
+            },
+            "enabled": {
+              "type": "boolean"
+            },
+            "standing": {
+              "$ref": "#/$defs/CredentialStanding"
+            },
+            "detail": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "hint": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "env": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "checked_at": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "pinned": {
+              "type": "boolean"
+            },
+            "in_use": {
+              "type": "boolean"
+            },
+            "warn_on_fallback": {
+              "type": "boolean"
+            },
+            "limit": {
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/CredentialLimit"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "usage": {
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/CredentialUsage"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "login_command": {
+              "type": [
+                "string",
+                "null"
+              ]
+            }
+          },
+          "required": [
+            "name",
+            "kind",
+            "enabled",
+            "standing",
+            "detail",
+            "hint",
+            "env",
+            "checked_at",
+            "pinned",
+            "in_use",
+            "warn_on_fallback",
+            "limit",
+            "usage"
+          ]
+        },
+        "CredentialKind": {
+          "type": "string",
+          "enum": [
+            "api_key",
+            "env",
+            "login",
+            "none"
+          ]
+        },
+        "CredentialStanding": {
+          "type": "string",
+          "enum": [
+            "works",
+            "invalid",
+            "over_quota",
+            "signed_out",
+            "missing",
+            "not_checked"
+          ]
+        },
+        "CredentialLimit": {
+          "type": "object",
+          "properties": {
+            "cost_usd": {
+              "type": "number",
+              "format": "double"
+            },
+            "period": {
+              "$ref": "#/$defs/UsageBudgetPeriod"
+            },
+            "spent_usd": {
+              "type": "number",
+              "format": "double"
+            },
+            "at_limit": {
+              "type": "boolean"
+            },
+            "resets_at": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "cost_usd",
+            "period",
+            "spent_usd",
+            "at_limit",
+            "resets_at"
+          ]
+        },
+        "UsageBudgetPeriod": {
+          "type": "string",
+          "enum": [
+            "hour",
+            "day",
+            "week",
+            "month"
+          ]
+        },
+        "CredentialUsage": {
+          "type": "object",
+          "properties": {
+            "cost_usd": {
+              "type": "number",
+              "format": "double"
+            },
+            "calls": {
+              "type": "integer",
+              "format": "uint",
+              "minimum": 0
+            },
+            "since": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "cost_usd",
+            "calls",
+            "since"
+          ]
+        },
+        "ProviderCacheStatus": {
+          "type": "object",
+          "properties": {
+            "present": {
+              "type": "boolean"
+            },
+            "models": {
+              "type": "integer",
+              "format": "uint",
+              "minimum": 0
+            },
+            "visible": {
+              "type": "integer",
+              "format": "uint",
+              "minimum": 0
+            },
+            "hidden": {
+              "type": "integer",
+              "format": "uint",
+              "minimum": 0
+            },
+            "fetched_at": {
+              "type": [
+                "string",
+                "null"
+              ]
+            }
+          },
+          "required": [
+            "present",
+            "models",
+            "visible",
+            "hidden",
+            "fetched_at"
+          ]
+        }
+      }
+    }
+  },
+  {
+    "name": "remove_provider",
+    "input": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "title": "ProviderArgs",
+      "type": "object",
+      "properties": {
+        "provider": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "provider"
+      ]
+    },
+    "output": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "title": "ProviderRemoved",
+      "type": "object",
+      "properties": {
+        "provider": {
+          "type": "string"
+        },
+        "keys_removed": {
+          "type": "integer",
+          "format": "uint",
+          "minimum": 0
+        },
+        "limits_removed": {
+          "type": "integer",
+          "format": "uint",
+          "minimum": 0
+        },
+        "file": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "provider",
+        "keys_removed",
+        "limits_removed",
+        "file"
+      ]
+    }
+  },
+  {
+    "name": "add_credential",
+    "input": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "title": "AddCredentialArgs",
+      "type": "object",
+      "properties": {
+        "provider": {
+          "type": "string"
+        },
+        "name": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "secret": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "env": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "no_check": {
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "allow_unencrypted": {
+          "type": [
+            "boolean",
+            "null"
+          ]
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "provider"
+      ]
+    },
+    "output": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "title": "ProviderChanged",
+      "type": "object",
+      "properties": {
+        "provider": {
+          "$ref": "#/$defs/ProviderStatus"
+        },
+        "message": {
+          "type": "string"
+        },
+        "file": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "provider",
+        "message",
+        "file"
+      ],
+      "$defs": {
+        "ProviderStatus": {
+          "type": "object",
+          "properties": {
+            "name": {
+              "type": "string"
+            },
+            "enabled": {
+              "type": "boolean"
+            },
+            "sdk": {
+              "type": "string"
+            },
+            "base_url": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "discovery_enabled": {
+              "type": "boolean"
+            },
+            "keys": {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/ProviderKeyStatus"
+              }
+            },
+            "ignore_models": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "subscription": {
+              "type": "boolean"
+            },
+            "no_auth": {
+              "type": "boolean"
+            },
+            "selection": {
+              "$ref": "#/$defs/CredentialSelection"
+            },
+            "pinned": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "credentials": {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/CredentialStatus"
+              }
+            },
+            "cache": {
+              "$ref": "#/$defs/ProviderCacheStatus"
+            }
+          },
+          "required": [
+            "name",
+            "enabled",
+            "sdk",
+            "base_url",
+            "discovery_enabled",
+            "keys",
+            "ignore_models",
+            "subscription",
+            "no_auth",
+            "selection",
+            "pinned",
+            "credentials",
+            "cache"
+          ]
+        },
+        "ProviderKeyStatus": {
+          "type": "object",
+          "properties": {
+            "name": {
+              "type": "string"
+            },
+            "enabled": {
+              "type": "boolean"
+            },
+            "warn_on_fallback": {
+              "type": "boolean"
+            },
+            "env_set": {
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "name",
+            "enabled",
+            "warn_on_fallback",
+            "env_set"
+          ]
+        },
+        "CredentialSelection": {
+          "type": "string",
+          "enum": [
+            "order",
+            "room"
+          ]
+        },
+        "CredentialStatus": {
+          "type": "object",
+          "properties": {
+            "name": {
+              "type": "string"
+            },
+            "kind": {
+              "$ref": "#/$defs/CredentialKind"
+            },
+            "enabled": {
+              "type": "boolean"
+            },
+            "standing": {
+              "$ref": "#/$defs/CredentialStanding"
+            },
+            "detail": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "hint": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "env": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "checked_at": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "pinned": {
+              "type": "boolean"
+            },
+            "in_use": {
+              "type": "boolean"
+            },
+            "warn_on_fallback": {
+              "type": "boolean"
+            },
+            "limit": {
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/CredentialLimit"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "usage": {
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/CredentialUsage"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "login_command": {
+              "type": [
+                "string",
+                "null"
+              ]
+            }
+          },
+          "required": [
+            "name",
+            "kind",
+            "enabled",
+            "standing",
+            "detail",
+            "hint",
+            "env",
+            "checked_at",
+            "pinned",
+            "in_use",
+            "warn_on_fallback",
+            "limit",
+            "usage"
+          ]
+        },
+        "CredentialKind": {
+          "type": "string",
+          "enum": [
+            "api_key",
+            "env",
+            "login",
+            "none"
+          ]
+        },
+        "CredentialStanding": {
+          "type": "string",
+          "enum": [
+            "works",
+            "invalid",
+            "over_quota",
+            "signed_out",
+            "missing",
+            "not_checked"
+          ]
+        },
+        "CredentialLimit": {
+          "type": "object",
+          "properties": {
+            "cost_usd": {
+              "type": "number",
+              "format": "double"
+            },
+            "period": {
+              "$ref": "#/$defs/UsageBudgetPeriod"
+            },
+            "spent_usd": {
+              "type": "number",
+              "format": "double"
+            },
+            "at_limit": {
+              "type": "boolean"
+            },
+            "resets_at": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "cost_usd",
+            "period",
+            "spent_usd",
+            "at_limit",
+            "resets_at"
+          ]
+        },
+        "UsageBudgetPeriod": {
+          "type": "string",
+          "enum": [
+            "hour",
+            "day",
+            "week",
+            "month"
+          ]
+        },
+        "CredentialUsage": {
+          "type": "object",
+          "properties": {
+            "cost_usd": {
+              "type": "number",
+              "format": "double"
+            },
+            "calls": {
+              "type": "integer",
+              "format": "uint",
+              "minimum": 0
+            },
+            "since": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "cost_usd",
+            "calls",
+            "since"
+          ]
+        },
+        "ProviderCacheStatus": {
+          "type": "object",
+          "properties": {
+            "present": {
+              "type": "boolean"
+            },
+            "models": {
+              "type": "integer",
+              "format": "uint",
+              "minimum": 0
+            },
+            "visible": {
+              "type": "integer",
+              "format": "uint",
+              "minimum": 0
+            },
+            "hidden": {
+              "type": "integer",
+              "format": "uint",
+              "minimum": 0
+            },
+            "fetched_at": {
+              "type": [
+                "string",
+                "null"
+              ]
+            }
+          },
+          "required": [
+            "present",
+            "models",
+            "visible",
+            "hidden",
+            "fetched_at"
+          ]
+        }
+      }
+    }
+  },
+  {
+    "name": "update_credential",
+    "input": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "title": "UpdateCredentialArgs",
+      "type": "object",
+      "properties": {
+        "provider": {
+          "type": "string"
+        },
+        "credential": {
+          "type": "string"
+        },
+        "enabled": {
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "rename": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "secret": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "warn_on_fallback": {
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "no_check": {
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "allow_unencrypted": {
+          "type": [
+            "boolean",
+            "null"
+          ]
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "provider",
+        "credential"
+      ]
+    },
+    "output": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "title": "ProviderChanged",
+      "type": "object",
+      "properties": {
+        "provider": {
+          "$ref": "#/$defs/ProviderStatus"
+        },
+        "message": {
+          "type": "string"
+        },
+        "file": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "provider",
+        "message",
+        "file"
+      ],
+      "$defs": {
+        "ProviderStatus": {
+          "type": "object",
+          "properties": {
+            "name": {
+              "type": "string"
+            },
+            "enabled": {
+              "type": "boolean"
+            },
+            "sdk": {
+              "type": "string"
+            },
+            "base_url": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "discovery_enabled": {
+              "type": "boolean"
+            },
+            "keys": {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/ProviderKeyStatus"
+              }
+            },
+            "ignore_models": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "subscription": {
+              "type": "boolean"
+            },
+            "no_auth": {
+              "type": "boolean"
+            },
+            "selection": {
+              "$ref": "#/$defs/CredentialSelection"
+            },
+            "pinned": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "credentials": {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/CredentialStatus"
+              }
+            },
+            "cache": {
+              "$ref": "#/$defs/ProviderCacheStatus"
+            }
+          },
+          "required": [
+            "name",
+            "enabled",
+            "sdk",
+            "base_url",
+            "discovery_enabled",
+            "keys",
+            "ignore_models",
+            "subscription",
+            "no_auth",
+            "selection",
+            "pinned",
+            "credentials",
+            "cache"
+          ]
+        },
+        "ProviderKeyStatus": {
+          "type": "object",
+          "properties": {
+            "name": {
+              "type": "string"
+            },
+            "enabled": {
+              "type": "boolean"
+            },
+            "warn_on_fallback": {
+              "type": "boolean"
+            },
+            "env_set": {
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "name",
+            "enabled",
+            "warn_on_fallback",
+            "env_set"
+          ]
+        },
+        "CredentialSelection": {
+          "type": "string",
+          "enum": [
+            "order",
+            "room"
+          ]
+        },
+        "CredentialStatus": {
+          "type": "object",
+          "properties": {
+            "name": {
+              "type": "string"
+            },
+            "kind": {
+              "$ref": "#/$defs/CredentialKind"
+            },
+            "enabled": {
+              "type": "boolean"
+            },
+            "standing": {
+              "$ref": "#/$defs/CredentialStanding"
+            },
+            "detail": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "hint": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "env": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "checked_at": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "pinned": {
+              "type": "boolean"
+            },
+            "in_use": {
+              "type": "boolean"
+            },
+            "warn_on_fallback": {
+              "type": "boolean"
+            },
+            "limit": {
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/CredentialLimit"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "usage": {
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/CredentialUsage"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "login_command": {
+              "type": [
+                "string",
+                "null"
+              ]
+            }
+          },
+          "required": [
+            "name",
+            "kind",
+            "enabled",
+            "standing",
+            "detail",
+            "hint",
+            "env",
+            "checked_at",
+            "pinned",
+            "in_use",
+            "warn_on_fallback",
+            "limit",
+            "usage"
+          ]
+        },
+        "CredentialKind": {
+          "type": "string",
+          "enum": [
+            "api_key",
+            "env",
+            "login",
+            "none"
+          ]
+        },
+        "CredentialStanding": {
+          "type": "string",
+          "enum": [
+            "works",
+            "invalid",
+            "over_quota",
+            "signed_out",
+            "missing",
+            "not_checked"
+          ]
+        },
+        "CredentialLimit": {
+          "type": "object",
+          "properties": {
+            "cost_usd": {
+              "type": "number",
+              "format": "double"
+            },
+            "period": {
+              "$ref": "#/$defs/UsageBudgetPeriod"
+            },
+            "spent_usd": {
+              "type": "number",
+              "format": "double"
+            },
+            "at_limit": {
+              "type": "boolean"
+            },
+            "resets_at": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "cost_usd",
+            "period",
+            "spent_usd",
+            "at_limit",
+            "resets_at"
+          ]
+        },
+        "UsageBudgetPeriod": {
+          "type": "string",
+          "enum": [
+            "hour",
+            "day",
+            "week",
+            "month"
+          ]
+        },
+        "CredentialUsage": {
+          "type": "object",
+          "properties": {
+            "cost_usd": {
+              "type": "number",
+              "format": "double"
+            },
+            "calls": {
+              "type": "integer",
+              "format": "uint",
+              "minimum": 0
+            },
+            "since": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "cost_usd",
+            "calls",
+            "since"
+          ]
+        },
+        "ProviderCacheStatus": {
+          "type": "object",
+          "properties": {
+            "present": {
+              "type": "boolean"
+            },
+            "models": {
+              "type": "integer",
+              "format": "uint",
+              "minimum": 0
+            },
+            "visible": {
+              "type": "integer",
+              "format": "uint",
+              "minimum": 0
+            },
+            "hidden": {
+              "type": "integer",
+              "format": "uint",
+              "minimum": 0
+            },
+            "fetched_at": {
+              "type": [
+                "string",
+                "null"
+              ]
+            }
+          },
+          "required": [
+            "present",
+            "models",
+            "visible",
+            "hidden",
+            "fetched_at"
+          ]
+        }
+      }
+    }
+  },
+  {
+    "name": "remove_credential",
+    "input": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "title": "CredentialArgs",
+      "type": "object",
+      "properties": {
+        "provider": {
+          "type": "string"
+        },
+        "credential": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "provider",
+        "credential"
+      ]
+    },
+    "output": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "title": "ProviderChanged",
+      "type": "object",
+      "properties": {
+        "provider": {
+          "$ref": "#/$defs/ProviderStatus"
+        },
+        "message": {
+          "type": "string"
+        },
+        "file": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "provider",
+        "message",
+        "file"
+      ],
+      "$defs": {
+        "ProviderStatus": {
+          "type": "object",
+          "properties": {
+            "name": {
+              "type": "string"
+            },
+            "enabled": {
+              "type": "boolean"
+            },
+            "sdk": {
+              "type": "string"
+            },
+            "base_url": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "discovery_enabled": {
+              "type": "boolean"
+            },
+            "keys": {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/ProviderKeyStatus"
+              }
+            },
+            "ignore_models": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "subscription": {
+              "type": "boolean"
+            },
+            "no_auth": {
+              "type": "boolean"
+            },
+            "selection": {
+              "$ref": "#/$defs/CredentialSelection"
+            },
+            "pinned": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "credentials": {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/CredentialStatus"
+              }
+            },
+            "cache": {
+              "$ref": "#/$defs/ProviderCacheStatus"
+            }
+          },
+          "required": [
+            "name",
+            "enabled",
+            "sdk",
+            "base_url",
+            "discovery_enabled",
+            "keys",
+            "ignore_models",
+            "subscription",
+            "no_auth",
+            "selection",
+            "pinned",
+            "credentials",
+            "cache"
+          ]
+        },
+        "ProviderKeyStatus": {
+          "type": "object",
+          "properties": {
+            "name": {
+              "type": "string"
+            },
+            "enabled": {
+              "type": "boolean"
+            },
+            "warn_on_fallback": {
+              "type": "boolean"
+            },
+            "env_set": {
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "name",
+            "enabled",
+            "warn_on_fallback",
+            "env_set"
+          ]
+        },
+        "CredentialSelection": {
+          "type": "string",
+          "enum": [
+            "order",
+            "room"
+          ]
+        },
+        "CredentialStatus": {
+          "type": "object",
+          "properties": {
+            "name": {
+              "type": "string"
+            },
+            "kind": {
+              "$ref": "#/$defs/CredentialKind"
+            },
+            "enabled": {
+              "type": "boolean"
+            },
+            "standing": {
+              "$ref": "#/$defs/CredentialStanding"
+            },
+            "detail": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "hint": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "env": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "checked_at": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "pinned": {
+              "type": "boolean"
+            },
+            "in_use": {
+              "type": "boolean"
+            },
+            "warn_on_fallback": {
+              "type": "boolean"
+            },
+            "limit": {
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/CredentialLimit"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "usage": {
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/CredentialUsage"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "login_command": {
+              "type": [
+                "string",
+                "null"
+              ]
+            }
+          },
+          "required": [
+            "name",
+            "kind",
+            "enabled",
+            "standing",
+            "detail",
+            "hint",
+            "env",
+            "checked_at",
+            "pinned",
+            "in_use",
+            "warn_on_fallback",
+            "limit",
+            "usage"
+          ]
+        },
+        "CredentialKind": {
+          "type": "string",
+          "enum": [
+            "api_key",
+            "env",
+            "login",
+            "none"
+          ]
+        },
+        "CredentialStanding": {
+          "type": "string",
+          "enum": [
+            "works",
+            "invalid",
+            "over_quota",
+            "signed_out",
+            "missing",
+            "not_checked"
+          ]
+        },
+        "CredentialLimit": {
+          "type": "object",
+          "properties": {
+            "cost_usd": {
+              "type": "number",
+              "format": "double"
+            },
+            "period": {
+              "$ref": "#/$defs/UsageBudgetPeriod"
+            },
+            "spent_usd": {
+              "type": "number",
+              "format": "double"
+            },
+            "at_limit": {
+              "type": "boolean"
+            },
+            "resets_at": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "cost_usd",
+            "period",
+            "spent_usd",
+            "at_limit",
+            "resets_at"
+          ]
+        },
+        "UsageBudgetPeriod": {
+          "type": "string",
+          "enum": [
+            "hour",
+            "day",
+            "week",
+            "month"
+          ]
+        },
+        "CredentialUsage": {
+          "type": "object",
+          "properties": {
+            "cost_usd": {
+              "type": "number",
+              "format": "double"
+            },
+            "calls": {
+              "type": "integer",
+              "format": "uint",
+              "minimum": 0
+            },
+            "since": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "cost_usd",
+            "calls",
+            "since"
+          ]
+        },
+        "ProviderCacheStatus": {
+          "type": "object",
+          "properties": {
+            "present": {
+              "type": "boolean"
+            },
+            "models": {
+              "type": "integer",
+              "format": "uint",
+              "minimum": 0
+            },
+            "visible": {
+              "type": "integer",
+              "format": "uint",
+              "minimum": 0
+            },
+            "hidden": {
+              "type": "integer",
+              "format": "uint",
+              "minimum": 0
+            },
+            "fetched_at": {
+              "type": [
+                "string",
+                "null"
+              ]
+            }
+          },
+          "required": [
+            "present",
+            "models",
+            "visible",
+            "hidden",
+            "fetched_at"
+          ]
+        }
+      }
+    }
+  },
+  {
+    "name": "test_credential",
+    "input": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "title": "CredentialArgs",
+      "type": "object",
+      "properties": {
+        "provider": {
+          "type": "string"
+        },
+        "credential": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "provider",
+        "credential"
+      ]
+    },
+    "output": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "title": "CredentialTested",
+      "type": "object",
+      "properties": {
+        "provider": {
+          "type": "string"
+        },
+        "credential": {
+          "type": "string"
+        },
+        "ok": {
+          "type": "boolean"
+        },
+        "standing": {
+          "$ref": "#/$defs/CredentialStanding"
+        },
+        "detail": {
+          "type": "string"
+        },
+        "model_count": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "uint",
+          "minimum": 0
+        }
+      },
+      "required": [
+        "provider",
+        "credential",
+        "ok",
+        "standing",
+        "detail",
+        "model_count"
+      ],
+      "$defs": {
+        "CredentialStanding": {
+          "type": "string",
+          "enum": [
+            "works",
+            "invalid",
+            "over_quota",
+            "signed_out",
+            "missing",
+            "not_checked"
+          ]
+        }
+      }
+    }
+  },
+  {
+    "name": "order_credentials",
+    "input": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "title": "OrderCredentialsArgs",
+      "type": "object",
+      "properties": {
+        "provider": {
+          "type": "string"
+        },
+        "order": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "provider",
+        "order"
+      ]
+    },
+    "output": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "title": "ProviderChanged",
+      "type": "object",
+      "properties": {
+        "provider": {
+          "$ref": "#/$defs/ProviderStatus"
+        },
+        "message": {
+          "type": "string"
+        },
+        "file": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "provider",
+        "message",
+        "file"
+      ],
+      "$defs": {
+        "ProviderStatus": {
+          "type": "object",
+          "properties": {
+            "name": {
+              "type": "string"
+            },
+            "enabled": {
+              "type": "boolean"
+            },
+            "sdk": {
+              "type": "string"
+            },
+            "base_url": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "discovery_enabled": {
+              "type": "boolean"
+            },
+            "keys": {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/ProviderKeyStatus"
+              }
+            },
+            "ignore_models": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "subscription": {
+              "type": "boolean"
+            },
+            "no_auth": {
+              "type": "boolean"
+            },
+            "selection": {
+              "$ref": "#/$defs/CredentialSelection"
+            },
+            "pinned": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "credentials": {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/CredentialStatus"
+              }
+            },
+            "cache": {
+              "$ref": "#/$defs/ProviderCacheStatus"
+            }
+          },
+          "required": [
+            "name",
+            "enabled",
+            "sdk",
+            "base_url",
+            "discovery_enabled",
+            "keys",
+            "ignore_models",
+            "subscription",
+            "no_auth",
+            "selection",
+            "pinned",
+            "credentials",
+            "cache"
+          ]
+        },
+        "ProviderKeyStatus": {
+          "type": "object",
+          "properties": {
+            "name": {
+              "type": "string"
+            },
+            "enabled": {
+              "type": "boolean"
+            },
+            "warn_on_fallback": {
+              "type": "boolean"
+            },
+            "env_set": {
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "name",
+            "enabled",
+            "warn_on_fallback",
+            "env_set"
+          ]
+        },
+        "CredentialSelection": {
+          "type": "string",
+          "enum": [
+            "order",
+            "room"
+          ]
+        },
+        "CredentialStatus": {
+          "type": "object",
+          "properties": {
+            "name": {
+              "type": "string"
+            },
+            "kind": {
+              "$ref": "#/$defs/CredentialKind"
+            },
+            "enabled": {
+              "type": "boolean"
+            },
+            "standing": {
+              "$ref": "#/$defs/CredentialStanding"
+            },
+            "detail": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "hint": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "env": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "checked_at": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "pinned": {
+              "type": "boolean"
+            },
+            "in_use": {
+              "type": "boolean"
+            },
+            "warn_on_fallback": {
+              "type": "boolean"
+            },
+            "limit": {
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/CredentialLimit"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "usage": {
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/CredentialUsage"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "login_command": {
+              "type": [
+                "string",
+                "null"
+              ]
+            }
+          },
+          "required": [
+            "name",
+            "kind",
+            "enabled",
+            "standing",
+            "detail",
+            "hint",
+            "env",
+            "checked_at",
+            "pinned",
+            "in_use",
+            "warn_on_fallback",
+            "limit",
+            "usage"
+          ]
+        },
+        "CredentialKind": {
+          "type": "string",
+          "enum": [
+            "api_key",
+            "env",
+            "login",
+            "none"
+          ]
+        },
+        "CredentialStanding": {
+          "type": "string",
+          "enum": [
+            "works",
+            "invalid",
+            "over_quota",
+            "signed_out",
+            "missing",
+            "not_checked"
+          ]
+        },
+        "CredentialLimit": {
+          "type": "object",
+          "properties": {
+            "cost_usd": {
+              "type": "number",
+              "format": "double"
+            },
+            "period": {
+              "$ref": "#/$defs/UsageBudgetPeriod"
+            },
+            "spent_usd": {
+              "type": "number",
+              "format": "double"
+            },
+            "at_limit": {
+              "type": "boolean"
+            },
+            "resets_at": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "cost_usd",
+            "period",
+            "spent_usd",
+            "at_limit",
+            "resets_at"
+          ]
+        },
+        "UsageBudgetPeriod": {
+          "type": "string",
+          "enum": [
+            "hour",
+            "day",
+            "week",
+            "month"
+          ]
+        },
+        "CredentialUsage": {
+          "type": "object",
+          "properties": {
+            "cost_usd": {
+              "type": "number",
+              "format": "double"
+            },
+            "calls": {
+              "type": "integer",
+              "format": "uint",
+              "minimum": 0
+            },
+            "since": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "cost_usd",
+            "calls",
+            "since"
+          ]
+        },
+        "ProviderCacheStatus": {
+          "type": "object",
+          "properties": {
+            "present": {
+              "type": "boolean"
+            },
+            "models": {
+              "type": "integer",
+              "format": "uint",
+              "minimum": 0
+            },
+            "visible": {
+              "type": "integer",
+              "format": "uint",
+              "minimum": 0
+            },
+            "hidden": {
+              "type": "integer",
+              "format": "uint",
+              "minimum": 0
+            },
+            "fetched_at": {
+              "type": [
+                "string",
+                "null"
+              ]
+            }
+          },
+          "required": [
+            "present",
+            "models",
+            "visible",
+            "hidden",
+            "fetched_at"
+          ]
+        }
+      }
+    }
+  },
+  {
+    "name": "select_credential",
+    "input": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "title": "SelectCredentialArgs",
+      "type": "object",
+      "properties": {
+        "provider": {
+          "type": "string"
+        },
+        "credential": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "provider"
+      ]
+    },
+    "output": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "title": "ProviderChanged",
+      "type": "object",
+      "properties": {
+        "provider": {
+          "$ref": "#/$defs/ProviderStatus"
+        },
+        "message": {
+          "type": "string"
+        },
+        "file": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "provider",
+        "message",
+        "file"
+      ],
+      "$defs": {
+        "ProviderStatus": {
+          "type": "object",
+          "properties": {
+            "name": {
+              "type": "string"
+            },
+            "enabled": {
+              "type": "boolean"
+            },
+            "sdk": {
+              "type": "string"
+            },
+            "base_url": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "discovery_enabled": {
+              "type": "boolean"
+            },
+            "keys": {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/ProviderKeyStatus"
+              }
+            },
+            "ignore_models": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "subscription": {
+              "type": "boolean"
+            },
+            "no_auth": {
+              "type": "boolean"
+            },
+            "selection": {
+              "$ref": "#/$defs/CredentialSelection"
+            },
+            "pinned": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "credentials": {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/CredentialStatus"
+              }
+            },
+            "cache": {
+              "$ref": "#/$defs/ProviderCacheStatus"
+            }
+          },
+          "required": [
+            "name",
+            "enabled",
+            "sdk",
+            "base_url",
+            "discovery_enabled",
+            "keys",
+            "ignore_models",
+            "subscription",
+            "no_auth",
+            "selection",
+            "pinned",
+            "credentials",
+            "cache"
+          ]
+        },
+        "ProviderKeyStatus": {
+          "type": "object",
+          "properties": {
+            "name": {
+              "type": "string"
+            },
+            "enabled": {
+              "type": "boolean"
+            },
+            "warn_on_fallback": {
+              "type": "boolean"
+            },
+            "env_set": {
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "name",
+            "enabled",
+            "warn_on_fallback",
+            "env_set"
+          ]
+        },
+        "CredentialSelection": {
+          "type": "string",
+          "enum": [
+            "order",
+            "room"
+          ]
+        },
+        "CredentialStatus": {
+          "type": "object",
+          "properties": {
+            "name": {
+              "type": "string"
+            },
+            "kind": {
+              "$ref": "#/$defs/CredentialKind"
+            },
+            "enabled": {
+              "type": "boolean"
+            },
+            "standing": {
+              "$ref": "#/$defs/CredentialStanding"
+            },
+            "detail": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "hint": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "env": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "checked_at": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "pinned": {
+              "type": "boolean"
+            },
+            "in_use": {
+              "type": "boolean"
+            },
+            "warn_on_fallback": {
+              "type": "boolean"
+            },
+            "limit": {
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/CredentialLimit"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "usage": {
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/CredentialUsage"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "login_command": {
+              "type": [
+                "string",
+                "null"
+              ]
+            }
+          },
+          "required": [
+            "name",
+            "kind",
+            "enabled",
+            "standing",
+            "detail",
+            "hint",
+            "env",
+            "checked_at",
+            "pinned",
+            "in_use",
+            "warn_on_fallback",
+            "limit",
+            "usage"
+          ]
+        },
+        "CredentialKind": {
+          "type": "string",
+          "enum": [
+            "api_key",
+            "env",
+            "login",
+            "none"
+          ]
+        },
+        "CredentialStanding": {
+          "type": "string",
+          "enum": [
+            "works",
+            "invalid",
+            "over_quota",
+            "signed_out",
+            "missing",
+            "not_checked"
+          ]
+        },
+        "CredentialLimit": {
+          "type": "object",
+          "properties": {
+            "cost_usd": {
+              "type": "number",
+              "format": "double"
+            },
+            "period": {
+              "$ref": "#/$defs/UsageBudgetPeriod"
+            },
+            "spent_usd": {
+              "type": "number",
+              "format": "double"
+            },
+            "at_limit": {
+              "type": "boolean"
+            },
+            "resets_at": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "cost_usd",
+            "period",
+            "spent_usd",
+            "at_limit",
+            "resets_at"
+          ]
+        },
+        "UsageBudgetPeriod": {
+          "type": "string",
+          "enum": [
+            "hour",
+            "day",
+            "week",
+            "month"
+          ]
+        },
+        "CredentialUsage": {
+          "type": "object",
+          "properties": {
+            "cost_usd": {
+              "type": "number",
+              "format": "double"
+            },
+            "calls": {
+              "type": "integer",
+              "format": "uint",
+              "minimum": 0
+            },
+            "since": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "cost_usd",
+            "calls",
+            "since"
+          ]
+        },
+        "ProviderCacheStatus": {
+          "type": "object",
+          "properties": {
+            "present": {
+              "type": "boolean"
+            },
+            "models": {
+              "type": "integer",
+              "format": "uint",
+              "minimum": 0
+            },
+            "visible": {
+              "type": "integer",
+              "format": "uint",
+              "minimum": 0
+            },
+            "hidden": {
+              "type": "integer",
+              "format": "uint",
+              "minimum": 0
+            },
+            "fetched_at": {
+              "type": [
+                "string",
+                "null"
+              ]
+            }
+          },
+          "required": [
+            "present",
+            "models",
+            "visible",
+            "hidden",
+            "fetched_at"
+          ]
+        }
+      }
+    }
+  },
+  {
+    "name": "set_credential_limit",
+    "input": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "title": "SetCredentialLimitArgs",
+      "type": "object",
+      "properties": {
+        "provider": {
+          "type": "string"
+        },
+        "credential": {
+          "type": "string"
+        },
+        "cost_usd": {
+          "type": [
+            "number",
+            "null"
+          ],
+          "format": "double"
+        },
+        "period": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/UsageBudgetPeriod"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "provider",
+        "credential"
+      ],
+      "$defs": {
+        "UsageBudgetPeriod": {
+          "type": "string",
+          "enum": [
+            "hour",
+            "day",
+            "week",
+            "month"
+          ]
+        }
+      }
+    },
+    "output": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "title": "ProviderChanged",
+      "type": "object",
+      "properties": {
+        "provider": {
+          "$ref": "#/$defs/ProviderStatus"
+        },
+        "message": {
+          "type": "string"
+        },
+        "file": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "provider",
+        "message",
+        "file"
+      ],
+      "$defs": {
+        "ProviderStatus": {
+          "type": "object",
+          "properties": {
+            "name": {
+              "type": "string"
+            },
+            "enabled": {
+              "type": "boolean"
+            },
+            "sdk": {
+              "type": "string"
+            },
+            "base_url": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "discovery_enabled": {
+              "type": "boolean"
+            },
+            "keys": {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/ProviderKeyStatus"
+              }
+            },
+            "ignore_models": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "subscription": {
+              "type": "boolean"
+            },
+            "no_auth": {
+              "type": "boolean"
+            },
+            "selection": {
+              "$ref": "#/$defs/CredentialSelection"
+            },
+            "pinned": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "credentials": {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/CredentialStatus"
+              }
+            },
+            "cache": {
+              "$ref": "#/$defs/ProviderCacheStatus"
+            }
+          },
+          "required": [
+            "name",
+            "enabled",
+            "sdk",
+            "base_url",
+            "discovery_enabled",
+            "keys",
+            "ignore_models",
+            "subscription",
+            "no_auth",
+            "selection",
+            "pinned",
+            "credentials",
+            "cache"
+          ]
+        },
+        "ProviderKeyStatus": {
+          "type": "object",
+          "properties": {
+            "name": {
+              "type": "string"
+            },
+            "enabled": {
+              "type": "boolean"
+            },
+            "warn_on_fallback": {
+              "type": "boolean"
+            },
+            "env_set": {
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "name",
+            "enabled",
+            "warn_on_fallback",
+            "env_set"
+          ]
+        },
+        "CredentialSelection": {
+          "type": "string",
+          "enum": [
+            "order",
+            "room"
+          ]
+        },
+        "CredentialStatus": {
+          "type": "object",
+          "properties": {
+            "name": {
+              "type": "string"
+            },
+            "kind": {
+              "$ref": "#/$defs/CredentialKind"
+            },
+            "enabled": {
+              "type": "boolean"
+            },
+            "standing": {
+              "$ref": "#/$defs/CredentialStanding"
+            },
+            "detail": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "hint": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "env": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "checked_at": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "pinned": {
+              "type": "boolean"
+            },
+            "in_use": {
+              "type": "boolean"
+            },
+            "warn_on_fallback": {
+              "type": "boolean"
+            },
+            "limit": {
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/CredentialLimit"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "usage": {
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/CredentialUsage"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "login_command": {
+              "type": [
+                "string",
+                "null"
+              ]
+            }
+          },
+          "required": [
+            "name",
+            "kind",
+            "enabled",
+            "standing",
+            "detail",
+            "hint",
+            "env",
+            "checked_at",
+            "pinned",
+            "in_use",
+            "warn_on_fallback",
+            "limit",
+            "usage"
+          ]
+        },
+        "CredentialKind": {
+          "type": "string",
+          "enum": [
+            "api_key",
+            "env",
+            "login",
+            "none"
+          ]
+        },
+        "CredentialStanding": {
+          "type": "string",
+          "enum": [
+            "works",
+            "invalid",
+            "over_quota",
+            "signed_out",
+            "missing",
+            "not_checked"
+          ]
+        },
+        "CredentialLimit": {
+          "type": "object",
+          "properties": {
+            "cost_usd": {
+              "type": "number",
+              "format": "double"
+            },
+            "period": {
+              "$ref": "#/$defs/UsageBudgetPeriod"
+            },
+            "spent_usd": {
+              "type": "number",
+              "format": "double"
+            },
+            "at_limit": {
+              "type": "boolean"
+            },
+            "resets_at": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "cost_usd",
+            "period",
+            "spent_usd",
+            "at_limit",
+            "resets_at"
+          ]
+        },
+        "UsageBudgetPeriod": {
+          "type": "string",
+          "enum": [
+            "hour",
+            "day",
+            "week",
+            "month"
+          ]
+        },
+        "CredentialUsage": {
+          "type": "object",
+          "properties": {
+            "cost_usd": {
+              "type": "number",
+              "format": "double"
+            },
+            "calls": {
+              "type": "integer",
+              "format": "uint",
+              "minimum": 0
+            },
+            "since": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "cost_usd",
+            "calls",
+            "since"
+          ]
+        },
+        "ProviderCacheStatus": {
+          "type": "object",
+          "properties": {
+            "present": {
+              "type": "boolean"
+            },
+            "models": {
+              "type": "integer",
+              "format": "uint",
+              "minimum": 0
+            },
+            "visible": {
+              "type": "integer",
+              "format": "uint",
+              "minimum": 0
+            },
+            "hidden": {
+              "type": "integer",
+              "format": "uint",
+              "minimum": 0
+            },
+            "fetched_at": {
+              "type": [
+                "string",
+                "null"
+              ]
+            }
+          },
+          "required": [
+            "present",
+            "models",
+            "visible",
+            "hidden",
+            "fetched_at"
           ]
         }
       }

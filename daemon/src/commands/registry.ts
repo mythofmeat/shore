@@ -26,7 +26,11 @@ import { alt, deleteMessages, edit, get, historyPage, injectSystem, listAlternat
 import { workspaceTurnsFor, type WorkspaceTurns } from "../tools/workspace_turns.ts";
 import { characterWorkspace } from "../tools/character_workspace.ts";
 import { config, configCheck, configSchemaCommand, configReload, tools } from "./config.ts";
-import { listProviders, listProviderModels, refreshProviderModels, refreshAllProviderModels, type ProvidersContext } from "./providers.ts";
+import { listProviderModels, refreshProviderModels, refreshAllProviderModels, type ProvidersContext } from "./providers.ts";
+import {
+  addCredential, addProvider, listProviderStatuses, orderCredentials, providerDetail, providerPresets, removeCredential, removeProvider,
+  selectCredential, setCredentialLimit, testCredential, updateCredential, updateProvider, type ProviderAdminContext,
+} from "./provider_admin.ts";
 
 export interface CommandOperationContext {
   session: CommandSession;
@@ -53,6 +57,17 @@ function archiveContext({ session, deps }: CommandOperationContext): ArchiveCont
 
 function providersContext({ session, deps }: CommandOperationContext): ProvidersContext {
   return { config: session.config, ...(deps.fetchImpl === undefined ? {} : { fetchImpl: deps.fetchImpl }) };
+}
+
+function adminContext({ session, deps }: CommandOperationContext): ProviderAdminContext {
+  return {
+    config: session,
+    ledgerPath: deps.ledgerPath,
+    threads: deps.threads,
+    confidential: session.confidential === true,
+    ...(deps.fetchImpl === undefined ? {} : { fetchImpl: deps.fetchImpl }),
+    ...(deps.now === undefined ? {} : { now: deps.now }),
+  };
 }
 
 function register<N extends OperationName>(
@@ -85,6 +100,11 @@ const providerPresentation = {
   category: "Providers", scope: "global", prerequisites: [], effects: ["read"], confirmation: "none",
 } as const;
 const providerField = { label: "Provider", choices: "providers" } as const;
+const providerWrite = { ...providerPresentation, effects: ["config_write"] } as const;
+const credentialField = { label: "Key", hint: "The key's name, as `shore provider <name> auth` lists it" } as const;
+const secretField = { label: "API key", hint: "Sent to the daemon and saved in a file only it can read; never shown again", secret: true } as const;
+const plainOnly = { label: "Allow an unencrypted connection", hint: "Send the key even though this connection is neither local nor encrypted; only on a private network" } as const;
+const noCheck = { label: "Skip the check", hint: "Save the key without asking the provider whether it works" } as const;
 const threadPresentation = {
   category: "Threads", scope: "character", prerequisites: ["threads"], effects: ["read"], confirmation: "none",
 } as const;
@@ -107,6 +127,7 @@ export const commandOperations: OperationRegistry<CommandOperationContext> = {
   }, policies: [{ condition: { kind: "absent", field: "output" }, effects: ["read"], confirmation: "none" }] }, (context, args) => exportCharacter(archiveContext(context), args)),
   export_backup: register("export_backup", { ...characterPresentation, prerequisites: ["archive"], label: "Back up every character and the global configuration", fields: {
     base: { label: "Previous backup", hint: "A write_transfer upload of the previous backup's manifest.json. Only files and database blocks that changed since then are sent." },
+    include_secrets: { label: "Include stored API keys", hint: "Left out unless asked for; the backup then holds keys in plain text" },
   } }, (context, args) => exportBackup(archiveContext(context), args)),
   import_archive: register("import_archive", { ...characterPresentation, prerequisites: ["archive"], effects: ["workspace_write", "history_write", "config_write", "runtime_write"], label: "Import an uploaded archive", fields: {
     transfer: { label: "Upload", hint: "A write_transfer upload holding a character archive or a backup. Characters that exist and files already present are left alone." },
@@ -248,7 +269,50 @@ export const commandOperations: OperationRegistry<CommandOperationContext> = {
   tools: register("tools", { ...configPresentation, label: "Inspect tool access", fields: {} },
     ({ session, deps }) => tools(session, (deps.runTool?.mcpTools() ?? []).map((tool) => tool.full_name))),
   list_providers: register("list_providers", { ...providerPresentation, label: "Browse providers", fields: {} },
-    (context) => listProviders(providersContext(context))),
+    (context) => listProviderStatuses(adminContext(context))),
+  provider_detail: register("provider_detail", { ...providerPresentation, label: "Inspect provider", fields: { provider: providerField } },
+    (context, args) => providerDetail(adminContext(context), args)),
+  provider_presets: register("provider_presets", { ...providerPresentation, label: "Browse known providers", fields: {} },
+    ({ session }) => providerPresets(session)),
+  add_provider: register("add_provider", { ...providerWrite, label: "Add provider", fields: {
+    name: { label: "Name", hint: "A known provider such as openrouter, or a name of your own with an sdk and base url" },
+    sdk: { label: "SDK", hint: "Omit for a known provider" },
+    base_url: { label: "Base URL", hint: "Omit for a known provider's own endpoint" },
+    no_auth: { label: "No key needed", hint: "For endpoints that take no API key, such as a model server on this machine" },
+    discover: { label: "Discover models", hint: "On unless turned off" },
+  } }, (context, args) => addProvider(adminContext(context), args)),
+  update_provider: register("update_provider", { ...providerWrite, label: "Change provider", fields: {
+    provider: providerField, enabled: { label: "Enabled" }, sdk: { label: "SDK", hint: "Null returns to the default" },
+    base_url: { label: "Base URL", hint: "Null returns to the default" }, discover: { label: "Discover models" },
+    ignore_models: { label: "Ignored models", hint: "Glob patterns; a leading ! shows a model again" }, subscription: { label: "Billed as a subscription" },
+    no_auth: { label: "No key needed" }, setting: { label: "Model setting", hint: "A default for this provider's models, such as max_output_tokens" },
+    value: { label: "Setting value", hint: "Null clears it" },
+  } }, (context, args) => updateProvider(adminContext(context), args)),
+  remove_provider: register("remove_provider", { ...providerWrite, confirmation: "delete", label: "Remove provider", fields: { provider: providerField } },
+    (context, args) => removeProvider(adminContext(context), args)),
+  add_credential: register("add_credential", { ...providerWrite, effects: ["config_write", "provider_call"], label: "Add API key", fields: {
+    provider: providerField, name: { label: "Key name", hint: "Defaults to default, then key2, key3…" }, secret: secretField,
+    env: { label: "Environment variable", hint: "Instead of the key itself: a variable in the daemon's environment that holds it" },
+    no_check: noCheck, allow_unencrypted: plainOnly,
+  }, policies: [{ condition: { kind: "equals", field: "no_check", value: true }, effects: ["config_write"], confirmation: "none" }] }, (context, args) => addCredential(adminContext(context), args)),
+  update_credential: register("update_credential", { ...providerWrite, label: "Change API key", fields: {
+    provider: providerField, credential: credentialField, enabled: { label: "Enabled" }, rename: { label: "New name" },
+    secret: { ...secretField, label: "Replacement key" }, warn_on_fallback: { label: "Warn when calls move past it" }, no_check: noCheck, allow_unencrypted: plainOnly,
+  } }, (context, args) => updateCredential(adminContext(context), args)),
+  remove_credential: register("remove_credential", { ...providerWrite, confirmation: "delete", label: "Remove API key", fields: { provider: providerField, credential: credentialField } },
+    (context, args) => removeCredential(adminContext(context), args)),
+  test_credential: register("test_credential", { ...providerPresentation, effects: ["provider_call"], label: "Test API key", fields: { provider: providerField, credential: credentialField } },
+    (context, args) => testCredential(adminContext(context), args)),
+  order_credentials: register("order_credentials", { ...providerWrite, label: "Order API keys", fields: {
+    provider: providerField, order: { label: "Order", hint: "Key names, first tried first; keys left out keep their order after these" },
+  } }, (context, args) => orderCredentials(adminContext(context), args)),
+  select_credential: register("select_credential", { ...providerWrite, label: "Pin API key", fields: {
+    provider: providerField, credential: { ...credentialField, hint: "Null goes back to automatic: the first key that works, in order" },
+  } }, (context, args) => selectCredential(adminContext(context), args)),
+  set_credential_limit: register("set_credential_limit", { ...providerWrite, label: "Limit API key spending", fields: {
+    provider: providerField, credential: credentialField, cost_usd: { label: "Limit (USD)", hint: "Null removes the limit" },
+    period: { label: "Period", hint: "hour, day, week or month; defaults to month" },
+  } }, (context, args) => setCredentialLimit(adminContext(context), args)),
   list_provider_models: register("list_provider_models", { ...providerPresentation, label: "Browse provider models", fields: {
     provider: providerField, include_hidden: { label: "Include hidden models", hint: "Include models excluded by discovery filters" },
   } }, (context, args) => listProviderModels(providersContext(context), args)),

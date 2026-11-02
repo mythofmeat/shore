@@ -3561,6 +3561,28 @@
           "env": null
         },
         {
+          "id": "include_secrets",
+          "short": null,
+          "long": "include-secrets",
+          "aliases": [],
+          "short_aliases": [],
+          "help": "With --all, also back up the provider keys stored on the daemon; the backup then holds them in plain text",
+          "long_help": null,
+          "action": "SetTrue",
+          "required": false,
+          "global": false,
+          "hidden": false,
+          "require_equals": false,
+          "min_values": 0,
+          "max_values": 0,
+          "defaults": [
+            "false"
+          ],
+          "choices": [],
+          "conflicts": [],
+          "env": null
+        },
+        {
           "id": "output",
           "short": "o",
           "long": "output",
@@ -5036,7 +5058,7 @@
     },
     {
       "path": "shore provider",
-      "about": "List configured providers with key and cache status, or refresh a catalog",
+      "about": "List providers and their keys; add, change or remove one",
       "long_about": null,
       "hidden": false,
       "aliases": [],
@@ -5204,6 +5226,279 @@
           "min_values": 1,
           "max_values": 1,
           "defaults": [],
+          "choices": [],
+          "conflicts": [],
+          "env": null
+        },
+        {
+          "id": "json",
+          "short": null,
+          "long": "json",
+          "aliases": [],
+          "short_aliases": [],
+          "help": "Output raw JSON",
+          "long_help": null,
+          "action": "SetTrue",
+          "required": false,
+          "global": false,
+          "hidden": false,
+          "require_equals": false,
+          "min_values": 0,
+          "max_values": 0,
+          "defaults": [
+            "false"
+          ],
+          "choices": [],
+          "conflicts": [],
+          "env": null
+        },
+        {
+          "id": "help",
+          "short": "h",
+          "long": "help",
+          "aliases": [],
+          "short_aliases": [],
+          "help": "Print help (see more with '--help')",
+          "long_help": "Print help (see a summary with '-h')",
+          "action": "Help",
+          "required": false,
+          "global": false,
+          "hidden": false,
+          "require_equals": false,
+          "min_values": 0,
+          "max_values": 0,
+          "defaults": [],
+          "choices": [],
+          "conflicts": [],
+          "env": null
+        }
+      ]
+    },
+    {
+      "path": "shore provider add",
+      "about": "Add a provider; bare, lists the providers shore knows",
+      "long_about": "Add a provider; bare, lists the providers shore knows\n\nA known provider needs only its name, then asks for its key. A provider of your own needs --sdk and --base-url.",
+      "hidden": false,
+      "aliases": [],
+      "subcommand_required": false,
+      "arguments": [
+        {
+          "id": "name",
+          "short": null,
+          "long": null,
+          "aliases": [],
+          "short_aliases": [],
+          "help": "A known provider such as openrouter, or a name of your own",
+          "long_help": null,
+          "action": "Set",
+          "required": false,
+          "global": false,
+          "hidden": false,
+          "require_equals": false,
+          "min_values": 1,
+          "max_values": 1,
+          "defaults": [],
+          "choices": [],
+          "conflicts": [],
+          "env": null
+        },
+        {
+          "id": "sdk",
+          "short": null,
+          "long": "sdk",
+          "aliases": [],
+          "short_aliases": [],
+          "help": "SDK for a provider of your own: openai suits most OpenAI-compatible servers",
+          "long_help": null,
+          "action": "Set",
+          "required": false,
+          "global": false,
+          "hidden": false,
+          "require_equals": false,
+          "min_values": 1,
+          "max_values": 1,
+          "defaults": [],
+          "choices": [],
+          "conflicts": [],
+          "env": null
+        },
+        {
+          "id": "base_url",
+          "short": null,
+          "long": "base-url",
+          "aliases": [],
+          "short_aliases": [],
+          "help": "Endpoint for a provider of your own, e.g. http://localhost:11434/v1",
+          "long_help": null,
+          "action": "Set",
+          "required": false,
+          "global": false,
+          "hidden": false,
+          "require_equals": false,
+          "min_values": 1,
+          "max_values": 1,
+          "defaults": [],
+          "choices": [],
+          "conflicts": [],
+          "env": null
+        },
+        {
+          "id": "no_auth",
+          "short": null,
+          "long": "no-auth",
+          "aliases": [],
+          "short_aliases": [],
+          "help": "The endpoint takes no API key",
+          "long_help": null,
+          "action": "SetTrue",
+          "required": false,
+          "global": false,
+          "hidden": false,
+          "require_equals": false,
+          "min_values": 0,
+          "max_values": 0,
+          "defaults": [
+            "false"
+          ],
+          "choices": [],
+          "conflicts": [
+            "env",
+            "stdin",
+            "no_key"
+          ],
+          "env": null
+        },
+        {
+          "id": "no_discover",
+          "short": null,
+          "long": "no-discover",
+          "aliases": [],
+          "short_aliases": [],
+          "help": "Don't discover the provider's models",
+          "long_help": null,
+          "action": "SetTrue",
+          "required": false,
+          "global": false,
+          "hidden": false,
+          "require_equals": false,
+          "min_values": 0,
+          "max_values": 0,
+          "defaults": [
+            "false"
+          ],
+          "choices": [],
+          "conflicts": [],
+          "env": null
+        },
+        {
+          "id": "no_key",
+          "short": null,
+          "long": "no-key",
+          "aliases": [],
+          "short_aliases": [],
+          "help": "Add the provider without asking for a key",
+          "long_help": null,
+          "action": "SetTrue",
+          "required": false,
+          "global": false,
+          "hidden": false,
+          "require_equals": false,
+          "min_values": 0,
+          "max_values": 0,
+          "defaults": [
+            "false"
+          ],
+          "choices": [],
+          "conflicts": [
+            "env",
+            "stdin"
+          ],
+          "env": null
+        },
+        {
+          "id": "stdin",
+          "short": null,
+          "long": "stdin",
+          "aliases": [],
+          "short_aliases": [],
+          "help": "Read the key from standard input, e.g. piped from a password manager",
+          "long_help": null,
+          "action": "SetTrue",
+          "required": false,
+          "global": false,
+          "hidden": false,
+          "require_equals": false,
+          "min_values": 0,
+          "max_values": 0,
+          "defaults": [
+            "false"
+          ],
+          "choices": [],
+          "conflicts": [
+            "env"
+          ],
+          "env": null
+        },
+        {
+          "id": "env",
+          "short": null,
+          "long": "env",
+          "aliases": [],
+          "short_aliases": [],
+          "help": "Use the key in this environment variable on the daemon's host instead",
+          "long_help": null,
+          "action": "Set",
+          "required": false,
+          "global": false,
+          "hidden": false,
+          "require_equals": false,
+          "min_values": 1,
+          "max_values": 1,
+          "defaults": [],
+          "choices": [],
+          "conflicts": [],
+          "env": null
+        },
+        {
+          "id": "no_check",
+          "short": null,
+          "long": "no-check",
+          "aliases": [],
+          "short_aliases": [],
+          "help": "Save the key without asking the provider whether it works",
+          "long_help": null,
+          "action": "SetTrue",
+          "required": false,
+          "global": false,
+          "hidden": false,
+          "require_equals": false,
+          "min_values": 0,
+          "max_values": 0,
+          "defaults": [
+            "false"
+          ],
+          "choices": [],
+          "conflicts": [],
+          "env": null
+        },
+        {
+          "id": "allow_unencrypted",
+          "short": null,
+          "long": "allow-unencrypted",
+          "aliases": [],
+          "short_aliases": [],
+          "help": "Send the key even though the connection to the daemon is neither local nor encrypted; only on a private network such as a VPN",
+          "long_help": null,
+          "action": "SetTrue",
+          "required": false,
+          "global": false,
+          "hidden": false,
+          "require_equals": false,
+          "min_values": 0,
+          "max_values": 0,
+          "defaults": [
+            "false"
+          ],
           "choices": [],
           "conflicts": [],
           "env": null
@@ -8828,6 +9123,155 @@
       "mapping": {
         "name": "refresh_all_provider_models",
         "args": {}
+      }
+    },
+    {
+      "argv": [
+        "provider",
+        "add"
+      ],
+      "mapping": {
+        "name": "provider_presets",
+        "args": {}
+      }
+    },
+    {
+      "argv": [
+        "provider",
+        "add",
+        "fixture"
+      ],
+      "mapping": {
+        "name": "add_provider",
+        "args": {
+          "name": "fixture"
+        }
+      }
+    },
+    {
+      "argv": [
+        "provider",
+        "fixture"
+      ],
+      "mapping": {
+        "name": "provider_detail",
+        "args": {
+          "provider": "fixture"
+        }
+      }
+    },
+    {
+      "argv": [
+        "provider",
+        "fixture",
+        "set",
+        "base-url",
+        "http://localhost:1/v1"
+      ],
+      "mapping": {
+        "name": "update_provider",
+        "args": {
+          "provider": "fixture",
+          "base_url": "http://localhost:1/v1"
+        }
+      }
+    },
+    {
+      "argv": [
+        "provider",
+        "fixture",
+        "disable"
+      ],
+      "mapping": {
+        "name": "update_provider",
+        "args": {
+          "provider": "fixture",
+          "enabled": false
+        }
+      }
+    },
+    {
+      "argv": [
+        "provider",
+        "fixture",
+        "auth",
+        "work",
+        "--test"
+      ],
+      "mapping": {
+        "name": "test_credential",
+        "args": {
+          "provider": "fixture",
+          "credential": "work"
+        }
+      }
+    },
+    {
+      "argv": [
+        "provider",
+        "fixture",
+        "auth",
+        "--order",
+        "work,home"
+      ],
+      "mapping": {
+        "name": "order_credentials",
+        "args": {
+          "provider": "fixture",
+          "order": [
+            "work",
+            "home"
+          ]
+        }
+      }
+    },
+    {
+      "argv": [
+        "provider",
+        "fixture",
+        "use",
+        "work"
+      ],
+      "mapping": {
+        "name": "select_credential",
+        "args": {
+          "provider": "fixture",
+          "credential": "work"
+        }
+      }
+    },
+    {
+      "argv": [
+        "provider",
+        "fixture",
+        "use",
+        "--auto"
+      ],
+      "mapping": {
+        "name": "select_credential",
+        "args": {
+          "provider": "fixture",
+          "credential": null
+        }
+      }
+    },
+    {
+      "argv": [
+        "provider",
+        "fixture",
+        "limit",
+        "work",
+        "--spend",
+        "20/month"
+      ],
+      "mapping": {
+        "name": "set_credential_limit",
+        "args": {
+          "cost_usd": 20.0,
+          "period": "month",
+          "provider": "fixture",
+          "credential": "work"
+        }
       }
     },
     {

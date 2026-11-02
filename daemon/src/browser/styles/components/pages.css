@@ -180,6 +180,61 @@
   gap: 10px;
 }
 
+.credential-list {
+  display: flex;
+  flex-direction: column;
+  margin: 0;
+  padding: 0;
+  border-top: 1px solid var(--line-2);
+  list-style: none;
+}
+
+.credential {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 10px 0;
+  border-bottom: 1px solid var(--line-2);
+}
+
+.credential.disabled {
+  opacity: 0.7;
+}
+
+.credential-main {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.credential-title {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+}
+
+.credential code {
+  word-break: break-all;
+}
+
+.radio-group {
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+
+.radio-group legend {
+  margin-bottom: 6px;
+  padding: 0;
+}
+
+.shell[data-layout="mobile"] .credential {
+  flex-wrap: wrap;
+}
+
 .segment-body,
 .segment-messages {
   display: flex;

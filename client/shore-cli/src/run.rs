@@ -70,6 +70,20 @@ pub(crate) async fn execute(
     if let Some(result) = try_handle_local_only(&cli).await {
         return result;
     }
+    let provider_plan = match cli.command.as_ref() {
+        Some(CliCommand::Provider {
+            subcommand:
+                Some(
+                    subcommand @ (crate::cli::ProviderCommand::Add(_)
+                    | crate::cli::ProviderCommand::Named(_)),
+                ),
+            ..
+        }) => match crate::providers::plan_or_report(subcommand)? {
+            Some(plan) => Some(plan),
+            None => return Ok(()),
+        },
+        Some(_) | None => None,
+    };
 
     let Some(command_ref) = cli.command.as_ref() else {
         return Err("missing command".into());
@@ -250,6 +264,7 @@ pub(crate) async fn execute(
             character: exported,
             all: _,
             full,
+            include_secrets,
             output,
             json,
         } => {
@@ -258,6 +273,7 @@ pub(crate) async fn execute(
                 exported.as_deref(),
                 output.as_deref(),
                 *full,
+                *include_secrets,
                 *json,
             )
             .await?;
@@ -278,6 +294,11 @@ pub(crate) async fn execute(
         }
         compact @ CliCommand::Compact { json: false, .. } => {
             handle_compact(&mut conn, compact, cli.character.as_deref()).await?;
+        }
+        CliCommand::Provider { .. } if provider_plan.is_some() => {
+            if let Some((plan, json)) = provider_plan {
+                crate::providers::run(&mut conn, plan, json).await?;
+            }
         }
         other @ (CliCommand::Character { .. }
         | CliCommand::Trace { .. }
@@ -532,13 +553,25 @@ pub(crate) fn config_keys_filter(other: &CliCommand) -> Option<&str> {
     filter.as_deref()
 }
 
-fn catalog_render(name: &str) -> Option<fn(&serde_json::Value)> {
+pub(crate) fn catalog_render(name: &str) -> Option<fn(&serde_json::Value)> {
     match name {
         "list_models" => Some(output::catalog::print_model_list),
         "model_info" => Some(output::catalog::print_model_info),
         "model_settings" => Some(output::catalog::print_model_settings),
         "list_providers" => Some(output::catalog::print_provider_list),
         "list_provider_models" => Some(output::catalog::print_provider_models),
+        "provider_detail" => Some(output::catalog::print_provider_detail),
+        "provider_presets" => Some(output::catalog::print_provider_presets),
+        "add_provider"
+        | "update_provider"
+        | "add_credential"
+        | "update_credential"
+        | "remove_credential"
+        | "order_credentials"
+        | "select_credential"
+        | "set_credential_limit" => Some(output::catalog::print_provider_changed),
+        "remove_provider" => Some(output::catalog::print_provider_removed),
+        "test_credential" => Some(output::catalog::print_credential_tested),
         _ => None,
     }
 }
@@ -2145,7 +2178,7 @@ pub(crate) async fn execute_operation_with_raw<O: Operation>(
     Ok((serde_json::from_value(data.clone())?, data))
 }
 
-async fn recv_command_data(
+pub(crate) async fn recv_command_data(
     conn: &mut SWPConnection,
 ) -> Result<serde_json::Value, Box<dyn std::error::Error>> {
     loop {

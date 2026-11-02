@@ -364,4 +364,16 @@ describe("the chat turn", () => {
     expect(error).toContain('Shore usage budget "keyed" is over limit');
     expect(calls).toBe(0);
   });
+
+  test("a key at its own budget hands the call to the provider's next key", async () => {
+    const scoped = {
+      timezone: "utc",
+      budgets: [{ name: "keyed", period: "month", cost_usd: 1.0, limit: "block", provider: "openai", api_key: "default" }],
+    } as unknown as UsageConfig;
+    const { calls, error, fallbacks } = await chatTurn(scoped, true);
+
+    expect(error).toBeUndefined();
+    expect(calls).toBe(1);
+    expect(fallbacks).toBe(1);
+  });
 });

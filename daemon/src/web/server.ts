@@ -4,6 +4,7 @@ import type { WebLoginCode } from "../protocol/WebLoginCode.ts";
 import type { WebProblem } from "../protocol/WebProblem.ts";
 import type { WebSessionInfo } from "../protocol/WebSessionInfo.ts";
 import type { Server } from "../swp/server.ts";
+import { isLoopbackAddress } from "../swp/session.ts";
 import { LoginCodes, WebSessions, type WebSession } from "./auth.ts";
 import { WEB_CONTRACT, WEB_PROTOCOL, WEB_SUBPROTOCOL } from "./contract.ts";
 import { validWebLogin, validWebLoginCode, validWebProblem, validWebSession, validWebArchiveExport, validWebArchiveInfo, validWebArchiveList, validWebRequestList } from "./contracts.ts";
@@ -211,7 +212,8 @@ export function startWebServer(options: WebServerOptions): RunningWebServer {
         }
         const headers = securityHeaders();
         headers.set("sec-websocket-protocol", WEB_SUBPROTOCOL);
-        return http.upgrade(request, { data: socketState(session), headers })
+        const confidential = secureCookie || isLoopbackAddress(http.requestIP(request)?.address);
+        return http.upgrade(request, { data: socketState(session, confidential), headers })
           ? undefined : problem(400, "invalid_request", "Expected a WebSocket upgrade");
       }
       return problem(404, "not_found", "Unknown browser endpoint");

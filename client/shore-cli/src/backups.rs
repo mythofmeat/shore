@@ -28,6 +28,8 @@ pub(crate) struct Manifest {
     source: Source,
     entries: Vec<Entry>,
     database: Database,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    secrets_left_out: Option<bool>,
 }
 
 #[derive(Debug, Deserialize, Serialize)]
@@ -289,6 +291,7 @@ pub(crate) fn base_manifest(backup: &Backup) -> Result<Vec<u8>, Failure> {
         },
         entries,
         database,
+        secrets_left_out: None,
     };
     Ok(serde_json::to_vec(&base)?)
 }
