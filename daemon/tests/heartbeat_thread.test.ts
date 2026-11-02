@@ -4,6 +4,7 @@ import { join } from "node:path";
 
 import { TurnAutonomyBridge } from "../src/autonomy/registration.ts";
 import { defaultAppConfig, type AppConfig } from "../src/config/app.ts";
+import { ConfigDuration } from "../src/config/duration.ts";
 import type { LoadedConfig } from "../src/config/loader.ts";
 import { emptyCatalog } from "../src/config/models.ts";
 import { ProviderRegistry } from "../src/config/providers.ts";
@@ -38,6 +39,7 @@ function textOf(request: SidecarRequest): string {
 
 interface Script {
   heartbeats: SidecarRequest[];
+  replies: SidecarRequest[];
   calls: string[];
   held: { started: PromiseWithResolvers<void>; release: PromiseWithResolvers<void> } | undefined;
 }
@@ -59,6 +61,7 @@ function scriptedProvider(script: Script): SidecarProvider {
     stream: async function* (request) {
       script.calls.push(request.context?.call_type ?? "");
       if (request.context?.call_type.startsWith("heartbeat") !== true) {
+        if (request.context?.call_type === "message") script.replies.push(structuredClone(request));
         const held = script.held;
         if (held !== undefined) {
           script.held = undefined;
@@ -122,7 +125,7 @@ async function withCharacter(run: (h: Harness) => Promise<void>, configure?: (ap
   const workspace = join(config.dirs.config, "characters", "ada", "workspace");
   await mkdir(workspace, { recursive: true });
   await writeFile(join(workspace, "SOUL.md"), "Ada");
-  const script: Script = { heartbeats: [], calls: [], held: undefined };
+  const script: Script = { heartbeats: [], replies: [], calls: [], held: undefined };
   const emitted: Emitted[] = [];
   const histories: History[] = [];
   const waiting: { thread: string; match: (message: Message) => boolean; resolve: () => void }[] = [];
@@ -327,5 +330,80 @@ test("the user can read the heartbeat thread but not write there", async () => {
 
     expect(await outcomeOf(say("can I join?", "heartbeat"))).toThrow("is where ada's heartbeats run");
     expect(await thread("heartbeat")).toEqual(before);
+  });
+});
+
+function compactsWhenIdle(app: AppConfig): void {
+  app.memory.compaction.enabled = true;
+  app.memory.compaction.keep_recent_turns = 0;
+  app.memory.compaction.min_turns = 1;
+  app.memory.compaction.idle_trigger = ConfigDuration.fromSecs(50 * 60);
+}
+
+const shownIn = async (thread: (id: string) => Promise<readonly Message[]>): Promise<string[][]> =>
+  (await thread("main")).map((message) => [message.role, message.origin ?? "", message.content]);
+
+async function repliedAt(minutes: number, script: Script, send: () => Promise<void>): Promise<void> {
+  const held = { started: Promise.withResolvers<void>(), release: Promise.withResolvers<void>() };
+  script.held = held;
+  const replying = send();
+  await held.started.promise;
+  at(minutes);
+  held.release.resolve();
+  await replying;
+}
+
+test("a heartbeat's message that lands in home just before idle compaction stays there unread, and the next reply has it in context", async () => {
+  await withCharacter(async ({ data, script, say, heartbeat, thread }) => {
+    await say("the keeper's name is Mara");
+    markThreadRead(data, "ada", "main", T0);
+
+    at(60);
+    await heartbeat();
+
+    expect(script.calls).toContain("compaction");
+    expect(await shownIn(thread)).toEqual([["assistant", "autonomous", "I found the keeper's log."]]);
+    expect(threadActivityNow(data, "ada", "main").unread).toBe(1);
+
+    at(8 * 60);
+    await say("good morning");
+    const next = script.replies.at(-1) as SidecarRequest;
+    expect(next.messages[0]?.role).toBe("user");
+    expect(textOf(next)).toContain("I found the keeper's log.");
+  }, compactsWhenIdle);
+});
+
+test("a reply the user never saw stays in home through idle compaction and the deep-idle archive after it", async () => {
+  await withCharacter(async ({ runtime, data, script, say, thread }) => {
+    markThreadRead(data, "ada", "main", T0 - MINUTE);
+    await repliedAt(1, script, () => say("is the lamp lit?"));
+    runtime.autonomy.forceHeartbeatState("ada", "dormant");
+    const unseen = [["assistant", "", "reply to: is the lamp lit?"]];
+
+    at(60);
+    await runtime.autonomy.tick();
+    expect(script.calls).toContain("compaction");
+    expect(await shownIn(thread)).toEqual(unseen);
+
+    at(25 * 60);
+    await runtime.autonomy.tick();
+    expect(await shownIn(thread)).toEqual(unseen);
+    expect(threadActivityNow(data, "ada", "main").unread).toBe(1);
+  }, (app) => {
+    compactsWhenIdle(app);
+    app.memory.compaction.archive_after = ConfigDuration.fromSecs(24 * 60 * 60);
+  });
+});
+
+test("a side thread trimmed for room without compaction keeps its newest reply while the user hasn't read it", async () => {
+  await withCharacter(async ({ runtime, data, script, say, thread }) => {
+    await runtime.registry.createThread("ada", "side");
+    markThreadRead(data, "ada", "side", T0 - MINUTE);
+    await repliedAt(1, script, () => say(`${"the lamp ".repeat(80_000)}\nwhich lamp?`, "side"));
+
+    expect((await thread("side")).map((message) => [message.role, message.content])).toEqual([["assistant", "reply to: which lamp?"]]);
+    expect(threadActivityNow(data, "ada", "side").unread).toBe(1);
+  }, (app) => {
+    app.memory.compaction.keep_recent_turns = 0;
   });
 });

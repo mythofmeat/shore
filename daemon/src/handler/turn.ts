@@ -10,7 +10,7 @@ import type { StreamResult } from "../llm/stream.ts";
 import { emitStreamEnd } from "../llm/stream.ts";
 import type { Usage } from "../llm/types.ts";
 import { compactionHeld } from "../memory/compaction/checkpoint.ts";
-import { heartbeatThread, homeThread, homeThreadOf, isHeartbeatOpener, readThreadsIndex } from "../engine/threads.ts";
+import { firstUnreadReply, heartbeatThread, homeThread, homeThreadOf, isHeartbeatOpener, readThreadsIndex } from "../engine/threads.ts";
 import { MessageStore } from "../engine/message_store.ts";
 import { conversationRef, SegmentReader } from "../engine/segments.ts";
 import { readDurable, threadFile } from "../storage/files.ts";
@@ -306,7 +306,7 @@ export async function archiveTrimmedTurns(
   try {
     const raw = readDurable(threadFile(dataDir, charName, engine.thread, "active.jsonl"));
     const input = archivalPlanInput(raw);
-    const splitAt = archiveSplitIndex([...input.messages], keepTurns, false);
+    const splitAt = archiveSplitIndex([...input.messages], keepTurns, false, firstUnreadReply(dataDir, charName, engine.thread, input.store.messages()));
     if (splitAt === 0) return;
     await conversationManager(
       threadDataDir(dataDir, charName, engine.thread),

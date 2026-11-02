@@ -3,6 +3,7 @@ import { readDurable, threadFile } from "../../storage/files.ts";
 import { required } from "../../util/required.ts";
 
 import { normalizeMessage } from "../../engine/message_store.ts";
+import { firstUnreadReply } from "../../engine/threads.ts";
 import type { Message } from "../../engine/types.ts";
 import { versionsIn } from "../coverage.ts";
 import { rustLines, rustTrim } from "../lines.ts";
@@ -46,8 +47,9 @@ export function archiveSplitIndex(
   messages: ConversationMessage[],
   keepTurns: number,
   retainTrailingAutonomous: boolean,
+  firstUnread = messages.length,
 ): number {
-  const splitAt = findTurnSplit(messages, keepTurns);
+  const splitAt = Math.min(findTurnSplit(messages, keepTurns), firstUnread);
   if (!retainTrailingAutonomous) return splitAt;
   const tail = trailingAutonomousLen(messages);
   return Math.min(splitAt, Math.max(messages.length - tail, 0));
@@ -64,6 +66,7 @@ export interface ArchivalPlanInput {
   rawContent: string;
   messages: readonly ConversationMessage[];
   store: { messages(): readonly Message[] };
+  firstUnread?: number;
 }
 
 export interface ArchivalPlanSettings {
@@ -118,14 +121,14 @@ export function conversationView(messages: readonly Message[]): ConversationMess
 
 function resumesCheckpoint(
   checkpoint: CompactionCheckpoint | undefined,
-  liveContent: string,
+  input: ArchivalPlanInput,
   splitAt: number,
   settings: ArchivalPlanSettings,
 ): checkpoint is CompactionCheckpoint {
   if (checkpoint === undefined || settings.restart === true) return false;
-  if (!archivedRangeIsCurrent(checkpoint, liveContent)) return false;
+  if (!archivedRangeIsCurrent(checkpoint, input.rawContent)) return false;
   if (settings.keepTurnsOverride !== undefined && checkpoint.splitAt !== splitAt) return false;
-  return true;
+  return input.firstUnread === undefined || checkpoint.splitAt <= input.firstUnread;
 }
 
 export function archivedRangeIsCurrent(
@@ -158,7 +161,8 @@ export async function resolveArchivalPlan(
   const checkpoint = await loadCompactionCheckpoint(dataDir, character, thread).catch(
     () => undefined,
   );
-  return buildArchivalPlan(input, settings, checkpoint);
+  const firstUnread = firstUnreadReply(dataDir, character, thread, input.store.messages());
+  return buildArchivalPlan(firstUnread === undefined ? input : { ...input, firstUnread }, settings, checkpoint);
 }
 
 export function archivalPlanInput(rawContent: string): ArchivalPlanInput {
@@ -180,9 +184,10 @@ export function buildArchivalPlan(
     [...input.messages],
     keepTurns,
     settings.retainTrailingAutonomous ?? false,
+    input.firstUnread,
   );
 
-  const resumed = resumesCheckpoint(checkpoint, input.rawContent, liveSplitAt, settings);
+  const resumed = resumesCheckpoint(checkpoint, input, liveSplitAt, settings);
 
   const sourceContent = resumed ? checkpoint.sourceContent : input.rawContent;
   const messages = resumed ? messagesFromJsonl(sourceContent) : [...input.store.messages()];
