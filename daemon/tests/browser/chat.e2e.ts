@@ -58,6 +58,7 @@ test("a message whose reply was stopped can be edited and then answered from the
   await mine.getByRole("button", { name: "Edit", exact: true }).click();
   await mine.getByLabel("Edit message").fill("Edited after stopping");
   await mine.getByRole("button", { name: "Save", exact: true }).click();
+  await expect(mine.getByLabel("Edit message")).toHaveCount(0);
   await expect(mine).toContainText("Edited after stopping");
   await mine.hover();
   await mine.getByRole("button", { name: "Generate reply", exact: true }).click();
