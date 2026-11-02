@@ -1,5 +1,11 @@
-import type { Nodes, Text } from "mdast";
+import type { Nodes, Root, Text } from "mdast";
 import { fromMarkdown } from "mdast-util-from-markdown";
+
+const WITHOUT_HTML_BLOCKS = { extensions: [{ disable: { null: ["htmlFlow"] } }] };
+
+export function parseMessage(text: string): Root {
+  return fromMarkdown(text, WITHOUT_HTML_BLOCKS);
+}
 
 export interface Embed {
   source: string;
@@ -77,7 +83,7 @@ export function imageEmbed(source: string, node: { url: string; alt?: string | n
 export function embedsIn(text: string): Embed[] {
   if (!text.includes("![")) return [];
   const found: Embed[] = [];
-  const pending: Nodes[] = [fromMarkdown(text)];
+  const pending: Nodes[] = [parseMessage(text)];
   for (let node = pending.pop(); node !== undefined; node = pending.pop()) {
     if (node.type === "text") found.push(...textEmbeds(text, node));
     if (node.type === "image") {

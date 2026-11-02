@@ -3,6 +3,7 @@ import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { Markdown, safeHref } from "../src/browser/markdown.tsx";
 import { imageFilename, mediaSource } from "../src/browser/media.ts";
+import { Pictures, unplacedPictures } from "../src/browser/pictures.tsx";
 import { runInNewContext } from "node:vm";
 
 test("markdown renders formatting but never raw HTML, unsafe links or remote images", () => {
@@ -19,6 +20,17 @@ test("markdown renders formatting but never raw HTML, unsafe links or remote ima
   expect(safeHref(" mailto:a@b.c ")).toBe("mailto:a@b.c");
   expect(safeHref("data:text/html,x")).toBeUndefined();
   expect(renderToStaticMarkup(createElement(Markdown, { text: "# Title" }))).toContain("<h3>Title</h3>");
+});
+
+test("a sent picture inside a block-level tag shows in place, once, with the text around it formatted and the tag shown as text", () => {
+  const text = "<sendMessage>\nThe *lamp* tonight\n![[lamp.png]]\n</sendMessage>";
+  const images = [{ path: "/data/media/ada/sent/abc.png", embed: "![[lamp.png]]", name: "lamp.png" }];
+  const html = renderToStaticMarkup(createElement(Pictures.Provider, { value: { images, open: () => {}, live: false, shown: true } }, createElement(Markdown, { text })));
+  expect(html).toContain('src="/api/pictures/abc.png"');
+  expect(html).toContain("<em>lamp</em>");
+  expect(html).toContain("&lt;sendMessage&gt;");
+  expect(html).not.toContain("![[");
+  expect(unplacedPictures(images, [text])).toEqual([]);
 });
 
 const png = "iVBORw0K";

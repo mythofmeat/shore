@@ -64,6 +64,11 @@ export function captureToolSendMessage(toolUses: readonly ToolUse[]): string | u
   return found;
 }
 
+export function sendMessageIn(blocks: readonly ContentBlock[]): string | undefined {
+  const uses = blocks.flatMap((block): ToolUse[] => block.type === "tool_use" ? [[block.id, block.name, block.input]] : []);
+  return captureToolSendMessage(uses) ?? extractSendMessage(deriveContentFromBlocks(blocks));
+}
+
 export function timeLeftPhrase(ms: number): string {
   const minutes = Math.floor(ms / 60_000);
   if (minutes < 1) return "less than a minute";

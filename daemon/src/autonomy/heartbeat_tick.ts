@@ -4,7 +4,7 @@ import { homeThreadOf } from "../engine/threads.ts";
 import { deriveContentFromBlocks } from "../engine/message_store.ts";
 import { shoreLog } from "../log.ts";
 
-import { buildAutonomousMessage } from "./heartbeat_shape.ts";
+import { buildAutonomousMessage, sendMessageIn } from "./heartbeat_shape.ts";
 import {
   HEARTBEAT_TIME_LIMIT_MS,
   runHeartbeatToolLoop,
@@ -203,13 +203,14 @@ export async function persistHeartbeatMessage(
   return persisted;
 }
 
-function roundMessage(round: HeartbeatRound, request: SidecarRequest, deps: Pick<HeartbeatTickDeps, "newId" | "nowIso">): Message {
+async function roundMessage(round: HeartbeatRound, request: SidecarRequest, deps: Pick<HeartbeatTickDeps, "newId" | "nowIso">, pictures: PictureSender): Promise<Message> {
   const model = round.model === undefined || round.model === "" ? request.model : round.model;
+  const sent = round.role === "assistant" ? sendMessageIn(round.blocks) : undefined;
   return {
     msg_id: (deps.newId ?? (() => `m_${crypto.randomUUID()}`))(),
     role: round.role,
     content: deriveContentFromBlocks(round.blocks, true),
-    images: [],
+    images: sent === undefined ? [] : await sendPictures([sent], pictures),
     content_blocks: round.blocks,
     timestamp: (deps.nowIso ?? (() => new Date().toISOString()))(),
     ...(round.role === "assistant"
@@ -282,6 +283,7 @@ export async function runHeartbeatTick(
     recordHomeThrough(characterDir, Date.parse(prepared.opener.timestamp));
 
     const workspace = characterWorkspace(config, character);
+    const pictures: PictureSender = { workspace, dir: sentPicturesDir(config.dirs.data, character) };
     const workspaceTurns = workspaceTurnsFor(config.dirs, character, workspace);
     const recorder = new WorkspaceRecorder(workspaceTurns);
     const known = new Set(replyVersions(engine.messages()));
@@ -289,7 +291,7 @@ export async function runHeartbeatTick(
       ...deps,
       dispatch: (name, input, toolUseId, tools) => deps.dispatch(name, input, toolUseId, tools, { ...prepared, recordWorkspaceWrite: recorder.track }),
       generate: (request, phase, loopSignal) => deps.generate(request, phase, AbortSignal.any([signal, loopSignal])),
-      persist: async (round) => { await engine.appendMessage(roundMessage(round, prepared.request, deps)); },
+      persist: async (round) => { await engine.appendMessage(await roundMessage(round, prepared.request, deps, pictures)); },
       character,
       wrapUpGrace: config.app.behavior.autonomy.heartbeat.wrap_up_grace_rounds,
       maxToolIterations: prepared.maxToolIterations,
@@ -306,7 +308,7 @@ export async function runHeartbeatTick(
       deps,
       note,
       { thread: home.thread, engine: home },
-      { workspace, dir: sentPicturesDir(config.dirs.data, character) },
+      pictures,
     );
     const newest = replyVersions(engine.messages()).filter((version) => !known.has(version)).at(-1);
     if (newest === undefined) await recorder.discard();
