@@ -41,11 +41,7 @@ import {
   refreshClaudePlanLimits,
 } from "./plan_limits.ts";
 import type { Ledger } from "./store.ts";
-import {
-  nanoGptSubscriptionPath,
-  readNanoGptSubscriptionSync,
-  type NanoGptSubscriptionState,
-} from "../llm/nanogpt_subscription.ts";
+import type { NanoGptSubscriptionState } from "../llm/nanogpt_subscription.ts";
 import {
   daysFromMonday,
   DAY_MS,
@@ -66,7 +62,7 @@ const ANOMALY_LOOKBACK = "7d";
 
 export interface UsageRequest {
   ledger: string;
-  cacheDir?: string;
+  nanoGptSubscription?: () => NanoGptSubscriptionState | undefined;
   args?: Record<string, unknown> | undefined;
   usage?: UsageConfig | undefined;
   rateLimits?: () => UsageRateLimitReading[];
@@ -257,9 +253,7 @@ export async function usageReport(
     opts,
     now,
     request.rateLimits?.() ?? [],
-    request.cacheDir === undefined
-      ? undefined
-      : readNanoGptSubscriptionSync(nanoGptSubscriptionPath(request.cacheDir)),
+    request.nanoGptSubscription?.(),
     claudePlanLimitsKnown() ? currentClaudePlanLimits(config, now) : undefined,
   );
 }
