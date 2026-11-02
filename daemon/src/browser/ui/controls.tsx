@@ -54,6 +54,19 @@ function isSearchBox(target: EventTarget): boolean {
   return target instanceof HTMLInputElement && target.type === "search";
 }
 
+const DIALOG_CLOSED_EVENT = "shore:dialog-closed";
+
+export function whenNoDialogOpen(work: () => void): () => void {
+  const attempt = () => {
+    if (document.querySelector("dialog[open]") !== null) return;
+    removeEventListener(DIALOG_CLOSED_EVENT, attempt);
+    work();
+  };
+  addEventListener(DIALOG_CLOSED_EVENT, attempt);
+  attempt();
+  return () => removeEventListener(DIALOG_CLOSED_EVENT, attempt);
+}
+
 export function Dialog({ title, close, children, footer, wide = false, describedBy }: { title: string; close: () => void; children: ReactNode; footer?: ReactNode; wide?: boolean; describedBy?: string }) {
   const ref = useRef<HTMLDialogElement>(null);
   const titleId = useId();
@@ -63,6 +76,7 @@ export function Dialog({ title, close, children, footer, wide = false, described
     dialog.showModal();
     (dialog.querySelector<HTMLElement>("[data-autofocus]") ?? dialog.querySelector<HTMLElement>("button[type=submit]:not(:disabled), .form-actions .button.primary:not(:disabled)") ?? dialog).focus();
   }, []);
+  useEffect(() => () => { dispatchEvent(new Event(DIALOG_CLOSED_EVENT)); }, []);
   return <dialog ref={ref} tabIndex={-1} className={`dialog ${wide ? "wide" : ""}`} aria-labelledby={titleId} aria-describedby={describedBy} onCancel={(event) => { event.preventDefault(); close(); }}
     onClick={(event) => { if (event.target === event.currentTarget) close(); }}
     onKeyDown={(event) => { if (event.key === "Escape" && isSearchBox(event.target)) { event.preventDefault(); close(); } }}>

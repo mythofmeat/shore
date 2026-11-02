@@ -1,12 +1,13 @@
 import type { Page } from "@playwright/test";
 import { expect, test } from "./fixtures.ts";
-import { createCharacter, send, signIn, watchPage } from "./helpers.ts";
+import { createCharacter, createConversation, send, signIn, watchPage } from "./helpers.ts";
 
 test("sending clears the message box at once and regenerating replaces the reply in place", async ({ page }) => {
   const check = await watchPage(page);
   await signIn(page);
   await createCharacter(page, "lumen");
   const box = page.getByLabel("Message", { exact: true });
+  await expect(box).toBeFocused();
   await box.fill("Please hold this request");
   await box.press("Enter");
   await expect(page.locator("article.message.user")).toContainText("Please hold this request");
@@ -179,14 +180,10 @@ test("a message the daemon saved is never brought back when the conversation swi
   });
   await signIn(page);
   await createCharacter(page, "tern");
-  await page.getByRole("button", { name: "New conversation", exact: true }).click();
-  const dialog = page.getByRole("dialog", { name: "New conversation with tern" });
-  await dialog.getByLabel("Name").fill("side");
-  await dialog.getByRole("button", { name: "Create", exact: true }).click();
-  await expect(dialog).toBeHidden();
-  await expect(page.locator(".topbar-thread")).toHaveText("side");
+  await createConversation(page, "tern", "side");
 
   const box = page.getByLabel("Message", { exact: true });
+  await expect(box).toBeFocused();
   holding = true;
   await box.fill("Please fail this reply once it is saved");
   await box.press("Enter");
@@ -258,6 +255,9 @@ test("vim mode edits with vim keys, keeps the draft over a reload, attaches past
   await page.keyboard.press("ControlOrMeta+Enter");
   await expect(page.locator("article.message.user")).toHaveCount(2);
   await expect(page.locator("article.message.user").last()).toContainText(/two\s*lines/);
+
+  await createConversation(page, "vesper", "side");
+  await expect(box).toBeFocused();
   await check();
 });
 
@@ -279,11 +279,7 @@ test("compacting from the palette starts on Enter and leaves other conversations
   const compacting = page.getByRole("status").filter({ hasText: "Compacting context" });
   await expect(compacting).toBeVisible();
 
-  await page.getByRole("button", { name: "New conversation", exact: true }).click();
-  const create = page.getByRole("dialog", { name: "New conversation with wren" });
-  await create.getByLabel("Name").fill("side");
-  await create.getByRole("button", { name: "Create", exact: true }).click();
-  await expect(page.locator(".topbar-thread")).toHaveText("side");
+  await createConversation(page, "wren", "side");
   await expect(compacting).toBeHidden();
   await send(page, "Chatting while main compacts");
 
