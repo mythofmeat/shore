@@ -1,10 +1,11 @@
-import { describe, expect, test } from "bun:test";
+import { describe, expect, spyOn, test } from "bun:test";
 import { execFileSync } from "node:child_process";
 import { chmodSync, existsSync, lstatSync, mkdirSync, mkdtempSync, readFileSync, readlinkSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
 import type { Message } from "../src/engine/types.ts";
+import { CharacterWorkspace } from "../src/tools/character_workspace.ts";
 import {
   aliasTurn,
   pruneTurns,
@@ -380,6 +381,36 @@ describe("workspace turns", () => {
     expect(read(turns, "log.md")).toBe("0\n");
     await redoTurns(turns, "main", ["mv_1"]);
     expect(read(turns, "log.md")).toBe("12\n");
+  });
+
+  test("undoing a reply puts back the original when its next tool call starts the moment the last one returns", async () => {
+    const turns = setup();
+    write(turns, "log.md", "0\n");
+    const recorder = new WorkspaceRecorder(turns);
+    const secondStarted = Promise.withResolvers<void>();
+    let hold: Promise<unknown> | undefined;
+    const call = CharacterWorkspace.prototype.call.bind(new CharacterWorkspace(turns.workspace));
+    const spy = spyOn(CharacterWorkspace.prototype, "call").mockImplementation((op, args, signal) => {
+      const held = hold;
+      hold = undefined;
+      return Promise.resolve(held).then(() => call(op, args, signal));
+    });
+    try {
+      await recorder.track(async () => {
+        write(turns, "log.md", "1\n");
+        hold = Promise.race([secondStarted.promise, Bun.sleep(100)]);
+      });
+      await recorder.track(async () => {
+        secondStarted.resolve();
+        write(turns, "log.md", "2\n");
+      });
+      await recorder.settle("main", "mv_1");
+
+      await undoTurns(turns, "main", ["mv_1"]);
+      expect(read(turns, "log.md")).toBe("0\n");
+    } finally {
+      spy.mockRestore();
+    }
   });
 
   test("undoing a reply that committed in two tool calls moves HEAD back past both, and redo forward past both", async () => {

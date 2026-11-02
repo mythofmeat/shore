@@ -199,6 +199,7 @@ export class WorkspaceRecorder {
   readonly #owner = {};
   readonly #records: Promise<CallRecord | undefined>[] = [];
   #group: WriteGroup | undefined;
+  #lastAfter: Promise<unknown> = Promise.resolve();
 
   constructor(turns: WorkspaceTurns) {
     this.#turns = turns;
@@ -208,7 +209,7 @@ export class WorkspaceRecorder {
     let group = this.#group;
     if (group === undefined) {
       const window = openWindow(this.#turns, this.#owner);
-      group = { window, before: bestEffort(this.#turns, undefined, async () => await turnSnapshot(this.#turns)), running: 0 };
+      group = { window, before: this.#lastAfter.then(async () => await this.#snapshot()), running: 0 };
       this.#group = group;
     }
     group.running += 1;
@@ -219,7 +220,9 @@ export class WorkspaceRecorder {
       group.running -= 1;
       if (group.running === 0) {
         this.#group = undefined;
-        this.#records.push(this.#finish(group));
+        const after = group.before.then(async (before) => before === undefined ? undefined : await this.#snapshot());
+        this.#lastAfter = after;
+        this.#records.push(this.#finish(group, after));
       }
     }
   };
@@ -242,10 +245,14 @@ export class WorkspaceRecorder {
     await Promise.all(this.#records.splice(0));
   }
 
-  async #finish(group: WriteGroup): Promise<CallRecord | undefined> {
+  async #snapshot(): Promise<Taken | undefined> {
+    return await bestEffort(this.#turns, undefined, async () => await turnSnapshot(this.#turns));
+  }
+
+  async #finish(group: WriteGroup, taken: Promise<Taken | undefined>): Promise<CallRecord | undefined> {
     const turns = this.#turns;
     const before = await group.before;
-    const after = before === undefined ? undefined : await bestEffort(turns, undefined, async () => await turnSnapshot(turns));
+    const after = await taken;
     const changed = before === undefined || after === undefined || after.id === before.id
       ? []
       : await bestEffort(turns, [], async () => await diff(turns, before.id, after.id));
