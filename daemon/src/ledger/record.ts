@@ -252,22 +252,11 @@ export function beginCallAttempt(
   const provider = req.provider_key ?? req.sdk;
   const effectiveCallType = callType ?? ctx.call_type;
   const estimate = recentAttemptEstimate(ledger, provider, req.model, effectiveCallType);
+  const subscribed = (): boolean => isSubscriptionCall(provider, req.model, Date.now(), ctx.character);
   return {
     ledger,
-    ...(isNanoGptProvider(provider) ? {} : { subscription: isSubscriptionCall(provider, req.model, Date.now(), ctx.character) }),
-    pricingReady: !isNanoGptProvider(provider) || isSubscriptionCall(provider, req.model)
-      ? Promise.resolve()
-      : prepareCallAccounting(req)
-          .then(async () => {
-            if (!isSubscriptionCall(provider, req.model)) {
-              await ledger.pricing.getOrFetch(provider, req.model);
-            }
-          })
-          .catch((e: unknown) => {
-            shoreLog.warn(
-              `shore: could not prepare accounting for ${provider}/${req.model}: ${String(e)}`,
-            );
-          }),
+    ...(isNanoGptProvider(provider) ? {} : { subscription: subscribed() }),
+    pricingReady: subscribed() ? Promise.resolve() : refreshPricing(ledger, req, provider, subscribed),
     id: ledger.beginAttempt(
       {
         provider,
@@ -279,6 +268,20 @@ export function beginCallAttempt(
       estimate,
     ),
   };
+}
+
+async function refreshPricing(
+  ledger: Ledger,
+  req: SidecarRequest,
+  provider: string,
+  subscribed: () => boolean,
+): Promise<void> {
+  try {
+    if (isNanoGptProvider(provider)) await prepareCallAccounting(req);
+    if (!subscribed()) await ledger.pricing.refreshForCall(provider);
+  } catch (e) {
+    shoreLog.warn(`shore: could not prepare accounting for ${provider}/${req.model}: ${String(e)}`);
+  }
 }
 
 function recentAttemptEstimate(

@@ -1,10 +1,15 @@
-import { afterEach, describe, expect, spyOn, test } from "bun:test";
+import { afterEach, beforeEach, describe, expect, jest, setSystemTime, spyOn, test } from "bun:test";
 
+import type { UsageConfig } from "../src/ledger/budget.ts";
+import { budgetBlockFor } from "../src/ledger/gate.ts";
 import { calculateCost, PRICING_TTL_MS, type ModelPricing } from "../src/ledger/pricing.ts";
-import { closeLedgers, ledgerFor } from "../src/ledger/record.ts";
-import type { Ledger, RecordCall } from "../src/ledger/store.ts";
+import { beginCallAttempt, closeLedgers, ledgerFor, recordingStream } from "../src/ledger/record.ts";
+import { setSubscriptionProviders, type Ledger, type RecordCall } from "../src/ledger/store.ts";
 import { backfillLedgerCosts } from "../src/ledger/usage.ts";
+import { NANOGPT_MODELS_URL } from "../src/llm/providers/nanogpt_config.ts";
+import type { SidecarRequest, StreamEvent } from "../src/llm/types.ts";
 import { required } from "../src/util/required.ts";
+import { collect } from "./support/stream.ts";
 import { freshLedger, type LedgerFixture } from "./support/ledger_fixture.ts";
 
 const anthropicPricing = (): ModelPricing => ({
@@ -228,5 +233,191 @@ describe("the pricing table", () => {
     expect(ratedModels(ledger)).toEqual(["anthropic/claude-opus-5.5"]);
     expect(fetched).toEqual([]);
     close(required(ledger.pricing.cached("anthropic", "claude-opus-5-5")).output_per_token, 20 / MILLION);
+  });
+});
+
+const MINUTE = 60_000;
+
+const HOUR = 60 * MINUTE;
+
+const INSTALLED_AT = Date.parse("2026-11-03T00:00:00.000Z");
+
+const paidRequest = (
+  ledger: string,
+  { provider = "anthropic", model = "claude-opus-5-5", usage }: { provider?: string; model?: string; usage?: UsageConfig } = {},
+): SidecarRequest => ({
+  sdk: "anthropic",
+  provider_key: provider,
+  model,
+  api_key: "sk-test",
+  messages: [],
+  max_tokens: 128,
+  replay_prior_thinking: "all",
+  context: {
+    ledger,
+    character: "ada",
+    call_type: "message",
+    thinking_enabled: false,
+    cache_ttl: "5m",
+    ...(usage === undefined ? {} : { usage }),
+  },
+});
+
+const finishedCall = async function* (): AsyncGenerator<StreamEvent> {
+  yield {
+    type: "done",
+    content: "hello",
+    finish_reason: "end_turn",
+    usage: { input_tokens: MILLION, output_tokens: 0, cache_read_tokens: 0, cache_creation_tokens: 0 },
+    timing: { total_ms: 1, time_to_first_token_ms: 1 },
+  };
+};
+
+const NANOGPT_CATALOG_ENTRY = {
+  id: "vendor/model",
+  pricing: { prompt: 2, completion: 8 },
+};
+
+describe("a paid call", () => {
+  const fixtures: LedgerFixture[] = [];
+  const restores: Array<() => void> = [];
+
+  const ledgerAt = (): { ledger: Ledger; path: string } => {
+    const fixture = freshLedger();
+    fixtures.push(fixture);
+    return { ledger: required(ledgerFor(fixture.path)), path: fixture.path };
+  };
+
+  const catalogAnswers = (answer: (url: string) => Response | Promise<Response>): string[] => {
+    const fetched: string[] = [];
+    const spy = spyOn(globalThis, "fetch").mockImplementation((async (input: string | URL | Request) => {
+      const url = input instanceof Request ? input.url : input.toString();
+      fetched.push(url);
+      return await answer(url);
+    }) as typeof fetch);
+    restores.push(() => spy.mockRestore());
+    return fetched;
+  };
+
+  const catalogCarries = (...entries: unknown[]): string[] =>
+    catalogAnswers(() => Response.json({ data: entries }));
+
+  const costOfLastCall = (ledger: Ledger): number | null =>
+    (ledger.database.query("SELECT total_cost FROM calls ORDER BY id DESC LIMIT 1").get() as { total_cost: number | null }).total_cost;
+
+  const landCall = async (
+    ledger: Ledger,
+    path: string,
+    { lastsMs = 0, ...request }: { lastsMs?: number; provider?: string; model?: string; usage?: UsageConfig } = {},
+  ): Promise<number | null> => {
+    const call = paidRequest(path, request);
+    const attempt = beginCallAttempt(call.context, call);
+    if (lastsMs > 0) setSystemTime(Date.now() + lastsMs);
+    await collect(recordingStream(call.context, call, finishedCall(), attempt));
+    return costOfLastCall(ledger);
+  };
+
+  beforeEach(() => setSubscriptionProviders([]));
+
+  afterEach(() => {
+    for (const restore of restores.splice(0)) restore();
+    setSystemTime();
+    setSubscriptionProviders(["opencode-go", "opencode"]);
+    closeLedgers();
+    for (const fixture of fixtures.splice(0)) fixture.cleanup();
+  });
+
+  test("records its cost when it lands, every half hour for three days from a new install's first call, with the catalog fetched about once a day", async () => {
+    const { ledger, path } = ledgerAt();
+    const fetched = catalogCarries(OPUS_5_5_CATALOG_ENTRY);
+    const unpriced: number[] = [];
+    for (let halfHour = 0; halfHour <= 144; halfHour++) {
+      setSystemTime(INSTALLED_AT + halfHour * 30 * MINUTE);
+      if (halfHour % 12 === 0) await backfillLedgerCosts(path);
+      if (await landCall(ledger, path, { lastsMs: 2 * MINUTE }) === null) unpriced.push(halfHour / 2);
+    }
+    expect(unpriced).toEqual([]);
+    expect(fetched.length).toBeLessThanOrEqual(4);
+  });
+
+  test("still records its cost when its rate turns 24 hours old while it runs", async () => {
+    const { ledger, path } = ledgerAt();
+    catalogCarries(OPUS_5_5_CATALOG_ENTRY);
+    setSystemTime(INSTALLED_AT);
+    await landCall(ledger, path);
+    setSystemTime(INSTALLED_AT + PRICING_TTL_MS - MINUTE);
+    close(required(await landCall(ledger, path, { lastsMs: 10 * MINUTE })), 4);
+  });
+
+  test("counts against a blocking budget as soon as it lands, on a new install too", async () => {
+    const { ledger, path } = ledgerAt();
+    catalogCarries(OPUS_5_5_CATALOG_ENTRY);
+    const usage = {
+      timezone: "utc",
+      budgets: [{ name: "tiny", period: "month", cost_usd: 1, warn_at: [1], limit: "block" }],
+    } as unknown as UsageConfig;
+    expect(budgetBlockFor(paidRequest(path, { usage }))).toBeUndefined();
+    await landCall(ledger, path, { usage });
+    expect(budgetBlockFor(paidRequest(path, { usage }))?.budget_name).toBe("tiny");
+  });
+
+  test("through NanoGPT is priced from NanoGPT's catalog", async () => {
+    const { ledger, path } = ledgerAt();
+    const fetched = catalogCarries(NANOGPT_CATALOG_ENTRY);
+    close(required(await landCall(ledger, path, { provider: "nanogpt", model: "vendor/model" })), 2);
+    expect(fetched).toContain(NANOGPT_MODELS_URL);
+    expect(fetched).not.toContain(OPENROUTER_CATALOG);
+  });
+
+  test("on a model the catalog doesn't carry doesn't refetch the catalog every call", async () => {
+    const { ledger, path } = ledgerAt();
+    const fetched = catalogCarries(OPUS_5_5_CATALOG_ENTRY);
+    for (let i = 0; i < 5; i++) {
+      expect(await landCall(ledger, path, { provider: "deepseek", model: "deepseek-reasoner" })).toBeNull();
+    }
+    expect(fetched).toEqual([OPENROUTER_CATALOG]);
+  });
+
+  test("on a subscription never touches a catalog", async () => {
+    const { ledger, path } = ledgerAt();
+    const fetched = catalogCarries(OPUS_5_5_CATALOG_ENTRY);
+    setSubscriptionProviders([], [["ada", ["anthropic"]]]);
+    expect(await landCall(ledger, path)).toBe(0);
+    expect(fetched).toEqual([]);
+  });
+
+  test("tries a catalog that's down once every few minutes rather than on every call, and is priced again once it's back", async () => {
+    const { ledger, path } = ledgerAt();
+    const failures: Array<() => Response> = [
+      () => new Response("down", { status: 503 }),
+      () => { throw new TypeError("fetch failed"); },
+    ];
+    const fetched = catalogAnswers(() => failures.shift()?.() ?? Response.json({ data: [OPUS_5_5_CATALOG_ENTRY] }));
+    setSystemTime(INSTALLED_AT);
+    for (let i = 0; i < 3; i++) expect(await landCall(ledger, path)).toBeNull();
+    expect(fetched).toHaveLength(1);
+    setSystemTime(INSTALLED_AT + HOUR);
+    for (let i = 0; i < 3; i++) expect(await landCall(ledger, path)).toBeNull();
+    expect(fetched).toHaveLength(2);
+    setSystemTime(INSTALLED_AT + 2 * HOUR);
+    close(required(await landCall(ledger, path)), 4);
+    expect(fetched).toHaveLength(3);
+  });
+
+  test("isn't held up for more than a minute by a catalog that never answers", async () => {
+    const { ledger, path } = ledgerAt();
+    const spy = spyOn(globalThis, "fetch").mockImplementation(((_input: string | URL | Request, init?: RequestInit) =>
+      new Promise<Response>((_resolve, reject) => {
+        init?.signal?.addEventListener("abort", () => reject(init.signal?.reason as Error), { once: true });
+      })) as typeof fetch);
+    restores.push(() => spy.mockRestore());
+    jest.useFakeTimers();
+    try {
+      const landed = landCall(ledger, path);
+      jest.advanceTimersByTime(MINUTE);
+      expect(await landed).toBeNull();
+    } finally {
+      jest.useRealTimers();
+    }
   });
 });

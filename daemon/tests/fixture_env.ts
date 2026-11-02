@@ -1,6 +1,7 @@
 import { afterEach } from "bun:test";
 
 import { restoreTestEnv } from "./support/env.ts";
+import { answerPricingCatalogsWithNoModels } from "./support/pricing_catalogs.ts";
 import { testRunRoot } from "./support/tmp.ts";
 
 const LONGEST_TIMER_DELAY_MS = 2 ** 31 - 1;
@@ -13,5 +14,6 @@ process.env["USER"] = "peggy";
 process.env["TMPDIR"] = testRunRoot();
 
 giveTheEventLoopATimerToSleepOn();
+answerPricingCatalogsWithNoModels();
 
 afterEach(restoreTestEnv);

@@ -10,6 +10,12 @@ const OPENROUTER_CATALOG_URL = "https://openrouter.ai/api/v1/models";
 
 export const PRICING_TTL_MS = 24 * 60 * 60 * 1000;
 
+const CATALOG_REFRESH_AGE_MS = PRICING_TTL_MS - 60 * 60 * 1000;
+
+const CATALOG_RETRY_MS = 5 * 60 * 1000;
+
+const CATALOG_TIMEOUT_MS = 10_000;
+
 export interface ModelPricing {
   input_per_token: number;
   output_per_token: number;
@@ -185,11 +191,12 @@ export class PricingEngine {
   readonly #inflight = new Map<string, Promise<void>>();
   readonly #warnedUnusable = new Set<string>();
   readonly #catalogFetchedAt = new Map<string, number>();
+  readonly #catalogTriedAt = new Map<string, number>();
   readonly #now: () => number;
 
   constructor(
     store: PricingStore,
-    fetchImpl: CatalogFetch = (url) => globalThis.fetch(url),
+    fetchImpl: CatalogFetch = (url) => globalThis.fetch(url, { signal: AbortSignal.timeout(CATALOG_TIMEOUT_MS) }),
     now: () => number = Date.now,
   ) {
     this.#store = store;
@@ -216,8 +223,12 @@ export class PricingEngine {
   async getOrFetch(provider: string, model: string): Promise<ModelPricing | undefined> {
     const hit = this.cached(provider, model);
     if (hit) return hit;
-    await this.#refreshCatalog(catalogSource(provider));
+    await this.#refreshCatalog(catalogSource(provider), PRICING_TTL_MS);
     return this.cached(provider, model);
+  }
+
+  async refreshForCall(provider: string): Promise<void> {
+    await this.#refreshCatalog(catalogSource(provider), CATALOG_REFRESH_AGE_MS);
   }
 
   cost(request: CostRequest): CostBreakdown | undefined {
@@ -229,14 +240,19 @@ export class PricingEngine {
     this.#store.dropExpired();
   }
 
-  async #refreshCatalog(source: CatalogSource): Promise<void> {
+  #isWithin(at: number | undefined, windowMs: number): boolean {
+    if (at === undefined) return false;
+    const age = this.#now() - at;
+    return age >= 0 && age < windowMs;
+  }
+
+  async #refreshCatalog(source: CatalogSource, maxAgeMs: number): Promise<void> {
     const fetchedAt = this.#store.catalogFetchedAt?.(source.url) ?? this.#catalogFetchedAt.get(source.url);
-    if (fetchedAt !== undefined) {
-      const age = this.#now() - fetchedAt;
-      if (age >= 0 && age < PRICING_TTL_MS) return;
-    }
+    if (this.#isWithin(fetchedAt, maxAgeMs)) return;
     let pending = this.#inflight.get(source.url);
     if (pending === undefined) {
+      if (this.#isWithin(this.#catalogTriedAt.get(source.url), CATALOG_RETRY_MS)) return;
+      this.#catalogTriedAt.set(source.url, this.#now());
       pending = this.#fetchCatalog(source).finally(() => {
         this.#inflight.delete(source.url);
       });
@@ -273,6 +289,7 @@ export class PricingEngine {
     const fetchedAt = this.#now();
     this.#store.putCatalogFetchedAt?.(source.url, fetchedAt);
     this.#catalogFetchedAt.set(source.url, fetchedAt);
+    this.#catalogTriedAt.delete(source.url);
   }
 
   #catalogUnavailable(source: CatalogSource, detail: string): void {
