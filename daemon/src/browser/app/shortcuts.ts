@@ -1,19 +1,19 @@
-export interface Shortcut { keys: string[]; description: string; where: "Anywhere" | "Message box" | "Conversation" }
+export interface Shortcut { keys: string[]; description: string; where: "Anywhere" | "Message box" | "Thread" }
 
 export const SHORTCUTS: readonly Shortcut[] = [
   { keys: ["Mod", "K"], description: "Open the command palette", where: "Anywhere" },
   { keys: ["Mod", "/"], description: "Focus the message box", where: "Anywhere" },
-  { keys: ["Mod", "Shift", "O"], description: "New conversation", where: "Anywhere" },
-  { keys: ["Alt", "↑ / ↓"], description: "Previous or next conversation", where: "Anywhere" },
-  { keys: ["Alt", "Shift", "↓"], description: "Next conversation with unread messages", where: "Anywhere" },
+  { keys: ["Mod", "Shift", "O"], description: "New thread", where: "Anywhere" },
+  { keys: ["Alt", "↑ / ↓"], description: "Previous or next thread", where: "Anywhere" },
+  { keys: ["Alt", "Shift", "↓"], description: "Next thread with unread messages", where: "Anywhere" },
   { keys: ["Mod", "\\"], description: "Show or hide the sidebar", where: "Anywhere" },
   { keys: ["Mod", ","], description: "Open settings", where: "Anywhere" },
   { keys: ["?"], description: "Show keyboard shortcuts", where: "Anywhere" },
   { keys: ["Enter"], description: "Send (Shift+Enter for a new line)", where: "Message box" },
   { keys: ["↑"], description: "Edit your last message when the box is empty", where: "Message box" },
   { keys: ["← / →"], description: "Previous or next response when the box is empty", where: "Message box" },
-  { keys: ["Esc"], description: "Stop a response, or move focus to the conversation", where: "Message box" },
-  { keys: ["↑ ↓ PgUp PgDn Home End"], description: "Scroll the conversation", where: "Conversation" },
+  { keys: ["Esc"], description: "Stop a response, or move focus to the thread", where: "Message box" },
+  { keys: ["↑ ↓ PgUp PgDn Home End"], description: "Scroll the thread", where: "Thread" },
 ];
 
 const MOD_ENTER_SENDS: Shortcut = { keys: ["Mod", "Enter"], description: "Send (Enter for a new line)", where: "Message box" };
@@ -23,7 +23,7 @@ const VIM_COMPOSER: Readonly<Record<string, string>> = {
   "Send (Enter for a new line)": "Send from any mode (Enter adds a new line in insert mode)",
   "Edit your last message when the box is empty": "Edit your last message when the box is empty, in insert mode",
   "Previous or next response when the box is empty": "Previous or next response when the box is empty, in insert mode",
-  "Stop a response, or move focus to the conversation": "Switch to normal mode (Stop ends a response)",
+  "Stop a response, or move focus to the thread": "Switch to normal mode (Stop ends a response)",
 };
 
 export function shortcutsFor(enterSends: boolean, vim = false): readonly Shortcut[] {

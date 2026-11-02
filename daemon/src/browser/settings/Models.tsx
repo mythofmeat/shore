@@ -3,7 +3,7 @@ import type { ModelInfoResult } from "../../protocol/ModelInfoResult.ts";
 import type { ModelSettingsDetail } from "../../protocol/ModelSettingsDetail.ts";
 import type { ModelSettingSchemaEntry } from "../../protocol/ModelSettingSchemaEntry.ts";
 import type { ModelPreferenceScope } from "../../protocol/ModelPreferenceScope.ts";
-import type { WorkspaceSnapshot } from "../workspace.ts";
+import type { ChromeSnapshot } from "../workspace.ts";
 import { modelSettingControl } from "../model_forms.ts";
 import { IconButton, Spinner } from "../ui/controls.tsx";
 import { Field, fieldLabel } from "../ui/Field.tsx";
@@ -81,7 +81,7 @@ function SamplerRow({ entry, detail, scope, target, saved }: { entry: ModelSetti
   </SettingRow>;
 }
 
-function ModelSettings({ target, state }: { target: ModelTarget; state: WorkspaceSnapshot }) {
+function ModelSettings({ target, state }: { target: ModelTarget; state: ChromeSnapshot }) {
   const [scope, setScope] = useState<ModelPreferenceScope>("character");
   const [version, setVersion] = useState(0);
   const { data, error } = useOperation(state, "model_settings", targetArgs(target), [targetKey(target), version]);
@@ -98,8 +98,9 @@ function ModelSettings({ target, state }: { target: ModelTarget; state: Workspac
   </SettingsSection>;
 }
 
-export function ModelsPage({ state }: { state: WorkspaceSnapshot }) {
-  const { listing, refresh } = useModelListing(state);
+export function ModelsPage({ state }: { state: ChromeSnapshot }) {
+  const { listing, reload } = useModelListing(state);
+  const changed = async () => { workspace.noteActiveModel((await reload()).active ?? null); };
   const [picker, setPicker] = useState<{ target: ModelTarget; current: string | null } | null>(null);
   const [inspect, setInspect] = useState<Inspect>({ kind: "character" });
   const tools = useOperation(state, "tools", {}, []);
@@ -140,6 +141,6 @@ export function ModelsPage({ state }: { state: WorkspaceSnapshot }) {
       {info.data === undefined ? info.error === "" ? <Spinner label="Loading model details" /> : null : <div className="rows padded"><p className="setting-label mono">{info.data.qualified_name}</p><ModelDetails info={info.data} /></div>}
     </SettingsSection>
     {inspect.kind === "model" ? null : <ModelSettings key={targetKey(inspect)} target={inspect} state={state} />}
-    {picker === null ? null : <ModelPicker state={state} target={picker.target} current={picker.current} scopes={false} close={() => setPicker(null)} changed={refresh} />}
+    {picker === null ? null : <ModelPicker state={state} target={picker.target} current={picker.current} scopes={false} close={() => setPicker(null)} changed={changed} />}
   </>;
 }

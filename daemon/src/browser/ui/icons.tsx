@@ -34,6 +34,7 @@ const ICONS = {
   video: stroke(<><rect x="3.5" y="5.5" width="17" height="13" rx="2.5" /><path d="M10 9.5v5l4.5-2.5z" /></>),
   soundOn: stroke(<><path d="M4 9.5v5h3.5L12 18.5v-13L7.5 9.5z" /><path d="M15.5 9a4.5 4.5 0 0 1 0 6M18 6.5a8 8 0 0 1 0 11" /></>),
   soundOff: stroke(<><path d="M4 9.5v5h3.5L12 18.5v-13L7.5 9.5z" /><path d="M16 9.5l5 5M21 9.5l-5 5" /></>),
+  folder: stroke(<path d="M3.5 7.5a2 2 0 0 1 2-2h4l2 2.5h7a2 2 0 0 1 2 2v7.5a2 2 0 0 1-2 2h-13a2 2 0 0 1-2-2z" />),
   archive: stroke(<><rect x="3.5" y="4.5" width="17" height="4" rx="1" /><path d="M5 8.5V19h14V8.5M10 12h4" /></>),
   star: stroke(<path d="M12 4l2.4 5 5.4.6-4 3.7 1.1 5.3L12 16l-4.9 2.6 1.1-5.3-4-3.7 5.4-.6z" />),
   download: stroke(<path d="M12 4v11M7 10l5 5 5-5M5 20h14" />),

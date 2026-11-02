@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
-import type { WorkspaceSnapshot } from "../workspace.ts";
+import type { ChromeSnapshot } from "../workspace.ts";
 import { Sidebar } from "../sidebar/Sidebar.tsx";
 import { sortThreads, threadsOnScreen } from "../sidebar/order.ts";
 import { Chat } from "../chat/Chat.tsx";
@@ -11,11 +11,11 @@ import { CompactionDialog } from "../chat/CompactionView.tsx";
 import { FolderDialogs, ThreadDialogs } from "../chat/thread_dialogs.tsx";
 import { COMPACTION_VIEW_EVENT, FOLDER_DIALOG_EVENT, THREAD_DIALOG_EVENT, type FolderDialogRequest, type ThreadDialogRequest } from "./intents.ts";
 import { Palette } from "./Palette.tsx";
-import { navigate, useRoute } from "./route.ts";
+import { navigate, openSettings, useRoute } from "./route.ts";
 import { adjacent, globalAction, nextUnread } from "./shortcuts.ts";
 import { perform, useCollapsedFolders, useNotifications, workspace } from "./state.ts";
 
-export function Shell({ state }: { state: WorkspaceSnapshot }) {
+export function Shell({ state }: { state: ChromeSnapshot }) {
   const route = useRoute();
   const mobile = useMediaQuery("(max-width: 860px)");
   const [expanded, setExpanded] = useStoredFlag("shore.sidebar", true);
@@ -69,17 +69,18 @@ export function Shell({ state }: { state: WorkspaceSnapshot }) {
         case "focus": navigate({ view: "chat" }); requestAnimationFrame(() => document.getElementById("message-composer")?.focus()); break;
         case "new-thread": if (state.character !== null && state.status === "ready") setDialog("thread"); break;
         case "sidebar": toggle(); break;
-        case "settings": navigate({ view: "settings", page: "models" }); break;
+        case "settings": openSettings(); break;
         case "help": navigate({ view: "settings", page: "keyboard" }); break;
         case "previous-thread": case "next-thread": {
-          const ids = threadsOnScreen(state.threads, state.folders, collapsed, state.thread).map((thread) => thread.id);
-          const next = adjacent(ids, state.thread ?? undefined, action === "next-thread" ? 1 : -1);
-          if (next !== undefined && next !== state.thread && state.status === "ready") perform(() => workspace.openThread(next));
+          const from = state.opening?.thread ?? state.thread;
+          const ids = threadsOnScreen(state.threads, state.folders, collapsed, from).map((thread) => thread.id);
+          const next = adjacent(ids, from ?? undefined, action === "next-thread" ? 1 : -1);
+          if (next !== undefined && next !== from && state.status === "ready") perform(() => workspace.openThread(next));
           break;
         }
         case "next-unread-thread": {
-          const next = nextUnread(sortThreads(state.threads, state.folders), state.thread);
-          if (next === undefined) toasts.show("No unread messages in other conversations");
+          const next = nextUnread(sortThreads(state.threads, state.folders), state.opening?.thread ?? state.thread);
+          if (next === undefined) toasts.show("No unread messages in other threads");
           else if (state.status === "ready") perform(() => workspace.openThread(next));
           break;
         }

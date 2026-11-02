@@ -451,3 +451,36 @@ test("threads can be dragged into order and into folders, the layout survives a 
   await expect(folder.getByRole("button", { name: "Stories (1 unread message)" })).toBeVisible();
   await finish();
 });
+
+test("effort and model sit together in the message box, a change shows at once and holds, and settings reopens on the last page", async ({ page }) => {
+  const finish = await watchPage(page);
+  await signIn(page);
+  await createCharacter(page, "ibis");
+
+  const effort = page.getByRole("button", { name: /^Reasoning effort:/ });
+  await effort.click();
+  const level = page.getByRole("menu", { name: "Reasoning effort" }).getByRole("menuitem").first();
+  const chosen = (await level.locator(".menu-label").textContent()) ?? "";
+  await level.click();
+  await expect(effort).toContainText(chosen);
+
+  await page.getByRole("button", { name: /^Chat model:/ }).click();
+  const picker = page.getByRole("dialog", { name: "Choose a model" });
+  await picker.getByRole("option", { name: "anthropic:fast-fixture" }).click();
+  await expect(picker).toBeHidden();
+  const model = page.getByRole("button", { name: /^Chat model:/ });
+  await expect(model).toContainText("fast-fixture");
+  await expect(page.getByText("ibis’s default now uses fast-fixture")).toBeVisible();
+
+  await page.reload();
+  await expect(page.getByText("Connected", { exact: true })).toBeVisible();
+  await expect(page.getByRole("button", { name: /^Chat model:/ })).toContainText("fast-fixture");
+
+  await page.getByRole("button", { name: "Settings", exact: true }).click();
+  await expect(page).toHaveURL(/#settings\/models$/);
+  await page.getByRole("navigation", { name: "Settings" }).getByRole("button", { name: "Usage & budgets" }).click();
+  await page.getByRole("button", { name: "Back to chat" }).click();
+  await page.getByRole("button", { name: "Settings", exact: true }).click();
+  await expect(page).toHaveURL(/#settings\/usage$/);
+  await finish();
+});

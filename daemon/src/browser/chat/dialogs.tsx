@@ -1,5 +1,5 @@
 import { useState, type ReactNode } from "react";
-import type { WorkspaceSnapshot } from "../workspace.ts";
+import type { ChromeSnapshot } from "../workspace.ts";
 import { Dialog } from "../ui/controls.tsx";
 import { toasts } from "../ui/toast.tsx";
 import { conversation, errorText, streamReplies, workspace } from "../app/state.ts";
@@ -31,24 +31,24 @@ export function Form({ title, close, submit, busy, error, action, danger = false
 }
 
 
-async function resync(state: WorkspaceSnapshot): Promise<void> {
+async function resync(state: ChromeSnapshot): Promise<void> {
   await workspace.refreshThreads();
   if (state.thread !== null) await workspace.actions.run("switch_thread", { name: state.thread, resync: true });
 }
 
-function viewing(state: WorkspaceSnapshot): boolean {
+function viewing(state: ChromeSnapshot): boolean {
   const now = workspace.getSnapshot();
   return now.character === state.character && now.thread === state.thread;
 }
 
-async function compactInBackground(state: WorkspaceSnapshot, label: string, work: () => Promise<string>): Promise<void> {
+async function compactInBackground(state: ChromeSnapshot, label: string, work: () => Promise<string>): Promise<void> {
   try {
     const message = await work();
     toasts.show(viewing(state) ? message : `“${label}”: ${message}`);
   } catch (failure) { toasts.show(errorText(failure), "error"); }
 }
 
-export function ConversationDialogs({ dialog, state, close }: { dialog: ConversationDialog; state: WorkspaceSnapshot; close: () => void }) {
+export function ConversationDialogs({ dialog, state, close }: { dialog: ConversationDialog; state: ChromeSnapshot; close: () => void }) {
   const thread = state.threads.find((item) => item.id === state.thread);
   const { busy, error, run } = useSubmit(close);
   const [text, setText] = useState("");
@@ -80,7 +80,7 @@ export function ConversationDialogs({ dialog, state, close }: { dialog: Conversa
       <label className="field"><span>Guidance for the new response</span><textarea className="input textarea" data-autofocus rows={4} value={text} onChange={(event) => setText(event.target.value)} /></label>
       <p className="form-hint">Used only for this regeneration; it isn’t saved to the thread.</p>
     </Form>;
-    case "system": return <Form title="Add a system message" close={close} busy={busy} error={error} action="Add" disabled={text.trim() === ""} submit={() => run(async () => {
+    case "system": return <Form title="Add system message" close={close} busy={busy} error={error} action="Add" disabled={text.trim() === ""} submit={() => run(async () => {
       await workspace.actions.run("inject_system", { text: text.trim() }); return undefined;
     })}>
       <label className="field"><span>Message</span><textarea className="input textarea" data-autofocus rows={4} value={text} onChange={(event) => setText(event.target.value)} /></label>

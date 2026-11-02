@@ -1,10 +1,16 @@
 import { expect, test } from "bun:test";
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
+import { chromeOf } from "../src/browser/chrome.ts";
+import { liveTurn, type WorkspaceSnapshot } from "../src/browser/workspace.ts";
 import { Markdown, safeHref } from "../src/browser/markdown.tsx";
 import { imageFilename, mediaSource } from "../src/browser/media.ts";
 import { Pictures, unplacedPictures } from "../src/browser/pictures.tsx";
 import { runInNewContext } from "node:vm";
+
+function emptySnapshot(): WorkspaceSnapshot {
+  return { characters: [], threads: [], operations: [], requests: [], messages: [], metadata: {}, streams: [], media: [], mediaLimited: false, activity: [], config: {}, error: "", status: "ready", detail: "", character: "ada", thread: "main", previousSegment: null, segmentView: null, uncertain: [], opening: null, folders: [], manualOrder: false, compaction: null };
+}
 
 test("markdown renders formatting but never raw HTML, unsafe links or remote images", () => {
   const html = renderToStaticMarkup(createElement(Markdown, { text: "*waves* **hi** `code`\n\n- one\n- two\n\n<img src=x onerror=alert(1)>\n\n[ok](https://example.com) [bad](javascript:alert(1)) ![pic](https://example.com/p.png)" }));
@@ -84,4 +90,14 @@ test("browser operation validators run without dynamic code generation", async (
   expect(script).toBeDefined();
   const result: unknown = runInNewContext(`${script}; [module.exports.validOperationInput('history_page', {segment:2, before:40}), module.exports.validOperationInput('history_page', {before:'active'}), module.exports.validOperationResult('edit', {ref:'1', edited:true})];`, { TextEncoder, module: { exports: {} } }, { contextCodeGeneration: { strings: false, wasm: false }, timeout: 5000 });
   expect(result).toEqual([true, false, true]);
+});
+
+test("a streaming reply never reaches the parts of the page that don't show it", () => {
+  const before = emptySnapshot();
+  const chrome = chromeOf(undefined, before);
+  const streaming = { ...before, streams: [liveTurn("key", "rid", null)], messages: [], activity: [{ id: 1, type: "stream_start", data: null, previewLimited: false }], metadata: {}, media: [], mediaLimited: true };
+  expect(chromeOf(chrome, streaming)).toBe(chrome);
+  const opened = { ...streaming, thread: "side" };
+  expect(chromeOf(chrome, opened)).not.toBe(chrome);
+  expect(chromeOf(chrome, opened).thread).toBe("side");
 });

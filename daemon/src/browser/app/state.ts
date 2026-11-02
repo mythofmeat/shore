@@ -1,5 +1,6 @@
 import { useSyncExternalStore } from "react";
 import { BrowserConnection } from "../connection.ts";
+import { chromeOf } from "../chrome.ts";
 import { CompactionWatch, type PassRecord } from "../chat/compaction_watch.ts";
 import { ConversationRequests, type ConversationScope } from "../chat/requests.ts";
 import { ReadMarks } from "../chat/read_marks.ts";
@@ -11,7 +12,7 @@ import { listRequests } from "../request_history.ts";
 import { FontSizeStore, type FontSizeId } from "../font_size.ts";
 import { ThemeStore, type ThemeId } from "../theme.ts";
 import { toasts } from "../ui/toast.tsx";
-import { Workspace, type WorkspaceSnapshot } from "../workspace.ts";
+import { Workspace, type ChromeSnapshot, type WorkspaceSnapshot } from "../workspace.ts";
 
 declare const SHORE_WEB_CONTRACT: string;
 declare const SHORE_WEB_PROTOCOL: number;
@@ -46,6 +47,21 @@ addEventListener("focus", () => { notifier.markRead(); });
 
 export function useWorkspace(): WorkspaceSnapshot {
   return useSyncExternalStore(workspace.subscribe, workspace.getSnapshot);
+}
+
+let chrome: ChromeSnapshot | undefined;
+
+function chromeSnapshot(): ChromeSnapshot {
+  chrome = chromeOf(chrome, workspace.getSnapshot());
+  return chrome;
+}
+
+export function useChrome(): ChromeSnapshot {
+  return useSyncExternalStore(workspace.subscribe, chromeSnapshot);
+}
+
+export function useWorkspaceValue<T>(select: (state: WorkspaceSnapshot) => T): T {
+  return useSyncExternalStore(workspace.subscribe, () => select(workspace.getSnapshot()));
 }
 
 export function useTheme(): ThemeId {

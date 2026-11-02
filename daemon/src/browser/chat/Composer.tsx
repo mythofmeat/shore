@@ -1,7 +1,7 @@
 import { useEffect, useLayoutEffect, useRef, useState, type ClipboardEvent, type DragEvent } from "react";
 import type { ImageUpload } from "../../protocol/ImageUpload.ts";
 import type { RequestFinished } from "../../protocol/RequestFinished.ts";
-import type { WorkspaceSnapshot } from "../workspace.ts";
+import type { ChromeSnapshot } from "../workspace.ts";
 import { InterruptedRequestError } from "../connection.ts";
 import { browserDraft, forgetSending, handOverSending, type DraftContent } from "../drafts.ts";
 import { randomUUID } from "../platform.ts";
@@ -10,10 +10,11 @@ import { MAX_ATTACHMENT_BYTES, MAX_ATTACHMENTS } from "../../swp/limits.ts";
 import { IconButton, whenNoDialogOpen } from "../ui/controls.tsx";
 import { Icon } from "../ui/icons.tsx";
 import { toasts } from "../ui/toast.tsx";
-import { conversation, enterSends, errorText, streamReplies, useConversationActive, VIM_MODE_KEY, workspace } from "../app/state.ts";
+import { conversation, enterSends, errorText, streamReplies, useConversationActive, useWorkspaceValue, VIM_MODE_KEY, workspace } from "../app/state.ts";
 import { useStoredFlag } from "../ui/hooks.ts";
 import { swipe } from "./actions.ts";
 import { EffortChip } from "./effort.tsx";
+import { ModelChip } from "./models.tsx";
 import { QUOTE_EVENT, QUOTE_READY_EVENT, withQuote } from "./quote.ts";
 import { droppedNotice } from "./sending.ts";
 import type { default as VimEditorView, VimInput } from "./VimEditor.tsx";
@@ -34,7 +35,7 @@ async function readImage(file: File): Promise<ImageUpload> {
 
 let vimEditor: typeof VimEditorView | undefined;
 
-export function Composer({ state, character, mobile }: { state: WorkspaceSnapshot; character: string; mobile: boolean }) {
+export function Composer({ state, character, mobile }: { state: ChromeSnapshot; character: string; mobile: boolean }) {
   const key = JSON.stringify([state.character, state.thread]);
   const [store] = useState(() => browserDraft(key));
   const [draft, setDraft] = useState<DraftContent>({ text: "", images: [] });
@@ -51,7 +52,10 @@ export function Composer({ state, character, mobile }: { state: WorkspaceSnapsho
   const vimInput = useRef<VimInput>(null);
   const files = useRef<HTMLInputElement>(null);
   const active = useConversationActive({ character: state.character, thread: state.thread });
-  const streaming = active || state.streams.some((stream) => !stream.final && stream.subagent === null);
+  const replying = useWorkspaceValue((live) => live.streams.some((stream) => !stream.final && stream.subagent === null));
+  const streaming = active || replying;
+  const [stopping, setStopping] = useState(false);
+  useEffect(() => { if (!streaming) setStopping(false); }, [streaming]);
   const request = state.requests.find((item) => item.name === "message");
   const ready = state.status === "ready" && request?.available !== false;
 
@@ -129,9 +133,9 @@ export function Composer({ state, character, mobile }: { state: WorkspaceSnapsho
     const unchanged = () => {
       const selected = workspace.getSnapshot();
       const synced = connection.selection;
-      return connection.status === "ready" && selected.character === state.character && selected.thread === state.thread && synced.character === state.character && synced.thread === state.thread;
+      return connection.status === "ready" && selected.opening === null && selected.character === state.character && selected.thread === state.thread && synced.character === state.character && synced.thread === state.thread;
     };
-    if (!unchanged()) { toasts.show("The conversation changed before sending. Your draft was kept.", "error"); return; }
+    if (!unchanged()) { toasts.show("The thread changed before sending. Your draft was kept.", "error"); return; }
     try { checkAttachments(submitted.images); } catch (error) { toasts.show(errorText(error), "error"); return; }
     workspace.closeSegment();
     const rid = randomUUID();
@@ -146,7 +150,7 @@ export function Composer({ state, character, mobile }: { state: WorkspaceSnapsho
     submitting.current = true;
     try {
       await store.send(rid, submitted).catch((error: unknown) => { kept = false; setUnsaved(true); workspace.report(error); });
-      if (!unchanged()) { await restore("The conversation changed before sending. Your draft was kept."); return; }
+      if (!unchanged()) { await restore("The thread changed before sending. Your draft was kept."); return; }
       finished = conversation.submit("message", { stream: streamReplies(), text: submitted.text, image_data: submitted.images }, { rid, accepted: () => { accepted = true; void forgetSending(rid).catch(() => {}); } });
     } finally { submitting.current = false; }
     try {
@@ -168,7 +172,7 @@ export function Composer({ state, character, mobile }: { state: WorkspaceSnapsho
     if (current.current.text !== "" || current.current.images.length > 0) return false;
     if (pressed === "ArrowUp") { dispatchEvent(new CustomEvent("shore:edit-last")); return true; }
     if ((pressed !== "ArrowLeft" && pressed !== "ArrowRight") || streaming) return false;
-    const last = state.messages.findLast((message) => message.role === "assistant");
+    const last = workspace.getSnapshot().messages.findLast((message) => message.role === "assistant");
     if (last === undefined) return false;
     void swipe(last, pressed === "ArrowLeft" ? "prev" : "next", true).catch((error: unknown) => toasts.show(errorText(error), "error"));
     return true;
@@ -190,17 +194,17 @@ export function Composer({ state, character, mobile }: { state: WorkspaceSnapsho
           <button type="button" className="attachment-remove" aria-label={`Remove ${image.filename}`} onClick={() => void change({ ...current.current, images: current.current.images.filter((_, item) => item !== index) })}><Icon name="close" size={12} /></button>
         </div>)}
       </div>}
-      {vim && VimEditor !== undefined ? <VimEditor ref={vimInput} text={draft.text} placeholder={`Message ${character}`} editable={loaded} autoFocus={loaded}
+      {vim && VimEditor !== undefined ? <VimEditor ref={vimInput} text={draft.text} placeholder={`Message ${character}`} editable={loaded && state.opening === null} autoFocus={loaded}
         change={(text) => void change({ ...current.current, text })} paste={(list) => void attach(list)} blank={blankKey}
         submit={(mod) => { if (!submits(mod)) return false; void send(); return true; }} />
-      : <textarea ref={area} id="message-composer" aria-label="Message" placeholder={`Message ${character}`} rows={1} value={draft.text} disabled={!loaded || (vim && !vimFailed)}
+      : <textarea ref={area} id="message-composer" aria-label="Message" placeholder={`Message ${character}`} rows={1} value={draft.text} readOnly={state.opening !== null} disabled={!loaded || (vim && !vimFailed)}
         onChange={(event) => void change({ ...current.current, text: event.target.value })} onPaste={onPaste}
         onKeyDown={(event) => {
           if (event.nativeEvent.isComposing) return;
           const plain = !event.ctrlKey && !event.metaKey && !event.altKey && !event.shiftKey;
           if (event.key === "Escape") {
             event.preventDefault();
-            if (streaming) conversation.cancel();
+            if (streaming) { setStopping(true); conversation.cancel(); }
             else document.querySelector<HTMLElement>(".transcript")?.focus();
             return;
           }
@@ -211,9 +215,10 @@ export function Composer({ state, character, mobile }: { state: WorkspaceSnapsho
       <div className="composer-bar">
         <IconButton icon="attach" label="Attach image" disabled={!loaded} onClick={() => files.current?.click()} />
         <input ref={files} type="file" accept={IMAGE_TYPES.join(",")} multiple hidden onChange={(event) => { const list = [...(event.target.files ?? [])]; event.target.value = ""; void attach(list); }} />
+        <ModelChip state={state} />
         <EffortChip state={state} />
         <span className="composer-status">{unsaved ? "Draft not saved in this browser" : ""}</span>
-        {streaming ? <button type="button" className="stop" onClick={() => conversation.cancel()}><Icon name="stop" size={14} />Stop</button>
+        {streaming ? <button type="button" className="stop" disabled={stopping} onClick={() => { setStopping(true); conversation.cancel(); }}>{stopping ? <><span className="spinner chip-spinner" aria-hidden="true" />Stopping…</> : <><Icon name="stop" size={14} />Stop</>}</button>
           : <button type="button" className="send" aria-label="Send" title="Send" disabled={empty || !ready} onClick={() => void send()}><Icon name="send" /></button>}
       </div>
     </div>

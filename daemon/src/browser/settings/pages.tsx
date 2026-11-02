@@ -1,5 +1,5 @@
 import type { ComponentType } from "react";
-import type { WorkspaceSnapshot } from "../workspace.ts";
+import type { ChromeSnapshot } from "../workspace.ts";
 import type { SettingsPage } from "../app/route.ts";
 import { AppearancePage } from "./Appearance.tsx";
 import { ArchivesPage } from "./Archives.tsx";
@@ -16,7 +16,7 @@ import { ToolsPage } from "./Tools.tsx";
 import { TracesPage } from "./Traces.tsx";
 import { UsagePage } from "./Usage.tsx";
 
-export const SETTINGS_PAGE_VIEWS: Record<SettingsPage, ComponentType<{ state: WorkspaceSnapshot }>> = {
+export const SETTINGS_PAGE_VIEWS: Record<SettingsPage, ComponentType<{ state: ChromeSnapshot }>> = {
   models: ModelsPage, characters: CharactersPage, appearance: AppearancePage, keyboard: KeyboardPage,
   providers: ProvidersPage, usage: UsagePage, configuration: ConfigurationPage, devices: DevicesPage,
   memory: MemoryPage, diagnostics: DiagnosticsPage, traces: TracesPage, tools: ToolsPage, archives: ArchivesPage, debug: DebugPage,

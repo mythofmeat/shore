@@ -26,19 +26,19 @@ function truncatedLine(text: string): string {
 
 export type OpenImage = (source: string, caption: string) => void;
 
-function ReasoningChip({ text, redacted = false, live = false }: { text: string; redacted?: boolean; live?: boolean }) {
-  const [open, setOpen] = useState(false);
+function ReasoningChip({ text, redacted = false, live = false, detailed = false }: { text: string; redacted?: boolean; live?: boolean; detailed?: boolean }) {
+  const [open, setOpen] = useState(detailed);
   if (redacted) return <div className="chip static"><span>Reasoning hidden by the provider</span></div>;
   return <div className="reasoning">
     <button type="button" className="chip" aria-expanded={open} onClick={() => setOpen(!open)}>
       <span>{live ? "Thinking…" : "Reasoning"}</span><Icon name={open ? "chevronUp" : "chevronRight"} size={14} />
     </button>
-    {open ? <div className="reasoning-text"><Markdown text={text} /></div> : null}
+    {open ? <div className="reasoning-text"><Markdown text={text} live={live} /></div> : null}
   </div>;
 }
 
-function ToolChip({ view, openImage }: { view: Extract<BlockView, { kind: "tool" }>; openImage: OpenImage }) {
-  const [open, setOpen] = useState(false);
+function ToolChip({ view, openImage, detailed = false }: { view: Extract<BlockView, { kind: "tool" }>; openImage: OpenImage; detailed?: boolean }) {
+  const [open, setOpen] = useState(detailed);
   const summary = toolSummary(view.input);
   const running = view.output === null;
   const input = formatToolInput(view.input);
@@ -62,14 +62,14 @@ export function ImageThumb({ source, caption, open }: { source: string; caption:
   return <button type="button" className="image-thumb" onClick={() => open(source, caption)} aria-label={`Open ${caption}`}><img src={source} alt={caption} loading="lazy" /></button>;
 }
 
-function Step({ step, live, openImage }: { step: StepView; live: boolean; openImage: OpenImage }) {
-  return step.kind === "thinking" ? <ReasoningChip text={step.text} redacted={step.redacted} live={live} /> : <ToolChip view={step} openImage={openImage} />;
+function Step({ step, live, openImage, detailed = false }: { step: StepView; live: boolean; openImage: OpenImage; detailed?: boolean }) {
+  return step.kind === "thinking" ? <ReasoningChip text={step.text} redacted={step.redacted} live={live} detailed={detailed} /> : <ToolChip view={step} openImage={openImage} detailed={detailed} />;
 }
 
-function Activity({ steps, live, openImage, expanded = false }: { steps: StepView[]; live: boolean; openImage: OpenImage; expanded?: boolean }) {
+function Activity({ steps, live, openImage, expanded = false, detailed = false }: { steps: StepView[]; live: boolean; openImage: OpenImage; expanded?: boolean; detailed?: boolean }) {
   const [open, setOpen] = useState(expanded);
   const [only] = steps;
-  if (only !== undefined && steps.length === 1) return <Step step={only} live={live} openImage={openImage} />;
+  if (only !== undefined && steps.length === 1) return <Step step={only} live={live} openImage={openImage} detailed={detailed} />;
   const { label, detail } = activityHeadline(steps, live);
   const failed = steps.filter((step) => step.kind === "tool" && step.error).length;
   return <div className={`activity ${open ? "open" : ""}`}>
@@ -80,11 +80,11 @@ function Activity({ steps, live, openImage, expanded = false }: { steps: StepVie
       {failed === 0 ? null : <span className="tool-status error"><Icon name="alert" size={14} />{failed} failed</span>}
       {live ? <span className="spinner" aria-label="Working" /> : null}
     </button>
-    {open ? <div className="activity-steps">{steps.map((step, index) => <Step key={step.key} step={step} live={live && index === steps.length - 1} openImage={openImage} />)}</div> : null}
+    {open ? <div className="activity-steps">{steps.map((step, index) => <Step key={step.key} step={step} live={live && index === steps.length - 1} openImage={openImage} detailed={detailed} />)}</div> : null}
   </div>;
 }
 
-export function MessageBody({ message, display, openImage, live = false, expanded = false, embeds = false }: { message: Pick<Message, "content" | "content_blocks" | "images">; display: ViewValues; openImage: OpenImage; live?: boolean; expanded?: boolean; embeds?: boolean }) {
+export function MessageBody({ message, display, openImage, live = false, expanded = false, detailed = false, embeds = false }: { message: Pick<Message, "content" | "content_blocks" | "images">; display: ViewValues; openImage: OpenImage; live?: boolean; expanded?: boolean; detailed?: boolean; embeds?: boolean }) {
   const views = message.content_blocks.length === 0 ? [{ kind: "text" as const, key: "content", text: message.content }] : blockViews(message.content_blocks);
   const shown = views.filter((view) => view.kind === "thinking" ? display.thinking !== "off" : view.kind === "tool" ? display.tools !== "off" : view.kind !== "image" || display.images !== "off");
   const items = bodyItems(shown);
@@ -99,9 +99,9 @@ export function MessageBody({ message, display, openImage, live = false, expande
     {items.map((item, index): ReactNode => {
       const latest = live && index === items.length - 1;
       switch (item.kind) {
-        case "text": return <Markdown key={item.key} text={item.text} className={latest ? "prose streaming-text" : "prose"} />;
+        case "text": return <Markdown key={item.key} text={item.text} live={latest} className={latest ? "prose streaming-text" : "prose"} />;
         case "image": return <div key={item.key} className="images"><ImageThumb source={item.source} caption="Image" open={openImage} /></div>;
-        case "activity": return <Activity key={item.key} steps={item.steps} live={latest} openImage={openImage} expanded={expanded} />;
+        case "activity": return <Activity key={item.key} steps={item.steps} live={latest} openImage={openImage} expanded={expanded} detailed={detailed} />;
       }
     })}
     {images.length === 0 ? null : <div className="images">{images.map((image, index) => <ImageThumb key={index} source={image.source} caption={image.caption} open={openImage} />)}</div>}
@@ -192,12 +192,16 @@ function AlternativesDialog({ message, close }: { message: Message; close: () =>
 function Swipe({ message, last, busy }: { message: Message; last: boolean; busy: boolean }) {
   const swipe = swipeState(message);
   const [listing, setListing] = useState(false);
-  const move = (direction: "prev" | "next") => { void swipeTo(message, direction, last).catch((error: unknown) => toasts.show(errorText(error), "error")); };
+  const [moving, setMoving] = useState(false);
+  const move = (direction: "prev" | "next") => {
+    setMoving(true);
+    void swipeTo(message, direction, last).catch((error: unknown) => toasts.show(errorText(error), "error")).finally(() => setMoving(false));
+  };
   if (!last && swipe.count <= 1) return null;
   return <div className="swipe" role="group" aria-label="Alternative responses">
-    <IconButton icon="chevronLeft" label="Previous response" size={16} disabled={busy || !swipe.canPrevious} onClick={() => move("prev")} />
+    <IconButton icon="chevronLeft" label="Previous response" size={16} disabled={busy || moving || !swipe.canPrevious} onClick={() => move("prev")} />
     <button type="button" className="swipe-count" aria-live="polite" aria-label={`Response ${String(swipe.position)} of ${String(swipe.count)}. Show all responses`} title="Show all responses" disabled={swipe.count <= 1} onClick={() => setListing(true)}><span className="swipe-current">{swipe.position}</span> / {swipe.count}</button>
-    <IconButton icon="chevronRight" label={swipe.atLast ? "Generate another response" : "Next response"} size={16} disabled={busy || (swipe.atLast && !last)} onClick={() => move("next")} />
+    <IconButton icon="chevronRight" label={swipe.atLast ? "Generate another response" : "Next response"} size={16} disabled={busy || moving || (swipe.atLast && !last)} onClick={() => move("next")} />
     {listing ? <AlternativesDialog message={message} close={() => setListing(false)} /> : null}
   </div>;
 }

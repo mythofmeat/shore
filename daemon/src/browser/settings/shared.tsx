@@ -1,13 +1,13 @@
 import { useCallback, useEffect, useState, type ReactNode } from "react";
 import type { OperationInput, OperationName, OperationResult } from "../../operations/types.ts";
-import type { WorkspaceSnapshot } from "../workspace.ts";
+import type { ChromeSnapshot } from "../workspace.ts";
 import { Spinner } from "../ui/controls.tsx";
 import { toasts } from "../ui/toast.tsx";
 import { errorText, workspace } from "../app/state.ts";
 
 export interface OperationState<N extends OperationName> { data: OperationResult<N> | undefined; error: string; loading: boolean; refresh: () => void; reload: () => Promise<void> }
 
-export function useOperation<N extends OperationName>(state: WorkspaceSnapshot, name: N, input: OperationInput<N>, deps: readonly unknown[], enabled = true): OperationState<N> {
+export function useOperation<N extends OperationName>(state: ChromeSnapshot, name: N, input: OperationInput<N>, deps: readonly unknown[], enabled = true): OperationState<N> {
   const [data, setData] = useState<OperationResult<N>>();
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);

@@ -1,12 +1,12 @@
-import type { WorkspaceSnapshot } from "../workspace.ts";
+import type { ChromeSnapshot } from "../workspace.ts";
 import { keyLabel, shortcutsFor } from "../app/shortcuts.ts";
 import { ENTER_SENDS_KEY, VIM_MODE_KEY } from "../app/state.ts";
 import { Switch } from "../ui/controls.tsx";
 import { useStoredFlag } from "../ui/hooks.ts";
 import { SettingRow, SettingsSection } from "./layout.tsx";
 
-export function KeyboardPage(_: { state: WorkspaceSnapshot }) {
-  const groups = ["Anywhere", "Message box", "Conversation"] as const;
+export function KeyboardPage(_: { state: ChromeSnapshot }) {
+  const groups = ["Anywhere", "Message box", "Thread"] as const;
   const [enterSends, setEnterSends] = useStoredFlag(ENTER_SENDS_KEY, true);
   const [vim, setVim] = useStoredFlag(VIM_MODE_KEY, false);
   const shortcuts = shortcutsFor(enterSends, vim);

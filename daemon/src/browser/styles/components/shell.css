@@ -156,6 +156,8 @@
   display: flex;
   align-items: center;
   -webkit-touch-callout: none;
+  -webkit-user-select: none;
+  user-select: none;
 }
 
 .thread-row .sidebar-item {
@@ -283,6 +285,14 @@
 .compaction-chip:hover {
   background: var(--surface);
   color: var(--text);
+}
+
+.shell[data-layout="mobile"] .compaction-chip {
+  padding: 0 8px;
+}
+
+.shell[data-layout="mobile"] .compaction-chip span:not(.spinner):not(.compaction-elapsed) {
+  display: none;
 }
 
 .compaction-elapsed {
@@ -465,27 +475,29 @@
 
 .model-chip {
   display: inline-flex;
+  flex: 0 1 auto;
   align-items: center;
   gap: 6px;
-  max-width: 280px;
-  height: 32px;
-  padding: 0 10px;
+  min-width: 0;
+  max-width: 240px;
+  height: 30px;
+  padding: 0 8px 0 10px;
   border: 1px solid var(--line-2);
   border-radius: 8px;
   background: transparent;
   color: var(--text-2);
+  font-size: var(--text-sm);
+  white-space: nowrap;
 }
 
-.model-chip:hover {
+.model-chip:hover:not(:disabled) {
   border-color: var(--line-3);
   color: var(--text);
 }
 
 .model-chip .mono {
   overflow: hidden;
-  font-size: var(--text-sm);
   text-overflow: ellipsis;
-  white-space: nowrap;
 }
 
 .banner {
@@ -503,4 +515,23 @@
 .banner .button {
   height: 28px;
   padding: 0 10px;
+}
+
+button.topbar-thread {
+  padding: 2px 6px;
+  margin-left: -6px;
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  font-family: inherit;
+  cursor: pointer;
+}
+
+button.topbar-thread:hover:not(:disabled) {
+  background: var(--surface);
+  color: var(--text);
+}
+
+button.topbar-thread:disabled {
+  cursor: default;
 }

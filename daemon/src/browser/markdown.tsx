@@ -81,9 +81,28 @@ export function markdownBlocks(text: string, previous: SettledMarkdown = UNSETTL
   return { blocks, settled: { text: base.text + tail.slice(0, cut), blocks: blocks.slice(0, base.blocks.length + open) } };
 }
 
-export const Markdown = memo(function Markdown({ text, className = "prose" }: { text: string; className?: string }) {
+const REMEMBERED_MESSAGES = 512;
+const remembered = new Map<string, { blocks: ReactNode[]; settled: SettledMarkdown }>();
+
+function firstRender(text: string): { blocks: ReactNode[]; settled: SettledMarkdown } {
+  const known = remembered.get(text);
+  if (known !== undefined) {
+    remembered.delete(text);
+    remembered.set(text, known);
+    return known;
+  }
+  const parsed = markdownBlocks(text);
+  remembered.set(text, parsed);
+  if (remembered.size > REMEMBERED_MESSAGES) {
+    const oldest = remembered.keys().next().value;
+    if (oldest !== undefined) remembered.delete(oldest);
+  }
+  return parsed;
+}
+
+export const Markdown = memo(function Markdown({ text, className = "prose", live = false }: { text: string; className?: string; live?: boolean }) {
   const settled = useRef<SettledMarkdown>(UNSETTLED);
   let blocks: ReactNode[];
-  try { ({ blocks, settled: settled.current } = markdownBlocks(text, settled.current)); } catch { return <div className={className}><p>{text}</p></div>; }
+  try { ({ blocks, settled: settled.current } = !live && settled.current === UNSETTLED ? firstRender(text) : markdownBlocks(text, settled.current)); } catch { return <div className={className}><p>{text}</p></div>; }
   return <div className={className}>{blocks}</div>;
 });

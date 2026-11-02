@@ -1,10 +1,10 @@
 import { useState } from "react";
-import type { WorkspaceSnapshot } from "../workspace.ts";
+import type { ChromeSnapshot } from "../workspace.ts";
 import type { ThreadView } from "../../protocol/ThreadView.ts";
 import { Avatar } from "../ui/avatar.tsx";
 import { IconButton, PointMenu, type MenuItem } from "../ui/controls.tsx";
 import { Icon } from "../ui/icons.tsx";
-import { navigate } from "../app/route.ts";
+import { navigate, openSettings } from "../app/route.ts";
 import { conversation, errorText, perform, useActiveRequests, useCollapsedFolders, workspace } from "../app/state.ts";
 import { openFolderDialog } from "../app/intents.ts";
 import { moveThreadTo } from "../chat/actions.ts";
@@ -23,7 +23,7 @@ function neighboursIn(ids: readonly string[], id: string, byActivity: boolean): 
   return { up: ids[at - 1], down: ids[at + 2], atEnd: at === ids.length - 1, byActivity };
 }
 
-function ThreadList({ state, shownThread, ready, select, newThread }: { state: WorkspaceSnapshot; shownThread: string | null; ready: boolean; select: (name: string) => void; newThread: () => void }) {
+function ThreadList({ state, shownThread, ready, select, newThread }: { state: ChromeSnapshot; shownThread: string | null; ready: boolean; select: (name: string) => void; newThread: () => void }) {
   const character = state.character ?? "";
   const collapsed = useCollapsedFolders(character);
   const sections = threadSections(state.threads, state.folders);
@@ -60,10 +60,10 @@ function placeRelative(ids: readonly string[], onto: string, dragged: string, af
   return before === undefined ? {} : { before };
 }
 
-function CharacterRow({ state, character, selected, openingThis, ready, select }: { state: WorkspaceSnapshot; character: WorkspaceSnapshot["characters"][number]; selected: boolean; openingThis: boolean; ready: boolean; select: () => void }) {
+function CharacterRow({ state, character, selected, openingThis, ready, select }: { state: ChromeSnapshot; character: ChromeSnapshot["characters"][number]; selected: boolean; openingThis: boolean; ready: boolean; select: () => void }) {
   const menu = useRowMenu();
   const items: MenuItem[] = [
-    { label: "New folder…", icon: "plus", onSelect: () => openFolderDialog({ kind: "new" }), disabled: !ready },
+    { label: "New folder…", icon: "folder", onSelect: () => openFolderDialog({ kind: "new" }), disabled: !ready },
     { label: "Sort threads by activity", icon: "refresh", ...(state.manualOrder ? {} : { detail: "On" }), onSelect: () => { void workspace.actions.run("thread_sort", { by_activity: state.manualOrder }).then((listing) => workspace.applyThreadListing(listing)).catch((error: unknown) => toasts.show(errorText(error), "error")); }, disabled: !ready },
   ];
   const openable = character.name === state.character;
@@ -77,13 +77,13 @@ function CharacterRow({ state, character, selected, openingThis, ready, select }
   </div>;
 }
 
-function ConnectionStatus({ status }: { status: WorkspaceSnapshot["status"] }) {
+function ConnectionStatus({ status }: { status: ChromeSnapshot["status"] }) {
   const [text, tone] = status === "ready" ? ["Connected", "ok"] : status === "error" ? ["Offline", "bad"] : status === "reload_required" ? ["Update ready", "bad"] : ["Reconnecting…", "wait"];
   return <span className="connection" data-tone={tone} title={text}><span className="connection-dot" />{text}</span>;
 }
 
 export function Sidebar({ state, mobile, close, collapse, newCharacter, newThread }: {
-  state: WorkspaceSnapshot; mobile: boolean; close: () => void; collapse: () => void; newCharacter: () => void; newThread: () => void;
+  state: ChromeSnapshot; mobile: boolean; close: () => void; collapse: () => void; newCharacter: () => void; newThread: () => void;
 }) {
   const [query, setQuery] = useState("");
   useActiveRequests();
@@ -96,12 +96,12 @@ export function Sidebar({ state, mobile, close, collapse, newCharacter, newThrea
   const selectCharacter = (name: string) => {
     navigate({ view: "chat" });
     if (mobile) close();
-    if (name !== state.character) perform(() => workspace.openCharacter(name));
+    if (name !== shownCharacter) perform(() => workspace.openCharacter(name));
   };
   const selectThread = (name: string) => {
     navigate({ view: "chat" });
     if (mobile) close();
-    if (name !== state.thread) perform(() => workspace.openThread(name));
+    if (name !== shownThread) perform(() => workspace.openThread(name));
   };
   return <aside className="sidebar" aria-label="Characters and threads">
     <div className="sidebar-header">
@@ -128,7 +128,7 @@ export function Sidebar({ state, mobile, close, collapse, newCharacter, newThrea
       {state.characters.length > 0 && characters.length === 0 ? <p className="sidebar-empty">No characters match “{query}”.</p> : null}
     </nav>
     <div className="sidebar-footer">
-      <button type="button" className="sidebar-item" onClick={() => { navigate({ view: "settings", page: "models" }); if (mobile) close(); }}><Icon name="settings" /><span className="sidebar-name">Settings</span></button>
+      <button type="button" className="sidebar-item" onClick={() => { openSettings(); if (mobile) close(); }}><Icon name="settings" /><span className="sidebar-name">Settings</span></button>
       <ConnectionStatus status={state.status} />
     </div>
   </aside>;

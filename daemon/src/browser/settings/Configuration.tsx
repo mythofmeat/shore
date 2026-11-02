@@ -3,7 +3,7 @@ import type { ConfigSchemaEntry } from "../../protocol/ConfigSchemaEntry.ts";
 import type { ConfigSources } from "../../protocol/ConfigSources.ts";
 import type { ConfigCheckResult } from "../../protocol/ConfigCheckResult.ts";
 import type { ConfigReloadResult } from "../../protocol/ConfigReloadResult.ts";
-import type { WorkspaceSnapshot } from "../workspace.ts";
+import type { ChromeSnapshot } from "../workspace.ts";
 import type { Control } from "../forms.ts";
 import { configAt, settingControl, settingText } from "../settings_forms.ts";
 import { Field } from "../ui/Field.tsx";
@@ -77,7 +77,7 @@ function ReloadResult({ result, apply, busy }: { result: ConfigReloadResult; app
   </div>;
 }
 
-export function ConfigurationPage({ state }: { state: WorkspaceSnapshot }) {
+export function ConfigurationPage({ state }: { state: ChromeSnapshot }) {
   const schema = useOperation(state, "config_schema", {}, []);
   const view = useOperation(state, "config", {}, []);
   const tools = useOperation(state, "tools", {}, []);

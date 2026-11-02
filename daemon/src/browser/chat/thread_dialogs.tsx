@@ -1,6 +1,6 @@
 import { useState } from "react";
 import type { ThreadView } from "../../protocol/ThreadView.ts";
-import type { WorkspaceSnapshot } from "../workspace.ts";
+import type { ChromeSnapshot } from "../workspace.ts";
 import { workspace } from "../app/state.ts";
 import { threadFileList } from "../sidebar/dialogs.tsx";
 import { threadLabel } from "../sidebar/Sidebar.tsx";
@@ -23,7 +23,7 @@ async function saveThreadSettings(thread: ThreadView, values: { label: string; p
   await workspace.refreshThreads();
 }
 
-function ThreadSettingsDialog({ state, thread, close }: { state: WorkspaceSnapshot; thread: ThreadView; close: () => void }) {
+function ThreadSettingsDialog({ state, thread, close }: { state: ChromeSnapshot; thread: ThreadView; close: () => void }) {
   const { busy, error, run } = useSubmit(close);
   const [label, setLabel] = useState(thread.label ?? "");
   const [purpose, setPurpose] = useState(thread.purpose ?? "");
@@ -67,7 +67,7 @@ function ForkDialog({ thread, close }: { thread: ThreadView; close: () => void }
   </Form>;
 }
 
-function ArchiveDialog({ state, thread, close }: { state: WorkspaceSnapshot; thread: ThreadView; close: () => void }) {
+function ArchiveDialog({ state, thread, close }: { state: ChromeSnapshot; thread: ThreadView; close: () => void }) {
   const { busy, error, run } = useSubmit(close);
   const label = threadLabel(thread);
   return <Form title={`Archive “${label}”?`} close={close} busy={busy} error={error} action="Archive" danger submit={() => run(async () => {
@@ -79,7 +79,7 @@ function ArchiveDialog({ state, thread, close }: { state: WorkspaceSnapshot; thr
   </Form>;
 }
 
-function MoveToFolderDialog({ state, thread, close }: { state: WorkspaceSnapshot; thread: ThreadView; close: () => void }) {
+function MoveToFolderDialog({ state, thread, close }: { state: ChromeSnapshot; thread: ThreadView; close: () => void }) {
   const { busy, error, run } = useSubmit(close);
   const [choice, setChoice] = useState(thread.folder ?? "");
   const [name, setName] = useState("");
@@ -120,7 +120,7 @@ export function FolderDialogs({ request, close }: { request: FolderDialogRequest
   }
 }
 
-export function ThreadDialogs({ state, request, close }: { state: WorkspaceSnapshot; request: ThreadDialogRequest; close: () => void }) {
+export function ThreadDialogs({ state, request, close }: { state: ChromeSnapshot; request: ThreadDialogRequest; close: () => void }) {
   const thread = state.threads.find((item) => item.id === request.thread);
   if (thread === undefined) return null;
   switch (request.kind) {

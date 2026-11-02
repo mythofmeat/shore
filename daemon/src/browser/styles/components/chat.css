@@ -941,6 +941,14 @@ button.chip:hover {
   color: var(--text-3);
 }
 
+.shell[data-layout="mobile"] .effort-name {
+  display: none;
+}
+
+.shell[data-layout="mobile"] .model-chip {
+  max-width: 44vw;
+}
+
 .composer-status {
   flex: 1;
   color: var(--text-3);
@@ -1322,7 +1330,7 @@ button.swipe-count:hover:not(:disabled) {
 
 .compaction-facts {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(130px, 1fr));
   gap: 8px 16px;
   margin: 0 0 12px;
 }
@@ -1338,13 +1346,23 @@ button.swipe-count:hover:not(:disabled) {
 }
 
 .compaction-log {
-  max-height: min(56vh, 620px);
+  max-height: min(52vh, 620px);
   overflow-y: auto;
   padding: 10px 12px;
   border: 1px solid var(--line-2);
   border-radius: var(--radius);
 }
 
+.shell[data-layout="mobile"] .compaction-log {
+  max-height: 34vh;
+}
+
 .dialog-footer-gap {
   flex: 1;
+}
+
+.button.thread-model {
+  justify-content: flex-start;
+  width: 100%;
+  text-align: left;
 }

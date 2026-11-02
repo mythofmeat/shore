@@ -1,4 +1,4 @@
-import { useCallback, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { startTransition, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import type { Message } from "../../protocol/Message.ts";
 import type { SegmentSummary } from "../../protocol/SegmentSummary.ts";
 import { liveTurn, type LiveTurn, type SegmentView, type WorkspaceSnapshot } from "../workspace.ts";
@@ -8,11 +8,14 @@ import { Dialog, Spinner } from "../ui/controls.tsx";
 import { Icon } from "../ui/icons.tsx";
 import { Markdown } from "../markdown.tsx";
 import { FullPicture } from "../pictures.tsx";
-import { conversation, perform, useActiveRequests, useDisplay, workspace } from "../app/state.ts";
+import { conversation, perform, useActiveRequests, useDisplay, useWorkspace, workspace } from "../app/state.ts";
 import { openCompactionView } from "../app/intents.ts";
 import { navigate } from "../app/route.ts";
 import { ImageThumb, MessageBody, MessageRow, type OpenImage } from "./Message.tsx";
 import { compactionPhase, regenReplaces, replyBlocks, savedPart, segmentDetail, segmentName, transcriptItems, visibleStreams } from "./transcript.ts";
+
+const FIRST_ROWS = 24;
+const MORE_ROWS = 32;
 
 function Lightbox({ image, close }: { image: { source: string; caption: string }; close: () => void }) {
   return <Dialog title={image.caption} close={close} wide>
@@ -32,7 +35,7 @@ function SubagentChip({ stream, openImage }: { stream: LiveTurn; openImage: Open
     {open ? <Dialog title={`Subagent ${name}`} close={() => setOpen(false)} wide>
       <p className="form-text">{stream.final ? "Finished." : "Working…"}</p>
       <MessageBody message={{ content: "", images: [], content_blocks: stream.blocks.filter((block) => block.type !== "text") }} display={display} openImage={openImage} live={!stream.final} expanded />
-      {stream.text === "" ? null : <Markdown text={stream.text} />}
+      {stream.text === "" ? null : <Markdown text={stream.text} live={!stream.final} />}
     </Dialog> : null}
   </>;
 }
@@ -65,19 +68,20 @@ function EmptyConversation({ character, state }: { character: string; state: Wor
   return <div className="empty">
     <Avatar name={character} avatar={info?.avatar} size={56} />
     <p className="empty-title">{character}</p>
-    <p className="empty-text">{state.previousSegment === null ? "No messages in this conversation yet." : "No messages in the current context yet."}</p>
+    <p className="empty-text">{state.previousSegment === null ? "No messages in this thread yet." : "No messages in the current context yet."}</p>
   </div>;
 }
 
 function SegmentLink({ lead, segment, ready }: { lead: string; segment: SegmentSummary | null; ready: boolean }) {
+  const [opening, setOpening] = useState(false);
   return <div className="segment-link">
     <div className="segment-link-text">
-      <span className="segment-link-name">{lead} {segment === null ? "the current conversation" : segmentName(segment)}</span>
+      <span className="segment-link-name">{lead} {segment === null ? "the current context" : segmentName(segment)}</span>
       {segment === null ? null : <span className="segment-link-detail">{segmentDetail(segment)}</span>}
     </div>
     {segment === null
       ? <button type="button" className="button" onClick={() => workspace.closeSegment()}>Back to current</button>
-      : <button type="button" className="button ghost" disabled={!ready} onClick={() => perform(() => workspace.openSegment(segment.index))}>View</button>}
+      : <button type="button" className="button ghost" disabled={!ready || opening} onClick={() => { setOpening(true); perform(async () => { try { await workspace.openSegment(segment.index); } finally { setOpening(false); } }); }}>{opening ? "Opening…" : "View"}</button>}
   </div>;
 }
 
@@ -102,7 +106,8 @@ function SegmentBanner({ view, state }: { view: SegmentView; state: WorkspaceSna
   </div>;
 }
 
-export function Transcript({ state, character, mobile }: { state: WorkspaceSnapshot; character: string; mobile: boolean }) {
+export function Transcript({ character, mobile }: { character: string; mobile: boolean }) {
+  const state = useWorkspace();
   const display = useDisplay();
   const active = useActiveRequests();
   const view = state.segmentView;
@@ -131,6 +136,14 @@ export function Transcript({ state, character, mobile }: { state: WorkspaceSnaps
     const merged = new Set(streaming.split("\n"));
     return transcriptItems(shown.filter((message) => !merged.has(message.msg_id)));
   }, [shown, streaming]);
+  const [rowLimit, setRowLimit] = useState(FIRST_ROWS);
+  useEffect(() => {
+    if (rowLimit === Infinity) return;
+    if (items.length <= rowLimit) { setRowLimit(Infinity); return; }
+    const timer = setTimeout(() => { startTransition(() => { setRowLimit((limit) => limit + MORE_ROWS); }); }, 0);
+    return () => clearTimeout(timer);
+  }, [rowLimit, items.length]);
+  const rows = items.length > rowLimit ? items.slice(-rowLimit) : items;
   const lastUser = live ? state.messages.findLast((message) => message.role === "user")?.msg_id : undefined;
   const waiting = live && streams.length === 0 ? conversation.awaitingStream(scope) : undefined;
   const info = state.characters.find((item) => item.name === character);
@@ -153,14 +166,14 @@ export function Transcript({ state, character, mobile }: { state: WorkspaceSnaps
       return;
     }
     if (follow.current) node.scrollTop = node.scrollHeight;
-  }, [visibleMessages, state.streams, state.media]);
+  }, [visibleMessages, state.streams, state.media, rows.length]);
   const onScroll = () => {
     const node = scroller.current;
     if (node === null) return;
     const atBottom = node.scrollHeight - node.scrollTop - node.clientHeight < 80;
     follow.current = atBottom;
     setAway(!atBottom);
-    if (node.scrollTop < 120 && view !== null && view.hasEarlier) loadEarlier();
+    if (node.scrollTop < 120 && view !== null && view.hasEarlier && rowLimit === Infinity) loadEarlier();
   };
   const jump = () => {
     const node = scroller.current;
@@ -170,13 +183,13 @@ export function Transcript({ state, character, mobile }: { state: WorkspaceSnaps
   };
   return <div className="transcript-wrap" data-opening={state.opening !== null} aria-busy={state.opening !== null}>
     {view === null ? null : <SegmentBanner view={view} state={state} />}
-    <div className="transcript" ref={scroller} onScroll={onScroll} tabIndex={-1} role="log" aria-label={view === null ? `Conversation with ${character}` : `${segmentName(view.segment)} with ${character}`} aria-live="off">
+    <div className="transcript" ref={scroller} onScroll={onScroll} tabIndex={-1} role="log" aria-label={view === null ? `Thread with ${character}` : `${segmentName(view.segment)} with ${character}`} aria-live="off">
       <div className="transcript-column">
         {view === null ? <ContextStart previous={state.previousSegment} ready={ready} />
           : view.hasEarlier ? <div className="load-earlier">{loading ? <Spinner label="Loading earlier messages" /> : <button type="button" className="button ghost" onClick={loadEarlier}>Load earlier messages</button>}</div>
-            : view.previous === null ? <div className="divider" role="separator">Start of the conversation</div> : <SegmentLink lead="Before this:" segment={view.previous} ready={ready} />}
+            : view.previous === null ? <div className="divider" role="separator">Start of the thread</div> : <SegmentLink lead="Before this:" segment={view.previous} ready={ready} />}
         {view === null && state.messages.length === 0 && streams.length === 0 && waiting === undefined ? ready ? <EmptyConversation character={character} state={state} /> : <div className="empty"><Spinner label="Loading conversation" /></div> : null}
-        {items.map((item) => {
+        {rows.map((item) => {
           switch (item.kind) {
             case "day": return <div key={item.key} className="divider" role="separator">{item.label}</div>;
             case "message": return <MessageRow key={item.key} message={item.message} character={character} avatar={info?.avatar} last={live && item.last && streams.length === 0 && waiting === undefined} lastUser={item.message.msg_id === lastUser}

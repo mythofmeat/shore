@@ -4,14 +4,14 @@ import type { ProviderPreset } from "../../protocol/ProviderPreset.ts";
 import type { ProviderStatus } from "../../protocol/ProviderStatus.ts";
 import type { SignInStarted } from "../../protocol/SignInStarted.ts";
 import type { OperationInput } from "../../operations/types.ts";
-import type { WorkspaceSnapshot } from "../workspace.ts";
+import type { ChromeSnapshot } from "../workspace.ts";
 import { Dialog, Menu, Spinner, Switch } from "../ui/controls.tsx";
 import { toasts } from "../ui/toast.tsx";
 import { errorText, workspace } from "../app/state.ts";
 import { SettingsSection } from "./layout.tsx";
 import { formatCost, formatNumber, formatTime, Loading, useAction, useOperation } from "./shared.tsx";
 
-function ProviderModels({ state, provider }: { state: WorkspaceSnapshot; provider: string }) {
+function ProviderModels({ state, provider }: { state: ChromeSnapshot; provider: string }) {
   const [hidden, setHidden] = useState(false);
   const listing = useOperation(state, "list_provider_models", { provider, include_hidden: hidden }, [provider, hidden]);
   const data = listing.data;
@@ -419,7 +419,7 @@ function TransportForm({ provider, sdks, close, done }: { provider: ProviderStat
   </FormDialog>;
 }
 
-function ProviderCard({ state, provider, sdks, refreshed }: { state: WorkspaceSnapshot; provider: ProviderStatus; sdks: readonly string[]; refreshed: () => void }) {
+function ProviderCard({ state, provider, sdks, refreshed }: { state: ChromeSnapshot; provider: ProviderStatus; sdks: readonly string[]; refreshed: () => void }) {
   const [models, setModels] = useState(false);
   const [editing, setEditing] = useState(false);
   const [dialog, setDialog] = useState<CredentialDialog>();
@@ -481,7 +481,7 @@ function ProviderCard({ state, provider, sdks, refreshed }: { state: WorkspaceSn
   </div>;
 }
 
-export function ProvidersPage({ state }: { state: WorkspaceSnapshot }) {
+export function ProvidersPage({ state }: { state: ChromeSnapshot }) {
   const providers = useOperation(state, "list_providers", {}, []);
   const presets = useOperation(state, "provider_presets", {}, [providers.data]);
   const [adding, setAdding] = useState(false);

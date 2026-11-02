@@ -1,4 +1,4 @@
-import { afterAll, expect, test } from "bun:test";
+import { afterAll, expect, spyOn, test } from "bun:test";
 import { mkdir, mkdtemp, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 
@@ -14,12 +14,15 @@ import { Diagnostics } from "../src/diagnostics.ts";
 import { MessageStore } from "../src/engine/message_store.ts";
 import type { Message } from "../src/engine/types.ts";
 import { dispatchCommand } from "../src/handler/commands.ts";
-import { buildCommandPathDeps } from "../src/handler/deps.ts";
-import type { SidecarRequest } from "../src/llm/types.ts";
+import { buildCommandPathDeps, buildGenerationDeps } from "../src/handler/deps.ts";
+import { runGeneration } from "../src/handler/generation.ts";
+import type { GenerateResponse, SidecarRequest } from "../src/llm/types.ts";
 import { createRuntime } from "../src/runtime.ts";
 import { DEFAULT_HANDSHAKE } from "../src/swp/connection.ts";
 import { SessionRouter } from "../src/swp/session.ts";
+import { required } from "../src/util/required.ts";
 import { restoreTestEnv, setTestEnv } from "./support/env.ts";
+import { eventsForResponse } from "./support/stream.ts";
 import { testTmp } from "./support/tmp.ts";
 import { until } from "./support/until.ts";
 
@@ -202,6 +205,47 @@ test("changing the model answers before the rebuild runs, and the rebuild then r
       expect(runtime.keepalive.warmThread("ada")).toBeUndefined();
       await until(() => runtime.cache.get("ada") !== undefined, "the detached rebuild");
       expect(runtime.keepalive.warmThread("ada")).toBe("main");
+    } finally {
+      await runtime.autonomy.shutdown();
+      await runtime.shutdown();
+    }
+  });
+});
+
+test("a message sent right after a model change uses the new model, with the rebuild still waiting to run", async () => {
+  await withAda(async (config, env) => {
+    config.models.chat.set("chat.other", {
+      name: "other", qualifiedName: "chat.other", category: "chat", providerKey: "anthropic",
+      sdk: "anthropic", modelId: "claude-other", apiKeyEnv: KEY_ENV,
+      maxContextTokens: 200_000, maxOutputTokens: 4096,
+    });
+    config.app.memory.compaction.enabled = false;
+    config.app.tools.enabled_tools = [];
+    const seen: SidecarRequest[] = [];
+    const reply = (request: SidecarRequest): GenerateResponse => {
+      seen.push(request);
+      return { model: request.model, content: "hi", content_blocks: [{ type: "text", text: "hi" }], finish_reason: "end_turn", usage: { input_tokens: 1, output_tokens: 1, cache_read_tokens: 0, cache_creation_tokens: 0 }, timing: { total_ms: 1, time_to_first_token_ms: 1 } };
+    };
+    const runtime = await createRuntime({ config, providers: { anthropic: { generate: async (request) => reply(request), stream: (request) => eventsForResponse(reply(request)) } }, env });
+    try {
+      const autonomy = new TurnAutonomyBridge(runtime.autonomy);
+      const commands = buildCommandPathDeps({ runtime, autonomy, diagnostics: new Diagnostics(), router: new SessionRouter(), handshake: DEFAULT_HANDSHAKE, providers: runtime.providers, env });
+      const session = { sessionId: 1, clientId: 1, clientType: "test", clientName: "test", capabilities: [], selectedCharacter: "ada", selectedThread: "main" };
+      const rebuilt = spyOn(runtime.cache, "reprimeFromDisk");
+      expect((await dispatchCommand(commands, { name: "switch_model", args: { name: "other" } }, { session, rid: "change", kind: "command" })).type).toBe("command_output");
+      const deps = buildGenerationDeps({ runtime, providers: runtime.providers, autonomy, diagnostics: new Diagnostics(), env, emitEvent: () => {} });
+      await runGeneration(deps, {
+        meta: { session, rid: "chat", kind: "message" },
+        body: { rid: "chat", text: "hello", stream: true, images: [], image_data: [] },
+        charName: "ada", regen: false, rid: "chat", signal: new AbortController().signal, send: async () => {},
+      });
+      expect(rebuilt).not.toHaveBeenCalled();
+      expect(required(seen.at(-1)).model).toBe("claude-other");
+      await until(() => rebuilt.mock.calls.length > 0, "the rebuild");
+      await until(() => runtime.keepalive.warmThread("ada") === "main", "keepalive to come back");
+      const armed = await Promise.resolve(runtime.cache.get("ada"));
+      expect(required(armed).model).toBe("claude-other");
+      rebuilt.mockRestore();
     } finally {
       await runtime.autonomy.shutdown();
       await runtime.shutdown();

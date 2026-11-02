@@ -2,11 +2,11 @@ import { useEffect, useState } from "react";
 import type { ClaudePlanLimit } from "../../protocol/ClaudePlanLimit.ts";
 import type { ClaudePlanLimitsReport } from "../../protocol/ClaudePlanLimitsReport.ts";
 import type { UsageBudget } from "../../protocol/UsageBudget.ts";
-import type { WorkspaceSnapshot } from "../workspace.ts";
+import type { ChromeSnapshot } from "../workspace.ts";
 import { focusedBudget, levelWarning, PLAN_WINDOWS, showPlanLimit, showUsage } from "../budget_display.ts";
 import { configAt } from "../settings_forms.ts";
 import { navigate } from "../app/route.ts";
-import { useDisplay, workspace } from "../app/state.ts";
+import { useDisplay, useWorkspaceValue, workspace } from "../app/state.ts";
 
 function PlanChip({ plan, mode }: { plan: ClaudePlanLimitsReport; mode: string }) {
   let shown: ClaudePlanLimit[];
@@ -21,11 +21,11 @@ function PlanChip({ plan, mode }: { plan: ClaudePlanLimitsReport; mode: string }
   </button>;
 }
 
-export function BudgetChip({ state }: { state: WorkspaceSnapshot }) {
+export function BudgetChip({ state }: { state: ChromeSnapshot }) {
   const values = useDisplay();
   const [budgets, setBudgets] = useState<UsageBudget[]>([]);
   const [plan, setPlan] = useState<ClaudePlanLimitsReport | undefined>(undefined);
-  const finished = state.activity.filter((item) => item.type === "request_finished").length;
+  const finished = useWorkspaceValue((live) => live.activity.findLast((item) => item.type === "request_finished")?.id ?? 0);
   useEffect(() => {
     if (values.usage === "off" || state.status !== "ready") return;
     let alive = true;

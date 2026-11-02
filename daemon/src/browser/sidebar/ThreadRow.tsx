@@ -21,7 +21,7 @@ export function threadMenuItems(thread: ThreadView, ready: boolean, neighbours: 
       "separator" as const,
       { label: "Move up", icon: "chevronUp" as const, onSelect: () => void moveThreadTo(thread.id, neighbours.up === undefined ? {} : { before: neighbours.up }), disabled: !ready || neighbours.up === undefined || neighbours.byActivity },
       { label: "Move down", icon: "chevronDown" as const, onSelect: () => void moveThreadTo(thread.id, neighbours.down === undefined ? {} : { before: neighbours.down }), disabled: !ready || neighbours.atEnd || neighbours.byActivity },
-      { label: "Move to folder…", icon: "archive" as const, onSelect: () => openThreadDialog("move", thread.id), disabled: !ready },
+      { label: "Move to folder…", icon: "folder" as const, onSelect: () => openThreadDialog("move", thread.id), disabled: !ready },
     ] : []),
     "separator",
     { label: "Archive…", icon: "archive", onSelect: () => openThreadDialog("archive", thread.id), disabled: !ready || thread.home, danger: true },

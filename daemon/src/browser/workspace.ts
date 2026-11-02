@@ -43,6 +43,9 @@ export interface WorkspaceSnapshot {
 
 export interface OpeningTarget { character: string | null; thread: string | null }
 
+export type LiveField = "messages" | "metadata" | "streams" | "media" | "mediaLimited" | "activity";
+export type ChromeSnapshot = Omit<WorkspaceSnapshot, LiveField>;
+
 export const EVENT_POLICIES = {
   hello: "navigation", history: "conversation", new_message: "conversation",
   stream_start: "stream", stream_chunk: "stream", stream_end: "stream",
@@ -311,7 +314,9 @@ export class Workspace {
         if (changed) this.#segmentEpoch += 1;
         if (character !== this.#state.character) this.#unread.clear();
         const sameCharacter = character === this.#state.character;
-        this.#patch({ opening: changed ? null : this.#state.opening, messages: changed ? messages : retainImages(messages, this.#state.messages, this.#state.media), media: changed ? [] : reconcileImages(this.#state.media, messages, this.#state.messages), previousSegment, segmentView: changed ? null : this.#state.segmentView,
+        const target = this.#state.opening;
+        const reached = target !== null && target.character === character && (target.thread === null || target.thread === thread);
+        this.#patch({ opening: reached ? null : target, messages: changed ? messages : retainImages(messages, this.#state.messages, this.#state.media), media: changed ? [] : reconcileImages(this.#state.media, messages, this.#state.messages), previousSegment, segmentView: changed ? null : this.#state.segmentView,
           character, thread, mediaLimited: changed ? false : this.#state.mediaLimited, metadata: changed ? {} : Object.fromEntries(Object.entries(this.#state.metadata).filter(([id]) => messages.some((item) => item.msg_id === id))), config: !changed && historyOnly ? this.#state.config : message.config, activity: changed ? this.#state.activity.filter((item) => item.type !== "phase") : this.#state.activity, streams: changed ? [] : this.#state.streams.filter((stream) => !stream.final || !messages.some((item) => item.msg_id === stream.msgId)) });
         if (changed && this.connection.status === "ready") void (sameCharacter ? this.refreshThreads() : this.refreshNavigation());
         if (!changed && moved) void this.#refreshSegmentNeighbours();

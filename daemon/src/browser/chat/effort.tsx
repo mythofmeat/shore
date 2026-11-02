@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
-import type { WorkspaceSnapshot } from "../workspace.ts";
+import type { OperationResult } from "../../operations/types.ts";
+import type { ChromeSnapshot } from "../workspace.ts";
 import { EFFORT_MENU_EVENT } from "../app/intents.ts";
 import { configAt } from "../settings_forms.ts";
 import { useOperation } from "../settings/shared.tsx";
@@ -10,7 +11,9 @@ import { errorText, workspace } from "../app/state.ts";
 
 const EFFORT = "reasoning_effort";
 
-export function EffortChip({ state }: { state: WorkspaceSnapshot }) {
+let lastDetail: { character: string | null; detail: Extract<OperationResult<"model_settings">, { setting_schema: unknown }> } | undefined;
+
+export function EffortChip({ state }: { state: ChromeSnapshot }) {
   const settings = useOperation(state, "model_settings", {}, [state.thread, configAt(state.config, "active_model")], state.character !== null);
   const [requested, setRequested] = useState(false);
   const [pending, setPending] = useState<{ value: string | null } | null>(null);
@@ -20,7 +23,9 @@ export function EffortChip({ state }: { state: WorkspaceSnapshot }) {
     addEventListener(EFFORT_MENU_EVENT, request);
     return () => removeEventListener(EFFORT_MENU_EVENT, request);
   }, []);
-  const detail = settings.data !== undefined && "setting_schema" in settings.data ? settings.data : undefined;
+  const fresh = settings.data !== undefined && "setting_schema" in settings.data ? settings.data : undefined;
+  if (fresh !== undefined) lastDetail = { character: state.character, detail: fresh };
+  const detail = fresh ?? (settings.error === "" && lastDetail?.character === state.character ? lastDetail.detail : undefined);
   const entry = detail?.setting_schema.find((item) => item.key === EFFORT);
   const available = detail !== undefined && entry?.applicability === "honored" && entry.suggestions.length > 0;
   const settled = !settings.loading && (detail !== undefined || settings.error !== "");

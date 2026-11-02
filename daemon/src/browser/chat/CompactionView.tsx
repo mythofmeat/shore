@@ -1,6 +1,6 @@
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import type { RunningCompaction } from "../../protocol/RunningCompaction.ts";
-import type { WorkspaceSnapshot } from "../workspace.ts";
+import type { ChromeSnapshot } from "../workspace.ts";
 import { navigate } from "../app/route.ts";
 import { compactionWatch, errorText, useCompactionRecord, useDisplay } from "../app/state.ts";
 import { Dialog, Spinner } from "../ui/controls.tsx";
@@ -29,7 +29,7 @@ function roundOf(phase: string | null): string | null {
   return phase === null ? null : /round (\d+)/.exec(phase)?.[1] ?? null;
 }
 
-export function CompactionChip({ state, open }: { state: WorkspaceSnapshot; open: () => void }) {
+export function CompactionChip({ state, open }: { state: ChromeSnapshot; open: () => void }) {
   const record = useCompactionRecord();
   const mine = record !== null && record.character === state.character ? record : null;
   const running = state.compaction !== null;
@@ -43,7 +43,7 @@ export function CompactionChip({ state, open }: { state: WorkspaceSnapshot; open
   </button>;
 }
 
-export function CompactionDialog({ state, close }: { state: WorkspaceSnapshot; close: () => void }) {
+export function CompactionDialog({ state, close }: { state: ChromeSnapshot; close: () => void }) {
   const display = useDisplay();
   const record = useCompactionRecord();
   const log = useRef<HTMLDivElement>(null);
@@ -79,7 +79,7 @@ export function CompactionDialog({ state, close }: { state: WorkspaceSnapshot; c
     {record.limited ? <p className="notice-inline">Showing the most recent part of a long pass.</p> : null}
     <div className="compaction-log" ref={log} tabIndex={0} aria-label="What the compaction is doing" onScroll={(event) => { const node = event.currentTarget; following.current = node.scrollHeight - node.scrollTop - node.clientHeight < 60; }}>
       {record.blocks.length === 0 ? record.running ? <div className="settings-empty"><Spinner label="Waiting for the compaction" /></div> : <p className="form-text">Nothing was recorded for this pass here. Its model calls are under Traces & call log.</p>
-        : <MessageBody message={{ content: "", images: [], content_blocks: record.blocks }} display={{ ...display, thinking: "on", tools: "on", images: "off" }} openImage={() => {}} live={record.running} expanded />}
+        : <MessageBody message={{ content: "", images: [], content_blocks: record.blocks }} display={{ ...display, thinking: "on", tools: "on", images: "off" }} openImage={() => {}} live={record.running} expanded detailed />}
     </div>
   </Dialog>;
 }

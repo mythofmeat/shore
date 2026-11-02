@@ -6,7 +6,7 @@ import type { UsageArgs } from "../../protocol/UsageArgs.ts";
 import type { UsageBudget } from "../../protocol/UsageBudget.ts";
 import type { UsageDimension } from "../../protocol/UsageDimension.ts";
 import type { UsageResult } from "../../protocol/UsageResult.ts";
-import type { WorkspaceSnapshot } from "../workspace.ts";
+import type { ChromeSnapshot } from "../workspace.ts";
 import { budgetFocus, VIEW_CONTROLS } from "../preferences.ts";
 import { PLAN_WINDOWS } from "../budget_display.ts";
 import { toasts } from "../ui/toast.tsx";
@@ -104,7 +104,7 @@ function UsageReport({ result }: { result: UsageResult }) {
   }
 }
 
-export function UsagePage({ state }: { state: WorkspaceSnapshot }) {
+export function UsagePage({ state }: { state: ChromeSnapshot }) {
   const values = useDisplay();
   const [view, setView] = useState<View>("summary");
   const [period, setPeriod] = useState("");

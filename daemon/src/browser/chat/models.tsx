@@ -2,15 +2,16 @@ import { useCallback, useEffect, useMemo, useState, useSyncExternalStore } from 
 import type { BackgroundModelTarget } from "../../protocol/BackgroundModelTarget.ts";
 import type { ModelListing } from "../../protocol/ModelListing.ts";
 import type { ModelSummary } from "../../protocol/ModelSummary.ts";
-import type { WorkspaceSnapshot } from "../workspace.ts";
+import type { ChromeSnapshot } from "../workspace.ts";
 import { Dialog, IconButton, Spinner } from "../ui/controls.tsx";
 import { Icon } from "../ui/icons.tsx";
 import { toasts } from "../ui/toast.tsx";
+import { CONVERSATION_DIALOG_EVENT } from "../app/intents.ts";
 import { errorText, workspace } from "../app/state.ts";
 
 export type ModelTarget = { kind: "thread"; id?: string } | { kind: "character" } | { kind: "background"; task: BackgroundModelTarget } | { kind: "subagent"; name: string };
 
-export function useModelListing(state: WorkspaceSnapshot, includeHidden = false, favoritesOnly = false): { listing: ModelListing | undefined; refresh: () => void; reload: () => Promise<ModelListing>; error: string } {
+export function useModelListing(state: ChromeSnapshot, includeHidden = false, favoritesOnly = false): { listing: ModelListing | undefined; refresh: () => void; reload: () => Promise<ModelListing>; error: string } {
   const [listing, setListing] = useState<ModelListing>();
   const [error, setError] = useState("");
   const [version, setVersion] = useState(0);
@@ -39,9 +40,32 @@ function setPendingModel(value: PendingModel | null): void {
   for (const listener of pendingListeners) listener();
 }
 
-export function usePendingModel(state: Pick<WorkspaceSnapshot, "character" | "thread">): { model: string | null } | undefined {
+export function usePendingModel(state: Pick<ChromeSnapshot, "character" | "thread">): { model: string | null } | undefined {
   const pending = useSyncExternalStore((listener) => { pendingListeners.add(listener); return () => { pendingListeners.delete(listener); }; }, () => pendingModel);
   return pending !== null && pending.character === state.character && pending.thread === state.thread ? { model: pending.model } : undefined;
+}
+
+let lastListing: { character: string | null; listing: ModelListing } | undefined;
+
+export function ModelChip({ state }: { state: ChromeSnapshot }) {
+  const { listing, reload } = useModelListing(state);
+  const [picking, setPicking] = useState(false);
+  const pending = usePendingModel(state);
+  useEffect(() => {
+    const open = (event: Event) => { if ((event as CustomEvent<string>).detail === "model") setPicking(true); };
+    addEventListener(CONVERSATION_DIALOG_EVENT, open);
+    return () => removeEventListener(CONVERSATION_DIALOG_EVENT, open);
+  }, []);
+  if (listing !== undefined) lastListing = { character: state.character, listing };
+  const known = listing ?? (lastListing?.character === state.character ? lastListing.listing : undefined);
+  const shown = pending === undefined ? known?.active : pending.model ?? known?.active;
+  const changed = async () => { workspace.noteActiveModel((await reload()).active ?? null); };
+  return <>
+    <button type="button" className={`model-chip ${pending === undefined ? "" : "pending"}`} aria-label={`Chat model: ${shown ?? "unknown"}${pending === undefined ? "" : ", saving"}. Choose a model`} title="Choose a model" disabled={state.status !== "ready"} onClick={() => setPicking(true)}>
+      <span className="mono">{known === undefined && pending === undefined ? "…" : shortModel(shown)}</span>{pending === undefined ? <Icon name="chevronUp" size={14} /> : <span className="spinner chip-spinner" aria-hidden="true" />}
+    </button>
+    {picking ? <ModelPicker state={state} close={() => setPicking(false)} changed={changed} /> : null}
+  </>;
 }
 
 export function shortModel(name: string | null | undefined): string {
@@ -64,7 +88,7 @@ export function targetLabel(target: ModelTarget, character: string | null): stri
   }
 }
 
-async function applyModel(state: WorkspaceSnapshot, target: ModelTarget, model: string | null, includeHidden: boolean): Promise<void> {
+async function applyModel(state: ChromeSnapshot, target: ModelTarget, model: string | null, includeHidden: boolean): Promise<void> {
   switch (target.kind) {
     case "thread": await workspace.actions.run("thread_model", { name: target.id ?? state.thread ?? "", model }); break;
     case "character":
@@ -83,7 +107,7 @@ async function applyModel(state: WorkspaceSnapshot, target: ModelTarget, model: 
 }
 
 export function ModelPicker({ state, close, target: initial, changed, scopes = true, current, pick }: {
-  state: WorkspaceSnapshot; close: () => void; target?: ModelTarget; changed?: () => void | Promise<void>; scopes?: boolean; current?: string | null; pick?: (model: string | null) => void;
+  state: ChromeSnapshot; close: () => void; target?: ModelTarget; changed?: () => void | Promise<void>; scopes?: boolean; current?: string | null; pick?: (model: string | null) => void;
 }) {
   const [hidden, setHidden] = useState(false);
   const [favorites, setFavorites] = useState(false);
@@ -121,9 +145,16 @@ export function ModelPicker({ state, close, target: initial, changed, scopes = t
       close();
     } catch (failure) { toasts.show(errorText(failure), "error"); } finally { setBusy(false); }
   };
+  const [stars, setStars] = useState<ReadonlyMap<string, boolean>>(new Map());
+  const starred = (model: ModelSummary) => stars.get(model.qualified_name) ?? model.favorite;
   const favorite = async (model: ModelSummary) => {
-    try { await workspace.actions.run("favorite_model", { name: model.qualified_name, favorite: !model.favorite }); refresh(); }
-    catch (failure) { toasts.show(errorText(failure), "error"); }
+    const next = !starred(model);
+    setStars(new Map(stars).set(model.qualified_name, next));
+    try { await workspace.actions.run("favorite_model", { name: model.qualified_name, favorite: next }); refresh(); }
+    catch (failure) {
+      setStars((known) => { const reverted = new Map(known); reverted.delete(model.qualified_name); return reverted; });
+      toasts.show(errorText(failure), "error");
+    }
   };
   const resettable = pick !== undefined || target.kind !== "thread" || thread?.chat_model !== undefined;
   return <Dialog title={scopes ? "Choose a model" : `Model for ${targetLabel(target, state.character).toLowerCase()}`} close={close} wide>
@@ -148,7 +179,7 @@ export function ModelPicker({ state, close, target: initial, changed, scopes = t
             {model.hidden ? <span className="tag muted-tag">hidden</span> : null}
             {model.qualified_name === active ? <Icon name="check" size={16} className="picker-check" /> : null}
           </button>
-          <IconButton icon="star" label={model.favorite ? `Remove ${model.qualified_name} from favorites` : `Add ${model.qualified_name} to favorites`} className={model.favorite ? "favorite" : ""} onClick={() => void favorite(model)} />
+          <IconButton icon="star" label={starred(model) ? `Remove ${model.qualified_name} from favorites` : `Add ${model.qualified_name} to favorites`} className={starred(model) ? "favorite" : ""} onClick={() => void favorite(model)} />
         </div>)}
     </div>
   </Dialog>;

@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import type { ToolDescription } from "../../protocol/ToolDescription.ts";
 import type { ToolRunReport } from "../../protocol/ToolRunReport.ts";
-import type { WorkspaceSnapshot } from "../workspace.ts";
+import type { ChromeSnapshot } from "../workspace.ts";
 import { initialValue } from "../forms.ts";
 import { mediaSource } from "../media.ts";
 import { toolControl, toolNames } from "../tool_forms.ts";
@@ -67,7 +67,7 @@ function ToolForm({ tool }: { tool: string }) {
   </div>;
 }
 
-export function ToolsPage({ state }: { state: WorkspaceSnapshot }) {
+export function ToolsPage({ state }: { state: ChromeSnapshot }) {
   const access = useOperation(state, "tools", {}, [], state.character !== null);
   const [tool, setTool] = useState("");
   if (state.character === null) return <NeedsCharacter />;
