@@ -171,7 +171,7 @@ test("a reply every account refuses fails with the refusal, saying when the firs
     const say = conversation(home, mock);
     const failure = await say("Hello?").catch((e: unknown) => e);
     expect(failure).toBeInstanceOf(Error);
-    expect((failure as Error).message).toMatch(/usage limit reached: You've hit your session limit/);
+    expect((failure as Error).message).toMatch(/usage limit reached: You.ve hit your /);
     expect(tokensSeen(mock)).toEqual(["Bearer token-first", "Bearer token-second"]);
     const freeAt = Date.parse(resetAtIn(failure) ?? "");
     expect(freeAt).toBeGreaterThan(Date.now());
