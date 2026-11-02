@@ -1,6 +1,7 @@
 use pulldown_cmark::{CodeBlockKind, Event, HeadingLevel, Options, Parser, Tag, TagEnd};
 use ratatui::style::{Color, Modifier, Style};
 use ratatui::text::{Line, Span};
+use shore_common::protocol::types::is_video_file;
 use unicode_width::{UnicodeWidthChar, UnicodeWidthStr};
 
 pub(crate) fn render_markdown_wrapped(text: &str, max_width: usize) -> Vec<Line<'static>> {
@@ -345,7 +346,12 @@ impl MarkdownRenderer {
                 );
             }
             Tag::Image { dest_url, .. } => {
-                self.push_text("[image", self.current_style().fg(Color::Magenta));
+                let kind = if is_video_file(&dest_url) {
+                    "[video"
+                } else {
+                    "[image"
+                };
+                self.push_text(kind, self.current_style().fg(Color::Magenta));
                 if !dest_url.is_empty() {
                     self.push_text(": ", self.current_style().fg(Color::Magenta));
                     self.push_text(dest_url.as_ref(), self.current_style().fg(Color::Magenta));

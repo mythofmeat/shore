@@ -27,6 +27,17 @@ pub struct ImageRef {
     pub sha256: Option<String>,
 }
 
+impl ImageRef {
+    pub fn is_video(&self) -> bool {
+        self.embed.is_some() && is_video_file(&self.path)
+    }
+}
+
+pub fn is_video_file(file: &str) -> bool {
+    let lowered = file.to_ascii_lowercase();
+    lowered.ends_with(".mp4") || lowered.ends_with(".webm")
+}
+
 impl PartialEq for ImageRef {
     fn eq(&self, other: &Self) -> bool {
         self.path == other.path

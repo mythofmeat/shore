@@ -33,6 +33,20 @@ test("a sent picture inside a block-level tag shows in place, once, with the tex
   expect(unplacedPictures(images, [text])).toEqual([]);
 });
 
+test("a sent video loops inline without sound, which is what lets a phone start it without being asked", () => {
+  const text = "![[clip.mp4]]";
+  const images = [{ path: "/data/media/ada/sent/abc.mp4", embed: "![[clip.mp4]]", name: "clip.mp4", data: "UklGR123" }];
+  const html = renderToStaticMarkup(createElement(Pictures.Provider, { value: { images, open: () => {}, live: false, shown: true } }, createElement(Markdown, { text })));
+  const video = /<video[^>]*>/.exec(html)?.[0] ?? "";
+  expect(video).toContain('src="/api/pictures/abc.mp4"');
+  expect(video).toContain('poster="data:image/webp;base64,UklGR123"');
+  for (const attribute of ["autoPlay", "loop", "muted", "playsInline"]) expect(video.toLowerCase()).toContain(attribute.toLowerCase());
+  expect(html).not.toContain("<img");
+  const hidden = renderToStaticMarkup(createElement(Pictures.Provider, { value: { images, open: () => {}, live: false, shown: false } }, createElement(Markdown, { text })));
+  expect(hidden).not.toContain("<video");
+  expect(hidden).toContain("clip.mp4");
+});
+
 const png = "iVBORw0K";
 
 test("image sources allow raster data only and download names cannot escape their filename", () => {
@@ -47,6 +61,8 @@ test("image sources allow raster data only and download names cannot escape thei
   expect(imageFilename("a b\u0000c\u007Fd\u001Fe", "data:image/png;base64,")).toBe("a b_c_d_e.png");
   expect(imageFilename("", "data:image/webp;base64,UklGR")).toBe("shore-image.webp");
   expect(imageFilename("a".repeat(1000), `data:image/png;base64,${png}`).length).toBe(184);
+  expect(imageFilename("the sea", "/api/pictures/abc.mp4")).toBe("the sea.mp4");
+  expect(imageFilename("clip.webm", "/api/pictures/abc.webm")).toBe("clip.webm");
 });
 
 test("the browser wire bundle runs with dynamic code generation disabled", async () => {

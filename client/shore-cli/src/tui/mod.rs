@@ -2061,7 +2061,9 @@ fn transmit_image_ref(
 ) {
     if let Some(b64) = &img.data {
         let _ = cache.ensure_transmitted_from_b64(&img.path, b64, max_cols, max_rows);
-    } else {
+        return;
+    }
+    if !img.is_video() {
         let _ = cache.ensure_transmitted(&img.path, max_cols, max_rows);
     }
 }

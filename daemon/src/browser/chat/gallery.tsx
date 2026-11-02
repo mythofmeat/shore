@@ -10,7 +10,8 @@ export function GalleryDialog({ state, close }: { state: WorkspaceSnapshot; clos
   const view = state.segmentView;
   const images = useMemo(() => (view === null ? conversationImages(state.messages, state.streams, state.media) : conversationImages(view.messages, [], [])).flatMap((image) => {
     const source = mediaSource(image.data, image.mime);
-    return source === undefined ? [] : [{ ...image, source }];
+    const shown = source ?? (image.video === true ? image.full : undefined);
+    return shown === undefined ? [] : [{ ...image, source: shown, still: source !== undefined }];
   }), [view, state.messages, state.streams, state.media]);
   const [open, setOpen] = useState<number>();
   const [loading, setLoading] = useState(false);
@@ -18,11 +19,13 @@ export function GalleryDialog({ state, close }: { state: WorkspaceSnapshot; clos
   return <Dialog title={selected === undefined ? view === null ? "Images in the current context" : `Images in ${segmentName(view.segment)}` : selected.caption} close={() => { if (selected === undefined) close(); else setOpen(undefined); }} wide>
     {selected === undefined ? <>
       {images.length === 0 ? <p className="form-text">{view === null ? "No images in the current context." : "No images in the loaded part of this segment."}</p> : <div className="gallery-grid">
-        {images.map((image, index) => <button key={image.id} type="button" className="image-thumb" aria-label={`Open ${image.caption}`} onClick={() => setOpen(index)}><img src={image.source} alt={image.caption} loading="lazy" /></button>)}
+        {images.map((image, index) => <button key={image.id} type="button" className="image-thumb" aria-label={`Open ${image.caption}`} onClick={() => setOpen(index)}>{image.still ? <img src={image.source} alt={image.caption} loading="lazy" /> : <video src={image.source} muted playsInline preload="metadata" />}</button>)}
       </div>}
       {view?.hasEarlier === true ? <div className="form-actions">{loading ? <Spinner label="Loading earlier messages" /> : <button type="button" className="button" onClick={() => { setLoading(true); perform(async () => { try { await workspace.loadEarlierInSegment(); } finally { setLoading(false); } }); }}>Load images from earlier in this segment</button>}</div> : null}
     </> : <>
-      <FullPicture key={selected.id} source={selected.full ?? selected.source} caption={selected.caption} />
+      {selected.video === true
+        ? <video key={selected.id} className="lightbox-image" src={selected.full} poster={selected.still ? selected.source : undefined} controls autoPlay loop playsInline />
+        : <FullPicture key={selected.id} source={selected.full ?? selected.source} caption={selected.caption} />}
       <div className="dialog-footer">
         <button type="button" className="button" disabled={open === 0} onClick={() => setOpen((open ?? 1) - 1)}>Previous</button>
         <button type="button" className="button" disabled={open === images.length - 1} onClick={() => setOpen((open ?? 0) + 1)}>Next</button>

@@ -61,6 +61,8 @@ const MIME_BY_EXTENSION: Record<string, string> = {
   ".jpeg": "image/jpeg",
   ".gif": "image/gif",
   ".webp": "image/webp",
+  ".mp4": "video/mp4",
+  ".webm": "video/webm",
 };
 
 export class MatrixBot {
@@ -250,7 +252,7 @@ export class MatrixBot {
         this.#client.uploadContent(new Uint8Array(bytes), { name, type: mimeType }),
       );
       return await this.#send(roomId, {
-        msgtype: "m.image",
+        msgtype: mimeType.startsWith("video/") ? "m.video" : "m.image",
         body: caption ?? name,
         url: upload.content_uri,
         info: { mimetype: mimeType, size: bytes.length },

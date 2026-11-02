@@ -59,7 +59,7 @@ export function pageOrigin(request: Request, publicOrigin: string | undefined): 
 export function securityHeaders(): Headers {
   return new Headers({
     "cache-control": "no-store",
-    "content-security-policy": "default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self' blob: data:; connect-src 'self'; font-src 'self'; frame-ancestors 'none'; base-uri 'none'; form-action 'self'",
+    "content-security-policy": "default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self' blob: data:; media-src 'self'; connect-src 'self'; font-src 'self'; frame-ancestors 'none'; base-uri 'none'; form-action 'self'",
     "x-content-type-options": "nosniff",
     "referrer-policy": "no-referrer",
     "cross-origin-resource-policy": "same-origin",

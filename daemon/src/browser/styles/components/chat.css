@@ -523,7 +523,8 @@ button.chip:hover {
   background: var(--surface);
 }
 
-.image-thumb img {
+.image-thumb img,
+.image-thumb video {
   display: block;
   max-width: 240px;
   max-height: 200px;
@@ -542,11 +543,28 @@ button.chip:hover {
   cursor: zoom-in;
 }
 
-.picture img {
+.picture img,
+.picture video {
   display: block;
   max-width: 100%;
   max-height: min(70dvh, 640px);
   height: auto;
+}
+
+.picture-video {
+  position: relative;
+  cursor: pointer;
+}
+
+.picture-sound {
+  position: absolute;
+  right: 8px;
+  bottom: 8px;
+  display: flex;
+  padding: 5px;
+  border-radius: 50%;
+  background: rgb(0 0 0 / 55%);
+  color: #fff;
 }
 
 .picture-name {

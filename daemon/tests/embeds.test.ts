@@ -56,6 +56,17 @@ test("picture text names what was sent and what was not, by position", () => {
   expect(embedName(embedsIn("![[art/sea/gull.png]]")[0] ?? { source: "", target: "", label: undefined, wikilink: true, at: 0 })).toBe("gull.png");
 });
 
+test("picture text calls a video a video, however it was named", () => {
+  const text = "![[clip]] ![[loop.webm]] ![[too-big.mp4]] ![[gone]]";
+  const images = [
+    { path: "/data/media/q/sent/a.mp4", embed: "![[clip]]", name: "clip.bin" },
+    { path: "/data/media/q/sent/b.webm", embed: "![[loop.webm]]", name: "loop.webm" },
+    { path: "", embed: "![[too-big.mp4]]", problem: "over the limit" },
+    { path: "", embed: "![[gone]]", problem: "no file matches" },
+  ];
+  expect(pictureText(text, images)).toBe("[video: clip.bin] [video: loop.webm] [video not sent: too-big.mp4] [picture not sent: gone]");
+});
+
 test("the notice lists each unsent picture once", () => {
   const unsent = { path: "", embed: "![[gone]]", problem: "no picture matches; did you mean ![[gone2.png]]?" };
   const sent = { path: "/x.png", embed: "![[ok]]", name: "ok.png" };
