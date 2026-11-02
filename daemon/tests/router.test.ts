@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test";
 
+import { afterCommand, type DispatchContext } from "../src/handler/command_dispatch.ts";
 import { MessageHandler, type GenerationParams, type HandlerRegistry } from "../src/handler/router.ts";
 import { SessionRouter, type RequestMeta } from "../src/swp/session.ts";
 import type { ClientMessage } from "../src/protocol/ClientMessage.ts";
@@ -117,6 +118,35 @@ const message = (rid: string | null, text: string, stream: boolean): ClientMessa
   stream,
   images: [],
   image_data: [],
+});
+
+describe("archiving the thread a session is on", () => {
+  test("a session that leaves for another thread while home loads stays where it went", async () => {
+    const router = new SessionRouter();
+    const frames = new Map<number, ServerMessage[]>();
+    for (const id of [1, 2]) {
+      registerTestSession(router, frames, id);
+      router.setSelectedCharacter(id, "ada");
+      router.setSelectedThread(id, "side");
+    }
+    const context = {
+      character: "ada", sessionId: 1, rid: "archive", router,
+      runtime: { homeThread: () => "main", warmThread: () => undefined, threadsChanged: () => {} },
+      handshake: {
+        history: () => {
+          router.setSelectedThread(2, "other");
+          return Promise.resolve({ messages: [], previousSegment: null, config: {}, selectedCharacter: "ada", selectedThread: "main", revision: 1 });
+        },
+      },
+    } as unknown as DispatchContext;
+
+    await afterCommand("archive_thread", { name: "side" }, {}, context);
+
+    expect(router.threadFor(1)).toBe("main");
+    expect(router.threadFor(2)).toBe("other");
+    expect(frames.get(1)).toMatchObject([{ type: "history", selected_thread: "main", rid: "archive" }]);
+    expect(frames.get(2)).toEqual([]);
+  });
 });
 
 describe("routed messages", () => {

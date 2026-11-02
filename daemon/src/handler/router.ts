@@ -203,10 +203,12 @@ export class MessageHandler {
   readonly #commands = new Set<ActiveCommand>();
   #closed = false;
   readonly #unobserve: (() => void) | undefined;
+  readonly #unobserveMoves: () => void;
 
   constructor(deps: MessageHandlerDeps) {
     this.#deps = deps;
     this.#unobserve = deps.compactions?.observe((character, thread, frame) => this.#toViewers(character, thread, frame));
+    this.#unobserveMoves = deps.router.observeMoves((sessionId) => { this.#join(sessionId); });
   }
 
   get generationCount(): number {
@@ -224,6 +226,7 @@ export class MessageHandler {
   close(): void {
     this.#closed = true;
     this.#unobserve?.();
+    this.#unobserveMoves();
   }
 
   #toViewers(character: string, thread: string, frame: ServerMessage): void {

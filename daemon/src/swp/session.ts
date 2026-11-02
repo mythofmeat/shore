@@ -91,10 +91,13 @@ export type DirectSender = (msg: ServerMessage) => Promise<void>;
 
 export type RequestObserver = (sessionId: number, msg: ServerMessage) => void;
 
+export type SessionMoveObserver = (sessionId: number) => void;
+
 export class SessionRouter {
   readonly #clients = new Map<number, ClientInfo>();
   readonly #senders = new Map<number, DirectSender>();
   readonly #requestObservers = new Set<RequestObserver>();
+  readonly #moveObservers = new Set<SessionMoveObserver>();
 
   observeRequests(observer: RequestObserver): () => void {
     this.#requestObservers.add(observer);
@@ -103,6 +106,15 @@ export class SessionRouter {
 
   reportRequest(sessionId: number, msg: ServerMessage): void {
     for (const observer of this.#requestObservers) observer(sessionId, msg);
+  }
+
+  observeMoves(observer: SessionMoveObserver): () => void {
+    this.#moveObservers.add(observer);
+    return () => { this.#moveObservers.delete(observer); };
+  }
+
+  reportMove(sessionId: number): void {
+    for (const observer of this.#moveObservers) observer(sessionId);
   }
 
   registerSession(client: ClientInfo, send: DirectSender): void {

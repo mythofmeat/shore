@@ -204,6 +204,44 @@ test("a message the daemon saved is never brought back when the conversation swi
   await check();
 });
 
+test("archiving the open conversation takes every tab on it home, closes what was open there and shows the next message", async ({ page, context }) => {
+  const check = await watchPage(page);
+  await signIn(page);
+  await createCharacter(page, "wren");
+  await send(page, "A message for home");
+  await createConversation(page, "wren", "side");
+  await send(page, "A message for the side conversation");
+
+  const otherTab = await context.newPage();
+  await otherTab.goto("/workspace/wren/side");
+  await expect(otherTab.locator("article.message.user")).toContainText("A message for the side conversation");
+  await otherTab.getByRole("button", { name: "Conversation options" }).click();
+  await otherTab.getByRole("menuitem", { name: "Clear context…" }).click();
+  await expect(otherTab.getByRole("dialog", { name: "Clear context" })).toBeVisible();
+
+  await page.bringToFront();
+  await page.getByRole("button", { name: "Conversation options" }).click();
+  await page.getByRole("menuitem", { name: "Archive conversation…" }).click();
+  const dialog = page.getByRole("dialog", { name: "Archive “side”?" });
+  await dialog.getByRole("button", { name: "Archive", exact: true }).click();
+  await expect(dialog).toBeHidden();
+  await expect(page.getByText("Archived “side”")).toBeVisible();
+  await expect(page.getByLabel("Message", { exact: true })).toBeFocused();
+
+  for (const tab of [page, otherTab]) {
+    await expect(tab.locator(".topbar-thread")).toHaveText("main");
+    await expect(tab).toHaveURL(/\/workspace\/wren\/main$/);
+    await expect(tab.getByRole("group", { name: "wren conversations" }).getByRole("button", { name: "side", exact: true })).toHaveCount(0);
+    await expect(tab.locator("dialog[open]")).toHaveCount(0);
+    await expect(tab.locator("article.message.user")).toContainText("A message for home");
+  }
+
+  await otherTab.bringToFront();
+  await send(otherTab, "Typed after archiving");
+  await expect(page.locator("article.message.assistant").last()).toContainText("Typed after archiving");
+  await check();
+});
+
 const savedDraft = (page: Page) => page.evaluate("new Promise((resolve, reject) => { const open = indexedDB.open('shore-drafts'); open.onerror = () => reject(open.error); open.onsuccess = () => { const all = open.result.transaction('drafts').objectStore('drafts').getAll(); all.onsuccess = () => { open.result.close(); resolve(all.result.map((row) => row.text).join('|')); }; }; })");
 
 test("vim mode edits with vim keys, keeps the draft over a reload, attaches pasted images and follows the Enter preference in insert mode", async ({ page }) => {
