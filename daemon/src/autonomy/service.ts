@@ -12,6 +12,7 @@ import {
   type AutonomyExecutor,
   type AutonomyRunnerConfig,
   type CompactionRunnerConfig,
+  type RestoredIdle,
 } from "./runner.ts";
 import { loadState, STATE_FILENAME, type PersistedKeepalive } from "./state_file.ts";
 import type { KeepaliveSnapshot } from "../cache/schedule.ts";
@@ -25,6 +26,7 @@ export interface RegisterCharacter {
   data_dir: string;
   config: AutonomyRunnerConfig;
   clock: HeartbeatClockConfig;
+  restoreIdle?: () => Promise<RestoredIdle | undefined>;
 }
 
 export interface AutonomyStatus {
@@ -117,6 +119,7 @@ export class AutonomyService {
 
     const statePath = `${dataDir}/${STATE_FILENAME}`;
     const restored = await loadState(statePath);
+    const idle = await request.restoreIdle?.();
     const runner = new CharacterAutonomy({
       character,
       config: request.config,
@@ -125,6 +128,7 @@ export class AutonomyService {
       clock: new HeartbeatClock(request.clock, this.#now()),
       log: await HeartbeatLog.load(`${dataDir}/${HEARTBEAT_LOG_FILENAME}`),
       restored,
+      idle,
       now: this.#now,
     });
     this.#entries.set(character, { runner, inFlight: false });

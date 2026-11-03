@@ -11,6 +11,8 @@ import { StartupError } from "../src/daemon/startup.ts";
 import { DATA_DIRECTORY_LEASE_FILE } from "../src/daemon/data_directory_lease.ts";
 import type { InstanceInfo } from "../src/daemon/instances.ts";
 import type { SidecarProvider, SidecarRequest } from "../src/llm/types.ts";
+import { threadActivityNow } from "../src/engine/threads.ts";
+import { loadCompactionCheckpoint, saveCompactionCheckpoint } from "../src/memory/compaction/checkpoint.ts";
 import { compactionFixture } from "./support/memory_fixture.ts";
 import { until } from "./support/until.ts";
 
@@ -626,6 +628,129 @@ describe("going down", () => {
     await new Promise<void>((resolve) => {
       probe.close(() => resolve());
     });
+  });
+});
+
+describe("coming back up", () => {
+  const IDLE_CONFIG = `${MODEL_CONFIG}[tools]\nenabled = ["bash"]\n[heartbeat]\nenabled = true\n[compaction]\nidle_after = "1s"\nmin_turns = 2\nkeep_recent_turns = 0\n`;
+  const PAST_IDLE_MS = 1_100;
+
+  function compacting(onPass: (signal?: AbortSignal) => Promise<void> = () => Promise.resolve()): SidecarProvider {
+    const chat = scriptedProvider("noted");
+    const memory = compactionFixture();
+    return {
+      async *stream(req: SidecarRequest, signal?: AbortSignal) {
+        if (req.context?.call_type !== "compaction") { yield* chat.stream(req, signal); return; }
+        await onPass(signal);
+        yield* memory(req, signal);
+      },
+    } as unknown as SidecarProvider;
+  }
+
+  function stalling(reached: () => void): SidecarProvider {
+    return compacting(async (signal) => {
+      reached();
+      await new Promise<void>((resolve) => { if (signal?.aborted === true) resolve(); else signal?.addEventListener("abort", () => resolve(), { once: true }); });
+      throw new Error("stopped");
+    });
+  }
+
+  async function talk(client: Client, texts: readonly string[]): Promise<void> {
+    for (const text of texts) {
+      client.frames.length = 0;
+      client.send({ type: "message", text, stream: true, images: [] });
+      await client.awaitFrame("new_message");
+      await client.awaitFrame("stream_end");
+    }
+  }
+
+  async function command(client: Client, name: string, args: unknown): Promise<void> {
+    client.frames.length = 0;
+    client.send({ type: "command", name, args });
+    await client.awaitFrame("command_output");
+  }
+
+  async function shutDown(daemon: RunningDaemon): Promise<void> {
+    await daemon.shutdown();
+    await daemon.done;
+    running.length = 0;
+  }
+
+  test("a conversation left idle compacts once the daemon is back, without anyone saying anything", async () => {
+    const place = await layout(IDLE_CONFIG);
+    const provider = compacting();
+    const first = await start(place, [], { anthropic: provider });
+    const client = await Client.open(first.port, "ada");
+    await client.awaitFrame("hello");
+    await talk(client, ["one", "two", "three"]);
+    client.close();
+    const data = first.runtime.config.dirs.data;
+    await shutDown(first);
+    await Bun.sleep(PAST_IDLE_MS);
+
+    await start(place, [], { anthropic: provider });
+
+    await until(() => threadActivityNow(data, "ada", "main").turns === 0, "the idle conversation compacting");
+  });
+
+  test("a daemon that died compacting waits out the idle time before trying again", async () => {
+    const place = await layout(IDLE_CONFIG);
+    let stalled = false;
+    const first = await start(place, [], { anthropic: stalling(() => { stalled = true; }) });
+    const client = await Client.open(first.port, "ada");
+    await client.awaitFrame("hello");
+    await talk(client, ["one", "two", "three"]);
+    client.send({ type: "command", name: "compact", args: { keep_turns: 0 } });
+    await until(() => stalled, "the compaction reaching the provider");
+    client.close();
+    const data = first.runtime.config.dirs.data;
+    await shutDown(first);
+    const checkpoint = required(await loadCompactionCheckpoint(data, "ada", "main"));
+    checkpoint.state = "running";
+    delete checkpoint.resumeOnStart;
+    await saveCompactionCheckpoint(data, checkpoint, "main");
+    await Bun.sleep(PAST_IDLE_MS);
+
+    let passes = 0;
+    const second = await start(place, [], { anthropic: compacting(() => { passes += 1; return Promise.resolve(); }) });
+    await second.settled;
+    await Bun.sleep(PAST_IDLE_MS);
+    expect(passes).toBe(0);
+
+    await second.runtime.autonomy.tick();
+    expect(passes).toBeGreaterThan(0);
+    expect(threadActivityNow(data, "ada", "main").turns).toBe(0);
+  });
+
+  test("a side thread's compaction resumed at startup finishes first, then the idle home thread compacts", async () => {
+    const place = await layout(IDLE_CONFIG);
+    let stalled = false;
+    const first = await start(place, [], { anthropic: stalling(() => { stalled = true; }) });
+    const client = await Client.open(first.port, "ada");
+    await client.awaitFrame("hello");
+    await talk(client, ["one", "two", "three"]);
+    await command(client, "create_thread", { name: "side" });
+    await command(client, "switch_thread", { name: "side" });
+    await talk(client, ["four", "five", "six"]);
+    client.send({ type: "command", name: "compact", args: { keep_turns: 0 } });
+    await until(() => stalled, "the side thread's compaction reaching the provider");
+    client.close();
+    const data = first.runtime.config.dirs.data;
+    await shutDown(first);
+    await Bun.sleep(PAST_IDLE_MS);
+
+    const resuming = Promise.withResolvers<void>();
+    let passes = 0;
+    const second = await start(place, [], { anthropic: compacting(async () => { passes += 1; await resuming.promise; }) });
+    await until(() => passes > 0, "the side thread's compaction resuming");
+    await second.runtime.autonomy.tick();
+    expect(passes).toBe(1);
+    expect(threadActivityNow(data, "ada", "main").turns).toBe(3);
+
+    resuming.resolve();
+    await second.settled;
+    await until(() => threadActivityNow(data, "ada", "side").turns === 0, "the side thread compacting");
+    await until(() => threadActivityNow(data, "ada", "main").turns === 0, "the idle home thread compacting");
   });
 });
 

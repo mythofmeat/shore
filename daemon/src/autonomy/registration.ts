@@ -1,9 +1,11 @@
 import { shoreLog } from "../log.ts";
 
 import { localWallClock } from "./activity.ts";
+import { homeThreadOf, threadActivityNow } from "../engine/threads.ts";
 import { hostZone } from "../ledger/zoned.ts";
 import type { LoadedConfig } from "../config/loader.ts";
-import type { AutonomyRunnerConfig, CompactionRunnerConfig } from "./runner.ts";
+import { loadCompactionCheckpoint } from "../memory/compaction/checkpoint.ts";
+import type { AutonomyRunnerConfig, CompactionRunnerConfig, RestoredIdle } from "./runner.ts";
 import type { HeartbeatClockConfig } from "./heartbeat.ts";
 import type { AutonomyService, RegisterCharacter } from "./service.ts";
 
@@ -40,12 +42,29 @@ export function clockConfigFor(config: LoadedConfig): HeartbeatClockConfig {
   };
 }
 
+async function restoredIdle(dataDir: string, character: string): Promise<RestoredIdle | undefined> {
+  try {
+    const thread = await homeThreadOf(dataDir, character);
+    const { turns, last_active: lastActive } = threadActivityNow(dataDir, character, thread);
+    const checkpoint = await loadCompactionCheckpoint(dataDir, character, thread).catch(() => undefined);
+    const diedCompacting = checkpoint?.state === "running";
+    return {
+      turnCount: turns,
+      ...(lastActive === undefined || diedCompacting ? {} : { lastActivityAt: Date.parse(lastActive) }),
+    };
+  } catch (e) {
+    shoreLog.warn(`shore: could not restore ${character}'s idle state: ${String(e)}`);
+    return undefined;
+  }
+}
+
 export function registrationFor(character: string, config: LoadedConfig): RegisterCharacter {
   return {
     character,
     data_dir: `${config.dirs.data}/${character}`,
     config: runnerConfigFor(config),
     clock: clockConfigFor(config),
+    restoreIdle: async () => await restoredIdle(config.dirs.data, character),
   };
 }
 

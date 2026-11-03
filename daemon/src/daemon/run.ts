@@ -58,32 +58,30 @@ async function registerKnownCharacters(
   }
 }
 
-function seedActivityInBackground(
+async function seedActivity(
   runtime: ShoreRuntime,
   bridge: TurnAutonomyBridge,
   log: Logger | undefined,
-): void {
-  void (async () => {
-    for (const character of runtime.registry.availableCharacters()) {
-      if (!bridge.needsActivityBackfill(character)) continue;
-      const started = performance.now();
-      try {
-        const engine = await runtime.registry.getOrCreate(character);
-        await ensureAndBackfillAutonomy(
-          { autonomy: bridge },
-          engine,
-          character,
-          runtime.registry.effectiveConfig(character),
-        );
-        log?.info?.("Seeded activity from history", {
-          character,
-          took_ms: Math.round(performance.now() - started),
-        });
-      } catch (e) {
-        shoreLog.warn(`shore: could not seed ${character}'s activity from history: ${String(e)}`);
-      }
+): Promise<void> {
+  for (const character of runtime.registry.availableCharacters()) {
+    if (!bridge.needsActivityBackfill(character)) continue;
+    const started = performance.now();
+    try {
+      const engine = await runtime.registry.getOrCreate(character);
+      await ensureAndBackfillAutonomy(
+        { autonomy: bridge },
+        engine,
+        character,
+        runtime.registry.effectiveConfig(character),
+      );
+      log?.info?.("Seeded activity from history", {
+        character,
+        took_ms: Math.round(performance.now() - started),
+      });
+    } catch (e) {
+      shoreLog.warn(`shore: could not seed ${character}'s activity from history: ${String(e)}`);
     }
-  })();
+  }
 }
 
 export interface DaemonOptions {
@@ -106,6 +104,7 @@ export interface RunningDaemon {
   readonly server: Server;
   readonly web?: RunningWebServer;
   readonly done: Promise<void>;
+  readonly settled: Promise<void>;
   stop(): void;
   shutdown(): Promise<void>;
 }
@@ -290,13 +289,15 @@ export async function startDaemon(options: DaemonOptions): Promise<RunningDaemon
     };
     await adoptHomeThreadModels(runtime.registry);
     await registerKnownCharacters(runtime, assembly.autonomy, log);
-    seedActivityInBackground(runtime, assembly.autonomy, log);
+    const settling = performance.now();
+    const compactionHolds = runtime.registry.availableCharacters().map((character) => runtime.autonomy.beginForeground(character));
+    const seeded = seedActivity(runtime, assembly.autonomy, log);
     startCharacterInits(runtime.config, runtime.registry.availableCharacters(), log);
     const clocks = startRuntimeClocks(runtime, options.clockIntervals ?? {});
     rollback.push(() => { clocks.stop(); });
 
     handler = new MessageHandler(buildMessageHandlerDeps(assembly));
-    void resumeStoppedCompactions(assembly).catch((e: unknown) => { shoreLog.warn(`shore: could not resume compactions paused by the last shutdown: ${String(e)}`); });
+    const resumed = resumeStoppedCompactions(assembly).catch((e: unknown) => { shoreLog.warn(`shore: could not resume compactions paused by the last shutdown: ${String(e)}`); });
     const messages = handler;
     server.setControlHandler((routed) => messages.handleControl(routed));
 
@@ -406,6 +407,12 @@ export async function startDaemon(options: DaemonOptions): Promise<RunningDaemon
       return draining;
     };
 
+    const settled = Promise.allSettled([seeded, resumed]).then(() => {
+      for (const release of compactionHolds) release();
+      log?.info?.("Startup settled, automatic compaction may run", { took_ms: Math.round(performance.now() - settling) });
+      if (!stopped) void runtime.autonomy.tick();
+    });
+
     return {
       host: bound.host,
       port: bound.port,
@@ -414,6 +421,7 @@ export async function startDaemon(options: DaemonOptions): Promise<RunningDaemon
       server,
       ...(web === undefined ? {} : { web }),
       done,
+      settled,
       stop,
       shutdown,
     };
