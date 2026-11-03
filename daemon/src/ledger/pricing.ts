@@ -52,8 +52,10 @@ export function isAnthropicPricing(provider: string, model: string): boolean {
   return provider === "anthropic" || model.startsWith("anthropic/");
 }
 
+const ANTHROPIC_SNAPSHOT_DATE = /-\d{8}$/;
+
 function normalizeAnthropicModel(model: string): string {
-  const chars = Array.from(model);
+  const chars = Array.from(model.replace(ANTHROPIC_SNAPSHOT_DATE, ""));
   for (let i = chars.length - 2; i >= 1; i--) {
     const before = chars[i - 1];
     const separator = chars[i];

@@ -125,6 +125,21 @@ const OPUS_5_CATALOG_ENTRY = {
   },
 };
 
+const CLAUDE_4_5_CATALOG_ENTRIES = [
+  {
+    id: "anthropic/claude-opus-4.5",
+    pricing: { prompt: "0.000005", completion: "0.000025", input_cache_read: "0.0000005", input_cache_write: "0.00000625" },
+  },
+  {
+    id: "anthropic/claude-sonnet-4.5",
+    pricing: { prompt: "0.000003", completion: "0.000015", input_cache_read: "0.0000003", input_cache_write: "0.00000375" },
+  },
+  {
+    id: "anthropic/claude-haiku-4.5",
+    pricing: { prompt: "0.000001", completion: "0.000005", input_cache_read: "0.0000001", input_cache_write: "0.00000125" },
+  },
+];
+
 const OPENROUTER_CATALOG = "https://openrouter.ai/api/v1/models";
 
 const MILLION = 1_000_000;
@@ -230,6 +245,40 @@ describe("the pricing table", () => {
     close(repriced.input_cost, 4);
     close(repriced.output_cost, 20);
     close(required(ledger.pricing.cached("anthropic", "claude-opus-5-5")).input_per_token, 4 / MILLION);
+  });
+
+  test("a sweep prices rows already recorded under a dated Anthropic id at the rate of the model the date belongs to", async () => {
+    const { ledger, path } = ledgerAt();
+    const opus = ledger.record({ ...opus55Call("5m"), model: "claude-opus-4-5-20251101" });
+    const sonnet = ledger.record({ ...opus55Call("5m"), model: "claude-sonnet-4-5-20250929" });
+    const haiku = ledger.record({ ...opus55Call("5m"), model: "claude-haiku-4-5-20251001" });
+    expect([opus.total_cost, sonnet.total_cost, haiku.total_cost]).toEqual([null, null, null]);
+
+    catalogAnswers(CLAUDE_4_5_CATALOG_ENTRIES);
+    expect((await backfillLedgerCosts(path)).updated).toBe(3);
+
+    const inputCosts = ledger.database.query("SELECT input_cost FROM calls ORDER BY id").all() as Array<{ input_cost: number }>;
+    expect(inputCosts).toHaveLength(3);
+    close(required(inputCosts[0]).input_cost, 5);
+    close(required(inputCosts[1]).input_cost, 3);
+    close(required(inputCosts[2]).input_cost, 1);
+  });
+
+  test("a sweep won't borrow a rate: a dated id the catalog no longer lists and claude_agent under any id stay unpriced", async () => {
+    const { ledger, path } = ledgerAt();
+    catalogAnswers([...CLAUDE_4_5_CATALOG_ENTRIES, OPUS_5_5_CATALOG_ENTRY]);
+    const calls = [
+      { provider: "anthropic", model: "claude-sonnet-4-20250514" },
+      { provider: "claude_agent", model: "claude-opus-4-5-20251101" },
+      { provider: "claude_agent", model: "claude-opus-5-5" },
+      { provider: "claude_agent", model: "claude-opus-5-5[1m]" },
+    ];
+    for (const call of calls) ledger.record({ ...opus55Call("5m"), ...call, subscription: false });
+
+    expect((await backfillLedgerCosts(path)).updated).toBe(0);
+
+    const costs = ledger.database.query("SELECT total_cost FROM calls").all() as Array<{ total_cost: number | null }>;
+    expect(costs).toEqual(calls.map(() => ({ total_cost: null })));
   });
 
   test("a sweep drops every rate past its TTL without fetching a catalog, and keeps the current ones", async () => {
@@ -373,6 +422,23 @@ describe("a paid call", () => {
     expect(budgetBlockFor(paidRequest(path, { usage }))).toBeUndefined();
     await landCall(ledger, path, { usage });
     expect(budgetBlockFor(paidRequest(path, { usage }))?.budget_name).toBe("tiny");
+  });
+
+  test("under a dated Anthropic id records what the catalog lists for that model when it lands", async () => {
+    const { ledger, path } = ledgerAt();
+    catalogCarries(...CLAUDE_4_5_CATALOG_ENTRIES);
+    close(required(await landCall(ledger, path, { model: "claude-opus-4-5-20251101" })), 5);
+    close(required(await landCall(ledger, path, { model: "claude-sonnet-4-5-20250929" })), 3);
+    close(required(await landCall(ledger, path, { model: "claude-haiku-4-5-20251001" })), 1);
+  });
+
+  test("through OpenRouter is looked up under the catalog's own id, even when that id ends in a date", async () => {
+    const { ledger, path } = ledgerAt();
+    catalogCarries(
+      { id: "qwen/qwen3.5-plus-20260420", pricing: { prompt: "0.000001", completion: "0.000002" } },
+      { id: "qwen/qwen3.5-plus", pricing: { prompt: "0.000009", completion: "0.000018" } },
+    );
+    close(required(await landCall(ledger, path, { provider: "openrouter", model: "qwen/qwen3.5-plus-20260420" })), 1);
   });
 
   test("through NanoGPT is priced from NanoGPT's catalog", async () => {
