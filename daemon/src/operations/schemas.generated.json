@@ -17510,6 +17510,31 @@
     }
   },
   {
+    "name": "workspace_files",
+    "input": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "title": "EmptyOperationArgs",
+      "type": "object",
+      "additionalProperties": false
+    },
+    "output": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "title": "WorkspaceFileListing",
+      "type": "object",
+      "properties": {
+        "files": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      },
+      "required": [
+        "files"
+      ]
+    }
+  },
+  {
     "name": "switch_thread",
     "input": {
       "$schema": "https://json-schema.org/draft/2020-12/schema",

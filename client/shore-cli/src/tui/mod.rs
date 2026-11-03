@@ -48,6 +48,8 @@ use app::{
 use connection::{ConnCommand, ConnEvent};
 use input::Action;
 
+use crate::completion::Source;
+
 const STREAM_FRAME_INTERVAL: Duration = Duration::from_millis(200);
 const INPUT_POLL_INTERVAL: Duration = Duration::from_millis(10);
 const DRAFT_AUTOSAVE_INTERVAL: Duration = Duration::from_secs(3);
@@ -1562,6 +1564,12 @@ async fn run_tui(
                                     action,
                                     !fixture_mode,
                                 ).await?;
+                                if !fixture_mode {
+                                    let lookups = input::needed_palette_lookups(&mut app);
+                                    if !lookups.is_empty() {
+                                        send_conn_commands(&mut app, &cmd_tx, lookups).await;
+                                    }
+                                }
                                 if !fixture_mode && let Some(mark) = read_mark_command(&mut app) {
                                     send_conn_command(&mut app, &cmd_tx, mark).await;
                                 }
@@ -2234,122 +2242,45 @@ fn route_subagent_task_frame(app: &mut App, msg: ServerMessage) -> UiEffect {
     })
 }
 
-fn named_palette_values(data: &serde_json::Value, array: &str) -> Vec<crate::cli::PaletteValue> {
-    data.get(array)
-        .and_then(serde_json::Value::as_array)
-        .into_iter()
-        .flatten()
-        .filter_map(|item| {
-            let value = item
-                .as_str()
-                .or_else(|| item.get("name").and_then(serde_json::Value::as_str))
-                .or_else(|| item.get("id").and_then(serde_json::Value::as_str))
-                .or_else(|| item.get("tool").and_then(serde_json::Value::as_str))?;
-            let help = item
-                .get("description")
-                .and_then(serde_json::Value::as_str)
-                .or_else(|| item.get("type").and_then(serde_json::Value::as_str))
-                .map(str::to_owned);
-            Some(crate::cli::PaletteValue {
-                value: value.to_owned(),
-                help,
-            })
-        })
-        .collect()
-}
-
-fn absorb_palette_catalog(app: &mut App, kind: &str, data: &serde_json::Value) {
-    match kind {
-        "threads" => absorb_thread_listing(app, data),
-        "models" => {
+fn absorb_palette_catalog(app: &mut App, source: Source, data: &serde_json::Value) {
+    match source {
+        Source::Threads => {
+            absorb_thread_listing(app, data);
+            app.palette_catalog.absorb_folders(data);
+            app.palette_catalog.mark_loaded(source);
+        }
+        Source::Models => {
             if data.get("models").is_some_and(serde_json::Value::is_object) {
                 let models = crate::output::models_by_provider(data);
                 app.model_names = models.iter().filter_map(model_switch_name).collect();
                 app.favorite_model_names = favorite_model_names(&models);
                 app.subscription_model_names = subscription_model_names(&models);
             }
+            app.palette_catalog.mark_loaded(source);
         }
-        "providers" => {
-            app.palette_catalog.providers = named_palette_values(data, "providers");
-        }
-        "status" => {
-            app.palette_catalog.status_sections = data
-                .get("sections")
-                .and_then(serde_json::Value::as_array)
-                .into_iter()
-                .flatten()
-                .filter_map(serde_json::Value::as_str)
-                .map(crate::cli::PaletteValue::plain)
-                .collect();
-        }
-        "tools" => {
-            let mut tools = named_palette_values(data, "tools");
-            tools.extend(named_palette_values(data, "mcp"));
-            tools.extend(
-                named_palette_values(data, "subagents")
-                    .into_iter()
-                    .map(|value| crate::cli::PaletteValue {
-                        value: format!("ask_{}", value.value),
-                        help: value.help,
-                    }),
-            );
-            tools.sort_by(|left, right| left.value.cmp(&right.value));
-            tools.dedup_by(|left, right| left.value == right.value);
-            app.palette_catalog.tools = tools;
-            app.palette_catalog.subagents = named_palette_values(data, "subagents");
-        }
-        "config" => {
-            app.palette_catalog.config_schema = Some(data.clone());
-            let entries = data
-                .get("schema")
-                .and_then(serde_json::Value::as_array)
-                .into_iter()
-                .flatten();
-            let mut sections = Vec::new();
-            let mut keys = Vec::new();
-            for entry in entries {
-                let Some(key) = entry.get("key").and_then(serde_json::Value::as_str) else {
-                    continue;
-                };
-                if key.contains('<') {
-                    continue;
-                }
-                let setting_kind = entry
-                    .get("type")
-                    .and_then(serde_json::Value::as_str)
-                    .unwrap_or("value");
-                let restart = entry
-                    .get("restart_required")
-                    .and_then(serde_json::Value::as_bool)
-                    .unwrap_or(false);
-                let help = if restart {
-                    format!("{setting_kind}; daemon restart required")
-                } else {
-                    setting_kind.to_owned()
-                };
-                let value = crate::cli::PaletteValue {
-                    value: key.to_owned(),
-                    help: Some(help),
-                };
-                sections.push(value.clone());
-                if entry
-                    .get("settable")
-                    .and_then(serde_json::Value::as_bool)
-                    .unwrap_or(false)
-                {
-                    keys.push(value);
-                }
-            }
-            app.palette_catalog.config_sections = sections;
-            app.palette_catalog.config_keys = keys;
-        }
-        "settings" => {
+        Source::Settings => {
             if let Some(snapshot) = EffectiveSamplerSnapshot::from_model_settings(data) {
                 app.note_active_model_from_snapshot(&snapshot);
                 app.effective_sampler = Some(snapshot);
             }
+            app.palette_catalog.mark_loaded(source);
         }
-        _ => {}
+        Source::Calls
+        | Source::Characters
+        | Source::Config
+        | Source::History
+        | Source::Presets
+        | Source::Providers
+        | Source::Segments
+        | Source::Status
+        | Source::SubagentRuns
+        | Source::ToolParameters
+        | Source::Tools
+        | Source::UsageApiKeys
+        | Source::UsageCallTypes
+        | Source::UsageModels
+        | Source::UsageProviders
+        | Source::WorkspaceFiles => app.palette_catalog.absorb(source, data),
     }
     if app.input.mode == app::InputMode::Command {
         app.update_completions();
@@ -2742,8 +2673,8 @@ pub(crate) fn handle_server_message(app: &mut App, msg: ServerMessage) -> UiEffe
             ) {
                 app.compaction = None;
             }
-            if let Some(kind) = app.take_palette_catalog_request(co.rid.as_deref()) {
-                absorb_palette_catalog(app, &kind, &co.data);
+            if let Some(source) = app.take_palette_catalog_request(co.rid.as_deref()) {
+                absorb_palette_catalog(app, source, &co.data);
                 return UiEffect::redraw(RedrawEffect::Immediate);
             }
             if app
@@ -3453,11 +3384,12 @@ pub(crate) fn handle_server_message(app: &mut App, msg: ServerMessage) -> UiEffe
                 app.finish_sampler_settings_refresh();
             }
             let palette_command = app.take_palette_command(err.rid.as_deref());
-            if app
-                .take_palette_catalog_request(err.rid.as_deref())
-                .is_some()
-            {
-                app.palette_catalog_loaded = false;
+            if let Some(source) = app.take_palette_catalog_request(err.rid.as_deref()) {
+                if Source::LOADED_WITH_THE_PALETTE.contains(&source) {
+                    app.palette_catalog_loaded = false;
+                } else {
+                    app.palette_catalog.mark_loaded(source);
+                }
             }
             if app
                 .pending_auth_check

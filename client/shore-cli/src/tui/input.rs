@@ -9,6 +9,7 @@ use crate::cli::{
     CharacterCommand, CliCommand, ConfigCommand, MsgCommand, PaletteScope, ScrollDirection,
     SegmentTarget, SegmentsCommand, ThreadCommand, ThreadStep, UiCommand, ViewKey,
 };
+use crate::completion::Source;
 use crate::tui::app::{App, ConversationEntry, InputMode, PaletteMode, SegmentRequest};
 use crate::tui::connection::ConnCommand;
 use crate::tui::keymap::{Scope, key_token};
@@ -314,6 +315,7 @@ fn handle_normal_mode(app: &mut App, key: KeyEvent) -> Action {
 fn open_palette(app: &mut App, scope: PaletteScope) -> Action {
     app.input.enter_command_mode();
     app.completion.scope = scope;
+    app.palette_catalog.forget_on_demand_values();
     app.update_completions();
     let commands = palette_catalog_commands(app);
     if commands.is_empty() {
@@ -328,25 +330,27 @@ fn palette_catalog_commands(app: &mut App) -> Vec<ConnCommand> {
         return Vec::new();
     }
     app.palette_catalog_loaded = true;
-    [
-        ("models", "list_models"),
-        ("threads", "list_threads"),
-        ("providers", "list_providers"),
-        ("status", "status"),
-        ("tools", "tools"),
-        ("config", "config_schema"),
-        ("settings", "model_settings"),
-    ]
-    .into_iter()
-    .map(|(kind, name)| {
-        let rid = app.begin_palette_catalog_request(kind);
-        ConnCommand::Send(ClientMessage::Command(Command {
-            rid: Some(rid),
-            name: name.to_owned(),
-            args: serde_json::json!({}),
-        }))
-    })
-    .collect()
+    Source::LOADED_WITH_THE_PALETTE
+        .into_iter()
+        .filter_map(|source| palette_lookup(app, source))
+        .collect()
+}
+
+pub(crate) fn needed_palette_lookups(app: &mut App) -> Vec<ConnCommand> {
+    app.take_needed_palette_sources()
+        .into_iter()
+        .filter_map(|source| palette_lookup(app, source))
+        .collect()
+}
+
+fn palette_lookup(app: &mut App, source: Source) -> Option<ConnCommand> {
+    let (name, args) = app.palette_catalog.palette_request(source)?;
+    let rid = app.begin_palette_catalog_request(source);
+    Some(ConnCommand::Send(ClientMessage::Command(Command {
+        rid: Some(rid),
+        name: name.to_owned(),
+        args,
+    })))
 }
 
 fn handle_output_pager(app: &mut App, key: KeyEvent) -> Action {
@@ -1713,7 +1717,7 @@ fn dispatch_cli_command(app: &mut App, raw_input: &str) -> Action {
     }
 
     match &command {
-        CliCommand::Completions { .. } | CliCommand::Complete { .. } => {
+        CliCommand::Completions { .. } => {
             app.set_error("shell completion generation is a terminal-only CLI operation");
             return Action::Redraw;
         }
@@ -1966,7 +1970,6 @@ fn dispatch_cli_command(app: &mut App, raw_input: &str) -> Action {
         | CliCommand::Config { .. }
         | CliCommand::Usage { .. }
         | CliCommand::Completions { .. }
-        | CliCommand::Complete { .. }
         | CliCommand::View { .. }
         | CliCommand::Ui { .. } => {
             let Some((name, args)) =

@@ -82,6 +82,16 @@ export async function workspaceNames(root: string, signal?: AbortSignal): Promis
   };
 }
 
+const MAX_LISTED_FILES = 2000;
+
+export async function listedWorkspaceFiles(root: string, signal?: AbortSignal): Promise<string[]> {
+  const { files } = await workspaceNames(root, signal);
+  return files
+    .filter(({ file, path }) => !isPicture(file) && !isVideo(file) && !path.split("/").some((part) => part.startsWith(".")))
+    .slice(0, MAX_LISTED_FILES)
+    .map(({ path }) => path);
+}
+
 async function probedText(path: string): Promise<boolean> {
   const file = await openRegularFile(path).catch(() => undefined);
   if (file === undefined) return false;

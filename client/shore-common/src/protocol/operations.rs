@@ -2628,6 +2628,8 @@ wire_types! {
         pub purpose: Option<String>,
     }
 
+    pub struct WorkspaceFileListing { pub files: Vec<String> }
+
     #[serde(deny_unknown_fields)]
     pub struct ThreadFilesArgs {
         pub name: String,
@@ -3035,6 +3037,7 @@ operations! {
     SwitchCharacter: "switch_character" (NamedOperationArgs) => CharacterSelection,
     InspectCharacter: "character_info" (CharacterInfoArgs) => CharacterDetails,
     ListThreads: "list_threads" (EmptyOperationArgs) => ThreadListing,
+    ListWorkspaceFiles: "workspace_files" (EmptyOperationArgs) => WorkspaceFileListing,
     SwitchThread: "switch_thread" (SwitchThreadArgs) => ThreadSelection,
     CreateThread: "create_thread" (CreateThreadArgs) => ThreadListing,
     ArchiveThread: "archive_thread" (NamedOperationArgs) => ThreadListing,

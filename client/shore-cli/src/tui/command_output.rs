@@ -43,7 +43,6 @@ fn config_modes(command: &CliCommand) -> (bool, bool) {
         | CliCommand::Provider { .. }
         | CliCommand::Usage { .. }
         | CliCommand::Completions { .. }
-        | CliCommand::Complete { .. }
         | CliCommand::View { .. }
         | CliCommand::Ui { .. } => (false, false),
     }

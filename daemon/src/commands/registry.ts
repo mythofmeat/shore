@@ -388,6 +388,12 @@ export const commandOperations: OperationRegistry<CommandOperationContext> = {
   list_threads: register("list_threads", {
     ...threadPresentation, label: "Browse threads", fields: {},
   }, async (context) => listThreads(await threadListingContext(context.deps, engineOf(context), context.session))),
+  workspace_files: register("workspace_files", {
+    ...threadPresentation, label: "List workspace files", fields: {},
+  }, async (context) => {
+    const workspace = characterWorkspace(context.session.config, engineOf(context).characterName);
+    return { files: await workspace.call("listFiles", { workspaceDir: workspace.dir }, context.session.signal) };
+  }),
   switch_thread: register("switch_thread", {
     ...threadPresentation, label: "Select thread", effects: ["selection"],
     fields: { name: threadName, resync: { label: "Refresh history", hint: "Request a full history snapshot even if already selected" } },
