@@ -64,6 +64,11 @@ interface RunnerState {
   keepalive: PersistedKeepalive | undefined;
 }
 
+export interface RestoredIdle {
+  readonly turnCount: number;
+  readonly lastActivityAt?: number;
+}
+
 export class CharacterAutonomy {
   readonly #character: string;
   #config: AutonomyRunnerConfig;
@@ -85,6 +90,7 @@ export class CharacterAutonomy {
     clock: HeartbeatClock;
     log: HeartbeatLog;
     restored?: AutonomyStateFile | undefined;
+    idle?: RestoredIdle | undefined;
     now: () => number;
   }) {
     this.#character = opts.character;
@@ -109,10 +115,10 @@ export class CharacterAutonomy {
     }
     this.#state = {
       dirty: false,
-      lastActivityAt: opts.now(),
+      lastActivityAt: opts.idle?.lastActivityAt ?? opts.now(),
       compactionTriggered: false,
       deepArchiveDone: false,
-      activeTurnCount: 0,
+      activeTurnCount: opts.idle?.turnCount ?? 0,
       coveredTurnCount: restored?.coveredTurnCount ?? 0,
       keepalive: restored?.keepalive,
     };

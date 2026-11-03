@@ -149,6 +149,10 @@ export function compactLater(dataDir: string, character: string, thread: string,
   return true;
 }
 
+export async function queuedCompactionsEnded(dataDir: string, character: string): Promise<void> {
+  await characterQueues.get(characterDataDir(dataDir, character));
+}
+
 export async function stopBackgroundCompactions(dataDir: string, reason: string): Promise<void> {
   stopping.add(dataDir);
   try {

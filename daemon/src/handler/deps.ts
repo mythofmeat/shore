@@ -35,7 +35,7 @@ import type { RunningStatusReport } from "../protocol/RunningStatusReport.ts";
 import type { ServerMessage } from "../protocol/ServerMessage.ts";
 import type { CompactionWatchResult } from "../protocol/CompactionWatchResult.ts";
 import { observePasses, runningPass } from "../memory/compaction/activity.ts";
-import { compactLater } from "../memory/compaction/background.ts";
+import { compactLater, queuedCompactionsEnded } from "../memory/compaction/background.ts";
 import { resumesOnStart } from "../memory/compaction/checkpoint.ts";
 import { compactAfterTurn } from "./turn.ts";
 import { passEnd } from "../commands/compact.ts";
@@ -217,17 +217,25 @@ export function chatCompactionRunner(a: GenerationAssembly): GenerationDeps["com
   };
 }
 
+const SIDE_THREAD_COMPACTION = {
+  autonomy: { shouldCompactNow: () => false, onCompactionComplete: () => {}, onCompactionFailed: () => {} },
+};
+
 export async function resumeStoppedCompactions(a: GenerationAssembly): Promise<void> {
   const { runtime } = a;
   const dataDir = runtime.config.dirs.data;
   const runner = chatCompactionRunner(a);
-  for (const character of runtime.registry.availableCharacters()) {
+  const characters = runtime.registry.availableCharacters();
+  for (const character of characters) {
+    const home = runtime.registry.homeThread(character);
     for (const { id: thread } of runtime.registry.listThreads(character)) {
       if (!await resumesOnStart(dataDir, character, thread)) continue;
       shoreLog.info(`shore: resuming the compaction of ${character}/${thread} that the last shutdown paused`);
-      compactLater(dataDir, character, thread, async () => await compactAfterTurn(a, character, runtime.registry.effectiveConfig(character), thread, runner));
+      const ctx = thread === home ? a : SIDE_THREAD_COMPACTION;
+      compactLater(dataDir, character, thread, async () => await compactAfterTurn(ctx, character, runtime.registry.effectiveConfig(character), thread, runner));
     }
   }
+  await Promise.all(characters.map(async (character) => { await queuedCompactionsEnded(dataDir, character); }));
 }
 
 export function usageBudgetWarnings(
