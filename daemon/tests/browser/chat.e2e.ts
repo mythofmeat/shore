@@ -484,3 +484,30 @@ test("effort and model sit together in the message box, a change shows at once a
   await expect(page).toHaveURL(/#settings\/usage$/);
   await finish();
 });
+
+test("the usage display refreshes after a reply and otherwise leaves the daemon alone", async ({ page }) => {
+  const check = await watchPage(page);
+  let usageRequests = 0;
+  page.on("websocket", (socket) => {
+    socket.on("framesent", ({ payload }) => { if (String(payload).includes('"name":"usage"')) usageRequests += 1; });
+  });
+  const settled = async (): Promise<number> => {
+    let seen = -1;
+    await expect.poll(() => {
+      const unchanged = usageRequests === seen;
+      seen = usageRequests;
+      return unchanged;
+    }, { intervals: [1000], message: "usage requests should stop on their own" }).toBe(true);
+    await expect(page.getByText("Connected", { exact: true })).toBeVisible();
+    return usageRequests;
+  };
+  await page.addInitScript("localStorage.setItem('shore.view.v1.usage', 'always')");
+  await signIn(page);
+  await createCharacter(page, "lumen");
+  const beforeReply = await settled();
+  expect(beforeReply).toBeGreaterThan(0);
+  await send(page, "A reply that spends something");
+  await expect.poll(() => usageRequests).toBeGreaterThan(beforeReply);
+  await settled();
+  await check();
+});
