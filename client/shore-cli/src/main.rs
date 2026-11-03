@@ -25,6 +25,7 @@ macro_rules! cli_err {
 mod archives;
 mod backups;
 mod cli;
+mod completion;
 mod output;
 mod providers;
 mod run;
@@ -38,6 +39,8 @@ use cli::{Cli, CliCommand};
 use tracing_subscriber::EnvFilter;
 
 fn main() -> ExitCode {
+    completion::answer_shell();
+
     output::detect_color();
 
     if let Some(problem) = cli::flag_problem(std::env::args()) {
@@ -52,14 +55,8 @@ fn main() -> ExitCode {
         Err(e) => e.exit(),
     };
 
-    let default_filter = if matches!(cli.command, Some(CliCommand::Complete { .. })) {
-        "off"
-    } else {
-        "warn"
-    };
-
     if let Some(CliCommand::Completions { shell }) = &cli.command {
-        cli::print_completions(*shell);
+        completion::print_completions(*shell);
         return match output::finish_stdout() {
             Ok(()) => ExitCode::SUCCESS,
             Err(error) => {
@@ -72,8 +69,7 @@ fn main() -> ExitCode {
     if cli.command.is_some() {
         tracing_subscriber::fmt()
             .with_env_filter(
-                EnvFilter::try_from_default_env()
-                    .unwrap_or_else(|_| EnvFilter::new(default_filter)),
+                EnvFilter::try_from_default_env().unwrap_or_else(|_| EnvFilter::new("warn")),
             )
             .with_target(true)
             .with_writer(std::io::stderr)

@@ -1,3 +1,4 @@
+use crate::completion::{Completes, provider_names, values};
 use clap::{Args, CommandFactory, FromArgMatches, Parser, Subcommand, ValueEnum};
 use clap_complete::Shell;
 use shore_common::protocol::operations::{
@@ -34,7 +35,8 @@ pub(crate) struct Cli {
         long,
         short = 'c',
         env = "SHORE_CHARACTER",
-        help_heading = LEADING_HEADING
+        help_heading = LEADING_HEADING,
+        add = values(Completes::Characters)
     )]
     pub character: Option<String>,
 
@@ -43,7 +45,8 @@ pub(crate) struct Cli {
         long,
         short = 't',
         env = "SHORE_THREAD",
-        help_heading = LEADING_HEADING
+        help_heading = LEADING_HEADING,
+        add = values(Completes::Threads)
     )]
     pub thread: Option<String>,
 
@@ -158,7 +161,7 @@ fn separated_model_target(argv: &[String]) -> Option<FlagProblem> {
         .map(|(flag, value)| FlagProblem::NeedsEquals(flag, value.clone()))
 }
 
-fn leading_flag_named(spelled: &str) -> Option<&'static str> {
+pub(crate) fn leading_flag_named(spelled: &str) -> Option<&'static str> {
     LEADING_FLAGS
         .iter()
         .find(|&&(spelling, _)| spelling == spelled)
@@ -288,7 +291,7 @@ pub(crate) enum CliCommand {
     #[command(display_order = 9)]
     Log {
         /// Message reference — show a single message (last, -1, 3, etc.)
-        #[arg(allow_hyphen_values = true, value_parser = message_ref)]
+        #[arg(allow_hyphen_values = true, value_parser = message_ref, add = values(Completes::MessageRefs))]
         msg_ref: Option<String>,
 
         /// Number of turns to show
@@ -296,7 +299,7 @@ pub(crate) enum CliCommand {
         count: u32,
 
         /// Read an archived segment instead of the current context
-        #[arg(short = 's', long, conflicts_with_all = ["msg_ref", "follow"])]
+        #[arg(short = 's', long, conflicts_with_all = ["msg_ref", "follow"], add = values(Completes::Segments))]
         segment: Option<u32>,
 
         /// Show only messages from one role
@@ -349,7 +352,7 @@ pub(crate) enum CliCommand {
         /// Write memory from an archived segment (see `shore segments`) as if it
         /// were being compacted now. The archive and the conversation are left
         /// as they are. Use it to redo a segment whose pass wrote nothing.
-        #[arg(long, value_name = "INDEX", conflicts_with_all = ["keep_turns", "restart", "watch", "cancel"])]
+        #[arg(long, value_name = "INDEX", conflicts_with_all = ["keep_turns", "restart", "watch", "cancel"], add = values(Completes::Segments))]
         segment: Option<u64>,
 
         /// Follow the compaction already running, whoever started it, from what
@@ -434,7 +437,7 @@ pub(crate) enum CliCommand {
     #[command(display_order = 9)]
     Export {
         /// Character to back up
-        #[arg(required_unless_present = "all", conflicts_with = "all")]
+        #[arg(required_unless_present = "all", conflicts_with = "all", add = values(Completes::Characters))]
         character: Option<String>,
 
         /// Back up every character and the global configuration into a folder;
@@ -476,9 +479,8 @@ pub(crate) enum CliCommand {
     /// Show daemon and session status
     #[command(display_order = 7)]
     Status {
-        /// Show only one section; every section is shown by default.
-        /// `shore complete sections` lists them
-        #[arg(long)]
+        /// Show only one section; every section is shown by default
+        #[arg(long, add = values(Completes::Sections))]
         section: Option<String>,
 
         /// Output raw JSON
@@ -522,7 +524,7 @@ pub(crate) enum CliCommand {
     },
 
     /// List providers with their keys and logins; add, change or remove one
-    #[command(args_conflicts_with_subcommands = true)]
+    #[command(args_conflicts_with_subcommands = true, add = provider_names())]
     #[command(display_order = 5)]
     #[command(
         after_help = "One provider:\n  shore provider <name>                      its transport, keys or logins, and catalog\n  shore provider <name> auth [--add [NAME]]  list its keys or logins, or add one (a key is asked for without echo; a login signs in through a link)\n  shore provider <name> auth <key> --test | --disable | --enable | --rename NEW | --replace | --remove\n  shore provider <name> auth <login> --login  sign a login in again\n  shore provider <name> auth --order a,b     the order keys are tried in\n  shore provider <name> use <key> | --auto   pin a key or login, or go back to choosing\n  shore provider <name> limit <key> --spend 20/month | off\n  shore provider <name> limit <login> --session 80% --weekly 50% | off\n  shore provider <name> set <setting> <value>  base-url, sdk, discover, ignore-models, ...\n  shore provider <name> enable | disable | remove | models | refresh\n\n`shore provider <name> --help` has the details."
@@ -573,23 +575,23 @@ pub(crate) enum CliCommand {
         /// Time period: "today", "week", "month", "all", or a count back like
         /// "4h", "7d", "2w", "1M". Defaults to the current budget window when
         /// a budget is configured, else today
-        #[arg(long, global = true)]
+        #[arg(long, global = true, add = values(Completes::UsagePeriods))]
         last: Option<String>,
 
         /// Filter by provider
-        #[arg(long, global = true)]
+        #[arg(long, global = true, add = values(Completes::UsageProviders))]
         provider: Option<String>,
 
         /// Filter by configured API key name ("unknown" matches older rows)
-        #[arg(long, global = true)]
+        #[arg(long, global = true, add = values(Completes::UsageApiKeys))]
         api_key: Option<String>,
 
         /// Filter by model
-        #[arg(long, global = true)]
+        #[arg(long, global = true, add = values(Completes::UsageModels))]
         model: Option<String>,
 
         /// Filter by ledger call type, e.g. message, heartbeat, or subagent
-        #[arg(long, global = true)]
+        #[arg(long, global = true, add = values(Completes::CallTypes))]
         call_type: Option<String>,
 
         /// Output raw JSON
@@ -606,8 +608,8 @@ pub(crate) enum CliCommand {
         /// Which display element to change
         key: ViewKey,
 
-        /// New state. Defaults to `toggle`; `usage` and `budget` take their own
-        /// values, which `shore complete view-values` lists
+        /// New state. Defaults to `toggle`; `usage` and `budget` take their own values
+        #[arg(add = values(Completes::ViewValues))]
         value: Option<String>,
     },
 
@@ -627,16 +629,6 @@ pub(crate) enum CliCommand {
         /// Shell to generate completions for
         shell: Shell,
     },
-
-    /// Emit plain names for shell completion helpers (internal)
-    #[command(hide = true)]
-    Complete {
-        /// What to enumerate
-        kind: CompleteKind,
-
-        /// Context for kinds that need it, e.g. the key for `config-values`
-        arg: Option<String>,
-    },
 }
 
 #[derive(Subcommand, Debug)]
@@ -647,7 +639,7 @@ pub(crate) enum MsgCommand {
         message: Vec<String>,
 
         /// Attach image file(s) to the message
-        #[arg(short = 'i', long = "image")]
+        #[arg(short = 'i', long = "image", value_hint = clap::ValueHint::FilePath)]
         images: Vec<String>,
 
         /// Inject as a system instruction instead of a user message
@@ -665,11 +657,11 @@ pub(crate) enum MsgCommand {
     /// List or select alternate responses for the latest assistant message
     Alt {
         /// Selector: list, prev, next, last, first, or 1-based alternate position
-        #[arg(allow_hyphen_values = true, value_parser = message_ref)]
+        #[arg(allow_hyphen_values = true, value_parser = message_ref, add = values(Completes::AltSelectors))]
         selector: Option<String>,
 
         /// Assistant message reference (defaults to latest assistant)
-        #[arg(long = "ref", allow_hyphen_values = true, value_parser = message_ref)]
+        #[arg(long = "ref", allow_hyphen_values = true, value_parser = message_ref, add = values(Completes::MessageRefs))]
         msg_ref: Option<String>,
 
         /// Output raw JSON
@@ -680,7 +672,7 @@ pub(crate) enum MsgCommand {
     /// Replace the content of a message (last, -1, 3, etc.)
     Edit {
         /// Message reference (last, -1, -2, 3, etc.)
-        #[arg(allow_hyphen_values = true, value_parser = message_ref)]
+        #[arg(allow_hyphen_values = true, value_parser = message_ref, add = values(Completes::MessageRefs))]
         msg_ref: String,
 
         /// New content. Left off, the message opens in $EDITOR for you to
@@ -698,7 +690,7 @@ pub(crate) enum MsgCommand {
         /// resolves against the conversation as it stands before any of them are
         /// removed. A reference that lands inside a tool loop removes the whole
         /// turn, since a tool result cannot outlive the call it answers
-        #[arg(required = true, allow_hyphen_values = true, value_parser = message_ref)]
+        #[arg(required = true, allow_hyphen_values = true, value_parser = message_ref, add = values(Completes::MessageRefs))]
         msg_refs: Vec<String>,
 
         /// Output raw JSON
@@ -710,19 +702,36 @@ pub(crate) enum MsgCommand {
 #[derive(Subcommand, Debug)]
 pub(crate) enum SegmentsCommand {
     /// Show the messages stored in a segment
-    Show { index: u32 },
+    Show {
+        #[arg(add = values(Completes::Segments))]
+        index: u32,
+    },
 
     /// Exclude a segment from history search
-    Exclude { index: u32 },
+    Exclude {
+        #[arg(add = values(Completes::Segments))]
+        index: u32,
+    },
 
     /// Include a previously excluded segment in history search
-    Include { index: u32 },
+    Include {
+        #[arg(add = values(Completes::Segments))]
+        index: u32,
+    },
 
     /// Set a segment label, or omit LABEL to clear it
-    Label { index: u32, label: Option<String> },
+    Label {
+        #[arg(add = values(Completes::Segments))]
+        index: u32,
+        label: Option<String>,
+    },
 
     /// Set a segment note, or omit NOTE to clear it
-    Note { index: u32, note: Option<String> },
+    Note {
+        #[arg(add = values(Completes::Segments))]
+        index: u32,
+        note: Option<String>,
+    },
 }
 
 /// Display elements `shore view` can change. Every one of these persists into
@@ -764,7 +773,7 @@ impl ViewKey {
         }
     }
 
-    /// Values this key accepts, for completion and for the error text when a
+    /// Completes this key accepts, for completion and for the error text when a
     /// value does not parse. `budget` also takes any configured budget name,
     /// which only the running daemon knows.
     pub(crate) fn values(self) -> &'static [&'static str] {
@@ -813,7 +822,7 @@ pub(crate) enum UiCommand {
     Segment {
         /// `older` or `newer` to step from what is shown, `current` to go
         /// back, or a segment number to jump to
-        #[arg(value_parser = segment_target)]
+        #[arg(value_parser = segment_target, add = values(Completes::SegmentSteps))]
         target: SegmentTarget,
     },
 
@@ -838,6 +847,7 @@ pub(crate) enum UiCommand {
         /// `paste` to take one from the clipboard, `clear` to drop the queue, a
         /// file path to attach it, or nothing to open the picker. A file
         /// actually named `paste` or `clear` has to go through the picker
+        #[arg(add = values(Completes::ImageTargets))]
         target: Option<String>,
     },
 
@@ -881,6 +891,7 @@ pub(crate) enum UiCommand {
     /// Remove a key binding and save `tui.toml`
     Unbind {
         /// Key to free up
+        #[arg(add = values(Completes::BoundKeys))]
         key: String,
 
         /// Free it from the every-mode bindings rather than normal mode
@@ -935,37 +946,6 @@ pub(crate) enum PaletteScope {
     Shortcuts,
     /// The settings browser
     Config,
-}
-
-/// Targets for the hidden `__complete` helper.
-#[derive(ValueEnum, Clone, Copy, Debug, PartialEq, Eq)]
-pub(crate) enum CompleteKind {
-    /// Chat model names from the daemon's catalog
-    Models,
-    /// Discovered character names
-    Characters,
-    /// Threads belonging to the selected character
-    Threads,
-    /// Configured provider keys
-    Providers,
-    /// Section names `shore status --section` accepts
-    Sections,
-    /// Every name `shore debug tool` accepts: built-ins, `ask_<subagent>`,
-    /// and connected `mcp__<server>__<tool>`
-    Tools,
-    /// Configured sub-agent names, without the `ask_` prefix
-    Subagents,
-    /// Sampler keys `shore model setting` accepts, with how the target model
-    /// treats each one
-    SettingKeys,
-    /// Preset values advertised for the named model setting
-    SettingValues,
-    /// Dotted config keys that `shore config set` accepts, with their types
-    ConfigKeys,
-    /// Every dotted config key, settable or not, for `shore config get`
-    ConfigSections,
-    /// Values valid for the config key named in the argument
-    ConfigValues,
 }
 
 /// Background task to retarget `shore model setting` at. `all` targets every
@@ -1068,6 +1048,7 @@ pub(crate) enum TraceCommand {
     /// that call's full request and response
     Calls {
         /// Call id to dump (from the bare listing)
+        #[arg(add = values(Completes::Calls))]
         id: Option<i64>,
 
         /// Number of calls to list
@@ -1075,7 +1056,7 @@ pub(crate) enum TraceCommand {
         count: u32,
 
         /// Filter by ledger call type, or require that type when dumping an id
-        #[arg(long)]
+        #[arg(long, add = values(Completes::CallTypes))]
         call_type: Option<String>,
 
         /// Also show what changed since the previous call
@@ -1083,7 +1064,7 @@ pub(crate) enum TraceCommand {
         diff: bool,
 
         /// Compare against this call id instead of the previous one
-        #[arg(long, requires = "diff", value_name = "ID")]
+        #[arg(long, requires = "diff", value_name = "ID", add = values(Completes::Calls))]
         against: Option<i64>,
 
         /// Show the raw HTTP request and response bodies in full, untruncated
@@ -1134,6 +1115,7 @@ pub(crate) enum TraceCommand {
     /// came back. Bare lists recent runs; pass a parent tool_use id for one
     Subagent {
         /// Parent tool_use id of a single run to dump
+        #[arg(add = values(Completes::SubagentRuns))]
         id: Option<String>,
 
         /// Number of runs to list
@@ -1170,7 +1152,8 @@ pub(crate) struct ModelTarget {
         num_args = 0..=1,
         require_equals = true,
         default_missing_value = "all",
-        conflicts_with_all = ["chat", "background"]
+        conflicts_with_all = ["chat", "background"],
+        add = values(Completes::Subagents)
     )]
     pub(crate) subagent: Option<String>,
 }
@@ -1204,6 +1187,7 @@ pub(crate) enum ModelCommand {
     /// and bare `--subagent` writes `subagents.model`.
     Use {
         /// Model name or provider:model_id
+        #[arg(add = values(Completes::Models))]
         name: String,
 
         #[command(flatten)]
@@ -1217,6 +1201,7 @@ pub(crate) enum ModelCommand {
     /// is compaction actually running on".
     Info {
         /// Model to describe. Omit for the active one, or for the targeted role
+        #[arg(add = values(Completes::Models))]
         name: Option<String>,
 
         #[command(flatten)]
@@ -1260,9 +1245,11 @@ pub(crate) enum ModelCommand {
     /// model only lists the knobs its own sdk honors.
     Setting {
         /// Setting key (temperature, top_p, reasoning_effort, sdk, ...)
+        #[arg(add = values(Completes::SettingKeys))]
         key: Option<String>,
 
         /// Value to save; true/false for booleans, off/none to stop reasoning
+        #[arg(add = values(Completes::SettingValues))]
         value: Option<String>,
 
         /// Save to the global preferences file instead of this character's
@@ -1277,7 +1264,7 @@ pub(crate) enum ModelCommand {
         target: ModelTarget,
 
         /// Tune a named model without switching to it
-        #[arg(long, conflicts_with_all = ["chat", "background", "subagent"])]
+        #[arg(long, conflicts_with_all = ["chat", "background", "subagent"], add = values(Completes::Models))]
         model: Option<String>,
 
         /// Output raw JSON
@@ -1293,12 +1280,14 @@ pub(crate) enum ModelCommand {
     /// when a `discovery.ignore` glob would otherwise hide it.
     Fav {
         /// Model name or provider:model_id
+        #[arg(add = values(Completes::Models))]
         name: String,
     },
 
     /// Drop a model's favorite mark
     Unfav {
         /// Model name or provider:model_id
+        #[arg(add = values(Completes::FavoriteModels))]
         name: String,
     },
 
@@ -1322,6 +1311,7 @@ pub(crate) enum CharacterCommand {
     /// Switch the active character. Unknown names are an error, never a fallback
     Use {
         /// Character name
+        #[arg(add = values(Completes::Characters))]
         name: String,
     },
 
@@ -1341,6 +1331,7 @@ pub(crate) enum CharacterCommand {
     #[command(verbatim_doc_comment)]
     Delete {
         /// Character name
+        #[arg(add = values(Completes::Characters))]
         name: String,
 
         /// Download a backup to this path before deleting
@@ -1358,6 +1349,7 @@ pub(crate) enum ThreadCommand {
     /// Talk in another thread. Unknown names are an error, never a fallback
     Use {
         /// Thread id
+        #[arg(add = values(Completes::Threads))]
         name: String,
     },
 
@@ -1375,11 +1367,11 @@ pub(crate) enum ThreadCommand {
         purpose: Option<String>,
 
         /// Workspace file to keep in this thread's prompt, like a story's notes, as a path or a [[link]]; repeat for more
-        #[arg(long = "file", value_name = "PATH")]
+        #[arg(long = "file", value_name = "PATH", add = values(Completes::WorkspaceFiles))]
         files: Vec<String>,
 
         /// Chat model for this thread alone
-        #[arg(long)]
+        #[arg(long, add = values(Completes::Models))]
         model: Option<String>,
 
         /// When this thread gets long, compact it into memory as the home thread does, instead of trimming its oldest turns into the archive. `shore compact` works either way
@@ -1390,6 +1382,7 @@ pub(crate) enum ThreadCommand {
     /// Set or clear a thread's label
     Label {
         /// Thread id
+        #[arg(add = values(Completes::Threads))]
         name: String,
 
         /// New label; omit to clear it
@@ -1399,6 +1392,7 @@ pub(crate) enum ThreadCommand {
     /// Set or clear what a thread is for. The character sees it in that thread's prompt
     Purpose {
         /// Thread id
+        #[arg(add = values(Completes::Threads))]
         name: String,
 
         /// A line or two; omit to clear it
@@ -1408,27 +1402,32 @@ pub(crate) enum ThreadCommand {
     /// Set the workspace files kept in a thread's prompt, next to MEMORY.md
     Files {
         /// Thread id
+        #[arg(add = values(Completes::Threads))]
         name: String,
 
         /// Paths relative to the workspace root or [[links]], like [[notes]] or [[lighthouse/]]; omit all to clear the list
+        #[arg(add = values(Completes::WorkspaceFiles))]
         files: Vec<String>,
     },
 
     /// Lock a thread's label, purpose and files, so only you change them. The character can still edit the files themselves
     Lock {
         /// Thread id
+        #[arg(add = values(Completes::Threads))]
         name: String,
     },
 
     /// Unlock a thread, so the character can change its label, purpose and files again with edit_thread
     Unlock {
         /// Thread id
+        #[arg(add = values(Completes::Threads))]
         name: String,
     },
 
     /// Choose what happens when a thread gets long: compact it into memory, or trim its oldest turns into the archive
     Compaction {
         /// Thread id
+        #[arg(add = values(Completes::Threads))]
         name: String,
 
         /// `on` compacts into memory, as the home thread does; `off` trims into the archive
@@ -1439,10 +1438,11 @@ pub(crate) enum ThreadCommand {
     /// Move a thread to another place in the list, or into or out of a folder. The home and heartbeat threads stay at the top
     Move {
         /// Thread id
+        #[arg(add = values(Completes::Threads))]
         name: String,
 
         /// Folder to put it in
-        #[arg(long, conflicts_with = "no_folder")]
+        #[arg(long, conflicts_with = "no_folder", add = values(Completes::Folders))]
         folder: Option<String>,
 
         /// Take it out of its folder
@@ -1450,7 +1450,7 @@ pub(crate) enum ThreadCommand {
         no_folder: bool,
 
         /// Thread to place it above; omit for the end of the list
-        #[arg(long)]
+        #[arg(long, add = values(Completes::Threads))]
         before: Option<String>,
     },
 
@@ -1468,21 +1468,25 @@ pub(crate) enum ThreadCommand {
     #[command(hide = true)]
     Model {
         /// Thread id
+        #[arg(add = values(Completes::Threads))]
         name: String,
 
         /// Model to pin, as `provider:model_id`; omit to clear the pin
+        #[arg(add = values(Completes::Models))]
         model: Option<String>,
     },
 
     /// Make a thread home. This is where the messages the character sends from heartbeats arrive
     Home {
         /// Thread id
+        #[arg(add = values(Completes::Threads))]
         name: String,
     },
 
     /// Retire a thread: its messages go to the archive and stay searchable
     Archive {
         /// Thread id
+        #[arg(add = values(Completes::Threads))]
         name: String,
     },
 
@@ -1498,7 +1502,7 @@ pub(crate) enum ThreadCommand {
         name: String,
 
         /// Thread to copy from; defaults to the one you are talking in
-        #[arg(long)]
+        #[arg(long, add = values(Completes::Threads))]
         from: Option<String>,
 
         /// Copy only the last N of your turns, with their whole tool exchanges.
@@ -1519,6 +1523,7 @@ pub(crate) enum ThreadFolderCommand {
     /// Rename a folder
     Rename {
         /// Folder name
+        #[arg(add = values(Completes::Folders))]
         name: String,
 
         /// New name
@@ -1528,22 +1533,25 @@ pub(crate) enum ThreadFolderCommand {
     /// Delete a folder. Its threads go back to the list outside folders; none is archived
     Delete {
         /// Folder name
+        #[arg(add = values(Completes::Folders))]
         name: String,
     },
 
     /// Move a folder to another place among the folders
     Move {
         /// Folder name
+        #[arg(add = values(Completes::Folders))]
         name: String,
 
         /// Folder to place it above; omit for the end
-        #[arg(long)]
+        #[arg(long, add = values(Completes::Folders))]
         before: Option<String>,
     },
 
     /// Choose how a folder lists its threads: by last activity, or in the order you put them
     Sort {
         /// Folder name
+        #[arg(add = values(Completes::Folders))]
         name: String,
 
         #[arg(value_parser = ["activity", "manual"])]
@@ -1556,6 +1564,7 @@ pub(crate) enum ProviderCommand {
     /// List discovered + statically configured models for one provider.
     Models {
         /// Provider key (e.g. `openrouter`, `anthropic`)
+        #[arg(add = values(Completes::Providers))]
         name: String,
 
         /// Include hidden discovered models in the main list
@@ -1574,6 +1583,7 @@ pub(crate) enum ProviderCommand {
     Refresh {
         /// Provider key to refresh. Omit to refresh all discovery-enabled
         /// providers in one batch.
+        #[arg(add = values(Completes::Providers))]
         name: Option<String>,
 
         /// Output raw JSON
@@ -1614,10 +1624,11 @@ pub(crate) struct KeySourceArgs {
 #[derive(clap::Args, Debug, Clone)]
 pub(crate) struct ProviderAddArgs {
     /// A known provider such as openrouter, or a name of your own
+    #[arg(add = values(Completes::ProviderPresets))]
     pub(crate) name: Option<String>,
 
     /// SDK for a provider of your own: openai suits most OpenAI-compatible servers
-    #[arg(long)]
+    #[arg(long, add = values(Completes::Sdks))]
     pub(crate) sdk: Option<String>,
 
     /// Endpoint for a provider of your own, e.g. http://localhost:11434/v1
@@ -1664,12 +1675,16 @@ pub(crate) enum ProviderAction {
     /// Change a setting: base-url, sdk, discover, ignore-models, subscription,
     /// no-auth, or a default for its models such as max-output-tokens
     Set {
+        #[arg(add = values(Completes::ProviderSettings))]
         setting: String,
-        #[arg(required = true, num_args = 1..)]
+        #[arg(required = true, num_args = 1.., add = values(Completes::ProviderSettingValues))]
         value: Vec<String>,
     },
     /// Return a setting to its default
-    Unset { setting: String },
+    Unset {
+        #[arg(add = values(Completes::ProviderSettings))]
+        setting: String,
+    },
     /// Turn the provider on
     Enable,
     /// Turn the provider off without removing it
@@ -1684,21 +1699,23 @@ pub(crate) enum ProviderAction {
     Auth(AuthArgs),
     /// Use only one key or login, or --auto to go back to choosing
     Use {
+        #[arg(add = values(Completes::Credentials))]
         credential: Option<String>,
         #[arg(long, conflicts_with = "credential")]
         auto: bool,
     },
     /// Cap what one key may spend, or how much of its windows one login may use
     Limit {
+        #[arg(add = values(Completes::Credentials))]
         credential: String,
         /// A key's spending: 20/month, 5/day, or off
-        #[arg(long, value_name = "USD[/PERIOD]", conflicts_with_all = ["session", "weekly"])]
+        #[arg(long, value_name = "USD[/PERIOD]", conflicts_with_all = ["session", "weekly"], add = values(Completes::LimitOff))]
         spend: Option<String>,
         /// A login's share of its 5-hour window: 80%, or off for the default
-        #[arg(long, value_name = "PERCENT")]
+        #[arg(long, value_name = "PERCENT", add = values(Completes::LimitOff))]
         session: Option<String>,
         /// A login's share of its weekly window: 50%, or off for the default
-        #[arg(long, value_name = "PERCENT")]
+        #[arg(long, value_name = "PERCENT", add = values(Completes::LimitOff))]
         weekly: Option<String>,
     },
     /// List the provider's models
@@ -1714,6 +1731,7 @@ pub(crate) enum ProviderAction {
 #[derive(clap::Args, Debug)]
 pub(crate) struct AuthArgs {
     /// The key or login to act on, by name; a login also goes by its email
+    #[arg(add = values(Completes::Credentials))]
     pub(crate) credential: Option<String>,
 
     /// Add a key named NAME (default, then key2, ...), asked for without echoing,
@@ -1754,7 +1772,7 @@ pub(crate) struct AuthArgs {
     pub(crate) remove: bool,
 
     /// Try keys in this order, e.g. --order work,personal
-    #[arg(long, value_delimiter = ',', value_name = "NAMES", conflicts_with_all = ["credential", "add"])]
+    #[arg(long, value_delimiter = ',', value_name = "NAMES", conflicts_with_all = ["credential", "add"], add = values(Completes::Credentials))]
     pub(crate) order: Vec<String>,
 
     /// Don't ask before removing
@@ -2192,6 +2210,7 @@ pub(crate) enum ConfigCommand {
     #[command(verbatim_doc_comment)]
     Get {
         /// Dotted key, e.g. heartbeat.enabled, daemon.listen_addr, mcp.beets.command
+        #[arg(add = values(Completes::ConfigSections))]
         key: String,
 
         /// Output raw JSON
@@ -2220,9 +2239,11 @@ pub(crate) enum ConfigCommand {
     #[command(verbatim_doc_comment)]
     Set {
         /// Dotted key, e.g. heartbeat.enabled, compaction.idle_after
+        #[arg(add = values(Completes::ConfigKeys))]
         key: String,
 
         /// New value. Lists take a comma-separated string
+        #[arg(add = values(Completes::ConfigValues))]
         value: String,
 
         /// Output raw JSON
@@ -2234,6 +2255,7 @@ pub(crate) enum ConfigCommand {
     /// the current values; this shows what `set` will accept.
     Keys {
         /// Only keys whose name contains this substring
+        #[arg(add = values(Completes::ConfigSections))]
         filter: Option<String>,
 
         /// Output raw JSON
@@ -2299,10 +2321,11 @@ pub(crate) enum DebugCommand {
     #[command(name = "tool", verbatim_doc_comment)]
     Tool {
         /// A built-in tool, `ask_<subagent>`, or `mcp__<server>__<tool>`
+        #[arg(add = values(Completes::Tools))]
         name: String,
 
         /// Arguments as `key=value`, coerced to the tool's declared types
-        #[arg(value_parser = parse_key_value)]
+        #[arg(value_parser = parse_key_value, add = values(Completes::ToolArguments))]
         args: Vec<(String, String)>,
 
         /// Whole argument object as JSON, for nested or array values.
@@ -2329,6 +2352,7 @@ pub(crate) enum DebugCommand {
     #[command(name = "subagent")]
     Subagent {
         /// Sub-agent name, without the `ask_` prefix
+        #[arg(add = values(Completes::Subagents))]
         name: String,
 
         /// The query to send
@@ -2388,364 +2412,6 @@ fn grouped_names() -> impl Iterator<Item = &'static str> {
     COMMAND_GROUPS
         .iter()
         .flat_map(|(_, names)| names.iter().copied())
-}
-
-#[derive(Clone, Debug, Default, PartialEq, Eq)]
-pub(crate) struct PaletteValue {
-    pub value: String,
-    pub help: Option<String>,
-}
-
-impl PaletteValue {
-    pub(crate) fn plain(value: impl Into<String>) -> Self {
-        Self {
-            value: value.into(),
-            help: None,
-        }
-    }
-}
-
-#[derive(Clone, Debug, Default)]
-pub(crate) struct PaletteCatalog {
-    pub models: Vec<PaletteValue>,
-    pub characters: Vec<PaletteValue>,
-    pub threads: Vec<PaletteValue>,
-    pub providers: Vec<PaletteValue>,
-    pub status_sections: Vec<PaletteValue>,
-    pub tools: Vec<PaletteValue>,
-    pub subagents: Vec<PaletteValue>,
-    pub setting_keys: Vec<PaletteValue>,
-    pub setting_values: BTreeMap<String, Vec<PaletteValue>>,
-    pub message_refs: Vec<PaletteValue>,
-    pub config_keys: Vec<PaletteValue>,
-    pub config_sections: Vec<PaletteValue>,
-    pub config_schema: Option<serde_json::Value>,
-}
-
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub(crate) struct PaletteCandidate {
-    pub replacement: String,
-    pub help: Option<String>,
-}
-
-#[derive(Clone, Debug, Default, PartialEq, Eq)]
-pub(crate) struct PaletteCompletions {
-    pub candidates: Vec<PaletteCandidate>,
-    pub header: Option<String>,
-}
-
-fn completion_values(values: &[PaletteValue]) -> clap_complete::engine::ArgValueCandidates {
-    use clap_complete::engine::{ArgValueCandidates, CompletionCandidate};
-
-    let owned_values = values.to_vec();
-    ArgValueCandidates::new(move || {
-        owned_values
-            .iter()
-            .map(|candidate| {
-                CompletionCandidate::new(&candidate.value).help(
-                    candidate
-                        .help
-                        .as_ref()
-                        .map(|help| clap::builder::StyledStr::from(help.clone())),
-                )
-            })
-            .collect()
-    })
-}
-
-fn with_palette_values(
-    command: clap::Command,
-    arg: &str,
-    values: &[PaletteValue],
-) -> clap::Command {
-    let candidates = completion_values(values);
-    let index = command
-        .get_arguments()
-        .find(|argument| argument.get_id() == arg)
-        .and_then(clap::Arg::get_index);
-    command.mut_arg(arg, move |argument| {
-        let updated_argument = argument.add(candidates.clone());
-        match index {
-            Some(position) => updated_argument.index(position),
-            None => updated_argument,
-        }
-    })
-}
-
-fn palette_command(catalog: &PaletteCatalog, input: &str) -> clap::Command {
-    use clap::CommandFactory;
-
-    let config_value_key = shlex::split(input).and_then(|words| {
-        (words.first().map(String::as_str) == Some("config")
-            && words.get(1).map(String::as_str) == Some("set"))
-        .then(|| words.get(2).cloned())
-        .flatten()
-    });
-    let config_values = config_value_key
-        .as_deref()
-        .zip(catalog.config_schema.as_ref())
-        .map_or_else(Vec::new, |(key, data)| {
-            crate::run::config_value_candidates_for_key(key, data)
-                .into_iter()
-                .map(PaletteValue::plain)
-                .collect()
-        });
-    let setting_values = shlex::split(input)
-        .and_then(|words| {
-            (words.first().map(String::as_str) == Some("model")
-                && words.get(1).map(String::as_str) == Some("setting"))
-            .then(|| words.get(2).cloned())
-            .flatten()
-        })
-        .and_then(|key| catalog.setting_values.get(&key).cloned())
-        .unwrap_or_default();
-
-    let model_values = catalog.models.clone();
-    let subagent_values = catalog.subagents.clone();
-    let message_refs = catalog.message_refs.clone();
-    let mut command = Cli::command();
-    command.build();
-    command = command
-        .mut_arg("character", |argument| argument.hide(true))
-        .mut_arg("addr", |argument| argument.hide(true))
-        .mut_arg("help", |argument| argument.hide(true))
-        .mut_arg("version", |argument| argument.hide(true))
-        .mut_subcommand("completions", |subcommand| subcommand.hide(true))
-        .mut_subcommand("view", |subcommand| subcommand.hide(false))
-        .mut_subcommand("ui", |subcommand| subcommand.hide(false))
-        .mut_subcommand("model", |subcommand| {
-            subcommand
-                .mut_subcommand("use", |leaf| {
-                    with_palette_values(
-                        with_palette_values(leaf, "subagent", &subagent_values),
-                        "name",
-                        &model_values,
-                    )
-                })
-                .mut_subcommand("info", |leaf| {
-                    with_palette_values(
-                        with_palette_values(leaf, "subagent", &subagent_values),
-                        "name",
-                        &model_values,
-                    )
-                })
-                .mut_subcommand("setting", |leaf| {
-                    with_palette_values(
-                        with_palette_values(
-                            with_palette_values(
-                                with_palette_values(leaf, "subagent", &subagent_values),
-                                "model",
-                                &model_values,
-                            ),
-                            "key",
-                            &catalog.setting_keys,
-                        ),
-                        "value",
-                        &setting_values,
-                    )
-                })
-                .mut_subcommand("reset", |leaf| {
-                    with_palette_values(leaf, "subagent", &subagent_values)
-                })
-                .mut_subcommand("fav", |leaf| {
-                    with_palette_values(leaf, "name", &model_values)
-                })
-                .mut_subcommand("unfav", |leaf| {
-                    with_palette_values(leaf, "name", &model_values)
-                })
-        })
-        .mut_subcommand("thread", |mut subcommand| {
-            for name in [
-                "use", "label", "purpose", "files", "lock", "unlock", "home", "archive", "model",
-            ] {
-                subcommand = subcommand.mut_subcommand(name, |leaf| {
-                    with_palette_values(leaf, "name", &catalog.threads)
-                });
-            }
-            subcommand
-                .mut_subcommand("fork", |leaf| {
-                    with_palette_values(leaf, "from", &catalog.threads)
-                })
-                .mut_subcommand("new", |leaf| {
-                    with_palette_values(leaf, "model", &model_values)
-                })
-                .mut_subcommand("model", |leaf| {
-                    with_palette_values(leaf, "model", &model_values)
-                })
-        })
-        .mut_subcommand("character", |mut subcommand| {
-            for name in ["use", "delete"] {
-                subcommand = subcommand.mut_subcommand(name, |leaf| {
-                    with_palette_values(leaf, "name", &catalog.characters)
-                });
-            }
-            subcommand
-        })
-        .mut_subcommand("msg", |subcommand| {
-            subcommand
-                .mut_subcommand("alt", |leaf| {
-                    let selectors = ["list", "prev", "next", "first", "last", "1", "2", "3"]
-                        .into_iter()
-                        .map(PaletteValue::plain)
-                        .collect::<Vec<_>>();
-                    with_palette_values(
-                        with_palette_values(leaf, "selector", &selectors),
-                        "msg_ref",
-                        &message_refs,
-                    )
-                })
-                .mut_subcommand("edit", |leaf| {
-                    with_palette_values(leaf, "msg_ref", &message_refs)
-                })
-                .mut_subcommand("delete", |leaf| {
-                    with_palette_values(leaf, "msg_refs", &message_refs)
-                })
-        })
-        .mut_subcommand("log", |leaf| {
-            with_palette_values(leaf, "msg_ref", &message_refs)
-        })
-        .mut_subcommand("provider", |subcommand| {
-            subcommand
-                .mut_subcommand("models", |leaf| {
-                    with_palette_values(leaf, "name", &catalog.providers)
-                })
-                .mut_subcommand("refresh", |leaf| {
-                    with_palette_values(leaf, "name", &catalog.providers)
-                })
-        })
-        .mut_subcommand("status", |leaf| {
-            with_palette_values(leaf, "section", &catalog.status_sections)
-        })
-        .mut_subcommand("debug", |subcommand| {
-            subcommand
-                .mut_subcommand("tool", |leaf| {
-                    with_palette_values(leaf, "name", &catalog.tools)
-                })
-                .mut_subcommand("subagent", |leaf| {
-                    with_palette_values(leaf, "name", &catalog.subagents)
-                })
-        })
-        .mut_subcommand("config", |subcommand| {
-            subcommand
-                .mut_subcommand("get", |leaf| {
-                    with_palette_values(leaf, "key", &catalog.config_sections)
-                })
-                .mut_subcommand("set", |leaf| {
-                    with_palette_values(
-                        with_palette_values(leaf, "key", &catalog.config_keys),
-                        "value",
-                        &config_values,
-                    )
-                })
-        });
-
-    for local in [
-        clap::Command::new("cancel").about("Stop the current generation"),
-        clap::Command::new("help").about("Show TUI keyboard shortcuts"),
-        clap::Command::new("image")
-            .about("Manage images attached to the next message")
-            .subcommand(clap::Command::new("clear").about("Remove pending image attachments")),
-        clap::Command::new("view")
-            .about("Configure TUI display options")
-            .arg(
-                clap::Arg::new("option")
-                    .value_parser([
-                        "timestamps",
-                        "thinking",
-                        "tools",
-                        "subagent",
-                        "images",
-                        "metadata",
-                        "usage",
-                        "budget",
-                    ])
-                    .help("Display option to change"),
-            )
-            .arg(
-                clap::Arg::new("value")
-                    .value_parser([
-                        "on", "off", "toggle", "always", "warn", "auto", "cap", "pace",
-                    ])
-                    .help("New display value"),
-            ),
-    ] {
-        command = command.subcommand(local);
-    }
-    command
-}
-
-fn completion_argv(input: &str) -> (Vec<std::ffi::OsString>, usize) {
-    let trailing_space = input.chars().last().is_some_and(char::is_whitespace);
-    let mut words = shlex::split(input).unwrap_or_else(|| {
-        input
-            .split_whitespace()
-            .map(str::to_owned)
-            .collect::<Vec<_>>()
-    });
-    if trailing_space || words.is_empty() {
-        words.push(String::new());
-    }
-    let mut argv = vec![std::ffi::OsString::from("shore")];
-    argv.extend(words.into_iter().map(std::ffi::OsString::from));
-    let target = argv.len().saturating_sub(1);
-    (argv, target)
-}
-
-fn completion_prefix(input: &str) -> &str {
-    let mut quote = None;
-    let mut escaped = false;
-    let mut start = 0;
-    for (index, ch) in input.char_indices() {
-        if escaped {
-            escaped = false;
-            continue;
-        }
-        match ch {
-            '\\' if quote != Some('\'') => escaped = true,
-            '\'' | '"' if quote == Some(ch) => quote = None,
-            '\'' | '"' if quote.is_none() => quote = Some(ch),
-            _ if ch.is_whitespace() && quote.is_none() => {
-                start = index.saturating_add(ch.len_utf8());
-            }
-            _ => {}
-        }
-    }
-    input.get(..start).unwrap_or_default()
-}
-
-/// Complete the TUI command line with clap's shell-independent engine.
-///
-/// Clap remains the grammar authority while the live catalog supplies values
-/// that only the connected daemon knows about.
-pub(crate) fn palette_completions(input: &str, catalog: &PaletteCatalog) -> PaletteCompletions {
-    let (argv, target) = completion_argv(input);
-    let prefix = completion_prefix(input);
-    let mut command = palette_command(catalog, input);
-    let Ok(raw) = clap_complete::engine::complete(&mut command, argv, target, None) else {
-        return PaletteCompletions::default();
-    };
-
-    let mut candidates = raw
-        .into_iter()
-        .filter_map(|candidate| {
-            let value = candidate.get_value().to_str()?;
-            if matches!(value, "-h" | "--help" | "-V" | "--version") {
-                return None;
-            }
-            let quoted = shlex::try_quote(value).ok()?;
-            Some(PaletteCandidate {
-                replacement: format!("{prefix}{quoted}"),
-                help: candidate.get_help().map(ToString::to_string),
-            })
-        })
-        .collect::<Vec<_>>();
-    let mut seen = std::collections::HashSet::new();
-    candidates.retain(|candidate| seen.insert(candidate.replacement.clone()));
-
-    PaletteCompletions {
-        header: (!candidates.is_empty()).then(|| "command, option, or value".to_owned()),
-        candidates,
-    }
 }
 
 /// Whether `input` is a whole command or only the start of one.
@@ -2871,144 +2537,6 @@ pub(crate) fn grouped_command() -> clap::Command {
         ))
 }
 
-pub(crate) fn print_completions(shell: Shell) {
-    use clap::CommandFactory;
-    let mut generated: Vec<u8> = Vec::new();
-    clap_complete::generate(shell, &mut Cli::command(), "shore", &mut generated);
-    let script = String::from_utf8_lossy(&generated).into_owned();
-    cli_write!("{}", suppress_noise_completions(shell, &script));
-    if shell == Shell::Fish {
-        cli_out!("{}", fish_dynamic_completions_footer());
-    }
-}
-
-const INTERNAL_HELPER_HELP: &str = "Emit plain names for shell completion helpers (internal)";
-
-const SUPERSEDED_HELP: &str = "Superseded by";
-
-/// Marks `view` and `ui` in generated help text. Both parse everywhere so the
-/// TUI can bind keys to them, but neither does anything in a terminal.
-const TUI_ONLY_HELP: &str = "Only meaningful inside";
-
-/// Commands a shell must never offer: clap's own completion helper, plus the
-/// two that need a running TUI.
-const NOISE_COMMANDS: [&str; 3] = ["complete", "view", "ui"];
-
-pub(crate) fn suppress_noise_completions(shell: Shell, script: &str) -> String {
-    let mut out = String::with_capacity(script.len());
-    let mut skipping_fish_target = false;
-    for line in script.lines() {
-        if skipping_fish_target {
-            if line.matches('"').count() % 2 == 1 {
-                skipping_fish_target = false;
-            }
-            continue;
-        }
-        let fish_optional_target = shell == Shell::Fish
-            && line.contains("__fish_shore_using_subcommand model")
-            && (line.contains(" -l background ") || line.contains(" -l subagent "));
-        if fish_optional_target {
-            skipping_fish_target = line.matches('"').count() % 2 == 1;
-            continue;
-        }
-        if line.contains(INTERNAL_HELPER_HELP)
-            || line.contains(SUPERSEDED_HELP)
-            || line.contains(TUI_ONLY_HELP)
-        {
-            continue;
-        }
-        if shell == Shell::Bash && line.trim_start().starts_with("opts=") {
-            out.push_str(&strip_noise_words(line));
-        } else {
-            out.push_str(line);
-        }
-        out.push('\n');
-    }
-    out
-}
-
-/// Drop the noise commands from one bash `opts="…"` word list.
-///
-/// Fish and zsh put each command on its own line next to its help text, so the
-/// filter above can recognise them. Bash emits a flat list of bare words with no
-/// help and no fixed order, so the only handle left is the name itself.
-fn strip_noise_words(line: &str) -> String {
-    let Some((head, rest)) = line.split_once('"') else {
-        return line.to_owned();
-    };
-    let Some((words, tail)) = rest.rsplit_once('"') else {
-        return line.to_owned();
-    };
-    let kept = words
-        .split_whitespace()
-        .filter(|word| !NOISE_COMMANDS.contains(word))
-        .collect::<Vec<_>>()
-        .join(" ");
-    format!("{head}\"{kept}\"{tail}")
-}
-
-pub(crate) fn fish_dynamic_completions_footer() -> &'static str {
-    "\n\
-# ── Dynamic completions (populated by the daemon) ────────────────────\n\
-complete -c shore -l thread -r -f -a \"(shore complete threads 2>/dev/null)\"\n\
-complete -c shore -n \"__fish_shore_using_subcommand thread; and __fish_seen_subcommand_from use label home archive\" -f -a \"(shore complete threads 2>/dev/null)\"\n\
-complete -c shore -n \"__fish_shore_using_subcommand thread; and __fish_seen_subcommand_from fork\" -l from -r -f -a \"(shore complete threads 2>/dev/null)\"\n\
-complete -c shore -n \"__fish_shore_using_subcommand thread; and __fish_seen_subcommand_from new\" -l model -r -f -a \"(shore complete models 2>/dev/null)\"\n\
-complete -c shore -n \"__fish_shore_using_subcommand model; and __fish_seen_subcommand_from use info\" -f -a \"(shore complete models 2>/dev/null)\"\n\
-complete -c shore -n \"__fish_shore_using_subcommand character; and __fish_seen_subcommand_from use delete\" -f -a \"(shore complete characters 2>/dev/null)\"\n\
-complete -c shore -n \"__fish_shore_using_subcommand provider; and __fish_seen_subcommand_from models refresh\" -f -a \"(shore complete providers 2>/dev/null)\"\n\
-complete -c shore -n \"__fish_shore_using_subcommand status\" -l section -r -f -a \"(shore complete sections 2>/dev/null)\"\n\
-complete -c shore -n \"__fish_shore_using_subcommand debug; and __fish_seen_subcommand_from tool\" -f -a \"(shore complete tools 2>/dev/null)\"\n\
-complete -c shore -n \"__fish_shore_using_subcommand debug; and __fish_seen_subcommand_from subagent\" -f -a \"(shore complete subagents 2>/dev/null)\"\n\
-\n\
-function __shore_setting_key\n\
-    set -l seen 0\n\
-    set -l skip 0\n\
-    for token in (commandline -opc)\n\
-        if test $skip -eq 1\n\
-            set skip 0\n\
-            continue\n\
-        end\n\
-        if contains -- $token --model\n\
-            set skip 1\n\
-            continue\n\
-        end\n\
-        if test $seen -eq 1; and not string match -q -- '-*' $token\n\
-            echo $token\n\
-            return 0\n\
-        end\n\
-        if test $token = setting\n\
-            set seen 1\n\
-        end\n\
-    end\n\
-    return 1\n\
-end\n\
-complete -c shore -n \"__fish_shore_using_subcommand model; and __fish_seen_subcommand_from setting; and not __shore_setting_key\" -f -a \"(shore complete setting-keys 2>/dev/null)\"\n\
-complete -c shore -n \"__fish_shore_using_subcommand model; and __fish_seen_subcommand_from setting; and __shore_setting_key\" -f -a \"(shore complete setting-values (__shore_setting_key) 2>/dev/null)\"\n\
-complete -c shore -n \"__fish_shore_using_subcommand model; and __fish_seen_subcommand_from use setting reset info; and string match -q -- '--b*' (commandline -ct)\" -f -a \"--background --background=all --background=heartbeat --background=compaction\"\n\
-complete -c shore -n \"__fish_shore_using_subcommand model; and __fish_seen_subcommand_from use setting reset info; and string match -q -- '--s*' (commandline -ct)\" -f -a \"--subagent\"\n\
-complete -c shore -n \"__fish_shore_using_subcommand model; and __fish_seen_subcommand_from use setting reset info; and string match -q -- '--s*' (commandline -ct)\" -f -a \"(shore complete subagents 2>/dev/null | string replace -r -- '^' '--subagent=')\"\n\
-complete -c shore -n \"__fish_shore_using_subcommand model; and __fish_seen_subcommand_from setting\" -l model -r -f -a \"(shore complete models 2>/dev/null)\"\n\
-complete -c shore -n \"__fish_shore_using_subcommand model; and __fish_seen_subcommand_from fav unfav\" -f -a \"(shore complete models 2>/dev/null)\"\n\
-\n\
-function __shore_config_key\n\
-    set -l seen 0\n\
-    for token in (commandline -opc)\n\
-        if test $seen -eq 1; and not string match -q -- '-*' $token\n\
-            echo $token\n\
-            return 0\n\
-        end\n\
-        if contains -- $token get set\n\
-            set seen 1\n\
-        end\n\
-    end\n\
-    return 1\n\
-end\n\
-complete -c shore -n \"__fish_shore_using_subcommand config; and __fish_seen_subcommand_from set; and not __shore_config_key\" -f -a \"(shore complete config-keys 2>/dev/null)\"\n\
-complete -c shore -n \"__fish_shore_using_subcommand config; and __fish_seen_subcommand_from get; and not __shore_config_key\" -f -a \"(shore complete config-sections 2>/dev/null)\"\n\
-complete -c shore -n \"__fish_shore_using_subcommand config; and __fish_seen_subcommand_from set; and __shore_config_key\" -f -a \"(shore complete config-values (__shore_config_key) 2>/dev/null)\"\n"
-}
-
 fn parse_setting_value(_key: &str, raw: &str) -> serde_json::Value {
     serde_json::Value::String(raw.trim().to_owned())
 }
@@ -3044,7 +2572,6 @@ pub(crate) fn to_swp_command(
     use serde_json::json;
     match cmd {
         CliCommand::Completions { .. }
-        | CliCommand::Complete { .. }
         | CliCommand::View { .. }
         | CliCommand::Ui { .. }
         | CliCommand::Config {
@@ -4240,8 +3767,6 @@ mod tests {
                     json!({"last": null, "character": null, "provider": null, "api_key": null, "model": null, "call_type": "message", "group_by": null, "budget": false, "anomalies": false, "export_csv": false, "export_tsv": false}),
                 )),
             ),
-            (&["complete", "models"], None),
-            (&["complete", "characters"], None),
             (
                 &["model", "--favorites"],
                 Some(("list_models", json!({"favorites_only": true}))),
@@ -4309,23 +3834,5 @@ mod tests {
             to_swp_command(parsed_command(&cli), None).is_none(),
             "deletion goes through the confirming handler, never the bare mapper",
         );
-    }
-
-    #[test]
-    fn completions_generates_output() {
-        use clap::CommandFactory;
-        for shell in [Shell::Fish, Shell::Bash, Shell::Zsh] {
-            let mut buf = Vec::new();
-            clap_complete::generate(shell, &mut Cli::command(), "shore", &mut buf);
-            assert!(
-                !buf.is_empty(),
-                "completions for {shell:?} should produce output"
-            );
-            let text = String::from_utf8(buf).expect("completions should be valid UTF-8");
-            assert!(
-                text.contains("shore"),
-                "completions for {shell:?} should reference 'shore'"
-            );
-        }
     }
 }

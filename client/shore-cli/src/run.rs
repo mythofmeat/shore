@@ -310,8 +310,7 @@ pub(crate) async fn execute(
         | CliCommand::Clear { .. }
         | CliCommand::Config { .. }
         | CliCommand::Usage { .. }
-        | CliCommand::Completions { .. }
-        | CliCommand::Complete { .. }) => {
+        | CliCommand::Completions { .. }) => {
             handle_generic_swp_command(&mut conn, other, cli.character.as_deref()).await?;
         }
     }
@@ -382,7 +381,6 @@ pub(crate) fn wants_json(other: &CliCommand) -> bool {
         CliCommand::Log { .. }
         | CliCommand::Status { .. }
         | CliCommand::Completions { .. }
-        | CliCommand::Complete { .. }
         | CliCommand::View { .. }
         | CliCommand::Ui { .. } => false,
     }
@@ -1232,8 +1230,7 @@ fn reads_the_selected_thread(command: &CliCommand) -> bool {
         | CliCommand::Import { .. }
         | CliCommand::View { .. }
         | CliCommand::Ui { .. }
-        | CliCommand::Completions { .. }
-        | CliCommand::Complete { .. } => false,
+        | CliCommand::Completions { .. } => false,
     }
 }
 
@@ -1276,10 +1273,6 @@ fn report_unresolved_thread(
 async fn try_handle_local_only(cli: &Cli) -> Option<Result<(), Box<dyn std::error::Error>>> {
     if matches!(&cli.command, Some(CliCommand::Config { path: true, .. })) {
         return Some(print_config_path(cli).await);
-    }
-    if let Some(CliCommand::Complete { kind, arg }) = &cli.command {
-        let _ignored = handle_complete_query(*kind, arg.as_deref(), cli).await;
-        return Some(Ok(()));
     }
     if let Some(command) = &cli.command
         && let Some(message) = tui_only_refusal(command)
@@ -1513,275 +1506,6 @@ async fn handle_list_characters(
     let active = state::read_active_character();
     output::catalog::print_character_list(&data, active.as_deref());
     Ok(())
-}
-
-async fn handle_complete_query(
-    kind: crate::cli::CompleteKind,
-    arg: Option<&str>,
-    cli: &Cli,
-) -> Result<(), Box<dyn std::error::Error>> {
-    use crate::cli::CompleteKind;
-    let addr = resolve_addr(cli)?;
-    let character = cli.character.clone().or_else(state::read_active_character);
-    let thread = cli
-        .thread
-        .clone()
-        .or_else(|| character.as_deref().and_then(state::read_active_thread));
-    let (mut conn, _hello, _history) = SWPConnection::connect_in_thread(
-        &addr,
-        "cli",
-        "shore-cli",
-        character,
-        thread,
-        &TokenSource::Discover,
-    )
-    .await?;
-
-    if matches!(
-        kind,
-        CompleteKind::ConfigKeys | CompleteKind::ConfigSections | CompleteKind::ConfigValues
-    ) {
-        let _ignored = conn
-            .send_command("config_schema", serde_json::json!({}))
-            .await?;
-        let data = recv_command_data(&mut conn).await?;
-        print_config_completions(kind, arg, &data);
-        return Ok(());
-    }
-
-    if kind == CompleteKind::SettingKeys || kind == CompleteKind::SettingValues {
-        let _ignored = conn
-            .send_command("model_settings", serde_json::json!({}))
-            .await?;
-        let data = recv_command_data(&mut conn).await?;
-        if kind == CompleteKind::SettingKeys {
-            print_setting_key_completions(&data);
-        } else {
-            if let Some(key) = arg {
-                for value in setting_value_completions(&data, key) {
-                    cli_out!("{value}");
-                }
-            }
-        }
-        return Ok(());
-    }
-
-    if kind == CompleteKind::Models {
-        let _ignored = conn
-            .send_command("list_models", serde_json::json!({}))
-            .await?;
-        let data = recv_command_data(&mut conn).await?;
-        for model in output::models_by_provider(&data) {
-            if let Some(name) = model.get("name").and_then(serde_json::Value::as_str) {
-                cli_out!("{name}");
-            }
-        }
-        return Ok(());
-    }
-
-    let (cmd, array_keys) = match kind {
-        CompleteKind::Threads => ("list_threads", &["threads"][..]),
-        CompleteKind::Characters => ("list_characters", &["characters"][..]),
-        CompleteKind::Providers => ("list_providers", &["providers"][..]),
-        CompleteKind::Sections => ("status", &["sections"][..]),
-        CompleteKind::Tools => ("tools", &["tools", "subagents", "mcp"][..]),
-        CompleteKind::Subagents => ("tools", &["subagents"][..]),
-        CompleteKind::Models
-        | CompleteKind::SettingKeys
-        | CompleteKind::SettingValues
-        | CompleteKind::ConfigKeys
-        | CompleteKind::ConfigSections
-        | CompleteKind::ConfigValues => {
-            return Ok(());
-        }
-    };
-
-    let _ignored = conn.send_command(cmd, serde_json::json!({})).await?;
-    let data = recv_command_data(&mut conn).await?;
-    for array_key in array_keys {
-        let Some(items) = data.get(array_key).and_then(serde_json::Value::as_array) else {
-            continue;
-        };
-        for item in items {
-            let Some(name) = item
-                .as_str()
-                .or_else(|| item["name"].as_str())
-                .or_else(|| item["id"].as_str())
-                .or_else(|| item["tool"].as_str())
-            else {
-                continue;
-            };
-            if kind == CompleteKind::Tools && *array_key == "subagents" {
-                cli_out!("ask_{name}");
-            } else {
-                cli_out!("{name}");
-            }
-        }
-    }
-    Ok(())
-}
-
-fn json_strings(value: Option<&serde_json::Value>) -> Vec<String> {
-    value
-        .and_then(serde_json::Value::as_array)
-        .map(|items| {
-            items
-                .iter()
-                .filter_map(|item| item.as_str().map(str::to_owned))
-                .collect()
-        })
-        .unwrap_or_default()
-}
-
-pub(crate) fn setting_key_completions(data: &serde_json::Value) -> Vec<String> {
-    let Some(schema) = data
-        .get("setting_schema")
-        .and_then(serde_json::Value::as_array)
-    else {
-        return Vec::new();
-    };
-    let effective = data
-        .get("effective_sampler")
-        .and_then(serde_json::Value::as_object);
-
-    let mut out = Vec::new();
-    for entry in schema {
-        let Some(key) = entry.get("key").and_then(serde_json::Value::as_str) else {
-            continue;
-        };
-        let verdict = entry
-            .get("applicability")
-            .and_then(serde_json::Value::as_str)
-            .unwrap_or("rejected");
-        if verdict != "always" && verdict != "honored" {
-            continue;
-        }
-        let current = effective
-            .and_then(|s| s.get(key))
-            .filter(|v| !v.is_null())
-            .map(render_setting_value);
-        let described = match (current, verdict) {
-            (Some(value), "ignored") => format!("{value} (ignored by this model)"),
-            (Some(value), _) => value,
-            (None, "ignored") => "unset (ignored by this model)".to_owned(),
-            (None, _) => "unset".to_owned(),
-        };
-        out.push(format!("{key}\t{described}"));
-    }
-    out
-}
-
-pub(crate) fn setting_value_completions(data: &serde_json::Value, key: &str) -> Vec<String> {
-    data.get("setting_schema")
-        .and_then(serde_json::Value::as_array)
-        .and_then(|schema| {
-            schema.iter().find(|entry| {
-                let matches_key = entry.get("key").and_then(serde_json::Value::as_str) == Some(key);
-                let applicable = entry
-                    .get("applicability")
-                    .and_then(serde_json::Value::as_str)
-                    .is_some_and(|value| value == "always" || value == "honored");
-                matches_key && applicable
-            })
-        })
-        .and_then(|entry| entry.get("suggestions"))
-        .and_then(serde_json::Value::as_array)
-        .map(|suggestions| {
-            suggestions
-                .iter()
-                .filter_map(serde_json::Value::as_str)
-                .map(str::to_owned)
-                .collect()
-        })
-        .unwrap_or_default()
-}
-
-fn render_setting_value(value: &serde_json::Value) -> String {
-    value
-        .as_str()
-        .map_or_else(|| value.to_string(), str::to_owned)
-}
-
-fn print_setting_key_completions(data: &serde_json::Value) {
-    for line in setting_key_completions(data) {
-        cli_out!("{line}");
-    }
-}
-
-fn print_config_completions(
-    kind: crate::cli::CompleteKind,
-    arg: Option<&str>,
-    data: &serde_json::Value,
-) {
-    use crate::cli::CompleteKind;
-    let Some(entries) = data.get("schema").and_then(serde_json::Value::as_array) else {
-        return;
-    };
-
-    if kind == CompleteKind::ConfigValues {
-        let Some(key) = arg else { return };
-        let Some(entry) = entries
-            .iter()
-            .find(|e| e.get("key").and_then(serde_json::Value::as_str) == Some(key))
-        else {
-            return;
-        };
-        for value in config_value_candidates(entry, data) {
-            cli_out!("{value}");
-        }
-        return;
-    }
-
-    let settable_only = kind == CompleteKind::ConfigKeys;
-    for entry in entries {
-        let Some(key) = entry.get("key").and_then(serde_json::Value::as_str) else {
-            continue;
-        };
-        if key.contains('<') {
-            continue;
-        }
-        let settable = entry
-            .get("settable")
-            .and_then(serde_json::Value::as_bool)
-            .unwrap_or(false);
-        if settable_only && !settable {
-            continue;
-        }
-        let described = entry
-            .get("type")
-            .and_then(serde_json::Value::as_str)
-            .unwrap_or("value");
-        if entry
-            .get("restart_required")
-            .and_then(serde_json::Value::as_bool)
-            .unwrap_or(false)
-        {
-            cli_out!("{key}\t{described} (needs restart)");
-        } else {
-            cli_out!("{key}\t{described}");
-        }
-    }
-}
-
-fn config_value_candidates(entry: &serde_json::Value, data: &serde_json::Value) -> Vec<String> {
-    if let Some(source) = entry.get("source").and_then(serde_json::Value::as_str) {
-        let from_source = json_strings(data.get("sources").and_then(|s| s.get(source)));
-        if !from_source.is_empty() {
-            return from_source;
-        }
-    }
-    json_strings(entry.get("values"))
-}
-
-pub(crate) fn config_value_candidates_for_key(key: &str, data: &serde_json::Value) -> Vec<String> {
-    data.get("schema")
-        .and_then(serde_json::Value::as_array)
-        .and_then(|entries| {
-            entries
-                .iter()
-                .find(|entry| entry.get("key").and_then(serde_json::Value::as_str) == Some(key))
-        })
-        .map_or_else(Vec::new, |entry| config_value_candidates(entry, data))
 }
 
 fn config_dir() -> PathBuf {

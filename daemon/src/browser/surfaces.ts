@@ -57,6 +57,7 @@ export const SURFACES: Readonly<Record<string, Tier>> = {
     "renderer:field", "renderer:usage_mode",
   ),
   ...advanced(
+    "workspace_files",
     "segments", "segments.index", "segments.value",
     "call_log", "call_log.id", "call_log.count", "call_log.call_type", "call_log.diff", "call_log.against", "call_log.wire",
     "transcript", "transcript.count", "heartbeat_log", "heartbeat_log.count", "error_log", "error_log.count",

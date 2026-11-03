@@ -389,9 +389,10 @@ pub(crate) struct App {
     pub sampler_settings_loading: bool,
     pub pending_sampler_settings_rid: Option<String>,
     pub pending_palette_commands: std::collections::HashMap<String, String>,
-    pub palette_catalog: crate::cli::PaletteCatalog,
+    pub palette_catalog: crate::completion::PaletteCatalog,
+    pub needed_palette_sources: Vec<crate::completion::Source>,
     pub palette_catalog_loaded: bool,
-    pub pending_palette_catalog: std::collections::HashMap<String, String>,
+    pub pending_palette_catalog: std::collections::HashMap<String, crate::completion::Source>,
     pub palette_confirmation: Option<PaletteConfirmation>,
     pub secret_prompt: Option<SecretPrompt>,
     pub sign_in_prompt: Option<SignInPrompt>,
@@ -488,7 +489,8 @@ impl Default for App {
             sampler_settings_loading: false,
             pending_sampler_settings_rid: None,
             pending_palette_commands: std::collections::HashMap::new(),
-            palette_catalog: crate::cli::PaletteCatalog::default(),
+            palette_catalog: crate::completion::PaletteCatalog::default(),
+            needed_palette_sources: Vec::new(),
             palette_catalog_loaded: false,
             pending_palette_catalog: std::collections::HashMap::new(),
             palette_confirmation: None,
@@ -964,29 +966,39 @@ impl App {
         rid
     }
 
-    pub(crate) fn begin_palette_catalog_request(&mut self, kind: &str) -> String {
+    pub(crate) fn begin_palette_catalog_request(
+        &mut self,
+        source: crate::completion::Source,
+    ) -> String {
         let rid = self.next_request_id("palette_catalog");
-        let _ = self
-            .pending_palette_catalog
-            .insert(rid.clone(), kind.to_owned());
+        let _ = self.pending_palette_catalog.insert(rid.clone(), source);
         rid
     }
 
-    pub(crate) fn take_palette_catalog_request(&mut self, rid: Option<&str>) -> Option<String> {
+    pub(crate) fn take_palette_catalog_request(
+        &mut self,
+        rid: Option<&str>,
+    ) -> Option<crate::completion::Source> {
         self.pending_palette_catalog.remove(rid?)
+    }
+
+    pub(crate) fn take_needed_palette_sources(&mut self) -> Vec<crate::completion::Source> {
+        let pending = self
+            .pending_palette_catalog
+            .values()
+            .copied()
+            .collect::<Vec<_>>();
+        std::mem::take(&mut self.needed_palette_sources)
+            .into_iter()
+            .filter(|source| !pending.contains(source))
+            .collect()
     }
 
     pub(crate) fn invalidate_palette_catalog(&mut self) {
         self.palette_catalog_loaded = false;
         self.pending_palette_catalog.clear();
-        self.palette_catalog.threads.clear();
-        self.palette_catalog.providers.clear();
-        self.palette_catalog.status_sections.clear();
-        self.palette_catalog.tools.clear();
-        self.palette_catalog.subagents.clear();
-        self.palette_catalog.config_keys.clear();
-        self.palette_catalog.config_sections.clear();
-        self.palette_catalog.config_schema = None;
+        self.needed_palette_sources.clear();
+        self.palette_catalog.forget_daemon_values();
     }
 
     pub(crate) fn take_palette_command(&mut self, rid: Option<&str>) -> Option<String> {
@@ -1960,17 +1972,17 @@ impl App {
             .model_names
             .iter()
             .cloned()
-            .map(crate::cli::PaletteValue::plain)
+            .map(crate::completion::PaletteValue::plain)
             .collect();
         self.palette_catalog.characters = self
             .characters
             .iter()
-            .map(|character| crate::cli::PaletteValue::plain(&character.name))
+            .map(|character| crate::completion::PaletteValue::plain(&character.name))
             .collect();
         self.palette_catalog.setting_keys = self
             .visible_setting_keys()
             .into_iter()
-            .map(crate::cli::PaletteValue::plain)
+            .map(crate::completion::PaletteValue::plain)
             .collect();
         self.palette_catalog.setting_values = self.effective_sampler.as_ref().map_or_else(
             std::collections::BTreeMap::new,
@@ -1987,27 +1999,47 @@ impl App {
                             entry
                                 .suggestions
                                 .iter()
-                                .map(crate::cli::PaletteValue::plain)
+                                .map(crate::completion::PaletteValue::plain)
                                 .collect(),
                         )
                     })
                     .collect()
             },
         );
-        let mut message_refs = ["last", "-1", "-2", "-3"]
-            .into_iter()
-            .map(crate::cli::PaletteValue::plain)
-            .collect::<Vec<_>>();
-        message_refs.extend(self.entries.iter().filter_map(|entry| {
-            entry
-                .as_turn()
-                .and_then(|turn| turn.msg_id.as_deref())
-                .map(crate::cli::PaletteValue::plain)
-        }));
-        self.palette_catalog.message_refs = message_refs;
+        self.palette_catalog.message_refs = self
+            .entries
+            .iter()
+            .filter_map(|entry| {
+                entry
+                    .as_turn()
+                    .and_then(|turn| turn.msg_id.as_deref())
+                    .map(crate::completion::PaletteValue::plain)
+            })
+            .collect();
+        self.palette_catalog.favorite_models = self
+            .favorite_model_names
+            .iter()
+            .cloned()
+            .map(crate::completion::PaletteValue::plain)
+            .collect();
+        let bound_keys = |scope: crate::tui::keymap::Scope| {
+            self.keymap
+                .bindings(scope)
+                .iter()
+                .map(|(key, _)| crate::completion::PaletteValue::plain(key))
+                .collect::<Vec<_>>()
+        };
+        self.palette_catalog.normal_keys = bound_keys(crate::tui::keymap::Scope::Normal);
+        self.palette_catalog.global_keys = bound_keys(crate::tui::keymap::Scope::Global);
+        self.palette_catalog.budget_names = self
+            .usage_budgets
+            .iter()
+            .map(|budget| crate::completion::PaletteValue::plain(&budget.name))
+            .collect();
 
         let completed =
-            crate::cli::palette_completions(&self.input.cmd_text, &self.palette_catalog);
+            crate::completion::palette_completions(&self.input.cmd_text, &mut self.palette_catalog);
+        self.needed_palette_sources = completed.needed;
         self.completion.header = completed.header;
         self.completion.candidates = completed
             .candidates
@@ -2126,12 +2158,12 @@ impl App {
     }
 
     pub(crate) fn sync_thread_catalog(&mut self) {
-        let values: Vec<crate::cli::PaletteValue> = self
+        let values: Vec<crate::completion::PaletteValue> = self
             .thread_order()
             .into_iter()
             .map(|row| {
                 let facts = Self::thread_row_facts(row);
-                crate::cli::PaletteValue {
+                crate::completion::PaletteValue {
                     value: row.id.clone(),
                     help: (!facts.is_empty()).then_some(facts),
                 }

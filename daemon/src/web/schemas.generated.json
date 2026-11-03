@@ -1690,6 +1690,22 @@
             "properties": {
               "name": {
                 "type": "string",
+                "const": "workspace_files"
+              },
+              "data": {
+                "$ref": "#/$defs/WorkspaceFileListing"
+              }
+            },
+            "required": [
+              "name",
+              "data"
+            ]
+          },
+          {
+            "type": "object",
+            "properties": {
+              "name": {
+                "type": "string",
                 "const": "switch_thread"
               },
               "data": {
@@ -9952,6 +9968,20 @@
         },
         "required": [
           "cached_request"
+        ]
+      },
+      "WorkspaceFileListing": {
+        "type": "object",
+        "properties": {
+          "files": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        },
+        "required": [
+          "files"
         ]
       },
       "ThreadSelection": {
@@ -11431,6 +11461,22 @@
             "properties": {
               "name": {
                 "type": "string",
+                "const": "workspace_files"
+              },
+              "data": {
+                "$ref": "#/$defs/WorkspaceFileListing"
+              }
+            },
+            "required": [
+              "name",
+              "data"
+            ]
+          },
+          {
+            "type": "object",
+            "properties": {
+              "name": {
+                "type": "string",
                 "const": "switch_thread"
               },
               "data": {
@@ -19693,6 +19739,20 @@
         },
         "required": [
           "cached_request"
+        ]
+      },
+      "WorkspaceFileListing": {
+        "type": "object",
+        "properties": {
+          "files": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        },
+        "required": [
+          "files"
         ]
       },
       "ThreadSelection": {
