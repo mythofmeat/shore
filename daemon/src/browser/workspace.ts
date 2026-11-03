@@ -38,7 +38,7 @@ export interface WorkspaceSnapshot {
   messages: Message[]; metadata: Record<string, StreamMetadata>; streams: LiveTurn[]; media: LiveImage[]; mediaLimited: boolean; activity: Activity[];
   config: unknown; error: string; status: string; detail: string;
   character: string | null; thread: string | null; previousSegment: SegmentSummary | null; segmentView: SegmentView | null; uncertain: Extract<ConnectionUpdate, { kind: "uncertain" }>[];
-  opening: OpeningTarget | null; folders: ThreadFolderView[]; manualOrder: boolean; compaction: RunningCompaction | null;
+  opening: OpeningTarget | null; folders: ThreadFolderView[]; manualOrder: boolean; compaction: RunningCompaction | null; spendingRequestsFinished: number;
 }
 
 export interface OpeningTarget { character: string | null; thread: string | null }
@@ -100,7 +100,7 @@ export class Workspace {
   #loadingEarlier = false;
   #unreadSeq = 0;
   #unread = new Map<string, { seq: number; update: ThreadUnread }>();
-  #state: WorkspaceSnapshot = { characters: [], threads: [], operations: [], requests: [], messages: [], metadata: {}, streams: [], media: [], mediaLimited: false, activity: [], config: {}, error: "", status: "idle", detail: "", character: null, thread: null, previousSegment: null, segmentView: null, uncertain: [], opening: null, folders: [], manualOrder: false, compaction: null };
+  #state: WorkspaceSnapshot = { characters: [], threads: [], operations: [], requests: [], messages: [], metadata: {}, streams: [], media: [], mediaLimited: false, activity: [], config: {}, error: "", status: "idle", detail: "", character: null, thread: null, previousSegment: null, segmentView: null, uncertain: [], opening: null, folders: [], manualOrder: false, compaction: null, spendingRequestsFinished: 0 };
   constructor(readonly connection: BrowserConnection, frame: FrameScheduler = (callback) => { callback(); }) {
     this.#frame = frame;
     this.actions = new OperationClient(connection);
@@ -164,6 +164,10 @@ export class Workspace {
       const current = this.#state.segmentView;
       if (epoch === this.#segmentEpoch && current !== null && page.segment !== null) this.#patch({ segmentView: { ...current, ...neighbours(page, page.segment) } });
     } catch (error) { this.report(error); }
+  }
+  #couldSpend(rid: string): boolean {
+    const name = this.actions.pendingOperation(rid);
+    return name === undefined || this.#state.operations.some((operation) => operation.name === name && operation.effects.includes("provider_call"));
   }
   #activity(type: string, data: unknown): void {
     const preview = inspectionPreview(data);
@@ -340,6 +344,7 @@ export class Workspace {
           this.acknowledge(message.rid);
           if (message.outcome === "failed") this.report(message.error?.message ?? "A request that was in flight when the connection dropped failed.");
         }
+        if (this.#couldSpend(message.rid)) this.#patch({ spendingRequestsFinished: this.#state.spendingRequestsFinished + 1 });
         this.#activity(message.type, message); return;
       case "send_image": {
         const previous = this.#state.media.find((image) => image.path === message.path);

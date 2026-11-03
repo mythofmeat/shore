@@ -6,7 +6,7 @@ import type { ChromeSnapshot } from "../workspace.ts";
 import { focusedBudget, levelWarning, PLAN_WINDOWS, showPlanLimit, showUsage } from "../budget_display.ts";
 import { configAt } from "../settings_forms.ts";
 import { navigate } from "../app/route.ts";
-import { useDisplay, useWorkspaceValue, workspace } from "../app/state.ts";
+import { useDisplay, workspace } from "../app/state.ts";
 
 function PlanChip({ plan, mode }: { plan: ClaudePlanLimitsReport; mode: string }) {
   let shown: ClaudePlanLimit[];
@@ -25,13 +25,12 @@ export function BudgetChip({ state }: { state: ChromeSnapshot }) {
   const values = useDisplay();
   const [budgets, setBudgets] = useState<UsageBudget[]>([]);
   const [plan, setPlan] = useState<ClaudePlanLimitsReport | undefined>(undefined);
-  const finished = useWorkspaceValue((live) => live.activity.findLast((item) => item.type === "request_finished")?.id ?? 0);
   useEffect(() => {
     if (values.usage === "off" || state.status !== "ready") return;
     let alive = true;
     workspace.actions.run("usage", { budget: true }).then((result) => { if (alive && result.mode === "budget") { setBudgets(result.budgets); setPlan(result.claude_plan_limits); } }).catch(() => { if (alive) { setBudgets([]); setPlan(undefined); } });
     return () => { alive = false; };
-  }, [values.usage, state.status, state.character, state.thread, configAt(state.config, "active_model"), finished]);
+  }, [values.usage, state.status, state.character, state.thread, configAt(state.config, "active_model"), state.spendingRequestsFinished]);
   if (values.usage === "off") return null;
   if (plan !== undefined) return <PlanChip plan={plan} mode={values.usage} />;
   let focused;
