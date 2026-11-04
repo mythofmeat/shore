@@ -366,6 +366,10 @@ type UserTimestampMode = "auto" | "always" | "never";
 
 const USER_TIMESTAMP_MODES: readonly UserTimestampMode[] = ["auto", "always", "never"];
 
+type NotesPlacement = "system" | "conversation";
+
+const NOTES_PLACEMENTS: readonly NotesPlacement[] = ["system", "conversation"];
+
 export interface HeartbeatConfig {
   default_interval: ConfigDuration;
   dormant_after_heartbeat_turns: number;
@@ -457,11 +461,13 @@ const CACHE: StructSpec<CacheConfig> = {
 export interface BehaviorConfig {
   autonomy: AutonomyConfig;
   user_message_timestamps: UserTimestampMode;
+  notes_placement: NotesPlacement;
 }
 
 const defaultBehaviorConfig = (): BehaviorConfig => ({
   autonomy: defaultAutonomyConfig(),
   user_message_timestamps: "auto",
+  notes_placement: "system",
 });
 
 const BEHAVIOR: StructSpec<BehaviorConfig> = {
@@ -470,6 +476,7 @@ const BEHAVIOR: StructSpec<BehaviorConfig> = {
   fields: {
     autonomy: struct(AUTONOMY),
     user_message_timestamps: readEnum(USER_TIMESTAMP_MODES),
+    notes_placement: readEnum(NOTES_PLACEMENTS),
   },
 };
 

@@ -24,6 +24,7 @@ const CONFIG_FIELDS: readonly ConfigField[] = [
   field("defaults.background.heartbeat", "heartbeat.model"),
   field("defaults.background.compaction", "compaction.model"),
   field("behavior.user_message_timestamps", "chat.user_timestamps"),
+  field("behavior.notes_placement", "chat.notes_placement"),
   field("memory.thinking.replay_prior_thinking", "chat.reasoning_replay"),
   ...["max_retries", "retry_backoff"].map((key) => field(`advanced.${key}`, `chat.${key}`)),
   ...Object.entries({

@@ -3,6 +3,7 @@ import { required } from "../util/required.ts";
 import builtinSystemTemplate from "../../prompts/engine/builtin_system.md" with { type: "text" };
 import threadTemplate from "../../prompts/engine/thread.md" with { type: "text" };
 import heartbeatThreadTemplate from "../../prompts/engine/heartbeat_thread.md" with { type: "text" };
+import notesTemplate from "../../prompts/engine/notes.md" with { type: "text" };
 import { hostZone, naiveInZone, partsOf } from "../ledger/zoned";
 import type { ContentBlock, ImageRef, Message, Role } from "./types";
 import { estimateTokens, withSafetyMargin } from "./tokens.ts";
@@ -37,10 +38,16 @@ const THREAD_TEMPLATE = threadTemplate.trimEnd();
 
 const HEARTBEAT_THREAD_TEMPLATE = heartbeatThreadTemplate.trimEnd();
 
+const NOTES_TEMPLATE = notesTemplate.trimEnd();
+
+const NOTES_END = "[End of your notes. The conversation starts here.]";
+
 const THREAD_FILES_HEADER =
   "Files kept in this thread's prompt. Changes to them show up here after a long pause in this thread, or after it compacts.";
 
 export type UserTimestampMode = "never" | "always" | "auto";
+
+export type NotesPlacement = "system" | "conversation";
 
 interface SystemBlock {
   label: string;
@@ -82,6 +89,7 @@ export interface PromptParams {
   character_definition?: string | undefined;
   user_definition?: string | undefined;
   memory_index?: string | undefined;
+  notes_placement?: NotesPlacement | undefined;
   has_prior_context: boolean;
   messages: Message[];
   max_context_tokens?: number | undefined;
@@ -98,20 +106,51 @@ export function assemblePrompt(
   const maxOutput = params.max_output_tokens ?? DEFAULT_MAX_OUTPUT_TOKENS;
 
   const system = buildSystemBlocks(params, timeZone);
-  const availableForMessages = availableMessageTokens(system, maxContext, maxOutput);
+  const notes = params.notes_placement === "conversation" ? notesText(params) : undefined;
+  const availableForMessages = availableMessageTokens(
+    notes === undefined ? system : [...system, { label: "notes", content: notes }],
+    maxContext,
+    maxOutput,
+  );
+  const messages = trimMessages(
+    params.messages,
+    availableForMessages,
+    params.has_prior_context,
+    params.user_timestamp_mode,
+    timeZone,
+    params.image_tier ?? HIGH_RESOLUTION_IMAGE_TIER,
+  );
 
   return {
     system,
-    messages: trimMessages(
-      params.messages,
-      availableForMessages,
-      params.has_prior_context,
-      params.user_timestamp_mode,
-      timeZone,
-      params.image_tier ?? HIGH_RESOLUTION_IMAGE_TIER,
-    ),
+    messages: notes === undefined ? messages : withNotesFirst(messages, notes),
     messageBudget: availableForMessages,
   };
+}
+
+function notesText(params: PromptParams): string | undefined {
+  const notes = [
+    present(params.user_definition),
+    present(params.memory_index),
+    params.thread !== undefined && params.thread.files.length > 0 ? threadFilesBlock(params.thread.files) : undefined,
+  ].filter((note) => note !== undefined);
+  if (notes.length === 0) return undefined;
+  const header = renderTemplate(NOTES_TEMPLATE, new Map([
+    ["char", params.character_name],
+    ["user", params.display_name],
+  ]));
+  return [header, ...notes, NOTES_END].join("\n\n");
+}
+
+function withNotesFirst(messages: PromptMessage[], notes: string): PromptMessage[] {
+  const index = messages.findIndex((message) => message.role !== "system");
+  const first = messages[index];
+  if (first === undefined || first.role !== "user") return [syntheticUserTurn(notes), ...messages];
+  return messages.map((message, at) => at !== index ? message : {
+    ...message,
+    content: `${notes}\n\n${message.content}`,
+    content_blocks: [{ type: "text", text: notes }, ...message.content_blocks],
+  });
 }
 
 function present(value: string | undefined): string | undefined {
@@ -148,6 +187,7 @@ function buildSystemBlocks(params: PromptParams, timeZone: string): SystemBlock[
   ]);
 
   const system: SystemBlock[] = [];
+  const notesInSystem = params.notes_placement !== "conversation";
 
   const systemPrompt = params.system_prompt ?? BUILTIN_SYSTEM_TEMPLATE;
   if (systemPrompt.trim() !== "") {
@@ -165,7 +205,7 @@ function buildSystemBlocks(params: PromptParams, timeZone: string): SystemBlock[
   }
 
   const userDef = present(params.user_definition);
-  if (userDef !== undefined) {
+  if (notesInSystem && userDef !== undefined) {
     system.push({ label: "user", content: userDef });
   }
 
@@ -174,11 +214,11 @@ function buildSystemBlocks(params: PromptParams, timeZone: string): SystemBlock[
   }
 
   const index = present(params.memory_index);
-  if (index !== undefined) {
+  if (notesInSystem && index !== undefined) {
     system.push({ label: "memory_index", content: index });
   }
 
-  if (params.thread !== undefined && params.thread.files.length > 0) {
+  if (notesInSystem && params.thread !== undefined && params.thread.files.length > 0) {
     system.push({ label: "thread_files", content: threadFilesBlock(params.thread.files) });
   }
 

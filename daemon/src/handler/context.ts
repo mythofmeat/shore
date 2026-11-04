@@ -146,6 +146,7 @@ export async function prepareChatContext(
     character_definition: characterDefinition,
     user_definition: userDefinition,
     memory_index: memoryIndex,
+    notes_placement: config.app.behavior.notes_placement,
     has_prior_context: params.hasPriorContext,
     messages,
     max_context_tokens: resolved.maxContextTokens,
