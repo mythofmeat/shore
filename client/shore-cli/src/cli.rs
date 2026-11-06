@@ -949,7 +949,8 @@ pub(crate) enum PaletteScope {
 }
 
 /// Background task to retarget `shore model setting` at. `all` targets every
-/// background task at once and errors if they resolve to different models.
+/// background task at once and errors if they resolve to different models,
+/// or, when only showing settings, if their own settings differ.
 #[derive(ValueEnum, Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) enum BackgroundTarget {
     All,
@@ -1225,6 +1226,11 @@ pub(crate) enum ModelCommand {
     /// named sub-agent overrides that shared value. Because the shared value
     /// belongs to the model, changing subagents.model picks up that model's
     /// settings rather than carrying the old ones over.
+    ///
+    /// A background task's settings sit on top of its model's: heartbeat and
+    /// compaction take whatever their model has, chat's when they share it,
+    /// and override only the keys set for them, so tuning a task never moves
+    /// chat. Bare --background writes the same value for both tasks.
     ///
     /// The keys are temperature, top_p, reasoning_effort, reasoning_budget_tokens,
     /// max_output_tokens, cache_ttl, cache_keepalive, cache_keepalive_pings, sdk,

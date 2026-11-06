@@ -4,6 +4,7 @@ import { shoreLog } from "../log.ts";
 
 import type { LoadedConfig } from "../config/loader.ts";
 import {
+  applyBackgroundSettings,
   configView,
   resolveBackgroundModel,
   resolveChatModelForCharacter,
@@ -182,16 +183,17 @@ export async function prepareHeartbeatRequest(
   deps: PrepareHeartbeatDeps,
 ): Promise<PreparedHeartbeat | undefined> {
   const { thread, home } = conversation;
-  const resolved = resolveChatModelForCharacter(
+  const chat = resolveChatModelForCharacter(
     configView(config),
     character,
     (v, c, n, h) => findEffectiveModel(v, c, n, h),
     await threadChatModel(config.dirs.data, character, home),
   );
-  if (resolved === undefined) {
+  if (chat === undefined) {
     shoreLog.info(`shore: heartbeat skipping tick for ${character} (no chat model resolves)`);
     return undefined;
   }
+  const resolved = applyBackgroundSettings(config.dirs.data, character, "heartbeat", chat);
 
   const nowMs = deps.now?.() ?? Date.now();
   const timeZone = deps.timeZone ?? hostZone();

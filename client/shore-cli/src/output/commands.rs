@@ -1265,17 +1265,14 @@ fn print_set_model_setting(data: &serde_json::Value) {
         Some(v) => v.as_str().map_or_else(|| v.to_string(), String::from),
         None => "(cleared)".to_owned(),
     };
-    let model = data["model"].as_str().unwrap_or("?");
-    let also = string_list(data, "also_affects");
-    if !also.is_empty() {
-        let task = data["background_task"].as_str().unwrap_or("that task");
-        cli_out!(
-            "note: {} shares {model} with {} — {key} applies there too",
-            role_label(task),
-            join_names(&also)
-        );
+    let model = abbreviate_model(data["model"].as_str().unwrap_or("?"));
+    match data["background_task"].as_str() {
+        Some(task) => cli_out!(
+            "[{scope}] {key} = {value}  ({}, {model})",
+            role_label(if task == "all" { "background" } else { task })
+        ),
+        None => cli_out!("[{scope}] {key} = {value}  ({model})"),
     }
-    cli_out!("[{scope}] {key} = {value}  ({})", abbreviate_model(model));
     if let Some(warning) = data["warning"].as_str() {
         cli_out!("warning: {warning}");
     }

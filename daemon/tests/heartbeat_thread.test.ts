@@ -12,11 +12,15 @@ import { Diagnostics } from "../src/diagnostics.ts";
 import type { History } from "../src/engine/conversation.ts";
 import { markThreadRead, threadActivityNow } from "../src/engine/threads.ts";
 import type { Message } from "../src/engine/types.ts";
-import { buildGenerationDeps } from "../src/handler/deps.ts";
+import { dispatchCommand } from "../src/handler/commands.ts";
+import { buildCommandPathDeps, buildGenerationDeps } from "../src/handler/deps.ts";
 import { runGeneration } from "../src/handler/generation.ts";
 import type { GenerateResponse, SidecarProvider, SidecarRequest } from "../src/llm/types.ts";
 import { runCompactionPass } from "../src/memory/compaction/run.ts";
+import type { ServerMessage } from "../src/protocol/ServerMessage.ts";
 import { createRuntime, type ShoreRuntime } from "../src/runtime.ts";
+import { DEFAULT_HANDSHAKE } from "../src/swp/connection.ts";
+import { SessionRouter } from "../src/swp/session.ts";
 import { sizedImage } from "./support/sized_image.ts";
 import { eventsForResponse } from "./support/stream.ts";
 import { restoreTestEnv, setTestEnv } from "./support/env.ts";
@@ -100,6 +104,7 @@ interface Harness {
   heartbeat: () => Promise<void>;
   thread: (id: string) => Promise<readonly Message[]>;
   shown: (thread: string, match: (message: Message) => boolean) => Promise<void>;
+  command: (name: string, args: Record<string, unknown>) => Promise<ServerMessage>;
 }
 
 async function withCharacter(run: (h: Harness) => Promise<void>, configure?: (app: AppConfig) => void): Promise<void> {
@@ -179,6 +184,14 @@ async function withCharacter(run: (h: Harness) => Promise<void>, configure?: (ap
         await runtime.autonomy.tick();
       },
       thread: async (id) => (await runtime.registry.getOrCreate("ada", id)).messages(),
+      command: async (name, args) => await dispatchCommand(buildCommandPathDeps({
+        runtime, autonomy, diagnostics: new Diagnostics(), router: new SessionRouter(),
+        handshake: DEFAULT_HANDSHAKE, providers: runtime.providers, env,
+      }), { name, args }, {
+        session: { sessionId: 1, clientId: 1, clientType: "test", clientName: "test", capabilities: [], selectedCharacter: "ada", selectedThread: "main" },
+        rid: name,
+        kind: "command",
+      }),
     });
   } finally {
     await runtime.autonomy.shutdown();
@@ -276,6 +289,63 @@ test("a heartbeat runs on home's model, and its thread is never compacted, howev
     app.memory.compaction.keep_recent_turns = 0;
     app.memory.compaction.min_turns = 1;
     app.memory.compaction.max_turns = 2;
+  });
+});
+
+test("heartbeats and compaction keep the reasoning effort set for each on chat's model, and setting it for them never moves chat's", async () => {
+  await withCharacter(async ({ runtime, script, say, heartbeat, command }) => {
+    const effort = async (args: Record<string, unknown>): Promise<void> => {
+      expect((await command("set_model_setting", { key: "reasoning_effort", ...args })).type).toBe("command_output");
+    };
+    const compactionEffort = async (): Promise<string | undefined> => {
+      const sent: SidecarRequest[] = [];
+      await runCompactionPass("ada", {
+        config: runtime.config,
+        generate: (request) => {
+          sent.push(request);
+          return Promise.resolve({
+            model: request.model, content: "noted", content_blocks: [{ type: "text", text: "noted" }], finish_reason: "end_turn",
+            usage: { input_tokens: 1, output_tokens: 1, cache_read_tokens: 0, cache_creation_tokens: 0 },
+            timing: { total_ms: 1, time_to_first_token_ms: 1 },
+          });
+        },
+      }, { thread: "main" });
+      return sent[0]?.provider_options?.reasoning_effort;
+    };
+    const effortOf = (requests: SidecarRequest[]): (string | undefined)[] =>
+      [...new Set(requests.map((request) => request.provider_options?.reasoning_effort))];
+
+    await effort({ value: "high" });
+    await effort({ value: "low", background_task: "heartbeat" });
+    await effort({ value: "medium", background_task: "compaction", scope: "global" });
+    await say("hello");
+    await heartbeat();
+
+    expect(effortOf(script.replies)).toEqual(["high"]);
+    expect(script.heartbeats.map((request) => request.model)).toContain("claude-fixture");
+    expect(effortOf(script.heartbeats)).toEqual(["low"]);
+    expect(await compactionEffort()).toBe("medium");
+
+    await effort({ value: "max", background_task: "all" });
+    script.heartbeats.length = 0;
+    at(10);
+    await heartbeat();
+    await say("again");
+
+    expect(effortOf(script.heartbeats)).toEqual(["max"]);
+    expect(await compactionEffort()).toBe("max");
+    expect(effortOf(script.replies)).toEqual(["high"]);
+
+    await effort({ value: null, background_task: "heartbeat" });
+    script.heartbeats.length = 0;
+    at(20);
+    await heartbeat();
+
+    expect(effortOf(script.heartbeats)).toEqual(["high"]);
+  }, (app) => {
+    app.memory.compaction.enabled = true;
+    app.memory.compaction.keep_recent_turns = 0;
+    app.memory.compaction.min_turns = 1;
   });
 });
 

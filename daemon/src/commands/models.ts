@@ -13,6 +13,9 @@ import {
 import { firstChatModel, resolvedModelToWire, sdkFromWire, type ResolvedModel, type Sdk } from "../config/models.ts";
 import type { LoadedConfig } from "../config/loader.ts";
 import {
+  applySamplerOverlay,
+  BACKGROUND_TASKS,
+  backgroundPreference,
   characterPreferencesPath,
   emptyPreferences,
   configView,
@@ -21,6 +24,8 @@ import {
   loadPreferences,
   modelPreference,
   preferenceKey,
+  resolveBackgroundSampler,
+  resolveBackgroundScopes,
   resolveChatModelForCharacter,
   resolveSamplerSettings,
   resolveSamplerScopes,
@@ -60,7 +65,7 @@ import type { ModelSummary } from "../protocol/ModelSummary.ts";
 import type { SavedModelSetting as OverviewSetting } from "../protocol/SavedModelSetting.ts";
 import type { ModelOverviewRole as OverviewRole } from "../protocol/ModelOverviewRole.ts";
 import type { ModelSettingsOverview } from "../protocol/ModelSettingsOverview.ts";
-import type { ModelSettingChanged } from "../protocol/ModelSettingChanged.ts";
+import type { BackgroundModelTarget } from "../protocol/BackgroundModelTarget.ts";
 import type { ModelSettingsDetail } from "../protocol/ModelSettingsDetail.ts";
 type Args = OperationInput<"model_info">;
 
@@ -133,8 +138,6 @@ function resolveActiveModel(ctx: ModelsContext): ResolvedModel {
   return first;
 }
 
-const BACKGROUND_TASKS: readonly BackgroundTask[] = ["heartbeat", "compaction"];
-
 function backgroundTask(selector: string): BackgroundTask {
   if (selector === "heartbeat" || selector === "compaction") return selector;
   throw invalidRequest(
@@ -160,8 +163,11 @@ function backgroundTargetModel(ctx: ModelsContext, task: BackgroundTask): Resolv
   return inherited;
 }
 
-function backgroundSettingTarget(ctx: ModelsContext, selector: string): ResolvedModel {
-  if (selector !== "all") return backgroundTargetModel(ctx, backgroundTask(selector));
+function backgroundSettingTarget(ctx: ModelsContext, selector: string): SettingTarget {
+  if (selector !== "all") {
+    const task = backgroundTask(selector);
+    return { kind: "background", tasks: [task], model: backgroundTargetModel(ctx, task) };
+  }
 
   const resolved = BACKGROUND_TASKS.map(
     (task) => [task, backgroundTargetModel(ctx, task)] as const,
@@ -170,7 +176,7 @@ function backgroundSettingTarget(ctx: ModelsContext, selector: string): Resolved
   const same = resolved.every(
     ([, m]) => m.providerKey === first.providerKey && m.modelId === first.modelId,
   );
-  if (same) return first;
+  if (same) return { kind: "background", tasks: BACKGROUND_TASKS, model: first };
 
   const mapping = resolved.map(([task, m]) => `${task} → ${m.qualifiedName}`).join(", ");
   throw invalidRequest(
@@ -180,6 +186,7 @@ function backgroundSettingTarget(ctx: ModelsContext, selector: string): Resolved
 
 type SettingTarget =
   | { kind: "model"; model: ResolvedModel }
+  | { kind: "background"; tasks: readonly BackgroundTask[]; model: ResolvedModel }
   | { kind: "subagent"; subagent: string; model: ResolvedModel }
   | { kind: "subagent_model"; model: ResolvedModel };
 
@@ -254,9 +261,7 @@ function settingTarget(ctx: ModelsContext, args: Args): SettingTarget {
   if (subagent !== undefined) return subagentSettingTarget(ctx, subagent);
 
   const selector = asStr(args["background_task"]);
-  if (selector !== undefined) {
-    return { kind: "model", model: backgroundSettingTarget(ctx, selector) };
-  }
+  if (selector !== undefined) return backgroundSettingTarget(ctx, selector);
 
   const name = asName(args["name"]);
   if (name !== undefined) return { kind: "model", model: resolve(ctx, name, true) };
@@ -510,10 +515,12 @@ export function modelInfo(ctx: ModelsContext, args: OperationInput<"model_info">
     throw invalidRequest("name a model or name a role, not both");
   }
 
-  ctx = withPreferences(ctx);
-  const target = settingTarget(ctx, args);
-  const data = resolvedModelToWire(target.model);
-  const settings = modelSettingsDetail(ctx, args, target);
+  const prepared = withPreferences(ctx);
+  const target = settingTarget(prepared, args);
+  const settings = modelSettingsDetail(prepared, args, target);
+  const [global, savedCharacter] = prepared.preferences;
+  const charPrefs = prepared.characterName === undefined ? undefined : savedCharacter;
+  const data = resolvedModelToWire(applySamplerOverlay(target.model, targetSampler(target, global, charPrefs)));
   data["effective_sampler"] = settings.effective_sampler;
   data["scopes"] = Object.fromEntries(INFO_SCOPE_FIELDS.map(([key]) => [key, settings.scopes[key] ?? null]));
   return data;
@@ -774,10 +781,7 @@ export function setModelSetting(ctx: ModelsContext, args: OperationInput<"set_mo
     character === undefined ? loadGlobalPreferences(ctx) : loadCharacterPreferences(ctx, character);
   const global = character === undefined ? prefs : loadGlobalPreferences(ctx);
   const charPrefs = character === undefined ? undefined : prefs;
-  const current = target.kind === "model"
-    ? resolveSamplerSettings(global, charPrefs, model.providerKey, model.modelId, model)
-    : resolveSubagentSampler(global, charPrefs, target.kind === "subagent" ? target.subagent : undefined,
-        model.providerKey, model.modelId, model);
+  const current = targetSampler(target, global, charPrefs);
   const sdk = sdkFromWire(current.sdk ?? model.sdk) ?? model.sdk;
   const failure = capabilityCheck(sdk, key, value, model.support, model.modelId);
   if (failure !== undefined) throw failure;
@@ -787,19 +791,27 @@ export function setModelSetting(ctx: ModelsContext, args: OperationInput<"set_mo
   }
   const warning = keepaliveWarningAfter(sdk, model.modelId, current, key, value);
 
-  const slot =
-    target.kind === "subagent"
-      ? prefs.subagents
-      : target.kind === "subagent_model"
-        ? prefs.subagentModels
-        : prefs.models;
-  const entryKey =
-    target.kind === "subagent" ? target.subagent : preferenceKey(model.providerKey, model.modelId);
-  const entry = slot.get(entryKey) ?? { sampler: {} };
-  applySamplerValue(entry.sampler, key, value);
-
-  if (samplerIsEmpty(entry.sampler)) slot.delete(entryKey);
-  else slot.set(entryKey, entry);
+  const write = <K>(slot: Map<K, { sampler: SamplerSettings }>, entryKey: K): void => {
+    const entry = slot.get(entryKey) ?? { sampler: {} };
+    applySamplerValue(entry.sampler, key, value);
+    if (samplerIsEmpty(entry.sampler)) slot.delete(entryKey);
+    else slot.set(entryKey, entry);
+  };
+  const modelKey = preferenceKey(model.providerKey, model.modelId);
+  switch (target.kind) {
+    case "background":
+      for (const task of target.tasks) write(prefs.background, task);
+      break;
+    case "subagent":
+      write(prefs.subagents, target.subagent);
+      break;
+    case "subagent_model":
+      write(prefs.subagentModels, modelKey);
+      break;
+    case "model":
+      write(prefs.models, modelKey);
+      break;
+  }
 
   if (character === undefined) saveGlobal(ctx, prefs);
   else saveCharacter(ctx, character, prefs);
@@ -811,7 +823,7 @@ export function setModelSetting(ctx: ModelsContext, args: OperationInput<"set_mo
     provider: model.providerKey,
     model_id: model.modelId,
     ...targetJson(target),
-    ...aliasedRolesJson(ctx, args, model),
+    ...(target.kind === "background" ? { background_task: backgroundSelector(target.tasks) } : {}),
     key,
     value,
     ...(warning === undefined ? {} : { warning }),
@@ -837,39 +849,8 @@ function keepaliveWarningAfter(
   return keepaliveTtlWarning(sdk, modelId, ttl, cadence.ok.interval.asMillis());
 }
 
-const SAMPLER_ROLES = ["chat", "heartbeat", "compaction", "sub-agents"];
-
-function aliasedRolesJson(
-  ctx: ModelsContext,
-  args: Args,
-  model: ResolvedModel,
-): Pick<ModelSettingChanged, "background_task" | "also_affects"> {
-  const selector = args.background_task ?? undefined;
-  if (selector === undefined) return {};
-
-  const targeted = new Set<string>(
-    selector === "all" ? [...BACKGROUND_TASKS] : [backgroundTask(selector)],
-  );
-  const shared = modelRoles(ctx)
-    .filter((role) => SAMPLER_ROLES.includes(role.role) && !targeted.has(role.role))
-    .filter((role) => sharesPreferenceKey(ctx, role.model, model))
-    .map((role) => role.role);
-
-  return shared.length === 0 ? {} : { background_task: selector, also_affects: shared };
-}
-
-function sharesPreferenceKey(
-  ctx: ModelsContext,
-  name: string | null,
-  model: ResolvedModel,
-): boolean {
-  if (name === null) return false;
-  try {
-    const other = resolve(ctx, name, true);
-    return other.providerKey === model.providerKey && other.modelId === model.modelId;
-  } catch {
-    return false;
-  }
+function backgroundSelector(tasks: readonly BackgroundTask[]): BackgroundModelTarget {
+  return tasks.length === 1 ? required(tasks[0]) : "all";
 }
 
 function targetJson(target: SettingTarget): Pick<ModelSettingsDetail, "subagent" | "applies_to"> {
@@ -878,6 +859,7 @@ function targetJson(target: SettingTarget): Pick<ModelSettingsDetail, "subagent"
       return { subagent: target.subagent };
     case "subagent_model":
       return { subagent: ALL_SUBAGENTS, applies_to: "every sub-agent on this model" };
+    case "background":
     case "model":
       return {};
   }
@@ -919,20 +901,46 @@ function preferenceEntryFor(
       return subagentPreference(prefs, target.subagent);
     case "subagent_model":
       return subagentModelPreference(prefs, target.model.providerKey, target.model.modelId);
+    case "background":
+      return backgroundPreference(prefs, required(target.tasks[0]));
     case "model":
       return modelPreference(prefs, target.model.providerKey, target.model.modelId);
   }
 }
 
-function preferenceIdentity(target: SettingTarget): string {
-  const key = preferenceKey(target.model.providerKey, target.model.modelId);
+function targetSampler(
+  target: SettingTarget,
+  global: ModelPreferences,
+  charPrefs: ModelPreferences | undefined,
+): SamplerSettings {
+  const { model } = target;
   switch (target.kind) {
-    case "subagent":
-      return `subagent:${target.subagent}`;
-    case "subagent_model":
-      return `subagent-model:${key}`;
     case "model":
-      return `model:${key}`;
+      return resolveSamplerSettings(global, charPrefs, model.providerKey, model.modelId, model);
+    case "background":
+      return resolveBackgroundSampler(global, charPrefs, required(target.tasks[0]), model.providerKey, model.modelId, model);
+    case "subagent":
+    case "subagent_model":
+      return resolveSubagentSampler(global, charPrefs, target.kind === "subagent" ? target.subagent : undefined,
+        model.providerKey, model.modelId, model);
+  }
+}
+
+function targetScopes(
+  target: SettingTarget,
+  global: ModelPreferences,
+  charPrefs: ModelPreferences | undefined,
+): SamplerScopes {
+  const { model } = target;
+  switch (target.kind) {
+    case "model":
+      return resolveSamplerScopes(global, charPrefs, model.providerKey, model.modelId, model);
+    case "background":
+      return resolveBackgroundScopes(global, charPrefs, required(target.tasks[0]), model.providerKey, model.modelId, model);
+    case "subagent":
+    case "subagent_model":
+      return resolveSubagentScopes(global, charPrefs, target.kind === "subagent" ? target.subagent : undefined,
+        model.providerKey, model.modelId, model);
   }
 }
 
@@ -975,7 +983,7 @@ function overviewSlots(ctx: ModelsContext): OverviewSlot[] {
       role: task,
       flag: `--background=${task}`,
       source: backgroundRole(ctx, task, inherits).source,
-      resolve: () => ({ kind: "model", model: backgroundTargetModel(ctx, task) }),
+      resolve: () => ({ kind: "background", tasks: [task], model: backgroundTargetModel(ctx, task) }),
     });
   }
 
@@ -1006,7 +1014,6 @@ function modelSettingsOverview(ctx: ModelsContext): ModelSettingsOverview {
       ? [loadGlobalPreferences(ctx), undefined]
       : loadPreferencesFor(ctx.dataDir, character);
 
-  const claimed = new Map<string, string>();
   const roles: OverviewRole[] = [];
 
   for (const slot of overviewSlots(ctx)) {
@@ -1018,10 +1025,6 @@ function modelSettingsOverview(ctx: ModelsContext): ModelSettingsOverview {
       error = e instanceof Error ? e.message : String(e);
     }
 
-    const identity = target === undefined ? undefined : preferenceIdentity(target);
-    const sharesWith = identity === undefined ? null : (claimed.get(identity) ?? null);
-    if (identity !== undefined && sharesWith === null) claimed.set(identity, slot.role);
-
     roles.push({
       role: slot.role,
       flag: slot.flag,
@@ -1029,7 +1032,6 @@ function modelSettingsOverview(ctx: ModelsContext): ModelSettingsOverview {
       source: slot.source,
       inherited: slot.source === null || slot.source.startsWith("inherits"),
       settings: target === undefined ? [] : savedSettingsFor(target, global, charPrefs),
-      same_settings_as: sharesWith,
       error,
     });
   }
@@ -1070,6 +1072,24 @@ function withPreferences(ctx: ModelsContext): ModelsContext & { preferences: rea
     : loadPreferencesFor(ctx.dataDir, ctx.characterName)) };
 }
 
+function requireAgreeingTasks(
+  target: SettingTarget,
+  global: ModelPreferences,
+  charPrefs: ModelPreferences | undefined,
+): void {
+  if (target.kind !== "background" || target.tasks.length < 2) return;
+  const saved = (task: BackgroundTask): string =>
+    JSON.stringify([global, charPrefs].map((prefs) => {
+      const entry = prefs === undefined ? undefined : backgroundPreference(prefs, task);
+      return entry === undefined ? null : samplerJson(entry.sampler);
+    }));
+  const [first, ...rest] = target.tasks.map(saved);
+  if (rest.every((each) => each === first)) return;
+  throw invalidRequest(
+    `background tasks have different settings (${target.tasks.join(", ")}); target a specific task instead of \`all\``,
+  );
+}
+
 function modelSettingsDetail(ctx: ModelsContext, args: OperationInput<"model_settings">, selected?: SettingTarget): ModelSettingsDetail {
   const only = requestedKey(ctx, args);
   const prepared = withPreferences(ctx);
@@ -1079,37 +1099,12 @@ function modelSettingsDetail(ctx: ModelsContext, args: OperationInput<"model_set
   const [global, savedCharacter] = prepared.preferences;
   const charPrefs = character === undefined ? undefined : savedCharacter;
 
-  const subagentName = target.kind === "subagent" ? target.subagent : undefined;
-  const sampler =
-    target.kind === "model"
-      ? resolveSamplerSettings(global, charPrefs, model.providerKey, model.modelId, model)
-      : resolveSubagentSampler(
-          global,
-          charPrefs,
-          subagentName,
-          model.providerKey,
-          model.modelId,
-          model,
-        );
-  const scopes =
-    target.kind === "model"
-      ? resolveSamplerScopes(global, charPrefs, model.providerKey, model.modelId, model)
-      : resolveSubagentScopes(
-          global,
-          charPrefs,
-          subagentName,
-          model.providerKey,
-          model.modelId,
-          model,
-        );
+  requireAgreeingTasks(target, global, charPrefs);
+  const sampler = targetSampler(target, global, charPrefs);
+  const scopes = targetScopes(target, global, charPrefs);
   const saved = (prefs: ModelPreferences | undefined): Record<string, unknown> | null => {
     if (prefs === undefined) return null;
-    const entry =
-      target.kind === "subagent"
-        ? subagentPreference(prefs, target.subagent)
-        : target.kind === "subagent_model"
-          ? subagentModelPreference(prefs, model.providerKey, model.modelId)
-          : modelPreference(prefs, model.providerKey, model.modelId);
+    const entry = preferenceEntryFor(target, prefs);
     return entry === undefined ? null : samplerJson(entry.sampler);
   };
 

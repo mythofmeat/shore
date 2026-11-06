@@ -142,6 +142,7 @@ export interface ModelPreferences {
   models: Map<string, ModelPreference>;
   subagents: Map<string, ModelPreference>;
   subagentModels: Map<string, ModelPreference>;
+  background: Map<BackgroundTask, ModelPreference>;
 }
 
 export function emptyPreferences(): ModelPreferences {
@@ -152,6 +153,7 @@ export function emptyPreferences(): ModelPreferences {
     models: new Map(),
     subagents: new Map(),
     subagentModels: new Map(),
+    background: new Map(),
   };
 }
 
@@ -162,7 +164,8 @@ export function preferencesAreEmpty(prefs: ModelPreferences): boolean {
     samplerIsEmpty(prefs.defaults.sampler) &&
     prefs.models.size === 0 &&
     prefs.subagents.size === 0 &&
-    prefs.subagentModels.size === 0
+    prefs.subagentModels.size === 0 &&
+    prefs.background.size === 0
   );
 }
 
@@ -218,6 +221,13 @@ export function setSubagentPreference(
 ): void {
   prefs.subagents.set(name, pref);
   prefs.subagents = new Map([...prefs.subagents].sort((a, b) => compareByCodePoint(a[0], b[0])));
+}
+
+export function backgroundPreference(
+  prefs: ModelPreferences,
+  task: BackgroundTask,
+): ModelPreference | undefined {
+  return prefs.background.get(task);
 }
 
 export function preferenceKey(provider: string, modelId: string): string {
@@ -386,6 +396,20 @@ export function resolveSubagentSampler(
   );
 }
 
+export function resolveBackgroundSampler(
+  global: ModelPreferences,
+  character: ModelPreferences | undefined,
+  task: BackgroundTask,
+  provider: string,
+  modelId: string,
+  staticDefault: ResolvedModel | undefined,
+): SamplerSettings {
+  return settingsFromLayers(
+    staticDefault,
+    backgroundLayers(global, character, task, provider, modelId),
+  );
+}
+
 interface PreferenceLayer {
   sampler: SamplerSettings;
   scope: PreferenceScope;
@@ -444,6 +468,23 @@ function subagentLayers(
   return layers;
 }
 
+function backgroundLayers(
+  global: ModelPreferences,
+  character: ModelPreferences | undefined,
+  task: BackgroundTask,
+  provider: string,
+  modelId: string,
+): PreferenceLayer[] {
+  const layers = preferenceLayers(global, character, provider, modelId);
+  const own = (prefs: ModelPreferences | undefined, scope: PreferenceScope): void => {
+    const entry = prefs === undefined ? undefined : backgroundPreference(prefs, task);
+    if (entry !== undefined) layers.push({ sampler: entry.sampler, scope });
+  };
+  own(global, "global_background");
+  own(character, "character_background");
+  return layers;
+}
+
 function sanitizePersistedOverlay(layer: SamplerSettings): SamplerSettings {
   const badSdk = layer.sdk !== undefined && sdkFromWire(layer.sdk) === undefined;
   const zeroCap = layer.maxToolIterations === 0;
@@ -469,7 +510,9 @@ type PreferenceScope =
   | "global_subagent_model"
   | "character_subagent_model"
   | "global_subagent"
-  | "character_subagent";
+  | "character_subagent"
+  | "global_background"
+  | "character_background";
 
 export type SamplerScopes = Partial<Record<keyof SamplerSettings, PreferenceScope>>;
 
@@ -508,6 +551,20 @@ export function resolveSamplerScopes(
   staticDefault: ResolvedModel | undefined,
 ): SamplerScopes {
   return scopesFromLayers(staticDefault, preferenceLayers(global, character, provider, modelId));
+}
+
+export function resolveBackgroundScopes(
+  global: ModelPreferences,
+  character: ModelPreferences | undefined,
+  task: BackgroundTask,
+  provider: string,
+  modelId: string,
+  staticDefault: ResolvedModel | undefined,
+): SamplerScopes {
+  return scopesFromLayers(
+    staticDefault,
+    backgroundLayers(global, character, task, provider, modelId),
+  );
 }
 
 export function resolveSubagentScopes(
@@ -549,6 +606,8 @@ export interface LoadedConfigView {
 }
 
 export type BackgroundTask = Exclude<import("../protocol/BackgroundModelTarget.ts").BackgroundModelTarget, "all">;
+
+export const BACKGROUND_TASKS: readonly BackgroundTask[] = ["heartbeat", "compaction"];
 
 export function configView(config: {
   models: ModelCatalog;
@@ -719,11 +778,11 @@ export function applySamplerOverlay(
   return patched;
 }
 
-function overlayForCharacter(
+export function applyBackgroundSettings(
   dataDir: string,
   character: string,
+  task: BackgroundTask,
   base: ResolvedModel,
-  op: string,
 ): ResolvedModel {
   let global: ModelPreferences;
   let charPrefs: ModelPreferences;
@@ -731,14 +790,15 @@ function overlayForCharacter(
     [global, charPrefs] = loadForCharacter(dataDir, character);
   } catch (e) {
     shoreLog.warn(
-      `shore: preferences load failed for ${character} (${op}); using raw model settings: ` +
+      `shore: preferences load failed for ${character} (${task}); using raw model settings: ` +
         (e as Error).message,
     );
     return base;
   }
-  const overlay = resolveSamplerSettings(
+  const overlay = resolveBackgroundSampler(
     global,
     charPrefs,
+    task,
     base.providerKey,
     base.modelId,
     base,
@@ -799,21 +859,17 @@ export function resolveBackgroundModel(
   threadModel?: string,
 ): ResolvedModel | undefined {
   const name = config.app.defaults.backgroundModelName(task);
-  if (name === undefined) {
-    return resolveChatModelForCharacter(config, character, findEffective, threadModel);
-  }
-
-  let base: ResolvedModel;
+  let base: ResolvedModel | undefined;
   try {
-    base = findEffective(config, config.dirs.cache, name, true);
+    base = name === undefined ? undefined : findEffective(config, config.dirs.cache, name, true);
   } catch (e) {
     shoreLog.warn(
       `shore: configured ${task} model "${name}" not found in catalog for ${character}; ` +
         `falling back to active chat model: ${(e as Error).message}`,
     );
-    return resolveChatModelForCharacter(config, character, findEffective, threadModel);
   }
-  return overlayForCharacter(config.dirs.data, character, base, task);
+  base ??= resolveChatModelForCharacter(config, character, findEffective, threadModel);
+  return base === undefined ? undefined : applyBackgroundSettings(config.dirs.data, character, task, base);
 }
 
 export function pinnedModel(
@@ -1060,6 +1116,7 @@ function readPreferences(table: Record<string, unknown>): ReadResult<ModelPrefer
     "models",
     "subagents",
     "subagent_models",
+    "background",
   ]);
   if (unknown !== undefined) return { err: unknown };
 
@@ -1129,6 +1186,21 @@ function readPreferences(table: Record<string, unknown>): ReadResult<ModelPrefer
     out[slot] = new Map(entries);
   }
 
+  const background = table["background"];
+  if (background !== undefined) {
+    if (!isTable(background)) return { err: "invalid type: expected a table for `background`" };
+    const bad = unknownField(background, BACKGROUND_TASKS);
+    if (bad !== undefined) return { err: bad };
+    for (const task of BACKGROUND_TASKS) {
+      const value = background[task];
+      if (value === undefined) continue;
+      if (!isTable(value)) return { err: `invalid type: expected a table for \`${task}\`` };
+      const read = readSampler(value);
+      if ("err" in read) return read;
+      out.background.set(task, { sampler: read.ok });
+    }
+  }
+
   return { ok: out };
 }
 
@@ -1166,6 +1238,11 @@ export function serializePreferences(prefs: ModelPreferences): string {
 
   for (const [key, pref] of prefs.subagents) {
     blocks.push([`[subagents.${tomlString(key)}]`, ...samplerLines(pref.sampler)].join("\n"));
+  }
+
+  for (const task of BACKGROUND_TASKS) {
+    const pref = prefs.background.get(task);
+    if (pref !== undefined) blocks.push([`[background.${task}]`, ...samplerLines(pref.sampler)].join("\n"));
   }
 
   return `${blocks.join("\n\n")}\n`;
