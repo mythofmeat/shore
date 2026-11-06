@@ -9,7 +9,7 @@ say() {
 	echo "shore: $*" >&2
 }
 
-daemon_user=${SHORE_USER:-app}
+daemon_user=${SHORE_USER:-shore}
 daemon_home=/home/$daemon_user
 workspace_root=${SHORE_WORKSPACE_DIR:-/workspace}
 

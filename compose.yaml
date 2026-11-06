@@ -20,7 +20,7 @@ services:
       - ./workspace:/workspace
       - data:/data
       - cache:/cache
-      - home:/home/app
+      - home:/home/shore
     tmpfs:
       - /tmp:exec
     cap_drop:
