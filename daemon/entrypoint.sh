@@ -9,22 +9,24 @@ say() {
 	echo "shore: $*" >&2
 }
 
-daemon_user=$(cat /opt/shore/daemon-user)
-entry=$(getent passwd "$daemon_user") || {
-	say "the image's daemon user $daemon_user is missing"
-	exit 1
-}
-daemon_uid=$(echo "$entry" | cut -d: -f3)
-daemon_gid=$(echo "$entry" | cut -d: -f4)
-daemon_home=$(echo "$entry" | cut -d: -f6)
+# The image holds only software. Who the users are and what timezone it is
+# belong to the deployment, so they are made here at each start from:
+#   SHORE_USER             the daemon's user (default app)
+#   SHORE_UID, SHORE_GID   its ids (default 1000; the gid follows the uid)
+#   SHORE_CHARACTER_USERS  space-separated name[:uid], one user per character,
+#                          so a character's tools run as a user of their name
+#   TZ                     the timezone (default UTC)
+daemon_user=${SHORE_USER:-app}
+daemon_home=/home/$daemon_user
+workspace_root=${SHORE_WORKSPACE_DIR:-/workspace}
 
 effective=$(sed -n 's/^CapEff:[[:space:]]*//p' /proc/self/status)
 has_cap() {
 	[ $(((0x$effective >> $1) & 1)) = 1 ]
 }
-if ! has_cap 6 || ! has_cap 7; then
-	say "the container must keep CAP_SETUID and CAP_SETGID (cap_add: [SETUID, SETGID, KILL])" \
-		"so the daemon can drop root and run characters' tools as their own users; refusing to run it as root"
+if ! has_cap 0 || ! has_cap 6 || ! has_cap 7; then
+	say "the container must keep CAP_CHOWN, CAP_SETUID and CAP_SETGID (cap_add: [SETUID, SETGID, KILL, CHOWN])" \
+		"so it can make the users, then drop root and run characters' tools as their own users; refusing to run it as root"
 	exit 1
 fi
 keep="+setuid,+setgid"
@@ -34,12 +36,42 @@ else
 	say "the container lacks CAP_KILL (cap_add: KILL), so timeouts and cancellation cannot stop characters' commands"
 fi
 
+tz=${TZ:-UTC}
+if [ -f "/usr/share/zoneinfo/$tz" ]; then
+	ln -snf "/usr/share/zoneinfo/$tz" /etc/localtime
+	echo "$tz" >/etc/timezone
+else
+	say "TZ=$tz is not a known timezone; the clock stays on UTC"
+fi
+
+# Adds user $1 with a group of the same name, uid $2 and gid $3 when given,
+# and login shell $4, unless the user already exists.
+add_user() {
+	getent passwd "$1" >/dev/null && return
+	getent group "$1" >/dev/null || groupadd ${3:+-g "$3"} "$1"
+	useradd -M ${2:+-u "$2"} -g "$1" -d "/home/$1" -s "$4" "$1"
+}
+
+# A fresh volume, or no mount at all, leaves directory $1 missing or owned by
+# root: gives it to user $2, with mode $3 when given. A directory that already
+# belongs to someone else is left alone.
+claim() {
+	[ -d "$1" ] || mkdir -p "$1"
+	[ "$(stat -c %u "$1")" = 0 ] || return 0
+	[ -z "${3:-}" ] || chmod "$3" "$1"
+	chown "$2:" "$1"
+}
+
+add_user "$daemon_user" "${SHORE_UID:-1000}" "${SHORE_GID:-${SHORE_UID:-1000}}" /bin/sh
+daemon_uid=$(id -u "$daemon_user")
+daemon_gid=$(id -g "$daemon_user")
+
 as_daemon() {
 	setpriv --reuid="$daemon_uid" --regid="$daemon_gid" --init-groups --inh-caps=-all --ambient-caps=-all -- "$@"
 }
 
 for dir in /config /data /cache "$daemon_home" ${CLAUDE_CONFIG_DIR:+"$CLAUDE_CONFIG_DIR"}; do
-	[ -d "$dir" ] || continue
+	claim "$dir" "$daemon_user" 700
 	if [ "$(stat -c %u "$dir")" != "$daemon_uid" ]; then
 		say "$dir belongs to uid $(stat -c %u "$dir"), not to $daemon_user (uid $daemon_uid); the daemon may not be able to use it"
 		continue
@@ -50,20 +82,23 @@ for dir in /config /data /cache "$daemon_home" ${CLAUDE_CONFIG_DIR:+"$CLAUDE_CON
 	fi
 done
 
-while read -r name; do
-	[ -n "$name" ] || continue
-	uid=$(id -u "$name" 2>/dev/null) || {
-		say "character user $name is missing from the image"
-		continue
-	}
-	home=$(getent passwd "$name" | cut -d: -f6)
-	if [ ! -d "$home" ]; then
-		say "$name has no home at $home; mount a volume there"
-	elif [ "$(stat -c %u "$home")" != "$uid" ]; then
+for entry in ${SHORE_CHARACTER_USERS:-}; do
+	name=${entry%%:*}
+	uid=${entry#"$name"}
+	uid=${uid#:}
+	add_user "$name" "$uid" "$uid" /bin/bash
+	usermod -aG "$name" "$daemon_user"
+	uid=$(id -u "$name")
+	gid=$(id -g "$name")
+
+	home=/home/$name
+	claim "$home" "$name" 700
+	if [ "$(stat -c %u "$home")" != "$uid" ]; then
 		say "$home belongs to uid $(stat -c %u "$home"), not to $name (uid $uid)"
 	fi
-	gid=$(id -g "$name")
-	workspace="${SHORE_WORKSPACE_DIR:-/workspace}/$name"
+
+	workspace=$workspace_root/$name
+	[ -d "$workspace" ] || { mkdir -p -m 2770 "$workspace" && chown "$name:" "$workspace"; } 2>/dev/null || true
 	if [ ! -d "$workspace" ]; then
 		say "$name has no workspace at $workspace; create it owned by $uid:$gid with mode 2770"
 	elif [ "$(stat -c %u "$workspace")" != "$uid" ]; then
@@ -71,8 +106,10 @@ while read -r name; do
 	elif ! as_daemon test -r "$workspace" -a -x "$workspace"; then
 		say "$daemon_user cannot read $workspace; give it group $gid, which $daemon_user is in, and mode 2770"
 	fi
-done </opt/shore/character-users
+done
+claim "$workspace_root" "$daemon_user"
 
 export HOME="$daemon_home" USER="$daemon_user" LOGNAME="$daemon_user"
+export PATH="$daemon_home/.local/bin:$daemon_home/.bun/bin:$daemon_home/.cargo/bin:$PATH"
 exec setpriv --reuid="$daemon_uid" --regid="$daemon_gid" --init-groups \
 	--inh-caps="-all,$keep" --ambient-caps="-all,$keep" -- "$@"

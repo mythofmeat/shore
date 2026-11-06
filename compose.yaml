@@ -4,14 +4,14 @@ services:
       context: .
       dockerfile: daemon/Dockerfile
       args:
-        USER_UID: ${SHORE_UID:-1000}
-        USER_GID: ${SHORE_GID:-1000}
-        CHARACTER_USERS: ${SHORE_CHARACTER_USERS:-}
-        TZ: ${TZ:-UTC}
+        EXTRA_PACKAGES: ${SHORE_EXTRA_PACKAGES:-}
     restart: unless-stopped
     stop_grace_period: 30m
     environment:
       TZ: ${TZ:-UTC}
+      SHORE_UID: ${SHORE_UID:-1000}
+      SHORE_GID: ${SHORE_GID:-1000}
+      SHORE_CHARACTER_USERS: ${SHORE_CHARACTER_USERS:-}
     ports:
       - "127.0.0.1:7320:7320"
       - "127.0.0.1:7340:7340"
@@ -21,7 +21,8 @@ services:
       - data:/data
       - cache:/cache
       - home:/home/app
-    read_only: true
+    # Not read_only: the entrypoint writes the users and timezone into /etc
+    # at start, and CHOWN lets it hand fresh volumes to those users.
     tmpfs:
       - /tmp:exec
     cap_drop:
@@ -30,6 +31,7 @@ services:
       - SETUID
       - SETGID
       - KILL
+      - CHOWN
     security_opt:
       - no-new-privileges:true
 
