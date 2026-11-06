@@ -40,8 +40,6 @@ jobs:
             sed -n 's/^  "version": "\(.*\)",$/\1/p' daemon/package.json desktop/package.json
             sed -n 's/^pkgver=//p' contrib/arch/PKGBUILD
             sed -n 's/^Version: *//p' contrib/fedora/shore.spec
-            sed -n 's/^      tag: "v\(.*\)"$/\1/p' HomebrewFormula/*.rb
-            sed -n 's/^  version "\(.*\)"$/\1/p' Casks/*.rb
           }
           current=$(versions | sort -u)
           if [ "$(printf '%s\n' "$current" | wc -l)" -ne 1 ]; then
@@ -67,8 +65,6 @@ jobs:
           sed -i "s/^  \"version\": \".*\",$/  \"version\": \"$version\",/" daemon/package.json desktop/package.json
           sed -i -e "s/^pkgver=.*/pkgver=$version/" -e "s/^pkgrel=.*/pkgrel=1/" contrib/arch/PKGBUILD
           sed -i -e "s/^\(Version: *\).*/\1$version/" -e "s/^\(Release: *\)[0-9]*/\11/" contrib/fedora/shore.spec
-          sed -i "s/^      tag: \"v.*\"$/      tag: \"v$version\"/" HomebrewFormula/*.rb
-          sed -i "s/^  version \".*\"$/  version \"$version\"/" Casks/*.rb
           if [ "$(versions | sort -u)" != "$version" ]; then
             echo "::error::Not every version file moved to $version."
             exit 1
@@ -84,8 +80,8 @@ jobs:
     needs: version
     runs-on: macos-15
     timeout-minutes: 30
-    permissions:
-      contents: write
+    outputs:
+      sha256: ${{ steps.zip.outputs.sha256 }}
     env:
       VERSION: ${{ needs.version.outputs.version }}
     steps:
@@ -99,17 +95,10 @@ jobs:
         working-directory: desktop
       - run: bun run app:macos
         working-directory: desktop
-      - run: |
-          sha=$(shasum -a 256 "out/desktop/Shore-$VERSION-arm64.zip" | cut -d' ' -f1)
-          sed -i '' "s/^  sha256 \".*\"$/  sha256 \"$sha\"/" Casks/shore-desktop.rb
-          if ! grep -q "^  sha256 \"$sha\"$" Casks/shore-desktop.rb; then
-            echo "::error::The cask's checksum didn't move to $sha."
-            exit 1
-          fi
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git commit -am "chore(release): Shore.app v$VERSION checksum"
-          git push origin "HEAD:release/v$VERSION"
+      - id: zip
+        run: |
+          sha=$(shasum -a 256 "out/desktop/Shore-$VERSION-arm64.zip")
+          echo "sha256=${sha%% *}" >>"$GITHUB_OUTPUT"
       - uses: actions/upload-artifact@v7
         with:
           name: macos
@@ -125,6 +114,7 @@ jobs:
       pull-requests: write
     outputs:
       tag: ${{ steps.merge.outputs.tag }}
+      revision: ${{ steps.merge.outputs.revision }}
     steps:
       - uses: actions/checkout@v7
         with:
@@ -161,6 +151,7 @@ jobs:
           merged=$(gh pr view "release/v$VERSION" --json mergeCommit --jq .mergeCommit.oid)
           gh api "repos/$GITHUB_REPOSITORY/git/refs" -f ref="refs/tags/v$VERSION" -f sha="$merged" >/dev/null
           echo "tag=v$VERSION" >>"$GITHUB_OUTPUT"
+          echo "revision=$merged" >>"$GITHUB_OUTPUT"
           if ! gh api -X DELETE "repos/$GITHUB_REPOSITORY/git/refs/heads/release/v$VERSION" >/dev/null; then
             echo "::warning::v$VERSION is merged and tagged, but release/v$VERSION couldn't be deleted."
           fi
@@ -186,3 +177,37 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           GH_REPO: ${{ github.repository }}
           TAG: ${{ needs.merge.outputs.tag }}
+
+  tap:
+    needs: [version, macos, merge, release]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          repository: mythofmeat/homebrew-shore
+          ssh-key: ${{ secrets.HOMEBREW_TAP_DEPLOY_KEY }}
+      - env:
+          VERSION: ${{ needs.version.outputs.version }}
+          REVISION: ${{ needs.merge.outputs.revision }}
+          SHA256: ${{ needs.macos.outputs.sha256 }}
+        run: |
+          if ! [[ $REVISION =~ ^[0-9a-f]{40}$ && $SHA256 =~ ^[0-9a-f]{64}$ ]]; then
+            echo "::error::v$VERSION's commit ($REVISION) or Shore.app's checksum ($SHA256) is missing or malformed."
+            exit 1
+          fi
+          sed -i -e "s/^      tag:      \"v.*\",$/      tag:      \"v$VERSION\",/" \
+            -e "s/^      revision: \"[0-9a-f]*\"$/      revision: \"$REVISION\"/" Formula/shore.rb
+          sed -i -e "s/^  version \".*\"$/  version \"$VERSION\"/" \
+            -e "s/^  sha256 \".*\"$/  sha256 \"$SHA256\"/" Casks/shore-desktop.rb
+          if ! grep -qx "      tag:      \"v$VERSION\"," Formula/shore.rb ||
+            ! grep -qx "      revision: \"$REVISION\"" Formula/shore.rb ||
+            ! grep -qx "  version \"$VERSION\"" Casks/shore-desktop.rb ||
+            ! grep -qx "  sha256 \"$SHA256\"" Casks/shore-desktop.rb; then
+            echo "::error::The tap's formula and cask didn't all move to v$VERSION."
+            exit 1
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git commit -am "chore(release): shore v$VERSION"
+          git push
