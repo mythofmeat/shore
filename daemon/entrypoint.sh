@@ -9,13 +9,6 @@ say() {
 	echo "shore: $*" >&2
 }
 
-# The image holds only software. Who the users are and what timezone it is
-# belong to the deployment, so they are made here at each start from:
-#   SHORE_USER             the daemon's user (default app)
-#   SHORE_UID, SHORE_GID   its ids (default 1000; the gid follows the uid)
-#   SHORE_CHARACTER_USERS  space-separated name[:uid], one user per character,
-#                          so a character's tools run as a user of their name
-#   TZ                     the timezone (default UTC)
 daemon_user=${SHORE_USER:-app}
 daemon_home=/home/$daemon_user
 workspace_root=${SHORE_WORKSPACE_DIR:-/workspace}
@@ -35,6 +28,10 @@ if has_cap 5; then
 else
 	say "the container lacks CAP_KILL (cap_add: KILL), so timeouts and cancellation cannot stop characters' commands"
 fi
+if [ ! -w /etc ]; then
+	say "the root filesystem must be writable (no read_only: true) so the users and timezone can be set at start"
+	exit 1
+fi
 
 tz=${TZ:-UTC}
 if [ -f "/usr/share/zoneinfo/$tz" ]; then
@@ -44,25 +41,20 @@ else
 	say "TZ=$tz is not a known timezone; the clock stays on UTC"
 fi
 
-# Adds user $1 with a group of the same name, uid $2 and gid $3 when given,
-# and login shell $4, unless the user already exists.
-add_user() {
+ensure_user() {
 	getent passwd "$1" >/dev/null && return
 	getent group "$1" >/dev/null || groupadd ${3:+-g "$3"} "$1"
 	useradd -M ${2:+-u "$2"} -g "$1" -d "/home/$1" -s "$4" "$1"
 }
 
-# A fresh volume, or no mount at all, leaves directory $1 missing or owned by
-# root: gives it to user $2, with mode $3 when given. A directory that already
-# belongs to someone else is left alone.
-claim() {
+give_fresh_dir() {
 	[ -d "$1" ] || mkdir -p "$1"
 	[ "$(stat -c %u "$1")" = 0 ] || return 0
 	[ -z "${3:-}" ] || chmod "$3" "$1"
 	chown "$2:" "$1"
 }
 
-add_user "$daemon_user" "${SHORE_UID:-1000}" "${SHORE_GID:-${SHORE_UID:-1000}}" /bin/sh
+ensure_user "$daemon_user" "${SHORE_UID:-1000}" "${SHORE_GID:-${SHORE_UID:-1000}}" /bin/sh
 daemon_uid=$(id -u "$daemon_user")
 daemon_gid=$(id -g "$daemon_user")
 
@@ -71,7 +63,7 @@ as_daemon() {
 }
 
 for dir in /config /data /cache "$daemon_home" ${CLAUDE_CONFIG_DIR:+"$CLAUDE_CONFIG_DIR"}; do
-	claim "$dir" "$daemon_user" 700
+	give_fresh_dir "$dir" "$daemon_user" 700
 	if [ "$(stat -c %u "$dir")" != "$daemon_uid" ]; then
 		say "$dir belongs to uid $(stat -c %u "$dir"), not to $daemon_user (uid $daemon_uid); the daemon may not be able to use it"
 		continue
@@ -86,13 +78,13 @@ for entry in ${SHORE_CHARACTER_USERS:-}; do
 	name=${entry%%:*}
 	uid=${entry#"$name"}
 	uid=${uid#:}
-	add_user "$name" "$uid" "$uid" /bin/bash
+	ensure_user "$name" "$uid" "$uid" /bin/bash
 	usermod -aG "$name" "$daemon_user"
 	uid=$(id -u "$name")
 	gid=$(id -g "$name")
 
 	home=/home/$name
-	claim "$home" "$name" 700
+	give_fresh_dir "$home" "$name" 700
 	if [ "$(stat -c %u "$home")" != "$uid" ]; then
 		say "$home belongs to uid $(stat -c %u "$home"), not to $name (uid $uid)"
 	fi
@@ -107,7 +99,7 @@ for entry in ${SHORE_CHARACTER_USERS:-}; do
 		say "$daemon_user cannot read $workspace; give it group $gid, which $daemon_user is in, and mode 2770"
 	fi
 done
-claim "$workspace_root" "$daemon_user"
+give_fresh_dir "$workspace_root" "$daemon_user"
 
 export HOME="$daemon_home" USER="$daemon_user" LOGNAME="$daemon_user"
 export PATH="$daemon_home/.local/bin:$daemon_home/.bun/bin:$daemon_home/.cargo/bin:$PATH"

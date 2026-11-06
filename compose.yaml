@@ -21,8 +21,6 @@ services:
       - data:/data
       - cache:/cache
       - home:/home/app
-    # Not read_only: the entrypoint writes the users and timezone into /etc
-    # at start, and CHOWN lets it hand fresh volumes to those users.
     tmpfs:
       - /tmp:exec
     cap_drop:

@@ -44,8 +44,6 @@ RUN ln -sf /usr/local/bin/bun /usr/local/bin/bunx \
     && ln -sf /usr/local/bin/bun /usr/local/bin/node
 RUN printf '[global]\nbreak-system-packages = true\n' >/etc/pip.conf
 
-# Debian packages a deployment wants on top of these, space-separated.
-# Users and the timezone are not set here: the entrypoint makes them at start.
 ARG EXTRA_PACKAGES=
 RUN if [ -n "$EXTRA_PACKAGES" ]; then \
     apt-get update && DEBIAN_FRONTEND=noninteractive apt-get install -y $EXTRA_PACKAGES; \
