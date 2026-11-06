@@ -153,5 +153,6 @@ jobs:
       - run: |
           mkdir -p "$(brew --repository)/Library/Taps/mythofmeat"
           ln -s "$GITHUB_WORKSPACE" "$(brew --repository)/Library/Taps/mythofmeat/homebrew-shore"
+          brew trust mythofmeat/shore
       - run: brew style mythofmeat/shore/shore mythofmeat/shore/shore-desktop
       - run: brew audit --strict mythofmeat/shore/shore mythofmeat/shore/shore-desktop
