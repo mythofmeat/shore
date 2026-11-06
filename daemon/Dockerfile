@@ -44,34 +44,10 @@ RUN ln -sf /usr/local/bin/bun /usr/local/bin/bunx \
     && ln -sf /usr/local/bin/bun /usr/local/bin/node
 RUN printf '[global]\nbreak-system-packages = true\n' >/etc/pip.conf
 
-ARG USERNAME=app
-ARG USER_UID=1000
-ARG USER_GID=1000
-ARG CHARACTER_USERS=
-RUN groupadd -g "$USER_GID" "$USERNAME"
-RUN useradd -m -u "$USER_UID" -g "$USER_GID" -d "/home/$USERNAME" -s /bin/sh "$USERNAME"
-RUN chmod 700 "/home/$USERNAME"
-RUN install -d -o "$USER_UID" -g "$USER_GID" -m 700 /config /data /cache
-RUN install -d -o "$USER_UID" -g "$USER_GID" /workspace
-RUN mkdir -p /opt/shore
-RUN echo "$USERNAME" >/opt/shore/daemon-user
-RUN : >/opt/shore/character-users
-RUN for entry in $CHARACTER_USERS; do \
-    name="${entry%%:*}"; uid="${entry#"$name"}"; uid="${uid#:}"; \
-    groupadd ${uid:+-g "$uid"} "$name" \
-    && useradd -m ${uid:+-u "$uid"} -g "$name" -d "/home/$name" -s /bin/bash "$name" \
-    && usermod -aG "$name" "$USERNAME" \
-    && chmod 700 "/home/$name" \
-    && install -d -o "$name" -g "$name" -m 2770 "/workspace/$name" \
-    && echo "$name" >> /opt/shore/character-users \
-    || exit 1; \
-    done
-
-ARG TZ=UTC
-RUN test -f "/usr/share/zoneinfo/$TZ"
-RUN ln -snf "/usr/share/zoneinfo/$TZ" /etc/localtime
-RUN echo "$TZ" >/etc/timezone
-ENV TZ=${TZ}
+ARG EXTRA_PACKAGES=
+RUN if [ -n "$EXTRA_PACKAGES" ]; then \
+    apt-get update && DEBIAN_FRONTEND=noninteractive apt-get install -y $EXTRA_PACKAGES; \
+    fi
 
 COPY daemon/entrypoint.sh /opt/shore/entrypoint
 COPY --from=patch-builder /build/daemon/dist/shore-apply-patch /opt/shore/
@@ -88,7 +64,6 @@ ENV SHORE_DATA_DIR=/data
 ENV SHORE_CACHE_DIR=/cache
 ENV SHORE_WORKSPACE_DIR=/workspace
 
-ENV PATH=/home/${USERNAME}/.local/bin:/home/${USERNAME}/.bun/bin:/home/${USERNAME}/.cargo/bin:${PATH}
 EXPOSE 7320
 EXPOSE 7340
 
