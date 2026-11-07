@@ -87,7 +87,7 @@ const tracked = new TextDecoder()
   .split("\n")
   .filter((rel) => rel !== "");
 
-const HASH_FILE = /(\.(ya?ml|sh|toml|rb|spec|py)|(^|\/)(Dockerfile|PKGBUILD|\.gitignore|\.gitattributes|\.dockerignore))$/;
+const HASH_FILE = /(\.(ya?ml|sh|toml|rb|spec|py)|(^|\/)(PKGBUILD|\.gitignore|\.gitattributes|\.dockerignore))$/;
 const HASH_DIRECTIVE = /^#(!|\s*frozen_string_literal:|\s*Maintainer:)/;
 const PROMPTS = /^daemon\/prompts\//;
 

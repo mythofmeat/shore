@@ -21,28 +21,47 @@ RUN bun run build:daemon
 
 FROM debian:stable
 RUN apt-get update && apt-get upgrade -y
-RUN apt-get install -y ca-certificates
-RUN apt-get install -y cargo
-RUN apt-get install -y curl
-RUN apt-get install -y file
-RUN apt-get install -y git
-RUN apt-get install -y git-lfs
-RUN apt-get install -y jq
-RUN apt-get install -y openssh-client
-RUN apt-get install -y procps
-RUN apt-get install -y python3
-RUN apt-get install -y python3-pip
-RUN apt-get install -y ripgrep
-RUN apt-get install -y tini
-RUN apt-get install -y tzdata
+
+### Mandatory packages ###
+RUN apt-get update && apt-get install -y \
+    ca-certificates \
+    git \
+    git-lfs \
+    openssh-client \
+    procps \
+    ripgrep \
+    tini \
+    tzdata
 RUN git lfs install --system
 
+### Basic utilities ###
 COPY --from=mikefarah/yq:latest /usr/bin/yq /usr/local/bin/yq
+RUN apt-get update && apt-get install -y \
+    bc \
+    curl \
+    ffmpeg \
+    file \
+    imagemagick \
+    iproute2 \
+    jq
+
+### Runtimes and languages ###
+#### Rust
+RUN apt-get update && apt-get install -y \
+    cargo
+#### Python
+RUN apt-get update && apt-get install -y python3
+##### Python-pip
+RUN apt-get update && apt-get install -y python3-pip
+RUN printf '[global]\nbreak-system-packages = true\n' >/etc/pip.conf
+##### UV
 COPY --from=ghcr.io/astral-sh/uv:latest /uv /uvx /usr/local/bin/
+#### Bun
 COPY --from=oven/bun:debian /usr/local/bin/bun /usr/local/bin/bun
 RUN ln -sf /usr/local/bin/bun /usr/local/bin/bunx \
     && ln -sf /usr/local/bin/bun /usr/local/bin/node
-RUN printf '[global]\nbreak-system-packages = true\n' >/etc/pip.conf
+
+###################
 
 ARG EXTRA_PACKAGES=
 RUN if [ -n "$EXTRA_PACKAGES" ]; then \
