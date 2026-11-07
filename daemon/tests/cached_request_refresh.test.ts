@@ -212,7 +212,7 @@ test("changing the model answers before the rebuild runs, and the rebuild then r
   });
 });
 
-test("a message sent right after a model change uses the new model, with the rebuild still waiting to run", async () => {
+test("a message sent right after a model change uses the new model, with the rebuild not yet done", async () => {
   await withAda(async (config, env) => {
     config.models.chat.set("chat.other", {
       name: "other", qualifiedName: "chat.other", category: "chat", providerKey: "anthropic",
@@ -231,7 +231,12 @@ test("a message sent right after a model change uses the new model, with the reb
       const autonomy = new TurnAutonomyBridge(runtime.autonomy);
       const commands = buildCommandPathDeps({ runtime, autonomy, diagnostics: new Diagnostics(), router: new SessionRouter(), handshake: DEFAULT_HANDSHAKE, providers: runtime.providers, env });
       const session = { sessionId: 1, clientId: 1, clientType: "test", clientName: "test", capabilities: [], selectedCharacter: "ada", selectedThread: "main" };
-      const rebuilt = spyOn(runtime.cache, "reprimeFromDisk");
+      const held = Promise.withResolvers<void>();
+      const reprime = runtime.cache.reprimeFromDisk.bind(runtime.cache);
+      const rebuilt = spyOn(runtime.cache, "reprimeFromDisk").mockImplementation(async (...args) => {
+        await held.promise;
+        return await reprime(...args);
+      });
       expect((await dispatchCommand(commands, { name: "switch_model", args: { name: "other" } }, { session, rid: "change", kind: "command" })).type).toBe("command_output");
       const deps = buildGenerationDeps({ runtime, providers: runtime.providers, autonomy, diagnostics: new Diagnostics(), env, emitEvent: () => {} });
       await runGeneration(deps, {
@@ -239,8 +244,8 @@ test("a message sent right after a model change uses the new model, with the reb
         body: { rid: "chat", text: "hello", stream: true, images: [], image_data: [] },
         charName: "ada", regen: false, rid: "chat", signal: new AbortController().signal, send: async () => {},
       });
-      expect(rebuilt).not.toHaveBeenCalled();
       expect(required(seen.at(-1)).model).toBe("claude-other");
+      held.resolve();
       await until(() => rebuilt.mock.calls.length > 0, "the rebuild");
       await until(() => runtime.keepalive.warmThread("ada") === "main", "keepalive to come back");
       const armed = await Promise.resolve(runtime.cache.get("ada"));

@@ -182,14 +182,6 @@ fn write_overview_role<W: Write>(out: &mut W, role: &Value) {
         &format!("shore model setting {}", text(role, "flag")),
         Tone::Muted,
     );
-    let shared = role.get("same_settings_as").and_then(Value::as_str);
-    if let Some(other) = shared {
-        rows.add_toned(
-            "shares settings with",
-            &format!("{other} — the same model, so tuning either moves both"),
-            Tone::Warn,
-        );
-    }
     if let Some(problem) = role.get("error").and_then(Value::as_str) {
         rows.add_toned("unresolved", problem, Tone::Bad);
     }

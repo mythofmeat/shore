@@ -1848,9 +1848,6 @@ wire_types! {
         pub background_task: Option<BackgroundModelTarget>,
         #[serde(default, skip_serializing_if = "Option::is_none")]
         #[ts(optional)]
-        pub also_affects: Option<Vec<String>>,
-        #[serde(default, skip_serializing_if = "Option::is_none")]
-        #[ts(optional)]
         pub invalidated: Option<ModelInvalidated>,
         #[serde(default, skip_serializing_if = "Option::is_none")]
         #[ts(optional)]
@@ -1873,8 +1870,6 @@ wire_types! {
         pub source: Option<String>,
         pub inherited: bool,
         pub settings: Vec<SavedModelSetting>,
-        #[serde(deserialize_with = "deserialize_nullable")]
-        pub same_settings_as: Option<String>,
         #[serde(deserialize_with = "deserialize_nullable")]
         pub error: Option<String>,
     }

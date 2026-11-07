@@ -7557,12 +7557,6 @@
               "$ref": "#/$defs/SavedModelSetting"
             }
           },
-          "same_settings_as": {
-            "type": [
-              "string",
-              "null"
-            ]
-          },
           "error": {
             "type": [
               "string",
@@ -7577,7 +7571,6 @@
           "source",
           "inherited",
           "settings",
-          "same_settings_as",
           "error"
         ]
       },
@@ -7815,15 +7808,6 @@
                 "type": "null"
               }
             ]
-          },
-          "also_affects": {
-            "type": [
-              "array",
-              "null"
-            ],
-            "items": {
-              "type": "string"
-            }
           },
           "invalidated": {
             "anyOf": [
@@ -17328,12 +17312,6 @@
               "$ref": "#/$defs/SavedModelSetting"
             }
           },
-          "same_settings_as": {
-            "type": [
-              "string",
-              "null"
-            ]
-          },
           "error": {
             "type": [
               "string",
@@ -17348,7 +17326,6 @@
           "source",
           "inherited",
           "settings",
-          "same_settings_as",
           "error"
         ]
       },
@@ -17586,15 +17563,6 @@
                 "type": "null"
               }
             ]
-          },
-          "also_affects": {
-            "type": [
-              "array",
-              "null"
-            ],
-            "items": {
-              "type": "string"
-            }
           },
           "invalidated": {
             "anyOf": [

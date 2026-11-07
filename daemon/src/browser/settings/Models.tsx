@@ -121,7 +121,7 @@ export function ModelsPage({ state }: { state: ChromeSnapshot }) {
         {state.thread === null ? null : row({ kind: "thread" }, thread?.chat_model ?? null, thread?.chat_model === undefined ? `thread-default` : `thread ${state.thread}`)}
       </div>
     </SettingsSection>
-    <SettingsSection title="Background tasks" description="Heartbeat check-ins and compaction can use a different model from chat.">
+    <SettingsSection title="Background tasks" description="Heartbeat check-ins and compaction can use a different model or settings from chat.">
       <div className="rows">
         {(["heartbeat", "compaction"] as const).map((task) => { const item = role(task); return row({ kind: "background", task }, item?.model, item?.source); })}
       </div>
