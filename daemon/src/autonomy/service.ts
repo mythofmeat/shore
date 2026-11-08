@@ -153,11 +153,19 @@ export class AutonomyService {
     this.#entries.get(character)?.runner.setDreamConfig(dream);
   }
 
-  forceDreamNow(character: string): boolean {
-    const runner = this.#entries.get(character)?.runner;
-    if (runner === undefined) return false;
-    runner.forceDream();
-    return true;
+  forceDreamNow(character: string): "queued" | "running" | undefined {
+    return this.#entries.get(character)?.runner.forceDream();
+  }
+
+  runningDreams(): HeartbeatView[] {
+    return [...this.#entries].flatMap(([character, { runner }]) => {
+      const startedAt = runner.dreamStartedAt;
+      return startedAt === undefined ? [] : [{ character, startedAt }];
+    });
+  }
+
+  async dreamsEnded(): Promise<void> {
+    await Promise.all([...this.#entries.values()].map(async ({ runner }) => { await runner.dreamEnded(); }));
   }
 
   dreamStatus(character: string): DreamStatus | undefined {
@@ -201,7 +209,11 @@ export class AutonomyService {
 
   async quiesce(): Promise<void> {
     this.#closed = true;
-    await Promise.allSettled(this.#ticks);
+    const stopDreams = async () => {
+      await Promise.allSettled([...this.#entries.values()].map(async ({ runner }) => { await runner.stopDream(); }));
+    };
+    await Promise.allSettled([...this.#ticks, stopDreams()]);
+    await stopDreams();
   }
 
   runningHeartbeats(): HeartbeatView[] {

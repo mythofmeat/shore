@@ -1,12 +1,13 @@
 import { shoreLog } from "../log.ts";
 
+import type { HeartbeatToolResult, TranscriptRound } from "./heartbeat_loop.ts";
 import { runHeartbeatTick } from "./heartbeat_tick.ts";
 import { runIdleCompaction } from "./idle_compaction.ts";
 import { runDeepIdleArchive } from "./deep_archive.ts";
 import type { LastRequestCache } from "../cache/last_request.ts";
 import { reloadAndApplyDeferred, repoint, type PostArchiveEngine } from "./post_archive.ts";
 import type { AutonomyActionResult, AutonomyExecutor, DreamActionResult, DreamWindow, TickHooks } from "./runner.ts";
-import { DREAM_CALL_TYPE, DREAM_TOOL_THREAD, runDreamPass } from "../memory/dreaming/run.ts";
+import { DREAM_CALL_TYPE, DREAM_LOOP_CALL_TYPE, DREAM_TOOL_THREAD, runDreamPass } from "../memory/dreaming/run.ts";
 import type { ToolContext } from "../tools/dispatch.ts";
 import type { CompactionReason } from "./tick.ts";
 import type { CharacterRegistry } from "../characters.ts";
@@ -17,7 +18,7 @@ import type { Message } from "../engine/types.ts";
 import { generate, generateViaStream } from "../llm/generate.ts";
 import type { FrameSink } from "../llm/stream.ts";
 import type { GenerateDeps } from "../llm/generate.ts";
-import type { ToolLoopOptions, GenerateResponse, SidecarProvider, SidecarRequest } from "../llm/types.ts";
+import type { ToolLoopOptions, GenerateResponse, SidecarProvider, SidecarRequest, ToolDefinition } from "../llm/types.ts";
 import type { ToolContextDeps } from "../handler/tool_context.ts";
 import { buildToolContext } from "../handler/tool_context.ts";
 import { toolLimitsFrom } from "../tools/dispatch.ts";
@@ -44,7 +45,7 @@ export interface InProcessExecutorDeps {
   rebuild: RebuildDeps;
   env?: NodeJS.ProcessEnv;
   beginForeground?: () => () => void;
-  runActivity?: <T>(run: () => Promise<T>) => Promise<T>;
+  runActivity?: <T>(run: () => Promise<T>, signal?: AbortSignal) => Promise<T>;
 }
 
 export class InProcessAutonomyExecutor implements AutonomyExecutor {
@@ -57,92 +58,34 @@ export class InProcessAutonomyExecutor implements AutonomyExecutor {
   async runHeartbeatTick(character: string, hooks: TickHooks): Promise<AutonomyActionResult> {
     return await this.#withForeground(async () => {
       const config = this.#deps.registry.effectiveConfig(character);
+      const calls = this.#loopCalls(config, character, "heartbeat", ["heartbeat", "heartbeat_tool_loop"]);
       let toolCtx: ReturnType<typeof buildToolContext> | undefined;
-      let imageLimits: ImageLimits | undefined;
 
       return await runHeartbeatTick(character, config, {
         rebuild: this.#deps.rebuild,
         ...(this.#deps.env === undefined ? {} : { env: this.#deps.env }),
-
-      generate: async (request, phase, signal) => {
-        labelAccountedCall(request, config, character, "heartbeat");
-        imageLimits = imageLimitsFor(request.sdk, request.model);
-        let round = 0;
-        const { response, fallbacks } = await generate(request, this.#generateDeps(config), signal, {
-          tools: {
-            ...phase,
-            beforeTurn: async (call) => {
-              labelAccountedCall(call, config, character, round++ === 0 ? "heartbeat" : "heartbeat_tool_loop");
-              imageLimits = imageLimitsFor(call.sdk, call.model);
-              await phase.beforeTurn?.(call);
-            },
-          },
-        });
-        for (const event of fallbacks) {
-          shoreLog.warn(
-            `shore: heartbeat for ${character} rotated ${event.from.name} → ` +
-            `${event.to?.name ?? "(none)"}: ${event.reason}`,
-          );
-        }
-        return response;
-      },
-
-      dispatch: async (name, input, toolUseId, tools, conversation) => {
-        toolCtx ??= buildToolContext(config, config.dirs.data, character, {
-          ...this.#deps.tools,
-          thread: conversation.thread,
-          conversation: conversation.conversation,
-          scheduleNextWake: (_character, hours, reason) => hooks.scheduleNextWake(hours, reason),
-        });
-        const exec: ToolExecution = {
-          sendDirect: () => {},
-          ctx: { ...await toolCtx, ...(conversation.recordWorkspaceWrite === undefined ? {} : { recordWorkspaceWrite: conversation.recordWorkspaceWrite }) },
-          limits: toolLimitsFrom(config.app.tools, config.app.subagents),
-          ...(imageLimits === undefined ? {} : { imageLimits }),
-          now: () => new Date().toISOString(),
-          newMessageId: () => `m_${crypto.randomUUID()}`,
-          schemas: schemasFrom(tools),
-        };
-        const run = await runToolUse(
-          { id: toolUseId ?? `hb_${crypto.randomUUID()}`, name, input },
-          exec,
-          [],
-        );
-        return {
-          output: run.output,
-          isError: run.isError,
-          block: run.block,
-          ...(run.value === undefined ? {} : { value: run.value }),
-        };
-      },
-
-      ...(this.#deps.callStore === undefined
-        ? {}
-        : {
-            recordTranscript: (round) => {
-              const store = this.#deps.callStore;
-              if (store === undefined) return;
-              recordTranscript(store, {
-                source: "heartbeat",
-                character,
-                callType: round.callType,
-                iteration: round.iteration,
-                response: round.response,
-                tools: round.captured,
-              });
-            },
-          }),
-
-      threads: {
-        ensure: async (name) => await this.#deps.registry.ensureHeartbeatThread(name),
-        engine: async (name, thread) => await this.#deps.registry.getOrCreate(name, thread),
-      },
-      threadsChanged: (name, thread) => { this.#deps.emitEvent?.({ type: "threads_changed", character: name, thread }); },
-      compaction: this.#threadCompaction(config),
-      ...(this.#deps.emit === undefined ? {} : { emit: this.#deps.emit }),
-      ...(this.#deps.notifyAutonomousMessage === undefined
-        ? {}
-        : { notify: this.#deps.notifyAutonomousMessage }),
+        generate: calls.generate,
+        dispatch: async (name, input, toolUseId, tools, conversation) => {
+          toolCtx ??= buildToolContext(config, config.dirs.data, character, {
+            ...this.#deps.tools,
+            thread: conversation.thread,
+            conversation: conversation.conversation,
+            scheduleNextWake: (_character, hours, reason) => hooks.scheduleNextWake(hours, reason),
+          });
+          const ctx = { ...await toolCtx, ...(conversation.recordWorkspaceWrite === undefined ? {} : { recordWorkspaceWrite: conversation.recordWorkspaceWrite }) };
+          return await runLoopTool(ctx, config, calls.imageLimits(), { id: toolUseId ?? `hb_${crypto.randomUUID()}`, name, input }, tools);
+        },
+        ...this.#transcripts("heartbeat", character),
+        threads: {
+          ensure: async (name) => await this.#deps.registry.ensureHeartbeatThread(name),
+          engine: async (name, thread) => await this.#deps.registry.getOrCreate(name, thread),
+        },
+        threadsChanged: (name, thread) => { this.#deps.emitEvent?.({ type: "threads_changed", character: name, thread }); },
+        compaction: this.#threadCompaction(config),
+        ...(this.#deps.emit === undefined ? {} : { emit: this.#deps.emit }),
+        ...(this.#deps.notifyAutonomousMessage === undefined
+          ? {}
+          : { notify: this.#deps.notifyAutonomousMessage }),
       });
     });
   }
@@ -185,83 +128,93 @@ export class InProcessAutonomyExecutor implements AutonomyExecutor {
     });
   }
 
-  async runDream(character: string, window: DreamWindow): Promise<DreamActionResult> {
-    return await this.#withForeground(async () => {
-      const config = this.#deps.registry.effectiveConfig(character);
-      let toolCtx: Promise<ToolContext> | undefined;
-      let imageLimits: ImageLimits | undefined;
-      const store = this.#deps.callStore;
-      const pass = await runDreamPass(character, config, window.since, {
-        forced: window.forced,
-        mcpToolDefs: (grants) => this.#deps.rebuild.mcpRegistry.toolDefsFiltered(grants),
-        generate: async (request, phase, signal) => {
-          labelAccountedCall(request, config, character, DREAM_CALL_TYPE);
-          imageLimits = imageLimitsFor(request.sdk, request.model);
-          const { response, fallbacks } = await generate(request, this.#generateDeps(config), signal, {
-            tools: {
-              ...phase,
-              beforeTurn: async (call) => {
-                labelAccountedCall(call, config, character, DREAM_CALL_TYPE);
-                imageLimits = imageLimitsFor(call.sdk, call.model);
-                await phase.beforeTurn?.(call);
-              },
-            },
-          });
-          for (const event of fallbacks) {
-            shoreLog.warn(
-              `shore: dream for ${character} rotated ${event.from.name} → ` +
-              `${event.to?.name ?? "(none)"}: ${event.reason}`,
-            );
-          }
-          return response;
-        },
-        dispatch: async (scoped, name, input, toolUseId, tools) => {
-          toolCtx ??= this.#dreamToolContext(scoped, character);
-          const exec: ToolExecution = {
-            sendDirect: () => {},
-            ctx: await toolCtx,
-            limits: toolLimitsFrom(scoped.app.tools, scoped.app.subagents),
-            ...(imageLimits === undefined ? {} : { imageLimits }),
-            now: () => new Date().toISOString(),
-            newMessageId: () => `m_${crypto.randomUUID()}`,
-            schemas: schemasFrom(tools),
-          };
-          const run = await runToolUse({ id: toolUseId ?? `dr_${crypto.randomUUID()}`, name, input }, exec, []);
-          return {
-            output: run.output,
-            isError: run.isError,
-            block: run.block,
-            ...(run.value === undefined ? {} : { value: run.value }),
-          };
-        },
-        ...(store === undefined
-          ? {}
-          : {
-              recordTranscript: (round) => {
-                recordTranscript(store, {
-                  source: "dreaming",
-                  character,
-                  callType: round.callType,
-                  iteration: round.iteration,
-                  response: round.response,
-                  tools: round.captured,
-                });
-              },
-            }),
-        refreshHome: async () => {
-          const deps = { config, cache: this.#deps.cache, rebuild: this.#deps.rebuild, engine: this.#engineReloader() };
-          await reloadAndApplyDeferred(character, deps, "dream");
-          await repoint(character, deps, "prompt_reload");
-        },
-        ...(this.#deps.env === undefined ? {} : { env: this.#deps.env }),
-      });
-      return { events: pass.events, dream: pass.outcome };
+  async runDream(character: string, start: DreamWindow): Promise<DreamActionResult> {
+    const config = this.#deps.registry.effectiveConfig(character);
+    const calls = this.#loopCalls(config, character, "dream", [DREAM_CALL_TYPE, DREAM_LOOP_CALL_TYPE]);
+    const activity = async <T>(run: () => Promise<T>): Promise<T> =>
+      await (this.#deps.runActivity?.(run, start.signal) ?? run());
+    let toolCtx: Promise<ToolContext> | undefined;
+    const pass = await runDreamPass(character, config, start, {
+      generate: calls.generate,
+      dispatch: async (scoped, name, input, toolUseId, tools, writes) => await activity(async () => {
+        start.signal.throwIfAborted();
+        toolCtx ??= this.#dreamToolContext(scoped, character, start.signal);
+        const ctx = { ...await toolCtx, recordWorkspaceWrite: writes };
+        return await runLoopTool(ctx, scoped, calls.imageLimits(), { id: toolUseId ?? `dr_${crypto.randomUUID()}`, name, input }, tools);
+      }),
+      ...this.#transcripts("dreaming", character),
+      refreshHome: async () => await activity(async () => {
+        const deps = { config, cache: this.#deps.cache, rebuild: this.#deps.rebuild, engine: this.#engineReloader() };
+        await reloadAndApplyDeferred(character, deps, "dream");
+        await repoint(character, deps, "prompt_reload");
+      }),
+      ...(this.#deps.env === undefined ? {} : { env: this.#deps.env }),
     });
+    return { events: pass.events, dream: pass.outcome };
   }
 
-  async #dreamToolContext(config: LoadedConfig, character: string): Promise<ToolContext> {
-    const { scheduleNextWake: _wake, startThread: _start, editThread: _edit, deferEdit: _defer, ...tools } = this.#deps.tools ?? {};
-    const ctx = await buildToolContext(config, config.dirs.data, character, { ...tools, conversation: [], countReads: false });
+  #loopCalls(config: LoadedConfig, character: string, task: string, [first, loop]: readonly [string, string]): {
+    generate: (request: SidecarRequest, phase: ToolPhase, signal: AbortSignal) => Promise<GenerateResponse>;
+    imageLimits: () => ImageLimits | undefined;
+  } {
+    let imageLimits: ImageLimits | undefined;
+    return {
+      imageLimits: () => imageLimits,
+      generate: async (request, phase, signal) => {
+        labelAccountedCall(request, config, character, first);
+        imageLimits = imageLimitsFor(request.sdk, request.model);
+        let round = 0;
+        const { response, fallbacks } = await generate(request, this.#generateDeps(config), signal, {
+          tools: {
+            ...phase,
+            beforeTurn: async (call) => {
+              labelAccountedCall(call, config, character, round++ === 0 ? first : loop);
+              imageLimits = imageLimitsFor(call.sdk, call.model);
+              await phase.beforeTurn?.(call);
+            },
+          },
+        });
+        for (const event of fallbacks) {
+          shoreLog.warn(
+            `shore: ${task} for ${character} rotated ${event.from.name} → ` +
+            `${event.to?.name ?? "(none)"}: ${event.reason}`,
+          );
+        }
+        return response;
+      },
+    };
+  }
+
+  #transcripts(source: "heartbeat" | "dreaming", character: string): { recordTranscript?: (round: TranscriptRound) => void } {
+    const store = this.#deps.callStore;
+    if (store === undefined) return {};
+    return {
+      recordTranscript: (round) => {
+        recordTranscript(store, {
+          source,
+          character,
+          callType: round.callType,
+          iteration: round.iteration,
+          response: round.response,
+          tools: round.captured,
+        });
+      },
+    };
+  }
+
+  async #dreamToolContext(config: LoadedConfig, character: string, signal: AbortSignal): Promise<ToolContext> {
+    const {
+      scheduleNextWake: _wake,
+      startThread: _start,
+      editThread: _edit,
+      deferEdit: _defer,
+      mcpRegistry: _mcp,
+      mcpToolDefs: _mcpDefs,
+      imageGenerator: _images,
+      ...tools
+    } = this.#deps.tools ?? {};
+    const ctx = await buildToolContext(config, config.dirs.data, character, { ...tools, conversation: [], signal });
+    delete ctx.imageGenConfig;
     ctx.thread = DREAM_TOOL_THREAD;
     return ctx;
   }
@@ -317,6 +270,31 @@ export class InProcessAutonomyExecutor implements AutonomyExecutor {
       ...(this.#deps.tools === undefined ? {} : { tools: this.#deps.tools }),
     };
   }
+}
+
+async function runLoopTool(
+  ctx: ToolContext,
+  config: LoadedConfig,
+  imageLimits: ImageLimits | undefined,
+  use: { id: string; name: string; input: unknown },
+  tools: readonly ToolDefinition[] | undefined,
+): Promise<HeartbeatToolResult> {
+  const exec: ToolExecution = {
+    sendDirect: () => {},
+    ctx,
+    limits: toolLimitsFrom(config.app.tools, config.app.subagents),
+    ...(imageLimits === undefined ? {} : { imageLimits }),
+    now: () => new Date().toISOString(),
+    newMessageId: () => `m_${crypto.randomUUID()}`,
+    schemas: schemasFrom(tools),
+  };
+  const run = await runToolUse(use, exec, []);
+  return {
+    output: run.output,
+    isError: run.isError,
+    block: run.block,
+    ...(run.value === undefined ? {} : { value: run.value }),
+  };
 }
 
 export type CompactionGenerate = (

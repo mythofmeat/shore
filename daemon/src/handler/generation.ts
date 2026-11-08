@@ -567,7 +567,7 @@ async function streamTurn(
           now: params.now,
           newMessageId: params.newMessageId,
           signal: params.signal,
-        }), signal: params.signal, ...(request.context?.thread === undefined ? {} : { thread: request.context.thread }) },
+        }), signal: params.signal, countReads: true, ...(request.context?.thread === undefined ? {} : { thread: request.context.thread }) },
       )
     : undefined;
   if (toolCtx !== undefined) toolCtx.recordWorkspaceWrite = params.recordWorkspaceWrite;

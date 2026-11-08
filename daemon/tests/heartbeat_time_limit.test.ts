@@ -1,23 +1,11 @@
 import { afterAll, afterEach, expect, jest, test } from "bun:test";
-import { mkdir, mkdtemp, writeFile } from "node:fs/promises";
-import { join } from "node:path";
-
 import type { HeartbeatEvent } from "../src/autonomy/heartbeat_log.ts";
-import { TurnAutonomyBridge } from "../src/autonomy/registration.ts";
-import { defaultAppConfig } from "../src/config/app.ts";
-import type { LoadedConfig } from "../src/config/loader.ts";
-import { emptyCatalog } from "../src/config/models.ts";
-import { ProviderRegistry } from "../src/config/providers.ts";
-import { Diagnostics } from "../src/diagnostics.ts";
 import type { Message } from "../src/engine/types.ts";
-import { buildGenerationDeps } from "../src/handler/deps.ts";
-import { runGeneration } from "../src/handler/generation.ts";
 import type { GenerateResponse, SidecarProvider, SidecarRequest } from "../src/llm/types.ts";
-import { createRuntime } from "../src/runtime.ts";
 import { required } from "../src/util/required.ts";
 import { eventsForResponse } from "./support/stream.ts";
-import { restoreTestEnv, setTestEnv } from "./support/env.ts";
-import { testTmp } from "./support/tmp.ts";
+import { afterFirstChat } from "./support/chat_world.ts";
+import { restoreTestEnv } from "./support/env.ts";
 
 const MINUTE = 60_000;
 const KEY_ENV = "SHORE_HEARTBEAT_TIME_LIMIT_KEY";
@@ -81,57 +69,27 @@ interface Heartbeats {
 }
 
 async function afterOneChat(script: Script, seen: SidecarRequest[], heartbeats: (h: Heartbeats) => Promise<void>): Promise<void> {
-  setTestEnv(KEY_ENV, "fixture-key");
-  const root = await mkdtemp(testTmp("shore-heartbeat-time-limit-"));
-  const app = defaultAppConfig();
-  app.defaults.model = "fixture";
-  app.advanced.max_retries = 0;
-  app.memory.compaction.enabled = false;
-  app.tools.enabled_tools = ["read", "set_next_wake"];
-  app.behavior.autonomy.enabled = true;
-  const models = emptyCatalog();
-  models.chat.set("chat.fixture", {
-    name: "fixture", qualifiedName: "chat.fixture", category: "chat", providerKey: "anthropic",
-    sdk: "anthropic", modelId: "claude-fixture", apiKeyEnv: KEY_ENV,
-    maxContextTokens: 200_000, maxOutputTokens: 4096,
-  });
-  const config: LoadedConfig = {
-    app, models, providers: ProviderRegistry.empty(), rawTable: undefined,
-    dirs: { config: join(root, "config"), data: join(root, "data"), cache: join(root, "cache"), runtime: join(root, "runtime") },
-  };
-  const workspace = join(config.dirs.config, "characters", "ada", "workspace");
-  await mkdir(workspace, { recursive: true });
-  await writeFile(join(workspace, "SOUL.md"), "Ada");
-  const env = { [KEY_ENV]: "fixture-key" };
-  const runtime = await createRuntime({ config, providers: { anthropic: slowProvider(script, seen) }, env });
-  try {
-    const autonomy = new TurnAutonomyBridge(runtime.autonomy);
-    const deps = buildGenerationDeps({
-      runtime, providers: runtime.providers, autonomy, diagnostics: new Diagnostics(), env, emitEvent: () => {},
-    });
-    await runGeneration(deps, {
-      meta: {
-        session: { sessionId: 1, clientId: 1, clientType: "test", clientName: "test", capabilities: [], selectedCharacter: "ada", selectedThread: "main" },
-        rid: "chat", kind: "message",
-      },
-      body: { rid: "chat", text: "hello", stream: true, images: [], image_data: [] },
-      charName: "ada", regen: false, rid: "chat", signal: new AbortController().signal, send: async () => {},
-    });
-    await autonomy.settled("ada");
+  await afterFirstChat({
+    name: "heartbeat-time-limit",
+    keyEnv: KEY_ENV,
+    provider: slowProvider(script, seen),
+    tools: ["read", "set_next_wake"],
+    autonomy: true,
+  }, async ({ runtime }) => {
     jest.useFakeTimers();
-    await heartbeats({
-      run: async () => {
-        expect(runtime.autonomy.forceHeartbeatNow("ada")).toBeDefined();
-        await runtime.autonomy.tick();
-      },
-      log: () => runtime.autonomy.log("ada", 100),
-      messages: async () => (await runtime.registry.getOrCreate("ada", "main")).messages(),
-    });
-  } finally {
-    jest.useRealTimers();
-    await runtime.autonomy.shutdown();
-    await runtime.shutdown();
-  }
+    try {
+      await heartbeats({
+        run: async () => {
+          expect(runtime.autonomy.forceHeartbeatNow("ada")).toBeDefined();
+          await runtime.autonomy.tick();
+        },
+        log: () => runtime.autonomy.log("ada", 100),
+        messages: async () => (await runtime.registry.getOrCreate("ada", "main")).messages(),
+      });
+    } finally {
+      jest.useRealTimers();
+    }
+  });
 }
 
 test("a heartbeat still busy at 25 minutes is told how long it has left, and its wrap-up runs before the 30-minute limit", async () => {

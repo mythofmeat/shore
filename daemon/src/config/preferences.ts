@@ -609,6 +609,8 @@ export type BackgroundTask = Exclude<import("../protocol/BackgroundModelTarget.t
 
 export const BACKGROUND_TASKS: readonly BackgroundTask[] = ["heartbeat", "compaction", "dreaming"];
 
+export const SHARED_BACKGROUND_TASKS: readonly BackgroundTask[] = ["heartbeat", "compaction"];
+
 export function configView(config: {
   models: ModelCatalog;
   providers: ProviderRegistry;

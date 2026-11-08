@@ -119,6 +119,9 @@ export function continuationOf(callType: string): string {
     case "heartbeat":
     case "heartbeat_tool_loop":
       return "heartbeat_tool_loop";
+    case "dreaming":
+    case "dreaming_tool_loop":
+      return "dreaming_tool_loop";
     default:
       return callType;
   }

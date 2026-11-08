@@ -88,9 +88,9 @@ export function inDayWindow(window: DayWindow, minute: number): boolean {
 
 export function dreamDue(i: DreamInputs): boolean {
   if (i.foreground) return false;
+  if (i.retryAt !== undefined && i.now < i.retryAt) return false;
   if (i.forced) return true;
   if (!i.enabled) return false;
-  if (i.retryAt !== undefined && i.now < i.retryAt) return false;
   if (i.lastDreamAt !== undefined && i.now - i.lastDreamAt < i.everyMs) return false;
   if (i.window !== undefined && !inDayWindow(i.window, i.localMinute)) return false;
   return i.quietMs >= i.idleAfterMs && i.turnsSince >= i.minTurns;

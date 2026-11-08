@@ -76,19 +76,22 @@ export async function gitHead(target: string | CharacterWorkspace): Promise<stri
   return sha === "" ? undefined : sha;
 }
 
-export async function gitChangesBetween(
+export async function gitCommitsBetween(
   target: string | CharacterWorkspace,
   from: string | undefined,
-  to: string | undefined,
-): Promise<{ commits: number; files: string[] }> {
-  if (to === undefined || from === to) return { commits: 0, files: [] };
-  const workspace = asCharacterWorkspace(target);
-  const count = await runGit(workspace, ["rev-list", "--count", from === undefined ? to : `${from}..${to}`]);
-  const commits = count.code === 0 ? Number.parseInt(rustTrim(count.stdout), 10) || 0 : 0;
-  if (from === undefined) return { commits, files: [] };
-  const diff = await runGit(workspace, ["-c", "core.quotePath=false", "diff", "--name-only", from, to]);
-  const files = diff.code === 0 ? rustTrim(diff.stdout).split("\n").filter((line) => line !== "") : [];
-  return { commits, files };
+  to: string,
+): Promise<string[]> {
+  if (from === to) return [];
+  const list = await runGit(asCharacterWorkspace(target), ["rev-list", "--reverse", from === undefined ? to : `${from}..${to}`]);
+  if (list.code !== 0) throw gitOutputError("git rev-list failed", list);
+  return rustTrim(list.stdout).split("\n").filter((line) => line !== "");
+}
+
+export async function gitCommitFiles(target: string | CharacterWorkspace, commits: readonly string[]): Promise<string[]> {
+  if (commits.length === 0) return [];
+  const shown = await runGit(asCharacterWorkspace(target), ["-c", "core.quotePath=false", "show", "--no-renames", "--name-only", "--format=", ...commits]);
+  if (shown.code !== 0) throw gitOutputError("git show failed", shown);
+  return [...new Set(rustTrim(shown.stdout).split("\n").filter((line) => line !== ""))].sort();
 }
 
 export async function gitPushWorkspace(target: string | CharacterWorkspace): Promise<boolean> {

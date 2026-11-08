@@ -1006,7 +1006,7 @@ wire_types! {
     }
 
     #[serde(rename_all = "snake_case")]
-    pub enum RunningWorkKind { Message, Heartbeat, Compaction }
+    pub enum RunningWorkKind { Message, Heartbeat, Compaction, Dream }
 
     pub struct RunningWork {
         pub kind: RunningWorkKind,
@@ -1508,7 +1508,10 @@ wire_types! {
     }
 
     #[serde(rename_all = "snake_case")]
-    pub enum DreamOutcome { Finished, CutOff, Failed }
+    pub enum DreamOutcome { Finished, CutOff, Failed, Interrupted }
+
+    #[serde(rename_all = "snake_case")]
+    pub enum DreamStop { TimeLimit, RoundLimit, Shutdown, Budget }
 
     pub struct DreamRecord {
         pub started_at: String,
@@ -1526,6 +1529,9 @@ wire_types! {
         #[serde(default, skip_serializing_if = "Option::is_none")]
         #[ts(optional)]
         pub error: Option<String>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        #[ts(optional)]
+        pub stopped_by: Option<DreamStop>,
     }
 
     pub struct DreamReport {

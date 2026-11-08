@@ -970,9 +970,10 @@ pub(crate) enum PaletteScope {
     Config,
 }
 
-/// Background task to retarget `shore model setting` at. `all` targets every
-/// background task at once and errors if they resolve to different models,
-/// or, when only showing settings, if their own settings differ.
+/// Background task to retarget `shore model setting` at. `all` targets heartbeat
+/// and compaction together and errors if they resolve to different models, or,
+/// when only showing settings, if their own settings differ. Dreaming is only
+/// ever targeted by name.
 #[derive(ValueEnum, Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) enum BackgroundTarget {
     All,
@@ -1171,7 +1172,7 @@ pub(crate) struct ModelTarget {
     #[arg(long)]
     pub(crate) chat: bool,
 
-    /// Background tasks: bare means all; naming one requires =compaction, =heartbeat or =dreaming
+    /// Background tasks: bare means heartbeat and compaction; naming one requires =compaction, =heartbeat or =dreaming
     #[arg(
         long,
         value_enum,
@@ -1219,7 +1220,7 @@ pub(crate) enum ModelCommand {
     /// own uses. With --thread (or SHORE_THREAD) it gives just that thread its own model.
     /// Every other target writes the config file,
     /// which is global: `--background=<task>` writes `<task>.model`,
-    /// bare `--background` writes `heartbeat.model`, `compaction.model` and `dreaming.model`; `--subagent=<name>` writes `subagents.<name>.model`,
+    /// bare `--background` writes `heartbeat.model` and `compaction.model` but never `dreaming.model`; `--subagent=<name>` writes `subagents.<name>.model`,
     /// and bare `--subagent` writes `subagents.model`.
     Use {
         /// Model name or provider:model_id
@@ -1265,7 +1266,8 @@ pub(crate) enum ModelCommand {
     /// A background task's settings sit on top of its model's: heartbeat,
     /// compaction and dreaming take whatever their model has, chat's when they
     /// share it, and override only the keys set for them, so tuning a task never
-    /// moves chat. Bare --background writes the same value for every task.
+    /// moves chat. Bare --background writes the same value for heartbeat and
+    /// compaction; dreaming takes its own with --background=dreaming.
     ///
     /// The keys are temperature, top_p, reasoning_effort, reasoning_budget_tokens,
     /// max_output_tokens, cache_ttl, cache_keepalive, cache_keepalive_pings, sdk,
@@ -1338,8 +1340,8 @@ pub(crate) enum ModelCommand {
     /// configured model. With --thread (or SHORE_THREAD) it clears just that thread's own
     /// model, so the thread uses the character's again. Other targets clear
     /// the config keys `use` would have written, so the role falls back the
-    /// way it did before anything was pinned. Bare --background clears every
-    /// task model key; bare --subagent clears subagents.model
+    /// way it did before anything was pinned. Bare --background clears
+    /// heartbeat.model and compaction.model; bare --subagent clears subagents.model
     /// and every per-sub-agent override.
     Reset {
         #[command(flatten)]

@@ -1,23 +1,12 @@
 import { afterAll, afterEach, expect, setSystemTime, test } from "bun:test";
-import { mkdir, mkdtemp, writeFile } from "node:fs/promises";
-import { join } from "node:path";
-
-import { TurnAutonomyBridge } from "../src/autonomy/registration.ts";
-import { defaultAppConfig } from "../src/config/app.ts";
 import { ConfigDuration } from "../src/config/duration.ts";
-import type { LoadedConfig } from "../src/config/loader.ts";
-import { emptyCatalog } from "../src/config/models.ts";
-import { ProviderRegistry } from "../src/config/providers.ts";
-import { Diagnostics } from "../src/diagnostics.ts";
-import { buildGenerationDeps } from "../src/handler/deps.ts";
-import { runGeneration } from "../src/handler/generation.ts";
 import { buildAnthropicPlan } from "../src/llm/providers/anthropic.ts";
 import type { GenerateResponse, SidecarProvider, SidecarRequest } from "../src/llm/types.ts";
-import { createRuntime, startRuntimeClocks } from "../src/runtime.ts";
+import { startRuntimeClocks } from "../src/runtime.ts";
 import { required } from "../src/util/required.ts";
 import { eventsForResponse } from "./support/stream.ts";
-import { restoreTestEnv, setTestEnv } from "./support/env.ts";
-import { testTmp } from "./support/tmp.ts";
+import { afterFirstChat } from "./support/chat_world.ts";
+import { restoreTestEnv } from "./support/env.ts";
 
 const MINUTE = 60_000;
 const T0 = Date.UTC(2026, 8, 19, 12);
@@ -59,49 +48,25 @@ interface IdleChat {
 }
 
 async function afterOneChat(heartbeatRead: number, idle: (chat: IdleChat) => Promise<void>): Promise<void> {
-  setTestEnv(KEY_ENV, "fixture-key");
   setSystemTime(new Date(T0));
-  const root = await mkdtemp(testTmp("shore-keepalive-heartbeat-"));
-  const app = defaultAppConfig();
-  app.defaults.model = "fixture";
-  app.advanced.max_retries = 0;
-  app.memory.compaction.enabled = false;
-  app.tools.enabled_tools = [];
-  app.behavior.autonomy.enabled = true;
-  const models = emptyCatalog();
-  models.chat.set("chat.fixture", {
-    name: "fixture", qualifiedName: "chat.fixture", category: "chat", providerKey: "anthropic",
-    sdk: "anthropic", modelId: "claude-fixture", apiKeyEnv: KEY_ENV,
-    maxContextTokens: 200_000, maxOutputTokens: 4096, maxToolIterations: 3,
-    cacheTtl: "1h",
-    cacheKeepalive: { kind: "every", interval: ConfigDuration.fromSecs(55 * 60) },
-    cacheKeepalivePings: 1,
-  });
-  const config: LoadedConfig = {
-    app, models, providers: ProviderRegistry.empty(), rawTable: undefined,
-    dirs: { config: join(root, "config"), data: join(root, "data"), cache: join(root, "cache"), runtime: join(root, "runtime") },
-  };
-  const workspace = join(config.dirs.config, "characters", "ada", "workspace");
-  await mkdir(workspace, { recursive: true });
-  await writeFile(join(workspace, "SOUL.md"), "Ada");
   const seen: SidecarRequest[] = [];
-  const env = { [KEY_ENV]: "fixture-key" };
-  const runtime = await createRuntime({ config, providers: { anthropic: recordingProvider(seen, heartbeatRead) }, env });
-  const clocks = startRuntimeClocks(runtime);
-  try {
-    const autonomy = new TurnAutonomyBridge(runtime.autonomy);
-    const deps = buildGenerationDeps({
-      runtime, providers: runtime.providers, autonomy, diagnostics: new Diagnostics(), env, emitEvent: () => {},
-    });
-    await runGeneration(deps, {
-      meta: {
-        session: { sessionId: 1, clientId: 1, clientType: "test", clientName: "test", capabilities: [], selectedCharacter: "ada", selectedThread: "main" },
-        rid: "chat", kind: "message",
-      },
-      body: { rid: "chat", text: "hello", stream: true, images: [], image_data: [] },
-      charName: "ada", regen: false, rid: "chat", signal: new AbortController().signal, send: async () => {},
-    });
-    await autonomy.settled("ada");
+  await afterFirstChat({
+    name: "keepalive-heartbeat",
+    keyEnv: KEY_ENV,
+    provider: recordingProvider(seen, heartbeatRead),
+    tools: [],
+    autonomy: true,
+    model: {
+      maxToolIterations: 3,
+      cacheTtl: "1h",
+      cacheKeepalive: { kind: "every", interval: ConfigDuration.fromSecs(55 * 60) },
+      cacheKeepalivePings: 1,
+    },
+    started: (runtime) => {
+      const clocks = startRuntimeClocks(runtime);
+      return () => { clocks.stop(); };
+    },
+  }, async ({ runtime }) => {
     await idle({
       seen,
       heartbeatAt: async (minutes) => {
@@ -110,11 +75,7 @@ async function afterOneChat(heartbeatRead: number, idle: (chat: IdleChat) => Pro
         await runtime.autonomy.tick();
       },
     });
-  } finally {
-    clocks.stop();
-    await runtime.autonomy.shutdown();
-    await runtime.shutdown();
-  }
+  });
 }
 
 function wireBlocks(messages: readonly { role: string; content: unknown }[]): { block: unknown; marked: boolean }[] {

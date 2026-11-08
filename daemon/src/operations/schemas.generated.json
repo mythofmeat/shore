@@ -5281,7 +5281,8 @@
           "enum": [
             "message",
             "heartbeat",
-            "compaction"
+            "compaction",
+            "dream"
           ]
         },
         "ShutdownWindow": {
@@ -6905,6 +6906,16 @@
                 "string",
                 "null"
               ]
+            },
+            "stopped_by": {
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/DreamStop"
+                },
+                {
+                  "type": "null"
+                }
+              ]
             }
           },
           "required": [
@@ -6921,7 +6932,17 @@
           "enum": [
             "finished",
             "cut_off",
-            "failed"
+            "failed",
+            "interrupted"
+          ]
+        },
+        "DreamStop": {
+          "type": "string",
+          "enum": [
+            "time_limit",
+            "round_limit",
+            "shutdown",
+            "budget"
           ]
         }
       }

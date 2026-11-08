@@ -1,11 +1,11 @@
-import { createHash } from "node:crypto";
 import { join } from "node:path";
 
 import { shoreLog } from "../../log.ts";
 import type { HeartbeatEventKind } from "../../autonomy/heartbeat_log.ts";
 import { runHeartbeatToolLoop, type HeartbeatToolResult, type TranscriptRound } from "../../autonomy/heartbeat_loop.ts";
 import { applyHeartbeatModelOverride, backgroundTaskModel, fallbackIntervalPhrase } from "../../autonomy/heartbeat_request.ts";
-import { resolveDisplayName, toolGrants, type ToolsConfig } from "../../config/app.ts";
+import type { DreamWindow } from "../../autonomy/runner.ts";
+import { resolveDisplayName, toolPatternMatches, type ToolsConfig } from "../../config/app.ts";
 import { activeJsonlIn, characterDataDir, resolvePromptTemplate, threadDataDir } from "../../config/dirs.ts";
 import { findEffectiveModel } from "../../config/effective_catalog.ts";
 import type { LoadedConfig } from "../../config/loader.ts";
@@ -14,25 +14,30 @@ import { formatWallClock } from "../../engine/prompt.ts";
 import { heartbeatThread, homeThreadOf, readThreadsIndex, threadChatModel } from "../../engine/threads.ts";
 import type { ContentBlock, Message } from "../../engine/types.ts";
 import { buildChatShapeRequestFromDisk } from "../../handler/context.ts";
-import { usageConfigView, type CallBlock } from "../../ledger/budget.ts";
+import { usageConfigView } from "../../ledger/budget.ts";
 import { budgetBlockFor } from "../../ledger/gate.ts";
 import { hostZone } from "../../ledger/zoned.ts";
-import { describeError } from "../../llm/errors.ts";
+import { budgetStopIn, describeError } from "../../llm/errors.ts";
 import type { GenerateResponse, SidecarRequest, ToolDefinition } from "../../llm/types.ts";
 import { truncateSummary } from "../../notifications.ts";
-import { readDurable } from "../../storage/files.ts";
+import type { DreamStop } from "../../protocol/DreamStop.ts";
+import { durableMark } from "../../storage/files.ts";
 import { characterWorkspace } from "../../tools/character_workspace.ts";
 import type { ToolPhase } from "../../tools/execute.ts";
-import { gitChangesBetween, gitHead, gitPushWorkspace } from "../../tools/workspace.ts";
+import { ALL_TOOLS } from "../../tools/registry.ts";
+import { gitCommitFiles, gitCommitsBetween, gitHead, gitPushWorkspace } from "../../tools/workspace.ts";
+import { WorkspaceRecorder, workspaceTurnsFor } from "../../tools/workspace_turns.ts";
 import { loadCanonicalPromptFile } from "../deferred_edits.ts";
 import { conversationLines, conversationsSince } from "./manifest.ts";
-import { DEFAULT_DREAM_TEMPLATE, DREAM_OPENER, dreamCutOffNote, dreamWrapUpText, renderDreamPrompt } from "./prompt.ts";
-import { clearWorkspaceReads, mostReadLines, workspaceReadCounts } from "./reads.ts";
-import { appendDreamRecord, lastDream, lastHead, type StoredDream } from "./records.ts";
+import { DEFAULT_DREAM_TEMPLATE, DREAM_OPENER, dreamStoppedNote, dreamWrapUpText, renderDreamPrompt } from "./prompt.ts";
+import { forgetWorkspaceReads, mostReadLines, workspaceReadCounts } from "./reads.ts";
+import { appendDreamRecord, lastDream, lastFinishedDream, type StoredDream } from "./records.ts";
 
 export const DREAM_TOOL_THREAD = "@dream";
 
 export const DREAM_CALL_TYPE = "dreaming";
+
+export const DREAM_LOOP_CALL_TYPE = "dreaming_tool_loop";
 
 const DREAM_NOTES_FILE = "DREAMS.md";
 
@@ -48,36 +53,46 @@ const DREAM_WRAP_UP_ROUNDS = 8;
 
 const MAX_WRAP_UP_MS = 10 * 60_000;
 
-export type DreamPassOutcome = "finished" | "cut_off" | "failed" | "skipped";
+export type DreamPassOutcome = "finished" | "cut_off" | "failed" | "skipped" | "paused" | "interrupted";
+
+export interface DreamEvent {
+  kind: HeartbeatEventKind;
+  detail: string;
+  at: number;
+}
 
 export interface DreamPass {
   outcome: DreamPassOutcome;
-  startedAt: number;
-  events: { kind: HeartbeatEventKind; detail: string }[];
-  record?: StoredDream;
+  events: DreamEvent[];
 }
 
+export type WorkspaceWrites = <T>(run: () => Promise<T>) => Promise<T>;
+
 export interface DreamPassDeps {
-  mcpToolDefs: (grants: readonly string[]) => ToolDefinition[];
   generate: (request: SidecarRequest, phase: ToolPhase, signal: AbortSignal) => Promise<GenerateResponse | undefined>;
-  dispatch: (config: LoadedConfig, name: string, input: unknown, toolUseId: string | undefined, tools: readonly ToolDefinition[] | undefined) => Promise<HeartbeatToolResult>;
+  dispatch: (
+    config: LoadedConfig,
+    name: string,
+    input: unknown,
+    toolUseId: string | undefined,
+    tools: readonly ToolDefinition[] | undefined,
+    writes: WorkspaceWrites,
+  ) => Promise<HeartbeatToolResult>;
   recordTranscript?: (round: TranscriptRound) => void;
   refreshHome?: () => Promise<void>;
-  budgetBlockFor?: (request: SidecarRequest) => CallBlock | undefined;
-  push?: (config: LoadedConfig, character: string) => Promise<boolean>;
   env?: NodeJS.ProcessEnv;
-  now?: () => number;
-  timeZone?: string;
-  forced?: boolean;
 }
 
 export function dreamToolsConfig(tools: ToolsConfig, chosen: readonly string[] | undefined): ToolsConfig {
+  const asked = chosen ?? tools.enabled_tools;
   return {
     ...tools,
-    enabled_tools: chosen === undefined
-      ? tools.enabled_tools.filter((name) => !LEFT_OUT_TOOLS.has(name) && !name.startsWith("mcp__"))
-      : [...chosen],
+    enabled_tools: ALL_TOOLS.map((tool) => tool.name)
+      .filter((name) => !LEFT_OUT_TOOLS.has(name) && asked.some((pattern) => toolPatternMatches(pattern, name))),
     enabled_mcp: [],
+    enabled_subagents: chosen === undefined
+      ? tools.enabled_subagents
+      : chosen.flatMap((name) => name.startsWith("ask_") ? [name.slice("ask_".length)] : []),
   };
 }
 
@@ -101,9 +116,9 @@ function phrase(ms: number): string {
   return fallbackIntervalPhrase(BigInt(Math.trunc(ms / 1000)));
 }
 
-function homeDigest(dataDir: string, character: string, home: string): string {
+function homeMark(dataDir: string, character: string, home: string): string {
   try {
-    return createHash("sha256").update(readDurable(activeJsonlIn(threadDataDir(dataDir, character, home)))).digest("hex");
+    return JSON.stringify(durableMark(activeJsonlIn(threadDataDir(dataDir, character, home))) ?? null);
   } catch {
     return "";
   }
@@ -113,7 +128,9 @@ function cappedNotes(notes: string | undefined): string | undefined {
   const trimmed = notes?.trim();
   if (trimmed === undefined || trimmed === "") return undefined;
   if (trimmed.length <= NOTES_CHARS) return trimmed;
-  return `${trimmed.slice(0, NOTES_CHARS).trimEnd()}\n\n[Cut here: read ${DREAM_NOTES_FILE} for the rest.]`;
+  const last = trimmed.charCodeAt(NOTES_CHARS - 1);
+  const end = last >= 0xd800 && last <= 0xdbff ? NOTES_CHARS - 1 : NOTES_CHARS;
+  return `${trimmed.slice(0, end).trimEnd()}\n\n[Cut here: read ${DREAM_NOTES_FILE} for the rest.]`;
 }
 
 function textOf(blocks: readonly ContentBlock[]): string {
@@ -133,6 +150,41 @@ function note(text: string, timestamp: string, role: "user" | "system"): Message
   };
 }
 
+function dreamWrites(config: LoadedConfig, character: string): { track: WorkspaceWrites; commits: () => string[]; done: () => Promise<void> } {
+  const workspace = characterWorkspace(config, character);
+  const recorder = new WorkspaceRecorder(workspaceTurnsFor(config.dirs, character, workspace));
+  const commits = new Set<string>();
+  const track = async <T>(run: () => Promise<T>): Promise<T> => await recorder.track(async () => {
+    const before = await gitHead(workspace).catch(() => undefined);
+    try {
+      return await run();
+    } finally {
+      const after = await gitHead(workspace).catch(() => undefined);
+      if (after !== undefined && after !== before) {
+        for (const sha of await gitCommitsBetween(workspace, before, after).catch(() => [])) commits.add(sha);
+      }
+    }
+  });
+  return { track, commits: () => [...commits], done: async () => { await recorder.discard(); } };
+}
+
+function stopOf(loop: Awaited<ReturnType<typeof runHeartbeatToolLoop>>, interrupted: boolean): { outcome: "finished" | "cut_off" | "failed" | "interrupted"; stoppedBy?: DreamStop } {
+  if (interrupted) return { outcome: "interrupted", stoppedBy: "shutdown" };
+  if (budgetStopIn(loop.failure) !== undefined) return { outcome: "interrupted", stoppedBy: "budget" };
+  if (loop.timedOut === true || loop.stoppedAt === "time") return { outcome: "cut_off", stoppedBy: "time_limit" };
+  if (loop.stoppedAt === "rounds") return { outcome: "cut_off", stoppedBy: "round_limit" };
+  return { outcome: loop.failedRound === undefined ? "finished" : "failed" };
+}
+
+function endDetail(outcome: string, stoppedBy: DreamStop | undefined, error: string | undefined, counts: string): string {
+  if (outcome === "failed") return `Dream failed — ${error ?? "unknown error"} (${counts})`;
+  if (stoppedBy === "budget") return `Dream paused by a usage budget — ${error ?? "budget reached"} (${counts})`;
+  if (stoppedBy === "shutdown") return `Dream stopped when Shore shut down — ${counts}`;
+  if (stoppedBy === "round_limit") return `Dream used up its rounds — ${counts}`;
+  if (stoppedBy === "time_limit") return `Dream reached its time limit — ${counts}`;
+  return `Dream finished — ${counts}`;
+}
+
 export async function defaultPush(config: LoadedConfig, character: string): Promise<boolean> {
   return await gitPushWorkspace(characterWorkspace(config, character));
 }
@@ -140,29 +192,34 @@ export async function defaultPush(config: LoadedConfig, character: string): Prom
 export async function runDreamPass(
   character: string,
   config: LoadedConfig,
-  sinceMs: number,
+  start: DreamWindow,
   deps: DreamPassDeps,
 ): Promise<DreamPass> {
-  const now = deps.now ?? Date.now;
-  const startedAt = now();
-  const events: DreamPass["events"] = [];
+  const startedAt = Date.now();
+  const events: DreamEvent[] = [];
+  const event = (kind: HeartbeatEventKind, detail: string): void => {
+    events.push({ kind, detail, at: Date.now() });
+  };
   const failed = (detail: string): DreamPass => {
-    events.push({ kind: "dream_failed", detail });
-    return { outcome: "failed", startedAt, events };
+    event("dream_failed", detail);
+    return { outcome: "failed", events };
   };
   const dataDir = config.dirs.data;
   const characterDir = characterDataDir(dataDir, character);
-  const timeZone = deps.timeZone ?? hostZone();
+  const timeZone = hostZone();
   const userName = resolveDisplayName(config.app.defaults, deps.env);
   const workspace = characterWorkspace(config, character);
   const dreaming = config.app.memory.dreaming;
 
+  const finishedBefore = lastFinishedDream(characterDir);
+  const anchoredAt = finishedBefore === undefined ? Number.NaN : Date.parse(finishedBefore.started_at);
+  const sinceMs = Number.isNaN(anchoredAt) ? start.since : anchoredAt;
   const home = await homeThreadOf(dataDir, character);
   const heartbeat = heartbeatThread(await readThreadsIndex(dataDir, character));
   const conversations = await conversationsSince(dataDir, character, sinceMs, new Set(heartbeat === undefined ? [] : [heartbeat]));
-  if (conversations.length === 0 && deps.forced !== true) {
+  if (conversations.length === 0 && !start.forced) {
     shoreLog.info(`shore: dream for ${character} skipped, nothing has been archived since ${new Date(sinceMs).toISOString()}`);
-    return { outcome: "skipped", startedAt, events };
+    return { outcome: "skipped", events };
   }
 
   const chat = resolveChatModelForCharacter(
@@ -176,42 +233,45 @@ export async function runDreamPass(
   const resolved = dreaming.system_prompt === undefined ? settled : { ...settled, systemPrompt: dreaming.system_prompt };
   const configured = backgroundTaskModel(config, character, "dreaming");
 
-  const headBefore = await gitHead(workspace).catch(() => undefined);
-  const previous = lastDream(characterDir);
-  const previousHead = lastHead(characterDir);
   const { limitMs, wrapUpMs } = dreamLimits(config);
   const timeLimit = phrase(limitMs);
-  const reads = mostReadLines(workspaceReadCounts(characterDir), MOST_READ);
+  const seenReads = workspaceReadCounts(characterDir);
+  const reads = mostReadLines(seenReads, MOST_READ);
   const template = resolvePromptTemplate(config.dirs.config, character, "dream.md") ?? DEFAULT_DREAM_TEMPLATE;
   const rendered = renderDreamPrompt(template, {
     now: formatWallClock(startedAt, timeZone),
     userName,
     characterName: character,
-    lastDream: previous === undefined ? undefined : formatWallClock(Date.parse(previous.started_at), timeZone),
+    lastDream: Number.isNaN(anchoredAt) ? undefined : formatWallClock(anchoredAt, timeZone),
     conversations: conversationLines(
       conversations,
       userName,
-      previousHead === undefined ? `--since=${new Date(sinceMs).toISOString()}` : `${previousHead.slice(0, 7)}..HEAD`,
+      finishedBefore?.head === undefined ? `--since=${new Date(sinceMs).toISOString()}` : `${finishedBefore.head.slice(0, 7)}..HEAD`,
     ),
     reads: reads.length === 0 ? undefined : reads.join("\n"),
     notes: cappedNotes(await loadCanonicalPromptFile(workspace, DREAM_NOTES_FILE).catch(() => undefined)),
     timeLimit,
     wrapUpAfter: phrase(limitMs - wrapUpMs),
   });
-  const cutOff = previous?.outcome === "cut_off"
-    ? dreamCutOffNote(Date.parse(previous.started_at), timeLimit, timeZone)
-    : undefined;
+  const latest = lastDream(characterDir);
+  const stoppedNote = latest === undefined || latest.outcome === "finished"
+    ? undefined
+    : dreamStoppedNote({ startedAt: Date.parse(latest.started_at), outcome: latest.outcome, stoppedBy: latest.stopped_by }, timeLimit, timeZone);
   const timestamp = new Date(startedAt).toISOString();
   const messages = [
     note(DREAM_OPENER, timestamp, "user"),
-    note([cutOff, rendered].filter((part) => part !== undefined).join("\n\n"), timestamp, "system"),
+    note([stoppedNote, rendered].filter((part) => part !== undefined).join("\n\n"), timestamp, "system"),
   ];
 
   const scoped = dreamConfig(config);
+  const dropped = (dreaming.tools ?? []).filter((name) => LEFT_OUT_TOOLS.has(name) || name.startsWith("mcp__"));
+  if (dropped.length > 0) {
+    shoreLog.warn(`shore: dream for ${character} leaves out ${dropped.join(", ")} from dreaming.tools; dreams never get scheduling, thread, picture or MCP tools`);
+  }
   let built: Awaited<ReturnType<typeof buildChatShapeRequestFromDisk>>;
   try {
     built = await buildChatShapeRequestFromDisk(character, characterDir, scoped, resolved, messages, false, {
-      mcpToolDefs: deps.mcpToolDefs(toolGrants(scoped.app.tools)),
+      mcpToolDefs: [],
       canonicalPromptFiles: true,
       activeConversation: true,
       timeZone,
@@ -238,76 +298,85 @@ export async function runDreamPass(
     thinking_enabled: request.context?.thinking_enabled ?? false,
   };
 
-  const blocked = (deps.budgetBlockFor ?? budgetBlockFor)(request);
-  if (blocked !== undefined) return failed(`Dream paused before it started — ${blocked.summary}`);
+  const blocked = budgetBlockFor(request);
+  if (blocked !== undefined) {
+    event("budget_paused", `Dream paused before it started — ${blocked.summary}`);
+    return { outcome: "paused", events };
+  }
 
-  events.push({
-    kind: "dream_started",
-    detail: `Dream started over ${counted(conversations.length, "conversation")}`,
-  });
-  const homeBefore = homeDigest(dataDir, character, home);
+  event("dream_started", `Dream started over ${counted(conversations.length, "conversation")}`);
+  const homeBefore = homeMark(dataDir, character, home);
+  const headBefore = await gitHead(workspace).catch(() => undefined);
+  const writes = dreamWrites(config, character);
   let summary = "";
   const loop = await runHeartbeatToolLoop(request, {
     character,
-    generate: deps.generate,
-    dispatch: (name, input, toolUseId, tools) => deps.dispatch(scoped, name, input, toolUseId, tools),
+    name: "Dream",
+    generate: async (call, phase, signal) => await deps.generate(call, phase, AbortSignal.any([start.signal, signal])),
+    dispatch: async (name, input, toolUseId, tools) => {
+      start.signal.throwIfAborted();
+      return await deps.dispatch(scoped, name, input, toolUseId, tools, writes.track);
+    },
     note: (detail) => {
-      if (!detail.startsWith("Tool: ")) events.push({ kind: "tool_use", detail });
+      if (!detail.startsWith("Tool: ")) event("tool_use", detail);
     },
     ...(deps.recordTranscript === undefined ? {} : { recordTranscript: deps.recordTranscript }),
     persist: async (round) => {
       if (round.role !== "assistant") return;
-      const text = textOf(round.blocks);
-      if (text !== "") summary = text;
+      summary = round.blocks.some((block) => block.type === "tool_use") ? "" : textOf(round.blocks);
     },
     wrapUpGrace: DREAM_WRAP_UP_ROUNDS,
     maxToolIterations: (override ?? resolved).maxToolIterations,
     timeLimitMs: limitMs,
     wrapUpMs,
     wrapUpText: dreamWrapUpText,
-    callTypes: [DREAM_CALL_TYPE, DREAM_CALL_TYPE],
+    callTypes: [DREAM_CALL_TYPE, DREAM_LOOP_CALL_TYPE],
   });
+  await writes.done();
 
-  const headAfter = await gitHead(workspace).catch(() => undefined);
-  const changes = await gitChangesBetween(workspace, headBefore, headAfter).catch(() => ({ commits: 0, files: [] }));
+  const interrupted = start.signal.aborted;
+  const { outcome, stoppedBy } = stopOf(loop, interrupted);
+  const commits = writes.commits();
+  const files = await gitCommitFiles(workspace, commits).catch(() => []);
+  const headAfter = await gitHead(workspace).catch(() => headBefore);
   let pushed: boolean | undefined;
-  if (config.app.memory.git_push && changes.commits > 0) {
+  if (config.app.memory.git_push && commits.length > 0 && !interrupted) {
     try {
-      pushed = await (deps.push ?? defaultPush)(config, character);
+      pushed = await defaultPush(config, character);
     } catch (e) {
       shoreLog.warn(`shore: could not push ${character}'s workspace after a dream: ${String(e)}`);
       pushed = false;
     }
   }
 
-  const outcome: DreamPassOutcome = loop.timedOut === true ? "cut_off" : loop.failedRound === undefined ? "finished" : "failed";
+  const budget = budgetStopIn(loop.failure);
   const error = outcome === "failed"
     ? truncateSummary(loop.failure === undefined ? `the model call failed on round ${String(loop.failedRound ?? 0)}` : describeError(loop.failure), 300)
-    : undefined;
+    : stoppedBy === "budget" ? truncateSummary(budget?.summary ?? budget?.message ?? "a usage budget was reached", 300) : undefined;
   const record: StoredDream = {
     started_at: new Date(startedAt).toISOString(),
-    ended_at: new Date(now()).toISOString(),
+    ended_at: new Date().toISOString(),
     outcome,
     conversations: conversations.length,
-    commits: changes.commits,
-    files: changes.files,
+    commits: commits.length,
+    files,
     ...(pushed === undefined ? {} : { pushed }),
     ...(summary === "" ? {} : { summary: truncateSummary(summary, SUMMARY_CHARS) }),
     ...(error === undefined ? {} : { error }),
+    ...(stoppedBy === undefined ? {} : { stopped_by: stoppedBy }),
     ...(headAfter === undefined ? {} : { head: headAfter }),
   };
   appendDreamRecord(characterDir, record);
-  if (outcome === "finished") clearWorkspaceReads(characterDir);
+  if (outcome === "finished") forgetWorkspaceReads(characterDir, seenReads);
 
-  const counts = `${counted(changes.commits, "commit")}, ${counted(changes.files.length, "file")}` +
+  const counts = `${counted(commits.length, "commit")}, ${counted(files.length, "file")}` +
     (pushed === undefined ? "" : pushed ? ", pushed" : ", not pushed");
-  events.push(
-    outcome === "failed"
-      ? { kind: "dream_failed", detail: `Dream failed — ${error ?? "unknown error"} (${counts})` }
-      : { kind: "dream_finished", detail: `Dream ${outcome === "cut_off" ? "reached its time limit" : "finished"} — ${counts}` },
+  event(
+    outcome === "failed" ? "dream_failed" : stoppedBy === "budget" ? "budget_paused" : "dream_finished",
+    endDetail(outcome, stoppedBy, error, counts),
   );
 
-  if (changes.commits > 0 && deps.refreshHome !== undefined && homeDigest(dataDir, character, home) === homeBefore) {
+  if (!interrupted && commits.length > 0 && deps.refreshHome !== undefined && homeMark(dataDir, character, home) === homeBefore) {
     try {
       await deps.refreshHome();
     } catch (e) {
@@ -315,5 +384,5 @@ export async function runDreamPass(
     }
   }
 
-  return { outcome, startedAt, events, record };
+  return { outcome: stoppedBy === "budget" ? "paused" : outcome, events };
 }

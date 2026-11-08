@@ -269,7 +269,7 @@ export async function createRuntime(options: RuntimeOptions): Promise<ShoreRunti
       notifyAutonomousMessage: autonomousMessageNotifier(notifier),
       notifyCompactionComplete: compactionCompleteNotifier(notifier),
       beginForeground: () => historyIndex.beginForeground(),
-      runActivity: async (run) => await snapshotGate.withActivity(run),
+      runActivity: async (run, signal) => await snapshotGate.withActivity(run, signal),
     }),
   );
   autonomy.attachKeepalive(keepalive);

@@ -106,7 +106,7 @@ export function callLog(ctx: CallLogContext, args: Args): OperationResult<"call_
 }
 
 const TRANSCRIPT_SOURCE = "heartbeat";
-const TRANSCRIPT_SOURCES: readonly string[] = [TRANSCRIPT_SOURCE];
+const TRANSCRIPT_SOURCES: readonly string[] = [TRANSCRIPT_SOURCE, "dreaming"];
 
 export function transcript(ctx: CallLogContext, args: OperationInput<"transcript">): OperationResult<"transcript"> {
   const source = args.source ?? TRANSCRIPT_SOURCE;

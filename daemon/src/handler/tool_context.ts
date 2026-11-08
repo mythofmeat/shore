@@ -106,7 +106,7 @@ export async function buildToolContext(
       ? {}
       : { scheduleNextWake: (hours: number, reason: string) => scheduleNextWake(charName, hours, reason) }),
     ...(deps.deferEdit === undefined ? {} : { deferEdit: deps.deferEdit }),
-    ...(deps.countReads === false ? {} : { recordRead: (path: string) => { recordReadBestEffort(charDataDir, path); } }),
+    ...(deps.countReads === true && config.app.memory.dreaming.enabled ? { recordRead: (path: string) => { recordReadBestEffort(charDataDir, path); } } : {}),
     ...(startThread === undefined
       ? {}
       : { startThread: (request: StartThreadRequest) => startThread(charName, request) }),

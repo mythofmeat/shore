@@ -271,6 +271,7 @@ export async function startDaemon(options: DaemonOptions): Promise<RunningDaemon
       dataDir: loaded.dirs.data,
       generations: () => handler?.activeGenerations() ?? [],
       heartbeats: () => runtime.autonomy.runningHeartbeats(),
+      dreams: () => runtime.autonomy.runningDreams(),
       shutdown: () => shutdownWindow,
     });
 

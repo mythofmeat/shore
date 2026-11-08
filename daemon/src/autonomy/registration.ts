@@ -5,8 +5,7 @@ import { homeThreadOf, threadActivityNow } from "../engine/threads.ts";
 import { hostZone } from "../ledger/zoned.ts";
 import type { LoadedConfig } from "../config/loader.ts";
 import { loadCompactionCheckpoint } from "../memory/compaction/checkpoint.ts";
-import { parseDayWindow } from "../config/app.ts";
-import type { AutonomyRunnerConfig, CompactionRunnerConfig, DreamRunnerConfig, RestoredIdle } from "./runner.ts";
+import { dreamRunnerConfig, type AutonomyRunnerConfig, type CompactionRunnerConfig, type DreamRunnerConfig, type RestoredIdle } from "./runner.ts";
 import type { HeartbeatClockConfig } from "./heartbeat.ts";
 import type { AutonomyService, RegisterCharacter } from "./service.ts";
 
@@ -21,14 +20,7 @@ export function runnerConfigFor(config: LoadedConfig): AutonomyRunnerConfig {
 }
 
 export function dreamConfigFor(config: LoadedConfig): DreamRunnerConfig {
-  const dreaming = config.app.memory.dreaming;
-  return {
-    enabled: dreaming.enabled,
-    everyMs: Number(dreaming.every.asMillisExact()),
-    window: dreaming.start_between === undefined ? undefined : parseDayWindow(dreaming.start_between),
-    idleAfterMs: Number(dreaming.idle_after.asMillisExact()),
-    minTurns: dreaming.min_turns,
-  };
+  return dreamRunnerConfig(config.app.memory.dreaming);
 }
 
 function compactionConfigFor(config: LoadedConfig): CompactionRunnerConfig {

@@ -497,3 +497,15 @@ test("a side thread trimmed for room without compaction keeps its newest reply w
     app.memory.compaction.keep_recent_turns = 0;
   });
 });
+
+test("bare --background tunes heartbeats and compaction on their pinned model while dreams keep the chat model's settings", async () => {
+  await withCharacter(async ({ command }) => {
+    const set = await command("set_model_setting", { key: "reasoning_effort", value: "low", background_task: "all" });
+    expect(set).toMatchObject({ type: "command_output", data: { model: "chat.pinned", background_task: "all" } });
+    expect(await command("model_settings", { background_task: "all" })).toMatchObject({ type: "command_output", data: { model: "chat.pinned" } });
+    expect(await command("model_settings", { background_task: "dreaming" })).toMatchObject({ type: "command_output", data: { model: "chat.fixture", saved_character: null } });
+  }, (app) => {
+    app.defaults.background.heartbeat = "pinned";
+    app.defaults.background.compaction = "pinned";
+  });
+});

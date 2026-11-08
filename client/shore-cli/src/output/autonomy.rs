@@ -259,10 +259,10 @@ pub(crate) fn write_autonomy_events(out: &mut impl Write, autonomy: &serde_json:
             },
         );
         let kind_color = match kind {
-            "tick_fired" => Tone::Active,
-            "message_sent" | "wake" => Tone::Good,
+            "tick_fired" | "dream_started" => Tone::Active,
+            "message_sent" | "wake" | "dream_finished" => Tone::Good,
             "message_skipped" => Tone::Muted,
-            "dormant" | "call_failed" => COLOR_ERROR,
+            "dormant" | "call_failed" | "dream_failed" => COLOR_ERROR,
             "dormant_ping" => Tone::Thinking,
             "timeout" | "budget_paused" => Tone::Warn,
             _ => Tone::Heading,

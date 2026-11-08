@@ -227,6 +227,7 @@ pub(crate) async fn execute(
                         "trace heartbeat",
                         "what each heartbeat tick thought and did",
                     ),
+                    ("trace dreams", "what each dream read and changed"),
                     (
                         "trace events",
                         "the heartbeat timeline: fired, dormant, woke",

@@ -106,7 +106,11 @@ export async function prepareChatContext(
   const activeConversation = params.activeConversation ?? messages.length > 0;
   const canonical = params.canonicalPromptFiles === true;
   if (canonical) {
-    await ensureCharacterWorkspace(workspace);
+    try {
+      await ensureCharacterWorkspace(workspace);
+    } catch (e) {
+      shoreLog.warn(`shore: failed to prepare character workspace for ${character}: ${String(e)}`);
+    }
   } else if (activeConversation) {
     try {
       await ensureActivePromptSnapshot(

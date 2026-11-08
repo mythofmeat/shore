@@ -242,7 +242,7 @@ export function normalizeConfigSource(input: ConfigTable, source = "config"): Co
   }
   const budgets = valueAt(table, ["usage", "budgets"]);
   if (Array.isArray(budgets)) for (const budget of budgets) if (isConfigTable(budget)) toInternal(budget, BUDGET_FIELDS);
-  for (const section of ["heartbeat", "compaction", "matrix", "image"]) if (isConfigTable(table[section]) && Object.keys(table[section]).length === 0) delete table[section];
+  for (const section of ["heartbeat", "compaction", "dreaming", "matrix", "image"]) if (isConfigTable(table[section]) && Object.keys(table[section]).length === 0) delete table[section];
   return table;
 }
 

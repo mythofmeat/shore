@@ -1933,7 +1933,7 @@ fn dispatch_cli_command(app: &mut App, raw_input: &str) -> Action {
             }
         },
         CliCommand::Trace { subcommand: None } => {
-            app.set_status("usage: :trace [calls|heartbeat|events|errors|subagent]");
+            app.set_status("usage: :trace [calls|heartbeat|dreams|events|errors|subagent]");
             Action::Redraw
         }
         CliCommand::Debug { subcommand: None } => {
@@ -2051,6 +2051,9 @@ fn palette_confirmation_prompt(app: &App, command: &CliCommand) -> Option<String
         } if !content.is_empty() => Some(format!("Replace the content of message {msg_ref:?}?")),
         CliCommand::Compact { .. } => {
             Some("Summarize and archive older conversation turns?".to_owned())
+        }
+        CliCommand::Dream { now: true, .. } => {
+            Some("Start a dream now? It spends tokens for up to its time limit.".to_owned())
         }
         CliCommand::Clear { .. } => Some("Archive and clear the active conversation?".to_owned()),
         CliCommand::Character {

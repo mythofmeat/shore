@@ -57,6 +57,7 @@ export interface HeartbeatLoopDeps {
   wrapUpMs?: number;
   wrapUpText?: (msLeft: number, rounds: number) => string;
   callTypes?: readonly [string, string];
+  name?: string;
 }
 
 export interface HeartbeatLoopResult {
@@ -65,6 +66,7 @@ export interface HeartbeatLoopResult {
   failedRound?: number | undefined;
   failure?: unknown;
   timedOut?: boolean;
+  stoppedAt?: "time" | "rounds";
   usage?: Usage;
 }
 
@@ -157,7 +159,9 @@ export async function runHeartbeatToolLoop(
   const [firstCall, loopCall] = deps.callTypes ?? ["heartbeat", "heartbeat_tool_loop"];
   const normalCap = deps.maxToolIterations ?? Number.POSITIVE_INFINITY;
   const offersWake = request.tools?.some((tool) => tool.name === "set_next_wake") === true;
+  const name = deps.name ?? "Heartbeat";
   let wrapUpEnd: number | undefined;
+  let wrapUpFor: "time" | "rounds" = "time";
   let model: string | undefined;
   let persisted = false;
   const observe = (blocks: ContentBlock[]): void => {
@@ -186,12 +190,17 @@ export async function runHeartbeatToolLoop(
     parallel: false,
     beforeTurn: async (call) => {
       if (wrapUpEnd !== undefined) {
-        if (iteration >= wrapUpEnd) throw new ToolLoopStop();
-        return;
+        if (iteration < wrapUpEnd) return;
+        result.stoppedAt = wrapUpFor;
+        throw new ToolLoopStop();
       }
       const left = deadline - performance.now();
       if (left > wrapUpMs && iteration < normalCap) return;
-      if (deps.wrapUpGrace === 0) throw new ToolLoopStop();
+      wrapUpFor = left > wrapUpMs ? "rounds" : "time";
+      if (deps.wrapUpGrace === 0) {
+        result.stoppedAt = wrapUpFor;
+        throw new ToolLoopStop();
+      }
       wrapUpEnd = iteration + deps.wrapUpGrace;
       const nudge = deps.wrapUpText?.(left, deps.wrapUpGrace) ?? wrapUpNudgeText(left, deps.wrapUpGrace, offersWake);
       appendWrapUpNudge(call.messages, nudge);
@@ -216,7 +225,7 @@ export async function runHeartbeatToolLoop(
       const message = captureToolSendMessage([[use.id, use.name, use.input]]);
       if (message !== undefined) result.sendMessageText = message;
       const block = round.results[0];
-      if (block === undefined) throw new Error("Heartbeat tool returned no result");
+      if (block === undefined) throw new Error(`${name} tool returned no result`);
       return block;
     },
     recordTurn: async (role, blocks) => {
@@ -237,7 +246,7 @@ export async function runHeartbeatToolLoop(
       result.failedRound = iteration;
     } else if (response.finish_reason.startsWith("error")) {
       result.failedRound = iteration - 1;
-      result.failure = new Error(`Heartbeat generation ended with ${response.finish_reason}`);
+      result.failure = new Error(`${name} generation ended with ${response.finish_reason}`);
     }
   } catch (failure) {
     result.failedRound = iteration;

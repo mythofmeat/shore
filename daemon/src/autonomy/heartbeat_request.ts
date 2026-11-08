@@ -87,8 +87,8 @@ export function applyHeartbeatModelOverride(
   request: SidecarRequest,
   config: LoadedConfig,
   character: string,
-  deps: HeartbeatModelDeps = {},
-  resolved: ResolvedModel | undefined = heartbeatModel(config, character),
+  deps: HeartbeatModelDeps,
+  resolved: ResolvedModel | undefined,
   task: "heartbeat" | "dream" = "heartbeat",
 ): HeartbeatModelChoice {
   if (resolved === undefined) return { request, override: undefined };

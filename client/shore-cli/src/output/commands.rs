@@ -837,16 +837,20 @@ pub(crate) fn dream_report_text(data: &serde_json::Value) -> String {
     lines.extend(state);
     let last = &data["last"];
     if last.is_object() {
-        let outcome = match last["outcome"].as_str().unwrap_or("?") {
-            "finished" => "finished",
-            "cut_off" => "was stopped at its time limit",
-            "failed" => "failed",
-            other => other,
+        let outcome = match (
+            last["outcome"].as_str().unwrap_or("?"),
+            last["stopped_by"].as_str(),
+        ) {
+            ("cut_off", Some("round_limit")) => "was stopped at its round limit",
+            ("cut_off", _) => "was stopped at its time limit",
+            ("interrupted", Some("budget")) => "was paused by a usage budget",
+            ("interrupted", _) => "was stopped when shore shut down",
+            (other, _) => other,
         };
         lines.push(format!(
             "Last dream: {} to {}, {outcome}.",
-            last["started_at"].as_str().unwrap_or("?"),
-            last["ended_at"].as_str().unwrap_or("?"),
+            super::autonomy::format_local_timestamp(last["started_at"].as_str().unwrap_or("?")),
+            super::autonomy::format_local_timestamp(last["ended_at"].as_str().unwrap_or("?")),
         ));
         let pushed = match last["pushed"].as_bool() {
             Some(true) => ", pushed",
@@ -865,7 +869,12 @@ pub(crate) fn dream_report_text(data: &serde_json::Value) -> String {
             ),
         ));
         if let Some(error) = last["error"].as_str() {
-            lines.push(format!("Error: {error}"));
+            let label = if last["outcome"].as_str() == Some("failed") {
+                "Error"
+            } else {
+                "Reason"
+            };
+            lines.push(format!("{label}: {error}"));
         }
         if let Some(summary) = last["summary"].as_str() {
             lines.push(String::new());
@@ -875,7 +884,10 @@ pub(crate) fn dream_report_text(data: &serde_json::Value) -> String {
         lines.push(format!("{character} hasn't dreamt yet."));
     }
     if let Some(next) = data["next_due_at"].as_str() {
-        lines.push(format!("Next dream due {next}."));
+        lines.push(format!(
+            "Next dream due {}.",
+            super::autonomy::format_local_timestamp(next)
+        ));
     }
     lines.join("\n")
 }

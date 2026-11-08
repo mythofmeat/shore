@@ -423,6 +423,7 @@ function modelRefs(config: LoadedConfig): [string, string | undefined][] {
     ["chat.model", d.model],
     ["heartbeat.model", d.background.heartbeat],
     ["compaction.model", d.background.compaction],
+    ["dreaming.model", d.background.dreaming],
     ["subagents.model", d.subagent_model],
     ["image.model", d.image_generation],
     ...[...config.app.subagents].map(([sub, def]): [string, string | undefined] => [`subagents.${sub}.model`, def.model]),

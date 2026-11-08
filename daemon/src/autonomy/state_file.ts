@@ -18,7 +18,6 @@ export interface PersistedKeepalive {
 
 export interface PersistedDream {
   readonly lastAt?: number;
-  readonly coveredThrough?: number;
   readonly turnsSince: number;
   readonly retryAt?: number;
   readonly failures: number;
@@ -105,7 +104,6 @@ export function decodeState(raw: string): AutonomyStateFile | undefined {
 function encodeDream(dream: PersistedDream): Record<string, unknown> {
   return {
     dream_last_at: dream.lastAt === undefined ? null : toRfc3339(dream.lastAt),
-    dream_covered_through: dream.coveredThrough === undefined ? null : toRfc3339(dream.coveredThrough),
     dream_turns_since: dream.turnsSince,
     dream_retry_at: dream.retryAt === undefined ? null : toRfc3339(dream.retryAt),
     dream_failures: dream.failures,
@@ -119,11 +117,9 @@ function count(value: unknown): number {
 
 function dreamField(o: Record<string, unknown>): PersistedDream {
   const lastAt = timeField(o["dream_last_at"]);
-  const coveredThrough = timeField(o["dream_covered_through"]);
   const retryAt = timeField(o["dream_retry_at"]);
   return {
     ...(lastAt === undefined ? {} : { lastAt }),
-    ...(coveredThrough === undefined ? {} : { coveredThrough }),
     turnsSince: count(o["dream_turns_since"]),
     ...(retryAt === undefined ? {} : { retryAt }),
     failures: count(o["dream_failures"]),
