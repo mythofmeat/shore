@@ -53,6 +53,10 @@ export interface HeartbeatLoopDeps {
   maxToolIterations: number | undefined;
   checkPictures?: (text: string) => Promise<string[]>;
   persist?: (round: HeartbeatRound) => Promise<void>;
+  timeLimitMs?: number;
+  wrapUpMs?: number;
+  wrapUpText?: (msLeft: number, rounds: number) => string;
+  callTypes?: readonly [string, string];
 }
 
 export interface HeartbeatLoopResult {
@@ -148,7 +152,9 @@ export async function runHeartbeatToolLoop(
   const result: HeartbeatLoopResult = { sendMessageText: undefined, images: [] };
   let iteration = 0;
   let captured: CapturedTool[] = [];
-  const deadline = performance.now() + HEARTBEAT_TIME_LIMIT_MS;
+  const deadline = performance.now() + (deps.timeLimitMs ?? HEARTBEAT_TIME_LIMIT_MS);
+  const wrapUpMs = deps.wrapUpMs ?? HEARTBEAT_WRAP_UP_MS;
+  const [firstCall, loopCall] = deps.callTypes ?? ["heartbeat", "heartbeat_tool_loop"];
   const normalCap = deps.maxToolIterations ?? Number.POSITIVE_INFINITY;
   const offersWake = request.tools?.some((tool) => tool.name === "set_next_wake") === true;
   let wrapUpEnd: number | undefined;
@@ -167,7 +173,7 @@ export async function runHeartbeatToolLoop(
       request.messages.push({ role: "assistant", content: response.content_blocks });
     }
     deps.recordTranscript?.({
-      callType: iteration === 0 ? "heartbeat" : "heartbeat_tool_loop",
+      callType: iteration === 0 ? firstCall : loopCall,
       iteration,
       response,
       captured,
@@ -184,10 +190,10 @@ export async function runHeartbeatToolLoop(
         return;
       }
       const left = deadline - performance.now();
-      if (left > HEARTBEAT_WRAP_UP_MS && iteration < normalCap) return;
+      if (left > wrapUpMs && iteration < normalCap) return;
       if (deps.wrapUpGrace === 0) throw new ToolLoopStop();
       wrapUpEnd = iteration + deps.wrapUpGrace;
-      const nudge = wrapUpNudgeText(left, deps.wrapUpGrace, offersWake);
+      const nudge = deps.wrapUpText?.(left, deps.wrapUpGrace) ?? wrapUpNudgeText(left, deps.wrapUpGrace, offersWake);
       appendWrapUpNudge(call.messages, nudge);
       await deps.persist?.({ role: "system", blocks: [{ type: "text", text: nudge }] });
       deps.note(`Wrap-up nudge on round ${String(iteration)}, with ${timeLeftPhrase(left)} left`);

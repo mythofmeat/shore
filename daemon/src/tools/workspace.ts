@@ -76,6 +76,21 @@ export async function gitHead(target: string | CharacterWorkspace): Promise<stri
   return sha === "" ? undefined : sha;
 }
 
+export async function gitChangesBetween(
+  target: string | CharacterWorkspace,
+  from: string | undefined,
+  to: string | undefined,
+): Promise<{ commits: number; files: string[] }> {
+  if (to === undefined || from === to) return { commits: 0, files: [] };
+  const workspace = asCharacterWorkspace(target);
+  const count = await runGit(workspace, ["rev-list", "--count", from === undefined ? to : `${from}..${to}`]);
+  const commits = count.code === 0 ? Number.parseInt(rustTrim(count.stdout), 10) || 0 : 0;
+  if (from === undefined) return { commits, files: [] };
+  const diff = await runGit(workspace, ["-c", "core.quotePath=false", "diff", "--name-only", from, to]);
+  const files = diff.code === 0 ? rustTrim(diff.stdout).split("\n").filter((line) => line !== "") : [];
+  return { commits, files };
+}
+
 export async function gitPushWorkspace(target: string | CharacterWorkspace): Promise<boolean> {
   const workspace = asCharacterWorkspace(target);
   if (!(await hasGitDir(workspace))) return false;

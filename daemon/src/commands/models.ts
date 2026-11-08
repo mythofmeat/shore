@@ -139,9 +139,9 @@ function resolveActiveModel(ctx: ModelsContext): ResolvedModel {
 }
 
 function backgroundTask(selector: string): BackgroundTask {
-  if (selector === "heartbeat" || selector === "compaction") return selector;
+  if (selector === "heartbeat" || selector === "compaction" || selector === "dreaming") return selector;
   throw invalidRequest(
-    `unknown background task: ${selector}; expected all, heartbeat, or compaction`,
+    `unknown background task: ${selector}; expected all, heartbeat, compaction, or dreaming`,
   );
 }
 

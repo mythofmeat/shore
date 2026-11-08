@@ -16,6 +16,17 @@ export interface PersistedKeepalive {
   readonly maxPings?: number;
 }
 
+export interface PersistedDream {
+  readonly lastAt?: number;
+  readonly coveredThrough?: number;
+  readonly turnsSince: number;
+  readonly retryAt?: number;
+  readonly failures: number;
+  readonly forced: boolean;
+}
+
+export const NO_DREAM: PersistedDream = { turnsSince: 0, failures: 0, forced: false };
+
 export interface AutonomyStateFile {
   readonly ticksWithoutUser: number;
   readonly nextWakeAt: number | undefined;
@@ -25,6 +36,7 @@ export interface AutonomyStateFile {
   readonly wakeAnchorAt?: number;
   readonly coveredTurnCount: number;
   readonly keepalive: PersistedKeepalive | undefined;
+  readonly dream?: PersistedDream;
 }
 
 export function toRfc3339(ms: number): string {
@@ -55,6 +67,7 @@ export function encodeState(state: AutonomyStateFile): string {
       keepalive_last_active_at: k === undefined ? null : toRfc3339(k.lastActiveAt),
       keepalive_pings_sent: k?.pingsSent ?? null,
       keepalive_max_pings: k?.maxPings ?? null,
+      ...encodeDream(state.dream ?? NO_DREAM),
     },
     null,
     2,
@@ -85,6 +98,36 @@ export function decodeState(raw: string): AutonomyStateFile | undefined {
     ...wakeProvenance(o),
     coveredTurnCount: typeof coveredTurnCount === "number" ? coveredTurnCount : 0,
     keepalive: keepaliveField(o),
+    dream: dreamField(o),
+  };
+}
+
+function encodeDream(dream: PersistedDream): Record<string, unknown> {
+  return {
+    dream_last_at: dream.lastAt === undefined ? null : toRfc3339(dream.lastAt),
+    dream_covered_through: dream.coveredThrough === undefined ? null : toRfc3339(dream.coveredThrough),
+    dream_turns_since: dream.turnsSince,
+    dream_retry_at: dream.retryAt === undefined ? null : toRfc3339(dream.retryAt),
+    dream_failures: dream.failures,
+    dream_forced: dream.forced,
+  };
+}
+
+function count(value: unknown): number {
+  return typeof value === "number" && Number.isInteger(value) && value >= 0 ? value : 0;
+}
+
+function dreamField(o: Record<string, unknown>): PersistedDream {
+  const lastAt = timeField(o["dream_last_at"]);
+  const coveredThrough = timeField(o["dream_covered_through"]);
+  const retryAt = timeField(o["dream_retry_at"]);
+  return {
+    ...(lastAt === undefined ? {} : { lastAt }),
+    ...(coveredThrough === undefined ? {} : { coveredThrough }),
+    turnsSince: count(o["dream_turns_since"]),
+    ...(retryAt === undefined ? {} : { retryAt }),
+    failures: count(o["dream_failures"]),
+    forced: o["dream_forced"] === true,
   };
 }
 

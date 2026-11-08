@@ -12,6 +12,8 @@ import {
   type AutonomyExecutor,
   type AutonomyRunnerConfig,
   type CompactionRunnerConfig,
+  type DreamRunnerConfig,
+  type DreamStatus,
   type RestoredIdle,
 } from "./runner.ts";
 import { loadState, STATE_FILENAME, type PersistedKeepalive } from "./state_file.ts";
@@ -145,6 +147,21 @@ export class AutonomyService {
 
   setHeartbeatConfig(character: string, clock: HeartbeatClockConfig): void {
     this.#entries.get(character)?.runner.setHeartbeatConfig(clock, this.#now());
+  }
+
+  setDreamConfig(character: string, dream: DreamRunnerConfig): void {
+    this.#entries.get(character)?.runner.setDreamConfig(dream);
+  }
+
+  forceDreamNow(character: string): boolean {
+    const runner = this.#entries.get(character)?.runner;
+    if (runner === undefined) return false;
+    runner.forceDream();
+    return true;
+  }
+
+  dreamStatus(character: string): DreamStatus | undefined {
+    return this.#entries.get(character)?.runner.dreamStatus();
   }
 
   async unregister(character: string): Promise<void> {

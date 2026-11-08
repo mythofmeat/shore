@@ -66,5 +66,6 @@ function projectedLoopCost(
 }
 
 function continuationType(request: SidecarRequest): string {
-  return request.context?.call_type === "heartbeat" ? "heartbeat_tool_loop" : "tool_loop";
+  const callType = request.context?.call_type;
+  return callType === "heartbeat" ? "heartbeat_tool_loop" : callType === "dreaming" ? "dreaming" : "tool_loop";
 }

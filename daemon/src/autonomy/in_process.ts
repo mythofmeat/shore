@@ -4,8 +4,10 @@ import { runHeartbeatTick } from "./heartbeat_tick.ts";
 import { runIdleCompaction } from "./idle_compaction.ts";
 import { runDeepIdleArchive } from "./deep_archive.ts";
 import type { LastRequestCache } from "../cache/last_request.ts";
-import type { PostArchiveEngine } from "./post_archive.ts";
-import type { AutonomyActionResult, AutonomyExecutor, TickHooks } from "./runner.ts";
+import { reloadAndApplyDeferred, repoint, type PostArchiveEngine } from "./post_archive.ts";
+import type { AutonomyActionResult, AutonomyExecutor, DreamActionResult, DreamWindow, TickHooks } from "./runner.ts";
+import { DREAM_CALL_TYPE, DREAM_TOOL_THREAD, runDreamPass } from "../memory/dreaming/run.ts";
+import type { ToolContext } from "../tools/dispatch.ts";
 import type { CompactionReason } from "./tick.ts";
 import type { CharacterRegistry } from "../characters.ts";
 import { rustJoin } from "../config/dirs.ts";
@@ -181,6 +183,87 @@ export class InProcessAutonomyExecutor implements AutonomyExecutor {
           : { notify: this.#deps.notifyCompactionComplete }),
       }, coveredTurnCount);
     });
+  }
+
+  async runDream(character: string, window: DreamWindow): Promise<DreamActionResult> {
+    return await this.#withForeground(async () => {
+      const config = this.#deps.registry.effectiveConfig(character);
+      let toolCtx: Promise<ToolContext> | undefined;
+      let imageLimits: ImageLimits | undefined;
+      const store = this.#deps.callStore;
+      const pass = await runDreamPass(character, config, window.since, {
+        forced: window.forced,
+        mcpToolDefs: (grants) => this.#deps.rebuild.mcpRegistry.toolDefsFiltered(grants),
+        generate: async (request, phase, signal) => {
+          labelAccountedCall(request, config, character, DREAM_CALL_TYPE);
+          imageLimits = imageLimitsFor(request.sdk, request.model);
+          const { response, fallbacks } = await generate(request, this.#generateDeps(config), signal, {
+            tools: {
+              ...phase,
+              beforeTurn: async (call) => {
+                labelAccountedCall(call, config, character, DREAM_CALL_TYPE);
+                imageLimits = imageLimitsFor(call.sdk, call.model);
+                await phase.beforeTurn?.(call);
+              },
+            },
+          });
+          for (const event of fallbacks) {
+            shoreLog.warn(
+              `shore: dream for ${character} rotated ${event.from.name} → ` +
+              `${event.to?.name ?? "(none)"}: ${event.reason}`,
+            );
+          }
+          return response;
+        },
+        dispatch: async (scoped, name, input, toolUseId, tools) => {
+          toolCtx ??= this.#dreamToolContext(scoped, character);
+          const exec: ToolExecution = {
+            sendDirect: () => {},
+            ctx: await toolCtx,
+            limits: toolLimitsFrom(scoped.app.tools, scoped.app.subagents),
+            ...(imageLimits === undefined ? {} : { imageLimits }),
+            now: () => new Date().toISOString(),
+            newMessageId: () => `m_${crypto.randomUUID()}`,
+            schemas: schemasFrom(tools),
+          };
+          const run = await runToolUse({ id: toolUseId ?? `dr_${crypto.randomUUID()}`, name, input }, exec, []);
+          return {
+            output: run.output,
+            isError: run.isError,
+            block: run.block,
+            ...(run.value === undefined ? {} : { value: run.value }),
+          };
+        },
+        ...(store === undefined
+          ? {}
+          : {
+              recordTranscript: (round) => {
+                recordTranscript(store, {
+                  source: "dreaming",
+                  character,
+                  callType: round.callType,
+                  iteration: round.iteration,
+                  response: round.response,
+                  tools: round.captured,
+                });
+              },
+            }),
+        refreshHome: async () => {
+          const deps = { config, cache: this.#deps.cache, rebuild: this.#deps.rebuild, engine: this.#engineReloader() };
+          await reloadAndApplyDeferred(character, deps, "dream");
+          await repoint(character, deps, "prompt_reload");
+        },
+        ...(this.#deps.env === undefined ? {} : { env: this.#deps.env }),
+      });
+      return { events: pass.events, dream: pass.outcome };
+    });
+  }
+
+  async #dreamToolContext(config: LoadedConfig, character: string): Promise<ToolContext> {
+    const { scheduleNextWake: _wake, startThread: _start, editThread: _edit, deferEdit: _defer, ...tools } = this.#deps.tools ?? {};
+    const ctx = await buildToolContext(config, config.dirs.data, character, { ...tools, conversation: [], countReads: false });
+    ctx.thread = DREAM_TOOL_THREAD;
+    return ctx;
   }
 
   async #withForeground<T>(run: () => Promise<T>): Promise<T> {

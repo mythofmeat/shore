@@ -279,7 +279,7 @@ export class KeepaliveService {
       this.#observeHeartbeat(character, usage, identity);
       return;
     }
-    if (callType === "keepalive" || callType === "heartbeat_tool_loop") return;
+    if (callType === "keepalive" || callType === "heartbeat_tool_loop" || callType === "dreaming") return;
     const entry = this.#entryFor(character);
     const armed = entry.prefix;
     const elsewhere = identity !== undefined && armed !== undefined && haltKey(identity) !== haltKey(armed);

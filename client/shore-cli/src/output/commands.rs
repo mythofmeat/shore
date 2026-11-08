@@ -61,6 +61,7 @@ pub(crate) fn format_command(name: &str, data: &serde_json::Value) {
         "transcript" => print_transcript(data),
         "subagent_trace" => print_subagent_trace(data),
         "heartbeat_tick_now" => print_heartbeat_tick_now(data),
+        "dream" => cli_out!("{}", dream_report_text(data)),
         "heartbeat_set_dormant" => print_heartbeat_status_change(data, "dormant"),
         "heartbeat_set_active" => print_heartbeat_status_change(data, "active"),
         "session_activate" => print_session_activate(data),
@@ -807,6 +808,76 @@ fn print_command_output_fallback(name: &str, data: &serde_json::Value) {
     if let Ok(pretty) = serde_json::to_string_pretty(data) {
         _ = writeln!(out, "{pretty}");
     }
+}
+
+fn counted(n: u64, noun: &str) -> String {
+    if n == 1 {
+        format!("1 {noun}")
+    } else {
+        format!("{n} {noun}s")
+    }
+}
+
+pub(crate) fn dream_report_text(data: &serde_json::Value) -> String {
+    let character = data["character"].as_str().unwrap_or("?");
+    let mut lines = Vec::new();
+    let state = if data["running"].as_bool().unwrap_or(false) {
+        Some(format!("{character} is dreaming now."))
+    } else if data["queued"].as_bool().unwrap_or(false) {
+        Some(format!(
+            "A dream for {character} starts at the next autonomy tick."
+        ))
+    } else if data["enabled"].as_bool().unwrap_or(false) {
+        None
+    } else {
+        Some(format!(
+            "Dreaming is off for {character}; set dreaming.enabled to turn it on."
+        ))
+    };
+    lines.extend(state);
+    let last = &data["last"];
+    if last.is_object() {
+        let outcome = match last["outcome"].as_str().unwrap_or("?") {
+            "finished" => "finished",
+            "cut_off" => "was stopped at its time limit",
+            "failed" => "failed",
+            other => other,
+        };
+        lines.push(format!(
+            "Last dream: {} to {}, {outcome}.",
+            last["started_at"].as_str().unwrap_or("?"),
+            last["ended_at"].as_str().unwrap_or("?"),
+        ));
+        let pushed = match last["pushed"].as_bool() {
+            Some(true) => ", pushed",
+            Some(false) => ", not pushed",
+            None => "",
+        };
+        lines.push(format!(
+            "{} read, {}, {} changed{pushed}.",
+            counted(last["conversations"].as_u64().unwrap_or(0), "conversation"),
+            counted(last["commits"].as_u64().unwrap_or(0), "commit"),
+            counted(
+                last["files"]
+                    .as_array()
+                    .map_or(0, |files| u64::try_from(files.len()).unwrap_or(u64::MAX)),
+                "file"
+            ),
+        ));
+        if let Some(error) = last["error"].as_str() {
+            lines.push(format!("Error: {error}"));
+        }
+        if let Some(summary) = last["summary"].as_str() {
+            lines.push(String::new());
+            lines.push(summary.to_owned());
+        }
+    } else {
+        lines.push(format!("{character} hasn't dreamt yet."));
+    }
+    if let Some(next) = data["next_due_at"].as_str() {
+        lines.push(format!("Next dream due {next}."));
+    }
+    lines.join("\n")
 }
 
 fn print_heartbeat_tick_now(data: &serde_json::Value) {

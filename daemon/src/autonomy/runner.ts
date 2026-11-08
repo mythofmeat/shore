@@ -1,16 +1,21 @@
-import { ActivityTracker, weekdayOf, type ActivityStats } from "./activity.ts";
+import { ActivityTracker, localWallClock, weekdayOf, type ActivityStats } from "./activity.ts";
 import { HeartbeatClock, type HeartbeatAction, type HeartbeatClockConfig } from "./heartbeat.ts";
 import { HeartbeatLog, type HeartbeatEventKind } from "./heartbeat_log.ts";
 import {
+  dreamDue,
+  dreamRetryDelayMs,
   tickDecision,
   type CompactionReason,
+  type DayWindow,
   type TickDecision,
   type TickInputs,
 } from "./tick.ts";
 import {
+  NO_DREAM,
   saveState,
   toRfc3339,
   type AutonomyStateFile,
+  type PersistedDream,
   type PersistedKeepalive,
 } from "./state_file.ts";
 
@@ -24,9 +29,35 @@ export interface CompactionRunnerConfig {
   readonly maxContextTokens: number;
 }
 
+export interface DreamRunnerConfig {
+  readonly enabled: boolean;
+  readonly everyMs: number;
+  readonly window: DayWindow | undefined;
+  readonly idleAfterMs: number;
+  readonly minTurns: number;
+}
+
+export const DREAMING_OFF: DreamRunnerConfig = {
+  enabled: false,
+  everyMs: 3 * 86_400_000,
+  window: undefined,
+  idleAfterMs: 7_200_000,
+  minTurns: 20,
+};
+
+const DREAM_SKIP_RETRY_MS = 3_600_000;
+
 export interface AutonomyRunnerConfig extends CompactionRunnerConfig {
   readonly autonomyEnabled: boolean;
   readonly heartbeatEnabled: boolean;
+  readonly dream?: DreamRunnerConfig;
+}
+
+export type DreamResultKind = "finished" | "cut_off" | "failed" | "skipped";
+
+export interface DreamWindow {
+  readonly since: number;
+  readonly forced: boolean;
 }
 
 export interface AutonomyActionResult {
@@ -37,6 +68,18 @@ export interface AutonomyActionResult {
   readonly retryAt?: number | undefined;
 }
 
+export interface DreamActionResult extends AutonomyActionResult {
+  readonly dream: DreamResultKind;
+}
+
+export interface DreamStatus {
+  readonly enabled: boolean;
+  readonly queued: boolean;
+  readonly running: boolean;
+  readonly lastAt: number | undefined;
+  readonly nextDueAt: number | undefined;
+}
+
 export interface TickHooks {
   scheduleNextWake(hoursFromNow: number, reason: string): number;
 }
@@ -45,6 +88,7 @@ export interface AutonomyExecutor {
   runHeartbeatTick(character: string, hooks: TickHooks): Promise<AutonomyActionResult>;
   runCompaction(character: string, reason: CompactionReason): Promise<AutonomyActionResult>;
   runDeepArchive(character: string, coveredTurnCount: number): Promise<AutonomyActionResult>;
+  runDream?(character: string, window: DreamWindow): Promise<DreamActionResult>;
 }
 
 export interface TickOutcome {
@@ -62,6 +106,7 @@ interface RunnerState {
   activeTurnCount: number;
   coveredTurnCount: number;
   keepalive: PersistedKeepalive | undefined;
+  dream: { -readonly [K in keyof PersistedDream]: PersistedDream[K] };
 }
 
 export interface RestoredIdle {
@@ -81,6 +126,7 @@ export class CharacterAutonomy {
   readonly #now: () => number;
   #state: RunnerState;
   #heartbeatStartedAt: number | undefined;
+  #dreamStartedAt: number | undefined;
 
   constructor(opts: {
     character: string;
@@ -121,6 +167,7 @@ export class CharacterAutonomy {
       activeTurnCount: opts.idle?.turnCount ?? 0,
       coveredTurnCount: restored?.coveredTurnCount ?? 0,
       keepalive: restored?.keepalive,
+      dream: { ...(restored?.dream ?? NO_DREAM) },
     };
   }
 
@@ -149,6 +196,7 @@ export class CharacterAutonomy {
     this.#state.lastActivityAt = now;
     this.#state.compactionTriggered = false;
     this.#state.deepArchiveDone = false;
+    this.#state.dream.turnsSince += 1;
     this.#state.dirty = true;
   }
 
@@ -157,6 +205,7 @@ export class CharacterAutonomy {
       this.note("wake", "User active in another thread — idle counter reset", now);
     }
     this.#clock.onUserMessage(now);
+    this.#state.dream.turnsSince += 1;
     this.#state.dirty = true;
   }
 
@@ -198,6 +247,30 @@ export class CharacterAutonomy {
       idleTriggerSecs: compaction.idleTriggerSecs,
       archiveAfterSecs: compaction.archiveAfterSecs,
       maxContextTokens: compaction.maxContextTokens,
+      ...(this.#config.dream === undefined ? {} : { dream: this.#config.dream }),
+    };
+  }
+
+  setDreamConfig(dream: DreamRunnerConfig): void {
+    this.#config = { ...this.#config, dream };
+  }
+
+  forceDream(): void {
+    this.#state.dream.forced = true;
+    this.#state.dirty = true;
+  }
+
+  dreamStatus(): DreamStatus {
+    const config = this.#config.dream ?? DREAMING_OFF;
+    const dream = this.#state.dream;
+    const due = dream.lastAt === undefined ? undefined : dream.lastAt + config.everyMs;
+    const next = due === undefined ? dream.retryAt : Math.max(due, dream.retryAt ?? due);
+    return {
+      enabled: config.enabled,
+      queued: dream.forced,
+      running: this.#dreamStartedAt !== undefined,
+      lastAt: dream.lastAt,
+      nextDueAt: config.enabled ? next : undefined,
     };
   }
 
@@ -357,6 +430,8 @@ export class CharacterAutonomy {
         }
         this.#state.dirty = true;
       }
+
+      if (this.#dreamDue(foreground)) await this.#dream();
     } catch (err) {
       this.#state.compactionTriggered = false;
       this.#state.dirty = true;
@@ -386,6 +461,74 @@ export class CharacterAutonomy {
       return;
     }
     this.onCompactionFailed(now, result.retryAt);
+  }
+
+  #dreamDue(foreground: boolean): boolean {
+    if (this.#executor.runDream === undefined) return false;
+    const now = this.#now();
+    const config = this.#config.dream ?? DREAMING_OFF;
+    const dream = this.#state.dream;
+    const lastUserAt = this.#clock.lastUserAt;
+    const local = localWallClock(now);
+    return dreamDue({
+      enabled: config.enabled,
+      forced: dream.forced,
+      foreground,
+      now,
+      localMinute: Math.floor((((local % 86_400_000) + 86_400_000) % 86_400_000) / 60_000),
+      lastDreamAt: dream.lastAt,
+      everyMs: config.everyMs,
+      window: config.window,
+      quietMs: lastUserAt === undefined ? Number.POSITIVE_INFINITY : now - lastUserAt,
+      idleAfterMs: config.idleAfterMs,
+      turnsSince: dream.turnsSince,
+      minTurns: config.minTurns,
+      retryAt: dream.retryAt,
+    });
+  }
+
+  async #dream(): Promise<void> {
+    const executor = this.#executor;
+    if (executor.runDream === undefined) return;
+    const config = this.#config.dream ?? DREAMING_OFF;
+    const dream = this.#state.dream;
+    const startedAt = this.#now();
+    const turnsAtStart = dream.turnsSince;
+    const forced = dream.forced;
+    dream.forced = false;
+    this.#state.dirty = true;
+    this.#dreamStartedAt = startedAt;
+    let kind: DreamResultKind;
+    try {
+      const result = await executor.runDream(this.#character, {
+        since: dream.coveredThrough ?? startedAt - config.everyMs,
+        forced,
+      });
+      this.#apply(result);
+      kind = result.dream;
+    } catch (err) {
+      this.note("dream_failed", `Dream failed — ${String(err)}`, this.#now());
+      kind = "failed";
+    } finally {
+      this.#dreamStartedAt = undefined;
+    }
+    if (kind === "finished") {
+      dream.lastAt = startedAt;
+      dream.coveredThrough = startedAt;
+      dream.turnsSince = Math.max(0, dream.turnsSince - turnsAtStart);
+    } else if (kind === "cut_off") {
+      dream.lastAt = startedAt;
+    }
+    if (kind === "finished" || kind === "cut_off") {
+      delete dream.retryAt;
+      dream.failures = 0;
+    } else if (kind === "skipped") {
+      dream.retryAt = this.#now() + DREAM_SKIP_RETRY_MS;
+    } else {
+      dream.failures += 1;
+      dream.retryAt = this.#now() + dreamRetryDelayMs(dream.failures, config.everyMs);
+    }
+    this.#state.dirty = true;
   }
 
   #stillIdleEnoughToArchive(): boolean {
@@ -421,6 +564,7 @@ export class CharacterAutonomy {
       ...(clock.wake_anchor_at === undefined ? {} : { wakeAnchorAt: clock.wake_anchor_at }),
       coveredTurnCount: this.#state.coveredTurnCount,
       keepalive: this.#state.keepalive,
+      dream: { ...this.#state.dream },
     };
   }
 

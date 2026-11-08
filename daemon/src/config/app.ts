@@ -299,11 +299,13 @@ const DAEMON: StructSpec<DaemonConfig> = {
 interface BackgroundDefaultsConfig {
   heartbeat: string | undefined;
   compaction: string | undefined;
+  dreaming: string | undefined;
 }
 
 const defaultBackgroundDefaults = (): BackgroundDefaultsConfig => ({
   heartbeat: undefined,
   compaction: undefined,
+  dreaming: undefined,
 });
 
 const BACKGROUND: StructSpec<BackgroundDefaultsConfig> = {
@@ -312,6 +314,7 @@ const BACKGROUND: StructSpec<BackgroundDefaultsConfig> = {
   fields: {
     heartbeat: optional(readChatModelName),
     compaction: optional(readChatModelName),
+    dreaming: optional(readChatModelName),
   },
 };
 
@@ -346,7 +349,7 @@ const DEFAULTS: StructSpec<DefaultsConfig> = {
   },
 };
 
-export type BackgroundTask = "heartbeat" | "compaction";
+export type BackgroundTask = "heartbeat" | "compaction" | "dreaming";
 
 export function resolveBackgroundModelName(
   defaults: DefaultsConfig,
@@ -803,14 +806,78 @@ const THINKING: StructSpec<ThinkingConfig> = {
   fields: { replay_prior_thinking: readThinkingReplay },
 };
 
+export interface DreamingConfig {
+  enabled: boolean;
+  every: ConfigDuration;
+  start_between: string | undefined;
+  idle_after: ConfigDuration;
+  min_turns: number;
+  time_limit: ConfigDuration;
+  system_prompt: string | undefined;
+  tools: string[] | undefined;
+}
+
+export const defaultDreamingConfig = (): DreamingConfig => ({
+  enabled: false,
+  every: ConfigDuration.fromSecs(3 * 86_400),
+  start_between: undefined,
+  idle_after: ConfigDuration.fromSecs(7200),
+  min_turns: 20,
+  time_limit: ConfigDuration.fromSecs(90 * 60),
+  system_prompt: undefined,
+  tools: undefined,
+});
+
+const DREAMING: StructSpec<DreamingConfig> = {
+  name: "DreamingConfig",
+  make: defaultDreamingConfig,
+  fields: {
+    enabled: readBool,
+    every: readDuration,
+    start_between: optional(readString),
+    idle_after: readDuration,
+    min_turns: readUsize,
+    time_limit: readDuration,
+    system_prompt: optional(readString),
+    tools: optional(readToolNameSeq),
+  },
+};
+
+const DAY_WINDOW = /^([01]\d|2[0-3]):([0-5]\d)-([01]\d|2[0-3]):([0-5]\d)$/;
+
+export function parseDayWindow(raw: string): { startMinute: number; endMinute: number } | undefined {
+  const match = DAY_WINDOW.exec(raw.trim());
+  if (match === null) return undefined;
+  const [, startHour, startMinute, endHour, endMinute] = match.map(Number);
+  const start = (startHour ?? 0) * 60 + (startMinute ?? 0);
+  const end = (endHour ?? 0) * 60 + (endMinute ?? 0);
+  return start === end ? undefined : { startMinute: start, endMinute: end };
+}
+
+const MAX_DREAM_TIME_LIMIT_SECS = 6n * 3600n;
+
+export function validateDreaming(dreaming: DreamingConfig): string | undefined {
+  if (dreaming.start_between !== undefined && parseDayWindow(dreaming.start_between) === undefined) {
+    return `dreaming.start_between is ${JSON.stringify(dreaming.start_between)}; expected a local time range like "02:00-07:00", with different start and end`;
+  }
+  if (dreaming.every.asSecs() <= 0n) return "dreaming.every must be greater than zero";
+  const limit = dreaming.time_limit.asSecs();
+  if (limit < 60n || limit > MAX_DREAM_TIME_LIMIT_SECS) {
+    return `dreaming.time_limit is ${dreaming.time_limit.toString()}; it must be between 1m and 6h`;
+  }
+  return undefined;
+}
+
 export interface MemoryConfig {
   compaction: CompactionConfig;
+  dreaming: DreamingConfig;
   thinking: ThinkingConfig;
   git_push: boolean;
 }
 
 const defaultMemoryConfig = (): MemoryConfig => ({
   compaction: defaultCompactionConfig(),
+  dreaming: defaultDreamingConfig(),
   thinking: defaultThinkingConfig(),
   git_push: false,
 });
@@ -820,6 +887,7 @@ const MEMORY: StructSpec<MemoryConfig> = {
   make: defaultMemoryConfig,
   fields: {
     compaction: struct(COMPACTION),
+    dreaming: struct(DREAMING),
     thinking: struct(THINKING),
     git_push: readBool,
   },

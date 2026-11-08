@@ -19,6 +19,8 @@ export function DebugPage({ state }: { state: ChromeSnapshot }) {
       action("Make dormant", () => workspace.actions.run("heartbeat_set_dormant", {}), (value) => `Heartbeat is ${value.status}`)],
     ["Make active", "Resumes autonomous check-ins on the normal schedule.",
       action("Make active", () => workspace.actions.run("heartbeat_set_active", {}), (value) => `Heartbeat is ${value.status}`)],
+    ["Dream now", "Starts a dream at the next autonomy tick instead of waiting for its schedule.",
+      action("Dream", () => workspace.actions.run("dream", { now: true }), (value) => value.running ? "Already dreaming" : "Dream queued")],
     ["Send a cache keepalive", "Pings the provider now to keep the prompt cache warm.",
       action("Ping", () => workspace.actions.run("keepalive_ping_now", {}), (value) => `Keepalive ${value.status}`)],
     ["Activate the session", "Registers the session and starts keepalive and heartbeat as a client connection would.",
