@@ -1,7 +1,8 @@
-import { memo, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { Fragment, memo, useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import type { CharacterAvatar } from "../../protocol/CharacterAvatar.ts";
 import type { AlternativeListing } from "../../protocol/AlternativeListing.ts";
 import type { Message } from "../../protocol/Message.ts";
+import type { MessageCopy } from "../../protocol/MessageCopy.ts";
 import type { StreamMetadata } from "../../protocol/StreamMetadata.ts";
 import type { ViewValues } from "../preferences.ts";
 import { copyText } from "../clipboard.ts";
@@ -13,8 +14,8 @@ import { Avatar, UserAvatar } from "../ui/avatar.tsx";
 import { Dialog, IconButton, Menu, Spinner, type MenuItem } from "../ui/controls.tsx";
 import { Icon } from "../ui/icons.tsx";
 import { toasts } from "../ui/toast.tsx";
-import { conversation, errorText, streamReplies, workspace } from "../app/state.ts";
-import { activityHeadline, blockViews, bodyItems, formatToolInput, swipeState, timeLabel, toolSummary, type BlockView, type StepView } from "./transcript.ts";
+import { conversation, errorText, perform, streamReplies, workspace } from "../app/state.ts";
+import { activityHeadline, blockViews, bodyItems, chatLogMessageId, formatToolInput, isChatLogTool, messageCopyLabel, swipeState, timeLabel, toolSummary, type BlockView, type StepView } from "./transcript.ts";
 import { showWorkspaceNote, swipe as swipeTo } from "./actions.ts";
 
 const HEARTBEAT_OPENER = "[heartbeat]";
@@ -52,10 +53,50 @@ function ToolChip({ view, openImage, detailed = false }: { view: Extract<BlockVi
     </button>
     {open ? <div className="tool-body">
       {input === "" ? null : <><div className="tool-label">Input</div><pre className="mono">{input}</pre></>}
-      {view.output === null ? <div className="tool-label">Running…</div> : <><div className="tool-label">{view.error ? "Error" : "Output"}</div><pre className="mono">{view.output === "" ? "(no output)" : view.output}</pre></>}
+      {view.output === null ? <div className="tool-label">Running…</div> : <><div className="tool-label">{view.error ? "Error" : "Output"}</div>{!view.error && view.output !== "" && isChatLogTool(view.name) ? <ChatLogOutput output={view.output} /> : <pre className="mono">{view.output === "" ? "(no output)" : view.output}</pre>}</>}
       {view.images.length === 0 ? null : <div className="images">{view.images.map((source, index) => <ImageThumb key={index} source={source} caption={`${view.name} image ${String(index + 1)}`} open={openImage} />)}</div>}
     </div> : null}
   </div>;
+}
+
+function ChatLogOutput({ output }: { output: string }) {
+  const lines = useMemo(() => output.split("\n"), [output]);
+  const ids = useMemo(() => [...new Set(lines.flatMap((line) => chatLogMessageId(line) ?? []))], [lines]);
+  const [copies, setCopies] = useState<ReadonlyMap<string, readonly MessageCopy[]>>(() => new Map());
+  const [changing, setChanging] = useState(false);
+  const mounted = useRef(true);
+  useEffect(() => { mounted.current = true; return () => { mounted.current = false; }; }, []);
+  const lookup = useCallback(async () => {
+    if (ids.length === 0) return;
+    const result = await workspace.actions.run("segments", { action: "find", msg_ids: ids });
+    if (mounted.current && "found" in result) setCopies(new Map(result.found.map((message) => [message.msg_id, message.copies])));
+  }, [ids]);
+  useEffect(() => { perform(lookup); }, [lookup]);
+  const toggle = (copy: MessageCopy) => {
+    const index = copy.segment;
+    if (index === null) return;
+    setChanging(true);
+    perform(async () => {
+      try {
+        await workspace.actions.run("segments", { action: copy.excluded ? "include" : "exclude", index, thread: copy.thread });
+        await lookup();
+      } finally {
+        if (mounted.current) setChanging(false);
+      }
+    });
+  };
+  return <pre className="mono chat-log">{lines.map((line, row) => {
+    const id = chatLogMessageId(line);
+    const found = id === undefined ? undefined : copies.get(id);
+    return <Fragment key={row}>
+      {line}
+      {found?.map((copy) => <span key={`${copy.thread}:${String(copy.segment)}`} className={`message-copy${copy.excluded ? " excluded" : ""}`}>
+        {messageCopyLabel(copy)}
+        {copy.segment === null ? null : <button type="button" className="message-copy-action" disabled={changing} aria-label={`${copy.excluded ? "Include" : "Exclude"} ${copy.thread} segment ${String(copy.segment)} ${copy.excluded ? "in" : "from"} history search`} onClick={() => toggle(copy)}>{copy.excluded ? "Include" : "Exclude"}</button>}
+      </span>)}
+      {row < lines.length - 1 ? "\n" : null}
+    </Fragment>;
+  })}</pre>;
 }
 
 export function ImageThumb({ source, caption, open }: { source: string; caption: string; open: OpenImage }) {

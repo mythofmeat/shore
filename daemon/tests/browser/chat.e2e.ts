@@ -485,6 +485,24 @@ test("effort and model sit together in the message box, a change shows at once a
   await finish();
 });
 
+test("a chat log search shows the segment each message it found is in, and the segment can be excluded and included from there", async ({ page }) => {
+  const finish = await watchPage(page);
+  await signIn(page);
+  await createCharacter(page, "recovery");
+  await send(page, "chat log fixture");
+  const reply = page.locator("article.message.assistant").last();
+  await reply.getByRole("button", { name: /used 1 tool/ }).click();
+  await reply.locator(".tool-head", { hasText: "search_chat_logs" }).click();
+  const copy = reply.locator(".message-copy");
+  await expect(copy).toHaveText("main segment 0Exclude");
+  await copy.getByRole("button", { name: "Exclude main segment 0 from history search" }).click();
+  await expect(copy).toHaveText("main segment 0, excludedInclude");
+  await expect(copy).toHaveClass(/excluded/);
+  await copy.getByRole("button", { name: "Include main segment 0 in history search" }).click();
+  await expect(copy).toHaveText("main segment 0Exclude");
+  await finish();
+});
+
 test("the usage display refreshes after a reply and otherwise leaves the daemon alone", async ({ page }) => {
   const check = await watchPage(page);
   let usageRequests = 0;

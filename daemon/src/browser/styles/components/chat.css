@@ -426,6 +426,42 @@ button.chip:hover {
   overflow-wrap: anywhere;
 }
 
+.message-copy {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin-left: 8px;
+  padding: 0 7px;
+  border: 1px solid var(--accent-line);
+  border-radius: var(--radius-pill);
+  color: var(--text-2);
+  font-size: var(--text-xs);
+  line-height: 1.6;
+  white-space: nowrap;
+  vertical-align: baseline;
+}
+
+.message-copy.excluded {
+  border-style: dashed;
+  border-color: var(--line-3);
+  color: var(--text-3);
+}
+
+.message-copy-action {
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--accent);
+  font: inherit;
+  text-decoration: underline;
+  cursor: pointer;
+}
+
+.message-copy-action:disabled {
+  color: var(--text-3);
+  cursor: default;
+}
+
 .activity {
   display: inline-block;
   max-width: 100%;

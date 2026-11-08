@@ -37,6 +37,7 @@ const WIRE_EXAMPLES: &[&[&str]] = &[
     &["clear", "--exclude", "--note", "archived"],
     &["segments"],
     &["segments", "show", "1"],
+    &["segments", "find", "m_1", "m_2"],
     &["segments", "exclude", "1"],
     &["segments", "include", "1"],
     &["segments", "label", "1", "label"],

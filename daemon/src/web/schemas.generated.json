@@ -4046,6 +4046,9 @@
           },
           {
             "$ref": "#/$defs/SegmentChanged"
+          },
+          {
+            "$ref": "#/$defs/SegmentsFound"
           }
         ]
       },
@@ -4510,6 +4513,66 @@
           "include",
           "label",
           "note"
+        ]
+      },
+      "SegmentsFound": {
+        "type": "object",
+        "properties": {
+          "character": {
+            "type": "string"
+          },
+          "found": {
+            "type": "array",
+            "items": {
+              "$ref": "#/$defs/FoundMessage"
+            }
+          }
+        },
+        "required": [
+          "character",
+          "found"
+        ]
+      },
+      "FoundMessage": {
+        "type": "object",
+        "properties": {
+          "msg_id": {
+            "type": "string"
+          },
+          "copies": {
+            "type": "array",
+            "items": {
+              "$ref": "#/$defs/MessageCopy"
+            }
+          }
+        },
+        "required": [
+          "msg_id",
+          "copies"
+        ]
+      },
+      "MessageCopy": {
+        "type": "object",
+        "properties": {
+          "thread": {
+            "type": "string"
+          },
+          "segment": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "uint64",
+            "minimum": 0
+          },
+          "excluded": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "thread",
+          "segment",
+          "excluded"
         ]
       },
       "ClearResult": {
@@ -13801,6 +13864,9 @@
           },
           {
             "$ref": "#/$defs/SegmentChanged"
+          },
+          {
+            "$ref": "#/$defs/SegmentsFound"
           }
         ]
       },
@@ -14265,6 +14331,66 @@
           "include",
           "label",
           "note"
+        ]
+      },
+      "SegmentsFound": {
+        "type": "object",
+        "properties": {
+          "character": {
+            "type": "string"
+          },
+          "found": {
+            "type": "array",
+            "items": {
+              "$ref": "#/$defs/FoundMessage"
+            }
+          }
+        },
+        "required": [
+          "character",
+          "found"
+        ]
+      },
+      "FoundMessage": {
+        "type": "object",
+        "properties": {
+          "msg_id": {
+            "type": "string"
+          },
+          "copies": {
+            "type": "array",
+            "items": {
+              "$ref": "#/$defs/MessageCopy"
+            }
+          }
+        },
+        "required": [
+          "msg_id",
+          "copies"
+        ]
+      },
+      "MessageCopy": {
+        "type": "object",
+        "properties": {
+          "thread": {
+            "type": "string"
+          },
+          "segment": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "uint64",
+            "minimum": 0
+          },
+          "excluded": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "thread",
+          "segment",
+          "excluded"
         ]
       },
       "ClearResult": {

@@ -5,6 +5,7 @@ use ratatui::style::{Color, Modifier, Style};
 use ratatui::text::{Line, Span, Text};
 use ratatui::widgets::{Block, BorderType, Borders, Clear, Padding, Paragraph, Wrap};
 use shore_common::duration::format_duration_ms;
+use shore_common::protocol::operations::MessageCopy;
 use shore_common::protocol::tool_display::{format_tool_input, format_tool_output};
 use shore_common::protocol::types::{Role, is_video_file};
 
@@ -12,6 +13,7 @@ use crate::tui::app::{
     AltChoice, App, Block as TurnBlock, CompactionRun, ConversationEntry, InputMode, PaletteMode,
     SegmentView, Turn, ValueEditorKind, format_elapsed,
 };
+use crate::tui::chat_logs;
 use crate::tui::images;
 use crate::tui::keymap::Scope;
 use crate::tui::markdown;
@@ -260,6 +262,42 @@ fn push_bar_wrapped(
     }
 }
 
+fn push_chat_log_output(
+    lines: &mut Vec<Line<'static>>,
+    text: &str,
+    copies: &std::collections::HashMap<String, Vec<MessageCopy>>,
+    bar_style: Style,
+    text_width: usize,
+) {
+    use unicode_width::UnicodeWidthStr;
+
+    let content_style = Style::default().fg(Color::DarkGray);
+    let note_style = Style::default().fg(Color::Cyan);
+    for tline in text.lines() {
+        let Some(note) = chat_logs::line_message_id(tline)
+            .and_then(|id| copies.get(id))
+            .and_then(|found| chat_logs::copies_note(found))
+        else {
+            push_bar_wrapped(lines, tline, bar_style, content_style, text_width);
+            continue;
+        };
+        let marked = format!("‹{note}›");
+        let width = UnicodeWidthStr::width(tline)
+            .saturating_add(2)
+            .saturating_add(UnicodeWidthStr::width(marked.as_str()));
+        if width <= text_width {
+            lines.push(Line::from(vec![
+                Span::styled("  │ ".to_owned(), bar_style),
+                Span::styled(tline.to_owned(), content_style),
+                Span::styled(format!("  {marked}"), note_style),
+            ]));
+        } else {
+            push_bar_wrapped(lines, tline, bar_style, content_style, text_width);
+            push_bar_wrapped(lines, &marked, bar_style, note_style, text_width);
+        }
+    }
+}
+
 fn render_thinking_group(lines: &mut Vec<Line<'static>>, thoughts: &[String], wrap_width: u16) {
     if thoughts.is_empty() {
         return;
@@ -282,13 +320,14 @@ fn render_thinking_group(lines: &mut Vec<Line<'static>>, thoughts: &[String], wr
 
 const SUBAGENT_COLOR: Color = Color::Cyan;
 
-struct ImageRenderer<'view> {
+struct BlockRenderer<'view> {
     cache: &'view images::ImageCache,
     show_inline: bool,
     index: &'view mut Vec<crate::tui::app::ImageEntry>,
+    copies: &'view std::collections::HashMap<String, Vec<MessageCopy>>,
 }
 
-impl ImageRenderer<'_> {
+impl BlockRenderer<'_> {
     fn render(
         &mut self,
         lines: &mut Vec<Line<'static>>,
@@ -303,7 +342,7 @@ fn render_tool_block(
     block: &TurnBlock,
     subagent: bool,
     wrap_width: u16,
-    image_renderer: &mut ImageRenderer<'_>,
+    renderer: &mut BlockRenderer<'_>,
 ) {
     let bar_style = Style::default().fg(Color::DarkGray);
     let text_width = usize::from(wrap_width.saturating_sub(4));
@@ -358,14 +397,24 @@ fn render_tool_block(
                 ),
             ]));
             let formatted_output = format_tool_output(output);
-            push_bar_wrapped(
-                lines,
-                &formatted_output,
-                bar_style,
-                Style::default().fg(Color::DarkGray),
-                text_width,
-            );
-            image_renderer.render(lines, images);
+            if chat_logs::is_chat_log_tool(tool_name) && !*is_error {
+                push_chat_log_output(
+                    lines,
+                    &formatted_output,
+                    renderer.copies,
+                    bar_style,
+                    text_width,
+                );
+            } else {
+                push_bar_wrapped(
+                    lines,
+                    &formatted_output,
+                    bar_style,
+                    Style::default().fg(Color::DarkGray),
+                    text_width,
+                );
+            }
+            renderer.render(lines, images);
             lines.push(Line::from(""));
         }
         TurnBlock::Text(_)
@@ -382,7 +431,7 @@ fn render_blocks(
     show_tools: bool,
     show_subagent: bool,
     wrap_width: u16,
-    image_renderer: &mut ImageRenderer<'_>,
+    renderer: &mut BlockRenderer<'_>,
 ) {
     let mut in_subagent = false;
     let mut i = 0;
@@ -471,7 +520,7 @@ fn render_blocks(
                     show_tools
                 };
                 if visible && let Some(tool_block) = blocks.get(i) {
-                    render_tool_block(lines, tool_block, in_subagent, wrap_width, image_renderer);
+                    render_tool_block(lines, tool_block, in_subagent, wrap_width, renderer);
                 }
                 i = i.saturating_add(1);
             }
@@ -593,10 +642,11 @@ fn render_compaction(
     content_width: u16,
     image_index: &mut Vec<crate::tui::app::ImageEntry>,
 ) {
-    let mut image_renderer = ImageRenderer {
+    let mut renderer = BlockRenderer {
         cache: &app.image_cache,
         show_inline: app.show_images,
         index: image_index,
+        copies: &app.message_copies,
     };
     let Some(run) = app.compaction.as_ref() else {
         return;
@@ -632,7 +682,7 @@ fn render_compaction(
                     lines.push(Line::from(""));
                 }
                 TurnBlock::ToolUse { .. } | TurnBlock::ToolResult { .. } => {
-                    render_tool_block(lines, block, true, content_width, &mut image_renderer);
+                    render_tool_block(lines, block, true, content_width, &mut renderer);
                 }
                 TurnBlock::Text(_)
                 | TurnBlock::Thinking(_)
@@ -858,10 +908,11 @@ fn render_turn(
     content_width: u16,
     image_index: &mut Vec<crate::tui::app::ImageEntry>,
 ) {
-    let mut image_renderer = ImageRenderer {
+    let mut renderer = BlockRenderer {
         cache: &app.image_cache,
         show_inline: app.show_images,
         index: image_index,
+        copies: &app.message_copies,
     };
     match turn.role {
         Role::User => {
@@ -880,9 +931,9 @@ fn render_turn(
                 app.show_tools,
                 app.show_subagent,
                 content_width,
-                &mut image_renderer,
+                &mut renderer,
             );
-            image_renderer.render(lines, &turn.images);
+            renderer.render(lines, &turn.images);
             lines.push(Line::from(""));
         }
         Role::Assistant => {
@@ -910,9 +961,9 @@ fn render_turn(
                 app.show_tools,
                 app.show_subagent,
                 content_width,
-                &mut image_renderer,
+                &mut renderer,
             );
-            image_renderer.render(lines, &turn.images);
+            renderer.render(lines, &turn.images);
             if turn.is_streaming() {
                 render_streaming_content(lines, app, content_width);
             } else {
@@ -942,7 +993,7 @@ fn render_turn(
                 app.show_tools,
                 app.show_subagent,
                 content_width,
-                &mut image_renderer,
+                &mut renderer,
             );
         }
     }
@@ -1770,10 +1821,11 @@ fn draw_subagent_panel(frame: &mut Frame<'_>, app: &mut App, area: Rect) {
         lines.push(Line::from(""));
     }
     let mut panel_images = Vec::new();
-    let mut image_renderer = ImageRenderer {
+    let mut renderer = BlockRenderer {
         cache: &app.image_cache,
         show_inline: app.show_images,
         index: &mut panel_images,
+        copies: &app.message_copies,
     };
     render_blocks(
         &mut lines,
@@ -1782,7 +1834,7 @@ fn draw_subagent_panel(frame: &mut Frame<'_>, app: &mut App, area: Rect) {
         true,
         true,
         body_area.width,
-        &mut image_renderer,
+        &mut renderer,
     );
     if !task.is_running()
         && let Some(detail) = &task.detail

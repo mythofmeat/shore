@@ -188,12 +188,14 @@ export const commandOperations: OperationRegistry<CommandOperationContext> = {
   compact_cancel: register("compact_cancel", { category: "Memory", scope: "character", prerequisites: ["compaction"], effects: ["runtime_write"], confirmation: "none", label: "Stop the running compaction", fields: {} },
     (context) => cancelCompaction(engineOf(context).characterName, { config: context.session.config, emit: context.session.emit, signal: context.session.signal })),
   segments: register("segments", { category: "Memory", scope: "character", prerequisites: [], effects: ["history_write"], confirmation: "none", label: "Inspect and manage segments", fields: {
-    action: { label: "Segment action", hint: "Omit to list segments; inspection and edits require an index" },
+    action: { label: "Segment action", hint: "Omit to list segments; inspection and edits require an index, find requires message ids" },
     index: { label: "Segment index" },
     value: { label: "Label or note", multiline: true, hint: "Used by label/note; explicitly unset or empty text clears the saved value" },
+    msg_ids: { label: "Message IDs", hint: "Used by find: lists every thread and segment holding each message, in any thread" },
+    thread: { label: "Thread", choices: "threads", hint: "The thread whose segments to list, show or change; omit for this conversation's thread" },
   }, policies: [
     { condition: { kind: "absent", field: "action" }, effects: ["read"], confirmation: "none" },
-    ...([null, "list", "show"] as const).map((value) => ({ condition: { kind: "equals" as const, field: "action", value }, effects: ["read" as const], confirmation: "none" as const })),
+    ...([null, "list", "show", "find"] as const).map((value) => ({ condition: { kind: "equals" as const, field: "action", value }, effects: ["read" as const], confirmation: "none" as const })),
   ] }, (context, args) => segments(context.session.dataDir, engineOf(context).characterName, engineOf(context).thread, args, context.deps.historyIndex)),
   clear: register("clear", { category: "Memory", scope: "character", prerequisites: [], effects: ["history_write"], confirmation: "archive", label: "Clear active context", fields: {
     exclude: { label: "Exclude from history search", hint: "The archived segment stays inspectable and can be included again" },

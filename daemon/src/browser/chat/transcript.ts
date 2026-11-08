@@ -3,6 +3,7 @@ import type { CompactionPassEnd } from "../../protocol/CompactionPassEnd.ts";
 import type { CompactionWatchResult } from "../../protocol/CompactionWatchResult.ts";
 import type { ContentBlock } from "../../protocol/ContentBlock.ts";
 import type { Message } from "../../protocol/Message.ts";
+import type { MessageCopy } from "../../protocol/MessageCopy.ts";
 import type { SegmentSummary } from "../../protocol/SegmentSummary.ts";
 import type { ToolResultContent } from "../../protocol/ToolResultContent.ts";
 
@@ -44,6 +45,23 @@ export function segmentDetail(segment: SegmentSummary, now = new Date()): string
   const last = segmentDay(segment.last_message_at, now);
   const dates = first === last || last === "" ? first : first === "" ? last : `${first} – ${last}`;
   return [`${String(segment.message_count)} ${segment.message_count === 1 ? "message" : "messages"}`, ...(dates === "" ? [] : [dates]), ...(segment.excluded ? ["excluded from memory"] : [])].join(" · ");
+}
+
+const CHAT_LOG_ENTRY = /^(?:\u25B6 )?\d{4}-\d{2}-\d{2} [A-Za-z]{3} \d{2}:\d{2} {2}/;
+
+export function isChatLogTool(name: string): boolean {
+  return name === "search_chat_logs" || name === "read_chat_logs";
+}
+
+export function chatLogMessageId(line: string): string | undefined {
+  if (!CHAT_LOG_ENTRY.test(line)) return undefined;
+  const id = line.slice(line.lastIndexOf("  ") + 2).split(" ")[0];
+  return id === undefined || id === "" ? undefined : id;
+}
+
+export function messageCopyLabel(copy: MessageCopy): string {
+  if (copy.segment === null) return `${copy.thread}, not archived`;
+  return `${copy.thread} segment ${String(copy.segment)}${copy.excluded ? ", excluded" : ""}`;
 }
 
 export function lastTurnIndex(messages: readonly Message[]): number {

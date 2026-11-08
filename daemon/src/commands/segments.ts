@@ -1,4 +1,4 @@
-import { homeThreadOf } from "../engine/threads.ts";
+import { homeThreadOf, isValidThreadId, readThreadsIndex } from "../engine/threads.ts";
 import { withConversation } from "../engine/lifecycle.ts";
 import { readDurable, threadFile } from "../storage/files.ts";
 import { join } from "node:path";
@@ -10,7 +10,7 @@ import {
   threadDataDir,
 } from "../config/dirs.ts";
 
-import { HISTORY_DB_FILE, HistoryStore } from "../engine/history_store.ts";
+import { HISTORY_DB_FILE, HistoryStore, type ArchivedCopy } from "../engine/history_store.ts";
 import { presentSegment } from "../engine/segments.ts";
 import { archiveAndRetain } from "../memory/compaction/archive.ts";
 import { tryBeginCompaction } from "../memory/compaction/manager.ts";
@@ -18,7 +18,9 @@ import { resetActivePromptSnapshot } from "../memory/deferred_edits.ts";
 import { withHistoryIndexLock } from "../memory/history_index.ts";
 import { CommandError, internalError, invalidRequest, notFound } from "./errors.ts";
 import type { OperationInput, OperationResult } from "../operations/types.ts";
+import type { MessageCopy } from "../protocol/MessageCopy.ts";
 import type { SegmentAction } from "../protocol/SegmentAction.ts";
+import type { SegmentsFound } from "../protocol/SegmentsFound.ts";
 type Args = OperationInput<"segments">;
 
 
@@ -49,8 +51,10 @@ export async function segments(
   historyIndex?: SegmentIndexMutationSink,
 ): Promise<OperationResult<"segments">> {
   const action = args.action ?? "list";
+  if (action === "find") return await findMessages(dataDir, character, args["msg_ids"]);
+  const target = targetThread(args["thread"], thread);
   const mutate = () =>
-    runSegments(dataDir, character, thread, action, args, historyIndex);
+    runSegments(dataDir, character, target, action, args, historyIndex);
   const indexPath =
     action === "list" || action === "show"
       ? undefined
@@ -64,7 +68,7 @@ function runSegments(
   dataDir: string,
   character: string,
   thread: string,
-  action: SegmentAction,
+  action: Exclude<SegmentAction, "find">,
   args: Args,
   historyIndex?: SegmentIndexMutationSink,
 ): OperationResult<"segments"> {
@@ -186,6 +190,71 @@ export async function clear(
       guard.release();
     }
   });
+}
+
+async function findMessages(dataDir: string, character: string, value: unknown): Promise<SegmentsFound> {
+  const ids = messageIds(value);
+  const store = HistoryStore.open(join(dataDir, HISTORY_DB_FILE));
+  let archived: ArchivedCopy[];
+  try {
+    archived = store.archivedCopies(character, ids);
+  } finally {
+    store.close();
+  }
+  const copies = new Map<string, MessageCopy[]>(ids.map((id) => [id, []]));
+  for (const copy of archived) {
+    const thread = copy.archiveKey === character ? MAIN_THREAD : copy.archiveKey.slice(character.length + 1);
+    copies.get(copy.msg_id)?.push({ thread, segment: copy.segment, excluded: copy.excluded });
+  }
+  const index = await readThreadsIndex(dataDir, character);
+  for (const thread of index?.threads.map((record) => record.id) ?? [MAIN_THREAD]) {
+    for (const id of new Set(activeMessageIds(dataDir, character, thread))) {
+      copies.get(id)?.push({ thread, segment: null, excluded: false });
+    }
+  }
+  return {
+    character,
+    found: [...copies].map(([msg_id, found]) => ({ msg_id, copies: found.sort(copyOrder) })),
+  };
+}
+
+function activeMessageIds(dataDir: string, character: string, thread: string): string[] {
+  let raw: string;
+  try {
+    raw = readDurable(threadFile(dataDir, character, thread, "active.jsonl"));
+  } catch {
+    return [];
+  }
+  return raw.split("\n").flatMap((line) => {
+    if (line.trim() === "") return [];
+    try {
+      const id = (JSON.parse(line) as { msg_id?: unknown }).msg_id;
+      return typeof id === "string" ? [id] : [];
+    } catch {
+      return [];
+    }
+  });
+}
+
+function copyOrder(a: MessageCopy, b: MessageCopy): number {
+  if (a.thread !== b.thread) {
+    if (a.thread === MAIN_THREAD || b.thread === MAIN_THREAD) return a.thread === MAIN_THREAD ? -1 : 1;
+    return a.thread < b.thread ? -1 : 1;
+  }
+  return (a.segment ?? Number.MAX_SAFE_INTEGER) - (b.segment ?? Number.MAX_SAFE_INTEGER);
+}
+
+function messageIds(value: unknown): string[] {
+  if (!Array.isArray(value) || value.length === 0 || !value.every((id): id is string => typeof id === "string" && id.trim() !== "")) {
+    throw invalidRequest("find needs msg_ids, one or more message ids");
+  }
+  return [...new Set(value.map((id) => id.trim()))];
+}
+
+function targetThread(value: unknown, current: string): string {
+  if (value === undefined || value === null) return current;
+  if (typeof value !== "string" || !isValidThreadId(value)) throw invalidRequest(`invalid thread ${JSON.stringify(value)}`);
+  return value;
 }
 
 function missing(idx: number, character: string, thread: string): string {

@@ -2,6 +2,7 @@ mod ansi;
 mod app;
 #[cfg(test)]
 mod capability_inventory;
+mod chat_logs;
 mod clipboard;
 mod command_output;
 mod connection;
@@ -33,7 +34,7 @@ use ratatui::buffer::Buffer;
 use shore_common::protocol::client_msg::{ClientMessage, Command};
 use shore_common::protocol::operations::{
     ConfigReloadArgs, ConfigReloadResult, ConversationPage, MarkThreadRead, MarkThreadReadArgs,
-    Operation, ReloadConfiguration, ThreadUnread, UsageArgs, UsageReport,
+    MessageCopy, Operation, ReloadConfiguration, ThreadUnread, UsageArgs, UsageReport,
 };
 use shore_common::protocol::server_msg::ServerMessage;
 use shore_common::protocol::types::{ContentBlock, Message, Role, StreamMetadata};
@@ -964,6 +965,66 @@ pub(crate) fn subagent_trace_fetch(app: &mut App) -> Vec<ConnCommand> {
     vec![subagent_trace_conn_command(&ids)]
 }
 
+pub(crate) fn message_copies_fetch(app: &mut App) -> Vec<ConnCommand> {
+    if app.pending_message_copies.is_some() {
+        return vec![];
+    }
+    let mut ids: Vec<String> = Vec::new();
+    for turn in app
+        .visible_entries()
+        .iter()
+        .filter_map(ConversationEntry::as_turn)
+    {
+        for block in &turn.blocks {
+            let Block::ToolResult {
+                tool_name,
+                output,
+                is_error: false,
+                ..
+            } = block
+            else {
+                continue;
+            };
+            if !chat_logs::is_chat_log_tool(tool_name) {
+                continue;
+            }
+            for id in chat_logs::listed_message_ids(output) {
+                if !app.message_copies.contains_key(id) && !ids.iter().any(|listed| listed == id) {
+                    ids.push(id.to_owned());
+                }
+            }
+        }
+    }
+    if ids.is_empty() {
+        return vec![];
+    }
+    let rid = app.next_request_id("command");
+    let command = ConnCommand::Send(ClientMessage::Command(Command {
+        rid: Some(rid.clone()),
+        name: "segments".into(),
+        args: serde_json::json!({ "action": "find", "msg_ids": ids }),
+    }));
+    app.pending_message_copies = Some((rid, ids));
+    vec![command]
+}
+
+fn absorb_message_copies(app: &mut App, ids: Vec<String>, data: Option<&serde_json::Value>) {
+    if std::mem::take(&mut app.stale_message_copies) && data.is_some() {
+        return;
+    }
+    let mut found: std::collections::HashMap<String, Vec<MessageCopy>> = data
+        .and_then(crate::output::commands::found_messages)
+        .unwrap_or_default()
+        .into_iter()
+        .map(|message| (message.msg_id, message.copies))
+        .collect();
+    for id in ids {
+        let copies = found.remove(&id).unwrap_or_default();
+        drop(app.message_copies.insert(id, copies));
+    }
+    app.history_version = app.history_version.wrapping_add(1);
+}
+
 fn thread_refresh_command(app: &mut App) -> ConnCommand {
     let rid = app.begin_thread_refresh();
     ConnCommand::Send(ClientMessage::Command(Command {
@@ -1704,6 +1765,7 @@ fn handle_conn_event(app: &mut App, event: ConnEvent) -> UiEffect {
                 vec![]
             };
             cmds.extend(subagent_trace_fetch(app));
+            cmds.extend(message_copies_fetch(app));
             UiEffect {
                 cmds,
                 redraw: RedrawEffect::Immediate,
@@ -2448,6 +2510,7 @@ pub(crate) fn handle_server_message(app: &mut App, msg: ServerMessage) -> UiEffe
             }
         }
     }
+    let chat_log_result = matches!(&msg, ServerMessage::ToolResult(result) if chat_logs::is_chat_log_tool(&result.tool_name));
     let redraw = match msg {
         ServerMessage::StreamStart(start) => {
             app.spinner_frame = 0;
@@ -2678,6 +2741,18 @@ pub(crate) fn handle_server_message(app: &mut App, msg: ServerMessage) -> UiEffe
                 return UiEffect::redraw(RedrawEffect::Immediate);
             }
             if app
+                .pending_message_copies
+                .as_ref()
+                .is_some_and(|(rid, _)| Some(rid.as_str()) == co.rid.as_deref())
+                && let Some((_, ids)) = app.pending_message_copies.take()
+            {
+                absorb_message_copies(app, ids, Some(&co.data));
+                return UiEffect {
+                    cmds: message_copies_fetch(app),
+                    redraw: RedrawEffect::Immediate,
+                };
+            }
+            if app
                 .pending_auth_check
                 .as_ref()
                 .is_some_and(|(rid, ..)| Some(rid.as_str()) == co.rid.as_deref())
@@ -2791,7 +2866,10 @@ pub(crate) fn handle_server_message(app: &mut App, msg: ServerMessage) -> UiEffe
                         return UiEffect::redraw(RedrawEffect::None);
                     }
                     absorb_segment_page(app, request, &co.data);
-                    return UiEffect::redraw(RedrawEffect::Immediate);
+                    return UiEffect {
+                        cmds: message_copies_fetch(app),
+                        redraw: RedrawEffect::Immediate,
+                    };
                 }
                 "subagent_trace" => {
                     absorb_subagent_traces(app, &co.data);
@@ -2799,8 +2877,10 @@ pub(crate) fn handle_server_message(app: &mut App, msg: ServerMessage) -> UiEffe
                     if let (Some(command), Some(rendered)) = (palette_command, palette_rendered) {
                         app.push_command_text(&command, rendered);
                     }
+                    let mut cmds = subagent_trace_fetch(app);
+                    cmds.extend(message_copies_fetch(app));
                     return UiEffect {
-                        cmds: subagent_trace_fetch(app),
+                        cmds,
                         redraw: RedrawEffect::Immediate,
                     };
                 }
@@ -3347,6 +3427,10 @@ pub(crate) fn handle_server_message(app: &mut App, msg: ServerMessage) -> UiEffe
             if refresh_usage {
                 follow_up.extend(usage_budget_conn_commands(app));
             }
+            if co.name == "segments" && co.data.get("action").is_some() {
+                app.invalidate_message_copies();
+                follow_up.extend(message_copies_fetch(app));
+            }
             if !follow_up.is_empty() {
                 return UiEffect {
                     cmds: follow_up,
@@ -3360,6 +3444,15 @@ pub(crate) fn handle_server_message(app: &mut App, msg: ServerMessage) -> UiEffe
             if err.rid.is_some() && app.pending_read_mark_rid.as_deref() == err.rid.as_deref() {
                 app.pending_read_mark_rid = None;
                 return UiEffect::redraw(RedrawEffect::None);
+            }
+            if app
+                .pending_message_copies
+                .as_ref()
+                .is_some_and(|(rid, _)| Some(rid.as_str()) == err.rid.as_deref())
+                && let Some((_, ids)) = app.pending_message_copies.take()
+            {
+                absorb_message_copies(app, ids, None);
+                return UiEffect::redraw(RedrawEffect::Immediate);
             }
             let generation_error = app.stream.active
                 && match (app.stream.rid.as_deref(), err.rid.as_deref()) {
@@ -3537,7 +3630,7 @@ pub(crate) fn handle_server_message(app: &mut App, msg: ServerMessage) -> UiEffe
                 app.history_version = app.history_version.wrapping_add(1);
                 transmit_entry_images_from(app, keep);
                 return UiEffect {
-                    cmds: vec![],
+                    cmds: message_copies_fetch(app),
                     redraw: RedrawEffect::Immediate,
                 };
             }
@@ -3565,7 +3658,9 @@ pub(crate) fn handle_server_message(app: &mut App, msg: ServerMessage) -> UiEffe
             app.previous_segment = hist.previous_segment;
             app.history_version = app.history_version.wrapping_add(1);
             transmit_entry_images(app);
+            app.invalidate_message_copies();
             let mut cmds = subagent_trace_fetch(app);
+            cmds.extend(message_copies_fetch(app));
             if moved {
                 cmds.extend(input::refresh_segment_neighbours(app));
             }
@@ -3600,6 +3695,12 @@ pub(crate) fn handle_server_message(app: &mut App, msg: ServerMessage) -> UiEffe
         | ServerMessage::RequestFinished(_)
         | ServerMessage::Unknown => RedrawEffect::Immediate,
     };
+    if chat_log_result {
+        return UiEffect {
+            cmds: message_copies_fetch(app),
+            redraw,
+        };
+    }
     UiEffect::redraw(redraw)
 }
 

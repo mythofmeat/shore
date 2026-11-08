@@ -150,6 +150,7 @@ CREATE INDEX IF NOT EXISTS idx_history_messages_version ON history_messages (cha
 CREATE UNIQUE INDEX IF NOT EXISTS idx_history_segments_operation ON history_segments (character, compaction_id) WHERE compaction_id IS NOT NULL;
 CREATE INDEX IF NOT EXISTS idx_history_messages_display ON history_messages (character, display_seq, segment, ordinal);
 CREATE INDEX IF NOT EXISTS idx_history_messages_turn ON history_messages (character, is_user_turn, display_seq);
+CREATE INDEX IF NOT EXISTS idx_history_messages_msg_id ON history_messages (msg_id);
 ${ARCHIVE_REVISION_TRIGGERS}
 `;
 
@@ -169,6 +170,13 @@ export interface SegmentRecord extends SegmentEntry {
   idx: number;
   first_message_at: string | null;
   last_message_at: string | null;
+}
+
+export interface ArchivedCopy {
+  msg_id: string;
+  archiveKey: string;
+  segment: number;
+  excluded: boolean;
 }
 
 export type MemoryPath = "compaction";
@@ -641,6 +649,18 @@ export class HistoryStore {
          WHERE character = ?1 AND path = ?2 AND state = 'claimed' AND claimed_at < ?3`,
       )
       .run(character, path, olderThanMs).changes;
+  }
+
+  archivedCopies(character: string, msgIds: readonly string[]): ArchivedCopy[] {
+    const rows = this.#db.query(
+      `SELECT DISTINCT m.msg_id, m.character, m.segment, s.excluded
+       FROM history_messages m
+       JOIN history_segments s ON s.character = m.character AND s.idx = m.segment
+       WHERE m.msg_id IN (SELECT value FROM json_each(?2)) AND s.committed = 1
+         AND (m.character = ?1 OR substr(m.character, 1, length(?1) + 1) = ?1 || '/')
+       ORDER BY m.character, m.segment`,
+    ).all(character, JSON.stringify(msgIds)) as { msg_id: string; character: string; segment: number; excluded: number }[];
+    return rows.map((row) => ({ msg_id: row.msg_id, archiveKey: row.character, segment: row.segment, excluded: row.excluded !== 0 }));
   }
 
   archiveKeys(character: string): string[] {
