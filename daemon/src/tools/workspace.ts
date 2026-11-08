@@ -76,6 +76,24 @@ export async function gitHead(target: string | CharacterWorkspace): Promise<stri
   return sha === "" ? undefined : sha;
 }
 
+export async function gitCommitsBetween(
+  target: string | CharacterWorkspace,
+  from: string | undefined,
+  to: string,
+): Promise<string[]> {
+  if (from === to) return [];
+  const list = await runGit(asCharacterWorkspace(target), ["rev-list", "--reverse", from === undefined ? to : `${from}..${to}`]);
+  if (list.code !== 0) throw gitOutputError("git rev-list failed", list);
+  return rustTrim(list.stdout).split("\n").filter((line) => line !== "");
+}
+
+export async function gitCommitFiles(target: string | CharacterWorkspace, commits: readonly string[]): Promise<string[]> {
+  if (commits.length === 0) return [];
+  const shown = await runGit(asCharacterWorkspace(target), ["-c", "core.quotePath=false", "show", "--no-renames", "--name-only", "--format=", ...commits]);
+  if (shown.code !== 0) throw gitOutputError("git show failed", shown);
+  return [...new Set(rustTrim(shown.stdout).split("\n").filter((line) => line !== ""))].sort();
+}
+
 export async function gitPushWorkspace(target: string | CharacterWorkspace): Promise<boolean> {
   const workspace = asCharacterWorkspace(target);
   if (!(await hasGitDir(workspace))) return false;

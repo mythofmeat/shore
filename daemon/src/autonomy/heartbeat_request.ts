@@ -56,21 +56,29 @@ export interface HeartbeatModelDeps {
 }
 
 export function heartbeatModel(config: LoadedConfig, character: string): ResolvedModel | undefined {
+  return backgroundTaskModel(config, character, "heartbeat");
+}
+
+export function backgroundTaskModel(
+  config: LoadedConfig,
+  character: string,
+  task: "heartbeat" | "dreaming",
+): ResolvedModel | undefined {
   const view = configView(config);
-  const configuredName = view.app.defaults.backgroundModelName("heartbeat");
+  const configuredName = view.app.defaults.backgroundModelName(task);
   if (configuredName === undefined) return undefined;
 
   try {
     findEffectiveModel(view, config.dirs.cache, configuredName, true);
   } catch (e) {
     shoreLog.warn(
-      `shore: heartbeat model "${configuredName}" not found in catalog for ${character}; ` +
+      `shore: ${task} model "${configuredName}" not found in catalog for ${character}; ` +
         `keeping chat model: ${String(e)}`,
     );
     return undefined;
   }
 
-  return resolveBackgroundModel(view, "heartbeat", character, (v, c, n, h) =>
+  return resolveBackgroundModel(view, task, character, (v, c, n, h) =>
     findEffectiveModel(v, c, n, h),
   );
 }
@@ -79,8 +87,9 @@ export function applyHeartbeatModelOverride(
   request: SidecarRequest,
   config: LoadedConfig,
   character: string,
-  deps: HeartbeatModelDeps = {},
-  resolved: ResolvedModel | undefined = heartbeatModel(config, character),
+  deps: HeartbeatModelDeps,
+  resolved: ResolvedModel | undefined,
+  task: "heartbeat" | "dream" = "heartbeat",
 ): HeartbeatModelChoice {
   if (resolved === undefined) return { request, override: undefined };
 
@@ -98,12 +107,12 @@ export function applyHeartbeatModelOverride(
       deps.env,
     );
     shoreLog.info(
-      `shore: heartbeat for ${character} using configured model ${resolved.name} (${built.request.model})`,
+      `shore: ${task} for ${character} using configured model ${resolved.name} (${built.request.model})`,
     );
     return { request: built.request, override: resolved };
   } catch (e) {
     shoreLog.warn(
-      `shore: heartbeat could not build a request on ${resolved.name} for ${character}, ` +
+      `shore: ${task} could not build a request on ${resolved.name} for ${character}, ` +
         `falling back to the chat model: ${String(e)}`,
     );
     return { request, override: undefined };

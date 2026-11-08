@@ -20,6 +20,7 @@ import type { FetchLike } from "./web.ts";
 import type { ToolInput } from "./workspace.ts";
 import { normalizeProtectedPath, normalizePromptVisiblePath } from "./workspace_path.ts";
 import { McpCancelled } from "../mcp/client.ts";
+import { readWorkspacePath } from "../memory/dreaming/reads.ts";
 import type { ImagesConfig, SubagentConfig, ToolsConfig } from "../config/app.ts";
 import type { ImageRef, Message } from "../engine/types.ts";
 import type { ThreadRecord } from "../engine/threads.ts";
@@ -52,6 +53,7 @@ export interface ToolContext {
 
   deferEdit?: (path: string) => Promise<void> | void;
   trackWorkspaceWrite?: (name: string, input: unknown, write: () => Promise<unknown>) => Promise<unknown>;
+  recordRead?: (path: string) => void;
   recordWorkspaceWrite?: <T>(run: () => Promise<T>) => Promise<T>;
 
   runSubagent?: (
@@ -138,14 +140,18 @@ export async function dispatchTool(
   const workspace = ctx.workspace ?? new CharacterWorkspace(ctx.workspaceDir);
 
   switch (name) {
-    case "read":
-      return decodeToolValue(await workspace.call("read", {
+    case "read": {
+      const value = decodeToolValue(await workspace.call("read", {
         input: args,
         workspaceDir: ctx.workspaceDir,
         ...(ctx.maxResultChars === undefined ? {} : { maxChars: ctx.maxResultChars }),
         ...(ctx.maxInlineImageBytes === undefined ? {} : { maxImageBytes: ctx.maxInlineImageBytes }),
         ...(ctx.images === undefined ? {} : { images: ctx.images }),
       }, ctx.signal));
+      const read = ctx.recordRead === undefined ? undefined : readWorkspacePath(value, ctx.workspaceDir);
+      if (read !== undefined) ctx.recordRead?.(read);
+      return value;
+    }
     case "edit":
     case "apply_patch": {
       const write = () => withPromptChanges(workspace,

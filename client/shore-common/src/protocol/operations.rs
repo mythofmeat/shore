@@ -1006,7 +1006,7 @@ wire_types! {
     }
 
     #[serde(rename_all = "snake_case")]
-    pub enum RunningWorkKind { Message, Heartbeat, Compaction }
+    pub enum RunningWorkKind { Message, Heartbeat, Compaction, Dream }
 
     pub struct RunningWork {
         pub kind: RunningWorkKind,
@@ -1060,7 +1060,7 @@ wire_types! {
     }
 
     #[serde(rename_all = "snake_case")]
-    pub enum TranscriptSource { Heartbeat }
+    pub enum TranscriptSource { Heartbeat, Dreaming }
 
     #[serde(deny_unknown_fields)]
     #[derive(Default)]
@@ -1081,7 +1081,7 @@ wire_types! {
     }
 
     #[serde(rename_all = "snake_case")]
-    pub enum HeartbeatEventKind { TickFired, CallFailed, MessageSent, MessageSkipped, ToolUse, Dormant, Wake, Timeout, DormantPing, BudgetPaused, RecapWritten, RecapMissing }
+    pub enum HeartbeatEventKind { TickFired, CallFailed, MessageSent, MessageSkipped, ToolUse, Dormant, Wake, Timeout, DormantPing, BudgetPaused, RecapWritten, RecapMissing, DreamStarted, DreamFinished, DreamFailed }
 
     pub struct HeartbeatEvent {
         pub timestamp: String,
@@ -1500,6 +1500,53 @@ wire_types! {
         pub warning: Option<String>,
     }
 
+    #[serde(deny_unknown_fields)]
+    #[derive(Default)]
+    pub struct DreamArgs {
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        pub now: Option<bool>,
+    }
+
+    #[serde(rename_all = "snake_case")]
+    pub enum DreamOutcome { Finished, CutOff, Failed, Interrupted }
+
+    #[serde(rename_all = "snake_case")]
+    pub enum DreamStop { TimeLimit, RoundLimit, Shutdown, Budget }
+
+    pub struct DreamRecord {
+        pub started_at: String,
+        pub ended_at: String,
+        pub outcome: DreamOutcome,
+        pub conversations: u32,
+        pub commits: u32,
+        pub files: Vec<String>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        #[ts(optional)]
+        pub pushed: Option<bool>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        #[ts(optional)]
+        pub summary: Option<String>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        #[ts(optional)]
+        pub error: Option<String>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        #[ts(optional)]
+        pub stopped_by: Option<DreamStop>,
+    }
+
+    pub struct DreamReport {
+        pub character: String,
+        pub enabled: bool,
+        pub queued: bool,
+        pub running: bool,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        #[ts(optional)]
+        pub next_due_at: Option<String>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        #[ts(optional)]
+        pub last: Option<DreamRecord>,
+    }
+
     #[serde(rename_all = "snake_case")]
     pub enum KeepaliveRequestSource { CachedLastRequest, RebuiltFromDisk }
 
@@ -1570,7 +1617,7 @@ wire_types! {
     }
 
     #[serde(rename_all = "snake_case")]
-    pub enum BackgroundModelTarget { All, Heartbeat, Compaction }
+    pub enum BackgroundModelTarget { All, Heartbeat, Compaction, Dreaming }
 
     #[serde(rename_all = "snake_case")]
     pub enum ModelPreferenceScope { Character, Global }
@@ -3005,6 +3052,7 @@ operations! {
     ReadTranscript: "transcript" (TranscriptArgs) => TranscriptResult,
     ReadSubagentTraces: "subagent_trace" (SubagentTraceArgs) => SubagentTraceResult,
     ScheduleHeartbeat: "heartbeat_tick_now" (EmptyOperationArgs) => HeartbeatControlResult,
+    Dream: "dream" (DreamArgs) => DreamReport,
     SetHeartbeatDormant: "heartbeat_set_dormant" (EmptyOperationArgs) => HeartbeatControlResult,
     SetHeartbeatActive: "heartbeat_set_active" (EmptyOperationArgs) => HeartbeatControlResult,
     PingKeepalive: "keepalive_ping_now" (EmptyOperationArgs) => KeepalivePingResult,

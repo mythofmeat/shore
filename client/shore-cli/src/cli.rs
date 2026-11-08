@@ -5,16 +5,16 @@ use shore_common::protocol::operations::{
     ActivateSession, BackgroundModelTarget, CallLogArgs, CancelCompaction, CheckConfiguration,
     ClearArgs, ClearConversation, CompactArgs, CompactConversation, ConfigArgs, Configuration,
     ConfigurationSchema, ConversationLog, ConversationLogArgs, DeleteMessages, DeleteMessagesArgs,
-    DiagnosticCountArgs, EditMessage, EditMessageArgs, EmptyOperationArgs, ExecuteTool,
-    FavoriteModel, FavoriteModelArgs, GetMessage, GetMessageArgs, InjectSystem, InjectSystemArgs,
-    InspectCalls, InspectModel, InspectSegments, ListModels, ListModelsArgs, ListProviderModels,
-    ListProviders, MessageReferences, ModelInfoArgs, ModelPreferenceScope, ModelSettings,
-    ModelSettingsArgs, Operation, PingKeepalive, ProviderArgs, ProviderModelsArgs, ReadErrorLog,
-    ReadHeartbeatLog, ReadStatus, ReadSubagentTraces, ReadTranscript, RefreshAllProviderModels,
-    RefreshProviderModels, ResetModel, ResetModelArgs, RunToolArgs, ScheduleHeartbeat,
-    SegmentAction, SegmentsArgs, SetHeartbeatActive, SetHeartbeatDormant, SetModelSetting,
-    SetModelSettingArgs, SubagentTraceArgs, SwitchModel, SwitchModelArgs, ToolAccessListing,
-    TranscriptArgs, TranscriptSource, WatchCompaction,
+    DiagnosticCountArgs, Dream, DreamArgs, EditMessage, EditMessageArgs, EmptyOperationArgs,
+    ExecuteTool, FavoriteModel, FavoriteModelArgs, GetMessage, GetMessageArgs, InjectSystem,
+    InjectSystemArgs, InspectCalls, InspectModel, InspectSegments, ListModels, ListModelsArgs,
+    ListProviderModels, ListProviders, MessageReferences, ModelInfoArgs, ModelPreferenceScope,
+    ModelSettings, ModelSettingsArgs, Operation, PingKeepalive, ProviderArgs, ProviderModelsArgs,
+    ReadErrorLog, ReadHeartbeatLog, ReadStatus, ReadSubagentTraces, ReadTranscript,
+    RefreshAllProviderModels, RefreshProviderModels, ResetModel, ResetModelArgs, RunToolArgs,
+    ScheduleHeartbeat, SegmentAction, SegmentsArgs, SetHeartbeatActive, SetHeartbeatDormant,
+    SetModelSetting, SetModelSettingArgs, SubagentTraceArgs, SwitchModel, SwitchModelArgs,
+    ToolAccessListing, TranscriptArgs, TranscriptSource, WatchCompaction,
 };
 use shore_common::protocol::types::Role;
 use std::collections::BTreeMap;
@@ -84,7 +84,10 @@ pub(crate) enum FlagProblem {
 }
 
 const TARGET_TAKES_EQUALS: [(&str, &[&str]); 2] = [
-    ("--background", &["all", "heartbeat", "compaction"]),
+    (
+        "--background",
+        &["all", "heartbeat", "compaction", "dreaming"],
+    ),
     ("--subagent", &["all"]),
 ];
 
@@ -482,6 +485,18 @@ pub(crate) enum CliCommand {
         /// Show only one section; every section is shown by default
         #[arg(long, add = values(Completes::Sections))]
         section: Option<String>,
+
+        /// Output raw JSON
+        #[arg(long)]
+        json: bool,
+    },
+
+    /// Show the last dream and when the next one is due, or start one now
+    #[command(display_order = 7)]
+    Dream {
+        /// Start a dream at the next autonomy tick instead of waiting for its schedule
+        #[arg(long)]
+        now: bool,
 
         /// Output raw JSON
         #[arg(long)]
@@ -955,14 +970,16 @@ pub(crate) enum PaletteScope {
     Config,
 }
 
-/// Background task to retarget `shore model setting` at. `all` targets every
-/// background task at once and errors if they resolve to different models,
-/// or, when only showing settings, if their own settings differ.
+/// Background task to retarget `shore model setting` at. `all` targets heartbeat
+/// and compaction together and errors if they resolve to different models, or,
+/// when only showing settings, if their own settings differ. Dreaming is only
+/// ever targeted by name.
 #[derive(ValueEnum, Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) enum BackgroundTarget {
     All,
     Heartbeat,
     Compaction,
+    Dreaming,
 }
 
 impl BackgroundTarget {
@@ -971,6 +988,7 @@ impl BackgroundTarget {
             Self::All => BackgroundModelTarget::All,
             Self::Heartbeat => BackgroundModelTarget::Heartbeat,
             Self::Compaction => BackgroundModelTarget::Compaction,
+            Self::Dreaming => BackgroundModelTarget::Dreaming,
         }
     }
 }
@@ -1096,6 +1114,17 @@ pub(crate) enum TraceCommand {
         json: bool,
     },
 
+    /// The dream transcript: what each dream read and changed, round by round
+    Dreams {
+        /// Number of entries to show
+        #[arg(short = 'n', long = "count", default_value = "20")]
+        count: u32,
+
+        /// Output raw JSON
+        #[arg(long)]
+        json: bool,
+    },
+
     /// The heartbeat operational timeline: tick fired, dormant, woke, timeout
     Events {
         /// Number of events to show
@@ -1143,7 +1172,7 @@ pub(crate) struct ModelTarget {
     #[arg(long)]
     pub(crate) chat: bool,
 
-    /// Background tasks: bare means all; naming one requires =compaction or =heartbeat
+    /// Background tasks: bare means heartbeat and compaction; naming one requires =compaction, =heartbeat or =dreaming
     #[arg(
         long,
         value_enum,
@@ -1191,7 +1220,7 @@ pub(crate) enum ModelCommand {
     /// own uses. With --thread (or SHORE_THREAD) it gives just that thread its own model.
     /// Every other target writes the config file,
     /// which is global: `--background=<task>` writes `<task>.model`,
-    /// bare `--background` writes both `heartbeat.model` and `compaction.model`; `--subagent=<name>` writes `subagents.<name>.model`,
+    /// bare `--background` writes `heartbeat.model` and `compaction.model` but never `dreaming.model`; `--subagent=<name>` writes `subagents.<name>.model`,
     /// and bare `--subagent` writes `subagents.model`.
     Use {
         /// Model name or provider:model_id
@@ -1234,10 +1263,11 @@ pub(crate) enum ModelCommand {
     /// belongs to the model, changing subagents.model picks up that model's
     /// settings rather than carrying the old ones over.
     ///
-    /// A background task's settings sit on top of its model's: heartbeat and
-    /// compaction take whatever their model has, chat's when they share it,
-    /// and override only the keys set for them, so tuning a task never moves
-    /// chat. Bare --background writes the same value for both tasks.
+    /// A background task's settings sit on top of its model's: heartbeat,
+    /// compaction and dreaming take whatever their model has, chat's when they
+    /// share it, and override only the keys set for them, so tuning a task never
+    /// moves chat. Bare --background writes the same value for heartbeat and
+    /// compaction; dreaming takes its own with --background=dreaming.
     ///
     /// The keys are temperature, top_p, reasoning_effort, reasoning_budget_tokens,
     /// max_output_tokens, cache_ttl, cache_keepalive, cache_keepalive_pings, sdk,
@@ -1310,8 +1340,8 @@ pub(crate) enum ModelCommand {
     /// configured model. With --thread (or SHORE_THREAD) it clears just that thread's own
     /// model, so the thread uses the character's again. Other targets clear
     /// the config keys `use` would have written, so the role falls back the
-    /// way it did before anything was pinned. Bare --background clears both
-    /// task model keys; bare --subagent clears subagents.model
+    /// way it did before anything was pinned. Bare --background clears
+    /// heartbeat.model and compaction.model; bare --subagent clears subagents.model
     /// and every per-sub-agent override.
     Reset {
         #[command(flatten)]
@@ -2719,6 +2749,9 @@ pub(crate) fn to_swp_command(
         CliCommand::Trace { .. } => trace_to_swp(cmd),
 
         CliCommand::Status { .. } => operation_to_swp::<ReadStatus>(EmptyOperationArgs {}),
+        CliCommand::Dream { now, .. } => operation_to_swp::<Dream>(DreamArgs {
+            now: now.then_some(true),
+        }),
 
         CliCommand::Debug { subcommand: None } => None,
         CliCommand::Debug {
@@ -2921,6 +2954,10 @@ fn trace_to_swp(cmd: &CliCommand) -> Option<(&'static str, serde_json::Value)> {
                 count: Some(*count),
             })
         }
+        TraceCommand::Dreams { count, .. } => operation_to_swp::<ReadTranscript>(TranscriptArgs {
+            source: Some(TranscriptSource::Dreaming),
+            count: Some(*count),
+        }),
         TraceCommand::Errors { count, .. } => {
             operation_to_swp::<ReadErrorLog>(DiagnosticCountArgs {
                 count: Some(*count),
@@ -3521,6 +3558,12 @@ mod tests {
                 Some(("character_info", json!({"name": ""}))),
             ),
             (&["status"], Some(("status", json!({})))),
+            (&["dream"], Some(("dream", json!({})))),
+            (&["dream", "--now"], Some(("dream", json!({"now": true})))),
+            (
+                &["trace", "dreams", "-n", "3"],
+                Some(("transcript", json!({"source": "dreaming", "count": 3}))),
+            ),
             (
                 &["trace", "errors", "-n", "5"],
                 Some(("error_log", json!({"count": 5}))),

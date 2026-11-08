@@ -5,7 +5,7 @@ import { homeThreadOf, threadActivityNow } from "../engine/threads.ts";
 import { hostZone } from "../ledger/zoned.ts";
 import type { LoadedConfig } from "../config/loader.ts";
 import { loadCompactionCheckpoint } from "../memory/compaction/checkpoint.ts";
-import type { AutonomyRunnerConfig, CompactionRunnerConfig, RestoredIdle } from "./runner.ts";
+import { dreamRunnerConfig, type AutonomyRunnerConfig, type CompactionRunnerConfig, type DreamRunnerConfig, type RestoredIdle } from "./runner.ts";
 import type { HeartbeatClockConfig } from "./heartbeat.ts";
 import type { AutonomyService, RegisterCharacter } from "./service.ts";
 
@@ -15,7 +15,12 @@ export function runnerConfigFor(config: LoadedConfig): AutonomyRunnerConfig {
     autonomyEnabled: autonomy.enabled,
     heartbeatEnabled: autonomy.enabled,
     ...compactionConfigFor(config),
+    dream: dreamConfigFor(config),
   };
+}
+
+export function dreamConfigFor(config: LoadedConfig): DreamRunnerConfig {
+  return dreamRunnerConfig(config.app.memory.dreaming);
 }
 
 function compactionConfigFor(config: LoadedConfig): CompactionRunnerConfig {
@@ -73,6 +78,7 @@ type ServiceSlice = Pick<
   | "register"
   | "setCompactionConfig"
   | "setHeartbeatConfig"
+  | "setDreamConfig"
   | "backfillActivity"
   | "onUserMessage"
   | "onUserActivityElsewhere"
@@ -152,6 +158,7 @@ export class TurnAutonomyBridge {
           compactionConfigFor(config),
         );
         this.#service.setHeartbeatConfig(character, clockConfigFor(config));
+        this.#service.setDreamConfig(character, dreamConfigFor(config));
       });
     }
   }

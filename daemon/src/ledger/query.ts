@@ -16,6 +16,7 @@ export interface QueryFilter {
 
 const USAGE_KIND_EXPR = `CASE
     WHEN call_type = 'heartbeat_tool_loop' THEN 'heartbeat'
+    WHEN call_type = 'dreaming_tool_loop' THEN 'dreaming'
     WHEN call_type = 'message' AND finish_reason = 'tool_use' THEN 'message_with_tools'
     WHEN call_type = 'tool_loop' THEN 'message_with_tools'
     WHEN call_type = 'message' THEN 'message_no_tools'

@@ -12,6 +12,8 @@ import {
   type AutonomyExecutor,
   type AutonomyRunnerConfig,
   type CompactionRunnerConfig,
+  type DreamRunnerConfig,
+  type DreamStatus,
   type RestoredIdle,
 } from "./runner.ts";
 import { loadState, STATE_FILENAME, type PersistedKeepalive } from "./state_file.ts";
@@ -147,6 +149,29 @@ export class AutonomyService {
     this.#entries.get(character)?.runner.setHeartbeatConfig(clock, this.#now());
   }
 
+  setDreamConfig(character: string, dream: DreamRunnerConfig): void {
+    this.#entries.get(character)?.runner.setDreamConfig(dream);
+  }
+
+  forceDreamNow(character: string): "queued" | "running" | undefined {
+    return this.#entries.get(character)?.runner.forceDream();
+  }
+
+  runningDreams(): HeartbeatView[] {
+    return [...this.#entries].flatMap(([character, { runner }]) => {
+      const startedAt = runner.dreamStartedAt;
+      return startedAt === undefined ? [] : [{ character, startedAt }];
+    });
+  }
+
+  async dreamsEnded(): Promise<void> {
+    await Promise.all([...this.#entries.values()].map(async ({ runner }) => { await runner.dreamEnded(); }));
+  }
+
+  dreamStatus(character: string): DreamStatus | undefined {
+    return this.#entries.get(character)?.runner.dreamStatus();
+  }
+
   async unregister(character: string): Promise<void> {
     const entry = this.#entries.get(character);
     if (entry === undefined) return;
@@ -184,7 +209,11 @@ export class AutonomyService {
 
   async quiesce(): Promise<void> {
     this.#closed = true;
-    await Promise.allSettled(this.#ticks);
+    const stopDreams = async () => {
+      await Promise.allSettled([...this.#entries.values()].map(async ({ runner }) => { await runner.stopDream(); }));
+    };
+    await Promise.allSettled([...this.#ticks, stopDreams()]);
+    await stopDreams();
   }
 
   runningHeartbeats(): HeartbeatView[] {

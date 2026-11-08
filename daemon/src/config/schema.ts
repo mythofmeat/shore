@@ -205,6 +205,18 @@ const PLAN_LIMIT_DESCRIPTIONS: Record<string, string> = {
   limit_action: "What reaching limit_fraction does to calls on the Claude subscription: warn, block, pause_background or pause_heartbeat.",
 };
 
+const DREAMING_DESCRIPTIONS: Record<string, string> = {
+  enabled: "Let the character dream: every so often, while the user is away, it goes back over everything archived since its last dream and works on its memory. Off by default; `shore dream --now` starts one either way.",
+  every: "Time from the start of the last dream that finished or reached its limit until the next one is due. Defaults to 3d.",
+  start_between: "Local time range a scheduled dream may start in, like \"02:00-07:00\"; it may cross midnight. Unset lets one start at any hour.",
+  idle_after: "How long since the user's last message, in any thread, before a dream may start. Defaults to 2h.",
+  min_turns: "Messages from the user, in any thread, since the last dream that finished before another is due. Defaults to 20.",
+  time_limit: "Longest a dream may run, from 1m to 6h. It is told to wrap up a sixth of the way from the end, ten minutes before at most. Defaults to 90m.",
+  system_prompt: "Markdown file, relative to the config directory, that opens a dream's system prompt in place of its model's own. Unset uses the model's.",
+  tools: "Tools a dream may use, as names or name* patterns, with ask_<name> for a sub-agent. Unset gives it the character's own tools and sub-agents. Either way it never gets scheduling, thread, picture or MCP tools.",
+  model: "Model dreams run on, as provider:model_id. Unset runs them on the character's chat model; a bare --background in shore model use never sets it.",
+};
+
 const IMAGE_DESCRIPTIONS: Record<string, string> = {
   max_tokens: "Most tokens an image may cost; Claude charges one per 28×28-pixel patch. 1,600 fits a 4:3 photo at about 1270×952 (1,564 tokens), 1,000 at 1008×756; 0 leaves only max_edge and the model's own limit.",
   max_edge: "Longest side in pixels. A 4:3 photo costs 1,036 tokens at 1024, 1,610 at 1280, 2,352 at 1568 and 3,888 at 2000 on Claude 4.7 and later; earlier models cap any image at 1,568 tokens (about 1270×952).",
@@ -240,6 +252,8 @@ function describeOption(path: readonly string[]): string {
   const leaf = path.at(-1) ?? "configuration";
   const plan = path[0] === "plan_limits" ? PLAN_LIMIT_DESCRIPTIONS[leaf] : undefined;
   if (plan !== undefined) return plan;
+  const dreaming = path[0] === "dreaming" ? DREAMING_DESCRIPTIONS[leaf] : undefined;
+  if (dreaming !== undefined) return dreaming;
   const user = leaf === "user" ? USER_DESCRIPTIONS[path[0] ?? ""] : undefined;
   if (user !== undefined) return user;
   const image = path[0] === "images" ? describeImageOption(path) : undefined;

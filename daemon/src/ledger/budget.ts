@@ -661,6 +661,7 @@ function pendingAttemptCost(
       "keepalive",
       "compaction",
       "dreaming",
+      "dreaming_tool_loop",
       "memory_query",
       "subagent",
     ].filter((callType) => kinds.some((kind) => callTypeMatchesUsageKind(callType, kind)));
@@ -1064,6 +1065,7 @@ function callTypeMatchesUsageKind(callType: string, usageKind: string): boolean 
     case "compaction":
       return usageKind === "compaction";
     case "dreaming":
+    case "dreaming_tool_loop":
       return usageKind === "dreaming";
     case "memory_query":
       return usageKind === "memory_query";
@@ -1110,6 +1112,7 @@ export function isBackgroundCall(callType: string): boolean {
     callType === "keepalive" ||
     callType === "compaction" ||
     callType === "dreaming" ||
+    callType === "dreaming_tool_loop" ||
     callType === "memory_query"
   );
 }

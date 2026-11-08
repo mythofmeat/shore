@@ -199,6 +199,11 @@ describe("removing providers", () => {
     expect(() => removeProvider(w.ctx, { provider: "openrouter" })).toThrow("chat.model (openrouter:anthropic/claude)");
   });
 
+  test("a provider only dreams run on is still in use", async () => {
+    const w = await world("[dreaming]\nmodel = \"openrouter:anthropic/claude\"\n\n[providers.openrouter]\ndiscover = true\n");
+    expect(() => removeProvider(w.ctx, { provider: "openrouter" })).toThrow("dreaming.model (openrouter:anthropic/claude)");
+  });
+
   test("removing a provider takes its tables, keys and limits with it and leaves the rest of the file alone", async () => {
     const w = await world("# mine\n[chat]\nmodel = \"x:y\"\n\n[providers.openrouter]\ndiscover = true\nmax_output_tokens = 4096\n\n[providers.deepseek]\ndiscover = true\n");
     await addCredential(w.ctx, { provider: "openrouter", name: "work", secret: SECRET, no_check: true });

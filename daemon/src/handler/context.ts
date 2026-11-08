@@ -18,6 +18,8 @@ import type { Message } from "../engine/types.ts";
 import {
   ensureActivePromptSnapshot,
   ensureCharacterWorkspace,
+  loadCanonicalMemoryIndex,
+  loadCanonicalPromptFile,
   loadPromptFile,
   loadMemoryIndex,
   loadThreadFiles,
@@ -41,6 +43,7 @@ export interface PrepareChatContextParams {
   messages: Message[];
   hasPriorContext: boolean;
   activeConversation?: boolean;
+  canonicalPromptFiles?: boolean;
   mcpToolDefs: readonly ToolDefinition[];
   timeZone?: string;
 }
@@ -101,7 +104,14 @@ export async function prepareChatContext(
 
   const workspace = characterWorkspace(config, character);
   const activeConversation = params.activeConversation ?? messages.length > 0;
-  if (activeConversation) {
+  const canonical = params.canonicalPromptFiles === true;
+  if (canonical) {
+    try {
+      await ensureCharacterWorkspace(workspace);
+    } catch (e) {
+      shoreLog.warn(`shore: failed to prepare character workspace for ${character}: ${String(e)}`);
+    }
+  } else if (activeConversation) {
     try {
       await ensureActivePromptSnapshot(
         characterDataDir,
@@ -120,8 +130,9 @@ export async function prepareChatContext(
     }
   }
 
-  const promptFile = (name: string) =>
-    loadPromptFile(
+  const promptFile = async (name: string) => canonical
+    ? await loadCanonicalPromptFile(workspace, name)
+    : await loadPromptFile(
       characterDataDir,
       workspace,
       name,
@@ -131,11 +142,13 @@ export async function prepareChatContext(
   const userDefinition = await promptFile(USER_FILE);
   const systemPrompt = await loadSystemPrompt(config, resolved);
   const toolsGuidance = await promptFile(TOOLS_FILE);
-  const memoryIndex = await loadMemoryIndex(
-    characterDataDir,
-    workspace,
-    params.thread,
-  );
+  const memoryIndex = canonical
+    ? await loadCanonicalMemoryIndex(workspace)
+    : await loadMemoryIndex(
+      characterDataDir,
+      workspace,
+      params.thread,
+    );
 
   const promptParams = {
     thread: await threadPrompt(characterDataDir, workspace, params.thread),
@@ -193,6 +206,7 @@ export async function buildChatShapeRequestFromDisk(
     mcpToolDefs?: readonly ToolDefinition[];
     timeZone?: string;
     activeConversation?: boolean;
+    canonicalPromptFiles?: boolean;
     env?: NodeJS.ProcessEnv;
   } = {},
 ): Promise<BuiltRequest & { messageBudget: number }> {
@@ -208,6 +222,7 @@ export async function buildChatShapeRequestFromDisk(
     ...(options.activeConversation === undefined
       ? {}
       : { activeConversation: options.activeConversation }),
+    ...(options.canonicalPromptFiles === undefined ? {} : { canonicalPromptFiles: options.canonicalPromptFiles }),
     ...(options.timeZone === undefined ? {} : { timeZone: options.timeZone }),
   });
 

@@ -11,6 +11,7 @@ import {
   parseAppConfig,
   toolGrants,
   validateCompaction,
+  validateDreaming,
   validateHeartbeat,
   validateImages,
   validateAppConfigLayer,
@@ -456,6 +457,13 @@ function validateConfig(
   warnOnUnresolvableModelRef(
     catalog,
     providers,
+    "dreaming.model",
+    app.defaults.background.dreaming,
+    onWarn,
+  );
+  warnOnUnresolvableModelRef(
+    catalog,
+    providers,
     "subagents.model",
     app.defaults.subagent_model,
     onWarn,
@@ -501,6 +509,9 @@ function validateConfig(
 
   const heartbeat = validateHeartbeat(app.behavior.autonomy.heartbeat);
   if (heartbeat !== undefined) throw validationError(heartbeat);
+
+  const dreaming = validateDreaming(app.memory.dreaming);
+  if (dreaming !== undefined) throw validationError(dreaming);
 
   const images = validateImages(app.images);
   if (images !== undefined) throw validationError(images);

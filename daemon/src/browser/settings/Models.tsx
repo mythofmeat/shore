@@ -3,6 +3,7 @@ import type { ModelInfoResult } from "../../protocol/ModelInfoResult.ts";
 import type { ModelSettingsDetail } from "../../protocol/ModelSettingsDetail.ts";
 import type { ModelSettingSchemaEntry } from "../../protocol/ModelSettingSchemaEntry.ts";
 import type { ModelPreferenceScope } from "../../protocol/ModelPreferenceScope.ts";
+import type { BackgroundModelTarget } from "../../protocol/BackgroundModelTarget.ts";
 import type { ChromeSnapshot } from "../workspace.ts";
 import { modelSettingControl } from "../model_forms.ts";
 import { IconButton, Spinner } from "../ui/controls.tsx";
@@ -16,11 +17,11 @@ import { sourceLabel } from "./format.ts";
 
 type Inspect = ModelTarget | { kind: "model"; name: string };
 
-function inspectArgs(target: Inspect): { name?: string; background_task?: "all" | "heartbeat" | "compaction"; subagent?: string } {
+function inspectArgs(target: Inspect): { name?: string; background_task?: BackgroundModelTarget; subagent?: string } {
   return target.kind === "model" ? { name: target.name } : targetArgs(target);
 }
 
-function targetArgs(target: ModelTarget): { background_task?: "all" | "heartbeat" | "compaction"; subagent?: string } {
+function targetArgs(target: ModelTarget): { background_task?: BackgroundModelTarget; subagent?: string } {
   return target.kind === "background" ? { background_task: target.task } : target.kind === "subagent" ? { subagent: target.name } : {};
 }
 
@@ -121,9 +122,9 @@ export function ModelsPage({ state }: { state: ChromeSnapshot }) {
         {state.thread === null ? null : row({ kind: "thread" }, thread?.chat_model ?? null, thread?.chat_model === undefined ? `thread-default` : `thread ${state.thread}`)}
       </div>
     </SettingsSection>
-    <SettingsSection title="Background tasks" description="Heartbeat check-ins and compaction can use a different model or settings from chat.">
+    <SettingsSection title="Background tasks" description="Heartbeat check-ins, compaction and dreaming can use a different model or settings from chat.">
       <div className="rows">
-        {(["heartbeat", "compaction"] as const).map((task) => { const item = role(task); return row({ kind: "background", task }, item?.model, item?.source); })}
+        {(["heartbeat", "compaction", "dreaming"] as const).map((task) => { const item = role(task); return row({ kind: "background", task }, item?.model, item?.source); })}
       </div>
     </SettingsSection>
     {subagents.length === 0 ? null : <SettingsSection title="Subagents">
@@ -131,9 +132,9 @@ export function ModelsPage({ state }: { state: ChromeSnapshot }) {
     </SettingsSection>}
     <SettingsSection title="Model details" actions={<select className="select" aria-label="Show details for" value={targetKey(inspect)} onChange={(event) => {
       const value = event.target.value;
-      setInspect(value === "character" ? { kind: "character" } : value.startsWith("background:") ? { kind: "background", task: value.slice(11) as "heartbeat" | "compaction" } : value.startsWith("model:") ? { kind: "model", name: value.slice(6) } : { kind: "subagent", name: value.slice(9) });
+      setInspect(value === "character" ? { kind: "character" } : value.startsWith("background:") ? { kind: "background", task: value.slice(11) as "heartbeat" | "compaction" | "dreaming" } : value.startsWith("model:") ? { kind: "model", name: value.slice(6) } : { kind: "subagent", name: value.slice(9) });
     }}>
-      <option value="character">Chat</option><option value="background:heartbeat">Heartbeat</option><option value="background:compaction">Compaction</option>
+      <option value="character">Chat</option><option value="background:heartbeat">Heartbeat</option><option value="background:compaction">Compaction</option><option value="background:dreaming">Dreaming</option>
       {subagents.map((agent) => <option key={agent.name} value={`subagent:${agent.name}`}>Subagent {agent.name}</option>)}
       <optgroup label="Any model">{flattenModels(listing).map((model) => <option key={model.qualified_name} value={`model:${model.qualified_name}`}>{model.qualified_name}</option>)}</optgroup>
     </select>}>

@@ -3,7 +3,7 @@ import { required } from "../util/required.ts";
 import { enforceBudgetForCall, type BudgetBlock, type CallBlock } from "./budget.ts";
 import { claudePlanBlockFor } from "./plan_limits.ts";
 import { recentCallCost } from "./query.ts";
-import { ledgerFor } from "./record.ts";
+import { continuationOf, ledgerFor } from "./record.ts";
 import type { CallContext, SidecarRequest } from "../llm/types.ts";
 
 export function budgetBlockFor(
@@ -59,12 +59,8 @@ function projectedLoopCost(
   if (cap === undefined || cap <= 1) return undefined;
   if (request.tools === undefined || request.tools.length === 0) return undefined;
 
-  const perCall = recentCallCost(db, provider, request.model, continuationType(request));
+  const perCall = recentCallCost(db, provider, request.model, continuationOf(request.context?.call_type ?? "message"));
   if (perCall === undefined) return undefined;
 
   return perCall * (cap - 1);
-}
-
-function continuationType(request: SidecarRequest): string {
-  return request.context?.call_type === "heartbeat" ? "heartbeat_tool_loop" : "tool_loop";
 }

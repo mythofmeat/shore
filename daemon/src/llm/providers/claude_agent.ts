@@ -330,7 +330,7 @@ function discardMissingAnchor(
 export function conversationKey(req: SidecarRequest): string {
   const callType = req.context?.call_type;
   const scope = callType === undefined || callType === "message" || callType === "tool_loop" || callType === "keepalive"
-    ? undefined : callType === "heartbeat_tool_loop" ? "heartbeat" : callType;
+    ? undefined : callType === "heartbeat_tool_loop" ? "heartbeat" : callType === "dreaming_tool_loop" ? "dreaming" : callType;
   return sessionKey(
     req.context?.character ?? "default",
     req.context?.ledger ?? "",

@@ -726,11 +726,11 @@ pub(crate) fn write_heartbeat_log<W: Write>(out: &mut W, data: &serde_json::Valu
         );
 
         let kind_color = match kind {
-            "tick_fired" => Tone::Active,
-            "message_sent" | "wake" | "recap_written" => Tone::Good,
+            "tick_fired" | "dream_started" => Tone::Active,
+            "message_sent" | "wake" | "recap_written" | "dream_finished" => Tone::Good,
             "message_skipped" => Tone::Muted,
             "tool_use" => Tone::Active,
-            "dormant" | "call_failed" => COLOR_ERROR,
+            "dormant" | "call_failed" | "dream_failed" => COLOR_ERROR,
             "recap_missing" | "budget_paused" => Tone::Warn,
             _ => Tone::Heading,
         };

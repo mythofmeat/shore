@@ -41,7 +41,7 @@ const materialWrite = (cacheReadTokens: number, cacheWriteTokens: number): boole
   cacheWriteTokens * 100 >= cacheReadTokens;
 
 function toolLoopKind(callType: string): string | undefined {
-  return callType === "tool_loop" || callType === "heartbeat_tool_loop" ? callType : undefined;
+  return callType === "tool_loop" || callType === "heartbeat_tool_loop" || callType === "dreaming_tool_loop" ? callType : undefined;
 }
 
 interface ModelIdentity {
@@ -222,7 +222,9 @@ export class CacheTracker {
       sameModel(this.#keepaliveMissedModel, identity) &&
       obs.cache_read_tokens > 0 &&
       obs.call_type !== "heartbeat" &&
-      obs.call_type !== "heartbeat_tool_loop"
+      obs.call_type !== "heartbeat_tool_loop" &&
+      obs.call_type !== "dreaming" &&
+      obs.call_type !== "dreaming_tool_loop"
     ) {
       this.#keepaliveMissedModel = undefined;
     }
@@ -237,7 +239,7 @@ export class CacheTracker {
     } else if (!skipNormalCacheReadComparison) {
       this.#lastCacheRead = obs.cache_read_tokens;
       this.#clearToolLoopBaseline();
-    } else if (obs.call_type === "heartbeat") {
+    } else if (obs.call_type === "heartbeat" || obs.call_type === "dreaming") {
       this.#clearToolLoopBaseline();
     }
 

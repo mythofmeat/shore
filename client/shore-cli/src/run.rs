@@ -227,6 +227,7 @@ pub(crate) async fn execute(
                         "trace heartbeat",
                         "what each heartbeat tick thought and did",
                     ),
+                    ("trace dreams", "what each dream read and changed"),
                     (
                         "trace events",
                         "the heartbeat timeline: fired, dormant, woke",
@@ -310,6 +311,7 @@ pub(crate) async fn execute(
         | CliCommand::Clear { .. }
         | CliCommand::Config { .. }
         | CliCommand::Usage { .. }
+        | CliCommand::Dream { .. }
         | CliCommand::Completions { .. }) => {
             handle_generic_swp_command(&mut conn, other, cli.character.as_deref()).await?;
         }
@@ -340,6 +342,7 @@ pub(crate) fn wants_json(other: &CliCommand) -> bool {
             Some(
                 crate::cli::TraceCommand::Calls { json, .. }
                 | crate::cli::TraceCommand::Heartbeat { json, .. }
+                | crate::cli::TraceCommand::Dreams { json, .. }
                 | crate::cli::TraceCommand::Errors { json, .. }
                 | crate::cli::TraceCommand::Events { json, .. }
                 | crate::cli::TraceCommand::Subagent { json, .. },
@@ -364,6 +367,7 @@ pub(crate) fn wants_json(other: &CliCommand) -> bool {
         | CliCommand::Export { json, .. }
         | CliCommand::Import { json, .. }
         | CliCommand::Compact { json, .. }
+        | CliCommand::Dream { json, .. }
         | CliCommand::Segments { json, .. }
         | CliCommand::Clear { json, .. }
         | CliCommand::Usage { json, .. } => *json,
@@ -1224,6 +1228,7 @@ fn reads_the_selected_thread(command: &CliCommand) -> bool {
         | CliCommand::Provider { .. }
         | CliCommand::Config { .. }
         | CliCommand::Usage { .. }
+        | CliCommand::Dream { .. }
         | CliCommand::Trace { .. }
         | CliCommand::Debug { .. }
         | CliCommand::Export { .. }

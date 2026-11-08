@@ -906,6 +906,22 @@
             "properties": {
               "name": {
                 "type": "string",
+                "const": "dream"
+              },
+              "data": {
+                "$ref": "#/$defs/DreamReport"
+              }
+            },
+            "required": [
+              "name",
+              "data"
+            ]
+          },
+          {
+            "type": "object",
+            "properties": {
+              "name": {
+                "type": "string",
                 "const": "heartbeat_set_dormant"
               },
               "data": {
@@ -4935,7 +4951,10 @@
           "dormant_ping",
           "budget_paused",
           "recap_written",
-          "recap_missing"
+          "recap_missing",
+          "dream_started",
+          "dream_finished",
+          "dream_failed"
         ]
       },
       "ActivityStatusReport": {
@@ -5341,7 +5360,8 @@
         "enum": [
           "message",
           "heartbeat",
-          "compaction"
+          "compaction",
+          "dream"
         ]
       },
       "ShutdownWindow": {
@@ -6056,7 +6076,8 @@
       "TranscriptSource": {
         "type": "string",
         "enum": [
-          "heartbeat"
+          "heartbeat",
+          "dreaming"
         ]
       },
       "TranscriptRow": {
@@ -6234,6 +6255,129 @@
           "scheduled",
           "dormant",
           "active"
+        ]
+      },
+      "DreamReport": {
+        "type": "object",
+        "properties": {
+          "character": {
+            "type": "string"
+          },
+          "enabled": {
+            "type": "boolean"
+          },
+          "queued": {
+            "type": "boolean"
+          },
+          "running": {
+            "type": "boolean"
+          },
+          "next_due_at": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "last": {
+            "anyOf": [
+              {
+                "$ref": "#/$defs/DreamRecord"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "character",
+          "enabled",
+          "queued",
+          "running"
+        ]
+      },
+      "DreamRecord": {
+        "type": "object",
+        "properties": {
+          "started_at": {
+            "type": "string"
+          },
+          "ended_at": {
+            "type": "string"
+          },
+          "outcome": {
+            "$ref": "#/$defs/DreamOutcome"
+          },
+          "conversations": {
+            "type": "integer",
+            "format": "uint32",
+            "minimum": 0
+          },
+          "commits": {
+            "type": "integer",
+            "format": "uint32",
+            "minimum": 0
+          },
+          "files": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "pushed": {
+            "type": [
+              "boolean",
+              "null"
+            ]
+          },
+          "summary": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "error": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "stopped_by": {
+            "anyOf": [
+              {
+                "$ref": "#/$defs/DreamStop"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "started_at",
+          "ended_at",
+          "outcome",
+          "conversations",
+          "commits",
+          "files"
+        ]
+      },
+      "DreamOutcome": {
+        "type": "string",
+        "enum": [
+          "finished",
+          "cut_off",
+          "failed",
+          "interrupted"
+        ]
+      },
+      "DreamStop": {
+        "type": "string",
+        "enum": [
+          "time_limit",
+          "round_limit",
+          "shutdown",
+          "budget"
         ]
       },
       "KeepalivePingResult": {
@@ -7904,7 +8048,8 @@
         "enum": [
           "all",
           "heartbeat",
-          "compaction"
+          "compaction",
+          "dreaming"
         ]
       },
       "ConfigResult": {
@@ -10724,6 +10869,22 @@
             "properties": {
               "name": {
                 "type": "string",
+                "const": "dream"
+              },
+              "data": {
+                "$ref": "#/$defs/DreamReport"
+              }
+            },
+            "required": [
+              "name",
+              "data"
+            ]
+          },
+          {
+            "type": "object",
+            "properties": {
+              "name": {
+                "type": "string",
                 "const": "heartbeat_set_dormant"
               },
               "data": {
@@ -14753,7 +14914,10 @@
           "dormant_ping",
           "budget_paused",
           "recap_written",
-          "recap_missing"
+          "recap_missing",
+          "dream_started",
+          "dream_finished",
+          "dream_failed"
         ]
       },
       "ActivityStatusReport": {
@@ -15159,7 +15323,8 @@
         "enum": [
           "message",
           "heartbeat",
-          "compaction"
+          "compaction",
+          "dream"
         ]
       },
       "ShutdownWindow": {
@@ -15874,7 +16039,8 @@
       "TranscriptSource": {
         "type": "string",
         "enum": [
-          "heartbeat"
+          "heartbeat",
+          "dreaming"
         ]
       },
       "TranscriptRow": {
@@ -16052,6 +16218,129 @@
           "scheduled",
           "dormant",
           "active"
+        ]
+      },
+      "DreamReport": {
+        "type": "object",
+        "properties": {
+          "character": {
+            "type": "string"
+          },
+          "enabled": {
+            "type": "boolean"
+          },
+          "queued": {
+            "type": "boolean"
+          },
+          "running": {
+            "type": "boolean"
+          },
+          "next_due_at": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "last": {
+            "anyOf": [
+              {
+                "$ref": "#/$defs/DreamRecord"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "character",
+          "enabled",
+          "queued",
+          "running"
+        ]
+      },
+      "DreamRecord": {
+        "type": "object",
+        "properties": {
+          "started_at": {
+            "type": "string"
+          },
+          "ended_at": {
+            "type": "string"
+          },
+          "outcome": {
+            "$ref": "#/$defs/DreamOutcome"
+          },
+          "conversations": {
+            "type": "integer",
+            "format": "uint32",
+            "minimum": 0
+          },
+          "commits": {
+            "type": "integer",
+            "format": "uint32",
+            "minimum": 0
+          },
+          "files": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "pushed": {
+            "type": [
+              "boolean",
+              "null"
+            ]
+          },
+          "summary": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "error": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "stopped_by": {
+            "anyOf": [
+              {
+                "$ref": "#/$defs/DreamStop"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "started_at",
+          "ended_at",
+          "outcome",
+          "conversations",
+          "commits",
+          "files"
+        ]
+      },
+      "DreamOutcome": {
+        "type": "string",
+        "enum": [
+          "finished",
+          "cut_off",
+          "failed",
+          "interrupted"
+        ]
+      },
+      "DreamStop": {
+        "type": "string",
+        "enum": [
+          "time_limit",
+          "round_limit",
+          "shutdown",
+          "budget"
         ]
       },
       "KeepalivePingResult": {
@@ -17722,7 +18011,8 @@
         "enum": [
           "all",
           "heartbeat",
-          "compaction"
+          "compaction",
+          "dreaming"
         ]
       },
       "ConfigResult": {

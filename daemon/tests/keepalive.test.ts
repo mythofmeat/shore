@@ -276,6 +276,22 @@ describe("what counts as a warm", () => {
     expect(required(h.service.scheduleFor(CHARACTER)).last_active_at).toBe(before);
   });
 
+  test("a dream on the chat model is not a warm of the chat's prefix, so the ping still goes out", async () => {
+    const h = harness();
+    armWarm(h);
+    const before = required(h.service.scheduleFor(CHARACTER));
+
+    h.clock.advance(minutes(50));
+    h.service.observe(CHARACTER, MODEL, "dreaming");
+    const after = required(h.service.scheduleFor(CHARACTER));
+    expect(after.last_warm_at).toBe(before.last_warm_at);
+    expect(after.last_active_at).toBe(before.last_active_at);
+
+    h.clock.advance(minutes(6));
+    await h.service.tick();
+    expect(h.sent).toHaveLength(1);
+  });
+
   test("pinging stops after the idle ceiling", async () => {
     const h = harness();
     armWarm(h);

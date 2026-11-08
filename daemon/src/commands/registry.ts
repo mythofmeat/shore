@@ -6,6 +6,7 @@ import { usageConfigView } from "../ledger/budget.ts";
 import { describeTool, runTool } from "./run_tool.ts";
 import { clear, segments } from "./segments.ts";
 import { status, errorLog, heartbeatLog, heartbeatTickNow, heartbeatSetDormant, heartbeatSetActive } from "./status.ts";
+import { dream } from "./dream.ts";
 import { statusContext } from "./status_context.ts";
 import { callLog, transcript } from "./call_log.ts";
 import { subagentTrace } from "./subagent_trace.ts";
@@ -88,7 +89,7 @@ const heartbeatPresentation = { ...diagnosticPresentation, prerequisites: ["auto
 const modelPresentation = { category: "Models", scope: "optional_character", prerequisites: [], effects: ["read"], confirmation: "none" } as const;
 const modelTargetFields = {
   name: { label: "Model", choices: "models", hint: "Omit for the active model; do not combine with role selectors" },
-  background_task: { label: "Background task", hint: "all, heartbeat or compaction" },
+  background_task: { label: "Background task", hint: "all, heartbeat, compaction or dreaming" },
   subagent: { label: "Subagent", choices: "subagents", hint: "A configured name, or all for the shared subagent model" },
 } as const;
 const modelHiddenField = { label: "Include hidden models", hint: "Allow a model excluded by discovery filters" } as const;
@@ -218,12 +219,15 @@ export const commandOperations: OperationRegistry<CommandOperationContext> = {
     diff: { label: "Compare calls", hint: "Compare the chosen call with its previous call or an explicit comparison ID" },
     against: { label: "Compare against call ID" }, wire: { label: "Include full HTTP bodies", hint: "Inspect captured request/response bodies and redacted headers" },
   } }, (context, args) => callLog({ characterName: engineOf(context).characterName, callStore: context.deps.callStore }, args)),
-  transcript: register("transcript", { ...diagnosticPresentation, label: "Read transcripts", fields: { source: { label: "Transcript source", hint: "Heartbeat activity or memory recall" }, count: storedDiagnosticCount } },
+  transcript: register("transcript", { ...diagnosticPresentation, label: "Read transcripts", fields: { source: { label: "Transcript source", hint: "Heartbeat or dream activity" }, count: storedDiagnosticCount } },
     (context, args) => transcript({ characterName: engineOf(context).characterName, callStore: context.deps.callStore }, args)),
   subagent_trace: register("subagent_trace", { ...diagnosticPresentation, label: "Stored subagent runs", fields: { ids: { label: "Parent tool-use IDs", hint: "Omit to list recent runs" }, count: storedDiagnosticCount } },
     (context, args) => subagentTrace({ characterName: engineOf(context).characterName, dataDir: context.session.dataDir }, args)),
   heartbeat_tick_now: register("heartbeat_tick_now", { ...heartbeatPresentation, label: "Schedule heartbeat now", effects: ["runtime_write", "provider_call"], fields: {} },
     (context) => heartbeatTickNow(statusContext(engineOf(context), context.session, context.deps))),
+  dream: register("dream", { category: "Memory", scope: "character", prerequisites: [], effects: ["runtime_write", "provider_call"], confirmation: "none", label: "Dream", fields: {
+    now: { label: "Dream now", hint: "Start a dream at the next autonomy tick instead of waiting for its schedule" },
+  } }, (context, args) => dream({ characterName: engineOf(context).characterName, config: context.session.config, autonomy: context.deps.autonomy }, args)),
   heartbeat_set_dormant: register("heartbeat_set_dormant", { ...heartbeatPresentation, label: "Make heartbeat dormant", fields: {} },
     (context) => heartbeatSetDormant(statusContext(engineOf(context), context.session, context.deps))),
   heartbeat_set_active: register("heartbeat_set_active", { ...heartbeatPresentation, label: "Activate heartbeat", fields: {} },

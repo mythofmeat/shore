@@ -42,6 +42,7 @@ fn config_modes(command: &CliCommand) -> (bool, bool) {
         | CliCommand::Model { .. }
         | CliCommand::Provider { .. }
         | CliCommand::Usage { .. }
+        | CliCommand::Dream { .. }
         | CliCommand::Completions { .. }
         | CliCommand::View { .. }
         | CliCommand::Ui { .. } => (false, false),
@@ -506,6 +507,7 @@ pub(crate) fn render(
                 .unwrap_or("?")
         )),
         "refresh_all_provider_models" => Some(render_provider_refresh_all(data)),
+        "dream" => Some(crate::output::commands::dream_report_text(data)),
         "heartbeat_tick_now" => Some(format!(
             "Scheduled a heartbeat tick for {}.",
             data.get("character")

@@ -46,7 +46,7 @@ import { compact, compactSegment, countTurns, tryBeginCompaction, type Compactio
 import { startPass, type PassScope } from "./activity.ts";
 import { isRealUserTurn } from "../../engine/versions.ts";
 import type { CompactionTrigger } from "../../protocol/CompactionTrigger.ts";
-import { DEFAULT_COMPACT_PROMPT } from "./prompts.ts";
+import { DEFAULT_COMPACT_PROMPT, withDreaming } from "./prompts.ts";
 import { renderToolValue } from "../../tools/media.ts";
 import {
   CompactionError,
@@ -615,8 +615,10 @@ async function resolveDeps(
   dryRun: boolean,
 ): Promise<ResolvedDeps> {
   const configDir = effective.dirs.config;
-  const promptTemplate =
-    resolvePromptTemplate(configDir, character, "compact.md") ?? DEFAULT_COMPACT_PROMPT;
+  const promptTemplate = withDreaming(
+    resolvePromptTemplate(configDir, character, "compact.md") ?? DEFAULT_COMPACT_PROMPT,
+    effective.app.memory.dreaming.enabled,
+  );
 
   const threadModel = await threadChatModel(effective.dirs.data, character, thread);
   const model = resolveBackgroundModel(
