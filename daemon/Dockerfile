@@ -22,6 +22,7 @@ RUN bun run build:daemon
 FROM debian:stable
 RUN apt-get update && apt-get upgrade -y
 
+###################
 ### Mandatory packages ###
 RUN apt-get update && apt-get install -y \
     ca-certificates \
@@ -60,13 +61,7 @@ COPY --from=ghcr.io/astral-sh/uv:latest /uv /uvx /usr/local/bin/
 COPY --from=oven/bun:debian /usr/local/bin/bun /usr/local/bin/bun
 RUN ln -sf /usr/local/bin/bun /usr/local/bin/bunx \
     && ln -sf /usr/local/bin/bun /usr/local/bin/node
-
 ###################
-
-ARG EXTRA_PACKAGES=
-RUN if [ -n "$EXTRA_PACKAGES" ]; then \
-    apt-get update && DEBIAN_FRONTEND=noninteractive apt-get install -y $EXTRA_PACKAGES; \
-    fi
 
 COPY daemon/entrypoint.sh /opt/shore/entrypoint
 COPY --from=patch-builder /build/daemon/dist/shore-apply-patch /opt/shore/
