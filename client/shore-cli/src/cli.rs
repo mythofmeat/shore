@@ -707,6 +707,13 @@ pub(crate) enum SegmentsCommand {
         index: u32,
     },
 
+    /// Show which thread and segment hold each message, by the ids chat log
+    /// results list, so the right segment can be excluded
+    Find {
+        #[arg(required = true, value_name = "MSG_ID")]
+        msg_ids: Vec<String>,
+    },
+
     /// Exclude a segment from history search
     Exclude {
         #[arg(add = values(Completes::Segments))]
@@ -2765,26 +2772,31 @@ pub(crate) fn to_swp_command(
         CliCommand::Compact { .. } => compact_to_swp(cmd),
 
         CliCommand::Segments { subcommand, .. } => {
-            let (action, segment_index, field_value) = match subcommand {
-                None => (SegmentAction::List, None, None),
-                Some(SegmentsCommand::Show { index }) => (SegmentAction::Show, Some(index), None),
-                Some(SegmentsCommand::Exclude { index }) => {
-                    (SegmentAction::Exclude, Some(index), None)
-                }
-                Some(SegmentsCommand::Include { index }) => {
-                    (SegmentAction::Include, Some(index), None)
-                }
+            let at = |action, index: &u32, value: Option<&Option<String>>| SegmentsArgs {
+                action: Some(action),
+                index: Some(u64::from(*index)),
+                value: value.cloned(),
+                ..SegmentsArgs::default()
+            };
+            operation_to_swp::<InspectSegments>(match subcommand {
+                None => SegmentsArgs {
+                    action: Some(SegmentAction::List),
+                    ..SegmentsArgs::default()
+                },
+                Some(SegmentsCommand::Find { msg_ids }) => SegmentsArgs {
+                    action: Some(SegmentAction::Find),
+                    msg_ids: Some(msg_ids.clone()),
+                    ..SegmentsArgs::default()
+                },
+                Some(SegmentsCommand::Show { index }) => at(SegmentAction::Show, index, None),
+                Some(SegmentsCommand::Exclude { index }) => at(SegmentAction::Exclude, index, None),
+                Some(SegmentsCommand::Include { index }) => at(SegmentAction::Include, index, None),
                 Some(SegmentsCommand::Label { index, label }) => {
-                    (SegmentAction::Label, Some(index), Some(label))
+                    at(SegmentAction::Label, index, Some(label))
                 }
                 Some(SegmentsCommand::Note { index, note }) => {
-                    (SegmentAction::Note, Some(index), Some(note))
+                    at(SegmentAction::Note, index, Some(note))
                 }
-            };
-            operation_to_swp::<InspectSegments>(SegmentsArgs {
-                action: Some(action),
-                index: segment_index.map(|index| u64::from(*index)),
-                value: field_value.cloned(),
             })
         }
 

@@ -775,7 +775,7 @@ wire_types! {
     }
 
     #[serde(rename_all = "snake_case")]
-    pub enum SegmentAction { List, Show, Exclude, Include, Label, Note }
+    pub enum SegmentAction { List, Show, Find, Exclude, Include, Label, Note }
 
     #[serde(rename_all = "snake_case")]
     pub enum SegmentMutation { Exclude, Include, Label, Note }
@@ -792,6 +792,10 @@ wire_types! {
         #[serde(default, deserialize_with = "deserialize_present", skip_serializing_if = "Option::is_none")]
         #[ts(optional)]
         pub value: Option<Option<String>>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        pub msg_ids: Option<Vec<String>>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        pub thread: Option<String>,
     }
 
     pub struct SegmentSummary {
@@ -835,8 +839,26 @@ wire_types! {
         pub segment: SegmentSummary,
     }
 
+    pub struct MessageCopy {
+        pub thread: String,
+        #[serde(deserialize_with = "deserialize_nullable")]
+        #[ts(type = "number | null")]
+        pub segment: Option<u64>,
+        pub excluded: bool,
+    }
+
+    pub struct FoundMessage {
+        pub msg_id: String,
+        pub copies: Vec<MessageCopy>,
+    }
+
+    pub struct SegmentsFound {
+        pub character: String,
+        pub found: Vec<FoundMessage>,
+    }
+
     #[serde(untagged)]
-    pub enum SegmentsResult { Listing(SegmentsListing), Inspection(Box<SegmentInspection>), Changed(Box<SegmentChanged>) }
+    pub enum SegmentsResult { Listing(SegmentsListing), Inspection(Box<SegmentInspection>), Changed(Box<SegmentChanged>), Found(SegmentsFound) }
 
     #[serde(tag = "status", rename_all = "snake_case")]
     pub enum ClearResult {

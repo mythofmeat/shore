@@ -4,7 +4,9 @@ import { join } from "node:path";
 
 import { lastWroteNote } from "../src/autonomy/heartbeat_request.ts";
 import { defaultAppConfig } from "../src/config/app.ts";
+import { chatLogMessageId } from "../src/browser/chat/transcript.ts";
 import { CharacterRegistry } from "../src/characters.ts";
+import { segments } from "../src/commands/segments.ts";
 import { archiveKey, characterDataDir, threadDataDir } from "../src/config/dirs.ts";
 import type { LoadedConfig } from "../src/config/loader.ts";
 import { emptyCatalog, type ResolvedModel } from "../src/config/models.ts";
@@ -355,6 +357,60 @@ describe("chat logs across threads", () => {
     const fromStory = await handleSearchChatLogs({ query: "Mara", all_time: true }, threadDataDir(data, "frank", "story"), options("story"));
     expect(fromStory).toContain("u2");
     expect(fromStory).not.toContain("u1");
+  });
+
+  test("finding a message lists every thread and segment holding a copy, and a copy not archived yet, so the right segment can be excluded", async () => {
+    const config = await setup();
+    const data = config.dirs.data;
+    await createThread(data, "frank", "story", NOW);
+    await archive(data, "main", [message("u1", "the keeper's name is Mara", NOW), message("a1", "Mara it is", NOW)]);
+    const forked = [message("u3", "Mara rows out at dawn", NOW), message("a3", "the boat leaks", NOW)];
+    await archive(data, "main", forked);
+    await archive(data, "story", forked);
+    writeDurable(threadFile(data, "frank", "main", "active.jsonl"), serializeMessages([message("u4", "and then?", NOW)]));
+    await segments(data, "frank", "main", { action: "exclude", index: 1 });
+
+    expect(await segments(data, "frank", "story", { action: "find", msg_ids: ["u3", "u1", "u4", "u1", "gone"] })).toEqual({
+      character: "frank",
+      found: [
+        { msg_id: "u3", copies: [{ thread: "main", segment: 1, excluded: true }, { thread: "story", segment: 0, excluded: false }] },
+        { msg_id: "u1", copies: [{ thread: "main", segment: 0, excluded: false }] },
+        { msg_id: "u4", copies: [{ thread: "main", segment: null, excluded: false }] },
+        { msg_id: "gone", copies: [] },
+      ],
+    });
+
+    expect(await segments(data, "frank", "main", { action: "exclude", index: 0, thread: "story" })).toMatchObject({ thread: "story", segment: { index: 0, excluded: true } });
+    expect(await segments(data, "frank", "main", { action: "find", msg_ids: ["u3"] })).toMatchObject({
+      found: [{ msg_id: "u3", copies: [{ thread: "main", segment: 1, excluded: true }, { thread: "story", segment: 0, excluded: true }] }],
+    });
+    expect(await outcomeOf(segments(data, "frank", "main", { action: "exclude", index: 0, thread: "../story" }))).toThrow("invalid thread");
+  });
+
+  test("the web UI picks out the id of every message a chat log result lists, to look up their segments", async () => {
+    const config = await setup();
+    const data = config.dirs.data;
+    await createThread(data, "frank", "story", NOW);
+    const at = (time: string) => `2026-11-01T${time}:00Z`;
+    await archive(data, "main", [
+      message("u1", "the keeper's name is Mara", at("09:00")),
+      message("a1", "Mara it is", at("09:01")),
+      message("h1", "Mara keeps the light", at("12:00"), { origin: "autonomous" }),
+    ]);
+    const forked = [message("u3", "Mara rows out at dawn", at("13:00"))];
+    await archive(data, "main", forked);
+    await archive(data, "story", forked);
+    writeDurable(threadFile(data, "frank", "main", "active.jsonl"), serializeMessages([message("u4", "and Mara?", at("14:00"))]));
+    const options = { character: "frank", dbPath: join(data, HISTORY_DB_FILE), dataDir: data, thread: "story", indexPath: join(config.dirs.cache, "chat_logs.db"), timeZone: "UTC", userName: "sam" };
+    const listed = (result: string) => result.split("\n").flatMap((line) => chatLogMessageId(line) ?? []);
+
+    const search = await handleSearchChatLogs({ query: "Mara", all_time: true, sort: "oldest" }, threadDataDir(data, "frank", "story"), options);
+    expect(search).toContain("(heartbeat)");
+    expect(search).toContain("also in story");
+    expect(listed(search)).toEqual(["u1", "a1", "h1", "u3", "u4"]);
+    const read = await handleReadChatLogs({ around: "h1", before: 5, after: 5 }, threadDataDir(data, "frank", "story"), options);
+    expect(read).toContain("▶ ");
+    expect(listed(read)).toEqual(["u1", "a1", "h1", "u3", "u4"]);
   });
 
   test("a heartbeat finds what earlier heartbeats did in its own thread, since none of it is in its context", async () => {

@@ -1,5 +1,5 @@
 use ratatui::text::Line;
-use shore_common::protocol::operations::{SegmentSummary, ThreadUnread};
+use shore_common::protocol::operations::{MessageCopy, SegmentSummary, ThreadUnread};
 use shore_common::protocol::types::{CharacterInfo, ImageRef, Role, StreamMetadata, TokenCounts};
 
 use crate::tui::images::ImageCache;
@@ -414,6 +414,9 @@ pub(crate) struct App {
     pub compaction: Option<CompactionRun>,
     pub subagent_traces: std::collections::HashMap<String, Option<SubagentSection>>,
     pub pending_subagent_trace_ids: Vec<String>,
+    pub message_copies: std::collections::HashMap<String, Vec<MessageCopy>>,
+    pub pending_message_copies: Option<(String, Vec<String>)>,
+    pub stale_message_copies: bool,
     pub subagent_tasks: Vec<SubagentTaskView>,
     pub subagent_panel: Option<usize>,
     pub show_images: bool,
@@ -519,6 +522,9 @@ impl Default for App {
             compaction: None,
             subagent_traces: std::collections::HashMap::new(),
             pending_subagent_trace_ids: Vec::new(),
+            message_copies: std::collections::HashMap::new(),
+            pending_message_copies: None,
+            stale_message_copies: false,
             subagent_tasks: Vec::new(),
             subagent_panel: None,
             show_images: true,
@@ -548,6 +554,17 @@ impl Default for App {
 }
 
 impl App {
+    pub(crate) fn forget_message_copies(&mut self) {
+        self.message_copies.clear();
+        self.pending_message_copies = None;
+        self.stale_message_copies = false;
+    }
+
+    pub(crate) fn invalidate_message_copies(&mut self) {
+        self.message_copies.clear();
+        self.stale_message_copies = self.pending_message_copies.is_some();
+    }
+
     pub(crate) fn next_request_id(&mut self, kind: &str) -> String {
         self.request_seq = self.request_seq.wrapping_add(1);
         format!(
@@ -584,6 +601,7 @@ impl App {
         self.invalidate_palette_catalog();
         self.pending_subagent_trace_ids.clear();
         self.subagent_traces.clear();
+        self.forget_message_copies();
         self.subagent_tasks.clear();
         self.subagent_panel = None;
         self.compaction = None;

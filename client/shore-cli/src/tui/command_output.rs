@@ -88,6 +88,9 @@ fn segment_row(segment: &serde_json::Value) -> String {
 }
 
 fn render_segments(data: &serde_json::Value) -> String {
+    if let Some(found) = crate::output::commands::found_messages(data) {
+        return crate::output::commands::found_message_lines(&found).join("\n");
+    }
     if let Some(segment) = data.get("segment") {
         let mut rendered = segment_row(segment);
         if let Some(messages) = data.get("messages").and_then(serde_json::Value::as_array) {

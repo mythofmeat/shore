@@ -2,6 +2,7 @@ use std::io::Write;
 
 use crossterm::style::{Attribute, SetAttribute};
 use shore_common::duration::format_duration_ms;
+use shore_common::protocol::operations::{FoundMessage, MessageCopy};
 
 use super::transcript::{LogFilter, character_color, format_time, print_log};
 use super::vocab::{COLOR_ERROR, Tone, indent_to, paint, wrap_line};
@@ -69,7 +70,47 @@ pub(crate) fn format_command(name: &str, data: &serde_json::Value) {
     }
 }
 
+pub(crate) fn message_copy_label(copy: &MessageCopy) -> String {
+    match copy.segment {
+        Some(segment) if copy.excluded => format!("{} segment {segment}, excluded", copy.thread),
+        Some(segment) => format!("{} segment {segment}", copy.thread),
+        None => format!("{}, not archived", copy.thread),
+    }
+}
+
+pub(crate) fn found_messages(data: &serde_json::Value) -> Option<Vec<FoundMessage>> {
+    serde_json::from_value(data.get("found")?.clone()).ok()
+}
+
+pub(crate) fn found_message_lines(found: &[FoundMessage]) -> Vec<String> {
+    let width = found
+        .iter()
+        .map(|message| message.msg_id.chars().count())
+        .max()
+        .unwrap_or_default();
+    let mut lines = Vec::new();
+    for message in found {
+        let labels = if message.copies.is_empty() {
+            vec!["not found".to_owned()]
+        } else {
+            message.copies.iter().map(message_copy_label).collect()
+        };
+        let mut id = message.msg_id.as_str();
+        for label in labels {
+            lines.push(format!("{id:<width$}  {label}"));
+            id = "";
+        }
+    }
+    lines
+}
+
 fn print_segments(data: &serde_json::Value) {
+    if let Some(found) = found_messages(data) {
+        for line in found_message_lines(&found) {
+            cli_out!("{line}");
+        }
+        return;
+    }
     if let Some(segment) = data.get("segment") {
         print_segment_row(segment);
         if let Some(messages) = data.get("messages").and_then(serde_json::Value::as_array) {
