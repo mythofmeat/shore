@@ -3,8 +3,6 @@ services:
     build:
       context: .
       dockerfile: daemon/Dockerfile
-      args:
-        EXTRA_PACKAGES: ${SHORE_EXTRA_PACKAGES:-}
     restart: unless-stopped
     stop_grace_period: 30m
     environment:
