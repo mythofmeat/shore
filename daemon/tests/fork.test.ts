@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { existsSync, readdirSync } from "node:fs";
+import { existsSync } from "node:fs";
 import { mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 
@@ -12,6 +12,7 @@ import type { Message } from "../src/engine/types.ts";
 import { loadActivePromptFile } from "../src/memory/deferred_edits.ts";
 import { durableExists, threadFile } from "../src/storage/files.ts";
 import { writeCharacterState } from "../src/storage/store.ts";
+import { handlesUnder } from "./support/handles.ts";
 import { outcomeOf } from "./support/outcome.ts";
 import { testTmp } from "./support/tmp.ts";
 
@@ -133,13 +134,13 @@ describe("forking a thread", () => {
     const root = await character();
     await forkThread(root, "ada", "main", "warm", { now: () => NOW });
     await recoverForks(root, "ada");
-    const open = readdirSync("/proc/self/fd").length;
+    const open = handlesUnder(root);
     await forkThread(root, "ada", "main", "spin", { now: () => NOW });
-    expect(readdirSync("/proc/self/fd").length).toBe(open);
+    expect(handlesUnder(root)).toBe(open);
     expect(await outcomeOf(forkThread(root, "ada", "main", "cut", { now: () => NOW, failAfter: "provenance" }))).toThrow(/injected/);
-    const before = readdirSync("/proc/self/fd").length;
+    const before = handlesUnder(root);
     await recoverForks(root, "ada");
-    expect(readdirSync("/proc/self/fd").length).toBe(before);
+    expect(handlesUnder(root)).toBe(before);
   });
 });
 

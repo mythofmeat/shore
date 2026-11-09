@@ -1,5 +1,4 @@
 import { describe, expect, spyOn, test } from "bun:test";
-import { readdirSync } from "node:fs";
 import { mkdir, mkdtemp } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -10,6 +9,7 @@ import type { Message } from "../src/engine/types.ts";
 import * as files from "../src/storage/files.ts";
 import { readDurable, threadFile, writeDurable } from "../src/storage/files.ts";
 import { closeStorageConnections } from "../src/storage/store.ts";
+import { handlesUnder } from "./support/handles.ts";
 import { outcomeOf } from "./support/outcome.ts";
 
 const stamp = "2026-09-20T00:00:00Z";
@@ -137,15 +137,15 @@ describe("what the archive writer records and refuses", () => {
   });
 
   test("a compaction a crash left pending is settled before the next one, and nothing stays open", async () => {
-    const { dir, dbPath } = await conversation("pending");
+    const { data, dir, dbPath } = await conversation("pending");
     const crashed = HistoryStore.open(dbPath);
     crashed.beginCompaction("ada", { file: "shore.db", message_count: 1, compacted_at: stamp }, [messages[0] as Message], jsonl(messages), jsonl(messages.slice(1)));
     crashed.close();
     closeStorageConnections();
-    const before = readdirSync("/proc/self/fd").length;
+    const before = handlesUnder(data);
     await archiveAndRetain(dir, { dbPath, archiveKey: "ada" }, 2, jsonl(messages), () => stamp, () => "next");
     closeStorageConnections();
-    expect(readdirSync("/proc/self/fd").length).toBe(before);
+    expect(handlesUnder(data)).toBe(before);
     const history = HistoryStore.open(dbPath);
     try {
       expect(history.segmentCount("ada")).toBe(1);
