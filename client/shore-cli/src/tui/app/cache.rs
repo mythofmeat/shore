@@ -61,7 +61,7 @@ pub(crate) struct ConvFingerprint {
     pub show_metadata: bool,
     pub spinner_frame: usize,
     pub character_name_len: usize,
-    pub image_cache_version: u64,
+    pub image_cache_version: (u32, usize),
 }
 
 impl ConvFingerprint {
