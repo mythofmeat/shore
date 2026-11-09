@@ -209,3 +209,34 @@ describe("a character that has stopped waking stays stopped", () => {
     expect(clock.tick(T0 + 5 * HOUR)).toBe("run_tick");
   });
 });
+
+describe("default wakes and the character's own", () => {
+  const MIN = 60_000;
+  test("a wake the clock sets itself is a default one, anchored where it was set, and one the character asks for is not", () => {
+    const clock = new HeartbeatClock(config({ defaultIntervalMs: HOUR, minIntervalMs: 30 * MIN }), 0);
+    expect(clock.tick(5 * MIN)).toBe("none");
+    expect(clock.snapshot()).toMatchObject({ next_wake_at: HOUR, default_wake: true, wake_anchor_at: 0 });
+    clock.schedule(2 * HOUR, 6 * MIN);
+    expect(clock.snapshot()).not.toHaveProperty("default_wake");
+    clock.setConfig(config({ defaultIntervalMs: 2 * HOUR, minIntervalMs: 30 * MIN }), 7 * MIN);
+    expect(clock.nextWakeAt, "a wake the character asked for stays put when the default changes").toBe(2 * HOUR);
+  });
+
+  test("a user back from dormancy gets a default wake anchored at their message, with any earlier floor forgotten", () => {
+    const clock = new HeartbeatClock(config({ defaultIntervalMs: HOUR, minIntervalMs: 6 * HOUR }), 0);
+    clock.restore({ ticks_without_user: 0, next_wake_at: HOUR, last_user_at: undefined, default_wake: true, wake_anchor_at: 0 });
+    clock.boundWake(0);
+    expect(clock.nextWakeAt, "a restored default wake raised to the new minimum").toBe(6 * HOUR);
+    clock.forceDormant();
+    clock.onUserMessage(2 * MIN);
+    expect(clock.snapshot()).toMatchObject({ default_wake: true, wake_anchor_at: 2 * MIN });
+    clock.setConfig(config({ defaultIntervalMs: HOUR, minIntervalMs: 30 * MIN }), 3 * MIN);
+    expect(clock.nextWakeAt).toBe(2 * MIN + HOUR);
+  });
+
+  test("a wake asked for in the past comes due at once when nothing holds it back", () => {
+    const clock = new HeartbeatClock(config({ minIntervalMs: 0 }), 0);
+    expect(clock.schedule(10 * MIN - 5, 10 * MIN)).toBe(0);
+    expect(clock.nextWakeAt).toBe(10 * MIN);
+  });
+});
