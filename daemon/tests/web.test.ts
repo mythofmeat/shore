@@ -21,7 +21,7 @@ import { outcomeOf } from "./support/outcome.ts";
 import { mkdir, mkdtemp, readFile, readdir, rm, stat, writeFile, chmod, symlink } from "node:fs/promises";
 import { dirname, join, basename } from "node:path";
 import { WebRecovery, sessionDigest, type WebRecoveryOptions } from "../src/web/recovery.ts";
-import { ArchiveTransfers, type ArchiveTransferLimits } from "../src/web/archives.ts";
+import { ArchiveTransferError, ArchiveTransfers, type ArchiveTransferLimits } from "../src/web/archives.ts";
 import { type WebArchiveInfo } from "../src/protocol/WebArchiveInfo.ts";
 import { parseOperationInput } from "../src/operations/contracts.ts";
 import { validWebArchiveInfo, validWebArchiveList } from "../src/web/contracts.ts";
@@ -456,8 +456,16 @@ test("a transfer is gone for its owner the moment their sign-in ends", async () 
   const info = f.transfers.export(a.session, "ada");
   const route = await f.next(); await f.finish(route);
   await until(() => f.transfers.get(a.session, info.id).downloadable, "the archive transfer to settle");
+  const missing = (session: WebSession): unknown => {
+    try {
+      return f.transfers.get(session, info.id);
+    } catch (e) {
+      return e instanceof ArchiveTransferError ? [e.status, e.message] : e;
+    }
+  };
+  expect(missing(owner().session)).toEqual([404, "Archive transfer is missing or expired"]);
   a.controller.abort();
-  expect(() => f.transfers.get(a.session, info.id)).toThrow("Archive transfer is missing or expired");
+  expect(missing(a.session)).toEqual([404, "Archive transfer is missing or expired"]);
   expect(f.transfers.list(a.session).archives).toEqual([]);
 });
 
