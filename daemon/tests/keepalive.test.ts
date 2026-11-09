@@ -262,6 +262,34 @@ describe("a ping a budget would stop", () => {
     expect(h.events.at(-1)?.detail).toContain("tiny");
     ledger.cleanup();
   });
+
+  test("a long reason is cut to 160 characters", async () => {
+    const ledger = freshLedger();
+    const db = openLedger(ledger.path);
+    db.query(
+      `INSERT INTO calls (ts, character, provider, api_key_name, model, call_type, input_tokens, output_tokens,
+         cache_read_tokens, cache_write_tokens, total_ms, ttft_ms, finish_reason, thinking_enabled, cost_source, total_cost)
+       VALUES (?1, ?2, 'anthropic', 'default', ?3, 'message', 10, 5, 0, 0, 100, 10, 'end_turn', 1, 'pricing_catalog', 5.0)`,
+    ).run(new Date(T0).toISOString(), CHARACTER, MODEL);
+    db.close();
+    const h = harness();
+    const base = prefix();
+    h.service.arm(prefix({
+      context: {
+        ...required(base.context),
+        ledger: ledger.path,
+        usage: { timezone: "utc", budgets: [{ name: "b".repeat(200), period: "month", cost_usd: 1, limit: "block", warn_at: [], usage_kind: [] }] },
+      },
+    }));
+    h.service.observe(CHARACTER, MODEL, "message");
+    h.clock.advance(minutes(56));
+    await h.service.tick();
+    const detail = required(h.events.at(-1)?.detail);
+    expect(detail.startsWith("Cache keepalive ping skipped: ")).toBe(true);
+    expect(detail.length).toBe("Cache keepalive ping skipped: ".length + 161);
+    expect(detail.endsWith("…")).toBe(true);
+    ledger.cleanup();
+  });
 });
 
 describe("what counts as a warm", () => {
