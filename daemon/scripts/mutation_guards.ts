@@ -415,6 +415,8 @@ export const DAEMON_EQUIVALENTS: readonly string[] = [
   "src/llm/providers/gemini.ts:translateParts: 「break; → {}」 #4",
   "src/daemon/data_directory_lease.ts:acquireDataDirectoryLease: … = takeLock(`${path}.acquire`, 「15_000 → 15001」);",
   "src/daemon/data_directory_lease.ts:ownerIsDead: …ecordedStart) && recordedStart 「< → <=」 performance.timeOrigin;",
+  "src/storage/archive.ts:exportUnifiedDatabase: …new Database(path, { readonly: 「true → false」 });",
+  "src/storage/archive.ts:importUnifiedDatabase: …tabase(sourcePath, { readonly: 「true → false」 });",
 ];
 
 export const CLIENT_FLOORS: Readonly<Record<string, number>> = {

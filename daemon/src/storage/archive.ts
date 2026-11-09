@@ -23,7 +23,6 @@ export function exportUnifiedDatabase(path: string, character: string, output: s
     const copy = new Database(draft);
     copy.run(STORAGE_SCHEMA);
     try {
-      copy.run("PRAGMA journal_mode = DELETE; PRAGMA foreign_keys = OFF");
       copy.query(`DELETE FROM history_alternatives WHERE message_id NOT IN
         (SELECT id FROM history_messages WHERE ${CHARACTER_ARCHIVES_SQL})`).run(character);
       for (const table of HISTORY_TABLES.filter((name) => !["history_blobs", "history_alternatives"].includes(name))) {
@@ -40,10 +39,7 @@ export function exportUnifiedDatabase(path: string, character: string, output: s
     try { capture.collectUnusedPayloads(); }
     finally { capture.close(); }
     const compacted = new Database(draft);
-    try {
-      compacted.run("PRAGMA journal_mode = DELETE");
-      compacted.query("VACUUM INTO ?1").run(output);
-    }
+    try { compacted.query("VACUUM INTO ?1").run(output); }
     finally { compacted.close(); }
   } finally {
     for (const suffix of ["", "-journal", "-wal", "-shm"]) rmSync(`${draft}${suffix}`, { force: true });
@@ -95,7 +91,7 @@ export function importUnifiedDatabase(path: string, sourcePath: string, characte
         destination.query("INSERT INTO events(character, kind, event_key, timestamp, content) VALUES (?1, ?2, ?3, ?4, ?5)")
           .run(row.character, row.kind, row.event_key, row.timestamp, row.content);
       }
-      if (sourceData !== undefined && destinationData !== undefined && sourceData !== destinationData) {
+      if (sourceData !== undefined && destinationData !== undefined) {
         relocateMediaReferences(destination, character, sourceData, destinationData);
       }
     })();
