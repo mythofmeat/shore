@@ -1,7 +1,9 @@
 import { describe, expect, test } from "bun:test";
+import { getEventListeners } from "node:events";
 import { emptyTiming, emptyUsage } from "../src/llm/stream.ts";
 
-import { buildWarningMessage, llmHttpStatus, missingKeyReason, sanitizeReason, streamWithCredentialFallback, type FallbackEvent } from "../src/llm/fallback";
+import { isAbortError } from "../src/llm/abort.ts";
+import { buildWarningMessage, llmHttpStatus, missingKeyReason, retryAfterHint, retryDelayMs, sanitizeReason, streamWithCredentialFallback, streamWithRetry, type FallbackEvent, type RetrySettings } from "../src/llm/fallback";
 import { CREDENTIAL_FAILURE_KINDS, type KeyCandidate } from "../src/llm/credentials";
 import type { LlmError } from "../src/llm/errors";
 import { rejectionOf } from "./support/outcome.ts";
@@ -140,5 +142,103 @@ describe("credential rotation", () => {
       )),
     ).toMatchObject({ kind: "http_status", status: 500 });
     expect(h.tried).toEqual(["first"]);
+  });
+});
+
+describe("the wait before a retry", () => {
+  const settings = (extra: Partial<RetrySettings> = {}): RetrySettings => ({ maxRetries: 3, backoffBaseMs: 1000, ...extra });
+
+  test("doubles with each attempt and adds up to the jitter fraction on top, within the ceiling", () => {
+    expect(retryDelayMs(settings({ jitterFraction: 0.5 }), 0, { random: () => 1 })).toBe(1500);
+    expect(retryDelayMs(settings({ jitterFraction: 0.5 }), 1, { random: () => 0 })).toBe(2000);
+    expect(retryDelayMs(settings({ backoffMaxMs: 1200, jitterFraction: 0.5 }), 0, { random: () => 1 })).toBe(1200);
+    expect(retryDelayMs(settings({ jitterFraction: 0 }), 0, { random: () => 1 })).toBe(1000);
+    expect(retryDelayMs(settings({ jitterFraction: -1 }), 0, { random: () => 1 })).toBe(1000);
+    expect(retryDelayMs(settings({ backoffBaseMs: 0, jitterFraction: 0 }), 0, { random: () => 1 })).toBe(0);
+  });
+
+  test("at or past the ceiling it waits the ceiling less up to the jitter fraction, and never less than nothing", () => {
+    expect(retryDelayMs(settings({ backoffMaxMs: 1000, jitterFraction: 0.5 }), 0, { random: () => 0.5 })).toBe(750);
+    expect(retryDelayMs(settings({ backoffMaxMs: 1000, jitterFraction: 0.5 }), 0, { retryAfterMs: 5000, random: () => 0.5 })).toBe(750);
+    expect(retryDelayMs(settings({ backoffMaxMs: 1000, jitterFraction: 2 }), 0, { random: () => 1 })).toBe(0);
+    expect(retryDelayMs(settings({ backoffMaxMs: 0 }), 0, { random: () => 0 })).toBe(0);
+    expect(retryDelayMs(settings({ backoffMaxMs: -5 }), 0, { random: () => 0 })).toBe(0);
+  });
+
+  test("a carried hint counts only as a finite, non-negative number, and otherwise the error's headers are read", () => {
+    expect(retryAfterHint({ retry_after_ms: 0 })).toBe(0);
+    expect(retryAfterHint({ retry_after_ms: 250 })).toBe(250);
+    for (const carried of [-5, Number.NaN, Number.POSITIVE_INFINITY, "250"]) expect(retryAfterHint({ retry_after_ms: carried })).toBeUndefined();
+    expect(retryAfterHint(Object.assign(new Error("429"), { headers: new Headers({ "retry-after": "7" }) }))).toBe(7000);
+    expect(retryAfterHint(null)).toBeUndefined();
+    expect(retryAfterHint("429")).toBeUndefined();
+  });
+});
+
+describe("retrying a failed attempt", () => {
+  const overloaded: LlmError = { kind: "http_status", status: 529, body: "overloaded_error" };
+  const settings: RetrySettings = { maxRetries: 3, backoffBaseMs: 100, jitterFraction: 0 };
+  const withinLimit = (_error: LlmError, attempt: number, max: number): boolean => attempt < max;
+
+  test("each retry is announced with its attempt and wait, and the stop signal is let go once the attempts end", async () => {
+    const stop = new AbortController();
+    const waits: number[] = [];
+    const announced: Array<readonly [LlmError, number, number]> = [];
+    let calls = 0;
+    const result = await streamWithRetry(
+      async () => {
+        calls += 1;
+        if (calls < 3) throw overloaded;
+        return await Promise.resolve("done");
+      },
+      settings,
+      withinLimit,
+      (ms) => { waits.push(ms); return Promise.resolve(); },
+      { signal: stop.signal, onRetry: (error, attempt, delay) => { announced.push([error, attempt, delay]); } },
+    );
+    expect(result).toBe("done");
+    expect(waits).toEqual([100, 200]);
+    expect(announced).toEqual([[overloaded, 0, 100], [overloaded, 1, 200]]);
+    expect(getEventListeners(stop.signal, "abort")).toEqual([]);
+  });
+
+  test("a stop during the wait ends it at once, and one that comes while deciding to retry skips the wait", async () => {
+    const during = new AbortController();
+    let attempts = 0;
+    const waited = await rejectionOf(streamWithRetry(
+      async () => { attempts += 1; await Promise.resolve(); throw overloaded; },
+      settings,
+      withinLimit,
+      () => { during.abort(); return new Promise<void>(() => {}); },
+      { signal: during.signal },
+    ));
+    expect(isAbortError(waited)).toBe(true);
+    expect(attempts).toBe(1);
+
+    const deciding = new AbortController();
+    const slept: number[] = [];
+    let tries = 0;
+    const skipped = await rejectionOf(streamWithRetry(
+      async () => { tries += 1; await Promise.resolve(); throw overloaded; },
+      settings,
+      withinLimit,
+      (ms) => { slept.push(ms); return Promise.resolve(); },
+      { signal: deciding.signal, onRetry: () => { deciding.abort(); } },
+    ));
+    expect(isAbortError(skipped)).toBe(true);
+    expect(slept).toEqual([]);
+    expect(tries).toBe(1);
+  });
+
+  test("an abort thrown by the attempt itself is never retried, whatever the retry rule says", async () => {
+    const aborted = new DOMException("The operation was aborted.", "AbortError");
+    let calls = 0;
+    expect(await rejectionOf(streamWithRetry(
+      () => { calls += 1; return Promise.reject(aborted); },
+      settings,
+      withinLimit,
+      () => Promise.resolve(),
+    ))).toBe(aborted);
+    expect(calls).toBe(1);
   });
 });

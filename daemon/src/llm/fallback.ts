@@ -121,9 +121,7 @@ export function retryDelayMs(
   const ceiling = Math.max(0, settings.backoffMaxMs ?? DEFAULT_BACKOFF_MAX_MS);
   const spread = Math.max(0, settings.jitterFraction ?? DEFAULT_JITTER_FRACTION);
   const random = inputs.random ?? Math.random;
-  const exponential = backoffDelayMs(settings.backoffBaseMs, attempt);
-  const hint = inputs.retryAfterMs;
-  const floor = hint !== undefined && hint > 0 ? Math.max(exponential, hint) : exponential;
+  const floor = Math.max(backoffDelayMs(settings.backoffBaseMs, attempt), inputs.retryAfterMs ?? 0);
 
   if (floor >= ceiling) return Math.max(0, Math.round(ceiling - ceiling * spread * random()));
 
