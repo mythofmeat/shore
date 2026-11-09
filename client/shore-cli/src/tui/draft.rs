@@ -129,7 +129,18 @@ pub(crate) fn save(
     save_locked(dir, owner, draft, owned_images).map(|_| ())
 }
 
-fn lock_store(dir: &Path) -> std::io::Result<std::fs::File> {
+#[derive(Debug)]
+struct StoreLock(std::fs::File);
+
+impl Drop for StoreLock {
+    fn drop(&mut self) {
+        if let Err(error) = self.0.unlock() {
+            tracing::warn!("could not release the draft store lock: {error}");
+        }
+    }
+}
+
+fn lock_store(dir: &Path) -> std::io::Result<StoreLock> {
     std::fs::create_dir_all(dir)?;
     let file = std::fs::OpenOptions::new()
         .create(true)
@@ -138,7 +149,7 @@ fn lock_store(dir: &Path) -> std::io::Result<std::fs::File> {
         .write(true)
         .open(dir.join("store.lock"))?;
     file.try_lock()?;
-    Ok(file)
+    Ok(StoreLock(file))
 }
 
 fn save_locked(
@@ -535,6 +546,16 @@ mod recovery_tests {
             super::prune_attachments(tmp.path()).is_err(),
             "attachments is a file"
         );
+    }
+
+    #[test]
+    fn a_released_store_lock_is_free_while_a_forked_process_still_holds_its_descriptor() {
+        let tmp = tempfile::tempdir().unwrap();
+        let lock = super::lock_store(tmp.path()).unwrap();
+        let inherited = lock.0.try_clone().unwrap();
+        drop(lock);
+        assert!(super::lock_store(tmp.path()).is_ok());
+        drop(inherited);
     }
 
     #[test]
