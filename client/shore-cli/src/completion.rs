@@ -1081,9 +1081,6 @@ impl Session {
                 Some(daemon) => {
                     daemon.load(source, &self.line, &mut self.catalog);
                     self.catalog.mark_loaded(source);
-                    if source == Source::ToolParameters {
-                        self.catalog.arguments_of = tool;
-                    }
                 }
                 None if source.loads_on_demand() => {
                     let _newly_needed = self.catalog.needed.insert(source);
@@ -2074,6 +2071,47 @@ mod tests {
                 .collect::<Vec<_>>();
             assert_eq!(replaced, [format!("{kept}fiction")], "completing {input:?}");
         }
+    }
+
+    #[test]
+    fn a_quoted_word_is_replaced_from_where_its_quote_opened() {
+        for input in [
+            "thread move story --folder \"my st\"",
+            "thread move story --folder 'my st'",
+        ] {
+            let mut catalog = PaletteCatalog {
+                folders: plain_values(&["my stories"]),
+                ..PaletteCatalog::default()
+            };
+            let replaced = palette_completions(input, &mut catalog)
+                .candidates
+                .into_iter()
+                .map(|candidate| candidate.replacement)
+                .collect::<Vec<_>>();
+            assert_eq!(
+                replaced,
+                ["thread move story --folder 'my stories'"],
+                "completing {input:?}"
+            );
+        }
+    }
+
+    #[test]
+    fn the_folders_a_thread_listing_names_are_offered_for_a_folder() {
+        let mut catalog = PaletteCatalog::default();
+        catalog.absorb_folders(&json!({ "folders": [{ "name": "fiction" }, { "name": "work" }] }));
+        let offered = palette_completions("thread move story --folder ", &mut catalog)
+            .candidates
+            .into_iter()
+            .map(|candidate| candidate.replacement)
+            .collect::<Vec<_>>();
+        assert_eq!(
+            offered,
+            [
+                "thread move story --folder fiction",
+                "thread move story --folder work"
+            ]
+        );
     }
 
     #[test]
