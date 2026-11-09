@@ -18,9 +18,7 @@ const MINUTE_MS = 60 * SECOND_MS;
 const PING_RETRY_GRACE_MS = 5 * MINUTE_MS;
 
 function retryDelay(failureCount: number): number {
-  const exponent = Math.min(Math.max(failureCount - 1, 0), 5);
-  const secs = Math.min(30 * 2 ** exponent, 15 * 60);
-  return secs * SECOND_MS;
+  return Math.min(30 * 2 ** Math.max(failureCount - 1, 0), 15 * 60) * SECOND_MS;
 }
 
 export class CacheKeepalive {

@@ -384,17 +384,17 @@ export class KeepaliveService {
   }
 
   async tick(): Promise<void> {
-    const due: string[] = [];
+    const due: [string, Entry][] = [];
     for (const [character, entry] of this.#entries) {
       if (entry.inFlight) continue;
       if (entry.keepalive.tick(this.#now()) !== "ping") continue;
       entry.inFlight = true;
-      due.push(character);
+      due.push([character, entry]);
     }
     await Promise.all(
-      due.map(async (character) => {
+      due.map(async ([character, entry]) => {
         try {
-          await this.#ping(character);
+          await this.#ping(character, entry);
         } catch (e) {
           shoreLog.error(`shore: keepalive ping failed for ${character}: ${String(e)}`);
         }
@@ -430,9 +430,7 @@ export class KeepaliveService {
     this.#sink?.(event);
   }
 
-  async #ping(character: string): Promise<void> {
-    const entry = this.#entries.get(character);
-    if (entry === undefined) return;
+  async #ping(character: string, entry: Entry): Promise<void> {
     try {
       await this.#runActivity(async () => await this.#pingInner(character, entry));
     } finally {
@@ -442,10 +440,7 @@ export class KeepaliveService {
 
   async #pingInner(character: string, entry: Entry): Promise<void> {
     const prefix = entry.prefix;
-    if (prefix === undefined) {
-      this.#skip(character, entry, "no cached request");
-      return;
-    }
+    if (prefix === undefined) return this.#skip(character, entry, "no cached request");
 
     if (this.haltFor(prefix) !== undefined) {
       entry.keepalive.onCacheInvalidated();
