@@ -109,10 +109,12 @@ describe("the rewrite", () => {
     expect(sanitizeToolPairs([
       tailed(1, result("ghost"), text("kept"), text("transient")),
       tailed(2, text("kept"), result("ghost"), text("transient")),
+      tailed(1, result("ghost"), text("first"), text("second"), text("transient")),
       user(result("ghost"), text("plain")),
     ])).toEqual([
       tailed(1, text("kept"), text("transient")),
       tailed(1, text("kept"), text("transient")),
+      tailed(1, text("first"), text("second"), text("transient")),
       user(text("plain")),
     ]);
   });
