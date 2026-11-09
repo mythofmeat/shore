@@ -3,7 +3,8 @@ import { readdir } from "./support/stored_files.ts";
 import { readFile } from "./support/stored_files.ts";
 import { required } from "../src/util/required.ts";
 
-import { describe, expect, test } from "bun:test";
+import { describe, expect, spyOn, test } from "bun:test";
+import * as files from "../src/storage/files.ts";
 import { mkdir, mkdtemp } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -88,6 +89,27 @@ describe("backupBeforeWrite", () => {
     at += BACKUP_THROTTLE_MS - 1;
     expect(await backupBeforeWrite(path, () => at)).toBeUndefined();
     at += 1;
+    expect(await backupBeforeWrite(path, () => at)).toBeDefined();
+  });
+
+  test("a backup that couldn't be written is not tried again until the throttle has passed", async () => {
+    const dir = await workspace();
+    const path = join(dir, "threads", "main", "active.jsonl");
+    writeDurable(path, "original\n");
+    const realWrite = files.writeDurable;
+    const failing = spyOn(files, "writeDurable").mockImplementation((target, content) => {
+      if ((typeof target === "string" ? target : target.key).includes("/backups/")) throw new Error("disk full");
+      realWrite(target, content);
+    });
+    let at = 2_000_000;
+    try {
+      expect(await backupBeforeWrite(path, () => at)).toBeUndefined();
+    } finally {
+      failing.mockRestore();
+    }
+    at += 1;
+    expect(await backupBeforeWrite(path, () => at)).toBeUndefined();
+    at += BACKUP_THROTTLE_MS;
     expect(await backupBeforeWrite(path, () => at)).toBeDefined();
   });
 
