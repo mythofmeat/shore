@@ -84,7 +84,7 @@ export class ArchiveTransfers {
 
   #owned(owner: WebSession, id: string): Artifact {
     const record = this.#records.get(id);
-    if (owner.signal.aborted || record === undefined || record.owner.id !== owner.id || record.abort.signal.aborted) throw new ArchiveTransferError(404, "Archive transfer is missing or expired");
+    if (record === undefined || record.owner.id !== owner.id || record.abort.signal.aborted) throw new ArchiveTransferError(404, "Archive transfer is missing or expired");
     return record;
   }
 

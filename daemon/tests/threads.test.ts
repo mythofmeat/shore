@@ -103,6 +103,23 @@ describe("concurrent thread-index mutations", () => {
     );
   });
 
+  test("archiving a thread forgets its engine, so a new thread of the same name starts afresh", async () => {
+    const { registry } = await registryWith("aria");
+    await registry.createThread("aria", "side");
+    const old = await registry.getOrCreate("aria", "side");
+    await registry.archiveThread("aria", "side");
+    await registry.createThread("aria", "side");
+    expect(await registry.getOrCreate("aria", "side")).not.toBe(old);
+  });
+
+  test("a change asked for after its stop arrived is never made", async () => {
+    const { registry } = await registryWith("aria");
+    const stop = new AbortController();
+    stop.abort(new Error("stopped"));
+    expect(await outcomeOf(registry.createThread("aria", "late", undefined, stop.signal))).toThrow("stopped");
+    expect(registry.listThreads("aria").map((t) => t.id)).toEqual([MAIN_THREAD]);
+  });
+
   test("a create racing an archive leaves the index consistent", async () => {
     const { registry, dataDir } = await registryWith("aria");
     await registry.createThread("aria", "doomed");

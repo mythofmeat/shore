@@ -451,6 +451,16 @@ async function archiveFixture(limits: Partial<ArchiveTransferLimits> = {}, singl
   return { server, transfers, next, finish, count: () => count };
 }
 
+test("a transfer is gone for its owner the moment their sign-in ends", async () => {
+  const f = await archiveFixture(); const a = owner();
+  const info = f.transfers.export(a.session, "ada");
+  const route = await f.next(); await f.finish(route);
+  await until(() => f.transfers.get(a.session, info.id).downloadable, "the archive transfer to settle");
+  a.controller.abort();
+  expect(() => f.transfers.get(a.session, info.id)).toThrow("Archive transfer is missing or expired");
+  expect(f.transfers.list(a.session).archives).toEqual([]);
+});
+
 test("download refuses substituted links and changed files and releases its download claim", async () => {
   const f = await archiveFixture(); const a = owner();
   const info = f.transfers.export(a.session, "ada");
