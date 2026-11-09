@@ -1987,6 +1987,28 @@ mod tests {
     }
 
     #[test]
+    fn commands_outside_the_conversation_do_not_care_which_thread_is_named() {
+        for args in [
+            vec!["status"],
+            vec!["model"],
+            vec!["usage"],
+            vec!["thread"],
+            vec!["character"],
+            vec!["config"],
+        ] {
+            let mut full = vec!["shore"];
+            full.extend_from_slice(&args);
+            let cli = <Cli as clap::Parser>::parse_from(full);
+            let command = cli.command.as_ref().expect("a command");
+            assert!(
+                !super::reads_the_selected_thread(command),
+                "`shore {}` doesn't read the thread, so a wrong one is no error",
+                args.join(" "),
+            );
+        }
+    }
+
+    #[test]
     fn only_a_named_thread_gets_a_model_of_its_own() {
         let pin = |args: &[&str], thread: Option<&str>| {
             let mut full = vec!["shore"];
@@ -2076,6 +2098,16 @@ mod tests {
             None,
             "a failed editor must not be read as an empty rewrite"
         );
+    }
+
+    #[test]
+    fn what_the_editor_saved_is_the_new_text_and_a_failed_editor_gives_back_nothing() {
+        let rewritten = super::edit_text_with("printf ' a rewrite \\n' >", "the original")
+            .expect("the editor ran");
+        assert_eq!(rewritten, "a rewrite");
+        let failed = super::edit_text_with("printf 'half done' > \"$1\"; false", "the original")
+            .expect("no hard failure");
+        assert_eq!(failed, "", "a failed editor's file is not read");
     }
 
     #[test]

@@ -1,5 +1,5 @@
 import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
-import { tmpdir } from "node:os";
+import { availableParallelism, setPriority, tmpdir } from "node:os";
 import { join } from "node:path";
 
 import { CLIENT_EQUIVALENTS, CLIENT_FLOORS } from "./mutation_guards.ts";
@@ -71,7 +71,9 @@ async function cargoMutants(extra: readonly string[], jobs: number): Promise<Car
   try {
     const cargoTmp = join(output, "tmp");
     mkdirSync(cargoTmp);
-    const cargo = Bun.spawn(["cargo", "mutants", "--no-shuffle", "-j", String(jobs), "--output", output, ...extra], { cwd: CLIENT, env: { ...process.env, TMPDIR: cargoTmp }, stdout: "inherit", stderr: "inherit" });
+    const idle = Bun.which("ionice") === null ? [] : ["ionice", "-c", "3"];
+    const shared = process.env["CI"] === undefined ? ["--jobserver-tasks", String(Math.max(2, Math.floor(availableParallelism() / 4)))] : [];
+    const cargo = Bun.spawn([...idle, "cargo", "mutants", "--no-shuffle", "-j", String(jobs), ...shared, "--output", output, ...extra], { cwd: CLIENT, env: { ...process.env, TMPDIR: cargoTmp }, stdout: "inherit", stderr: "inherit" });
     await cargo.exited;
     try {
       return (JSON.parse(readFileSync(join(output, "mutants.out", "outcomes.json"), "utf8")) as { outcomes: CargoOutcome[] }).outcomes;
@@ -88,6 +90,7 @@ function caught(summary: string): boolean {
 }
 
 export async function main(args: readonly string[]): Promise<number> {
+  setPriority(19);
   const all = listing();
   if (all === undefined) return 1;
   const ids = stableIds(all);

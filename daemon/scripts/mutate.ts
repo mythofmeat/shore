@@ -1,6 +1,6 @@
 import * as ts from "typescript/unstable/ast";
 import { closeSync, cpSync, mkdtempSync, openSync, readFileSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
-import { availableParallelism, freemem, tmpdir } from "node:os";
+import { availableParallelism, freemem, setPriority, tmpdir } from "node:os";
 import { join } from "node:path";
 
 import { parseInventorySources } from "./capability_inventory.ts";
@@ -334,6 +334,22 @@ async function pool<T, R>(items: readonly T[], workers: number, label: string, w
   return results;
 }
 
+function failures(log: string): string {
+  let lines: string[];
+  try {
+    lines = readFileSync(log, "utf8").split("\n");
+  } catch {
+    return "";
+  }
+  const shown = new Set<number>();
+  lines.forEach((line, i) => {
+    if (!line.startsWith("(fail)")) return;
+    for (let j = Math.max(0, i - 30); j <= i; j++) shown.add(j);
+  });
+  if (shown.size === 0) for (let j = Math.max(0, lines.length - 40); j < lines.length; j++) shown.add(j);
+  return [...shown].sort((a, b) => a - b).map((j) => `    | ${lines[j] ?? ""}`).join("\n");
+}
+
 async function collectCoverage(files: ReadonlySet<string>, workers: number): Promise<{ coverage: Coverage; problems: string[] }> {
   const tests = [...new Bun.Glob("*.test.{ts,tsx}").scanSync(join(ROOT, "tests"))].sort();
   const logs = mkdtempSync(join(tmpdir(), "shore-mutate-logs-"));
@@ -355,7 +371,7 @@ async function collectCoverage(files: ReadonlySet<string>, workers: number): Pro
   const hits = new Map<string, Map<number, number[]>>();
   const executable = new Map<string, Set<number>>();
   runs.forEach(({ test, run, lcov, log }, index) => {
-    if (run.code !== 0) problems.push(`tests/${test} fails before any mutation (${run.code === undefined ? "timed out" : `exit ${String(run.code)}`}); its output is in ${log}`);
+    if (run.code !== 0) problems.push(`tests/${test} fails before any mutation (${run.code === undefined ? "timed out" : `exit ${String(run.code)}`}); its output is in ${log}\n${failures(log)}`);
     else rmSync(log, { force: true });
     for (const [file, lines] of lcov) {
       if (!files.has(file)) continue;
@@ -440,6 +456,7 @@ function describe(result: Result): string {
 }
 
 async function main(args: readonly string[]): Promise<number> {
+  setPriority(19);
   if (args.includes("--client")) {
     const { main: client } = await import("./mutate_client.ts");
     return client(args.filter((a) => a !== "--client"));
@@ -472,7 +489,7 @@ async function main(args: readonly string[]): Promise<number> {
   const requested = Number(args.find((a) => a.startsWith("--workers="))?.slice("--workers=".length));
   const workers = Number.isInteger(requested) && requested > 0
     ? requested
-    : Math.max(1, Math.min(Math.floor(availableParallelism() / 2), capped ? Math.floor(freemem() / (MEMORY_CAP_BYTES * 1.25)) : Infinity));
+    : Math.max(1, Math.min(Math.floor(availableParallelism() / 4), capped ? Math.floor(freemem() / (MEMORY_CAP_BYTES * 1.25)) : Infinity));
   if (!capped) console.error("systemd-run --user is unavailable, so test runs have no memory cap");
 
   if (diffArg !== undefined) {
@@ -513,9 +530,9 @@ async function main(args: readonly string[]): Promise<number> {
   const chosen = targets.flatMap((file) => mutants.get(file) ?? []);
   const { coverage, problems: baseline } = await collectCoverage(new Set(targets), workers);
   problems.push(...baseline);
-  if (baseline.length > 0) {
+  if (baseline.length > 0 || args.includes("--baseline")) {
     for (const p of problems) console.log(`problem: ${p}`);
-    return 1;
+    return problems.length > 0 ? 1 : 0;
   }
   const results = await runMutants(chosen, coverage, workers);
   const showSurvivors = args.includes("--survivors");

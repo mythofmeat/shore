@@ -1601,7 +1601,6 @@ fn send_user_message(app: &mut App, text: String, images: Vec<String>) -> Action
             shore_common::swp_client::read_image_upload(path).map(|upload| {
                 let image_ref = shore_common::protocol::types::ImageRef {
                     path: path.clone(),
-                    caption: None,
                     data: Some(upload.data.clone()),
                     ..shore_common::protocol::types::ImageRef::default()
                 };
@@ -2180,6 +2179,154 @@ mod tests {
             Some(&serde_json::json!("defaults.stream"))
         );
         assert_eq!(sent.args.get("value"), Some(&serde_json::json!("false")));
+    }
+
+    #[test]
+    fn only_ctrl_c_interrupts_while_typing() {
+        let mut app = App::default();
+        app.input.mode = InputMode::Insert;
+        assert!(!matches!(
+            handle_key(&mut app, make_key(KeyModifiers::NONE, KeyCode::Char('c'))),
+            Action::Interrupt
+        ));
+        assert!(!matches!(
+            handle_key(
+                &mut app,
+                make_key(KeyModifiers::CONTROL, KeyCode::Char('w'))
+            ),
+            Action::Interrupt
+        ));
+        assert_eq!(app.input.text, "c");
+    }
+
+    fn pager() -> crate::tui::app::OutputPager {
+        crate::tui::app::OutputPager {
+            command: "status".into(),
+            lines: vec![],
+            scroll: 0,
+            viewport: 10,
+        }
+    }
+
+    #[test]
+    fn an_open_output_pager_takes_keys_until_the_command_line_is_open() {
+        let mut app = App {
+            output_pager: Some(pager()),
+            ..App::default()
+        };
+        app.input.mode = InputMode::Normal;
+        let _ = handle_key(&mut app, make_key(KeyModifiers::NONE, KeyCode::Char('q')));
+        assert!(app.output_pager.is_none(), "q closes the pager");
+
+        app.output_pager = Some(pager());
+        app.input.enter_command_mode();
+        let _ = handle_key(&mut app, make_key(KeyModifiers::NONE, KeyCode::Char('q')));
+        assert!(app.output_pager.is_some(), "the command line gets the key");
+        assert_eq!(app.input.cmd_text, "q");
+    }
+
+    fn saved_conversation() -> App {
+        let mut app = App::default();
+        for id in ["m_1", "m_2", "m_3"] {
+            app.entries.push(ConversationEntry::assistant(
+                Some(id.into()),
+                format!("reply {id}"),
+                vec![],
+                "t1".into(),
+                None,
+            ));
+        }
+        app
+    }
+
+    fn confirmed_command(app: &App) -> Option<&str> {
+        app.palette_confirmation
+            .as_ref()
+            .map(|confirmation| confirmation.command.as_str())
+    }
+
+    #[test]
+    fn deleting_by_a_count_from_the_end_pins_the_message_it_means_now() {
+        for (typed, pinned) in [
+            ("msg delete -1", "msg delete m_3"),
+            ("msg delete last", "msg delete m_3"),
+            ("msg delete -3 --json", "msg delete m_1 --json"),
+            ("msg delete m_2", "msg delete m_2"),
+            ("msg delete 0", "msg delete 0"),
+            ("msg delete 2", "msg delete 2"),
+        ] {
+            let mut app = saved_conversation();
+            let _ = parse_command(&mut app, typed);
+            assert_eq!(
+                confirmed_command(&app),
+                Some(pinned),
+                "{typed}: {:?} {:?}",
+                app.error_log,
+                app.notifications
+            );
+        }
+        let mut app = saved_conversation();
+        let _ = parse_command(&mut app, "msg delete -4");
+        assert_eq!(confirmed_command(&app), None);
+        assert!(
+            app.error_log
+                .last()
+                .is_some_and(|error| error.contains("cannot safely resolve")),
+            "{:?}",
+            app.error_log
+        );
+    }
+
+    #[test]
+    fn declining_a_confirmation_cancels_the_command() {
+        for key in [KeyCode::Char('n'), KeyCode::Esc] {
+            let mut app = App::default();
+            let _ = parse_command(&mut app, "config set defaults.stream false");
+            assert!(app.palette_confirmation.is_some());
+            let action = handle_palette_confirmation(&mut app, make_key(KeyModifiers::NONE, key));
+            assert!(matches!(action, Action::Redraw));
+            assert!(app.palette_confirmation.is_none());
+            assert_eq!(app.input.mode, InputMode::Normal);
+            assert!(
+                app.notifications
+                    .iter()
+                    .any(|note| note.content.contains("command cancelled")),
+                "{:?}",
+                app.notifications
+            );
+        }
+    }
+
+    #[test]
+    fn enter_sends_text_or_pictures_and_shows_them_right_away() {
+        let temp = tempfile::tempdir().unwrap();
+        let picture = temp.path().join("picture.png");
+        std::fs::write(&picture, b"\x89PNG\r\n\x1a\npixels").unwrap();
+        let picture_path = picture.to_string_lossy().into_owned();
+        for (text, images) in [("just words", vec![]), ("", vec![picture_path.clone()])] {
+            let mut app = App::default();
+            app.input.mode = InputMode::Insert;
+            app.input.set_text(text.to_owned());
+            app.pending_images.clone_from(&images);
+            let action = handle_key(&mut app, make_key(KeyModifiers::NONE, KeyCode::Enter));
+            let Action::Send(ConnCommand::Send(ClientMessage::Message(sent))) = action else {
+                panic!("expected a message for {text:?}");
+            };
+            assert_eq!(sent.text, text);
+            assert_eq!(sent.images, images);
+            assert_eq!(sent.image_data.len(), images.len());
+            let Some(ConversationEntry::Turn(shown)) = app.entries.last() else {
+                panic!("the message should show at once");
+            };
+            assert_eq!(
+                shown
+                    .images
+                    .iter()
+                    .map(|image| image.path.clone())
+                    .collect::<Vec<_>>(),
+                images
+            );
+        }
     }
 
     #[test]

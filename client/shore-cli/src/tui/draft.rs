@@ -3,8 +3,8 @@ use std::path::{Path, PathBuf};
 
 const KEEP_EDITOR_SESSIONS: usize = 20;
 
-pub(crate) fn drafts_dir() -> PathBuf {
-    shore_common::dirs::data_dir().join("drafts")
+pub(crate) fn drafts_dir(data: &Path) -> PathBuf {
+    data.join("drafts")
 }
 
 #[derive(Debug, Clone, Default, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
@@ -129,18 +129,7 @@ pub(crate) fn save(
     save_locked(dir, owner, draft, owned_images).map(|_| ())
 }
 
-#[derive(Debug)]
-struct StoreLock(std::fs::File);
-
-impl Drop for StoreLock {
-    fn drop(&mut self) {
-        if let Err(error) = self.0.unlock() {
-            tracing::warn!("could not release the draft store lock: {error}");
-        }
-    }
-}
-
-fn lock_store(dir: &Path) -> std::io::Result<StoreLock> {
+fn lock_store(dir: &Path) -> std::io::Result<std::fs::File> {
     std::fs::create_dir_all(dir)?;
     let file = std::fs::OpenOptions::new()
         .create(true)
@@ -149,7 +138,7 @@ fn lock_store(dir: &Path) -> std::io::Result<StoreLock> {
         .write(true)
         .open(dir.join("store.lock"))?;
     file.try_lock()?;
-    Ok(StoreLock(file))
+    Ok(file)
 }
 
 fn save_locked(
@@ -287,26 +276,107 @@ pub(crate) fn prune_editor_sessions_to_default(dir: &Path) {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use chrono::Timelike as _;
 
     #[test]
     fn two_editor_sessions_in_the_same_second_get_their_own_files() {
         let tmp = tempfile::tempdir().unwrap();
-        std::fs::create_dir_all(editor_dir(tmp.path())).unwrap();
+        let sessions = tmp.path().join("editor");
+        std::fs::create_dir_all(&sessions).unwrap();
 
         let first = editor_session_path(tmp.path(), "20260822-010203");
+        assert_eq!(first, sessions.join("20260822-010203.md"));
         std::fs::write(&first, "one").unwrap();
         let second = editor_session_path(tmp.path(), "20260822-010203");
+        assert_eq!(second, sessions.join("20260822-010203-2.md"));
         std::fs::write(&second, "two").unwrap();
+        assert_eq!(
+            editor_session_path(tmp.path(), "20260822-010203"),
+            sessions.join("20260822-010203-3.md")
+        );
 
-        assert_ne!(first, second);
         assert_eq!(std::fs::read_to_string(&first).unwrap(), "one");
         assert_eq!(std::fs::read_to_string(&second).unwrap(), "two");
+    }
+
+    #[test]
+    fn drafts_and_editor_sessions_live_in_the_data_directory() {
+        let data = Path::new("/srv/shore-data");
+        assert_eq!(drafts_dir(data), Path::new("/srv/shore-data/drafts"));
+        assert_eq!(
+            editor_dir(&drafts_dir(data)),
+            Path::new("/srv/shore-data/drafts/editor")
+        );
+    }
+
+    #[test]
+    fn editor_sessions_are_named_by_the_local_time_to_the_second() {
+        let before = chrono::Local::now()
+            .naive_local()
+            .with_nanosecond(0)
+            .unwrap();
+        let stamp = stamp_now();
+        let after = chrono::Local::now().naive_local();
+        let named = chrono::NaiveDateTime::parse_from_str(&stamp, "%Y%m%d-%H%M%S").unwrap();
+        assert!(
+            before <= named && named <= after,
+            "{stamp} is not between {before} and {after}"
+        );
+    }
+
+    fn write_sessions(dir: &Path, count: u32) {
+        let sessions = dir.join("editor");
+        std::fs::create_dir_all(&sessions).unwrap();
+        for minute in 0..count {
+            std::fs::write(
+                sessions.join(format!("20260822-01{minute:02}00.md")),
+                "text",
+            )
+            .unwrap();
+        }
+    }
+
+    fn session_files(dir: &Path) -> Vec<String> {
+        let mut names: Vec<String> = std::fs::read_dir(dir.join("editor"))
+            .unwrap()
+            .map(|entry| entry.unwrap().file_name().to_string_lossy().into_owned())
+            .collect();
+        names.sort();
+        names
+    }
+
+    #[test]
+    fn pruning_keeps_the_newest_editor_sessions_and_leaves_other_files_alone() {
+        let tmp = tempfile::tempdir().unwrap();
+        write_sessions(tmp.path(), 25);
+        std::fs::write(tmp.path().join("editor").join("notes.txt"), "keep").unwrap();
+        prune_editor_sessions(tmp.path(), 20);
+        let left = session_files(tmp.path());
+        assert_eq!(left.len(), 21);
+        assert!(left.contains(&"notes.txt".to_owned()), "{left:?}");
+        assert!(!left.contains(&"20260822-010400.md".to_owned()), "{left:?}");
+        assert!(left.contains(&"20260822-010500.md".to_owned()), "{left:?}");
+        assert!(left.contains(&"20260822-012400.md".to_owned()), "{left:?}");
+    }
+
+    #[test]
+    fn the_editor_keeps_its_last_twenty_sessions() {
+        let tmp = tempfile::tempdir().unwrap();
+        write_sessions(tmp.path(), 21);
+        prune_editor_sessions_to_default(tmp.path());
+        let left = session_files(tmp.path());
+        assert_eq!(left.len(), 20);
+        assert!(!left.contains(&"20260822-010000.md".to_owned()), "{left:?}");
     }
 }
 
 #[cfg(test)]
 mod recovery_tests {
     use super::{Draft, load, save};
+    use sha2::Digest as _;
+    use std::path::Path;
+
+    const PNG: &[u8] = b"\x89PNG\r\n\x1a\npayload";
 
     fn message(thread: &str, text: &str) -> Draft {
         Draft {
@@ -316,6 +386,155 @@ mod recovery_tests {
             text: text.into(),
             ..Draft::default()
         }
+    }
+
+    fn write_raw(dir: &Path, identity: &Draft, owner: &str, draft: &Draft) {
+        let directory = identity.directory(dir);
+        std::fs::create_dir_all(&directory).unwrap();
+        std::fs::write(
+            directory.join(format!("{owner}.json")),
+            serde_json::to_vec(draft).unwrap(),
+        )
+        .unwrap();
+    }
+
+    #[test]
+    fn a_draft_for_another_conversation_or_with_nothing_in_it_is_never_restored() {
+        let tmp = tempfile::tempdir().unwrap();
+        let identity = message("main", "");
+        let mut stranger = message("main", "for someone else");
+        stranger.character = "bea".into();
+        write_raw(tmp.path(), &identity, "stray", &stranger);
+        assert_eq!(load(tmp.path(), "next", &identity), None);
+        write_raw(tmp.path(), &identity, "blank", &message("main", "  \n"));
+        assert_eq!(load(tmp.path(), "next", &identity), None);
+        write_raw(tmp.path(), &identity, "kept", &message("main", "unsent"));
+        assert_eq!(
+            load(tmp.path(), "next", &identity),
+            Some(message("main", "unsent"))
+        );
+    }
+
+    #[test]
+    fn a_session_restores_its_own_draft_before_a_newer_one_left_by_another() {
+        let tmp = tempfile::tempdir().unwrap();
+        let identity = message("main", "");
+        save(tmp.path(), "mine", &message("main", "my own words"), &[]).unwrap();
+        save(tmp.path(), "other", &message("main", "someone else's"), &[]).unwrap();
+        assert_eq!(
+            load(tmp.path(), "mine", &identity),
+            Some(message("main", "my own words"))
+        );
+        assert_eq!(
+            load(tmp.path(), "third", &identity),
+            Some(message("main", "someone else's"))
+        );
+    }
+
+    #[test]
+    fn a_draft_held_by_a_running_session_is_left_to_it() {
+        let tmp = tempfile::tempdir().unwrap();
+        let identity = message("main", "");
+        save(tmp.path(), "running", &message("main", "still typing"), &[]).unwrap();
+        let held = super::lock_session(tmp.path(), "running").unwrap();
+        assert_eq!(load(tmp.path(), "next", &identity), None);
+        drop(held);
+        assert_eq!(
+            load(tmp.path(), "next", &identity),
+            Some(message("main", "still typing"))
+        );
+    }
+
+    #[test]
+    fn clearing_a_draft_that_cannot_be_removed_reports_the_failure() {
+        let tmp = tempfile::tempdir().unwrap();
+        let identity = message("main", "");
+        let stuck = identity.directory(tmp.path()).join("mine.json");
+        std::fs::create_dir_all(stuck.join("in-the-way")).unwrap();
+        assert!(
+            save(tmp.path(), "mine", &identity, &[]).is_err(),
+            "the draft file is still there"
+        );
+    }
+
+    #[test]
+    fn attachments_keep_their_image_type_and_identical_images_share_one_copy() {
+        let tmp = tempfile::tempdir().unwrap();
+        let png = tmp.path().join("clipboard.png");
+        std::fs::write(&png, PNG).unwrap();
+        let blob = tmp.path().join("notes");
+        std::fs::write(&blob, b"not an image").unwrap();
+        let mut first = message("main", "pictures");
+        first.images = vec![
+            png.to_string_lossy().into_owned(),
+            blob.to_string_lossy().into_owned(),
+        ];
+        save(tmp.path(), "first", &first, &[png.clone(), blob.clone()]).unwrap();
+        let mut second = message("side", "the same picture");
+        second.images = vec![png.to_string_lossy().into_owned()];
+        save(tmp.path(), "second", &second, std::slice::from_ref(&png)).unwrap();
+        let stored = load(tmp.path(), "first", &first).unwrap().images;
+        let picture = stored.first().unwrap();
+        assert_eq!(Path::new(picture).extension(), Some("png".as_ref()));
+        assert_eq!(
+            Path::new(stored.get(1).unwrap()).extension(),
+            Some("bin".as_ref())
+        );
+        assert_eq!(
+            load(tmp.path(), "second", &second).unwrap().images,
+            vec![picture.clone()]
+        );
+        assert_eq!(
+            std::fs::read_dir(tmp.path().join("attachments"))
+                .unwrap()
+                .count(),
+            2
+        );
+    }
+
+    #[test]
+    fn an_attachment_whose_stored_copy_changed_is_saved_under_a_new_name() {
+        let tmp = tempfile::tempdir().unwrap();
+        let png = tmp.path().join("clipboard.png");
+        std::fs::write(&png, PNG).unwrap();
+        let attachments = tmp.path().join("attachments");
+        std::fs::create_dir_all(&attachments).unwrap();
+        let hashed = attachments.join(format!("{}.png", super::hex(&sha2::Sha256::digest(PNG))));
+        std::fs::write(&hashed, b"\x89PNG\r\n\x1a\naltered").unwrap();
+        let mut draft = message("main", "picture");
+        draft.images = vec![png.to_string_lossy().into_owned()];
+        save(tmp.path(), "mine", &draft, std::slice::from_ref(&png)).unwrap();
+        let stored = load(tmp.path(), "mine", &draft).unwrap().images;
+        let kept = Path::new(stored.first().unwrap());
+        assert_ne!(kept, hashed);
+        assert_eq!(std::fs::read(kept).unwrap(), PNG);
+    }
+
+    #[test]
+    fn a_recovered_attachment_keeps_its_image_type() {
+        use base64::Engine as _;
+        let path =
+            super::recover_attachment(&base64::engine::general_purpose::STANDARD.encode(PNG))
+                .unwrap();
+        let contents = std::fs::read(&path).unwrap();
+        let extension = path.extension().map(std::ffi::OsStr::to_os_string);
+        std::fs::remove_file(&path).unwrap();
+        assert_eq!(extension, Some("png".into()));
+        assert_eq!(contents, PNG);
+    }
+
+    #[test]
+    fn reclaiming_attachments_before_any_exist_is_fine_but_an_unreadable_store_is_reported() {
+        let tmp = tempfile::tempdir().unwrap();
+        assert!(
+            super::prune_attachments(tmp.path()).is_ok(),
+            "no attachments directory yet"
+        );
+        std::fs::write(tmp.path().join("attachments"), "not a directory").unwrap();
+        assert!(
+            super::prune_attachments(tmp.path()).is_err(),
+            "attachments is a file"
+        );
     }
 
     #[test]
@@ -335,7 +554,7 @@ mod recovery_tests {
         let snapshot = super::save_locked(tmp.path(), "publisher", &published, &[]).unwrap();
         drop(lock);
         save(tmp.path(), "clearing", &message("main", ""), &[]).unwrap();
-        assert!(std::path::Path::new(snapshot.images.first().unwrap()).exists());
+        assert!(Path::new(snapshot.images.first().unwrap()).exists());
     }
 
     #[test]
@@ -353,12 +572,12 @@ mod recovery_tests {
         save(tmp.path(), "second", &shared, &[]).unwrap();
         save(tmp.path(), "first", &message("main", ""), &[]).unwrap();
         assert!(
-            std::path::Path::new(attachment).exists(),
+            Path::new(attachment).exists(),
             "another draft still owns the image"
         );
         save(tmp.path(), "second", &message("side", ""), &[]).unwrap();
         assert!(
-            !std::path::Path::new(attachment).exists(),
+            !Path::new(attachment).exists(),
             "sent/cleared images must not accumulate"
         );
     }
