@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 
-import { replayableMessages } from "../src/llm/replay.ts";
+import { replayableMessages, replayableMessagesWithDrops } from "../src/llm/replay.ts";
 import type { SidecarRequest, WireMessage } from "../src/llm/types.ts";
 
 function req(over: Partial<SidecarRequest> = {}): SidecarRequest {
@@ -174,5 +174,43 @@ describe("empty content", () => {
       }),
     );
     expect(out).toHaveLength(1);
+  });
+});
+
+describe("what replay keeps and counts", () => {
+  const thinking = (extra: Record<string, unknown>) => ({ type: "thinking", thinking: "t", ...extra });
+
+  test("a foreign carrier from the active provider is dropped unless the same model minted it, while a redacted blob from that provider travels", () => {
+    const fromProvider = { provider_key: "anthropic" };
+    const kept = (block: Record<string, unknown>, provenance: Partial<WireMessage>) => types(replayableMessages(req({ messages: [thinkingTurn(block, provenance)] })));
+    expect(kept(thinking({ reasoning_details: [{ text: "x" }] }), fromProvider)).toEqual([["text"]]);
+    expect(kept(thinking({ reasoning_content: "x" }), fromProvider)).toEqual([["text"]]);
+    expect(kept(thinking({ reasoning_content: "x" }), { provider_key: "anthropic", model: "claude-opus-4-8" })).toEqual([["thinking", "text"]]);
+    expect(kept({ type: "redacted_thinking", data: "blob" }, fromProvider)).toEqual([["redacted_thinking", "text"]]);
+    expect(kept(thinking({ signature: "sig" }), fromProvider), "a signed block from the active provider, model unknown").toEqual([["thinking", "text"]]);
+    expect(kept(thinking({ signature: "sig" }), { provider_key: "zai" })).toEqual([["text"]]);
+  });
+
+  test("drops are counted by why they happened", () => {
+    const foreign = thinkingTurn(thinking({ signature: "sig" }), { provider_key: "zai", model: "glm" });
+    const own = thinkingTurn(thinking({ signature: "sig" }), { provider_key: "anthropic", model: "claude-opus-4-8" });
+    expect(replayableMessagesWithDrops(req({ messages: [foreign, foreign] })).drops).toEqual({ strippedByPolicy: 0, unportable: 2 });
+    expect(replayableMessagesWithDrops(req({ replay_prior_thinking: "none", messages: [own] })).drops).toEqual({ strippedByPolicy: 1, unportable: 0 });
+    expect(replayableMessagesWithDrops(req({ messages: [own] })).drops).toEqual({ strippedByPolicy: 0, unportable: 0 });
+  });
+
+  test("with prior thinking off, a turn that called a tool keeps its thinking for the loop, and other turns lose theirs", () => {
+    const plain = thinkingTurn(thinking({ signature: "sig" }), { provider_key: "anthropic", model: "claude-opus-4-8" });
+    const calling: WireMessage = { role: "assistant", content: [thinking({ signature: "sig" }) as never, { type: "tool_use", id: "t1", name: "read", input: {} }], provider_key: "anthropic", model: "claude-opus-4-8" };
+    const user: WireMessage = { role: "user", content: [{ type: "text", text: "hi" }] };
+    expect(types(replayableMessages(req({ replay_prior_thinking: "none", messages: [user, plain, calling] })))).toEqual([["text"], ["text"], ["thinking", "tool_use"]]);
+  });
+
+  test("a turn's transient tail counts only the tail blocks that are kept, and a turn without one gets none", () => {
+    const tailed: WireMessage = { role: "user", content: [{ type: "text", text: "a" }, { type: "text", text: "c" }, { type: "text", text: "  " }, { type: "text", text: "d" }], transient_tail: 3 };
+    const plain: WireMessage = { role: "user", content: [{ type: "text", text: "e" }] };
+    const out = replayableMessages(req({ messages: [tailed, plain] }));
+    expect(out[0]).toStrictEqual({ role: "user", content: [{ type: "text", text: "a" }, { type: "text", text: "c" }, { type: "text", text: "d" }], transient_tail: 2 });
+    expect(out[1]).toStrictEqual(plain);
   });
 });

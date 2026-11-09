@@ -438,6 +438,7 @@ export const DAEMON_EQUIVALENTS: readonly string[] = [
   "src/llm/prepare_images.ts:limitImageBlock: ) 「return block; → {}」",
   "src/llm/providers/anthropic.ts:applyMessageBreakpoint: 「return false; → {}」",
   "src/llm/image_dimensions.ts:webp: switch (ascii(head, 12, 「4 → 5」)) {",
+  "src/llm/replay.ts:mintedByTheActiveModel: 「return false; → {}」",
 ];
 
 export const CLIENT_FLOORS: Readonly<Record<string, number>> = {
