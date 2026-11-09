@@ -67,10 +67,27 @@ describe("deleting a tool loop leaves nothing the API will reject", () => {
 
   test("two refs inside one tool loop delete it once", async () => {
     const engine = await engineOver(wedgeShape);
+    const before = engine.currentRevision();
     const result = await deleteMessages(engine, { refs: ["m_31", "m_32"] });
 
     expect(result.deleted.sort()).toEqual(["m_31", "m_32"]);
     expect(engine.messages().map((m) => m.msg_id)).toEqual(["m_29", "m_30"]);
+    expect(engine.currentRevision()).toBe(before + 1);
+  });
+
+  test("refs must be given, as a string or a list of strings", async () => {
+    const engine = await engineOver(wedgeShape);
+    const refusal = async (args: Record<string, unknown>): Promise<string> => {
+      try {
+        await deleteMessages(engine, args);
+        return "deleted";
+      } catch (e) {
+        return e instanceof CommandError ? e.message : String(e);
+      }
+    };
+    expect(await refusal({})).toBe("Missing required argument: refs");
+    expect(await refusal({ refs: ["m_31", 5] })).toBe("refs must be an array of strings");
+    expect(engine.messages()).toHaveLength(wedgeShape.length);
   });
 
   test("deleting the assistant by raw msg_id takes its tool results too", async () => {
