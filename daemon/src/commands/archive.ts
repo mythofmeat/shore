@@ -374,7 +374,7 @@ export async function importCharacter(ctx: ArchiveContext, args: Args): Promise<
       external_memory: "queued_for_rebuild_when_retain_is_enabled",
     };
   } finally {
-    await rm(stage, { recursive: true, force: true });
+    await rm(stage, { recursive: true });
   }
 }
 
@@ -629,9 +629,7 @@ async function installCharacter(ctx: ArchiveContext, stage: string, character: s
   const configTarget = characterConfigDir(ctx.dirs.config, character);
   const workspaceTarget = characterWorkspaceDir(ctx.dirs.config, character, ctx.dirs.workspace);
   const dataTarget = characterDataDir(ctx.dirs.data, character);
-  const occupied = [configTarget, dataTarget, characterMediaDir(ctx.dirs.data, character)].filter((path, index, all) =>
-    all.indexOf(path) === index && path !== workspaceTarget,
-  );
+  const occupied = [configTarget, dataTarget, characterMediaDir(ctx.dirs.data, character)];
   if (ctx.hasCharacter(character) || (await Promise.all(occupied.map(exists))).some(Boolean)) {
     throw invalidRequest(`Refusing to overwrite existing character '${character}'`);
   }
@@ -652,7 +650,6 @@ async function installCharacter(ctx: ArchiveContext, stage: string, character: s
     const workspace = isolatedWorkspace(ctx, character);
     if (workspace === undefined) {
       if (await exists(workspaceTarget)) throw invalidRequest(`Refusing to overwrite existing character '${character}'`);
-      await mkdir(dirname(workspaceTarget), { recursive: true });
       await cp(join(stage, "workspace"), workspaceTarget, copyOptions());
       if (!created.includes(workspaceTarget)) created.push(workspaceTarget);
     } else {
@@ -664,7 +661,6 @@ async function installCharacter(ctx: ArchiveContext, stage: string, character: s
       filled = workspace;
       await copyWorkspaceIn(workspace, join(stage, "workspace"));
     }
-    await mkdir(dirname(dataTarget), { recursive: true });
     await cp(join(stage, "data"), dataTarget, copyOptions());
     created.push(dataTarget);
 
@@ -673,7 +669,6 @@ async function installCharacter(ctx: ArchiveContext, stage: string, character: s
     imported = true;
     const media = characterMediaDir(ctx.dirs.data, character);
     if (await exists(join(stage, "media"))) {
-      await mkdir(dirname(media), { recursive: true });
       await cp(join(stage, "media"), media, copyOptions());
       created.push(media);
     }

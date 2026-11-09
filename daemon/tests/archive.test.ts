@@ -3,14 +3,14 @@ import { readFile } from "./support/stored_files.ts";
 import { Database } from "bun:sqlite";
 import { existsSync } from "node:fs";
 import { describe, expect, test } from "bun:test";
-import { access, mkdir, mkdtemp, readdir, rm, stat, writeFile, symlink } from "node:fs/promises";
+import { access, mkdir, mkdtemp, readdir, rename, rm, stat, writeFile, symlink } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { create, extract, Header, Parser } from "tar";
 
 import { deleteCharacter, exportBackup, exportCharacter, importArchive, importCharacter, readTransfer, writeTransfer, type ArchiveContext } from "../src/commands/archive.ts";
 import { ArchiveSpool } from "../src/commands/archive_spool.ts";
-import type { ShoreDirs } from "../src/config/dirs.ts";
+import { characterCacheDir, type ShoreDirs } from "../src/config/dirs.ts";
 import { HistoryStore } from "../src/engine/history_store.ts";
 import type { Message } from "../src/engine/types.ts";
 import { Ledger } from "../src/ledger/store.ts";
@@ -611,7 +611,93 @@ describe("archive checks", () => {
 
     const failing = await root("media-rollback");
     expect(await outcomeOf(importCharacter(context(failing, new Set(), () => { throw new Error("refresh failed"); }), { archive: output }))).toThrow("refresh failed");
-    for (const path of [join(failing.data, "media", "ada"), join(failing.cache, "ada"), join(failing.config, "characters", "ada")]) expect(existsSync(path)).toBe(false);
+    for (const path of [join(failing.data, "media", "ada"), characterCacheDir(failing.cache, "ada"), join(failing.config, "characters", "ada")]) expect(existsSync(path)).toBe(false);
+  });
+});
+
+describe("export, import and delete edges", () => {
+  test("an export refused for an existing archive doesn't pause the character first", async () => {
+    const source = await root("no-pause");
+    await seedCharacter(source, "ada", "x");
+    const output = join(source.runtime, "taken.tar");
+    await writeFile(output, "already here");
+    let paused = 0;
+    const ctx: ArchiveContext = { ...context(source, new Set(["ada"])), withSnapshot: async (run) => { paused += 1; return await run(); } };
+    expect(await outcomeOf(exportCharacter(ctx, { character: "ada", output }))).toThrow("Refusing to overwrite existing archive");
+    expect(paused).toBe(0);
+  });
+
+  test("deleting doesn't fail when one of the character's folders goes while it is released", async () => {
+    const dirs = await root("vanishing");
+    await seedCharacter(dirs, "ada", "x");
+    const workspace = join(dirs.workspace as string, "ada");
+    const ctx: ArchiveContext = { ...context(dirs, new Set(["ada"])), releaseCharacter: async () => { await rm(workspace, { recursive: true }); } };
+    await deleteCharacter(ctx, { character: "ada", confirm: "ada" });
+    for (const path of [workspace, join(dirs.data, "ada"), join(dirs.config, "characters", "ada")]) expect(existsSync(path)).toBe(false);
+  });
+
+  test("an import brings the data folder's own files, and archived pictures an older release saved by full path follow the data folder when it moves", async () => {
+    const source = await root("pictures-source");
+    await seedCharacter(source, "ada", "x");
+    await writeFile(join(source.data, "ada", "notes.txt"), "kept\n");
+    const lamp = join(source.data, "media", "ada", "sent", "lamp.png");
+    await mkdir(dirname(lamp), { recursive: true });
+    await writeFile(lamp, "png bytes");
+    const history = HistoryStore.open(join(source.data, "shore.db"));
+    history.putSegment("ada", 1, { file: "segment-1.jsonl", message_count: 1, compacted_at: "2026-09-02T00:00:00Z" }, [{ ...userMessage("ada", "a lamp"), msg_id: "m_lamp", images: [{ path: lamp }] }]);
+    history.close();
+    const legacy = new Database(join(source.data, "shore.db"));
+    legacy.query("UPDATE history_messages SET images = ?1 WHERE msg_id = 'm_lamp'").run(JSON.stringify([{ path: lamp }]));
+    legacy.close();
+    const output = join(source.runtime, "ada.tar");
+    await exportCharacter(context(source, new Set(["ada"])), { character: "ada", output });
+
+    const target = await root("pictures-target");
+    await importCharacter(context(target, new Set()), { archive: output });
+    expect(await Bun.file(join(target.data, "ada", "notes.txt")).text()).toBe("kept\n");
+    const moved = `${target.data}-moved`;
+    await rename(target.data, moved);
+    const reopened = HistoryStore.open(join(moved, "shore.db"));
+    try {
+      expect(reopened.readSegment("ada", 1)[0]?.images[0]?.path).toBe(join(moved, "media", "ada", "sent", "lamp.png"));
+    } finally {
+      reopened.close();
+    }
+  });
+
+  test("a failed import takes out the picture cache it made, keeps one that was there, and leaves what an earlier character left in the database", async () => {
+    const source = await root("cache-source");
+    await seedCharacter(source, "ada", "x");
+    const pixel = join(source.data, "media", "ada", "attachments", "pixel.png");
+    await mkdir(dirname(pixel), { recursive: true });
+    await writeFile(pixel, "png bytes");
+    writeDurable(join(source.data, "ada", "threads", "main", "active.jsonl"), `${JSON.stringify({ ...userMessage("ada", "a pixel"), images: [{ path: pixel }] })}\n`);
+    const output = join(source.runtime, "ada.tar");
+    await exportCharacter(context(source, new Set(["ada"])), { character: "ada", output });
+    const failing = () => { throw new Error("refresh failed"); };
+
+    const fresh = await root("cache-fresh");
+    expect(await outcomeOf(importCharacter(context(fresh, new Set(), failing), { archive: output }))).toThrow("refresh failed");
+    expect(existsSync(characterCacheDir(fresh.cache, "ada"))).toBe(false);
+
+    const kept = await root("cache-kept");
+    await mkdir(characterCacheDir(kept.cache, "ada"), { recursive: true });
+    await writeFile(join(characterCacheDir(kept.cache, "ada"), "mine.png"), "mine");
+    expect(await outcomeOf(importCharacter(context(kept, new Set(), failing), { archive: output }))).toThrow("refresh failed");
+    expect(await Bun.file(join(characterCacheDir(kept.cache, "ada"), "mine.png")).text()).toBe("mine");
+
+    const leftover = await root("cache-leftover");
+    const store = HistoryStore.open(join(leftover.data, "shore.db"));
+    store.putSegment("ada", 0, { file: "segment-0.jsonl", message_count: 1, compacted_at: "2026-09-01T00:00:00Z" }, [userMessage("ada", "left behind")]);
+    store.close();
+    await mkdir(join(leftover.workspace as string, "ada"), { recursive: true });
+    expect(await outcomeOf(importCharacter(context(leftover, new Set()), { archive: output }))).toThrow("Refusing to overwrite existing character 'ada'");
+    const after = HistoryStore.open(join(leftover.data, "shore.db"));
+    try {
+      expect(after.readSegment("ada", 0)[0]?.content).toBe("left behind");
+    } finally {
+      after.close();
+    }
   });
 });
 
