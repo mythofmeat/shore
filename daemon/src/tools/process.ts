@@ -47,9 +47,8 @@ export function runProcess(
     let failure: Error | undefined;
     let escalation: ReturnType<typeof setTimeout> | undefined;
     const kill = (signal: NodeJS.Signals): void => {
-      if (child.pid === undefined) return;
       try {
-        process.kill(grouped ? -child.pid : child.pid, signal);
+        if (child.pid !== undefined) process.kill(grouped ? -child.pid : child.pid, signal);
       } catch {}
     };
     const cancel = (): void => {
@@ -57,7 +56,7 @@ export function runProcess(
       escalation = setTimeout(() => { kill("SIGKILL"); }, KILL_GRACE_MS);
     };
     options.signal?.addEventListener("abort", cancel);
-    child.stdin?.on("error", (error) => { if ((error as NodeJS.ErrnoException).code !== "EPIPE") failure = error; });
+    child.stdin?.on("error", () => {});
     if (options.stdin !== undefined) child.stdin?.end(options.stdin);
     child.stdout?.on("data", stdout.accept);
     child.stderr?.on("data", stderr.accept);

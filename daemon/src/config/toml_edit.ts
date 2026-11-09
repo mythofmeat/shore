@@ -15,7 +15,6 @@ interface Assignment {
   path: readonly string[];
   startLine: number;
   endLine: number;
-  indent: string;
   keyText: string;
   table: Header | undefined;
 }
@@ -108,7 +107,7 @@ function advanceValue(line: string, from: number, state: ValueState): void {
     }
     if (ch === '"' || ch === "'") {
       const c: Cursor = { text: line, at: i };
-      if (readQuoted(c, ch) === undefined) return;
+      readQuoted(c, ch);
       i = c.at;
       continue;
     }
@@ -143,11 +142,6 @@ function scanToml(source: string): Scan {
     const raw = lines[i] as string;
     const trimmed = raw.trim();
 
-    if (trimmed === "" || trimmed.startsWith("#")) {
-      i += 1;
-      continue;
-    }
-
     if (trimmed.startsWith("[")) {
       const parsed = headerPath(trimmed);
       if (parsed !== undefined) {
@@ -160,15 +154,12 @@ function scanToml(source: string): Scan {
     }
 
     const c: Cursor = { text: raw, at: 0 };
-    skipSpace(c);
-    const indent = raw.slice(0, c.at);
-    const keyStart = c.at;
     const key = readKeyPath(c);
     if (key === undefined || c.text[c.at] !== "=") {
       i += 1;
       continue;
     }
-    const keyText = raw.slice(keyStart, c.at).trimEnd();
+    const keyText = raw.slice(0, c.at).trimEnd();
 
     const state: ValueState = { depth: 0, multiline: undefined };
     let end = i;
@@ -178,7 +169,7 @@ function scanToml(source: string): Scan {
       advanceValue(lines[end] as string, 0, state);
     }
 
-    assignments.push({ path: [...current, ...key], startLine: i, endLine: end, indent, keyText, table });
+    assignments.push({ path: [...current, ...key], startLine: i, endLine: end, keyText, table });
     i = end + 1;
   }
 
@@ -190,7 +181,7 @@ function samePath(a: readonly string[], b: readonly string[]): boolean {
 }
 
 function isPrefix(prefix: readonly string[], path: readonly string[]): boolean {
-  return prefix.length <= path.length && prefix.every((part, i) => part === path[i]);
+  return prefix.every((part, i) => part === path[i]);
 }
 
 function quoteKey(part: string): string {
@@ -232,7 +223,7 @@ export function setTomlValue(source: string, path: readonly string[], literal: s
 
   const existing = scan.assignments.find((a) => samePath(a.path, path));
   if (existing !== undefined) {
-    const replacement = `${existing.indent}${existing.keyText} = ${literal}`;
+    const replacement = `${existing.keyText} = ${literal}`;
     const next = [
       ...lines.slice(0, existing.startLine),
       replacement,
@@ -316,7 +307,7 @@ function arrayBlocks(scan: Scan, lines: readonly string[], path: readonly string
 }
 
 function refuseInline(scan: Scan, path: readonly string[]): void {
-  const inline = scan.assignments.find((a) => a.path.length <= path.length && isPrefix(a.path, path));
+  const inline = scan.assignments.find((a) => isPrefix(a.path, path));
   if (inline !== undefined) {
     throw new TomlEditError(
       `\`${renderKey(path)}\` is written inline as \`${renderKey(inline.path)}\` on line ${inline.startLine + 1}; edit that line by hand`,
@@ -367,7 +358,7 @@ export function setTomlArrayTableValue(source: string, path: readonly string[], 
   const block = blockAt(scan, lines, path, index);
   const existing = scan.assignments.find((a) => a.table === block.header && samePath(a.path, [...path, key]));
   if (existing !== undefined) {
-    return [...lines.slice(0, existing.startLine), `${existing.indent}${existing.keyText} = ${literal}`, ...lines.slice(existing.endLine + 1)].join("\n");
+    return [...lines.slice(0, existing.startLine), `${existing.keyText} = ${literal}`, ...lines.slice(existing.endLine + 1)].join("\n");
   }
   return [...lines.slice(0, block.contentEnd), `${quoteKey(key)} = ${literal}`, ...lines.slice(block.contentEnd)].join("\n");
 }
@@ -424,7 +415,7 @@ export function removeTomlTable(source: string, path: readonly string[]): string
   const lines = source.split("\n");
   const ranges: Array<{ start: number; end: number }> = scan.headers.filter((h) => isPrefix(path, h.path)).map((h) => blockOf(scan, lines, h));
   for (const a of scan.assignments) {
-    if (isPrefix(path, a.path) || (a.path.length < path.length && isPrefix(a.path, path))) ranges.push({ start: a.startLine, end: a.endLine + 1 });
+    if (isPrefix(path, a.path) || isPrefix(a.path, path)) ranges.push({ start: a.startLine, end: a.endLine + 1 });
   }
   return dropRanges(lines, ranges);
 }

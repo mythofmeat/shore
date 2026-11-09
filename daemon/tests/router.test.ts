@@ -460,6 +460,7 @@ interface WorldOptions {
   readonly commandChangesState?: (cmd: Command) => boolean;
   readonly compactions?: MessageHandlerDeps["compactions"];
   readonly now?: () => number;
+  readonly resolveThread?: HandlerRegistry["resolveThread"];
 }
 
 function untilStopped(params: GenerationParams): Promise<void> {
@@ -494,7 +495,7 @@ function world(options: WorldOptions) {
   const started: GenerationParams[] = [];
   const handler = new MessageHandler({
     router,
-    registry: registryOf(options.characters ?? ["ada"]),
+    registry: { ...registryOf(options.characters ?? ["ada"]), ...(options.resolveThread === undefined ? {} : { resolveThread: options.resolveThread }) },
     notifier: { notify: (_event, title, body) => { notified.push(`${title}: ${body}`); } },
     dispatchCommand: options.dispatchCommand ?? ((cmd) => Promise.resolve(commandOutput(cmd.name))),
     runGeneration: (params) => {
@@ -681,10 +682,10 @@ describe("replies", () => {
     h.router.setSelectedThread(2, "side");
     h.router.setSelectedThread(3, "side");
     h.router.reportMove(3);
+    h.router.setSelectedThread(3, null);
     next.resolve();
     await settle();
     h.router.setSelectedThread(2, null);
-    h.router.setSelectedThread(3, null);
     last.resolve();
     await h.handler.drain();
     expect(h.frames.get(1)).toEqual([chunk("a"), chunk("b"), chunk("c")]);
@@ -728,9 +729,10 @@ describe("replies", () => {
     expect(h.frames.get(1)).toEqual([cancelledEnd("r1")]);
   });
 
-  test("a stop that arrives while a replaced reply is still ending leaves it replaced", async () => {
+  test("a stop that arrives while a replaced reply is still ending leaves it replaced, however slowly it winds down", async () => {
     const ending = deferred();
-    const h = world({ sessions: [] });
+    const winding = deferred();
+    const h = world({ sessions: [], runGeneration: (params) => (params.rid === "r1" ? winding.promise : untilStopped(params)) });
     const received: ServerMessage[] = [];
     h.join({ id: 1, lifecycle: true }, async (msg) => {
       if (msg.type === "stream_end" && msg.rid === "r1") await ending.promise;
@@ -739,9 +741,11 @@ describe("replies", () => {
     await h.say(1, "r1");
     const replacing = h.say(1, "r2");
     await settle();
-    await h.stop(1);
+    const stopping = h.stop(1);
+    await settle();
     ending.resolve();
-    await replacing;
+    await Promise.all([replacing, stopping]);
+    winding.resolve();
     await h.stop(1);
     await h.handler.drain();
     expect(received.filter((frame) => frame.type === "request_finished")).toEqual([
@@ -1123,6 +1127,22 @@ describe("commands", () => {
     expect(signals.get("thread_rename")?.aborted).toBe(false);
     gate("thread_label").resolve();
     gate("thread_rename").resolve();
+    await h.handler.drain();
+  });
+
+  test("for clients whose character doesn't resolve, each raw thread is its own conversation", async () => {
+    const { dispatch, gate, signals } = stoppableDispatch();
+    const h = world({
+      sessions: [{ id: 1, character: "gone", thread: "x" }, { id: 2, character: "gone", thread: "y" }],
+      dispatchCommand: dispatch,
+      resolveThread: () => "main",
+    });
+    h.handler.enqueueRouted({ kind: "command", cmd: command("thread_label"), meta: h.metaOf(2, null, "command") });
+    await settle();
+    h.router.unregisterSession(2);
+    await h.stop(1);
+    expect(signals.get("thread_label")?.aborted).toBe(false);
+    gate("thread_label").resolve();
     await h.handler.drain();
   });
 

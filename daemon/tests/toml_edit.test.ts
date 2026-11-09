@@ -52,11 +52,11 @@ describe("reading keys the way TOML writes them", () => {
   });
 
   test("headers set the table for the lines that follow, and malformed headers are ignored", () => {
-    const source = ["top = 1", "[ a . b ]", "x = 1", "[[list]]", "y = 2", "[[broken]", "z = 3", "[!]", "w = 4", "[]", "v = 5"].join("\n");
+    const source = ["top = 1", "[ a . b ]", "x = 1", "[[list]]", "y = 2", "[[broken]", "z = 3", "[!]", "w = 4", "[]", "v = 5", '["open]', "u = 6"].join("\n");
     expect(tomlKeyDefined(source, ["top"])).toBe(true);
     expect(tomlKeyDefined(source, ["a", "b", "x"])).toBe(true);
     expect(tomlKeyDefined(source, ["list", "y"])).toBe(true);
-    for (const path of [["list", "z"], ["list", "w"], ["list", "v"]]) expect(tomlKeyDefined(source, path)).toBe(true);
+    for (const path of [["list", "z"], ["list", "w"], ["list", "v"], ["list", "u"]]) expect(tomlKeyDefined(source, path)).toBe(true);
     expect(tomlArrayTableCount(source, ["broken"])).toBe(0);
     expect(tomlArrayTableCount(source, ["list"])).toBe(1);
   });
@@ -72,11 +72,21 @@ describe("reading keys the way TOML writes them", () => {
       'a = ["]", "[", "#", \'"\', "\\"]"]',
       'a = [ # a comment ]\n  1,\n]',
       'a = "unterminated [',
+      'a = ["""\nline\n"""]',
+      "a=[\n  1,\n]",
     ];
     for (const value of values) {
       const source = `${value}\nnext = 1\n`;
       expect(setTomlValue(source, ["a"], "0").text).toBe("a = 0\nnext = 1\n");
     }
+    expect(setTomlValue('"a"=[\n  1,\n]\nnext = 1\n', ["a"], "0").text).toBe('"a" = 0\nnext = 1\n');
+  });
+
+  test("a value still open at the end of the file runs to the end, with or without a final newline", () => {
+    expect(setTomlValue("a = [\n  1,\n]", ["a"], "0").text).toBe("a = 0");
+    expect(setTomlValue("a = [\n  1,\n", ["a"], "0").text).toBe("a = 0");
+    expect(setTomlValue('a = """\nopen', ["a"], "0").text).toBe("a = 0");
+    expect(tomlKeyDefined("a = [\n  1,", ["a"])).toBe(true);
   });
 });
 
@@ -101,6 +111,10 @@ describe("setTomlValue", () => {
     const intoArray = setTomlValue("[[t]]\nx = 1\n", ["t", "y"], "1");
     expect(intoArray.action).toBe("added-section");
     expect(intoArray.text.startsWith("[[t]]\nx = 1\n\n")).toBe(true);
+  });
+
+  test("a key named like an existing table is never written inside that table", () => {
+    expect(setTomlValue("[a.b]\nc = 2\n", ["a", "b"], "1")).toEqual({ text: "[a.b]\nc = 2\n\n[a]\nb = 1\n", action: "added-section" });
   });
 
   test("a key with no table to go into starts one at the end, quoting what needs quoting", () => {
@@ -164,6 +178,7 @@ describe("tables", () => {
       "",
     ].join("\n");
     expect(removeTomlTable(source, ["gone"])).toBe("keep = 1\n\n[stays]\nz = 3\n");
+    expect(removeTomlTable("top = 1\n\ngone.x = 1\n\nb = 2\n", ["gone"])).toBe("top = 1\n\nb = 2\n");
     expect(removeTomlTable("[p]\ninline = { a = 1 }\nother = 2\n", ["p", "inline", "a"])).toBe("[p]\nother = 2\n");
     expect(removeTomlTable("# first line\n[gone]\nx = 1\n", ["gone"])).toBe("");
     expect(removeTomlTable("\n[gone]\nx = 1", ["gone"])).toBe("");
@@ -232,6 +247,7 @@ describe("arrays of tables", () => {
     expect(removeTomlArrayTable(providers, ["providers"], 0)).toBe(providers.replace('# the first\n[[providers]]\nname = "one"\nurl = [\n  "a",\n]\n\n', ""));
     expect(removeTomlArrayTable(providers, ["providers"], 1)).toBe(providers.replace('[[providers]]\nname = "two"\n\n', ""));
     expect(removeTomlArrayTable("[[p]]\nx = 1\n\n", ["p"], 0)).toBe("");
+    expect(removeTomlArrayTable('[[p]]\nname = "a"\n\n[t]\ny = 1\n\nz = 2', ["p"], 0)).toBe("[t]\ny = 1\n\nz = 2");
   });
 
   test("entries can be reordered, keeping what sits between them, and a bad order is refused", () => {

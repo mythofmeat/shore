@@ -427,10 +427,10 @@ export class MessageHandler {
   }
 
   #abortCommands(selected: (command: ActiveCommand) => boolean, reason: string): void {
-    const aborted = [...this.#commands].filter(selected);
-    if (aborted.length === 0) return;
-    this.#deps.log?.info?.("cancelling commands", { commands: aborted.length, reason });
-    for (const command of aborted) command.controller.abort(new DOMException(reason, "AbortError"));
+    for (const command of [...this.#commands].filter(selected)) {
+      this.#deps.log?.info?.("cancelling command", { session: command.sessionId, reason });
+      command.controller.abort(new DOMException(reason, "AbortError"));
+    }
   }
 
   #guard(work: Promise<void>): Promise<void> {

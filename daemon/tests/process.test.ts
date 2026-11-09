@@ -1,4 +1,4 @@
-import { describe, expect, jest, test } from "bun:test";
+import { describe, expect, jest, spyOn, test } from "bun:test";
 import { getEventListeners } from "node:events";
 import { readFileSync } from "node:fs";
 import { mkdtemp, readFile } from "node:fs/promises";
@@ -102,6 +102,29 @@ describe("runProcess", () => {
     }
     expect(alive(pid)).toBe(false);
     expect(KILL_GRACE_MS).toBe(250);
+  });
+
+  test("once a stopped process is gone, nothing is signalled again when the grace period runs out", async () => {
+    const ready = join(await mkdtemp(testTmp("process-")), "ready");
+    const stop = new AbortController();
+    const work = runProcess(bun, ["-e", `
+      require("node:fs").writeFileSync(${JSON.stringify(ready)}, String(process.pid));
+      setInterval(() => {}, 1000);
+    `], { signal: stop.signal }).catch((error: unknown) => error);
+    await readPid(ready);
+    const kill = spyOn(process, "kill");
+    jest.useFakeTimers();
+    let signals: unknown[] = [];
+    try {
+      stop.abort();
+      expect(await work).toBe(stop.signal.reason);
+      jest.advanceTimersByTime(KILL_GRACE_MS);
+      signals = kill.mock.calls.map(([, signal]) => signal);
+    } finally {
+      jest.useRealTimers();
+      kill.mockRestore();
+    }
+    expect(signals).toEqual(["SIGTERM", "SIGKILL"]);
   });
 
   test("stopping reaches everything the process started, even what ignores the polite stop", async () => {
