@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { mkdtempSync, existsSync, mkdirSync, writeFileSync } from "node:fs";
+import { mkdtempSync, existsSync, mkdirSync, readdirSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { CallStore, ZERO_USAGE } from "../src/call_store.ts";
@@ -48,6 +48,30 @@ test("only old heartbeat events expire; history, state, ledger and malformed rec
     expect(db.query("SELECT id FROM call_attempts").get()).toEqual({ id: "old" });
     expect(db.query("PRAGMA integrity_check").values()).toEqual([["ok"]]);
   });
+});
+
+test("an old subagent trace keeps its result and loses its messages, and one missing a field, or not an object, is kept as it was", () => {
+  const data = dataDir();
+  const trace = { subagent: "researcher", parent_tool_use_id: "tu_1", messages: [{ role: "user", content: "look this up" }], result: "found it" };
+  const kept = [null, "text", [trace], { ...trace, subagent: 5 }, { ...trace, parent_tool_use_id: 5 }, { ...trace, messages: "none" }].map((value) => JSON.stringify(value));
+  withStorage(data, (db) => {
+    for (const content of [JSON.stringify(trace), JSON.stringify({ ...trace, parent_tool_use_id: "tu_2" }), ...kept]) {
+      insertEvent(db, { character: "ada", kind: "subagent", timestamp: old.toISOString(), content });
+    }
+  });
+  expect(pruneDiagnostics(data, NOW)).toEqual({ captures: 0, heartbeats: 0, subagentTraces: 2, unreadableTraces: kept.length });
+  expect(readEvents(data, "ada", "subagent_result").map((content) => JSON.parse(content) as unknown)).toEqual([
+    { ...trace, messages: [], messages_expired: true },
+    { ...trace, parent_tool_use_id: "tu_2", messages: [], messages_expired: true },
+  ]);
+  expect(readEvents(data, "ada", "subagent")).toEqual(kept);
+});
+
+test("a data folder without a database yet is pruned without error, and no file is left open", () => {
+  const data = mkdtempSync(join(tmpdir(), "shore-retention-fresh-"));
+  const open = readdirSync("/proc/self/fd").length;
+  expect(pruneDiagnostics(data, NOW)).toEqual({ captures: 0, heartbeats: 0, subagentTraces: 0, unreadableTraces: 0 });
+  expect(readdirSync("/proc/self/fd").length).toBe(open);
 });
 
 test("a write failure rolls back the entire cleanup", async () => {
