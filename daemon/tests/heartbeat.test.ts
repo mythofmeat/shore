@@ -234,6 +234,16 @@ describe("default wakes and the character's own", () => {
     expect(clock.nextWakeAt).toBe(2 * MIN + HOUR);
   });
 
+  test("a user back from dormancy gets a default wake even when the last wake was one the character asked for", () => {
+    const clock = new HeartbeatClock(config({ defaultIntervalMs: HOUR, minIntervalMs: 30 * MIN }), 0);
+    clock.schedule(2 * HOUR, 0);
+    clock.forceDormant();
+    clock.onUserMessage(2 * MIN);
+    expect(clock.snapshot()).toMatchObject({ next_wake_at: 2 * MIN + HOUR, default_wake: true, wake_anchor_at: 2 * MIN });
+    clock.setConfig(config({ defaultIntervalMs: 2 * HOUR, minIntervalMs: 30 * MIN }), 3 * MIN);
+    expect(clock.nextWakeAt, "a default wake follows a new default interval").toBe(2 * MIN + 2 * HOUR);
+  });
+
   test("a wake asked for in the past comes due at once when nothing holds it back", () => {
     const clock = new HeartbeatClock(config({ minIntervalMs: 0 }), 0);
     expect(clock.schedule(10 * MIN - 5, 10 * MIN)).toBe(0);
