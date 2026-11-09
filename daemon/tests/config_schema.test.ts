@@ -1,9 +1,10 @@
 import { describe, expect, test } from "bun:test";
-import { mkdir, mkdtemp, readFile, writeFile } from "node:fs/promises";
+import { chmod, mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { setTomlValue, TomlEditError } from "../src/config/toml_edit.ts";
-import { config, type ConfigContext, type ConfigRuntime } from "../src/commands/config.ts";
-import { loadConfig } from "../src/config/loader.ts";
+import { clearConfigKey, commitConfigEdits, config, type ConfigContext, type ConfigRuntime } from "../src/commands/config.ts";
+import { loadConfig, type LoadedConfig } from "../src/config/loader.ts";
+import { setTestEnv } from "./support/env.ts";
 import { testTmp } from "./support/tmp.ts";
 
 const runtime = (): ConfigRuntime => ({
@@ -11,6 +12,16 @@ const runtime = (): ConfigRuntime => ({
   adoptGlobalConfig: () => {},
   notifyPromptSnapshotRefreshed: () => {},
 });
+
+function refusalOf(edit: () => unknown): Error {
+  try {
+    edit();
+  } catch (error) {
+    if (error instanceof Error) return error;
+    throw error;
+  }
+  throw new Error("the edit was accepted");
+}
 
 async function world(
   toml: string,
@@ -138,6 +149,120 @@ describe("config set on disk", () => {
     expect(result.file, "conf.d wins the merge, so that is the file worth editing").toBe(confd);
     expect(await readFile(confd, "utf8")).toBe("# local\n[heartbeat]\nenabled = true\n");
     expect(await readFile(ctx.configPath, "utf8")).toBe("[heartbeat]\nenabled = true\n");
+  });
+
+  test("an accepted change is adopted by the running daemon, environment file included", async () => {
+    const ctx = await world("[compaction]\nkeep_recent_turns = 2\n");
+    const adopted: LoadedConfig[] = [];
+    const reloaded: LoadedConfig[] = [];
+    ctx.runtime = { ...runtime(), adoptGlobalConfig: (fresh) => { adopted.push(fresh); }, reloadRuntimeConfig: (fresh) => { reloaded.push(fresh); } };
+    setTestEnv("SHORE_ADOPTED_BY_SET", "before");
+    await writeFile(join(dirname(ctx.configPath), ".env"), "SHORE_ADOPTED_BY_SET=from-dotenv\n");
+    config(ctx, { key: "compaction.keep_recent_turns", value: "3" });
+    expect(adopted).toHaveLength(1);
+    expect(reloaded).toEqual(adopted);
+    expect(ctx.config).toBe(adopted[0] as LoadedConfig);
+    expect(config(ctx, { key: "compaction.keep_recent_turns" })).toMatchObject({ config: 3 });
+    expect(process.env["SHORE_ADOPTED_BY_SET"]).toBe("from-dotenv");
+  });
+
+  test("a refused change names the key and value but never a secret's value, and leaves the file as it was", async () => {
+    const ctx = await world('[mcp.search]\ncommand = "tavily"\n\n[mcp.search.env]\nREGION = "eu"\n', [["conf.d/10-local.toml", "[tools]\nmax_result_chars = 10\n"]]);
+    await writeFile(join(ctx.config.dirs.config, "conf.d", "10-local.toml"), "[tools\n");
+    const before = await readFile(ctx.configPath, "utf8");
+    const secret = refusalOf(() => config(ctx, { key: "mcp.search.env.REGION", value: "my-private-region" }));
+    expect(secret.message.startsWith("mcp.search.env.REGION = <redacted> was rejected: ")).toBe(true);
+    expect(secret.message).not.toContain("my-private-region");
+    const plain = refusalOf(() => config(ctx, { key: "compaction.idle_after", value: "6h" }));
+    expect(plain.message.startsWith('compaction.idle_after = "6h" was rejected: ')).toBe(true);
+    expect(await readFile(ctx.configPath, "utf8")).toBe(before);
+  });
+
+  test("a refused change to a config file that didn't exist removes the file again", async () => {
+    const ctx = await world("", [["conf.d/10-local.toml", "[tools]\nmax_result_chars = 10\n"]]);
+    await writeFile(join(ctx.config.dirs.config, "conf.d", "10-local.toml"), "[tools\n");
+    await rm(ctx.configPath);
+    expect(refusalOf(() => config(ctx, { key: "compaction.idle_after", value: "6h" })).message).toContain("was rejected");
+    expect(await Bun.file(ctx.configPath).exists()).toBe(false);
+  });
+
+  test("a config file that can't be read is reported rather than overwritten", async () => {
+    const ctx = await world("[heartbeat]\nenabled = true\n");
+    await rm(ctx.configPath);
+    await mkdir(ctx.configPath);
+    expect(refusalOf(() => config(ctx, { key: "heartbeat.enabled", value: "false" })).message).toStartWith(`failed to read ${ctx.configPath}: `);
+  });
+
+  test("setting the default model points out a character whose own model still wins", async () => {
+    const ctx = await world('[providers.anthropic]\napi_key_env = "ANTHROPIC_API_KEY"\n\n[chat]\nmodel = "anthropic:claude-one"\n');
+    ctx.activeModel = "anthropic:claude-two";
+    expect(config(ctx, { key: "chat.model", value: "anthropic:claude-one" })).toMatchObject({ masked_by_preference: "anthropic:claude-two" });
+    expect(config(ctx, { key: "chat.model", value: "anthropic:claude-two" })).toMatchObject({ masked_by_preference: null });
+    ctx.activeModel = undefined;
+    expect(config(ctx, { key: "chat.model", value: "anthropic:claude-one" })).toMatchObject({ masked_by_preference: null });
+    ctx.activeModel = "anthropic:claude-two";
+    expect(config(ctx, { key: "compaction.idle_after", value: "6h" })).toMatchObject({ masked_by_preference: null });
+  });
+
+  test("clearing a key removes it from the file that holds it and says when there was nothing to clear", async () => {
+    const ctx = await world("[compaction]\nidle_after = \"6h\"\n");
+    expect(clearConfigKey(ctx, "compaction.idle_after")).toMatchObject({ set: "compaction.idle_after", action: "removed" });
+    expect(await readFile(ctx.configPath, "utf8")).toBe("[compaction]\n");
+    expect(clearConfigKey(ctx, " compaction . idle_after ")).toMatchObject({ set: "compaction.idle_after", action: "absent" });
+  });
+
+  test("reading a key walks into tables and reports a key that isn't there", async () => {
+    const ctx = await world("[compaction]\nidle_after = \"6h\"\n");
+    expect(config(ctx, { key: "compaction.idle_after" })).toMatchObject({ key: "compaction.idle_after", config: "6h" });
+    for (const key of ["compaction.nope", "compaction.idle_after.deeper", "compaction.idle_after.deeper.still"]) {
+      expect(refusalOf(() => config(ctx, { key })).message).toBe(`Config section not found: ${key}`);
+    }
+  });
+
+  test("several files change together or not at all", async () => {
+    const ctx = await world("[heartbeat]\nenabled = true\n", [["conf.d/10-local.toml", "[tools]\nmax_result_chars = 10\n"]]);
+    const confd = join(ctx.config.dirs.config, "conf.d", "10-local.toml");
+    const mainBefore = await readFile(ctx.configPath, "utf8");
+    const confdBefore = await readFile(confd, "utf8");
+    const rejected = refusalOf(() => commitConfigEdits(ctx, [
+      { file: ctx.configPath, edit: (text) => text.replace("true", "false") },
+      { file: confd, edit: (text) => text.replace("10", "\"ten\"") },
+    ], "the pair"));
+    expect(rejected.message).toStartWith("the pair was rejected: ");
+    expect(await readFile(ctx.configPath, "utf8")).toBe(mainBefore);
+    expect(await readFile(confd, "utf8")).toBe(confdBefore);
+
+    const unreadable = join(ctx.config.dirs.config, "a-directory");
+    await mkdir(unreadable);
+    expect(refusalOf(() => commitConfigEdits(ctx, [{ file: unreadable, edit: () => "x = 1\n" }], "the read")).message).toStartWith(`failed to read ${unreadable}: `);
+
+    const toml = refusalOf(() => commitConfigEdits(ctx, [{ file: ctx.configPath, edit: () => { throw new TomlEditError("can't edit that"); } }], "the edit"));
+    expect(toml.message).toBe("can't edit that");
+
+    const kept = commitConfigEdits(ctx, [
+      { file: ctx.configPath, edit: (text) => text },
+      { file: confd, edit: (text) => text.replace("10", "12") },
+    ], "the change");
+    expect(kept.fresh.app.tools.max_result_chars).toBe(12);
+    expect(ctx.config).toBe(kept.fresh);
+  });
+
+  test.skipIf(process.getuid?.() === 0)("a write that fails part way puts back the files already written", async () => {
+    const ctx = await world("[heartbeat]\nenabled = true\n", [["conf.d/10-local.toml", "[tools]\nmax_result_chars = 10\n"]]);
+    const confd = join(ctx.config.dirs.config, "conf.d", "10-local.toml");
+    const newFile = join(ctx.config.dirs.config, "conf.d", "20-new.toml");
+    const locked = join(ctx.config.dirs.config, "locked");
+    await mkdir(locked);
+    await chmod(locked, 0o555);
+    const unwritable = join(locked, "30-new.toml");
+    const failed = refusalOf(() => commitConfigEdits(ctx, [
+      { file: confd, edit: (text) => text.replace("10", "11") },
+      { file: newFile, edit: () => "[tools]\nmax_result_chars = 11\n" },
+      { file: unwritable, edit: () => "x = 1\n" },
+    ], "the write"));
+    expect(failed.message).toStartWith(`failed to write ${unwritable}: `);
+    expect(await Bun.file(newFile).exists()).toBe(false);
+    expect(await readFile(confd, "utf8")).toBe("[tools]\nmax_result_chars = 10\n");
   });
 
   test("a key no file defines yet lands in the main config", async () => {

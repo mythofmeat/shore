@@ -20,7 +20,6 @@ import type {
   Usage,
 } from "../types.ts";
 import { systemToText, toTurn } from "../types.ts";
-import { EMPTY_TOOL_SCHEMA } from "../types.ts";
 import { replayableMessages } from "../replay.ts";
 import { turnToOpenAI } from "./openai.ts";
 import { parseToolArgs } from "../tool_args.ts";
@@ -342,7 +341,7 @@ function toZaiTools(tools: ToolDefinition[] | undefined): ChatCompletionTool[] {
     function: {
       name: t.name,
       description: t.description,
-      parameters: t.input_schema ?? EMPTY_TOOL_SCHEMA,
+      parameters: t.input_schema,
     },
   }));
 }

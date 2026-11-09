@@ -31,7 +31,6 @@ import type {
   Usage,
   } from "../types.ts";
 import { systemToText, toolResultImages, toolResultText, toTurn } from "../types.ts";
-import { EMPTY_TOOL_SCHEMA } from "../types.ts";
 import { replayableMessages } from "../replay.ts";
 import { foldInlineSystemMessages, translatesToAnthropic } from "../inline_system.ts";
 import { REASONING_OFF } from "../types.ts";
@@ -266,7 +265,7 @@ function buildTools(tools: ToolDefinition[] | undefined): ToolSet | undefined {
   for (const t of tools) {
     out[t.name] = tool({
       description: t.description,
-      inputSchema: jsonSchema(t.input_schema ?? EMPTY_TOOL_SCHEMA),
+      inputSchema: jsonSchema(t.input_schema),
     });
   }
   return out;

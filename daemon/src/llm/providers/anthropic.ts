@@ -27,7 +27,7 @@ import type {
   Usage,
   WireMessage,
 } from "../types.ts";
-import { EMPTY_TOOL_SCHEMA, streamErrorEvent } from "../types.ts";
+import { streamErrorEvent } from "../types.ts";
 import {
   ANTHROPIC_CACHE_CONTROL_LIMIT,
   recordCacheCall,
@@ -621,7 +621,7 @@ function buildTools(tools: ToolDefinition[] | undefined): Tool[] {
   return tools.map((t) => ({
     name: t.name,
     description: t.description,
-    input_schema: (t.input_schema ?? EMPTY_TOOL_SCHEMA) as Tool["input_schema"],
+    input_schema: t.input_schema as Tool["input_schema"],
   }));
 }
 

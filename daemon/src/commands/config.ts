@@ -454,11 +454,7 @@ export function setConfigKey(
   return commitConfigKey(
     ctx,
     key,
-    (before, owned) => {
-      const path = parseConfigPath(key);
-      const source = formatConfigPath(owned) === key ? before : unsetTomlValue(before, owned).text;
-      return setTomlValue(source, path, literal);
-    },
+    (before, path) => setTomlValue(before, path, literal),
     `${key} = ${isSecretConfigPath(parseConfigPath(key)) ? REDACTED : literal}`,
   );
 }

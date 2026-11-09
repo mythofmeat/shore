@@ -5,18 +5,19 @@ export class TomlEditError extends Error {
   }
 }
 
+interface Header {
+  path: readonly string[];
+  line: number;
+  arrayOfTables: boolean;
+}
+
 interface Assignment {
   path: readonly string[];
   startLine: number;
   endLine: number;
   indent: string;
   keyText: string;
-}
-
-interface Header {
-  path: readonly string[];
-  line: number;
-  arrayOfTables: boolean;
+  table: Header | undefined;
 }
 
 interface Scan {
@@ -30,7 +31,7 @@ interface Cursor {
 }
 
 function skipSpace(c: Cursor): void {
-  while (c.at < c.text.length && (c.text[c.at] === " " || c.text[c.at] === "\t")) c.at += 1;
+  while (c.text[c.at] === " " || c.text[c.at] === "\t") c.at += 1;
 }
 
 const BARE_KEY = /[A-Za-z0-9_-]/;
@@ -38,23 +39,19 @@ const BARE_KEY = /[A-Za-z0-9_-]/;
 function readQuoted(c: Cursor, quote: string): string | undefined {
   c.at += 1;
   let out = "";
-  while (c.at < c.text.length) {
-    const ch = c.text[c.at] as string;
+  for (;;) {
+    const ch = c.text[c.at];
+    if (ch === undefined) return undefined;
     if (ch === "\\" && quote === '"') {
       const next = c.text[c.at + 1];
-      if (next === undefined) return undefined;
       out += next === "n" ? "\n" : next === "t" ? "\t" : next;
       c.at += 2;
       continue;
     }
-    if (ch === quote) {
-      c.at += 1;
-      return out;
-    }
-    out += ch;
     c.at += 1;
+    if (ch === quote) return out;
+    out += ch;
   }
-  return undefined;
 }
 
 function readKeyPath(c: Cursor): readonly string[] | undefined {
@@ -62,15 +59,14 @@ function readKeyPath(c: Cursor): readonly string[] | undefined {
   for (;;) {
     skipSpace(c);
     const ch = c.text[c.at];
-    if (ch === undefined) return undefined;
     if (ch === '"' || ch === "'") {
       const part = readQuoted(c, ch);
       if (part === undefined) return undefined;
       parts.push(part);
     } else {
       let bare = "";
-      while (c.at < c.text.length && BARE_KEY.test(c.text[c.at] as string)) {
-        bare += c.text[c.at];
+      for (let next = ch; next !== undefined && BARE_KEY.test(next); next = c.text[c.at]) {
+        bare += next;
         c.at += 1;
       }
       if (bare === "") return undefined;
@@ -92,17 +88,18 @@ interface ValueState {
 
 function advanceValue(line: string, from: number, state: ValueState): void {
   let i = from;
-  while (i < line.length) {
+  for (;;) {
+    const ch = line[i];
+    if (ch === undefined) return;
     if (state.multiline !== undefined) {
       if (line.startsWith(state.multiline, i)) {
         i += 3;
         state.multiline = undefined;
-        continue;
+      } else {
+        i += 1;
       }
-      i += 1;
       continue;
     }
-    const ch = line[i] as string;
     if (ch === "#") return;
     if (line.startsWith('"""', i) || line.startsWith("'''", i)) {
       state.multiline = line.slice(i, i + 3);
@@ -127,7 +124,7 @@ function headerPath(
   const arrayOfTables = trimmed.startsWith("[[");
   const open = arrayOfTables ? 2 : 1;
   const close = trimmed.lastIndexOf(arrayOfTables ? "]]" : "]");
-  if (close <= open) return undefined;
+  if (close === -1) return undefined;
   const c: Cursor = { text: trimmed.slice(open, close), at: 0 };
   const path = readKeyPath(c);
   if (path === undefined) return undefined;
@@ -139,6 +136,7 @@ function scanToml(source: string): Scan {
   const assignments: Assignment[] = [];
   const headers: Header[] = [];
   let current: readonly string[] = [];
+  let table: Header | undefined;
   let i = 0;
 
   while (i < lines.length) {
@@ -154,7 +152,8 @@ function scanToml(source: string): Scan {
       const parsed = headerPath(trimmed);
       if (parsed !== undefined) {
         current = parsed.path;
-        headers.push({ path: parsed.path, line: i, arrayOfTables: parsed.arrayOfTables });
+        table = { path: parsed.path, line: i, arrayOfTables: parsed.arrayOfTables };
+        headers.push(table);
       }
       i += 1;
       continue;
@@ -179,7 +178,7 @@ function scanToml(source: string): Scan {
       advanceValue(lines[end] as string, 0, state);
     }
 
-    assignments.push({ path: [...current, ...key], startLine: i, endLine: end, indent, keyText });
+    assignments.push({ path: [...current, ...key], startLine: i, endLine: end, indent, keyText, table });
     i = end + 1;
   }
 
@@ -205,18 +204,7 @@ function renderKey(path: readonly string[]): string {
 function insertionPoint(scan: Scan, table: readonly string[]): number | undefined {
   const header = scan.headers.find((h) => !h.arrayOfTables && samePath(h.path, table));
   if (header === undefined) return undefined;
-
-  const nextHeader = scan.headers
-    .filter((h) => h.line > header.line)
-    .reduce<number>((best, h) => Math.min(best, h.line), Number.POSITIVE_INFINITY);
-
-  let last = header.line;
-  for (const a of scan.assignments) {
-    if (a.startLine > header.line && a.startLine < nextHeader && a.endLine > last) {
-      last = a.endLine;
-    }
-  }
-  return last;
+  return scan.assignments.filter((a) => a.table === header).at(-1)?.endLine ?? header.line;
 }
 
 type TomlWriteAction = "replaced" | "added-to-section" | "added-section";
@@ -315,13 +303,9 @@ function nextHeaderLine(scan: Scan, after: number, total: number): number {
 
 function blockOf(scan: Scan, lines: readonly string[], header: Header): Block {
   const limit = nextHeaderLine(scan, header.line, lines.length);
-  let contentEnd = header.line + 1;
-  for (const a of scan.assignments) {
-    if (a.startLine > header.line && a.startLine < limit) contentEnd = Math.max(contentEnd, a.endLine + 1);
-  }
+  const contentEnd = (scan.assignments.filter((a) => a.table === header).at(-1)?.endLine ?? header.line) + 1;
   let end = contentEnd;
   while (end < limit && (lines[end] as string).trim() === "") end += 1;
-  if (end === limit && limit === lines.length) end = lines.length;
   let start = header.line;
   while (start > 0 && (lines[start - 1] as string).trim().startsWith("#")) start -= 1;
   return { start, contentEnd, end, header };
@@ -381,7 +365,7 @@ export function setTomlArrayTableValue(source: string, path: readonly string[], 
   const scan = scanToml(source);
   const lines = source.split("\n");
   const block = blockAt(scan, lines, path, index);
-  const existing = scan.assignments.find((a) => a.startLine > block.header.line && a.startLine < block.contentEnd && samePath(a.path, [...path, key]));
+  const existing = scan.assignments.find((a) => a.table === block.header && samePath(a.path, [...path, key]));
   if (existing !== undefined) {
     return [...lines.slice(0, existing.startLine), `${existing.indent}${existing.keyText} = ${literal}`, ...lines.slice(existing.endLine + 1)].join("\n");
   }
@@ -392,7 +376,7 @@ export function unsetTomlArrayTableValue(source: string, path: readonly string[]
   const scan = scanToml(source);
   const lines = source.split("\n");
   const block = blockAt(scan, lines, path, index);
-  const existing = scan.assignments.find((a) => a.startLine > block.header.line && a.startLine < block.contentEnd && samePath(a.path, [...path, key]));
+  const existing = scan.assignments.find((a) => a.table === block.header && samePath(a.path, [...path, key]));
   if (existing === undefined) return source;
   return [...lines.slice(0, existing.startLine), ...lines.slice(existing.endLine + 1)].join("\n");
 }
@@ -438,12 +422,9 @@ export function reorderTomlArrayTables(source: string, path: readonly string[], 
 export function removeTomlTable(source: string, path: readonly string[]): string {
   const scan = scanToml(source);
   const lines = source.split("\n");
-  const ranges = scan.headers.filter((h) => isPrefix(path, h.path)).map((h) => blockOf(scan, lines, h));
-  const owned = (line: number) => ranges.some((r) => line >= r.start && line < r.end);
+  const ranges: Array<{ start: number; end: number }> = scan.headers.filter((h) => isPrefix(path, h.path)).map((h) => blockOf(scan, lines, h));
   for (const a of scan.assignments) {
-    if (isPrefix(path, a.path) || (a.path.length < path.length && isPrefix(a.path, path))) {
-      if (!owned(a.startLine)) ranges.push({ start: a.startLine, contentEnd: a.endLine + 1, end: a.endLine + 1, header: { path: a.path, line: a.startLine, arrayOfTables: false } });
-    }
+    if (isPrefix(path, a.path) || (a.path.length < path.length && isPrefix(a.path, path))) ranges.push({ start: a.startLine, end: a.endLine + 1 });
   }
   return dropRanges(lines, ranges);
 }

@@ -111,6 +111,7 @@ export function mutantsOf(file: string, text: string, source: ts.SourceFile): Mu
   const raw: { start: number; end: number; replacement: string; scope: Scope }[] = [];
   const visit = (n: ts.Node, scope: Scope): void => {
     if (skipped(n)) return;
+    if (ts.isCallExpression(n) && LOGGING_CALL.test(n.getText(source))) return;
     const add = (start: number, end: number, replacement: string): void => {
       raw.push({ start, end, replacement, scope });
     };
@@ -394,12 +395,26 @@ interface Result {
   readonly outcome: Outcome;
 }
 
+function stem(path: string): string {
+  return (path.split("/").at(-1) ?? path).replace(/\.(test\.)?tsx?$/u, "");
+}
+
+export function likeliestFirst(mutant: Mutant, tests: readonly number[], coverage: Coverage): number[] {
+  const own = stem(mutant.file);
+  const rank = (t: number): number => (stem(coverage.tests[t] ?? "") === own ? 0 : 1);
+  return [...tests].sort((a, b) => rank(a) - rank(b) || (coverage.ms[a] ?? 0) - (coverage.ms[b] ?? 0) || a - b);
+}
+
 async function runMutants(mutants: readonly Mutant[], coverage: Coverage, workers: number): Promise<Result[]> {
-  const planned = mutants.map((mutant) => ({ mutant, tests: testsFor(mutant, coverage) }));
+  const planned = mutants.map((mutant) => {
+    const tests = testsFor(mutant, coverage);
+    return { mutant, tests: tests === undefined ? undefined : likeliestFirst(mutant, tests, coverage) };
+  });
   const covered = planned.filter((p) => p.tests !== undefined);
   const cost = (tests: readonly number[] | undefined): number => (tests ?? []).reduce((sum, t) => sum + (coverage.ms[t] ?? 0), 0);
   covered.sort((a, b) => cost(b.tests) - cost(a.tests));
-  console.error(`${String(mutants.length)} mutants, ${String(mutants.length - covered.length)} on lines no test runs, ${String(workers)} workers`);
+  const files = covered.reduce((sum, p) => sum + (p.tests?.length ?? 0), 0);
+  console.error(`${String(mutants.length)} mutants, ${String(mutants.length - covered.length)} on lines no test runs, ${covered.length === 0 ? "0" : (files / covered.length).toFixed(1)} test files each on average, ${String(workers)} workers`);
   const ran = await pool(covered, workers, "mutants", async (dir, { mutant, tests }) => {
     const path = join(dir, mutant.file);
     const pristine = readFileSync(path, "utf8");

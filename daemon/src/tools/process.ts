@@ -24,6 +24,10 @@ export interface ProcessOutput {
   stderr: string;
 }
 
+export const KILL_GRACE_MS = 250;
+
+export const OUTPUT_LIMIT_BYTES = 1024 * 1024;
+
 export function runProcess(
   program: string,
   args: string[],
@@ -43,19 +47,16 @@ export function runProcess(
     let failure: Error | undefined;
     let escalation: ReturnType<typeof setTimeout> | undefined;
     const kill = (signal: NodeJS.Signals): void => {
+      if (child.pid === undefined) return;
       try {
-        if (grouped && child.pid !== undefined) process.kill(-child.pid, signal);
-        else child.kill(signal);
-      } catch (error) {
-        if ((error as NodeJS.ErrnoException).code !== "ESRCH") failure = error as Error;
-      }
+        process.kill(grouped ? -child.pid : child.pid, signal);
+      } catch {}
     };
     const cancel = (): void => {
       kill("SIGTERM");
-      escalation = setTimeout(() => kill("SIGKILL"), 250);
+      escalation = setTimeout(() => { kill("SIGKILL"); }, KILL_GRACE_MS);
     };
-    options.signal?.addEventListener("abort", cancel, { once: true });
-    if (options.signal?.aborted === true) cancel();
+    options.signal?.addEventListener("abort", cancel);
     child.stdin?.on("error", (error) => { if ((error as NodeJS.ErrnoException).code !== "EPIPE") failure = error; });
     if (options.stdin !== undefined) child.stdin?.end(options.stdin);
     child.stdout?.on("data", stdout.accept);
@@ -68,32 +69,26 @@ export function runProcess(
         kill("SIGKILL");
         const reason: unknown = options.signal.reason;
         reject(reason instanceof Error ? reason : new Error(String(reason)));
-        return;
+      } else if (failure === undefined) {
+        resolve({ code, stdout: stdout.text(), stderr: stderr.text() });
+      } else {
+        reject(failure);
       }
-      if (failure !== undefined) { reject(failure); return; }
-      resolve({
-        code,
-        stdout: stdout.text(),
-        stderr: stderr.text(),
-      });
     });
   });
 }
 
 function boundedProcessOutput() {
   const chunks: Buffer[] = [];
-  const limit = 1024 * 1024;
   let bytes = 0;
   let truncated = false;
   return {
     accept: (chunk: Buffer): void => {
-      const remaining = limit - bytes;
+      const remaining = OUTPUT_LIMIT_BYTES - bytes;
       if (chunk.length > remaining) truncated = true;
-      if (remaining > 0) {
-        const kept = Buffer.from(chunk.subarray(0, remaining));
-        chunks.push(kept);
-        bytes += kept.length;
-      }
+      const kept = Buffer.from(chunk.subarray(0, remaining));
+      chunks.push(kept);
+      bytes += kept.length;
     },
     text: () => Buffer.concat(chunks).toString("utf8") + (truncated ? "\n[process output truncated]" : ""),
   };

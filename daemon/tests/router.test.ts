@@ -1,7 +1,10 @@
 import { describe, expect, test } from "bun:test";
 
 import { afterCommand, type DispatchContext } from "../src/handler/command_dispatch.ts";
-import { MessageHandler, type GenerationParams, type HandlerRegistry } from "../src/handler/router.ts";
+import { CharacterConfigError } from "../src/characters.ts";
+import { HeartbeatThreadError, ImagesUnsupportedError, NoModelError } from "../src/handler/setup.ts";
+import { MessageHandler, withRid, type GenerationParams, type HandlerRegistry, type MessageHandlerDeps } from "../src/handler/router.ts";
+import type { ErrorCode } from "../src/protocol/ErrorCode.ts";
 import { REQUEST_LIFECYCLE_CAPABILITY, SessionRouter, type RequestMeta, type RoutedMessage } from "../src/swp/session.ts";
 import type { ClientMessage } from "../src/protocol/ClientMessage.ts";
 import type { Command } from "../src/protocol/Command.ts";
@@ -439,5 +442,698 @@ describe("per-session routing queues", () => {
     gate("compact").resolve();
     await handler.drain();
     expect(names(required(frames.get(1)))).toEqual(["switch_thread", "compact"]);
+  });
+});
+
+interface SessionSpec {
+  readonly id: number;
+  readonly character?: string | null;
+  readonly thread?: string | null;
+  readonly lifecycle?: boolean;
+}
+
+interface WorldOptions {
+  readonly sessions: readonly SessionSpec[];
+  readonly characters?: readonly string[];
+  readonly runGeneration?: (params: GenerationParams) => Promise<void>;
+  readonly dispatchCommand?: MessageHandlerDeps["dispatchCommand"];
+  readonly commandChangesState?: (cmd: Command) => boolean;
+  readonly compactions?: MessageHandlerDeps["compactions"];
+  readonly now?: () => number;
+}
+
+function untilStopped(params: GenerationParams): Promise<void> {
+  return new Promise<void>((resolve) => {
+    params.signal.addEventListener("abort", () => { resolve(); }, { once: true });
+  });
+}
+
+function world(options: WorldOptions) {
+  const router = new SessionRouter();
+  const frames = new Map<number, ServerMessage[]>();
+  const reported: Array<readonly [number, ServerMessage]> = [];
+  router.observeRequests((sessionId, msg) => { reported.push([sessionId, msg]); });
+  const join = (spec: SessionSpec, send?: (msg: ServerMessage) => Promise<void>): void => {
+    const received: ServerMessage[] = [];
+    frames.set(spec.id, received);
+    router.registerSession(
+      {
+        id: spec.id,
+        clientType: "test-client",
+        clientName: `test-${String(spec.id)}`,
+        capabilities: spec.lifecycle === true ? ["streaming", REQUEST_LIFECYCLE_CAPABILITY] : ["streaming"],
+        character: spec.character === undefined ? "ada" : spec.character,
+        thread: spec.thread ?? null,
+      },
+      send ?? ((msg) => { received.push(msg); return Promise.resolve(); }),
+    );
+  };
+  for (const spec of options.sessions) join(spec);
+  const notified: string[] = [];
+  const logged: string[] = [];
+  const started: GenerationParams[] = [];
+  const handler = new MessageHandler({
+    router,
+    registry: registryOf(options.characters ?? ["ada"]),
+    notifier: { notify: (_event, title, body) => { notified.push(`${title}: ${body}`); } },
+    dispatchCommand: options.dispatchCommand ?? ((cmd) => Promise.resolve(commandOutput(cmd.name))),
+    runGeneration: (params) => {
+      started.push(params);
+      return (options.runGeneration ?? untilStopped)(params);
+    },
+    log: { error: (msg) => { logged.push(msg); } },
+    ...(options.now === undefined ? {} : { now: options.now }),
+    ...(options.commandChangesState === undefined ? {} : { commandChangesState: options.commandChangesState }),
+    ...(options.compactions === undefined ? {} : { compactions: options.compactions }),
+  });
+  const metaOf = (sessionId: number, rid: string | null, kind: RequestMeta["kind"] = "message"): RequestMeta => {
+    const client = required(router.client(sessionId));
+    return {
+      session: {
+        clientId: sessionId,
+        sessionId,
+        clientType: client.clientType,
+        clientName: client.clientName,
+        capabilities: client.capabilities,
+        selectedCharacter: client.character,
+        selectedThread: client.thread,
+      },
+      rid,
+      kind,
+    };
+  };
+  const say = (sessionId: number, rid: string | null, stream = true): Promise<void> =>
+    handler.handleRouted({ kind: "engine", msg: message(rid, "hi", stream), meta: metaOf(sessionId, rid) });
+  const stop = (sessionId: number, rid: string | null = null): Promise<void> =>
+    handler.handleRouted({ kind: "engine", msg: { type: "cancel" }, meta: metaOf(sessionId, rid, "cancel") });
+  return { router, handler, frames, reported, notified, logged, started, join, metaOf, say, stop };
+}
+
+const start = (rid: string | null, regen = false): ServerMessage => ({ type: "stream_start", rid, regen });
+const chunk = (text: string, extra: { content_type?: string; subagent?: string; task_id?: string } = {}): ServerMessage =>
+  ({ type: "stream_chunk", rid: "r1", text, content_type: "text", ...extra });
+const end = (content: string, rid = "r1"): ServerMessage => ({
+  type: "stream_end",
+  rid,
+  content,
+  metadata: { tokens: { input: 3, output: 2, cache_read: 0, cache_write: 0 }, timing: { total_ms: 9, ttft_ms: 4 }, model: "m" },
+  finish_reason: "end_turn",
+  is_final: true,
+});
+const cancelledEnd = (rid?: string): ServerMessage => ({
+  type: "stream_end",
+  ...(rid === undefined ? {} : { rid }),
+  content: "",
+  metadata: { tokens: { input: 0, output: 0, cache_read: 0, cache_write: 0 }, timing: { total_ms: 0, ttft_ms: 0 }, model: "" },
+  finish_reason: "cancelled",
+  is_final: true,
+});
+const usage = { input_tokens: 1, output_tokens: 1, cache_read_tokens: 0, cache_creation_tokens: 0 };
+const timing = { total_ms: 1, time_to_first_token_ms: 1 };
+
+describe("replies", () => {
+  test("a failed reply tells everyone watching why, coded by the kind of failure, and its request finishes failed", async () => {
+    const failures: Array<readonly [unknown, ErrorCode, string, number | undefined]> = [
+      [new NoModelError("no model chosen"), "invalid_request", "no model chosen", undefined],
+      [new ImagesUnsupportedError("chat.x", 2), "invalid_request", "chat.x does not accept images, so the 2 attachments were not sent. Switch to a vision-capable model and send again.", undefined],
+      [new HeartbeatThreadError("ada", "beats"), "invalid_request", `"beats" is where ada's heartbeats run, so you can read it but not write there. Write to ada in another thread.`, undefined],
+      [new CharacterConfigError("ada", new Error("bad toml")), "invalid_request", `invalid config for character "ada": bad toml`, undefined],
+      [new DOMException("too slow", "TimeoutError"), "timeout", "too slow", undefined],
+      [{ kind: "stream_errored", message: "cut off", usage, timing, timeout: true }, "timeout", "stream errored after partial usage: cut off", undefined],
+      [{ kind: "stream_errored", message: "cut off", usage, timing }, "provider_error", "stream errored after partial usage: cut off", undefined],
+      [{ kind: "http_status", status: 429, body: "slow down", retry_after_ms: 1500 }, "provider_error", "HTTP 429: slow down", 1500],
+      [{ kind: "provider", message: "overloaded" }, "provider_error", "provider error: overloaded", undefined],
+      [{ kind: "launch_failed", message: "no claude binary" }, "provider_error", "no claude binary", undefined],
+      [new Error("boom"), "internal_error", "boom", undefined],
+    ];
+    for (const [error, code, text, retry] of failures) {
+      const h = world({ sessions: [{ id: 1, lifecycle: true }, { id: 2 }], runGeneration: async () => { throw error; } });
+      await h.say(1, "r1");
+      await h.handler.drain();
+      const failure = { code, message: text, ...(retry === undefined ? {} : { retry_after_ms: retry }) };
+      expect(h.frames.get(1)).toEqual([{ type: "error", rid: "r1", ...failure }, { type: "request_finished", rid: "r1", outcome: "failed", error: failure }]);
+      expect(h.frames.get(2)).toEqual([{ type: "error", rid: "r1", ...failure }]);
+      expect(h.notified).toEqual([`Shore - ada: ${text}`]);
+      expect(h.handler.generationCount).toBe(0);
+    }
+  });
+
+  test("a reply sent without a request id fails without one and reports no request", async () => {
+    const h = world({ sessions: [{ id: 1, lifecycle: true }], runGeneration: () => Promise.reject(new Error("boom")) });
+    await h.say(1, null);
+    await h.handler.drain();
+    expect(h.frames.get(1)).toEqual([{ type: "error", code: "internal_error", message: "boom" }]);
+    expect(h.reported).toEqual([]);
+  });
+
+  test("a reply that fails because it was stopped reports the stop, not an error", async () => {
+    const h = world({
+      sessions: [{ id: 1, lifecycle: true }],
+      runGeneration: (params) => new Promise<void>((_resolve, reject) => {
+        params.signal.addEventListener("abort", () => { reject(new DOMException("stopped", "AbortError")); }, { once: true });
+      }),
+    });
+    await h.say(1, "r1");
+    await h.stop(1);
+    await h.handler.drain();
+    expect(h.frames.get(1)).toEqual([cancelledEnd("r1"), { type: "request_finished", rid: "r1", outcome: "cancelled" }]);
+    expect(h.notified).toEqual([]);
+    expect(h.handler.generationCount).toBe(0);
+  });
+
+  test("a client that asked not to stream gets the reply when it ends while other viewers watch it stream", async () => {
+    const script = [start("r1"), chunk("Hel"), chunk("lo"), end("Hello")];
+    const h = world({ sessions: [{ id: 1 }, { id: 2 }], runGeneration: async (params) => { for (const frame of script) await params.send(frame); } });
+    await h.say(1, "r1", false);
+    await h.handler.drain();
+    expect(h.frames.get(1)).toEqual([end("Hello")]);
+    expect(h.frames.get(2)).toEqual(script);
+
+    const regenerated = world({ sessions: [{ id: 1 }], runGeneration: async (params) => { await params.send(start("r1", true)); await params.send(chunk("x")); } });
+    await regenerated.say(1, "r1", false);
+    await regenerated.handler.drain();
+    expect(regenerated.frames.get(1)).toEqual([start("r1", true)]);
+  });
+
+  test("a session that arrives mid-reply first sees what was said so far, and one that arrives after the end sees nothing", async () => {
+    const parked = deferred();
+    const more = deferred();
+    const ended = deferred();
+    const after = deferred();
+    const tool: ServerMessage = { type: "tool_call", rid: "r1", tool_id: "t1", tool_name: "read", input: {} };
+    const h = world({
+      sessions: [{ id: 1 }, { id: 2, thread: "side" }, { id: 3, thread: "side" }],
+      runGeneration: async (params) => {
+        await params.send({ type: "phase", rid: "r1", phase: "thinking" });
+        await params.send(start("r1"));
+        await params.send(chunk("Hel"));
+        await params.send({ type: "stream_chunk", rid: "r1", text: "lo", content_type: "text", subagent: null, task_id: null });
+        await params.send(chunk("hmm", { content_type: "thinking" }));
+        await params.send(tool);
+        await params.send(roundEnd);
+        await params.send(chunk("from a helper", { subagent: "memory" }));
+        await params.send(chunk("from a task", { task_id: "t9" }));
+        parked.resolve();
+        await more.promise;
+        await params.send(chunk("!"));
+        await params.send(end("Hello!"));
+        ended.resolve();
+        await after.promise;
+        await params.send(late);
+      },
+    });
+    const roundEnd: ServerMessage = { type: "stream_end", rid: "r1", content: "Hello", metadata: { tokens: { input: 1, output: 1, cache_read: 0, cache_write: 0 }, timing: { total_ms: 1, ttft_ms: 1 }, model: "m" }, finish_reason: "tool_use", is_final: false };
+    const late: ServerMessage = { type: "phase", rid: "r1", phase: "saving" };
+    await h.say(1, "r1");
+    await parked.promise;
+    h.router.setSelectedThread(2, null);
+    h.router.reportMove(2);
+    await settle();
+    expect(h.frames.get(2)).toEqual([start("r1"), chunk("Hello"), chunk("hmm", { content_type: "thinking" }), tool, roundEnd]);
+    more.resolve();
+    await ended.promise;
+    await settle();
+    expect(h.frames.get(2)?.slice(5)).toEqual([chunk("!"), end("Hello!")]);
+    h.router.setSelectedThread(3, null);
+    await h.handler.handleControl({ kind: "session_connected", sessionId: 3 });
+    expect(h.frames.get(3)).toEqual([]);
+    after.resolve();
+    await h.handler.drain();
+    expect(h.frames.get(2)?.at(-1)).toEqual(late);
+    expect(h.frames.get(3)).toEqual([]);
+  });
+
+  test("a session only gets the reply again by joining: moving away and back quietly isn't enough", async () => {
+    const next = deferred();
+    const last = deferred();
+    const h = world({
+      sessions: [{ id: 1 }, { id: 2 }, { id: 3 }],
+      runGeneration: async (params) => {
+        await params.send(chunk("a"));
+        await next.promise;
+        await params.send(chunk("b"));
+        await last.promise;
+        await params.send(chunk("c"));
+      },
+    });
+    await h.say(1, "r1");
+    await settle();
+    h.router.setSelectedThread(2, "side");
+    h.router.setSelectedThread(3, "side");
+    h.router.reportMove(3);
+    next.resolve();
+    await settle();
+    h.router.setSelectedThread(2, null);
+    h.router.setSelectedThread(3, null);
+    last.resolve();
+    await h.handler.drain();
+    expect(h.frames.get(1)).toEqual([chunk("a"), chunk("b"), chunk("c")]);
+    expect(h.frames.get(2)).toEqual([chunk("a")]);
+    expect(h.frames.get(3)).toEqual([chunk("a")]);
+  });
+
+  test("a session that isn't connected any more joins nothing", async () => {
+    const done = deferred();
+    const h = world({ sessions: [{ id: 1 }], runGeneration: async (params) => { await params.send(chunk("a")); await done.promise; } });
+    await h.say(1, "r1");
+    await settle();
+    await h.handler.handleControl({ kind: "session_connected", sessionId: 99 });
+    done.resolve();
+    await h.handler.drain();
+    expect(h.logged).toEqual([]);
+  });
+
+  test("a reply waits for its issuer to take each frame", async () => {
+    const taken = deferred();
+    const progress: string[] = [];
+    const h = world({ sessions: [], runGeneration: async (params) => { await params.send(chunk("a")); progress.push("sent"); } });
+    h.join({ id: 1 }, async () => { await taken.promise; progress.push("taken"); });
+    await h.say(1, "r1");
+    await settle();
+    expect(progress).toEqual([]);
+    taken.resolve();
+    await h.handler.drain();
+    expect(progress).toEqual(["taken", "sent"]);
+  });
+
+  test("a stopped reply is gone at once, so stopping again sends nothing more", async () => {
+    const winding = deferred();
+    const h = world({ sessions: [{ id: 1 }], runGeneration: async () => { await winding.promise; } });
+    await h.say(1, "r1");
+    await h.stop(1);
+    expect(h.handler.generationCount).toBe(0);
+    await h.stop(1);
+    winding.resolve();
+    await h.handler.drain();
+    expect(h.frames.get(1)).toEqual([cancelledEnd("r1")]);
+  });
+
+  test("a stop that arrives while a replaced reply is still ending leaves it replaced", async () => {
+    const ending = deferred();
+    const h = world({ sessions: [] });
+    const received: ServerMessage[] = [];
+    h.join({ id: 1, lifecycle: true }, async (msg) => {
+      if (msg.type === "stream_end" && msg.rid === "r1") await ending.promise;
+      received.push(msg);
+    });
+    await h.say(1, "r1");
+    const replacing = h.say(1, "r2");
+    await settle();
+    await h.stop(1);
+    ending.resolve();
+    await replacing;
+    await h.stop(1);
+    await h.handler.drain();
+    expect(received.filter((frame) => frame.type === "request_finished")).toEqual([
+      { type: "request_finished", rid: "r1", outcome: "superseded" },
+      { type: "request_finished", rid: "r2", outcome: "cancelled" },
+    ]);
+  });
+
+  test("a viewer that switches character or thread, or disconnects, stops getting the reply", async () => {
+    const next = deferred();
+    const h = world({
+      characters: ["ada", "bob"],
+      sessions: [{ id: 1 }, { id: 2 }, { id: 3 }, { id: 4, character: null }],
+      runGeneration: async (params) => { await params.send(chunk("a")); await next.promise; await params.send(chunk("b")); },
+    });
+    await h.say(1, "r1");
+    await settle();
+    h.router.setSelectedCharacter(2, "bob");
+    h.router.setSelectedThread(3, "side");
+    h.router.unregisterSession(4);
+    next.resolve();
+    await h.handler.drain();
+    expect(h.frames.get(1)).toEqual([chunk("a"), chunk("b")]);
+    for (const id of [2, 3, 4]) expect(h.frames.get(id)).toEqual([chunk("a")]);
+    expect(h.logged).toEqual([]);
+  });
+
+  test("a viewer whose connection fails is logged and the others still get the reply", async () => {
+    const h = world({ sessions: [{ id: 1 }], runGeneration: async (params) => { await params.send(chunk("a")); } });
+    h.join({ id: 2 }, () => Promise.reject(new Error("socket closed")));
+    await h.say(1, "r1");
+    await h.handler.drain();
+    expect(h.frames.get(1)).toEqual([chunk("a")]);
+    expect(h.logged).toEqual(["failed to deliver stream frame"]);
+  });
+
+  test("a new message replaces the reply still running: its stream ends as cancelled and its request as superseded", async () => {
+    const h = world({ sessions: [{ id: 1, lifecycle: true }] });
+    await h.say(1, "r1");
+    await h.say(1, "r2");
+    await settle();
+    expect(h.started[0]?.signal.aborted).toBe(true);
+    expect(h.handler.generationCount).toBe(1);
+    await h.stop(1);
+    await h.handler.drain();
+    expect(h.frames.get(1)).toEqual([
+      cancelledEnd("r1"),
+      { type: "request_finished", rid: "r1", outcome: "superseded" },
+      cancelledEnd("r2"),
+      { type: "request_finished", rid: "r2", outcome: "cancelled" },
+    ]);
+
+    const unnamed = world({ sessions: [{ id: 1 }] });
+    await unnamed.say(1, null);
+    await unnamed.say(1, "r2");
+    await settle();
+    expect(unnamed.frames.get(1)).toEqual([]);
+    await unnamed.stop(1);
+    await unnamed.handler.drain();
+  });
+
+  test("stopping a reply ends its stream under its own id and the stop's, and reaches a stopper who isn't watching", async () => {
+    const h = world({ sessions: [{ id: 1 }, { id: 2 }] });
+    await h.say(1, "r1");
+    await h.stop(2, "c2");
+    await h.handler.drain();
+    expect(h.frames.get(1)).toEqual([cancelledEnd("r1"), cancelledEnd("c2")]);
+    expect(h.frames.get(2)).toEqual([cancelledEnd("r1"), cancelledEnd("c2")]);
+
+    const unnamed = world({ sessions: [{ id: 1 }] });
+    await unnamed.say(1, null);
+    await unnamed.stop(1, "c1");
+    await unnamed.handler.drain();
+    expect(unnamed.frames.get(1)).toEqual([cancelledEnd("c1")]);
+
+    const anonymous = world({ sessions: [{ id: 1 }] });
+    await anonymous.say(1, null);
+    await anonymous.stop(1);
+    await anonymous.handler.drain();
+    expect(anonymous.frames.get(1)).toEqual([cancelledEnd()]);
+
+    const late = world({ sessions: [{ id: 1 }] });
+    await late.say(1, "r1");
+    late.join({ id: 2 });
+    await late.stop(2);
+    await late.handler.drain();
+    expect(late.frames.get(1)).toEqual([cancelledEnd("r1")]);
+    expect(late.frames.get(2)).toEqual([cancelledEnd("r1")]);
+
+    const idle = world({ sessions: [{ id: 1 }] });
+    await idle.stop(1, "c1");
+    expect(idle.frames.get(1)).toEqual([]);
+  });
+
+  test("clients that track requests hear when one is accepted and when it finishes, and every request is reported", async () => {
+    const h = world({
+      sessions: [{ id: 1, lifecycle: true }, { id: 2, thread: "side" }],
+      runGeneration: async (params) => { await params.accepted?.(); await params.send(end("done", params.rid ?? "")); },
+    });
+    await h.say(1, "r1");
+    await h.say(2, "r2");
+    await h.handler.drain();
+    expect(h.frames.get(1)).toEqual([{ type: "request_accepted", rid: "r1" }, end("done", "r1"), { type: "request_finished", rid: "r1", outcome: "completed" }]);
+    expect(h.frames.get(2)).toEqual([end("done", "r2")]);
+    expect(h.reported).toEqual([
+      [1, { type: "request_accepted", rid: "r1" }],
+      [2, { type: "request_accepted", rid: "r2" }],
+      [1, { type: "request_finished", rid: "r1", outcome: "completed" }],
+      [2, { type: "request_finished", rid: "r2", outcome: "completed" }],
+    ]);
+
+    const gone = world({ sessions: [{ id: 1, lifecycle: true }], runGeneration: async (params) => { gone.router.unregisterSession(1); await params.accepted?.(); } });
+    await gone.say(1, "r1");
+    await gone.handler.drain();
+    expect(gone.frames.get(1)).toEqual([]);
+    expect(gone.reported.map(([, frame]) => frame.type)).toEqual(["request_accepted", "request_finished"]);
+
+    const unnamed = world({ sessions: [{ id: 1, lifecycle: true }], runGeneration: async (params) => { await params.accepted?.(); } });
+    await unnamed.say(1, null);
+    await unnamed.handler.drain();
+    expect(unnamed.frames.get(1)).toEqual([]);
+    expect(unnamed.reported).toEqual([]);
+  });
+
+  test("once the daemon is shutting down a new message is refused as busy", async () => {
+    const h = world({ sessions: [{ id: 1, lifecycle: true }] });
+    h.handler.close();
+    await h.say(1, "r1");
+    const text = "The daemon is shutting down. Send this again once it has restarted.";
+    expect(h.frames.get(1)).toEqual([
+      { type: "error", rid: "r1", code: "busy", message: text },
+      { type: "request_finished", rid: "r1", outcome: "failed", error: { code: "busy", message: text } },
+    ]);
+    expect(h.started).toEqual([]);
+  });
+
+  test("a message for a character that doesn't exist is refused and its request fails", async () => {
+    const h = world({ sessions: [{ id: 1, lifecycle: true, character: "zed" }] });
+    await h.say(1, "r1");
+    const text = 'character "zed" not found (available: ["ada"])';
+    expect(h.frames.get(1)).toEqual([
+      { type: "error", rid: "r1", code: "invalid_request", message: text },
+      { type: "request_finished", rid: "r1", outcome: "failed", error: { code: "invalid_request", message: text } },
+    ]);
+    expect(h.started).toEqual([]);
+  });
+
+  test("a hello or a command reaching the reply handler starts nothing", async () => {
+    const h = world({ sessions: [{ id: 1 }] });
+    await h.handler.handleEngine({ type: "hello", client_type: "tui", client_name: "t", capabilities: [] }, h.metaOf(1, null));
+    await h.handler.handleEngine({ type: "command", name: "status", args: {}, rid: null } as unknown as ClientMessage, h.metaOf(1, null));
+    expect(h.started).toEqual([]);
+    expect(h.frames.get(1)).toEqual([]);
+  });
+
+  test("what is running is listed by character, thread and start time", async () => {
+    const h = world({ characters: ["ada", "bob"], sessions: [{ id: 1, thread: "side" }, { id: 2, character: "bob" }], now: () => 1234 });
+    await h.say(1, "r1");
+    await h.say(2, "r2");
+    expect(h.handler.activeGenerations()).toEqual([
+      { character: "ada", thread: "side", startedAt: 1234 },
+      { character: "bob", thread: null, startedAt: 1234 },
+    ]);
+    await h.stop(1);
+    await h.stop(2);
+    await h.handler.drain();
+  });
+
+  test("a frame that carries no request id is passed on as it is", () => {
+    const history: ServerMessage = { type: "threads_changed", character: "ada", thread: "main" };
+    expect(withRid(history, "r1")).toBe(history);
+    const failure: ServerMessage = { type: "error", code: "internal_error", message: "x" };
+    expect(withRid(failure, null)).toBe(failure);
+    expect(withRid(failure, "r1")).toEqual({ ...failure, rid: "r1" });
+  });
+});
+
+describe("compactions", () => {
+  test("a compaction's progress reaches the sessions on that conversation and one that arrives during it, until the handler closes", async () => {
+    let listener: ((character: string, thread: string, frame: ServerMessage) => void) | undefined;
+    const progress: ServerMessage = { type: "phase", phase: "compacting" };
+    const running = new Map<string, { thread: string; frame: ServerMessage }>([["ada", { thread: "side", frame: progress }]]);
+    const h = world({
+      sessions: [{ id: 1, thread: "side" }, { id: 2 }],
+      compactions: {
+        observe: (observer) => { listener = observer; return () => { listener = undefined; }; },
+        running: (character) => running.get(character),
+      },
+    });
+    listener?.("ada", "side", progress);
+    await settle();
+    expect(h.frames.get(1)).toEqual([progress]);
+    expect(h.frames.get(2)).toEqual([]);
+
+    h.join({ id: 3, thread: "side" });
+    h.join({ id: 4 });
+    await h.handler.handleControl({ kind: "session_connected", sessionId: 3 });
+    await h.handler.handleControl({ kind: "session_connected", sessionId: 4 });
+    expect(h.frames.get(3)).toEqual([progress]);
+    expect(h.frames.get(4)).toEqual([]);
+
+    h.handler.close();
+    expect(listener).toBeUndefined();
+    h.router.setSelectedThread(4, "side");
+    h.router.reportMove(4);
+    expect(h.frames.get(4)).toEqual([]);
+  });
+});
+
+function stoppableDispatch() {
+  const gated = gatedDispatch();
+  const dispatch = async (cmd: Command, requestMeta: RequestMeta, signal: AbortSignal): Promise<ServerMessage> => {
+    const stopped = new Promise<undefined>((resolve) => {
+      signal.addEventListener("abort", () => { resolve(undefined); }, { once: true });
+    });
+    const result = await Promise.race([gated.dispatch(cmd, requestMeta, signal), stopped]);
+    signal.throwIfAborted();
+    return required(result);
+  };
+  return { ...gated, dispatch };
+}
+
+describe("commands", () => {
+  test("a command that fails finishes its request failed, and one that throws is logged as failed", async () => {
+    const failure: ServerMessage = { type: "error", rid: "c1", code: "invalid_request", message: "no such thread" };
+    const h = world({
+      sessions: [{ id: 1, lifecycle: true }],
+      dispatchCommand: (cmd) => (cmd.name === "broken" ? Promise.reject(new Error("exploded")) : Promise.resolve(failure)),
+    });
+    await h.handler.handleRouted({ kind: "command", cmd: command("switch_thread", "c1"), meta: h.metaOf(1, "c1", "command") });
+    h.handler.enqueueRouted({ kind: "command", cmd: command("broken", "c2"), meta: h.metaOf(1, "c2", "command") });
+    await h.handler.drain();
+    expect(h.frames.get(1)).toEqual([
+      failure,
+      { type: "request_finished", rid: "c1", outcome: "failed", error: failure },
+      { type: "request_finished", rid: "c2", outcome: "failed", error: { code: "internal_error", message: "exploded" } },
+    ]);
+    expect(h.logged).toEqual(["error handling routed message"]);
+    expect(h.reported.map(([, frame]) => frame.type)).toEqual(["error", "request_finished", "request_finished"]);
+    expect(h.handler.queuedSessionCount).toBe(0);
+    expect(h.handler.commandCount).toBe(0);
+  });
+
+  test("a command stopped while it waits its turn never starts", async () => {
+    const { dispatch, gate, started } = stoppableDispatch();
+    const h = world({ sessions: [{ id: 1 }], dispatchCommand: dispatch });
+    h.handler.enqueueRouted({ kind: "command", cmd: command("slow"), meta: h.metaOf(1, null, "command") });
+    h.handler.enqueueRouted({ kind: "command", cmd: command("waiting"), meta: h.metaOf(1, null, "command") });
+    await settle();
+    await h.stop(1);
+    gate("slow").resolve();
+    gate("waiting").resolve();
+    await h.handler.drain();
+    expect(started).toEqual(["slow"]);
+    expect(h.handler.commandCount).toBe(0);
+  });
+
+  test("a command that leaves the session where it was doesn't replay the reply it is already watching", async () => {
+    const done = deferred();
+    const h = world({ sessions: [{ id: 1 }, { id: 2 }], runGeneration: async (params) => { await params.send(chunk("so far")); await done.promise; } });
+    await h.say(1, "r1");
+    await settle();
+    await h.handler.handleRouted({ kind: "command", cmd: command("status"), meta: h.metaOf(2, null, "command") });
+    expect(h.frames.get(2)).toEqual([chunk("so far"), commandOutput("status")]);
+    done.resolve();
+    await h.handler.drain();
+  });
+
+  test("a compaction command that moves the session doesn't join it to a reply, since it runs out of turn", async () => {
+    const done = deferred();
+    const h = world({
+      sessions: [{ id: 1 }, { id: 2, thread: "side" }],
+      runGeneration: async (params) => { await params.send(chunk("so far")); await done.promise; },
+      dispatchCommand: (cmd) => {
+        h.router.setSelectedThread(2, null);
+        return Promise.resolve(commandOutput(cmd.name));
+      },
+    });
+    await h.say(1, "r1");
+    await settle();
+    await h.handler.handleRouted({ kind: "command", cmd: command("compact"), meta: h.metaOf(2, null, "command") });
+    expect(h.frames.get(2)).toEqual([commandOutput("compact")]);
+    done.resolve();
+    await h.handler.drain();
+  });
+
+  test("connections, disconnections and stops can be queued like anything else", async () => {
+    let listener: ((character: string, thread: string, frame: ServerMessage) => void) | undefined;
+    const progress: ServerMessage = { type: "phase", phase: "compacting" };
+    const h = world({
+      sessions: [{ id: 1, thread: "main" }],
+      compactions: { observe: (observer) => { listener = observer; return () => { listener = undefined; }; }, running: () => ({ thread: "main", frame: progress }) },
+    });
+    expect(listener).toBeDefined();
+    h.handler.enqueueRouted({ kind: "session_connected", sessionId: 1 });
+    await h.say(1, "r1");
+    h.handler.enqueueRouted({ kind: "engine", msg: { type: "cancel" }, meta: h.metaOf(1, null, "cancel") });
+    h.handler.enqueueRouted({ kind: "session_disconnected", sessionId: 1 });
+    await h.handler.drain();
+    expect(h.frames.get(1)).toEqual([progress, cancelledEnd("r1")]);
+  });
+
+  test("a stopped command tells a client without request tracking that it was cancelled", async () => {
+    for (const lifecycle of [false, true]) {
+      const { dispatch, gate } = stoppableDispatch();
+      const h = world({ sessions: [{ id: 1, lifecycle }], dispatchCommand: dispatch });
+      h.handler.enqueueRouted({ kind: "command", cmd: command("slow", "c1"), meta: h.metaOf(1, "c1", "command") });
+      await settle();
+      await h.stop(1);
+      gate("slow").resolve();
+      await h.handler.drain();
+      expect(h.frames.get(1)).toEqual(lifecycle
+        ? [{ type: "request_finished", rid: "c1", outcome: "cancelled", error: { code: "internal_error", message: "User requested cancellation" } }]
+        : [{ type: "error", rid: "c1", code: "invalid_request", message: "Command cancelled before completion" }]);
+      expect(h.logged).toEqual([]);
+    }
+  });
+
+  test("a command that moves the session to another thread joins it to the reply running there", async () => {
+    const chunks = deferred();
+    const h = world({
+      sessions: [{ id: 1, thread: "side" }, { id: 2 }],
+      runGeneration: async (params) => { await params.send(chunk("so far")); await chunks.promise; },
+      dispatchCommand: (cmd) => {
+        h.router.setSelectedThread(2, "side");
+        return Promise.resolve(commandOutput(cmd.name));
+      },
+    });
+    await h.say(1, "r1");
+    await settle();
+    await h.handler.handleRouted({ kind: "command", cmd: command("switch_thread"), meta: h.metaOf(2, null, "command") });
+    expect(h.frames.get(2)).toEqual([commandOutput("switch_thread"), chunk("so far")]);
+    chunks.resolve();
+    await h.handler.drain();
+  });
+
+  test("disconnecting stops the session's read-only commands, lets its changes finish, and forgets it as a viewer", async () => {
+    const { dispatch, gate, signals } = stoppableDispatch();
+    const next = deferred();
+    const h = world({
+      sessions: [{ id: 1 }, { id: 2 }],
+      dispatchCommand: dispatch,
+      commandChangesState: (cmd) => !cmd.name.startsWith("list_"),
+      runGeneration: async (params) => { await next.promise; await params.send(chunk("late")); },
+    });
+    await h.say(1, "r1");
+    h.handler.enqueueRouted({ kind: "command", cmd: command("list_threads"), meta: h.metaOf(2, null, "command") });
+    h.handler.enqueueRouted({ kind: "command", cmd: command("thread_label"), meta: h.metaOf(1, null, "command") });
+    h.join({ id: 3 });
+    h.handler.enqueueRouted({ kind: "command", cmd: command("list_providers"), meta: h.metaOf(3, null, "command") });
+    await settle();
+    expect(h.handler.queuedSessionCount).toBe(3);
+    h.router.unregisterSession(2);
+    await h.handler.handleRouted({ kind: "session_disconnected", sessionId: 2 });
+    expect(signals.get("list_threads")?.aborted).toBe(true);
+    expect(signals.get("list_providers")?.aborted).toBe(false);
+    expect(h.handler.queuedSessionCount).toBe(2);
+    next.resolve();
+    gate("list_threads").resolve();
+    gate("thread_label").resolve();
+    gate("list_providers").resolve();
+    await settle();
+    expect(signals.get("thread_label")?.aborted).toBe(false);
+    expect(h.frames.get(2)).toEqual([]);
+    await h.stop(1);
+    await h.handler.drain();
+  });
+
+  test("stopping cancels a change left behind by a client that has gone, on the same conversation only", async () => {
+    const { dispatch, gate, signals } = stoppableDispatch();
+    const h = world({ sessions: [{ id: 1 }, { id: 2 }, { id: 3, thread: "side" }], dispatchCommand: dispatch });
+    h.handler.enqueueRouted({ kind: "command", cmd: command("thread_label"), meta: h.metaOf(2, null, "command") });
+    h.handler.enqueueRouted({ kind: "command", cmd: command("thread_rename"), meta: h.metaOf(3, null, "command") });
+    await settle();
+    h.router.unregisterSession(2);
+    h.router.unregisterSession(3);
+    await h.stop(1);
+    expect(signals.get("thread_label")?.aborted).toBe(true);
+    expect(signals.get("thread_rename")?.aborted).toBe(false);
+    gate("thread_label").resolve();
+    gate("thread_rename").resolve();
+    await h.handler.drain();
+  });
+
+  test("the handler runs whatever arrives on the route stream and then drains", async () => {
+    const h = world({ sessions: [{ id: 1 }] });
+    async function* routes(): AsyncIterable<RoutedMessage> {
+      yield { kind: "command", cmd: command("status"), meta: h.metaOf(1, null, "command") };
+      yield { kind: "command", cmd: command("tools"), meta: h.metaOf(1, null, "command") };
+    }
+    await h.handler.run(routes());
+    expect(names(required(h.frames.get(1)))).toEqual(["status", "tools"]);
+    expect(h.handler.queuedSessionCount).toBe(0);
   });
 });

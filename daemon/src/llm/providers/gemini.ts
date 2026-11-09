@@ -27,7 +27,7 @@ import type {
   Usage,
   WireMessage,
 } from "../types.ts";
-import { EMPTY_TOOL_SCHEMA, toolResultImages, toolResultText } from "../types.ts";
+import { toolResultImages, toolResultText } from "../types.ts";
 import { replayableMessages } from "../replay.ts";
 
 type GeminiSchema = NonNullable<FunctionDeclaration["parameters"]>;
@@ -346,7 +346,7 @@ function translateTools(tools: ToolDefinition[] | undefined): Tool[] | undefined
   const declarations: FunctionDeclaration[] = tools.map((t) => ({
     name: t.name,
     description: t.description,
-    parameters: (t.input_schema ?? EMPTY_TOOL_SCHEMA) as GeminiSchema,
+    parameters: t.input_schema as GeminiSchema,
   }));
   return [{ functionDeclarations: declarations }];
 }

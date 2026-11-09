@@ -76,7 +76,6 @@ export interface ToolDefinition {
   input_schema: Record<string, unknown>;
 }
 
-export const EMPTY_TOOL_SCHEMA: Record<string, unknown> = { type: "object" };
 
 export interface ProviderOptions {
   reasoning_effort?: string;
