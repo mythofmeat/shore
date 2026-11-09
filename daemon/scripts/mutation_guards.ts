@@ -452,6 +452,16 @@ export const DAEMON_EQUIVALENTS: readonly string[] = [
   "src/web/auth.ts:WebSessions.#presented: …== null || token === undefined 「|| → &&」 !/^[A-Za-z0-9_-]{43}$/.test(to…",
   "src/web/auth.ts:LoginCodes.create: … of this.#codes) if (expiresAt 「<= → <」 now) this.#codes.delete(id);",
   "src/web/auth.ts:LoginCodes.create: ….#codes) if (expiresAt <= now) 「this.#codes.delete(id); → {}」",
+  "src/tools/workspace_turns.ts:foreignTo: 「window.overlaps.clear(); → {}」",
+  "src/tools/workspace_turns.ts:WorkspaceRecorder.settle: if (records.length === 0) 「return; → {}」",
+  "src/tools/workspace_turns.ts:aliasTurn: if (record === undefined 「|| → &&」 completeSegments(record).lengt…",
+  "src/tools/workspace_turns.ts:aliasTurn: …Segments(record).length === 0) 「return; → {}」",
+  "src/tools/workspace_turns.ts:pruneTurns: if (doomed.length === 0) 「return; → {}」",
+  "src/tools/workspace_turns.ts:pruneTurns: 「await git(turns, [\"-c\", \"gc.autoDetach=… → {}」",
+  "src/tools/workspace_turns.ts:replay: if (versions.length === 0) 「return total; → {}」",
+  "src/tools/workspace_turns.ts:completeSegments: …ted(([a], [b]) => (a === \"\" ? -「1 → 2」 : Number(a)) - (b === \"\" ? -1 …",
+  "src/tools/workspace_turns.ts:move: if (changes.length === 0) 「return { restored: [], skipped: [] }; → {}」",
+  "src/tools/workspace_turns.ts:completeSegments: …-1 : Number(a)) - (b === \"\" ? -「1 → 2」 : Number(b)))",
 ];
 
 export const CLIENT_FLOORS: Readonly<Record<string, number>> = {
