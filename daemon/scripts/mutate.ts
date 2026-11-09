@@ -14,9 +14,12 @@ const MIN_TIMEOUT_MS = 60_000;
 const TIMEOUT_FACTOR = 5;
 const TEST_TIMEOUT = "--timeout=20000";
 const MEMORY_CAP_BYTES = 2 * 1024 ** 3;
+const MEMORY_KILL_BYTES = (MEMORY_CAP_BYTES / 8) * 7;
+const MEMORY_POLL_MS = 100;
 const capped = Bun.spawnSync(["systemd-run", "--user", "--scope", "-q", "-p", "MemoryMax=64M", "true"], { stdout: "ignore", stderr: "ignore" }).exitCode === 0;
-const cap = capped ? ["systemd-run", "--user", "--scope", "-q", "-p", `MemoryMax=${String(MEMORY_CAP_BYTES)}`, "-p", "MemorySwapMax=0"] : [];
-const running = new Set<number>();
+const cap = ["systemd-run", "--user", "--scope", "-q", "-p", `MemoryMax=${String(MEMORY_CAP_BYTES)}`, "-p", "MemorySwapMax=0"];
+const running = new Map<number, string | undefined>();
+let scopes = 0;
 const scratch = new Set<string>();
 const LOGGING_CALL = /^(?:shoreLog|console|(?:[\w$#]+\??\.)*log)\??\.(?:debug|info|warn|error|trace|log)(?:\?\.)?\(/;
 
@@ -270,34 +273,49 @@ function workspace(): string {
   return dir;
 }
 
-function killGroup(pid: number): void {
+function stop(pid: number): void {
   try {
     process.kill(-pid, "SIGKILL");
+  } catch {}
+  const unit = running.get(pid);
+  if (unit !== undefined) Bun.spawnSync(["systemctl", "--user", "kill", "--signal=SIGKILL", `${unit}.scope`], { stdout: "ignore", stderr: "ignore" });
+}
+
+function scopeMemory(pid: number, unit: string): number {
+  try {
+    const group = readFileSync(`/proc/${String(pid)}/cgroup`, "utf8").trim().split("::")[1] ?? "";
+    return group.endsWith(`/${unit}.scope`) ? Number(readFileSync(`/sys/fs/cgroup${group}/memory.current`, "utf8")) : 0;
   } catch {
-    running.delete(pid);
+    return 0;
   }
 }
 
 async function bunTest(dir: string, args: readonly string[], timeoutMs: number, log?: string): Promise<{ code: number | undefined; ms: number }> {
   const started = performance.now();
   const fd = log === undefined ? undefined : openSync(log, "w");
-  const proc = Bun.spawn(["setsid", ...cap, "bun", "test", ...args], { cwd: dir, stdout: fd ?? "ignore", stderr: fd ?? "ignore" });
-  running.add(proc.pid);
+  scopes += 1;
+  const unit = capped ? `shore-mutate-${String(process.pid)}-${String(scopes)}` : undefined;
+  const proc = Bun.spawn(["setsid", ...(unit === undefined ? [] : [...cap, `--unit=${unit}`]), "bun", "test", ...args], { cwd: dir, stdout: fd ?? "ignore", stderr: fd ?? "ignore" });
+  running.set(proc.pid, unit);
   let timedOut = false;
   const timer = setTimeout(() => {
     timedOut = true;
-    killGroup(proc.pid);
+    stop(proc.pid);
   }, timeoutMs);
+  const watchdog = unit === undefined ? undefined : setInterval(() => {
+    if (scopeMemory(proc.pid, unit) > MEMORY_KILL_BYTES) stop(proc.pid);
+  }, MEMORY_POLL_MS);
   const code = await proc.exited;
   clearTimeout(timer);
+  clearInterval(watchdog);
   if (fd !== undefined) closeSync(fd);
-  killGroup(proc.pid);
+  stop(proc.pid);
   running.delete(proc.pid);
   return { code: timedOut ? undefined : code, ms: performance.now() - started };
 }
 
 function cleanUp(): void {
-  for (const pid of running) killGroup(pid);
+  for (const pid of running.keys()) stop(pid);
   for (const dir of scratch) rmSync(dir, { recursive: true, force: true });
 }
 

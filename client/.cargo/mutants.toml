@@ -1,1 +1,2 @@
 additional_cargo_test_args = ["--", "--skip", "export", "--skip", "terminal_capability_inventory_is_current"]
+test_workspace = true
