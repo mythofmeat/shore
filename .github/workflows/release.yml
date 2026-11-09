@@ -95,6 +95,8 @@ jobs:
         working-directory: desktop
       - run: bun run app:macos
         working-directory: desktop
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
       - id: zip
         run: |
           sha=$(shasum -a 256 "out/desktop/Shore-$VERSION-arm64.zip")

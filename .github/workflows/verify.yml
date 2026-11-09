@@ -107,6 +107,8 @@ jobs:
         working-directory: desktop
       - run: bun run app:macos
         working-directory: desktop
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
       - run: |
           zip="$GITHUB_WORKSPACE/out/desktop/Shore-$(sed -n 's/^  "version": "\(.*\)",$/\1/p' desktop/package.json)-arm64.zip"
           sed -i '' -e "s|^  sha256 \".*\"$|  sha256 \"$(shasum -a 256 "$zip" | cut -d' ' -f1)\"|" -e "s|^  url \".*\"$|  url \"file://$zip\"|" tap/Casks/shore-desktop.rb
