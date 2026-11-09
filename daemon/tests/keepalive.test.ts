@@ -1,6 +1,6 @@
 import { required } from "../src/util/required.ts";
 
-import { beforeEach, describe, expect, test } from "bun:test";
+import { beforeEach, describe, expect, spyOn, test } from "bun:test";
 
 import {
   KeepaliveService,
@@ -14,6 +14,7 @@ import {
 import { CacheKeepalive } from "../src/cache/schedule.ts";
 import { closeLedgers, setCallObserver } from "../src/ledger/record.ts";
 import { freshLedger, openLedger } from "./support/ledger_fixture.ts";
+import { until } from "./support/until.ts";
 import type { GenerateResponse, SidecarRequest } from "../src/llm/types.ts";
 
 const MODEL = "claude-opus-4-6";
@@ -976,6 +977,52 @@ describe("keepalive edges", () => {
       } finally {
         db.close();
         ledger.cleanup();
+      }
+    }
+  });
+});
+
+describe("a ping's cost", () => {
+  const OPENROUTER_CATALOG = "https://openrouter.ai/api/v1/models";
+  const OPUS_4_6 = { id: "anthropic/claude-opus-4.6", pricing: { prompt: "0.000005", completion: "0.000025", input_cache_read: "0.0000005", input_cache_write: "0.00000625" } };
+
+  test("is recorded from the price list even when the list arrives after the reply, for a sent or a failed ping, on schedule or on demand", async () => {
+    for (const reply of [response(2200, 0, MODEL), new Error("provider unavailable")]) {
+      for (const how of ["tick", "now"] as const) {
+        const ledger = freshLedger();
+        const catalog = Promise.withResolvers<Response>();
+        const fetched: string[] = [];
+        const realFetch = globalThis.fetch;
+        const fetching = spyOn(globalThis, "fetch").mockImplementation((async (input: string | URL | Request, init?: RequestInit) => {
+          const url = input instanceof Request ? input.url : input.toString();
+          fetched.push(url);
+          return url === OPENROUTER_CATALOG ? await catalog.promise : await realFetch(input, init);
+        }) as typeof fetch);
+        try {
+          const h = harness([reply]);
+          const base = prefix();
+          h.service.arm(prefix({ context: { ...required(base.context), ledger: ledger.path } }));
+          h.service.observe(CHARACTER, MODEL, "message");
+          h.clock.advance(minutes(56));
+          const pinging = how === "tick" ? h.service.tick() : h.service.pingNow(CHARACTER);
+          await until(() => h.sent.length === 1 && fetched.includes(OPENROUTER_CATALOG), "the ping and the price list request");
+          catalog.resolve(Response.json({ data: [OPUS_4_6] }));
+          await pinging;
+          const db = openLedger(ledger.path, { readonly: true });
+          try {
+            const label = `${how}, ${reply instanceof Error ? "failed" : "sent"}`;
+            const [row, ...others] = db.query("SELECT total_cost FROM calls WHERE call_type = 'keepalive'").all() as { total_cost: number | null }[];
+            expect(others, label).toEqual([]);
+            if (reply instanceof Error) expect(row?.total_cost, label).toBe(0);
+            else expect(row?.total_cost, label).toBeGreaterThan(0);
+          } finally {
+            db.close();
+          }
+        } finally {
+          fetching.mockRestore();
+          closeLedgers();
+          ledger.cleanup();
+        }
       }
     }
   });
