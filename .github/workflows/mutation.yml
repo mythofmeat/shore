@@ -7,6 +7,11 @@ on:
         type: string
         default: ""
   workflow_dispatch:
+    inputs:
+      files:
+        description: Mutate only the files whose path contains one of these space-separated parts
+        type: string
+        default: ""
 
 permissions:
   contents: read
@@ -41,7 +46,11 @@ jobs:
           key: codex-apply-patch-${{ runner.os }}-rust-${{ steps.rust.outputs.version }}-${{ hashFiles('daemon/vendor/codex-apply-patch/**', 'daemon/scripts/build_patch.ts') }}
       - run: bun run build:patch
       - run: bun install --frozen-lockfile
-      - run: bun run mutate --shard=${{ matrix.shard }}/16 --workers=4 --survivors
+      - env:
+          FILES: ${{ inputs.files }}
+        run: |
+          read -ra files <<< "$FILES"
+          bun run mutate --shard=${{ matrix.shard }}/16 --workers=4 --survivors "${files[@]}"
 
   mutate-client:
     runs-on: ubuntu-24.04
@@ -67,4 +76,8 @@ jobs:
       - uses: taiki-e/install-action@v2
         with:
           tool: cargo-mutants@27.1.0
-      - run: bun ../daemon/scripts/mutate_client.ts --shard=${{ matrix.shard }}/8 --workers=2 --survivors
+      - env:
+          FILES: ${{ inputs.files }}
+        run: |
+          read -ra files <<< "$FILES"
+          bun ../daemon/scripts/mutate_client.ts --shard=${{ matrix.shard }}/8 --workers=2 --survivors "${files[@]}"

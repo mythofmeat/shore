@@ -328,7 +328,6 @@ describe("how conversation turns are written for OpenAI", () => {
     const toolNames = new Map([["t1", "screenshot"]]);
     expect(turnToOpenAI({
       role: "user",
-      images: [{ path: "cat.png", data: "iVBORw0K" }, { path: "notes.txt", data: "aGk=" }],
       content: [
         { type: "tool_result", tool_use_id: "t1", content: [{ type: "text", text: "taken" }, png, bmp] },
         { type: "tool_result", tool_use_id: "t2", content: [png] },
@@ -342,8 +341,6 @@ describe("how conversation turns are written for OpenAI", () => {
       { role: "tool", tool_call_id: "t2", content: "" },
       { role: "tool", tool_call_id: "t3", content: "plain" },
       { role: "user", content: [
-        { type: "image_url", image_url: { url: "data:image/png;base64,iVBORw0K" } },
-        { type: "text", text: "[image omitted: notes.txt — .txt is not a supported format]" },
         { type: "text", text: "Images from tool screenshot (tool_call_id: t1):" },
         { type: "image_url", image_url: { url: "data:image/png;base64,iVBORw0K" } },
         { type: "text", text: "[image omitted: a tool result image — image/bmp is not a supported format]" },
@@ -355,7 +352,7 @@ describe("how conversation turns are written for OpenAI", () => {
       ] },
     ] as never);
     expect(turnToOpenAI({ role: "user", content: [{ type: "tool_result", tool_use_id: "t1", content: "only" }] })).toEqual([{ role: "tool", tool_call_id: "t1", content: "only" }]);
-    expect(turnToOpenAI({ role: "user", images: [], content: [] })).toEqual([]);
+    expect(turnToOpenAI({ role: "user", content: [] })).toEqual([]);
   });
 
   test("a request becomes a system message followed by its turns, naming tools by the call that made them", () => {

@@ -543,6 +543,11 @@ async function main(args: readonly string[]): Promise<number> {
   const filtered = files.filter((file) => (mutants.get(file)?.length ?? 0) > 0 && (filters.length === 0 || filters.some((f) => file.includes(f))));
   const targets = shard === undefined ? filtered : shardOf(filtered, mutants, Number(shard[1]), Number(shard[2]));
   const chosen = targets.flatMap((file) => mutants.get(file) ?? []);
+  if (targets.length === 0) {
+    console.log("no files to mutate");
+    for (const p of problems) console.log(`problem: ${p}`);
+    return problems.length > 0 ? 1 : 0;
+  }
   const { coverage, problems: baseline } = await collectCoverage(new Set(targets), workers);
   problems.push(...baseline);
   if (baseline.length > 0 || args.includes("--baseline")) {

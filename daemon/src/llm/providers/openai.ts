@@ -10,7 +10,7 @@ import type {
   ChatCompletionToolMessageParam,
 } from "openai/resources/chat/completions";
 
-import type { ContentBlock, ImageRef } from "../../engine/types.ts";
+import type { ContentBlock } from "../../engine/types.ts";
 import { REASONING_OFF } from "../types.ts";
 import { effectiveCacheTtl } from "../cache_capability.ts";
 import {
@@ -18,7 +18,7 @@ import {
   nanogptPromptCaching,
   placeNanogptBreakpoints,
 } from "./nanogpt_config.ts";
-import { type ResolvedImage, resolveImage, resolveImageBlock, imageLabel, omissionNotice } from "../images.ts";
+import { type ResolvedImage, resolveImageBlock, omissionNotice } from "../images.ts";
 import type {
   GenerateResponse,
   SidecarProvider,
@@ -326,7 +326,7 @@ export function turnToOpenAI(turn: TurnMessage, toolNames: ReadonlyMap<string, s
   }
 
   const out: ChatCompletionMessageParam[] = [];
-  const parts: Array<OpenAITextPart | OpenAIImagePart> = imagesToOpenAIParts(turn.images);
+  const parts: Array<OpenAITextPart | OpenAIImagePart> = [];
   for (const b of turn.content) {
     if (b.type === "tool_result") {
       const toolMsg: ChatCompletionToolMessageParam = {
@@ -370,22 +370,6 @@ function imageUrlPart(resolved: ResolvedImage): OpenAIImagePart {
     type: "image_url",
     image_url: { url: `data:${resolved.mediaType};base64,${resolved.base64}` },
   };
-}
-
-function imagesToOpenAIParts(
-  images: ImageRef[] | undefined,
-): Array<OpenAIImagePart | OpenAITextPart> {
-  if (!images || images.length === 0) return [];
-  const out: Array<OpenAIImagePart | OpenAITextPart> = [];
-  for (const img of images) {
-    const resolution = resolveImage(img);
-    if ("omitted" in resolution) {
-      out.push({ type: "text", text: omissionNotice(imageLabel(img), resolution.omitted) });
-      continue;
-    }
-    out.push(imageUrlPart(resolution.image));
-  }
-  return out;
 }
 
 interface RawUsage {

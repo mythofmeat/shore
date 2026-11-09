@@ -1,4 +1,4 @@
-import type { ContentBlock, ImageRef } from "../engine/types.ts";
+import type { ContentBlock } from "../engine/types.ts";
 import type { UsageConfig } from "../ledger/budget.ts";
 import { isAbortError, isTimeoutError } from "./abort.ts";
 import { retryAfterMsFromError } from "./retry_after.ts";
@@ -246,7 +246,6 @@ export interface ImageResponse {
 export interface TurnMessage {
   role: "user" | "assistant" | "system";
   content: ContentBlock[];
-  images?: ImageRef[];
 }
 
 export function toTurn(turn: WireMessage): TurnMessage {

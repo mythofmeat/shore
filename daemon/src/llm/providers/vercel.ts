@@ -19,8 +19,8 @@ import {
   type ToolSet,
 } from "ai";
 
-import type { ContentBlock, ImageRef } from "../../engine/types.ts";
-import { resolveImage, resolveImageBlock, imageLabel, omissionNotice } from "../images.ts";
+import type { ContentBlock } from "../../engine/types.ts";
+import { resolveImageBlock, omissionNotice } from "../images.ts";
 import type {
   GenerateResponse,
   SidecarProvider,
@@ -353,7 +353,6 @@ export function turnToVercel(
   const userParts: Array<
     { type: "text"; text: string } | { type: "image"; image: string; mediaType: string }
   > = [];
-  for (const img of imageParts(turn.images)) userParts.push(img);
   for (const b of turn.content) {
     if (b.type === "tool_result") {
       const images = toolResultImages(b.content);
@@ -392,30 +391,6 @@ export function turnToVercel(
     }
   }
   if (userParts.length > 0) out.push({ role: "user", content: userParts });
-  return out;
-}
-
-function imageParts(
-  images: ImageRef[] | undefined,
-): Array<
-  { type: "image"; image: string; mediaType: string } | { type: "text"; text: string }
-> {
-  if (!images || images.length === 0) return [];
-  const out: Array<
-    { type: "image"; image: string; mediaType: string } | { type: "text"; text: string }
-  > = [];
-  for (const img of images) {
-    const resolution = resolveImage(img);
-    if ("omitted" in resolution) {
-      out.push({ type: "text", text: omissionNotice(imageLabel(img), resolution.omitted) });
-      continue;
-    }
-    out.push({
-      type: "image",
-      image: resolution.image.base64,
-      mediaType: resolution.image.mediaType,
-    });
-  }
   return out;
 }
 
