@@ -1,7 +1,7 @@
 import { shoreLog } from "../log.ts";
 
 import { classifyCredentialFailure, shouldRotate } from "./credentials";
-import { describeError, describeLlmError, toLlmError } from "./errors";
+import { describeLlmError, toLlmError } from "./errors";
 
 export interface RetryPolicy {
   max_retries: number;
@@ -51,12 +51,5 @@ export function shouldRetryError(
 
     case "budget_blocked":
       return FAIL;
-
-    default:
-      shoreLog.warn(
-        `shore: unclassifiable provider failure on attempt ${attempt}, retrying as ` +
-          `transport: ${describeError(error)}`,
-      );
-      return RETRY;
   }
 }

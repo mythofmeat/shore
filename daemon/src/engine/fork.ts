@@ -1,5 +1,5 @@
 import { withConversation } from "./lifecycle.ts";
-import { forkPromptState, resetActivePromptSnapshot } from "../memory/deferred_edits.ts";
+import { forkPromptState } from "../memory/deferred_edits.ts";
 import { threadFile, writeDurable, durableExists, deleteThreadState } from "../storage/files.ts";
 import { existsSync } from "node:fs";
 import { mkdir, readFile, readdir, rm, unlink, writeFile } from "node:fs/promises";
@@ -270,7 +270,6 @@ export async function recoverForks(data: string, character: string): Promise<str
       recovered.push(entry);
       continue;
     }
-    await resetActivePromptSnapshot(characterDataDir(data, character), entry);
     await rm(dir, { recursive: true });
     deleteThreadState(data, character, entry);
     const dbPath = join(data, HISTORY_DB_FILE);

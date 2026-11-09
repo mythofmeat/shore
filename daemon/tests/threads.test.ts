@@ -84,6 +84,24 @@ async function registryWith(...characters: string[]): Promise<{
   return { registry, dataDir, configDir, loaded };
 }
 
+describe("creating a thread", () => {
+  test("makes its data folder, records a chosen model only when there is one, and refuses a second thread of the same id", async () => {
+    const data = await freshDataDir();
+    const plain = await createThread(data, "ada", "side", NOW);
+    expect(existsSync(join(data, "ada", "threads", "side"))).toBe(true);
+    expect(plain.threads.find((thread) => thread.id === "side")).toStrictEqual({ id: "side", created_at: NOW, compaction: false });
+    const chosen = await createThread(data, "ada", "other", NOW, { chat_model: "anthropic:claude-one" });
+    expect(chosen.threads.find((thread) => thread.id === "other")).toStrictEqual({ id: "other", created_at: NOW, compaction: false, chat_model: "anthropic:claude-one" });
+    expect(await outcomeOf(createThread(data, "ada", "side", NOW))).toThrow('thread "side" already exists for ada');
+  });
+
+  test("reuses a folder an earlier thread of the same id left behind", async () => {
+    const data = await freshDataDir();
+    mkdirSync(join(data, "ada", "threads", "again"), { recursive: true });
+    expect((await createThread(data, "ada", "again", NOW)).threads.map((thread) => thread.id)).toContain("again");
+  });
+});
+
 describe("concurrent thread-index mutations", () => {
   test("two threads created at once both survive on disk and in the registry", async () => {
     const { registry, dataDir } = await registryWith("aria");

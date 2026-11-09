@@ -34,9 +34,7 @@ export function parseRetryAfterMs(headers: unknown, now: () => number = Date.now
     if (Number.isFinite(parsed) && parsed >= 0) return Math.round(parsed);
   }
 
-  const after = read("retry-after");
-  if (after === undefined) return undefined;
-
+  const after = read("retry-after") ?? "";
   const seconds = Number.parseFloat(after);
   if (Number.isFinite(seconds) && seconds >= 0) return Math.round(seconds * 1000);
 
