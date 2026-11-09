@@ -307,7 +307,7 @@ describe("workspace turns", () => {
     const realRun = CharacterWorkspace.prototype.run.bind(new CharacterWorkspace(turns.workspace));
     let trees = 0;
     const run = spyOn(CharacterWorkspace.prototype, "run").mockImplementation(async (command, args, options) => {
-      if (command === "git" && args.includes("write-tree") && ++trees === 3) return { code: 1, stdout: "", stderr: "disk full" };
+      if (command === "git" && args.includes("write-tree") && options?.env?.["GIT_INDEX_FILE"] === undefined && ++trees === 3) return { code: 1, stdout: "", stderr: "disk full" };
       return await realRun(command, args, options);
     });
     try {
