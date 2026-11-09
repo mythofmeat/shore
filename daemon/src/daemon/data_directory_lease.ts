@@ -9,7 +9,6 @@ import {
   realpathSync,
   statSync,
   unlinkSync,
-  rmSync,
   writeFileSync,
 } from "node:fs";
 import { join } from "node:path";
@@ -190,7 +189,7 @@ function createLeaseFile(path: string, content: string): void {
       closeSync(fd);
     }
   } catch (e) {
-    rmSync(path, { force: true });
+    unlinkSync(path);
     throw e;
   }
 }
