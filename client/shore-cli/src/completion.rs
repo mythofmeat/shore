@@ -1395,14 +1395,8 @@ pub(crate) fn palette_completions(input: &str, catalog: &mut PaletteCatalog) -> 
         *catalog = session.catalog;
     }
     let needed = std::mem::take(&mut catalog.needed).into_iter().collect();
-    let Ok(raw) = completed else {
-        return PaletteCompletions {
-            needed,
-            ..PaletteCompletions::default()
-        };
-    };
-
-    let mut candidates = raw
+    let mut candidates = completed
+        .unwrap_or_default()
         .into_iter()
         .filter_map(|candidate| {
             let value = candidate.get_value().to_str()?;
