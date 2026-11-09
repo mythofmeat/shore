@@ -3,8 +3,8 @@ use std::path::{Path, PathBuf};
 
 const KEEP_EDITOR_SESSIONS: usize = 20;
 
-pub(crate) fn drafts_dir(data: &Path) -> PathBuf {
-    data.join("drafts")
+pub(crate) fn drafts_dir() -> PathBuf {
+    shore_common::dirs::data_dir().join("drafts")
 }
 
 #[derive(Debug, Clone, Default, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
@@ -312,11 +312,11 @@ mod tests {
 
     #[test]
     fn drafts_and_editor_sessions_live_in_the_data_directory() {
-        let data = Path::new("/srv/shore-data");
-        assert_eq!(drafts_dir(data), Path::new("/srv/shore-data/drafts"));
+        let data = shore_common::dirs::data_dir();
+        assert_eq!(drafts_dir(), data.join("drafts"));
         assert_eq!(
-            editor_dir(&drafts_dir(data)),
-            Path::new("/srv/shore-data/drafts/editor")
+            editor_dir(&drafts_dir()),
+            data.join("drafts").join("editor")
         );
     }
 

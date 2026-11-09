@@ -589,9 +589,9 @@ fn open_in_editor(
     last_reply: Option<&str>,
 ) -> io::Result<()> {
     let editor = crate::run::editor_from_env();
-    let drafts = draft::drafts_dir(&shore_common::dirs::data_dir());
-    std::fs::create_dir_all(draft::editor_dir(&drafts))?;
-    let tmp = draft::editor_session_path(&drafts, &draft::stamp_now());
+    let sessions = draft::editor_dir(&draft::drafts_dir());
+    std::fs::create_dir_all(&sessions)?;
+    let tmp = draft::editor_session_path(&draft::drafts_dir(), &draft::stamp_now());
     std::fs::write(&tmp, editor_buffer(input.text.as_str(), last_reply))?;
 
     let (program, args) = crate::run::editor_invocation(&editor, &tmp);
@@ -604,7 +604,7 @@ fn open_in_editor(
     if let Ok(contents) = std::fs::read_to_string(&tmp) {
         input.set_text(strip_editor_fence(&contents));
     }
-    draft::prune_editor_sessions_to_default(&drafts);
+    draft::prune_editor_sessions_to_default(&draft::drafts_dir());
     Ok(())
 }
 
@@ -1516,7 +1516,7 @@ async fn run_tui(
         app.settings_files = Some(app::SettingsFiles::resolve());
         load_prefs(&mut app);
         load_keymap(&mut app);
-        let root = draft::drafts_dir(&shore_common::dirs::data_dir());
+        let root = draft::drafts_dir();
         app.persist_session = true;
         app.draft_daemon = addr
             .clone()
