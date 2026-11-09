@@ -53,6 +53,11 @@ jobs:
       - run: bun run lint
       - run: bun run lint:comments
       - run: bun run lint:test-env
+      - uses: taiki-e/install-action@v2
+        with:
+          tool: cargo-mutants
+      - run: bun run mutate --list > /dev/null
+      - run: bun run mutate --client --list
       - run: bun run typecheck
       - run: bun run browser:check
       - run: bun run build:daemon

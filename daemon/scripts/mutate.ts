@@ -274,19 +274,58 @@ const args = process.argv.slice(2);
 const listOnly = args.includes("--list");
 const filters = args.filter((a) => !a.startsWith("--"));
 
+interface CargoMutant {
+  readonly name: string;
+  readonly file: string;
+}
+
 interface CargoOutcome {
-  readonly scenario: "Baseline" | { readonly Mutant: { readonly name: string; readonly file: string } };
+  readonly scenario: "Baseline" | { readonly Mutant: CargoMutant };
   readonly summary: string;
 }
 
+const CLIENT = join(ROOT, "..", "client");
+
+function examineRe(): ReadonlyMap<string, RegExp> {
+  const config = Bun.TOML.parse(readFileSync(join(CLIENT, ".cargo", "mutants.toml"), "utf8")) as { examine_re: string[] };
+  return new Map(config.examine_re.map((pattern) => [pattern, new RegExp(pattern, "u")]));
+}
+
+function examined(patterns: ReadonlyMap<string, RegExp>, name: string): boolean {
+  for (const re of patterns.values()) if (re.test(name)) return true;
+  return false;
+}
+
+function floorProblems(files: ReadonlySet<string>): string[] {
+  return [
+    ...[...files].filter((file) => CLIENT_FLOORS[file] === undefined).map((file) => `no floor for ${file}`),
+    ...Object.keys(CLIENT_FLOORS).filter((file) => !files.has(file)).map((file) => `floor for ${file}, which has no mutants`),
+  ];
+}
+
+function listClient(): number {
+  const listing = Bun.spawnSync(["cargo", "mutants", "--list", "--json"], { cwd: CLIENT, stderr: "inherit" });
+  if (!listing.success) return 1;
+  const patterns = examineRe();
+  const mutants = (JSON.parse(listing.stdout.toString()) as CargoMutant[]).filter((m) => examined(patterns, m.name));
+  const byFile = new Map<string, number>();
+  for (const m of mutants) byFile.set(m.file, (byFile.get(m.file) ?? 0) + 1);
+  for (const [file, count] of [...byFile].sort(([a], [b]) => a.localeCompare(b))) console.log(`${String(count).padStart(4)}  ${file}`);
+  const problems = [
+    ...floorProblems(new Set(byFile.keys())),
+    ...[...patterns].filter(([, re]) => !mutants.some((m) => re.test(m.name))).map(([pattern]) => `examine_re ${pattern} selects no mutants`),
+  ];
+  for (const problem of problems) console.error(`problem: ${problem}`);
+  return problems.length > 0 ? 1 : 0;
+}
+
 async function runClient(): Promise<number> {
-  const client = join(ROOT, "..", "client");
   const output = mkdtempSync(join(tmpdir(), "shore-mutate-client-"));
   const requested = Number(args.find((a) => a.startsWith("--workers="))?.slice("--workers=".length));
   const jobs = Number.isInteger(requested) && requested > 0 ? requested : 2;
   const cargoTmp = join(output, "tmp");
   mkdirSync(cargoTmp);
-  const cargo = Bun.spawn(["cargo", "mutants", "-j", String(jobs), "--output", output], { cwd: client, env: { ...process.env, TMPDIR: cargoTmp }, stdout: "inherit", stderr: "inherit" });
+  const cargo = Bun.spawn(["cargo", "mutants", "-j", String(jobs), "--output", output], { cwd: CLIENT, env: { ...process.env, TMPDIR: cargoTmp }, stdout: "inherit", stderr: "inherit" });
   await cargo.exited;
   let outcomes: CargoOutcome[];
   try {
@@ -296,30 +335,37 @@ async function runClient(): Promise<number> {
   }
   const problems: string[] = [];
   if (outcomes.some((o) => o.scenario === "Baseline" && o.summary !== "Success")) problems.push("the client tests fail before any mutation");
+  const patterns = examineRe();
   const byFile = new Map<string, { caught: number; missed: string[] }>();
+  let unselected = 0;
   for (const o of outcomes) {
     if (o.scenario === "Baseline" || o.summary === "Unviable") continue;
-    const entry = byFile.get(o.scenario.Mutant.file) ?? { caught: 0, missed: [] };
-    if (o.summary === "MissedMutant") entry.missed.push(o.scenario.Mutant.name);
+    const mutant = o.scenario.Mutant;
+    if (!examined(patterns, mutant.name)) {
+      unselected++;
+      continue;
+    }
+    const entry = byFile.get(mutant.file) ?? { caught: 0, missed: [] };
+    if (o.summary === "MissedMutant") entry.missed.push(mutant.name);
     else entry.caught += 1;
-    byFile.set(o.scenario.Mutant.file, entry);
+    byFile.set(mutant.file, entry);
   }
+  if (unselected > 0) console.log(`left out ${String(unselected)} mutants that examine_re does not select`);
   let below = 0;
   for (const [file, { caught, missed }] of [...byFile].sort(([a], [b]) => a.localeCompare(b))) {
     const floor = CLIENT_FLOORS[file];
-    if (floor === undefined) problems.push(`no floor for ${file}`);
     const rate = caught / (caught + missed.length);
     const failing = floor === undefined || rate < floor;
     if (failing) below++;
     console.log(`${failing ? "BELOW" : "ok   "} ${(rate * 100).toFixed(1).padStart(5)}% (floor ${floor === undefined ? "-" : `${String(Math.round(floor * 100))}%`}) ${String(caught)}/${String(caught + missed.length)}  ${file}`);
     if (args.includes("--survivors") || failing) for (const name of missed) console.log(`    missed: ${name}`);
   }
-  for (const file of Object.keys(CLIENT_FLOORS)) if (!byFile.has(file)) problems.push(`floor for ${file}, which has no mutants`);
+  problems.push(...floorProblems(new Set(byFile.keys())));
   for (const problem of problems) console.log(`problem: ${problem}`);
   return below > 0 || problems.length > 0 ? 1 : 0;
 }
 
-if (args.includes("--client")) process.exit(await runClient());
+if (args.includes("--client")) process.exit(listOnly ? listClient() : await runClient());
 function shardOf(all: readonly Target[], index: number, count: number): Target[] {
   const loads = Array.from({ length: count }, () => 0);
   const mine: Target[] = [];
