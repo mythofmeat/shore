@@ -302,6 +302,45 @@ describe("workspace turns", () => {
     }
   });
 
+  test("a reply whose first commit was reworded by a tool call that went unrecorded is undone past both commits, and redone to its last", async () => {
+    const { turns, start } = await startedRepo();
+    const realRun = CharacterWorkspace.prototype.run.bind(new CharacterWorkspace(turns.workspace));
+    let trees = 0;
+    const run = spyOn(CharacterWorkspace.prototype, "run").mockImplementation(async (command, args, options) => {
+      if (command === "git" && args.includes("write-tree") && ++trees === 3) return { code: 1, stdout: "", stderr: "disk full" };
+      return await realRun(command, args, options);
+    });
+    try {
+      const recorder = new WorkspaceRecorder(turns);
+      await recorder.track(async () => {
+        write(turns, "a.md", "a\n");
+        gitIn(turns, "add", "-A");
+        commit(turns, "a");
+      });
+      await recorder.track(async () => {
+        gitIn(turns, "-c", "user.name=Ada", "-c", "user.email=ada@shore.local", "commit", "--quiet", "--amend", "-m", "a, reworded");
+      });
+      await recorder.track(async () => {
+        write(turns, "b.md", "b\n");
+        gitIn(turns, "add", "-A");
+        commit(turns, "b");
+      });
+      await recorder.settle("main", "mv_1");
+    } finally {
+      run.mockRestore();
+    }
+    expect(trees).toBe(5);
+    const last = await gitHead(turns.workspace);
+
+    await undoTurns(turns, "main", ["mv_1"]);
+    expect(await gitHead(turns.workspace)).toBe(start);
+    expect(gitIn(turns, "status", "--porcelain")).toBe("");
+
+    await redoTurns(turns, "main", ["mv_1"]);
+    expect(await gitHead(turns.workspace)).toBe(last);
+    expect(gitIn(turns, "status", "--porcelain")).toBe("");
+  });
+
   test("commits made after the turn keep HEAD where it is", async () => {
     const turns = setup();
     await ensureWorkspaceGitRepo(turns.workspace);
