@@ -1,5 +1,5 @@
 import { realpathSync } from "node:fs";
-import { dirname, isAbsolute, parse, sep } from "node:path";
+import { dirname, isAbsolute, sep } from "node:path";
 
 import { rustTrim } from "../memory/lines";
 
@@ -55,28 +55,15 @@ export function resolvePath(workspaceDir: string, relative: string): string {
   const canonicalBase = tryRealpath(base);
   if (canonicalBase === undefined) return resolved;
 
-  const canonical = tryRealpath(resolved);
-  if (canonical !== undefined) {
-    if (!isInside(canonical, canonicalBase)) {
-      throw new PathError("invalid args: resolved path escapes workspace");
-    }
-    return resolved;
+  let nearest = resolved;
+  let canonical = tryRealpath(nearest);
+  while (canonical === undefined) {
+    nearest = dirname(nearest);
+    canonical = tryRealpath(nearest);
   }
-
-  let ancestor = resolved;
-  for (;;) {
-    const parent = parentOf(ancestor);
-    if (parent === undefined) break;
-    const canonicalParent = tryRealpath(parent);
-    if (canonicalParent !== undefined) {
-      if (!isInside(canonicalParent, canonicalBase)) {
-        throw new PathError("invalid args: resolved path escapes workspace");
-      }
-      break;
-    }
-    ancestor = parent;
+  if (!isInside(canonical, canonicalBase)) {
+    throw new PathError("invalid args: resolved path escapes workspace");
   }
-
   return resolved;
 }
 
@@ -94,13 +81,6 @@ function isInside(candidate: string, base: string): boolean {
   if (candidate === base) return true;
   const withSep = base.endsWith(sep) ? base : base + sep;
   return candidate.startsWith(withSep);
-}
-
-function parentOf(p: string): string | undefined {
-  const parent = dirname(p);
-  if (parent === p) return undefined;
-  if (parent === "." && parse(p).dir === "") return undefined;
-  return parent;
 }
 
 function tryRealpath(p: string): string | undefined {

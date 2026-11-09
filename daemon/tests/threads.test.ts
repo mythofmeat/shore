@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { createFolder, deleteFolder, moveFolder, moveThread, placedThreads, renameFolder, setFolderSort } from "../src/engine/thread_layout.ts";
-import { MAX_THREAD_ID_LENGTH, archiveThread, assertThreadId, isValidThreadId, createThread, ensureHeartbeatThread, ensureThreads, heartbeatThread, markThreadRead, readThreadsIndex, setThreadCompaction, threadActivityNow, writeThreadsIndex, type ThreadsIndex } from "../src/engine/threads.ts";
+import { MAX_THREAD_ID_LENGTH, archiveThread, assertThreadId, isValidThreadId, createThread, ensureHeartbeatThread, ensureThreads, heartbeatThread, markThreadRead, readThreadsIndex, setThreadCompaction, threadActivityNow, threadFilePaths, writeThreadsIndex, type ThreadsIndex } from "../src/engine/threads.ts";
 import { readFileSync, readFile } from "./support/stored_files.ts";
 import { mkdirSync, mkdtempSync, writeFileSync, existsSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -19,6 +19,13 @@ import { MessageStore } from "../src/engine/message_store.ts";
 import { type ContentBlock, type Message } from "../src/engine/types.ts";
 import { testTmp } from "./support/tmp.ts";
 import { outcomeOf } from "./support/outcome.ts";
+
+describe("thread file paths", () => {
+  test("lose empty and dot parts, and one that names nothing is refused", () => {
+    expect(threadFilePaths(["stories//lighthouse.md", "stories/./notes.md", "/workspace/./plan.md"])).toEqual(["stories/lighthouse.md", "stories/notes.md", "plan.md"]);
+    expect(() => threadFilePaths(["."])).toThrow("a thread file path is empty");
+  });
+});
 
 describe("thread ids", () => {
   test("accepts ordinary ids and rejects path-shaped ones", () => {
