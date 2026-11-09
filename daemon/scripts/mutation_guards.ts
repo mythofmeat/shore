@@ -413,6 +413,8 @@ export const DAEMON_EQUIVALENTS: readonly string[] = [
   "src/engine/embeds.ts:embedsIn: if (!text.includes(\"![\")) 「return []; → {}」",
   "src/engine/embeds.ts:pictureText: if (sent.length === 0) 「return text; → {}」",
   "src/llm/providers/gemini.ts:translateParts: 「break; → {}」 #4",
+  "src/daemon/data_directory_lease.ts:acquireDataDirectoryLease: … = takeLock(`${path}.acquire`, 「15_000 → 15001」);",
+  "src/daemon/data_directory_lease.ts:ownerIsDead: …ecordedStart) && recordedStart 「< → <=」 performance.timeOrigin;",
 ];
 
 export const CLIENT_FLOORS: Readonly<Record<string, number>> = {
