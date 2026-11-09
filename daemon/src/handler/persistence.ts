@@ -77,11 +77,6 @@ export async function persistAndNotify(
 
   const completedMessages = completedResponseMessages(result);
 
-  ctx.autonomy.notifyLastRequest(charName, lastRequestWithResponse(request, completedMessages), {
-    intervalMs: params.keepaliveIntervalMs,
-    pings: params.keepalivePings,
-    cachedTokens: cachedPrefixTokens(result.context_usage ?? result.usage),
-  }, engine.thread);
   const mintingProvider = request.provider_key ?? resolvedProviderKey;
   const mintingModel = result.model === "" ? request.model : result.model;
 
@@ -112,6 +107,11 @@ export async function persistAndNotify(
     charName,
     replaceGeneratedTail: params.replaceGeneratedTail === true,
   });
+  ctx.autonomy.notifyLastRequest(charName, lastRequestWithResponse(request, completedMessages), {
+    intervalMs: params.keepaliveIntervalMs,
+    pings: params.keepalivePings,
+    cachedTokens: cachedPrefixTokens(result.context_usage ?? result.usage),
+  }, engine.thread);
   ctx.autonomy.notifyAssistantMessage(charName, engine.turnCount());
 
   ctx.notifier.notifyMessageComplete(

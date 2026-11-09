@@ -212,6 +212,44 @@ test("changing the model answers before the rebuild runs, and the rebuild then r
   });
 });
 
+test("a rebuild that starts the moment a turn arms its keepalive finds the turn's reply already written, so the keepalive stays armed", async () => {
+  await withAda(async (config, env) => {
+    config.app.memory.compaction.enabled = false;
+    config.app.tools.enabled_tools = [];
+    const reply = (request: SidecarRequest): GenerateResponse => ({ model: request.model, content: "hi", content_blocks: [{ type: "text", text: "hi" }], finish_reason: "end_turn", usage: { input_tokens: 1, output_tokens: 1, cache_read_tokens: 0, cache_creation_tokens: 0 }, timing: { total_ms: 1, time_to_first_token_ms: 1 } });
+    const runtime = await createRuntime({ config, providers: { anthropic: { generate: async (request) => reply(request), stream: (request) => eventsForResponse(reply(request)) } }, env });
+    try {
+      const engine = await runtime.registry.getOrCreate("ada", "main");
+      let rebuild: Promise<KeepaliveReprime> | undefined;
+      const set = runtime.cache.set.bind(runtime.cache);
+      const armed = spyOn(runtime.cache, "set").mockImplementation((...args) => {
+        set(...args);
+        rebuild = runtime.cache.reprimeFromDisk("ada", config.dirs.data, config, { env, thread: "main", mcpRegistry: { toolDefsFiltered: () => [] } });
+      });
+      const append = engine.appendMessage.bind(engine);
+      const written = spyOn(engine, "appendMessage").mockImplementation(async (msg) => {
+        await rebuild;
+        await append(msg);
+      });
+      const session = { sessionId: 1, clientId: 1, clientType: "test", clientName: "test", capabilities: [], selectedCharacter: "ada", selectedThread: "main" };
+      const deps = buildGenerationDeps({ runtime, providers: runtime.providers, autonomy: new TurnAutonomyBridge(runtime.autonomy), diagnostics: new Diagnostics(), env, emitEvent: () => {} });
+      await runGeneration(deps, {
+        meta: { session, rid: "chat", kind: "message" },
+        body: { rid: "chat", text: "hello", stream: true, images: [], image_data: [] },
+        charName: "ada", regen: false, rid: "chat", signal: new AbortController().signal, send: async () => {},
+      });
+      expect(written.mock.calls.map(([msg]) => msg.role)).toEqual(["user", "assistant"]);
+      expect((await required(rebuild)).kind).toBe("push");
+      expect(runtime.keepalive.warmThread("ada")).toBe("main");
+      armed.mockRestore();
+      written.mockRestore();
+    } finally {
+      await runtime.autonomy.shutdown();
+      await runtime.shutdown();
+    }
+  });
+});
+
 test("a message sent right after a model change uses the new model, with the rebuild not yet done", async () => {
   await withAda(async (config, env) => {
     config.models.chat.set("chat.other", {
