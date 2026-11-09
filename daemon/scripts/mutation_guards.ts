@@ -448,6 +448,10 @@ export const DAEMON_EQUIVALENTS: readonly string[] = [
   "src/autonomy/heartbeat.ts:HeartbeatClock.tick: 「this.#defaultFloor = undefined; → {}」",
   "src/autonomy/heartbeat.ts:HeartbeatClock.schedule: 「this.#lastAnchor = now; → {}」",
   "src/config/token.ts:resolveDaemonToken: …nc(path, `${token}\\n`, { mode: 「0o600 → 385」 });",
+  "src/web/auth.ts:WebSessions.#presented: return token === null 「|| → &&」 token === undefined || !/^[A-Z…",
+  "src/web/auth.ts:WebSessions.#presented: …== null || token === undefined 「|| → &&」 !/^[A-Za-z0-9_-]{43}$/.test(to…",
+  "src/web/auth.ts:LoginCodes.create: … of this.#codes) if (expiresAt 「<= → <」 now) this.#codes.delete(id);",
+  "src/web/auth.ts:LoginCodes.create: ….#codes) if (expiresAt <= now) 「this.#codes.delete(id); → {}」",
 ];
 
 export const CLIENT_FLOORS: Readonly<Record<string, number>> = {

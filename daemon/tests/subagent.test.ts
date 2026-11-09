@@ -254,3 +254,38 @@ describe("subagentToolSubset", () => {
     }
   });
 });
+
+describe("pulling a file into a prompt", () => {
+  const ctx = (layout: Layout, warn?: (path: string, why: string) => void) => ({ characterDataDir: layout.data, workspaceDir: layout.ws, history: [], charName: "C", userName: "U", ...(warn === undefined ? {} : { warn }) });
+
+  test("a prompt file comes from the snapshot the conversation started with, not the workspace", async () => {
+    expect(await expandPromptMacros("{{file: SOUL.md}}", ctx(withSnapshot))).toBe("SNAPSHOT SOUL");
+  });
+
+  test("a missing file expands to nothing and says it couldn't be read; a refused path gives the reason", async () => {
+    const warned: [string, string][] = [];
+    expect(await expandPromptMacros("[{{file: ./missing.md}}]", ctx(bare, (path, why) => warned.push([path, why])))).toBe("[]");
+    expect(await expandPromptMacros("[{{file: ../../etc/passwd}}]", ctx(bare, (path, why) => warned.push([path, why])))).toBe("[]");
+    let refusal = "";
+    try {
+      resolvePath(bare.ws, "../../etc/passwd");
+    } catch (e) {
+      refusal = (e as Error).message;
+    }
+    expect(warned).toEqual([["./missing.md", "file unreadable"], ["../../etc/passwd", refusal]]);
+  });
+
+  test("closing braces with no opening ones are left as written", async () => {
+    expect(await expandPromptMacros("a}}b and c}}", ctx(bare))).toBe("a}}b and c}}");
+  });
+});
+
+describe("which tools a sub-agent is offered", () => {
+  test("an unknown name is reported unless it may be an MCP tool, and the MCP tools that match are added", () => {
+    const unknown: string[] = [];
+    const mcpTool = { name: "mcp__web__search", description: "search", parameters: { type: "object" } };
+    const offered = subagentToolSubset(["read", "nope", "mcp__web__search"], registry, new Map(), renderTemplate, { namesMatching: () => [mcpTool] }, (name) => unknown.push(name));
+    expect(offered.map((def) => def.name)).toEqual(["read", "mcp__web__search"]);
+    expect(unknown).toEqual(["nope"]);
+  });
+});

@@ -5,7 +5,8 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 
 import { findSentPicture, sentPicturesDir } from "../src/storage/sent_pictures.ts";
-import { WebSessions, type WebSession } from "../src/web/auth.ts";
+import { LoginCodes, WebSessions, type WebSession } from "../src/web/auth.ts";
+import { required } from "../src/util/required.ts";
 import { pageOrigin, readSmallJson, WebBodyTooLarge } from "../src/web/policy.ts";
 import { sessionDigest, WebRecovery } from "../src/web/recovery.ts";
 import { rejectionOf } from "./support/outcome.ts";
@@ -245,5 +246,38 @@ describe("what the daemon keeps on disk for browsers", () => {
     expect(findSentPicture(data, `${"b".repeat(64)}.png`)).toBeUndefined();
     writeFileSync(join(sentPicturesDir(data, "ada"), "notes.txt"), "not a picture");
     expect(findSentPicture(data, "notes.txt"), "a file beside the pictures that isn't named by its content").toBeUndefined();
+  });
+});
+
+describe("ending a sign-in and spending a code", () => {
+  test("a revoked sign-in can't issue a cookie, leaves no timer behind, and revoking it again does nothing", () => {
+    jest.useFakeTimers();
+    try {
+      const sessions = new WebSessions(ORIGIN, 4, 60_000);
+      const session = required(sessions.create());
+      expect(sessions.cookie(session)).toContain("shore_web_");
+      sessions.revoke(session);
+      expect(() => sessions.cookie(session)).toThrow("Only a new browser sign-in can issue a cookie");
+      expect(jest.getTimerCount()).toBe(0);
+      sessions.revoke(session);
+      expect(session.signal.aborted).toBe(true);
+    } finally {
+      jest.useRealTimers();
+    }
+  });
+
+  test("a code is spent by the moment it expires, and codes can be made even with no room kept for them", () => {
+    setSystemTime(new Date("2026-11-10T00:00:00Z"));
+    try {
+      const codes = new LoginCodes(60_000, 4);
+      const { code } = codes.create();
+      setSystemTime(new Date(Date.parse("2026-11-10T00:00:00Z") + 60_000));
+      expect(codes.redeem(code)).toBe(false);
+      const fresh = codes.create();
+      expect(codes.redeem(fresh.code)).toBe(true);
+      expect(new LoginCodes(60_000, 0).create().code).toMatch(/^[A-Za-z0-9_-]{43}$/);
+    } finally {
+      setSystemTime();
+    }
   });
 });

@@ -1,5 +1,6 @@
 import { Cookie, CookieMap } from "bun";
 import { createHash, randomBytes } from "node:crypto";
+import { required } from "../util/required.ts";
 import { sessionDigest, type WebRecovery } from "./recovery.ts";
 
 const MAX_TIMER_MS = 2 ** 31 - 1;
@@ -61,11 +62,7 @@ export class WebSessions {
     const id = sessionDigest(token);
     const expiresAt = Date.now() + this.#lifetime;
     this.recovery?.saveSession(id, expiresAt);
-    while (this.#sessions.size >= this.#capacity) {
-      const oldest = this.#sessions.values().next().value;
-      if (oldest === undefined) break;
-      this.revoke(oldest);
-    }
+    while (this.#sessions.size >= this.#capacity) this.revoke(required(this.#sessions.values().next().value));
     this.#cookies.set(id, token);
     return this.#restore(id, expiresAt);
   }
