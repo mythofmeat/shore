@@ -426,6 +426,18 @@ export const DAEMON_EQUIVALENTS: readonly string[] = [
   "src/memory/compaction/manager.ts:rollbackCompaction: …oException).code === \"ENOENT\") 「continue; → {}」",
   "src/memory/compaction/manager.ts:archiveCompactPrefix: 「await tools.gitCommitAll( workspaceDir,… → !(await tools.gitCommitAll( workspaceDi…」",
   "src/memory/compaction/manager.ts:recoverArchivedPass: …charName, compactThread(opts), 「false → true」),",
+  "src/llm/prepare_images.ts:encodeWithin: if (encoding === \"png\") 「return await attempt(target, \"png\", set… → {}」",
+  "src/llm/prepare_images.ts:encodeWithin: …nking(\"png\", settings.quality, 「false → true」);",
+  "src/llm/prepare_images.ts:encodeWithin: if (as === \"jpeg\" 「&& → ||」 mayBeTransparent(bytes)) {",
+  "src/llm/prepare_images.ts:encodeWithin: 「first = probe; → {}」",
+  "src/llm/prepare_images.ts:encodeWithin: …n await shrinking(as, quality, 「false → true」);",
+  "src/llm/prepare_images.ts:limitImageBlock: base64Bytes(block.source.data) 「<= → <」 MAX_SENT_IMAGE_BYTES &&",
+  "src/llm/prepare_images.ts:limitImageBlock: (dimensions 「=== → !==」 undefined || Math.max(dimensio…",
+  "src/llm/prepare_images.ts:limitImageBlock: (dimensions === undefined 「|| → &&」 Math.max(dimensions.width, dim…",
+  "src/llm/prepare_images.ts:limitImageBlock: …ions.width, dimensions.height) 「<= → <」 maxEdge)",
+  "src/llm/prepare_images.ts:limitImageBlock: ) 「return block; → {}」",
+  "src/llm/providers/anthropic.ts:applyMessageBreakpoint: 「return false; → {}」",
+  "src/llm/image_dimensions.ts:webp: switch (ascii(head, 12, 「4 → 5」)) {",
 ];
 
 export const CLIENT_FLOORS: Readonly<Record<string, number>> = {

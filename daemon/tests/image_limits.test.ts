@@ -117,3 +117,11 @@ describe("what an image costs once Shore has prepared it", () => {
     }
   });
 });
+
+describe("fitting a long edge", () => {
+  test("a side the scale would round away keeps one pixel", () => {
+    expect(fitLongEdge({ width: 1, height: 10_000 }, 1000)).toEqual({ width: 1, height: 1000 });
+    expect(fitLongEdge({ width: 30_000, height: 2 }, 1000)).toEqual({ width: 1000, height: 1 });
+    expect(fitLongEdge({ width: 400, height: 300 }, 1000)).toEqual({ width: 400, height: 300 });
+  });
+});

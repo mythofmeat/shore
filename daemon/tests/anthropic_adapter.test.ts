@@ -348,6 +348,15 @@ describe("placing cache markers", () => {
     expect(marked(messages)).toEqual([[true], [true, false], [true], [false]]);
   });
 
+  test("system markers past the limit are dropped and counted, and a message marker past the end lands on the last message", () => {
+    const system: Sys[] = ["s1", "s2", "s3", "s4", "s5"].map((text) => ({ type: "text" as const, text }));
+    expect(placeBreakpoints([], system, cc, [], [0, 1, 2, 3, 4])).toEqual({ requested: 5, placed: 4, droppedNoAnchor: 0, droppedOverLimit: 1 });
+    expect(system.map((b) => "cache_control" in b)).toEqual([true, true, true, true, false]);
+    const messages: Param[] = [{ role: "user", content: [{ type: "text", text: "a" }] }];
+    expect(placeBreakpoints(messages, [], cc, [5], [])).toEqual({ requested: 1, placed: 1, droppedNoAnchor: 0, droppedOverLimit: 0 });
+    expect(marked(messages)).toEqual([[true]]);
+  });
+
   test("continuing a loop clears old markers first, and with caching off touches nothing", () => {
     const system: Sys[] = [{ type: "text", text: "s1", cache_control: cc }];
     const messages: Param[] = [
