@@ -10,7 +10,7 @@ import { databasePath, insertEvent, readEvents, unpack, withStorage, writeState,
 import { appendSubagentTrace } from "../src/tools/subagent_trace.ts";
 import { randomUUID } from "node:crypto";
 import { bookPathIn, forgetThreadSessions, readBook, sessionKey, writeBook, SESSION_BOOK_VERSION, type SessionRecord } from "../src/llm/providers/agent_sessions.ts";
-import { pruneSdkSessions } from "../src/llm/providers/agent_session_retention.ts";
+import { pruneSdkSessions, retireSession } from "../src/llm/providers/agent_session_retention.ts";
 import { nativeHistoryStore } from "../src/llm/providers/claude_agent_history.ts";
 
 const NOW = Date.parse("2026-09-10T12:00:00Z");
@@ -113,6 +113,77 @@ test("retired transcripts last a day; fork ancestors and other threads remain li
   expect(f.stored()).toEqual([other]);
   expect([parent, child, other].map(id => existsSync(f.local(id)))).toEqual([false, false, true]);
   withStorage(f.data, db => expect(db.query("SELECT count(*) AS n FROM state_lines WHERE path NOT IN (SELECT path FROM state_files)").get()).toEqual({ n: 0 }));
+});
+
+test("a transcript no book names is retired when first seen and expires a day later, along with its local copies, once", async () => {
+  const f = fixture();
+  const id = randomUUID();
+  await f.add(id);
+  expect(f.prune(start)).toBe(0);
+  expect(f.prune(start + DAY)).toBe(0);
+  expect(f.prune(start + DAY + 1)).toBe(1);
+  expect(f.stored()).toEqual([]);
+  expect([existsSync(f.local(id)), existsSync(join(f.project, id))]).toEqual([false, false]);
+  expect(f.prune(start + DAY * 3)).toBe(0);
+});
+
+test("a session dropped from a thread's book is retired under its character", () => {
+  const f = fixture();
+  writeBook(f.book, { [f.key]: record(randomUUID()) }, start);
+  writeBook(f.book, {}, start + 1);
+  withStorage(f.data, (db) => expect(db.query("SELECT character FROM state_files WHERE path GLOB 'sdk_retired/*'").all()).toEqual([{ character: "ada" }]));
+});
+
+test("expiry clears every project's copies, past stray files, projects without a copy and config folders without projects", async () => {
+  const f = fixture();
+  const id = randomUUID();
+  const bare = randomUUID();
+  await f.add(id);
+  await f.mirror.append({ projectKey: "-tmp", sessionId: bare }, [{ type: "user", uuid: randomUUID(), timestamp: "2000-01-01T00:00:00Z" }]);
+  mkdirSync(join(f.config, "projects", "-other"));
+  writeFileSync(join(f.config, "projects", "stray.txt"), "not a project");
+  const configs = [f.config, join(f.data, "unused-config")];
+  expect(pruneSdkSessions(f.data, start, configs)).toBe(0);
+  expect(pruneSdkSessions(f.data, start + DAY + 1, configs)).toBe(2);
+  expect([existsSync(f.local(id)), existsSync(join(f.project, id))]).toEqual([false, false]);
+  expect(f.stored()).toEqual([]);
+});
+
+test("a retired session whose id isn't a UUID never names a file to delete", () => {
+  const f = fixture();
+  const outside = join(f.config, "projects", "escape.jsonl");
+  writeFileSync(outside, "keep");
+  withStorage(f.data, (db) => { retireSession(db, "../escape", "ada", start); });
+  expect(f.prune(start + DAY + 1)).toBe(1);
+  expect(existsSync(outside)).toBe(true);
+});
+
+test("retired markers without a session id or a time, and transcript rows without one, are left alone", () => {
+  const f = fixture();
+  withStorage(f.data, (db) => {
+    const insert = db.query("INSERT INTO state_files(path, character, content) VALUES (?1, 'ada', ?2)");
+    insert.run("sdk_retired/numbered", pack(JSON.stringify({ sessionId: 5, retiredAt: start })));
+    insert.run("sdk_retired/timeless", pack(JSON.stringify({ sessionId: randomUUID(), retiredAt: "soon" })));
+    insert.run("sdk_transcripts/short", pack("x"));
+  });
+  expect(f.prune(start + DAY * 2)).toBe(0);
+  withStorage(f.data, (db) => expect((db.query("SELECT path FROM state_files WHERE path GLOB 'sdk_retired/*' ORDER BY path").all() as { path: string }[]).map((row) => row.path)).toEqual(["sdk_retired/numbered", "sdk_retired/timeless"]));
+});
+
+test("a session book that doesn't name its session or list its entries, or names a parent that isn't an id, prevents transcript deletion", async () => {
+  for (const [content, failure] of [
+    [{ sessionId: "s" }, "Invalid SDK session references; preserving transcripts"],
+    [{ entries: [] }, "Invalid SDK session references; preserving transcripts"],
+    [{ sessionId: "s", entries: [{ hash: "h", uuid: "u", sessionId: 5 }] }, "Invalid SDK parent session; preserving transcripts"],
+  ] as const) {
+    const f = fixture();
+    const id = randomUUID();
+    await f.add(id);
+    expect(f.prune(start)).toBe(0);
+    withStorage(f.data, (db) => db.query("INSERT INTO state_files VALUES ('sdk_sessions/broken/key', 'ada', ?1)").run(pack(JSON.stringify(content))));
+    expect(() => f.prune(start + DAY + 1)).toThrow(failure);
+    expect(existsSync(f.local(id))).toBe(true);
+  }
 });
 
 test("an unreadable session book prevents transcript deletion", async () => {
