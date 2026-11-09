@@ -10,6 +10,8 @@ mod compaction;
 mod conversation;
 mod input;
 mod notifications;
+#[cfg(test)]
+mod palette_tests;
 mod segments;
 mod stream;
 mod usage;
