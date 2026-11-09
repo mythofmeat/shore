@@ -15,6 +15,8 @@ mod palette_tests;
 #[cfg(test)]
 mod render_key_tests;
 mod segments;
+#[cfg(test)]
+mod state_tests;
 mod stream;
 mod usage;
 
