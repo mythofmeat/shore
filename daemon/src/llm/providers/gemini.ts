@@ -248,8 +248,6 @@ export function translateMessages(messages: WireMessage[], generation = 2): Cont
 }
 
 function translateParts(content: WireMessage["content"], toolIdToName: Map<string, string>, generation: number): Part[] {
-  if (typeof content === "string") return content ? [{ text: content }] : [];
-
   const parts: Part[] = [];
   for (const block of content) {
     switch (block.type) {
@@ -389,7 +387,6 @@ function safetySettings(): SafetySetting[] {
 }
 
 function extractSystemText(content: WireMessage["content"]): string {
-  if (typeof content === "string") return content;
   return content
     .filter((b): b is Extract<ContentBlock, { type: "text" }> => b.type === "text")
     .map((b) => b.text)
