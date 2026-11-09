@@ -443,7 +443,6 @@ export const DAEMON_EQUIVALENTS: readonly string[] = [
   "src/ledger/zoned.ts:candidatesFor: const probes = [guess - 「12 → 13」 * HOUR_MS, guess, guess + 12 *…",
   "src/ledger/zoned.ts:candidatesFor: const probes = [guess - 12 「* → /」 HOUR_MS, guess, guess + 12 * H…",
   "src/ledger/zoned.ts:candidatesFor: …- 12 * HOUR_MS, guess, guess + 「12 → 13」 * HOUR_MS];",
-  "src/ledger/gate.ts:costBudgetBlock: … (context.ledger === undefined 「|| → &&」 budgets.length === 0) {",
   "src/ledger/gate.ts:projectedLoopCost: if (cap === undefined || cap 「<= → <」 1) return undefined;",
   "src/autonomy/heartbeat.ts:HeartbeatClock.tick: 「this.#defaultFloor = undefined; → {}」",
   "src/autonomy/heartbeat.ts:HeartbeatClock.schedule: 「this.#lastAnchor = now; → {}」",
