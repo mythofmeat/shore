@@ -22,10 +22,11 @@ export function sanitizeToolPairs(messages: WireMessage[]): WireMessage[] | unde
 
   const out: WireMessage[] = [];
   for (const msg of messages) {
+    const tail = msg.transient_tail;
     let transientTail = 0;
     const kept = msg.content.filter((block, index) => {
       if (!keep(msg.role, block, orphanUses, orphanResults)) return false;
-      if (index >= msg.content.length - (msg.transient_tail ?? 0)) transientTail += 1;
+      if (tail !== undefined && index >= msg.content.length - tail) transientTail += 1;
       return true;
     });
     if (kept.length === 0) continue;
