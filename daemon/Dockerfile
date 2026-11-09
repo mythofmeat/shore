@@ -36,31 +36,62 @@ RUN apt-get update && apt-get install -y \
 RUN git lfs install --system
 
 ### Basic utilities ###
+#### media
+RUN apt-get update && apt-get install -y \
+    ffmpeg \
+    imagemagick \
+    libimage-exiftool-perl \
+    sox
+
+#### archives / compression
+RUN apt-get update && apt-get install -y \
+    unzip \
+    zip \
+    zstd
+
+#### network / transfer
+RUN apt-get update && apt-get install -y \
+    curl \
+    iproute2 \
+    rsync
+
+#### data wrangling
 COPY --from=mikefarah/yq:latest /usr/bin/yq /usr/local/bin/yq
 RUN apt-get update && apt-get install -y \
     bc \
-    curl \
-    ffmpeg \
+    jq \
+    sqlite3
+
+#### inspecting files
+RUN apt-get update && apt-get install -y \
+    bsdextrautils \
     file \
-    imagemagick \
-    iproute2 \
-    jq
+    tree \
+    xxd
 
 ### Runtimes and languages ###
+
 #### Rust
 RUN apt-get update && apt-get install -y \
     cargo
+
 #### Python
-RUN apt-get update && apt-get install -y python3
-##### Python-pip
-RUN apt-get update && apt-get install -y python3-pip
-RUN printf '[global]\nbreak-system-packages = true\n' >/etc/pip.conf
-##### UV
 COPY --from=ghcr.io/astral-sh/uv:latest /uv /uvx /usr/local/bin/
+RUN apt-get update && apt-get install -y \
+    python3 \
+    python3-pip
+RUN apt-get update && apt-get install -y \
+    python3-matplotlib \
+    python3-numpy \
+    python3-pil \
+    python3-zstandard
+RUN printf '[global]\nbreak-system-packages = true\n' >/etc/pip.conf
+
 #### Bun
 COPY --from=oven/bun:debian /usr/local/bin/bun /usr/local/bin/bun
 RUN ln -sf /usr/local/bin/bun /usr/local/bin/bunx \
     && ln -sf /usr/local/bin/bun /usr/local/bin/node
+
 ###################
 
 COPY daemon/entrypoint.sh /opt/shore/entrypoint
