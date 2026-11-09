@@ -18,6 +18,8 @@ mod segments;
 #[cfg(test)]
 mod state_tests;
 mod stream;
+#[cfg(test)]
+mod thread_model_tests;
 mod usage;
 
 pub(crate) use alt::*;
