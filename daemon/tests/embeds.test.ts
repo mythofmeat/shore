@@ -98,3 +98,7 @@ test("each picture is named where it sits: shown when named without a problem, o
     { embed: "![[d.png]]" },
   ])).toBe("[picture: a.png] then [picture not sent: b.png] then [picture: c.png] and [picture not sent: d.png]");
 });
+
+test("a shown text whose links don't line up with its source is kept whole", () => {
+  expect(splitText("see ![[a]]", "see ![[a]] and ![[b]]")).toEqual(["see ![[a]]"]);
+});

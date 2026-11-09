@@ -447,6 +447,7 @@ export const DAEMON_EQUIVALENTS: readonly string[] = [
   "src/ledger/gate.ts:projectedLoopCost: if (cap === undefined || cap 「<= → <」 1) return undefined;",
   "src/autonomy/heartbeat.ts:HeartbeatClock.tick: 「this.#defaultFloor = undefined; → {}」",
   "src/autonomy/heartbeat.ts:HeartbeatClock.schedule: 「this.#lastAnchor = now; → {}」",
+  "src/config/token.ts:resolveDaemonToken: …nc(path, `${token}\\n`, { mode: 「0o600 → 385」 });",
 ];
 
 export const CLIENT_FLOORS: Readonly<Record<string, number>> = {

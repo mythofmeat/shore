@@ -165,6 +165,14 @@ describe("the recursion cap", () => {
     expect(nested.workspaceDir).toBe(parent.workspaceDir);
   });
 
+  test("the nested context keeps the parent's abort signal unless it is given its own", () => {
+    const parentSignal = new AbortController().signal;
+    const own = new AbortController().signal;
+    const parent = { ...contextIn("/tmp/whatever"), signal: parentSignal };
+    expect(nestedContext(parent).signal).toBe(parentSignal);
+    expect(nestedContext(parent, own).signal).toBe(own);
+  });
+
   test("the nested context has no heartbeat schedule, so a sub-agent cannot move its parent's wake", () => {
     const parent = { ...contextIn("/tmp/whatever"), scheduleNextWake: () => 1 };
 

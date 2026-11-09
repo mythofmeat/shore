@@ -243,5 +243,7 @@ describe("what the daemon keeps on disk for browsers", () => {
     expect(findSentPicture(data, name)).toBe(join(sentPicturesDir(data, "ada"), name));
     expect(findSentPicture(data, "../../../secret.png")).toBeUndefined();
     expect(findSentPicture(data, `${"b".repeat(64)}.png`)).toBeUndefined();
+    writeFileSync(join(sentPicturesDir(data, "ada"), "notes.txt"), "not a picture");
+    expect(findSentPicture(data, "notes.txt"), "a file beside the pictures that isn't named by its content").toBeUndefined();
   });
 });

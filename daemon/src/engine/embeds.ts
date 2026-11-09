@@ -127,7 +127,7 @@ export function pictureText(text: string, images: readonly Sent[]): string {
   if (sent.length === 0) return text;
   let result = "";
   let cursor = 0;
-  for (const embed of embedsIn(text).toSorted((a, b) => a.at - b.at)) {
+  for (const embed of embedsIn(text)) {
     const image = sentFor(sent, embed);
     if (image === undefined || embed.at < cursor) continue;
     result += text.slice(cursor, embed.at) + (typeof image.name === "string" && (image.problem === undefined || image.problem === null)

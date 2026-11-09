@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, test } from "bun:test";
-import { mkdtempSync, chmodSync, readFileSync, statSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, chmodSync, readFileSync, statSync, writeFileSync } from "node:fs";
 import { connect } from "node:net";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -217,5 +217,21 @@ describe("the handshake", () => {
     } finally {
       await stop();
     }
+  });
+});
+
+describe("a generated token", () => {
+  test.skipIf(process.getuid?.() === 0)("makes the config folder it needs, and an empty token file left behind becomes owner-only", () => {
+    const root = mkdtempSync(join(tmpdir(), "shore-token-"));
+    const nested = join(root, "not", "yet", "here");
+    const made = resolveDaemonToken({}, nested);
+    expect(made.source).toBe("generated");
+    expect(readFileSync(join(nested, TOKEN_FILE), "utf8")).toBe(`${made.token}\n`);
+    const leftover = join(root, "leftover");
+    mkdirSync(leftover);
+    writeFileSync(join(leftover, TOKEN_FILE), "   \n", { mode: 0o644 });
+    chmodSync(join(leftover, TOKEN_FILE), 0o644);
+    expect(resolveDaemonToken({}, leftover).source).toBe("generated");
+    expect(statSync(join(leftover, TOKEN_FILE)).mode & 0o777).toBe(0o600);
   });
 });
