@@ -417,6 +417,15 @@ export const DAEMON_EQUIVALENTS: readonly string[] = [
   "src/daemon/data_directory_lease.ts:ownerIsDead: …ecordedStart) && recordedStart 「< → <=」 performance.timeOrigin;",
   "src/storage/archive.ts:exportUnifiedDatabase: …new Database(path, { readonly: 「true → false」 });",
   "src/storage/archive.ts:importUnifiedDatabase: …tabase(sourcePath, { readonly: 「true → false」 });",
+  "src/memory/compaction/manager.ts:rollbackCompaction: while (i 「> → >=」 0 && writes[i - 1]?.previousTr…",
+  "src/memory/compaction/manager.ts:rollbackCompaction: while (i > 「0 → 1」 && writes[i - 1]?.previousTree…",
+  "src/memory/compaction/manager.ts:rollbackCompaction: while (i > 0 && writes[i - 「1 → 2」]?.previousTree === tree) batch…",
+  "src/memory/compaction/manager.ts:rollbackCompaction: if (paths.length 「> → >=」 0) await restorePaths(turns, t…",
+  "src/memory/compaction/manager.ts:rollbackCompaction: if (「(e as NodeJS.ErrnoException).code === \"… → !((e as NodeJS.ErrnoException).code ===…」) continue;",
+  "src/memory/compaction/manager.ts:rollbackCompaction: …as NodeJS.ErrnoException).code 「=== → !==」 \"ENOENT\") continue;",
+  "src/memory/compaction/manager.ts:rollbackCompaction: …oException).code === \"ENOENT\") 「continue; → {}」",
+  "src/memory/compaction/manager.ts:archiveCompactPrefix: 「await tools.gitCommitAll( workspaceDir,… → !(await tools.gitCommitAll( workspaceDi…」",
+  "src/memory/compaction/manager.ts:recoverArchivedPass: …charName, compactThread(opts), 「false → true」),",
 ];
 
 export const CLIENT_FLOORS: Readonly<Record<string, number>> = {
