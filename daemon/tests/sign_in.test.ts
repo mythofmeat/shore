@@ -1,5 +1,6 @@
-import { afterEach, describe, expect, setSystemTime, test } from "bun:test";
-import { chmodSync, mkdirSync, mkdtempSync, statSync, writeFileSync } from "node:fs";
+import { afterEach, describe, expect, jest, setSystemTime, test } from "bun:test";
+import { Database } from "bun:sqlite";
+import { chmodSync, readdirSync, mkdirSync, mkdtempSync, statSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
@@ -22,27 +23,32 @@ function requestWith(cookie: string): Request {
 }
 
 describe("a browser session", () => {
-  test("renews only for the browser holding its cookie, and the renewal outlives the original expiry", async () => {
-    const sessions = new WebSessions(ORIGIN, 4, 60);
-    const mine = sessions.create();
-    const theirs = sessions.create();
-    if (mine === undefined || theirs === undefined) throw new Error("no session");
-    const cookie = cookieOf(sessions, mine);
+  test("renews only for the browser holding its cookie, and the renewal outlives the original expiry", () => {
+    jest.useFakeTimers();
+    try {
+      const sessions = new WebSessions(ORIGIN, 4, 60);
+      const mine = sessions.create();
+      const theirs = sessions.create();
+      if (mine === undefined || theirs === undefined) throw new Error("no session");
+      const cookie = cookieOf(sessions, mine);
 
-    expect(() => sessions.renew(mine, requestWith(cookieOf(sessions, theirs)))).toThrow("Only the browser holding a sign-in can renew it");
-    expect(() => sessions.renew(mine, requestWith(""))).toThrow("Only the browser holding a sign-in can renew it");
+      expect(() => sessions.renew(mine, requestWith(cookieOf(sessions, theirs)))).toThrow("Only the browser holding a sign-in can renew it");
+      expect(() => sessions.renew(mine, requestWith(""))).toThrow("Only the browser holding a sign-in can renew it");
 
-    await Bun.sleep(40);
-    const renewed = sessions.renew(mine, requestWith(cookie));
-    expect(renewed).toContain("Expires=");
-    await Bun.sleep(40);
-    expect(sessions.read(requestWith(cookie))?.id).toBe(mine.id);
-    expect(mine.signal.aborted).toBe(false);
+      jest.advanceTimersByTime(40);
+      const renewed = sessions.renew(mine, requestWith(cookie));
+      expect(renewed).toContain("Expires=");
+      jest.advanceTimersByTime(40);
+      expect(sessions.read(requestWith(cookie))?.id).toBe(mine.id);
+      expect(mine.signal.aborted).toBe(false);
 
-    await Bun.sleep(60);
-    expect(mine.signal.aborted).toBe(true);
-    expect(() => sessions.renew(mine, requestWith(cookie))).toThrow("Only the browser holding a sign-in can renew it");
-    sessions.close();
+      jest.advanceTimersByTime(60);
+      expect(mine.signal.aborted).toBe(true);
+      expect(() => sessions.renew(mine, requestWith(cookie))).toThrow("Only the browser holding a sign-in can renew it");
+      sessions.close();
+    } finally {
+      jest.useRealTimers();
+    }
   });
 
   test("a renewal is saved, so it survives a restart", () => {
@@ -165,6 +171,47 @@ describe("what the daemon keeps on disk for browsers", () => {
     mkdirSync(fifoDir, { recursive: true });
     Bun.spawnSync(["mkfifo", join(fifoDir, "recovery.sqlite")]);
     expect(() => new WebRecovery({ cacheDir: join(fifo, "cache"), dataDir: fifo, token: "t" }, ORIGIN)).toThrow("regular database file");
+  });
+
+  test("browser sessions outlive a restart unless they have expired, or the origin changed", () => {
+    const root = mkdtempSync(join(tmpdir(), "shore-sign-in-restart-"));
+    const options = { cacheDir: join(root, "cache"), dataDir: root, token: "t" };
+    const first = new WebRecovery(options, ORIGIN);
+    first.saveSession("live", Date.now() + 60_000);
+    first.saveSession("stale", Date.now() - 1);
+    first.close();
+    const second = new WebRecovery(options, ORIGIN);
+    expect(second.sessions().map((session) => session.id)).toEqual(["live"]);
+    second.close();
+    const moved = new WebRecovery(options, "https://elsewhere.example");
+    expect(moved.sessions()).toEqual([]);
+    moved.close();
+  });
+
+  test("a store written by an earlier daemon keeps its sessions while the origin and token stay the same", () => {
+    const root = mkdtempSync(join(tmpdir(), "shore-sign-in-upgrade-"));
+    const options = { cacheDir: join(root, "cache"), dataDir: root, token: "t" };
+    new WebRecovery(options, ORIGIN).close();
+    const db = new Database(join(options.cacheDir, "web", sessionDigest(root), "recovery.sqlite"));
+    db.query("UPDATE identity SET fingerprint = ?").run(sessionDigest(JSON.stringify([1, ORIGIN, "t"])));
+    db.query("INSERT INTO sessions VALUES (?, ?)").run("kept", Date.now() + 60_000);
+    db.close();
+    const upgraded = new WebRecovery(options, ORIGIN);
+    expect(upgraded.sessions().map((session) => session.id)).toEqual(["kept"]);
+    upgraded.close();
+  });
+
+  test("opening the recovery store leaves no file open, and a damaged one is refused and closed", () => {
+    const root = mkdtempSync(join(tmpdir(), "shore-sign-in-damaged-"));
+    const options = { cacheDir: join(root, "cache"), dataDir: root, token: "t" };
+    const descriptors = () => readdirSync("/proc/self/fd").length;
+    new WebRecovery(options, ORIGIN).close();
+    const open = descriptors();
+    new WebRecovery(options, ORIGIN).close();
+    expect(descriptors()).toBe(open);
+    writeFileSync(join(options.cacheDir, "web", sessionDigest(root), "recovery.sqlite"), "not a database ".repeat(100));
+    expect(() => new WebRecovery(options, ORIGIN)).toThrow();
+    expect(descriptors()).toBe(open);
   });
 
   test("a sent picture is found only by its content name, never by a path", () => {

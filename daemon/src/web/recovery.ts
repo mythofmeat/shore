@@ -30,12 +30,12 @@ export class WebRecovery {
     const directory = join(parent, sessionDigest(realpathSync(options.dataDir)));
     privateDirectory(directory);
     const path = join(directory, "recovery.sqlite");
-    const file = openSync(path, constants.O_CREAT | constants.O_RDWR | constants.O_NOFOLLOW, 0o600);
+    const file = openSync(path, constants.O_CREAT | constants.O_RDWR | constants.O_NOFOLLOW);
     try {
       if (!fstatSync(file).isFile()) throw new Error("Browser recovery requires a regular database file");
       chmodSync(path, 0o600);
     } finally { closeSync(file); }
-    this.#db = new Database(path, { strict: true });
+    this.#db = new Database(path);
     this.artifacts = join(directory, "artifacts");
     try {
       this.#db.run(`PRAGMA journal_mode = DELETE; PRAGMA synchronous = EXTRA; PRAGMA foreign_keys = ON; PRAGMA max_page_count = 16384;

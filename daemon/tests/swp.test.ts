@@ -484,6 +484,13 @@ describe("client request admission", () => {
     expect(() => admitClientMessage(message([upload("x", "AQIDBA==")]))).not.toThrow();
   });
 
+  test("a refused attachment is named by its place in the list, counting from one", () => {
+    const fine = upload("a.png", "AQIDBA==");
+    expect(() => admitClientMessage(message([fine, null]))).toThrow("Attachment 2 is not an object");
+    expect(() => admitClientMessage(message([fine, upload("é".repeat(128), "AQIDBA==")]))).toThrow(/^Attachment 2 filename /);
+    expect(() => admitClientMessage(message([fine, fine, upload("", "AQIDBA==")]))).toThrow("Attachment 3 has an empty filename");
+  });
+
   test("caps attachment and capability counts", () => {
     expect(() =>
       admitClientMessage(message(Array.from({ length: MAX_ATTACHMENTS }, (_, i) => upload(`${String(i)}.png`, "")))),
