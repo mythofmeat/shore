@@ -611,3 +611,122 @@ describe("the ping count", () => {
     expect(ka.tick(START + minutes(170))).toBe("ping");
   });
 });
+
+describe("the keepalive schedule", () => {
+  const MIN = 60_000;
+  const armed = (interval = 55 * MIN, maxPings = 10): CacheKeepalive => {
+    const schedule = new CacheKeepalive(maxPings);
+    schedule.setInterval(interval, "chat.m", 0);
+    schedule.onCacheWarmed("chat.m", 0);
+    return schedule;
+  };
+
+  test("a failed ping retries after 30 s, doubling each time up to 15 minutes, and a success starts over", () => {
+    const schedule = armed();
+    const delays: number[] = [];
+    let now = 1000;
+    for (let failure = 0; failure < 7; failure += 1) {
+      schedule.onPingFailed(now);
+      delays.push((schedule.nextPingAt ?? 0) - now);
+      now += 1000;
+    }
+    expect(delays).toEqual([30_000, 60_000, 120_000, 240_000, 480_000, 900_000, 900_000]);
+    schedule.onPingSucceeded(now);
+    schedule.onPingFailed(now + 1000);
+    expect((schedule.nextPingAt ?? 0) - (now + 1000)).toBe(30_000);
+  });
+
+  test("a failed ping gives up once the warm it was keeping is past the interval plus five minutes", () => {
+    const schedule = armed(10 * MIN);
+    schedule.onPingFailed(15 * MIN - 1);
+    expect(schedule.nextPingAt).toBe(15 * MIN - 1 + 30_000);
+    const epoch = schedule.epoch;
+    schedule.onPingFailed(15 * MIN);
+    expect(schedule.nextPingAt).toBeUndefined();
+    expect(schedule.epoch).toBe(epoch + 1);
+    expect(schedule.snapshot()).toBeUndefined();
+
+    const never = new CacheKeepalive(10);
+    never.setInterval(10 * MIN, "chat.m", 0);
+    never.onPingFailed(0);
+    expect(never.nextPingAt).toBeUndefined();
+    const unarmed = new CacheKeepalive(10);
+    unarmed.onCacheWarmed("chat.m", 0);
+    unarmed.onPingFailed(1);
+    expect(unarmed.nextPingAt).toBeUndefined();
+  });
+
+  test("setting the same interval again leaves the next ping where it was; a new one reschedules from the last activity", () => {
+    const schedule = armed(10 * MIN);
+    schedule.onPingSucceeded(4 * MIN);
+    expect(schedule.nextPingAt).toBe(14 * MIN);
+    schedule.setInterval(10 * MIN, "chat.m", 5 * MIN);
+    expect(schedule.nextPingAt).toBe(14 * MIN);
+    schedule.setInterval(20 * MIN, "chat.m", 5 * MIN);
+    expect(schedule.nextPingAt).toBe(20 * MIN);
+    schedule.setInterval(undefined, "chat.m", 6 * MIN);
+    expect(schedule.nextPingAt).toBeUndefined();
+    expect(schedule.tick(60 * MIN)).toBe("none");
+
+    const fresh = new CacheKeepalive(10);
+    fresh.setInterval(10 * MIN, "chat.m", 0);
+    expect(fresh.nextPingAt).toBeUndefined();
+  });
+
+  test("a new model or prompt identity starts over, and leaving the identity out changes nothing", () => {
+    const schedule = new CacheKeepalive(10);
+    schedule.setInterval(10 * MIN, "chat.m", 0, "key-a");
+    schedule.onCacheWarmed("chat.m", 0);
+    const epoch = schedule.epoch;
+    schedule.setInterval(10 * MIN, "chat.m", 1, undefined);
+    expect(schedule.epoch).toBe(epoch);
+    expect(schedule.nextPingAt).toBe(10 * MIN);
+    schedule.setInterval(10 * MIN, "chat.m", 2, "key-b");
+    expect(schedule.epoch).toBe(epoch + 1);
+    expect(schedule.nextPingAt).toBeUndefined();
+    expect(schedule.snapshot()).toBeUndefined();
+  });
+
+  test("a warm of another model is ignored, and a new reply resets the pings and starts a new epoch", () => {
+    const schedule = armed(10 * MIN, 2);
+    const epoch = schedule.epoch;
+    schedule.onCacheWarmed("chat.other", 5 * MIN);
+    expect(schedule.nextPingAt).toBe(10 * MIN);
+    expect(schedule.epoch).toBe(epoch);
+    schedule.onPingSucceeded(10 * MIN);
+    schedule.onCacheWarmed("chat.m", 12 * MIN, false);
+    expect(schedule.pingsSent).toBe(1);
+    expect(schedule.epoch).toBe(epoch);
+    schedule.onCacheWarmed("chat.m", 13 * MIN);
+    expect(schedule.pingsSent).toBe(0);
+    expect(schedule.epoch).toBe(epoch + 1);
+    expect(schedule.nextPingAt).toBe(20 * MIN);
+  });
+
+  test("invalidating forgets the warm, the failures and the pings, and opens a new epoch", () => {
+    const schedule = armed(10 * MIN, 5);
+    schedule.onPingSucceeded(10 * MIN);
+    schedule.onPingFailed(12 * MIN);
+    const epoch = schedule.epoch;
+    schedule.onCacheInvalidated();
+    expect(schedule.epoch).toBe(epoch + 1);
+    expect(schedule.pingsSent).toBe(0);
+    expect(schedule.nextPingAt).toBeUndefined();
+    expect(schedule.snapshot()).toBeUndefined();
+    schedule.onCacheWarmed("chat.m", 20 * MIN, false);
+    schedule.onPingFailed(21 * MIN);
+    expect((schedule.nextPingAt ?? 0) - 21 * MIN).toBe(30_000);
+  });
+
+  test("the ping allowance is checked when a ping is due, so lowering it stops the next one", () => {
+    const schedule = armed(10 * MIN, 3);
+    schedule.onPingSucceeded(10 * MIN);
+    expect(schedule.tick(20 * MIN)).toBe("ping");
+    schedule.setMaxPings(1);
+    expect(schedule.tick(20 * MIN)).toBe("none");
+    expect(schedule.nextPingAt).toBeUndefined();
+    const exact = armed(10 * MIN, 2);
+    exact.onPingSucceeded(10 * MIN);
+    expect(exact.tick(20 * MIN)).toBe("ping");
+  });
+});

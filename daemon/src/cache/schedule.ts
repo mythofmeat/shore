@@ -103,10 +103,6 @@ export class CacheKeepalive {
     }
     const changed = this.#interval !== interval;
     this.#interval = interval;
-    if (interval === undefined) {
-      this.#nextPingAt = undefined;
-      return;
-    }
     if (this.#nextPingAt === undefined || changed) {
       this.#nextPingAt =
         this.#lastActiveAt === undefined
