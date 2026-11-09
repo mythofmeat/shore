@@ -54,11 +54,11 @@ jobs:
 
   mutate-client:
     runs-on: ubuntu-24.04
-    timeout-minutes: 240
+    timeout-minutes: 360
     strategy:
       fail-fast: false
       matrix:
-        shard: [1, 2, 3, 4, 5, 6, 7, 8]
+        shard: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12]
     defaults:
       run:
         working-directory: client
@@ -80,4 +80,4 @@ jobs:
           FILES: ${{ inputs.files }}
         run: |
           read -ra files <<< "$FILES"
-          bun ../daemon/scripts/mutate_client.ts --shard=${{ matrix.shard }}/8 --workers=2 --survivors "${files[@]}"
+          bun ../daemon/scripts/mutate_client.ts --shard=${{ matrix.shard }}/12 --workers=2 --survivors "${files[@]}"
