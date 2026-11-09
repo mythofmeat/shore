@@ -3,12 +3,12 @@ import { readFile } from "./support/stored_files.ts";
 import { Database } from "bun:sqlite";
 import { existsSync } from "node:fs";
 import { describe, expect, test } from "bun:test";
-import { access, mkdir, mkdtemp, readdir, stat, writeFile, symlink } from "node:fs/promises";
+import { access, mkdir, mkdtemp, readdir, rm, stat, writeFile, symlink } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
-import { create, Header, Parser } from "tar";
+import { dirname, join } from "node:path";
+import { create, extract, Header, Parser } from "tar";
 
-import { exportBackup, exportCharacter, importArchive, importCharacter, readTransfer, writeTransfer, type ArchiveContext } from "../src/commands/archive.ts";
+import { deleteCharacter, exportBackup, exportCharacter, importArchive, importCharacter, readTransfer, writeTransfer, type ArchiveContext } from "../src/commands/archive.ts";
 import { ArchiveSpool } from "../src/commands/archive_spool.ts";
 import type { ShoreDirs } from "../src/config/dirs.ts";
 import { HistoryStore } from "../src/engine/history_store.ts";
@@ -16,6 +16,7 @@ import type { Message } from "../src/engine/types.ts";
 import { Ledger } from "../src/ledger/store.ts";
 import { freezeDatabase } from "../src/storage/frozen_database.ts";
 import { outcomeOf } from "./support/outcome.ts";
+import { StandInWorkspace } from "./support/stand_in_workspace.ts";
 
 describe("character archives", () => {
   test("browser archive snapshots and extraction remain inside the owned transfer directory", async () => {
@@ -51,6 +52,37 @@ describe("character archives", () => {
     await writeFile(output, Bun.gzipSync(Buffer.concat([block, Buffer.from("x"), Buffer.alloc(511 + 1024)])));
     expect(await outcomeOf(importCharacter(context(target, new Set()), { archive: output }))).toThrow("unexpected path");
     expect(existsSync(join(target.workspace as string, "outside"))).toBe(false);
+  });
+
+  test("a link in an archive can't copy a file from outside the import into the workspace", async () => {
+    const source = await root("link-source");
+    await seedCharacter(source, "ada", "x");
+    const exported = join(source.runtime, "ada.tar");
+    await exportCharacter(context(source, new Set(["ada"])), { character: "ada", output: exported });
+    const unpacked = await mkdtemp(join(source.runtime, "unpacked-"));
+    await extract({ file: exported, cwd: unpacked });
+    const secret = join(tmpdir(), `outside-secret-${String(process.pid)}`);
+    await writeFile(secret, "secret");
+    const blocks: Buffer[] = [];
+    for (const path of (await readdir(unpacked, { recursive: true })).sort()) {
+      const full = join(unpacked, path);
+      const header = Buffer.alloc(512);
+      if ((await stat(full)).isDirectory()) {
+        new Header({ path: `${path}/`, size: 0, mode: 0o700, type: "Directory" }).encode(header);
+        blocks.push(header);
+        continue;
+      }
+      const data = Buffer.from(await Bun.file(full).arrayBuffer());
+      new Header({ path, size: data.length, mode: 0o600, type: "File" }).encode(header);
+      blocks.push(header, data, Buffer.alloc((512 - (data.length % 512)) % 512));
+    }
+    const link = Buffer.alloc(512);
+    new Header({ path: "workspace/stolen.txt", type: "Link", linkpath: `../${String(secret.split("/").at(-1))}`, size: 0, mode: 0o600 }).encode(link);
+    const output = join(source.runtime, "linked.tar");
+    await writeFile(output, Buffer.concat([...blocks, link, Buffer.alloc(1024)]));
+    const target = await root("link-target");
+    expect(await outcomeOf(importCharacter(context(target, new Set()), { archive: output }))).toThrow("TAR_ENTRY_ERROR: linkpath contains '..'");
+    expect(existsSync(join(target.workspace as string, "ada", "stolen.txt"))).toBe(false);
   });
 
   test.each(["../evil", "a/b", ""])("an archive naming its character %j is refused", async (character) => {
@@ -474,3 +506,167 @@ function context(
     releaseCharacter: async () => undefined,
   };
 }
+
+async function packed(dirs: ShoreDirs, files: Record<string, string>): Promise<string> {
+  const stage = await mkdtemp(join(dirs.runtime, "stage-"));
+  for (const [path, text] of Object.entries(files)) {
+    await mkdir(dirname(join(stage, path)), { recursive: true });
+    await writeFile(join(stage, path), text);
+  }
+  const output = join(dirs.runtime, `${String(Object.keys(files).length)}-${String(Date.now())}.tar`);
+  await create({ cwd: stage, file: output, portable: true }, [...new Set(Object.keys(files).map((path) => path.split("/")[0] ?? path))]);
+  return output;
+}
+
+async function archiveEntries(archive: string): Promise<{ count: number; bytes: number }> {
+  let count = 0;
+  let bytes = 0;
+  await new Promise<void>((resolve, reject) => {
+    const parser = new Parser({ onReadEntry: (entry) => { count += 1; bytes += entry.size; entry.resume(); } });
+    parser.on("end", resolve);
+    parser.on("error", reject);
+    void Bun.file(archive).arrayBuffer().then((data) => { parser.end(Buffer.from(data)); });
+  });
+  return { count, bytes };
+}
+
+describe("archive checks", () => {
+  test("an archive that isn't a readable Shore character is refused with what is wrong with it", async () => {
+    const dirs = await root("manifests");
+    const ctx = context(dirs, new Set());
+    const manifest = (fields: Record<string, unknown>): string => JSON.stringify({ format: "shore-character", version: 2, character: "ada", source_data: "/srv/data", ...fields });
+    const cases: Array<[Record<string, string>, string]> = [
+      [{ "workspace/SOUL.md": "x" }, "Not a readable Shore character archive: "],
+      [{ "manifest.json": "{not json" }, "Not a readable Shore character archive: "],
+      [{ "manifest.json": "[]" }, "Unsupported or malformed Shore character archive"],
+      [{ "manifest.json": manifest({ format: "other" }) }, "Unsupported or malformed Shore character archive"],
+      [{ "manifest.json": manifest({ version: 1 }) }, "Unsupported or malformed Shore character archive"],
+      [{ "manifest.json": manifest({ character: "a/b" }) }, "Archive has an invalid character name"],
+      [{ "manifest.json": manifest({ character: 5 }) }, "Archive has an invalid character name"],
+      [{ "manifest.json": manifest({}) }, "Archive has no workspace/SOUL.md"],
+      [{ "manifest.json": manifest({}), "workspace/SOUL.md": "x" }, "Archive has no shore.db"],
+      [{ "manifest.json": manifest({ source_data: "relative" }), "workspace/SOUL.md": "x", "shore.db": "" }, "Archive has an invalid source data directory"],
+      [{ "manifest.json": manifest({ source_data: 7 }), "workspace/SOUL.md": "x", "shore.db": "" }, "Archive has an invalid source data directory"],
+    ];
+    for (const [files, refusal] of cases) {
+      const failure = await outcomeOf(importCharacter(ctx, { archive: await packed(dirs, files) }));
+      expect(failure).toThrow(refusal);
+    }
+    expect(existsSync(join(dirs.config, "characters", "ada"))).toBe(false);
+  });
+
+  test("a file that isn't a tar archive at all fails as one, before any manifest is looked for", async () => {
+    const dirs = await root("not-tar");
+    const bogus = join(dirs.runtime, "bogus.tar");
+    await writeFile(bogus, "this is not a tar archive at all, just some words that go on long enough to fill a header block".repeat(8));
+    let message = "";
+    try {
+      await importCharacter(context(dirs, new Set()), { archive: bogus });
+    } catch (error) {
+      message = (error as Error).message;
+    }
+    expect(message).not.toBe("");
+    expect(message).not.toContain("Not a readable Shore character archive");
+  });
+
+  test("browser limits allow an archive exactly at the entry and byte limits and refuse one entry or byte more", async () => {
+    const source = await root("limits-source");
+    await seedCharacter(source, "ada", "limits");
+    const output = join(source.runtime, "ada.tar");
+    await exportCharacter(context(source, new Set(["ada"])), { character: "ada", output });
+    const { count, bytes } = await archiveEntries(output);
+    const attempt = async (limits: { bytes: number; entries: number }) => {
+      const target = await root("limits-target");
+      return await outcomeOf(importCharacter({ ...context(target, new Set()), limits: { ...limits, temporaryDirectory: target.runtime } }, { archive: output }));
+    };
+    expect((await attempt({ entries: count, bytes }))()).toMatchObject({ character: "ada", imported: true });
+    expect(await attempt({ entries: count - 1, bytes })).toThrow("Browser archive contains unsupported entries or too many files");
+    expect(await attempt({ entries: count, bytes: bytes - 1 })).toThrow("Archive expands beyond the browser processing limit");
+  });
+
+  test("export won't overwrite an archive, and import names an archive that isn't there", async () => {
+    const dirs = await root("refusals");
+    await seedCharacter(dirs, "ada", "x");
+    const existing = join(dirs.runtime, "taken.tar");
+    await writeFile(existing, "already here");
+    expect(await outcomeOf(exportCharacter(context(dirs, new Set(["ada"])), { character: "ada", output: existing }))).toThrow(`Refusing to overwrite existing archive: ${existing}`);
+    expect(await readFile(existing, "utf8")).toBe("already here");
+    const missing = join(dirs.runtime, "missing.tar");
+    expect(await outcomeOf(importCharacter(context(dirs, new Set()), { archive: missing }))).toThrow(`Archive not found: ${missing}`);
+  });
+
+  test("an imported character brings its pictures and an empty config folder, and a failed import takes them back out", async () => {
+    const source = await root("media-source");
+    await seedCharacter(source, "ada", "pictures");
+    await rm(join(source.config, "characters", "ada", "config.toml"));
+    await mkdir(join(source.data, "media", "ada", "sent"), { recursive: true });
+    await writeFile(join(source.data, "media", "ada", "sent", "lamp.png"), "png bytes");
+    const output = join(source.runtime, "ada.tar");
+    await exportCharacter(context(source, new Set(["ada"])), { character: "ada", output });
+
+    const target = await root("media-target");
+    await importCharacter(context(target, new Set()), { archive: output });
+    expect(await readFile(join(target.data, "media", "ada", "sent", "lamp.png"), "utf8")).toBe("png bytes");
+    expect(await readdir(join(target.config, "characters", "ada"))).toEqual([]);
+
+    const failing = await root("media-rollback");
+    expect(await outcomeOf(importCharacter(context(failing, new Set(), () => { throw new Error("refresh failed"); }), { archive: output }))).toThrow("refresh failed");
+    for (const path of [join(failing.data, "media", "ada"), join(failing.cache, "ada"), join(failing.config, "characters", "ada")]) expect(existsSync(path)).toBe(false);
+  });
+});
+
+describe("a character whose tools run as its own user", () => {
+  async function isolatedRoot(name: string) {
+    const dirs = await root(name);
+    const home = await mkdtemp(join(dirs.runtime, "home-"));
+    const workspaces = new Map<string, StandInWorkspace>();
+    const workspaceOf = (character: string): StandInWorkspace => {
+      const existing = workspaces.get(character);
+      if (existing !== undefined) return existing;
+      const made = new StandInWorkspace(join(dirs.workspace as string, character), home);
+      workspaces.set(character, made);
+      return made;
+    };
+    return { dirs, home, workspaceOf, ctx: (characters: Set<string>, refresh?: () => void): ArchiveContext => ({ ...context(dirs, characters, refresh), workspace: workspaceOf }) };
+  }
+
+  test("deleting empties its workspace through its user and removes its workspace history", async () => {
+    const { dirs, home, workspaceOf, ctx } = await isolatedRoot("isolated-delete");
+    await seedCharacter(dirs, "ada", "x");
+    const history = join(home, ".cache", "shore", "workspace-turns", "ada.git");
+    await mkdir(history, { recursive: true });
+    await writeFile(join(history, "HEAD"), "ref");
+    await deleteCharacter(ctx(new Set(["ada"])), { character: "ada", confirm: "ada" });
+    expect(existsSync(join(dirs.workspace as string, "ada"))).toBe(false);
+    expect(existsSync(history)).toBe(false);
+    expect(workspaceOf("ada").calls).toEqual(["clear", "remove"]);
+  });
+
+  test("importing fills its existing empty workspace through its user, and refuses a missing or occupied one", async () => {
+    const source = await root("isolated-source");
+    await seedCharacter(source, "ada", "x");
+    const output = join(source.runtime, "ada.tar");
+    await exportCharacter(context(source, new Set(["ada"])), { character: "ada", output });
+
+    const missing = await isolatedRoot("isolated-missing");
+    expect(await outcomeOf(importCharacter(missing.ctx(new Set()), { archive: output }))).toThrow(`${join(missing.dirs.workspace as string, "ada")} does not exist, and ada's tools run as stand-in: create that folder owned by them, then import again`);
+    expect(existsSync(join(missing.dirs.config, "characters", "ada"))).toBe(false);
+
+    const occupied = await isolatedRoot("isolated-occupied");
+    await mkdir(join(occupied.dirs.workspace as string, "ada"), { recursive: true });
+    await writeFile(join(occupied.dirs.workspace as string, "ada", "notes.md"), "mine");
+    expect(await outcomeOf(importCharacter(occupied.ctx(new Set()), { archive: output }))).toThrow("Refusing to overwrite existing character 'ada'");
+    expect(await readFile(join(occupied.dirs.workspace as string, "ada", "notes.md"), "utf8")).toBe("mine");
+
+    const ready = await isolatedRoot("isolated-ready");
+    await mkdir(join(ready.dirs.workspace as string, "ada"), { recursive: true });
+    await importCharacter(ready.ctx(new Set()), { archive: output });
+    expect(await readFile(join(ready.dirs.workspace as string, "ada", "SOUL.md"), "utf8")).toBe("You are ada.\n");
+
+    const failing = await isolatedRoot("isolated-failing");
+    await mkdir(join(failing.dirs.workspace as string, "ada"), { recursive: true });
+    expect(await outcomeOf(importCharacter(failing.ctx(new Set(), () => { throw new Error("refresh failed"); }), { archive: output }))).toThrow("refresh failed");
+    expect(await readdir(join(failing.dirs.workspace as string, "ada"))).toEqual([]);
+    expect(failing.workspaceOf("ada").calls).toEqual(["entries", "clear"]);
+  });
+});

@@ -124,6 +124,24 @@ describe("deleting a character", () => {
   });
 });
 
+describe("what deleting a character removes", () => {
+  test("a listed character with nothing on disk is deleted without error, and one no longer listed still has its leftovers removed", async () => {
+    const dirs = await root("listed-empty");
+    expect(await deleteCharacter(context(dirs, new Set(["ada"]), []), { character: "ada", confirm: "ada" })).toEqual({ character: "ada", deleted: true, removed: [], archive: null });
+    await mkdir(join(dirs.data, "bea", "threads"), { recursive: true });
+    expect(await deleteCharacter(context(dirs, new Set(), []), { character: "bea", confirm: "bea" })).toEqual({ character: "bea", deleted: true, removed: [join(dirs.data, "bea")], archive: null });
+    expect(existsSync(join(dirs.data, "bea"))).toBe(false);
+  });
+
+  test("a workspace kept inside the character's config folder goes with that folder and isn't listed twice", async () => {
+    const dirs = { ...(await root("nested-workspace")), workspace: undefined };
+    await seedCharacter(dirs, "ada");
+    const result = await deleteCharacter(context(dirs, new Set(["ada"]), []), { character: "ada", confirm: "ada" }) as { removed: string[] };
+    expect(result.removed).toEqual([join(dirs.config, "characters", "ada"), join(dirs.data, "ada"), join(dirs.cache, "characters", "ada")]);
+    expect(existsSync(join(dirs.config, "characters", "ada"))).toBe(false);
+  });
+});
+
 async function root(name: string): Promise<ShoreDirs> {
   const base = await mkdtemp(join(tmpdir(), `shore-${name}-`));
   const dirs: ShoreDirs = {
