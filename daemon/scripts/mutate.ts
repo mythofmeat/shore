@@ -404,12 +404,12 @@ function failures(log: string): string {
 }
 
 async function collectCoverage(files: ReadonlySet<string>, workers: number): Promise<{ coverage: Coverage; problems: string[] }> {
-  const tests = [...new Bun.Glob("*.test.{ts,tsx}").scanSync(join(ROOT, "tests"))].sort();
+  const tests = [...new Bun.Glob("**/*.test.{ts,tsx}").scanSync(join(ROOT, "tests"))].sort();
   const logs = mkdtempSync(join(tmpdir(), "shore-mutate-logs-"));
   const runs = await pool(tests, workers, "coverage", async (dir, test) => {
     const out = join(dir, "coverage-out");
     rmSync(out, { recursive: true, force: true });
-    const log = join(logs, `${test}.log`);
+    const log = join(logs, `${test.replaceAll("/", "_")}.log`);
     const run = await bunTest(dir, [TEST_TIMEOUT, "--coverage", "--coverage-reporter=lcov", `--coverage-dir=${out}`, `./tests/${test}`], MIN_TIMEOUT_MS * 10, log);
     let lcov = "";
     try {

@@ -4,7 +4,6 @@ import { conversationCharacter, droppedNotice, sentFate } from "../src/browser/c
 import { QUOTE_EVENT, quoteText, withQuote } from "../src/browser/chat/quote.ts";
 import { ReadMarks } from "../src/browser/chat/read_marks.ts";
 import { workspaceNote } from "../src/browser/chat/workspace_note.ts";
-import { COMPACTION_VIEW_EVENT, CONVERSATION_DIALOG_EVENT, EFFORT_MENU_EVENT, FOLDER_DIALOG_EVENT, THREAD_DIALOG_EVENT, openCompactionView, openConversationDialog, openEffortMenu, openFolderDialog, openThreadDialog, requestConfigSearch, takeConfigSearch } from "../src/browser/app/intents.ts";
 import { SETTINGS_PAGES, parseRoute } from "../src/browser/app/routing.ts";
 import { DEFAULT_FONT_SIZE, FONT_SIZE_STORAGE_KEY, FontSizeStore, isFontSizeId, storedFontSize } from "../src/browser/font_size.ts";
 import { accumulateMetadata, metadataLabel } from "../src/browser/metadata.ts";
@@ -189,29 +188,6 @@ describe("small pieces of the page", () => {
     expect(randomUUID()).toBe("ffffffff-ffff-4fff-bfff-ffffffffffff");
     fills.mockImplementation(<T extends ArrayBufferView | null>(array: T): T => array);
     expect(randomUUID()).toBe("00000000-0000-4000-8000-000000000000");
-  });
-
-  test("dialogs and menus are asked for by events, and a configuration search is taken once", () => {
-    const heard: [string, unknown][] = [];
-    const names = [CONVERSATION_DIALOG_EVENT, EFFORT_MENU_EVENT, THREAD_DIALOG_EVENT, FOLDER_DIALOG_EVENT, COMPACTION_VIEW_EVENT];
-    const listener = (event: Event) => { heard.push([event.type, (event as CustomEvent).detail]); };
-    for (const name of names) addEventListener(name, listener);
-    restores.push(() => { for (const name of names) removeEventListener(name, listener); });
-    openConversationDialog("rename");
-    openEffortMenu();
-    openThreadDialog("fork", "story");
-    openFolderDialog({ kind: "rename", folder: "work" });
-    openCompactionView();
-    expect(heard).toEqual([
-      [CONVERSATION_DIALOG_EVENT, "rename"],
-      [EFFORT_MENU_EVENT, null],
-      [THREAD_DIALOG_EVENT, { kind: "fork", thread: "story" }],
-      [FOLDER_DIALOG_EVENT, { kind: "rename", folder: "work" }],
-      [COMPACTION_VIEW_EVENT, null],
-    ]);
-    requestConfigSearch("heartbeat");
-    expect(takeConfigSearch()).toBe("heartbeat");
-    expect(takeConfigSearch()).toBe("");
   });
 
   test("request history comes from the daemon, checked, and says so when it cannot", async () => {

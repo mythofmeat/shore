@@ -23,5 +23,5 @@
     "noUnusedLocals": true
   },
   "include": ["src/**/*.ts", "tests/**/*.ts"],
-  "exclude": ["src/browser/**"]
+  "exclude": ["src/browser/**", "tests/dom/**"]
 }

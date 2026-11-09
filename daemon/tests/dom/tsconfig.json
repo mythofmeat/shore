@@ -1,0 +1,14 @@
+{
+  "extends": "../../src/browser/tsconfig.json",
+  "compilerOptions": {
+    "types": [
+      "@types/bun",
+      "react",
+      "react-dom"
+    ]
+  },
+  "include": [
+    "**/*.ts",
+    "**/*.tsx"
+  ]
+}
