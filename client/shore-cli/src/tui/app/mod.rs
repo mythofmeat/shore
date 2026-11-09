@@ -12,6 +12,8 @@ mod input;
 mod notifications;
 #[cfg(test)]
 mod palette_tests;
+#[cfg(test)]
+mod render_key_tests;
 mod segments;
 mod stream;
 mod usage;
@@ -616,75 +618,60 @@ impl App {
     }
 
     pub(crate) fn conversation_fingerprint(&self, width: u16) -> ConvFingerprint {
-        fn block_summary(b: &Block) -> u64 {
+        fn block_summary(b: &Block) -> usize {
             match b {
-                Block::Text(s) | Block::Thinking(s) => u64::try_from(s.len()).unwrap_or(u64::MAX),
-                Block::ToolUse { tool_name, .. } => {
-                    u64::try_from(tool_name.len()).unwrap_or(u64::MAX)
-                }
+                Block::Text(s) | Block::Thinking(s) => s.len(),
+                Block::ToolUse { tool_name, .. } => tool_name.len(),
                 Block::ToolResult {
                     tool_name, output, ..
-                } => {
-                    u64::try_from(tool_name.len().saturating_add(output.len())).unwrap_or(u64::MAX)
-                }
-                Block::SubagentBegin(name) | Block::SubagentEnd(name) => {
-                    u64::try_from(name.len()).unwrap_or(u64::MAX)
-                }
+                } => tool_name.len().saturating_add(output.len()),
+                Block::SubagentBegin(name) | Block::SubagentEnd(name) => name.len(),
             }
         }
 
-        let entry_summary = |e: &ConversationEntry| -> u64 {
-            match e {
-                ConversationEntry::Turn(turn) => {
-                    let block_len = block_summary;
-                    let role_bit = u64::from(matches!(turn.role, Role::Assistant));
-                    let last_len = turn.blocks.last().map_or(0, block_len);
-                    (1_u64 << 56)
-                        | (role_bit << 55)
-                        | (u64::from(turn.is_streaming()) << 54)
-                        | (u64::from(turn.metadata.is_some()) << 53)
-                        | ((u64::try_from(turn.images.len()).unwrap_or(u64::MAX) & 0x1FF) << 44)
-                        | ((u64::try_from(turn.blocks.len()).unwrap_or(u64::MAX) & 0xFFF) << 32)
-                        | (last_len & 0xFFFF_FFFF)
-                }
-                ConversationEntry::System { content, count, .. } => {
-                    (3_u64 << 56)
-                        | (u64::try_from(content.len()).unwrap_or(u64::MAX) << 24)
-                        | u64::from(*count)
-                }
-            }
+        let entry_summary = |e: &ConversationEntry| match e {
+            ConversationEntry::Turn(turn) => EntrySummary::Turn {
+                assistant: matches!(turn.role, Role::Assistant),
+                streaming: turn.is_streaming(),
+                metadata: turn.metadata.is_some(),
+                images: turn.images.len(),
+                blocks: turn.blocks.len(),
+                last_block: turn.blocks.last().map_or(0, block_summary),
+            },
+            ConversationEntry::System { content, count, .. } => EntrySummary::System {
+                content_len: content.len(),
+                count: *count,
+            },
         };
 
         let compaction = self.compaction.as_ref().map(|run| CompactionFingerprint {
             round: run.round,
-            blocks: u32::try_from(run.blocks.len()).unwrap_or(u32::MAX),
+            blocks: run.blocks.len(),
             last_block: run.blocks.last().map_or(0, block_summary),
-            tool_name_len: run
-                .tool_name
-                .as_ref()
-                .map_or(-1, |s| i32::try_from(s.len()).unwrap_or(i32::MAX)),
-            text_len: u32::try_from(run.text.len()).unwrap_or(u32::MAX),
-            thinking_len: u32::try_from(run.thinking.len()).unwrap_or(u32::MAX),
+            tool_name_len: run.tool_name.as_ref().map(String::len),
+            text_len: run.text.len(),
+            thinking_len: run.thinking.len(),
             elapsed_secs: run.elapsed().map_or(0, |d| d.as_secs()),
         });
 
-        let last_entry = self.entries.last().map_or(0, entry_summary);
-        let second_last_entry = self.entries.iter().rev().nth(1).map_or(0, entry_summary);
-
         ConvFingerprint {
             width,
-            entries_len: u32::try_from(self.entries.len()).unwrap_or(u32::MAX),
-            last_entry,
-            second_last_entry,
+            entries_len: self.entries.len(),
+            last_entry: self
+                .entries
+                .last()
+                .map_or(EntrySummary::Absent, entry_summary),
+            second_last_entry: self
+                .entries
+                .iter()
+                .rev()
+                .nth(1)
+                .map_or(EntrySummary::Absent, entry_summary),
             history_version: self.history_version,
             stream_active: self.stream.active,
             stream_regen: self.stream.regen,
-            stream_phase_len: u32::try_from(self.stream.phase.len()).unwrap_or(u32::MAX),
-            stream_tool_name_len: self
-                .stream
-                .tool_name
-                .as_ref()
-                .map_or(-1, |s| i32::try_from(s.len()).unwrap_or(i32::MAX)),
+            stream_phase_len: self.stream.phase.len(),
+            stream_tool_name_len: self.stream.tool_name.as_ref().map(String::len),
             show_thinking: self.show_thinking,
             show_tools: self.show_tools,
             show_subagent: self.show_subagent,
@@ -693,8 +680,8 @@ impl App {
             show_images: self.show_images,
             show_timestamps: self.show_timestamps,
             show_metadata: self.show_metadata,
-            spinner_frame: u32::try_from(self.spinner_frame).unwrap_or(u32::MAX),
-            character_name_len: u32::try_from(self.character_name.len()).unwrap_or(u32::MAX),
+            spinner_frame: self.spinner_frame,
+            character_name_len: self.character_name.len(),
             image_cache_version: self.image_cache.version(),
         }
     }
