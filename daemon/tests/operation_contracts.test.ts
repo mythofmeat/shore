@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { commandOperations } from "../src/commands/registry.ts";
-import { assertContractBindings, parseOperationResult } from "../src/operations/contracts.ts";
+import { assertContractBindings, parseOperationInput, parseOperationResult } from "../src/operations/contracts.ts";
 import { defineOperation } from "../src/operations/registry.ts";
 
 const EMPTY_LIST = { character: "ada", threads: [], current: "main", home: "main" };
@@ -11,6 +11,8 @@ describe("executable operation contracts", () => {
     expect(() => assertContractBindings(Object.keys(commandOperations))).not.toThrow();
     expect(() => assertContractBindings(Object.keys(commandOperations).filter((name) => name !== "fork_thread"))).toThrow("Missing operation handler: fork_thread");
     expect(() => assertContractBindings([...Object.keys(commandOperations), "unregistered"])).toThrow("Missing operation contract: unregistered");
+    expect(() => assertContractBindings([...Object.keys(commandOperations), "fork_thread"])).toThrow("Duplicate operation handler");
+    expect(() => parseOperationInput("unregistered" as never, {})).toThrow("Missing operation contract: unregistered");
   });
 
   test("validation precedes the bound handler and a malformed result cannot become success", () => {

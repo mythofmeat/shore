@@ -228,7 +228,7 @@ export function buildRequestWithProviderKeys(
     throw new MissingApiKey(`provider '${model.provider_key}' has no enabled keys`);
   }
 
-  let lastEnv = candidates[0]?.env ?? "";
+  let lastEnv = "";
   for (const candidate of candidates) {
     const apiKey = readCandidateEnv(candidate, env);
     if (apiKey !== undefined) {

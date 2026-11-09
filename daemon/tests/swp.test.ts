@@ -481,6 +481,12 @@ describe("which events a session receives", () => {
     expect(eventMatchesSession(newMessage("bea", "main"), "ada", true, false, "main")).toBe(false);
   });
 
+  test("a thread's unread count reaches every session viewing its character, whatever thread they're on", () => {
+    const unread = (character: string) => ({ type: "thread_unread", character, thread: "side", unread: 1 }) as unknown as ServerMessage;
+    expect(eventMatchesSession(unread("ada"), "ada", true, false, "main")).toBe(true);
+    expect(eventMatchesSession(unread("bea"), "ada", true, false, "main")).toBe(false);
+  });
+
   test("an unregistered or characterless session hears only what everyone hears", () => {
     expect(eventMatchesSession({ type: "ping" }, null, false)).toBe(true);
     expect(eventMatchesSession(newMessage("ada"), "ada", false)).toBe(false);
