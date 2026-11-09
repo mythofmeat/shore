@@ -5,6 +5,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 
 import type { Message } from "../src/engine/types.ts";
+import { required } from "../src/util/required.ts";
 import { CharacterWorkspace } from "../src/tools/character_workspace.ts";
 import {
   aliasTurn,
@@ -265,6 +266,19 @@ describe("workspace turns", () => {
 
     await redoTurns(turns, "main", ["mv_1"]);
     expect(await gitHead(turns.workspace)).toBe(pushed);
+  });
+
+  test("a record whose later tool call lost its closing snapshot still undoes the calls that kept both", async () => {
+    const turns = setup();
+    write(turns, "kept.md", "before\n");
+    await turn(turns, "mv_1", () => { write(turns, "kept.md", "after\n"); });
+    const base = `refs/turns/${Buffer.from("main", "utf8").toString("hex")}/mv_1`;
+    const refs = execFileSync("git", ["--git-dir", turns.repo, "for-each-ref", "--format=%(refname) %(objectname)", base], { encoding: "utf8" }).trim().split("\n");
+    const before = required(refs.find((line) => line.split(" ")[0]?.endsWith("/before"))).split(" ")[1];
+    execFileSync("git", ["--git-dir", turns.repo, "update-ref", `${base}/9/before`, required(before)]);
+
+    await undoTurns(turns, "main", ["mv_1"]);
+    expect(read(turns, "kept.md")).toBe("before\n");
   });
 
   test("commits made after the turn keep HEAD where it is", async () => {
