@@ -58,13 +58,7 @@ export async function backupBeforeWrite(
 }
 
 async function pruneBackups(file: DurableFile, dir: string, prefix: string): Promise<void> {
-  let entries: string[];
-  try {
-    entries = listDurableFiles(atPath(file, dir));
-  } catch {
-    return;
-  }
-  const mine = entries.filter((name) => name.startsWith(`${prefix}.`) && !name.startsWith(`${prefix}.quarantine.`)).sort();
+  const mine = listDurableFiles(atPath(file, dir)).filter((name) => name.startsWith(`${prefix}.`) && !name.startsWith(`${prefix}.quarantine.`)).sort();
   for (const stale of mine.slice(0, Math.max(0, mine.length - MAX_BACKUPS))) {
     deleteDurable(atPath(file, join(dir, stale)));
   }
