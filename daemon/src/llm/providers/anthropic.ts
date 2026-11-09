@@ -103,7 +103,6 @@ export class AnthropicProvider implements SidecarProvider {
 type AccumState =
   | { kind: "text" }
   | { kind: "thinking"; signature: string }
-  | { kind: "redacted_thinking" }
   | { kind: "tool_use"; id: string; name: string; partialJson: string };
 
 export interface TurnAccumulator {
@@ -133,7 +132,6 @@ export async function* anthropicContentEvents(
       } else if (blk.type === "tool_use") {
         accum.set(event.index, { kind: "tool_use", id: blk.id, name: blk.name, partialJson: "" });
       } else if (blk.type === "redacted_thinking") {
-        accum.set(event.index, { kind: "redacted_thinking" });
         yield { type: "redacted_thinking", data: blk.data };
       }
     } else if (event.type === "content_block_delta") {
