@@ -60,7 +60,9 @@ jobs:
       - run: |
           rustup-init -y --profile minimal
           echo "$HOME/.cargo/bin" >>"$GITHUB_PATH"
-      - run: |
+      - env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: |
           version=$(sed -n 's/^Version: *//p' contrib/fedora/shore.spec)
           git config --global --add safe.directory "$GITHUB_WORKSPACE"
           git archive --prefix="shore-$version/" -o "shore-$version.tar.gz" HEAD
