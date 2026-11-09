@@ -3,7 +3,7 @@ import { mkdtemp } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
-import { ClaudeAgentProvider } from "../src/llm/providers/claude_agent.ts";
+import { ClaudeAgentProvider, claudeAgentEnvironment } from "../src/llm/providers/claude_agent.ts";
 import { fakeAgent, type FakeScript } from "../src/testing/fake_agent_query.ts";
 import type { SidecarRequest, StreamEvent } from "../src/llm/types.ts";
 import { restoreTestEnv, setTestEnv, unsetTestEnv } from "./support/env.ts";
@@ -109,5 +109,61 @@ describe("the environment the subprocess is given", () => {
     } finally {
       restoreTestEnv();
     }
+  });
+});
+
+describe("what the options carry", () => {
+  const once: FakeScript = { rounds: [{ blocks: [{ kind: "text", text: "hi" }] }] };
+
+  test("the config folder and base URL are passed on only when there are any", async () => {
+    unsetTestEnv("CLAUDE_CONFIG_DIR");
+    try {
+      expect((await collect(once)).agent.calls[0]?.options.env ?? {}).not.toHaveProperty("CLAUDE_CONFIG_DIR");
+      const bare = claudeAgentEnvironment();
+      expect(bare).not.toHaveProperty("CLAUDE_CONFIG_DIR");
+      expect(bare).not.toHaveProperty("ANTHROPIC_BASE_URL");
+      const given = claudeAgentEnvironment("https://proxy.example", "", "/claude/login");
+      expect(given.CLAUDE_CONFIG_DIR).toBe("/claude/login");
+      expect(given.ANTHROPIC_BASE_URL).toBe("https://proxy.example");
+      setTestEnv("CLAUDE_CONFIG_DIR", "/claude/config");
+      expect(((await collect(once)).agent.calls[0]?.options.env ?? {}).CLAUDE_CONFIG_DIR).toBe("/claude/config");
+    } finally {
+      restoreTestEnv();
+    }
+  });
+
+  test("the system prompt goes as a custom prompt that is not snapshotted, the cache lifetime only when set, partial messages on, and one turn without tools", async () => {
+    const plain = (await collect(once)).agent.calls[0]?.options;
+    expect(plain?.settings).toStrictEqual({ autoCompactEnabled: false });
+    expect(plain?.includePartialMessages).toBe(true);
+    expect(plain?.maxTurns).toBe(1);
+    expect(plain).not.toHaveProperty("systemPrompt");
+    expect(plain?.env ?? {}).not.toHaveProperty("MAX_MCP_OUTPUT_TOKENS");
+    const shaped = (await collect(once, request({ system: [{ text: "be kind", label: "soul" }], provider_options: { cache_ttl: "1h" } }))).agent.calls[0]?.options;
+    expect(shaped?.systemPrompt).toStrictEqual({ type: "custom", prompt: "be kind", snapshot: false });
+    expect(shaped?.settings).toStrictEqual({ autoCompactEnabled: false, promptCacheTtl: "1h" });
+  });
+
+  test("a regenerated reply forks the session at the reply before it, while a new turn just continues", async () => {
+    const dir = await bookDir();
+    const path = join(dir, "sessions.json");
+    const agent = fakeAgent({ rounds: [{ blocks: [{ kind: "text", text: "first" }] }, { blocks: [{ kind: "text", text: "second" }] }, { blocks: [{ kind: "text", text: "again" }] }] });
+    const provider = new ClaudeAgentProvider({ runQuery: agent.query, bookPath: () => path });
+    const run = async (messages: SidecarRequest["messages"]): Promise<string> => {
+      let text = "";
+      for await (const event of provider.stream(request({ messages }))) if (event.type === "text") text += event.text;
+      return text;
+    };
+    const ask = { role: "user" as const, content: [{ type: "text" as const, text: "hello" }] };
+    const first = await run([ask]);
+    const then = { role: "user" as const, content: [{ type: "text" as const, text: "and then?" }] };
+    await run([ask, { role: "assistant", content: [{ type: "text", text: first }] }, then]);
+    await run([ask, { role: "assistant", content: [{ type: "text", text: first }] }, then]);
+    const [, continued, regenerated] = agent.calls.map((call) => call.options);
+    expect(continued?.resume).toBeDefined();
+    expect(continued).not.toHaveProperty("forkSession");
+    expect(continued).not.toHaveProperty("resumeSessionAt");
+    expect(regenerated?.forkSession).toBe(true);
+    expect(typeof regenerated?.resumeSessionAt).toBe("string");
   });
 });
