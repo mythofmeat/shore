@@ -1,4 +1,5 @@
-import { describe, expect, test } from "bun:test";
+import { describe, expect, spyOn, test } from "bun:test";
+import * as fs from "node:fs";
 import { chmod, mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { setTomlValue, TomlEditError } from "../src/config/toml_edit.ts";
@@ -237,7 +238,7 @@ describe("config set on disk", () => {
     expect(refusalOf(() => commitConfigEdits(ctx, [{ file: unreadable, edit: () => "x = 1\n" }], "the read")).message).toStartWith(`failed to read ${unreadable}: `);
 
     const toml = refusalOf(() => commitConfigEdits(ctx, [{ file: ctx.configPath, edit: () => { throw new TomlEditError("can't edit that"); } }], "the edit"));
-    expect(toml.message).toBe("can't edit that");
+    expect(toml).toMatchObject({ code: "invalid_request", message: "can't edit that" });
 
     const kept = commitConfigEdits(ctx, [
       { file: ctx.configPath, edit: (text) => text },
@@ -263,6 +264,80 @@ describe("config set on disk", () => {
     expect(failed.message).toStartWith(`failed to write ${unwritable}: `);
     expect(await Bun.file(newFile).exists()).toBe(false);
     expect(await readFile(confd, "utf8")).toBe("[tools]\nmax_result_chars = 10\n");
+  });
+
+  test("a value of the wrong kind, or for a key that doesn't exist or doesn't parse, is refused before the file is touched", async () => {
+    const ctx = await world("[compaction]\nkeep_recent_turns = 2\n");
+    const before = await readFile(ctx.configPath, "utf8");
+    expect(refusalOf(() => config(ctx, { key: "compaction.keep_recent_turns", value: "many" }))).toMatchObject({ code: "invalid_request", message: 'compaction.keep_recent_turns: expected a whole number, got "many"' });
+    expect(refusalOf(() => config(ctx, { key: "compaction.nope", value: "1" }))).toMatchObject({ code: "not_found", message: "Config section not found: compaction.nope" });
+    expect(refusalOf(() => config(ctx, { key: 'compaction."open', value: "1" }))).toMatchObject({ code: "not_found", message: 'Config section not found: compaction."open' });
+    expect(refusalOf(() => clearConfigKey(ctx, 'compaction."open'))).toMatchObject({ code: "not_found", message: 'Config section not found: compaction."open' });
+    expect(await readFile(ctx.configPath, "utf8")).toBe(before);
+  });
+
+  test("a value naming something its source doesn't have is refused, while lists, blanks and empty sources go unchecked", async () => {
+    const ctx = await world('[providers.anthropic]\napi_key_env = "ANTHROPIC_API_KEY"\n\n[chat."anthropic:claude-one"]\nmax_output_tokens = 100\n\n[image."openai:gpt-image-1"]\nsize = "1024x1024"\n\n[image."openai:gpt-image-2"]\nsize = "1024x1024"\n');
+    expect(refusalOf(() => config(ctx, { key: "image.model", value: "openai:dall-e-9" }))).toMatchObject({ code: "not_found", message: 'image.model: no image_models named "openai:dall-e-9". Known: openai:gpt-image-1, openai:gpt-image-2' });
+    expect(config(ctx, { key: "image.model", value: "openai:gpt-image-2" })).toMatchObject({ value: "openai:gpt-image-2" });
+    expect(refusalOf(() => config(ctx, { key: "chat.model", value: "nosuch:model" }))).toMatchObject({ code: "not_found", message: 'model "nosuch:model" not found in static catalog or discovered models' });
+    expect(config(ctx, { key: "chat.model", value: "claude-one" }), "a configured model may go by its bare name").toMatchObject({ value: "claude-one" });
+    expect(config(ctx, { key: "tools.enabled", value: "read, edit" })).toMatchObject({ value: ["read", "edit"] });
+    const blank = refusalOf(() => config(ctx, { key: "image.model", value: " " }));
+    expect(blank, "a blank isn't a name to look up, so the loader judges it").toMatchObject({ code: "invalid_request" });
+    expect(blank.message).toStartWith('image.model = " " was rejected: ');
+    const bare = await world("");
+    expect(config(bare, { key: "image.model", value: "openai:dall-e-9" }), "with no image models configured there is nothing to check against").toMatchObject({ value: "openai:dall-e-9" });
+  });
+
+  test("an edit the TOML editor can't make is refused as an invalid request", async () => {
+    const ctx = await world('[mcp.search]\ncommand = "tavily"\nenv = { REGION = "eu" }\n');
+    const before = await readFile(ctx.configPath, "utf8");
+    const refused = refusalOf(() => config(ctx, { key: "mcp.search.env.REGION", value: "us" }));
+    expect(refused).toMatchObject({ code: "invalid_request", message: "`mcp.search.env.REGION` lives inside the value of `mcp.search.env` on line 3; edit that line by hand" });
+    expect(await readFile(ctx.configPath, "utf8")).toBe(before);
+  });
+
+  test.skipIf(process.getuid?.() === 0)("a config file that can't be written is reported and left as it was", async () => {
+    const ctx = await world("[heartbeat]\nenabled = true\n");
+    const folder = dirname(ctx.configPath);
+    await chmod(folder, 0o555);
+    let refused: Error;
+    try {
+      refused = refusalOf(() => config(ctx, { key: "heartbeat.enabled", value: "false" }));
+    } finally {
+      await chmod(folder, 0o755);
+    }
+    expect(refused).toMatchObject({ code: "internal_error" });
+    expect(refused.message).toStartWith(`failed to write ${ctx.configPath}: `);
+    expect(await readFile(ctx.configPath, "utf8")).toBe("[heartbeat]\nenabled = true\n");
+  });
+
+  test("a rejected change that wrote one new file twice still removes it", async () => {
+    const ctx = await world("[heartbeat]\nenabled = true\n");
+    const fresh = join(ctx.config.dirs.config, "conf.d", "20-new.toml");
+    const rejected = refusalOf(() => commitConfigEdits(ctx, [
+      { file: fresh, edit: () => '[tools]\nmax_result_chars = "ten"\n' },
+      { file: fresh, edit: () => '[tools]\nmax_result_chars = "eleven"\n' },
+    ], "the pair"));
+    expect(rejected).toMatchObject({ code: "invalid_request" });
+    expect(rejected.message).toStartWith("the pair was rejected: ");
+    expect(await Bun.file(fresh).exists()).toBe(false);
+  });
+
+  test("a rejected change that can't be taken back says the file still holds it", async () => {
+    const ctx = await world("[heartbeat]\nenabled = true\n");
+    const fresh = join(ctx.config.dirs.config, "conf.d", "20-new.toml");
+    const removal = spyOn(fs, "rmSync").mockImplementation(() => {
+      throw new Error("the disk went away");
+    });
+    let refused: Error;
+    try {
+      refused = refusalOf(() => commitConfigEdits(ctx, [{ file: fresh, edit: () => '[tools]\nmax_result_chars = "ten"\n' }], "the edit"));
+    } finally {
+      removal.mockRestore();
+    }
+    expect(refused).toMatchObject({ code: "internal_error", message: `${fresh} was left holding a rejected edit: restoring it failed: the disk went away` });
   });
 
   test("a key no file defines yet lands in the main config", async () => {
