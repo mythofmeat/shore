@@ -56,10 +56,10 @@ export class CompactionWatch {
   readonly #schedule: (callback: () => void) => void;
   readonly #listeners = new Set<() => void>();
   #record: PassRecord | null = null;
-  #attempt = 0;
-  #size = 0;
+  #watching: symbol | null = null;
+  #size!: number;
   #scheduled = false;
-  #streamed = false;
+  #streamed!: boolean;
 
   constructor(actions: WatchActions, schedule: (callback: () => void) => void = (callback) => { callback(); }) {
     this.#actions = actions;
@@ -109,12 +109,13 @@ export class CompactionWatch {
   }
 
   async #watch(): Promise<void> {
-    const attempt = ++this.#attempt;
+    const watching = Symbol("compaction watch");
+    this.#watching = watching;
     try {
-      const result = await this.#actions.watch((message) => { if (attempt === this.#attempt) this.#frame(message); });
-      if (attempt === this.#attempt) this.#finished(result);
+      const result = await this.#actions.watch((message) => { if (watching === this.#watching) this.#frame(message); });
+      if (watching === this.#watching) this.#finished(result);
     } catch (failure) {
-      if (attempt !== this.#attempt) return;
+      if (watching !== this.#watching) return;
       this.#patch({ interrupted: true, phase: failure instanceof Error ? failure.message : String(failure) });
     }
   }
@@ -147,46 +148,38 @@ export class CompactionWatch {
       case "stream_start": this.#streamed = false; break;
       case "stream_chunk":
         this.#streamed = true;
-        this.#append(message.content_type === "thinking" ? { type: "thinking", thinking: message.text } : { type: "text", text: message.text });
+        this.#append(known, message.content_type === "thinking" ? { type: "thinking", thinking: message.text } : { type: "text", text: message.text });
         break;
       case "stream_end":
-        if (!this.#streamed && message.content !== "") this.#append({ type: "text", text: message.content });
+        if (!this.#streamed && message.content !== "") this.#append(known, { type: "text", text: message.content });
         this.#streamed = false;
         break;
-      case "tool_call": this.#add({ type: "tool_use", id: message.tool_id, name: message.tool_name, input: message.input }); break;
-      case "tool_result": this.#add({ type: "tool_result", tool_use_id: message.tool_id, content: message.output, is_error: message.is_error }); break;
+      case "tool_call": this.#add(known, { type: "tool_use", id: message.tool_id, name: message.tool_name, input: message.input }); break;
+      case "tool_result": this.#add(known, { type: "tool_result", tool_use_id: message.tool_id, content: message.output, is_error: message.is_error }); break;
       default: return;
     }
     this.#record = { ...known };
     this.#notifySoon();
   }
 
-  #append(block: Extract<ContentBlock, { type: "text" | "thinking" }>): void {
-    const known = this.#record;
-    if (known === null) return;
+  #append(known: PassRecord, block: Extract<ContentBlock, { type: "text" | "thinking" }>): void {
     const last = known.blocks.at(-1);
-    if (last?.type === "text" && block.type === "text") this.#replaceLast({ type: "text", text: last.text + block.text }, block.text.length);
-    else if (last?.type === "thinking" && block.type === "thinking") this.#replaceLast({ type: "thinking", thinking: last.thinking + block.thinking }, block.thinking.length);
-    else this.#add(block);
+    if (last?.type === "text" && block.type === "text") this.#replaceLast(known, { type: "text", text: last.text + block.text }, block.text.length);
+    else if (last?.type === "thinking" && block.type === "thinking") this.#replaceLast(known, { type: "thinking", thinking: last.thinking + block.thinking }, block.thinking.length);
+    else this.#add(known, block);
   }
 
-  #replaceLast(block: ContentBlock, grew: number): void {
-    const known = this.#record;
-    if (known === null) return;
+  #replaceLast(known: PassRecord, block: ContentBlock, grew: number): void {
     known.blocks = [...known.blocks.slice(0, -1), block];
-    this.#grew(grew);
+    this.#grew(known, grew);
   }
 
-  #add(block: ContentBlock): void {
-    const known = this.#record;
-    if (known === null) return;
+  #add(known: PassRecord, block: ContentBlock): void {
     known.blocks = [...known.blocks, block];
-    this.#grew(blockSize(block));
+    this.#grew(known, blockSize(block));
   }
 
-  #grew(by: number): void {
-    const known = this.#record;
-    if (known === null) return;
+  #grew(known: PassRecord, by: number): void {
     this.#size += by;
     if (this.#size <= MAX_PASS_CHARS && known.blocks.length <= MAX_PASS_BLOCKS) return;
     const trimmed = trimmedBlocks(known.blocks, Math.floor(MAX_PASS_CHARS * 0.75));
@@ -209,7 +202,6 @@ export class CompactionWatch {
   }
 
   dismiss(): void {
-    this.#attempt += 1;
     this.#record = null;
     this.#notify();
   }
