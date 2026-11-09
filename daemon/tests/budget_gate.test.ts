@@ -7,6 +7,7 @@ import { restoreTestEnv, setTestEnv } from "./support/env.ts";
 import { closeLedgers } from "../src/ledger/record.ts";
 import { generate } from "../src/llm/generate.ts";
 import { budgetBlockFor } from "../src/ledger/gate.ts";
+import { required } from "../src/util/required.ts";
 import type {
   GenerateResponse,
   SidecarProvider,
@@ -375,5 +376,34 @@ describe("the chat turn", () => {
     expect(error).toBeUndefined();
     expect(calls).toBe(1);
     expect(fallbacks).toBe(1);
+  });
+});
+
+describe("projecting a tool loop's cost", () => {
+  const overBudget = (): string => ledgerWithHistory(12, 1.0);
+
+  test("only a loop of two or more calls with tools and a known per-call cost is projected", () => {
+    const ledger = overBudget();
+    const unprojected = (request: SidecarRequest, why: string) => {
+      const block = costBlock(request);
+      expect(block, why).toBeDefined();
+      expect(block, why).not.toHaveProperty("projected_cost");
+    };
+    expect(costBlock(loopReq(ledger, TEN_DOLLAR_BUDGET, 2))?.projected_cost).toBeCloseTo(1.0, 5);
+    unprojected(loopReq(ledger, TEN_DOLLAR_BUDGET, 1), "a single call");
+    const { max_tool_iterations: _cap, ...uncapped } = loopReq(ledger, TEN_DOLLAR_BUDGET, 10);
+    unprojected(uncapped, "no tool budget");
+    unprojected({ ...loopReq(ledger, TEN_DOLLAR_BUDGET, 10), tools: [] }, "no tools");
+    const { tools: _tools, ...toolless } = loopReq(ledger, TEN_DOLLAR_BUDGET, 10);
+    unprojected(toolless, "tools left out");
+    unprojected(loopReq(spentLedger(), BLOCKING_BUDGET, 10), "no earlier loop call to go by");
+  });
+
+  test("a request with no ledger, or one that can't be opened, is never blocked", async () => {
+    const base = req("", BLOCKING_BUDGET);
+    const { ledger: _ledger, ...unledgered } = required(base.context);
+    expect(costBlock({ ...base, context: unledgered })).toBeUndefined();
+    const folder = await mkdtemp(join(tmpdir(), "shore-ledger-folder-"));
+    expect(costBlock(req(folder, BLOCKING_BUDGET))).toBeUndefined();
   });
 });

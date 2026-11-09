@@ -225,3 +225,23 @@ describe("rendering an instant in a zone", () => {
     expect(normalizeToZone("not-a-timestamp", CBR)).toBe("not-a-timestamp");
   });
 });
+
+describe("resolving a wall time across a clock change", () => {
+  const cases: [string, Naive, number][] = [
+    ["America/New_York", wall(2026, 11, 1, 1, 30), Date.UTC(2026, 10, 1, 6, 30)],
+    ["America/New_York", wall(2026, 3, 8, 2, 30), Date.UTC(2026, 2, 8, 7, 30)],
+    ["Australia/Sydney", wall(2026, 4, 5, 2, 30), Date.UTC(2026, 3, 4, 16, 30)],
+    ["Australia/Sydney", wall(2026, 10, 4, 2, 30), Date.UTC(2026, 9, 3, 16, 30)],
+    ["Pacific/Auckland", wall(2026, 4, 5, 2, 30), Date.UTC(2026, 3, 4, 14, 30)],
+    ["Pacific/Auckland", wall(2026, 9, 27, 2, 30), Date.UTC(2026, 8, 26, 14, 30)],
+    ["America/St_Johns", wall(2026, 11, 1, 1, 30), Date.UTC(2026, 10, 1, 5, 0)],
+    ["Pacific/Chatham", wall(2026, 4, 5, 3, 15), Date.UTC(2026, 3, 4, 14, 30)],
+    ["Europe/London", wall(2026, 10, 25, 1, 30), Date.UTC(2026, 9, 25, 1, 30)],
+    ["Europe/London", wall(2026, 3, 29, 1, 30), Date.UTC(2026, 2, 29, 1, 30)],
+    ["America/Anchorage", wall(2026, 11, 1, 1, 30), Date.UTC(2026, 10, 1, 10, 30)],
+    ["America/Anchorage", wall(2026, 3, 8, 2, 30), Date.UTC(2026, 2, 8, 11, 30)],
+  ];
+  test.each(cases)("%s: an hour that happens twice takes the later one, and one that never happens moves past the gap", (zone, naive, expected) => {
+    expect(new Date(resolveInZone(naive, zone)).toISOString()).toBe(new Date(expected).toISOString());
+  });
+});
