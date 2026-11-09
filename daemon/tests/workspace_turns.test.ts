@@ -237,6 +237,36 @@ describe("workspace turns", () => {
     expect(gitIn(turns, "status", "--porcelain")).toBe("");
   });
 
+  test("undoing a reply that pushed a commit in each of two tool calls reverts them together, and redo returns to the pushed head", async () => {
+    const turns = setup();
+    const remote = `${turns.workspace}-remote.git`;
+    execFileSync("git", ["init", "--quiet", "--bare", remote]);
+    await ensureWorkspaceGitRepo(turns.workspace);
+    write(turns, "SOUL.md", "soul\n");
+    await gitCommitAll(turns.workspace, "Ada", "start");
+    gitIn(turns, "remote", "add", "origin", remote);
+    gitIn(turns, "push", "--quiet", "--set-upstream", "origin", "HEAD");
+    const recorder = new WorkspaceRecorder(turns);
+    for (const name of ["a", "b"]) {
+      await recorder.track(async () => {
+        write(turns, `${name}.md`, `${name}\n`);
+        gitIn(turns, "add", "-A");
+        commit(turns, name);
+        gitIn(turns, "push", "--quiet");
+      });
+    }
+    await recorder.settle("main", "mv_1");
+    const pushed = await gitHead(turns.workspace);
+
+    await undoTurns(turns, "main", ["mv_1"]);
+    expect(gitIn(turns, "log", "-1", "--format=%P %s")).toBe(`${pushed} Revert 2 commits`);
+    expect(existsSync(file(turns, "a.md")) || existsSync(file(turns, "b.md"))).toBe(false);
+    expect(gitIn(turns, "status", "--porcelain")).toBe("");
+
+    await redoTurns(turns, "main", ["mv_1"]);
+    expect(await gitHead(turns.workspace)).toBe(pushed);
+  });
+
   test("commits made after the turn keep HEAD where it is", async () => {
     const turns = setup();
     await ensureWorkspaceGitRepo(turns.workspace);
