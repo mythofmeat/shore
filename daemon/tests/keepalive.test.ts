@@ -961,6 +961,22 @@ describe("keepalive edges", () => {
     expect(h.service.halted).toBeUndefined();
   });
 
+  test("a failed ping is reported by its event alone, with nothing logged as an error", async () => {
+    const h = harness([new Error("provider unavailable")]);
+    armWarm(h);
+    h.clock.advance(minutes(56));
+    const errors = spyOn(console, "error").mockImplementation(() => {});
+    let logged: string[];
+    try {
+      await h.service.tick();
+    } finally {
+      logged = errors.mock.calls.map((call) => call.map((part: unknown) => String(part)).join(" "));
+      errors.mockRestore();
+    }
+    expect(h.events.map((e) => e.outcome)).toEqual(["failed"]);
+    expect(logged).toEqual([]);
+  });
+
   test("a sent or failed ping is written to the ledger as a keepalive, with its attempt settled", async () => {
     for (const reply of [response(2200, 0, MODEL), new Error("provider unavailable")]) {
       const ledger = freshLedger();
@@ -1029,6 +1045,27 @@ describe("a ping's cost", () => {
 });
 
 describe("the schedule's resets", () => {
+  test("an invalidated cache forgets earlier ping failures, so the first failure once it is warm again waits 30 s", () => {
+    const schedule = new CacheKeepalive(10);
+    schedule.setInterval(minutes(5), MODEL);
+    schedule.onCacheWarmed(MODEL, 0);
+    schedule.onPingFailed(minutes(5));
+    schedule.onPingFailed(minutes(5) + 30_000);
+    schedule.onCacheInvalidated();
+    schedule.onPrefixWarmed(minutes(6));
+    schedule.onPingFailed(minutes(11));
+    expect(schedule.nextPingAt).toBe(minutes(11) + 30_000);
+  });
+
+  test("a ping failure reported after the cache was invalidated schedules no retry, however recently it was warm", () => {
+    const schedule = new CacheKeepalive(10);
+    schedule.setInterval(minutes(5), MODEL);
+    schedule.onCacheWarmed(MODEL, 0);
+    schedule.onCacheInvalidated();
+    schedule.onPingFailed(minutes(1));
+    expect(schedule.nextPingAt).toBeUndefined();
+  });
+
   test("a real warm forgets earlier ping failures, so the next failure waits 30 s again", () => {
     const schedule = new CacheKeepalive(10);
     schedule.setInterval(minutes(5), MODEL);
