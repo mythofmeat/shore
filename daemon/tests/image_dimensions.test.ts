@@ -29,6 +29,15 @@ function segment(code: number, payload: number): Buffer {
   return bytes;
 }
 
+function frameSegment(code: number): Buffer {
+  const frame = segment(code, 15);
+  frame.writeUInt16BE(SIZE.height, 5);
+  frame.writeUInt16BE(SIZE.width, 7);
+  return frame;
+}
+
+const base64Size = (bytes: Buffer) => base64ImageDimensions(bytes.toString("base64"));
+
 const ENCODINGS: [string, Encode][] = [
   ["a PNG", (image) => image.png()],
   ["a baseline JPEG", (image) => image.jpeg()],
@@ -91,6 +100,38 @@ describe("an image's size comes from its header", () => {
     expect(base64ImageDimensions(tablesFirst.toString("base64"))).toEqual(SIZE);
   });
 
+  test("a header cut off right after the size still gives it", () => {
+    const png = Buffer.alloc(24);
+    Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]).copy(png);
+    png.writeUInt32BE(13, 8);
+    png.write("IHDR", 12);
+    png.writeUInt32BE(SIZE.width, 16);
+    png.writeUInt32BE(SIZE.height, 20);
+    const gif = Buffer.alloc(10);
+    gif.write("GIF89a");
+    gif.writeUInt16LE(SIZE.width, 6);
+    gif.writeUInt16LE(SIZE.height, 8);
+    const lossless = Buffer.alloc(25);
+    lossless.write("RIFF");
+    lossless.write("WEBPVP8L", 8);
+    lossless[20] = 0x2f;
+    lossless.writeUInt32LE((SIZE.width - 1) | ((SIZE.height - 1) << 14), 21);
+    const jpeg = Buffer.concat([Buffer.from([0xff, 0xd8]), frameSegment(0xc0).subarray(0, 9)]);
+    for (const bytes of [png, gif, lossless, jpeg]) expect(base64Size(bytes)).toEqual(SIZE);
+  });
+
+  test("a JPEG's frame header can carry any start-of-frame code, after fill bytes and markers that aren't one", () => {
+    expect(base64Size(Buffer.concat([Buffer.from([0xff, 0xd8]), frameSegment(0xcf)]))).toEqual(SIZE);
+    expect(base64Size(Buffer.concat([Buffer.from([0xff, 0xd8, 0xff]), frameSegment(0xc0)]))).toEqual(SIZE);
+    expect(base64Size(Buffer.concat([Buffer.from([0xff, 0xd8]), segment(0xd0, 7), frameSegment(0xc2)]))).toEqual(SIZE);
+  });
+
+  test("a JPEG's frame header is found as its 512th segment, but no later", () => {
+    const after = (skipped: number) => Buffer.concat([Buffer.from([0xff, 0xd8]), ...Array.from({ length: skipped }, () => segment(0xe0, 0)), frameSegment(0xc0)]);
+    expect(base64Size(after(511))).toEqual(SIZE);
+    expect(base64Size(after(512))).toBeUndefined();
+  });
+
   test("a JPEG whose metadata pushes its frame header far past the start", async () => {
     const plain = await sizedImage(SIZE.width, SIZE.height, (image) => image.jpeg());
     const padded = Buffer.concat([
@@ -112,6 +153,29 @@ describe("anything else has no size", () => {
     expect(base64ImageDimensions("A".repeat(4096))).toBeUndefined();
     expect(base64ImageDimensions("")).toBeUndefined();
     expect(base64ImageDimensions(png.subarray(0, 20).toString("base64"))).toBeUndefined();
+  });
+
+  test("a RIFF file that isn't WebP, whatever it holds", () => {
+    const wave = Buffer.alloc(30);
+    wave.write("RIFF");
+    wave.write("WAVEVP8X", 8);
+    wave.writeUIntLE(SIZE.width - 1, 24, 3);
+    wave.writeUIntLE(SIZE.height - 1, 27, 3);
+    expect(base64Size(wave)).toBeUndefined();
+  });
+
+  test("a JPEG must start with its start-of-image marker, and every segment with 0xff", () => {
+    for (const start of [[0xff, 0x00], [0x00, 0xd8], [0x00, 0x00]]) expect(base64Size(Buffer.concat([Buffer.from(start), frameSegment(0xc0)]))).toBeUndefined();
+    const unmarked = Buffer.concat([Buffer.from([0xff, 0xd8]), frameSegment(0xc0)]);
+    unmarked[2] = 0x00;
+    expect(base64Size(unmarked)).toBeUndefined();
+  });
+
+  test("a JPEG that ends before its frame header, or is cut off at a marker or inside a segment's length", () => {
+    expect(base64Size(Buffer.concat([Buffer.from([0xff, 0xd8, 0xff, 0xd9, 0x00, 0x02]), frameSegment(0xc0)]))).toBeUndefined();
+    for (const cut of [[0xff, 0xd8, 0xff, 0xe0, 0x00, 0x02], [0xff, 0xd8, 0xff, 0xe0], [0xff, 0xd8, 0xff, 0xe0, 0x00]]) {
+      expect(base64Size(Buffer.from(cut))).toBeUndefined();
+    }
   });
 
   test("a PNG whose first chunk is not its header", () => {

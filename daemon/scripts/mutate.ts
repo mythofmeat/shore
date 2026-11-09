@@ -109,6 +109,29 @@ function scopeOf(n: ts.Node, outer: Scope, source: ts.SourceFile, starts: readon
   return outer;
 }
 
+const BODY_OWNERS = [ts.isFunctionDeclaration, ts.isFunctionExpression, ts.isArrowFunction, ts.isMethodDeclaration, ts.isConstructorDeclaration, ts.isGetAccessorDeclaration, ts.isSetAccessorDeclaration];
+
+function fallsOffTheEnd(n: ts.Node): boolean {
+  const { parent } = n;
+  if (ts.isIfStatement(parent)) return fallsOffTheEnd(parent);
+  if (ts.isCaseClause(parent) || ts.isDefaultClause(parent)) {
+    const clauses: ts.Node = parent.parent;
+    return parent.statements.at(-1) === n && ts.isCaseBlock(clauses) && clauses.clauses.at(-1) === parent && fallsOffTheEnd(clauses.parent);
+  }
+  if (!ts.isBlock(parent) || parent.statements.at(-1) !== n) return false;
+  const owner = parent.parent;
+  if (BODY_OWNERS.some((is) => is(owner))) return true;
+  if (ts.isCatchClause(owner)) return fallsOffTheEnd(owner.parent);
+  if (ts.isTryStatement(owner)) return owner.finallyBlock !== parent && fallsOffTheEnd(owner);
+  return (ts.isIfStatement(owner) || ts.isBlock(owner)) && fallsOffTheEnd(owner);
+}
+
+function returnsNothingAtTheEnd(n: ts.Node): boolean {
+  if (!ts.isReturnStatement(n)) return false;
+  const value = n.expression;
+  return (value === undefined || (ts.isIdentifier(value) && value.text === "undefined")) && fallsOffTheEnd(n);
+}
+
 export function mutantsOf(file: string, text: string, source: ts.SourceFile): Mutant[] {
   const starts = lineStarts(text);
   const raw: { start: number; end: number; replacement: string; scope: Scope }[] = [];
@@ -132,7 +155,7 @@ export function mutantsOf(file: string, text: string, source: ts.SourceFile): Mu
       const value = Number(n.text);
       if (Number.isFinite(value)) add(n.getStart(source), n.end, String(value + 1));
     }
-    const deletable = (ts.isExpressionStatement(n) && !LOGGING_CALL.test(n.expression.getText(source))) || ts.isReturnStatement(n) || ts.isThrowStatement(n) || ts.isBreakStatement(n) || ts.isContinueStatement(n);
+    const deletable = (ts.isExpressionStatement(n) && !LOGGING_CALL.test(n.expression.getText(source))) || (ts.isReturnStatement(n) && !returnsNothingAtTheEnd(n)) || ts.isThrowStatement(n) || ts.isBreakStatement(n) || ts.isContinueStatement(n);
     if (deletable) add(n.getStart(source), n.end, "{}");
     const inner = scopeOf(n, scope, source, starts);
     n.forEachChild((child) => {
