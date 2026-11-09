@@ -57,6 +57,34 @@ const CASES: { name: string; input: Uint8Array; reads: ("cancel" | "eof" | "err"
 ];
 
 describe("framing", () => {
+  test("a frame that isn't UTF-8, or isn't JSON, says which", async () => {
+    expect(await readAll(once(Uint8Array.from([0xff, 0xfe, 0x0a])))).toEqual([{ err: "Frame is not valid UTF-8" }]);
+    const [notJson] = await readAll(once(bytes("{oops\n")));
+    expect(notJson).toMatchObject({ err: expect.stringMatching(/^Frame is not valid JSON: /) as unknown as string });
+  });
+
+  test("once its source has ended, the reader says so again without asking the source", async () => {
+    let ended = false;
+    let sent = false;
+    const source: AsyncIterable<Uint8Array> = {
+      [Symbol.asyncIterator]: () => ({
+        next: (): Promise<IteratorResult<Uint8Array>> => {
+          if (ended) return Promise.reject(new Error("asked again after the end"));
+          if (!sent) {
+            sent = true;
+            return Promise.resolve({ done: false, value: bytes(`${CANCEL}\n`) });
+          }
+          ended = true;
+          return Promise.resolve({ done: true, value: undefined });
+        },
+      }),
+    };
+    const reader = new WireReader(source);
+    expect(await reader.readMessage()).toMatchObject({ type: "cancel" });
+    expect(await reader.readMessage()).toBeNull();
+    expect(await reader.readMessage()).toBeNull();
+  });
+
   for (const c of CASES) {
     test(c.name, async () => {
       const reads = await readAll(once(c.input));

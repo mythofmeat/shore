@@ -73,7 +73,7 @@ export class WebBodyTooLarge extends Error {
 }
 
 export async function readSmallJson(request: Request, limit: number): Promise<unknown> {
-  if (request.headers.get("content-type")?.split(";", 1)[0]?.trim() !== "application/json") throw new Error("Expected application/json");
+  if (request.headers.get("content-type")?.split(";")[0]?.trim() !== "application/json") throw new Error("Expected application/json");
   const length = Number(request.headers.get("content-length") ?? "0");
   if (!Number.isSafeInteger(length) || length < 0 || length > limit) throw new WebBodyTooLarge();
   const reader = request.body?.getReader();

@@ -129,6 +129,26 @@ describe("a request body", () => {
     expect(String(await rejectionOf(readSmallJson(empty, 64)))).toContain("Expected a JSON body");
   });
 
+  test("a body that isn't bytes is refused, an over-long one is cancelled, and the body is let go either way", async () => {
+    const streamed = (chunks: unknown[], cancelled: string[] = []) => new Request(`${ORIGIN}/api/login`, {
+      method: "POST",
+      headers: { "content-type": "application/json; charset=utf-8" },
+      body: new ReadableStream({
+        pull(c) { const next = chunks.shift(); if (next === undefined) c.close(); else c.enqueue(next); },
+        cancel() { cancelled.push("cancelled"); },
+      }),
+    });
+    expect(String(await rejectionOf(readSmallJson(streamed(["{}"]), 64)))).toContain("Expected a byte stream");
+    const cancelled: string[] = [];
+    const long = streamed([new TextEncoder().encode(`{"a":"${"x".repeat(40)}`), new TextEncoder().encode(`${"x".repeat(40)}"}`), new TextEncoder().encode("never read")], cancelled);
+    expect(await rejectionOf(readSmallJson(long, 64))).toBeInstanceOf(WebBodyTooLarge);
+    expect(cancelled).toEqual(["cancelled"]);
+    expect(long.body?.locked).toBe(false);
+    const fine = streamed([new TextEncoder().encode('{"ok":true}')]);
+    expect(await readSmallJson(fine, 64)).toEqual({ ok: true });
+    expect(fine.body?.locked).toBe(false);
+  });
+
   test("at the limit and of the right type, it is read", async () => {
     const body = `{"a":"${"x".repeat(56)}"}`;
     expect(body).toHaveLength(64);
