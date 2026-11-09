@@ -281,6 +281,27 @@ describe("workspace turns", () => {
     expect(read(turns, "kept.md")).toBe("before\n");
   });
 
+  test("a tool call whose snapshot before or after couldn't be taken is recorded as nothing, without failing the reply", async () => {
+    for (const failing of [1, 2]) {
+      const turns = setup();
+      write(turns, "note.md", "before\n");
+      const realRun = CharacterWorkspace.prototype.run.bind(new CharacterWorkspace(turns.workspace));
+      let trees = 0;
+      const run = spyOn(CharacterWorkspace.prototype, "run").mockImplementation(async (command, args, options) => {
+        if (command === "git" && args.includes("write-tree") && ++trees === failing) return { code: 1, stdout: "", stderr: "disk full" };
+        return await realRun(command, args, options);
+      });
+      try {
+        const recorder = new WorkspaceRecorder(turns);
+        await recorder.track(async () => { write(turns, "note.md", "after\n"); });
+        await recorder.settle("main", "mv_1");
+      } finally {
+        run.mockRestore();
+      }
+      expect(await recordedTurns(turns, "main", ["mv_1"]), `snapshot ${String(failing)} failed`).toEqual([]);
+    }
+  });
+
   test("commits made after the turn keep HEAD where it is", async () => {
     const turns = setup();
     await ensureWorkspaceGitRepo(turns.workspace);
