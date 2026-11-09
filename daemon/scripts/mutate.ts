@@ -126,6 +126,17 @@ function fallsOffTheEnd(n: ts.Node): boolean {
   return (ts.isIfStatement(owner) || ts.isBlock(owner)) && fallsOffTheEnd(owner);
 }
 
+function landsOnABreak(n: ts.Node): boolean {
+  const { parent } = n;
+  if (ts.isIfStatement(parent)) return landsOnABreak(parent);
+  if (ts.isBlock(parent)) return parent.statements.at(-1) === n && landsOnABreak(parent);
+  if (!(ts.isCaseClause(parent) || ts.isDefaultClause(parent)) || parent.statements.at(-1) !== n) return false;
+  const block: ts.Node = parent.parent;
+  if (!ts.isCaseBlock(block)) return false;
+  const next = block.clauses.slice(block.clauses.indexOf(parent) + 1).find((clause) => clause.statements.length > 0)?.statements[0];
+  return next === undefined || (ts.isBreakStatement(next) && next.label === undefined);
+}
+
 function returnsNothingAtTheEnd(n: ts.Node): boolean {
   if (!ts.isReturnStatement(n)) return false;
   const value = n.expression;
@@ -155,7 +166,7 @@ export function mutantsOf(file: string, text: string, source: ts.SourceFile): Mu
       const value = Number(n.text);
       if (Number.isFinite(value)) add(n.getStart(source), n.end, String(value + 1));
     }
-    const deletable = (ts.isExpressionStatement(n) && !LOGGING_CALL.test(n.expression.getText(source))) || (ts.isReturnStatement(n) && !returnsNothingAtTheEnd(n)) || ts.isThrowStatement(n) || ts.isBreakStatement(n) || ts.isContinueStatement(n);
+    const deletable = (ts.isExpressionStatement(n) && !LOGGING_CALL.test(n.expression.getText(source))) || (ts.isReturnStatement(n) && !returnsNothingAtTheEnd(n)) || ts.isThrowStatement(n) || (ts.isBreakStatement(n) && !(n.label === undefined && landsOnABreak(n))) || ts.isContinueStatement(n);
     if (deletable) add(n.getStart(source), n.end, "{}");
     const inner = scopeOf(n, scope, source, starts);
     n.forEachChild((child) => {
