@@ -8,7 +8,7 @@ import { required } from "../src/util/required.ts";
 import { noisePng } from "./support/test_images.ts";
 import { capRequestImages, countImageBlocks, MAX_REQUEST_IMAGES, REQUEST_IMAGE_DROP_STEP } from "../src/llm/image_support";
 import { type WireMessage } from "../src/llm/types";
-import { HIGH_RESOLUTION_IMAGE_TIER, STANDARD_IMAGE_TIER, imageTokens, sizeForTier, visualTokens } from "../src/llm/image_tokens.ts";
+import { HIGH_RESOLUTION_IMAGE_TIER, STANDARD_IMAGE_TIER, fitLongEdge, imageTokens, sizeForTier, visualTokens } from "../src/llm/image_tokens.ts";
 
 type ImageBlock = Extract<ContentBlock, { type: "image" }>;
 
@@ -40,17 +40,32 @@ describe("what a request may carry", () => {
   });
 });
 
-function imageMessage(): WireMessage {
+function imageMessage(data = "AAAA"): WireMessage {
   return {
     role: "user",
     content: [
-      { type: "image", source: { type: "base64", media_type: "image/png", data: "AAAA" } },
+      { type: "image", source: { type: "base64", media_type: "image/png", data } },
       { type: "text", text: "what is this" },
     ],
   };
 }
 
 describe("capping images per request", () => {
+  test("images up to the character limit all go, the same messages as before", () => {
+    const history = [imageMessage("A".repeat(12_000_000)), imageMessage("A".repeat(8_000_000))];
+    const capped = capRequestImages(history);
+    expect(capped.stripped).toBe(0);
+    expect(capped.messages).toHaveLength(2);
+    capped.messages.forEach((message, i) => { expect(message).toBe(history[i] as WireMessage); });
+  });
+
+  test("past the character limit the oldest images go until ten million characters have gone", () => {
+    const history = [imageMessage("A".repeat(9_999_999)), imageMessage("A"), imageMessage("A".repeat(10_000_001))];
+    const capped = capRequestImages(history);
+    expect(capped.stripped).toBe(2);
+    expect(countImageBlocks(capped.messages)).toBe(1);
+    expect(capped.messages[2]).toBe(history[2] as WireMessage);
+  });
 
   test("the dropped prefix stays identical as history grows within a step, keeping the prompt cache valid", () => {
     const base = Array.from({ length: MAX_REQUEST_IMAGES + 1 }, () => imageMessage());
@@ -76,6 +91,20 @@ describe("Anthropic's resize rule, and the costs its vision guide lists", () => 
 
   test("a tall image is resized along its long edge", () => {
     expect(sizeForTier(size(1080, 1920), STANDARD_IMAGE_TIER)).toEqual(size(819, 1456));
+    expect(sizeForTier(size(1000, 3000), STANDARD_IMAGE_TIER)).toEqual(size(523, 1568));
+  });
+
+  test("an image that fits is kept as it is, a large one becomes the largest that fits, and one that can't fit at all becomes one pixel", () => {
+    expect(sizeForTier(size(200, 200), STANDARD_IMAGE_TIER)).toEqual(size(200, 200));
+    expect(sizeForTier(size(4000, 3000), STANDARD_IMAGE_TIER)).toEqual(size(1270, 952));
+    expect(sizeForTier(size(100, 50), { maxEdge: 27, maxTokens: 10 })).toEqual(size(1, 1));
+  });
+
+  test("the long edge is brought down to the limit, never up, and no side goes below a pixel", () => {
+    expect(fitLongEdge(size(4000, 3000), 2000)).toEqual(size(2000, 1500));
+    expect(fitLongEdge(size(3000, 4000), 2000)).toEqual(size(1500, 2000));
+    expect(fitLongEdge(size(800, 600), 2000)).toEqual(size(800, 600));
+    expect(fitLongEdge(size(4000, 1), 1000)).toEqual(size(1000, 1));
   });
 });
 

@@ -177,21 +177,18 @@ const REQUEST_IMAGE_DROP_STEP_CHARS = 10_000_000;
 
 export function capRequestImages(messages: readonly WireMessage[]): StripOutcome {
   const sizes = messages.flatMap((message) => message.content.flatMap(imagesOf)).map((image) => image.source.data.length);
-  const excessImages = sizes.length - MAX_REQUEST_IMAGES;
-  const excessChars = sizes.reduce((total, size) => total + size, 0) - MAX_REQUEST_IMAGE_BASE64_CHARS;
-  let drop = excessImages > 0 ? Math.ceil(excessImages / REQUEST_IMAGE_DROP_STEP) * REQUEST_IMAGE_DROP_STEP : 0;
-  if (excessChars > 0) {
-    const target = Math.ceil(excessChars / REQUEST_IMAGE_DROP_STEP_CHARS) * REQUEST_IMAGE_DROP_STEP_CHARS;
-    let dropped = 0;
-    let count = 0;
-    while (count < sizes.length && dropped < target) dropped += sizes[count++] ?? 0;
-    drop = Math.max(drop, count);
+  const target = Math.ceil((sizes.reduce((total, size) => total + size, 0) - MAX_REQUEST_IMAGE_BASE64_CHARS) / REQUEST_IMAGE_DROP_STEP_CHARS) * REQUEST_IMAGE_DROP_STEP_CHARS;
+  let dropped = 0;
+  let count = 0;
+  for (const size of sizes) {
+    if (dropped >= target) break;
+    dropped += size;
+    count += 1;
   }
-  if (drop === 0) return { messages: [...messages], stripped: 0 };
   return stripImageBlocks(
     messages,
     `only the newest ${String(MAX_REQUEST_IMAGES)} images, up to ${String(MAX_REQUEST_IMAGE_BASE64_CHARS)} base64 characters in total, are sent per request; older ones are dropped in batches`,
-    drop,
+    Math.max(Math.ceil((sizes.length - MAX_REQUEST_IMAGES) / REQUEST_IMAGE_DROP_STEP) * REQUEST_IMAGE_DROP_STEP, count),
   );
 }
 

@@ -71,8 +71,7 @@ export function reducedSize(dimensions: ImageDimensions, settings: Readonly<Imag
 }
 
 export function fitLongEdge({ width, height }: ImageDimensions, edge: number): ImageDimensions {
-  const scale = edge / Math.max(width, height);
-  if (scale >= 1) return { width, height };
+  const scale = Math.min(1, edge / Math.max(width, height));
   return { width: Math.max(1, Math.round(width * scale)), height: Math.max(1, Math.round(height * scale)) };
 }
 
