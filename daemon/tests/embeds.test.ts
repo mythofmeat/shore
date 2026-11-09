@@ -76,3 +76,25 @@ test("the notice lists each unsent picture once", () => {
     "[These pictures in your last message were not sent, so only their names were shown:\n- ![[gone]]: no picture matches; did you mean ![[gone2.png]]?\nSend a picture again in a new message if you meant to show it.]",
   );
 });
+
+test("an embed is escaped by an odd run of backslashes before it, and an empty label is no label", () => {
+  expect([1, 2, 3, 4].map((slashes) => embedsIn(`${"\\".repeat(slashes)}![[a]]`).length)).toEqual([0, 1, 0, 1]);
+  expect(embedsIn("![[a.png|]]")[0]?.label).toBeUndefined();
+  expect(embedsIn("![x](photo%zz.png)")[0]?.target).toBe("photo%zz.png");
+});
+
+test("text is split around embeds without empty pieces between or after them", () => {
+  const pieces = (text: string) => splitText(text, text).map((part) => (typeof part === "string" ? part : part.source));
+  expect(pieces("![[a]]![[b]]")).toEqual(["![[a]]", "![[b]]"]);
+  expect(pieces("x ![[a]]")).toEqual(["x ", "![[a]]"]);
+});
+
+test("each picture is named where it sits: shown when named without a problem, otherwise marked not sent", () => {
+  const text = "![[a.png]] then ![[b.png]] then ![[c.png]] and ![[d.png]]";
+  expect(pictureText(text, [
+    { embed: "![[a.png]]", name: "a.png", path: "/x/a.png" },
+    { embed: "![[b.png]]", name: "b.png", problem: "too big" },
+    { embed: "![[c.png]]", name: "c.png", problem: null },
+    { embed: "![[d.png]]" },
+  ])).toBe("[picture: a.png] then [picture not sent: b.png] then [picture: c.png] and [picture not sent: d.png]");
+});

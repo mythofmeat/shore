@@ -32,14 +32,14 @@ function wikilink(match: RegExpMatchArray, at: number): Embed {
   };
 }
 
-function escaped(source: string, offset: number, start: number): boolean {
+function escaped(source: string, offset: number): boolean {
   let escapes = 0;
-  while (offset - escapes > start && source[offset - escapes - 1] === "\\") escapes += 1;
+  while (source[offset - escapes - 1] === "\\") escapes += 1;
   return escapes % 2 === 1;
 }
 
 export function localTarget(url: string): string | undefined {
-  const target = url.split(/[?#]/, 1)[0] ?? "";
+  const target = url.split(/[?#]/)[0] ?? "";
   if (target === "" || REMOTE.test(target)) return undefined;
   try {
     return decodeURIComponent(target);
@@ -56,7 +56,7 @@ export function splitText(value: string, source: string): (string | Embed)[] {
   let cursor = 0;
   for (const [index, match] of shown.entries()) {
     const original = raw[index];
-    if (original === undefined || escaped(source, original.index, 0) || original[0] !== match[0]) continue;
+    if (original === undefined || escaped(source, original.index) || original[0] !== match[0]) continue;
     if (match.index > cursor) parts.push(value.slice(cursor, match.index));
     parts.push(wikilink(match, original.index));
     cursor = match.index + match[0].length;
