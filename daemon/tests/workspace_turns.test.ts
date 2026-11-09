@@ -410,6 +410,27 @@ describe("workspace turns", () => {
     expect(await gitHead(turns.workspace)).toBe(compacted);
   });
 
+  test("undoing a reply keeps a commit another writer made while its tool call ran, even one that changed no file", async () => {
+    const { turns } = await startedRepo();
+    write(turns, "memory/fact.md", "remembered\n");
+    const recorder = new WorkspaceRecorder(turns);
+    await recorder.track(async () => {
+      write(turns, "a.md", "a\n");
+      await withWriteWindow(turns, {}, async () => {
+        gitIn(turns, "add", "memory");
+        commit(turns, "memory");
+        return { value: undefined, paths: [], head: true };
+      });
+    });
+    await recorder.settle("main", "mv_1");
+    const committed = await gitHead(turns.workspace);
+
+    await undoTurns(turns, "main", ["mv_1"]);
+    expect(existsSync(file(turns, "a.md"))).toBe(false);
+    expect(read(turns, "memory/fact.md")).toBe("remembered\n");
+    expect(await gitHead(turns.workspace)).toBe(committed);
+  });
+
   test("undoing a reply leaves a file written by another reply whose tool call outlasted its own", async () => {
     const turns = setup();
     write(turns, "a.md", "a0\n");

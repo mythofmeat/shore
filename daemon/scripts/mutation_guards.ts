@@ -461,7 +461,6 @@ export const DAEMON_EQUIVALENTS: readonly string[] = [
   "src/tools/workspace_turns.ts:completeSegments: …ted(([a], [b]) => (a === \"\" ? -「1 → 2」 : Number(a)) - (b === \"\" ? -1 …",
   "src/tools/workspace_turns.ts:move: if (changes.length === 0) 「return { restored: [], skipped: [] }; → {}」",
   "src/tools/workspace_turns.ts:completeSegments: …-1 : Number(a)) - (b === \"\" ? -「1 → 2」 : Number(b)))",
-  "src/tools/workspace_turns.ts:WorkspaceRecorder.#finish: if (ambiguous.length === 0 && 「!headAmbiguous → headAmbiguous」) return { before: before.id, a…",
   "src/tools/workspace_turns.ts:WorkspaceRecorder.#finish: …ength === 0 && !headAmbiguous) 「return { before: before.id, after: afte… → {}」",
 ];
 
