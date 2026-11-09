@@ -42,3 +42,15 @@ export function tickingClock(): () => number {
     return t;
   };
 }
+
+export function timedChunks<T>(startAt: number, chunks: readonly (readonly [at: number, chunk: unknown])[], endAt: number): { clock: () => number; chunks: AsyncIterable<T> } {
+  let time = startAt;
+  async function* play(): AsyncIterable<T> {
+    for (const [at, chunk] of chunks) {
+      time = at;
+      yield chunk as T;
+    }
+    time = endAt;
+  }
+  return { clock: () => time, chunks: play() };
+}

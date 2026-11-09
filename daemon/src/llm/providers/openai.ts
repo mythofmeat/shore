@@ -266,10 +266,7 @@ export function applyPromptCaching(
 ): void {
   const requested = req.provider_options?.cache_ttl ?? "";
   const ttl = effectiveCacheTtl(req.sdk, requested, req.model);
-  if (req.context !== undefined && ttl !== requested) {
-    if (ttl === "") delete req.context.cache_ttl;
-    else req.context.cache_ttl = ttl;
-  }
+  if (req.context !== undefined && ttl !== requested) delete req.context.cache_ttl;
   if (ttl === "") return;
   if (req.sdk !== NANOGPT_PROVIDER) return;
   const helper = nanogptPromptCaching({ ttl });

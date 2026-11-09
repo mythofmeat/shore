@@ -1,7 +1,7 @@
 import { afterEach, expect, test, describe } from "bun:test";
 import { type ChatCompletionChunk, type ChatCompletionCreateParams } from "openai/resources/chat/completions";
 import { openAIStreamEvents, applyPromptCaching, buildOpenAIMessages, OpenAIProvider, turnToOpenAI } from "../src/llm/providers/openai.ts";
-import { collect, tickingClock } from "./support/stream.ts";
+import { collect, tickingClock, timedChunks } from "./support/stream.ts";
 import { REASONING_OFF, type Sdk, type SidecarRequest, type StreamEvent } from "../src/llm/types.ts";
 
 function asChunk(c: unknown): ChatCompletionChunk {
@@ -395,5 +395,30 @@ describe("prompt-cache settings", () => {
     const body = server.seen[0]?.body;
     expect(body?.["prompt_caching"]).toEqual({ enabled: true, ttl: "5m", stickyProvider: true, explicitCacheControl: true });
     expect(JSON.stringify(body?.["messages"])).toContain('"cache_control":{"type":"ephemeral"}');
+  });
+});
+
+describe("stream timing", () => {
+  const delta = (d: Record<string, unknown>, finish: string | null = null) => ({ choices: [{ index: 0, delta: d, finish_reason: finish }] });
+
+  test("a one-letter thought or text counts, and the first of them times the first token", async () => {
+    const { clock, chunks } = timedChunks<ChatCompletionChunk>(50, [[100, delta({ reasoning_content: "r" })], [200, delta({ content: "a" }, "stop")]], 1000);
+    const events = await collect(openAIStreamEvents("m", chunks, clock));
+    expect(events.slice(1, -1)).toEqual([{ type: "thinking", text: "r" }, { type: "text", text: "a" }]);
+    expect(events.at(-1)).toMatchObject({ type: "done", content: "a", timing: { total_ms: 950, time_to_first_token_ms: 50 } });
+  });
+
+  test("a reply that only calls a tool times its first token at the call", async () => {
+    const { clock, chunks } = timedChunks<ChatCompletionChunk>(50, [[100, delta({ tool_calls: [{ index: 0, id: "c1", function: { name: "look", arguments: "{}" } }] }, "tool_calls")]], 1000);
+    const events = await collect(openAIStreamEvents("m", chunks, clock));
+    expect(events.at(-1)).toMatchObject({ type: "done", timing: { total_ms: 950, time_to_first_token_ms: 50 } });
+  });
+});
+
+describe("the prompt-cache helper is nano-gpt's alone", () => {
+  test("another SDK that keeps a cache lifetime still gets no helper", () => {
+    const p = params(2);
+    applyPromptCaching(request("anthropic", "1h"), p);
+    expect(helperIn(p)).toBeUndefined();
   });
 });

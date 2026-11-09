@@ -4,7 +4,7 @@ import type { ChatCompletionChunk } from "openai/resources/chat/completions";
 import { buildZaiMessages, zaiGenerateResponse, zaiStreamEvents } from "../src/llm/providers/zai.ts";
 import type { SidecarRequest } from "../src/llm/types.ts";
 import { rejectionOf } from "./support/outcome.ts";
-import { collect, tickingClock } from "./support/stream.ts";
+import { collect, tickingClock, timedChunks } from "./support/stream.ts";
 
 function req(over: Partial<SidecarRequest> = {}): SidecarRequest {
   return {
@@ -297,5 +297,33 @@ describe("whole replies", () => {
     const finish = (reason: string): unknown => zaiGenerateResponse("glm-5.1", { choices: [{ message: {}, finish_reason: reason }], usage: { completion_tokens: 1 } }, 1).finish_reason;
     expect(["stop", "tool_calls", "length", "model_context_window_exceeded", "content_filter", "sensitive", "end_turn", "max_tokens", "tool_use", "refusal", "stop_sequence"].map(finish))
       .toEqual(["end_turn", "tool_use", "max_tokens", "max_tokens", "content_filter", "content_filter", "end_turn", "max_tokens", "tool_use", "refusal", "stop_sequence"]);
+  });
+});
+
+describe("stream timing", () => {
+  const delta = (d: Record<string, unknown>, finish: string | null = null) => ({ choices: [{ index: 0, delta: d, finish_reason: finish }] });
+
+  test("the first thought times the first token, before any text", async () => {
+    const { clock, chunks } = timedChunks<ChatCompletionChunk>(50, [[100, delta({ reasoning_content: "r" })], [200, { ...delta({ content: "a" }, "stop"), usage }]], 1000);
+    expect((await collect(zaiStreamEvents("glm-5.1", chunks, clock))).at(-1)).toMatchObject({ type: "done", timing: { total_ms: 950, time_to_first_token_ms: 50 } });
+  });
+
+  test("a reply with no tokens times its first token at the end", async () => {
+    const { clock, chunks } = timedChunks<ChatCompletionChunk>(50, [[100, stop()]], 1000);
+    expect((await collect(zaiStreamEvents("glm-5.1", chunks, clock))).at(-1)).toMatchObject({ type: "done", timing: { total_ms: 950, time_to_first_token_ms: 950 } });
+  });
+
+  test("a stream that ends badly is timed the same way", async () => {
+    const empty = timedChunks<ChatCompletionChunk>(50, [[100, delta({}, "stop")]], 1000);
+    expect(await rejectionOf(collect(zaiStreamEvents("glm-5.1", empty.chunks, empty.clock)))).toMatchObject({ message: "Z.ai stream ended with zero token usage", timing: { total_ms: 950, time_to_first_token_ms: 950 } });
+    const cut = timedChunks<ChatCompletionChunk>(50, [[100, delta({})]], 1000);
+    expect(await rejectionOf(collect(zaiStreamEvents("glm-5.1", cut.chunks, cut.clock)))).toMatchObject({ message: "Z.ai stream ended without a finish reason", timing: { total_ms: 950, time_to_first_token_ms: 950 } });
+    const spoke = timedChunks<ChatCompletionChunk>(50, [[100, delta({ content: "a" }, "stop")]], 1000);
+    expect(await rejectionOf(collect(zaiStreamEvents("glm-5.1", spoke.chunks, spoke.clock)))).toMatchObject({ message: "Z.ai stream ended with zero token usage", timing: { total_ms: 950, time_to_first_token_ms: 50 } });
+  });
+
+  test("a call that gives no index is the first call", async () => {
+    const events = await collect(zaiStreamEvents("glm-5.1", fakeChunks([{ ...delta({ tool_calls: [{ function: { name: "look", arguments: "{}" } }] }, "tool_calls"), usage }]), tickingClock()));
+    expect(events.find((e) => e.type === "tool_use")).toEqual({ type: "tool_use", id: "tc_0", name: "look", input: {} });
   });
 });
