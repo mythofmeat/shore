@@ -262,7 +262,6 @@ function options(
     dryRun: false,
     chatRequest: compactionRequest(),
     dataDir,
-    resumable: true,
     tools,
   };
 }

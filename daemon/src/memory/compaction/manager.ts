@@ -576,10 +576,9 @@ export interface CompactOptions {
   keepTurnsOverride?: number;
   restart?: boolean;
   chatRequest: SidecarRequest;
-  dataDir?: string;
+  dataDir: string;
   tools: CompactionTools;
   maxToolIterations?: number;
-  resumable?: boolean;
   foreground?: boolean;
   coverage?: CompactionCoverage;
   emit?: FrameSink;
@@ -734,7 +733,7 @@ export async function compact(opts: CompactOptions, settings: CompactionSettings
     };
   }
 
-  if (state.maxRoundsHit && opts.resumable === true) {
+  if (state.maxRoundsHit) {
     checkpoint.state = "paused";
     checkpoint.pauseReason = "iteration_limit";
     await persistCheckpoint(opts, checkpoint);
@@ -798,7 +797,7 @@ export async function compact(opts: CompactOptions, settings: CompactionSettings
   if ("kind" in committed) return committed;
   const { id: newConversationId, retained, retainedTurns } = committed;
   const archivedCount = plan.splitAt;
-  const archivedTurns = opts.resumable === true ? checkpoint.compactedTurns : compactedTurns;
+  const archivedTurns = checkpoint.compactedTurns;
 
   const markdownPaths = changedFilePaths(state.writesApplied);
 
@@ -940,7 +939,7 @@ async function recoverArchivedPass(
   plan: ArchivalPlan,
 ): Promise<CompactionOutcome | undefined> {
   const prior = plan.checkpoint;
-  if (opts.resumable !== true || opts.dataDir === undefined || prior === undefined) return undefined;
+  if (prior === undefined) return undefined;
   const archived = await hasCompactionOperation(
     conversationRef(opts.dataDir, opts.charName, compactThread(opts), false),
     prior.id,
@@ -974,35 +973,23 @@ async function resolveCheckpoint(
   workspaceHead: string | undefined,
 ): Promise<CompactionCheckpoint> {
   const { plan } = opts;
-  if (opts.resumable === true && opts.dataDir !== undefined) {
-    const abandoned = plan.checkpoint;
-    const sameModel = abandoned !== undefined &&
-      abandoned.request.sdk === request.sdk &&
-      abandoned.request.model === request.model &&
-      abandoned.request.provider_key === request.provider_key &&
-      abandoned.request.base_url === request.base_url;
-    if (plan.resumed && abandoned !== undefined && sameModel) return abandoned;
-    if (abandoned !== undefined) {
-      const reason = sameModel
+  const abandoned = plan.checkpoint;
+  const sameModel = abandoned !== undefined &&
+    abandoned.request.sdk === request.sdk &&
+    abandoned.request.model === request.model &&
+    abandoned.request.provider_key === request.provider_key &&
+    abandoned.request.base_url === request.base_url;
+  if (plan.resumed && abandoned !== undefined && sameModel) return abandoned;
+  if (abandoned !== undefined) {
+    shoreLog.warn(
+      `shore: starting a fresh compaction for ${opts.charName}: ${sameModel
         ? `the pass was restarted or its archival range changed (${String(abandoned.splitAt)} -> ${String(plan.splitAt)})`
-        : `the model changed (${abandoned.request.sdk}:${abandoned.request.model} -> ${request.sdk}:${request.model})`;
-      shoreLog.warn(
-        `shore: starting a fresh compaction for ${opts.charName}: ${reason}. ` +
-          `The memory checkpoint ${abandoned.id} already wrote ` +
-          `(${JSON.stringify(abandoned.loop.writesApplied.map((w) => w.displayPath))}) stays on disk`,
-      );
-    }
-    const abandonedBefore = abandoned === undefined ? undefined : await discardCheckpoint(opts);
-    return newCompactionCheckpoint(
-      opts.charName,
-      plan.sourceContent,
-      plan.splitAt,
-      compactedTurns,
-      request,
-      opts.dryRun,
-      abandonedBefore ?? abandoned?.memoryBefore ?? workspaceHead,
+        : `the model changed (${abandoned.request.sdk}:${abandoned.request.model} -> ${request.sdk}:${request.model})`}. ` +
+        `The memory checkpoint ${abandoned.id} already wrote ` +
+        `(${JSON.stringify(abandoned.loop.writesApplied.map((w) => w.displayPath))}) stays on disk`,
     );
   }
+  const abandonedBefore = abandoned === undefined ? undefined : await discardCheckpoint(opts);
   return newCompactionCheckpoint(
     opts.charName,
     plan.sourceContent,
@@ -1010,24 +997,19 @@ async function resolveCheckpoint(
     compactedTurns,
     request,
     opts.dryRun,
-    workspaceHead,
+    abandonedBefore ?? abandoned?.memoryBefore ?? workspaceHead,
   );
 }
 
 async function persistCheckpoint(opts: CompactOptions, checkpoint: CompactionCheckpoint): Promise<void> {
-  if (opts.resumable === true && opts.dataDir !== undefined) {
-    await saveCompactionCheckpoint(opts.dataDir, checkpoint, compactThread(opts));
-  }
+  await saveCompactionCheckpoint(opts.dataDir, checkpoint, compactThread(opts));
 }
 
 async function clearCheckpoint(opts: CompactOptions): Promise<void> {
-  if (opts.resumable === true && opts.dataDir !== undefined) {
-    await removeCompactionCheckpoint(opts.dataDir, opts.charName, compactThread(opts));
-  }
+  await removeCompactionCheckpoint(opts.dataDir, opts.charName, compactThread(opts));
 }
 
 async function discardCheckpoint(opts: CompactOptions): Promise<string | undefined> {
-  if (opts.dataDir === undefined) return undefined;
   const abandoned = await loadCompactionCheckpoint(
     opts.dataDir,
     opts.charName,
@@ -1117,7 +1099,6 @@ function pausedOutcome(
 }
 
 async function pauseCompaction(opts: CompactOptions, checkpoint: CompactionCheckpoint, error: unknown): Promise<CompactionOutcome> {
-  if (opts.resumable !== true) throw error;
   const stop = budgetStopIn(error);
   const cancelled = opts.signal?.aborted === true;
   const refused = !cancelled && error instanceof CompactionRefused;
@@ -1141,7 +1122,6 @@ function describeAbort(reason: unknown): string {
 }
 
 async function currentActiveContent(opts: CompactOptions): Promise<string> {
-  if (opts.resumable !== true || opts.dataDir === undefined) return opts.plan.sourceContent;
   try {
     return readDurable(threadFile(opts.dataDir, opts.charName, compactThread(opts), "active.jsonl"));
   } catch (e) {
