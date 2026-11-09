@@ -904,6 +904,63 @@ mod tests {
         assert_eq!(cell_size_of(&not_a_terminal), None);
     }
 
+    #[cfg(unix)]
+    #[test]
+    #[expect(
+        unsafe_code,
+        reason = "only a process of its own can take a pseudo-terminal as its controlling terminal"
+    )]
+    fn inside_a_terminal_the_cell_size_is_read_from_it_and_probing_takes_it() {
+        use std::os::fd::AsRawFd as _;
+        use std::os::unix::process::CommandExt as _;
+
+        let (_controller, follower) = terminal(100, 30, 1000, 600);
+        let follower_fd = follower.as_raw_fd();
+        let mut child = std::process::Command::new(std::env::current_exe().unwrap());
+        let _configured = child
+            .args([
+                "--exact",
+                "tui::images::tests::inside_a_terminal",
+                "--ignored",
+                "--nocapture",
+            ])
+            .env("SHORE_IMAGES", "kitty")
+            .stdin(std::process::Stdio::null());
+        let take_terminal = move || {
+            // SAFETY: setsid is async-signal-safe and touches no memory of ours.
+            if unsafe { libc::setsid() } == -1 {
+                return Err(std::io::Error::last_os_error());
+            }
+            // SAFETY: ioctl is async-signal-safe, and follower_fd is still open in the child.
+            if unsafe { libc::ioctl(follower_fd, libc::TIOCSCTTY, 0) } == -1 {
+                return Err(std::io::Error::last_os_error());
+            }
+            Ok(())
+        };
+        // SAFETY: the hook makes only async-signal-safe calls between fork and exec.
+        let _in_terminal = unsafe { child.pre_exec(take_terminal) };
+        let ran = child.output().unwrap();
+        let printed = String::from_utf8_lossy(&ran.stdout);
+        assert!(ran.status.success(), "{printed}");
+        assert!(printed.contains("cell size Some((10, 20))"), "{printed}");
+        assert!(printed.contains("probed Some(Kitty) (10, 2)"), "{printed}");
+    }
+
+    #[test]
+    #[ignore = "only its parent test runs it, inside a terminal it made"]
+    fn inside_a_terminal() {
+        let mut out = std::io::stdout().lock();
+        let _size = writeln!(out, "cell size {:?}", query_cell_size());
+        let mut pictures = cache(8, 16);
+        pictures.probe_protocol();
+        let _probed = writeln!(
+            out,
+            "probed {:?} {:?}",
+            pictures.protocol,
+            pictures.calculate_cells(100, 40, 100, 50)
+        );
+    }
+
     #[test]
     fn with_no_terminal_to_ask_a_cell_is_taken_as_eight_by_sixteen_pixels() {
         if std::fs::File::open("/dev/tty").is_ok() {
