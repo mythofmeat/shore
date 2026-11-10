@@ -7,7 +7,8 @@ import { truncateSummary } from "../notifications.ts";
 import type { ServerMessage } from "../protocol/ServerMessage.ts";
 import { toolLimitsFrom } from "../tools/dispatch.ts";
 import { runToolUse, type ToolExecution } from "../tools/execute.ts";
-import { ALL_TOOLS, SUBAGENT_INPUT_SCHEMA, toolTemplateVars } from "../tools/registry.ts";
+import { ALL_TOOLS, renderToolSchema, SUBAGENT_INPUT_SCHEMA, toolTemplateVars } from "../tools/registry.ts";
+import { wakeToolNotes } from "../autonomy/heartbeat_shape.ts";
 import {
   CompiledToolSchema,
   compileToolSchema,
@@ -183,7 +184,7 @@ function coerceValue(key: string, value: string, type: string | undefined): unkn
 export function describeTool(character: string, ctx: RunToolContext, args: OperationInput<"run_tool">): ToolDescription {
   const { tool } = parseRunToolArgs(args);
   const cfg = ctx.config.app.tools;
-  const vars = toolTemplateVars(cfg, character, resolveDisplayName(ctx.config.app.defaults), ctx.config.app.behavior.autonomy.heartbeat.defer_on_activity);
+  const vars = toolTemplateVars(cfg, character, resolveDisplayName(ctx.config.app.defaults), wakeToolNotes(ctx.config, character));
   const seen = (kind: ToolKind, enabled: boolean, description: string, schema: Record<string, unknown>): ToolDescription => ({
     mode: "tool_definition",
     tool,
@@ -223,7 +224,7 @@ export function describeTool(character: string, ctx: RunToolContext, args: Opera
     "builtin",
     toolEnabled(cfg, tool),
     renderTemplate(def.description, vars),
-    compileToolSchema(tool, def.parameters).schema,
+    compileToolSchema(tool, renderToolSchema(def.parameters, vars)).schema,
   );
 }
 

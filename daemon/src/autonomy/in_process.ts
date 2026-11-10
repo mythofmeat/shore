@@ -64,6 +64,7 @@ export class InProcessAutonomyExecutor implements AutonomyExecutor {
       return await runHeartbeatTick(character, config, {
         rebuild: this.#deps.rebuild,
         ...(this.#deps.env === undefined ? {} : { env: this.#deps.env }),
+        ...(hooks.wakeReason === undefined ? {} : { wakeReason: hooks.wakeReason }),
         generate: calls.generate,
         dispatch: async (name, input, toolUseId, tools, conversation) => {
           toolCtx ??= buildToolContext(config, config.dirs.data, character, {

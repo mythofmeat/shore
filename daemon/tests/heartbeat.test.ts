@@ -250,3 +250,80 @@ describe("default wakes and the character's own", () => {
     expect(clock.nextWakeAt).toBe(10 * MIN);
   });
 });
+
+describe("the reason a character gave for a wake stays with that wake", () => {
+  const MIN = 60_000;
+  test("it is kept while the wake only moves, and is gone once the heartbeat it was for has run", () => {
+    const clock = new HeartbeatClock(config({ minIntervalMs: 30 * MIN, deferOnActivity: true }), 0);
+    expect(clock.wakeReason).toBeUndefined();
+    expect(clock.snapshot()).not.toHaveProperty("wake_reason");
+    clock.schedule(HOUR, 0, "check the tide table");
+    expect(clock.snapshot()).toMatchObject({ next_wake_at: HOUR, wake_reason: "check the tide table" });
+
+    clock.onUserMessage(50 * MIN);
+    expect(clock.nextWakeAt, "pushed later by a message").toBe(80 * MIN);
+    clock.setConfig(config({ minIntervalMs: 2 * HOUR, deferOnActivity: true }), 50 * MIN);
+    expect(clock.nextWakeAt, "raised to a new minimum").toBe(170 * MIN);
+    clock.setConfig(config({ minIntervalMs: 30 * MIN, maxIntervalMs: HOUR, deferOnActivity: true }), 50 * MIN);
+    expect(clock.nextWakeAt, "cut to a new maximum").toBe(110 * MIN);
+    clock.forceWake(60 * MIN);
+    expect(clock.wakeReason).toBe("check the tide table");
+
+    expect(clock.tick(60 * MIN)).toBe("run_tick");
+    expect(clock.wakeReason).toBeUndefined();
+    expect(clock.tick(61 * MIN), "the default wake that follows has none").toBe("none");
+    expect(clock.snapshot()).not.toHaveProperty("wake_reason");
+  });
+
+  test("a later call replaces it, and a blank one clears it", () => {
+    const clock = new HeartbeatClock(config(), 0);
+    clock.schedule(HOUR, 0, "first");
+    clock.schedule(2 * HOUR, 0, "second");
+    expect(clock.wakeReason).toBe("second");
+    clock.schedule(2 * HOUR, 0, " \n\t");
+    expect(clock.wakeReason).toBeUndefined();
+    clock.schedule(2 * HOUR, 0, " kept as written ");
+    expect(clock.wakeReason).toBe(" kept as written ");
+    clock.schedule(2 * HOUR, 0);
+    expect(clock.wakeReason).toBeUndefined();
+  });
+
+  test("it is dropped when the wake is cleared without a heartbeat running", () => {
+    const slept = new HeartbeatClock(config(), 0);
+    slept.schedule(HOUR, 0, "put to sleep");
+    slept.forceDormant();
+    expect(slept.wakeReason).toBeUndefined();
+    slept.forceActive(MIN);
+    expect(slept.tick(MIN)).toBe("run_tick");
+    expect(slept.wakeReason).toBeUndefined();
+
+    const idle = new HeartbeatClock(config({ maxIdleTicks: 1 }), 0);
+    idle.schedule(HOUR, 0);
+    expect(idle.tick(HOUR)).toBe("run_tick");
+    idle.schedule(2 * HOUR, HOUR, "past the tick ceiling");
+    expect(idle.tick(2 * HOUR)).toBe("none");
+    expect(idle.wakeReason).toBeUndefined();
+
+    const silent = new HeartbeatClock(config({ maxSilentMs: 90 * MIN }), 0);
+    silent.onUserMessage(0);
+    silent.schedule(2 * HOUR, 0, "too long silent");
+    expect(silent.tick(2 * HOUR)).toBe("none");
+    expect(silent.nextWakeAt).toBeUndefined();
+    expect(silent.wakeReason).toBeUndefined();
+  });
+
+  test("a restart brings it back with the wake the character asked for, and never onto a default wake or no wake", () => {
+    const asked = new HeartbeatClock(config(), 0);
+    asked.restore({ ticks_without_user: 0, next_wake_at: HOUR, last_user_at: undefined, wake_reason: "after the restart" });
+    asked.boundWake(0);
+    expect(asked.wakeReason).toBe("after the restart");
+
+    const defaulted = new HeartbeatClock(config(), 0);
+    defaulted.restore({ ticks_without_user: 0, next_wake_at: HOUR, last_user_at: undefined, default_wake: true, wake_anchor_at: 0, wake_reason: "stale" });
+    expect(defaulted.wakeReason).toBeUndefined();
+
+    const none = new HeartbeatClock(config(), 0);
+    none.restore({ ticks_without_user: 0, next_wake_at: undefined, last_user_at: undefined, wake_reason: "stale" });
+    expect(none.wakeReason).toBeUndefined();
+  });
+});

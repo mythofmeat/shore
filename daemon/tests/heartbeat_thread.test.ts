@@ -48,6 +48,8 @@ interface Script {
   calls: string[];
   held: { started: PromiseWithResolvers<void>; release: PromiseWithResolvers<void> } | undefined;
   closing: string;
+  wake?: Record<string, unknown> | undefined;
+  replyWake?: Record<string, unknown> | undefined;
 }
 
 function scriptedProvider(script: Script): SidecarProvider {
@@ -74,11 +76,21 @@ function scriptedProvider(script: Script): SidecarProvider {
           held.started.resolve();
           await held.release.promise;
         }
-        yield* eventsForResponse(respond(request, [{ type: "text", text: `reply to: ${textOf(request).split("\n").at(-1) ?? ""}` }]));
+        const replyWake = script.replyWake;
+        script.replyWake = undefined;
+        yield* eventsForResponse(respond(request, replyWake === undefined
+          ? [{ type: "text", text: `reply to: ${textOf(request).split("\n").at(-1) ?? ""}` }]
+          : [{ type: "tool_use", id: "reply-wake", name: "set_next_wake", input: replyWake }]));
         return;
       }
       script.heartbeats.push(structuredClone(request));
       const resultsIn = request.messages.at(-1)?.content.some((block) => block.type === "tool_result") === true;
+      const wake = resultsIn ? undefined : script.wake;
+      if (wake !== undefined) {
+        script.wake = undefined;
+        yield* eventsForResponse(respond(request, [{ type: "tool_use", id: `wake-${String(script.heartbeats.length)}`, name: "set_next_wake", input: wake }]));
+        return;
+      }
       yield* eventsForResponse(respond(request, resultsIn
         ? [
             { type: "thinking", thinking: "She asked about the lamp, so I'll tell her.", signature: "sig-1" },
@@ -107,10 +119,10 @@ interface Harness {
   command: (name: string, args: Record<string, unknown>) => Promise<ServerMessage>;
 }
 
-async function withCharacter(run: (h: Harness) => Promise<void>, configure?: (app: AppConfig) => void): Promise<void> {
+async function withCharacter(run: (h: Harness) => Promise<void>, configure?: (app: AppConfig) => void, kept?: string): Promise<void> {
   setTestEnv(KEY_ENV, "fixture-key");
-  at(0);
-  const root = await mkdtemp(testTmp("shore-heartbeat-thread-"));
+  if (kept === undefined) at(0);
+  const root = kept ?? await mkdtemp(testTmp("shore-heartbeat-thread-"));
   const app = defaultAppConfig();
   app.defaults.model = "fixture";
   app.advanced.max_retries = 0;
@@ -371,6 +383,7 @@ test("with defer_on_activity, each message and the end of each reply push the ne
     held.release.resolve();
     await replying;
     expect(wake()).toBe(T0 + 140 * MINUTE);
+    expect(wakeTool(script.replies[0]).description).toMatch(/A later call replaces the earlier schedule\. Each message from \S+, and the end of each reply to one, pushes it to at least the minimum interval later\.\n/);
   }, (app) => {
     app.behavior.autonomy.heartbeat.defer_on_activity = true;
   });
@@ -507,5 +520,130 @@ test("bare --background tunes heartbeats and compaction on their pinned model wh
   }, (app) => {
     app.defaults.background.heartbeat = "pinned";
     app.defaults.background.compaction = "pinned";
+  });
+});
+
+const SHOWN = "[You scheduled this heartbeat with set_next_wake, giving this reason: ";
+
+function wakeNote(request: SidecarRequest | undefined): string | undefined {
+  const text = request === undefined ? "" : textOf(request);
+  const start = text.indexOf(SHOWN);
+  return start === -1 ? undefined : text.slice(start + SHOWN.length, text.indexOf("]\n", start));
+}
+
+function wakeTool(request: SidecarRequest | undefined): { description: string; reason: string } {
+  const tool = request?.tools?.find((def) => def.name === "set_next_wake");
+  const properties = tool?.input_schema["properties"] as Record<string, { description: string }>;
+  return { description: tool?.description ?? "", reason: properties["reason"]?.description ?? "" };
+}
+
+test("a heartbeat starts with the reason its set_next_wake call gave, word for word, and only that heartbeat does", async () => {
+  await withCharacter(async ({ runtime, script, say, heartbeat, thread }) => {
+    const first = "check the tide table for {{user}} {{#if now}}at {{now}}{{/if}} $& wake_reason";
+    await say("hello");
+    script.wake = { hours_from_now: 2, reason: first };
+    at(10);
+    await heartbeat();
+    expect(wakeNote(script.heartbeats[0]), "a heartbeat no set_next_wake call scheduled").toBeUndefined();
+    expect(textOf(script.heartbeats[0] as SidecarRequest)).toContain("PM]\n\n[This is a private heartbeat turn.");
+    expect(runtime.autonomy.status("ada")?.next_wake_at).toBe(T0 + 130 * MINUTE);
+    expect(runtime.autonomy.status("ada")?.recent_events.map((event) => event.detail)).toContain(`set_next_wake: 2.0h - ${first}`);
+
+    script.heartbeats.length = 0;
+    script.wake = { hours_from_now: 3, reason: "water the fern" };
+    at(20);
+    await heartbeat();
+    expect(wakeNote(script.heartbeats[0])).toBe(first);
+    expect(textOf(script.heartbeats[0] as SidecarRequest)).toContain(`PM]\n\n${SHOWN}${first}]\n\n[This is a private heartbeat turn.`);
+    expect(wakeNote(script.heartbeats[1]), "a call made during a heartbeat leaves that heartbeat's own reason alone").toBe(first);
+    expect((await thread("heartbeat")).filter((message) => message.role === "system").at(-1)?.content).toContain(`${SHOWN}${first}]`);
+
+    script.heartbeats.length = 0;
+    at(30);
+    await heartbeat();
+    expect(wakeNote(script.heartbeats[0])).toBe("water the fern");
+
+    script.heartbeats.length = 0;
+    await say("still here");
+    at(40);
+    await heartbeat();
+    expect(script.heartbeats).toHaveLength(2);
+    expect(wakeNote(script.heartbeats[0]), "a reason is shown once").toBeUndefined();
+    expect(runtime.autonomy.scheduleNextWake("ada", 3, "later")).toBe(3);
+  }, (app) => {
+    app.behavior.autonomy.heartbeat.min_interval = ConfigDuration.fromSecs(60n);
+  });
+});
+
+test("a reason given in a chat reply waits for its heartbeat through later messages and a restart, and a later call replaces it", async () => {
+  const root = await mkdtemp(testTmp("shore-wake-reason-"));
+  at(0);
+  await withCharacter(async ({ runtime, script, say }) => {
+    script.replyWake = { hours_from_now: 2, reason: "an earlier plan" };
+    await say("goodnight");
+    script.replyWake = { hours_from_now: 4, reason: "ask how the interview went" };
+    await say("actually, the interview is tomorrow");
+    expect(runtime.autonomy.status("ada")?.next_wake_at).toBe(T0 + 240 * MINUTE);
+    expect(script.replies.map((request) => wakeTool(request).description).every((text) => text.includes("that heartbeat shows it to you when it starts"))).toBe(true);
+    expect(wakeTool(script.replies[0]).description).toMatch(/A later call replaces the earlier schedule\. Messages from \S+ don't move it\.\n/);
+    expect(wakeTool(script.replies[0]).reason).toBe("A note to yourself for that heartbeat, which shows it to you when it starts. Also recorded in the heartbeat log.");
+  }, undefined, root);
+
+  at(60);
+  await withCharacter(async ({ runtime, script, say, heartbeat }) => {
+    await say("good morning");
+    expect(runtime.autonomy.status("ada")?.next_wake_at).toBe(T0 + 240 * MINUTE);
+    at(70);
+    await heartbeat();
+    expect(wakeNote(script.heartbeats[0])).toBe("ask how the interview went");
+  }, undefined, root);
+});
+
+test("a reason is dropped when its wake is, by dormancy or a blank reason, so a later heartbeat doesn't start with a stale one", async () => {
+  await withCharacter(async ({ script, say, heartbeat, command }) => {
+    script.replyWake = { hours_from_now: 2, reason: "look in on the bees" };
+    await say("hello");
+    expect((await command("heartbeat_set_dormant", {})).type).toBe("command_output");
+    at(10);
+    await say("back again");
+    await heartbeat();
+    expect(wakeNote(script.heartbeats[0]), "after the character was put to sleep").toBeUndefined();
+
+    script.heartbeats.length = 0;
+    script.replyWake = { hours_from_now: 2, reason: "count the hives" };
+    await say("one");
+    script.replyWake = { hours_from_now: 2, reason: "  \n" };
+    await say("two");
+    at(20);
+    await heartbeat();
+    expect(wakeNote(script.heartbeats[0]), "after a call with a blank reason").toBeUndefined();
+  });
+});
+
+test("a character whose own heartbeat.md leaves the reason out is told set_next_wake only logs it", async () => {
+  await withCharacter(async ({ script, say, heartbeat, workspace, command }) => {
+    const prompts = join(workspace, "..", "prompts");
+    await mkdir(prompts, { recursive: true });
+    await writeFile(join(prompts, "heartbeat.md"), "[Private turn at {{now}}. {{#if wake_reason}}You left a note.{{/if}}]");
+    script.replyWake = { hours_from_now: 2, reason: "look in on the bees" };
+    await say("hello");
+    const offered = wakeTool(script.replies[0]);
+    expect(offered.description).toContain("`reason` is recorded in the heartbeat log next to the scheduled time. That heartbeat doesn't show it to you, so a note for it belongs in `HEARTBEAT.md`.");
+    expect(offered.description).not.toContain("shows it to you");
+    expect(offered.reason).toBe("Why this time. Recorded in the heartbeat log. That heartbeat doesn't show it to you.");
+    at(10);
+    await heartbeat();
+    expect(textOf(script.heartbeats[0] as SidecarRequest)).toContain("PM. You left a note.]");
+    expect(textOf(script.heartbeats[0] as SidecarRequest)).not.toContain("bees");
+
+    await writeFile(join(prompts, "heartbeat.md"), "[Private turn. {{wake_reason}}]");
+    const described = await command("run_tool", { tool: "set_next_wake", describe: true });
+    expect(JSON.stringify(described)).toContain("A note to yourself for that heartbeat");
+    expect(JSON.stringify(described)).toContain("that heartbeat shows it to you when it starts");
+    expect(JSON.stringify(described)).not.toContain("{{");
+    script.heartbeats.length = 0;
+    at(20);
+    await heartbeat();
+    expect(textOf(script.heartbeats[0] as SidecarRequest), "a heartbeat with no reason leaves the macro empty").toContain("[Private turn. ]");
   });
 });

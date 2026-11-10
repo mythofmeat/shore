@@ -18,6 +18,7 @@ export interface HeartbeatSnapshot {
   forced_dormant?: boolean;
   default_wake?: boolean;
   wake_anchor_at?: number;
+  wake_reason?: string;
 }
 
 export class HeartbeatClock {
@@ -33,6 +34,7 @@ export class HeartbeatClock {
   #defaultWake = false;
   #defaultFloor: number | undefined;
   #forcedDormant = false;
+  #wakeReason: string | undefined;
 
   constructor(config: HeartbeatClockConfig, now: number) {
     this.#config = config;
@@ -41,6 +43,10 @@ export class HeartbeatClock {
 
   get nextWakeAt(): number | undefined {
     return this.#nextWakeAt;
+  }
+
+  get wakeReason(): string | undefined {
+    return this.#wakeReason;
   }
 
   get ticksWithoutUser(): number {
@@ -85,6 +91,7 @@ export class HeartbeatClock {
   forceDormant(): void {
     this.#ticksWithoutUser = this.#config.maxIdleTicks;
     this.#nextWakeAt = undefined;
+    this.#wakeReason = undefined;
     this.#forcedDormant = true;
   }
 
@@ -129,19 +136,11 @@ export class HeartbeatClock {
 
     if (now < wakeAt) return "none";
 
-    if (this.#forcedDormant || this.#ticksWithoutUser >= this.#config.maxIdleTicks) {
-      this.#nextWakeAt = undefined;
-      return "none";
-    }
-    if (this.#lastUserAt !== undefined) {
-      if (now - this.#lastUserAt >= this.#config.maxSilentMs) {
-        this.#nextWakeAt = undefined;
-        return "none";
-      }
-    }
+    this.#nextWakeAt = undefined;
+    this.#wakeReason = undefined;
+    if (this.#isAbandoned(now)) return "none";
 
     this.#ticksWithoutUser += 1;
-    this.#nextWakeAt = undefined;
     this.#lastAnchor = now;
     return "run_tick";
   }
@@ -150,9 +149,10 @@ export class HeartbeatClock {
     return Math.min(Math.max(delayMs, this.#config.minIntervalMs), this.#config.maxIntervalMs);
   }
 
-  schedule(when: number, now: number): number {
+  schedule(when: number, now: number, reason = ""): number {
     const clamped = this.#bounded(Math.max(0, when - now));
     this.#nextWakeAt = now + clamped;
+    this.#wakeReason = reason.trim() === "" ? undefined : reason;
     this.#lastAnchor = now;
     this.#defaultWake = false;
     return clamped;
@@ -206,6 +206,7 @@ export class HeartbeatClock {
       this.#lastAnchor = this.#defaultWake && snapshot.wake_anchor_at !== undefined
         ? snapshot.wake_anchor_at
         : snapshot.next_wake_at;
+      this.#wakeReason = this.#defaultWake ? undefined : snapshot.wake_reason;
     }
     if (snapshot.last_user_at !== undefined) {
       this.#lastUserAt = snapshot.last_user_at;
@@ -219,6 +220,7 @@ export class HeartbeatClock {
       last_user_at: this.#lastUserAt,
       ...(this.#forcedDormant ? { forced_dormant: true } : {}),
       ...(this.#defaultWake ? { default_wake: true, wake_anchor_at: this.#lastAnchor } : {}),
+      ...(this.#wakeReason === undefined ? {} : { wake_reason: this.#wakeReason }),
     };
   }
 }

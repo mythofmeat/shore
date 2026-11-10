@@ -259,7 +259,12 @@ export const ALL_TOOLS: readonly ToolDef[] = Object.freeze([
           type: "number",
           description: "Hours from now until the next heartbeat. Fractions are allowed. Clamped to the configured minimum and maximum interval.",
         },
-        reason: { type: "string", description: "Why this time. Recorded in the heartbeat log." },
+        reason: {
+          type: "string",
+          description:
+            "{{#if wake_reason_shown}}A note to yourself for that heartbeat, which shows it to you when it starts. Also recorded in the heartbeat log.{{/if}}" +
+            "{{#if wake_reason_logged}}Why this time. Recorded in the heartbeat log. That heartbeat doesn't show it to you.{{/if}}",
+        },
       },
       required: ["hours_from_now", "reason"],
       additionalProperties: false,
@@ -285,24 +290,38 @@ export function templateVars(charName: string, userName: string): Map<string, st
   ]);
 }
 
-export function toolTemplateVars(cfg: ToolsConfigView, charName: string, userName: string, wakeDefers = false): Map<string, string> {
+export interface WakeToolNotes {
+  readonly defers?: boolean;
+  readonly reasonShown?: boolean;
+}
+
+export function toolTemplateVars(cfg: ToolsConfigView, charName: string, userName: string, wake: WakeToolNotes = {}): Map<string, string> {
   const vars = templateVars(charName, userName);
   for (const tool of availableTools(cfg)) vars.set(tool.name, tool.name);
-  vars.set(wakeDefers ? "wake_defers" : "wake_stays", "yes");
+  vars.set(wake.defers === true ? "wake_defers" : "wake_stays", "yes");
+  vars.set(wake.reasonShown === true ? "wake_reason_shown" : "wake_reason_logged", "yes");
   return vars;
+}
+
+export function renderToolSchema(parameters: Record<string, unknown>, vars: Map<string, string>): Record<string, unknown> {
+  const rendered = Object.entries(parameters["properties"] as Record<string, Record<string, unknown>>).map(([name, schema]) => {
+    const description = schema["description"];
+    return [name, typeof description === "string" ? { ...schema, description: renderTemplate(description, vars) } : schema];
+  });
+  return { ...parameters, properties: Object.fromEntries(rendered) };
 }
 
 export function renderToolDefs(
   cfg: ToolsConfigView,
   charName: string,
   userName: string,
-  wakeDefers = false,
+  wake: WakeToolNotes = {},
 ): ToolDefinition[] {
-  const vars = toolTemplateVars(cfg, charName, userName, wakeDefers);
+  const vars = toolTemplateVars(cfg, charName, userName, wake);
   return availableTools(cfg).map((t) => ({
     name: t.name,
     description: renderTemplate(t.description, vars),
-    input_schema: t.parameters,
+    input_schema: renderToolSchema(t.parameters, vars),
   }));
 }
 

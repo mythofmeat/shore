@@ -33,6 +33,7 @@ export interface AutonomyStateFile {
   readonly forcedDormant?: boolean;
   readonly defaultWake?: boolean;
   readonly wakeAnchorAt?: number;
+  readonly wakeReason?: string;
   readonly coveredTurnCount: number;
   readonly keepalive: PersistedKeepalive | undefined;
   readonly dream?: PersistedDream;
@@ -58,6 +59,7 @@ export function encodeState(state: AutonomyStateFile): string {
       forced_dormant: state.forcedDormant === true,
       default_wake: state.defaultWake === true,
       wake_anchor_at: state.wakeAnchorAt === undefined ? null : toRfc3339(state.wakeAnchorAt),
+      wake_reason: state.wakeReason ?? null,
       covered_turn_count: state.coveredTurnCount,
       keepalive_model: k?.model ?? null,
       keepalive_identity: k?.identity ?? null,
@@ -127,9 +129,11 @@ function dreamField(o: Record<string, unknown>): PersistedDream {
   };
 }
 
-function wakeProvenance(o: Record<string, unknown>): Pick<AutonomyStateFile, "forcedDormant" | "defaultWake" | "wakeAnchorAt"> {
+function wakeProvenance(o: Record<string, unknown>): Pick<AutonomyStateFile, "forcedDormant" | "defaultWake" | "wakeAnchorAt" | "wakeReason"> {
   const wakeAnchorAt = timeField(o["wake_anchor_at"]);
+  const wakeReason = o["wake_reason"];
   return {
+    ...(typeof wakeReason === "string" ? { wakeReason } : {}),
     ...(o["forced_dormant"] === true ? { forcedDormant: true } : {}),
     ...(o["default_wake"] === true ? { defaultWake: true } : {}),
     ...(wakeAnchorAt === undefined ? {} : { wakeAnchorAt }),
