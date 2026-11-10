@@ -316,7 +316,6 @@ export class Workspace {
         const previousSegment = full ? message.previous_segment ?? null : this.#state.previousSegment;
         const moved = previousSegment?.index !== this.#state.previousSegment?.index;
         if (changed) this.#segmentEpoch += 1;
-        if (character !== this.#state.character) this.#unread.clear();
         const sameCharacter = character === this.#state.character;
         const target = this.#state.opening;
         const reached = target !== null && target.character === character && (target.thread === null || target.thread === thread);
