@@ -179,7 +179,7 @@ describe("small pieces of the page", () => {
     expect(randomUUID()).toMatch(/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/);
     const original = Object.getOwnPropertyDescriptor(crypto, "randomUUID");
     Object.defineProperty(crypto, "randomUUID", { value: undefined, configurable: true, writable: true });
-    restores.push(() => { if (original !== undefined) Object.defineProperty(crypto, "randomUUID", original); });
+    restores.push(() => { if (original === undefined) Reflect.deleteProperty(crypto, "randomUUID"); else Object.defineProperty(crypto, "randomUUID", original); });
     const fills = spyOn(crypto, "getRandomValues").mockImplementation(<T extends ArrayBufferView | null>(array: T): T => {
       if (array instanceof Uint8Array) array.fill(0xff);
       return array;

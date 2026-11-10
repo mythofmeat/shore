@@ -52,5 +52,5 @@ export async function renderHook<T, P>(hook: (props: P) => T, initial: P) {
 export function blockStorage(): () => void {
   const original = Object.getOwnPropertyDescriptor(globalThis, "localStorage");
   Object.defineProperty(globalThis, "localStorage", { configurable: true, get: () => { throw new Error("storage is blocked"); } });
-  return () => { if (original !== undefined) Object.defineProperty(globalThis, "localStorage", original); };
+  return () => { if (original === undefined) Reflect.deleteProperty(globalThis, "localStorage"); else Object.defineProperty(globalThis, "localStorage", original); };
 }
