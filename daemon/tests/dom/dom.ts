@@ -1,8 +1,11 @@
-import { afterAll, beforeAll } from "bun:test";
+import { afterAll, afterEach, beforeAll } from "bun:test";
 import { GlobalRegistrator } from "@happy-dom/global-registrator";
 import { act, createElement, type ReactElement } from "react";
 
+const mounted = new Set<() => Promise<void>>();
+
 export function useDom(url = "http://shore.test:7340/"): void {
+  afterEach(async () => { for (const unmount of Array.from(mounted)) await unmount(); });
   beforeAll(() => {
     GlobalRegistrator.register({ url });
     Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true });
@@ -23,10 +26,16 @@ export async function mount(element: ReactElement) {
   document.body.append(host);
   const root = createRoot(host);
   await acting(() => { root.render(element); });
+  const unmount = async () => {
+    if (!mounted.delete(unmount)) return;
+    await acting(() => { root.unmount(); });
+    host.remove();
+  };
+  mounted.add(unmount);
   return {
     host,
     update: async (next: ReactElement) => { await acting(() => { root.render(next); }); },
-    unmount: async () => { await acting(() => { root.unmount(); }); host.remove(); },
+    unmount,
   };
 }
 

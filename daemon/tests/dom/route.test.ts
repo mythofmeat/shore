@@ -7,7 +7,8 @@ useDom("http://shore.test:7340/workspace/ada?x=1#settings/usage");
 const restores: (() => void)[] = [];
 afterEach(() => { for (const restore of restores.splice(0)) restore(); });
 
-async function routes() { return await import("../../src/browser/app/route.ts"); }
+const COPY = "own";
+async function routes() { return await import(`../../src/browser/app/route.ts?${COPY}`) as typeof import("../../src/browser/app/route.ts"); }
 
 async function drain(): Promise<void> {
   await new Promise((resolve) => { setTimeout(resolve, 5); });
