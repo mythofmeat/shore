@@ -13,7 +13,7 @@ import { Diagnostics } from "../src/diagnostics.ts";
 import type { History } from "../src/engine/conversation.ts";
 import { unfoldedDiary } from "../src/autonomy/diary.ts";
 import { heartbeatNewsNote, triggerFiredNote, userWroteNote } from "../src/autonomy/heartbeat_shape.ts";
-import { noteSeen, setPresence } from "../src/autonomy/presence.ts";
+import { lastSeen, noteSeen, setPresence } from "../src/autonomy/presence.ts";
 import { checkFacts, startTriggerTimer, type TriggerService } from "../src/autonomy/trigger_service.ts";
 import { DIARY_FOR_CHAT, DIARY_FOR_HEARTBEAT, diaryText, heartbeatRunningText } from "../src/engine/prompt.ts";
 import { markThreadRead, threadActivityNow } from "../src/engine/threads.ts";
@@ -21,6 +21,7 @@ import type { DiaryNote, Message } from "../src/engine/types.ts";
 import { dispatchCommand } from "../src/handler/commands.ts";
 import { buildCommandPathDeps, buildGenerationDeps } from "../src/handler/deps.ts";
 import { runGeneration } from "../src/handler/generation.ts";
+import { ThreadUnreadTracker } from "../src/handler/thread_unread.ts";
 import type { GenerateResponse, SidecarProvider, SidecarRequest } from "../src/llm/types.ts";
 import { runCompactionPass } from "../src/memory/compaction/run.ts";
 import type { ServerMessage } from "../src/protocol/ServerMessage.ts";
@@ -1513,4 +1514,20 @@ test("a heartbeat starts with the user's status and its age while one is set, an
     await heartbeat();
     expect(textOf(script.heartbeats[0] as SidecarRequest)).not.toContain("User's status");
   }, withTriggers);
+});
+
+test("the user was last seen when they last wrote, or when a client of theirs last marked a thread read, and not when a reply is only asked for again", async () => {
+  await withCharacter(async ({ data, say }) => {
+    expect(lastSeen(data)).toBeUndefined();
+    at(3);
+    await say("hello");
+    expect(lastSeen(data)).toBe(T0 + 3 * MINUTE);
+    at(8);
+    await say("");
+    expect(lastSeen(data)).toBe(T0 + 3 * MINUTE);
+
+    const reads = new ThreadUnreadTracker({ dataDir: data, broadcast: () => {}, now: () => T0 + 20 * MINUTE });
+    reads.markRead("ada", "main", T0 + 15 * MINUTE);
+    expect(lastSeen(data)).toBe(T0 + 20 * MINUTE);
+  });
 });

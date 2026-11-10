@@ -1,6 +1,6 @@
 import { withConversation } from "../engine/lifecycle.ts";
 import { unseenDiary } from "../autonomy/diary.ts";
-import { presence, unshownPresence } from "../autonomy/presence.ts";
+import { noteSeen, presence, unshownPresence } from "../autonomy/presence.ts";
 import type { RunningHeartbeat } from "../autonomy/runner.ts";
 import { characterDataDir, threadDataDir } from "../config/dirs.ts";
 import { isToolResultOnly } from "../engine/message_store.ts";
@@ -300,6 +300,7 @@ async function runGenerationCore(
       ? { cold: false, annotations: {} }
       : await threadArrival(deps, engine, charName, home, resolved, now());
     if (!regen && bodyHasContent(body)) await deps.userBack?.(charName);
+    if (!regen && bodyHasContent(body)) noteSeen(deps.dataDir, Date.parse(now()));
     const diary = unseenDiary(characterDataDir(deps.dataDir, charName), engine.messages(), Date.parse(now()), engine.thread);
     const running = heartbeatNotTold(deps.runningHeartbeat?.(charName), engine.messages());
     const status = unshownPresence(presence(deps.dataDir), engine.messages());
