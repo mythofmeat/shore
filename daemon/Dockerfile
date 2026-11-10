@@ -94,14 +94,32 @@ RUN ln -sf /usr/local/bin/bun /usr/local/bin/bunx \
 
 ###################
 
-COPY daemon/entrypoint.sh /opt/shore/entrypoint
 COPY --from=patch-builder /build/daemon/dist/shore-apply-patch /opt/shore/
 COPY --from=daemon-builder /build/daemon/dist/shore-daemon /build/daemon/dist/shore-claude /opt/shore/
 COPY --from=patch-builder /build/daemon/dist/codex-apply-patch.LICENSE /build/daemon/dist/codex-apply-patch.NOTICE /usr/local/share/licenses/shore/
 COPY --from=daemon-builder /build/daemon/dist/claude-code.LICENSE.md /usr/local/share/licenses/shore/
 
+ARG SHORE_UID=1000
+ARG SHORE_GID=1000
+ARG SHORE_CHARACTER_USERS=""
+RUN groupadd -g "$SHORE_GID" shore \
+    && useradd -M -u "$SHORE_UID" -g shore -d /home/shore -s /bin/sh shore \
+    && install -d -o shore -g shore -m 700 /config /data /cache /home/shore \
+    && install -d -o shore -g shore /workspace \
+    && for entry in $SHORE_CHARACTER_USERS; do \
+        name=${entry%%:*}; uid=${entry#"$name"}; uid=${uid#:}; \
+        groupadd ${uid:+-g "$uid"} "$name" \
+        && useradd -M ${uid:+-u "$uid"} -g "$name" -d "/home/$name" -s /bin/bash "$name" \
+        && usermod -aG "$name" shore \
+        && install -d -o "$name" -g "$name" -m 700 "/home/$name" \
+        && install -d -o "$name" -g "$name" -m 2770 "/workspace/$name" \
+        || exit 1; \
+    done
+
 WORKDIR /workspace
 
+ENV HOME=/home/shore USER=shore LOGNAME=shore
+ENV PATH=/home/shore/.local/bin:/home/shore/.bun/bin:/home/shore/.cargo/bin:$PATH
 ENV SHORE_ADDR=0.0.0.0:7320
 ENV SHORE_WEB_ADDR=0.0.0.0:7340
 ENV SHORE_CONFIG_DIR=/config
@@ -112,5 +130,7 @@ ENV SHORE_WORKSPACE_DIR=/workspace
 EXPOSE 7320
 EXPOSE 7340
 
-ENTRYPOINT ["/usr/bin/tini", "-s", "--", "/opt/shore/entrypoint"]
+ENTRYPOINT ["/usr/bin/tini", "-s", "--", \
+    "setpriv", "--reuid=shore", "--regid=shore", "--init-groups", \
+    "--inh-caps=-all,+setuid,+setgid,+kill", "--ambient-caps=-all,+setuid,+setgid,+kill", "--"]
 CMD ["/opt/shore/shore-daemon"]

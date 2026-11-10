@@ -3,13 +3,14 @@ services:
     build:
       context: .
       dockerfile: daemon/Dockerfile
+      args:
+        SHORE_UID: ${SHORE_UID:-1000}
+        SHORE_GID: ${SHORE_GID:-1000}
+        SHORE_CHARACTER_USERS: ${SHORE_CHARACTER_USERS:-}
     restart: unless-stopped
     stop_grace_period: 30m
     environment:
       TZ: ${TZ:-UTC}
-      SHORE_UID: ${SHORE_UID:-1000}
-      SHORE_GID: ${SHORE_GID:-1000}
-      SHORE_CHARACTER_USERS: ${SHORE_CHARACTER_USERS:-}
     ports:
       - "127.0.0.1:7320:7320"
       - "127.0.0.1:7340:7340"
@@ -27,7 +28,6 @@ services:
       - SETUID
       - SETGID
       - KILL
-      - CHOWN
     security_opt:
       - no-new-privileges:true
 
