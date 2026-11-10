@@ -61,7 +61,7 @@ function open(): Promise<IDBDatabase> {
       if (!stores.contains("attachments")) request.result.createObjectStore("attachments");
       if (!stores.contains("sending")) request.result.createObjectStore("sending", { keyPath: "rid" });
     };
-    request.onerror = () => { database = undefined; reject(request.error ?? new Error("Draft storage unavailable")); };
+    request.onerror = () => { reject(request.error ?? new Error("Draft storage unavailable")); };
     request.onblocked = () => { blocked = true; reject(new Error("Close older Shore tabs to open draft storage")); };
     request.onsuccess = () => {
       const db = request.result;
