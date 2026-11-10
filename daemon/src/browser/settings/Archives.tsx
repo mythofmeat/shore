@@ -4,7 +4,6 @@ import type { WebArchiveList } from "../../protocol/WebArchiveList.ts";
 import type { ChromeSnapshot } from "../workspace.ts";
 import { validWebArchiveInfo, validWebArchiveList } from "../validators.generated.js";
 import { Dialog } from "../ui/controls.tsx";
-import { toasts } from "../ui/toast.tsx";
 import { errorText, workspace } from "../app/state.ts";
 import { SettingsSection } from "./layout.tsx";
 import { formatTime, useAction } from "./shared.tsx";
@@ -21,10 +20,8 @@ async function transfer(path: string, body?: BodyInit, headers?: HeadersInit, si
   return response;
 }
 
-async function archiveInfo(response: Response): Promise<WebArchiveInfo> {
-  const value: unknown = await response.json();
-  if (!validWebArchiveInfo(value)) throw new Error("The daemon sent an unexpected archive response. Reload the page.");
-  return value;
+async function expectArchive(response: Response): Promise<void> {
+  if (!validWebArchiveInfo(await response.json())) throw new Error("The daemon sent an unexpected archive response. Reload the page.");
 }
 
 
@@ -58,7 +55,7 @@ export function ArchivesPage({ state }: { state: ChromeSnapshot }) {
   const [selected, setSelected] = useState(state.character ?? "");
   const [confirm, setConfirm] = useState<WebArchiveInfo>();
   const [error, setError] = useState("");
-  const [version, setVersion] = useState(0);
+  const [version, setVersion] = useState({});
   const upload = useRef<AbortController | null>(null);
   const { busy, run } = useAction();
   const ready = state.status === "ready";
@@ -77,11 +74,11 @@ export function ArchivesPage({ state }: { state: ChromeSnapshot }) {
     void poll();
     return () => { alive = false; clearTimeout(timer); };
   }, [ready, version]);
-  const refresh = () => setVersion((value) => value + 1);
+  const refresh = () => { setVersion({}); };
   const receive = (file: File) => void run(async () => {
     if (listing !== undefined && file.size > listing.max_upload_bytes) throw new Error(`Choose an archive no larger than ${mib(listing.max_upload_bytes)}`);
     const controller = new AbortController(); upload.current = controller;
-    try { await archiveInfo(await transfer("", file, { "content-type": "application/octet-stream", "x-shore-filename": encodeURIComponent(file.name) }, controller.signal)); }
+    try { await expectArchive(await transfer("", file, { "content-type": "application/octet-stream", "x-shore-filename": encodeURIComponent(file.name) }, controller.signal)); }
     finally { upload.current = null; refresh(); }
     return "Uploaded. Import it from the list below.";
   });
@@ -101,7 +98,7 @@ export function ArchivesPage({ state }: { state: ChromeSnapshot }) {
       <div className="rows padded">
         <div className="inline-form wrap">
           <select className="select" aria-label="Character to export" value={selected} onChange={(event) => setSelected(event.target.value)}><option value="">Choose a character</option>{state.characters.map((item) => <option key={item.name} value={item.name}>{item.name}</option>)}</select>
-          <button type="button" className="button primary" disabled={!ready || busy || selected === ""} onClick={() => void run(async () => { await archiveInfo(await transfer("/export", JSON.stringify({ character: selected }), { "content-type": "application/json" })); refresh(); return undefined; })}>Export and download</button>
+          <button type="button" className="button primary" disabled={!ready || busy || selected === ""} onClick={() => void run(async () => { await expectArchive(await transfer("/export", JSON.stringify({ character: selected }), { "content-type": "application/json" })); refresh(); return undefined; })}>Export and download</button>
         </div>
         <label className="button file-button">Upload an archive to import<input type="file" accept=".tar,.tar.gz,.tgz,application/x-tar,application/gzip" disabled={!ready || busy} onChange={(event) => { const file = event.target.files?.[0]; event.target.value = ""; if (file !== undefined) receive(file); }} /></label>
         {upload.current === null ? null : <button type="button" className="button ghost" onClick={() => upload.current?.abort()}>Stop upload</button>}
@@ -123,7 +120,7 @@ export function ArchivesPage({ state }: { state: ChromeSnapshot }) {
     </SettingsSection>
     {confirm === undefined ? null : <Dialog title={`Import ${confirm.filename}?`} close={() => setConfirm(undefined)}>
       <p className="form-text">Existing characters are kept. If a character with the same name exists, the import is rejected.</p>
-      <div className="form-actions"><button type="button" className="button" onClick={() => setConfirm(undefined)}>Cancel</button><button type="button" className="button primary" disabled={busy} onClick={() => { const archive = confirm; setConfirm(undefined); void run(async () => { await archiveInfo(await transfer(`/${archive.id}/import`)); refresh(); await workspace.refreshNavigation().catch((failure: unknown) => toasts.show(errorText(failure), "error")); return undefined; }); }}>Import</button></div>
+      <div className="form-actions"><button type="button" className="button" onClick={() => setConfirm(undefined)}>Cancel</button><button type="button" className="button primary" disabled={busy} onClick={() => { const archive = confirm; setConfirm(undefined); void run(async () => { await expectArchive(await transfer(`/${archive.id}/import`)); refresh(); await workspace.refreshNavigation(); return undefined; }); }}>Import</button></div>
     </Dialog>}
   </>;
 }
