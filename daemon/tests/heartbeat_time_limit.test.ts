@@ -1,5 +1,6 @@
 import { afterAll, afterEach, expect, jest, test } from "bun:test";
 import type { HeartbeatEvent } from "../src/autonomy/heartbeat_log.ts";
+import { wrapUpNudgeText } from "../src/autonomy/heartbeat_shape.ts";
 import type { Message } from "../src/engine/types.ts";
 import type { GenerateResponse, SidecarProvider, SidecarRequest } from "../src/llm/types.ts";
 import { required } from "../src/util/required.ts";
@@ -142,5 +143,18 @@ test("a heartbeat stopped at its 30-minute limit is logged as such, and only the
       expect(told).toContain("Nothing from it was sent");
       expect(instructionsOf(required(opening[2]))).not.toContain("30-minute limit and was stopped");
     },
+  );
+});
+
+test("the wrap-up nudge asks for the closing note, and for set_next_wake only when the heartbeat has that tool", () => {
+  expect(wrapUpNudgeText(4 * MINUTE, 3, true)).toBe(
+    "[System nudge: this heartbeat stops in about 4 minutes or after 3 more rounds, counting this one, whichever comes first. " +
+    "Wrap up now: call set_next_wake if you haven't yet, then finish with your note to yourself, saying where you stopped so future-you can pick it up. " +
+    "Only what you put in <sendMessage> tags is sent.]",
+  );
+  expect(wrapUpNudgeText(30_000, 1, false)).toBe(
+    "[System nudge: this heartbeat stops in less than a minute or after this round, whichever comes first. " +
+    "Wrap up now: finish with your note to yourself, saying where you stopped so future-you can pick it up. " +
+    "Only what you put in <sendMessage> tags is sent.]",
   );
 });

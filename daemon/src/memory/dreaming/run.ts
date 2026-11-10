@@ -4,13 +4,14 @@ import { shoreLog } from "../../log.ts";
 import type { HeartbeatEventKind } from "../../autonomy/heartbeat_log.ts";
 import { runHeartbeatToolLoop, type HeartbeatToolResult, type TranscriptRound } from "../../autonomy/heartbeat_loop.ts";
 import { applyHeartbeatModelOverride, backgroundTaskModel, fallbackIntervalPhrase } from "../../autonomy/heartbeat_request.ts";
+import { foldDiary, unfoldedDiary } from "../../autonomy/diary.ts";
 import type { DreamWindow } from "../../autonomy/runner.ts";
 import { resolveDisplayName, toolPatternMatches, type ToolsConfig } from "../../config/app.ts";
 import { activeJsonlIn, characterDataDir, resolvePromptTemplate, threadDataDir } from "../../config/dirs.ts";
 import { findEffectiveModel } from "../../config/effective_catalog.ts";
 import type { LoadedConfig } from "../../config/loader.ts";
 import { applyBackgroundSettings, configView, resolveChatModelForCharacter } from "../../config/preferences.ts";
-import { formatWallClock } from "../../engine/prompt.ts";
+import { DIARY_FOR_DREAM, diaryText, formatWallClock } from "../../engine/prompt.ts";
 import { heartbeatThread, homeThreadOf, readThreadsIndex, threadChatModel } from "../../engine/threads.ts";
 import type { ContentBlock, Message } from "../../engine/types.ts";
 import { buildChatShapeRequestFromDisk } from "../../handler/context.ts";
@@ -258,9 +259,11 @@ export async function runDreamPass(
     ? undefined
     : dreamStoppedNote({ startedAt: Date.parse(latest.started_at), outcome: latest.outcome, stoppedBy: latest.stopped_by }, timeLimit, timeZone);
   const timestamp = new Date(startedAt).toISOString();
+  const diary = unfoldedDiary(characterDir);
+  const diaryNote = diary.length === 0 ? undefined : diaryText(diary, DIARY_FOR_DREAM, timeZone);
   const messages = [
     note(DREAM_OPENER, timestamp, "user"),
-    note([stoppedNote, rendered].filter((part) => part !== undefined).join("\n\n"), timestamp, "system"),
+    note([stoppedNote, rendered, diaryNote].filter((part) => part !== undefined).join("\n\n"), timestamp, "system"),
   ];
 
   const scoped = dreamConfig(config);
@@ -368,6 +371,7 @@ export async function runDreamPass(
   };
   appendDreamRecord(characterDir, record);
   if (outcome === "finished") forgetWorkspaceReads(characterDir, seenReads);
+  if (outcome === "finished") foldDiary(characterDir, diary.map((entry) => entry.id));
 
   const counts = `${counted(commits.length, "commit")}, ${counted(files.length, "file")}` +
     (pushed === undefined ? "" : pushed ? ", pushed" : ", not pushed");

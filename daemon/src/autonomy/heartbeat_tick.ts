@@ -4,6 +4,7 @@ import { homeThreadOf } from "../engine/threads.ts";
 import { deriveContentFromBlocks } from "../engine/message_store.ts";
 import { shoreLog } from "../log.ts";
 
+import { addDiaryNote, closingNote } from "./diary.ts";
 import { buildAutonomousMessage, sendMessageIn } from "./heartbeat_shape.ts";
 import {
   HEARTBEAT_TIME_LIMIT_MS,
@@ -287,11 +288,17 @@ export async function runHeartbeatTick(
     const workspaceTurns = workspaceTurnsFor(config.dirs, character, workspace);
     const recorder = new WorkspaceRecorder(workspaceTurns);
     const known = new Set(replyVersions(engine.messages()));
+    let closing = "";
     const loop = await runHeartbeatToolLoop(prepared.request, {
       ...deps,
       dispatch: (name, input, toolUseId, tools) => deps.dispatch(name, input, toolUseId, tools, { ...prepared, recordWorkspaceWrite: recorder.track }),
       generate: (request, phase, loopSignal) => deps.generate(request, phase, AbortSignal.any([signal, loopSignal])),
-      persist: async (round) => { await engine.appendMessage(await roundMessage(round, prepared.request, deps, pictures)); },
+      persist: async (round) => {
+        if (round.role === "assistant") {
+          closing = round.blocks.some((block) => block.type === "tool_use") ? "" : round.blocks.flatMap((block) => block.type === "text" ? [block.text] : []).join("");
+        }
+        await engine.appendMessage(await roundMessage(round, prepared.request, deps, pictures));
+      },
       character,
       wrapUpGrace: config.app.behavior.autonomy.heartbeat.wrap_up_grace_rounds,
       maxToolIterations: prepared.maxToolIterations,
@@ -329,6 +336,9 @@ export async function runHeartbeatTick(
         shoreLog.warn(`shore: could not trim the heartbeat thread for ${character}: ${String(error)}`);
       }
     }
+
+    const noted = closingNote(closing);
+    if (noted !== undefined) addDiaryNote(characterDir, { at: deps.now?.() ?? Date.now(), thread, source: "heartbeat", text: noted });
 
     return { events };
   });

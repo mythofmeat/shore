@@ -80,9 +80,10 @@ export function timeLeftPhrase(ms: number): string {
 export function wrapUpNudgeText(msLeft: number, rounds: number, offersWake: boolean): string {
   const stop = rounds === 1 ? "after this round" : `after ${String(rounds)} more rounds, counting this one`;
   return `[System nudge: this heartbeat stops in ${timeLeftPhrase(msLeft)} or ${stop}, whichever comes first. ` +
-    "Wrap up now: note any unfinished work in HEARTBEAT.md so future-you can pick it up, " +
-    (offersWake ? "call set_next_wake if you haven't yet, " : "") +
-    "then either send your message in <sendMessage> tags or reply HEARTBEAT_OK.]";
+    "Wrap up now: " +
+    (offersWake ? "call set_next_wake if you haven't yet, then " : "") +
+    "finish with your note to yourself, saying where you stopped so future-you can pick it up. " +
+    "Only what you put in <sendMessage> tags is sent.]";
 }
 
 export function appendWrapUpNudge(messages: WireMessageLike[], text: string): void {

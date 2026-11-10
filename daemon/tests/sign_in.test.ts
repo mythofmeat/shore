@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, jest, setSystemTime, test } from "bun:test";
 import { Database } from "bun:sqlite";
-import { chmodSync, readdirSync, mkdirSync, mkdtempSync, statSync, writeFileSync } from "node:fs";
+import { chmodSync, readdirSync, readlinkSync, realpathSync, mkdirSync, mkdtempSync, statSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
@@ -223,16 +223,23 @@ describe("what the daemon keeps on disk for browsers", () => {
   });
 
   test("opening the recovery store leaves no file open, and a damaged one is refused and closed", () => {
-    const root = mkdtempSync(join(tmpdir(), "shore-sign-in-damaged-"));
+    const root = realpathSync(mkdtempSync(join(tmpdir(), "shore-sign-in-damaged-")));
     const options = { cacheDir: join(root, "cache"), dataDir: root, token: "t" };
-    const descriptors = () => readdirSync("/proc/self/fd").length;
-    new WebRecovery(options, ORIGIN).close();
-    const open = descriptors();
-    new WebRecovery(options, ORIGIN).close();
-    expect(descriptors()).toBe(open);
-    writeFileSync(join(options.cacheDir, "web", sessionDigest(root), "recovery.sqlite"), "not a database ".repeat(100));
+    const store = join(options.cacheDir, "web", sessionDigest(root), "recovery.sqlite");
+    const openOnTheStore = () => readdirSync("/proc/self/fd").filter((descriptor) => {
+      try {
+        return readlinkSync(`/proc/self/fd/${descriptor}`).startsWith(store);
+      } catch {
+        return false;
+      }
+    }).length;
+    const recovery = new WebRecovery(options, ORIGIN);
+    expect(openOnTheStore()).toBeGreaterThan(0);
+    recovery.close();
+    expect(openOnTheStore()).toBe(0);
+    writeFileSync(store, "not a database ".repeat(100));
     expect(() => new WebRecovery(options, ORIGIN)).toThrow();
-    expect(descriptors()).toBe(open);
+    expect(openOnTheStore()).toBe(0);
   });
 
   test("a sent picture is found only by its content name, never by a path", () => {

@@ -15,7 +15,7 @@ import { resolveDisplayName, toolGrants, type HeartbeatConfig } from "../config/
 import { characterDataDir } from "../config/dirs.ts";
 import { credentialEntry, type ToolConversation } from "../handler/tool_context.ts";
 import { buildChatShapeRequestFromDisk } from "../handler/context.ts";
-import { agoPhrase, formatWallClock } from "../engine/prompt.ts";
+import { agoPhrase, DIARY_FOR_HEARTBEAT, diaryText, formatWallClock } from "../engine/prompt.ts";
 import { readThreadsIndex, threadActivities, threadChatModel } from "../engine/threads.ts";
 import type { Message } from "../engine/types.ts";
 import { hostZone } from "../ledger/zoned.ts";
@@ -23,6 +23,7 @@ import { buildRequestWithProviderKeys } from "../llm/request.ts";
 import { applyDeferredEdits } from "../memory/deferred_edits.ts";
 import { characterWorkspace } from "../tools/character_workspace.ts";
 import type { SidecarRequest } from "../llm/types.ts";
+import { recentDiary } from "./diary.ts";
 import { heartbeatTemplate, renderHeartbeatPrompt } from "./heartbeat_shape.ts";
 import { HEARTBEAT_TIME_LIMIT_MS, HEARTBEAT_WRAP_UP_MS } from "./heartbeat_loop.ts";
 import { HEARTBEAT_OPENER, homeDigest, readHomeThrough, type HomeReader } from "./heartbeat_thread.ts";
@@ -228,6 +229,8 @@ export async function prepareHeartbeatRequest(
   });
   const wrote = await lastWroteNote(config.dirs.data, character, thread, home, userName, nowMs).catch(() => undefined);
   const cutOff = deps.cutOff === undefined ? undefined : cutOffNote(deps.cutOff, userName, timeZone);
+  const recent = recentDiary(characterDir, nowMs);
+  const diary = recent.notes.length === 0 ? undefined : diaryText(recent.notes, DIARY_FOR_HEARTBEAT, timeZone, recent.omitted);
   const newId = deps.newId ?? (() => `m_${crypto.randomUUID()}`);
   const timestamp = new Date(nowMs).toISOString();
   const note = (role: "user" | "system", text: string): Message => ({
@@ -241,7 +244,7 @@ export async function prepareHeartbeatRequest(
     timestamp,
   });
   const opener = note("user", `${HEARTBEAT_OPENER}\n\n${await homeDigest(conversation.homeThread, home, since, userName, timeZone)}`);
-  const instructions = note("system", [cutOff, wrote, rendered].filter((part) => part !== undefined).join("\n\n"));
+  const instructions = note("system", [cutOff, wrote, diary, rendered].filter((part) => part !== undefined).join("\n\n"));
   const messages = [opener, instructions];
 
   let built: Awaited<ReturnType<typeof buildChatShapeRequestFromDisk>>;
