@@ -52,6 +52,16 @@ describe("running an action", () => {
     expect(link.listeners.size, "it stops listening once done").toBe(0);
   });
 
+  test("keeps waiting through the connection's own news", async () => {
+    const link = daemon((_request, rid) => ({ frames: [{ type: "command_output", rid, name: "list_characters", data: characters }], finished: "completed" }));
+    const client = new OperationClient(link.connection);
+    const listing = client.run("list_characters", {});
+    for (const listener of link.listeners) listener({ kind: "status", status: "ready", detail: "" });
+    expect(await listing).toEqual(characters);
+    expect(client.pendingOperation(undefined)).toBeUndefined();
+    expect(client.pendingOperation(null)).toBeUndefined();
+  });
+
   test("refuses arguments the action does not take, before sending anything", async () => {
     let sent = 0;
     const client = new OperationClient(daemon(() => { sent += 1; return { frames: [], finished: "completed" }; }).connection);
@@ -88,14 +98,14 @@ describe("running an action", () => {
       data: {
         tool: "screenshot", character: "ada", kind: "builtin", enabled: true, input: {}, ok: true, rejected: false, duration_ms: 1,
         output: "", truncated: false, result_chars: 0, raw: null, calls: [],
-        images: [picture("/sent.png"), picture("/result.png"), picture("/kept.png", "own"), picture("/unknown.png")],
+        images: [picture("/sent.png"), picture("/result.png"), picture("/kept.png", "own"), picture("/unknown.png"), picture("/no-data.png")],
       },
     });
     const client = new OperationClient(daemon((_request, rid) => ({
       frames: [
         { type: "send_image", rid, path: "/sent.png", data: "from-send" },
         { type: "send_image", rid, path: "/no-data.png" },
-        { type: "tool_result", rid, tool_name: "screenshot", output: "", is_error: false, images: [picture("/result.png", "from-result"), picture("/sent.png", "late"), picture("/bare.png")] },
+        { type: "tool_result", rid, tool_name: "screenshot", output: "", is_error: false, images: [picture("/result.png", "from-result"), picture("/sent.png", "late"), picture("/bare.png"), picture("/no-data.png", "from-result-later")] },
         { type: "tool_result", rid, tool_name: "screenshot", output: "", is_error: false },
         report(rid),
       ],
@@ -103,13 +113,20 @@ describe("running an action", () => {
     })).connection);
     const result = await client.run("run_tool", { tool: "screenshot" });
     expect("images" in result ? result.images?.map((image) => [image.path, image.data]) : []).toEqual([
-      ["/sent.png", "from-send"], ["/result.png", "from-result"], ["/kept.png", "own"], ["/unknown.png", null],
+      ["/sent.png", "from-send"], ["/result.png", "from-result"], ["/kept.png", "own"], ["/unknown.png", null], ["/no-data.png", "from-result-later"],
     ]);
     const other = new OperationClient(daemon((_request, rid) => ({
       frames: [{ type: "send_image", rid, path: "/x.png", data: "ignored" }, { type: "command_output", rid, name: "list_characters", data: characters }],
       finished: "completed",
     })).connection);
     expect(await other.run("list_characters", {}), "only a tool run collects pictures").toEqual(characters);
+    const description = { mode: "tool_definition", tool: "screenshot", kind: "builtin", enabled: true, description: "d", input_schema: {}, images: [{ path: "/x.png" }] };
+    const describing = new OperationClient(daemon((_request, rid) => ({
+      frames: [{ type: "send_image", rid, path: "/x.png", data: "ignored" }, { type: "command_output", rid, name: "run_tool", data: description }],
+      finished: "completed",
+    })).connection);
+    const described: unknown = await describing.run("run_tool", { tool: "screenshot", describe: true });
+    expect(described, "a tool's description is not a run, so its pictures are left alone").toEqual(description);
   });
 });
 

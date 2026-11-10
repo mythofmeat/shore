@@ -16,12 +16,11 @@ function dayKey(date: Date): string {
 }
 
 export function dayLabel(date: Date, now: Date): string {
-  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-  const day = new Date(date.getFullYear(), date.getMonth(), date.getDate());
-  const days = Math.round((today.getTime() - day.getTime()) / 86_400_000);
-  if (days === 0) return "Today";
-  if (days === 1) return "Yesterday";
-  return date.toLocaleDateString(undefined, { weekday: days < 7 ? "long" : undefined, month: "long", day: "numeric", year: date.getFullYear() === now.getFullYear() ? undefined : "numeric" });
+  const day = new Date(date.getFullYear(), date.getMonth(), date.getDate()).getTime();
+  const daysBefore = (count: number) => new Date(now.getFullYear(), now.getMonth(), now.getDate() - count).getTime();
+  if (day === daysBefore(0)) return "Today";
+  if (day === daysBefore(1)) return "Yesterday";
+  return date.toLocaleDateString(undefined, { weekday: day > daysBefore(7) ? "long" : undefined, month: "long", day: "numeric", year: date.getFullYear() === now.getFullYear() ? undefined : "numeric" });
 }
 
 export function timeLabel(timestamp: string): string {
@@ -205,7 +204,7 @@ export interface SwipeState { position: number; count: number; canPrevious: bool
 
 export function swipeState(message: Pick<Message, "alt_index" | "alt_count">): SwipeState {
   const count = Math.max(1, message.alt_count ?? 1);
-  const position = Math.min(count, Math.max(1, (message.alt_index ?? count - 1) + 1));
+  const position = Math.min(count, Math.max(1, (message.alt_index ?? count) + 1));
   return { position, count, canPrevious: position > 1, atLast: position >= count };
 }
 
@@ -225,17 +224,14 @@ export function regenReplaces(messages: readonly Message[], visible: readonly { 
 }
 
 export function compactionPhase(activity: readonly { id: number; type: string; data: unknown }[]): string | null {
-  let phase: { id: number; text: string } | null = null;
-  let finished = -1;
+  let phase: string | null = null;
   for (const item of activity) {
-    const value = item.data !== null && typeof item.data === "object" ? (item.data as { phase?: unknown }).phase : undefined;
-    const name = item.data !== null && typeof item.data === "object" ? (item.data as { name?: unknown }).name : undefined;
-    const rid = item.data !== null && typeof item.data === "object" ? (item.data as { rid?: unknown }).rid : undefined;
-    if (item.type === "phase" && (rid ?? null) === null && typeof value === "string" && value.startsWith("compacting")) phase = { id: item.id, text: value };
-    if (item.type === "command_output" && (name === "compact" || name === "compact_watch" || name === "compact_cancel")) finished = item.id;
+    const fields = item.data !== null && typeof item.data === "object" ? item.data as { phase?: unknown; name?: unknown; rid?: unknown } : {};
+    if (item.type === "phase" && (fields.rid ?? null) === null && typeof fields.phase === "string" && fields.phase.startsWith("compacting")) phase = fields.phase;
+    if (item.type === "command_output" && (fields.name === "compact" || fields.name === "compact_watch" || fields.name === "compact_cancel")) phase = null;
   }
-  if (phase === null || phase.id < finished) return null;
-  const round = /round (\d+)/.exec(phase.text)?.[1];
+  if (phase === null) return null;
+  const round = /round (\d+)/.exec(phase)?.[1];
   return round === undefined || round === "1" ? "Compacting context…" : `Compacting context (round ${round})…`;
 }
 

@@ -42,7 +42,6 @@ const graphemes = new Intl.Segmenter(undefined, { granularity: "grapheme" });
 
 export function notificationBody(text: string): string {
   const trimmed = text.trim();
-  if (trimmed.length <= NOTIFY_BODY_LIMIT) return trimmed;
   const kept: string[] = [];
   for (const { segment } of graphemes.segment(trimmed)) {
     if (kept.length === NOTIFY_BODY_LIMIT) return `${kept.slice(0, -1).join("").trimEnd()}…`;
@@ -78,7 +77,8 @@ export class Notifier {
     try { return this.#storage?.getItem(NOTIFY_KEY) === "true"; } catch { return false; }
   }
   #store(enabled: boolean): boolean {
-    try { this.#storage?.setItem(NOTIFY_KEY, String(enabled)); return true; } catch { return false; }
+    try { this.#storage?.setItem(NOTIFY_KEY, String(enabled)); } catch { return false; }
+    return true;
   }
   #permission(): NotifyPermission {
     return this.#api === null ? "unavailable" : this.#api.permission;

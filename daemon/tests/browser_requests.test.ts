@@ -33,6 +33,8 @@ describe("attachments", () => {
     expect(() => checkAttachments(Array.from({ length: MAX_ATTACHMENTS + 1 }, () => image(1)))).toThrow(`Attach at most ${String(MAX_ATTACHMENTS)} images`);
     expect(() => checkAttachments(Array.from({ length: MAX_ATTACHMENTS }, () => image(1)))).not.toThrow();
     expect(() => checkAttachments([image(1, "a".repeat(MAX_FILENAME_BYTES + 1))])).toThrow("Image filename or media type is too long");
+    expect(() => checkAttachments([image(1, "a".repeat(MAX_FILENAME_BYTES))]), "a name exactly at the limit").not.toThrow();
+    expect(() => checkAttachments([{ ...image(1), mime_type: "x".repeat(MAX_MIME_TYPE_BYTES) }]), "a type exactly at the limit").not.toThrow();
     expect(() => checkAttachments([image(1, "é".repeat(MAX_FILENAME_BYTES / 2 + 1))])).toThrow("Image filename or media type is too long");
     expect(() => checkAttachments([{ ...image(1), mime_type: "x".repeat(MAX_MIME_TYPE_BYTES + 1) }])).toThrow("Image filename or media type is too long");
     expect(() => checkAttachments([{ filename: "a.png", data: "AAAA" }])).not.toThrow();
@@ -77,11 +79,12 @@ function connection() {
     cancel: () => { cancels += 1; },
   };
   const frame = (message: Record<string, unknown>) => { for (const listener of listeners) listener({ kind: "frame", message } as ConnectionUpdate); };
+  const status = () => { for (const listener of listeners) listener({ kind: "status", status: "ready", detail: "" }); };
   const finish = async (rid: string, outcome: RequestFinished["outcome"] = "completed", error?: string) => {
     finishes.get(rid)?.({ rid, outcome, ...(error === undefined ? {} : { error: { code: "provider_error", message: error } }) });
     await Bun.sleep(0);
   };
-  return { fake: fake as unknown as BrowserConnection, submitted, frame, finish, selection, cancels: () => cancels };
+  return { fake: fake as unknown as BrowserConnection, submitted, frame, status, finish, selection, cancels: () => cancels };
 }
 
 describe("a conversation's requests in flight", () => {
@@ -141,6 +144,34 @@ describe("a conversation's requests in flight", () => {
     link.frame({ type: "request_accepted", rid: "r_1" });
     expect(accepted).toBe(1);
     expect(requests.getSnapshot().has("r_1"), "accepted is not finished").toBe(true);
+  });
+
+  test("forget everything about a request once it finishes, so its id can be used again", async () => {
+    const link = connection();
+    const requests = new ConversationRequests(link.fake);
+    let accepted = 0;
+    const first = requests.submit("message", { text: "hi", stream: true, images: [] }, { rid: "again", accepted: () => { accepted += 1; } });
+    link.frame({ type: "stream_start", rid: "again" });
+    expect(requests.awaitingStream()).toBeUndefined();
+    await link.finish("again", "failed");
+    await first;
+    link.frame({ type: "request_accepted", rid: "again" });
+    expect(accepted, "a finished request is not accepted late").toBe(0);
+    void requests.submit("message", { text: "hi", stream: true, images: [] }, { rid: "again" });
+    expect(requests.awaitingStream(), "the new request has not started").toBe("again");
+  });
+
+  test("ignore the connection's own news, and stop telling a listener that left", async () => {
+    const link = connection();
+    const requests = new ConversationRequests(link.fake);
+    let heard = 0;
+    const stop = requests.subscribe(() => { heard += 1; });
+    expect(() => { link.status(); }).not.toThrow();
+    stop();
+    const sending = requests.submit("message", { text: "hi", stream: true, images: [] });
+    await link.finish("r_1");
+    await sending;
+    expect(heard).toBe(0);
   });
 
   test("regenerations are listed until they finish, and pending until their stream starts", async () => {

@@ -1,6 +1,5 @@
 import { describe, expect, test } from "bun:test";
 
-import { MAX_LIVE_MEDIA_CHARS } from "../src/browser/live_limits.ts";
 import { conversationImages, reconcileImages, retainLiveImages, type LiveImage } from "../src/browser/media.ts";
 import { liveTurn } from "../src/browser/workspace.ts";
 import type { ContentBlock } from "../src/protocol/ContentBlock.ts";
@@ -24,7 +23,7 @@ describe("live pictures kept while a reply streams", () => {
     expect(counted.limited).toBe(true);
     expect(retainLiveImages(many.slice(1)).limited).toBe(false);
 
-    const fill = (extra: number): LiveImage => ({ path: "p", manual: true, data: "d".repeat(MAX_LIVE_MEDIA_CHARS - 256 - 1 + extra) });
+    const fill = (extra: number): LiveImage => ({ path: "p", manual: true, data: "d".repeat(16 * 1024 * 1024 - 256 - 1 + extra) });
     expect(retainLiveImages([fill(0)]).items).toHaveLength(1);
     expect(retainLiveImages([fill(1)]).items, "one character over, counting only text fields").toHaveLength(0);
     expect(retainLiveImages([{ path: "a", data: "b" }, fill(-2)]).items).toHaveLength(1);

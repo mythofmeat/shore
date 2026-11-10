@@ -66,11 +66,12 @@ describe("signing in another device", () => {
 
   test("an address typed for a device becomes its origin, on shore's web port unless one is given", () => {
     expect(deviceOrigin("  ")).toBeUndefined();
-    expect(deviceOrigin("desktop.lan")).toBe(`http://desktop.lan:${String(DEFAULT_WEB_PORT)}`);
+    expect(deviceOrigin("desktop.lan")).toBe("http://desktop.lan:7340");
+    expect(DEFAULT_WEB_PORT).toBe(7340);
     expect(deviceOrigin("desktop.lan:8080")).toBe("http://desktop.lan:8080");
     expect(deviceOrigin("https://shore.example.org"), "an explicit scheme keeps its own port").toBe("https://shore.example.org");
     expect(deviceOrigin("HTTP://Desktop.LAN:7340/")).toBe("http://desktop.lan:7340");
-    for (const refused of ["ftp://desktop.lan", "http://user:pass@desktop.lan", "http://desktop.lan/path", "http://desktop.lan/?x=1", "http://desktop.lan/#x", "http://[bad", "ws://desktop.lan"]) {
+    for (const refused of ["ftp://desktop.lan", "http://user:pass@desktop.lan", "http://user@desktop.lan", "http://:pass@desktop.lan", "http://desktop.lan/path", "http://desktop.lan/?x=1", "http://desktop.lan/#x", "http://[bad", "ws://desktop.lan"]) {
       expect(deviceOrigin(refused), refused).toBeUndefined();
     }
   });

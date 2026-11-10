@@ -78,10 +78,21 @@ describe("appearance", () => {
       store.select(fallback as never);
       expect(store.getSnapshot()).toBe(fallback);
       expect(store.error).toContain("will reset on reload");
+      const before = heard;
       stop();
+      store.select(chosen as never);
+      expect(heard, "a listener that left hears nothing").toBe(before);
+      expect(store instanceof ThemeStore ? store.theme : store.size).toBe(chosen);
       const unrooted = new Store(storage(), undefined);
       unrooted.select(chosen as never);
       expect(unrooted.getSnapshot()).toBe(chosen);
+    });
+
+    test(`the ${name} is read from the page's own storage when none is given`, () => {
+      Object.defineProperty(globalThis, "localStorage", { configurable: true, value: storage({ [key]: chosen }) });
+      try { expect(new Store().getSnapshot()).toBe(chosen); } finally { Reflect.deleteProperty(globalThis, "localStorage"); }
+      Object.defineProperty(globalThis, "localStorage", { configurable: true, get: () => { throw new Error("blocked"); } });
+      try { expect(new Store().getSnapshot()).toBe(fallback); } finally { Reflect.deleteProperty(globalThis, "localStorage"); }
     });
   }
 });
@@ -146,6 +157,7 @@ describe("model setting forms", () => {
     expect(modelSettingControl(setting("boolean"))).toEqual({ kind: "boolean" });
     expect(modelSettingControl(setting("duration"))).toEqual({ kind: "string" });
     expect(modelSettingControl(setting("duration_or_off"))).toEqual({ kind: "string" });
+    expect(modelSettingControl(setting("duration", { allow_custom: false })), "a duration is typed, never chosen").toEqual({ kind: "string" });
     expect(modelSettingControl(setting("string"))).toEqual({ kind: "string" });
     expect(modelSettingControl(setting("string", { allow_custom: false, suggestions: ["low"] }))).toEqual({ kind: "string", choices: ["low"] });
     expect(() => modelSettingControl(setting("string", { allow_custom: false }))).toThrow("Missing choices for k");
@@ -177,6 +189,10 @@ describe("small pieces of the page", () => {
 
   test("an id is a version 4 UUID, made by hand where the browser has no generator", () => {
     expect(randomUUID()).toMatch(/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/);
+    restores.push(() => { Reflect.deleteProperty(crypto, "randomUUID"); });
+    Object.defineProperty(crypto, "randomUUID", { value: () => "11111111-2222-4333-8444-555555555555", configurable: true, writable: true });
+    expect(randomUUID(), "the browser's own generator is used when there is one").toBe("11111111-2222-4333-8444-555555555555");
+    Reflect.deleteProperty(crypto, "randomUUID");
     const original = Object.getOwnPropertyDescriptor(crypto, "randomUUID");
     Object.defineProperty(crypto, "randomUUID", { value: undefined, configurable: true, writable: true });
     restores.push(() => { if (original === undefined) Reflect.deleteProperty(crypto, "randomUUID"); else Object.defineProperty(crypto, "randomUUID", original); });
@@ -188,6 +204,11 @@ describe("small pieces of the page", () => {
     expect(randomUUID()).toBe("ffffffff-ffff-4fff-bfff-ffffffffffff");
     fills.mockImplementation(<T extends ArrayBufferView | null>(array: T): T => array);
     expect(randomUUID()).toBe("00000000-0000-4000-8000-000000000000");
+    fills.mockImplementation(<T extends ArrayBufferView | null>(array: T): T => {
+      if (array instanceof Uint8Array) array.forEach((_, index) => { array[index] = index * 17; });
+      return array;
+    });
+    expect(randomUUID(), "each byte keeps its place, with the version and variant set").toBe("00112233-4455-4677-8899-aabbccddeeff");
   });
 
   test("request history comes from the daemon, checked, and says so when it cannot", async () => {
@@ -199,7 +220,10 @@ describe("small pieces of the page", () => {
       return answer;
     }) as typeof fetch);
     restores.push(() => { fetching.mockRestore(); });
+    const deadlines = spyOn(AbortSignal, "timeout");
+    restores.push(() => { deadlines.mockRestore(); });
     expect(await listRequests()).toEqual(list);
+    expect(deadlines.mock.calls.map(([delay]) => delay)).toEqual([10_000]);
     expect(asked[0]?.[0]).toBe("/api/requests/list");
     expect(asked[0]?.[1]).toMatchObject({ method: "POST", credentials: "same-origin", redirect: "error", cache: "no-store" });
     answer = Response.json({ requests: "nope" });

@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 
-import { MAX_ACTIVITY_CHARS, inspectionPreview, recentItems, recentText } from "../src/browser/live_limits.ts";
+import { inspectionPreview, recentItems, recentText } from "../src/browser/live_limits.ts";
 import { assertToolControlCoverage, toolControl, toolNames } from "../src/browser/tool_forms.ts";
 import type { ToolAccessResult } from "../src/protocol/ToolAccessResult.ts";
 
@@ -12,6 +12,9 @@ describe("what a live view keeps of a long stream", () => {
     expect(recentText("ab😀cd", 3), "half an emoji is dropped").toBe("cd");
     expect(recentText("ab😀cd", 4)).toBe("😀cd");
     expect(recentText("\uDC00xy", 2)).toBe("xy");
+    expect(recentText("abcdef", 7), "a text under the limit is whole").toBe("abcdef");
+    expect(recentText("\uDC00x", 2), "a text exactly at the limit is whole, whatever it starts with").toBe("\uDC00x");
+    for (const [code, kept] of [["\uDBFF", "\uDBFFyz"], ["\uDC00", "yz"], ["\uDFFF", "yz"], ["\uE000", "\uE000yz"]] as const) expect(recentText(`x${code}yz`, 3), code).toBe(kept);
   });
 
   test("the most recent items that fit both the count and the size, in order, saying whether any were left out", () => {
@@ -29,18 +32,19 @@ describe("what a live view keeps of a long stream", () => {
     const small = { type: "phase", phase: "x" };
     expect(inspectionPreview(small)).toBe(small);
     expect(inspectionPreview(undefined)).toBeUndefined();
-    const fits = { type: "x", text: "a".repeat(MAX_ACTIVITY_CHARS - 22) };
-    expect(JSON.stringify(fits).length).toBe(MAX_ACTIVITY_CHARS);
+    const fits = { type: "x", text: "a".repeat(64 * 1024 - 22) };
+    expect(JSON.stringify(fits).length).toBe(64 * 1024);
     expect(inspectionPreview(fits)).toBe(fits);
-    const large = { type: "stream_chunk", rid: "r".repeat(300), subagent: "memory", task_id: 7, text: "a".repeat(MAX_ACTIVITY_CHARS) };
+    expect(inspectionPreview({ type: "x", text: "a".repeat(64 * 1024 - 21) })).toMatchObject({ previewLimited: true });
+    const large = { type: "stream_chunk", rid: "r".repeat(300), subagent: "memory", task_id: 7, text: "a".repeat(64 * 1024) };
     const preview = inspectionPreview(large) as Record<string, unknown>;
     expect(preview["type"]).toBe("stream_chunk");
     expect(preview["rid"]).toBe("r".repeat(256));
     expect(preview["subagent"]).toBe("memory");
     expect(preview["task_id"]).toBeUndefined();
     expect(preview["previewLimited"]).toBe(true);
-    expect(preview["preview"]).toBe(JSON.stringify(large).slice(-MAX_ACTIVITY_CHARS));
-    const text = inspectionPreview("b".repeat(MAX_ACTIVITY_CHARS + 5)) as Record<string, unknown>;
+    expect(preview["preview"]).toBe(JSON.stringify(large).slice(-64 * 1024));
+    const text = inspectionPreview("b".repeat(64 * 1024 + 5)) as Record<string, unknown>;
     expect(Object.keys(text).sort()).toEqual(["preview", "previewLimited"]);
   });
 });

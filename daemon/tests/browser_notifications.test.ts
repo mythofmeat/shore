@@ -1,7 +1,9 @@
 import { describe, expect, test } from "bun:test";
 
 import type { ConnectionUpdate } from "../src/browser/connection.ts";
-import { NOTIFY_BODY_LIMIT, NOTIFY_KEY, Notifier, notificationBody, type NotificationApi } from "../src/browser/notifications.ts";
+import { NOTIFY_KEY, Notifier, notificationBody, type NotificationApi } from "../src/browser/notifications.ts";
+
+const LIMIT = 200;
 import type { ImageRef } from "../src/protocol/ImageRef.ts";
 
 interface Shown { title: string; options: { body: string; tag: string; renotify: boolean; icon?: string; image?: string }; closed: number; onclick: (() => void) | null; close(): void }
@@ -44,13 +46,13 @@ const selection = { character: "ada", thread: "main" };
 describe("a notification's text", () => {
   test("is trimmed, and a long one is cut to the limit by whole characters with an ellipsis", () => {
     expect(notificationBody("  hello  ")).toBe("hello");
-    const exact = "a".repeat(NOTIFY_BODY_LIMIT);
+    const exact = "a".repeat(LIMIT);
     expect(notificationBody(exact)).toBe(exact);
-    expect(notificationBody(`${"a".repeat(NOTIFY_BODY_LIMIT)}b`)).toBe(`${"a".repeat(NOTIFY_BODY_LIMIT - 1)}…`);
-    expect(notificationBody(`${"a".repeat(NOTIFY_BODY_LIMIT - 2)} ${"b".repeat(9)}`), "no space before the ellipsis").toBe(`${"a".repeat(NOTIFY_BODY_LIMIT - 2)}…`);
-    const flags = "🇳🇿".repeat(NOTIFY_BODY_LIMIT + 1);
-    expect(notificationBody(flags), "a flag is one character").toBe(`${"🇳🇿".repeat(NOTIFY_BODY_LIMIT - 1)}…`);
-    expect(notificationBody("é".normalize("NFD").repeat(NOTIFY_BODY_LIMIT))).toBe("é".normalize("NFD").repeat(NOTIFY_BODY_LIMIT));
+    expect(notificationBody(`${"a".repeat(LIMIT)}b`)).toBe(`${"a".repeat(LIMIT - 1)}…`);
+    expect(notificationBody(`${"a".repeat(LIMIT - 2)} ${"b".repeat(9)}`), "no space before the ellipsis").toBe(`${"a".repeat(LIMIT - 2)}…`);
+    const flags = "🇳🇿".repeat(LIMIT + 1);
+    expect(notificationBody(flags), "a flag is one character").toBe(`${"🇳🇿".repeat(LIMIT - 1)}…`);
+    expect(notificationBody("é".normalize("NFD").repeat(LIMIT))).toBe("é".normalize("NFD").repeat(LIMIT));
   });
 });
 
@@ -61,6 +63,7 @@ describe("turning notifications on and off", () => {
     const notifier = new Notifier({ storage: saved, api: browser.api, focused: () => false });
     expect(notifier.getSnapshot()).toEqual({ enabled: true, permission: "default", unread: 0 });
     await notifier.enable();
+    expect(saved.values.get(NOTIFY_KEY)).toBe("true");
     expect(browser.requests()).toBe(1);
     expect(notifier.getSnapshot().permission).toBe("granted");
     await notifier.enable();
@@ -181,6 +184,52 @@ describe("what gets a notification", () => {
     notifier.markRead();
     expect([first?.closed, second?.closed, elsewhere?.closed], "a clicked one is not closed again").toEqual([1, 1, 1]);
     expect(notifier.getSnapshot().unread).toBe(0);
+    notifier.markRead();
+    expect(elsewhere?.closed, "a closed one is forgotten").toBe(1);
+  });
+
+  test("clicking an older notification leaves the newer one for its conversation to be closed", () => {
+    const browser = notifications();
+    const notifier = new Notifier({ storage: storage({ [NOTIFY_KEY]: "true" }), api: browser.api, focused: () => false, focusWindow: () => {} });
+    notifier.observe(reply("first"), selection);
+    notifier.observe(reply("second"), selection);
+    const [first, second] = browser.shown;
+    first?.onclick?.();
+    notifier.markRead();
+    expect([first?.closed, second?.closed]).toEqual([1, 1]);
+  });
+
+  test("turning notifications off closes the ones showing", () => {
+    const browser = notifications();
+    const notifier = new Notifier({ storage: storage({ [NOTIFY_KEY]: "true" }), api: browser.api, focused: () => false });
+    notifier.observe(reply("hi"), selection);
+    notifier.disable();
+    expect(browser.shown.map((item) => item.closed)).toEqual([1]);
+  });
+
+  test("by default the page's own focus and window are used, and notifications only in a secure page", () => {
+    const browser = notifications();
+    const scope = globalThis as unknown as Record<string, unknown>;
+    const notifier = new Notifier({ storage: storage({ [NOTIFY_KEY]: "true" }), api: browser.api });
+    notifier.observe(reply("while focused"), selection);
+    expect(notifier.getSnapshot().unread, "with no page to ask, it counts as focused").toBe(0);
+    let focused = 0;
+    Object.assign(scope, { document: { hasFocus: () => false }, focus: () => { focused += 1; }, isSecureContext: true, Notification: browser.api });
+    try {
+      const background = new Notifier({ storage: storage({ [NOTIFY_KEY]: "true" }) });
+      expect(background.getSnapshot().permission).toBe("granted");
+      background.observe(reply("while away"), selection);
+      expect(background.getSnapshot().unread).toBe(1);
+      browser.shown.at(-1)?.onclick?.();
+      expect(focused).toBe(1);
+      scope["isSecureContext"] = false;
+      expect(new Notifier().getSnapshot().permission).toBe("unavailable");
+      scope["isSecureContext"] = true;
+      scope["Notification"] = undefined;
+      expect(new Notifier().getSnapshot().permission).toBe("unavailable");
+    } finally {
+      for (const key of ["document", "focus", "isSecureContext", "Notification"]) Reflect.deleteProperty(scope, key);
+    }
   });
 
   test("listeners hear each change once, and only real changes", () => {

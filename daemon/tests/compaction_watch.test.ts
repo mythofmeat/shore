@@ -76,6 +76,7 @@ describe("trimming a pass's blocks", () => {
     expect(trimmedBlocks([nested], nestedSize - 1).limited).toBe(true);
     const picture: ContentBlock = { type: "image", source: { type: "base64", media_type: "image/png", data: "x".repeat(50) } };
     expect(trimmedBlocks([{ type: "text", text: "ab" }, picture], 2)).toEqual({ blocks: [{ type: "text", text: "ab" }, picture], limited: false });
+    expect(trimmedBlocks([{ type: "text", text: "abc" }, picture], 2), "a picture takes none of the room").toEqual({ blocks: [picture], limited: true });
   });
 });
 

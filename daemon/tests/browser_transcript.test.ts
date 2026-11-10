@@ -63,6 +63,10 @@ describe("dates and times", () => {
     expect(dayLabel(sixDays, now)).toContain(sixDays.toLocaleDateString(undefined, { weekday: "long" }));
     const week = new Date(2026, 10, 3, 12);
     expect(dayLabel(week, now)).toBe(week.toLocaleDateString(undefined, { month: "long", day: "numeric" }));
+    const tomorrow = new Date(2026, 10, 11, 9);
+    expect(dayLabel(tomorrow, now), "a day still to come reads by weekday").toBe(tomorrow.toLocaleDateString(undefined, { weekday: "long", month: "long", day: "numeric" }));
+    expect(dayLabel(new Date(2026, 2, 8, 12), new Date(2026, 2, 9, 0, 30)), "across a clock change").toBe("Yesterday");
+    expect(dayLabel(new Date(2025, 11, 31, 22), new Date(2026, 0, 1, 1)), "across the new year").toBe("Yesterday");
     const lastYear = new Date(2025, 11, 31, 12);
     expect(dayLabel(lastYear, now)).toBe(lastYear.toLocaleDateString(undefined, { month: "long", day: "numeric", year: "numeric" }));
   });
@@ -135,6 +139,7 @@ describe("what a reply shows", () => {
       toolUse("t_2", "bash", "ls"), toolResult("t_2", "plain output"),
       toolResult("t_9", "orphan"),
       toolUse("t_3", "grep"),
+      toolResult("t_8", "failed orphan", true),
     ]);
     expect(views).toEqual([
       { kind: "text", key: "1", text: "hello" },
@@ -145,6 +150,7 @@ describe("what a reply shows", () => {
       { kind: "tool", key: "tool:t_2", id: "t_2", name: "bash", input: "ls", output: "plain output", error: false, images: [] },
       { kind: "tool", key: "10", id: "t_9", name: "tool", input: null, output: "orphan", error: false, images: [] },
       { kind: "tool", key: "tool:t_3", id: "t_3", name: "grep", input: { path: "a.md" }, output: null, error: false, images: [] },
+      { kind: "tool", key: "12", id: "t_8", name: "tool", input: null, output: "failed orphan", error: true, images: [] },
     ]);
   });
 
@@ -165,6 +171,7 @@ describe("what a reply shows", () => {
     const many = step(["read", "bash", "grep", "edit", "write", "read"].map((name, index) => toolUse(`t_${String(index)}`, name)));
     expect(activityHeadline(many, false)).toEqual({ label: "Used 6 tools", detail: "read, bash, grep and 2 more" });
     expect(activityHeadline(step(["a", "b", "c"].map((name) => toolUse(name, name))), false).detail).toBe("a, b, c");
+    expect(activityHeadline(step(["a", "b", "c", "d"].map((name) => toolUse(name, name))), false).detail).toBe("a, b, c and 1 more");
   });
 
   test("a tool's input is summed up by its first text, or its first number, and laid out in full otherwise", () => {
@@ -258,6 +265,8 @@ describe("compaction", () => {
     expect(compactionPhase([output(1, "compact"), phase(2, "compacting")])).toBe("Compacting context…");
     expect(compactionPhase([phase(1, "compacting"), output(2, "status")])).toBe("Compacting context…");
     expect(compactionPhase([{ id: 1, type: "phase", data: "compacting" }, { id: 2, type: "phase", data: { phase: 7 } }])).toBeNull();
+    expect(compactionPhase([phase(1, "compacting"), { id: 2, type: "phase", data: null }, { id: 3, type: "command_output", data: null }]), "nothing to read in an empty frame").toBe("Compacting context…");
+    expect(compactionPhase([phase(1, "compacting"), output(2, "compact"), phase(3, "compacting round 2")]), "a new pass after the last ended").toBe("Compacting context (round 2)…");
   });
 
   const counts = { character: "ada", message_count: 10, turn_count: 5, compacted_turns: 4, tool_rounds: 1, tools_called: [] };

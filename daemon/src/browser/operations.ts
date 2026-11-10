@@ -13,7 +13,7 @@ export class OperationFailure extends Error {
 
 export class OperationClient {
   #requests = new Map<string, OperationName>();
-  pendingOperation(rid: string | null | undefined): OperationName | undefined { return rid === undefined || rid === null ? undefined : this.#requests.get(rid); }
+  pendingOperation(rid: string | null | undefined): OperationName | undefined { return this.#requests.get(rid ?? ""); }
   constructor(readonly connection: BrowserConnection) {}
 
   async run<N extends OperationName>(name: N, input: OperationInput<N>, options: { observe?: (message: ServerMessage) => void } = {}): Promise<OperationResult<N>> {
@@ -42,8 +42,10 @@ export class OperationClient {
       this.#requests.set(rid, name);
       const completion = await ticket.finished;
       if (completion.outcome !== "completed") throw new OperationFailure(name, completion);
-      if (name === "run_tool" && validOperationResult("run_tool", result) && !("mode" in result) && result.images !== undefined) {
-        result = { ...result, images: result.images.map(image => ({ ...image, data: image.data ?? images.get(image.path) ?? null })) };
+      if (name === "run_tool") {
+        if (validOperationResult("run_tool", result) && !("mode" in result) && result.images !== undefined) {
+          result = { ...result, images: result.images.map(image => ({ ...image, data: image.data ?? images.get(image.path) ?? null })) };
+        }
       }
       if (invalid || !received || !validOperationResult(name, result)) throw new Error(`Invalid result for ${name}`);
       return result;

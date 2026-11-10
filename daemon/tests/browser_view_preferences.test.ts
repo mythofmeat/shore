@@ -79,6 +79,17 @@ describe("the display preferences of a tab", () => {
     expect(preferences.getSnapshot().error).toBe("");
   });
 
+  test("once saved, a choice follows what another tab stores, and every reload is told", () => {
+    const saved = storage();
+    const preferences = new DisplayPreferences(saved);
+    preferences.change("thinking", "off");
+    saved.values.set(stored("thinking"), "on");
+    let heard = 0;
+    preferences.subscribe(() => { heard += 1; });
+    preferences.reload();
+    expect([preferences.option("thinking"), heard]).toEqual(["on", 1]);
+  });
+
   test("keep working on defaults when nothing saved can be read, and say so", () => {
     const unreadable = storage({ [stored("tools")]: "garbled" });
     const preferences = new DisplayPreferences(unreadable);

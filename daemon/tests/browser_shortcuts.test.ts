@@ -5,6 +5,10 @@ import { SHORTCUTS, adjacent, globalAction, keyLabel, nextUnread, paletteMatches
 const key = (pressed: string, modifiers: Partial<Omit<KeyInput, "key">> = {}): KeyInput =>
   ({ key: pressed, ctrlKey: false, metaKey: false, altKey: false, shiftKey: false, ...modifiers });
 
+async function macShortcuts(tag: string): Promise<typeof import("../src/browser/app/shortcuts.ts")> {
+  return await import(`../src/browser/app/shortcuts.ts?${tag}`) as typeof import("../src/browser/app/shortcuts.ts");
+}
+
 describe("the shortcut list", () => {
   test("says how to send for the way the box is set to send, and speaks of modes for vim", () => {
     expect(shortcutsFor(true)).toBe(SHORTCUTS);
@@ -77,6 +81,7 @@ describe("moving between threads", () => {
     expect(nextUnread([{ id: "a", unread: 3 }], "a")).toBeUndefined();
     expect(nextUnread([{ id: "a" }, { id: "b", unread: 0 }], "a")).toBeUndefined();
     expect(nextUnread([], null)).toBeUndefined();
+    expect(nextUnread([{ id: "a" }, { id: "b" }, { id: "c", unread: 1 }], null), "with nothing open the last thread is reached too").toBe("c");
   });
 
   test("stepping wraps around both ends, and with nothing current starts from the edge", () => {
@@ -87,6 +92,19 @@ describe("moving between threads", () => {
     expect(adjacent(items, undefined, 1)).toBe("a");
     expect(adjacent(items, undefined, -1), "from before the start").toBe("b");
     expect(adjacent([], "a", 1)).toBeUndefined();
+    expect(adjacent(["only"], "only", 1), "one item steps to itself").toBe("only");
+  });
+
+  test("on a Mac the modifier is Command, from the keyboard and in the labels", async () => {
+    const platform = Object.getOwnPropertyDescriptor(navigator, "platform");
+    Object.defineProperty(navigator, "platform", { configurable: true, value: "MacIntel" });
+    try {
+      const mac = await macShortcuts("mac");
+      expect(mac.keyLabel("Mod")).toBe("⌘");
+      expect([mac.globalAction(key("k", { metaKey: true }), false), mac.globalAction(key("k", { ctrlKey: true }), false)]).toEqual(["palette", undefined]);
+    } finally {
+      if (platform === undefined) Reflect.deleteProperty(navigator, "platform"); else Object.defineProperty(navigator, "platform", platform);
+    }
   });
 });
 

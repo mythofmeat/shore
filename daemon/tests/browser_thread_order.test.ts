@@ -113,6 +113,7 @@ describe("editing a setting", () => {
     expect(configAt("not an object", "chat")).toBeNull();
     expect(configAt({ toString: 1 }, "toString")).toBe(1);
     expect(configAt({}, "toString")).toBeNull();
+    expect(configAt({ chat: "text" }, "chat.length"), "a plain value has no settings inside it").toBeNull();
   });
 
   test("every setting is either editable with a known control or deliberately read-only", () => {
@@ -121,5 +122,6 @@ describe("editing a setting", () => {
     expect(() => { assertSettingsCoverage([entry("a", "list", { item_kind: "string" })], new Set(["array"])); }).toThrow("Missing settings renderer: string");
     expect(() => { assertSettingsCoverage([entry("a", "boolean")], new Set(["string"])); }).toThrow("Missing settings renderer: boolean");
     expect(() => { assertSettingsCoverage([entry("version", "string", { settable: false })], renderers); }).toThrow("Unaccounted read-only setting: version");
+    expect(() => { assertSettingsCoverage([entry("d.<index>.e", "boolean", { settable: false }), entry("m", "map", { settable: false }), entry("l", "list", { settable: false })], new Set()); }).not.toThrow();
   });
 });

@@ -606,18 +606,14 @@ describe("sending requests", () => {
     broken.connection.stop();
   });
 
-  test("a request lost with nobody waiting on it raises no unhandled failure, and the room it took is free again", async () => {
+  test("a request lost with nobody waiting on it raises no unhandled failure", async () => {
     jest.useFakeTimers();
     const link = await ready();
     link.connection.submit({ ...MESSAGE, text: "x".repeat(4000) }, "r_1");
     link.connection.reconnect();
     jest.advanceTimersByTime(0);
     await settle();
-    const socket = link.sockets.at(-1);
-    socket?.fire("open");
-    socket?.receive(HELLO);
-    socket?.receive(HISTORY);
-    expect(() => link.connection.submit({ ...MESSAGE, text: "x".repeat(4000) }, "r_2")).not.toThrow();
+    expect(link.connection.pendingCount).toBe(0);
   });
 });
 
@@ -705,5 +701,118 @@ describe("signing in and out", () => {
     expect(await failure()).toBe("Not here");
     expect(await failure()).toBe("Could not create a sign-in code");
     expect(await failure()).toBe("The daemon sent an unexpected sign-in code. Reload the page.");
+  });
+});
+
+describe("what a connection keeps between attempts", () => {
+  test("a refresh asked for before any connection starts as a first one, and a refresh after stopping connects again", async () => {
+    jest.useFakeTimers();
+    const fresh = rig();
+    fresh.connection.reconnect();
+    expect(fresh.statuses()).toEqual(["reconnecting: Refreshing conversation state"]);
+    jest.advanceTimersByTime(0);
+    await settle();
+    expect(fresh.statuses().at(-1)).toBe("connecting: ");
+    fresh.connection.stop();
+    const before = fresh.calls.length;
+    fresh.connection.reconnect();
+    jest.advanceTimersByTime(0);
+    await settle();
+    expect(fresh.calls.length).toBe(before + 1);
+    fresh.connection.stop();
+  });
+
+  test("each attempt and each loss moves the generation on by one", async () => {
+    const link = rig();
+    expect(link.connection.generation).toBe(0);
+    link.connection.connect();
+    expect(link.connection.generation).toBe(1);
+    link.connection.stop();
+    expect(link.connection.generation).toBe(2);
+    await settle();
+  });
+
+  test("a lost attempt's handshake deadline does not cut short the next attempt", async () => {
+    jest.useFakeTimers();
+    const link = rig({ retryDelayMs: 100, handshakeTimeoutMs: 1000 });
+    link.connection.connect();
+    await settle();
+    jest.advanceTimersByTime(600);
+    link.sockets[0]?.fire("error");
+    jest.advanceTimersByTime(100);
+    await settle();
+    expect(link.sockets).toHaveLength(2);
+    jest.advanceTimersByTime(500);
+    expect(link.statuses().at(-1), "the first attempt's deadline has passed").toBe("reconnecting: ");
+    jest.advanceTimersByTime(499);
+    expect(link.statuses().at(-1)).toBe("reconnecting: ");
+    jest.advanceTimersByTime(1);
+    expect(link.statuses().at(-1)).toBe("reconnecting: Connection setup timed out");
+    link.connection.stop();
+  });
+
+  test("a reconnected daemon that started its revisions over is followed from its new revisions", async () => {
+    jest.useFakeTimers();
+    const link = await ready();
+    const arrived = (revision: number) => ({ type: "new_message", revision, character: "ada", thread: "story", msg_id: `m_${String(revision)}`, role: "user", content: "", images: [], content_blocks: [], timestamp: "2026-11-10T00:00:00Z" });
+    link.socket.receive({ ...HISTORY, revision: 5 });
+    link.socket.receive(arrived(6));
+    link.connection.reconnect();
+    jest.advanceTimersByTime(0);
+    await settle();
+    const socket = link.sockets.at(-1);
+    socket?.fire("open");
+    socket?.receive(HELLO);
+    socket?.receive({ ...HISTORY, revision: 1 });
+    socket?.receive(arrived(2));
+    expect(link.updates.at(-1)).toMatchObject({ kind: "frame", message: { type: "new_message", revision: 2 } });
+    link.connection.stop();
+  });
+
+  test("a renewed session's limits apply to the requests that follow", async () => {
+    jest.useFakeTimers();
+    setSystemTime(new Date("2026-11-10T00:00:00Z"));
+    const link = rig();
+    link.answer("/api/session", () => session({ expires_at: Date.now() + 10_000, max_pending_requests: 1 }), () => session({ max_pending_requests: 3 }));
+    link.connection.connect();
+    await settle();
+    const socket = link.sockets[0];
+    socket?.fire("open");
+    socket?.receive(HELLO);
+    socket?.receive(HISTORY);
+    link.connection.submit(MESSAGE, "r_1");
+    expect(() => link.connection.submit(MESSAGE, "r_2")).toThrow("Wait for a pending request to finish");
+    jest.advanceTimersByTime(5000);
+    await settle();
+    link.connection.submit(MESSAGE, "r_2");
+    link.connection.submit(MESSAGE, "r_3");
+    expect(link.connection.pendingCount).toBe(3);
+    link.connection.stop();
+  });
+
+  test("the whole room a lost request took is free again", async () => {
+    jest.useFakeTimers();
+    const link = await ready();
+    const size = (rid: string, text: string) => new TextEncoder().encode(JSON.stringify({ ...MESSAGE, text, rid })).byteLength;
+    link.connection.submit({ ...MESSAGE, text: "x".repeat(4000) }, "r_1");
+    link.connection.reconnect();
+    jest.advanceTimersByTime(0);
+    await settle();
+    const socket = link.sockets.at(-1);
+    socket?.fire("open");
+    socket?.receive(HELLO);
+    socket?.receive(HISTORY);
+    expect(() => link.connection.submit({ ...MESSAGE, text: "x".repeat(4096 - size("r_2", "")) }, "r_2")).not.toThrow();
+  });
+
+  test("a rejected hello or a missed update passes on nothing after saying so", async () => {
+    jest.useFakeTimers();
+    const doubled = await ready({ retryDelayMs: HOUR });
+    doubled.socket.receive(HELLO);
+    expect(doubled.updates.at(-1)).toEqual({ kind: "status", status: "error", detail: "Unexpected Shore handshake" });
+    const missed = await ready({ retryDelayMs: HOUR });
+    missed.socket.receive({ ...HISTORY, revision: 3, delta: { base_revision: 2, after: null } });
+    expect(missed.updates.at(-1)).toEqual({ kind: "status", status: "reconnecting", detail: "Conversation updates were missed; refreshing state" });
+    missed.connection.stop();
   });
 });

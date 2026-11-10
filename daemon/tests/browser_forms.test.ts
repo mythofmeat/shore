@@ -72,6 +72,13 @@ describe("a schema becomes the control that edits it", () => {
     expect(() => controlFor(looping.$defs.Loop, looping)).toThrow("Recursive action schemas need a dedicated control");
     expect(controlFor({ type: "string" }, {}, 24)).toEqual({ kind: "string" });
     expect(() => controlFor({ type: "string" }, {}, 25)).toThrow("Recursive action schemas need a dedicated control");
+    const nested = (levels: number): unknown => levels === 0 ? { type: "string" } : { type: "array", items: nested(levels - 1) };
+    expect(() => controlFor(nested(24)), "two dozen levels deep from the top").not.toThrow();
+    expect(() => controlFor(nested(25))).toThrow("Recursive action schemas need a dedicated control");
+    expect(() => controlFor({ $ref: "#/$defs/Mode" }, {})).toThrow("Expected a schema object");
+    expect(() => controlFor({ type: "object", propertyNames: "x" })).toThrow("Expected a schema object");
+    expect(() => controlFor({ type: "string", enum: ["a", 1] })).toThrow("Unsupported choice values");
+    expect(() => controlFor({ type: "string", enum: "a" })).toThrow("Unsupported choice values");
   });
 });
 
