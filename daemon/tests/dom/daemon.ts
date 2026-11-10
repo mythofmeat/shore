@@ -5,6 +5,8 @@ import type { BrowserConnection } from "../../src/browser/connection.ts";
 export interface SocketEvent { data?: unknown; code?: number; reason?: string }
 export type Answer = (request: Record<string, unknown>) => unknown;
 
+export const HOLD = Symbol("the daemon has not answered yet");
+
 export const HELLO = { type: "hello", v: 1, server_name: "shore", characters: [{ name: "ada" }] };
 export const HISTORY = { type: "history", messages: [], config: {}, revision: 1, selected_character: "ada", selected_thread: "story" };
 export const LISTING = { character: "ada", threads: [{ id: "story", created_at: "2026-11-01T00:00:00Z", compaction: true, home: true, current: true }], home: "story", current: "story" };
@@ -40,7 +42,7 @@ export class FakeSocket {
       queueMicrotask(() => { this.receive({ type: "request_finished", rid: request["rid"], outcome: "failed", error: { code: "internal_error", message: (error as Error).message } }); });
       return;
     }
-    if (data === undefined) return;
+    if (data === undefined || data === HOLD) return;
     queueMicrotask(() => {
       this.receive({ type: "command_output", rid: request["rid"], name: request["name"], data });
       this.receive({ type: "request_finished", rid: request["rid"], outcome: "completed" });
