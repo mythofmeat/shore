@@ -150,11 +150,9 @@ export class BrowserConnection {
     clearTimeout(this.#handshake);
     clearTimeout(this.#renewal);
     this.#abort?.abort();
-    this.#abort = undefined;
     const socket = this.#socket;
     this.#socket = undefined;
     socket?.close();
-    this.#session = undefined;
     const interrupted = [...this.#pending];
     this.#pending.clear();
     this.#pendingBytes = 0;
@@ -170,7 +168,6 @@ export class BrowserConnection {
   }
 
   async #open(): Promise<void> {
-    if (!this.#wanted) return;
     const generation = ++this.#generation;
     this.#setStatus(this.#retries === 0 ? "connecting" : "reconnecting");
     const controller = new AbortController();
@@ -275,7 +272,7 @@ export class BrowserConnection {
   submit(request: BrowserRequest, rid = randomUUID()): { rid: string; finished: Promise<RequestFinished> } {
     const socket = this.#socket;
     const session = this.#session;
-    if (this.#status !== "ready" || socket === undefined || session === undefined) throw new Error("Wait for Shore to reconnect before sending");
+    if (session === undefined || this.#status !== "ready" || socket === undefined) throw new Error("Wait for Shore to reconnect before sending");
     if (this.#pending.size >= Math.min(session.max_pending_requests, 32)) throw new Error("Wait for a pending request to finish");
     if (!validClientMessage(request)) throw new Error("Invalid conversation request fields");
     if (this.#pending.has(rid)) throw new Error("This request is already in flight");
