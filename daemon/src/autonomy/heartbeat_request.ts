@@ -15,7 +15,7 @@ import { resolveDisplayName, toolGrants, type HeartbeatConfig } from "../config/
 import { characterDataDir } from "../config/dirs.ts";
 import { credentialEntry, type ToolConversation } from "../handler/tool_context.ts";
 import { buildChatShapeRequestFromDisk } from "../handler/context.ts";
-import { agoPhrase, DIARY_FOR_HEARTBEAT, diaryText, formatWallClock } from "../engine/prompt.ts";
+import { agoPhrase, DIARY_FOR_HEARTBEAT, diaryText, formatWallClock, presenceText } from "../engine/prompt.ts";
 import { readThreadsIndex, threadActivities, threadChatModel } from "../engine/threads.ts";
 import type { Message } from "../engine/types.ts";
 import { hostZone } from "../ledger/zoned.ts";
@@ -24,6 +24,7 @@ import { applyDeferredEdits } from "../memory/deferred_edits.ts";
 import { characterWorkspace } from "../tools/character_workspace.ts";
 import type { SidecarRequest } from "../llm/types.ts";
 import { recentDiary } from "./diary.ts";
+import { presence } from "./presence.ts";
 import { heartbeatTemplate, renderHeartbeatPrompt, triggerFiredNote } from "./heartbeat_shape.ts";
 import type { TriggerFiring } from "./runner.ts";
 import { HEARTBEAT_TIME_LIMIT_MS, HEARTBEAT_WRAP_UP_MS } from "./heartbeat_loop.ts";
@@ -247,7 +248,9 @@ export async function prepareHeartbeatRequest(
   });
   const opener = note("user", `${HEARTBEAT_OPENER}\n\n${await homeDigest(conversation.homeThread, home, since, userName, timeZone)}`);
   const fired = (deps.fired ?? []).map((firing) => triggerFiredNote(firing, timeZone));
-  const instructions = note("system", [cutOff, wrote, diary, ...fired, rendered].filter((part) => part !== undefined).join("\n\n"));
+  const set = presence(config.dirs.data);
+  const status = set === undefined || set.status === "" ? undefined : presenceText(set, nowMs, `${userName}'s`);
+  const instructions = note("system", [cutOff, wrote, status, diary, ...fired, rendered].filter((part) => part !== undefined).join("\n\n"));
   const messages = [opener, instructions];
 
   let built: Awaited<ReturnType<typeof buildChatShapeRequestFromDisk>>;

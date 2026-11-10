@@ -147,13 +147,15 @@ test("`when` names something that happens, and the two about the user being away
   expect(whenOf('when = "user_back"\nafter = "8h"')).toEqual({ kind: "event", event: "user_back", afterMs: 8 * HOUR });
   expect(whenOf('when = "user_quiet"\nafter = "36h"')).toEqual({ kind: "event", event: "user_quiet", afterMs: 36 * HOUR });
   expect(whenOf('when = "dream_done"')).toEqual({ kind: "event", event: "dream_done", afterMs: 0 });
+  expect(whenOf('when = "status_changed"')).toEqual({ kind: "event", event: "status_changed", afterMs: 0 });
+  expect(whenOf('when = "status_changed"\nafter = "1h"')).toBe('`t` isn\'t running: `when = "status_changed"` takes no `after`');
   expect(whenOf('when = "user_back"')).toBe('`t` isn\'t running: `when = "user_back"` needs `after`, the least time away that counts');
   expect(whenOf('when = "user_quiet"')).toBe('`t` isn\'t running: `when = "user_quiet"` needs `after`, the least time away that counts');
   expect(whenOf('when = "dream_done"\nafter = "1h"')).toBe('`t` isn\'t running: `when = "dream_done"` takes no `after`');
   expect(whenOf('when = "user_back"\nafter = "later"')).toBe('`t` isn\'t running: `after` must be a length of time in quotes, like "90m" or "6h"');
-  expect(whenOf('when = "wake_done"')).toBe('`t` isn\'t running: `when` must be one of "user_back", "user_quiet", "dream_done"');
-  expect(whenOf('when = "full_moon"')).toBe('`t` isn\'t running: `when` must be one of "user_back", "user_quiet", "dream_done"');
-  expect(whenOf("when = 3")).toBe('`t` isn\'t running: `when` must be one of "user_back", "user_quiet", "dream_done"');
+  expect(whenOf('when = "wake_done"')).toBe('`t` isn\'t running: `when` must be one of "user_back", "user_quiet", "dream_done", "status_changed"');
+  expect(whenOf('when = "full_moon"')).toBe('`t` isn\'t running: `when` must be one of "user_back", "user_quiet", "dream_done", "status_changed"');
+  expect(whenOf("when = 3")).toBe('`t` isn\'t running: `when` must be one of "user_back", "user_quiet", "dream_done", "status_changed"');
 });
 
 test("a trigger wakes the character unless told not to, and has a reason of its own or a check to give one", () => {
@@ -364,6 +366,7 @@ test("the list says when each trigger fires, what it does, and what limits it", 
   expect(shown('when = "user_back"\nafter = "8h"\ncheck = "welcome.sh"\nreason = "They are back."')).toBe("t: when eve comes back after 8h away, if `welcome.sh` prints, arrives with eve's message, \"They are back.\"\n  never fired");
   expect(shown('when = "user_quiet"\nafter = "36h"\nreason = "r"')).toBe('t: when eve has been quiet for 36h, wakes you, "r", at most every 1h\n  never fired');
   expect(shown('when = "dream_done"\nreason = "r"\nwake = false')).toBe('t: after a dream, leaves a diary entry, "r"\n  never fired');
+  expect(shown('when = "status_changed"\nreason = "r"\nwake = false')).toBe('t: when eve changes their status, leaves a diary entry, "r"\n  never fired');
 });
 
 test("the list says when each trigger is next due, how often it has fired, and whether it is off or failing", () => {

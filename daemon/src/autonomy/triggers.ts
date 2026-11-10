@@ -9,7 +9,7 @@ const TRIGGER_NAME = /^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$/;
 
 const SETTINGS = ["every", "at", "on", "when", "after", "follows", "check", "wake", "reason", "cooldown", "between"];
 
-const EVENTS = ["user_back", "user_quiet", "dream_done"] as const;
+const EVENTS = ["user_back", "user_quiet", "dream_done", "status_changed"] as const;
 
 const WEEKDAYS = ["sun", "mon", "tue", "wed", "thu", "fri", "sat"];
 
@@ -90,7 +90,7 @@ function whenOf(raw: Record<string, unknown>): TriggerWhen {
   if (raw["follows"] !== undefined) return { kind: "follows", trigger: text(raw["follows"], "follows") };
   const event = EVENTS.find((each) => each === raw["when"]);
   if (event === undefined) throw new Error(`\`when\` must be one of ${EVENTS.map((each) => `"${each}"`).join(", ")}`);
-  const timed = event !== "dream_done";
+  const timed = event === "user_back" || event === "user_quiet";
   if (timed !== (raw["after"] !== undefined)) {
     throw new Error(timed ? `\`when = "${event}"\` needs \`after\`, the least time away that counts` : `\`when = "${event}"\` takes no \`after\``);
   }

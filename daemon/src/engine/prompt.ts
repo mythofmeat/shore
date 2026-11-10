@@ -349,6 +349,11 @@ function formatTimeMarker(
   return `[${relativeGapPhrase(gapSecs)} · ${timeStr}${elsewhere === undefined ? "" : ` · ${elsewhere}`}]`;
 }
 
+export function presenceText(presence: NonNullable<Message["presence"]>, at: number, whose: string): string {
+  const ago = agoPhrase(gapSeconds(Date.parse(presence.set_at), at));
+  return presence.status === "" ? `[${whose} status was cleared ${ago}.]` : `[${whose} status, set ${ago}: "${presence.status}"]`;
+}
+
 export function heartbeatRunningText(running: NonNullable<Message["heartbeat_running"]>, timeZone: string): string {
   const why = running.reason === undefined ? "" : ` You scheduled it with set_next_wake, giving this reason: ${running.reason}`;
   return `[A heartbeat of yours has been running since ${formatWallClock(Date.parse(running.started_at), timeZone)}. ` +
@@ -421,7 +426,7 @@ function trimMessages(
   timeZone: string,
   imageTier: ImageTier,
 ): PromptMessage[] {
-  const selected: { pm: PromptMessage; ts: string; heartbeat: boolean; elsewhere: Message["last_elsewhere"]; diary: Message["diary"]; running: Message["heartbeat_running"] }[] = [];
+  const selected: { pm: PromptMessage; ts: string; heartbeat: boolean; elsewhere: Message["last_elsewhere"]; diary: Message["diary"]; running: Message["heartbeat_running"]; presence: Message["presence"] }[] = [];
   let usedTokens = 0;
 
   for (let i = messages.length - 1; i >= 0; i--) {
@@ -443,6 +448,7 @@ function trimMessages(
       elsewhere: msg.last_elsewhere,
       diary: msg.diary,
       running: msg.heartbeat_running,
+      presence: msg.presence,
     });
   }
   selected.reverse();
@@ -467,7 +473,7 @@ function trimMessages(
     return pm;
   };
 
-  for (const { pm, ts, heartbeat, elsewhere, diary, running } of selected) {
+  for (const { pm, ts, heartbeat, elsewhere, diary, running, presence } of selected) {
     const currentMs = parseRfc3339(ts);
 
     if (heartbeat) result.push(noticed(syntheticUserTurn(heartbeatMarker(currentMs, mode, timeZone))));
@@ -502,6 +508,12 @@ function trimMessages(
         lastMarkerMs = currentMs;
       }
       firstUserPending = false;
+    }
+
+    if (presence !== undefined && currentMs !== undefined) {
+      const text = presenceText(presence, currentMs, "Their");
+      pm.content = `${text}\n\n${pm.content}`;
+      pm.content_blocks = [{ type: "text", text }, ...pm.content_blocks];
     }
 
     if (running !== undefined) {
