@@ -43,9 +43,8 @@ test("a status the daemon refuses is shown to the user as an error", async () =>
   const busy = [...view.host.querySelectorAll<HTMLButtonElement>("[role=menuitem]")].find((item) => item.textContent === "busy");
   await acting(() => { busy?.click(); });
   await settle();
-  const alert = view.host.querySelector(".toast.error");
-  expect(alert?.getAttribute("role")).toBe("alert");
-  expect(alert?.textContent).toContain("isn't one of your statuses");
+  const refusals = [...view.host.querySelectorAll(".toast.error")].filter((toast) => toast.textContent.includes("isn't one of your statuses"));
+  expect(refusals.map((toast) => toast.getAttribute("role"))).toEqual(["alert"]);
   expect(chip?.textContent).toBe("Set status");
   await acting(() => { for (const shown of toasts.getSnapshot()) toasts.dismiss(shown.id); });
 });
