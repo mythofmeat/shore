@@ -678,6 +678,8 @@ test("what a heartbeat says at the end, apart from the message it sends, is the 
     at(70);
     await heartbeat();
     expect(textOf(script.heartbeats[0] as SidecarRequest)).toContain(`in your home thread "main".]\n\n${diary}\n\n[Current time: `);
+    expect(diary).toStartWith("[Your diary from the last day. Each entry says where it came from.]\n\nyour note at the end of a heartbeat · ");
+    expect(diary).toEndWith("\nRead the keeper's log up to March.\n\n[End of your diary.]");
 
     script.heartbeats.length = 0;
     script.aside = undefined;

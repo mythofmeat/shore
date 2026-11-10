@@ -40,13 +40,13 @@ const HEARTBEAT_THREAD_TEMPLATE = heartbeatThreadTemplate.trimEnd();
 const THREAD_FILES_HEADER =
   "Files kept in this thread's prompt. Changes to them show up here after a long pause in this thread, or after it compacts.";
 
-export const DIARY_FOR_HEARTBEAT = "Your diary from the last day: the notes you left yourself at the end of your own turns.";
+export const DIARY_FOR_HEARTBEAT = "Your diary from the last day. Each entry says where it came from.";
 
-export const DIARY_FOR_CHAT = "New in your diary: notes you left yourself at the end of your own turns elsewhere.";
+export const DIARY_FOR_CHAT = "New in your diary. Each entry says where it came from.";
 
 export const DIARY_FOR_DREAM =
-  "Your diary since your last dream: the notes you left yourself at the end of your own turns. " +
-  "Fold what matters into your files, because once this dream finishes, later dreams aren't shown these notes.";
+  "Your diary since your last dream. Each entry says where it came from. " +
+  "Fold what matters into your files, because once this dream finishes, later dreams aren't shown these entries.";
 
 const DIARY_END = "[End of your diary.]";
 
@@ -350,8 +350,8 @@ function formatTimeMarker(
 }
 
 export function diaryText(notes: readonly DiaryNote[], heading: string, timeZone: string, omitted = 0): string {
-  const left = omitted === 0 ? [] : [`(Earlier notes not shown: ${String(omitted)}.)`];
-  const shown = notes.map((note) => `from a heartbeat · ${formatWallClock(Date.parse(note.at), timeZone)}\n${note.text}`);
+  const left = omitted === 0 ? [] : [`(Earlier entries not shown: ${String(omitted)}.)`];
+  const shown = notes.map((note) => `your note at the end of a heartbeat · ${formatWallClock(Date.parse(note.at), timeZone)}\n${note.text}`);
   return [`[${heading}]`, ...left, ...shown, DIARY_END].join("\n\n");
 }
 

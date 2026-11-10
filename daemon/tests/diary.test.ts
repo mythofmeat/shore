@@ -149,14 +149,14 @@ test("the diary is written out with a heading, each note under where and when it
 
   expect(diaryText(notes, "Your diary.", "UTC")).toBe([
     "[Your diary.]",
-    "from a heartbeat · Friday 2026-10-30 · 12:00 PM\nThe lamp is lit.",
-    "from a heartbeat · Friday 2026-10-30 · 1:30 PM\nThe log is read.\nMarch is next.",
+    "your note at the end of a heartbeat · Friday 2026-10-30 · 12:00 PM\nThe lamp is lit.",
+    "your note at the end of a heartbeat · Friday 2026-10-30 · 1:30 PM\nThe log is read.\nMarch is next.",
     "[End of your diary.]",
   ].join("\n\n"));
   expect(diaryText(notes.slice(1), "Your diary.", "Australia/Sydney", 3)).toBe([
     "[Your diary.]",
-    "(Earlier notes not shown: 3.)",
-    "from a heartbeat · Saturday 2026-10-31 · 12:30 AM\nThe log is read.\nMarch is next.",
+    "(Earlier entries not shown: 3.)",
+    "your note at the end of a heartbeat · Saturday 2026-10-31 · 12:30 AM\nThe log is read.\nMarch is next.",
     "[End of your diary.]",
   ].join("\n\n"));
 });
@@ -180,7 +180,7 @@ test("a message that arrived with diary notes carries them ahead of what the use
     ],
   }, "UTC");
 
-  expect(block).toStartWith("[New in your diary: notes you left yourself at the end of your own turns elsewhere.]\n\nfrom a heartbeat");
+  expect(block).toBe("[New in your diary. Each entry says where it came from.]\n\nyour note at the end of a heartbeat · Friday 2026-10-30 · 12:00 PM\nThe lamp is lit.\n\n[End of your diary.]");
   expect(prompt.messages.map((message) => message.content)).toEqual([`${block}\n\ngood morning`, "morning!", "is the lamp lit?"]);
   expect(prompt.messages.map((message) => message.content_blocks)).toEqual([
     [{ type: "text", text: block }, { type: "text", text: "good morning" }],
