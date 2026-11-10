@@ -1359,3 +1359,81 @@ test("the character can list its triggers from a conversation, and is told when 
     });
   }, (app) => { app.tools.enabled_tools = [...app.tools.enabled_tools, "list_triggers"]; });
 });
+
+test("the character's push reaches the user's topic once, at normal priority, and a second one the same day is refused", async () => {
+  const pushed: { path: string; method: string; title: string | null; auth: string | null; priority: string | null; body: string }[] = [];
+  const ntfy = Bun.serve({
+    port: 0,
+    fetch: async (request) => {
+      pushed.push({
+        path: new URL(request.url).pathname, method: request.method, title: request.headers.get("title"),
+        auth: request.headers.get("authorization"), priority: request.headers.get("priority"), body: await request.text(),
+      });
+      return new Response("ok");
+    },
+  });
+  try {
+    await withCharacter(async ({ script, say, thread }) => {
+      const result = async (): Promise<{ text: string; failed: boolean }> => {
+        const last = lastToolResult(await thread("main"));
+        return { text: String(last?.text), failed: last?.failed === true };
+      };
+      await say("hello");
+      script.replyTool = { name: "send_push", input: { message: "  I miss you.  " } };
+      at(5);
+      await say("you can reach my phone now");
+      expect(await result()).toEqual({ text: "Sent to peggy's phone. The next push is allowed from Saturday 2026-10-31 · 12:05 PM.", failed: false });
+      expect(pushed).toEqual([{ path: "/phone", method: "POST", title: "Shore - ada", auth: "Bearer fixture-key", priority: null, body: "I miss you." }]);
+
+      script.replyTool = { name: "send_push", input: { message: "Still here." } };
+      at(65);
+      await say("try again");
+      expect(await result()).toMatchObject({ failed: true });
+      expect((await result()).text).toContain("not sent: your last push was Friday 2026-10-30 · 12:05 PM, and the next one is allowed from Saturday 2026-10-31 · 12:05 PM");
+      expect(pushed).toHaveLength(1);
+
+      for (const input of [{ message: "   " }, { message: "" }, { message: "Hello.", loud: true }]) {
+        script.replyTool = { name: "send_push", input };
+        await say("and again");
+        expect(await result(), JSON.stringify(input)).toMatchObject({ failed: true });
+      }
+      script.replyTool = { name: "send_push", input: { message: "   " } };
+      await say("once more");
+      expect((await result()).text).toContain("message must be a non-empty string");
+      expect(pushed).toHaveLength(1);
+    }, (app) => {
+      app.tools.enabled_tools = [...app.tools.enabled_tools, "send_push"];
+      app.notifications.push_topic = "phone";
+      app.notifications.ntfy.url = `http://127.0.0.1:${String(ntfy.port)}`;
+      app.notifications.token_env = KEY_ENV;
+    });
+
+    await withCharacter(async ({ script, say, thread }) => {
+      await say("hello");
+      script.replyTool = { name: "send_push", input: { message: "I miss you." } };
+      await say("can you reach my phone?");
+      const last = lastToolResult(await thread("main"));
+      expect(last?.failed).toBe(true);
+      expect(String(last?.text)).toContain("push notifications aren't set up: peggy hasn't given Shore a topic to send them to");
+      expect(pushed).toHaveLength(1);
+    }, (app) => { app.tools.enabled_tools = [...app.tools.enabled_tools, "send_push"]; });
+
+    await withCharacter(async ({ script, say, thread }) => {
+      await say("hello");
+      script.replyTool = { name: "send_push", input: { message: "Hello.", loud: true } };
+      await say("loudly");
+      expect(lastToolResult(await thread("main"))?.failed).toBe(true);
+      expect(pushed).toHaveLength(1);
+      script.replyTool = { name: "send_push", input: { message: "!" } };
+      await say("briefly");
+      expect(lastToolResult(await thread("main"))?.failed).toBe(false);
+      expect(pushed.map((each) => each.body)).toEqual(["I miss you.", "!"]);
+    }, (app) => {
+      app.tools.enabled_tools = [...app.tools.enabled_tools, "send_push"];
+      app.notifications.push_topic = "phone";
+      app.notifications.ntfy.url = `http://127.0.0.1:${String(ntfy.port)}`;
+    });
+  } finally {
+    await ntfy.stop(true);
+  }
+});

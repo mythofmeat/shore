@@ -298,6 +298,8 @@ function describeOption(path: readonly string[]): string {
     allow_compaction: "Allow compaction to exceed this budget's ceiling.",
     warn_fractions: "Budget fractions that trigger warnings (0.9 means 90%).",
     pace_warn_fractions: "Pacing fractions that trigger warnings.",
+    push_topic: "ntfy topic the character's send_push tool sends to, on the server in notifications.url. Give it a topic of its own, apart from notifications.topic. Unset means the character can't push.",
+    push_every: "Least time between two pushes from the character's send_push tool. Defaults to 1d.",
   };
   return descriptions[leaf] ?? `${leaf.replaceAll("_", " ")} for ${path[0]}.`;
 }

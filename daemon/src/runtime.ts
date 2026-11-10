@@ -28,6 +28,7 @@ import {
   rustJoin,
   threadDataDir,
   MAIN_THREAD,
+  characterDataDir,
 } from "./config/dirs.ts";
 import { HISTORY_DB_FILE } from "./engine/history_store.ts";
 import { mcpBearerToken, type McpServerConfig } from "./config/app.ts";
@@ -61,7 +62,8 @@ import type { SidecarProvider, SidecarRequest } from "./llm/types.ts";
 import { installWireCapture } from "./llm/wire_capture.ts";
 import { prefixFingerprint } from "./cache/keepalive.ts";
 import { McpClient, type McpServerSpec } from "./mcp/client.ts";
-import { NotificationService, type NotificationPicture } from "./notifications.ts";
+import { NotificationService, realSink, type NotificationPicture } from "./notifications.ts";
+import { pushToUser } from "./autonomy/push.ts";
 import {
   McpRegistry,
   type McpRegistryOptions,
@@ -488,6 +490,16 @@ export function sharedToolDeps(
 ): ToolContextDeps {
   return {
     ...(triggers === undefined ? {} : { triggersView: (character: string) => triggers.view(character) }),
+    push: async (character, message) => {
+      const notifications = (subagent?.registry.effectiveConfig(character) ?? config).app.notifications;
+      const env = subagent?.env ?? process.env;
+      return await pushToUser(characterDataDir(config.dirs.data, character), `Shore - ${character}`, message, {
+        url: notifications.ntfy.url,
+        topic: notifications.push_topic,
+        token: notifications.token_env === undefined ? "" : env[notifications.token_env] ?? "",
+        everyMs: notifications.push_every.asMillis(),
+      }, Date.now(), async (delivery, title, body) => { await realSink.ntfy(delivery, title, body); });
+    },
     activityStats: (character, days) => {
       const report = autonomy.activityStats(character, localWallClock(Date.now()), days);
       return report === undefined

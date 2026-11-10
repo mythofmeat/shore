@@ -1033,6 +1033,8 @@ export interface NotificationsConfig {
   command: string[];
   generation_threshold: ConfigDuration;
   events: NotificationEventsConfig;
+  push_topic: string;
+  push_every: ConfigDuration;
 }
 
 export const defaultNotificationsConfig = (): NotificationsConfig => ({
@@ -1042,6 +1044,8 @@ export const defaultNotificationsConfig = (): NotificationsConfig => ({
   command: [],
   generation_threshold: ConfigDuration.fromSecs(0),
   events: defaultNotificationEvents(),
+  push_topic: "",
+  push_every: ConfigDuration.fromSecs(86_400),
 });
 
 const NOTIFICATIONS: StructSpec<NotificationsConfig> = {
@@ -1055,6 +1059,8 @@ const NOTIFICATIONS: StructSpec<NotificationsConfig> = {
     command: readStringSeq,
     generation_threshold: readDuration,
     events: struct(NOTIFICATION_EVENTS),
+    push_topic: readString,
+    push_every: readDuration,
   },
 };
 
