@@ -33,8 +33,7 @@ function targetKey(target: Inspect): string {
 
 function display(value: unknown): string {
   if (value === null || value === undefined) return "—";
-  if (typeof value === "string" || typeof value === "number" || typeof value === "boolean") return String(value);
-  return JSON.stringify(value);
+  return typeof value === "string" ? value : JSON.stringify(value);
 }
 
 function ModelDetails({ info }: { info: ModelInfoResult }) {
@@ -73,7 +72,7 @@ function SamplerRow({ entry, detail, scope, target, saved }: { entry: ModelSetti
     setScopes([own === undefined ? `Not set for ${detail.applies_to ?? "this character"}` : `Set for this character: ${display(own)}`, global === undefined ? "not set for all characters" : `set for all characters: ${display(global)}`, `in effect: ${display(result.effective_sampler[entry.key])}`, result.scopes[entry.key] === null || result.scopes[entry.key] === undefined ? "" : `from ${String(result.scopes[entry.key])}`].filter(Boolean).join("; "));
     return undefined;
   });
-  const note = entry.applicability === "ignored" ? "This provider ignores this setting." : entry.applicability === "rejected" ? "This provider rejects this setting." : `Current value: ${display(effective)}`;
+  const note = entry.applicability === "ignored" ? "This provider ignores this setting." : `Current value: ${display(effective)}`;
   return <SettingRow label={fieldLabel(entry.key)} description={scopes ?? note}>
     <Field control={control} value={value} change={setValue} label={fieldLabel(entry.key)} id={`sampler-${entry.key}`} />
     <button type="button" className="button" disabled={busy || JSON.stringify(value) === JSON.stringify(stored)} onClick={() => void save(value)}>Save</button>
@@ -84,7 +83,7 @@ function SamplerRow({ entry, detail, scope, target, saved }: { entry: ModelSetti
 
 function ModelSettings({ target, state }: { target: ModelTarget; state: ChromeSnapshot }) {
   const [scope, setScope] = useState<ModelPreferenceScope>("character");
-  const [version, setVersion] = useState(0);
+  const [version, setVersion] = useState({});
   const { data, error } = useOperation(state, "model_settings", targetArgs(target), [targetKey(target), version]);
   const detail = data !== undefined && "setting_schema" in data ? data : undefined;
   return <SettingsSection title={detail === undefined ? "Model settings" : `Settings for ${shortModel(detail.model)}`} description="Sampler and provider options. Empty fields use the model’s configured value."
@@ -94,7 +93,7 @@ function ModelSettings({ target, state }: { target: ModelTarget; state: ChromeSn
     </div>}>
     {error === "" ? null : <p className="form-error" role="alert">{error}</p>}
     {detail === undefined ? error === "" ? <Spinner label="Loading model settings" /> : null : <div className="rows">
-      {detail.setting_schema.filter((entry) => entry.applicability !== "rejected").map((entry) => <SamplerRow key={`${entry.key}:${scope}`} entry={entry} detail={detail} scope={scope} target={target} saved={() => setVersion((value) => value + 1)} />)}
+      {detail.setting_schema.filter((entry) => entry.applicability !== "rejected").map((entry) => <SamplerRow key={`${entry.key}:${scope}`} entry={entry} detail={detail} scope={scope} target={target} saved={() => { setVersion({}); }} />)}
     </div>}
   </SettingsSection>;
 }
