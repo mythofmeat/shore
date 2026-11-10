@@ -109,6 +109,7 @@ export async function runToolUse(
     };
   }
 
+  const maxResultChars = resultCharsFor(exec.limits, toolUse.name);
   let rawOutput: string;
   let isError: boolean;
   let okValue: unknown;
@@ -117,7 +118,7 @@ export async function runToolUse(
     const dispatch = async () => await dispatchWithinDeadline(
       toolUse.name,
       toolUse.input,
-      { ...exec.ctx, toolUseId: toolUse.id, maxResultChars: resultCharsFor(exec.limits, toolUse.name), maxInlineImageBytes: inlineImageBytesFor(exec.limits, toolUse.name) },
+      { ...exec.ctx, toolUseId: toolUse.id, maxResultChars, maxInlineImageBytes: inlineImageBytesFor(exec.limits, toolUse.name) },
       timeoutFor(exec.limits, toolUse.name),
     );
     const record = exec.ctx.recordWorkspaceWrite;
@@ -133,7 +134,7 @@ export async function runToolUse(
   }
   const dispatchMs = clock() - startedAt;
 
-  const windowed = windowToolResult(rawOutput, resultCharsFor(exec.limits, toolUse.name));
+  const windowed = windowToolResult(rawOutput, maxResultChars);
   const attached = await attachToolMedia(payload, exec, toolUse);
   isError ||= attached.failed;
   const content = toolResultContent(windowed, [...(payload?.notes ?? []), ...attached.notes], attached.placed);

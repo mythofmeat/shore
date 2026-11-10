@@ -17,7 +17,7 @@ import {
 } from "./character_user.ts";
 import { helperCommand, WorkspaceHelper } from "./workspace_helper.ts";
 import { WORKSPACE_OPS, type OpArgs, type OpResult, type WorkspaceOp } from "./workspace_ops.ts";
-import { envWithoutInheritedGitRepo, runProcess, type ProcessOutput } from "./process.ts";
+import { envWithoutInheritedGitRepo, runProcess, type ProcessOutput, type ProcessStreams } from "./process.ts";
 
 export interface CharacterTools {
   readonly user: string | undefined;
@@ -30,6 +30,7 @@ export interface CharacterRunOptions {
   stdin?: string | undefined;
   env?: Readonly<Record<string, string | undefined>> | undefined;
   signal?: AbortSignal | undefined;
+  stopped?: ((output: ProcessStreams) => void) | undefined;
 }
 
 interface Launch {
@@ -97,7 +98,7 @@ export class CharacterWorkspace {
 
   async run(program: string, args: readonly string[], options: CharacterRunOptions = {}): Promise<ProcessOutput> {
     const launch = await this.#launch(program, args, options);
-    return await runProcess(launch.command, launch.args, { cwd: launch.cwd, env: launch.env, stdin: options.stdin, signal: options.signal });
+    return await runProcess(launch.command, launch.args, { cwd: launch.cwd, env: launch.env, stdin: options.stdin, signal: options.signal, stopped: options.stopped });
   }
 
   async spawn(program: string, args: readonly string[], options: Pick<CharacterRunOptions, "cwd" | "env"> = {}): Promise<ChildProcessWithoutNullStreams> {

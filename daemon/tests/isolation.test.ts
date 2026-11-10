@@ -196,7 +196,7 @@ describe.skipIf(!READY)("a character whose tools run as its own user", () => {
   test("a timeout stops the character's command", async () => {
     const workspace = await freshWorkspace();
     const outcome = await failure(dispatchWithinDeadline("bash", { command: "echo $$ > pid; exec sleep 30" }, await context(workspace), 1_000));
-    expect(outcome).toBe("timed out after 1s and was cancelled");
+    expect(outcome).toBe("timed out after 1s and was cancelled\nIt printed nothing before it was stopped.");
     const pid = Number(readFileSync(join(workspace.dir, "pid"), "utf8"));
     expect(() => process.kill(pid, 0)).toThrow();
   });

@@ -41,11 +41,12 @@ import {
 } from "./agent_sessions.ts";
 import type { ContentBlock } from "../../engine/types.ts";
 import { compareByCodePoint } from "../../util/sort.ts";
-import { SHORE_MCP_SERVER, ToolNames, shoreToolServer } from "./claude_agent_tools.ts";
+import { MCP_RESULT_CEILING_CHARS, SHORE_MCP_SERVER, ToolNames, shoreToolServer } from "./claude_agent_tools.ts";
 import { claudeCodeLaunchFailure, claudeCodeOptions } from "./claude_code.ts";
 import { nativeHistoryStore, seedNativeHistory, throwawayHistoryStore } from "./claude_agent_history.ts";
 import { anchorKeys, contextFilterEnvironment, resultAnchor, type SystemNote } from "./claude_agent_injections.ts";
 import { currentWireScope } from "../wire_capture.ts";
+import { withResultCeiling } from "../../tools/dispatch.ts";
 import type { ToolPhase } from "../../tools/execute.ts";
 import { budgetBlockFor } from "../../ledger/gate.ts";
 import {
@@ -360,6 +361,7 @@ export function claudeAgentEnvironment(baseUrl?: string, apiKey = "", configDir?
     CLAUDE_CODE_DISABLE_GIT_INSTRUCTIONS: "1",
     CLAUDE_CODE_DISABLE_REFUSAL_RETRY: "1",
     CLAUDE_CODE_DISABLE_REFUSAL_FALLBACK: "1",
+    CLAUDE_CODE_MAX_MCP_DESCRIPTION_LENGTH: "1000000",
     CLAUDE_SECURESTORAGE_CONFIG_DIR:
       configDir ?? process.env.CLAUDE_SECURESTORAGE_CONFIG_DIR ?? process.env.CLAUDE_CONFIG_DIR ?? "",
   };
@@ -1131,7 +1133,7 @@ class RoundLog {
         !this.#claimed.has(block.id));
       if (use?.type !== "tool_use") throw new Error(`SDK invoked ${bare} without a streamed tool call`);
       this.#claimed.add(use.id);
-      const result = await this.#phase.runTool({ id: use.id, name: bare, input });
+      const result = await withResultCeiling(MCP_RESULT_CEILING_CHARS, () => this.#phase.runTool({ id: use.id, name: bare, input }));
       this.#results.push(result);
       if (this.#results.length === turn?.content_blocks.filter((block) => block.type === "tool_use").length) {
         await this.finishTools();

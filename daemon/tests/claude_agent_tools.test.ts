@@ -50,6 +50,17 @@ describe("the name a call comes back under", () => {
   });
 });
 
+describe("how much of a result the CLI is told to keep", () => {
+  test("every tool asks the CLI to keep results of up to 500,000 characters in the conversation", async () => {
+    const client = await connected([def("read"), def("bash")], () => Promise.resolve(ok("")));
+    const listed = await client.listTools();
+    expect(listed.tools.map((tool) => [tool.name, tool._meta])).toEqual([
+      ["read", { "anthropic/maxResultSizeChars": 500_000 }],
+      ["bash", { "anthropic/maxResultSizeChars": 500_000 }],
+    ]);
+  });
+});
+
 describe("what a tool result becomes", () => {
   test("a failure is marked as one rather than reading as success", () => {
     const failed = toCallToolResult({

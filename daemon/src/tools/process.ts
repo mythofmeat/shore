@@ -18,10 +18,13 @@ export function envWithoutInheritedGitRepo(): NodeJS.ProcessEnv {
   return env;
 }
 
-export interface ProcessOutput {
-  code: number | null;
+export interface ProcessStreams {
   stdout: string;
   stderr: string;
+}
+
+export interface ProcessOutput extends ProcessStreams {
+  code: number | null;
 }
 
 export const KILL_GRACE_MS = 250;
@@ -31,7 +34,10 @@ export const OUTPUT_LIMIT_BYTES = 1024 * 1024;
 export function runProcess(
   program: string,
   args: string[],
-  options: { stdin?: string | undefined; cwd?: string | undefined; env?: NodeJS.ProcessEnv | undefined; signal?: AbortSignal | undefined },
+  options: {
+    stdin?: string | undefined; cwd?: string | undefined; env?: NodeJS.ProcessEnv | undefined; signal?: AbortSignal | undefined;
+    stopped?: ((output: ProcessStreams) => void) | undefined;
+  },
 ): Promise<ProcessOutput> {
   return new Promise((resolve, reject) => {
     options.signal?.throwIfAborted();
@@ -66,6 +72,7 @@ export function runProcess(
       clearTimeout(escalation);
       if (options.signal?.aborted === true) {
         kill("SIGKILL");
+        options.stopped?.({ stdout: stdout.text(), stderr: stderr.text() });
         const reason: unknown = options.signal.reason;
         reject(reason instanceof Error ? reason : new Error(String(reason)));
       } else if (failure === undefined) {
