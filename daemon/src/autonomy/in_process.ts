@@ -65,7 +65,8 @@ export class InProcessAutonomyExecutor implements AutonomyExecutor {
         rebuild: this.#deps.rebuild,
         ...(this.#deps.env === undefined ? {} : { env: this.#deps.env }),
         ...(hooks.wakeReason === undefined ? {} : { wakeReason: hooks.wakeReason }),
-        userWrote: () => hooks.userWrote(),
+        fired: hooks.fired,
+        news: () => hooks.news(),
         generate: calls.generate,
         dispatch: async (name, input, toolUseId, tools, conversation) => {
           toolCtx ??= buildToolContext(config, config.dirs.data, character, {

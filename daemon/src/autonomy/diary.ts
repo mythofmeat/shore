@@ -16,16 +16,20 @@ const SENT = /<sendMessage>[\s\S]*?<\/sendMessage>/g;
 
 const NOTHING_TO_NOTE = "HEARTBEAT_OK";
 
+const SOURCES = ["heartbeat", "trigger", "shore", "note"] as const;
+
 interface StoredNote extends DiaryNote {
   folded?: true;
 }
 
 function storedNote(raw: unknown): StoredNote | undefined {
   if (typeof raw !== "object" || raw === null) return undefined;
-  const { id, at, thread, source, text, folded } = raw as Record<string, unknown>;
+  const { id, at, thread, source, trigger, text, folded } = raw as Record<string, unknown>;
   if (typeof id !== "string" || typeof thread !== "string" || typeof text !== "string") return undefined;
-  if (typeof at !== "string" || Number.isNaN(Date.parse(at)) || source !== "heartbeat") return undefined;
-  return { id, at, thread, source, text, ...(folded === true ? { folded } : {}) };
+  if (typeof at !== "string" || Number.isNaN(Date.parse(at))) return undefined;
+  const known = SOURCES.find((each) => each === source);
+  if (known === undefined) return undefined;
+  return { id, at, thread, source: known, ...(typeof trigger === "string" ? { trigger } : {}), text, ...(folded === true ? { folded } : {}) };
 }
 
 function stored(characterDir: string): StoredNote[] {
@@ -55,14 +59,19 @@ export interface NewDiaryNote {
   at: number;
   thread: string;
   source: DiaryNote["source"];
+  trigger?: string;
   text: string;
 }
 
 export function addDiaryNote(characterDir: string, note: NewDiaryNote, newId: () => string = () => `d_${crypto.randomUUID()}`): void {
   const chars = Array.from(note.text);
   const text = chars.length > DIARY_NOTE_CHARS ? `${chars.slice(0, DIARY_NOTE_CHARS).join("")}… [cut]` : note.text;
-  const added: StoredNote = { id: newId(), at: new Date(note.at).toISOString(), thread: note.thread, source: note.source, text };
-  keep(characterDir, [...stored(characterDir), added]);
+  const added: StoredNote = {
+    id: newId(), at: new Date(note.at).toISOString(), thread: note.thread, source: note.source,
+    ...(note.trigger === undefined ? {} : { trigger: note.trigger }), text,
+  };
+  const earlier = stored(characterDir).filter((each) => note.trigger === undefined || each.trigger !== note.trigger);
+  keep(characterDir, [...earlier, added]);
 }
 
 export interface ShownDiary {
@@ -76,9 +85,9 @@ export function recentDiary(characterDir: string, now: number): ShownDiary {
   return { notes, omitted: recent.length - notes.length };
 }
 
-export function unseenDiary(characterDir: string, active: readonly Pick<Message, "diary">[], now: number): DiaryNote[] {
+export function unseenDiary(characterDir: string, active: readonly Pick<Message, "diary">[], now: number, thread?: string): DiaryNote[] {
   const seen = new Set(active.flatMap((message) => (message.diary ?? []).map((note) => note.id)));
-  return recentDiary(characterDir, now).notes.filter((note) => !seen.has(note.id));
+  return recentDiary(characterDir, now).notes.filter((note) => !seen.has(note.id) && !(note.source === "note" && note.thread === thread));
 }
 
 export function unfoldedDiary(characterDir: string): DiaryNote[] {

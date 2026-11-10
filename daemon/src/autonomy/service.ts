@@ -9,6 +9,7 @@ import {
 } from "../cache/keepalive.ts";
 import {
   CharacterAutonomy,
+  type AutonomyEvents,
   type AutonomyExecutor,
   type AutonomyRunnerConfig,
   type CompactionRunnerConfig,
@@ -16,6 +17,7 @@ import {
   type DreamStatus,
   type RestoredIdle,
   type RunningHeartbeat,
+  type TriggerFiring,
 } from "./runner.ts";
 import { loadState, STATE_FILENAME, type PersistedKeepalive } from "./state_file.ts";
 import type { KeepaliveSnapshot } from "../cache/schedule.ts";
@@ -96,6 +98,7 @@ export class AutonomyService {
   readonly #executor: AutonomyExecutor;
   readonly #now: () => number;
   #keepalive: KeepaliveService | undefined;
+  #listener: ((character: string) => AutonomyEvents) | undefined;
   #closed = false;
   readonly #ticks = new Set<Promise<void>>();
 
@@ -109,6 +112,14 @@ export class AutonomyService {
     keepalive.onEvent((event) => {
       this.#entries.get(event.character)?.runner.note("dormant_ping", event.detail, event.at);
     });
+  }
+
+  onEvents(listener: (character: string) => AutonomyEvents): void {
+    this.#listener = listener;
+  }
+
+  characters(): string[] {
+    return [...this.#entries.keys()];
   }
 
   keepaliveHalts(character: string): KeepaliveHalt[] {
@@ -132,6 +143,10 @@ export class AutonomyService {
       log: await HeartbeatLog.load(`${dataDir}/${HEARTBEAT_LOG_FILENAME}`),
       restored,
       idle,
+      events: {
+        wakeDone: (triggers) => { this.#listener?.(character).wakeDone(triggers); },
+        dreamDone: () => { this.#listener?.(character).dreamDone(); },
+      },
       now: this.#now,
     });
     this.#entries.set(character, { runner, inFlight: false });
@@ -222,6 +237,10 @@ export class AutonomyService {
       const startedAt = runner.heartbeatStartedAt;
       return startedAt === undefined ? [] : [{ character, startedAt }];
     });
+  }
+
+  wakeFor(character: string, firing: TriggerFiring): "handed" | "queued" | undefined {
+    return this.#entries.get(character)?.runner.wakeFor(firing);
   }
 
   runningHeartbeat(character: string): RunningHeartbeat | undefined {

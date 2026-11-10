@@ -2,7 +2,7 @@
 export type ConfigTable = Record<string, unknown>;
 export type ConfigPath = readonly string[];
 
-export const CONFIG_SECTIONS = ["daemon", "chat", "image", "images", "providers", "heartbeat", "compaction", "dreaming", "tools", "subagents", "budgets", "plan_limits", "notifications", "mcp", "matrix", "usage"] as const;
+export const CONFIG_SECTIONS = ["daemon", "chat", "image", "images", "providers", "heartbeat", "triggers", "compaction", "dreaming", "tools", "subagents", "budgets", "plan_limits", "notifications", "mcp", "matrix", "usage"] as const;
 
 export interface ConfigField {
   internal: ConfigPath;
@@ -36,6 +36,7 @@ const CONFIG_FIELDS: readonly ConfigField[] = [
     wrap_up_grace_rounds: "max_wrap_up_rounds",
     defer_on_activity: "defer_on_activity",
   }).map(([old, key]) => field(`behavior.autonomy.heartbeat.${old}`, `heartbeat.${key}`)),
+  ...["enabled", "wake_cooldown", "check_time_limit", "off"].map((key) => field(`behavior.autonomy.triggers.${key}`, `triggers.${key}`)),
   ...["enabled", "write_memory", "archive_after", "min_turns", "max_turns", "max_context_tokens", "keep_recent_turns"].map((key) => field(`memory.compaction.${key}`, `compaction.${key}`)),
   field("memory.compaction.idle_trigger", "compaction.idle_after"),
   ...["enabled", "every", "start_between", "idle_after", "min_turns", "time_limit", "system_prompt", "tools"].map((key) => field(`memory.dreaming.${key}`, `dreaming.${key}`)),
@@ -242,7 +243,7 @@ export function normalizeConfigSource(input: ConfigTable, source = "config"): Co
   }
   const budgets = valueAt(table, ["usage", "budgets"]);
   if (Array.isArray(budgets)) for (const budget of budgets) if (isConfigTable(budget)) toInternal(budget, BUDGET_FIELDS);
-  for (const section of ["heartbeat", "compaction", "dreaming", "matrix", "image"]) if (isConfigTable(table[section]) && Object.keys(table[section]).length === 0) delete table[section];
+  for (const section of ["heartbeat", "triggers", "compaction", "dreaming", "matrix", "image"]) if (isConfigTable(table[section]) && Object.keys(table[section]).length === 0) delete table[section];
   return table;
 }
 

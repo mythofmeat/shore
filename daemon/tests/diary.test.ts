@@ -239,3 +239,48 @@ test("a message that arrived while a heartbeat ran says so between the diary not
     [{ type: "text", text: diary }, { type: "text", text: running }, { type: "text", text: "is the lamp lit?" }],
   ]);
 });
+
+test("an entry says whether it is the character's own note, from one of its triggers by name, or from Shore", async () => {
+  const dir = await character();
+  const newId = counter();
+  addDiaryNote(dir, { at: T0, thread: "heartbeat", source: "heartbeat", text: "The lamp is lit." }, newId);
+  addDiaryNote(dir, { at: T0 + HOUR, thread: "heartbeat", source: "trigger", trigger: "tide-table", text: "The tide is out." }, newId);
+  addDiaryNote(dir, { at: T0 + 2 * HOUR, thread: "heartbeat", source: "shore", text: "Your trigger `lamp` isn't running." }, newId);
+  const kept = unfoldedDiary(dir);
+
+  expect(kept).toEqual([
+    note("d1", T0, "The lamp is lit."),
+    { ...note("d2", T0 + HOUR, "The tide is out."), source: "trigger", trigger: "tide-table" },
+    { ...note("d3", T0 + 2 * HOUR, "Your trigger `lamp` isn't running."), source: "shore" },
+  ]);
+  expect(Object.keys(kept[0] ?? {})).not.toContain("trigger");
+  expect(diaryText(kept, "Your diary.", "UTC")).toBe([
+    "[Your diary.]",
+    "your note at the end of a heartbeat · Friday 2026-10-30 · 12:00 PM\nThe lamp is lit.",
+    'from your trigger "tide-table" · Friday 2026-10-30 · 1:00 PM\nThe tide is out.',
+    "from Shore · Friday 2026-10-30 · 2:00 PM\nYour trigger `lamp` isn't running.",
+    "[End of your diary.]",
+  ].join("\n\n"));
+
+  writeCharacterState(dir, "diary.json", JSON.stringify([{ ...note("d4", T0, "A trigger with a name that isn't text."), source: "trigger", trigger: 7 }]));
+  expect(unfoldedDiary(dir)).toEqual([{ ...note("d4", T0, "A trigger with a name that isn't text."), source: "trigger" }]);
+  expect(diaryText(unfoldedDiary(dir), "Your diary.", "UTC")).toContain('from your trigger "" · ');
+});
+
+test("the diary holds only the newest entry from each trigger, so one that fires often can't crowd the rest out", async () => {
+  const dir = await character();
+  const newId = counter();
+  const from = (trigger: string, at: number, text: string): void => { addDiaryNote(dir, { at, thread: "heartbeat", source: "trigger", trigger, text }, newId); };
+  from("tide-table", T0, "The tide is out.");
+  leave(dir, T0 + 1, "The lamp is lit.", newId);
+  from("ferry", T0 + 2, "The ferry is late.");
+  leave(dir, T0 + 3, "The log is read.", newId);
+  from("tide-table", T0 + 4, "The tide is in.");
+
+  expect(unfoldedDiary(dir).map((each) => [each.id, each.trigger ?? "", each.text])).toEqual([
+    ["d2", "", "The lamp is lit."],
+    ["d3", "ferry", "The ferry is late."],
+    ["d4", "", "The log is read."],
+    ["d5", "tide-table", "The tide is in."],
+  ]);
+});

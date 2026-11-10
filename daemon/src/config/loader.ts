@@ -12,6 +12,7 @@ import {
   toolGrants,
   validateCompaction,
   validateDreaming,
+  validateTriggers,
   validateHeartbeat,
   validateImages,
   validateAppConfigLayer,
@@ -512,6 +513,8 @@ function validateConfig(
 
   const dreaming = validateDreaming(app.memory.dreaming);
   if (dreaming !== undefined) throw validationError(dreaming);
+  const triggers = validateTriggers(app.behavior.autonomy.triggers);
+  if (triggers !== undefined) throw validationError(triggers);
 
   const images = validateImages(app.images);
   if (images !== undefined) throw validationError(images);

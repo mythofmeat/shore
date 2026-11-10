@@ -422,14 +422,46 @@ const HEARTBEAT: StructSpec<HeartbeatConfig> = {
   },
 };
 
+export interface TriggersConfig {
+  enabled: boolean;
+  wake_cooldown: ConfigDuration;
+  check_time_limit: ConfigDuration;
+  off: string[];
+}
+
+export const defaultTriggersConfig = (): TriggersConfig => ({
+  enabled: false,
+  wake_cooldown: ConfigDuration.fromSecs(3600),
+  check_time_limit: ConfigDuration.fromSecs(60),
+  off: [],
+});
+
+export function validateTriggers(triggers: TriggersConfig): string | undefined {
+  if (triggers.check_time_limit.asMillisExact() <= 0n) return "triggers.check_time_limit must be greater than zero";
+  return undefined;
+}
+
+const TRIGGERS: StructSpec<TriggersConfig> = {
+  name: "TriggersConfig",
+  make: defaultTriggersConfig,
+  fields: {
+    enabled: readBool,
+    wake_cooldown: readDuration,
+    check_time_limit: readDuration,
+    off: readStringSeq,
+  },
+};
+
 interface AutonomyConfig {
   enabled: boolean;
   heartbeat: HeartbeatConfig;
+  triggers: TriggersConfig;
 }
 
 const defaultAutonomyConfig = (): AutonomyConfig => ({
   enabled: false,
   heartbeat: defaultHeartbeatConfig(),
+  triggers: defaultTriggersConfig(),
 });
 
 const AUTONOMY: StructSpec<AutonomyConfig> = {
@@ -438,6 +470,7 @@ const AUTONOMY: StructSpec<AutonomyConfig> = {
   fields: {
     enabled: readBool,
     heartbeat: struct(HEARTBEAT),
+    triggers: struct(TRIGGERS),
   },
 };
 

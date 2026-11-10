@@ -130,6 +130,7 @@ export interface GenerationDeps {
   callStore?: CallRecorder | undefined;
   autonomy: TurnAutonomy & PersistContext["autonomy"];
   runningHeartbeat?: (character: string) => RunningHeartbeat | undefined;
+  userBack?: (character: string) => Promise<void>;
   notifier: PersistContext["notifier"];
   diagnostics: GenerationDiagnostics;
   emitEvent: (message: ServerMessage) => void;
@@ -297,7 +298,8 @@ async function runGenerationCore(
     const arrival = regen || !bodyHasContent(body)
       ? { cold: false, annotations: {} }
       : await threadArrival(deps, engine, charName, home, resolved, now());
-    const diary = unseenDiary(characterDataDir(deps.dataDir, charName), engine.messages(), Date.parse(now()));
+    if (!regen && bodyHasContent(body)) await deps.userBack?.(charName);
+    const diary = unseenDiary(characterDataDir(deps.dataDir, charName), engine.messages(), Date.parse(now()), engine.thread);
     const running = heartbeatNotTold(deps.runningHeartbeat?.(charName), engine.messages());
     const regenAlt = await appendUserTurn(turnCtx, engine, config.dirs.cache, charName, body, regen, params.rid, imageSettingsFor(config.app.images, "upload"), {
       ...arrival.annotations,

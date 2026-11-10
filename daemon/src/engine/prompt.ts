@@ -355,9 +355,15 @@ export function heartbeatRunningText(running: NonNullable<Message["heartbeat_run
     `It can't see this conversation. It is only told that a message arrived.${why}]`;
 }
 
+function noteFrom(note: DiaryNote): string {
+  if (note.source === "trigger") return `from your trigger "${note.trigger ?? ""}"`;
+  if (note.source === "note") return `your note, written in "${note.thread}"`;
+  return note.source === "shore" ? "from Shore" : "your note at the end of a heartbeat";
+}
+
 export function diaryText(notes: readonly DiaryNote[], heading: string, timeZone: string, omitted = 0): string {
   const left = omitted === 0 ? [] : [`(Earlier entries not shown: ${String(omitted)}.)`];
-  const shown = notes.map((note) => `your note at the end of a heartbeat · ${formatWallClock(Date.parse(note.at), timeZone)}\n${note.text}`);
+  const shown = notes.map((note) => `${noteFrom(note)} · ${formatWallClock(Date.parse(note.at), timeZone)}\n${note.text}`);
   return [`[${heading}]`, ...left, ...shown, DIARY_END].join("\n\n");
 }
 

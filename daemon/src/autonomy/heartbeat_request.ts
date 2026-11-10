@@ -24,7 +24,8 @@ import { applyDeferredEdits } from "../memory/deferred_edits.ts";
 import { characterWorkspace } from "../tools/character_workspace.ts";
 import type { SidecarRequest } from "../llm/types.ts";
 import { recentDiary } from "./diary.ts";
-import { heartbeatTemplate, renderHeartbeatPrompt } from "./heartbeat_shape.ts";
+import { heartbeatTemplate, renderHeartbeatPrompt, triggerFiredNote } from "./heartbeat_shape.ts";
+import type { TriggerFiring } from "./runner.ts";
 import { HEARTBEAT_TIME_LIMIT_MS, HEARTBEAT_WRAP_UP_MS } from "./heartbeat_loop.ts";
 import { HEARTBEAT_OPENER, homeDigest, readHomeThrough, type HomeReader } from "./heartbeat_thread.ts";
 import type { RebuildDeps } from "../cache/rebuild.ts";
@@ -168,6 +169,7 @@ export interface PrepareHeartbeatDeps {
   timeZone?: string;
   cutOff?: HeartbeatCutOff;
   wakeReason?: string;
+  fired?: readonly TriggerFiring[];
   newId?: () => string;
 }
 
@@ -244,7 +246,8 @@ export async function prepareHeartbeatRequest(
     timestamp,
   });
   const opener = note("user", `${HEARTBEAT_OPENER}\n\n${await homeDigest(conversation.homeThread, home, since, userName, timeZone)}`);
-  const instructions = note("system", [cutOff, wrote, diary, rendered].filter((part) => part !== undefined).join("\n\n"));
+  const fired = (deps.fired ?? []).map((firing) => triggerFiredNote(firing, timeZone));
+  const instructions = note("system", [cutOff, wrote, diary, ...fired, rendered].filter((part) => part !== undefined).join("\n\n"));
   const messages = [opener, instructions];
 
   let built: Awaited<ReturnType<typeof buildChatShapeRequestFromDisk>>;

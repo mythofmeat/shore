@@ -18,6 +18,7 @@ import { KeepaliveService, startKeepaliveTimer } from "./cache/keepalive.ts";
 import { LastRequestCache } from "./cache/last_request.ts";
 import { CachedRequestRefresher } from "./cache/refresh.ts";
 import { AutonomyService, startAutonomyTimer } from "./autonomy/service.ts";
+import { startTriggerTimer, TriggerService } from "./autonomy/trigger_service.ts";
 import { CallStore } from "./call_store.ts";
 import { CharacterRegistry } from "./characters.ts";
 import {
@@ -105,6 +106,7 @@ export interface ShoreRuntime {
   readonly notifier: NotificationService;
   readonly keepalive: KeepaliveService;
   readonly autonomy: AutonomyService;
+  readonly triggers: TriggerService;
   readonly historyIndex: HistoryIndexService;
   readonly snapshotGate: SnapshotGate;
   refreshHistoryIndexes(): Promise<void>;
@@ -244,7 +246,7 @@ export async function createRuntime(options: RuntimeOptions): Promise<ShoreRunti
           registry,
           ...(callStore === undefined ? {} : { callStore }),
           ...(options.env === undefined ? {} : { env: options.env }),
-        }),
+        }, { view: (character) => triggers.view(character) }),
         startThread: (character, request) => startCharacterThread(
           { registry, dataDir: config.dirs.data, emitEvent: options.emitEvent },
           character,
@@ -273,6 +275,7 @@ export async function createRuntime(options: RuntimeOptions): Promise<ShoreRunti
     }),
   );
   autonomy.attachKeepalive(keepalive);
+  const triggers = new TriggerService({ autonomy, config: (character) => registry.effectiveConfig(character) });
 
   return {
     config,
@@ -287,11 +290,13 @@ export async function createRuntime(options: RuntimeOptions): Promise<ShoreRunti
     notifier,
     keepalive,
     autonomy,
+    triggers,
     historyIndex,
     snapshotGate,
     refreshHistoryIndexes,
     refreshMcpCaches,
     async shutdown() {
+      triggers.stop();
       await cacheRefresh.stop();
       closeSignIns();
       await historyIndex.shutdown();
@@ -327,6 +332,7 @@ export function startRuntimeClocks(
   });
   const keepaliveTimer = startKeepaliveTimer(runtime.keepalive, intervals.keepaliveMs);
   const autonomyTimer = startAutonomyTimer(runtime.autonomy);
+  const triggerTimer = startTriggerTimer(runtime.triggers);
   const retention = startDiagnosticRetention(runtime.config.dirs.data, runtime.snapshotGate, intervals.diagnosticRetentionMs);
   const costBackfill = startCostBackfill(
     rustJoin(runtime.config.dirs.data, "shore.db"),
@@ -337,6 +343,7 @@ export function startRuntimeClocks(
     stop: () => {
       keepaliveTimer.stop();
       autonomyTimer.stop();
+      triggerTimer.stop();
       costBackfill.stop();
       retention.stop();
       setCallObserver(undefined);
@@ -477,8 +484,10 @@ export function sharedToolDeps(
   mcp: McpHolder,
   autonomy: Pick<AutonomyService, "activityStats" | "heartbeatsRunning" | "scheduleNextWake">,
   subagent?: SubagentToolDeps,
+  triggers?: Pick<TriggerService, "view">,
 ): ToolContextDeps {
   return {
+    ...(triggers === undefined ? {} : { triggersView: (character: string) => triggers.view(character) }),
     activityStats: (character, days) => {
       const report = autonomy.activityStats(character, localWallClock(Date.now()), days);
       return report === undefined
