@@ -4,6 +4,7 @@ import { resolvePromptTemplate } from "../config/dirs.ts";
 import type { LoadedConfig } from "../config/loader.ts";
 import { formatWallClock, renderTemplate } from "../engine/prompt.ts";
 import type { ContentBlock } from "../engine/types.ts";
+import type { HeartbeatNews, TriggerFiring } from "./runner.ts";
 
 export type WireRole = "user" | "assistant" | "system";
 
@@ -89,6 +90,15 @@ export function wrapUpNudgeText(msLeft: number, rounds: number, offersWake: bool
 export function userWroteNote(at: number, userName: string, timeZone: string): string {
   return `[${userName} has just written to you, at ${formatWallClock(at, timeZone)}, while this heartbeat is running. ` +
     "Another turn of you is answering them, and it knows this heartbeat is running.]";
+}
+
+export function triggerFiredNote(firing: TriggerFiring, timeZone: string): string {
+  return `[Your trigger "${firing.name}" fired at ${formatWallClock(firing.at, timeZone)}: ${firing.reason}]`;
+}
+
+export function heartbeatNewsNote(news: readonly HeartbeatNews[], userName: string, timeZone: string): string | undefined {
+  const notes = news.map((item) => item.kind === "trigger" ? triggerFiredNote(item.firing, timeZone) : userWroteNote(item.at, userName, timeZone));
+  return notes.length === 0 ? undefined : notes.join("\n\n");
 }
 
 export function appendWrapUpNudge(messages: WireMessageLike[], text: string): void {

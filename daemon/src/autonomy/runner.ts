@@ -92,10 +92,21 @@ export interface DreamStatus {
   readonly nextDueAt: number | undefined;
 }
 
+export interface TriggerFiring {
+  readonly name: string;
+  readonly reason: string;
+  readonly at: number;
+}
+
+export type HeartbeatNews =
+  | { readonly kind: "user_wrote"; readonly at: number }
+  | { readonly kind: "trigger"; readonly firing: TriggerFiring };
+
 export interface TickHooks {
   readonly wakeReason: string | undefined;
+  readonly fired: readonly TriggerFiring[];
   scheduleNextWake(hoursFromNow: number, reason: string): number;
-  userWrote(): number | undefined;
+  news(): HeartbeatNews[];
 }
 
 export interface RunningHeartbeat {
@@ -104,8 +115,8 @@ export interface RunningHeartbeat {
 }
 
 interface LiveHeartbeat extends RunningHeartbeat {
-  userWroteAt: number | undefined;
-  told: boolean;
+  readonly news: HeartbeatNews[];
+  userTold: boolean;
 }
 
 export interface AutonomyExecutor {
@@ -150,6 +161,7 @@ export class CharacterAutonomy {
   readonly #now: () => number;
   #state: RunnerState;
   #heartbeat: LiveHeartbeat | undefined;
+  readonly #fired: TriggerFiring[] = [];
   #dream: RunningDream | undefined;
 
   constructor(opts: {
@@ -221,7 +233,7 @@ export class CharacterAutonomy {
       this.note("wake", "User returned — idle counter reset", now);
     }
     this.#clock.onUserMessage(now);
-    if (this.#heartbeat !== undefined) this.#heartbeat.userWroteAt ??= now;
+    this.#tellHeartbeatUserWrote(now);
     this.#state.activeTurnCount = turnCount;
     this.#state.lastActivityAt = now;
     this.#state.compactionTriggered = false;
@@ -235,9 +247,25 @@ export class CharacterAutonomy {
       this.note("wake", "User active in another thread — idle counter reset", now);
     }
     this.#clock.onUserMessage(now);
-    if (this.#heartbeat !== undefined) this.#heartbeat.userWroteAt ??= now;
+    this.#tellHeartbeatUserWrote(now);
     this.#state.dream.turnsSince += 1;
     this.#state.dirty = true;
+  }
+
+  #tellHeartbeatUserWrote(now: number): void {
+    const running = this.#heartbeat;
+    if (running === undefined || running.userTold) return;
+    running.userTold = true;
+    running.news.push({ kind: "user_wrote", at: now });
+  }
+
+  wakeFor(firing: TriggerFiring): "handed" | "queued" {
+    if (this.#heartbeat !== undefined) {
+      this.#heartbeat.news.push({ kind: "trigger", firing });
+      return "handed";
+    }
+    this.#fired.push(firing);
+    return "queued";
   }
 
   onAssistantMessage(turnCount: number, now: number): void {
@@ -445,24 +473,25 @@ export class CharacterAutonomy {
       this.#state.dirty = true;
     }
 
-    const wakeReason = this.#clock.wakeReason;
+    const scheduledReason = this.#clock.wakeReason;
     const heartbeat = this.#runClock(decision, now);
+    const fired = this.#fired.splice(0).filter(() => decision.heartbeatMayTick && !this.#clock.isDormant(now));
+    const wakes = heartbeat === "run_tick" || fired.length > 0;
     try {
-      if (heartbeat === "run_tick") {
-        this.note("tick_fired", "Heartbeat tick fired", now);
-        const running: LiveHeartbeat = { startedAt: now, reason: wakeReason, userWroteAt: undefined, told: false };
+      if (wakes) {
+        const wakeReason = heartbeat === "run_tick" ? scheduledReason : undefined;
+        const byTrigger = fired.map((firing) => `"${firing.name}"`).join(", ");
+        this.note("tick_fired", heartbeat === "run_tick" ? "Heartbeat tick fired" : `Woken by trigger ${byTrigger}`, now);
+        const running: LiveHeartbeat = { startedAt: now, reason: wakeReason, news: [], userTold: false };
         this.#heartbeat = running;
         try {
           this.#apply(
             await this.#executor.runHeartbeatTick(this.#character, {
               wakeReason,
+              fired,
               scheduleNextWake: (hours, reason) =>
                 this.scheduleNextWake(hours, reason, this.#now()),
-              userWrote: () => {
-                if (running.told || running.userWroteAt === undefined) return undefined;
-                running.told = true;
-                return running.userWroteAt;
-              },
+              news: () => running.news.splice(0),
             }),
           );
         } finally {

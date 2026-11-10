@@ -5,7 +5,7 @@ import { deriveContentFromBlocks } from "../engine/message_store.ts";
 import { shoreLog } from "../log.ts";
 
 import { addDiaryNote, closingNote } from "./diary.ts";
-import { buildAutonomousMessage, sendMessageIn, userWroteNote } from "./heartbeat_shape.ts";
+import { buildAutonomousMessage, heartbeatNewsNote, sendMessageIn } from "./heartbeat_shape.ts";
 import {
   HEARTBEAT_TIME_LIMIT_MS,
   runHeartbeatToolLoop,
@@ -17,7 +17,7 @@ import { prepareHeartbeatRequest, type HeartbeatCutOff, type PrepareHeartbeatDep
 import { recordHomeThrough, type HomeReader } from "./heartbeat_thread.ts";
 import { deleteCharacterState, readCharacterState, writeCharacterState } from "../storage/store.ts";
 import type { HeartbeatEventKind } from "./heartbeat_log.ts";
-import type { AutonomyActionResult } from "./runner.ts";
+import type { AutonomyActionResult, HeartbeatNews } from "./runner.ts";
 import { resolveDisplayName } from "../config/app.ts";
 import type { LoadedConfig } from "../config/loader.ts";
 import { hostZone } from "../ledger/zoned.ts";
@@ -57,12 +57,12 @@ export interface HeartbeatTickDeps
   extends PrepareHeartbeatDeps,
     Omit<
       HeartbeatLoopDeps,
-      "character" | "wrapUpGrace" | "maxToolIterations" | "note" | "generate" | "dispatch" | "persist"
+      "character" | "wrapUpGrace" | "maxToolIterations" | "note" | "generate" | "dispatch" | "persist" | "news"
     > {
   generate: HeartbeatLoopDeps["generate"];
   dispatch: (...args: [...Parameters<HeartbeatLoopDeps["dispatch"]>, ToolConversation]) => ReturnType<HeartbeatLoopDeps["dispatch"]>;
   threads: HeartbeatThreads;
-  userWrote?: () => number | undefined;
+  news?: () => HeartbeatNews[];
   emit?: (character: string, revision: number, msg: Message, thread: string) => void;
   threadsChanged?: (character: string, thread: string) => void;
   notify?: (title: string, body: string, picture?: NotificationPicture) => void;
@@ -306,10 +306,7 @@ export async function runHeartbeatTick(
       wrapUpGrace: config.app.behavior.autonomy.heartbeat.wrap_up_grace_rounds,
       maxToolIterations: prepared.maxToolIterations,
       note: (detail) => note("tool_use", detail),
-      news: () => {
-        const at = deps.userWrote?.();
-        return at === undefined ? undefined : userWroteNote(at, resolveDisplayName(config.app.defaults, deps.env), deps.timeZone ?? hostZone());
-      },
+      news: () => heartbeatNewsNote(deps.news?.() ?? [], resolveDisplayName(config.app.defaults, deps.env), deps.timeZone ?? hostZone()),
       checkPictures: async (text) => await pictureProblems([text], workspace, signal),
     });
     if (loop.failedRound !== undefined) await engine.recoverInterruptedToolLoop();

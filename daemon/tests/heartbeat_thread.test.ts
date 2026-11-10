@@ -10,7 +10,7 @@ import { emptyCatalog } from "../src/config/models.ts";
 import { ProviderRegistry } from "../src/config/providers.ts";
 import { Diagnostics } from "../src/diagnostics.ts";
 import type { History } from "../src/engine/conversation.ts";
-import { userWroteNote } from "../src/autonomy/heartbeat_shape.ts";
+import { heartbeatNewsNote, triggerFiredNote, userWroteNote } from "../src/autonomy/heartbeat_shape.ts";
 import { DIARY_FOR_CHAT, DIARY_FOR_HEARTBEAT, diaryText, heartbeatRunningText } from "../src/engine/prompt.ts";
 import { markThreadRead, threadActivityNow } from "../src/engine/threads.ts";
 import type { DiaryNote, Message } from "../src/engine/types.ts";
@@ -863,5 +863,122 @@ test("each side is told about the other in these words, with the heartbeat's rea
   expect(userWroteNote(T0 + MINUTE, "eve", "UTC")).toBe(
     "[eve has just written to you, at Friday 2026-10-30 · 12:01 PM, while this heartbeat is running. " +
     "Another turn of you is answering them, and it knows this heartbeat is running.]",
+  );
+});
+
+test("a trigger that fires wakes the character with what it said, and leaves the heartbeat it scheduled for itself alone", async () => {
+  await withCharacter(async ({ runtime, script, say, heartbeat }) => {
+    const events = (): string[] => runtime.autonomy.log("ada", 100).map((event) => event.detail);
+    await say("hello");
+    script.wake = { hours_from_now: 2, reason: "water the fern" };
+    at(10);
+    await heartbeat();
+    expect(textOf(script.heartbeats[0] as SidecarRequest)).not.toContain("Your trigger");
+    expect(events().filter((detail) => detail === "Heartbeat tick fired")).toHaveLength(1);
+
+    const tide = { name: "tide-table", reason: "the tide is out", at: T0 + 19 * MINUTE };
+    const lamp = { name: "lamp", reason: "the lamp is low", at: T0 + 20 * MINUTE };
+    script.heartbeats.length = 0;
+    at(20);
+    expect(runtime.autonomy.wakeFor("ada", tide)).toBe("queued");
+    expect(runtime.autonomy.wakeFor("ada", lamp)).toBe("queued");
+    await runtime.autonomy.tick();
+    expect(script.heartbeats).toHaveLength(2);
+    const woken = textOf(script.heartbeats[0] as SidecarRequest);
+    expect(woken).toContain(`in your home thread "main".]\n\n${triggerFiredNote(tide, hostZone())}\n\n${triggerFiredNote(lamp, hostZone())}\n\n[Current time: `);
+    expect(woken).not.toContain("water the fern");
+    expect(runtime.autonomy.status("ada")?.next_wake_at).toBe(T0 + 130 * MINUTE);
+    expect(events()).toContain('Woken by trigger "tide-table", "lamp"');
+    expect(events().filter((detail) => detail === "Heartbeat tick fired")).toHaveLength(1);
+
+    script.heartbeats.length = 0;
+    at(21);
+    await runtime.autonomy.tick();
+    expect(script.heartbeats).toHaveLength(0);
+
+    at(22);
+    expect(runtime.autonomy.wakeFor("ada", { ...tide, at: T0 + 22 * MINUTE })).toBe("queued");
+    await runtime.autonomy.tick();
+    expect(script.heartbeats).toHaveLength(2);
+    expect(events()).toContain('Woken by trigger "tide-table"');
+    script.heartbeats.length = 0;
+
+    at(131);
+    expect(runtime.autonomy.wakeFor("ada", { ...lamp, at: T0 + 131 * MINUTE })).toBe("queued");
+    await runtime.autonomy.tick();
+    const both = textOf(script.heartbeats[0] as SidecarRequest);
+    expect(both).toContain(`${triggerFiredNote({ ...lamp, at: T0 + 131 * MINUTE }, hostZone())}\n\n[Current time: `);
+    expect(both).toContain("giving this reason: water the fern]");
+    expect(events().filter((detail) => detail === "Heartbeat tick fired")).toHaveLength(2);
+    expect(runtime.autonomy.wakeFor("nobody", lamp)).toBeUndefined();
+  });
+});
+
+test("a trigger that fires while the character is dormant, or with heartbeats off, wakes nothing then or later", async () => {
+  const lamp = { name: "lamp", reason: "the lamp is low", at: T0 + 10 * MINUTE };
+  await withCharacter(async ({ runtime, script, say }) => {
+    await say("hello");
+    expect(runtime.autonomy.forceHeartbeatState("ada", "dormant")).toBe(true);
+    at(10);
+    expect(runtime.autonomy.wakeFor("ada", lamp)).toBe("queued");
+    await runtime.autonomy.tick();
+    expect(script.heartbeats).toHaveLength(0);
+
+    at(20);
+    await say("I'm back");
+    at(90);
+    await runtime.autonomy.tick();
+    expect(script.heartbeats.length).toBeGreaterThan(0);
+    expect(script.heartbeats.map(textOf).join("\n")).not.toContain("Your trigger");
+  });
+
+  await withCharacter(async ({ runtime, script, say }) => {
+    await say("hello");
+    at(10);
+    expect(runtime.autonomy.wakeFor("ada", lamp)).toBe("queued");
+    await runtime.autonomy.tick();
+    expect(script.heartbeats).toHaveLength(0);
+  }, (app) => { app.behavior.autonomy.enabled = false; });
+});
+
+test("a trigger that fires during a heartbeat is handed to that heartbeat at its next step, along with word that the user wrote", async () => {
+  await withCharacter(async ({ runtime, script, say, heartbeat }) => {
+    await say("hello");
+    const held = hold();
+    script.beatHeld = held;
+    script.again = 1;
+    at(10);
+    const ticking = heartbeat();
+    await held.started.promise;
+    const tide = { name: "tide-table", reason: "the tide is out", at: T0 + 11 * MINUTE };
+    const lamp = { name: "lamp", reason: "the lamp is low", at: T0 + 13 * MINUTE };
+    at(11);
+    expect(runtime.autonomy.wakeFor("ada", tide)).toBe("handed");
+    at(12);
+    await say("are you there?");
+    at(13);
+    expect(runtime.autonomy.wakeFor("ada", lamp)).toBe("handed");
+    held.release.resolve();
+    await ticking;
+
+    expect(script.heartbeats).toHaveLength(3);
+    expect(textOf(script.heartbeats[1] as SidecarRequest)).toEndWith(
+      `${triggerFiredNote(tide, hostZone())}\n\n${userWroteNote(T0 + 12 * MINUTE, "User", hostZone())}\n\n${triggerFiredNote(lamp, hostZone())}`,
+    );
+    expect(times(textOf(script.heartbeats[2] as SidecarRequest), "Your trigger")).toBe(2);
+
+    script.heartbeats.length = 0;
+    at(14);
+    await runtime.autonomy.tick();
+    expect(script.heartbeats).toHaveLength(0);
+  });
+});
+
+test("a trigger's firing is told in these words, and nothing new means no note", () => {
+  const tide = { name: "tide-table", reason: "the tide is out", at: T0 + MINUTE };
+  expect(triggerFiredNote(tide, "UTC")).toBe('[Your trigger "tide-table" fired at Friday 2026-10-30 · 12:01 PM: the tide is out]');
+  expect(heartbeatNewsNote([], "eve", "UTC")).toBeUndefined();
+  expect(heartbeatNewsNote([{ kind: "user_wrote", at: T0 }, { kind: "trigger", firing: tide }], "eve", "UTC")).toBe(
+    `${userWroteNote(T0, "eve", "UTC")}\n\n${triggerFiredNote(tide, "UTC")}`,
   );
 });

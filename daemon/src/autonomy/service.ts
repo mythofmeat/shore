@@ -16,6 +16,7 @@ import {
   type DreamStatus,
   type RestoredIdle,
   type RunningHeartbeat,
+  type TriggerFiring,
 } from "./runner.ts";
 import { loadState, STATE_FILENAME, type PersistedKeepalive } from "./state_file.ts";
 import type { KeepaliveSnapshot } from "../cache/schedule.ts";
@@ -222,6 +223,10 @@ export class AutonomyService {
       const startedAt = runner.heartbeatStartedAt;
       return startedAt === undefined ? [] : [{ character, startedAt }];
     });
+  }
+
+  wakeFor(character: string, firing: TriggerFiring): "handed" | "queued" | undefined {
+    return this.#entries.get(character)?.runner.wakeFor(firing);
   }
 
   runningHeartbeat(character: string): RunningHeartbeat | undefined {
