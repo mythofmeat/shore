@@ -207,20 +207,12 @@ export function withoutOrphanToolResults(messages: readonly Message[]): Message[
 }
 
 function unansweredTailToolUseIds(messages: readonly Message[]): string[] {
-  let latestAssistant = -1;
-  for (let index = messages.length - 1; index >= 0; index -= 1) {
-    if (required(messages[index]).role === "assistant") {
-      latestAssistant = index;
-      break;
-    }
-  }
+  const latestAssistant = messages.findLastIndex((message) => message.role === "assistant");
   if (latestAssistant < 0) return [];
 
   const offered = required(messages[latestAssistant]).content_blocks.flatMap((block) =>
     block.type === "tool_use" ? [block.id] : [],
   );
-  if (offered.length === 0) return [];
-
   const answered = new Set(
     messages.slice(latestAssistant + 1).flatMap((message) =>
       message.content_blocks.flatMap((block) =>

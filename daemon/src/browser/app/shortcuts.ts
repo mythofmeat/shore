@@ -65,7 +65,6 @@ export function nextUnread(threads: readonly { id: string; unread?: number }[], 
 }
 
 export function adjacent<T>(items: readonly T[], current: T | undefined, step: number): T | undefined {
-  if (items.length === 0) return undefined;
   const index = current === undefined ? -1 : items.indexOf(current);
   return items[(index + step + items.length) % items.length];
 }

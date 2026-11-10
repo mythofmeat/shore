@@ -27,7 +27,7 @@ import type {
   Usage,
   WireMessage,
 } from "../types.ts";
-import { EMPTY_TOOL_SCHEMA, streamErrorEvent } from "../types.ts";
+import { streamErrorEvent } from "../types.ts";
 import {
   ANTHROPIC_CACHE_CONTROL_LIMIT,
   recordCacheCall,
@@ -103,7 +103,6 @@ export class AnthropicProvider implements SidecarProvider {
 type AccumState =
   | { kind: "text" }
   | { kind: "thinking"; signature: string }
-  | { kind: "redacted_thinking" }
   | { kind: "tool_use"; id: string; name: string; partialJson: string };
 
 export interface TurnAccumulator {
@@ -121,65 +120,48 @@ export async function* anthropicContentEvents(
   acc: TurnAccumulator,
 ): AsyncIterable<StreamEvent> {
   const accum = new Map<number, AccumState>();
-  {
-    for await (const event of events) {
-    switch (event.type) {
-      case "message_start": {
-        acc.usage = anthropicUsage(event.message.usage);
-        break;
+  for await (const event of events) {
+    if (event.type === "message_start") {
+      acc.usage = anthropicUsage(event.message.usage);
+    } else if (event.type === "content_block_start") {
+      const blk = event.content_block;
+      if (blk.type === "text") {
+        accum.set(event.index, { kind: "text" });
+      } else if (blk.type === "thinking") {
+        accum.set(event.index, { kind: "thinking", signature: blk.signature ?? "" });
+      } else if (blk.type === "tool_use") {
+        accum.set(event.index, { kind: "tool_use", id: blk.id, name: blk.name, partialJson: "" });
+      } else if (blk.type === "redacted_thinking") {
+        yield { type: "redacted_thinking", data: blk.data };
       }
-      case "content_block_start": {
-        const blk = event.content_block;
-        if (blk.type === "text") {
-          accum.set(event.index, { kind: "text" });
-        } else if (blk.type === "thinking") {
-          accum.set(event.index, { kind: "thinking", signature: blk.signature ?? "" });
-        } else if (blk.type === "tool_use") {
-          accum.set(event.index, { kind: "tool_use", id: blk.id, name: blk.name, partialJson: "" });
-        } else if (blk.type === "redacted_thinking") {
-          accum.set(event.index, { kind: "redacted_thinking" });
-          yield { type: "redacted_thinking", data: blk.data };
-        }
-        break;
+    } else if (event.type === "content_block_delta") {
+      const state = accum.get(event.index);
+      const d = event.delta;
+      if (d.type === "text_delta" && state?.kind === "text") {
+        acc.text += d.text;
+        yield { type: "text", text: d.text };
+      } else if (d.type === "thinking_delta" && state?.kind === "thinking") {
+        yield { type: "thinking", text: d.thinking };
+      } else if (d.type === "signature_delta" && state?.kind === "thinking") {
+        state.signature += d.signature;
+      } else if (d.type === "input_json_delta" && state?.kind === "tool_use") {
+        state.partialJson += d.partial_json;
       }
-      case "content_block_delta": {
-        const state = accum.get(event.index);
-        if (!state) break;
-        const d = event.delta;
-        if (d.type === "text_delta" && state.kind === "text") {
-          acc.text += d.text;
-          yield { type: "text", text: d.text };
-        } else if (d.type === "thinking_delta" && state.kind === "thinking") {
-          yield { type: "thinking", text: d.thinking };
-        } else if (d.type === "signature_delta" && state.kind === "thinking") {
-          state.signature += d.signature;
-        } else if (d.type === "input_json_delta" && state.kind === "tool_use") {
-          state.partialJson += d.partial_json;
-        }
-        break;
+    } else if (event.type === "content_block_stop") {
+      const state = accum.get(event.index);
+      if (state?.kind === "thinking" && state.signature) {
+        yield { type: "thinking_signature", signature: state.signature };
+      } else if (state?.kind === "tool_use") {
+        yield {
+          type: "tool_use",
+          id: state.id,
+          name: state.name,
+          ...parseToolArgs(state.partialJson),
+        };
       }
-      case "content_block_stop": {
-        const state = accum.get(event.index);
-        if (state?.kind === "thinking" && state.signature) {
-          yield { type: "thinking_signature", signature: state.signature };
-        } else if (state?.kind === "tool_use") {
-          yield {
-            type: "tool_use",
-            id: state.id,
-            name: state.name,
-            ...parseToolArgs(state.partialJson),
-          };
-        }
-        break;
-      }
-      case "message_delta": {
-        if (event.delta.stop_reason) acc.stopReason = event.delta.stop_reason;
-        acc.usage = mergeAnthropicUsage(acc.usage, event.usage);
-        break;
-      }
-      case "message_stop":
-        break;
-    }
+    } else if (event.type === "message_delta") {
+      if (event.delta.stop_reason) acc.stopReason = event.delta.stop_reason;
+      acc.usage = mergeAnthropicUsage(acc.usage, event.usage);
     }
   }
 }
@@ -261,7 +243,7 @@ export function buildAnthropicPlan(req: SidecarRequest): {
     droppedOverLimit: 0,
   };
   if (cacheEnabled) {
-    const msgs = normalizeMessages(converted);
+    const msgs = converted.map(toMessageParam);
     const labelled = req.system ?? [];
     const sys = systemToBlocks(labelled);
     const placement = applyDefaultPlacement(msgs, sys, labelled, cacheTtl, transientTail);
@@ -337,13 +319,6 @@ function messagesHaveCacheControl(messages: WireMessage[]): boolean {
   );
 }
 
-function normalizeMessages(messages: ConversationTurn[]): MessageParam[] {
-  return messages.map((m): MessageParam => {
-    const blocks = m.content.map(toContentBlockParam);
-    for (const b of blocks) delete (b as { cache_control?: unknown }).cache_control;
-    return { role: m.role, content: blocks };
-  });
-}
 
 
 
@@ -458,10 +433,7 @@ export function clearCacheMarkers(
   system: TextBlockParam[],
 ): void {
   for (const message of messages) {
-    if (!Array.isArray(message.content)) continue;
-    for (const block of message.content) {
-      delete (block as { cache_control?: unknown }).cache_control;
-    }
+    if (Array.isArray(message.content)) for (const block of message.content) delete (block as { cache_control?: unknown }).cache_control;
   }
   for (const block of system) {
     delete (block as { cache_control?: unknown }).cache_control;
@@ -504,7 +476,7 @@ export function placeContinuationBreakpoints(
 function applyMessageBreakpoint(
   content: ContentBlockParam[],
   cc: CacheControl,
-  transientTrailing = 0,
+  transientTrailing: number,
 ): boolean {
   for (let i = content.length - 1 - transientTrailing; i >= 0; i--) {
     const b = content[i] as ContentBlockParam & { cache_control?: unknown };
@@ -621,7 +593,7 @@ function buildTools(tools: ToolDefinition[] | undefined): Tool[] {
   return tools.map((t) => ({
     name: t.name,
     description: t.description,
-    input_schema: (t.input_schema ?? EMPTY_TOOL_SCHEMA) as Tool["input_schema"],
+    input_schema: t.input_schema as Tool["input_schema"],
   }));
 }
 

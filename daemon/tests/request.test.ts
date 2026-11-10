@@ -55,6 +55,23 @@ describe("choosing among a provider's configured keys", () => {
     expect(() => buildRequestWithProviderKeys(model(), entry([], false), INPUTS, env)).toThrow(
       MissingApiKey,
     );
+    expect(() => buildRequestWithProviderKeys(model(), entry([], false), INPUTS, env)).toThrow("provider 'openrouter' has no enabled keys");
+  });
+
+  test("the first key whose variable is set is used, and when none is, the last one tried is named", () => {
+    const keys = [key("first", "FIX_UNSET_ONE"), key("second", "FIX_FALLBACK"), key("third", "FIX_LEGACY")];
+    const built = buildRequestWithProviderKeys(model(), entry(keys), INPUTS, env);
+    expect([built.api_key_name, built.request.api_key]).toEqual(["second", "sk-fallback"]);
+    const missing = (() => {
+      try {
+        buildRequestWithProviderKeys(model(), entry([key("first", "FIX_UNSET_ONE"), key("second", "FIX_UNSET_TWO")]), INPUTS, env);
+      } catch (e) {
+        return e;
+      }
+      return undefined;
+    })();
+    expect(missing).toBeInstanceOf(MissingApiKey);
+    expect((missing as MissingApiKey).variable).toBe("FIX_UNSET_TWO");
   });
 
   test("a subscription sdk is billed to the subscription, not to a key that happens to be set", () => {

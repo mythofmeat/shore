@@ -45,8 +45,7 @@ pub fn spawn_connection(
     let owned_app = app_name.to_owned();
 
     let _ignored = tokio::spawn(connection_loop(
-        addr,
-        config,
+        move || resolve_addr(addr.as_deref(), config.as_deref()),
         owned_id,
         owned_app,
         SessionTarget {
@@ -136,20 +135,21 @@ async fn send_event(
     )
 }
 
-async fn connection_loop(
-    addr: Option<String>,
-    config: Option<String>,
+async fn connection_loop<F>(
+    resolve: F,
     client_id: String,
     app_name: String,
     mut target: SessionTarget,
     event_tx: mpsc::Sender<ConnEvent>,
     mut cmd_rx: mpsc::Receiver<ConnCommand>,
-) {
+) where
+    F: Fn() -> crate::swp_client::Result<ServerAddr>,
+{
     let mut backoff = Duration::from_millis(500);
     let max_backoff = Duration::from_secs(15);
 
     loop {
-        let resolved = match resolve_addr(addr.as_deref(), config.as_deref()) {
+        let resolved = match resolve() {
             Ok(resolved) => resolved,
             Err(e) => {
                 error!(error = %e, "failed to resolve daemon address");
@@ -394,13 +394,138 @@ mod tests {
 
 #[cfg(test)]
 mod lifecycle_tests {
-    use super::{ConnCommand, ConnEvent, Duration, spawn_connection};
+    use super::{
+        ConnCommand, ConnEvent, Duration, SessionTarget, connection_loop, spawn_connection,
+    };
+    use crate::protocol::SWP_V1;
+    use crate::protocol::server_msg::{Error, History, ServerHello, ServerMessage};
+    use crate::swp_client::error::ClientError;
     use crate::token::TokenSource;
+    use tokio::io::{AsyncBufReadExt as _, AsyncWriteExt as _};
 
     const HANG_GUARD: Duration = Duration::from_secs(5);
 
     fn token() -> TokenSource {
         TokenSource::Given("test-token".into())
+    }
+
+    async fn next(rx: &mut tokio::sync::mpsc::Receiver<ConnEvent>) -> Option<ConnEvent> {
+        tokio::time::timeout(HANG_GUARD, rx.recv()).await.unwrap()
+    }
+
+    async fn write_frame(write: &mut tokio::net::tcp::OwnedWriteHalf, frame: &ServerMessage) {
+        let mut line = serde_json::to_vec(frame).unwrap();
+        line.push(b'\n');
+        write.write_all(&line).await.unwrap();
+    }
+
+    async fn serve_one_frame_after_the_handshake(listener: tokio::net::TcpListener) {
+        let (socket, _) = listener.accept().await.unwrap();
+        let (read, mut write) = socket.into_split();
+        let mut reader = tokio::io::BufReader::new(read);
+        write_frame(
+            &mut write,
+            &ServerMessage::Hello(ServerHello {
+                v: SWP_V1,
+                server_name: "fake".into(),
+                server_version: None,
+                characters: vec![],
+            }),
+        )
+        .await;
+        let mut hello = String::new();
+        let _hello_len = reader.read_line(&mut hello).await.unwrap();
+        write_frame(
+            &mut write,
+            &ServerMessage::History(History {
+                delta: None,
+                rid: None,
+                messages: vec![],
+                previous_segment: None,
+                config: serde_json::json!({}),
+                selected_character: None,
+                selected_thread: None,
+                revision: 1,
+            }),
+        )
+        .await;
+        write_frame(
+            &mut write,
+            &ServerMessage::Error(Error {
+                rid: None,
+                code: crate::protocol::error::ErrorCode::InternalError,
+                message: "after the handshake".into(),
+                retry_after_ms: None,
+            }),
+        )
+        .await;
+        let mut rest = String::new();
+        let _closed = reader.read_line(&mut rest).await;
+    }
+
+    #[tokio::test]
+    async fn a_connected_session_passes_on_what_the_daemon_sends() {
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let address = listener.local_addr().unwrap().to_string();
+        let daemon = tokio::spawn(serve_one_frame_after_the_handshake(listener));
+        let (tx, mut rx) =
+            spawn_connection(Some(address), None, "test", "test", None, None, token());
+        assert!(matches!(
+            next(&mut rx).await,
+            Some(ConnEvent::Connected { .. })
+        ));
+        assert!(matches!(
+            next(&mut rx).await,
+            Some(ConnEvent::Message(ServerMessage::Error(error))) if error.message == "after the handshake"
+        ));
+        tx.send(ConnCommand::Shutdown).await.unwrap();
+        daemon.await.unwrap();
+    }
+
+    #[tokio::test]
+    async fn a_refused_connection_is_tried_again() {
+        let closed = std::net::TcpListener::bind("127.0.0.1:0")
+            .unwrap()
+            .local_addr()
+            .unwrap()
+            .to_string();
+        let (tx, mut rx) =
+            spawn_connection(Some(closed), None, "test", "test", None, None, token());
+        for attempt in 0..2 {
+            assert!(
+                matches!(
+                    next(&mut rx).await,
+                    Some(ConnEvent::Disconnected(reason)) if reason.starts_with("connect failed")
+                ),
+                "attempt {attempt}"
+            );
+        }
+        tx.send(ConnCommand::Shutdown).await.unwrap();
+    }
+
+    #[tokio::test]
+    async fn an_address_that_cannot_be_found_is_looked_up_again() {
+        let (event_tx, mut rx) = tokio::sync::mpsc::channel(4);
+        let (tx, cmd_rx) = tokio::sync::mpsc::channel(4);
+        let looking = tokio::spawn(connection_loop(
+            || Err(ClientError::Protocol("no daemon address".into())),
+            "test".into(),
+            "test".into(),
+            SessionTarget::default(),
+            event_tx,
+            cmd_rx,
+        ));
+        for attempt in 0..2 {
+            assert!(
+                matches!(
+                    next(&mut rx).await,
+                    Some(ConnEvent::Disconnected(reason)) if reason.starts_with("address resolution failed")
+                ),
+                "attempt {attempt}"
+            );
+        }
+        tx.send(ConnCommand::Shutdown).await.unwrap();
+        looking.await.unwrap();
     }
 
     #[tokio::test]

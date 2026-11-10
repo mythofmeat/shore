@@ -5,7 +5,7 @@ const AVATAR_TONES = 6;
 
 export function avatarTone(name: string): number {
   let hash = 0;
-  for (const character of name) hash = (hash * 31 + (character.codePointAt(0) ?? 0)) >>> 0;
+  for (const character of name) hash = (hash * 31 + Number(character.codePointAt(0))) >>> 0;
   return hash % AVATAR_TONES;
 }
 

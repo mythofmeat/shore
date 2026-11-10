@@ -335,7 +335,7 @@ function periodStartNaive(
     }
     case "week": {
       const todayDow = daysFromMonday(now);
-      const daysBack = (todayDow + 7 - anchors.day_of_week) % 7;
+      const daysBack = todayDow - anchors.day_of_week;
       const candidate = atHour(asNaive(now - daysBack * DAY_MS), anchors.hour);
       if (now >= candidate) {
         return candidate;
@@ -382,9 +382,7 @@ function monthAnchorNaive(
   month: number,
   anchors: BudgetAnchors,
 ): Naive {
-  const maxDay = daysInMonth(year, month);
-  const day = Math.min(Math.max(anchors.day_of_month, 1), maxDay);
-  return naiveFrom(year, month, day, Math.min(Math.max(anchors.hour, 0), 23));
+  return naiveFrom(year, month, Math.min(anchors.day_of_month, daysInMonth(year, month)), anchors.hour);
 }
 
 interface PaceWindow {

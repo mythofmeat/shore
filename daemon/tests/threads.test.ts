@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { createFolder, deleteFolder, moveFolder, moveThread, placedThreads, renameFolder, setFolderSort } from "../src/engine/thread_layout.ts";
-import { MAX_THREAD_ID_LENGTH, archiveThread, assertThreadId, isValidThreadId, createThread, ensureHeartbeatThread, ensureThreads, heartbeatThread, markThreadRead, readThreadsIndex, setThreadCompaction, threadActivityNow, writeThreadsIndex, type ThreadsIndex } from "../src/engine/threads.ts";
+import { MAX_THREAD_ID_LENGTH, archiveThread, assertThreadId, isValidThreadId, createThread, ensureHeartbeatThread, ensureThreads, heartbeatThread, markThreadRead, readThreadsIndex, setThreadCompaction, threadActivityNow, threadFilePaths, writeThreadsIndex, type ThreadsIndex } from "../src/engine/threads.ts";
 import { readFileSync, readFile } from "./support/stored_files.ts";
 import { mkdirSync, mkdtempSync, writeFileSync, existsSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -19,6 +19,13 @@ import { MessageStore } from "../src/engine/message_store.ts";
 import { type ContentBlock, type Message } from "../src/engine/types.ts";
 import { testTmp } from "./support/tmp.ts";
 import { outcomeOf } from "./support/outcome.ts";
+
+describe("thread file paths", () => {
+  test("lose empty and dot parts, and one that names nothing is refused", () => {
+    expect(threadFilePaths(["stories//lighthouse.md", "stories/./notes.md", "/workspace/./plan.md"])).toEqual(["stories/lighthouse.md", "stories/notes.md", "plan.md"]);
+    expect(() => threadFilePaths(["."])).toThrow("a thread file path is empty");
+  });
+});
 
 describe("thread ids", () => {
   test("accepts ordinary ids and rejects path-shaped ones", () => {
@@ -77,6 +84,24 @@ async function registryWith(...characters: string[]): Promise<{
   return { registry, dataDir, configDir, loaded };
 }
 
+describe("creating a thread", () => {
+  test("makes its data folder, records a chosen model only when there is one, and refuses a second thread of the same id", async () => {
+    const data = await freshDataDir();
+    const plain = await createThread(data, "ada", "side", NOW);
+    expect(existsSync(join(data, "ada", "threads", "side"))).toBe(true);
+    expect(plain.threads.find((thread) => thread.id === "side")).toStrictEqual({ id: "side", created_at: NOW, compaction: false });
+    const chosen = await createThread(data, "ada", "other", NOW, { chat_model: "anthropic:claude-one" });
+    expect(chosen.threads.find((thread) => thread.id === "other")).toStrictEqual({ id: "other", created_at: NOW, compaction: false, chat_model: "anthropic:claude-one" });
+    expect(await outcomeOf(createThread(data, "ada", "side", NOW))).toThrow('thread "side" already exists for ada');
+  });
+
+  test("reuses a folder an earlier thread of the same id left behind", async () => {
+    const data = await freshDataDir();
+    mkdirSync(join(data, "ada", "threads", "again"), { recursive: true });
+    expect((await createThread(data, "ada", "again", NOW)).threads.map((thread) => thread.id)).toContain("again");
+  });
+});
+
 describe("concurrent thread-index mutations", () => {
   test("two threads created at once both survive on disk and in the registry", async () => {
     const { registry, dataDir } = await registryWith("aria");
@@ -94,6 +119,23 @@ describe("concurrent thread-index mutations", () => {
     expect(registry.listThreads("aria").map((t) => t.id).sort()).toEqual(
       [MAIN_THREAD, "alpha", "beta"].sort(),
     );
+  });
+
+  test("archiving a thread forgets its engine, so a new thread of the same name starts afresh", async () => {
+    const { registry } = await registryWith("aria");
+    await registry.createThread("aria", "side");
+    const old = await registry.getOrCreate("aria", "side");
+    await registry.archiveThread("aria", "side");
+    await registry.createThread("aria", "side");
+    expect(await registry.getOrCreate("aria", "side")).not.toBe(old);
+  });
+
+  test("a change asked for after its stop arrived is never made", async () => {
+    const { registry } = await registryWith("aria");
+    const stop = new AbortController();
+    stop.abort(new Error("stopped"));
+    expect(await outcomeOf(registry.createThread("aria", "late", undefined, stop.signal))).toThrow("stopped");
+    expect(registry.listThreads("aria").map((t) => t.id)).toEqual([MAIN_THREAD]);
   });
 
   test("a create racing an archive leaves the index consistent", async () => {

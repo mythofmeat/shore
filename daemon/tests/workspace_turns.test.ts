@@ -5,6 +5,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 
 import type { Message } from "../src/engine/types.ts";
+import { required } from "../src/util/required.ts";
 import { CharacterWorkspace } from "../src/tools/character_workspace.ts";
 import {
   aliasTurn,
@@ -237,6 +238,109 @@ describe("workspace turns", () => {
     expect(gitIn(turns, "status", "--porcelain")).toBe("");
   });
 
+  test("undoing a reply that pushed a commit in each of two tool calls reverts them together, and redo returns to the pushed head", async () => {
+    const turns = setup();
+    const remote = `${turns.workspace}-remote.git`;
+    execFileSync("git", ["init", "--quiet", "--bare", remote]);
+    await ensureWorkspaceGitRepo(turns.workspace);
+    write(turns, "SOUL.md", "soul\n");
+    await gitCommitAll(turns.workspace, "Ada", "start");
+    gitIn(turns, "remote", "add", "origin", remote);
+    gitIn(turns, "push", "--quiet", "--set-upstream", "origin", "HEAD");
+    const recorder = new WorkspaceRecorder(turns);
+    for (const name of ["a", "b"]) {
+      await recorder.track(async () => {
+        write(turns, `${name}.md`, `${name}\n`);
+        gitIn(turns, "add", "-A");
+        commit(turns, name);
+        gitIn(turns, "push", "--quiet");
+      });
+    }
+    await recorder.settle("main", "mv_1");
+    const pushed = await gitHead(turns.workspace);
+
+    await undoTurns(turns, "main", ["mv_1"]);
+    expect(gitIn(turns, "log", "-1", "--format=%P %s")).toBe(`${pushed} Revert 2 commits`);
+    expect(existsSync(file(turns, "a.md")) || existsSync(file(turns, "b.md"))).toBe(false);
+    expect(gitIn(turns, "status", "--porcelain")).toBe("");
+
+    await redoTurns(turns, "main", ["mv_1"]);
+    expect(await gitHead(turns.workspace)).toBe(pushed);
+  });
+
+  test("a record whose later tool call lost its closing snapshot still undoes the calls that kept both", async () => {
+    const turns = setup();
+    write(turns, "kept.md", "before\n");
+    await turn(turns, "mv_1", () => { write(turns, "kept.md", "after\n"); });
+    const base = `refs/turns/${Buffer.from("main", "utf8").toString("hex")}/mv_1`;
+    const refs = execFileSync("git", ["--git-dir", turns.repo, "for-each-ref", "--format=%(refname) %(objectname)", base], { encoding: "utf8" }).trim().split("\n");
+    const before = required(refs.find((line) => line.split(" ")[0]?.endsWith("/before"))).split(" ")[1];
+    execFileSync("git", ["--git-dir", turns.repo, "update-ref", `${base}/9/before`, required(before)]);
+
+    await undoTurns(turns, "main", ["mv_1"]);
+    expect(read(turns, "kept.md")).toBe("before\n");
+  });
+
+  test("a tool call whose snapshot before or after couldn't be taken is recorded as nothing, without failing the reply", async () => {
+    for (const failing of [1, 2]) {
+      const turns = setup();
+      write(turns, "note.md", "before\n");
+      const realRun = CharacterWorkspace.prototype.run.bind(new CharacterWorkspace(turns.workspace));
+      let trees = 0;
+      const run = spyOn(CharacterWorkspace.prototype, "run").mockImplementation(async (command, args, options) => {
+        if (command === "git" && args.includes("write-tree") && ++trees === failing) return { code: 1, stdout: "", stderr: "disk full" };
+        return await realRun(command, args, options);
+      });
+      try {
+        const recorder = new WorkspaceRecorder(turns);
+        await recorder.track(async () => { write(turns, "note.md", "after\n"); });
+        await recorder.settle("main", "mv_1");
+      } finally {
+        run.mockRestore();
+      }
+      expect(await recordedTurns(turns, "main", ["mv_1"]), `snapshot ${String(failing)} failed`).toEqual([]);
+    }
+  });
+
+  test("a reply whose first commit was reworded by a tool call that went unrecorded is undone past both commits, and redone to its last", async () => {
+    const { turns, start } = await startedRepo();
+    const realRun = CharacterWorkspace.prototype.run.bind(new CharacterWorkspace(turns.workspace));
+    let trees = 0;
+    const run = spyOn(CharacterWorkspace.prototype, "run").mockImplementation(async (command, args, options) => {
+      if (command === "git" && args.includes("write-tree") && options?.env?.["GIT_INDEX_FILE"] === undefined && ++trees === 3) return { code: 1, stdout: "", stderr: "disk full" };
+      return await realRun(command, args, options);
+    });
+    try {
+      const recorder = new WorkspaceRecorder(turns);
+      await recorder.track(async () => {
+        write(turns, "a.md", "a\n");
+        gitIn(turns, "add", "-A");
+        commit(turns, "a");
+      });
+      await recorder.track(async () => {
+        gitIn(turns, "-c", "user.name=Ada", "-c", "user.email=ada@shore.local", "commit", "--quiet", "--amend", "-m", "a, reworded");
+      });
+      await recorder.track(async () => {
+        write(turns, "b.md", "b\n");
+        gitIn(turns, "add", "-A");
+        commit(turns, "b");
+      });
+      await recorder.settle("main", "mv_1");
+    } finally {
+      run.mockRestore();
+    }
+    expect(trees).toBe(5);
+    const last = await gitHead(turns.workspace);
+
+    await undoTurns(turns, "main", ["mv_1"]);
+    expect(await gitHead(turns.workspace)).toBe(start);
+    expect(gitIn(turns, "status", "--porcelain")).toBe("");
+
+    await redoTurns(turns, "main", ["mv_1"]);
+    expect(await gitHead(turns.workspace)).toBe(last);
+    expect(gitIn(turns, "status", "--porcelain")).toBe("");
+  });
+
   test("commits made after the turn keep HEAD where it is", async () => {
     const turns = setup();
     await ensureWorkspaceGitRepo(turns.workspace);
@@ -304,6 +408,27 @@ describe("workspace turns", () => {
     expect(existsSync(file(turns, "a.md"))).toBe(false);
     expect(read(turns, "memory/fact.md")).toBe("remembered\n");
     expect(await gitHead(turns.workspace)).toBe(compacted);
+  });
+
+  test("undoing a reply keeps a commit another writer made while its tool call ran, even one that changed no file", async () => {
+    const { turns } = await startedRepo();
+    write(turns, "memory/fact.md", "remembered\n");
+    const recorder = new WorkspaceRecorder(turns);
+    await recorder.track(async () => {
+      write(turns, "a.md", "a\n");
+      await withWriteWindow(turns, {}, async () => {
+        gitIn(turns, "add", "memory");
+        commit(turns, "memory");
+        return { value: undefined, paths: [], head: true };
+      });
+    });
+    await recorder.settle("main", "mv_1");
+    const committed = await gitHead(turns.workspace);
+
+    await undoTurns(turns, "main", ["mv_1"]);
+    expect(existsSync(file(turns, "a.md"))).toBe(false);
+    expect(read(turns, "memory/fact.md")).toBe("remembered\n");
+    expect(await gitHead(turns.workspace)).toBe(committed);
   });
 
   test("undoing a reply leaves a file written by another reply whose tool call outlasted its own", async () => {

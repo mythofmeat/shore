@@ -32,3 +32,10 @@ describe("the command sink spawns argv directly", () => {
     expect(await outcomeOf(realSink.command(["false"], "t", "b"))).toThrow("exited 1");
   });
 });
+
+describe("a notification command", () => {
+  test("fills the title and body into its arguments but never into the command itself", async () => {
+    const { expandArgv } = await import("../src/notifications.ts");
+    expect(expandArgv(["notify-{title}", "--title={title}", "{body}"], "Ada", "hello")).toEqual(["notify-{title}", "--title=Ada", "hello"]);
+  });
+});

@@ -80,16 +80,13 @@ export async function archiveAndRetain(
       );
       const [character, thread = MAIN_THREAD] = history.archiveKey.split("/");
       if (character !== undefined) forgetThreadSessions(dirname(history.dbPath), character, thread, Date.parse(now()));
-      await refreshConversation(characterDir);
-      return newId();
+    } else {
+      try {
+        writeDurable(archiveFile(history.dbPath, history.archiveKey, "active.jsonl"), retainedContent);
+      } catch (e) {
+        throw CompactionError.conversationManager(`failed to write retained messages: ${message(e)}`);
+      }
     }
-
-    try {
-      writeDurable(archiveFile(history.dbPath, history.archiveKey, "active.jsonl"), retainedContent);
-    } catch (e) {
-      throw CompactionError.conversationManager(`failed to write retained messages: ${message(e)}`);
-    }
-
     await refreshConversation(characterDir);
     return newId();
   });

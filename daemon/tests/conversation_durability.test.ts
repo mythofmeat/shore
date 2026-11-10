@@ -3,12 +3,14 @@ import { readdir } from "./support/stored_files.ts";
 import { readFile } from "./support/stored_files.ts";
 import { required } from "../src/util/required.ts";
 
-import { describe, expect, test } from "bun:test";
+import { describe, expect, spyOn, test } from "bun:test";
+import * as files from "../src/storage/files.ts";
 import { mkdir, mkdtemp } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
-import { BACKUP_THROTTLE_MS, MAX_BACKUPS, backupBeforeWrite, backupDirFor } from "../src/engine/backup.ts";
+import { BACKUP_THROTTLE_MS, MAX_BACKUPS, backupBeforeWrite, backupDirFor, quarantineLines } from "../src/engine/backup.ts";
+import { listDurableFiles } from "../src/storage/files.ts";
 import { MessageStore } from "../src/engine/message_store.ts";
 import type { Message } from "../src/engine/types.ts";
 import { outcomeOf } from "./support/outcome.ts";
@@ -86,7 +88,28 @@ describe("backupBeforeWrite", () => {
     expect(await backupBeforeWrite(path, () => at)).toBeDefined();
     at += BACKUP_THROTTLE_MS - 1;
     expect(await backupBeforeWrite(path, () => at)).toBeUndefined();
-    at += 2;
+    at += 1;
+    expect(await backupBeforeWrite(path, () => at)).toBeDefined();
+  });
+
+  test("a backup that couldn't be written is not tried again until the throttle has passed", async () => {
+    const dir = await workspace();
+    const path = join(dir, "threads", "main", "active.jsonl");
+    writeDurable(path, "original\n");
+    const realWrite = files.writeDurable;
+    const failing = spyOn(files, "writeDurable").mockImplementation((target, content) => {
+      if ((typeof target === "string" ? target : target.key).includes("/backups/")) throw new Error("disk full");
+      realWrite(target, content);
+    });
+    let at = 2_000_000;
+    try {
+      expect(await backupBeforeWrite(path, () => at)).toBeUndefined();
+    } finally {
+      failing.mockRestore();
+    }
+    at += 1;
+    expect(await backupBeforeWrite(path, () => at)).toBeUndefined();
+    at += BACKUP_THROTTLE_MS;
     expect(await backupBeforeWrite(path, () => at)).toBeDefined();
   });
 
@@ -101,6 +124,43 @@ describe("backupBeforeWrite", () => {
       at += BACKUP_THROTTLE_MS + 1;
     }
     expect((await readdir(backupDirFor(path))).length).toBe(MAX_BACKUPS);
+  });
+
+  test("pruning keeps quarantined lines and other files' copies", async () => {
+    const dir = await workspace();
+    const path = join(dir, "threads", "main", "active.jsonl");
+    writeDurable(path, "original\n");
+    const others = ["active.jsonl.quarantine.2020-01-01T00-00-00-000Z", "deferred_edits.jsonl.2020-01-01T00-00-00-000Z"];
+    for (const name of others) writeDurable(join(backupDirFor(path), name), "kept\n");
+
+    let at = 1_000_000;
+    for (let i = 0; i < MAX_BACKUPS + 3; i += 1) {
+      await backupBeforeWrite(path, () => at);
+      at += BACKUP_THROTTLE_MS + 1;
+    }
+    const names = listDurableFiles(backupDirFor(path));
+    expect(names.filter((name) => !others.includes(name))).toHaveLength(MAX_BACKUPS);
+    expect(others.every((name) => names.includes(name))).toBe(true);
+  });
+
+  test("an attempt with nothing to copy still counts toward the throttle", async () => {
+    const dir = await workspace();
+    const path = join(dir, "threads", "main", "active.jsonl");
+    expect(await backupBeforeWrite(path, () => 1)).toBeUndefined();
+    writeDurable(path, "now there is\n");
+    expect(await backupBeforeWrite(path, () => 2)).toBeUndefined();
+    const empty = join(dir, "threads", "main", "deferred_edits.jsonl");
+    writeDurable(empty, "");
+    expect(await backupBeforeWrite(empty, () => 1)).toBeUndefined();
+    writeDurable(empty, "now there is\n");
+    expect(await backupBeforeWrite(empty, () => 2)).toBeUndefined();
+  });
+
+  test("quarantining no lines writes nothing", async () => {
+    const dir = await workspace();
+    const path = join(dir, "threads", "main", "active.jsonl");
+    expect(await quarantineLines(path, [])).toBeUndefined();
+    expect(listDurableFiles(backupDirFor(path))).toEqual([]);
   });
 
   test("an empty or missing file is not worth a copy", async () => {

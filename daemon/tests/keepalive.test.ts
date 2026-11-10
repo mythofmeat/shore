@@ -1,18 +1,20 @@
 import { required } from "../src/util/required.ts";
 
-import { beforeEach, describe, expect, test } from "bun:test";
+import { beforeEach, describe, expect, spyOn, test } from "bun:test";
 
 import {
   KeepaliveService,
   buildKeepalivePing,
   pingLandedCold,
   prefixFingerprint,
+  prefixIsStale,
   type KeepaliveEvent,
   type KeepalivePrefix,
 } from "../src/cache/keepalive.ts";
 import { CacheKeepalive } from "../src/cache/schedule.ts";
 import { closeLedgers, setCallObserver } from "../src/ledger/record.ts";
 import { freshLedger, openLedger } from "./support/ledger_fixture.ts";
+import { until } from "./support/until.ts";
 import type { GenerateResponse, SidecarRequest } from "../src/llm/types.ts";
 
 const MODEL = "claude-opus-4-6";
@@ -259,6 +261,34 @@ describe("a ping a budget would stop", () => {
     expect(h.sent).toHaveLength(0);
     expect(h.events.at(-1)?.outcome).toBe("skipped");
     expect(h.events.at(-1)?.detail).toContain("tiny");
+    ledger.cleanup();
+  });
+
+  test("a long reason is cut to 160 characters", async () => {
+    const ledger = freshLedger();
+    const db = openLedger(ledger.path);
+    db.query(
+      `INSERT INTO calls (ts, character, provider, api_key_name, model, call_type, input_tokens, output_tokens,
+         cache_read_tokens, cache_write_tokens, total_ms, ttft_ms, finish_reason, thinking_enabled, cost_source, total_cost)
+       VALUES (?1, ?2, 'anthropic', 'default', ?3, 'message', 10, 5, 0, 0, 100, 10, 'end_turn', 1, 'pricing_catalog', 5.0)`,
+    ).run(new Date(T0).toISOString(), CHARACTER, MODEL);
+    db.close();
+    const h = harness();
+    const base = prefix();
+    h.service.arm(prefix({
+      context: {
+        ...required(base.context),
+        ledger: ledger.path,
+        usage: { timezone: "utc", budgets: [{ name: "b".repeat(200), period: "month", cost_usd: 1, limit: "block", warn_at: [], usage_kind: [] }] },
+      },
+    }));
+    h.service.observe(CHARACTER, MODEL, "message");
+    h.clock.advance(minutes(56));
+    await h.service.tick();
+    const detail = required(h.events.at(-1)?.detail);
+    expect(detail.startsWith("Cache keepalive ping skipped: ")).toBe(true);
+    expect(detail.length).toBe("Cache keepalive ping skipped: ".length + 161);
+    expect(detail.endsWith("…")).toBe(true);
     ledger.cleanup();
   });
 });
@@ -609,5 +639,456 @@ describe("the ping count", () => {
     ka.onPrefixWarmed(START + minutes(115));
     expect(ka.tick(START + minutes(120))).toBe("none");
     expect(ka.tick(START + minutes(170))).toBe("ping");
+  });
+});
+
+describe("the keepalive schedule", () => {
+  const MIN = 60_000;
+  const armed = (interval = 55 * MIN, maxPings = 10): CacheKeepalive => {
+    const schedule = new CacheKeepalive(maxPings);
+    schedule.setInterval(interval, "chat.m", 0);
+    schedule.onCacheWarmed("chat.m", 0);
+    return schedule;
+  };
+
+  test("a failed ping retries after 30 s, doubling each time up to 15 minutes, and a success starts over", () => {
+    const schedule = armed();
+    const delays: number[] = [];
+    let now = 1000;
+    for (let failure = 0; failure < 7; failure += 1) {
+      schedule.onPingFailed(now);
+      delays.push((schedule.nextPingAt ?? 0) - now);
+      now += 1000;
+    }
+    expect(delays).toEqual([30_000, 60_000, 120_000, 240_000, 480_000, 900_000, 900_000]);
+    schedule.onPingSucceeded(now);
+    schedule.onPingFailed(now + 1000);
+    expect((schedule.nextPingAt ?? 0) - (now + 1000)).toBe(30_000);
+  });
+
+  test("a failed ping gives up once the warm it was keeping is past the interval plus five minutes", () => {
+    const schedule = armed(10 * MIN);
+    schedule.onPingFailed(15 * MIN - 1);
+    expect(schedule.nextPingAt).toBe(15 * MIN - 1 + 30_000);
+    const epoch = schedule.epoch;
+    schedule.onPingFailed(15 * MIN);
+    expect(schedule.nextPingAt).toBeUndefined();
+    expect(schedule.epoch).toBe(epoch + 1);
+    expect(schedule.snapshot()).toBeUndefined();
+
+    const never = new CacheKeepalive(10);
+    never.setInterval(10 * MIN, "chat.m", 0);
+    never.onPingFailed(0);
+    expect(never.nextPingAt).toBeUndefined();
+    const unarmed = new CacheKeepalive(10);
+    unarmed.onCacheWarmed("chat.m", 0);
+    unarmed.onPingFailed(1);
+    expect(unarmed.nextPingAt).toBeUndefined();
+  });
+
+  test("setting the same interval again leaves the next ping where it was; a new one reschedules from the last activity", () => {
+    const schedule = armed(10 * MIN);
+    schedule.onPingSucceeded(4 * MIN);
+    expect(schedule.nextPingAt).toBe(14 * MIN);
+    schedule.setInterval(10 * MIN, "chat.m", 5 * MIN);
+    expect(schedule.nextPingAt).toBe(14 * MIN);
+    schedule.setInterval(20 * MIN, "chat.m", 5 * MIN);
+    expect(schedule.nextPingAt).toBe(20 * MIN);
+    schedule.setInterval(undefined, "chat.m", 6 * MIN);
+    expect(schedule.nextPingAt).toBeUndefined();
+    expect(schedule.tick(60 * MIN)).toBe("none");
+
+    const fresh = new CacheKeepalive(10);
+    fresh.setInterval(10 * MIN, "chat.m", 0);
+    expect(fresh.nextPingAt).toBeUndefined();
+  });
+
+  test("a new model or prompt identity starts over, and leaving the identity out changes nothing", () => {
+    const schedule = new CacheKeepalive(10);
+    schedule.setInterval(10 * MIN, "chat.m", 0, "key-a");
+    schedule.onCacheWarmed("chat.m", 0);
+    const epoch = schedule.epoch;
+    schedule.setInterval(10 * MIN, "chat.m", 1, undefined);
+    expect(schedule.epoch).toBe(epoch);
+    expect(schedule.nextPingAt).toBe(10 * MIN);
+    schedule.setInterval(10 * MIN, "chat.m", 2, "key-b");
+    expect(schedule.epoch).toBe(epoch + 1);
+    expect(schedule.nextPingAt).toBeUndefined();
+    expect(schedule.snapshot()).toBeUndefined();
+  });
+
+  test("a warm of another model is ignored, and a new reply resets the pings and starts a new epoch", () => {
+    const schedule = armed(10 * MIN, 2);
+    const epoch = schedule.epoch;
+    schedule.onCacheWarmed("chat.other", 5 * MIN);
+    expect(schedule.nextPingAt).toBe(10 * MIN);
+    expect(schedule.epoch).toBe(epoch);
+    schedule.onPingSucceeded(10 * MIN);
+    schedule.onCacheWarmed("chat.m", 12 * MIN, false);
+    expect(schedule.pingsSent).toBe(1);
+    expect(schedule.epoch).toBe(epoch);
+    schedule.onCacheWarmed("chat.m", 13 * MIN);
+    expect(schedule.pingsSent).toBe(0);
+    expect(schedule.epoch).toBe(epoch + 1);
+    expect(schedule.nextPingAt).toBe(20 * MIN);
+  });
+
+  test("invalidating forgets the warm, the failures and the pings, and opens a new epoch", () => {
+    const schedule = armed(10 * MIN, 5);
+    schedule.onPingSucceeded(10 * MIN);
+    schedule.onPingFailed(12 * MIN);
+    const epoch = schedule.epoch;
+    schedule.onCacheInvalidated();
+    expect(schedule.epoch).toBe(epoch + 1);
+    expect(schedule.pingsSent).toBe(0);
+    expect(schedule.nextPingAt).toBeUndefined();
+    expect(schedule.snapshot()).toBeUndefined();
+    schedule.onCacheWarmed("chat.m", 20 * MIN, false);
+    schedule.onPingFailed(21 * MIN);
+    expect((schedule.nextPingAt ?? 0) - 21 * MIN).toBe(30_000);
+  });
+
+  test("the ping allowance is checked when a ping is due, so lowering it stops the next one", () => {
+    const schedule = armed(10 * MIN, 3);
+    schedule.onPingSucceeded(10 * MIN);
+    expect(schedule.tick(20 * MIN)).toBe("ping");
+    schedule.setMaxPings(1);
+    expect(schedule.tick(20 * MIN)).toBe("none");
+    expect(schedule.nextPingAt).toBeUndefined();
+    const exact = armed(10 * MIN, 2);
+    exact.onPingSucceeded(10 * MIN);
+    expect(exact.tick(20 * MIN)).toBe("ping");
+  });
+});
+
+describe("keepalive edges", () => {
+  const OPUS = "claude-opus-5";
+  const named = (character: string, over: Partial<KeepalivePrefix> = {}): KeepalivePrefix => ({ ...rhia(), ...over, context: { character, call_type: "message", thinking_enabled: false } });
+
+  test("a prefix is stale only when both fingerprints are known and differ", () => {
+    expect(prefixIsStale({ armedFingerprint: undefined, lastCallFingerprint: "b" })).toBe(false);
+    expect(prefixIsStale({ armedFingerprint: "a", lastCallFingerprint: undefined })).toBe(false);
+    expect(prefixIsStale({ armedFingerprint: "a", lastCallFingerprint: "a" })).toBe(false);
+    expect(prefixIsStale({ armedFingerprint: "a", lastCallFingerprint: "b" })).toBe(true);
+  });
+
+  test("a ping keeps the cached request's window unless its labels name another", () => {
+    expect(buildKeepalivePing(prefix()).context?.keepalive_window_secs).toBe(WINDOW_SECS);
+    expect(buildKeepalivePing(prefix(), { windowSecs: 99 }).context?.keepalive_window_secs).toBe(99);
+  });
+
+  test("a halt gives its evidence and clears the schedule of everyone pinging that model, but no one else's", async () => {
+    let at = T0;
+    const events: KeepaliveEvent[] = [];
+    const service = new KeepaliveService(async (req) => response(req.model === OPUS ? 0 : 12_000, req.model === OPUS ? 14_144 : 0, req.model), () => at);
+    service.onEvent((e) => events.push(e));
+    service.arm(named("Bea", { keepalive_interval_ms: 60_000 }), true);
+    service.arm(named("Cy", { model: "claude-sonnet-5", keepalive_interval_ms: 60_000 }), true);
+    for (let i = 0; i < 2; i += 1) {
+      service.arm(rhia(), true);
+      at += 10_000;
+      await service.tick();
+    }
+    const reason = "two keepalive pings in a row missed with nothing in between. Neither read any cached tokens on anthropic; the latest wrote 14144 tokens. " +
+      "There is no evidence that the prefix is being reused, so every further ping would pay full price for nothing. Keepalives for anthropic:claude-opus-5 " +
+      "are stopped for the life of this daemon; nothing resumes them, because nothing that causes this is fixable at runtime";
+    expect(service.halted?.reason).toBe(reason);
+    expect(events.at(-1)).toEqual({ character: "Rhia", outcome: "halted", detail: `Cache keepalive HALTED: ${reason}`, at });
+    expect(service.nextPingAt("Bea")).toBeUndefined();
+    expect(service.nextPingAt("Cy")).toBe(T0 + 60_000);
+  });
+
+  test("a prefix with no character arms nothing", async () => {
+    const h = harness();
+    const nameless: KeepalivePrefix = rhia();
+    delete (nameless.context as { character?: string }).character;
+    h.service.arm(nameless, true);
+    h.clock.advance(10_000);
+    await h.service.tick();
+    expect(h.sent).toHaveLength(0);
+  });
+
+  test("re-arming forgets the last call's prefix, so the next ping goes out", async () => {
+    const h = harness();
+    h.service.arm(rhia(), true);
+    h.service.observe("Rhia", OPUS, "message", "a different prefix");
+    h.service.arm(rhia(), true);
+    h.clock.advance(10_000);
+    await h.service.tick();
+    expect(h.events.map((e) => e.outcome)).toEqual(["sent"]);
+  });
+
+  test("a call on another model is not this prefix's last call, so it doesn't make the ping stale", async () => {
+    const h = harness();
+    h.service.arm(rhia(), true);
+    h.service.observe("Rhia", "claude-sonnet-5", "message", "a different prefix");
+    h.clock.advance(10_000);
+    await h.service.tick();
+    expect(h.events.map((e) => e.outcome)).toEqual(["sent"]);
+  });
+
+  test("a call on another model, or through another provider, says nothing about this prefix", async () => {
+    const h = harness();
+    h.service.arm(rhia(), true);
+    h.service.observe("Rhia", OPUS, "message");
+    const activeAt = h.clock.now();
+    h.clock.advance(500);
+    h.service.observe("Rhia", "claude-sonnet-5", "message", "a different prefix");
+    h.service.observe("Rhia", OPUS, "message", undefined, undefined, { sdk: "openai", model: OPUS, provider_key: "elsewhere" });
+    expect(h.service.scheduleFor("Rhia")?.last_active_at).toBe(activeAt);
+    h.service.observe("Rhia", OPUS, "message", undefined, undefined, { sdk: "anthropic", model: OPUS, provider_key: "anthropic" });
+    expect(h.service.scheduleFor("Rhia")?.last_active_at).toBe(h.clock.now());
+    h.clock.advance(10_000);
+    await h.service.tick();
+    expect(h.events.map((e) => e.outcome)).toEqual(["sent"]);
+  });
+
+  test("a real call that read from the missed model forgives the miss; one that read nothing does not", async () => {
+    for (const [read, halts] of [[1, false], [0, true]] as const) {
+      const h = harness([], response(0, 14_144, OPUS));
+      h.service.arm(rhia(), true);
+      h.clock.advance(10_000);
+      await h.service.tick();
+      h.service.observe("Rhia", OPUS, "message", undefined, usage(read, 0));
+      h.service.arm(rhia(), true);
+      h.clock.advance(10_000);
+      await h.service.tick();
+      expect(h.service.halted !== undefined, `a real call reading ${String(read)}`).toBe(halts);
+    }
+  });
+
+  test("a heartbeat that refreshed the prefix moves the next ping without counting as activity", async () => {
+    const h = harness();
+    h.service.arm({ ...rhia(), keepalive_interval_ms: 60_000, keepalive_cached_tokens: 1000 }, true);
+    h.service.observe("Rhia", OPUS, "message");
+    const armedAt = h.clock.now();
+    h.clock.advance(30_000);
+    h.service.observe("Rhia", OPUS, "heartbeat", undefined, usage(1000, 0), { sdk: "anthropic", model: OPUS, provider_key: "anthropic" });
+    expect(h.service.nextPingAt("Rhia")).toBe(h.clock.now() + 60_000);
+    expect(h.service.scheduleFor("Rhia")?.last_active_at).toBe(armedAt);
+  });
+
+  test("a restored schedule with no cached request yet skips its ping and backs off", async () => {
+    const h = harness();
+    expect(h.service.restore("Rhia", { model: OPUS, interval: 60_000, last_warm_at: T0, last_active_at: T0 })).toBe(true);
+    h.clock.advance(61_000);
+    await h.service.tick();
+    expect(h.sent).toHaveLength(0);
+    expect(h.events).toEqual([{ character: "Rhia", outcome: "skipped", detail: "Cache keepalive ping skipped: no cached request", at: T0 + 61_000 }]);
+    expect(h.service.nextPingAt("Rhia")).toBe(T0 + 61_000 + 30_000);
+  });
+
+  test("a schedule restored for a halted model is cleared when it comes due, without a ping", async () => {
+    let at = T0;
+    const sent: string[] = [];
+    const service = new KeepaliveService(async (req) => {
+      sent.push(req.context?.character ?? "");
+      return response(0, 14_144, OPUS);
+    }, () => at);
+    for (let i = 0; i < 2; i += 1) {
+      service.arm(rhia(), true);
+      at += 10_000;
+      await service.tick();
+    }
+    service.arm(named("Bea"), true);
+    expect(service.restore("Bea", { model: OPUS, interval: 60_000, last_warm_at: at, last_active_at: at })).toBe(true);
+    at += 61_000;
+    await service.tick();
+    expect(sent.filter((character) => character === "Bea")).toEqual([]);
+    expect(service.nextPingAt("Bea")).toBeUndefined();
+  });
+
+  test("a ping that lands after its schedule was reset changes nothing and says nothing", async () => {
+    for (const fails of [false, true]) {
+      let at = T0;
+      const events: KeepaliveEvent[] = [];
+      let sending!: () => void;
+      const sent = new Promise<void>((resolve) => { sending = resolve; });
+      let land!: () => void;
+      const landed = new Promise<void>((resolve) => { land = resolve; });
+      const service = new KeepaliveService(async () => {
+        sending();
+        await landed;
+        if (fails) throw new Error("provider unavailable");
+        return response(2200, 0, OPUS);
+      }, () => at);
+      service.onEvent((e) => events.push(e));
+      service.arm(rhia(), true);
+      at += 10_000;
+      const ticking = service.tick();
+      await sent;
+      service.disarm("Rhia");
+      land();
+      await ticking;
+      expect(events, fails ? "a failure" : "a success").toEqual([]);
+      expect(service.nextPingAt("Rhia")).toBeUndefined();
+    }
+  });
+
+  test("each outcome says exactly what happened", async () => {
+    const said = async (reply: GenerateResponse | Error): Promise<KeepaliveEvent[]> => {
+      const h = harness([reply]);
+      h.service.arm(rhia(), true);
+      h.clock.advance(10_000);
+      await h.service.tick();
+      return h.events;
+    };
+    const at = T0 + 10_000;
+    expect(await said(response(2200, 0, OPUS))).toEqual([{ character: "Rhia", outcome: "sent", detail: "Cache refresh ping (cache_read: 2200, input: 7)", at }]);
+    expect(await said(response(2200, 1500, OPUS))).toEqual([{ character: "Rhia", outcome: "rewrote", detail: "Cache refresh ping rewrote the prefix — it had moved under the ping (cache_read: 2200, cache_write: 1500); the entry it just wrote is what the next ping reads", at }]);
+    expect(await said(response(0, 0, OPUS))).toEqual([{ character: "Rhia", outcome: "cold", detail: "Cache refresh ping (COLD — read nothing, disarmed; cache_read: 0, input: 7)", at }]);
+    expect(await said(response(0, 1, OPUS))).toEqual([{ character: "Rhia", outcome: "cold", detail: "Cache refresh ping (COLD — wrote cache, disarmed; cache_read: 0, input: 7)", at }]);
+    const long = "x".repeat(200);
+    expect(await said(new Error(long))).toEqual([{ character: "Rhia", outcome: "failed", detail: `Cache keepalive ping failed: Error: ${"x".repeat(153)}…`, at }]);
+  });
+
+  test("a rewrite, like any landed ping, schedules the next one a full interval on", async () => {
+    const h = harness([response(2200, 1500, OPUS)]);
+    h.service.arm(rhia(), true);
+    h.clock.advance(10_000);
+    await h.service.tick();
+    expect(h.service.nextPingAt("Rhia")).toBe(h.clock.now() + 1000);
+  });
+
+  test("a warm ping between two misses means the second is not a second in a row", async () => {
+    const h = harness([response(0, 14_144, OPUS), response(2200, 0, OPUS), response(0, 14_144, OPUS)]);
+    for (let i = 0; i < 3; i += 1) {
+      h.service.arm(rhia(), true);
+      h.clock.advance(10_000);
+      await h.service.tick();
+    }
+    expect(h.events.map((e) => e.outcome)).toEqual(["cold", "sent", "cold"]);
+    expect(h.service.halted).toBeUndefined();
+  });
+
+  test("a failed ping is reported by its event alone, with nothing logged as an error", async () => {
+    const h = harness([new Error("provider unavailable")]);
+    armWarm(h);
+    h.clock.advance(minutes(56));
+    const errors = spyOn(console, "error").mockImplementation(() => {});
+    let logged: string[];
+    try {
+      await h.service.tick();
+    } finally {
+      logged = errors.mock.calls.map((call) => call.map((part: unknown) => String(part)).join(" "));
+      errors.mockRestore();
+    }
+    expect(h.events.map((e) => e.outcome)).toEqual(["failed"]);
+    expect(logged).toEqual([]);
+  });
+
+  test("a sent or failed ping is written to the ledger as a keepalive, with its attempt settled", async () => {
+    for (const reply of [response(2200, 0, MODEL), new Error("provider unavailable")]) {
+      const ledger = freshLedger();
+      const h = harness([reply]);
+      const base = prefix();
+      h.service.arm(prefix({ context: { ...required(base.context), ledger: ledger.path } }));
+      h.service.observe(CHARACTER, MODEL, "message");
+      h.clock.advance(minutes(56));
+      await h.service.tick();
+      const db = openLedger(ledger.path, { readonly: true });
+      try {
+        expect(db.query("SELECT call_type, finish_reason FROM calls").all()).toEqual([{ call_type: "keepalive", finish_reason: reply instanceof Error ? "error" : "end_turn" }]);
+        expect(db.query("SELECT call_type, status FROM call_attempts").all()).toEqual([{ call_type: "keepalive", status: reply instanceof Error ? "error" : "completed" }]);
+      } finally {
+        db.close();
+        ledger.cleanup();
+      }
+    }
+  });
+});
+
+describe("a ping's cost", () => {
+  const OPENROUTER_CATALOG = "https://openrouter.ai/api/v1/models";
+  const OPUS_4_6 = { id: "anthropic/claude-opus-4.6", pricing: { prompt: "0.000005", completion: "0.000025", input_cache_read: "0.0000005", input_cache_write: "0.00000625" } };
+
+  test("is recorded from the price list even when the list arrives after the reply, for a sent or a failed ping, on schedule or on demand", async () => {
+    for (const reply of [response(2200, 0, MODEL), new Error("provider unavailable")]) {
+      for (const how of ["tick", "now"] as const) {
+        const ledger = freshLedger();
+        const catalog = Promise.withResolvers<Response>();
+        const fetched: string[] = [];
+        const realFetch = globalThis.fetch;
+        const fetching = spyOn(globalThis, "fetch").mockImplementation((async (input: string | URL | Request, init?: RequestInit) => {
+          const url = input instanceof Request ? input.url : input.toString();
+          fetched.push(url);
+          return url === OPENROUTER_CATALOG ? await catalog.promise : await realFetch(input, init);
+        }) as typeof fetch);
+        try {
+          const h = harness([reply]);
+          const base = prefix();
+          h.service.arm(prefix({ context: { ...required(base.context), ledger: ledger.path } }));
+          h.service.observe(CHARACTER, MODEL, "message");
+          h.clock.advance(minutes(56));
+          const pinging = how === "tick" ? h.service.tick() : h.service.pingNow(CHARACTER);
+          await until(() => h.sent.length === 1 && fetched.includes(OPENROUTER_CATALOG), "the ping and the price list request");
+          catalog.resolve(Response.json({ data: [OPUS_4_6] }));
+          await pinging;
+          const db = openLedger(ledger.path, { readonly: true });
+          try {
+            const label = `${how}, ${reply instanceof Error ? "failed" : "sent"}`;
+            const [row, ...others] = db.query("SELECT total_cost FROM calls WHERE call_type = 'keepalive'").all() as { total_cost: number | null }[];
+            expect(others, label).toEqual([]);
+            if (reply instanceof Error) expect(row?.total_cost, label).toBe(0);
+            else expect(row?.total_cost, label).toBeGreaterThan(0);
+          } finally {
+            db.close();
+          }
+        } finally {
+          fetching.mockRestore();
+          closeLedgers();
+          ledger.cleanup();
+        }
+      }
+    }
+  });
+});
+
+describe("the schedule's resets", () => {
+  test("an invalidated cache forgets earlier ping failures, so the first failure once it is warm again waits 30 s", () => {
+    const schedule = new CacheKeepalive(10);
+    schedule.setInterval(minutes(5), MODEL);
+    schedule.onCacheWarmed(MODEL, 0);
+    schedule.onPingFailed(minutes(5));
+    schedule.onPingFailed(minutes(5) + 30_000);
+    schedule.onCacheInvalidated();
+    schedule.onPrefixWarmed(minutes(6));
+    schedule.onPingFailed(minutes(11));
+    expect(schedule.nextPingAt).toBe(minutes(11) + 30_000);
+  });
+
+  test("a ping failure reported after the cache was invalidated schedules no retry, however recently it was warm", () => {
+    const schedule = new CacheKeepalive(10);
+    schedule.setInterval(minutes(5), MODEL);
+    schedule.onCacheWarmed(MODEL, 0);
+    schedule.onCacheInvalidated();
+    schedule.onPingFailed(minutes(1));
+    expect(schedule.nextPingAt).toBeUndefined();
+  });
+
+  test("a real warm forgets earlier ping failures, so the next failure waits 30 s again", () => {
+    const schedule = new CacheKeepalive(10);
+    schedule.setInterval(minutes(5), MODEL);
+    schedule.onCacheWarmed(MODEL, 0);
+    schedule.onPingFailed(minutes(5));
+    schedule.onPingFailed(minutes(5) + 30_000);
+    schedule.onCacheWarmed(MODEL, minutes(6));
+    schedule.onPingFailed(minutes(11));
+    expect(schedule.nextPingAt).toBe(minutes(11) + 30_000);
+  });
+
+  test("invalidating forgets when the prefix was last warmed and how often pings failed", () => {
+    const schedule = new CacheKeepalive(10);
+    schedule.setInterval(minutes(5), MODEL);
+    schedule.onPrefixWarmed(0);
+    schedule.onPingFailed(minutes(1));
+    schedule.onPingFailed(minutes(2));
+    schedule.onCacheInvalidated();
+    schedule.onCacheWarmed(MODEL, minutes(3), false);
+    expect(schedule.nextPingAt).toBe(minutes(8));
+    schedule.onCacheInvalidated();
+    schedule.onPrefixWarmed(minutes(10));
+    schedule.onPingFailed(minutes(15));
+    expect(schedule.nextPingAt).toBe(minutes(15) + 30_000);
   });
 });

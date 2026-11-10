@@ -163,7 +163,6 @@ function options(
     dryRun: false,
     chatRequest: request(),
     dataDir,
-    resumable: true,
     tools: toolCtx,
   };
 }

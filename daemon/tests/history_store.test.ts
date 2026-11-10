@@ -1,4 +1,5 @@
 import { expect, test } from "bun:test";
+import { Database } from "bun:sqlite";
 import { access, mkdir } from "node:fs/promises";
 import { join } from "node:path";
 
@@ -83,6 +84,39 @@ test("pending compactions are hidden and recover from either side of the active-
   expect(store.readSegment("ada", committed)).toEqual(messages);
   expect(store.segmentDisplayBounds("ada", committed)).toEqual({ start: 0, end: 1 });
   expect(store.segmentTurnCount("ada", committed)).toBe(1);
+  store.close();
+});
+
+test("a finished compaction turns its memory claim into coverage; an aborted one releases it and leaves no stored bodies behind; either is harmless twice", async () => {
+  const dataDir = testTmp(`history-coverage-${crypto.randomUUID()}`);
+  await mkdir(dataDir, { recursive: true });
+  const path = join(dataDir, HISTORY_DB_FILE);
+  const store = HistoryStore.open(path);
+  const entry = { file: HISTORY_DB_FILE, message_count: 1, compacted_at: "2026-08-13T10:01:00+10:00" };
+  const now = Date.parse("2026-08-13T00:00:00Z");
+  const blobs = (): unknown => {
+    const db = new Database(path, { readonly: true });
+    try {
+      return db.query("SELECT count(*) AS n FROM history_blobs").get();
+    } finally {
+      db.close();
+    }
+  };
+
+  expect(store.claimMemoryCoverage("ada", "compaction", ["v1"], "kept", "pass", now, 60_000)).toEqual(["v1"]);
+  const finished = store.beginCompaction("ada", entry, [message("u1", "hello")], "before\n", "after\n", "kept");
+  store.finishCompaction("ada", finished);
+  store.finishCompaction("ada", finished);
+  expect([...store.coveredMemoryVersions("ada", "compaction", ["v1"])]).toEqual(["v1"]);
+
+  const stored = blobs();
+  expect(store.claimMemoryCoverage("ada", "compaction", ["v2"], "dropped", "pass", now, 60_000)).toEqual(["v2"]);
+  const aborted = store.beginCompaction("ada", entry, [message("u2", "a body only this pass stored")], "before\n", "after\n", "dropped");
+  store.abortCompaction("ada", aborted);
+  store.abortCompaction("ada", aborted);
+  expect(store.coveredMemoryVersions("ada", "compaction", ["v2"]).size).toBe(0);
+  expect(store.claimMemoryCoverage("ada", "compaction", ["v2"], "next", "pass", now, 60_000)).toEqual(["v2"]);
+  expect(blobs()).toEqual(stored);
   store.close();
 });
 

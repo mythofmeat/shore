@@ -24,6 +24,14 @@ describe("parseRetryAfterMs", () => {
     expect(parseRetryAfterMs({ "Retry-After": "Tue, 11 Aug 2026 11:18:00 GMT" }, now)).toBe(0);
   });
 
+  test("zero waits nothing, a negative wait is no wait, and a fraction of a second counts", () => {
+    expect(parseRetryAfterMs({ "retry-after-ms": "0" }, now)).toBe(0);
+    expect(parseRetryAfterMs({ "retry-after-ms": "-5" }, now)).toBeUndefined();
+    expect(parseRetryAfterMs({ "retry-after": "0" }, () => 0)).toBe(0);
+    expect(parseRetryAfterMs({ "retry-after": "0.5" }, () => 0)).toBe(500);
+    expect(parseRetryAfterMs({ "retry-after": "-1" }, now)).toBe(0);
+  });
+
   test("no header and unparseable values yield nothing", () => {
     expect(parseRetryAfterMs(new Headers(), now)).toBeUndefined();
     expect(parseRetryAfterMs({ "retry-after": "soon" }, now)).toBeUndefined();
@@ -43,6 +51,11 @@ describe("retryAfterMsFromError", () => {
       headers: new Headers({ "retry-after": "7" }),
     });
     expect(retryAfterMsFromError(err, now)).toBe(7000);
+  });
+
+  test("something thrown that isn't an object carries no wait", () => {
+    expect(retryAfterMsFromError(null, now)).toBeUndefined();
+    expect(retryAfterMsFromError("429", now)).toBeUndefined();
   });
 
   test("an error without headers is silent rather than wrong", () => {

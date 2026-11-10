@@ -69,19 +69,4 @@ describe("tool definitions reach every adapter intact", () => {
     const call = buildVercelCall(req({ sdk: "deepseek", model: "deepseek-v4-pro" }));
     expect(Object.keys(call.tools ?? {}).sort()).toEqual([...EXPECTED_ORDER].sort());
   });
-
-  test("a tool arriving without a schema gets an object schema, not {}", () => {
-    const bare = [{ name: "x", description: "", input_schema: null }] as unknown as ToolDefinition[];
-
-    const anthropicTools = buildAnthropicParams(req({ tools: bare })).tools as
-      | Array<{ input_schema: unknown }>
-      | undefined;
-    expect(anthropicTools?.[0]?.input_schema).toEqual({ type: "object" });
-
-    const decls = geminiDeclarations(req({ sdk: "gemini", model: "gemini-3-pro", tools: bare }));
-    expect(decls?.[0]?.parameters).toEqual({ type: "object" });
-
-    const fns = zaiFunctions(req({ sdk: "zai", model: "glm-4.6", tools: bare }));
-    expect(fns?.[0]?.parameters).toEqual({ type: "object" });
-  });
 });

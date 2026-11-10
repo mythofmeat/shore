@@ -20,6 +20,17 @@ describe("parseToolArgs", () => {
     expect(parsed.input_error).toContain("not valid JSON");
     expect(parsed.input_error).toContain("18 characters");
   });
+
+  test("no arguments at all are an empty input, and a parse failure gives the parser's own words", () => {
+    expect(parseToolArgs("  ")).toStrictEqual({ input: {} });
+    let why = "";
+    try {
+      JSON.parse("{");
+    } catch (e) {
+      why = (e as Error).message;
+    }
+    expect(parseToolArgs("{")).toStrictEqual({ input: {}, input_error: `the arguments were not valid JSON (${why}); 1 characters arrived` });
+  });
 });
 
 describe("executeToolUse", () => {

@@ -39,10 +39,6 @@ export class SyncState {
         state.snapshotRevision = message.revision;
         return "deliver";
       }
-      case "new_message":
-        if ((message.character ?? null) !== state.character || (message.thread ?? "main") !== (state.thread ?? "main") || message.revision <= state.messageRevision) return "drop_stale";
-        state.messageRevision = message.revision;
-        return "deliver";
       case "hello":
       case "shutdown":
       case "ping":
@@ -65,6 +61,10 @@ export class SyncState {
       case "config_warning":
       case "request_accepted":
       case "request_finished":
+        return "deliver";
+      case "new_message":
+        if ((message.character ?? null) !== state.character || (message.thread ?? "main") !== (state.thread ?? "main") || message.revision <= state.messageRevision) return "drop_stale";
+        state.messageRevision = message.revision;
         return "deliver";
     }
   }

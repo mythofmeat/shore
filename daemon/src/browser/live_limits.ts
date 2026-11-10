@@ -14,8 +14,8 @@ export function recentText(text: string, limit: number): string {
 export function recentItems<T>(items: readonly T[], maxItems: number, maxChars: number, size: (item: T) => number): { items: T[]; limited: boolean } {
   const kept: T[] = [];
   let chars = 0;
-  for (let index = items.length - 1; index >= 0 && kept.length < maxItems; index--) {
-    const item = items[index];
+  for (const item of [...items].reverse()) {
+    if (kept.length >= maxItems) break;
     if (item === undefined) continue;
     const length = size(item);
     if (length + chars > maxChars) continue;
@@ -28,7 +28,7 @@ export function recentItems<T>(items: readonly T[], maxItems: number, maxChars: 
 export function inspectionPreview(value: unknown): unknown {
   const text = JSON.stringify(value);
   if (text === undefined || text.length <= MAX_ACTIVITY_CHARS) return value;
-  const fields = typeof value === "object" && value !== null ? value as Record<string, unknown> : {};
+  const fields = typeof value === "object" ? value as Record<string, unknown> : {};
   const scope = Object.fromEntries(["type", "rid", "subagent", "task_id"].flatMap((key) => typeof fields[key] === "string" ? [[key, fields[key].slice(0, 256)]] : []));
   return { ...scope, previewLimited: true, preview: recentText(text, MAX_ACTIVITY_CHARS) };
 }

@@ -4,10 +4,17 @@ import { describe, expect, test } from "bun:test";
 import type { RawMessageStreamEvent } from "@anthropic-ai/sdk/resources/messages";
 
 import {
+  anthropicContentEvents,
   anthropicStreamEvents,
   buildAnthropicParams,
+  buildAnthropicPlan,
   buildThinkingParams,
+  dropUnverifiableThinking,
+  newTurnAccumulator,
+  placeBreakpoints,
+  placeContinuationBreakpoints,
 } from "../src/llm/providers/anthropic.ts";
+import { assistantTurnStart, messageBreakpoints, type PlacementTurn } from "../src/llm/cache_placement.ts";
 import type { SidecarRequest } from "../src/llm/types.ts";
 import { resolvedModelFromParts } from "../src/config/models.ts";
 import { settingSchema } from "../src/llm/settings.ts";
@@ -280,4 +287,179 @@ test("maps thinking+signature+text+tool_use SSE to StreamEvents in order", async
     expect(done.usage.output_tokens).toBe(30);
   }
   expect(out.length).toBe(6);
+});
+
+describe("where cache anchors go", () => {
+  const u: PlacementTurn = { role: "user", toolResultOnly: false };
+  const a: PlacementTurn = { role: "assistant", toolResultOnly: false };
+  const r: PlacementTurn = { role: "user", toolResultOnly: true };
+  const s: PlacementTurn = { role: "system", toolResultOnly: false };
+
+  test("the answer being given starts at the last assistant turn and runs back through its tool loop", () => {
+    expect(assistantTurnStart([])).toBe(0);
+    expect(assistantTurnStart([u])).toBe(1);
+    expect(assistantTurnStart([a])).toBe(0);
+    expect(assistantTurnStart([u, a])).toBe(1);
+    expect(assistantTurnStart([u, a, r, a])).toBe(1);
+    expect(assistantTurnStart([a, r, a, u])).toBe(0);
+    expect(assistantTurnStart([u, a, u, a])).toBe(3);
+    expect(assistantTurnStart([s, a])).toBe(1);
+    expect(assistantTurnStart([u, a, r, r, a])).toBe(1);
+  });
+
+  test("anchors sit on the newest turn, the turn before the current answer and the turn before the previous one, oldest first", () => {
+    expect(messageBreakpoints([])).toEqual([]);
+    expect(messageBreakpoints([u])).toEqual([0]);
+    expect(messageBreakpoints([u, u, u])).toEqual([2]);
+    expect(messageBreakpoints([u, a, u])).toEqual([0, 2]);
+    expect(messageBreakpoints([u, a, u, a, u, a, u])).toEqual([2, 4, 6]);
+    expect(messageBreakpoints([u, a, r, a, u])).toEqual([0, 4]);
+  });
+});
+
+describe("placing cache markers", () => {
+  const cc = { type: "ephemeral" } as const;
+  type Param = Parameters<typeof placeBreakpoints>[0][number];
+  type Sys = Parameters<typeof placeBreakpoints>[1][number];
+  const marked = (messages: Param[]): unknown[][] =>
+    messages.map((m) => (Array.isArray(m.content) ? m.content.map((b) => "cache_control" in b) : []));
+
+  test("system and message markers are counted, placed on the last block that takes one, and capped at four", () => {
+    const messages: Param[] = [
+      { role: "user", content: [{ type: "text", text: "a" }] },
+      { role: "assistant", content: "plain" },
+      { role: "user", content: [{ type: "text", text: "  " }] },
+      { role: "user", content: [{ type: "text", text: "b" }, { type: "text", text: "transient" }] },
+    ];
+    const system: Sys[] = [{ type: "text", text: "s1" }, { type: "text", text: "s2" }];
+    expect(placeBreakpoints(messages, system, cc, [3, 2, 1], [0, 1, 5], [0, 0, 0, 1])).toEqual({ requested: 6, placed: 4, droppedNoAnchor: 1, droppedOverLimit: 1 });
+    expect(system.map((b) => "cache_control" in b)).toEqual([true, true]);
+    expect(marked(messages)).toEqual([[true], [], [false], [true, false]]);
+  });
+
+  test("a marker never lands twice on one message, and thinking can't hold one but images and tool blocks can", () => {
+    const messages: Param[] = [
+      { role: "user", content: [{ type: "image", source: { type: "base64", media_type: "image/png", data: "x" } }] },
+      { role: "assistant", content: [{ type: "tool_use", id: "t", name: "n", input: {} }, { type: "thinking", thinking: "x", signature: "s" }] },
+      { role: "user", content: [{ type: "tool_result", tool_use_id: "t", content: "ok" }] },
+      { role: "assistant", content: [{ type: "redacted_thinking", data: "x" }] },
+    ];
+    expect(placeBreakpoints(messages, [], cc, [3, 2, 2, 1, 0], [])).toEqual({ requested: 5, placed: 3, droppedNoAnchor: 2, droppedOverLimit: 0 });
+    expect(marked(messages)).toEqual([[true], [true, false], [true], [false]]);
+  });
+
+  test("system markers past the limit are dropped and counted, and a message marker past the end lands on the last message", () => {
+    const system: Sys[] = ["s1", "s2", "s3", "s4", "s5"].map((text) => ({ type: "text" as const, text }));
+    expect(placeBreakpoints([], system, cc, [], [0, 1, 2, 3, 4])).toEqual({ requested: 5, placed: 4, droppedNoAnchor: 0, droppedOverLimit: 1 });
+    expect(system.map((b) => "cache_control" in b)).toEqual([true, true, true, true, false]);
+    const messages: Param[] = [{ role: "user", content: [{ type: "text", text: "a" }] }];
+    expect(placeBreakpoints(messages, [], cc, [5], [])).toEqual({ requested: 1, placed: 1, droppedNoAnchor: 0, droppedOverLimit: 0 });
+    expect(marked(messages)).toEqual([[true]]);
+  });
+
+  test("continuing a loop clears old markers first, and with caching off touches nothing", () => {
+    const system: Sys[] = [{ type: "text", text: "s1", cache_control: cc }];
+    const messages: Param[] = [
+      { role: "user", content: [{ type: "text", text: "a" }] },
+      { role: "assistant", content: [{ type: "text", text: "b", cache_control: cc }] },
+      { role: "user", content: [{ type: "text", text: "c" }] },
+      { role: "assistant", content: "plain" },
+    ];
+    expect(placeContinuationBreakpoints(messages, system, [{ text: "s1", label: "memory_index" }], "")).toEqual({ msgBp: [], sysBp: [] });
+    expect(marked(messages)).toEqual([[false], [true], [false], []]);
+    const placed = placeContinuationBreakpoints(messages, system, [{ text: "s1", label: "memory_index" }], "5m");
+    expect(placed).toEqual({ msgBp: [0, 2, 3], sysBp: [] });
+    expect(marked(messages)).toEqual([[true], [false], [true], []]);
+    expect(system.map((b) => "cache_control" in b)).toEqual([false]);
+  });
+
+  test("the request plan reports how many markers were asked for and where they went", () => {
+    const plan = buildAnthropicPlan(req({
+      provider_options: { cache_ttl: "1h" },
+      system: [{ text: "be kind", label: "soul" }],
+      messages: [
+        { role: "user", content: [{ type: "text", text: "q" }] },
+        { role: "assistant", content: [{ type: "text", text: "a" }] },
+        { role: "user", content: [{ type: "text", text: "q2" }] },
+      ],
+    }));
+    expect(plan.placement).toMatchObject({ cache_enabled: true, has_existing_markers: false, msg_count: 3, sys_blocks: 1, breakpoints_dropped_no_anchor: 0, breakpoints_dropped_over_limit: 0 });
+    expect(plan.placement.breakpoints_placed).toBe(plan.placement.breakpoints_requested);
+    expect(plan.placement.breakpoints_requested).toBe(plan.placement.msg_breakpoints.length + plan.placement.sys_breakpoints.length);
+  });
+});
+
+describe("thinking replayed to Anthropic", () => {
+  test("a turn whose thinking can't be verified loses all its thinking, and a turn left empty is dropped", () => {
+    const { messages, dropped } = dropUnverifiableThinking([
+      { role: "assistant", content: [{ type: "thinking", thinking: "unsigned" }, { type: "redacted_thinking", data: "r" }, { type: "text", text: "kept" }] },
+      { role: "assistant", content: [{ type: "thinking", thinking: "unsigned" }] },
+      { role: "assistant", content: [{ type: "thinking", thinking: "signed", signature: "sig" }, { type: "text", text: "whole" }] },
+    ]);
+    expect(dropped).toBe(3);
+    expect(messages).toEqual([
+      { role: "assistant", content: [{ type: "text", text: "kept" }] },
+      { role: "assistant", content: [{ type: "thinking", thinking: "signed", signature: "sig" }, { type: "text", text: "whole" }] },
+    ]);
+  });
+
+  test("redacted thinking and failed tool results reach the wire as they are", () => {
+    const params = buildAnthropicParams(req({ provider_key: "anthropic", messages: [
+      { role: "assistant", provider_key: "anthropic", model: "anthropic/claude-opus-4.8", content: [{ type: "redacted_thinking", data: "opaque" }, { type: "tool_use", id: "t", name: "n", input: {} }] },
+      { role: "user", content: [{ type: "tool_result", tool_use_id: "t", content: "boom", is_error: true }, { type: "tool_result", tool_use_id: "t", content: "fine" }] },
+    ] }));
+    expect(params.messages).toEqual([
+      { role: "assistant", content: [{ type: "redacted_thinking", data: "opaque" }, { type: "tool_use", id: "t", name: "n", input: {} }] },
+      { role: "user", content: [{ type: "tool_result", tool_use_id: "t", content: "boom", is_error: true }, { type: "tool_result", tool_use_id: "t", content: "fine" }] },
+    ]);
+  });
+});
+
+describe("a thinking budget", () => {
+  test("is raised to the 1,024-token minimum, kept under max_tokens, and dropped when it can't fit", () => {
+    const budget = (budget_tokens: number, maxTokens: number): unknown => buildThinkingParams({ budget_tokens, reasoning_effort: "high" }, "anthropic/claude-opus-4.8", maxTokens);
+    expect(budget(500, 4096)).toEqual({ thinking: { type: "enabled", budget_tokens: 1024 } });
+    expect(budget(1024, 1100)).toEqual({ thinking: { type: "enabled", budget_tokens: 1024 } });
+    expect(budget(5000, 3000)).toEqual({ thinking: { type: "enabled", budget_tokens: 2999 } });
+    expect(budget(2000, 1025)).toEqual({ thinking: { type: "enabled", budget_tokens: 1024 } });
+    expect(budget(2000, 1024)).toEqual({});
+  });
+});
+
+describe("streamed content", () => {
+  const stream = (events: unknown[]) => anthropicContentEvents((async function* () { for (const e of events) yield e as RawMessageStreamEvent; })(), newTurnAccumulator());
+
+  test("redacted thinking is passed on, and a thinking block that never got a signature sends none", async () => {
+    expect(await collect(stream([
+      { type: "content_block_start", index: 0, content_block: { type: "redacted_thinking", data: "opaque" } },
+      { type: "content_block_stop", index: 0 },
+      { type: "content_block_start", index: 1, content_block: { type: "thinking", thinking: "", signature: "" } },
+      { type: "content_block_delta", index: 1, delta: { type: "thinking_delta", thinking: "hm" } },
+      { type: "content_block_stop", index: 1 },
+    ]))).toEqual([{ type: "redacted_thinking", data: "opaque" }, { type: "thinking", text: "hm" }]);
+  });
+
+  test("a delta that doesn't match its block, or has no block, changes nothing", async () => {
+    expect(await collect(stream([
+      { type: "content_block_delta", index: 9, delta: { type: "text_delta", text: "stray" } },
+      { type: "content_block_start", index: 0, content_block: { type: "thinking", thinking: "", signature: "" } },
+      { type: "content_block_delta", index: 0, delta: { type: "text_delta", text: "not thinking" } },
+      { type: "content_block_delta", index: 0, delta: { type: "input_json_delta", partial_json: "{}" } },
+      { type: "content_block_delta", index: 0, delta: { type: "signature_delta", signature: "sig" } },
+      { type: "content_block_stop", index: 0 },
+      { type: "content_block_start", index: 1, content_block: { type: "tool_use", id: "t", name: "n" } },
+      { type: "content_block_delta", index: 1, delta: { type: "text_delta", text: "nope" } },
+      { type: "content_block_delta", index: 1, delta: { type: "signature_delta", signature: "nope" } },
+      { type: "content_block_delta", index: 1, delta: { type: "input_json_delta", partial_json: '{"a":1}' } },
+      { type: "content_block_stop", index: 1 },
+      { type: "content_block_start", index: 2, content_block: { type: "text", text: "" } },
+      { type: "content_block_delta", index: 2, delta: { type: "thinking_delta", thinking: "nope" } },
+      { type: "content_block_delta", index: 2, delta: { type: "text_delta", text: "yes" } },
+      { type: "content_block_stop", index: 2 },
+    ]))).toEqual([
+      { type: "thinking_signature", signature: "sig" },
+      { type: "tool_use", id: "t", name: "n", input: { a: 1 } },
+      { type: "text", text: "yes" },
+    ]);
+  });
 });

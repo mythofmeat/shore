@@ -1,9 +1,10 @@
-import { describe, expect, test, afterEach } from "bun:test";
-import { existsSync, mkdirSync, readFileSync, statSync, symlinkSync, unlinkSync, utimesSync, writeFileSync } from "node:fs";
+import { describe, expect, test, afterEach, jest, spyOn } from "bun:test";
+import * as fs from "node:fs";
+import { chmodSync, existsSync, mkdirSync, readdirSync, readFileSync, realpathSync, renameSync, rmdirSync, statSync, symlinkSync, unlinkSync, utimesSync, writeFileSync } from "node:fs";
 import { mkdtemp, rm, mkdir, readFile, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, relative } from "node:path";
-import { acquireDataDirectoryLease, DATA_DIRECTORY_LEASE_FILE, DataDirectoryOwned, type DataDirectoryOwner } from "../src/daemon/data_directory_lease.ts";
+import { acquireDataDirectoryLease, DATA_DIRECTORY_LEASE_FILE, DATA_DIRECTORY_LOCK_FILE, DataDirectoryOwned, type DataDirectoryLease, type DataDirectoryOwner } from "../src/daemon/data_directory_lease.ts";
 
 const STARTED_AT = "2026-08-28T12:00:00+10:00";
 const DEAD_PID = 0x7fff_fffe;
@@ -277,6 +278,257 @@ describe("data-directory ownership", () => {
     } finally {
       await rm(root, { recursive: true, force: true });
     }
+  });
+});
+
+describe("data-directory ownership edges", () => {
+  const openHandles = (): number => readdirSync("/proc/self/fd").length;
+  const take = (data: string, instanceId: string): DataDirectoryLease => acquireDataDirectoryLease(data, { instanceId, startedAt: STARTED_AT });
+  const failureOf = (attempt: () => unknown): unknown => {
+    try {
+      attempt();
+    } catch (e) {
+      return e;
+    }
+    throw new Error("the attempt succeeded");
+  };
+  async function inData(name: string, body: (data: string, leasePath: string) => void | Promise<void>): Promise<void> {
+    const root = await rootFor(name);
+    try {
+      const data = join(root, "data");
+      mkdirSync(data);
+      await body(data, join(realpathSync.native(data), DATA_DIRECTORY_LEASE_FILE));
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  }
+
+  test("the record is two-space JSON with a newline, and taking it leaves no acquisition lock or handle behind", async () => {
+    await inData("format", (data) => {
+      const before = openHandles();
+      const lease = take(data, "formatted");
+      expect(readFileSync(lease.path, "utf8")).toBe(`${JSON.stringify(lease.owner, null, 2)}\n`);
+      expect(existsSync(`${lease.path}.acquire`)).toBe(false);
+      lease.release();
+      expect(openHandles()).toBe(before);
+    });
+  });
+
+  test("a refused daemon leaves no handle open once the owner lets go", async () => {
+    await inData("refused-handles", (data) => {
+      const before = openHandles();
+      const lease = take(data, "holder");
+      expect(failureOf(() => take(data, "refused"))).toBeInstanceOf(DataDirectoryOwned);
+      expect(failureOf(() => take(data, "refused again"))).toBeInstanceOf(DataDirectoryOwned);
+      lease.release();
+      expect(openHandles()).toBe(before);
+    });
+  });
+
+  test("a lifetime lock that can't be opened is an error, not an owner", async () => {
+    await inData("lock-directory", (data) => {
+      mkdirSync(join(data, DATA_DIRECTORY_LOCK_FILE));
+      expect(failureOf(() => take(data, "blocked"))).toMatchObject({ code: "SQLITE_CANTOPEN" });
+    });
+  });
+
+  test("a stale acquisition lock that can't be cleared is reported, and frees the data directory again", async () => {
+    await inData("stuck-acquire", (data, leasePath) => {
+      mkdirSync(`${leasePath}.acquire`);
+      const old = Date.now() / 1000 - 60;
+      utimesSync(`${leasePath}.acquire`, old, old);
+      expect(failureOf(() => take(data, "blocked"))).toMatchObject({ code: "ERR_FS_EISDIR" });
+      rmdirSync(`${leasePath}.acquire`);
+      take(data, "after").release();
+    });
+  });
+
+  test("a record path that never resolves is tried eight times, then reported", async () => {
+    await inData("dangling", (data, leasePath) => {
+      symlinkSync(join(data, "nowhere"), leasePath);
+      const opened = spyOn(fs, "openSync");
+      let failure: unknown;
+      let attempts: number;
+      try {
+        failure = failureOf(() => take(data, "blocked"));
+        attempts = opened.mock.calls.filter(([path, flags]) => path === leasePath && flags === "wx").length;
+      } finally {
+        opened.mockRestore();
+      }
+      expect(failure).toMatchObject({ message: `could not acquire Shore data-directory ownership at ${leasePath}` });
+      expect(attempts).toBe(8);
+    });
+  });
+
+  test("a record that can't be created or flushed is reported, leaves nothing behind, and frees the data directory", async () => {
+    await inData("unwritable", (data, leasePath) => {
+      const refusal = Object.assign(new Error("permission denied"), { code: "EACCES" });
+      const realOpen = fs.openSync;
+      const open = spyOn(fs, "openSync").mockImplementation(((path: fs.PathLike, ...rest: [fs.OpenMode, fs.Mode]) => {
+        if (path === leasePath) throw refusal;
+        return realOpen(path, ...rest);
+      }) as typeof fs.openSync);
+      try {
+        expect(failureOf(() => take(data, "blocked"))).toBe(refusal);
+      } finally {
+        open.mockRestore();
+      }
+      const full = Object.assign(new Error("no space left"), { code: "ENOSPC" });
+      const flush = spyOn(fs, "fsyncSync").mockImplementation(() => {
+        throw full;
+      });
+      try {
+        expect(failureOf(() => take(data, "blocked"))).toBe(full);
+      } finally {
+        flush.mockRestore();
+      }
+      expect(existsSync(leasePath)).toBe(false);
+      take(data, "after").release();
+    });
+  });
+
+  test.skipIf(process.getuid?.() === 0)("a record that can't be read is reported rather than taken over", async () => {
+    await inData("unreadable", (data, leasePath) => {
+      writeFileSync(leasePath, JSON.stringify(owner()));
+      chmodSync(leasePath, 0o000);
+      try {
+        expect(failureOf(() => take(data, "blocked"))).toMatchObject({ code: "EACCES" });
+      } finally {
+        chmodSync(leasePath, 0o600);
+      }
+    });
+  });
+
+  test("a record that doesn't parse is taken over only once it is more than ten seconds old", async () => {
+    await inData("grace", (data, leasePath) => {
+      const now = 1_800_000_000_000;
+      jest.useFakeTimers();
+      try {
+        jest.setSystemTime(now);
+        writeFileSync(leasePath, "{");
+        utimesSync(leasePath, (now - 10_000) / 1000, (now - 10_000) / 1000);
+        expect(failureOf(() => take(data, "too-soon"))).toBeInstanceOf(DataDirectoryOwned);
+        utimesSync(leasePath, (now - 10_001) / 1000, (now - 10_001) / 1000);
+        take(data, "after-grace").release();
+      } finally {
+        jest.useRealTimers();
+      }
+    });
+  });
+
+  test("a current-format record is taken over once its lifetime lock is free, even naming this live process", async () => {
+    await inData("current-format", (data) => {
+      const first = take(data, "first");
+      const record = readFileSync(first.path, "utf8");
+      first.release();
+      writeFileSync(first.path, record);
+      const second = take(data, "second");
+      expect(second.owner.instance_id).toBe("second");
+      second.release();
+    });
+  });
+
+  test("a legacy record that carries a process start is judged by it, and one naming another live process stays owned", async () => {
+    await inData("legacy-start", (data, leasePath) => {
+      const probe = take(data, "probe");
+      const ours = probe.owner.process_start_id;
+      probe.release();
+      writeFileSync(leasePath, JSON.stringify(owner({ pid: process.pid, ...(ours === undefined ? {} : { process_start_id: ours }) })));
+      expect(failureOf(() => take(data, "blocked"))).toBeInstanceOf(DataDirectoryOwned);
+      writeFileSync(leasePath, JSON.stringify(owner({ pid: process.pid, process_start_id: "an-earlier-run" })));
+      take(data, "after-restart").release();
+      writeFileSync(leasePath, JSON.stringify(owner({ pid: process.ppid, started_at: new Date(performance.timeOrigin - 60_000).toISOString() })));
+      expect(failureOf(() => take(data, "blocked"))).toBeInstanceOf(DataDirectoryOwned);
+    });
+  });
+
+  test("only a complete, well-formed record names its owner", async () => {
+    await inData("parse", (data) => {
+      const lease = take(data, "holder");
+      const named = (record: unknown): DataDirectoryOwner | undefined => {
+        writeFileSync(lease.path, typeof record === "string" ? record : JSON.stringify(record));
+        const failure = failureOf(() => take(data, "second"));
+        if (!(failure instanceof DataDirectoryOwned)) throw failure;
+        return failure.owner;
+      };
+      const valid: DataDirectoryOwner = { version: 1, lease_id: "l", instance_id: "i", pid: 1, started_at: STARTED_AT, data_dir: "/d" };
+      expect(named(valid)).toStrictEqual(valid);
+      const current: DataDirectoryOwner = { ...valid, version: 2, process_start_id: "s" };
+      expect(named(current)).toStrictEqual(current);
+      for (const broken of [
+        "{", "null", "5",
+        { ...valid, version: 3 },
+        { ...valid, lease_id: 7 }, { ...valid, lease_id: "" },
+        { ...valid, instance_id: 7 }, { ...valid, instance_id: "" },
+        { ...valid, pid: "1" }, { ...valid, pid: 1.5 }, { ...valid, pid: 0 }, { ...valid, pid: -1 },
+        { ...valid, process_start_id: 7 }, { ...valid, process_start_id: "" },
+        { ...valid, version: 2 },
+        { ...valid, started_at: 7 }, { ...valid, data_dir: 7 },
+      ]) {
+        expect(named(broken), JSON.stringify(broken)).toBeUndefined();
+      }
+      writeFileSync(lease.path, `${JSON.stringify(lease.owner, null, 2)}\n`);
+      expect(lease.release()).toBe(true);
+    });
+  });
+
+  describe("a release racing another daemon", () => {
+    function racing(lease: DataDirectoryLease, before: () => void): { restore: () => void } {
+      const realStat = fs.statSync;
+      let calls = 0;
+      const stat = spyOn(fs, "statSync").mockImplementation(((path: fs.PathLike, options?: fs.StatOptions) => {
+        if (path === lease.path && ++calls === 2) before();
+        return realStat(path, options);
+      }) as typeof fs.statSync);
+      return { restore: () => stat.mockRestore() };
+    }
+
+    test("leaves a record swapped in just before removal", async () => {
+      await inData("swapped", (data) => {
+        const lease = take(data, "mine");
+        const theirs = JSON.stringify(owner({ lease_id: "theirs" }));
+        const race = racing(lease, () => {
+          writeFileSync(`${lease.path}.new`, theirs);
+          renameSync(`${lease.path}.new`, lease.path);
+        });
+        try {
+          expect(lease.release()).toBe(false);
+        } finally {
+          race.restore();
+        }
+        expect(readFileSync(lease.path, "utf8")).toBe(theirs);
+      });
+    });
+
+    test("doesn't count a record that vanished just before removal as removed", async () => {
+      await inData("vanished", (data) => {
+        const lease = take(data, "mine");
+        const race = racing(lease, () => {
+          unlinkSync(lease.path);
+        });
+        try {
+          expect(lease.release()).toBe(false);
+        } finally {
+          race.restore();
+        }
+      });
+    });
+
+    test("reports a record it can no longer look at, and still frees the data directory", async () => {
+      await inData("unstatable", (data) => {
+        const lease = take(data, "mine");
+        const refusal = Object.assign(new Error("permission denied"), { code: "EACCES" });
+        const race = racing(lease, () => {
+          throw refusal;
+        });
+        try {
+          expect(failureOf(() => lease.release())).toBe(refusal);
+        } finally {
+          race.restore();
+        }
+        take(data, "after").release();
+      });
+    });
   });
 });
 

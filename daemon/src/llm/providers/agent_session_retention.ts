@@ -1,5 +1,5 @@
 import type { Database } from "bun:sqlite";
-import { readdirSync, rmSync } from "node:fs";
+import { existsSync, readdirSync, rmSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
 import { shoreLog } from "../../log.ts";
@@ -34,21 +34,13 @@ export function reconcileSessions(db: Database, before: SessionBook, after: Sess
   for (const [id, character] of sessionReferences(before)) {
     if (!active.has(id)) retireSession(db, id, character, nowMs);
   }
-  for (const id of active.keys()) {
-    db.query("DELETE FROM state_files WHERE path = ?1").run(RETIRED_PREFIX + Buffer.from(id).toString("base64url"));
-  }
 }
 
 function removeLocalSession(sessionId: string, configDir: string): void {
   if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(sessionId)) return;
   const projects = join(configDir, "projects");
-  let dirs;
-  try { dirs = readdirSync(projects, { withFileTypes: true }); }
-  catch (error) {
-    if ((error as NodeJS.ErrnoException).code === "ENOENT") return;
-    throw error;
-  }
-  for (const dir of dirs) {
+  if (!existsSync(projects)) return;
+  for (const dir of readdirSync(projects, { withFileTypes: true })) {
     if (!dir.isDirectory()) continue;
     rmSync(join(projects, dir.name, `${sessionId}.jsonl`), { force: true });
     rmSync(join(projects, dir.name, sessionId), { recursive: true, force: true });
@@ -59,10 +51,7 @@ export function pruneSdkSessions(data: string, nowMs: number, configDirs: readon
   return withStorage(data, db => {
     const book: SessionBook = {};
     const records = db.query("SELECT path, content FROM state_files WHERE path GLOB 'sdk_sessions/*'").all() as { path: string; content: Uint8Array }[];
-    for (const row of records) {
-      const key = Buffer.from(row.path.split("/").at(-1) ?? "", "base64url").toString();
-      book[key + "\u0000" + row.path] = JSON.parse(unpack(row.content)) as SessionRecord;
-    }
+    for (const row of records) book[row.path] = JSON.parse(unpack(row.content)) as SessionRecord;
     const active = sessionReferences(book);
     for (const id of active.keys()) db.query("DELETE FROM state_files WHERE path = ?1").run(RETIRED_PREFIX + Buffer.from(id).toString("base64url"));
     const transcripts = db.query("SELECT path, character FROM state_files WHERE path GLOB 'sdk_transcripts/*'").all() as { path: string; character: string }[];

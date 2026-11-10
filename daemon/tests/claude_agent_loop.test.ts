@@ -119,3 +119,14 @@ describe("the tool budget", () => {
     expect(agent.toolOutcomes[0]?.allowed).toBe(false);
   });
 });
+
+describe("the options a tool turn runs with", () => {
+  test("tool output may be large, and the turn limit follows the request's tool budget, with none when it has none", async () => {
+    const script: FakeScript = { rounds: [{ blocks: [{ kind: "text", text: "done" }] }] };
+    const open = (await drive(script, phase())).agent.calls[0]?.options;
+    expect(open?.env?.MAX_MCP_OUTPUT_TOKENS).toBe("1000000");
+    expect(open).not.toHaveProperty("maxTurns");
+    const capped = (await drive(script, phase(), request({ max_tool_iterations: 3 }))).agent.calls[0]?.options;
+    expect(capped?.maxTurns).toBe(5);
+  });
+});

@@ -1,4 +1,3 @@
-import { required } from "../util/required.ts";
 
 declare const NaiveBrand: unique symbol;
 
@@ -50,7 +49,7 @@ export function naiveInZone(instant: number, timeZone: string): Naive {
   };
   const bc = parts.some((p) => p.type === "era" && p.value.startsWith("B"));
   const year = bc ? 1 - get("year") : get("year");
-  const d = new Date(0);
+  const d = new Date(Number.NaN);
   d.setUTCFullYear(year, get("month") - 1, get("day"));
   d.setUTCHours(get("hour"), get("minute"), get("second"), 0);
   return asNaive(d.getTime());
@@ -64,19 +63,14 @@ function candidatesFor(naive: Naive, timeZone: string): number[] {
   const guess = naive - offsetAt(naive, timeZone);
   const probes = [guess - 12 * HOUR_MS, guess, guess + 12 * HOUR_MS];
   const offsets = [...new Set(probes.map((t) => offsetAt(t, timeZone)))];
-  const candidates = [...new Set(offsets.map((o) => naive - o))];
-  return candidates
-    .filter((t) => naiveInZone(t, timeZone) === naive)
-    .sort((a, b) => a - b);
+  return offsets.map((o) => naive - o).filter((t) => naiveInZone(t, timeZone) === naive);
 }
 
 export function resolveInZone(naive: Naive, timeZone: string): number {
   const direct = candidatesFor(naive, timeZone);
-  if (direct.length > 0) {
-    return required(direct[direct.length - 1]);
-  }
+  if (direct.length > 0) return Math.max(...direct);
   const shifted = candidatesFor(asNaive(naive + HOUR_MS), timeZone);
-  return shifted.length > 0 ? required(shifted[0]) : naive;
+  return shifted.length > 0 ? Math.min(...shifted) : naive;
 }
 
 export interface NaiveParts {
@@ -111,15 +105,15 @@ export function naiveFrom(
   day: number,
   hour: number,
 ): Naive {
-  const d = new Date(0);
+  const d = new Date(Number.NaN);
   d.setUTCFullYear(year, month - 1, day);
   d.setUTCHours(hour, 0, 0, 0);
   return asNaive(d.getTime());
 }
 
 export function daysInMonth(year: number, month: number): number {
-  const d = new Date(0);
-  d.setUTCFullYear(month === 12 ? year + 1 : year, month === 12 ? 0 : month, 0);
+  const d = new Date(Number.NaN);
+  d.setUTCFullYear(year, month, 0);
   return d.getUTCDate();
 }
 

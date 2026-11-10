@@ -156,9 +156,9 @@ function isBillingHeader(block: Block): boolean {
 export function filterInjectedContext(body: Record<string, unknown>): { body: Record<string, unknown>; removed: RemovedContext[] } {
   const removed: RemovedContext[] = [];
   const system = Array.isArray(body.system) ? { system: (body.system as Block[]).filter((block, index) => {
-    if (!isBillingHeader(block)) return true;
-    removed.push({ at: `system[${String(index)}]`, after: index === 0 ? "the start" : "system text", kind: "billing header", text: textOf(block) });
-    return false;
+    const billing = isBillingHeader(block);
+    if (billing) removed.push({ at: `system[${String(index)}]`, after: index === 0 ? "the start" : "system text", kind: "billing header", text: textOf(block) });
+    return !billing;
   }) } : {};
   if (!Array.isArray(body.messages)) return { body: { ...body, ...system }, removed };
   const messages = body.messages as Message[];

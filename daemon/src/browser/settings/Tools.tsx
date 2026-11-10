@@ -34,17 +34,14 @@ function ToolForm({ tool }: { tool: string }) {
   const [report, setReport] = useState<ToolRunReport>();
   const { busy, run } = useAction();
   useEffect(() => {
-    let alive = true;
-    setDescription(undefined); setReport(undefined); setError("");
     workspace.actions.run("run_tool", { tool, describe: true }).then((result) => {
-      if (!alive || !("input_schema" in result)) return;
+      if (!("input_schema" in result)) return;
       setDescription(result);
       try { setValue(initialValue(toolControl(result.input_schema))); } catch (failure) { setError(errorText(failure)); setMode("pairs"); }
-    }).catch((failure: unknown) => { if (alive) setError(errorText(failure)); });
-    return () => { alive = false; };
+    }).catch((failure: unknown) => { setError(errorText(failure)); });
   }, [tool]);
   let control;
-  try { control = description === undefined ? undefined : toolControl(description.input_schema); } catch { control = undefined; }
+  try { control = description === undefined ? undefined : toolControl(description.input_schema); } catch {}
   return <div className="tool-runner">
     {description === undefined ? error === "" ? <Spinner label="Loading tool" /> : null : <p className="setting-description">{description.description}{description.enabled ? "" : " (not enabled for this character)"}</p>}
     {error === "" ? null : <p className="form-error" role="alert">{error}</p>}

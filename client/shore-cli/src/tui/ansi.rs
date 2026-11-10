@@ -165,9 +165,111 @@ mod tests {
             .collect()
     }
 
+    fn styles_of(lines: &[Line<'static>]) -> Vec<Vec<(String, Style)>> {
+        lines
+            .iter()
+            .map(|line| {
+                line.spans
+                    .iter()
+                    .map(|span| (span.content.to_string(), span.style))
+                    .collect()
+            })
+            .collect()
+    }
+
+    fn style_after(sequence: &str) -> Style {
+        to_lines(&format!("{sequence}x"))
+            .first()
+            .and_then(|line| line.spans.first())
+            .map(|span| span.style)
+            .unwrap()
+    }
+
     #[test]
     fn cursor_moves_and_other_sequences_are_dropped_without_eating_text() {
         let lines = to_lines("before\u{1b}[2K\u{1b}[1;3Hafter");
         assert_eq!(text_of(&lines), vec!["beforeafter"]);
+        assert_eq!(
+            styles_of(&lines),
+            vec![vec![("beforeafter".to_owned(), Style::default())]]
+        );
+        assert_eq!(text_of(&to_lines("a\u{1b}xb")), vec!["axb"]);
+    }
+
+    #[test]
+    fn each_run_of_text_keeps_the_style_it_was_written_in_across_lines() {
+        let red = Style::default().fg(Color::Red);
+        assert_eq!(
+            styles_of(&to_lines("a\u{1b}[31mb\nc\u{1b}[0md")),
+            vec![
+                vec![("a".to_owned(), Style::default()), ("b".to_owned(), red)],
+                vec![("c".to_owned(), red), ("d".to_owned(), Style::default())],
+            ]
+        );
+    }
+
+    #[test]
+    fn select_graphic_rendition_codes_become_terminal_styles() {
+        let plain = Style::default();
+        let with = |modifier: Modifier| plain.add_modifier(modifier);
+        let mut cases: Vec<(String, Style)> = vec![
+            ("1".into(), with(Modifier::BOLD)),
+            ("2".into(), with(Modifier::DIM)),
+            ("3".into(), with(Modifier::ITALIC)),
+            ("4".into(), with(Modifier::UNDERLINED)),
+            ("7".into(), with(Modifier::REVERSED)),
+            ("9".into(), with(Modifier::CROSSED_OUT)),
+            ("1;2;22".into(), plain),
+            ("3;23".into(), plain),
+            ("4;24".into(), plain),
+            ("7;27".into(), plain),
+            ("9;29".into(), plain),
+            ("1;3;0".into(), plain),
+            (";1".into(), with(Modifier::BOLD)),
+            ("31;39".into(), plain),
+            ("41;49".into(), plain),
+            ("99".into(), plain),
+            ("38;5;208".into(), plain.fg(Color::Indexed(208))),
+            ("48;5;17".into(), plain.bg(Color::Indexed(17))),
+            ("38;5;999".into(), plain.fg(Color::Indexed(255))),
+            ("38;2;10;20;30".into(), plain.fg(Color::Rgb(10, 20, 30))),
+            ("48;2;1;2;3".into(), plain.bg(Color::Rgb(1, 2, 3))),
+            ("38;2;300;20;30".into(), plain.fg(Color::Rgb(255, 20, 30))),
+            (
+                "38;5;208;1".into(),
+                with(Modifier::BOLD).fg(Color::Indexed(208)),
+            ),
+            (
+                "38;2;1;2;3;4".into(),
+                with(Modifier::UNDERLINED).fg(Color::Rgb(1, 2, 3)),
+            ),
+            ("31;38;2;1;2".into(), plain),
+            ("38;9;1".into(), with(Modifier::BOLD)),
+            ("31;1".into(), with(Modifier::BOLD).fg(Color::Red)),
+        ];
+        let colors = [
+            (Color::Black, Color::DarkGray),
+            (Color::Red, Color::LightRed),
+            (Color::Green, Color::LightGreen),
+            (Color::Yellow, Color::LightYellow),
+            (Color::Blue, Color::LightBlue),
+            (Color::Magenta, Color::LightMagenta),
+            (Color::Cyan, Color::LightCyan),
+            (Color::Gray, Color::White),
+        ];
+        for (offset, (basic, bright)) in (0_u16..).zip(colors) {
+            cases.push((format!("{}", offset.saturating_add(30)), plain.fg(basic)));
+            cases.push((format!("{}", offset.saturating_add(40)), plain.bg(basic)));
+            cases.push((format!("{}", offset.saturating_add(90)), plain.fg(bright)));
+            cases.push((format!("{}", offset.saturating_add(100)), plain.bg(bright)));
+        }
+        for (parameters, expected) in cases {
+            assert_eq!(
+                style_after(&format!("\u{1b}[{parameters}m")),
+                expected,
+                "ESC[{parameters}m"
+            );
+        }
+        assert_eq!(style_after("\u{1b}[1m\u{1b}[m"), plain, "ESC[m resets");
     }
 }

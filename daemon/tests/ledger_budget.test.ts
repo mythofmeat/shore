@@ -418,4 +418,33 @@ describe("where a budget window starts and ends", () => {
     expect(windowOf({ period: "month", reset_day_of_month: 1, reset_hour: 0 }, "2026-12-15T12:00:00Z")).toEqual(["2026-12-01T00:00:00.000Z", "2027-01-01T00:00:00.000Z"]);
     expect(windowOf({ period: "month", reset_day_of_month: 1, reset_hour: 0 }, "2027-01-15T12:00:00Z")).toEqual(["2027-01-01T00:00:00.000Z", "2027-02-01T00:00:00.000Z"]);
   });
+
+  test("a window that resets this very moment starts now, and one whose reset is later today or this week starts at the last one", () => {
+    expect(windowOf({ period: "day" }, "2026-03-18T00:00:00Z")).toEqual(["2026-03-18T00:00:00.000Z", "2026-03-19T00:00:00.000Z"]);
+    expect(windowOf({ period: "day", reset_hour: 6 }, "2026-03-18T06:00:00Z")).toEqual(["2026-03-18T06:00:00.000Z", "2026-03-19T06:00:00.000Z"]);
+    expect(windowOf({ period: "week", reset_hour: 6, reset_day_of_week: "wednesday" }, "2026-03-18T06:00:00Z")).toEqual(["2026-03-18T06:00:00.000Z", "2026-03-25T06:00:00.000Z"]);
+    expect(windowOf({ period: "week", reset_hour: 6, reset_day_of_week: "wednesday" }, "2026-03-18T05:00:00Z")).toEqual(["2026-03-11T06:00:00.000Z", "2026-03-18T06:00:00.000Z"]);
+    expect(windowOf({ period: "week", reset_day_of_week: "sunday" }, "2026-03-18T05:00:00Z")).toEqual(["2026-03-15T00:00:00.000Z", "2026-03-22T00:00:00.000Z"]);
+    expect(windowOf({ period: "week" }, "2026-03-22T23:00:00Z")).toEqual(["2026-03-16T00:00:00.000Z", "2026-03-23T00:00:00.000Z"]);
+    expect(windowOf({ period: "month", reset_day_of_month: 15, reset_hour: 9 }, "2026-03-15T09:00:00Z")).toEqual(["2026-03-15T09:00:00.000Z", "2026-04-15T09:00:00.000Z"]);
+  });
+
+  test("a monthly reset before this month's anchor goes back to last month's, across a year, and an anchor past the month's end lands on its last day", () => {
+    expect(windowOf({ period: "month", reset_day_of_month: 15, reset_hour: 23 }, "2027-01-10T12:00:00Z")).toEqual(["2026-12-15T23:00:00.000Z", "2027-01-15T23:00:00.000Z"]);
+    expect(windowOf({ period: "month", reset_day_of_month: 31 }, "2026-02-20T12:00:00Z")).toEqual(["2026-01-31T00:00:00.000Z", "2026-02-28T00:00:00.000Z"]);
+    expect(windowOf({ period: "month", reset_day_of_month: 31 }, "2026-03-01T12:00:00Z")).toEqual(["2026-02-28T00:00:00.000Z", "2026-03-31T00:00:00.000Z"]);
+  });
+
+  test("a budget kept in local time says so, and one in UTC says utc", () => {
+    const zoneOf = (timezone: string): string => {
+      const db = caseLedger(index++);
+      try {
+        return required(budgetStatuses(db, { timezone, budgets: [budget("z", "day", 100)] }, Date.parse("2026-03-18T12:00:00Z"), { localZone: "America/New_York" })[0]).timezone;
+      } finally {
+        db.close();
+      }
+    };
+    expect(zoneOf("utc")).toBe("utc");
+    expect(zoneOf("local")).toBe("local");
+  });
 });

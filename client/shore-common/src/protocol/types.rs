@@ -76,13 +76,6 @@ impl ThinkingSignature {
             Self::ZaiReasoning(s) => format!("{}{s}", Self::ZAI_PREFIX),
         }
     }
-
-    pub fn as_opaque(&self) -> Option<&str> {
-        match self {
-            Self::Opaque(s) => Some(s),
-            Self::OpenrouterDetails(_) | Self::ZaiReasoning(_) => None,
-        }
-    }
 }
 
 impl From<&str> for ThinkingSignature {
@@ -436,7 +429,9 @@ mod tests {
     fn a_signature_shaped_like_a_carrier_fails_closed() {
         let collided = ThinkingSignature::Opaque("orrd:not-really".into());
         let round_tripped = ThinkingSignature::from_wire(&collided.to_wire());
-        assert_ne!(round_tripped, collided);
-        assert_eq!(round_tripped.as_opaque(), None);
+        assert_eq!(
+            round_tripped,
+            ThinkingSignature::OpenrouterDetails("not-really".into())
+        );
     }
 }

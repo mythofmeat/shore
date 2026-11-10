@@ -3906,6 +3906,142 @@ mod send_failure_tests {
         assert_message_was_restored(&app);
     }
 
+    fn streaming(rid: &str) -> App {
+        let mut app = App::default();
+        app.stream.active = true;
+        app.stream.rid = Some(rid.into());
+        app
+    }
+
+    fn message_with(rid: &str, text: &str) -> ClientMessage {
+        ClientMessage::Message(ClientMessageBody {
+            rid: Some(rid.into()),
+            text: text.into(),
+            stream: true,
+            images: vec![],
+            image_data: vec![],
+            absence_seconds: None,
+        })
+    }
+
+    fn regen_with(rid: &str) -> ClientMessage {
+        ClientMessage::Regen(shore_common::protocol::client_msg::Regen {
+            rid: Some(rid.into()),
+            stream: true,
+            guidance: None,
+        })
+    }
+
+    fn command_with(rid: &str) -> ClientMessage {
+        ClientMessage::Command(Command {
+            rid: Some(rid.into()),
+            name: "log".into(),
+            args: serde_json::Value::Null,
+        })
+    }
+
+    fn sent_turn(msg_id: Option<&str>, role: Role, text: &str) -> ConversationEntry {
+        ConversationEntry::Turn(Turn::text(
+            role,
+            msg_id.map(str::to_owned),
+            text.into(),
+            vec![],
+            "t1".into(),
+            None,
+        ))
+    }
+
+    #[test]
+    fn a_failed_send_stops_only_the_reply_it_started() {
+        let mut other = streaming("r_other");
+        let _ = handle_conn_event(
+            &mut other,
+            ConnEvent::SendFailed(message_with("r_mine", "hi")),
+        );
+        assert!(other.stream.active, "another reply keeps streaming");
+        assert_eq!(other.stream.rid.as_deref(), Some("r_other"));
+
+        let mut mine = streaming("r_mine");
+        let _ = handle_conn_event(
+            &mut mine,
+            ConnEvent::SendFailed(message_with("r_mine", "hi")),
+        );
+        assert!(!mine.stream.active, "the reply to the failed send stops");
+    }
+
+    #[test]
+    fn a_failed_regenerate_stops_only_its_own_reply() {
+        let mut other = streaming("r_other");
+        let _ = handle_conn_event(&mut other, ConnEvent::SendFailed(regen_with("r_regen")));
+        assert!(other.stream.active, "another reply keeps streaming");
+
+        let mut mine = streaming("r_regen");
+        let _ = handle_conn_event(&mut mine, ConnEvent::SendFailed(regen_with("r_regen")));
+        assert!(!mine.stream.active, "the regenerated reply stops");
+    }
+
+    #[test]
+    fn a_failed_command_releases_only_the_navigation_it_was_for() {
+        let mut app = App {
+            pending_navigation: Some("r_nav".into()),
+            ..App::default()
+        };
+        let _ = handle_conn_event(&mut app, ConnEvent::SendFailed(command_with("r_other")));
+        assert_eq!(app.pending_navigation.as_deref(), Some("r_nav"));
+        let _ = handle_conn_event(&mut app, ConnEvent::SendFailed(command_with("r_nav")));
+        assert_eq!(app.pending_navigation, None);
+    }
+
+    #[test]
+    fn a_failed_send_removes_its_own_unsaved_row_and_nothing_else() {
+        let cases = [
+            (sent_turn(None, Role::User, "hi"), 0),
+            (sent_turn(Some("m_saved"), Role::User, "hi"), 1),
+            (sent_turn(None, Role::User, "something else"), 1),
+            (sent_turn(None, Role::Assistant, "hi"), 1),
+        ];
+        for (last, left) in cases {
+            let mut app = App::default();
+            app.entries.push(last.clone());
+            let _ = handle_conn_event(
+                &mut app,
+                ConnEvent::SendFailed(message_with("r_mine", "hi")),
+            );
+            assert_eq!(app.entries.len(), left, "{last:?}");
+            assert_eq!(app.input.text, "hi");
+        }
+    }
+
+    #[test]
+    fn a_failed_reply_leaves_whatever_was_typed_since_in_the_composer() {
+        for (typed, images) in [
+            ("new draft", vec![]),
+            ("", vec!["/tmp/next.png".to_owned()]),
+        ] {
+            let mut app = streaming("r_mine");
+            app.entries
+                .push(sent_turn(None, Role::User, "first message"));
+            app.input.set_text(typed.to_owned());
+            app.pending_images.clone_from(&images);
+            let _ = handle_server_message(
+                &mut app,
+                ServerMessage::Error(shore_common::protocol::server_msg::Error {
+                    rid: Some("r_mine".into()),
+                    code: shore_common::protocol::error::ErrorCode::ProviderError,
+                    message: "overloaded".into(),
+                    retry_after_ms: None,
+                }),
+            );
+            assert_eq!(app.input.text, typed);
+            assert_eq!(app.pending_images, images);
+            assert_eq!(
+                app.entries.len(),
+                1,
+                "the failed message stays in the transcript"
+            );
+        }
+    }
+
     #[tokio::test]
     async fn failed_command_enqueue_restores_text_and_attachments() {
         let mut app = App::default();

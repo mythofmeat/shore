@@ -38,12 +38,10 @@ export function pruneDiagnostics(data: string, nowMs = Date.now()): RetentionSta
         for (const { id } of rows) {
           cursor = id;
           const row = db.query("SELECT content FROM events WHERE id = ?1").get(id) as { content: Uint8Array };
-          let trace: Record<string, unknown>;
+          let trace: Record<string, unknown> | null;
           try {
-            const value: unknown = JSON.parse(unpack(row.content));
-            if (value === null || typeof value !== "object" || Array.isArray(value)) throw new Error("Invalid trace");
-            trace = value as Record<string, unknown>;
-            if (typeof trace["subagent"] !== "string" || typeof trace["parent_tool_use_id"] !== "string" || !Array.isArray(trace["messages"])) {
+            trace = JSON.parse(unpack(row.content)) as Record<string, unknown> | null;
+            if (typeof trace?.["subagent"] !== "string" || typeof trace["parent_tool_use_id"] !== "string" || !Array.isArray(trace["messages"])) {
               throw new Error("Invalid trace");
             }
           } catch {

@@ -123,36 +123,37 @@ impl InputState {
         self.end_run(None);
     }
 
+    fn char_before(text: &str, at: usize) -> Option<usize> {
+        text.get(..at)
+            .unwrap_or_default()
+            .char_indices()
+            .next_back()
+            .map(|(i, _)| i)
+    }
+
+    fn char_after(text: &str, at: usize) -> Option<usize> {
+        text.get(at..)
+            .unwrap_or_default()
+            .chars()
+            .next()
+            .map(|c| at.saturating_add(c.len_utf8()))
+    }
+
     pub(crate) fn backspace(&mut self) {
         self.checkpoint(Some(EditKind::DeleteBack));
-        self.end_run(Some(EditKind::DeleteBack));
-        if self.cursor > 0 {
-            let prev = self
-                .text
-                .get(..self.cursor)
-                .unwrap_or_default()
-                .char_indices()
-                .next_back()
-                .map_or(0, |(i, _)| i);
+        if let Some(prev) = Self::char_before(&self.text, self.cursor) {
             drop(self.text.drain(prev..self.cursor));
             self.cursor = prev;
-            self.end_run(Some(EditKind::DeleteBack));
         }
+        self.end_run(Some(EditKind::DeleteBack));
     }
 
     pub(crate) fn delete(&mut self) {
         self.checkpoint(Some(EditKind::DeleteForward));
-        self.end_run(Some(EditKind::DeleteForward));
-        if self.cursor < self.text.len() {
-            let next = self
-                .text
-                .get(self.cursor..)
-                .unwrap_or_default()
-                .char_indices()
-                .nth(1)
-                .map_or(self.text.len(), |(i, _)| self.cursor.saturating_add(i));
+        if let Some(next) = Self::char_after(&self.text, self.cursor) {
             drop(self.text.drain(self.cursor..next));
         }
+        self.end_run(Some(EditKind::DeleteForward));
     }
 
     pub(crate) fn backspace_word(&mut self) {
@@ -186,26 +187,14 @@ impl InputState {
     }
 
     pub(crate) fn move_left(&mut self) {
-        if self.cursor > 0 {
-            self.cursor = self
-                .text
-                .get(..self.cursor)
-                .unwrap_or_default()
-                .char_indices()
-                .next_back()
-                .map_or(0, |(i, _)| i);
+        if let Some(prev) = Self::char_before(&self.text, self.cursor) {
+            self.cursor = prev;
         }
     }
 
     pub(crate) fn move_right(&mut self) {
-        if self.cursor < self.text.len() {
-            self.cursor = self
-                .text
-                .get(self.cursor..)
-                .unwrap_or_default()
-                .char_indices()
-                .nth(1)
-                .map_or(self.text.len(), |(i, _)| self.cursor.saturating_add(i));
+        if let Some(next) = Self::char_after(&self.text, self.cursor) {
+            self.cursor = next;
         }
     }
 
@@ -276,14 +265,7 @@ impl InputState {
     }
 
     pub(crate) fn cmd_backspace(&mut self) {
-        if self.cmd_cursor > 0 {
-            let prev = self
-                .cmd_text
-                .get(..self.cmd_cursor)
-                .unwrap_or_default()
-                .char_indices()
-                .next_back()
-                .map_or(0, |(i, _)| i);
+        if let Some(prev) = Self::char_before(&self.cmd_text, self.cmd_cursor) {
             drop(self.cmd_text.drain(prev..self.cmd_cursor));
             self.cmd_cursor = prev;
         }
@@ -332,20 +314,6 @@ pub(crate) fn word_wrap_offsets(text: &str, max_width: usize) -> Vec<usize> {
                 starts.push(brk);
                 col = col.saturating_sub(col_at_space_after).saturating_add(w);
                 last_space_after = None;
-                for (j, c) in text.get(brk..i).unwrap_or_default().char_indices() {
-                    if c == ' ' {
-                        let after = brk.saturating_add(j).saturating_add(c.len_utf8());
-                        last_space_after = Some(after);
-                        col_at_space_after = text
-                            .get(brk..after)
-                            .unwrap_or_default()
-                            .chars()
-                            .map(|wrapped_char| {
-                                unicode_width::UnicodeWidthChar::width(wrapped_char).unwrap_or(0)
-                            })
-                            .sum();
-                    }
-                }
             } else {
                 starts.push(i);
                 col = w;
@@ -365,7 +333,240 @@ pub(crate) fn word_wrap_offsets(text: &str, max_width: usize) -> Vec<usize> {
 
 #[cfg(test)]
 mod tests {
-    use super::{InputState, word_wrap_offsets};
+    use super::{InputMode, InputState, word_wrap_offsets};
+
+    fn typed(text: &str) -> InputState {
+        let mut input = InputState::default();
+        for c in text.chars() {
+            input.insert_char(c);
+        }
+        input
+    }
+
+    fn state(input: &InputState) -> (&str, usize) {
+        (input.text.as_str(), input.cursor)
+    }
+
+    #[test]
+    fn typing_puts_each_character_at_the_cursor() {
+        let mut input = typed("helo");
+        assert_eq!(state(&input), ("helo", 4));
+        input.move_left();
+        input.insert_char('l');
+        assert_eq!(state(&input), ("hello", 4));
+        input.insert_newline();
+        assert_eq!(state(&input), ("hell\no", 5));
+    }
+
+    #[test]
+    fn undo_takes_back_a_word_at_a_time_and_redo_puts_it_back() {
+        let mut input = typed("hello world");
+        assert!(input.undo());
+        assert_eq!(state(&input), ("hello ", 6));
+        assert!(input.undo());
+        assert_eq!(state(&input), ("", 0));
+        assert!(!input.undo(), "nothing is left to undo");
+        assert!(input.redo());
+        assert_eq!(state(&input), ("hello ", 6));
+        assert!(input.redo());
+        assert_eq!(state(&input), ("hello world", 11));
+        assert!(!input.redo(), "nothing is left to redo");
+    }
+
+    #[test]
+    fn moving_the_cursor_or_switching_between_typing_and_deleting_starts_a_new_undo_step() {
+        let mut input = typed("ab");
+        input.move_left();
+        input.insert_char('x');
+        assert!(input.undo());
+        assert_eq!(input.text, "ab");
+
+        let mut deleting = typed("hello world");
+        deleting.backspace();
+        deleting.backspace();
+        deleting.insert_char('k');
+        assert!(deleting.undo());
+        assert_eq!(deleting.text, "hello wor");
+        assert!(deleting.undo());
+        assert_eq!(deleting.text, "hello world");
+        deleting.move_home();
+        deleting.delete();
+        deleting.delete();
+        assert_eq!(state(&deleting), ("llo world", 0));
+        assert!(deleting.undo());
+        assert_eq!(deleting.text, "hello world");
+    }
+
+    #[test]
+    fn a_new_edit_after_undo_drops_what_could_have_been_redone() {
+        let mut input = typed("ab ");
+        input.insert_char('c');
+        assert!(input.undo());
+        input.insert_char('d');
+        assert!(!input.redo());
+        assert_eq!(input.text, "ab d");
+    }
+
+    #[test]
+    fn deleting_or_moving_past_either_end_changes_nothing() {
+        let mut input = InputState::default();
+        input.backspace();
+        input.delete();
+        input.move_left();
+        input.move_right();
+        assert_eq!(state(&input), ("", 0));
+        input.insert_str("ab");
+        input.move_right();
+        input.delete();
+        assert_eq!(state(&input), ("ab", 2));
+        input.move_home();
+        input.move_left();
+        input.backspace();
+        assert_eq!(state(&input), ("ab", 0));
+        input.move_right();
+        assert_eq!(input.cursor, 1);
+        input.move_right();
+        assert_eq!(input.cursor, 2);
+    }
+
+    #[test]
+    fn word_deletes_take_a_word_with_the_spaces_beside_it_and_undo_as_one_step() {
+        let mut input = InputState::default();
+        input.insert_str("one two  three");
+        input.backspace_word();
+        assert_eq!(state(&input), ("one two  ", 9));
+        input.backspace_word();
+        assert_eq!(state(&input), ("one ", 4));
+        assert!(input.undo());
+        assert_eq!(input.text, "one two  ");
+        input.move_home();
+        input.delete_word();
+        assert_eq!(state(&input), (" two  ", 0));
+        input.delete_word();
+        assert_eq!(state(&input), ("  ", 0));
+        assert!(input.undo());
+        assert_eq!(input.text, " two  ");
+    }
+
+    #[test]
+    fn a_word_delete_with_nothing_to_delete_leaves_no_undo_step() {
+        let mut at_start = typed("ab");
+        at_start.move_home();
+        at_start.backspace_word();
+        assert!(at_start.undo());
+        assert_eq!(at_start.text, "", "the typing is what gets undone");
+
+        let mut at_end = typed("ab");
+        at_end.delete_word();
+        assert!(at_end.undo());
+        assert_eq!(at_end.text, "", "the typing is what gets undone");
+    }
+
+    #[test]
+    fn home_and_end_stay_on_the_current_line() {
+        let mut input = InputState::default();
+        input.insert_str("first\nsecond");
+        input.move_home();
+        assert_eq!(input.cursor, 6);
+        input.move_end();
+        assert_eq!(input.cursor, 12);
+        input.cursor = 2;
+        input.move_end();
+        assert_eq!(input.cursor, 5);
+        input.move_home();
+        assert_eq!(input.cursor, 0);
+    }
+
+    #[test]
+    fn taking_the_text_empties_the_box_and_can_be_undone() {
+        let mut input = typed("draft");
+        assert_eq!(input.take_text(), "draft");
+        assert_eq!(state(&input), ("", 0));
+        assert!(input.undo());
+        assert_eq!(state(&input), ("draft", 5));
+    }
+
+    #[test]
+    fn setting_the_text_puts_the_cursor_at_its_end_and_forgetting_history_stops_undo() {
+        let mut input = typed("old");
+        input.set_text("new text".to_owned());
+        assert_eq!(state(&input), ("new text", 8));
+        assert!(input.undo());
+        assert_eq!(input.text, "old");
+        input.reset_history();
+        assert!(!input.undo());
+        assert!(!input.redo());
+    }
+
+    #[test]
+    fn the_command_line_edits_on_its_own_and_hands_back_what_was_typed() {
+        let mut input = typed("draft");
+        input.cmd_text = "left over".to_owned();
+        input.cmd_cursor = 9;
+        input.enter_command_mode();
+        assert_eq!(input.mode, InputMode::Command);
+        assert_eq!((input.cmd_text.as_str(), input.cmd_cursor), ("", 0));
+        for c in "qu!t".chars() {
+            input.cmd_insert_char(c);
+        }
+        input.cmd_backspace();
+        input.cmd_backspace();
+        input.cmd_insert_char('i');
+        input.cmd_insert_char('t');
+        assert_eq!((input.cmd_text.as_str(), input.cmd_cursor), ("quit", 4));
+        assert_eq!(input.take_cmd_text(), "quit");
+        assert_eq!(input.mode, InputMode::Normal);
+        assert_eq!((input.cmd_text.as_str(), input.cmd_cursor), ("", 0));
+        assert_eq!(input.text, "draft");
+
+        input.enter_command_mode();
+        input.cmd_insert_char('界');
+        assert_eq!(input.cmd_cursor, 3);
+        input.cmd_backspace();
+        input.cmd_backspace();
+        assert_eq!((input.cmd_text.as_str(), input.cmd_cursor), ("", 0));
+        input.cmd_insert_char('x');
+        input.exit_command_mode();
+        assert_eq!(input.mode, InputMode::Normal);
+        assert_eq!((input.cmd_text.as_str(), input.cmd_cursor), ("", 0));
+    }
+
+    #[test]
+    fn the_box_grows_a_line_when_its_last_line_is_full() {
+        let mut input = InputState::default();
+        assert_eq!(input.visual_line_count(10), 1);
+        input.insert_str("abcd");
+        assert_eq!(input.visual_line_count(10), 1);
+        assert_eq!(
+            input.visual_line_count(4),
+            2,
+            "a full line leaves room for the cursor"
+        );
+        assert_eq!(input.visual_line_count(3), 2);
+        assert_eq!(input.visual_line_count(0), 1);
+        input.insert_str("\nxy");
+        assert_eq!(input.visual_line_count(0), 2);
+        assert_eq!(input.visual_line_count(10), 2);
+    }
+
+    #[test]
+    fn wrapping_breaks_after_the_last_space_that_fits() {
+        assert_eq!(word_wrap_offsets("hello world", 8), vec![0, 6]);
+        assert_eq!(
+            word_wrap_offsets("abcd", 4),
+            vec![0],
+            "a word that just fits stays on its line"
+        );
+        assert_eq!(
+            word_wrap_offsets("abcdefghij", 4),
+            vec![0, 4, 8],
+            "a word longer than the line is cut"
+        );
+        assert_eq!(word_wrap_offsets("ab cdefghijk", 4), vec![0, 3, 7, 11]);
+        assert_eq!(word_wrap_offsets("abcd efgh", 4), vec![0, 5]);
+        assert_eq!(word_wrap_offsets("ab\ncd ef", 0), vec![0, 3]);
+        assert_eq!(word_wrap_offsets("ab\ncd ef", 4), vec![0, 3, 6]);
+    }
 
     #[test]
     fn unicode_editing_keeps_cursor_on_character_boundaries() {

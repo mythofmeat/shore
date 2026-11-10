@@ -364,7 +364,6 @@ async function passUnderGuard(
           : { keepTurnsOverride: options.keepTurnsOverride }),
         chatRequest,
         dataDir,
-        resumable: true,
         foreground: options.trigger === "manual",
         tools: resolved.tools,
         ...(planned.coverage === undefined ? {} : { coverage: planned.coverage }),

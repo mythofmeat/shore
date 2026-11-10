@@ -10,7 +10,12 @@ export type Control =
   | { kind: "object"; fields: Record<string, Control>; required: string[]; additional?: Control; hints?: Record<string, string> };
 export const CONTROL_KINDS = ["json", "string", "integer", "number", "boolean", "null", "array", "union", "object"] as const satisfies readonly Control["kind"][];
 export type ControlKind = (typeof CONTROL_KINDS)[number];
-export const CONTROL_KINDS_COMPLETE: [Exclude<Control["kind"], ControlKind>] extends [never] ? true : never = true;
+type Expect<T extends true> = T;
+export type ControlKindsComplete = Expect<[Exclude<Control["kind"], ControlKind>] extends [never] ? true : false>;
+
+function isStrings(value: unknown): value is string[] {
+  return Array.isArray(value) && value.every((item) => typeof item === "string");
+}
 
 function record(value: unknown): Record<string, unknown> {
   if (typeof value !== "object" || value === null || Array.isArray(value)) throw new Error("Expected a schema object");
@@ -37,11 +42,8 @@ export function controlFor(schema: unknown, root: unknown = schema, depth = 0): 
   switch (node["type"]) {
     case "string": {
       const choices = node["enum"];
-      if (choices !== undefined && (!Array.isArray(choices) || !choices.every((value) => typeof value === "string"))) throw new Error("Unsupported choice values");
-      return { kind: "string", ...(choices === undefined ? {} : { choices: choices.map((value: unknown) => {
-        if (typeof value !== "string") throw new Error("Expected a string choice");
-        return value;
-      }) }) };
+      if (choices !== undefined && !isStrings(choices)) throw new Error("Unsupported choice values");
+      return { kind: "string", ...(choices === undefined ? {} : { choices }) };
     }
     case "integer": case "number":
       return { kind: node["type"], ...(typeof node["minimum"] === "number" ? { minimum: node["minimum"] } : {}), ...(typeof node["maximum"] === "number" ? { maximum: node["maximum"] } : {}) };
@@ -77,9 +79,9 @@ export function actionControl(operation: OperationDescriptor): Extract<Control, 
 
 export function initialValue(control: Control): unknown {
   switch (control.kind) {
-    case "json": return "";
     case "string": return control.choices?.at(0) ?? "";
     case "number": case "integer": return control.minimum ?? 0;
+    case "json": return "";
     case "boolean": return false;
     case "null": return null;
     case "array": return [];

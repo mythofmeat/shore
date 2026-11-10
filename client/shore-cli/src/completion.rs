@@ -1081,9 +1081,6 @@ impl Session {
                 Some(daemon) => {
                     daemon.load(source, &self.line, &mut self.catalog);
                     self.catalog.mark_loaded(source);
-                    if source == Source::ToolParameters {
-                        self.catalog.arguments_of = tool;
-                    }
                 }
                 None if source.loads_on_demand() => {
                     let _newly_needed = self.catalog.needed.insert(source);
@@ -1395,14 +1392,8 @@ pub(crate) fn palette_completions(input: &str, catalog: &mut PaletteCatalog) -> 
         *catalog = session.catalog;
     }
     let needed = std::mem::take(&mut catalog.needed).into_iter().collect();
-    let Ok(raw) = completed else {
-        return PaletteCompletions {
-            needed,
-            ..PaletteCompletions::default()
-        };
-    };
-
-    let mut candidates = raw
+    let mut candidates = completed
+        .unwrap_or_default()
         .into_iter()
         .filter_map(|candidate| {
             let value = candidate.get_value().to_str()?;
@@ -1742,11 +1733,396 @@ mod tests {
         }
     }
 
+    fn offered_with_help(
+        input: &str,
+        catalog: &mut PaletteCatalog,
+    ) -> Vec<(String, Option<String>)> {
+        let prefix = completion_prefix(input).to_owned();
+        palette_completions(input, catalog)
+            .candidates
+            .into_iter()
+            .map(|candidate| {
+                let value = candidate
+                    .replacement
+                    .strip_prefix(prefix.as_str())
+                    .unwrap_or(&candidate.replacement)
+                    .to_owned();
+                (value, candidate.help)
+            })
+            .filter(|(value, _)| !value.starts_with("--"))
+            .collect()
+    }
+
+    fn described(expected: &[(&str, Option<&str>)]) -> Vec<(String, Option<String>)> {
+        expected
+            .iter()
+            .map(|&(value, help)| (value.to_owned(), help.map(str::to_owned)))
+            .collect()
+    }
+
+    fn daemon_catalog() -> PaletteCatalog {
+        let mut catalog = PaletteCatalog::default();
+        catalog.absorb(
+            Source::Models,
+            &json!({ "models": {
+                "anthropic": [{ "name": "sonnet" }, { "name": "opus", "favorite": true }],
+                "openrouter": [{ "name": "qwen" }],
+            }}),
+        );
+        catalog.absorb(
+            Source::Threads,
+            &json!({
+                "threads": [{ "id": "main", "label": "Home" }, { "id": "story" }, { "label": "no id" }],
+                "folders": [{ "name": "fiction" }, { "label": "no name" }],
+            }),
+        );
+        catalog.absorb(
+            Source::Providers,
+            &json!({ "providers": [{ "name": "openrouter", "sdk": "openrouter", "credentials": [
+                { "name": "work", "kind": "api_key", "standing": "active" },
+                { "name": "spare", "standing": "spent" },
+                { "name": "bare" },
+            ]}]}),
+        );
+        catalog.absorb(
+            Source::Calls,
+            &json!({ "entries": [
+                { "id": 7, "call_type": "message", "model": "opus", "ts": "2026-11-10T01:00:00Z" },
+                { "id": 8 },
+                { "call_type": "no id" },
+            ]}),
+        );
+        catalog.absorb(
+            Source::SubagentRuns,
+            &json!({ "entries": [
+                { "parent_tool_use_id": "toolu_1", "subagent": "memory", "ts": "2026-11-10T02:00:00Z" },
+                { "subagent": "no id" },
+            ]}),
+        );
+        catalog.absorb(
+            Source::Tools,
+            &json!({
+                "tools": [{ "name": "read", "description": "Read a file" }, "bash", { "id": "grep", "type": "builtin" }],
+                "mcp": [{ "tool": "mcp__notes__find" }, "bash"],
+                "subagents": [{ "name": "memory", "description": "Searches memory" }, "music"],
+            }),
+        );
+        catalog.absorb(
+            Source::Settings,
+            &json!({
+                "setting_schema": [
+                    { "key": "temperature", "applicability": "always", "suggestions": ["0.7", "1"] },
+                    { "key": "top_p", "applicability": "honored" },
+                    { "key": "seed", "applicability": "ignored", "suggestions": ["1"] },
+                    { "key": "reasoning_effort", "applicability": "always", "suggestions": ["high"] },
+                    { "key": "thinking", "applicability": "always" },
+                ],
+                "effective_sampler": { "temperature": 0.7, "top_p": null, "reasoning_effort": "high", "thinking": true },
+            }),
+        );
+        catalog.absorb(
+            Source::UsageModels,
+            &json!({ "summary": [{ "group": "anthropic opus" }, { "group": "openrouter opus" }, { "group": "anthropic sonnet" }, { "group": "unnamed" }] }),
+        );
+        catalog.absorb(
+            Source::UsageApiKeys,
+            &json!({ "summary": [{ "group": "anthropic default" }] }),
+        );
+        catalog.absorb(
+            Source::UsageProviders,
+            &json!({ "summary": [{ "group": "my provider" }, { "group": "anthropic" }, { "group": "anthropic" }] }),
+        );
+        catalog.absorb(
+            Source::UsageCallTypes,
+            &json!({ "summary": [{ "group": "message" }, { "group": "tool loop" }] }),
+        );
+        catalog
+    }
+
+    type Described<'expected> = &'expected [(&'expected str, Option<&'expected str>)];
+
+    #[test]
+    fn daemon_values_are_offered_with_what_the_daemon_says_about_them() {
+        let cases: &[(&str, Described<'_>)] = &[
+            (
+                "model fav ",
+                &[
+                    ("opus", Some("anthropic")),
+                    ("sonnet", Some("anthropic")),
+                    ("qwen", Some("openrouter")),
+                ],
+            ),
+            ("model unfav ", &[("opus", Some("anthropic"))]),
+            ("thread lock ", &[("main", Some("Home")), ("story", None)]),
+            ("thread move story --folder ", &[("fiction", None)]),
+            (
+                "provider openrouter auth ",
+                &[
+                    ("work", Some("api_key \u{b7} active")),
+                    ("spare", Some("spent")),
+                    ("bare", None),
+                ],
+            ),
+            (
+                "trace calls ",
+                &[
+                    ("7", Some("message \u{b7} opus \u{b7} 2026-11-10T01:00:00Z")),
+                    ("8", None),
+                ],
+            ),
+            (
+                "trace subagent ",
+                &[("toolu_1", Some("memory \u{b7} 2026-11-10T02:00:00Z"))],
+            ),
+            (
+                "debug tool ",
+                &[
+                    ("ask_memory", Some("Searches memory")),
+                    ("ask_music", None),
+                    ("bash", None),
+                    ("grep", Some("builtin")),
+                    ("mcp__notes__find", None),
+                    ("read", Some("Read a file")),
+                ],
+            ),
+            (
+                "debug subagent ",
+                &[("memory", Some("Searches memory")), ("music", None)],
+            ),
+            (
+                "model setting ",
+                &[
+                    ("temperature", Some("0.7")),
+                    ("top_p", Some("unset")),
+                    ("reasoning_effort", Some("high")),
+                    ("thinking", Some("true")),
+                ],
+            ),
+            ("model setting temperature ", &[("0.7", None), ("1", None)]),
+            ("model setting seed ", &[]),
+            (
+                "usage --model ",
+                &[
+                    ("opus", Some("anthropic")),
+                    ("sonnet", Some("anthropic")),
+                    ("unnamed", None),
+                ],
+            ),
+            ("usage --api-key ", &[("default", Some("anthropic"))]),
+            (
+                "usage --provider ",
+                &[("'my provider'", None), ("anthropic", None)],
+            ),
+            (
+                "usage --call-type ",
+                &[("message", None), ("'tool loop'", None)],
+            ),
+        ];
+        let mut catalog = daemon_catalog();
+        for (input, expected) in cases {
+            assert_eq!(
+                offered_with_help(input, &mut catalog),
+                described(expected),
+                "completing {input:?}"
+            );
+        }
+    }
+
+    #[test]
+    fn a_budget_readout_also_offers_the_configured_budget_names() {
+        let mut catalog = PaletteCatalog {
+            budget_names: plain_values(&["monthly"]),
+            ..PaletteCatalog::default()
+        };
+        assert_eq!(
+            offered("view budget ").len(),
+            ViewKey::Budget.values().len(),
+            "with no names known, only the fixed readouts"
+        );
+        let budget = offered_with_help("view budget ", &mut catalog);
+        assert_eq!(
+            budget
+                .iter()
+                .map(|(value, _)| value.as_str())
+                .collect::<Vec<_>>(),
+            ["auto", "cap", "pace", "toggle", "monthly"]
+        );
+        let usage = offered_with_help("view usage ", &mut catalog);
+        assert_eq!(
+            usage
+                .iter()
+                .map(|(value, _)| value.as_str())
+                .collect::<Vec<_>>(),
+            ["off", "always", "warn", "toggle"],
+            "other readouts take no budget name"
+        );
+    }
+
+    #[test]
+    fn forgetting_one_daemon_keeps_what_the_tui_tracks_itself() {
+        let mut catalog = filled_catalog();
+        catalog.setting_keys = plain_values(&["temperature"]);
+        let _previous = catalog
+            .setting_values
+            .insert("temperature".to_owned(), plain_values(&["0.7"]));
+        catalog.message_refs = plain_values(&["m_1"]);
+        catalog.normal_keys = plain_values(&["j"]);
+        catalog.global_keys = plain_values(&["ctrl-c"]);
+        catalog.budget_names = plain_values(&["monthly"]);
+        catalog.forget_daemon_values();
+        let values = |input: &str, forgotten: &mut PaletteCatalog| {
+            offered_with_help(input, forgotten)
+                .into_iter()
+                .map(|(value, _)| value)
+                .collect::<Vec<_>>()
+        };
+        let kept: &[(&str, &[&str])] = &[
+            ("model fav ", &["sonnet", "opus"]),
+            ("model unfav ", &["opus"]),
+            ("export ", &["alice", "bob"]),
+            ("model setting ", &["temperature"]),
+            ("model setting temperature ", &["0.7"]),
+            ("msg edit ", &["last", "-1", "-2", "-3", "m_1"]),
+            ("ui unbind ", &["j"]),
+            ("ui unbind --global ", &["ctrl-c"]),
+            (
+                "view budget ",
+                &["auto", "cap", "pace", "toggle", "monthly"],
+            ),
+        ];
+        for (input, expected) in kept {
+            assert_eq!(&values(input, &mut catalog), expected, "kept for {input:?}");
+        }
+        for input in [
+            "thread lock ",
+            "provider openrouter auth ",
+            "segments show ",
+        ] {
+            assert!(
+                values(input, &mut catalog).is_empty(),
+                "{input:?} had the old daemon's values"
+            );
+        }
+    }
+
+    #[test]
+    fn a_source_marked_loaded_is_not_asked_for_again() {
+        let mut catalog = PaletteCatalog::default();
+        assert_eq!(
+            palette_completions("segments show ", &mut catalog).needed,
+            [Source::Segments]
+        );
+        catalog.mark_loaded(Source::Segments);
+        assert!(
+            palette_completions("segments show ", &mut catalog)
+                .needed
+                .is_empty()
+        );
+    }
+
+    #[test]
+    fn the_palette_heads_its_list_only_when_there_is_something_to_pick() {
+        let mut catalog = filled_catalog();
+        assert_eq!(
+            palette_completions("thread lock ", &mut catalog)
+                .header
+                .as_deref(),
+            Some("command, option, or value")
+        );
+        let nothing = palette_completions("thread lock zzz", &mut catalog);
+        assert!(nothing.candidates.is_empty());
+        assert_eq!(nothing.header, None);
+    }
+
+    #[test]
+    fn a_completion_keeps_what_was_typed_before_the_word_it_completes() {
+        let cases: &[(&str, &str)] = &[
+            (
+                "thread move \"my story\" --folder f",
+                "thread move \"my story\" --folder ",
+            ),
+            (
+                "thread move 'my story' --folder f",
+                "thread move 'my story' --folder ",
+            ),
+            (
+                "thread move my\\ story --folder f",
+                "thread move my\\ story --folder ",
+            ),
+            (
+                "thread move \"it's\" --folder f",
+                "thread move \"it's\" --folder ",
+            ),
+            (
+                "thread move 'a\\' --folder f",
+                "thread move 'a\\' --folder ",
+            ),
+            (
+                "thread move \"a\\\" b\" --folder f",
+                "thread move \"a\\\" b\" --folder ",
+            ),
+        ];
+        for (input, kept) in cases {
+            assert_eq!(completion_prefix(input), *kept, "completing {input:?}");
+            let replaced = palette_completions(input, &mut filled_catalog())
+                .candidates
+                .into_iter()
+                .map(|candidate| candidate.replacement)
+                .collect::<Vec<_>>();
+            assert_eq!(replaced, [format!("{kept}fiction")], "completing {input:?}");
+        }
+    }
+
+    #[test]
+    fn a_quoted_word_is_replaced_from_where_its_quote_opened() {
+        for input in [
+            "thread move story --folder \"my st\"",
+            "thread move story --folder 'my st'",
+        ] {
+            let mut catalog = PaletteCatalog {
+                folders: plain_values(&["my stories"]),
+                ..PaletteCatalog::default()
+            };
+            let replaced = palette_completions(input, &mut catalog)
+                .candidates
+                .into_iter()
+                .map(|candidate| candidate.replacement)
+                .collect::<Vec<_>>();
+            assert_eq!(
+                replaced,
+                ["thread move story --folder 'my stories'"],
+                "completing {input:?}"
+            );
+        }
+    }
+
+    #[test]
+    fn the_folders_a_thread_listing_names_are_offered_for_a_folder() {
+        let mut catalog = PaletteCatalog::default();
+        catalog.absorb_folders(&json!({ "folders": [{ "name": "fiction" }, { "name": "work" }] }));
+        let offered = palette_completions("thread move story --folder ", &mut catalog)
+            .candidates
+            .into_iter()
+            .map(|candidate| candidate.replacement)
+            .collect::<Vec<_>>();
+        assert_eq!(
+            offered,
+            [
+                "thread move story --folder fiction",
+                "thread move story --folder work"
+            ]
+        );
+    }
+
     #[test]
     fn a_shell_is_never_offered_tui_only_commands() {
         let command = out_of_reach_of_shells(grammar(&[]));
         assert!(command.find_subcommand("view").is_none());
         assert!(command.find_subcommand("ui").is_none());
+        assert!(
+            command.find_subcommand("thread").is_some(),
+            "every other command stays within reach"
+        );
         assert!(
             palette_command(&[]).find_subcommand("view").is_some(),
             "the TUI keeps them"

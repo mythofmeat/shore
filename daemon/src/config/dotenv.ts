@@ -18,8 +18,8 @@ export function parseDotenv(
   const resolve = (name: string): string => own.get(name) ?? lookup(name) ?? "";
 
   let i = 0;
-  while (i < content.length) {
-    while (i < content.length && isSpace(required(content[i]))) i += 1;
+  for (;;) {
+    while (isSpace(content[i])) i += 1;
     if (i >= content.length) break;
 
     if (content[i] === "#") {
@@ -30,15 +30,15 @@ export function parseDotenv(
     i = skipExport(content, i);
 
     const keyStart = i;
-    while (i < content.length && content[i] !== "=" && content[i] !== "\n") i += 1;
-    if (i >= content.length || content[i] === "\n") {
+    while (content[i] !== undefined && content[i] !== "=" && content[i] !== "\n") i += 1;
+    if (content[i] !== "=") {
       throw new DotenvError(`line has no '=': ${content.slice(keyStart, i).trim()}`);
     }
     const key = content.slice(keyStart, i).trim();
     if (key === "") throw new DotenvError("line has an empty key");
     i += 1;
 
-    while (i < content.length && isBlank(required(content[i]))) i += 1;
+    while (isBlank(content[i])) i += 1;
 
     let value: string;
     const quote = content[i];
@@ -104,8 +104,8 @@ export function applyDotenv(path: string, target: Environment = process.env): st
   return candidate.keys;
 }
 
-const isSpace = (c: string): boolean => c === " " || c === "\t" || c === "\n" || c === "\r";
-const isBlank = (c: string): boolean => c === " " || c === "\t";
+const isSpace = (c: string | undefined): boolean => c === " " || c === "\t" || c === "\n" || c === "\r";
+const isBlank = (c: string | undefined): boolean => c === " " || c === "\t";
 
 function endOfLine(content: string, from: number): number {
   const at = content.indexOf("\n", from);
@@ -113,11 +113,8 @@ function endOfLine(content: string, from: number): number {
 }
 
 function skipExport(content: string, from: number): number {
-  if (!content.startsWith("export", from)) return from;
-  let i = from + "export".length;
-  if (i >= content.length || !isBlank(required(content[i]))) return from;
-  while (i < content.length && isBlank(required(content[i]))) i += 1;
-  return i;
+  const after = from + "export".length;
+  return content.startsWith("export", from) && isBlank(content[after]) ? after : from;
 }
 
 function readSingleQuoted(content: string, from: number): [string, number] {

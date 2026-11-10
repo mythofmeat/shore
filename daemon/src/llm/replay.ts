@@ -7,23 +7,25 @@ function isThinking(block: ContentBlock): boolean {
   return block.type === "thinking" || block.type === "redacted_thinking";
 }
 
-function carriesOpaqueData(block: ContentBlock): boolean {
-  if (block.type === "redacted_thinking") return true;
-  if (block.type !== "thinking") return false;
-  return (
-    block.signature !== undefined ||
-    block.reasoning_details !== undefined ||
-    block.reasoning_content !== undefined
-  );
+type ThinkingBlock = Extract<ContentBlock, { type: "thinking" | "redacted_thinking" }>;
+
+function isThinkingBlock(block: ContentBlock): block is ThinkingBlock {
+  return isThinking(block);
 }
 
-function hasForeignCarrier(block: ContentBlock): boolean {
-  if (block.type !== "thinking") return false;
-  return block.reasoning_details !== undefined || block.reasoning_content !== undefined;
+function carriesOpaqueData(block: ThinkingBlock): boolean {
+  return block.type === "redacted_thinking" ||
+    block.signature !== undefined ||
+    block.reasoning_details !== undefined ||
+    block.reasoning_content !== undefined;
+}
+
+function hasForeignCarrier(block: ThinkingBlock): boolean {
+  return block.type === "thinking" && (block.reasoning_details !== undefined || block.reasoning_content !== undefined);
 }
 
 function mintedByTheActiveModel(
-  block: ContentBlock,
+  block: ThinkingBlock,
   mintingProvider: string | undefined,
   mintingModel: string | undefined,
   activeProvider: string,
@@ -71,6 +73,7 @@ export function replayableMessagesWithDrops(req: SidecarRequest): {
       activeModel,
     });
 
+    const tail = msg.transient_tail;
     let transientTail = 0;
     const kept = msg.content.filter((block, index) => {
       if (block.type === "text" && block.text.trim() === "") return false;
@@ -78,14 +81,14 @@ export function replayableMessagesWithDrops(req: SidecarRequest): {
         drops[reason] += 1;
         return false;
       }
-      if (index >= msg.content.length - (msg.transient_tail ?? 0)) transientTail += 1;
+      if (tail !== undefined && index >= msg.content.length - tail) transientTail += 1;
       return true;
     });
     if (kept.length === 0) continue;
     out.push({
       ...msg,
       content: kept,
-      ...(msg.transient_tail === undefined ? {} : { transient_tail: transientTail }),
+      ...(tail === undefined ? {} : { transient_tail: transientTail }),
     });
   }
   return { messages: out, drops };
@@ -98,7 +101,7 @@ interface DropRules {
 }
 
 function thinkingDropReason(msg: WireMessage, rules: DropRules): keyof ThinkingDrops | undefined {
-  const thinking = msg.content.filter(isThinking);
+  const thinking = msg.content.filter(isThinkingBlock);
   if (thinking.length === 0) return undefined;
   if (rules.stripPrior && msg.role === "assistant") return "strippedByPolicy";
 

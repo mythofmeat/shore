@@ -3,6 +3,8 @@ import { open } from "node:fs/promises";
 import { filePath } from "./file_access.ts";
 import { InvalidArgs, ToolIoError } from "./errors.ts";
 
+const fingerprint = (stat: { size: number; mtimeMs: number; ctimeMs: number }): string => `${String(stat.size)}:${String(stat.mtimeMs)}:${String(stat.ctimeMs)}`;
+
 export async function handleEdit(input: Record<string, unknown>, workspaceDir: string, signal?: AbortSignal): Promise<string> {
   signal?.throwIfAborted();
   const path = filePath(input, workspaceDir);
@@ -27,8 +29,7 @@ export async function handleEdit(input: Record<string, unknown>, workspaceDir: s
     if (matches === 0) throw new InvalidArgs(`${path}: old_string has no exact match; file unchanged`);
     const first = text.indexOf(oldText);
     if (!all && text.indexOf(oldText, first + 1) !== -1) throw new InvalidArgs(`${path}: old_string has multiple exact matches; provide unique text or set replace_all=true; file unchanged`);
-    const after = await file.stat();
-    if (after.size !== before.size || after.mtimeMs !== before.mtimeMs || after.ctimeMs !== before.ctimeMs) throw new ToolIoError(`${path}: file changed during validation; retry; no edit written`);
+    if (fingerprint(await file.stat()) !== fingerprint(before)) throw new ToolIoError(`${path}: file changed during validation; retry; no edit written`);
     const output = Buffer.from(parts.join(newText));
     signal?.throwIfAborted();
     let written = 0;

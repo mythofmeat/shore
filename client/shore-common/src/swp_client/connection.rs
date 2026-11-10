@@ -287,7 +287,12 @@ impl SWPConnection {
     }
 
     pub async fn recv(&mut self) -> Result<ServerMessage> {
-        let line = read_json_line_bounded(&mut self.reader, &mut self.read_pending).await?;
+        let line = read_json_line_bounded(
+            &mut self.reader,
+            &mut self.read_pending,
+            MAX_WIRE_MESSAGE_SIZE,
+        )
+        .await?;
         let msg: ServerMessage = serde_json::from_str(line.trim()).map_err(|e| {
             warn!(error = %e, raw_len = line.len(), "failed to deserialize server message");
             ClientError::Deserialize(e)
@@ -444,6 +449,7 @@ impl SWPConnection {
 async fn read_json_line_bounded<R>(
     reader: &mut BufReader<R>,
     pending: &mut Vec<u8>,
+    limit: usize,
 ) -> Result<String>
 where
     R: tokio::io::AsyncRead + Unpin,
@@ -472,13 +478,13 @@ where
 
         let Some(total_len) = pending.len().checked_add(consume) else {
             return Err(ClientError::Protocol(format!(
-                "server message exceeds maximum size of {MAX_WIRE_MESSAGE_SIZE} bytes"
+                "server message exceeds maximum size of {limit} bytes"
             )));
         };
 
-        if total_len > MAX_WIRE_MESSAGE_SIZE {
+        if total_len > limit {
             return Err(ClientError::Protocol(format!(
-                "server message exceeds maximum size of {MAX_WIRE_MESSAGE_SIZE} bytes"
+                "server message exceeds maximum size of {limit} bytes"
             )));
         }
 
@@ -516,6 +522,32 @@ mod tests {
     use super::*;
     use tokio::io::AsyncReadExt;
     use tokio::time::{Duration, timeout};
+
+    #[tokio::test]
+    async fn a_line_exactly_at_the_size_limit_is_read_and_one_byte_more_is_refused() {
+        let fits = format!("{}\n", "x".repeat(15));
+        let mut pending = Vec::new();
+        let read = read_json_line_bounded(
+            &mut BufReader::with_capacity(4, fits.as_bytes()),
+            &mut pending,
+            16,
+        )
+        .await
+        .unwrap();
+        assert_eq!(read, fits);
+        let too_long = format!("{}\n", "x".repeat(16));
+        let refused = read_json_line_bounded(
+            &mut BufReader::with_capacity(4, too_long.as_bytes()),
+            &mut pending,
+            16,
+        )
+        .await
+        .unwrap_err();
+        assert!(
+            refused.to_string().contains("maximum size of 16 bytes"),
+            "{refused}"
+        );
+    }
 
     #[tokio::test]
     async fn unreadable_attachment_prevents_the_entire_message_send() {

@@ -20,7 +20,6 @@ import type {
   Usage,
 } from "../types.ts";
 import { systemToText, toTurn } from "../types.ts";
-import { EMPTY_TOOL_SCHEMA } from "../types.ts";
 import { replayableMessages } from "../replay.ts";
 import { turnToOpenAI } from "./openai.ts";
 import { parseToolArgs } from "../tool_args.ts";
@@ -128,9 +127,8 @@ function turnToZai(turn: TurnMessage, preserveThinking: boolean, toolNames: Read
   const msgs = turnToOpenAI({
     role: turn.role,
     content: turn.content.filter((b) => b.type !== "thinking"),
-    ...(turn.images ? { images: turn.images } : {}),
   }, toolNames);
-  if (turn.role !== "assistant" || !preserveThinking || msgs.length === 0) return msgs;
+  if (turn.role !== "assistant" || !preserveThinking) return msgs;
   const thinking = turn.content.find(
     (b): b is Extract<ContentBlock, { type: "thinking" }> => b.type === "thinking",
   );
@@ -163,17 +161,14 @@ export async function* zaiStreamEvents(
   const toolCalls = new Map<number, { id: string; name: string; argsJson: string }>();
   let textAccum = "";
   let reasoningAccum = "";
-  let sawThinking = false;
   let sigEmitted = false;
   let finishReason: string | undefined;
   let usage: Usage = emptyUsage();
 
   const flushSignature = function* (): Iterable<StreamEvent> {
-    if (sigEmitted || !sawThinking) return;
+    if (sigEmitted || reasoningAccum.length === 0) return;
     sigEmitted = true;
-    if (reasoningAccum.length > 0) {
-      yield { type: "reasoning_content", reasoning: reasoningAccum };
-    }
+    yield { type: "reasoning_content", reasoning: reasoningAccum };
   };
 
   for await (const chunk of chunks) {
@@ -187,7 +182,6 @@ export async function* zaiStreamEvents(
       const delta = choice.delta as ZaiDelta;
       if (typeof delta.reasoning_content === "string" && delta.reasoning_content.length > 0) {
         markFirst();
-        sawThinking = true;
         reasoningAccum += delta.reasoning_content;
         yield { type: "thinking", text: delta.reasoning_content };
       }
@@ -342,7 +336,7 @@ function toZaiTools(tools: ToolDefinition[] | undefined): ChatCompletionTool[] {
     function: {
       name: t.name,
       description: t.description,
-      parameters: t.input_schema ?? EMPTY_TOOL_SCHEMA,
+      parameters: t.input_schema,
     },
   }));
 }

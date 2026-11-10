@@ -264,11 +264,9 @@ async function rewindDeleted(
   gone: ReadonlySet<string>,
 ): Promise<WorkspaceRewind | undefined> {
   const replies = mergeToolLoopMessages([...before]).filter((m) => m.role === "assistant");
-  const first = replies.findIndex((m) => gone.has(m.msg_id));
-  if (first === -1) return undefined;
   const doomed = replies.filter((m) => gone.has(m.msg_id));
   const versions = doomed.flatMap((m) => versionOf(m) ?? []);
-  if (!replies.slice(first).every((m) => gone.has(m.msg_id))) {
+  if (!replies.slice(replies.length - doomed.length).every((m) => gone.has(m.msg_id))) {
     const recorded = await recordedTurns(turns, engine.thread, versions);
     return recorded.length === 0 ? undefined : { restored: [], skipped: [], kept: "later_turns" };
   }

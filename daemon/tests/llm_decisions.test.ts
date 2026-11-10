@@ -23,6 +23,12 @@ describe("which failures are worth reissuing", () => {
     ).toBe(true);
   });
 
+  test("a key out of quota fails at once so the next key can be tried, and a failure nobody recognises is retried", () => {
+    expect(retries(http(429, "You exceeded your current quota"))).toBe(false);
+    expect(retries(http(429, "monthly limit reached for this key"))).toBe(false);
+    expect(retries({ kind: "mystery" } as unknown as LlmError)).toBe(true);
+  });
+
   test("a server error and a rate limit are, a client mistake is not", () => {
     expect(retries(http(500))).toBe(true);
     expect(retries(http(503))).toBe(true);

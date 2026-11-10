@@ -1,10 +1,12 @@
-import { afterEach, describe, expect, setSystemTime, test } from "bun:test";
-import { chmodSync, mkdirSync, mkdtempSync, statSync, writeFileSync } from "node:fs";
+import { afterEach, describe, expect, jest, setSystemTime, test } from "bun:test";
+import { Database } from "bun:sqlite";
+import { chmodSync, readdirSync, mkdirSync, mkdtempSync, statSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
 import { findSentPicture, sentPicturesDir } from "../src/storage/sent_pictures.ts";
-import { WebSessions, type WebSession } from "../src/web/auth.ts";
+import { LoginCodes, WebSessions, type WebSession } from "../src/web/auth.ts";
+import { required } from "../src/util/required.ts";
 import { pageOrigin, readSmallJson, WebBodyTooLarge } from "../src/web/policy.ts";
 import { sessionDigest, WebRecovery } from "../src/web/recovery.ts";
 import { rejectionOf } from "./support/outcome.ts";
@@ -22,27 +24,32 @@ function requestWith(cookie: string): Request {
 }
 
 describe("a browser session", () => {
-  test("renews only for the browser holding its cookie, and the renewal outlives the original expiry", async () => {
-    const sessions = new WebSessions(ORIGIN, 4, 60);
-    const mine = sessions.create();
-    const theirs = sessions.create();
-    if (mine === undefined || theirs === undefined) throw new Error("no session");
-    const cookie = cookieOf(sessions, mine);
+  test("renews only for the browser holding its cookie, and the renewal outlives the original expiry", () => {
+    jest.useFakeTimers();
+    try {
+      const sessions = new WebSessions(ORIGIN, 4, 60);
+      const mine = sessions.create();
+      const theirs = sessions.create();
+      if (mine === undefined || theirs === undefined) throw new Error("no session");
+      const cookie = cookieOf(sessions, mine);
 
-    expect(() => sessions.renew(mine, requestWith(cookieOf(sessions, theirs)))).toThrow("Only the browser holding a sign-in can renew it");
-    expect(() => sessions.renew(mine, requestWith(""))).toThrow("Only the browser holding a sign-in can renew it");
+      expect(() => sessions.renew(mine, requestWith(cookieOf(sessions, theirs)))).toThrow("Only the browser holding a sign-in can renew it");
+      expect(() => sessions.renew(mine, requestWith(""))).toThrow("Only the browser holding a sign-in can renew it");
 
-    await Bun.sleep(40);
-    const renewed = sessions.renew(mine, requestWith(cookie));
-    expect(renewed).toContain("Expires=");
-    await Bun.sleep(40);
-    expect(sessions.read(requestWith(cookie))?.id).toBe(mine.id);
-    expect(mine.signal.aborted).toBe(false);
+      jest.advanceTimersByTime(40);
+      const renewed = sessions.renew(mine, requestWith(cookie));
+      expect(renewed).toContain("Expires=");
+      jest.advanceTimersByTime(40);
+      expect(sessions.read(requestWith(cookie))?.id).toBe(mine.id);
+      expect(mine.signal.aborted).toBe(false);
 
-    await Bun.sleep(60);
-    expect(mine.signal.aborted).toBe(true);
-    expect(() => sessions.renew(mine, requestWith(cookie))).toThrow("Only the browser holding a sign-in can renew it");
-    sessions.close();
+      jest.advanceTimersByTime(60);
+      expect(mine.signal.aborted).toBe(true);
+      expect(() => sessions.renew(mine, requestWith(cookie))).toThrow("Only the browser holding a sign-in can renew it");
+      sessions.close();
+    } finally {
+      jest.useRealTimers();
+    }
   });
 
   test("a renewal is saved, so it survives a restart", () => {
@@ -123,6 +130,26 @@ describe("a request body", () => {
     expect(String(await rejectionOf(readSmallJson(empty, 64)))).toContain("Expected a JSON body");
   });
 
+  test("a body that isn't bytes is refused, an over-long one is cancelled, and the body is let go either way", async () => {
+    const streamed = (chunks: unknown[], cancelled: string[] = []) => new Request(`${ORIGIN}/api/login`, {
+      method: "POST",
+      headers: { "content-type": "application/json; charset=utf-8" },
+      body: new ReadableStream({
+        pull(c) { const next = chunks.shift(); if (next === undefined) c.close(); else c.enqueue(next); },
+        cancel() { cancelled.push("cancelled"); },
+      }),
+    });
+    expect(String(await rejectionOf(readSmallJson(streamed(["{}"]), 64)))).toContain("Expected a byte stream");
+    const cancelled: string[] = [];
+    const long = streamed([new TextEncoder().encode(`{"a":"${"x".repeat(40)}`), new TextEncoder().encode(`${"x".repeat(40)}"}`), new TextEncoder().encode("never read")], cancelled);
+    expect(await rejectionOf(readSmallJson(long, 64))).toBeInstanceOf(WebBodyTooLarge);
+    expect(cancelled).toEqual(["cancelled"]);
+    expect(long.body?.locked).toBe(false);
+    const fine = streamed([new TextEncoder().encode('{"ok":true}')]);
+    expect(await readSmallJson(fine, 64)).toEqual({ ok: true });
+    expect(fine.body?.locked).toBe(false);
+  });
+
   test("at the limit and of the right type, it is read", async () => {
     const body = `{"a":"${"x".repeat(56)}"}`;
     expect(body).toHaveLength(64);
@@ -167,6 +194,47 @@ describe("what the daemon keeps on disk for browsers", () => {
     expect(() => new WebRecovery({ cacheDir: join(fifo, "cache"), dataDir: fifo, token: "t" }, ORIGIN)).toThrow("regular database file");
   });
 
+  test("browser sessions outlive a restart unless they have expired, or the origin changed", () => {
+    const root = mkdtempSync(join(tmpdir(), "shore-sign-in-restart-"));
+    const options = { cacheDir: join(root, "cache"), dataDir: root, token: "t" };
+    const first = new WebRecovery(options, ORIGIN);
+    first.saveSession("live", Date.now() + 60_000);
+    first.saveSession("stale", Date.now() - 1);
+    first.close();
+    const second = new WebRecovery(options, ORIGIN);
+    expect(second.sessions().map((session) => session.id)).toEqual(["live"]);
+    second.close();
+    const moved = new WebRecovery(options, "https://elsewhere.example");
+    expect(moved.sessions()).toEqual([]);
+    moved.close();
+  });
+
+  test("a store written by an earlier daemon keeps its sessions while the origin and token stay the same", () => {
+    const root = mkdtempSync(join(tmpdir(), "shore-sign-in-upgrade-"));
+    const options = { cacheDir: join(root, "cache"), dataDir: root, token: "t" };
+    new WebRecovery(options, ORIGIN).close();
+    const db = new Database(join(options.cacheDir, "web", sessionDigest(root), "recovery.sqlite"));
+    db.query("UPDATE identity SET fingerprint = ?").run(sessionDigest(JSON.stringify([1, ORIGIN, "t"])));
+    db.query("INSERT INTO sessions VALUES (?, ?)").run("kept", Date.now() + 60_000);
+    db.close();
+    const upgraded = new WebRecovery(options, ORIGIN);
+    expect(upgraded.sessions().map((session) => session.id)).toEqual(["kept"]);
+    upgraded.close();
+  });
+
+  test("opening the recovery store leaves no file open, and a damaged one is refused and closed", () => {
+    const root = mkdtempSync(join(tmpdir(), "shore-sign-in-damaged-"));
+    const options = { cacheDir: join(root, "cache"), dataDir: root, token: "t" };
+    const descriptors = () => readdirSync("/proc/self/fd").length;
+    new WebRecovery(options, ORIGIN).close();
+    const open = descriptors();
+    new WebRecovery(options, ORIGIN).close();
+    expect(descriptors()).toBe(open);
+    writeFileSync(join(options.cacheDir, "web", sessionDigest(root), "recovery.sqlite"), "not a database ".repeat(100));
+    expect(() => new WebRecovery(options, ORIGIN)).toThrow();
+    expect(descriptors()).toBe(open);
+  });
+
   test("a sent picture is found only by its content name, never by a path", () => {
     const data = mkdtempSync(join(tmpdir(), "shore-sign-in-pictures-"));
     const name = `${"a".repeat(64)}.png`;
@@ -176,5 +244,42 @@ describe("what the daemon keeps on disk for browsers", () => {
     expect(findSentPicture(data, name)).toBe(join(sentPicturesDir(data, "ada"), name));
     expect(findSentPicture(data, "../../../secret.png")).toBeUndefined();
     expect(findSentPicture(data, `${"b".repeat(64)}.png`)).toBeUndefined();
+    writeFileSync(join(sentPicturesDir(data, "ada"), "notes.txt"), "not a picture");
+    expect(findSentPicture(data, "notes.txt"), "a file beside the pictures that isn't named by its content").toBeUndefined();
+    const unsent = mkdtempSync(join(tmpdir(), "shore-sign-in-no-pictures-"));
+    expect(findSentPicture(unsent, name), "a daemon that has never sent a picture").toBeUndefined();
+  });
+});
+
+describe("ending a sign-in and spending a code", () => {
+  test("a revoked sign-in can't issue a cookie, leaves no timer behind, and revoking it again does nothing", () => {
+    jest.useFakeTimers();
+    try {
+      const sessions = new WebSessions(ORIGIN, 4, 60_000);
+      const session = required(sessions.create());
+      expect(sessions.cookie(session)).toContain("shore_web_");
+      sessions.revoke(session);
+      expect(() => sessions.cookie(session)).toThrow("Only a new browser sign-in can issue a cookie");
+      expect(jest.getTimerCount()).toBe(0);
+      sessions.revoke(session);
+      expect(session.signal.aborted).toBe(true);
+    } finally {
+      jest.useRealTimers();
+    }
+  });
+
+  test("a code is spent by the moment it expires, and codes can be made even with no room kept for them", () => {
+    setSystemTime(new Date("2026-11-10T00:00:00Z"));
+    try {
+      const codes = new LoginCodes(60_000, 4);
+      const { code } = codes.create();
+      setSystemTime(new Date(Date.parse("2026-11-10T00:00:00Z") + 60_000));
+      expect(codes.redeem(code)).toBe(false);
+      const fresh = codes.create();
+      expect(codes.redeem(fresh.code)).toBe(true);
+      expect(new LoginCodes(60_000, 0).create().code).toMatch(/^[A-Za-z0-9_-]{43}$/);
+    } finally {
+      setSystemTime();
+    }
   });
 });

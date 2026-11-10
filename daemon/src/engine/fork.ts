@@ -1,8 +1,8 @@
 import { withConversation } from "./lifecycle.ts";
-import { forkPromptState, resetActivePromptSnapshot } from "../memory/deferred_edits.ts";
+import { forkPromptState } from "../memory/deferred_edits.ts";
 import { threadFile, writeDurable, durableExists, deleteThreadState } from "../storage/files.ts";
 import { existsSync } from "node:fs";
-import { mkdir, readFile, readdir, rm, writeFile } from "node:fs/promises";
+import { mkdir, readFile, readdir, rm, unlink, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 
 import {
@@ -116,18 +116,9 @@ function pendingCompactionFor(dbPath: string, archiveKeys: readonly string[]): b
 const forkLocks = new Map<string, Promise<unknown>>();
 
 async function withForkLock<T>(key: string, run: () => Promise<T>): Promise<T> {
-  const prior = forkLocks.get(key);
-  const started = prior === undefined ? run() : prior.then(run, run);
-  const settled = started.then(
-    () => undefined,
-    () => undefined,
-  );
-  forkLocks.set(key, settled);
-  try {
-    return await started;
-  } finally {
-    if (forkLocks.get(key) === settled) forkLocks.delete(key);
-  }
+  const started = (forkLocks.get(key) ?? Promise.resolve()).then(run);
+  forkLocks.set(key, started.then(() => undefined, () => undefined));
+  return await started;
 }
 
 export async function forkThread(
@@ -199,7 +190,7 @@ async function forkThreadLocked(
   };
 
   await mkdir(childDir, { recursive: true });
-  await writeFile(join(childDir, FORK_MARKER_FILE), `${JSON.stringify(marker, null, 2)}\n`, "utf8");
+  await writeFile(join(childDir, FORK_MARKER_FILE), `${JSON.stringify(marker)}\n`, "utf8");
   writeDurable(threadFile(data, character, child, "active.jsonl"), serializeMessages(copied));
   await forkPromptState(characterDataDir(data, character), source, child);
   if (options.failAfter === "context") throw new Error("injected fork failure after context");
@@ -229,7 +220,7 @@ async function forkThreadLocked(
   await writeThreadsIndex(data, character, published);
   if (options.failAfter === "publish") throw new Error("injected fork failure after publish");
 
-  await rm(join(childDir, FORK_MARKER_FILE), { force: true });
+  await unlink(join(childDir, FORK_MARKER_FILE));
   return { index: published, fork: marker, child: record };
 }
 
@@ -272,15 +263,14 @@ export async function recoverForks(data: string, character: string): Promise<str
     const marker = await readForkMarker(join(dir, FORK_MARKER_FILE));
     if (marker === undefined) continue;
     if (index !== undefined && threadRecord(index, entry) !== undefined) {
-      await rm(join(dir, FORK_MARKER_FILE), { force: true });
+      await unlink(join(dir, FORK_MARKER_FILE));
       shoreLog.warn(
         `shore: completed the interrupted fork ${marker.fork_id} for ${character}/${entry}`,
       );
       recovered.push(entry);
       continue;
     }
-    await resetActivePromptSnapshot(characterDataDir(data, character), entry);
-    await rm(dir, { recursive: true, force: true });
+    await rm(dir, { recursive: true });
     deleteThreadState(data, character, entry);
     const dbPath = join(data, HISTORY_DB_FILE);
     if (existsSync(dbPath)) {

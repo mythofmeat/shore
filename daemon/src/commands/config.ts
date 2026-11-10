@@ -347,8 +347,7 @@ function commitConfigKey(
     written = result.text;
     action = result.action;
   } catch (e) {
-    if (e instanceof TomlEditError) throw invalidRequest(e.message);
-    throw e;
+    throw e instanceof TomlEditError ? invalidRequest(e.message) : e;
   }
 
   const existed = existsSync(file);
@@ -402,8 +401,7 @@ export function commitConfigEdits(ctx: ConfigContext, edits: readonly ConfigFile
     try {
       text = edit(before);
     } catch (e) {
-      if (e instanceof TomlEditError) throw invalidRequest(e.message);
-      throw e;
+      throw e instanceof TomlEditError ? invalidRequest(e.message) : e;
     }
     return { file, before, text, existed: existsSync(file) };
   }).filter((plan) => plan.text !== plan.before);
@@ -445,8 +443,7 @@ export function setConfigKey(
   try {
     literal = schemaValueLiteral(entry, value);
   } catch (e) {
-    if (e instanceof SchemaValueError) throw invalidRequest(`${key}: ${e.message}`);
-    throw e;
+    throw e instanceof SchemaValueError ? invalidRequest(`${key}: ${e.message}`) : e;
   }
 
   checkAgainstSource(ctx, entry, value);
@@ -454,11 +451,7 @@ export function setConfigKey(
   return commitConfigKey(
     ctx,
     key,
-    (before, owned) => {
-      const path = parseConfigPath(key);
-      const source = formatConfigPath(owned) === key ? before : unsetTomlValue(before, owned).text;
-      return setTomlValue(source, path, literal);
-    },
+    (before, path) => setTomlValue(before, path, literal),
     `${key} = ${isSecretConfigPath(parseConfigPath(key)) ? REDACTED : literal}`,
   );
 }

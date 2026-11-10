@@ -3,8 +3,8 @@ import { readFile } from "./support/stored_files.ts";
 import { toolGeneration } from "./support/tool_generation.ts";
 import { required } from "../src/util/required.ts";
 
-import { expect, test } from "bun:test";
-import { mkdtemp, mkdir, readlink, symlink, writeFile } from "node:fs/promises";
+import { describe, expect, spyOn, test } from "bun:test";
+import { mkdtemp, mkdir, readlink, symlink, unlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 
@@ -14,6 +14,8 @@ import type { ArchivalPlan } from "../src/memory/compaction/plan.ts";
 import { planFor } from "./support/archival_plan.ts";
 import { conversationManager } from "../src/memory/compaction/archive.ts";
 import { compact } from "../src/memory/compaction/manager.ts";
+import * as checkpoints from "../src/memory/compaction/checkpoint.ts";
+import type { Message } from "../src/engine/types.ts";
 import type {
   CompactionLlm,
   CompactionTools,
@@ -262,7 +264,6 @@ function options(
     dryRun: false,
     chatRequest: compactionRequest(),
     dataDir,
-    resumable: true,
     tools,
   };
 }
@@ -483,4 +484,217 @@ test("regenerating the newest reply while a pass runs still archives the planned
     .split("\n")
     .map((line) => (JSON.parse(line) as { content: string }).content);
   expect(kept).toEqual(["recent question", "a regenerated answer"]);
+});
+
+describe("a pass that stopped part way", () => {
+  async function world(label: string) {
+    const root = await mkdtemp(join(tmpdir(), `shore-compact-${label}-`));
+    const dataDir = join(root, "data");
+    const characterDir = join(dataDir, "ada");
+    const workspace = join(root, "workspace");
+    await mkdir(join(workspace, "memory"), { recursive: true });
+    await mkdir(join(characterDir, "threads", "main"), { recursive: true });
+    const memoryStore = await MarkdownMemoryStore.open(join(workspace, "memory"));
+    const activeContent = conversation().map(activeLine).join("\n") + "\n";
+    writeDurable(join(characterDir, "threads", "main", "active.jsonl"), activeContent);
+    let edits = 0;
+    const tools: CompactionTools = {
+      workspaceDir: workspace,
+      turns: { workspace, repo: join(dirname(workspace), "turns.git") },
+      dispatch: async (name, input) => {
+        if (name !== "edit") return { output: "ok", isError: false };
+        edits += 1;
+        const edit = input as { path: string; content: string };
+        await mkdir(dirname(join(workspace, edit.path)), { recursive: true });
+        await writeFile(join(workspace, edit.path), edit.content, "utf8");
+        return { output: "written", isError: false };
+      },
+      ensureWorkspaceGitRepo: async () => {},
+      gitCommitAll: async () => false,
+    };
+    const checkpointPath = join(characterDir, "threads", "main", "compaction-checkpoint.json");
+    const active = join(characterDir, "threads", "main", "active.jsonl");
+    return { dataDir, workspace, memoryStore, tools, activeContent, checkpointPath, active, edits: () => edits };
+  }
+  const write = response("tool_use", [{ type: "tool_use", id: "write-1", name: "edit", input: { path: "memory/fact.md", content: "remembered\n" } }]);
+  const finished = response("end_turn", [{ type: "text", text: "done" }]);
+
+  test("one that archived but stopped before clearing its checkpoint is reported done next time, without asking the model again", async () => {
+    const w = await world("archived");
+    const realRemove = checkpoints.removeCompactionCheckpoint;
+    let stops = 1;
+    const remove = spyOn(checkpoints, "removeCompactionCheckpoint").mockImplementation(async (...args) => {
+      if (stops > 0) {
+        stops -= 1;
+        throw new Error("stopped");
+      }
+      await realRemove(...args);
+    });
+    let stopped: unknown;
+    try {
+      stopped = await compact(options(w.dataDir, w.workspace, w.memoryStore, await planFor(w.dataDir, "ada", "main", { keepRecentTurns: 1 }), w.tools, scripted([write, finished])), { keepRecentTurns: 1 }).catch((e: unknown) => e);
+    } finally {
+      remove.mockRestore();
+    }
+    expect(stopped).toHaveProperty("message", "stopped");
+    const id = (JSON.parse(await readFile(w.checkpointPath, "utf8")) as { id: string }).id;
+    const kept = await readFile(w.active, "utf8");
+    writeDurable(join(w.dataDir, "ada", "threads", "main", "active.jsonl"), kept + [conversationMessage("user", "newer question"), conversationMessage("assistant", "newer answer")].map(activeLine).join("\n") + "\n");
+
+    const quiet = scripted([]);
+    const outcome = await compact(options(w.dataDir, w.workspace, w.memoryStore, await planFor(w.dataDir, "ada", "main", { keepRecentTurns: 1 }), w.tools, quiet), { keepRecentTurns: 1 });
+    expect(outcome).toEqual({
+      kind: "compacted",
+      memoryFilesWritten: ["memory/fact.md"],
+      conversationId: "ada",
+      newConversationId: id,
+      messageCount: 2,
+      compactedTurns: 1,
+      retainedCount: 4,
+      retainedTurns: 2,
+      markdownPaths: ["memory/fact.md"],
+      toolRounds: 1,
+      toolsCalled: ["edit"],
+    });
+    expect(quiet.calls).toBe(0);
+    expect(await outcomeOf(readFile(w.checkpointPath, "utf8"))).toThrow();
+  });
+
+  test("one whose archive was recorded while the conversation still holds the archived turns finishes rewriting it", async () => {
+    const w = await world("recorded");
+    const first = await compact(options(w.dataDir, w.workspace, w.memoryStore, await planFor(w.dataDir, "ada", "main", { keepRecentTurns: 1 }), w.tools, scripted([write, new Error("provider unavailable")])), { keepRecentTurns: 1 });
+    expect(first.kind).toBe("paused");
+    const id = (JSON.parse(await readFile(w.checkpointPath, "utf8")) as { id: string }).id;
+    const lines = w.activeContent.trim().split("\n");
+    const history = HistoryStore.open(join(w.dataDir, HISTORY_DB_FILE));
+    const segment = history.beginCompaction("ada", { file: HISTORY_DB_FILE, message_count: 2, compacted_at: "2026-08-12T00:00:00Z", compaction_id: id }, lines.slice(0, 2).map((line) => JSON.parse(line) as Message), w.activeContent, lines.slice(2).join("\n") + "\n");
+    history.finishCompaction("ada", segment);
+    history.close();
+
+    const outcome = await compact(options(w.dataDir, w.workspace, w.memoryStore, await planFor(w.dataDir, "ada", "main", { keepRecentTurns: 1 }), w.tools, scripted([finished])), { keepRecentTurns: 1 });
+    expect(outcome.kind).toBe("compacted");
+    expect(await readFile(w.active, "utf8")).toBe(lines.slice(2).join("\n") + "\n");
+    const after = HistoryStore.open(join(w.dataDir, HISTORY_DB_FILE));
+    try {
+      expect(after.segmentCount("ada")).toBe(1);
+    } finally {
+      after.close();
+    }
+  });
+
+  test("one whose conversation was rewritten by hand, with nothing archived, starts over", async () => {
+    const w = await world("rewritten");
+    const first = await compact(options(w.dataDir, w.workspace, w.memoryStore, await planFor(w.dataDir, "ada", "main", { keepRecentTurns: 1 }), w.tools, scripted([write, new Error("provider unavailable")])), { keepRecentTurns: 1 });
+    expect(first.kind).toBe("paused");
+    writeDurable(join(w.dataDir, "ada", "threads", "main", "active.jsonl"), [conversationMessage("user", "a different start"), ...conversation().slice(1)].map(activeLine).join("\n") + "\n");
+    const fresh = scripted([finished]);
+    const outcome = await compact(options(w.dataDir, w.workspace, w.memoryStore, await planFor(w.dataDir, "ada", "main", { keepRecentTurns: 1 }), w.tools, fresh), { keepRecentTurns: 1 });
+    expect(outcome.kind).toBe("compacted");
+    expect(fresh.calls).toBe(1);
+  });
+
+  test("a pass that claimed memory versions turns the claim into coverage when it archives", async () => {
+    const w = await world("covered");
+    const store = HistoryStore.open(join(w.dataDir, HISTORY_DB_FILE));
+    store.claimMemoryCoverage("ada", "compaction", ["v1"], "claim-1", "pass", Date.now(), 60_000);
+    store.close();
+    const outcome = await compact({ ...options(w.dataDir, w.workspace, w.memoryStore, await planFor(w.dataDir, "ada", "main", { keepRecentTurns: 1 }), w.tools, scripted([finished])), coverage: { claim: "claim-1", unit: "turn", claimed: 1, background: 0, fresh: 0 } }, { keepRecentTurns: 1 });
+    expect(outcome.kind).toBe("compacted");
+    const after = HistoryStore.open(join(w.dataDir, HISTORY_DB_FILE));
+    try {
+      expect([...after.coveredMemoryVersions("ada", "compaction", ["v1"])]).toEqual(["v1"]);
+    } finally {
+      after.close();
+    }
+  });
+
+  test("one restarted on purpose writes again from the start instead of resuming", async () => {
+    const w = await world("restarted");
+    const first = await compact(options(w.dataDir, w.workspace, w.memoryStore, await planFor(w.dataDir, "ada", "main", { keepRecentTurns: 1 }), w.tools, scripted([write, new Error("provider unavailable")])), { keepRecentTurns: 1 });
+    expect(first.kind).toBe("paused");
+    const abandoned = (JSON.parse(await readFile(w.checkpointPath, "utf8")) as { id: string }).id;
+    const again = scripted([write, finished]);
+    const outcome = await compact(options(w.dataDir, w.workspace, w.memoryStore, await planFor(w.dataDir, "ada", "main", { keepRecentTurns: 1, restart: true }), w.tools, again), { keepRecentTurns: 1 });
+    expect(outcome).toMatchObject({ kind: "compacted", toolRounds: 1 });
+    expect(outcome).not.toHaveProperty("newConversationId", abandoned);
+    expect(w.edits()).toBe(2);
+    expect(again.calls).toBe(2);
+  });
+});
+
+describe("rolling back a pass whose archive failed", () => {
+  async function world(label: string) {
+    const root = await mkdtemp(join(tmpdir(), `shore-compact-rollback-${label}-`));
+    const dataDir = join(root, "data");
+    const workspace = join(root, "workspace");
+    await mkdir(join(workspace, "memory"), { recursive: true });
+    await mkdir(join(dataDir, "ada", "threads", "main"), { recursive: true });
+    const memoryStore = await MarkdownMemoryStore.open(join(workspace, "memory"));
+    writeDurable(join(dataDir, "ada", "threads", "main", "active.jsonl"), conversation().map(activeLine).join("\n") + "\n");
+    const tools: CompactionTools = {
+      workspaceDir: workspace,
+      turns: { workspace, repo: join(dirname(workspace), "turns.git") },
+      dispatch: async (name, input) => {
+        if (name === "delete") {
+          await unlink(join(workspace, (input as { path: string }).path));
+          return { output: "deleted", isError: false };
+        }
+        return await renderToolOutcome(() => handleBash(input as Record<string, unknown>, workspace, "ada"));
+      },
+      ensureWorkspaceGitRepo: async () => {},
+      gitCommitAll: async () => false,
+    };
+    const plan = async () => await planFor(dataDir, "ada", "main", { keepRecentTurns: 1 });
+    const failing = { archiveAndRetain: async (): Promise<string> => { throw new Error("archive failed"); } };
+    return { dataDir, workspace, memoryStore, tools, plan, failing };
+  }
+  const call = (id: string, name: string, input: unknown) => ({ type: "tool_use" as const, id, name, input });
+
+  test("deleted files and links come back, but one recreated while the pass was paused keeps its new content", async () => {
+    const w = await world("deleted");
+    await writeFile(join(w.workspace, "memory/a.md"), "original a");
+    await writeFile(join(w.workspace, "memory/b.md"), "original b");
+    await symlink("a.md", join(w.workspace, "memory/link.md"));
+    const first = await compact(options(w.dataDir, w.workspace, w.memoryStore, await w.plan(), w.tools, scripted([
+      response("tool_use", [call("d1", "delete", { path: "memory/a.md" }), call("d2", "delete", { path: "memory/b.md" }), call("d3", "delete", { path: "memory/link.md" })]),
+      new Error("provider unavailable"),
+    ])), { keepRecentTurns: 1 });
+    expect(first.kind).toBe("paused");
+    await writeFile(join(w.workspace, "memory/b.md"), "outside b");
+    const resumed = await compact({ ...options(w.dataDir, w.workspace, w.memoryStore, await w.plan(), w.tools, scripted([response("end_turn", [])])), conversationMgr: w.failing }, { keepRecentTurns: 1 }).catch((e: unknown) => e);
+    expect(resumed).toHaveProperty("message", "archive failed");
+    expect(await readFile(join(w.workspace, "memory/a.md"), "utf8")).toBe("original a");
+    expect(await readFile(join(w.workspace, "memory/b.md"), "utf8")).toBe("outside b");
+    expect(await readlink(join(w.workspace, "memory/link.md"))).toBe("a.md");
+  });
+
+  test("an older checkpoint's recorded states are put back and the files it made are removed", async () => {
+    const w = await world("legacy");
+    await writeFile(join(w.workspace, "memory/old.md"), "rewritten by the pass");
+    await writeFile(join(w.workspace, "memory/made.md"), "made by the pass");
+    const first = await compact(options(w.dataDir, w.workspace, w.memoryStore, await w.plan(), w.tools, scripted([new Error("provider unavailable")])), { keepRecentTurns: 1 });
+    expect(first.kind).toBe("paused");
+    const saved = required(await checkpoints.loadCompactionCheckpoint(w.dataDir, "ada", "main"));
+    saved.loop.writesApplied.push(
+      { displayPath: "memory/old.md", resolvedPath: join(w.workspace, "memory/old.md"), previousState: { kind: "file", content: Buffer.from("as it was").toString("base64"), mode: 0o644 } },
+      { displayPath: "memory/made.md", resolvedPath: join(w.workspace, "memory/made.md") },
+    );
+    await checkpoints.saveCompactionCheckpoint(w.dataDir, saved, "main");
+    const resumed = await compact({ ...options(w.dataDir, w.workspace, w.memoryStore, await w.plan(), w.tools, scripted([response("end_turn", [])])), conversationMgr: w.failing }, { keepRecentTurns: 1 }).catch((e: unknown) => e);
+    expect(resumed).toHaveProperty("message", "archive failed");
+    expect(await readFile(join(w.workspace, "memory/old.md"), "utf8")).toBe("as it was");
+    expect(await outcomeOf(readFile(join(w.workspace, "memory/made.md"), "utf8"))).toThrow();
+  });
+
+  test("files one command wrote together go back to how they were before it, and earlier files before theirs", async () => {
+    const w = await world("batch");
+    for (const name of ["one", "two", "three"]) await writeFile(join(w.workspace, `memory/${name}.md`), `original ${name}`);
+    const failure = await compact({ ...options(w.dataDir, w.workspace, w.memoryStore, await w.plan(), w.tools, scripted([
+      response("tool_use", [call("w1", "bash", { command: "printf changed > memory/one.md" })]),
+      response("tool_use", [call("w2", "bash", { command: "printf changed > memory/two.md; printf changed > memory/three.md" })]),
+      response("end_turn", []),
+    ])), conversationMgr: w.failing }, { keepRecentTurns: 1 }).catch((e: unknown) => e);
+    expect(failure).toHaveProperty("message", "archive failed");
+    for (const name of ["one", "two", "three"]) expect(await readFile(join(w.workspace, `memory/${name}.md`), "utf8")).toBe(`original ${name}`);
+  });
 });

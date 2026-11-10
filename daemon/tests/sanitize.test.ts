@@ -104,6 +104,21 @@ describe("the rewrite", () => {
     ]);
   });
 
+  test("a message's transient tail counts only the transient blocks that stay", () => {
+    const tailed = (tail: number, ...content: unknown[]): WireMessage => ({ role: "user", content, transient_tail: tail }) as unknown as WireMessage;
+    expect(sanitizeToolPairs([
+      tailed(1, result("ghost"), text("kept"), text("transient")),
+      tailed(2, text("kept"), result("ghost"), text("transient")),
+      tailed(1, result("ghost"), text("first"), text("second"), text("transient")),
+      user(result("ghost"), text("plain")),
+    ])).toEqual([
+      tailed(1, text("kept"), text("transient")),
+      tailed(1, text("kept"), text("transient")),
+      tailed(1, text("first"), text("second"), text("transient")),
+      user(text("plain")),
+    ]);
+  });
+
   test("can empty the conversation entirely", () => {
     expect(sanitizeToolPairs([assistant(use("a")), user(result("ghost"))])).toEqual([]);
   });

@@ -257,18 +257,21 @@ fn write_set<W: Write>(out: &mut W, key: &str, data: &Value) {
 
     let value = data.get("value").unwrap_or(&Value::Null);
     let previous = data.get("previous").unwrap_or(&Value::Null);
-    let shown = if is_secret(&[], key.rsplit('.').next().unwrap_or(key)) {
-        redacted(value)
-    } else {
-        scalar(value)
+    let secret = is_secret(&[], key.rsplit('.').next().unwrap_or(key));
+    let shown = |shown_value: &Value| {
+        if secret {
+            redacted(shown_value)
+        } else {
+            scalar(shown_value)
+        }
     };
 
     let mut rows = Rows::new();
     if previous == value {
-        rows.add_toned("unchanged", &shown, Tone::Muted);
+        rows.add_toned("unchanged", &shown(value), Tone::Muted);
     } else {
-        rows.add_toned("was", &scalar(previous), Tone::Muted);
-        rows.add_toned("now", &shown, Tone::Good);
+        rows.add_toned("was", &shown(previous), Tone::Muted);
+        rows.add_toned("now", &shown(value), Tone::Good);
     }
     if let Some(file) = data.get("file").and_then(Value::as_str) {
         rows.add_toned("written to", file, Tone::Muted);
@@ -497,6 +500,74 @@ mod tests {
             }
         }
         data
+    }
+
+    #[test]
+    fn the_hidden_secrets_note_appears_only_when_something_was_hidden() {
+        let plain = render(
+            &json!({"config": {"defaults": {"display_name": "eve"}}, "defaults": {}}),
+            true,
+        );
+        assert!(!plain.contains("secrets hidden"), "{plain}");
+        let nested = render(
+            &json!({"config": {"providers": {"anthropic": {"api_key": "sk-1"}}}, "defaults": {}}),
+            true,
+        );
+        assert!(nested.contains("secrets hidden"), "{nested}");
+    }
+
+    #[test]
+    fn setting_a_value_to_what_it_was_says_unchanged_and_a_change_shows_both() {
+        let same = render(&with(set_payload(), &[("previous", json!("6h"))]), false);
+        assert!(
+            same.contains("unchanged") && !same.contains("12h"),
+            "{same}"
+        );
+        let changed = render(&set_payload(), false);
+        assert!(
+            changed.contains("12h") && changed.contains("6h") && !changed.contains("unchanged"),
+            "{changed}"
+        );
+    }
+
+    #[test]
+    fn a_change_that_needs_a_restart_says_so_and_others_do_not() {
+        let quiet = render(&set_payload(), false);
+        assert!(!quiet.contains("restart"), "{quiet}");
+        let one = render(
+            &with(set_payload(), &[("restart_required", json!(["web.port"]))]),
+            false,
+        );
+        assert!(
+            one.contains("web.port takes effect only after a daemon restart"),
+            "{one}"
+        );
+        let two = render(
+            &with(
+                set_payload(),
+                &[("restart_required", json!(["web.port", "web.host"]))],
+            ),
+            false,
+        );
+        assert!(
+            two.contains("web.port, web.host take effect only after a daemon restart"),
+            "{two}"
+        );
+    }
+
+    #[test]
+    fn replacing_a_secret_hides_the_old_one_too() {
+        let data = with(
+            set_payload(),
+            &[
+                ("set", json!("notifications.ntfy.token")),
+                ("value", json!("tk_new_value")),
+                ("previous", json!("tk_old_value")),
+            ],
+        );
+        let out = render(&data, false);
+        assert!(!out.contains("tk_old_value"), "{out}");
+        assert_eq!(out.matches("(set, hidden)").count(), 2, "{out}");
     }
 
     #[test]

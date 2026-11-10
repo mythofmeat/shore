@@ -60,7 +60,7 @@ export class BrowserConnection {
   #generation = 0;
   #retries = 0;
   #wanted = false;
-  #hello = false;
+  #hello!: boolean;
   #session: WebSessionInfo | undefined;
 
   constructor(options: BrowserConnectionOptions) {
@@ -136,25 +136,20 @@ export class BrowserConnection {
 
   reconnect(): void {
     this.#wanted = true;
-    this.#lost("reconnecting", "Refreshing conversation state", 0);
+    this.#lost("reconnecting", "Refreshing conversation state", true);
   }
 
   stop(): void {
-    this.#wanted = false;
     this.#lost("stopped", "Connection stopped");
   }
 
-  #lost(status: ConnectionStatus, detail: string, delay?: number): void {
+  #lost(status: ConnectionStatus, detail: string, immediately = false): void {
     this.#generation += 1;
     clearTimeout(this.#timer);
     clearTimeout(this.#handshake);
     clearTimeout(this.#renewal);
     this.#abort?.abort();
-    this.#abort = undefined;
-    const socket = this.#socket;
-    this.#socket = undefined;
-    socket?.close();
-    this.#session = undefined;
+    this.#socket?.close();
     const interrupted = [...this.#pending];
     this.#pending.clear();
     this.#pendingBytes = 0;
@@ -164,20 +159,17 @@ export class BrowserConnection {
     }
     this.#setStatus(status, detail);
     if (this.#wanted && status === "reconnecting") {
-      const retry = delay ?? Math.min((this.#options.retryDelayMs ?? 500) * 2 ** Math.min(this.#retries++, 5), 10_000);
-      this.#timer = setTimeout(() => { void this.#open(); }, retry);
+      const open = () => { void this.#open(); };
+      this.#timer = immediately ? setTimeout(open) : setTimeout(open, Math.min((this.#options.retryDelayMs ?? 500) * 2 ** Math.min(this.#retries++, 5), 10_000));
     } else this.#wanted = false;
   }
 
   async #open(): Promise<void> {
-    if (!this.#wanted) return;
     const generation = ++this.#generation;
     this.#setStatus(this.#retries === 0 ? "connecting" : "reconnecting");
     const controller = new AbortController();
     this.#abort = controller;
-    this.#handshake = setTimeout(() => {
-      if (generation === this.#generation) this.#lost("reconnecting", "Connection setup timed out");
-    }, this.#options.handshakeTimeoutMs ?? 10_000);
+    this.#handshake = setTimeout(() => { this.#lost("reconnecting", "Connection setup timed out"); }, this.#options.handshakeTimeoutMs ?? 10_000);
     try {
       const response = await this.#post("/api/session", undefined, controller.signal);
       const body: unknown = await response.json();
@@ -223,7 +215,6 @@ export class BrowserConnection {
   }
 
   #renewLater(generation: number, expiresAt: number): void {
-    clearTimeout(this.#renewal);
     const delay = Math.max(1000, Math.min(12 * 60 * 60 * 1000, (expiresAt - Date.now()) / 2));
     this.#renewal = setTimeout(() => { void this.#renew(generation); }, delay);
   }
@@ -260,7 +251,7 @@ export class BrowserConnection {
     }
     const decision = this.#sync.observe(message);
     if (decision === "drop_stale") return;
-    if (decision === "resync") { this.#lost("reconnecting", "Conversation updates were missed; refreshing state", 0); return; }
+    if (decision === "resync") { this.#lost("reconnecting", "Conversation updates were missed; refreshing state", true); return; }
     if (message.type === "request_finished") {
       const pending = this.#pending.get(message.rid);
       if (pending !== undefined) {
@@ -275,7 +266,7 @@ export class BrowserConnection {
   submit(request: BrowserRequest, rid = randomUUID()): { rid: string; finished: Promise<RequestFinished> } {
     const socket = this.#socket;
     const session = this.#session;
-    if (this.#status !== "ready" || socket === undefined || session === undefined) throw new Error("Wait for Shore to reconnect before sending");
+    if (session === undefined || this.#status !== "ready" || socket === undefined) throw new Error("Wait for Shore to reconnect before sending");
     if (this.#pending.size >= Math.min(session.max_pending_requests, 32)) throw new Error("Wait for a pending request to finish");
     if (!validClientMessage(request)) throw new Error("Invalid conversation request fields");
     if (this.#pending.has(rid)) throw new Error("This request is already in flight");

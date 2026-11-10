@@ -496,6 +496,55 @@ mod tests {
     }
 
     #[test]
+    fn a_binding_to_something_that_is_not_a_command_says_what_is_wrong() {
+        let keymap = Keymap::parse("[normal]\n\"q\" = \"nonsense\"\n\"w\" = \"msg 'regen\"\n");
+        assert!(
+            keymap
+                .warnings
+                .iter()
+                .any(|w| w.ends_with("which error: unrecognized subcommand 'nonsense'")),
+            "{:?}",
+            keymap.warnings
+        );
+        assert!(
+            keymap
+                .warnings
+                .iter()
+                .any(|w| w.ends_with("which unclosed quote in command")),
+            "{:?}",
+            keymap.warnings
+        );
+    }
+
+    fn written_keys(keymap: &Keymap, scope: Scope) -> Vec<(String, String)> {
+        let mut keys: Vec<(String, String)> = keymap
+            .bindings(scope)
+            .iter()
+            .map(|(key, binding)| (key.clone(), binding.written.clone()))
+            .collect();
+        keys.sort();
+        keys
+    }
+
+    #[test]
+    fn a_missing_keymap_file_is_seeded_with_the_defaults_and_a_written_one_is_used() {
+        let tmp = tempfile::tempdir().unwrap();
+        let path = tmp.path().join("config").join("tui.toml");
+        let seeded = Keymap::load_from(&path);
+        assert!(seeded.lookup(Scope::Normal, "j").is_some(), "the defaults");
+        let written = Keymap::parse(&std::fs::read_to_string(&path).unwrap());
+        for scope in [Scope::Global, Scope::Normal] {
+            assert_eq!(written_keys(&written, scope), written_keys(&seeded, scope));
+        }
+        std::fs::write(&path, "[normal]\n\"x\" = \"msg regen\"\n").unwrap();
+        let custom = Keymap::load_from(&path);
+        assert_eq!(
+            written_keys(&custom, Scope::Normal),
+            vec![("x".to_owned(), "msg regen".to_owned())]
+        );
+    }
+
+    #[test]
     fn unparseable_toml_falls_back_to_the_defaults_and_says_so() {
         let keymap = Keymap::parse("[normal\nbroken");
         assert!(

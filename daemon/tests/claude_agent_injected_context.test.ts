@@ -8,7 +8,7 @@ import { emptyCatalog } from "../src/config/models.ts";
 import { ProviderRegistry } from "../src/config/providers.ts";
 import { runGeneration } from "../src/llm/generate.ts";
 import { ClaudeAgentProvider } from "../src/llm/providers/claude_agent.ts";
-import { filterInjectedContext } from "../src/llm/providers/claude_agent_injections.ts";
+import { filterInjectedContext, RESUME_PROMPT } from "../src/llm/providers/claude_agent_injections.ts";
 import type { AnthropicRequestRecord } from "../src/testing/mock_anthropic.ts";
 import { startMockAnthropic } from "../src/testing/mock_anthropic.ts";
 import { required } from "../src/util/required.ts";
@@ -218,3 +218,38 @@ test("a refused reply ends the turn with the refusal instead of a hidden retry, 
     await rm(dir, { recursive: true, force: true });
   }
 }, 60_000);
+
+test("the filter tells injected context from the conversation by role, shape and exact wording", () => {
+  const user = (content: unknown) => ({ role: "user", content });
+  const text = (value: unknown, extra: Record<string, unknown> = {}) => ({ type: "text", text: value, ...extra });
+  const nudge = "Your tool call was malformed and could not be parsed. Please retry.";
+  const filtered = filterInjectedContext({
+    system: [text("x-anthropic-billing-header: cc_version=1"), text("you are ada")],
+    messages: [
+      user([text("hello")]),
+      { role: "assistant", content: [{ type: "thinking", thinking: "t", signature: "s" }] },
+      user([text("<system-reminder>be brief</system-reminder>", { cache_control: { type: "ephemeral" } })]),
+      user([text(RESUME_PROMPT), text(nudge)]),
+      { role: "tool", content: [text("<system-reminder>not ours to judge</system-reminder>")] },
+      user([text(5)]),
+      user("plain words"),
+      { role: "assistant", content: "<system-reminder>quoted by the model</system-reminder>" },
+      user("<system-reminder>injected as a string</system-reminder>"),
+      user(null),
+    ],
+  });
+  expect(filtered.body).toStrictEqual({
+    system: [text("you are ada")],
+    messages: [
+      user([text("hello", { cache_control: { type: "ephemeral" } })]),
+      { role: "assistant", content: [{ type: "thinking", thinking: "t", signature: "s" }] },
+      { role: "tool", content: [text("<system-reminder>not ours to judge</system-reminder>")] },
+      user([text(5)]),
+      user("plain words"),
+      { role: "assistant", content: "<system-reminder>quoted by the model</system-reminder>" },
+      user(null),
+    ],
+  });
+  expect(filtered.removed.map((item) => item.kind)).toEqual(["billing header", "system reminder", "resume prompt", "retry nudge", "system reminder"]);
+  expect(filterInjectedContext({ system: [text("x-anthropic-billing-header: cc_version=1")] })).toStrictEqual({ body: { system: [] }, removed: [{ at: "system[0]", after: "the start", kind: "billing header", text: "x-anthropic-billing-header: cc_version=1" }] });
+});

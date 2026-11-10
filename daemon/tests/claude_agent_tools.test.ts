@@ -3,7 +3,7 @@ import { describe, expect, test } from "bun:test";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
 
-import { ToolNames, shoreToolServer, toCallToolResult } from "../src/llm/providers/claude_agent_tools.ts";
+import { DuplicateToolName, ToolNameTooLong, ToolNames, shoreToolServer, toCallToolResult } from "../src/llm/providers/claude_agent_tools.ts";
 import type { ContentBlock } from "../src/engine/types.ts";
 import type { ToolDefinition } from "../src/llm/types.ts";
 
@@ -60,6 +60,35 @@ describe("what a tool result becomes", () => {
     });
     expect(failed.isError).toBe(true);
     expect(failed.content).toEqual([{ type: "text", text: "no such file" }]);
+  });
+});
+
+describe("what a tool result becomes, whatever it holds", () => {
+  test("a plain block becomes its text, and a result's list keeps its text and pictures and its failure", () => {
+    expect(toCallToolResult({ type: "text", text: "plain" })).toEqual({ content: [{ type: "text", text: "plain" }] });
+    expect(toCallToolResult({ type: "image", source: { type: "base64", media_type: "image/png", data: "AAAA" } })).toEqual({ content: [{ type: "text", text: "" }] });
+    const listed = (isError: boolean | undefined) => toCallToolResult({
+      type: "tool_result",
+      tool_use_id: "t1",
+      content: [
+        { type: "text", text: "seen" },
+        { type: "image", source: { type: "base64", media_type: "image/png", data: "AAAA" } },
+      ],
+      ...(isError === undefined ? {} : { is_error: isError }),
+    });
+    expect(listed(true)).toEqual({ content: [{ type: "text", text: "seen" }, { type: "image", data: "AAAA", mimeType: "image/png" }], isError: true });
+    expect(listed(false)).toEqual({ content: [{ type: "text", text: "seen" }, { type: "image", data: "AAAA", mimeType: "image/png" }] });
+    expect(Object.hasOwn(listed(undefined), "isError")).toBe(false);
+  });
+});
+
+describe("the names shore's tools travel under", () => {
+  test("a wire name may be 128 characters but no more, and two tools that clean up to one name are refused", () => {
+    const prefix = "mcp__shore__".length;
+    expect(new ToolNames([def("a".repeat(128 - prefix))]).wireOf("a".repeat(128 - prefix))).toHaveLength(128);
+    expect(() => new ToolNames([def("a".repeat(129 - prefix))])).toThrow(ToolNameTooLong);
+    expect(() => new ToolNames([def("look.up"), def("look_up")])).toThrow(DuplicateToolName);
+    expect(new ToolNames([def("look.up")]).bareOf("mcp__shore__look_up")).toBe("look.up");
   });
 });
 

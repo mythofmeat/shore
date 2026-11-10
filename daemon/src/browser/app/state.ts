@@ -9,6 +9,7 @@ import { UnsentMessages } from "../chat/unsent.ts";
 import { Notifier, type NotifySnapshot } from "../notifications.ts";
 import { DisplayPreferences, type ViewValues } from "../preferences.ts";
 import { listRequests } from "../request_history.ts";
+import { readStored } from "../stored.ts";
 import { FontSizeStore, type FontSizeId } from "../font_size.ts";
 import { ThemeStore, type ThemeId } from "../theme.ts";
 import { toasts } from "../ui/toast.tsx";
@@ -102,13 +103,13 @@ export function useCompactionRecord(): PassRecord | null {
 export const STREAM_KEY = "shore.stream";
 
 export function streamReplies(): boolean {
-  try { return localStorage.getItem(STREAM_KEY) !== "false"; } catch { return true; }
+  return readStored(STREAM_KEY) !== "false";
 }
 
 export const ENTER_SENDS_KEY = "shore.enter-sends";
 
 export function enterSends(): boolean {
-  try { return localStorage.getItem(ENTER_SENDS_KEY) !== "false"; } catch { return true; }
+  return readStored(ENTER_SENDS_KEY) !== "false";
 }
 
 export const VIM_MODE_KEY = "shore.vim-mode";
@@ -143,7 +144,7 @@ class CollapsedFolders {
     if (!next.delete(folder)) next.add(folder);
     this.#all = { ...this.#all, [character]: [...next] };
     this.#raw = JSON.stringify(this.#all);
-    try { this.storage.setItem(COLLAPSED_FOLDERS_KEY, this.#raw); } catch { void 0; }
+    try { this.storage.setItem(COLLAPSED_FOLDERS_KEY, this.#raw); } catch {}
     this.#sets.set(character, next);
     for (const listener of this.#listeners) listener();
   }

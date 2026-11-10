@@ -4,24 +4,13 @@ export interface PlacementTurn {
 }
 
 export function assistantTurnStart(turns: readonly PlacementTurn[]): number {
-  let lastAssistant = -1;
-  for (let i = turns.length - 1; i >= 0; i--) {
-    if (turns[i]?.role === "assistant") {
-      lastAssistant = i;
-      break;
-    }
-  }
-  if (lastAssistant < 0) return turns.length;
-
-  let start = lastAssistant;
-  while (start > 0) {
-    const previous = turns[start - 1];
-    if (previous === undefined) break;
-    if (previous.role === "assistant" || previous.toolResultOnly) {
-      start -= 1;
-      continue;
-    }
-    break;
+  const last = turns.findLastIndex((turn) => turn.role === "assistant");
+  if (last === -1) return turns.length;
+  let start = last;
+  for (let i = last - 1; i >= 0; i -= 1) {
+    const turn = turns[i];
+    if (turn?.role !== "assistant" && turn?.toolResultOnly !== true) break;
+    start = i;
   }
   return start;
 }

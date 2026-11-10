@@ -82,3 +82,26 @@ export function rotatedJpeg(jpeg: Buffer): Buffer {
 }
 
 export const ONE_PIXEL_GIF = "R0lGODlhAQABAIAAAP///wAAACH5BAEAAAAALAAAAAABAAEAAAICRAEAOw==";
+
+export function noisyTransparentPng(width: number, height: number, seed = 1): Buffer {
+  const rows = Buffer.alloc(height * (width * 4 + 1));
+  let state = seed;
+  for (let y = 0; y < height; y += 1) {
+    for (let x = 0; x < width; x += 1) {
+      state = (Math.imul(state, 1103515245) + 12345) >>> 0;
+      const at = y * (width * 4 + 1) + 1 + x * 4;
+      rows.set([state >>> 24, (state >>> 16) & 0xff, (state >>> 8) & 0xff, x < width / 2 ? 0 : 255], at);
+    }
+  }
+  const header = Buffer.alloc(13);
+  header.writeUInt32BE(width, 0);
+  header.writeUInt32BE(height, 4);
+  header[8] = 8;
+  header[9] = 6;
+  return Buffer.concat([
+    Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]),
+    chunk("IHDR", header),
+    chunk("IDAT", deflateSync(rows)),
+    chunk("IEND", new Uint8Array()),
+  ]);
+}

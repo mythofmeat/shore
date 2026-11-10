@@ -124,8 +124,7 @@ export function UsagePage({ state }: { state: ChromeSnapshot }) {
     return undefined;
   });
   const budgetNames = report.data?.mode === "summary" || report.data?.mode === "budget" ? report.data.budgets.map((budget) => budget.name) : [];
-  let focus = { name: null as string | null, scope: "auto" as string };
-  try { focus = budgetFocus(values.budget); } catch { focus = { name: null, scope: "auto" }; }
+  const focus = budgetFocus(values.budget);
   return <>
     <p className="settings-description">Token usage and costs recorded by the daemon’s ledger.</p>
     <SettingsSection title="Report" actions={<div className="actions-row tight">

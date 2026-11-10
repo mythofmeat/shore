@@ -62,6 +62,12 @@ describe("deleting turns", () => {
     expect(there(turns, "one.md")).toBe(true);
   });
 
+  test("deleting only what the user said, before any reply, touches no files and reports nothing", async () => {
+    const { engine, turns } = await world([user("m_u1", "first")]);
+    const result = await deleteMessages(engine, { refs: "m_u1" }, turns);
+    expect(result).toEqual({ deleted: ["m_u1"] });
+  });
+
   test("a file changed after the reply is left alone and reported", async () => {
     const { engine, turns } = await world(history());
     await wrote(turns, "mv_2", "two.md");

@@ -9,7 +9,7 @@ import {
   realpathSync,
   statSync,
   unlinkSync,
-  writeSync,
+  writeFileSync,
 } from "node:fs";
 import { join } from "node:path";
 
@@ -112,7 +112,7 @@ export function acquireDataDirectoryLease(
       const existing = parseOwner(snapshot.text);
       const reclaimable = existing === undefined
         ? Date.now() - snapshot.mtimeMs > UNREADABLE_LEASE_GRACE_MS
-        : existing.version === 2 || ownerProcessState(existing) === "dead";
+        : existing.version === 2 || ownerIsDead(existing);
       if (!reclaimable) throw new DataDirectoryOwned(canonicalDataDir, path, existing);
       removeSnapshot(path, snapshot);
     }
@@ -128,7 +128,6 @@ function takeDataDirectoryProcessLock(path: string): (() => void) | undefined {
   let db: Database | undefined;
   try {
     db = new Database(path, { create: true, readwrite: true });
-    db.run("PRAGMA busy_timeout = 0;");
     db.run("BEGIN EXCLUSIVE;");
   } catch (e) {
     db?.close();
@@ -137,28 +136,19 @@ function takeDataDirectoryProcessLock(path: string): (() => void) | undefined {
     throw e;
   }
 
-  let released = false;
   return () => {
-    if (released) return;
-    released = true;
     db.close();
   };
 }
 
-function ownerProcessState(owner: DataDirectoryOwner): "alive" | "dead" | "unknown" {
+function ownerIsDead(owner: DataDirectoryOwner): boolean {
   const state = pidState(owner.pid);
-  if (state !== "alive") return state;
-
+  if (state !== "alive") return state === "dead";
   const observedStartId = processStartId(owner.pid);
-  if (owner.process_start_id !== undefined && observedStartId !== undefined) {
-    return owner.process_start_id === observedStartId ? "alive" : "dead";
-  }
-
-  if (owner.process_start_id === undefined && owner.pid === process.pid) {
-    const recordedStart = Date.parse(owner.started_at);
-    if (Number.isFinite(recordedStart) && recordedStart < performance.timeOrigin) return "dead";
-  }
-  return "alive";
+  if (owner.process_start_id !== undefined && observedStartId !== undefined) return owner.process_start_id !== observedStartId;
+  if (owner.process_start_id !== undefined || owner.pid !== process.pid) return false;
+  const recordedStart = Date.parse(owner.started_at);
+  return Number.isFinite(recordedStart) && recordedStart < performance.timeOrigin;
 }
 
 const FALLBACK_CURRENT_PROCESS_START_ID = `runtime:${process.pid}:${performance.timeOrigin}`;
@@ -191,30 +181,16 @@ function linuxProcessStartId(pid: number): string | undefined {
 
 function createLeaseFile(path: string, content: string): void {
   const fd = openSync(path, "wx", 0o600);
-  let failure: unknown;
   try {
-    const bytes = Buffer.from(content);
-    let offset = 0;
-    while (offset < bytes.length) {
-      const written = writeSync(fd, bytes, offset, bytes.length - offset);
-      if (written <= 0) throw new Error(`could not write Shore data-directory ownership at ${path}`);
-      offset += written;
-    }
-    fsyncSync(fd);
-  } catch (e) {
-    failure = e;
-  }
-  try {
-    closeSync(fd);
-  } catch (e) {
-    if (failure === undefined) failure = e;
-  }
-  if (failure !== undefined) {
     try {
-      unlinkSync(path);
-    } catch {
+      writeFileSync(fd, content);
+      fsyncSync(fd);
+    } finally {
+      closeSync(fd);
     }
-    throw failure;
+  } catch (e) {
+    unlinkSync(path);
+    throw e;
   }
 }
 
@@ -277,13 +253,16 @@ function removeSnapshot(path: string, expected: LeaseSnapshot): boolean {
   }
 }
 
-function parseOwner(text: string): DataDirectoryOwner | undefined {
-  let value: unknown;
+function parsedJson(text: string): unknown {
   try {
-    value = JSON.parse(text);
+    return JSON.parse(text);
   } catch {
     return undefined;
   }
+}
+
+function parseOwner(text: string): DataDirectoryOwner | undefined {
+  const value = parsedJson(text);
   if (typeof value !== "object" || value === null) return undefined;
   const record = value as Record<string, unknown>;
   if (

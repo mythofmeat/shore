@@ -705,7 +705,7 @@ pub(crate) enum MsgCommand {
         /// resolves against the conversation as it stands before any of them are
         /// removed. A reference that lands inside a tool loop removes the whole
         /// turn, since a tool result cannot outlive the call it answers
-        #[arg(required = true, allow_hyphen_values = true, value_parser = message_ref, add = values(Completes::MessageRefs))]
+        #[arg(required = true, allow_negative_numbers = true, value_parser = message_ref, add = values(Completes::MessageRefs))]
         msg_refs: Vec<String>,
 
         /// Output raw JSON
@@ -2987,13 +2987,9 @@ fn trace_to_swp(cmd: &CliCommand) -> Option<(&'static str, serde_json::Value)> {
             count: id.is_none().then_some(*count),
             call_type: call_type.clone(),
             character: None,
-            diff: (id.is_some() && *diff).then_some(true),
-            against: if id.is_some() && *diff {
-                *against
-            } else {
-                None
-            },
-            wire: (id.is_some() && *wire).then_some(true),
+            diff: diff.then_some(true),
+            against: *against,
+            wire: wire.then_some(true),
         }),
     }
 }
@@ -3868,6 +3864,85 @@ mod tests {
                 &["msg", "edit", "last", "two", "words"],
                 Some(("edit", json!({"ref": "last", "content": "two words"}))),
             ),
+            (
+                &["msg", "delete", "-1", "-2", "--json"],
+                Some(("delete", json!({"refs": ["-1", "-2"]}))),
+            ),
+            (
+                &["msg", "delete", "last", "m_7"],
+                Some(("delete", json!({"refs": ["last", "m_7"]}))),
+            ),
+            (&["segments"], Some(("segments", json!({"action": "list"})))),
+            (
+                &["segments", "find", "m_1", "m_2"],
+                Some((
+                    "segments",
+                    json!({"action": "find", "msg_ids": ["m_1", "m_2"]}),
+                )),
+            ),
+            (
+                &["segments", "label", "3", "the trip"],
+                Some((
+                    "segments",
+                    json!({"action": "label", "index": 3, "value": "the trip"}),
+                )),
+            ),
+            (
+                &["segments", "show", "4"],
+                Some(("segments", json!({"action": "show", "index": 4}))),
+            ),
+            (
+                &["trace", "calls"],
+                Some(("call_log", json!({"count": 20}))),
+            ),
+            (
+                &["trace", "calls", "5"],
+                Some(("call_log", json!({"id": 5}))),
+            ),
+            (
+                &["trace", "calls", "5", "--diff", "--against", "3"],
+                Some(("call_log", json!({"id": 5, "diff": true, "against": 3}))),
+            ),
+            (
+                &["trace", "calls", "5", "--wire"],
+                Some(("call_log", json!({"id": 5, "wire": true}))),
+            ),
+            (&["model"], Some(("list_models", json!({})))),
+            (&["model", "--reset"], Some(("reset_model", json!({})))),
+            (&["model", "--info"], Some(("model_info", json!({})))),
+            (
+                &["model", "setting"],
+                Some(("model_settings", json!({"overview": true}))),
+            ),
+            (
+                &["model", "setting", "temperature"],
+                Some(("model_settings", json!({"key": "temperature"}))),
+            ),
+            (
+                &["model", "setting", "--model", "opus"],
+                Some(("model_settings", json!({"name": "opus"}))),
+            ),
+            (
+                &["usage", "export"],
+                Some((
+                    "usage",
+                    json!({"last": null, "character": null, "provider": null, "api_key": null, "model": null, "call_type": null, "group_by": null, "budget": false, "anomalies": false, "export_csv": true, "export_tsv": false}),
+                )),
+            ),
+            (
+                &["usage", "export", "--tsv"],
+                Some((
+                    "usage",
+                    json!({"last": null, "character": null, "provider": null, "api_key": null, "model": null, "call_type": null, "group_by": null, "budget": false, "anomalies": false, "export_csv": false, "export_tsv": true}),
+                )),
+            ),
+            (
+                &["usage", "by", "model"],
+                Some((
+                    "usage",
+                    json!({"last": null, "character": null, "provider": null, "api_key": null, "model": null, "call_type": null, "group_by": "model", "budget": false, "anomalies": false, "export_csv": false, "export_tsv": false}),
+                )),
+            ),
         ];
         for (argv, expected) in cases {
             let cli = parse(argv);
@@ -3876,6 +3951,21 @@ mod tests {
                 sent,
                 expected,
                 "`shore {}` sends the wrong command (None means it is handled locally)",
+                argv.join(" ")
+            );
+        }
+    }
+
+    #[test]
+    fn a_call_comparison_or_wire_dump_needs_a_call_id() {
+        for argv in [
+            &["trace", "calls", "--diff"][..],
+            &["trace", "calls", "--wire"],
+            &["trace", "calls", "5", "--against", "3"],
+        ] {
+            assert!(
+                try_parse(argv).is_err(),
+                "`shore {}` should be refused",
                 argv.join(" ")
             );
         }

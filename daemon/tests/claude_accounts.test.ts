@@ -4,6 +4,7 @@ import { mkdir, mkdtemp, readFile, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
+import { KeepaliveService, type KeepaliveEvent } from "../src/cache/keepalive.ts";
 import { defaultAppConfig } from "../src/config/app.ts";
 import { emptyCatalog } from "../src/config/models.ts";
 import { ProviderRegistry } from "../src/config/providers.ts";
@@ -20,7 +21,7 @@ import { claudeAccountsRoot } from "../src/llm/claude_accounts.ts";
 import { resetAtIn } from "../src/llm/errors.ts";
 import { runGeneration } from "../src/llm/generate.ts";
 import { ClaudeAgentProvider } from "../src/llm/providers/claude_agent.ts";
-import type { WireMessage } from "../src/llm/types.ts";
+import type { SidecarRequest, WireMessage } from "../src/llm/types.ts";
 import { startMockAnthropic, type AnthropicRequestRecord, type MockAnthropic } from "../src/testing/mock_anthropic.ts";
 import { required } from "../src/util/required.ts";
 
@@ -287,6 +288,45 @@ test("a pinned login takes every reply while others have more room, and at its o
     await mock.stop();
   }
 }, 60_000);
+
+test("a keepalive ping on a login checks that login's usage first, and is skipped once the login is past its own limit, on schedule or on demand", async () => {
+  for (const how of ["tick", "now"] as const) {
+    const home = await mkdtemp(join(tmpdir(), "shore-accounts-"));
+    await signIn(home, "qwfp", "first");
+    const now = Date.now();
+    const reading = (used: number, resetsIn: number) => ({ percent_used: used, resets_at: new Date(now + resetsIn).toISOString() });
+    configureClaudePlanLimits({
+      home, cacheDir: home,
+      settings: () => ({ provider: "claude_agent", logins: [{ name: "first@example.com", enabled: true, limits: { weekly: 0.5 } }] }),
+      fetch: () => Promise.resolve({ status: "ok", poll: { subscription_type: "pro", five_hour: reading(0, HOUR), seven_day: reading(0.6, 2 * DAY) } }),
+    });
+    const sent: SidecarRequest[] = [];
+    let clock = now;
+    const keepalive = new KeepaliveService(async (request) => {
+      sent.push(request);
+      return { content: "", content_blocks: [], finish_reason: "end_turn", usage: { input_tokens: 1, output_tokens: 1, cache_read_tokens: 100, cache_creation_tokens: 0 }, timing: { total_ms: 1, time_to_first_token_ms: 1 }, model: "claude-opus-5-5" };
+    }, () => clock);
+    const events: KeepaliveEvent[] = [];
+    keepalive.onEvent((event) => events.push(event));
+    keepalive.arm({
+      sdk: "claude_agent", model: "claude-opus-5-5", api_key: "", max_tokens: 1, replay_prior_thinking: "all",
+      messages: [{ role: "user", content: [{ type: "text", text: "hello" }] }, { role: "assistant", content: [{ type: "text", text: "hi" }] }],
+      keepalive_interval_ms: 55 * 60_000, keepalive_pings: 3,
+      context: { character: "ada", call_type: "message", thinking_enabled: false, api_key_name: "first@example.com" },
+    }, true);
+    if (how === "tick") {
+      clock += 56 * 60_000;
+      await keepalive.tick();
+      expect(events.map((event) => event.outcome)).toEqual(["skipped"]);
+      expect(events[0]?.detail).toContain("first@example.com weekly limit");
+    } else {
+      const outcome = await keepalive.pingNow("ada");
+      expect([outcome.status, outcome.reason]).toEqual(["skipped", "budget"]);
+      expect(outcome.detail).toContain("first@example.com weekly limit");
+    }
+    expect(sent).toEqual([]);
+  }
+});
 
 test("a login with no limit of its own stays usable past the switch points when no other login has room", async () => {
   const home = await mkdtemp(join(tmpdir(), "shore-accounts-"));

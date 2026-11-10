@@ -193,17 +193,13 @@ function recordReplay(generation: ActiveGeneration, msg: ServerMessage): void {
   if (generation.finished || !REPLAYED.has(msg.type)) return;
   if ("subagent" in msg && msg.subagent !== undefined && msg.subagent !== null) return;
   if ("task_id" in msg && msg.task_id !== undefined && msg.task_id !== null) return;
-  if (msg.type === "stream_end" && msg.is_final) {
-    generation.finished = true;
-    generation.replay.length = 0;
-    return;
-  }
   const last = generation.replay.at(-1);
-  if (msg.type === "stream_chunk" && last?.type === "stream_chunk" && last.content_type === msg.content_type) {
+  if (msg.type === "stream_end" && msg.is_final) generation.finished = true;
+  else if (msg.type === "stream_chunk" && last?.type === "stream_chunk" && last.content_type === msg.content_type) {
     generation.replay[generation.replay.length - 1] = { ...last, text: last.text + msg.text };
-    return;
+  } else {
+    generation.replay.push(msg);
   }
-  generation.replay.push(msg);
 }
 
 export class MessageHandler {
@@ -227,6 +223,10 @@ export class MessageHandler {
 
   get queuedSessionCount(): number {
     return this.#queues.size;
+  }
+
+  get commandCount(): number {
+    return this.#commands.size;
   }
 
   activeGenerations(): GenerationView[] {
@@ -405,20 +405,15 @@ export class MessageHandler {
   }
 
   async handleControl(routed: ControlRoutedMessage): Promise<void> {
-    if (routed.kind === "engine") {
-      await this.#cancel(routed.meta.session.sessionId, routed.meta.rid);
-      return;
+    if (routed.kind === "engine") await this.#cancel(routed.meta.session.sessionId, routed.meta.rid);
+    else if (routed.kind === "session_connected") this.#join(routed.sessionId);
+    else {
+      this.#abortCommands(
+        (command) => command.sessionId === routed.sessionId && !command.changesState,
+        "Client disconnected",
+      );
+      this.#queues.delete(routed.sessionId);
     }
-    if (routed.kind === "session_connected") {
-      this.#join(routed.sessionId);
-      return;
-    }
-    this.#abortCommands(
-      (command) => command.sessionId === routed.sessionId && !command.changesState,
-      "Client disconnected",
-    );
-    for (const generation of this.#generations.values()) generation.viewers.delete(routed.sessionId);
-    this.#queues.delete(routed.sessionId);
   }
 
   async #cancel(sessionId: number, rid: string | null): Promise<void> {
@@ -432,12 +427,9 @@ export class MessageHandler {
   }
 
   #abortCommands(selected: (command: ActiveCommand) => boolean, reason: string): void {
-    const aborted = [...this.#commands].filter(selected);
-    if (aborted.length === 0) return;
-    this.#deps.log?.info?.("cancelling commands", { commands: aborted.length, reason });
-    for (const command of aborted) {
+    for (const command of [...this.#commands].filter(selected)) {
+      this.#deps.log?.info?.("cancelling command", { session: command.sessionId, reason });
       command.controller.abort(new DOMException(reason, "AbortError"));
-      this.#commands.delete(command);
     }
   }
 

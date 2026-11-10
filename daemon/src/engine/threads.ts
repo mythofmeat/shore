@@ -39,7 +39,7 @@ export class ThreadError extends Error {
 }
 
 export function isValidThreadId(id: string): boolean {
-  return id.length > 0 && id.length <= MAX_THREAD_ID_LENGTH && THREAD_ID.test(id);
+  return id.length <= MAX_THREAD_ID_LENGTH && THREAD_ID.test(id);
 }
 
 export function assertThreadId(id: string): void {

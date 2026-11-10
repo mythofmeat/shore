@@ -1,12 +1,12 @@
 import { required } from "../src/util/required.ts";
 
-import { afterEach, describe, expect, test } from "bun:test";
+import { afterEach, describe, expect, jest, spyOn, test } from "bun:test";
 import { connect, createServer, type Socket } from "node:net";
 import { mkdir, mkdtemp, readFile, writeFile } from "node:fs/promises";
 import { existsSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { startDaemon, type RunningDaemon } from "../src/daemon/run.ts";
+import { exitIfStillRunning, startDaemon, type RunningDaemon } from "../src/daemon/run.ts";
 import { StartupError } from "../src/daemon/startup.ts";
 import { DATA_DIRECTORY_LEASE_FILE } from "../src/daemon/data_directory_lease.ts";
 import type { InstanceInfo } from "../src/daemon/instances.ts";
@@ -481,6 +481,23 @@ describe("going down", () => {
     } finally {
       client.close();
       running.length = 0;
+    }
+  });
+
+  test("the exit timer waits its full delay, then says why and exits with success", () => {
+    jest.useFakeTimers();
+    const exit = spyOn(process, "exit").mockImplementation((() => undefined) as never);
+    const warnings: string[] = [];
+    try {
+      exitIfStillRunning({ info: () => {}, warn: (msg) => warnings.push(msg), error: () => {} }, 1000);
+      jest.advanceTimersByTime(999);
+      expect(exit).not.toHaveBeenCalled();
+      jest.advanceTimersByTime(1);
+      expect(exit).toHaveBeenCalledWith(0);
+      expect(warnings).toEqual(["Still running after shutting down; exiting anyway"]);
+    } finally {
+      exit.mockRestore();
+      jest.useRealTimers();
     }
   });
 

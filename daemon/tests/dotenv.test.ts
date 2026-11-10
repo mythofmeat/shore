@@ -14,6 +14,24 @@ const parse = (text: string, env: Record<string, string> = {}) =>
   parseDotenv(text, (name) => env[name]);
 
 describe("parseDotenv", () => {
+  test("whatever follows a quoted value on its line is ignored, and the next line still reads", () => {
+    expect(parseDotenv('A="x" trailing words\nB=y\n', () => undefined)).toEqual([["A", "x"], ["B", "y"]]);
+  });
+
+  test("blank lines and spaces at the end of the file, and an empty last value, are fine", () => {
+    expect(parseDotenv("A=1\n  \n\t \n  ", () => undefined)).toEqual([["A", "1"]]);
+    expect(parseDotenv("A=1\nB=", () => undefined)).toEqual([["A", "1"], ["B", ""]]);
+    expect(parseDotenv("A=   spaced\nB= one\nC=\t\t \ttabs", () => undefined)).toEqual([["A", "spaced"], ["B", "one"], ["C", "tabs"]]);
+    expect(parseDotenv("export\t \tA=1", () => undefined)).toEqual([["A", "1"]]);
+  });
+
+  test("a line without '=', even the last one, or with nothing before it, is an error", () => {
+    expect(() => parseDotenv("A=1\nB", () => undefined)).toThrow("line has no '=': B");
+    expect(() => parseDotenv("B\nA=1", () => undefined)).toThrow("line has no '=': B");
+    expect(() => parseDotenv("=value", () => undefined)).toThrow("line has an empty key");
+    expect(() => parseDotenv("export", () => undefined)).toThrow("line has no '=': export");
+  });
+
   test("plain assignments, in file order", () => {
     expect(parse("A=1\nB=2\n")).toEqual([
       ["A", "1"],

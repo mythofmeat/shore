@@ -8,7 +8,7 @@
     "build": "bun run build:patch && bun run build:daemon",
     "build:daemon": "bun run browser:build && bun build src/daemon/main.ts --compile --outfile dist/shore-daemon && bun run build:claude",
     "build:claude": "bun run scripts/build_claude.ts",
-    "typecheck": "tsc --noEmit && tsc --project src/browser/tsconfig.json",
+    "typecheck": "tsc --noEmit && tsc --project src/browser/tsconfig.json && tsc --project tests/dom/tsconfig.json",
     "lint:comments": "bun run scripts/check_no_comments.ts",
     "lint": "oxlint --type-aware src tests scripts",
     "test": "bun test",
@@ -48,12 +48,14 @@
     "zhipu-ai-provider": "^0.4.0"
   },
   "devDependencies": {
+    "@happy-dom/global-registrator": "^21.0.4",
     "@playwright/test": "^1.65.0",
     "@types/bun": "^1.4.4",
     "@types/mdast": "^4.0.4",
-    "oxlint": "^1.92.0",
     "@types/react": "^19.3.0",
     "@types/react-dom": "^19.3.0",
+    "fake-indexeddb": "6.2.6",
+    "oxlint": "^1.92.0",
     "oxlint-tsgolint": "^7.0.2006",
     "typescript": "^7.0.2"
   }

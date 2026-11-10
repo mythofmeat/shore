@@ -71,14 +71,14 @@ export function reconcileImages(images: readonly LiveImage[], messages: readonly
 export function conversationImages(messages: readonly Message[], streams: readonly LiveTurn[], liveImages: readonly SendImage[]): GalleryImage[] {
   const storedPaths = new Set(messages.flatMap((message) => message.images.map((image) => image.path)));
   const namedData = new Set([...messages.flatMap((message) => message.images), ...liveImages].flatMap((image) => typeof image.data === "string" ? [image.data] : []));
-  const inline = (blocks: readonly ContentBlock[], prefix: string) => blockImages(blocks, prefix).filter((image) => image.data === undefined || image.data === null || !namedData.has(image.data));
+  const inline = (blocks: readonly ContentBlock[], prefix: string) => blockImages(blocks, prefix).filter((image) => typeof image.data !== "string" || !namedData.has(image.data));
   return [
     ...messages.flatMap((message) => [
-      ...message.images.flatMap((image, index) => image.path === "" ? [] : [{ id: `message:${message.msg_id}:image:${String(index)}`, caption: image.caption ?? image.name ?? image.path.split(/[\\/]/).at(-1) ?? "Attached image", data: image.data, mime: undefined, ...(typeof image.embed === "string" ? { full: pictureUrl(image.path), ...(isVideoFile(image.path) ? { video: true } : {}) } : {}) }]),
+      ...message.images.flatMap((image, index) => image.path === "" ? [] : [{ id: `message:${message.msg_id}:image:${String(index)}`, caption: image.caption ?? image.name ?? (image.path.split(/[\\/]/).at(-1) || "Attached image"), data: image.data, mime: undefined, ...(typeof image.embed === "string" ? { full: pictureUrl(image.path), ...(isVideoFile(image.path) ? { video: true } : {}) } : {}) }]),
       ...inline(message.content_blocks, `message:${message.msg_id}:block`),
     ]),
     ...streams.filter((stream) => !(stream.final && messages.some((message) => message.msg_id === stream.msgId))).flatMap((stream) => inline(stream.blocks, `stream:${stream.key}`)),
-    ...liveImages.filter((image) => !storedPaths.has(image.path)).map((image) => ({ id: `live:${image.path}`, caption: image.caption ?? image.path.split(/[\\/]/).at(-1) ?? "Live image", data: image.data, mime: undefined })),
+    ...liveImages.filter((image) => !storedPaths.has(image.path)).map((image) => ({ id: `live:${image.path}`, caption: image.caption ?? (image.path.split(/[\\/]/).at(-1) || "Live image"), data: image.data, mime: undefined })),
   ];
 }
 

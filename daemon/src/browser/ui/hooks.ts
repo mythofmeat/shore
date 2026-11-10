@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState, useSyncExternalStore } from "react";
+import { readStored, writeStored } from "../stored.ts";
 
 export function useMediaQuery(query: string): boolean {
   const subscribe = useCallback((listener: () => void) => {
@@ -7,14 +8,6 @@ export function useMediaQuery(query: string): boolean {
     return () => list.removeEventListener("change", listener);
   }, [query]);
   return useSyncExternalStore(subscribe, () => matchMedia(query).matches);
-}
-
-function readStored(key: string): string | null {
-  try { return localStorage.getItem(key); } catch { return null; }
-}
-
-function writeStored(key: string, value: string): boolean {
-  try { localStorage.setItem(key, value); return true; } catch { return false; }
 }
 
 export function useStoredFlag(key: string, fallback: boolean): [boolean, (value: boolean) => void] {

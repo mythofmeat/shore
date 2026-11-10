@@ -31,7 +31,7 @@ export function Menu({ label, items, trigger, triggerLabel, triggerClassName = "
   const move = (step: number) => {
     const buttons = [...(list.current?.querySelectorAll<HTMLButtonElement>("button:not(:disabled)") ?? [])];
     const index = buttons.indexOf(document.activeElement as HTMLButtonElement);
-    buttons.at((index + step + buttons.length) % buttons.length)?.focus();
+    buttons.at((index + step) % buttons.length)?.focus();
   };
   return <div className="menu" ref={root} onKeyDown={(event) => {
     if (!open) return;
@@ -79,7 +79,7 @@ export function PointMenu({ label, items, at, close }: { label: string; items: r
   const move = (step: number) => {
     const buttons = [...(list.current?.querySelectorAll<HTMLButtonElement>("button:not(:disabled)") ?? [])];
     const index = buttons.indexOf(document.activeElement as HTMLButtonElement);
-    buttons.at((index + step + buttons.length) % buttons.length)?.focus();
+    buttons.at((index + step) % buttons.length)?.focus();
   };
   const onKeyDown = (event: KeyboardEvent<HTMLDivElement>) => {
     event.stopPropagation();

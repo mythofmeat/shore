@@ -10,7 +10,6 @@ export function loginCodeIn(hash: string): string | undefined {
 
 export function deviceOrigin(text: string): string | undefined {
   const trimmed = text.trim();
-  if (trimmed === "") return undefined;
   const explicit = /^[a-z][a-z0-9+.-]*:\/\//i.test(trimmed);
   let url: URL;
   try { url = new URL(explicit ? trimmed : `http://${trimmed}`); } catch { return undefined; }
