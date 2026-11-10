@@ -4,7 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { defaultWebConfig } from "../src/config/app.ts";
 import { Server } from "../src/swp/server.ts";
-import { PREFERENCE_LIMITS } from "../src/web/preferences.ts";
+const LIMITS = { keys: 64, valueBytes: 16_384, bodyBytes: 262_144 };
 import { startWebServer } from "../src/web/server.ts";
 
 const cleanups: (() => Promise<unknown> | void)[] = [];
@@ -79,24 +79,24 @@ test("a save the daemon can't keep is refused whole, with the reason, and leaves
     expect(await d.save({ "shore.font-size": "large", [key]: "x" }), key).toEqual([400, { code: "invalid_request", message: `${key} is not a setting the web UI keeps` }]);
   }
   expect(await d.save({ [`shore.${"a".repeat(64)}`]: "x", "shore.9.a-b": "y" })).toMatchObject([200, {}]);
-  expect(await d.save({ "shore.folders.collapsed": "é".repeat(PREFERENCE_LIMITS.valueBytes / 2) })).toMatchObject([200, {}]);
-  expect(await d.save({ "shore.folders.collapsed": `${"é".repeat(PREFERENCE_LIMITS.valueBytes / 2)}a` })).toEqual([400, { code: "invalid_request", message: "shore.folders.collapsed is too long to keep" }]);
-  const room = PREFERENCE_LIMITS.keys - 4;
+  expect(await d.save({ "shore.folders.collapsed": "é".repeat(LIMITS.valueBytes / 2) })).toMatchObject([200, {}]);
+  expect(await d.save({ "shore.folders.collapsed": `${"é".repeat(LIMITS.valueBytes / 2)}a` })).toEqual([400, { code: "invalid_request", message: "shore.folders.collapsed is too long to keep" }]);
+  const room = LIMITS.keys - 4;
   const many = Object.fromEntries(Array.from({ length: room + 1 }, (_, index) => [`shore.extra-${String(index)}`, "1"]));
   expect(await d.save(many)).toEqual([400, { code: "invalid_request", message: "Too many web UI settings to keep" }]);
   const { [`shore.extra-${String(room)}`]: _dropped, ...fitting } = many;
   expect((await d.save(fitting))[0]).toBe(200);
-  expect(Object.keys(((await d.list())[1] as { values: object }).values)).toHaveLength(PREFERENCE_LIMITS.keys);
+  expect(Object.keys(((await d.list())[1] as { values: object }).values)).toHaveLength(LIMITS.keys);
   expect((await d.save({ "shore.theme": "default" }))[0], "a kept setting can still change when the daemon is full").toBe(200);
   for (const body of [JSON.stringify({}), JSON.stringify({ values: { "shore.theme": 1 } }), JSON.stringify({ values: {}, more: 1 }), JSON.stringify({ values: [] })]) {
     expect(await refused(await d.post("/api/preferences", d.cookie, body)), body).toEqual([400, { code: "invalid_request", message: "Supply the settings to keep" }]);
   }
   expect(await refused(await d.post("/api/preferences", d.cookie, "{not json"))).toEqual([400, { code: "invalid_request", message: "Invalid settings request" }]);
   expect(await refused(await d.post("/api/preferences", d.cookie, JSON.stringify({ values: {} }), "text/plain"))).toEqual([400, { code: "invalid_request", message: "Invalid settings request" }]);
-  const huge = JSON.stringify({ values: { "shore.theme": "x".repeat(PREFERENCE_LIMITS.bodyBytes) } });
+  const huge = JSON.stringify({ values: { "shore.theme": "x".repeat(LIMITS.bodyBytes) } });
   expect(await refused(await d.post("/api/preferences", d.cookie, huge))).toEqual([413, { code: "invalid_request", message: "Request body is too large" }]);
-  expect(JSON.stringify({ values: { "shore.theme": "x".repeat(PREFERENCE_LIMITS.bodyBytes - 100) } }).length).toBeLessThan(PREFERENCE_LIMITS.bodyBytes);
-  expect(await refused(await d.post("/api/preferences", d.cookie, JSON.stringify({ values: { "shore.theme": "x".repeat(PREFERENCE_LIMITS.bodyBytes - 100) } })))).toEqual([400, { code: "invalid_request", message: "shore.theme is too long to keep" }]);
+  expect(JSON.stringify({ values: { "shore.theme": "x".repeat(LIMITS.bodyBytes - 100) } }).length).toBeLessThan(LIMITS.bodyBytes);
+  expect(await refused(await d.post("/api/preferences", d.cookie, JSON.stringify({ values: { "shore.theme": "x".repeat(LIMITS.bodyBytes - 100) } })))).toEqual([400, { code: "invalid_request", message: "shore.theme is too long to keep" }]);
   expect(((await d.list())[1] as { values: Record<string, string> }).values["shore.theme"]).toBe("default");
 });
 

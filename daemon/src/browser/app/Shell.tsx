@@ -13,12 +13,12 @@ import { COMPACTION_VIEW_EVENT, FOLDER_DIALOG_EVENT, THREAD_DIALOG_EVENT, type F
 import { Palette } from "./Palette.tsx";
 import { navigate, openSettings, useRoute } from "./route.ts";
 import { adjacent, globalAction, nextUnread } from "./shortcuts.ts";
-import { perform, SIDEBAR_KEY, useCollapsedFolders, useNotifications, workspace } from "./state.ts";
+import { perform, useCollapsedFolders, useNotifications, workspace } from "./state.ts";
 
 export function Shell({ state }: { state: ChromeSnapshot }) {
   const route = useRoute();
   const mobile = useMediaQuery("(max-width: 860px)");
-  const [expanded, setExpanded] = useStoredFlag(SIDEBAR_KEY, true);
+  const [expanded, setExpanded] = useStoredFlag("shore.sidebar", true);
   const [drawer, setDrawer] = useState(false);
   const [dialog, setDialog] = useState<"character" | "thread" | "palette" | null>(null);
   const [threadDialog, setThreadDialog] = useState<ThreadDialogRequest | null>(null);

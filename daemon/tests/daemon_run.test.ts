@@ -629,6 +629,23 @@ describe("going down", () => {
     }
   });
 
+  test("web UI settings a browser saved are there when the daemon starts again", async () => {
+    const place = await layout('[daemon.web]\nenabled = true\nbind_addr = "127.0.0.1:0"\n');
+    const page = async (daemon: RunningDaemon, save?: Record<string, string>) => {
+      const origin = required(daemon.web).origin;
+      const post = async (path: string, body: unknown, cookie = "") => await fetch(`${origin}${path}`, { method: "POST", headers: { origin, cookie, "content-type": "application/json" }, body: JSON.stringify(body) });
+      const cookie = (await post("/api/login", { token: TEST_TOKEN })).headers.get("set-cookie")?.split(";", 1)[0] ?? "";
+      if (save !== undefined) expect((await post("/api/preferences", { values: save }, cookie)).status).toBe(200);
+      return await (await post("/api/preferences/list", {}, cookie)).json();
+    };
+    const first = await start(place);
+    expect(await page(first, { "shore.theme": "fog" })).toEqual({ values: { "shore.theme": "fog" } });
+    first.stop();
+    await first.done;
+    running.length = 0;
+    expect(await page(await start(place))).toEqual({ values: { "shore.theme": "fog" } });
+  });
+
   test("the port is free afterwards", async () => {
     const place = await layout();
     const daemon = await start(place);
