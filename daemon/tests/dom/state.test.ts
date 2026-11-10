@@ -93,6 +93,12 @@ describe("the app's state", () => {
     fresh.compactionWatch.open("ada", { thread: "story", trigger: "idle", started_at: "2026-11-10T00:00:00Z" });
     await Bun.sleep(5);
     expect(fresh.compactionWatch.getSnapshot()?.interrupted, "with no connection the watch cannot start").toBe(true);
+    let watched = 0;
+    const leave = fresh.compactionWatch.subscribe(() => { watched += 1; });
+    fresh.workspace.connection.stop();
+    await Bun.sleep(5);
+    expect(watched, "only a ready connection restarts the watch").toBe(0);
+    leave();
     const freshSocket = await connected(fresh);
     expect(fresh.compactionWatch.getSnapshot()?.interrupted).toBe(false);
     expect(freshSocket.sent.some((request) => request["name"] === "compact_watch"), "it was watched again once ready").toBe(true);
@@ -168,6 +174,12 @@ describe("the app's state", () => {
 });
 
 describe("collapsed folders", () => {
+  test("start from what was stored before the page loaded", async () => {
+    localStorage.setItem("shore.folders.collapsed", JSON.stringify({ ada: ["kept"] }));
+    const { collapsedFolders } = await load();
+    expect([...collapsedFolders.of("ada")]).toEqual(["kept"]);
+  });
+
   test("are kept per character, toggled, stored, and told to subscribers until they leave", async () => {
     const { collapsedFolders } = await load();
     let heard = 0;

@@ -14,7 +14,6 @@ const TAB_LOCK = "shore.draft.tab.";
 let database: Promise<IDBDatabase> | undefined;
 let ownership: Promise<boolean> | undefined;
 let tab: string | null = null;
-const claimedDrafts = new Set<string>();
 const sendingHere = new Set<string>();
 const sessions = new Map<string, BrowserDraft>();
 const unsavedDrafts = new Set<BrowserDraft>();
@@ -53,7 +52,6 @@ function separateClonedTab(): Promise<boolean> {
 
 function open(): Promise<IDBDatabase> {
   database ??= new Promise<IDBDatabase>((resolve, reject) => {
-    let blocked = false;
     const request = indexedDB.open("shore-drafts", 2);
     request.onupgradeneeded = () => {
       const stores = request.result.objectStoreNames;
@@ -62,10 +60,9 @@ function open(): Promise<IDBDatabase> {
       if (!stores.contains("sending")) request.result.createObjectStore("sending", { keyPath: "rid" });
     };
     request.onerror = () => { reject(request.error ?? new Error("Draft storage unavailable")); };
-    request.onblocked = () => { blocked = true; reject(new Error("Close older Shore tabs to open draft storage")); };
+    request.onblocked = () => { reject(new Error("Close older Shore tabs to open draft storage")); };
     request.onsuccess = () => {
       const db = request.result;
-      if (blocked) { db.close(); return; }
       db.onversionchange = () => { db.close(); database = undefined; };
       resolve(db);
     };
@@ -82,10 +79,10 @@ function result<T>(request: IDBRequest<T>): Promise<T> {
   });
 }
 
-async function storedDrafts(conversation?: string): Promise<StoredDraft[]> {
+async function hasDrafts(conversation: string): Promise<boolean> {
   const db = await open();
   const rows = await result(db.transaction("drafts").objectStore("drafts").getAll()) as StoredDraft[];
-  return rows.filter((row) => conversation === undefined || row.conversation === conversation).sort((a, b) => b.updated - a.updated);
+  return rows.some((row) => row.conversation === conversation);
 }
 
 async function readDraft(id: string, conversation: string): Promise<{ record: StoredDraft; content: DraftContent } | undefined> {
@@ -118,7 +115,6 @@ async function readSending(rid: string): Promise<SendingMessage | undefined> {
 }
 
 export async function forgetSending(rid: string): Promise<void> {
-  sendingHere.delete(rid);
   const db = await open();
   await new Promise<void>((resolve, reject) => {
     const tx = db.transaction("sending", "readwrite", { durability: "strict" });
@@ -152,20 +148,19 @@ export class BrowserDraft {
   #current: DraftContent | undefined;
   #saving = false;
   readonly #listeners = new Set<(content: DraftContent) => void>();
-  #sequence = 0;
+  #latest: object = {};
   readonly #key: string;
   constructor(readonly conversation: string) { this.#key = `shore.draft.owner.v2.${conversation}`; }
 
   async load(): Promise<DraftContent> {
-    await this.#queue;
     if (this.#current !== undefined) return this.#current;
-    const sequence = this.#sequence;
+    const latest = this.#latest;
     const cloned = await separateClonedTab();
     const id = sessionStorage.getItem(this.#key);
     const saved = id === null ? undefined : await readDraft(id, this.conversation);
-    if (sequence !== this.#sequence) return await this.load();
+    if (latest !== this.#latest) return await this.load();
     if (saved !== undefined) {
-      if (cloned && !claimedDrafts.has(saved.record.id)) await this.save(saved.content);
+      if (cloned) await this.save(saved.content);
       else {
         this.#id = saved.record.id; this.#revision = saved.record.revision;
         this.#attachment = saved.record.attachment; this.#images = saved.content.images;
@@ -174,7 +169,7 @@ export class BrowserDraft {
     }
     const legacy = localStorage.getItem(`shore.draft.v1.${this.conversation}`) ?? "";
     const content: DraftContent = { text: legacy, images: [] };
-    if (legacy !== "" && (await storedDrafts(this.conversation)).length === 0) {
+    if (legacy !== "" && !await hasDrafts(this.conversation)) {
       await this.save(content);
       localStorage.removeItem(`shore.draft.v1.${this.conversation}`);
       return content;
@@ -209,15 +204,16 @@ export class BrowserDraft {
 
   #save(content: DraftContent, sending?: { put?: SendingMessage; take?: string }): Promise<void> {
     this.#current = content;
-    const sequence = ++this.#sequence;
+    const latest = {};
+    this.#latest = latest;
     this.#saving = true;
     unsavedDrafts.add(this);
     const saved = this.#queue.then(async () => {
       try {
         await this.#write(content, sending);
-        if (sequence === this.#sequence) unsavedDrafts.delete(this);
+        if (latest === this.#latest) unsavedDrafts.delete(this);
       } finally {
-        if (sequence === this.#sequence) {
+        if (latest === this.#latest) {
           this.#saving = false;
           for (const listener of this.#listeners) listener(content);
         }
@@ -279,7 +275,6 @@ export class BrowserDraft {
     });
     this.#id = saved?.id ?? randomUUID(); this.#revision = saved?.revision ?? 0;
     this.#attachment = saved?.attachment ?? null; this.#images = content.images;
-    claimedDrafts.add(this.#id);
     sessionStorage.setItem(this.#key, this.#id);
   }
 }

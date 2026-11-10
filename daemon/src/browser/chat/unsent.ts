@@ -6,7 +6,7 @@ import { sentFate } from "./sending.ts";
 export class UnsentMessages {
   #waiting: ReadonlySet<string> = new Set();
   #busy = false;
-  #again = false;
+  #again!: boolean;
   constructor(connection: BrowserConnection, readonly list: () => Promise<WebRequestList>, readonly restored: (message: SendingMessage, dropped: number) => void) {
     connection.subscribe((update) => {
       if (update.kind === "status" && update.status === "ready") this.check();

@@ -21,7 +21,7 @@ export function useRowMenu(): RowMenu {
   const [at, setAt] = useState<{ x: number; y: number } | null>(null);
   const press = useRef<{ timer: ReturnType<typeof setTimeout>; x: number; y: number } | null>(null);
   const pressed = useRef(false);
-  const release = () => { if (press.current !== null) clearTimeout(press.current.timer); press.current = null; };
+  const release = () => { if (press.current !== null) clearTimeout(press.current.timer); };
   return {
     at,
     close: () => setAt(null),
@@ -46,7 +46,7 @@ export function useRowMenu(): RowMenu {
         const { clientX: x, clientY: y } = event;
         pressed.current = false;
         release();
-        press.current = { x, y, timer: setTimeout(() => { pressed.current = true; press.current = null; setAt({ x, y }); }, LONG_PRESS_MS) };
+        press.current = { x, y, timer: setTimeout(() => { pressed.current = true; setAt({ x, y }); }, LONG_PRESS_MS) };
       },
       onPointerMove: (event) => {
         if (press.current !== null && Math.hypot(event.clientX - press.current.x, event.clientY - press.current.y) > LONG_PRESS_SLOP) release();

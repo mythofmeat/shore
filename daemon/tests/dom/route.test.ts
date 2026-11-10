@@ -48,6 +48,18 @@ describe("the page's route", () => {
     await hook.unmount();
   });
 
+  test("knows the new route as soon as it navigates, before the page says the address changed", async () => {
+    const { navigate, useRoute } = await routes();
+    const { act } = await import("react");
+    const hook = await renderHook(() => useRoute(), undefined);
+    act(() => { navigate({ view: "settings", page: "models" }); });
+    expect(hook.current()).toEqual({ view: "settings", page: "models" });
+    act(() => { navigate({ view: "chat" }); });
+    expect(hook.current()).toEqual({ view: "chat" });
+    await acting(drain);
+    await hook.unmount();
+  });
+
   test("follows a change of address made outside it", async () => {
     const { navigate, useRoute } = await routes();
     await acting(() => { navigate({ view: "chat" }); });

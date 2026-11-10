@@ -135,7 +135,7 @@ describe("pure helpers", () => {
 describe("the workspace", () => {
   test("starts empty, tells subscribers of every change until they leave, and keeps errors until dismissed", () => {
     const link = rig();
-    expect(link.state()).toMatchObject({ characters: [], threads: [], messages: [], status: "idle", error: "", character: null, thread: null, segmentView: null, opening: null, spendingRequestsFinished: 0 });
+    expect(link.state()).toMatchObject({ characters: [], threads: [], messages: [], status: "idle", error: "", character: null, thread: null, segmentView: null, opening: null, spendingRequestsFinished: 0, mediaLimited: false, manualOrder: false });
     let heard = 0;
     const leave = link.workspace.subscribe(() => { heard += 1; });
     link.workspace.report(new Error("broke"));
@@ -749,6 +749,8 @@ describe("other frames", () => {
     const link = await opened();
     link.calls.length = 0;
     link.frame({ type: "threads_changed", character: "bo" });
+    await settle();
+    expect(link.calls, "another character's threads").toHaveLength(0);
     link.frame({ type: "threads_changed", character: "ada" });
     await settle();
     expect(link.calls.map((call) => call.name)).toEqual(["list_threads"]);
@@ -910,5 +912,93 @@ describe("work that outlives its conversation", () => {
     link.named("list_threads").at(-1)?.reply(listing([thread("stale")]));
     await refreshing;
     expect(link.state()).toMatchObject({ operations: [], characters: [], threads: [] });
+  });
+});
+
+describe("what the GitHub pass found untested", () => {
+  test("streamed text shows at once by default, and the first streamed piece of a fresh workspace waits for a frame", async () => {
+    const link = await opened();
+    const before = link.notified();
+    link.frame(chunk("r_1", "a"));
+    expect(link.notified()).toBe(before + 1);
+    const queued: (() => void)[] = [];
+    const fresh = rig({}, (callback) => { queued.push(callback); });
+    fresh.frame(chunk("r_1", "a"));
+    expect(queued).toHaveLength(1);
+  });
+
+  test("a stream that starts has no text, a tool result is one of its blocks, and long reasoning is cut to the limit", async () => {
+    const link = await opened();
+    link.frame({ type: "stream_start", rid: "r_1", regen: false });
+    expect(link.state().streams.at(-1)).toMatchObject({ text: "", reasoning: "" });
+    link.frame(answered("r_1", "t_1"));
+    expect(link.state().streams.at(-1)?.blocks).toEqual([{ type: "tool_result", tool_use_id: "t_1", content: "out t_1", is_error: false }]);
+    link.frame(chunk("r_2", "a".repeat(512 * 1024 + 3), "thinking"));
+    expect(link.state().streams.at(-1)?.reasoning).toHaveLength(512 * 1024);
+  });
+
+  test("the daemon's hello names its characters, and becoming ready loads the catalogues even when the conversation came first", async () => {
+    const link = rig();
+    link.frame({ type: "hello", v: 1, server_name: "shore", characters: [{ name: "ada" }, { name: "bo" }] });
+    expect(link.state().characters).toEqual([{ name: "ada" }, { name: "bo" }]);
+    link.setStatus("connecting");
+    link.frame(history());
+    await settle();
+    expect(link.named("discover_operations")).toHaveLength(0);
+    link.setStatus("ready");
+    await settle();
+    expect(link.named("discover_operations")).toHaveLength(1);
+  });
+
+  test("an earlier segment that moved while no segment is open asks for nothing", async () => {
+    const link = await opened();
+    link.calls.length = 0;
+    link.frame(history({ revision: 2, previous_segment: segment(4) }));
+    await settle();
+    expect([link.calls, link.state().error]).toEqual([[], ""]);
+  });
+
+  test("a failed catalogue or thread list is reported on its own, and a stale one not at all", async () => {
+    const catalogue = await opened({ discover_operations: () => { throw new Error("catalogue down"); } });
+    await catalogue.workspace.refreshNavigation();
+    expect(catalogue.state().error).toBe("catalogue down");
+    const threads = await opened({ list_threads: () => { throw new Error("threads down"); } });
+    await threads.workspace.refreshThreads();
+    expect(threads.state().error).toBe("threads down");
+    const stale = await opened({ discover_operations: null, list_threads: null });
+    const first = stale.workspace.refreshNavigation();
+    await settle();
+    const [oldCatalogue] = stale.named("discover_operations").slice(-1);
+    const [oldListing] = stale.named("list_threads").slice(-1);
+    const second = stale.workspace.refreshNavigation();
+    await settle();
+    oldCatalogue?.fail("old catalogue down");
+    oldListing?.fail("old threads down");
+    stale.named("list_characters").at(-2)?.reply({ characters: [] });
+    await first;
+    expect(stale.state().error).toBe("");
+    void second;
+  });
+
+  test("picture data is kept from the last copy of a picture that had any, and nothing is added where there was none", async () => {
+    const earlier = message("a", { images: [{ path: "/p.png", data: "pixels" }, { path: "/p.png", data: null }] });
+    const later = message("b", { images: [{ path: "/p.png" }, { path: "/q.png" }] });
+    const merged = mergeHistory([earlier], { messages: [later], config: {}, revision: 2, delta: { base_revision: 1, after: "a" } });
+    expect(merged?.at(-1)?.images[0]).toEqual({ path: "/p.png", data: "pixels" });
+    expect(Object.keys(merged?.at(-1)?.images[1] ?? {})).toEqual(["path"]);
+  });
+
+  test("a history for the same conversation keeps picture data and the dropped-pictures mark; another conversation starts clean", async () => {
+    const link = await opened();
+    link.frame(history({ revision: 2, messages: [message("m_1", { images: [{ path: "/p.png", data: "pixels" }] })] }));
+    for (let index = 0; index < 129; index += 1) link.frame({ type: "send_image", path: `/many/${String(index)}.png` });
+    expect(link.state().mediaLimited).toBe(true);
+    link.frame(history({ revision: 3, messages: [message("m_1", { images: [{ path: "/p.png" }] })] }));
+    expect(link.state().messages[0]?.images).toEqual([{ path: "/p.png", data: "pixels" }]);
+    expect(link.state().mediaLimited).toBe(true);
+    link.frame({ type: "send_image", path: "/q.png", data: "live" });
+    link.frame(history({ revision: 1, selected_thread: "side", messages: [message("s_1", { images: [{ path: "/q.png" }] })] }));
+    expect(link.state().messages[0]?.images).toEqual([{ path: "/q.png" }]);
+    expect(link.state().mediaLimited).toBe(false);
   });
 });

@@ -583,3 +583,160 @@ describe("draft storage that cannot be used", () => {
     });
   });
 });
+
+function sequentialIds(): void {
+  let next = 0;
+  swap(crypto, "randomUUID", () => { next += 1; return `id-${String(next)}`; });
+}
+
+describe("what the GitHub pass found untested", () => {
+  test("a draft is saved under the id it was made with, and again under a new one once cleared", async () => {
+    sequentialIds();
+    const page = await tab();
+    await page.run(async ({ browserDraft }) => {
+      const draft = browserDraft("ada/main");
+      expect(draft.saving).toBe(false);
+      await draft.load();
+      await draft.save({ text: "first", images: [] });
+      expect(await rows("drafts")).toMatchObject([{ id: "id-1", revision: 1 }]);
+      await draft.save({ text: "", images: [] });
+      await draft.save({ text: "again", images: [] });
+      expect(await rows("drafts")).toMatchObject([{ id: "id-3", revision: 1 }]);
+    });
+  });
+
+  test("a draft of one picture alone is kept", async () => {
+    const page = await tab();
+    await page.run(async ({ browserDraft }) => { const draft = browserDraft("ada/main"); await draft.load(); await draft.save({ text: "", images: [image("a.png")] }); });
+    expect(await rows("drafts")).toMatchObject([{ text: "", imageCount: 1 }]);
+  });
+
+  test("a reloaded draft carries on as the same record with the same pictures", async () => {
+    const first = await tab();
+    await first.run(async ({ browserDraft }) => { const draft = browserDraft("ada/main"); await draft.load(); await draft.save({ text: "one", images: [image("a.png")] }); });
+    const [saved] = await rows("drafts") as { id: string; attachment: string }[];
+    locks?.held.delete(`shore.draft.tab.${first.session.getItem("shore.draft.tab") ?? ""}`);
+    const again = await tab(first.session);
+    await again.run(async ({ browserDraft }) => {
+      const draft = browserDraft("ada/main");
+      const loaded = await draft.load();
+      await draft.save({ ...loaded, text: "two" });
+    });
+    expect(await rows("drafts")).toMatchObject([{ id: saved?.id, attachment: saved?.attachment, revision: 2, text: "two" }]);
+  });
+
+  test("unchanged pictures keep their stored copy from save to save", async () => {
+    const page = await tab();
+    await page.run(async ({ browserDraft }) => {
+      const draft = browserDraft("ada/main");
+      await draft.load();
+      const images = [image("a.png")];
+      await draft.save({ text: "one", images });
+      const [first] = await rows("drafts") as { attachment: string }[];
+      await draft.save({ text: "two", images });
+      const [second] = await rows("drafts") as { attachment: string }[];
+      expect(second?.attachment).toBe(first?.attachment ?? "");
+    });
+  });
+
+  test("a tab that copied a draft from another keeps its own pictures when the other drops theirs", async () => {
+    const first = await tab();
+    const images = [image("a.png")];
+    await first.run(async ({ browserDraft }) => { const draft = browserDraft("ada/main"); await draft.load(); await draft.save({ text: "start", images }); });
+    const copy = memory();
+    copy.setItem("shore.draft.owner.v2.ada/main", first.session.getItem("shore.draft.owner.v2.ada/main") ?? "");
+    const second = await tab(copy);
+    const loaded = await second.run(async ({ browserDraft }) => await browserDraft("ada/main").load());
+    await first.run(async ({ browserDraft }) => { await browserDraft("ada/main").save({ text: "first edit", images }); });
+    await second.run(async ({ browserDraft }) => { const draft = browserDraft("ada/main"); await draft.save({ ...loaded, text: "second edit" }); await draft.save({ ...loaded, text: "second again" }); });
+    expect(await rows("drafts")).toHaveLength(2);
+    await first.run(async ({ browserDraft }) => { await browserDraft("ada/main").save({ text: "no pictures", images: [] }); });
+    locks?.held.delete(`shore.draft.tab.${copy.getItem("shore.draft.tab") ?? ""}`);
+    const reloaded = await tab(copy);
+    expect(await reloaded.run(async ({ browserDraft }) => await browserDraft("ada/main").load())).toEqual({ text: "second again", images });
+  });
+
+  test("an old draft moves in even when other conversations have drafts", async () => {
+    await seed("drafts", [[row("other", { conversation: "bo/main" }), undefined]]);
+    localStorage.setItem("shore.draft.v1.ada/main", "from before");
+    const page = await tab();
+    expect(await page.run(async ({ browserDraft }) => await browserDraft("ada/main").load())).toEqual({ text: "from before", images: [] });
+  });
+
+  test("a copied tab's own messages are left to it while it is open", async () => {
+    const first = await tab();
+    await first.run(async ({ browserDraft }) => { await browserDraft("ada/main").load(); });
+    const copied = memory();
+    copied.setItem("shore.draft.tab", first.session.getItem("shore.draft.tab") ?? "");
+    const clone = await tab(copied);
+    await clone.run(async ({ browserDraft }) => { const draft = browserDraft("ada/main"); await draft.load(); await draft.send("r_clone", { text: "hi", images: [] }); });
+    const other = await tab();
+    expect(await other.run(async ({ unclaimedSending }) => await unclaimedSending())).toEqual([]);
+    locks?.held.delete(`shore.draft.tab.${copied.getItem("shore.draft.tab") ?? ""}`);
+    expect((await other.run(async ({ unclaimedSending }) => await unclaimedSending())).map((message) => message.rid)).toEqual(["r_clone"]);
+  });
+
+  test("a reloaded tab takes back its own messages before another tab can", async () => {
+    const first = await tab();
+    await first.run(async ({ browserDraft }) => { const draft = browserDraft("ada/main"); await draft.load(); await draft.send("r_1", { text: "hi", images: [] }); });
+    locks?.held.delete(`shore.draft.tab.${first.session.getItem("shore.draft.tab") ?? ""}`);
+    const reloaded = await tab(first.session);
+    expect((await reloaded.run(async ({ unclaimedSending }) => await unclaimedSending())).map((message) => message.rid)).toEqual(["r_1"]);
+    const other = await tab();
+    expect(await other.run(async ({ unclaimedSending }) => await unclaimedSending())).toEqual([]);
+  });
+
+  test("putting a message back fails loudly for any trouble but another tab taking it", async () => {
+    const { IDBObjectStore } = await import("fake-indexeddb");
+    const page = await tab();
+    await page.run(async ({ browserDraft }) => {
+      const draft = browserDraft("ada/main");
+      await draft.load();
+      await draft.send("r_1", { text: "hello", images: [] });
+      swap(IDBObjectStore.prototype, "put", () => { throw new Error("quota"); });
+      expect(await draft.restore("r_1").then(() => "", failure)).toBe("Error: quota");
+    });
+  });
+
+  test("a save made while the draft was being read wins over what was read", async () => {
+    const first = await tab();
+    await first.run(async ({ browserDraft }) => { const draft = browserDraft("ada/main"); await draft.load(); await draft.save({ text: "stored", images: [] }); });
+    const { IDBObjectStore } = await import("fake-indexeddb");
+    const again = await tab(first.session);
+    await again.run(async ({ browserDraft }) => {
+      const draft = browserDraft("ada/main");
+      const original: unknown = Reflect.get(IDBObjectStore.prototype, "get");
+      let typed = false;
+      swap(IDBObjectStore.prototype, "get", function (this: IDBObjectStore, key: IDBValidKey) {
+        if (!typed) { typed = true; void draft.save({ text: "typed meanwhile", images: [] }); }
+        return Reflect.apply(original as (key: IDBValidKey) => IDBRequest, this, [key]);
+      });
+      expect(await draft.load()).toEqual({ text: "typed meanwhile", images: [] });
+    });
+  });
+
+  test("saves land one after another, each seeing the last one's result", async () => {
+    const { IDBDatabase } = await import("fake-indexeddb");
+    const page = await tab();
+    await page.run(async ({ browserDraft }) => {
+      const draft = browserDraft("ada/main");
+      await draft.load();
+      const original: unknown = Reflect.get(IDBDatabase.prototype, "transaction");
+      let slowed = false;
+      swap(IDBDatabase.prototype, "transaction", function (this: IDBDatabase, ...args: unknown[]) {
+        const tx = Reflect.apply(original as (...rest: unknown[]) => IDBTransaction, this, args);
+        if (!slowed && args[1] === "readwrite") {
+          slowed = true;
+          let handler: ((event: Event) => void) | null = null;
+          Object.defineProperty(tx, "oncomplete", { configurable: true, get: () => handler === null ? null : (event: Event) => { setTimeout(() => { handler?.(event); }, 20); }, set: (value: ((event: Event) => void) | null) => { handler = value; } });
+        }
+        return tx;
+      });
+      const first = draft.save({ text: "one", images: [] });
+      const second = draft.save({ text: "two", images: [] });
+      await first;
+      await second;
+    });
+    expect(await rows("drafts")).toMatchObject([{ text: "two", revision: 2 }]);
+  });
+});

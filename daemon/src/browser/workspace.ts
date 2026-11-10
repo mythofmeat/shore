@@ -93,13 +93,12 @@ export class Workspace {
   #listeners = new Set<() => void>();
   #frame: FrameScheduler;
   #framePending = false;
-  #navigation = 0;
-  #threadListing = 0;
+  #navigation: object = {};
+  #threadListing: object = {};
   #eventId = 0;
-  #segmentEpoch = 0;
+  #segmentEpoch: object = {};
   #loadingEarlier = false;
-  #unreadSeq = 0;
-  #unread = new Map<string, { seq: number; update: ThreadUnread }>();
+  #unread = new Map<string, ThreadUnread>();
   #state: WorkspaceSnapshot = { characters: [], threads: [], operations: [], requests: [], messages: [], metadata: {}, streams: [], media: [], mediaLimited: false, activity: [], config: {}, error: "", status: "idle", detail: "", character: null, thread: null, previousSegment: null, segmentView: null, uncertain: [], opening: null, folders: [], manualOrder: false, compaction: null, spendingRequestsFinished: 0 };
   constructor(readonly connection: BrowserConnection, frame: FrameScheduler = (callback) => { callback(); }) {
     this.#frame = frame;
@@ -123,7 +122,8 @@ export class Workspace {
   dismissError(): void { this.#patch({ error: "" }); }
   acknowledge(rid: string): void { this.#patch({ uncertain: this.#state.uncertain.filter((item) => item.rid !== rid) }); }
   async openSegment(index: number): Promise<void> {
-    const epoch = ++this.#segmentEpoch;
+    const epoch = {};
+    this.#segmentEpoch = epoch;
     const page = await this.actions.run("history_page", { segment: index, turns: SEGMENT_PAGE_TURNS });
     if (epoch !== this.#segmentEpoch || page.segment === null) return;
     this.#patch({ segmentView: { ...neighbours(page, page.segment), messages: page.messages, before: page.next_before, hasEarlier: page.has_more_before, seenLive: this.#state.messages.at(-1)?.msg_id ?? null } });
@@ -139,7 +139,7 @@ export class Workspace {
     else await this.openSegment(next.index);
   }
   closeSegment(): void {
-    this.#segmentEpoch += 1;
+    this.#segmentEpoch = {};
     if (this.#state.segmentView !== null) this.#patch({ segmentView: null });
   }
   async loadEarlierInSegment(): Promise<void> {
@@ -174,31 +174,33 @@ export class Workspace {
     this.#patch({ activity: [...this.#state.activity.slice(-99), { id: ++this.#eventId, type, data: preview, previewLimited: preview !== data }] });
   }
   async refreshNavigation(): Promise<void> {
-    const generation = ++this.#navigation;
+    const generation = {};
+    this.#navigation = generation;
     await Promise.all([this.refreshThreads(), this.#refreshCatalogues(generation)]);
   }
-  async #refreshCatalogues(generation: number): Promise<void> {
+  async #refreshCatalogues(generation: object): Promise<void> {
     try {
       const [catalogue, characters] = await Promise.all([this.actions.run("discover_operations", {}), this.actions.run("list_characters", {})]);
       if (generation === this.#navigation) this.#patch({ operations: catalogue.operations, requests: catalogue.requests, characters: characters.characters });
     } catch (error) { if (generation === this.#navigation && this.connection.status === "ready") this.report(error); }
   }
   async refreshThreads(): Promise<void> {
-    const generation = ++this.#threadListing;
-    const since = this.#unreadSeq;
+    const generation = {};
+    this.#threadListing = generation;
+    const known = new Set(this.#unread.values());
     try {
       if (this.#state.character === null) { this.#patch({ threads: [], folders: [], manualOrder: false, compaction: null }); return; }
       const listing = await this.actions.run("list_threads", {});
       if (generation !== this.#threadListing) return;
-      this.#applyListing(listing, since);
+      this.#applyListing(listing, known);
     } catch (error) { if (generation === this.#threadListing && this.connection.status === "ready") this.report(error); }
   }
-  #applyListing(listing: ThreadListing, since: number): void {
-    this.#patch({ threads: this.#laterUnread(listing.threads, since), folders: listing.folders ?? [], manualOrder: listing.manual_order === true, compaction: listing.compaction ?? null });
+  #applyListing(listing: ThreadListing, known: ReadonlySet<ThreadUnread>): void {
+    this.#patch({ threads: this.#laterUnread(listing.threads, known), folders: listing.folders ?? [], manualOrder: listing.manual_order === true, compaction: listing.compaction ?? null });
   }
   applyThreadListing(listing: ThreadListing): void {
-    this.#threadListing += 1;
-    this.#applyListing(listing, this.#unreadSeq);
+    this.#threadListing = {};
+    this.#applyListing(listing, new Set(this.#unread.values()));
   }
   noteThreads(threads: ThreadView[]): void {
     this.#patch({ threads });
@@ -223,9 +225,9 @@ export class Workspace {
     const config = this.#state.config;
     this.#patch({ config: { ...(typeof config === "object" && config !== null ? config : {}), active_model: model } });
   }
-  #laterUnread(threads: ThreadView[], since: number): ThreadView[] {
+  #laterUnread(threads: ThreadView[], known: ReadonlySet<ThreadUnread>): ThreadView[] {
     let merged = threads;
-    for (const { seq, update } of this.#unread.values()) if (seq > since) merged = applyThreadUnread(merged, update);
+    for (const update of this.#unread.values()) if (!known.has(update)) merged = applyThreadUnread(merged, update);
     return merged;
   }
   #stream(message: Extract<ServerMessage, { type: "stream_start" | "stream_chunk" | "stream_end" | "tool_call" | "tool_result" }>): void {
@@ -291,18 +293,18 @@ export class Workspace {
   }
   #receive(update: ConnectionUpdate): void {
     if (update.kind === "status") {
-      if (update.status !== "ready") { this.#navigation += 1; this.#threadListing += 1; }
-      if (update.status === "signed_out") this.#segmentEpoch += 1;
+      if (update.status !== "ready") { this.#navigation = {}; this.#threadListing = {}; }
+      if (update.status === "signed_out") this.#segmentEpoch = {};
       this.#patch({ status: update.status, detail: update.detail, streams: update.status === "ready" ? this.#state.streams : [], ...(update.status === "signed_out" ? { error: "", messages: [], metadata: {}, config: {}, media: [], mediaLimited: false, activity: [], operations: [], requests: [], threads: [], characters: [], uncertain: [], previousSegment: null, segmentView: null, opening: null, folders: [], manualOrder: false, compaction: null } : {}) });
       if (update.status === "ready") void this.refreshNavigation();
       return;
     }
-    if (update.kind === "future") { this.#activity(`Future event: ${update.message.type}`, update.message); return; }
-    if (update.kind === "uncertain") {
+    if (update.kind === "future") this.#activity(`Future event: ${update.message.type}`, update.message);
+    else if (update.kind === "uncertain") {
       this.#patch({ uncertain: [...this.#state.uncertain, { ...update, request: inspectableRequest(update.request) }], media: this.#state.media.filter((image) => image.rid !== update.rid || image.manual === true) });
-      return;
-    }
-    const message = update.message;
+    } else this.#message(update.message);
+  }
+  #message(message: ServerMessage): void {
     switch (message.type) {
       case "hello": this.#patch({ characters: message.characters }); return;
       case "history": {
@@ -315,7 +317,7 @@ export class Workspace {
         const full = message.delta === undefined || message.delta === null;
         const previousSegment = full ? message.previous_segment ?? null : this.#state.previousSegment;
         const moved = previousSegment?.index !== this.#state.previousSegment?.index;
-        if (changed) this.#segmentEpoch += 1;
+        if (changed) this.#segmentEpoch = {};
         const sameCharacter = character === this.#state.character;
         const target = this.#state.opening;
         const reached = target !== null && target.character === character && (target.thread === null || target.thread === thread);
@@ -363,7 +365,7 @@ export class Workspace {
         this.#activity(message.type, message); break;
       case "thread_unread":
         if (message.character === this.#state.character) {
-          this.#unread.set(message.thread, { seq: ++this.#unreadSeq, update: message });
+          this.#unread.set(message.thread, message);
           this.#patch({ threads: applyThreadUnread(this.#state.threads, message) });
         }
         this.#activity(message.type, message); break;

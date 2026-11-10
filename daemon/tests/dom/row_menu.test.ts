@@ -40,6 +40,7 @@ describe("a thread row's menu", () => {
   test("a long touch opens it where the finger is, and swallows the one click that follows", async () => {
     jest.useFakeTimers();
     const hook = await menu();
+    expect(hook.current().swallowClick(), "nothing to swallow before any press").toBe(false);
     await acting(() => { hook.current().handlers.onPointerDown(pointer("touch", 5, 6)); });
     await acting(() => { jest.advanceTimersByTime(499); });
     expect(hook.current().at).toBeNull();
