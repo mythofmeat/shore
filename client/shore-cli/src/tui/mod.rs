@@ -3706,6 +3706,28 @@ pub(crate) fn handle_server_message(app: &mut App, msg: ServerMessage) -> UiEffe
 }
 
 #[cfg(test)]
+mod palette_catalog_tests {
+    use super::*;
+
+    #[test]
+    fn a_daemon_answer_fills_the_palette_with_what_it_listed() {
+        let mut app = App::default();
+        absorb_palette_catalog(
+            &mut app,
+            Source::Presence,
+            &serde_json::json!({ "choices": ["asleep", "busy"] }),
+        );
+        let offered: Vec<&str> = app
+            .palette_catalog
+            .statuses
+            .iter()
+            .map(|status| status.value.as_str())
+            .collect();
+        assert_eq!(offered, ["asleep", "busy"]);
+    }
+}
+
+#[cfg(test)]
 mod redraw_tests {
     use super::*;
     use shore_common::protocol::error::ErrorCode;

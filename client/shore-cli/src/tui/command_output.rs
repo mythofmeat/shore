@@ -617,6 +617,32 @@ mod tests {
     use serde_json::json;
 
     #[test]
+    fn config_asked_for_as_toml_is_shown_as_toml_with_defaults_left_out_unless_all_is_asked_for() {
+        let data = json!({
+            "config": { "chat": { "model": "anthropic:fixture", "display_name": "eve" } },
+            "defaults": { "chat": { "display_name": "eve" } }
+        });
+        let changed = crate::run::render_config_toml(&data, false).ok();
+        let all = crate::run::render_config_toml(&data, true).ok();
+        assert!(
+            changed
+                .as_deref()
+                .is_some_and(|toml| toml.contains("model"))
+        );
+        assert_ne!(changed, all);
+        assert_eq!(
+            super::render("config --toml", "config", &data, "ada"),
+            changed
+        );
+        assert_eq!(
+            super::render("config --toml --all", "config", &data, "ada"),
+            all
+        );
+        assert_ne!(super::render("config", "config", &data, "ada"), changed);
+        assert_ne!(super::render("config --all", "config", &data, "ada"), all);
+    }
+
+    #[test]
     fn the_palette_shows_a_status_in_the_same_words_as_the_command_line() {
         assert_eq!(
             super::render(
