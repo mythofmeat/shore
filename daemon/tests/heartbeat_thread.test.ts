@@ -1,5 +1,6 @@
-import { afterAll, afterEach, expect, setSystemTime, test } from "bun:test";
-import { mkdir, mkdtemp, writeFile } from "node:fs/promises";
+import { afterAll, afterEach, expect, jest, setSystemTime, test } from "bun:test";
+import { existsSync } from "node:fs";
+import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 
 import { TurnAutonomyBridge } from "../src/autonomy/registration.ts";
@@ -10,7 +11,9 @@ import { emptyCatalog } from "../src/config/models.ts";
 import { ProviderRegistry } from "../src/config/providers.ts";
 import { Diagnostics } from "../src/diagnostics.ts";
 import type { History } from "../src/engine/conversation.ts";
+import { unfoldedDiary } from "../src/autonomy/diary.ts";
 import { heartbeatNewsNote, triggerFiredNote, userWroteNote } from "../src/autonomy/heartbeat_shape.ts";
+import { checkFacts, startTriggerTimer, type TriggerService } from "../src/autonomy/trigger_service.ts";
 import { DIARY_FOR_CHAT, DIARY_FOR_HEARTBEAT, diaryText, heartbeatRunningText } from "../src/engine/prompt.ts";
 import { markThreadRead, threadActivityNow } from "../src/engine/threads.ts";
 import type { DiaryNote, Message } from "../src/engine/types.ts";
@@ -21,7 +24,7 @@ import type { GenerateResponse, SidecarProvider, SidecarRequest } from "../src/l
 import { runCompactionPass } from "../src/memory/compaction/run.ts";
 import type { ServerMessage } from "../src/protocol/ServerMessage.ts";
 import { hostZone } from "../src/ledger/zoned.ts";
-import { createRuntime, type ShoreRuntime } from "../src/runtime.ts";
+import { createRuntime, startRuntimeClocks, type ShoreRuntime } from "../src/runtime.ts";
 import { DEFAULT_HANDSHAKE } from "../src/swp/connection.ts";
 import { SessionRouter } from "../src/swp/session.ts";
 import { sizedImage } from "./support/sized_image.ts";
@@ -981,4 +984,276 @@ test("a trigger's firing is told in these words, and nothing new means no note",
   expect(heartbeatNewsNote([{ kind: "user_wrote", at: T0 }, { kind: "trigger", firing: tide }], "eve", "UTC")).toBe(
     `${userWroteNote(T0, "eve", "UTC")}\n\n${triggerFiredNote(tide, "UTC")}`,
   );
+});
+
+function withTriggers(app: AppConfig): void {
+  app.behavior.autonomy.triggers.enabled = true;
+}
+
+function diaryOf(data: string): [from: string, text: string][] {
+  return unfoldedDiary(join(data, "ada")).map((note) => [note.source === "trigger" ? note.trigger ?? "" : note.source, note.text]);
+}
+
+test("a trigger in the character's file wakes it when its check prints, and the check is handed what Shore knows", async () => {
+  await withCharacter(async ({ runtime, script, workspace, say }) => {
+    await writeFile(join(workspace, "TRIGGERS.toml"), [
+      "[tide]",
+      'every = "10m"',
+      `check = 'printf "%s|%s|%s|%s|" "$SHORE_TRIGGER" "$SHORE_NOW" "$SHORE_USER_QUIET_SECS" "$SHORE_USER_LAST_MESSAGE_AT"; cat'`,
+      "",
+    ].join("\n"));
+    await say("hello");
+    at(1);
+    await runtime.triggers.tick();
+    at(11);
+    await runtime.triggers.tick();
+    expect(script.heartbeats).toHaveLength(0);
+    await runtime.autonomy.tick();
+
+    const woken = textOf(script.heartbeats[0] as SidecarRequest);
+    expect(woken).toContain(
+      '[Your trigger "tide" fired at Friday 2026-10-30 · ',
+    );
+    const printed = woken.slice(woken.indexOf(" PM: tide|") + " PM: ".length, woken.indexOf("]\n\n[Current time: "));
+    const [name, now, quiet, last, ...stdin] = printed.split("|");
+    expect([name, now, quiet, last]).toEqual(["tide", "2026-10-30T12:11:00.000Z", "660", "2026-10-30T12:00:00.000Z"]);
+    const facts = JSON.parse(stdin.join("|")) as { now: string; user: unknown; activity: { messages: number; share_of_messages_by_local_hour: number[]; median_secs_between_sessions: number | null } };
+    expect(facts.now).toBe("2026-10-30T12:11:00.000Z");
+    expect(facts.user).toEqual({ last_message_at: "2026-10-30T12:00:00.000Z", quiet_secs: 660 });
+    expect(Object.keys(facts.activity)).toEqual(["messages", "share_of_messages_by_local_hour", "median_secs_between_sessions"]);
+    expect(facts.activity.messages).toBeGreaterThan(0);
+    expect(facts.activity.share_of_messages_by_local_hour).toHaveLength(24);
+    expect(facts.activity.share_of_messages_by_local_hour.reduce((sum, share) => sum + share, 0)).toBe(1);
+    expect(facts.activity.median_secs_between_sessions).toBeNull();
+    expect(runtime.triggers.view("ada")).toMatchObject({ enabled: true, problems: [], triggers: [{ fired: 1, lastFiredAt: T0 + 11 * MINUTE, off: false }] });
+  }, withTriggers);
+});
+
+test("what a trigger for the user's return says arrives with their message, and the character's first message ever sets none off", async () => {
+  await withCharacter(async ({ script, workspace, data, say }) => {
+    await writeFile(join(workspace, "TRIGGERS.toml"), `[welcome]\nwhen = "user_back"\nafter = "8h"\ncheck = 'echo "away $SHORE_USER_QUIET_SECS seconds"'\n\n[always]\nwhen = "user_back"\nafter = "1s"\nreason = "They wrote."\n`);
+    await say("hello");
+    expect(diaryOf(data)).toEqual([]);
+    at(9 * 60);
+    await say("I'm back");
+    expect(diaryOf(data)).toEqual([["welcome", "away 32400 seconds"], ["always", "They wrote."]]);
+    const reply = textOf(script.replies.at(-1) as SidecarRequest);
+    expect(reply).toContain('from your trigger "welcome" · ');
+    expect(reply).toEndWith("They wrote.\n\n[End of your diary.]\n[9 hours later · Friday 2026-10-30 · 9:00 PM]\n\nI'm back");
+
+    at(9 * 60 + 1);
+    await say("still here");
+    expect(diaryOf(data)).toEqual([["welcome", "away 32400 seconds"], ["always", "They wrote."]]);
+    const next = textOf(script.replies.at(-1) as SidecarRequest);
+    expect(times(next, 'from your trigger "welcome"')).toBe(1);
+    expect(next).toEndWith('[New in your diary. Each entry says where it came from.]\n\nfrom your trigger "always" · Friday 2026-10-30 · 9:01 PM\nThey wrote.\n\n[End of your diary.]\nstill here');
+
+    const before = unfoldedDiary(join(data, "ada")).map((note) => note.at);
+    at(18 * 60 + 1);
+    await say("");
+    expect(unfoldedDiary(join(data, "ada")).map((note) => note.at)).toEqual(before);
+  }, withTriggers);
+});
+
+test("a follower's turn comes once the wake its leader caused is over, whether that wake was started for it or it joined one already running", async () => {
+  const file = '[lamp]\nevery = "10m"\nreason = "Trim the lamp."\ncooldown = "1m"\n\n[after]\nfollows = "lamp"\nreason = "Write it up."\nwake = false\n';
+  await withCharacter(async ({ runtime, script, workspace, data, say }) => {
+    await writeFile(join(workspace, "TRIGGERS.toml"), file);
+    await say("hello");
+    at(1);
+    await runtime.triggers.tick();
+    at(11);
+    await runtime.triggers.tick();
+    await runtime.triggers.tick();
+    expect(diaryOf(data)).toEqual([]);
+    await runtime.autonomy.tick();
+    expect(script.heartbeats.length).toBeGreaterThan(0);
+    await runtime.triggers.tick();
+    expect(diaryOf(data)).toEqual([["after", "Write it up."]]);
+
+    const held = hold();
+    script.beatHeld = held;
+    at(20);
+    const ticking = runtime.autonomy.forceHeartbeatNow("ada") === undefined ? Promise.resolve() : runtime.autonomy.tick();
+    await held.started.promise;
+    at(21);
+    await runtime.triggers.tick();
+    expect(runtime.triggers.view("ada").triggers.map((each) => each.fired)).toEqual([2, 1]);
+    held.release.resolve();
+    await ticking;
+    at(22);
+    await runtime.triggers.tick();
+    expect(runtime.triggers.view("ada").triggers.map((each) => each.fired)).toEqual([2, 2]);
+  }, withTriggers);
+});
+
+test("a trigger for a dream finishing gets its turn after a dream", async () => {
+  await withCharacter(async ({ runtime, workspace, data, say }) => {
+    await writeFile(join(workspace, "TRIGGERS.toml"), '[after-dream]\nwhen = "dream_done"\nreason = "Read what the dream changed."\nwake = false\n');
+    await say("hello");
+    at(1);
+    await runtime.triggers.tick();
+    expect(diaryOf(data)).toEqual([]);
+    expect(runtime.autonomy.forceDreamNow("ada")).toBe("queued");
+    await runtime.autonomy.tick();
+    await runtime.autonomy.dreamsEnded();
+    await runtime.triggers.tick();
+    expect(diaryOf(data)).toEqual([["after-dream", "Read what the dream changed."]]);
+  }, withTriggers);
+});
+
+const TOUCH = '[touch]\nevery = "10m"\ncheck = "touch ran"\n';
+
+async function looks(runtime: ShoreRuntime): Promise<void> {
+  at(1);
+  await runtime.triggers.tick();
+  at(11);
+  await runtime.triggers.tick();
+}
+
+test("the character's triggers run only when the user has turned them on, with heartbeats on, and not while it is dormant", async () => {
+  await withCharacter(async ({ runtime, workspace, say }) => {
+    await writeFile(join(workspace, "TRIGGERS.toml"), TOUCH);
+    await say("hello");
+    await looks(runtime);
+    expect(existsSync(join(workspace, "ran"))).toBe(false);
+    expect(runtime.triggers.view("ada").enabled).toBe(false);
+  });
+
+  await withCharacter(async ({ runtime, workspace, say }) => {
+    await writeFile(join(workspace, "TRIGGERS.toml"), TOUCH);
+    await say("hello");
+    await looks(runtime);
+    expect(existsSync(join(workspace, "ran"))).toBe(false);
+    expect(runtime.triggers.view("ada").enabled).toBe(false);
+  }, (app) => {
+    withTriggers(app);
+    app.behavior.autonomy.enabled = false;
+  });
+
+  await withCharacter(async ({ runtime, workspace, say }) => {
+    await writeFile(join(workspace, "TRIGGERS.toml"), TOUCH);
+    await say("hello");
+    expect(runtime.autonomy.forceHeartbeatState("ada", "dormant")).toBe(true);
+    await looks(runtime);
+    expect(existsSync(join(workspace, "ran"))).toBe(false);
+    expect(runtime.autonomy.forceHeartbeatState("ada", "active")).toBe(true);
+    at(12);
+    await runtime.triggers.tick();
+    at(22);
+    await runtime.triggers.tick();
+    expect(existsSync(join(workspace, "ran"))).toBe(true);
+  }, withTriggers);
+});
+
+test("the user's settings reach the character's triggers: a longer cooldown, a shorter check limit, and a trigger switched off by name", async () => {
+  await withCharacter(async ({ runtime, workspace, data, say }) => {
+    await writeFile(join(workspace, "TRIGGERS.toml"), `${TOUCH}\n[slow]\nevery = "10m"\ncheck = "sleep 30"\nwake = false\n\n[lamp]\nevery = "10m"\nreason = "Trim the lamp."\n`);
+    await say("hello");
+    const started = performance.now();
+    await looks(runtime);
+    expect(performance.now() - started).toBeLessThan(15_000);
+    expect(existsSync(join(workspace, "ran"))).toBe(false);
+    expect(diaryOf(data)).toEqual([["shore", "The check for your trigger `slow` failed: it was still running at its time limit and was stopped. It keeps being tried, and you'll be told again only once it has worked and then failed again."]]);
+    expect(runtime.triggers.view("ada").triggers.map((each) => [each.trigger.name, each.off, each.trigger.cooldownMs, each.nextAt])).toEqual([
+      ["touch", true, 3 * 60 * MINUTE, undefined],
+      ["slow", false, 0, T0 + 21 * MINUTE],
+      ["lamp", false, 3 * 60 * MINUTE, T0 + 191 * MINUTE],
+    ]);
+  }, (app) => {
+    withTriggers(app);
+    app.behavior.autonomy.triggers.off = ["touch"];
+    app.behavior.autonomy.triggers.wake_cooldown = ConfigDuration.fromSecs(3 * 3600);
+    app.behavior.autonomy.triggers.check_time_limit = ConfigDuration.fromMillis(300);
+  });
+});
+
+test("a character with no triggers file has none, and a file that can't be read leaves the triggers it had running", async () => {
+  await withCharacter(async ({ runtime, workspace, say }) => {
+    await say("hello");
+    at(1);
+    await runtime.triggers.tick();
+    expect(runtime.triggers.view("ada")).toEqual({ enabled: true, triggers: [], problems: [] });
+
+    await writeFile(join(workspace, "TRIGGERS.toml"), TOUCH);
+    at(2);
+    await runtime.triggers.tick();
+    expect(runtime.triggers.view("ada").triggers.map((each) => each.trigger.name)).toEqual(["touch"]);
+    await rm(join(workspace, "TRIGGERS.toml"));
+    await mkdir(join(workspace, "TRIGGERS.toml"));
+    at(3);
+    await runtime.triggers.tick();
+    expect(runtime.triggers.view("ada").triggers.map((each) => each.trigger.name)).toEqual(["touch"]);
+    await rm(join(workspace, "TRIGGERS.toml"), { recursive: true });
+    at(4);
+    await runtime.triggers.tick();
+    expect(runtime.triggers.view("ada").triggers).toEqual([]);
+  }, withTriggers);
+});
+
+test("a check still running when Shore shuts down is stopped, and nothing is recorded as fired or failed", async () => {
+  let looking: Promise<void> = Promise.resolve();
+  let state = "";
+  const started = performance.now();
+  await withCharacter(async ({ runtime, workspace, data, say }) => {
+    await writeFile(join(workspace, "TRIGGERS.toml"), '[slow]\nevery = "10m"\ncheck = "sleep 30"\nwake = false\n');
+    await say("hello");
+    at(1);
+    await runtime.triggers.tick();
+    at(11);
+    looking = runtime.triggers.tick();
+    await new Promise<void>((resolve) => { setTimeout(resolve, 200); });
+    state = JSON.stringify([diaryOf(data), runtime.triggers.view("ada").triggers.map((each) => [each.fired, each.failing])]);
+  }, withTriggers);
+  await looking;
+  expect(performance.now() - started).toBeLessThan(15_000);
+  expect(state).toBe("[[],[[0,false]]]");
+});
+
+test("the runtime's clocks look at the triggers every thirty seconds until they are stopped", async () => {
+  await withCharacter(async ({ runtime, say }) => {
+    await say("hello");
+    let looked = 0;
+    runtime.triggers.tick = async () => { looked += 1; };
+    jest.useFakeTimers();
+    try {
+      const clocks = startRuntimeClocks(runtime);
+      jest.advanceTimersByTime(29_999);
+      expect(looked).toBe(0);
+      jest.advanceTimersByTime(1);
+      expect(looked).toBe(1);
+      jest.advanceTimersByTime(30_000);
+      expect(looked).toBe(2);
+      clocks.stop();
+      jest.advanceTimersByTime(90_000);
+      expect(looked).toBe(2);
+    } finally {
+      jest.useRealTimers();
+    }
+  });
+});
+
+test("the timer looks at the triggers again and again until it is stopped, and one failed look doesn't end it", async () => {
+  let looked = 0;
+  const service = { tick: async () => { looked += 1; if (looked === 1) throw new Error("the first look failed"); } } as unknown as TriggerService;
+  const timer = startTriggerTimer(service, 5);
+  await new Promise<void>((resolve) => { setTimeout(resolve, 80); });
+  timer.stop();
+  const seen = looked;
+  expect(seen).toBeGreaterThan(2);
+  await new Promise<void>((resolve) => { setTimeout(resolve, 40); });
+  expect(looked).toBe(seen);
+});
+
+test("a check is told the time, and when the user last wrote and how long ago if they ever did", () => {
+  const activity = { messages: 3 };
+  expect(checkFacts(T0 + 90_500, T0, activity)).toEqual({
+    facts: { now: "2026-10-30T12:01:30.500Z", user: { last_message_at: "2026-10-30T12:00:00.000Z", quiet_secs: 90 }, activity },
+    env: { SHORE_NOW: "2026-10-30T12:01:30.500Z", SHORE_USER_LAST_MESSAGE_AT: "2026-10-30T12:00:00.000Z", SHORE_USER_QUIET_SECS: "90" },
+  });
+  expect(checkFacts(T0, undefined, undefined)).toEqual({
+    facts: { now: "2026-10-30T12:00:00.000Z", user: { last_message_at: null, quiet_secs: null }, activity: null },
+    env: { SHORE_NOW: "2026-10-30T12:00:00.000Z", SHORE_USER_LAST_MESSAGE_AT: "", SHORE_USER_QUIET_SECS: "" },
+  });
+  expect(checkFacts(T0, T0, undefined).env.SHORE_USER_QUIET_SECS).toBe("0");
 });

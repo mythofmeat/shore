@@ -116,7 +116,13 @@ export interface RunningHeartbeat {
 
 interface LiveHeartbeat extends RunningHeartbeat {
   readonly news: HeartbeatNews[];
+  readonly carried: string[];
   userTold: boolean;
+}
+
+export interface AutonomyEvents {
+  wakeDone(triggers: readonly string[]): void;
+  dreamDone(): void;
 }
 
 export interface AutonomyExecutor {
@@ -162,6 +168,7 @@ export class CharacterAutonomy {
   #state: RunnerState;
   #heartbeat: LiveHeartbeat | undefined;
   readonly #fired: TriggerFiring[] = [];
+  readonly #events: AutonomyEvents | undefined;
   #dream: RunningDream | undefined;
 
   constructor(opts: {
@@ -173,6 +180,7 @@ export class CharacterAutonomy {
     log: HeartbeatLog;
     restored?: AutonomyStateFile | undefined;
     idle?: RestoredIdle | undefined;
+    events?: AutonomyEvents | undefined;
     now: () => number;
   }) {
     this.#character = opts.character;
@@ -181,6 +189,7 @@ export class CharacterAutonomy {
     this.#statePath = opts.statePath;
     this.#clock = opts.clock;
     this.#log = opts.log;
+    this.#events = opts.events;
     this.#now = opts.now;
 
     const restored = opts.restored;
@@ -262,6 +271,7 @@ export class CharacterAutonomy {
   wakeFor(firing: TriggerFiring): "handed" | "queued" {
     if (this.#heartbeat !== undefined) {
       this.#heartbeat.news.push({ kind: "trigger", firing });
+      this.#heartbeat.carried.push(firing.name);
       return "handed";
     }
     this.#fired.push(firing);
@@ -482,7 +492,7 @@ export class CharacterAutonomy {
         const wakeReason = heartbeat === "run_tick" ? scheduledReason : undefined;
         const byTrigger = fired.map((firing) => `"${firing.name}"`).join(", ");
         this.note("tick_fired", heartbeat === "run_tick" ? "Heartbeat tick fired" : `Woken by trigger ${byTrigger}`, now);
-        const running: LiveHeartbeat = { startedAt: now, reason: wakeReason, news: [], userTold: false };
+        const running: LiveHeartbeat = { startedAt: now, reason: wakeReason, news: [], carried: fired.map((firing) => firing.name), userTold: false };
         this.#heartbeat = running;
         try {
           this.#apply(
@@ -496,6 +506,7 @@ export class CharacterAutonomy {
           );
         } finally {
           this.#heartbeat = undefined;
+          this.#events?.wakeDone(running.carried);
         }
       }
 
@@ -620,6 +631,7 @@ export class CharacterAutonomy {
     if (kind === "finished" || kind === "cut_off") {
       delete dream.retryAt;
       dream.failures = 0;
+      this.#events?.dreamDone();
     } else if (kind === "skipped" || kind === "paused") {
       dream.retryAt = this.#now() + DREAM_SKIP_RETRY_MS;
     } else if (kind === "failed") {
