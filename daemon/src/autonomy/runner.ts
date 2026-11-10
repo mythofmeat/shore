@@ -93,6 +93,7 @@ export interface DreamStatus {
 }
 
 export interface TickHooks {
+  readonly wakeReason: string | undefined;
   scheduleNextWake(hoursFromNow: number, reason: string): number;
 }
 
@@ -168,6 +169,7 @@ export class CharacterAutonomy {
         ...(restored.forcedDormant === true ? { forced_dormant: true } : {}),
         ...(restored.defaultWake === true ? { default_wake: true } : {}),
         ...(restored.wakeAnchorAt === undefined ? {} : { wake_anchor_at: restored.wakeAnchorAt }),
+        ...(restored.wakeReason === undefined ? {} : { wake_reason: restored.wakeReason }),
       });
       this.#clock.boundWake(opts.now());
     }
@@ -327,7 +329,7 @@ export class CharacterAutonomy {
   }
 
   scheduleNextWake(hoursFromNow: number, reason: string, now: number): number {
-    const hours = this.#clock.schedule(now + hoursFromNow * 3_600_000, now) / 3_600_000;
+    const hours = this.#clock.schedule(now + hoursFromNow * 3_600_000, now, reason) / 3_600_000;
     this.note("tool_use", `set_next_wake: ${hours.toFixed(1)}h - ${reason}`, now);
     this.#state.dirty = true;
     return hours;
@@ -426,6 +428,7 @@ export class CharacterAutonomy {
       this.#state.dirty = true;
     }
 
+    const wakeReason = this.#clock.wakeReason;
     const heartbeat = this.#runClock(decision, now);
     try {
       if (heartbeat === "run_tick") {
@@ -434,6 +437,7 @@ export class CharacterAutonomy {
         try {
           this.#apply(
             await this.#executor.runHeartbeatTick(this.#character, {
+              wakeReason,
               scheduleNextWake: (hours, reason) =>
                 this.scheduleNextWake(hours, reason, this.#now()),
             }),
@@ -605,6 +609,7 @@ export class CharacterAutonomy {
       ...(clock.forced_dormant === true ? { forcedDormant: true } : {}),
       ...(clock.default_wake === true ? { defaultWake: true } : {}),
       ...(clock.wake_anchor_at === undefined ? {} : { wakeAnchorAt: clock.wake_anchor_at }),
+      ...(clock.wake_reason === undefined ? {} : { wakeReason: clock.wake_reason }),
       coveredTurnCount: this.#state.coveredTurnCount,
       keepalive: this.#state.keepalive,
       dream: { ...this.#state.dream },

@@ -1,4 +1,6 @@
-[Current time: {{now}}]
+[Current time: {{now}}]{{#if wake_reason}}
+
+[You scheduled this heartbeat with set_next_wake, giving this reason: {{wake_reason}}]{{/if}}
 
 [This is a private heartbeat turn. These are chances to do things on your own time, and of your own accord. You are free to use your tools as you wish. If you have a `HEARTBEAT.md` file in your workspace's root folder, now is the time to check it. If you don't have a `HEARTBEAT.md` file, then you should create one. Use `bash` for these file operations when it is available.
 

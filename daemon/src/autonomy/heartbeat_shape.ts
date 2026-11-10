@@ -1,5 +1,7 @@
 import heartbeatTemplateRaw from "../../prompts/autonomy/heartbeat.md" with { type: "text" };
 
+import { resolvePromptTemplate } from "../config/dirs.ts";
+import type { LoadedConfig } from "../config/loader.ts";
 import { renderTemplate } from "../engine/prompt.ts";
 import type { ContentBlock } from "../engine/types.ts";
 
@@ -152,12 +154,28 @@ export interface HeartbeatPromptVars {
   timeLimit: string;
   wrapUpAfter: string;
   maxRounds: number | undefined;
+  wakeReason?: string | undefined;
+}
+
+const WAKE_REASON_SLOT = "\uE000wake_reason\uE001";
+
+export function heartbeatTemplate(config: LoadedConfig, character: string): string {
+  return resolvePromptTemplate(config.dirs.config, character, "heartbeat.md") ?? DEFAULT_HEARTBEAT_TEMPLATE;
+}
+
+export function wakeToolNotes(config: LoadedConfig, character: string): { defers: boolean; reasonShown: boolean } {
+  return {
+    defers: config.app.behavior.autonomy.heartbeat.defer_on_activity,
+    reasonShown: heartbeatTemplate(config, character).includes("{{wake_reason}}"),
+  };
 }
 
 export function renderHeartbeatPrompt(template: string, vars: HeartbeatPromptVars): string {
+  const wakeReason = vars.wakeReason ?? "";
   return renderTemplate(
     template,
     new Map([
+      ["wake_reason", wakeReason === "" ? "" : WAKE_REASON_SLOT],
       ["now", vars.now],
       ["user", vars.userName],
       ["default_interval", vars.defaultInterval],
@@ -165,5 +183,5 @@ export function renderHeartbeatPrompt(template: string, vars: HeartbeatPromptVar
       ["wrap_up_after", vars.wrapUpAfter],
       ["max_rounds", vars.maxRounds === undefined ? "" : String(vars.maxRounds)],
     ]),
-  );
+  ).replaceAll(WAKE_REASON_SLOT, () => wakeReason);
 }

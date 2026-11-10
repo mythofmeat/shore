@@ -12,7 +12,7 @@ import {
 import { findEffectiveModel } from "../config/effective_catalog.ts";
 import { resolvedReplayPriorThinking, toRequestModel, type ResolvedModel } from "../config/models.ts";
 import { resolveDisplayName, toolGrants, type HeartbeatConfig } from "../config/app.ts";
-import { characterDataDir, resolvePromptTemplate } from "../config/dirs.ts";
+import { characterDataDir } from "../config/dirs.ts";
 import { credentialEntry, type ToolConversation } from "../handler/tool_context.ts";
 import { buildChatShapeRequestFromDisk } from "../handler/context.ts";
 import { agoPhrase, formatWallClock } from "../engine/prompt.ts";
@@ -23,7 +23,7 @@ import { buildRequestWithProviderKeys } from "../llm/request.ts";
 import { applyDeferredEdits } from "../memory/deferred_edits.ts";
 import { characterWorkspace } from "../tools/character_workspace.ts";
 import type { SidecarRequest } from "../llm/types.ts";
-import { DEFAULT_HEARTBEAT_TEMPLATE, renderHeartbeatPrompt } from "./heartbeat_shape.ts";
+import { heartbeatTemplate, renderHeartbeatPrompt } from "./heartbeat_shape.ts";
 import { HEARTBEAT_TIME_LIMIT_MS, HEARTBEAT_WRAP_UP_MS } from "./heartbeat_loop.ts";
 import { HEARTBEAT_OPENER, homeDigest, readHomeThrough, type HomeReader } from "./heartbeat_thread.ts";
 import type { RebuildDeps } from "../cache/rebuild.ts";
@@ -166,6 +166,7 @@ export interface PrepareHeartbeatDeps {
   now?: () => number;
   timeZone?: string;
   cutOff?: HeartbeatCutOff;
+  wakeReason?: string;
   newId?: () => string;
 }
 
@@ -216,16 +217,14 @@ export async function prepareHeartbeatRequest(
   } catch (e) {
     shoreLog.warn(`shore: could not refresh the heartbeat thread's prompt files for ${character}: ${String(e)}`);
   }
-  const template =
-    resolvePromptTemplate(config.dirs.config, character, "heartbeat.md") ??
-    DEFAULT_HEARTBEAT_TEMPLATE;
-  const rendered = renderHeartbeatPrompt(template, {
+  const rendered = renderHeartbeatPrompt(heartbeatTemplate(config, character), {
     now: formatWallClock(nowMs, timeZone),
     userName,
     defaultInterval: fallbackIntervalPhrase(defaultWakeSecs(config.app.behavior.autonomy.heartbeat)),
     timeLimit: fallbackIntervalPhrase(BigInt(HEARTBEAT_TIME_LIMIT_MS / 1000)),
     wrapUpAfter: fallbackIntervalPhrase(BigInt((HEARTBEAT_TIME_LIMIT_MS - HEARTBEAT_WRAP_UP_MS) / 1000)),
     maxRounds: maxToolIterations,
+    wakeReason: deps.wakeReason,
   });
   const wrote = await lastWroteNote(config.dirs.data, character, thread, home, userName, nowMs).catch(() => undefined);
   const cutOff = deps.cutOff === undefined ? undefined : cutOffNote(deps.cutOff, userName, timeZone);
