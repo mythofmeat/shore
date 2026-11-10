@@ -246,7 +246,7 @@ export async function createRuntime(options: RuntimeOptions): Promise<ShoreRunti
           registry,
           ...(callStore === undefined ? {} : { callStore }),
           ...(options.env === undefined ? {} : { env: options.env }),
-        }),
+        }, { view: (character) => triggers.view(character) }),
         startThread: (character, request) => startCharacterThread(
           { registry, dataDir: config.dirs.data, emitEvent: options.emitEvent },
           character,
@@ -484,8 +484,10 @@ export function sharedToolDeps(
   mcp: McpHolder,
   autonomy: Pick<AutonomyService, "activityStats" | "heartbeatsRunning" | "scheduleNextWake">,
   subagent?: SubagentToolDeps,
+  triggers?: Pick<TriggerService, "view">,
 ): ToolContextDeps {
   return {
+    ...(triggers === undefined ? {} : { triggersView: (character: string) => triggers.view(character) }),
     activityStats: (character, days) => {
       const report = autonomy.activityStats(character, localWallClock(Date.now()), days);
       return report === undefined

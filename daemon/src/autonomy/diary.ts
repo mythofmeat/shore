@@ -16,7 +16,7 @@ const SENT = /<sendMessage>[\s\S]*?<\/sendMessage>/g;
 
 const NOTHING_TO_NOTE = "HEARTBEAT_OK";
 
-const SOURCES = ["heartbeat", "trigger", "shore"] as const;
+const SOURCES = ["heartbeat", "trigger", "shore", "note"] as const;
 
 interface StoredNote extends DiaryNote {
   folded?: true;
@@ -85,9 +85,9 @@ export function recentDiary(characterDir: string, now: number): ShownDiary {
   return { notes, omitted: recent.length - notes.length };
 }
 
-export function unseenDiary(characterDir: string, active: readonly Pick<Message, "diary">[], now: number): DiaryNote[] {
+export function unseenDiary(characterDir: string, active: readonly Pick<Message, "diary">[], now: number, thread?: string): DiaryNote[] {
   const seen = new Set(active.flatMap((message) => (message.diary ?? []).map((note) => note.id)));
-  return recentDiary(characterDir, now).notes.filter((note) => !seen.has(note.id));
+  return recentDiary(characterDir, now).notes.filter((note) => !seen.has(note.id) && !(note.source === "note" && note.thread === thread));
 }
 
 export function unfoldedDiary(characterDir: string): DiaryNote[] {

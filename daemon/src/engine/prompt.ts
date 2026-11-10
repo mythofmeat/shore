@@ -357,6 +357,7 @@ export function heartbeatRunningText(running: NonNullable<Message["heartbeat_run
 
 function noteFrom(note: DiaryNote): string {
   if (note.source === "trigger") return `from your trigger "${note.trigger ?? ""}"`;
+  if (note.source === "note") return `your note, written in "${note.thread}"`;
   return note.source === "shore" ? "from Shore" : "your note at the end of a heartbeat";
 }
 

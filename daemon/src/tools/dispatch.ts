@@ -16,6 +16,9 @@ import { handleGenerateImage, type ImageGenConfigView, type ImageGenerator } fro
 import { handleModelHistory, type ModelHistoryQuery } from "./model_history.ts";
 import { handleSavePicture } from "./save_picture.ts";
 import { handleListThreads } from "./list_threads.ts";
+import { handleListTriggers } from "./list_triggers.ts";
+import { addDiaryNote } from "../autonomy/diary.ts";
+import type { TriggersView } from "../autonomy/trigger_loop.ts";
 import { handleStartThread, type StartThreadRequest } from "./start_thread.ts";
 import { handleEditThread, type EditThreadRequest } from "./edit_thread.ts";
 import type { FetchLike } from "./web.ts";
@@ -72,6 +75,8 @@ export interface ToolContext {
   mcpCall?: (name: string, input: unknown, signal?: AbortSignal) => Promise<unknown>;
 
   scheduleNextWake?: (hoursFromNow: number, reason: string) => number | undefined;
+
+  triggers?: () => TriggersView;
 
   startThread?: (request: StartThreadRequest) => Promise<void>;
 
@@ -219,6 +224,16 @@ export async function dispatchTool(
       const used = ctx.scheduleNextWake(hours, reason);
       if (used === undefined) throw new ToolIoError("heartbeats are not running for this character");
       return `Scheduled next moment in ${used.toFixed(1)} hours.`;
+    }
+
+    case "list_triggers":
+      return handleListTriggers(ctx.triggers?.(), ctx.userName ?? "the user");
+
+    case "write_diary": {
+      const text = typeof args["text"] === "string" ? args["text"].trim() : "";
+      if (text === "") throw new InvalidArgs("text must be a non-empty string");
+      addDiaryNote(ctx.characterDataDir, { at: Date.now(), thread: ctx.thread ?? "", source: "note", text });
+      return "Noted in your diary. Your other turns will see it for the next day.";
     }
 
     default: {

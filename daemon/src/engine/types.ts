@@ -45,7 +45,7 @@ export interface DiaryNote {
   id: string;
   at: string;
   thread: string;
-  source: "heartbeat" | "trigger" | "shore";
+  source: "heartbeat" | "trigger" | "shore" | "note";
   trigger?: string;
   text: string;
 }

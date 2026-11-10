@@ -59,6 +59,7 @@ interface Script {
   beatHeld?: { started: PromiseWithResolvers<void>; release: PromiseWithResolvers<void> } | undefined;
   wake?: Record<string, unknown> | undefined;
   replyWake?: Record<string, unknown> | undefined;
+  replyTool?: { name: string; input: Record<string, unknown> } | undefined;
 }
 
 function scriptedProvider(script: Script): SidecarProvider {
@@ -84,6 +85,12 @@ function scriptedProvider(script: Script): SidecarProvider {
           script.held = undefined;
           held.started.resolve();
           await held.release.promise;
+        }
+        const replyTool = script.replyTool;
+        script.replyTool = undefined;
+        if (replyTool !== undefined) {
+          yield* eventsForResponse(respond(request, [{ type: "tool_use", id: "reply-tool", name: replyTool.name, input: replyTool.input }]));
+          return;
         }
         const replyWake = script.replyWake;
         script.replyWake = undefined;
@@ -1256,4 +1263,99 @@ test("a check is told the time, and when the user last wrote and how long ago if
     env: { SHORE_NOW: "2026-10-30T12:00:00.000Z", SHORE_USER_LAST_MESSAGE_AT: "", SHORE_USER_QUIET_SECS: "" },
   });
   expect(checkFacts(T0, T0, undefined).env.SHORE_USER_QUIET_SECS).toBe("0");
+});
+
+function lastToolResult(messages: readonly Message[]): { text: unknown; failed: boolean } | undefined {
+  const block = messages.flatMap((message) => message.content_blocks).findLast((each) => each.type === "tool_result");
+  return block?.type === "tool_result" ? { text: block.content, failed: block.is_error === true } : undefined;
+}
+
+function withTools(...names: string[]): (app: AppConfig) => void {
+  return (app) => {
+    withTriggers(app);
+    app.tools.enabled_tools = [...app.tools.enabled_tools, ...names];
+  };
+}
+
+test("a note the character writes in its diary from a conversation reaches its heartbeats and its other threads, and isn't shown again where it was written", async () => {
+  await withCharacter(async ({ runtime, script, data, say, heartbeat, thread }) => {
+    await runtime.registry.createThread("ada", "garden");
+    await say("hello");
+    script.replyTool = { name: "write_diary", input: { text: "  Water the fern on Friday.  " } };
+    at(5);
+    await say("please remember the fern");
+    expect(lastToolResult(await thread("main"))).toEqual({ text: "Noted in your diary. Your other turns will see it for the next day.", failed: false });
+    expect(unfoldedDiary(join(data, "ada")).map((note) => [note.source, note.thread, note.at, note.text])).toEqual([
+      ["note", "main", new Date(T0 + 5 * MINUTE).toISOString(), "Water the fern on Friday."],
+    ]);
+
+    at(6);
+    await say("thank you");
+    expect(textOf(script.replies.at(-1) as SidecarRequest)).not.toContain("[New in your diary");
+    at(7);
+    await say("the beans are up", "garden");
+    expect(textOf(script.replies.at(-1) as SidecarRequest)).toEndWith(
+      '[New in your diary. Each entry says where it came from.]\n\nyour note, written in "main" · Friday 2026-10-30 · 12:05 PM\nWater the fern on Friday.\n\n[End of your diary.]\nthe beans are up',
+    );
+    script.closing = "HEARTBEAT_OK";
+    at(10);
+    await heartbeat();
+    expect(textOf(script.heartbeats[0] as SidecarRequest)).toContain('your note, written in "main" · Friday 2026-10-30 · 12:05 PM\nWater the fern on Friday.');
+
+    script.replyTool = { name: "write_diary", input: { text: "   " } };
+    at(11);
+    await say("and the lamp");
+    expect(lastToolResult(await thread("main"))).toMatchObject({ failed: true });
+    expect(String(lastToolResult(await thread("main"))?.text)).toContain("text must be a non-empty string");
+    expect(unfoldedDiary(join(data, "ada"))).toHaveLength(1);
+
+    script.replyTool = { name: "write_diary", input: { text: "Lamp oil is low.", urgent: true } };
+    at(12);
+    await say("and the oil");
+    expect(lastToolResult(await thread("main"))).toMatchObject({ failed: true });
+    script.replyTool = { name: "write_diary", input: { text: "" } };
+    at(13);
+    await say("and the wick");
+    expect(lastToolResult(await thread("main"))).toMatchObject({ failed: true });
+    expect(String(lastToolResult(await thread("main"))?.text)).not.toContain("text must be a non-empty string");
+    expect(unfoldedDiary(join(data, "ada"))).toHaveLength(1);
+
+    script.replyTool = { name: "write_diary", input: { text: "!" } };
+    at(14);
+    await say("and the door");
+    expect(lastToolResult(await thread("main"))).toMatchObject({ failed: false });
+    expect(unfoldedDiary(join(data, "ada")).map((note) => note.text)).toEqual(["Water the fern on Friday.", "!"]);
+  }, withTools("write_diary"));
+});
+
+test("the character can list its triggers from a conversation, and is told when the user hasn't turned them on", async () => {
+  const file = '[lamp]\nevery = "1h"\nreason = "Trim the lamp."\n';
+  await withCharacter(async ({ runtime, script, workspace, say, thread }) => {
+    await writeFile(join(workspace, "TRIGGERS.toml"), file);
+    await say("hello");
+    at(1);
+    await runtime.triggers.tick();
+    script.replyTool = { name: "list_triggers", input: {} };
+    await say("what have you set up?");
+    expect(lastToolResult(await thread("main"))).toEqual({
+      text: 'Your triggers, from TRIGGERS.toml in your workspace root.\n\nlamp: every 1h, wakes you, "Trim the lamp.", at most every 1h\n  next Friday 2026-10-30 · 1:01 PM · never fired',
+      failed: false,
+    });
+
+    script.replyTool = { name: "list_triggers", input: { only: "lamp" } };
+    await say("just the lamp?");
+    expect(lastToolResult(await thread("main"))).toMatchObject({ failed: true });
+    expect(String(lastToolResult(await thread("main"))?.text)).not.toContain("Your triggers");
+  }, withTools("list_triggers"));
+
+  await withCharacter(async ({ script, workspace, say, thread }) => {
+    await writeFile(join(workspace, "TRIGGERS.toml"), file);
+    await say("hello");
+    script.replyTool = { name: "list_triggers", input: {} };
+    await say("what have you set up?");
+    expect(lastToolResult(await thread("main"))).toEqual({
+      text: "Your triggers, from TRIGGERS.toml in your workspace root. peggy hasn't turned triggers on, so none of them run.\n\nYou have none yet.",
+      failed: false,
+    });
+  }, (app) => { app.tools.enabled_tools = [...app.tools.enabled_tools, "list_triggers"]; });
 });

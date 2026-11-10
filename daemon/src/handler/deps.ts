@@ -172,7 +172,7 @@ function runtimeToolDeps(a: ToolAssembly, turn?: SubagentTurn): ToolContextDeps 
     ...(runtime.callStore === undefined ? {} : { callStore: runtime.callStore }),
     ...(a.env === undefined ? {} : { env: a.env }),
     ...(turn === undefined ? {} : { turn }),
-  });
+  }, runtime.triggers);
 }
 
 export function chatToolDeps(

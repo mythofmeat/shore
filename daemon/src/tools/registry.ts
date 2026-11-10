@@ -8,6 +8,8 @@ import { toolPatternMatches } from "../config/app.ts";
 import bashDesc from "../../prompts/tools/bash.md" with { type: "text" };
 import activityHeatmapDesc from "../../prompts/tools/activity/activity_heatmap.md" with { type: "text" };
 import setNextWakeDesc from "../../prompts/tools/autonomy/set_next_wake.md" with { type: "text" };
+import listTriggersDesc from "../../prompts/tools/autonomy/list_triggers.md" with { type: "text" };
+import writeDiaryDesc from "../../prompts/tools/autonomy/write_diary.md" with { type: "text" };
 import listThreadsDesc from "../../prompts/tools/threads/list_threads.md" with { type: "text" };
 import startThreadDesc from "../../prompts/tools/threads/start_thread.md" with { type: "text" };
 import editThreadDesc from "../../prompts/tools/threads/edit_thread.md" with { type: "text" };
@@ -267,6 +269,27 @@ export const ALL_TOOLS: readonly ToolDef[] = Object.freeze([
         },
       },
       required: ["hours_from_now", "reason"],
+      additionalProperties: false,
+    },
+  },
+  {
+    name: "list_triggers",
+    description: stripOneTrailingNewline(listTriggersDesc),
+    parameters: {
+      type: "object",
+      properties: {},
+      additionalProperties: false,
+    },
+  },
+  {
+    name: "write_diary",
+    description: stripOneTrailingNewline(writeDiaryDesc),
+    parameters: {
+      type: "object",
+      properties: {
+        text: { type: "string", minLength: 1, description: "The note, in your own words, for a turn of yours that has none of this conversation in front of it." },
+      },
+      required: ["text"],
       additionalProperties: false,
     },
   },
