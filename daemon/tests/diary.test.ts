@@ -208,6 +208,7 @@ test("diary notes on a message count towards the room the conversation takes", (
   const second = "Mara's letters are in the tin.";
 
   expect(estimateTokens(text)).toBeGreaterThan(1);
+  expect(estimateMessageTokens(plain)).toBe(estimateTokens("good morning"));
   expect(estimateMessageTokens({ ...plain, diary: [note("d1", T0, text)] })).toBe(estimateMessageTokens(plain) + estimateTokens(text));
   expect(estimateMessageTokens({ ...plain, diary: [note("d1", T0, text), note("d2", T0, second)] }))
     .toBe(estimateMessageTokens(plain) + estimateTokens(text) + estimateTokens(second));

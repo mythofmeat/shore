@@ -535,7 +535,12 @@ test("a dream ends its instructions with the diary notes no finished dream has b
     expect(await dream()).not.toContain("[Your diary");
 
     const march = leaveNote(characterDir, "d1", Date.now() - 3 * DAY, "The log is read up to March.");
-    expect(await dream()).toEndWith(`kept as this dream's record.\n\n${diaryText([march], DIARY_FOR_DREAM, hostZone())}`);
+    const shown = await dream();
+    expect(shown).toEndWith(`kept as this dream's record.\n\n${diaryText([march], DIARY_FOR_DREAM, hostZone())}`);
+    expect(shown).toContain(
+      "[Your diary since your last dream: the notes you left yourself at the end of your own turns. " +
+      "Fold what matters into your files, because once this dream finishes, later dreams aren't shown these notes.]\n\nfrom a heartbeat · ",
+    );
 
     const april = leaveNote(characterDir, "d2", Date.now() - HOUR, "April is next.");
     const later = await dream();
