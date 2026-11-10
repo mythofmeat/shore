@@ -70,7 +70,8 @@ export function addDiaryNote(characterDir: string, note: NewDiaryNote, newId: ()
     id: newId(), at: new Date(note.at).toISOString(), thread: note.thread, source: note.source,
     ...(note.trigger === undefined ? {} : { trigger: note.trigger }), text,
   };
-  keep(characterDir, [...stored(characterDir), added]);
+  const earlier = stored(characterDir).filter((each) => note.trigger === undefined || each.trigger !== note.trigger);
+  keep(characterDir, [...earlier, added]);
 }
 
 export interface ShownDiary {

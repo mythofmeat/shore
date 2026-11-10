@@ -266,3 +266,21 @@ test("an entry says whether it is the character's own note, from one of its trig
   expect(unfoldedDiary(dir)).toEqual([{ ...note("d4", T0, "A trigger with a name that isn't text."), source: "trigger" }]);
   expect(diaryText(unfoldedDiary(dir), "Your diary.", "UTC")).toContain('from your trigger "" · ');
 });
+
+test("the diary holds only the newest entry from each trigger, so one that fires often can't crowd the rest out", async () => {
+  const dir = await character();
+  const newId = counter();
+  const from = (trigger: string, at: number, text: string): void => { addDiaryNote(dir, { at, thread: "heartbeat", source: "trigger", trigger, text }, newId); };
+  from("tide-table", T0, "The tide is out.");
+  leave(dir, T0 + 1, "The lamp is lit.", newId);
+  from("ferry", T0 + 2, "The ferry is late.");
+  leave(dir, T0 + 3, "The log is read.", newId);
+  from("tide-table", T0 + 4, "The tide is in.");
+
+  expect(unfoldedDiary(dir).map((each) => [each.id, each.trigger ?? "", each.text])).toEqual([
+    ["d2", "", "The lamp is lit."],
+    ["d3", "ferry", "The ferry is late."],
+    ["d4", "", "The log is read."],
+    ["d5", "tide-table", "The tide is in."],
+  ]);
+});

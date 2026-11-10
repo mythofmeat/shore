@@ -7,7 +7,7 @@ const HOUR = 60 * MINUTE;
 const DAY = 24 * HOUR;
 const DEFAULT_COOLDOWN = HOUR;
 const WEEK = [0, 1, 2, 3, 4, 5, 6];
-const SETTINGS = "every, at, when, after, check, wake, reason, cooldown, between";
+const SETTINGS = "every, at, when, after, follows, check, wake, reason, cooldown, between";
 const AT_HELP = '`at` must be a 24-hour local time, with the days it applies to in front if not every day, like "20:00" or "Sat 20:00" or "Mon,Thu 09:30"';
 
 function parse(content: string): ReturnType<typeof parseTriggers> {
@@ -47,14 +47,18 @@ test("a triggers file is read one trigger per table, each with when it fires and
     'after = "8h"',
     'reason = "They are back."',
     'check = "scripts/gone_long.sh"',
-    "wake = true",
+    "",
+    "[show-recap]",
+    'follows = "saturday_show"',
+    'reason = "Write up how it went."',
     "",
   ].join("\n"))).toEqual({
     problems: [],
     triggers: [
       { name: "tide-table", when: { kind: "every", everyMs: 90 * MINUTE }, wakes: false, reason: undefined, check: "scripts/tide.sh", cooldownMs: 0, between: undefined },
       { name: "saturday_show", when: { kind: "at", weekdays: [6], minute: 20 * 60 }, wakes: true, reason: "Write the show.", check: undefined, cooldownMs: 6 * HOUR, between: { startMinute: 8 * 60, endMinute: 23 * 60 } },
-      { name: "welcome_back", when: { kind: "event", event: "user_back", afterMs: 8 * HOUR }, wakes: true, reason: "They are back.", check: "scripts/gone_long.sh", cooldownMs: DEFAULT_COOLDOWN, between: undefined },
+      { name: "welcome_back", when: { kind: "event", event: "user_back", afterMs: 8 * HOUR }, wakes: false, reason: "They are back.", check: "scripts/gone_long.sh", cooldownMs: 0, between: undefined },
+      { name: "show-recap", when: { kind: "follows", trigger: "saturday_show" }, wakes: true, reason: "Write up how it went.", check: undefined, cooldownMs: DEFAULT_COOLDOWN, between: undefined },
     ],
   });
   expect(parse("")).toEqual({ triggers: [], problems: [] });
@@ -72,7 +76,7 @@ test("a file that isn't TOML runs no triggers and says so, and one bad trigger d
   expect(mixed.problems).toEqual([
     "`stray` isn't running: write it as `[stray]` with its settings on the lines under it",
     "`list` isn't running: write it as `[list]` with its settings on the lines under it",
-    "`bad` isn't running: it needs exactly one of `every`, `at` or `when` to say when it fires",
+    "`bad` isn't running: it needs exactly one of `every`, `at`, `when` or `follows` to say when it fires",
   ]);
 });
 
@@ -101,10 +105,12 @@ test("a setting that isn't one is named, with the list of those that are", () =>
 });
 
 test("a trigger says when it fires in exactly one way", () => {
-  const one = "`t` isn't running: it needs exactly one of `every`, `at` or `when` to say when it fires";
+  const one = "`t` isn't running: it needs exactly one of `every`, `at`, `when` or `follows` to say when it fires";
   expect(whenOf("")).toBe(one);
   expect(whenOf('every = "1h"\nat = "20:00"')).toBe(one);
-  expect(whenOf('at = "20:00"\nwhen = "wake_done"')).toBe(one);
+  expect(whenOf('at = "20:00"\nwhen = "dream_done"')).toBe(one);
+  expect(whenOf('every = "1h"\nfollows = "other"')).toBe(one);
+  expect(whenOf('follows = "other"\nafter = "2h"')).toBe("`t` isn't running: `after` only goes with `when`");
   expect(whenOf('every = "1h"\nafter = "2h"')).toBe("`t` isn't running: `after` only goes with `when`");
   expect(whenOf('at = "20:00"\nafter = "2h"')).toBe("`t` isn't running: `after` only goes with `when`");
 });
@@ -133,15 +139,14 @@ test("`at` is a 24-hour time, on every day unless days are named, and the days c
 test("`when` names something that happens, and the two about the user being away need how long", () => {
   expect(whenOf('when = "user_back"\nafter = "8h"')).toEqual({ kind: "event", event: "user_back", afterMs: 8 * HOUR });
   expect(whenOf('when = "user_quiet"\nafter = "36h"')).toEqual({ kind: "event", event: "user_quiet", afterMs: 36 * HOUR });
-  expect(whenOf('when = "wake_done"')).toEqual({ kind: "event", event: "wake_done", afterMs: 0 });
   expect(whenOf('when = "dream_done"')).toEqual({ kind: "event", event: "dream_done", afterMs: 0 });
   expect(whenOf('when = "user_back"')).toBe('`t` isn\'t running: `when = "user_back"` needs `after`, the least time away that counts');
   expect(whenOf('when = "user_quiet"')).toBe('`t` isn\'t running: `when = "user_quiet"` needs `after`, the least time away that counts');
-  expect(whenOf('when = "wake_done"\nafter = "1h"')).toBe('`t` isn\'t running: `when = "wake_done"` takes no `after`');
   expect(whenOf('when = "dream_done"\nafter = "1h"')).toBe('`t` isn\'t running: `when = "dream_done"` takes no `after`');
   expect(whenOf('when = "user_back"\nafter = "later"')).toBe('`t` isn\'t running: `after` must be a length of time in quotes, like "90m" or "6h"');
-  expect(whenOf('when = "full_moon"')).toBe('`t` isn\'t running: `when` must be one of "user_back", "user_quiet", "wake_done", "dream_done"');
-  expect(whenOf("when = 3")).toBe('`t` isn\'t running: `when` must be one of "user_back", "user_quiet", "wake_done", "dream_done"');
+  expect(whenOf('when = "wake_done"')).toBe('`t` isn\'t running: `when` must be one of "user_back", "user_quiet", "dream_done"');
+  expect(whenOf('when = "full_moon"')).toBe('`t` isn\'t running: `when` must be one of "user_back", "user_quiet", "dream_done"');
+  expect(whenOf("when = 3")).toBe('`t` isn\'t running: `when` must be one of "user_back", "user_quiet", "dream_done"');
 });
 
 test("a trigger wakes the character unless told not to, and has a reason of its own or a check to give one", () => {
@@ -211,7 +216,8 @@ test("the time is the character's local one, and a time a clock change skips mov
 test("a schedule's next time counts from when it last ran, and something that happens has none", () => {
   expect(scheduledAt({ kind: "every", everyMs: 90 * MINUTE }, utc(30, 12), "UTC")).toBe(utc(30, 13, 30));
   expect(scheduledAt({ kind: "at", weekdays: [6], minute: 20 * 60 }, utc(30, 12), "UTC")).toBe(utc(31, 20));
-  expect(scheduledAt({ kind: "event", event: "wake_done", afterMs: 0 }, utc(30, 12), "UTC")).toBeUndefined();
+  expect(scheduledAt({ kind: "event", event: "dream_done", afterMs: 0 }, utc(30, 12), "UTC")).toBeUndefined();
+  expect(scheduledAt({ kind: "follows", trigger: "show" }, utc(30, 12), "UTC")).toBeUndefined();
 });
 
 test("a trigger may fire once its cooldown has passed and only inside its hours", () => {
@@ -229,4 +235,60 @@ test("a trigger may fire once its cooldown has passed and only inside its hours"
   expect(allowedNow(daytime, undefined, utc(30, 12), "Australia/Sydney")).toBe(false);
   expect(allowedNow(daytime, undefined, utc(30, 22), "Australia/Sydney")).toBe(true);
   expect(allowedNow({ cooldownMs: HOUR, between: daytime.between }, utc(30, 11, 30), utc(30, 12), "UTC")).toBe(false);
+});
+
+test("a trigger that answers the user coming back never wakes the character, and says so if asked to", () => {
+  const back = 'when = "user_back"\nafter = "8h"\nreason = "r"';
+  const never = '`t` isn\'t running: `when = "user_back"` never wakes you, because you are already answering them, and what it says arrives with their message; leave `wake` out';
+  expect(only(back)).toMatchObject({ wakes: false, cooldownMs: 0 });
+  expect(only(`${back}\ncooldown = "1d"`)).toMatchObject({ wakes: false, cooldownMs: DAY });
+  expect(only(`${back}\nwake = true`)).toBe(never);
+  expect(only(`${back}\nwake = false`)).toBe(never);
+  expect(only('when = "user_quiet"\nafter = "8h"\nreason = "r"')).toMatchObject({ wakes: true, cooldownMs: DEFAULT_COOLDOWN });
+  expect(only('when = "dream_done"\nreason = "r"\nwake = false')).toMatchObject({ wakes: false, cooldownMs: 0 });
+});
+
+test("a trigger can follow another by name, but not itself, one that isn't running, or one that answers the user coming back", () => {
+  const show = '[show]\nat = "Sat 20:00"\nreason = "r"\n';
+  const follows = (leader: string): string => `[recap]\nfollows = ${leader}\nreason = "r"\n`;
+  expect(parse(show + follows('" show "')).triggers.map((trigger) => trigger.when)).toEqual([
+    { kind: "at", weekdays: [6], minute: 1200 },
+    { kind: "follows", trigger: "show" },
+  ]);
+  expect(parse(follows('"show"') + show).problems).toEqual([]);
+  expect(parse('[show]\nwhen = "dream_done"\nreason = "r"\n' + follows('"show"'))).toMatchObject({ triggers: [{ name: "show" }, { name: "recap" }], problems: [] });
+  expect(parse('[show]\nwhen = "user_quiet"\nafter = "8h"\nreason = "r"\n' + follows('"show"'))).toMatchObject({ triggers: [{ name: "show" }, { name: "recap" }], problems: [] });
+  expect(parse(show + follows("7"))).toMatchObject({ problems: ["`recap` isn't running: `follows` must be text in quotes"] });
+  expect(parse(show + follows('"recap"')).problems).toEqual(["`recap` isn't running: it can't follow itself"]);
+  expect(parse(show + follows('"encore"')).problems).toEqual(["`recap` isn't running: it follows `encore`, which isn't a running trigger in this file"]);
+  expect(parse('[show]\nat = "Sat 25:00"\nreason = "r"\n' + follows('"show"'))).toEqual({
+    triggers: [],
+    problems: [`\`show\` isn't running: ${AT_HELP}`, "`recap` isn't running: it follows `show`, which isn't a running trigger in this file"],
+  });
+  expect(parse('[show]\nwhen = "user_back"\nafter = "8h"\nreason = "r"\n' + follows('"show"'))).toMatchObject({
+    triggers: [{ name: "show" }],
+    problems: ["`recap` isn't running: it follows `show`, which fires as you start answering, so nothing can follow it"],
+  });
+});
+
+test("triggers that follow each other in a ring are all refused, and so is anything that followed one of them", () => {
+  const link = (name: string, leader: string): string => `[${name}]\nfollows = "${leader}"\nreason = "r"\n`;
+  const ring = (name: string, leader: string): string => `\`${name}\` isn't running: it follows \`${leader}\`, which ends up following it, so each would set the other off forever`;
+  expect(parse(link("a", "b") + link("b", "a"))).toEqual({ triggers: [], problems: [ring("a", "b"), ring("b", "a")] });
+  expect(parse(link("a", "b") + link("b", "c") + link("c", "a"))).toEqual({ triggers: [], problems: [ring("a", "b"), ring("b", "c"), ring("c", "a")] });
+  expect(parse(link("a", "b") + link("b", "c") + link("c", "d") + link("d", "e") + '[e]\nevery = "1h"\nreason = "r"\n').problems).toEqual([]);
+  expect(parse(link("a", "b") + link("b", "c") + link("c", "d") + link("d", "e")).problems).toEqual([
+    "`d` isn't running: it follows `e`, which isn't a running trigger in this file",
+    "`c` isn't running: it follows `d`, which isn't a running trigger in this file",
+    "`b` isn't running: it follows `c`, which isn't a running trigger in this file",
+    "`a` isn't running: it follows `b`, which isn't a running trigger in this file",
+  ]);
+  expect(parse(link("d", "a") + link("a", "b") + link("b", "a") + '[e]\nevery = "1h"\nreason = "r"\n' + link("f", "e") + link("g", "f"))).toEqual({
+    triggers: [
+      { name: "e", when: { kind: "every", everyMs: HOUR }, wakes: true, reason: "r", check: undefined, cooldownMs: DEFAULT_COOLDOWN, between: undefined },
+      { name: "f", when: { kind: "follows", trigger: "e" }, wakes: true, reason: "r", check: undefined, cooldownMs: DEFAULT_COOLDOWN, between: undefined },
+      { name: "g", when: { kind: "follows", trigger: "f" }, wakes: true, reason: "r", check: undefined, cooldownMs: DEFAULT_COOLDOWN, between: undefined },
+    ],
+    problems: [ring("a", "b"), ring("b", "a"), "`d` isn't running: it follows `a`, which isn't a running trigger in this file"],
+  });
 });

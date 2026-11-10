@@ -7,9 +7,9 @@ export const TRIGGERS_FILE = "TRIGGERS.toml";
 
 const TRIGGER_NAME = /^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$/;
 
-const SETTINGS = ["every", "at", "when", "after", "check", "wake", "reason", "cooldown", "between"];
+const SETTINGS = ["every", "at", "when", "after", "follows", "check", "wake", "reason", "cooldown", "between"];
 
-const EVENTS = ["user_back", "user_quiet", "wake_done", "dream_done"] as const;
+const EVENTS = ["user_back", "user_quiet", "dream_done"] as const;
 
 const WEEKDAYS = ["sun", "mon", "tue", "wed", "thu", "fri", "sat"];
 
@@ -22,7 +22,8 @@ export type TriggerEvent = (typeof EVENTS)[number];
 export type TriggerWhen =
   | { kind: "every"; everyMs: number }
   | { kind: "at"; weekdays: readonly number[]; minute: number }
-  | { kind: "event"; event: TriggerEvent; afterMs: number };
+  | { kind: "event"; event: TriggerEvent; afterMs: number }
+  | { kind: "follows"; trigger: string };
 
 export interface Trigger {
   name: string;
@@ -63,8 +64,8 @@ function atTime(value: unknown): TriggerWhen {
 }
 
 function whenOf(raw: Record<string, unknown>): TriggerWhen {
-  const given = ["every", "at", "when"].filter((setting) => raw[setting] !== undefined);
-  if (given.length !== 1) throw new Error("it needs exactly one of `every`, `at` or `when` to say when it fires");
+  const given = ["every", "at", "when", "follows"].filter((setting) => raw[setting] !== undefined);
+  if (given.length !== 1) throw new Error("it needs exactly one of `every`, `at`, `when` or `follows` to say when it fires");
   if (raw["when"] === undefined && raw["after"] !== undefined) throw new Error("`after` only goes with `when`");
   if (raw["every"] !== undefined) {
     const everyMs = duration(raw["every"], "every");
@@ -72,9 +73,10 @@ function whenOf(raw: Record<string, unknown>): TriggerWhen {
     return { kind: "every", everyMs };
   }
   if (raw["at"] !== undefined) return atTime(raw["at"]);
+  if (raw["follows"] !== undefined) return { kind: "follows", trigger: text(raw["follows"], "follows") };
   const event = EVENTS.find((each) => each === raw["when"]);
   if (event === undefined) throw new Error(`\`when\` must be one of ${EVENTS.map((each) => `"${each}"`).join(", ")}`);
-  const timed = event === "user_back" || event === "user_quiet";
+  const timed = event !== "dream_done";
   if (timed !== (raw["after"] !== undefined)) {
     throw new Error(timed ? `\`when = "${event}"\` needs \`after\`, the least time away that counts` : `\`when = "${event}"\` takes no \`after\``);
   }
@@ -90,7 +92,11 @@ function trigger(name: string, raw: unknown, defaultCooldownMs: number): Trigger
   if (nested !== undefined) throw new Error(`a trigger's name can't have a dot in it, so \`[${name}.${nested}]\` could be \`[${name}-${nested}]\``);
   if (unknown.length > 0) throw new Error(`${unknown.map((setting) => `\`${setting}\``).join(", ")} isn't a trigger setting; the settings are ${SETTINGS.join(", ")}`);
   const when = whenOf(settings);
-  const wakes = settings["wake"] ?? true;
+  const arrives = when.kind === "event" && when.event === "user_back";
+  if (arrives && settings["wake"] !== undefined) {
+    throw new Error('`when = "user_back"` never wakes you, because you are already answering them, and what it says arrives with their message; leave `wake` out');
+  }
+  const wakes = settings["wake"] ?? !arrives;
   if (typeof wakes !== "boolean") throw new Error("`wake` must be true or false, without quotes");
   const reason = settings["reason"] === undefined ? undefined : text(settings["reason"], "reason");
   const check = settings["check"] === undefined ? undefined : text(settings["check"], "check");
@@ -116,7 +122,33 @@ export function parseTriggers(content: string, defaultCooldownMs: number): Parse
       parsed.problems.push(`\`${name}\` isn't running: ${(error as Error).message}`);
     }
   }
-  return parsed;
+  return parsed.triggers.reduce((settled) => withoutLostFollowers(settled), parsed);
+}
+
+function withoutLostFollowers(parsed: ParsedTriggers): ParsedTriggers {
+  const lost = parsed.triggers.flatMap((each) => {
+    const problem = followProblem(each, parsed.triggers);
+    return problem === undefined ? [] : [{ name: each.name, problem }];
+  });
+  return {
+    triggers: parsed.triggers.filter((each) => lost.every((gone) => gone.name !== each.name)),
+    problems: [...parsed.problems, ...lost.map((gone) => `\`${gone.name}\` isn't running: ${gone.problem}`)],
+  };
+}
+
+function followed(follower: Trigger, all: readonly Trigger[]): Trigger | undefined {
+  const when = follower.when;
+  return when.kind === "follows" ? all.find((other) => other.name === when.trigger) : undefined;
+}
+
+function followProblem(follower: Trigger, all: readonly Trigger[]): string | undefined {
+  if (follower.when.kind !== "follows") return undefined;
+  const leader = followed(follower, all);
+  if (leader === follower) return "it can't follow itself";
+  if (leader === undefined) return `it follows \`${follower.when.trigger}\`, which isn't a running trigger in this file`;
+  if (leader.when.kind === "event" && leader.when.event === "user_back") return `it follows \`${leader.name}\`, which fires as you start answering, so nothing can follow it`;
+  const end = all.reduce<Trigger | undefined>((at) => (at === undefined || at === follower ? at : followed(at, all)), leader);
+  return end === follower ? `it follows \`${leader.name}\`, which ends up following it, so each would set the other off forever` : undefined;
 }
 
 export function nextAt(when: Extract<TriggerWhen, { kind: "at" }>, after: number, timeZone: string): number {
