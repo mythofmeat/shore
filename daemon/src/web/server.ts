@@ -7,7 +7,7 @@ import type { Server } from "../swp/server.ts";
 import { isLoopbackAddress } from "../swp/session.ts";
 import { LoginCodes, WebSessions, type WebSession } from "./auth.ts";
 import { WEB_CONTRACT, WEB_PROTOCOL, WEB_SUBPROTOCOL } from "./contract.ts";
-import { validWebLogin, validWebLoginCode, validWebProblem, validWebSession, validWebArchiveExport, validWebArchiveInfo, validWebArchiveList, validWebRequestList } from "./contracts.ts";
+import { validWebLogin, validWebLoginCode, validWebProblem, validWebSession, validWebArchiveExport, validWebArchiveInfo, validWebArchiveList, validWebRequestList, validWebPreferences } from "./contracts.ts";
 import { pageOrigin, readSmallJson, securityHeaders, webBinding, WebBodyTooLarge, WEB_LIMITS } from "./policy.ts";
 import { socketState, WebSocketPeers, type WebSocketState } from "./socket.ts";
 import { browserAssets } from "./assets.generated.ts";
@@ -16,6 +16,7 @@ const servedAssets = new Map(Object.entries(browserAssets).map(([path, asset]) =
 import { ArchiveTransfers, ArchiveTransferError, ARCHIVE_TRANSFER_LIMITS, type ArchiveTransferLimits } from "./archives.ts";
 import { WebRecovery, type WebRecoveryOptions } from "./recovery.ts";
 import { RequestHistory, RequestHistoryError } from "./requests.ts";
+import { PreferenceError, PreferenceStore, PREFERENCE_LIMITS } from "./preferences.ts";
 
 export interface WebServerOptions {
   readonly config: WebConfig;
@@ -28,6 +29,7 @@ export interface WebServerOptions {
   readonly archiveLimits?: Partial<ArchiveTransferLimits>;
   readonly recovery?: WebRecoveryOptions;
   readonly picture?: (file: string) => string | undefined;
+  readonly dataDir?: string;
 }
 
 export interface RunningWebServer {
@@ -67,6 +69,7 @@ export function startWebServer(options: WebServerOptions): RunningWebServer {
   let loginRequests = 0;
   let archives: ArchiveTransfers;
   let recovery: WebRecovery | undefined;
+  const preferences = new PreferenceStore(options.dataDir);
   const server = Bun.serve({
     hostname: binding.hostname,
     port: binding.port,
@@ -184,6 +187,17 @@ export function startWebServer(options: WebServerOptions): RunningWebServer {
           if (error instanceof WebBodyTooLarge) return problem(413, "invalid_request", error.message);
           if (error instanceof ArchiveTransferError) return problem(error.status, error.status === 404 ? "not_found" : error.status === 429 ? "too_many_requests" : error.status === 401 ? "unauthorized" : "invalid_request", error.message);
           return problem(400, "invalid_request", "Archive transfer could not be completed");
+        }
+      }
+      if (url.pathname === "/api/preferences/list" && request.method === "POST") return Response.json(preferences.list(), { headers: securityHeaders() });
+      if (url.pathname === "/api/preferences" && request.method === "POST") {
+        let body: unknown;
+        try { body = await readSmallJson(request, PREFERENCE_LIMITS.bodyBytes); } catch (error) {
+          return error instanceof WebBodyTooLarge ? problem(413, "invalid_request", error.message) : problem(400, "invalid_request", "Invalid settings request");
+        }
+        if (!validWebPreferences(body)) return problem(400, "invalid_request", "Supply the settings to keep");
+        try { return Response.json(preferences.save(body), { headers: securityHeaders() }); } catch (error) {
+          return error instanceof PreferenceError ? problem(400, "invalid_request", error.message) : problem(503, "unavailable", "The daemon couldn’t save these settings");
         }
       }
       if (url.pathname === "/api/logout" && request.method === "POST") {

@@ -146,7 +146,7 @@ export function UsagePage({ state }: { state: ChromeSnapshot }) {
       </details>
       <Loading error={report.error} ready={report.data !== undefined}>{report.data === undefined ? null : <UsageReport result={report.data} />}</Loading>
     </SettingsSection>
-    <SettingsSection title="In the chat" description="Saved in this browser.">
+    <SettingsSection title="In the chat" description="Kept by the daemon, so every browser and device shows the same.">
       <div className="rows">
         <SettingRow label={VIEW_CONTROLS.usage.label} description="Show a budget chip in the top bar.">
           <select className="select" aria-label={VIEW_CONTROLS.usage.label} value={values.usage} onChange={(event) => display.change("usage", event.target.value)}>

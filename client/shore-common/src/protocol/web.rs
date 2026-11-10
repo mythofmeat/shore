@@ -152,6 +152,13 @@ pub struct WebRequestList {
     pub max_result_bytes: u32,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema, ts_rs::TS)]
+#[serde(deny_unknown_fields)]
+#[ts(export, export_to = "../../../daemon/src/protocol/")]
+pub struct WebPreferences {
+    pub values: std::collections::BTreeMap<String, String>,
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -169,6 +176,7 @@ mod tests {
             "archive_list": SchemaSettings::draft2020_12().for_serialize().into_generator().into_root_schema_for::<WebArchiveList>(),
             "request_info": SchemaSettings::draft2020_12().for_serialize().into_generator().into_root_schema_for::<WebRequestInfo>(),
             "request_list": SchemaSettings::draft2020_12().for_serialize().into_generator().into_root_schema_for::<WebRequestList>(),
+            "preferences": SchemaSettings::draft2020_12().for_deserialize().into_generator().into_root_schema_for::<WebPreferences>(),
         });
         let target = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
             .join("../../daemon/src/web/schemas.generated.json");

@@ -48,3 +48,34 @@ test("a sign-in code from Settings › Devices signs in another browser once, an
   await expect(late.getByLabel("Access token")).toBeVisible();
   await check();
 });
+
+test("settings chosen at one address are there at another address of the same daemon, and a change made later arrives when the page is next focused", async ({ page, browser, baseURL }) => {
+  const check = await watchPage(page);
+  await signIn(page);
+  await page.goto(`${new URL(page.url()).pathname}#settings/appearance`);
+  await page.getByRole("radio", { name: /Sodium fog/ }).click();
+  await expect(page.locator("html")).toHaveAttribute("data-theme", "fog");
+  await page.goto(`${new URL(page.url()).pathname}#settings/keyboard`);
+  await page.getByRole("switch", { name: "Vim mode", exact: true }).click();
+  await expect(page.getByRole("switch", { name: "Vim mode", exact: true })).toHaveAttribute("aria-checked", "true");
+
+  const elsewhere = await (await browser.newContext()).newPage();
+  const elsewhereCheck = await watchPage(elsewhere);
+  const other = (baseURL ?? "").replace("127.0.0.1", "localhost");
+  expect(other).not.toBe(baseURL);
+  await signIn(elsewhere, `${other}/workspace`);
+  await expect(elsewhere.locator("html")).toHaveAttribute("data-theme", "fog");
+  await elsewhere.goto(`${other}${new URL(elsewhere.url()).pathname}#settings/keyboard`);
+  await expect(elsewhere.getByRole("switch", { name: "Vim mode", exact: true })).toHaveAttribute("aria-checked", "true");
+  await elsewhere.reload();
+  await expect(elsewhere.locator("html")).toHaveAttribute("data-theme", "fog");
+
+  await elsewhere.getByRole("switch", { name: "Vim mode", exact: true }).click();
+  await expect(elsewhere.getByRole("switch", { name: "Vim mode", exact: true })).toHaveAttribute("aria-checked", "false");
+  await expect.poll(async () => {
+    await page.evaluate("window.dispatchEvent(new Event('focus'))");
+    return await page.getByRole("switch", { name: "Vim mode", exact: true }).getAttribute("aria-checked");
+  }).toBe("false");
+  await elsewhereCheck();
+  await check();
+});
