@@ -349,6 +349,12 @@ function formatTimeMarker(
   return `[${relativeGapPhrase(gapSecs)} · ${timeStr}${elsewhere === undefined ? "" : ` · ${elsewhere}`}]`;
 }
 
+export function heartbeatRunningText(running: NonNullable<Message["heartbeat_running"]>, timeZone: string): string {
+  const why = running.reason === undefined ? "" : ` You scheduled it with set_next_wake, giving this reason: ${running.reason}`;
+  return `[A heartbeat of yours has been running since ${formatWallClock(Date.parse(running.started_at), timeZone)}. ` +
+    `It can't see this conversation. It is only told that a message arrived.${why}]`;
+}
+
 export function diaryText(notes: readonly DiaryNote[], heading: string, timeZone: string, omitted = 0): string {
   const left = omitted === 0 ? [] : [`(Earlier entries not shown: ${String(omitted)}.)`];
   const shown = notes.map((note) => `your note at the end of a heartbeat · ${formatWallClock(Date.parse(note.at), timeZone)}\n${note.text}`);
@@ -409,7 +415,7 @@ function trimMessages(
   timeZone: string,
   imageTier: ImageTier,
 ): PromptMessage[] {
-  const selected: { pm: PromptMessage; ts: string; heartbeat: boolean; elsewhere: Message["last_elsewhere"]; diary: Message["diary"] }[] = [];
+  const selected: { pm: PromptMessage; ts: string; heartbeat: boolean; elsewhere: Message["last_elsewhere"]; diary: Message["diary"]; running: Message["heartbeat_running"] }[] = [];
   let usedTokens = 0;
 
   for (let i = messages.length - 1; i >= 0; i--) {
@@ -430,6 +436,7 @@ function trimMessages(
       heartbeat: msg.role === "assistant" && msg.origin === "autonomous",
       elsewhere: msg.last_elsewhere,
       diary: msg.diary,
+      running: msg.heartbeat_running,
     });
   }
   selected.reverse();
@@ -454,7 +461,7 @@ function trimMessages(
     return pm;
   };
 
-  for (const { pm, ts, heartbeat, elsewhere, diary } of selected) {
+  for (const { pm, ts, heartbeat, elsewhere, diary, running } of selected) {
     const currentMs = parseRfc3339(ts);
 
     if (heartbeat) result.push(noticed(syntheticUserTurn(heartbeatMarker(currentMs, mode, timeZone))));
@@ -489,6 +496,12 @@ function trimMessages(
         lastMarkerMs = currentMs;
       }
       firstUserPending = false;
+    }
+
+    if (running !== undefined) {
+      const text = heartbeatRunningText(running, timeZone);
+      pm.content = `${text}\n\n${pm.content}`;
+      pm.content_blocks = [{ type: "text", text }, ...pm.content_blocks];
     }
 
     if (diary !== undefined) {

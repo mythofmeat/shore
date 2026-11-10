@@ -5,7 +5,7 @@ import { deriveContentFromBlocks } from "../engine/message_store.ts";
 import { shoreLog } from "../log.ts";
 
 import { addDiaryNote, closingNote } from "./diary.ts";
-import { buildAutonomousMessage, sendMessageIn } from "./heartbeat_shape.ts";
+import { buildAutonomousMessage, sendMessageIn, userWroteNote } from "./heartbeat_shape.ts";
 import {
   HEARTBEAT_TIME_LIMIT_MS,
   runHeartbeatToolLoop,
@@ -18,7 +18,9 @@ import { recordHomeThrough, type HomeReader } from "./heartbeat_thread.ts";
 import { deleteCharacterState, readCharacterState, writeCharacterState } from "../storage/store.ts";
 import type { HeartbeatEventKind } from "./heartbeat_log.ts";
 import type { AutonomyActionResult } from "./runner.ts";
+import { resolveDisplayName } from "../config/app.ts";
 import type { LoadedConfig } from "../config/loader.ts";
+import { hostZone } from "../ledger/zoned.ts";
 import type { Message } from "../engine/types.ts";
 import { newMessageVersion } from "../engine/versions.ts";
 import { nearMessageBudget } from "../engine/prompt.ts";
@@ -60,6 +62,7 @@ export interface HeartbeatTickDeps
   generate: HeartbeatLoopDeps["generate"];
   dispatch: (...args: [...Parameters<HeartbeatLoopDeps["dispatch"]>, ToolConversation]) => ReturnType<HeartbeatLoopDeps["dispatch"]>;
   threads: HeartbeatThreads;
+  userWrote?: () => number | undefined;
   emit?: (character: string, revision: number, msg: Message, thread: string) => void;
   threadsChanged?: (character: string, thread: string) => void;
   notify?: (title: string, body: string, picture?: NotificationPicture) => void;
@@ -303,6 +306,10 @@ export async function runHeartbeatTick(
       wrapUpGrace: config.app.behavior.autonomy.heartbeat.wrap_up_grace_rounds,
       maxToolIterations: prepared.maxToolIterations,
       note: (detail) => note("tool_use", detail),
+      news: () => {
+        const at = deps.userWrote?.();
+        return at === undefined ? undefined : userWroteNote(at, resolveDisplayName(config.app.defaults, deps.env), deps.timeZone ?? hostZone());
+      },
       checkPictures: async (text) => await pictureProblems([text], workspace, signal),
     });
     if (loop.failedRound !== undefined) await engine.recoverInterruptedToolLoop();

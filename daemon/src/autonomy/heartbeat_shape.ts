@@ -2,7 +2,7 @@ import heartbeatTemplateRaw from "../../prompts/autonomy/heartbeat.md" with { ty
 
 import { resolvePromptTemplate } from "../config/dirs.ts";
 import type { LoadedConfig } from "../config/loader.ts";
-import { renderTemplate } from "../engine/prompt.ts";
+import { formatWallClock, renderTemplate } from "../engine/prompt.ts";
 import type { ContentBlock } from "../engine/types.ts";
 
 export type WireRole = "user" | "assistant" | "system";
@@ -84,6 +84,11 @@ export function wrapUpNudgeText(msLeft: number, rounds: number, offersWake: bool
     (offersWake ? "call set_next_wake if you haven't yet, then " : "") +
     "finish with your note to yourself, saying where you stopped so future-you can pick it up. " +
     "Only what you put in <sendMessage> tags is sent.]";
+}
+
+export function userWroteNote(at: number, userName: string, timeZone: string): string {
+  return `[${userName} has just written to you, at ${formatWallClock(at, timeZone)}, while this heartbeat is running. ` +
+    "Another turn of you is answering them, and it knows this heartbeat is running.]";
 }
 
 export function appendWrapUpNudge(messages: WireMessageLike[], text: string): void {

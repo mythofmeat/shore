@@ -15,6 +15,7 @@ import {
   type DreamRunnerConfig,
   type DreamStatus,
   type RestoredIdle,
+  type RunningHeartbeat,
 } from "./runner.ts";
 import { loadState, STATE_FILENAME, type PersistedKeepalive } from "./state_file.ts";
 import type { KeepaliveSnapshot } from "../cache/schedule.ts";
@@ -221,6 +222,10 @@ export class AutonomyService {
       const startedAt = runner.heartbeatStartedAt;
       return startedAt === undefined ? [] : [{ character, startedAt }];
     });
+  }
+
+  runningHeartbeat(character: string): RunningHeartbeat | undefined {
+    return this.#entries.get(character)?.runner.runningHeartbeat;
   }
 
   async #tickDue(): Promise<void> {

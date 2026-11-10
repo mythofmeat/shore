@@ -65,4 +65,5 @@ export interface Message {
   version?: string;
   last_elsewhere?: { thread: string; at: string };
   diary?: DiaryNote[];
+  heartbeat_running?: { started_at: string; reason?: string | undefined };
 }

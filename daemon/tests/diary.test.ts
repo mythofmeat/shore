@@ -3,7 +3,7 @@ import { mkdtemp } from "node:fs/promises";
 import { join } from "node:path";
 
 import { addDiaryNote, closingNote, foldDiary, recentDiary, unfoldedDiary, unseenDiary } from "../src/autonomy/diary.ts";
-import { assemblePrompt, DIARY_FOR_CHAT, diaryText, estimateMessageTokens } from "../src/engine/prompt.ts";
+import { assemblePrompt, DIARY_FOR_CHAT, diaryText, estimateMessageTokens, heartbeatRunningText } from "../src/engine/prompt.ts";
 import { estimateTokens } from "../src/engine/tokens.ts";
 import type { DiaryNote, Message } from "../src/engine/types.ts";
 import { writeCharacterState } from "../src/storage/store.ts";
@@ -212,4 +212,30 @@ test("diary notes on a message count towards the room the conversation takes", (
   expect(estimateMessageTokens({ ...plain, diary: [note("d1", T0, text)] })).toBe(estimateMessageTokens(plain) + estimateTokens(text));
   expect(estimateMessageTokens({ ...plain, diary: [note("d1", T0, text), note("d2", T0, second)] }))
     .toBe(estimateMessageTokens(plain) + estimateTokens(text) + estimateTokens(second));
+});
+
+test("a message that arrived while a heartbeat ran says so between the diary notes and what the user wrote", () => {
+  const left = [note("d1", T0, "The lamp is lit.")];
+  const heartbeat = { started_at: new Date(T0 + HOUR).toISOString(), reason: "check the tide table" };
+  const diary = diaryText(left, DIARY_FOR_CHAT, "UTC");
+  const running = heartbeatRunningText(heartbeat, "UTC");
+  const prompt = assemblePrompt({
+    character_name: "ada", display_name: "eve", has_prior_context: false, user_timestamp_mode: "never",
+    messages: [
+      { ...said("m1", "user", "good morning", T0 + HOUR), heartbeat_running: heartbeat },
+      said("m2", "assistant", "morning!", T0 + HOUR),
+      { ...said("m3", "user", "is the lamp lit?", T0 + HOUR, left), heartbeat_running: heartbeat },
+    ],
+  }, "UTC");
+
+  expect(prompt.messages.map((message) => message.content)).toEqual([
+    `${running}\n\ngood morning`,
+    "morning!",
+    `${diary}\n\n${running}\n\nis the lamp lit?`,
+  ]);
+  expect(prompt.messages.map((message) => message.content_blocks)).toEqual([
+    [{ type: "text", text: running }, { type: "text", text: "good morning" }],
+    [{ type: "text", text: "morning!" }],
+    [{ type: "text", text: diary }, { type: "text", text: running }, { type: "text", text: "is the lamp lit?" }],
+  ]);
 });

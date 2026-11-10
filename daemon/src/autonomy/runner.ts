@@ -95,6 +95,17 @@ export interface DreamStatus {
 export interface TickHooks {
   readonly wakeReason: string | undefined;
   scheduleNextWake(hoursFromNow: number, reason: string): number;
+  userWrote(): number | undefined;
+}
+
+export interface RunningHeartbeat {
+  readonly startedAt: number;
+  readonly reason: string | undefined;
+}
+
+interface LiveHeartbeat extends RunningHeartbeat {
+  userWroteAt: number | undefined;
+  told: boolean;
 }
 
 export interface AutonomyExecutor {
@@ -138,7 +149,7 @@ export class CharacterAutonomy {
   readonly #activity = new ActivityTracker();
   readonly #now: () => number;
   #state: RunnerState;
-  #heartbeatStartedAt: number | undefined;
+  #heartbeat: LiveHeartbeat | undefined;
   #dream: RunningDream | undefined;
 
   constructor(opts: {
@@ -194,7 +205,11 @@ export class CharacterAutonomy {
   }
 
   get heartbeatStartedAt(): number | undefined {
-    return this.#heartbeatStartedAt;
+    return this.#heartbeat?.startedAt;
+  }
+
+  get runningHeartbeat(): RunningHeartbeat | undefined {
+    return this.#heartbeat;
   }
 
   get heartbeatMayTick(): boolean {
@@ -206,6 +221,7 @@ export class CharacterAutonomy {
       this.note("wake", "User returned — idle counter reset", now);
     }
     this.#clock.onUserMessage(now);
+    if (this.#heartbeat !== undefined) this.#heartbeat.userWroteAt ??= now;
     this.#state.activeTurnCount = turnCount;
     this.#state.lastActivityAt = now;
     this.#state.compactionTriggered = false;
@@ -219,6 +235,7 @@ export class CharacterAutonomy {
       this.note("wake", "User active in another thread — idle counter reset", now);
     }
     this.#clock.onUserMessage(now);
+    if (this.#heartbeat !== undefined) this.#heartbeat.userWroteAt ??= now;
     this.#state.dream.turnsSince += 1;
     this.#state.dirty = true;
   }
@@ -433,17 +450,23 @@ export class CharacterAutonomy {
     try {
       if (heartbeat === "run_tick") {
         this.note("tick_fired", "Heartbeat tick fired", now);
-        this.#heartbeatStartedAt = now;
+        const running: LiveHeartbeat = { startedAt: now, reason: wakeReason, userWroteAt: undefined, told: false };
+        this.#heartbeat = running;
         try {
           this.#apply(
             await this.#executor.runHeartbeatTick(this.#character, {
               wakeReason,
               scheduleNextWake: (hours, reason) =>
                 this.scheduleNextWake(hours, reason, this.#now()),
+              userWrote: () => {
+                if (running.told || running.userWroteAt === undefined) return undefined;
+                running.told = true;
+                return running.userWroteAt;
+              },
             }),
           );
         } finally {
-          this.#heartbeatStartedAt = undefined;
+          this.#heartbeat = undefined;
         }
       }
 
