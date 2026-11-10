@@ -39,21 +39,19 @@ export interface ParsedTriggers {
   problems: string[];
 }
 
-class Problem extends Error {}
-
 function duration(value: unknown, setting: string): number {
   const parsed = ConfigDuration.deserialize(value);
-  if ("err" in parsed) throw new Problem(`\`${setting}\` must be a length of time in quotes, like "90m" or "6h"`);
+  if ("err" in parsed) throw new Error(`\`${setting}\` must be a length of time in quotes, like "90m" or "6h"`);
   return parsed.ok.asMillis();
 }
 
 function text(value: unknown, setting: string): string {
-  if (typeof value !== "string" || value.trim() === "") throw new Problem(`\`${setting}\` must be text in quotes`);
+  if (typeof value !== "string" || value.trim() === "") throw new Error(`\`${setting}\` must be text in quotes`);
   return value.trim();
 }
 
 function atTime(value: unknown): TriggerWhen {
-  const wrong = new Problem('`at` must be a 24-hour local time, with the days it applies to in front if not every day, like "20:00" or "Sat 20:00" or "Mon,Thu 09:30"');
+  const wrong = new Error('`at` must be a 24-hour local time, with the days it applies to in front if not every day, like "20:00" or "Sat 20:00" or "Mon,Thu 09:30"');
   const match = typeof value === "string" ? AT.exec(value.trim()) : null;
   if (match === null) throw wrong;
   const [, days, hour, minute] = match;
@@ -66,39 +64,39 @@ function atTime(value: unknown): TriggerWhen {
 
 function whenOf(raw: Record<string, unknown>): TriggerWhen {
   const given = ["every", "at", "when"].filter((setting) => raw[setting] !== undefined);
-  if (given.length !== 1) throw new Problem("it needs exactly one of `every`, `at` or `when` to say when it fires");
-  if (raw["when"] === undefined && raw["after"] !== undefined) throw new Problem("`after` only goes with `when`");
+  if (given.length !== 1) throw new Error("it needs exactly one of `every`, `at` or `when` to say when it fires");
+  if (raw["when"] === undefined && raw["after"] !== undefined) throw new Error("`after` only goes with `when`");
   if (raw["every"] !== undefined) {
     const everyMs = duration(raw["every"], "every");
-    if (everyMs < MINUTE_MS) throw new Problem("`every` can't be shorter than a minute");
+    if (everyMs < MINUTE_MS) throw new Error("`every` can't be shorter than a minute");
     return { kind: "every", everyMs };
   }
   if (raw["at"] !== undefined) return atTime(raw["at"]);
   const event = EVENTS.find((each) => each === raw["when"]);
-  if (event === undefined) throw new Problem(`\`when\` must be one of ${EVENTS.map((each) => `"${each}"`).join(", ")}`);
+  if (event === undefined) throw new Error(`\`when\` must be one of ${EVENTS.map((each) => `"${each}"`).join(", ")}`);
   const timed = event === "user_back" || event === "user_quiet";
   if (timed !== (raw["after"] !== undefined)) {
-    throw new Problem(timed ? `\`when = "${event}"\` needs \`after\`, the least time away that counts` : `\`when = "${event}"\` takes no \`after\``);
+    throw new Error(timed ? `\`when = "${event}"\` needs \`after\`, the least time away that counts` : `\`when = "${event}"\` takes no \`after\``);
   }
   return { kind: "event", event, afterMs: timed ? duration(raw["after"], "after") : 0 };
 }
 
 function trigger(name: string, raw: unknown, defaultCooldownMs: number): Trigger {
-  if (typeof raw !== "object" || raw === null || Array.isArray(raw)) throw new Problem(`write it as \`[${name}]\` with its settings on the lines under it`);
-  if (!TRIGGER_NAME.test(name)) throw new Problem("a trigger's name is letters, digits, dashes and underscores, starting with a letter or digit, at most 64 characters");
+  if (typeof raw !== "object" || raw === null || Array.isArray(raw)) throw new Error(`write it as \`[${name}]\` with its settings on the lines under it`);
+  if (!TRIGGER_NAME.test(name)) throw new Error("a trigger's name is letters, digits, dashes and underscores, starting with a letter or digit, at most 64 characters");
   const settings = raw as Record<string, unknown>;
   const unknown = Object.keys(settings).filter((setting) => !SETTINGS.includes(setting));
   const nested = unknown.find((setting) => typeof settings[setting] === "object" && !Array.isArray(settings[setting]));
-  if (nested !== undefined) throw new Problem(`a trigger's name can't have a dot in it, so \`[${name}.${nested}]\` could be \`[${name}-${nested}]\``);
-  if (unknown.length > 0) throw new Problem(`${unknown.map((setting) => `\`${setting}\``).join(", ")} isn't a trigger setting; the settings are ${SETTINGS.join(", ")}`);
+  if (nested !== undefined) throw new Error(`a trigger's name can't have a dot in it, so \`[${name}.${nested}]\` could be \`[${name}-${nested}]\``);
+  if (unknown.length > 0) throw new Error(`${unknown.map((setting) => `\`${setting}\``).join(", ")} isn't a trigger setting; the settings are ${SETTINGS.join(", ")}`);
   const when = whenOf(settings);
   const wakes = settings["wake"] ?? true;
-  if (typeof wakes !== "boolean") throw new Problem("`wake` must be true or false, without quotes");
+  if (typeof wakes !== "boolean") throw new Error("`wake` must be true or false, without quotes");
   const reason = settings["reason"] === undefined ? undefined : text(settings["reason"], "reason");
   const check = settings["check"] === undefined ? undefined : text(settings["check"], "check");
-  if (reason === undefined && check === undefined) throw new Problem("it needs a `reason` to show you when it fires, or a `check` whose output is the reason");
+  if (reason === undefined && check === undefined) throw new Error("it needs a `reason` to show you when it fires, or a `check` whose output is the reason");
   const between = settings["between"] === undefined ? undefined : parseDayWindow(typeof settings["between"] === "string" ? settings["between"] : "");
-  if (settings["between"] !== undefined && between === undefined) throw new Problem('`between` must be a local time range like "08:00-23:00"');
+  if (settings["between"] !== undefined && between === undefined) throw new Error('`between` must be a local time range like "08:00-23:00"');
   const cooldownMs = settings["cooldown"] === undefined ? (wakes ? defaultCooldownMs : 0) : duration(settings["cooldown"], "cooldown");
   return { name, when, wakes, reason, check, cooldownMs, between };
 }
@@ -108,15 +106,14 @@ export function parseTriggers(content: string, defaultCooldownMs: number): Parse
   try {
     table = Bun.TOML.parse(content) as Record<string, unknown>;
   } catch (error) {
-    return { triggers: [], problems: [`${TRIGGERS_FILE} can't be read as TOML, so none of its triggers are running: ${error instanceof Error ? error.message : String(error)}`] };
+    return { triggers: [], problems: [`${TRIGGERS_FILE} can't be read as TOML, so none of its triggers are running: ${(error as Error).message}`] };
   }
   const parsed: ParsedTriggers = { triggers: [], problems: [] };
   for (const [name, raw] of Object.entries(table)) {
     try {
       parsed.triggers.push(trigger(name, raw, defaultCooldownMs));
     } catch (error) {
-      if (!(error instanceof Problem)) throw error;
-      parsed.problems.push(`\`${name}\` isn't running: ${error.message}`);
+      parsed.problems.push(`\`${name}\` isn't running: ${(error as Error).message}`);
     }
   }
   return parsed;
@@ -125,11 +122,10 @@ export function parseTriggers(content: string, defaultCooldownMs: number): Parse
 export function nextAt(when: Extract<TriggerWhen, { kind: "at" }>, after: number, timeZone: string): number {
   const local = naiveInZone(after, timeZone);
   const midnight = local - (local % DAY_MS);
-  const today = new Date(midnight).getUTCDay();
-  const coming = when.weekdays.flatMap((weekday) => {
-    const ahead = (weekday - today + 7) % 7;
-    return [ahead, ahead + 7].map((days) => resolveInZone(asNaive(midnight + days * DAY_MS + when.minute * MINUTE_MS), timeZone));
-  });
+  const coming = [...WEEKDAYS.keys(), WEEKDAYS.length]
+    .map((daysAhead) => midnight + daysAhead * DAY_MS)
+    .filter((day) => when.weekdays.includes(new Date(day).getUTCDay()))
+    .map((day) => resolveInZone(asNaive(day + when.minute * MINUTE_MS), timeZone));
   return Math.min(...coming.filter((instant) => instant > after));
 }
 

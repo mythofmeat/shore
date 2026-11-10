@@ -195,6 +195,9 @@ test("named days are waited for, and the same day next week once this week's tim
   expect(nextAt({ kind: "at", weekdays: [1, 4], minute: 9 * 60 + 30 }, Date.UTC(2026, 10, 2, 9, 30), "UTC")).toBe(Date.UTC(2026, 10, 5, 9, 30));
   expect(nextAt({ kind: "at", weekdays: [0], minute: 0 }, utc(30, 12), "UTC")).toBe(Date.UTC(2026, 10, 1, 0));
   expect(nextAt({ kind: "at", weekdays: [5], minute: 6 * 60 }, utc(30, 12), "UTC")).toBe(Date.UTC(2026, 10, 6, 6));
+  for (const [weekday, day] of [[6, 31], [0, 32], [1, 33], [2, 34], [3, 35], [4, 36], [5, 37]] as const) {
+    expect(nextAt({ kind: "at", weekdays: [weekday], minute: 13 * 60 }, utc(30, 13), "UTC"), `weekday ${String(weekday)}`).toBe(utc(day, 13));
+  }
 });
 
 test("the time is the character's local one, and a time a clock change skips moves to the hour after", () => {

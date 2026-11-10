@@ -42,6 +42,17 @@ async function changedPromptFiles(
   return changed;
 }
 
+export const BASH_ARGS: readonly string[] = ["--noprofile", "--norc", "-o", "pipefail", "-c"];
+
+export function bashEnvironment(character: string, root: string, workdir: string): Record<string, string | undefined> {
+  const [name, email] = characterGitIdentity(character);
+  return {
+    BASH_ENV: undefined, PWD: workdir, SHORE_WORKSPACE_DIR: root,
+    GIT_AUTHOR_NAME: name, GIT_AUTHOR_EMAIL: email,
+    GIT_COMMITTER_NAME: name, GIT_COMMITTER_EMAIL: email,
+  };
+}
+
 export async function handleBash(
   input: ToolInput,
   target: string | CharacterWorkspace,
@@ -72,16 +83,11 @@ export async function handleBash(
   await workspace.call("mkdir", { path: root });
   const before = await promptContents(workspace, root);
   let changed: string[] = [];
-  const [name, email] = characterGitIdentity(character);
   const execute = async () => {
     try {
-      return await workspace.run("bash", ["--noprofile", "--norc", "-o", "pipefail", "-c", command], {
+      return await workspace.run("bash", [...BASH_ARGS, command], {
         cwd: workdir,
-        env: {
-          BASH_ENV: undefined, PWD: workdir, SHORE_WORKSPACE_DIR: root,
-          GIT_AUTHOR_NAME: name, GIT_AUTHOR_EMAIL: email,
-          GIT_COMMITTER_NAME: name, GIT_COMMITTER_EMAIL: email,
-        },
+        env: bashEnvironment(character, root, workdir),
         signal,
         stopped,
       });
