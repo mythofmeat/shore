@@ -13,7 +13,8 @@ import type { AnthropicRequestRecord } from "../src/testing/mock_anthropic.ts";
 import { startMockAnthropic } from "../src/testing/mock_anthropic.ts";
 import { required } from "../src/util/required.ts";
 import type { ContentBlock } from "../src/engine/types.ts";
-import type { WireMessage } from "../src/llm/types.ts";
+import { toolResultText, type WireMessage } from "../src/llm/types.ts";
+import { toolPhase } from "../src/tools/execute.ts";
 import { noisePng } from "./support/test_images.ts";
 
 const EMAIL = "someone.private@example.com";
@@ -119,6 +120,72 @@ test("the model sees only what Shore sent, plus the SDK identity line subscripti
     expect(loopEnd.usage.cache_read_input_tokens).toBeGreaterThan(0);
     expect(keepsCachedPrefix(loopStart, required(mock.requests[2]))).toBe(true);
     expect(required(mock.requests[2]).usage.cache_read_input_tokens).toBeGreaterThan(0);
+  } finally {
+    await mock.stop();
+    await rm(dir, { recursive: true, force: true });
+  }
+}, 90_000);
+
+test("a long tool result reaches the model as Shore made it, whole or cut once, and a long tool description arrives whole", async () => {
+  const dir = await mkdtemp(join(tmpdir(), "shore-agent-results-"));
+  const workspace = join(dir, "heidi");
+  await mkdir(workspace);
+  const mock = await startMockAnthropic({ script: [
+    { toolUses: [{ id: "toolu_long", name: "mcp__shore__bash", input: { command: "seq 1 30000" } }] },
+    { toolUses: [{ id: "toolu_longer", name: "mcp__shore__bash", input: { command: "head -c 300000 /dev/zero | tr '\\0' x" } }] },
+    { text: "Done." },
+  ] });
+  const provider = new ClaudeAgentProvider({
+    bookPath: () => join(dir, "sessions.json"),
+    runQuery: params => query({ ...params, options: { ...params.options, env: {
+      ...params.options.env, HOME: dir, CLAUDE_CONFIG_DIR: dir,
+      CLAUDE_SECURESTORAGE_CONFIG_DIR: dir, CLAUDE_CODE_OAUTH_TOKEN: "test-oauth-token",
+    } } }),
+  });
+  const deps = {
+    config: {
+      app: defaultAppConfig(), models: emptyCatalog(), providers: ProviderRegistry.empty(), rawTable: undefined,
+      dirs: { config: dir, data: dir, cache: dir, runtime: dir },
+    },
+    providers: { claude_agent: provider }, retry: { maxRetries: 0, backoffBaseMs: 0 },
+  };
+  const phase = toolPhase({
+    ctx: {
+      workspaceDir: workspace, characterName: "heidi", characterDataDir: dir,
+      imageDir: dir, conversationDir: dir, historyDbPath: join(dir, "history.db"), configDir: dir,
+    },
+    sendDirect: () => {}, limits: { max_result_chars: 0, timeout_ms: 20_000 },
+    now: () => new Date().toISOString(), newMessageId: () => "unused",
+  });
+  const description = `Run a shell command. ${"Every word of this must arrive. ".repeat(200)}The end.`;
+  try {
+    await runGeneration({
+      sdk: "claude_agent", api_key: "", base_url: mock.url, model: "opus",
+      system: [{ label: "soul", text: SOUL }],
+      tools: [{ name: "bash", description, input_schema: {
+        type: "object", properties: { command: { type: "string" } }, required: ["command"],
+      } }],
+      context: { character: "heidi", workspace_dir: workspace, thinking_enabled: false, call_type: "message" },
+      max_tokens: 1024, replay_prior_thinking: "all",
+      messages: [{ role: "user", content: [{ type: "text", text: "Count for me." }] }],
+    }, { providerKey: "claude-code" }, deps, { signal: AbortSignal.timeout(60_000), sink: () => {}, tools: phase });
+
+    const sent = required(mock.requests.at(-1));
+    const tools = sent.body.tools as { name: string; description: string }[];
+    expect(description.length).toBeGreaterThan(6_000);
+    expect(required(tools.find(tool => tool.name === "mcp__shore__bash")).description).toBe(description);
+
+    const results = (sent.body.messages as WireMessage[]).flatMap(message => message.content)
+      .flatMap(block => block.type === "tool_result" ? [toolResultText(block.content)] : []);
+    const [long, longer] = [required(results[0]), required(results[1])];
+    expect(results).toHaveLength(2);
+    expect(long.length).toBeGreaterThan(168_000);
+    expect(long.endsWith("\n29999\n30000")).toBe(true);
+    expect(long).not.toContain("[tool_result truncated");
+    expect(longer.match(/\[tool_result truncated/g)).toHaveLength(1);
+    expect(longer).toContain("the first 144,000 characters are above this note and the last 96,000 are below it");
+    expect(longer.endsWith("x".repeat(96_000))).toBe(true);
+    expect(JSON.stringify(sent.body)).not.toContain("persisted-output");
   } finally {
     await mock.stop();
     await rm(dir, { recursive: true, force: true });

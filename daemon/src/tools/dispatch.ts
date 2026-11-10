@@ -1,3 +1,4 @@
+import { AsyncLocalStorage } from "node:async_hooks";
 import { dirname } from "node:path";
 
 import { shoreLog } from "../log.ts";
@@ -7,6 +8,7 @@ import { handleApplyPatch } from "./apply_patch.ts";
 import { handleBash, withPromptChanges } from "./bash.ts";
 import { CharacterWorkspace } from "./character_workspace.ts";
 import { DEFAULT_MAX_INLINE_IMAGE_BYTES } from "./media.ts";
+import type { ProcessStreams } from "./process.ts";
 import { decodeToolValue } from "./workspace_ops.ts";
 import { InvalidArgs, NotImplemented, ToolIoError, ToolTimedOut } from "./errors.ts";
 import { handleReadChatLogs, handleSearchChatLogs, type ChatLogOptions } from "./history.ts";
@@ -52,6 +54,7 @@ export interface ToolContext {
   userName?: string;
 
   deferEdit?: (path: string) => Promise<void> | void;
+  stoppedOutput?: (output: ProcessStreams) => void;
   trackWorkspaceWrite?: (name: string, input: unknown, write: () => Promise<unknown>) => Promise<unknown>;
   recordRead?: (path: string) => void;
   recordWorkspaceWrite?: <T>(run: () => Promise<T>) => Promise<T>;
@@ -188,7 +191,7 @@ export async function dispatchTool(
       return handleActivityHeatmap(args, ctx.activityStats);
 
     case "bash": {
-      const write = () => handleBash(args, workspace, ctx.characterName, ctx.signal, ctx.deferEdit);
+      const write = () => handleBash(args, workspace, ctx.characterName, ctx.signal, ctx.deferEdit, ctx.stoppedOutput);
       return ctx.trackWorkspaceWrite === undefined ? await write()
         : await ctx.trackWorkspaceWrite(name, input, write);
     }
@@ -277,8 +280,17 @@ export function toolLimitsFrom(
   };
 }
 
+const resultCeilings = new AsyncLocalStorage<number>();
+
+export function withResultCeiling<T>(maxChars: number, run: () => T): T {
+  return resultCeilings.run(maxChars, run);
+}
+
 export function resultCharsFor(cfg: ToolLimitsView, name: string): number {
-  return cfg.config?.[name]?.max_result_chars ?? cfg.max_result_chars;
+  const configured = cfg.config?.[name]?.max_result_chars ?? cfg.max_result_chars;
+  const ceiling = resultCeilings.getStore();
+  if (ceiling === undefined) return configured;
+  return configured === 0 ? ceiling : Math.min(configured, ceiling);
 }
 
 export function inlineImageBytesFor(cfg: ToolLimitsView, name: string): number {
@@ -300,6 +312,21 @@ export interface ToolResultWindow {
 
 const HEAD_SHARE = 0.6;
 
+function lineBreakBefore(chars: readonly string[], end: number): number {
+  for (let at = end; at > end / 2; at -= 1) if (chars[at - 1] === "\n") return at;
+  return end;
+}
+
+function lineBreakAfter(chars: readonly string[], start: number): number {
+  const limit = start + (chars.length - start) / 2;
+  for (let at = start; at < limit; at += 1) if (chars[at - 1] === "\n") return at;
+  return start;
+}
+
+function count(n: number): string {
+  return n.toLocaleString("en-US");
+}
+
 export function windowToolResult(output: string, maxChars: number): ToolResultWindow {
   const chars = Array.from(output);
   if (maxChars === 0 || chars.length <= maxChars) {
@@ -312,17 +339,25 @@ export function windowToolResult(output: string, maxChars: number): ToolResultWi
     };
   }
 
-  const headChars = Math.max(1, Math.ceil(maxChars * HEAD_SHARE));
-  const tailChars = maxChars - headChars;
-  const head = chars.slice(0, headChars).join("");
-  const tail = tailChars > 0 ? chars.slice(chars.length - tailChars).join("") : "";
-  const elided = chars.length - headChars - tailChars;
-
+  const headBudget = Math.max(1, Math.ceil(maxChars * HEAD_SHARE));
+  const tailBudget = maxChars - headBudget;
+  const headChars = lineBreakBefore(chars, headBudget);
+  const tailStart = lineBreakAfter(chars, chars.length - tailBudget);
+  const tailChars = chars.length - tailStart;
+  const elided = chars.slice(headChars, tailStart);
+  const wholeLines = chars[headChars - 1] === "\n" && (tailChars === 0 || chars[tailStart - 1] === "\n");
+  const lines = elided.filter((char) => char === "\n").length;
+  const missing = `${count(elided.length)} of its ${count(chars.length)} characters`;
+  const size = wholeLines ? `${missing}, ${count(lines)} line${lines === 1 ? "" : "s"}` : `${missing}; the cut falls inside a line`;
+  const shown = tailChars > 0
+    ? `the first ${count(headChars)} characters are above this note and the last ${count(tailChars)} are below it`
+    : `only the first ${count(headChars)} characters are shown`;
   const marker =
-    `[tool_result truncated: ${String(chars.length)} characters, showing the first ` +
-    `${String(headChars)}${tailChars > 0 ? ` and the last ${String(tailChars)}` : ""}; ` +
-    `${String(elided)} elided. Narrow the call — a more specific path, pattern, or range — ` +
-    `to see the rest.]`;
+    `[tool_result truncated: this result was too long, so ${tailChars > 0 ? "its middle" : "its end"} is left out here: ` +
+    `${size}. Nothing else is missing: ${shown}. To see the rest, narrow the call to a more specific ` +
+    `path, pattern or range, or write the output to a file and read it in parts.]`;
+  const head = chars.slice(0, headChars).join("").replace(/\n$/, "");
+  const tail = chars.slice(tailStart).join("");
 
   return {
     output: tailChars > 0 ? `${head}\n\n${marker}\n\n${tail}` : `${head}\n\n${marker}`,
@@ -396,7 +431,8 @@ export async function dispatchWithinDeadline(
       ? controller.signal
       : AbortSignal.any([ctx.signal, controller.signal]);
 
-  const work = settled(dispatchTool(name, input, { ...ctx, signal }));
+  let output: ProcessStreams | undefined;
+  const work = settled(dispatchTool(name, input, { ...ctx, signal, stoppedOutput: (streams) => { output = streams; } }));
 
   const onTime = await waitFor(work, deadlineMs);
   if (onTime !== STILL_RUNNING) return unwrap(onTime);
@@ -425,7 +461,7 @@ export async function dispatchWithinDeadline(
     );
     throw new ToolTimedOut(seconds, false);
   }
-  throw new ToolTimedOut(seconds, true);
+  throw new ToolTimedOut(seconds, true, output);
 }
 
 export { InvalidArgs, NotImplemented };

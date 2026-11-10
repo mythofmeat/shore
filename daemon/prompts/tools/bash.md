@@ -1,6 +1,6 @@
 Run a command in a fresh, non-interactive Bash shell (pipefail enabled) on the daemon host, as the user your tools run as: the daemon's, or a user of your own if the operator gave you one (`id` shows which). The command runs in your workspace unless `workdir` is set. Shell state such as `cd` and exported variables does not persist between calls; files do. Standard input is closed, so supply input with pipes or heredocs. Run commands in the foreground and wait for them to finish.
 
-Returns the exit status, stdout, and stderr. Output is bounded. Shore's configured tool timeout applies, and cancellation stops the command's process group. Changes made before an error, timeout, or cancellation are not rolled back.
+Returns the exit status, stdout, and stderr. A result that is too long has its middle left out, on line breaks, with a note there saying how much is missing; send long output to a file and read it in parts. Shore's configured tool timeout applies, and cancellation stops the command's process group. A command that times out returns what it printed before it was stopped. Changes made before an error, timeout, or cancellation are not rolled back.
 
 Git commits are authored with your character identity. Changes to SOUL.md, USER.md, TOOLS.md and MEMORY.md in the workspace are queued for prompt reload.
 

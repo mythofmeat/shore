@@ -2,6 +2,7 @@ import { join, resolve } from "node:path";
 import { CharacterUserError } from "./character_user.ts";
 import { asCharacterWorkspace, type CharacterWorkspace } from "./character_workspace.ts";
 import { InvalidArgs, ToolIoError } from "./errors.ts";
+import type { ProcessStreams } from "./process.ts";
 import { characterGitIdentity, type ToolInput } from "./workspace.ts";
 
 export interface BashResult {
@@ -47,6 +48,7 @@ export async function handleBash(
   character: string,
   signal?: AbortSignal,
   deferEdit?: (path: string) => Promise<void> | void,
+  stopped?: (output: ProcessStreams) => void,
 ): Promise<BashResult> {
   signal?.throwIfAborted();
   const command = input["command"];
@@ -81,6 +83,7 @@ export async function handleBash(
           GIT_COMMITTER_NAME: name, GIT_COMMITTER_EMAIL: email,
         },
         signal,
+        stopped,
       });
     } catch (error) {
       signal?.throwIfAborted();
