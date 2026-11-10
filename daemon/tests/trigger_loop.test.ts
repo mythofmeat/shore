@@ -310,7 +310,7 @@ test("a trigger switched off doesn't fire or run its check until it is switched 
 
 test("triggers that don't make sense are reported to the character once, and again when what's wrong changes", async () => {
   const w = await world('[lamp]\nreason = "Trim the lamp."\n\n[tide]\nevery = "1h"\nreason = "Look."\n');
-  const lamp = "`lamp` isn't running: it needs exactly one of `every`, `at`, `when` or `follows` to say when it fires";
+  const lamp = "`lamp` isn't running: it needs exactly one of `every`, `at`, `on`, `when` or `follows` to say when it fires";
   await w.at(0);
   await w.at(1);
   expect(w.notes()).toEqual([["shore", `These triggers in TRIGGERS.toml aren't running:\n- ${lamp}`]]);
@@ -448,4 +448,18 @@ test("a trigger for the user's return works while the character is dormant, but 
   await other.triggers.userBack(9 * HOUR);
   expect(other.woke).toEqual([]);
   expect(other.notes()).toEqual([]);
+});
+
+test("a one-off fires once at its time, late if Shore wasn't looking then, and never if its time had passed when it was added", async () => {
+  const w = await world('[midnight]\non = "2026-10-30 13:30"\nreason = "It is time."\n\n[missed]\non = "2026-10-30 11:00"\nreason = "Too late."\n');
+  await w.at(0);
+  expect(w.triggers.view().triggers.map((each) => each.nextAt)).toEqual([T0 + 90 * MINUTE, undefined]);
+  await w.at(89);
+  expect(w.woke).toEqual([]);
+  await w.at(95);
+  expect(w.woke).toEqual([{ name: "midnight", reason: "It is time.", at: T0 + 95 * MINUTE }]);
+  await w.at(96);
+  await w.at(3 * 24 * 60);
+  expect(w.woke).toHaveLength(1);
+  expect(w.triggers.view().triggers.map((each) => [each.fired, each.nextAt])).toEqual([[1, undefined], [0, undefined]]);
 });

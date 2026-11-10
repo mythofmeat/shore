@@ -12,7 +12,7 @@ const HOUR = 60 * MINUTE;
 const DAY = 24 * HOUR;
 const DEFAULT_COOLDOWN = HOUR;
 const WEEK = [0, 1, 2, 3, 4, 5, 6];
-const SETTINGS = "every, at, when, after, follows, check, wake, reason, cooldown, between";
+const SETTINGS = "every, at, on, when, after, follows, check, wake, reason, cooldown, between";
 const AT_HELP = '`at` must be a 24-hour local time, with the days it applies to in front if not every day, like "20:00" or "Sat 20:00" or "Mon,Thu 09:30"';
 
 function parse(content: string): ReturnType<typeof parseTriggers> {
@@ -81,7 +81,7 @@ test("a file that isn't TOML runs no triggers and says so, and one bad trigger d
   expect(mixed.problems).toEqual([
     "`stray` isn't running: write it as `[stray]` with its settings on the lines under it",
     "`list` isn't running: write it as `[list]` with its settings on the lines under it",
-    "`bad` isn't running: it needs exactly one of `every`, `at`, `when` or `follows` to say when it fires",
+    "`bad` isn't running: it needs exactly one of `every`, `at`, `on`, `when` or `follows` to say when it fires",
   ]);
 });
 
@@ -110,7 +110,7 @@ test("a setting that isn't one is named, with the list of those that are", () =>
 });
 
 test("a trigger says when it fires in exactly one way", () => {
-  const one = "`t` isn't running: it needs exactly one of `every`, `at`, `when` or `follows` to say when it fires";
+  const one = "`t` isn't running: it needs exactly one of `every`, `at`, `on`, `when` or `follows` to say when it fires";
   expect(whenOf("")).toBe(one);
   expect(whenOf('every = "1h"\nat = "20:00"')).toBe(one);
   expect(whenOf('at = "20:00"\nwhen = "dream_done"')).toBe(one);
@@ -323,4 +323,24 @@ test("each [triggers] setting is described in the config schema", () => {
     ["triggers.off", "Names of triggers that"],
     ["triggers.wake_cooldown", "Least time between two"],
   ]);
+});
+
+test("`on` is one local date and time, and a date that doesn't exist is refused", () => {
+  const help = '`t` isn\'t running: `on` must be a local date and 24-hour time, like "2026-11-12 00:00"';
+  expect(whenOf('on = "2026-11-12 00:00"')).toEqual({ kind: "once", local: Date.UTC(2026, 10, 12) });
+  expect(whenOf('on = " 2026-02-28T23:59 "')).toEqual({ kind: "once", local: Date.UTC(2026, 1, 28, 23, 59) });
+  expect(whenOf('on = "2028-02-29 12:30"')).toEqual({ kind: "once", local: Date.UTC(2028, 1, 29, 12, 30) });
+  for (const wrong of ['"2026-02-29 12:00"', '"2026-13-01 12:00"', '"2026-11-31 12:00"', '"2026-11-12 24:00"', '"2026-11-12 12:60"', '"2026-11-12"', '"12 Nov 2026 00:00"', '"2026-11-12 00:00:00"', "20261112", '""']) {
+    expect(whenOf(`on = ${wrong}`), wrong).toBe(help);
+  }
+  expect(whenOf('on = "2026-11-12 00:00"\nevery = "1h"')).toBe("`t` isn't running: it needs exactly one of `every`, `at`, `on`, `when` or `follows` to say when it fires");
+});
+
+test("a one-off is due at its time in the local zone, and never again once that time is behind the last look", () => {
+  const once = { kind: "once", local: Date.UTC(2026, 10, 12) } as const;
+  expect(scheduledAt(once, Date.UTC(2026, 10, 1), "UTC")).toBe(Date.UTC(2026, 10, 12));
+  expect(scheduledAt(once, Date.UTC(2026, 10, 12) - 1, "UTC")).toBe(Date.UTC(2026, 10, 12));
+  expect(scheduledAt(once, Date.UTC(2026, 10, 12), "UTC")).toBeUndefined();
+  expect(scheduledAt(once, Date.UTC(2026, 10, 13), "UTC")).toBeUndefined();
+  expect(scheduledAt(once, Date.UTC(2026, 10, 1), "Australia/Sydney")).toBe(Date.UTC(2026, 10, 11, 13));
 });

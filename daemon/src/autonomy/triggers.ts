@@ -7,13 +7,15 @@ export const TRIGGERS_FILE = "TRIGGERS.toml";
 
 const TRIGGER_NAME = /^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$/;
 
-const SETTINGS = ["every", "at", "when", "after", "follows", "check", "wake", "reason", "cooldown", "between"];
+const SETTINGS = ["every", "at", "on", "when", "after", "follows", "check", "wake", "reason", "cooldown", "between"];
 
 const EVENTS = ["user_back", "user_quiet", "dream_done"] as const;
 
 const WEEKDAYS = ["sun", "mon", "tue", "wed", "thu", "fri", "sat"];
 
 const AT = /^(?:(.*\S)\s+)?(\d{1,2}):(\d{2})$/;
+
+const ON = /^(\d{4}-\d{2}-\d{2})[ T](\d{2}:\d{2})$/;
 
 const MINUTE_MS = 60_000;
 
@@ -22,6 +24,7 @@ export type TriggerEvent = (typeof EVENTS)[number];
 export type TriggerWhen =
   | { kind: "every"; everyMs: number }
   | { kind: "at"; weekdays: readonly number[]; minute: number }
+  | { kind: "once"; local: number }
   | { kind: "event"; event: TriggerEvent; afterMs: number }
   | { kind: "follows"; trigger: string };
 
@@ -63,9 +66,19 @@ function atTime(value: unknown): TriggerWhen {
   return { kind: "at", weekdays: named.length === 0 ? week : week.filter((weekday) => named.includes(weekday)), minute: Number(hour) * 60 + Number(minute) };
 }
 
+function onDate(value: unknown): TriggerWhen {
+  const match = typeof value === "string" ? ON.exec(value.trim()) : null;
+  const written = `${match?.[1] ?? ""}T${match?.[2] ?? ""}`;
+  const local = Date.parse(`${written}:00Z`);
+  if (Number.isNaN(local) || new Date(local).toISOString().slice(0, 16) !== written) {
+    throw new Error('`on` must be a local date and 24-hour time, like "2026-11-12 00:00"');
+  }
+  return { kind: "once", local };
+}
+
 function whenOf(raw: Record<string, unknown>): TriggerWhen {
-  const given = ["every", "at", "when", "follows"].filter((setting) => raw[setting] !== undefined);
-  if (given.length !== 1) throw new Error("it needs exactly one of `every`, `at`, `when` or `follows` to say when it fires");
+  const given = ["every", "at", "on", "when", "follows"].filter((setting) => raw[setting] !== undefined);
+  if (given.length !== 1) throw new Error("it needs exactly one of `every`, `at`, `on`, `when` or `follows` to say when it fires");
   if (raw["when"] === undefined && raw["after"] !== undefined) throw new Error("`after` only goes with `when`");
   if (raw["every"] !== undefined) {
     const everyMs = duration(raw["every"], "every");
@@ -73,6 +86,7 @@ function whenOf(raw: Record<string, unknown>): TriggerWhen {
     return { kind: "every", everyMs };
   }
   if (raw["at"] !== undefined) return atTime(raw["at"]);
+  if (raw["on"] !== undefined) return onDate(raw["on"]);
   if (raw["follows"] !== undefined) return { kind: "follows", trigger: text(raw["follows"], "follows") };
   const event = EVENTS.find((each) => each === raw["when"]);
   if (event === undefined) throw new Error(`\`when\` must be one of ${EVENTS.map((each) => `"${each}"`).join(", ")}`);
@@ -163,7 +177,9 @@ export function nextAt(when: Extract<TriggerWhen, { kind: "at" }>, after: number
 
 export function scheduledAt(when: TriggerWhen, since: number, timeZone: string): number | undefined {
   if (when.kind === "every") return since + when.everyMs;
-  return when.kind === "at" ? nextAt(when, since, timeZone) : undefined;
+  if (when.kind === "at") return nextAt(when, since, timeZone);
+  const once = when.kind === "once" ? resolveInZone(asNaive(when.local), timeZone) : undefined;
+  return once !== undefined && once > since ? once : undefined;
 }
 
 export function coolingDown(cooldownMs: number, lastFiredAt: number | undefined, now: number): boolean {
