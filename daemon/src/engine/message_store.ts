@@ -150,6 +150,7 @@ function serializeForStorage(msg: Message): string {
   if (msg.model !== undefined) ordered.push(["model", msg.model]);
   if (msg.origin !== undefined) ordered.push(["origin", msg.origin]);
   if (msg.last_elsewhere !== undefined) ordered.push(["last_elsewhere", msg.last_elsewhere]);
+  if (msg.diary !== undefined) ordered.push(["diary", msg.diary]);
 
   const contentAt = 2;
   const last = required(ordered.pop());

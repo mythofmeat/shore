@@ -1,6 +1,6 @@
 import { afterAll, afterEach, expect, setSystemTime, test } from "bun:test";
 import { mkdir, mkdtemp, writeFile } from "node:fs/promises";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 
 import { TurnAutonomyBridge } from "../src/autonomy/registration.ts";
 import { defaultAppConfig, type AppConfig } from "../src/config/app.ts";
@@ -10,14 +10,16 @@ import { emptyCatalog } from "../src/config/models.ts";
 import { ProviderRegistry } from "../src/config/providers.ts";
 import { Diagnostics } from "../src/diagnostics.ts";
 import type { History } from "../src/engine/conversation.ts";
+import { DIARY_FOR_CHAT, DIARY_FOR_HEARTBEAT, diaryText } from "../src/engine/prompt.ts";
 import { markThreadRead, threadActivityNow } from "../src/engine/threads.ts";
-import type { Message } from "../src/engine/types.ts";
+import type { DiaryNote, Message } from "../src/engine/types.ts";
 import { dispatchCommand } from "../src/handler/commands.ts";
 import { buildCommandPathDeps, buildGenerationDeps } from "../src/handler/deps.ts";
 import { runGeneration } from "../src/handler/generation.ts";
 import type { GenerateResponse, SidecarProvider, SidecarRequest } from "../src/llm/types.ts";
 import { runCompactionPass } from "../src/memory/compaction/run.ts";
 import type { ServerMessage } from "../src/protocol/ServerMessage.ts";
+import { hostZone } from "../src/ledger/zoned.ts";
 import { createRuntime, type ShoreRuntime } from "../src/runtime.ts";
 import { DEFAULT_HANDSHAKE } from "../src/swp/connection.ts";
 import { SessionRouter } from "../src/swp/session.ts";
@@ -48,6 +50,7 @@ interface Script {
   calls: string[];
   held: { started: PromiseWithResolvers<void>; release: PromiseWithResolvers<void> } | undefined;
   closing: string;
+  aside?: string | undefined;
   wake?: Record<string, unknown> | undefined;
   replyWake?: Record<string, unknown> | undefined;
 }
@@ -96,7 +99,10 @@ function scriptedProvider(script: Script): SidecarProvider {
             { type: "thinking", thinking: "She asked about the lamp, so I'll tell her.", signature: "sig-1" },
             { type: "text", text: script.closing },
           ]
-        : [{ type: "tool_use", id: `read-${String(script.heartbeats.length)}`, name: "read", input: { file_path: "SOUL.md" } }]));
+        : [
+            ...(script.aside === undefined ? [] : [{ type: "text" as const, text: script.aside }]),
+            { type: "tool_use", id: `read-${String(script.heartbeats.length)}`, name: "read", input: { file_path: "SOUL.md" } },
+          ]));
     },
   };
 }
@@ -646,4 +652,96 @@ test("a character whose own heartbeat.md leaves the reason out is told set_next_
     await heartbeat();
     expect(textOf(script.heartbeats[0] as SidecarRequest), "a heartbeat with no reason leaves the macro empty").toContain("[Private turn. ]");
   });
+});
+
+function left(minutes: number, text: string): DiaryNote {
+  return { id: "", at: new Date(T0 + minutes * MINUTE).toISOString(), thread: "heartbeat", source: "heartbeat", text };
+}
+
+function times(text: string, part: string): number {
+  return text.split(part).length - 1;
+}
+
+test("what a heartbeat says at the end, apart from the message it sends, is the note its later heartbeats start with for a day", async () => {
+  await withCharacter(async ({ script, say, heartbeat, thread }) => {
+    await say("hello");
+    script.closing = "Read the keeper's log up to March.\n<sendMessage>I found the keeper's log.</sendMessage>";
+    at(10);
+    await heartbeat();
+    expect(textOf(script.heartbeats[0] as SidecarRequest)).not.toContain("[Your diary");
+    expect((await thread("main")).at(-1)?.content).toBe("I found the keeper's log.");
+
+    const diary = diaryText([left(10, "Read the keeper's log up to March.")], DIARY_FOR_HEARTBEAT, hostZone());
+    script.heartbeats.length = 0;
+    script.aside = "March is done, so April is next.";
+    script.closing = "HEARTBEAT_OK";
+    at(70);
+    await heartbeat();
+    expect(textOf(script.heartbeats[0] as SidecarRequest)).toContain(`in your home thread "main".]\n\n${diary}\n\n[Current time: `);
+
+    script.heartbeats.length = 0;
+    script.aside = undefined;
+    script.closing = "<sendMessage>Goodnight.</sendMessage>";
+    at(130);
+    await heartbeat();
+    const third = textOf(script.heartbeats[0] as SidecarRequest);
+    expect(third).toContain(`${diary}\n\n[Current time: `);
+    expect(third).not.toContain("April is next");
+
+    at(24 * 60 + 9);
+    await say("good morning");
+    script.heartbeats.length = 0;
+    script.closing = "HEARTBEAT_OK";
+    await heartbeat();
+    expect(textOf(script.heartbeats[0] as SidecarRequest)).toContain(diary);
+
+    at(24 * 60 + 11);
+    await say("still here");
+    script.heartbeats.length = 0;
+    await heartbeat();
+    expect(textOf(script.heartbeats[0] as SidecarRequest)).not.toContain("[Your diary");
+  });
+});
+
+test("the user's next message in each thread arrives with the notes left since the character was last there, once, and they stay with that message", async () => {
+  const note = left(10, "The log is read up to March.");
+  const block = diaryText([note], DIARY_FOR_CHAT, hostZone());
+  let root = "";
+  await withCharacter(async ({ runtime, script, data, say, heartbeat, thread }) => {
+    root = dirname(data);
+    await runtime.registry.createThread("ada", "garden");
+    await say("hello");
+    expect(textOf(script.replies[0] as SidecarRequest)).not.toContain("diary");
+    script.closing = "The log is read up to March.";
+    at(10);
+    await heartbeat();
+    expect((await thread("main")).filter((message) => message.origin === "autonomous")).toEqual([]);
+
+    at(20);
+    await say("is the lamp lit?");
+    expect(textOf(script.replies[1] as SidecarRequest)).toEndWith(`${block}\nis the lamp lit?`);
+
+    at(21);
+    await say("and the door?");
+    const later = textOf(script.replies[2] as SidecarRequest);
+    expect(later).toContain(`${block}\nis the lamp lit?`);
+    expect(later).toEndWith("reply to: is the lamp lit?\nand the door?");
+    expect(times(later, "[New in your diary")).toBe(1);
+    expect((await thread("main")).flatMap((message) => message.diary === undefined ? [] : [[message.content, message.diary.map((each) => [each.at, each.thread, each.source, each.text])]])).toEqual([
+      ["is the lamp lit?", [[note.at, "heartbeat", "heartbeat", "The log is read up to March."]]],
+    ]);
+
+    at(22);
+    await say("the beans are up", "garden");
+    expect(textOf(script.replies[3] as SidecarRequest)).toEndWith(`${block}\nthe beans are up`);
+  });
+
+  await withCharacter(async ({ script, say }) => {
+    at(30);
+    await say("anything new?");
+    const resumed = textOf(script.replies[0] as SidecarRequest);
+    expect(resumed).toContain(`${block}\nis the lamp lit?`);
+    expect(resumed).toEndWith("reply to: and the door?\nanything new?");
+    expect(times(resumed, "[New in your diary")).toBe(1);
+  }, undefined, root);
 });

@@ -41,6 +41,14 @@ export interface MessageAlternative {
   version?: string;
 }
 
+export interface DiaryNote {
+  id: string;
+  at: string;
+  thread: string;
+  source: "heartbeat";
+  text: string;
+}
+
 export interface Message {
   msg_id: string;
   role: Role;
@@ -56,4 +64,5 @@ export interface Message {
   origin?: MessageOrigin;
   version?: string;
   last_elsewhere?: { thread: string; at: string };
+  diary?: DiaryNote[];
 }

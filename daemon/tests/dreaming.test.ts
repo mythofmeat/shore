@@ -6,6 +6,7 @@ import { join } from "node:path";
 import { CacheTracker } from "../src/cache/tracker.ts";
 import { transcript } from "../src/commands/call_log.ts";
 import { runningReport } from "../src/daemon/running.ts";
+import { addDiaryNote } from "../src/autonomy/diary.ts";
 import { dreamDue, type DreamInputs } from "../src/autonomy/tick.ts";
 import { defaultAppConfig, type AppConfig } from "../src/config/app.ts";
 import { characterDataDir } from "../src/config/dirs.ts";
@@ -13,7 +14,9 @@ import { ConfigDuration } from "../src/config/duration.ts";
 import { loadConfig, type LoadedConfig } from "../src/config/loader.ts";
 import type { ModelCatalog } from "../src/config/models.ts";
 import { HISTORY_DB_FILE, HistoryStore } from "../src/engine/history_store.ts";
-import type { ContentBlock, Message } from "../src/engine/types.ts";
+import { DIARY_FOR_DREAM, diaryText } from "../src/engine/prompt.ts";
+import type { ContentBlock, DiaryNote, Message } from "../src/engine/types.ts";
+import { hostZone } from "../src/ledger/zoned.ts";
 import type { GenerateResponse, SidecarProvider, SidecarRequest } from "../src/llm/types.ts";
 import { withDreaming } from "../src/memory/compaction/prompts.ts";
 import { loadActivePromptFile } from "../src/memory/deferred_edits.ts";
@@ -511,4 +514,58 @@ test("a dream's first call may start cold, but a follow-up that loses its cache 
   expect(anomaly("dreaming", 0, 8_000)).toBeUndefined();
   expect(anomaly("dreaming_tool_loop", 8_000, 200)).toBeUndefined();
   expect(anomaly("dreaming_tool_loop", 0, 9_000)).toBe("unexpected_write");
+});
+
+function leaveNote(characterDir: string, id: string, at: number, text: string): DiaryNote {
+  addDiaryNote(characterDir, { at, thread: "heartbeat", source: "heartbeat", text }, () => id);
+  return { id, at: new Date(at).toISOString(), thread: "heartbeat", source: "heartbeat", text };
+}
+
+test("a dream ends its instructions with the diary notes no finished dream has been shown, however old they are", async () => {
+  const seen: SidecarRequest[] = [];
+  await afterOneChat(seen, () => [{ type: "text", text: "Folded the notes into MEMORY.md." }], () => {}, async ({ characterDir, runtime }) => {
+    const dream = async (): Promise<string> => {
+      const first = seen.length;
+      runtime.autonomy.forceDreamNow("ada");
+      await runtime.autonomy.tick();
+      await runtime.autonomy.dreamsEnded();
+      expect(lastDream(characterDir)?.outcome).toBe("finished");
+      return instructionsOf(required(seen[first]));
+    };
+    expect(await dream()).not.toContain("[Your diary");
+
+    const march = leaveNote(characterDir, "d1", Date.now() - 3 * DAY, "The log is read up to March.");
+    expect(await dream()).toEndWith(`kept as this dream's record.\n\n${diaryText([march], DIARY_FOR_DREAM, hostZone())}`);
+
+    const april = leaveNote(characterDir, "d2", Date.now() - HOUR, "April is next.");
+    const later = await dream();
+    expect(later).toEndWith(`kept as this dream's record.\n\n${diaryText([april], DIARY_FOR_DREAM, hostZone())}`);
+    expect(later).not.toContain("up to March");
+
+    expect(await dream()).not.toContain("[Your diary");
+  });
+});
+
+test("a dream that is cut off is shown the same diary notes again next time", async () => {
+  const seen: SidecarRequest[] = [];
+  await afterOneChat(seen, (_request, round) => [
+    { type: "text", text: "Let me look." },
+    { type: "tool_use", id: `dream-bash-${String(round)}`, name: "bash", input: { command: "true" } },
+  ], (_app, models) => {
+    models.chat.set("chat.fixture", { ...required(models.chat.get("chat.fixture")), maxToolIterations: 1 });
+  }, async ({ characterDir, runtime }) => {
+    const march = leaveNote(characterDir, "d1", Date.now() - HOUR, "The log is read up to March.");
+    const block = diaryText([march], DIARY_FOR_DREAM, hostZone());
+    runtime.autonomy.forceDreamNow("ada");
+    await runtime.autonomy.tick();
+    await runtime.autonomy.dreamsEnded();
+    expect(lastDream(characterDir)?.outcome).toBe("cut_off");
+    expect(instructionsOf(required(seen[0]))).toContain(block);
+    const first = seen.length;
+
+    runtime.autonomy.forceDreamNow("ada");
+    await runtime.autonomy.tick();
+    await runtime.autonomy.dreamsEnded();
+    expect(instructionsOf(required(seen[first]))).toEndWith(block);
+  });
 });

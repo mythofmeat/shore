@@ -1,4 +1,5 @@
 import { withConversation } from "../engine/lifecycle.ts";
+import { unseenDiary } from "../autonomy/diary.ts";
 import { characterDataDir, threadDataDir } from "../config/dirs.ts";
 import { isToolResultOnly } from "../engine/message_store.ts";
 import { parseDurationMs } from "../llm/request.ts";
@@ -294,7 +295,11 @@ async function runGenerationCore(
     const arrival = regen || !bodyHasContent(body)
       ? { cold: false, annotations: {} }
       : await threadArrival(deps, engine, charName, home, resolved, now());
-    const regenAlt = await appendUserTurn(turnCtx, engine, config.dirs.cache, charName, body, regen, params.rid, imageSettingsFor(config.app.images, "upload"), arrival.annotations);
+    const diary = unseenDiary(characterDataDir(deps.dataDir, charName), engine.messages(), Date.parse(now()));
+    const regenAlt = await appendUserTurn(turnCtx, engine, config.dirs.cache, charName, body, regen, params.rid, imageSettingsFor(config.app.images, "upload"), {
+      ...arrival.annotations,
+      ...(diary.length === 0 ? {} : { diary }),
+    });
     if (arrival.cold) {
       try {
         await deps.compaction.applyDeferredEdits(characterDataDir(deps.dataDir, charName), workspace, engine.thread);
