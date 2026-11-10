@@ -217,6 +217,13 @@ const DREAMING_DESCRIPTIONS: Record<string, string> = {
   model: "Model dreams run on, as provider:model_id. Unset runs them on the character's chat model; a bare --background in shore model use never sets it.",
 };
 
+const TRIGGER_DESCRIPTIONS: Record<string, string> = {
+  enabled: "Run the triggers the character keeps in TRIGGERS.toml in its workspace: schedules, things that happen and checks, each of which wakes it or leaves it a diary entry. A check is a command run as the character with no model call. Off by default, and needs heartbeats on.",
+  wake_cooldown: "Least time between two wakes from the same trigger, unless the trigger sets its own cooldown. A trigger that comes due sooner waits, and its check isn't run until then. Defaults to 1h.",
+  check_time_limit: "Longest a trigger's check may run before it is stopped and counted as failed. Defaults to 60s.",
+  off: "Names of triggers that are switched off: they don't fire and their checks don't run until the name is taken out again.",
+};
+
 const IMAGE_DESCRIPTIONS: Record<string, string> = {
   max_tokens: "Most tokens an image may cost; Claude charges one per 28×28-pixel patch. 1,600 fits a 4:3 photo at about 1270×952 (1,564 tokens), 1,000 at 1008×756; 0 leaves only max_edge and the model's own limit.",
   max_edge: "Longest side in pixels. A 4:3 photo costs 1,036 tokens at 1024, 1,610 at 1280, 2,352 at 1568 and 3,888 at 2000 on Claude 4.7 and later; earlier models cap any image at 1,568 tokens (about 1270×952).",
@@ -254,6 +261,8 @@ function describeOption(path: readonly string[]): string {
   if (plan !== undefined) return plan;
   const dreaming = path[0] === "dreaming" ? DREAMING_DESCRIPTIONS[leaf] : undefined;
   if (dreaming !== undefined) return dreaming;
+  const triggers = path[0] === "triggers" ? TRIGGER_DESCRIPTIONS[leaf] : undefined;
+  if (triggers !== undefined) return triggers;
   const user = leaf === "user" ? USER_DESCRIPTIONS[path[0] ?? ""] : undefined;
   if (user !== undefined) return user;
   const image = path[0] === "images" ? describeImageOption(path) : undefined;

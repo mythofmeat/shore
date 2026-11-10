@@ -1,6 +1,11 @@
 import { expect, test } from "bun:test";
+import { mkdtemp, writeFile } from "node:fs/promises";
+import { join } from "node:path";
 
-import { allowedNow, nextAt, parseTriggers, scheduledAt, type Trigger, type TriggerWhen } from "../src/autonomy/triggers.ts";
+import { loadConfig } from "../src/config/loader.ts";
+import { configSchema } from "../src/config/schema.ts";
+import { testTmp } from "./support/tmp.ts";
+import { coolingDown, inItsHours, nextAt, parseTriggers, scheduledAt, type Trigger, type TriggerWhen } from "../src/autonomy/triggers.ts";
 
 const MINUTE = 60_000;
 const HOUR = 60 * MINUTE;
@@ -220,21 +225,22 @@ test("a schedule's next time counts from when it last ran, and something that ha
   expect(scheduledAt({ kind: "follows", trigger: "show" }, utc(30, 12), "UTC")).toBeUndefined();
 });
 
-test("a trigger may fire once its cooldown has passed and only inside its hours", () => {
-  const cooling = { cooldownMs: HOUR, between: undefined };
-  expect(allowedNow(cooling, undefined, utc(30, 12), "UTC")).toBe(true);
-  expect(allowedNow(cooling, utc(30, 12), utc(30, 13) - 1, "UTC")).toBe(false);
-  expect(allowedNow(cooling, utc(30, 12), utc(30, 13), "UTC")).toBe(true);
-  expect(allowedNow({ cooldownMs: 0, between: undefined }, utc(30, 12), utc(30, 12), "UTC")).toBe(true);
+test("a trigger is cooling down until its cooldown has passed since it last fired, and keeps to its hours in the local zone", () => {
+  expect(coolingDown(HOUR, undefined, utc(30, 12))).toBe(false);
+  expect(coolingDown(HOUR, utc(30, 12), utc(30, 13) - 1)).toBe(true);
+  expect(coolingDown(HOUR, utc(30, 12), utc(30, 13))).toBe(false);
+  expect(coolingDown(0, utc(30, 12), utc(30, 12))).toBe(false);
 
-  const daytime = { cooldownMs: 0, between: { startMinute: 8 * 60, endMinute: 23 * 60 } };
-  expect(allowedNow(daytime, undefined, utc(30, 8), "UTC")).toBe(true);
-  expect(allowedNow(daytime, undefined, utc(30, 8) - 1, "UTC")).toBe(false);
-  expect(allowedNow(daytime, undefined, utc(30, 22, 59), "UTC")).toBe(true);
-  expect(allowedNow(daytime, undefined, utc(30, 23), "UTC")).toBe(false);
-  expect(allowedNow(daytime, undefined, utc(30, 12), "Australia/Sydney")).toBe(false);
-  expect(allowedNow(daytime, undefined, utc(30, 22), "Australia/Sydney")).toBe(true);
-  expect(allowedNow({ cooldownMs: HOUR, between: daytime.between }, utc(30, 11, 30), utc(30, 12), "UTC")).toBe(false);
+  const daytime = { startMinute: 8 * 60, endMinute: 23 * 60 };
+  expect(inItsHours(undefined, utc(30, 3), "UTC")).toBe(true);
+  expect(inItsHours(daytime, utc(30, 8), "UTC")).toBe(true);
+  expect(inItsHours(daytime, utc(30, 8) - 1, "UTC")).toBe(false);
+  expect(inItsHours(daytime, utc(30, 22, 59), "UTC")).toBe(true);
+  expect(inItsHours(daytime, utc(30, 23), "UTC")).toBe(false);
+  expect(inItsHours(daytime, utc(30, 12), "Australia/Sydney")).toBe(false);
+  expect(inItsHours(daytime, utc(30, 22), "Australia/Sydney")).toBe(true);
+  expect(inItsHours({ startMinute: 10 * 60, endMinute: 3 * 60 }, utc(30, 2, 59), "UTC")).toBe(true);
+  expect(inItsHours({ startMinute: 10 * 60, endMinute: 3 * 60 }, utc(30, 3), "UTC")).toBe(false);
 });
 
 test("a trigger that answers the user coming back never wakes the character, and says so if asked to", () => {
@@ -291,4 +297,30 @@ test("triggers that follow each other in a ring are all refused, and so is anyth
     ],
     problems: [ring("a", "b"), ring("b", "a"), "`d` isn't running: it follows `a`, which isn't a running trigger in this file"],
   });
+});
+
+test("[triggers] is read under its own name, off unless turned on, and a check time limit of zero is refused", async () => {
+  const root = await mkdtemp(testTmp("shore-triggers-config-"));
+  const read = (): (boolean | number | string[])[] => {
+    const triggers = loadConfig(join(root, "config.toml"), { env: { SHORE_CONFIG_DIR: root }, onWarn: () => {} }).app.behavior.autonomy.triggers;
+    return [triggers.enabled, Number(triggers.wake_cooldown.asSecs()), Number(triggers.check_time_limit.asSecs()), triggers.off];
+  };
+  await writeFile(join(root, "config.toml"), '[chat]\ndisplay_name = "eve"\n');
+  expect(read()).toEqual([false, 3600, 60, []]);
+
+  await writeFile(join(root, "config.toml"), '[triggers]\nenabled = true\nwake_cooldown = "2h"\ncheck_time_limit = "10s"\noff = ["tide-table"]\n');
+  expect(read()).toEqual([true, 7200, 10, ["tide-table"]]);
+
+  await writeFile(join(root, "config.toml"), '[triggers]\ncheck_time_limit = "0s"\n');
+  expect(read).toThrow("triggers.check_time_limit must be greater than zero");
+});
+
+test("each [triggers] setting is described in the config schema", () => {
+  const described = configSchema({ instancesAt: () => [] }).filter((entry) => entry.key.startsWith("triggers.")).map((entry) => [entry.key, (entry.description ?? "").split(" ").slice(0, 4).join(" ")]);
+  expect(described).toEqual([
+    ["triggers.check_time_limit", "Longest a trigger's check"],
+    ["triggers.enabled", "Run the triggers the"],
+    ["triggers.off", "Names of triggers that"],
+    ["triggers.wake_cooldown", "Least time between two"],
+  ]);
 });

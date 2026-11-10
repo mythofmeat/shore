@@ -166,9 +166,12 @@ export function scheduledAt(when: TriggerWhen, since: number, timeZone: string):
   return when.kind === "at" ? nextAt(when, since, timeZone) : undefined;
 }
 
-export function allowedNow(rule: Pick<Trigger, "cooldownMs" | "between">, lastFiredAt: number | undefined, now: number, timeZone: string): boolean {
-  if (lastFiredAt !== undefined && now - lastFiredAt < rule.cooldownMs) return false;
-  if (rule.between === undefined) return true;
+export function coolingDown(cooldownMs: number, lastFiredAt: number | undefined, now: number): boolean {
+  return lastFiredAt !== undefined && now - lastFiredAt < cooldownMs;
+}
+
+export function inItsHours(between: DayWindow | undefined, now: number, timeZone: string): boolean {
+  if (between === undefined) return true;
   const local = naiveInZone(now, timeZone);
-  return inDayWindow(rule.between, Math.floor((local % DAY_MS) / MINUTE_MS));
+  return inDayWindow(between, Math.floor((local % DAY_MS) / MINUTE_MS));
 }
