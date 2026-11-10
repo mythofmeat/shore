@@ -17,7 +17,6 @@ function summary(value: unknown, secret: boolean): string {
   if (secret) return value === null || value === undefined || value === "" ? "Not set" : "Set (hidden)";
   if (value === null || value === undefined) return "Not set";
   if (typeof value === "string") return value === "" ? "Empty" : value;
-  if (typeof value === "number" || typeof value === "boolean") return String(value);
   if (Array.isArray(value)) return value.length === 0 ? "None" : value.map((item) => typeof item === "string" ? item : JSON.stringify(item)).join(", ");
   return JSON.stringify(value);
 }
@@ -32,7 +31,7 @@ function controlFor(entry: ConfigSchemaEntry, sources: ConfigSources | undefined
 
 function ConfigRow({ entry, effective, fallback, sources, saved }: { entry: ConfigSchemaEntry; effective: unknown; fallback: unknown; sources: ConfigSources | undefined; saved: () => void }) {
   const [editing, setEditing] = useState(false);
-  const [value, setValue] = useState<unknown>(entry.secret ? "" : effective);
+  const [value, setValue] = useState<unknown>();
   const { busy, run } = useAction();
   const save = () => void run(async () => {
     const result = await workspace.actions.run("config", { key: entry.key, value: settingText(entry, value) });
