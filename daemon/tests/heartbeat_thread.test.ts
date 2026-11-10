@@ -13,7 +13,7 @@ import { Diagnostics } from "../src/diagnostics.ts";
 import type { History } from "../src/engine/conversation.ts";
 import { unfoldedDiary } from "../src/autonomy/diary.ts";
 import { heartbeatNewsNote, triggerFiredNote, userWroteNote } from "../src/autonomy/heartbeat_shape.ts";
-import { lastSeen, noteSeen, setPresence } from "../src/autonomy/presence.ts";
+import { lastSeen, noteSeen, presence, setPresence } from "../src/autonomy/presence.ts";
 import { checkFacts, startTriggerTimer, type TriggerService } from "../src/autonomy/trigger_service.ts";
 import { DIARY_FOR_CHAT, DIARY_FOR_HEARTBEAT, diaryText, heartbeatRunningText } from "../src/engine/prompt.ts";
 import { markThreadRead, threadActivityNow } from "../src/engine/threads.ts";
@@ -1530,4 +1530,52 @@ test("the user was last seen when they last wrote, or when a client of theirs la
     reads.markRead("ada", "main", T0 + 15 * MINUTE);
     expect(lastSeen(data)).toBe(T0 + 20 * MINUTE);
   });
+});
+
+test("the presence command sets one of the user's own statuses, shows and clears it, refuses any other, and sets off the trigger for a change", async () => {
+  const choices = ["asleep", "at work"];
+  await withCharacter(async ({ runtime, workspace, data, say, command }) => {
+    await writeFile(join(workspace, "TRIGGERS.toml"), `[status]\nwhen = "status_changed"\ncheck = 'echo "now: $SHORE_USER_STATUS"'\nwake = false\n`);
+    await say("hello");
+    at(1);
+    await runtime.triggers.tick();
+    expect((await command("presence", {}) as { data?: unknown }).data).toEqual({ choices });
+    await runtime.triggers.tick();
+    expect(diaryOf(data)).toEqual([]);
+
+    at(5);
+    const set = await command("presence", { status: "  at work " });
+    expect(set).toMatchObject({ type: "command_output", name: "presence" });
+    expect((set as { data?: unknown }).data).toEqual({ status: "at work", set_at: new Date(T0 + 5 * MINUTE).toISOString(), choices });
+    expect(presence(data)).toEqual({ status: "at work", set_at: new Date(T0 + 5 * MINUTE).toISOString() });
+    at(6);
+    await runtime.triggers.tick();
+    expect(diaryOf(data)).toEqual([["status", "now: at work"]]);
+    expect((await command("presence", {}) as { data?: unknown }).data).toEqual({ status: "at work", set_at: new Date(T0 + 5 * MINUTE).toISOString(), choices });
+    expect((await command("presence", { status: null }) as { data?: unknown }).data).toEqual({ status: "at work", set_at: new Date(T0 + 5 * MINUTE).toISOString(), choices });
+
+    at(7);
+    const refused = await command("presence", { status: "on the moon" });
+    expect(refused.type).toBe("error");
+    expect(JSON.stringify(refused)).toContain(`\\"on the moon\\" isn't one of your statuses: yours are asleep, at work. Add it to presence.statuses to use it.`);
+    expect(presence(data)?.status).toBe("at work");
+    await runtime.triggers.tick();
+    expect(diaryOf(data)).toEqual([["status", "now: at work"]]);
+
+    at(8);
+    const cleared = await command("presence", { status: " " });
+    expect((cleared as { data?: unknown }).data).toEqual({ choices });
+    expect(presence(data)).toEqual({ status: "", set_at: new Date(T0 + 8 * MINUTE).toISOString() });
+  }, (app) => {
+    withTriggers(app);
+    app.behavior.presence.statuses = choices;
+  });
+
+  await withCharacter(async ({ say, command }) => {
+    await say("hello");
+    const refused = await command("presence", { status: "asleep" });
+    expect(refused.type).toBe("error");
+    expect(JSON.stringify(refused)).toContain("isn't one of your statuses: presence.statuses in your config is empty. Add it to presence.statuses to use it.");
+    expect((await command("presence", { status: "" }) as { data?: unknown }).data).toEqual({ choices: [] });
+  }, (app) => { app.behavior.presence.statuses = []; });
 });

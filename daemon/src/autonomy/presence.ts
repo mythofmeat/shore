@@ -4,8 +4,6 @@ const PRESENCE_STATE = "presence.json";
 
 const SEEN_STATE = "last_seen.json";
 
-export const STATUS_CHARS = 80;
-
 export interface Presence {
   status: string;
   set_at: string;
@@ -31,9 +29,7 @@ export function presence(dataDir: string): Presence | undefined {
 }
 
 export function setPresence(dataDir: string, status: string, now: number): Presence {
-  const text = status.trim();
-  if (Array.from(text).length > STATUS_CHARS) throw new Error(`a status is at most ${String(STATUS_CHARS)} characters`);
-  const next: Presence = { status: text, set_at: new Date(now).toISOString() };
+  const next: Presence = { status: status.trim(), set_at: new Date(now).toISOString() };
   writeState(dataDir, PRESENCE_STATE, JSON.stringify(next));
   return next;
 }

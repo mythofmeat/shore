@@ -9,12 +9,13 @@ use shore_common::protocol::operations::{
     ExecuteTool, FavoriteModel, FavoriteModelArgs, GetMessage, GetMessageArgs, InjectSystem,
     InjectSystemArgs, InspectCalls, InspectModel, InspectSegments, ListModels, ListModelsArgs,
     ListProviderModels, ListProviders, MessageReferences, ModelInfoArgs, ModelPreferenceScope,
-    ModelSettings, ModelSettingsArgs, Operation, PingKeepalive, ProviderArgs, ProviderModelsArgs,
-    ReadErrorLog, ReadHeartbeatLog, ReadStatus, ReadSubagentTraces, ReadTranscript,
-    RefreshAllProviderModels, RefreshProviderModels, ResetModel, ResetModelArgs, RunToolArgs,
-    ScheduleHeartbeat, SegmentAction, SegmentsArgs, SetHeartbeatActive, SetHeartbeatDormant,
-    SetModelSetting, SetModelSettingArgs, SubagentTraceArgs, SwitchModel, SwitchModelArgs,
-    ToolAccessListing, TranscriptArgs, TranscriptSource, WatchCompaction,
+    ModelSettings, ModelSettingsArgs, Operation, PingKeepalive, Presence, PresenceArgs,
+    ProviderArgs, ProviderModelsArgs, ReadErrorLog, ReadHeartbeatLog, ReadStatus,
+    ReadSubagentTraces, ReadTranscript, RefreshAllProviderModels, RefreshProviderModels,
+    ResetModel, ResetModelArgs, RunToolArgs, ScheduleHeartbeat, SegmentAction, SegmentsArgs,
+    SetHeartbeatActive, SetHeartbeatDormant, SetModelSetting, SetModelSettingArgs,
+    SubagentTraceArgs, SwitchModel, SwitchModelArgs, ToolAccessListing, TranscriptArgs,
+    TranscriptSource, WatchCompaction,
 };
 use shore_common::protocol::types::Role;
 use std::collections::BTreeMap;
@@ -485,6 +486,22 @@ pub(crate) enum CliCommand {
         /// Show only one section; every section is shown by default
         #[arg(long, add = values(Completes::Sections))]
         section: Option<String>,
+
+        /// Output raw JSON
+        #[arg(long)]
+        json: bool,
+    },
+
+    /// Show the status the character sees for you, set it, or clear it
+    #[command(display_order = 7)]
+    Presence {
+        /// The status to set: one of the statuses in your config's presence.statuses
+        #[arg(add = values(Completes::Statuses))]
+        status: Option<String>,
+
+        /// Clear the status
+        #[arg(long, conflicts_with = "status")]
+        clear: bool,
 
         /// Output raw JSON
         #[arg(long)]
@@ -2752,6 +2769,13 @@ pub(crate) fn to_swp_command(
         CliCommand::Dream { now, .. } => operation_to_swp::<Dream>(DreamArgs {
             now: now.then_some(true),
         }),
+        CliCommand::Presence { status, clear, .. } => operation_to_swp::<Presence>(PresenceArgs {
+            status: if *clear {
+                Some(String::new())
+            } else {
+                status.clone()
+            },
+        }),
 
         CliCommand::Debug { subcommand: None } => None,
         CliCommand::Debug {
@@ -3556,6 +3580,15 @@ mod tests {
             (&["status"], Some(("status", json!({})))),
             (&["dream"], Some(("dream", json!({})))),
             (&["dream", "--now"], Some(("dream", json!({"now": true})))),
+            (&["presence"], Some(("presence", json!({})))),
+            (
+                &["presence", "at work"],
+                Some(("presence", json!({"status": "at work"}))),
+            ),
+            (
+                &["presence", "--clear"],
+                Some(("presence", json!({"status": ""}))),
+            ),
             (
                 &["trace", "dreams", "-n", "3"],
                 Some(("transcript", json!({"source": "dreaming", "count": 3}))),

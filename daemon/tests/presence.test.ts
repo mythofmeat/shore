@@ -1,7 +1,11 @@
 import { expect, test } from "bun:test";
 import { mkdtemp } from "node:fs/promises";
+import { join } from "node:path";
 
 import { lastSeen, noteSeen, presence, setPresence, unshownPresence } from "../src/autonomy/presence.ts";
+import { loadConfig } from "../src/config/loader.ts";
+import { configSchema } from "../src/config/schema.ts";
+import { rejectionOf } from "./support/outcome.ts";
 import { assemblePrompt, DIARY_FOR_CHAT, diaryText, heartbeatRunningText, presenceText } from "../src/engine/prompt.ts";
 import type { Message } from "../src/engine/types.ts";
 import { writeState } from "../src/storage/store.ts";
@@ -25,11 +29,25 @@ test("a status is kept as written, without the space around it, with when it was
   expect(presence(dir)).toEqual({ status: "", set_at: "2026-10-30T13:00:00.000Z" });
 });
 
-test("a status is at most 80 characters, counting characters and not bytes", async () => {
-  const dir = await data();
-  expect(setPresence(dir, "🕯".repeat(80), T0).status).toBe("🕯".repeat(80));
-  expect(() => setPresence(dir, "🕯".repeat(81), T0 + 1)).toThrow("a status is at most 80 characters");
-  expect(presence(dir)?.set_at).toBe(AT);
+test("the statuses the user can set are a list in their config, each 1 to 80 characters, with no repeats", async () => {
+  const root = await mkdtemp(testTmp("shore-presence-config-"));
+  const read = async (toml: string): Promise<string[]> => {
+    await Bun.write(join(root, "config.toml"), toml);
+    return loadConfig(join(root, "config.toml"), { env: { SHORE_CONFIG_DIR: root }, onWarn: () => {} }).app.behavior.presence.statuses;
+  };
+  expect(await read('[chat]\ndisplay_name = "eve"\n')).toEqual(["asleep", "busy", "away"]);
+  expect(await read(`[presence]\nstatuses = ["at work", "${"🕯".repeat(80)}"]\n`)).toEqual(["at work", "🕯".repeat(80)]);
+  expect(await read("[presence]\nstatuses = []\n")).toEqual([]);
+
+  const refused = async (toml: string): Promise<string> => String(await rejectionOf(read(toml)));
+  const shape = "a status is 1 to 80 characters with no space at either end";
+  expect(await refused('[presence]\nstatuses = ["asleep", ""]\n')).toContain(`presence.statuses has ""; ${shape}`);
+  expect(await refused('[presence]\nstatuses = [" asleep"]\n')).toContain(`presence.statuses has " asleep"; ${shape}`);
+  expect(await refused(`[presence]\nstatuses = ["${"z".repeat(81)}"]\n`)).toContain(`presence.statuses has "${"z".repeat(81)}"; ${shape}`);
+  expect(await refused('[presence]\nstatuses = ["asleep", "busy", "asleep"]\n')).toContain('presence.statuses lists "asleep" twice');
+
+  const described = configSchema({ instancesAt: () => [] }).find((entry) => entry.key === "presence.statuses")?.description ?? "";
+  expect(described).toStartWith("The statuses you can set for yourself with shore presence");
 });
 
 test("a stored status or last-seen time that can't be read counts as none", async () => {

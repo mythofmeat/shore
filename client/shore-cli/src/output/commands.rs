@@ -62,6 +62,7 @@ pub(crate) fn format_command(name: &str, data: &serde_json::Value) {
         "subagent_trace" => print_subagent_trace(data),
         "heartbeat_tick_now" => print_heartbeat_tick_now(data),
         "dream" => cli_out!("{}", dream_report_text(data)),
+        "presence" => cli_out!("{}", presence_text(data)),
         "heartbeat_set_dormant" => print_heartbeat_status_change(data, "dormant"),
         "heartbeat_set_active" => print_heartbeat_status_change(data, "active"),
         "session_activate" => print_session_activate(data),
@@ -815,6 +816,29 @@ fn counted(n: u64, noun: &str) -> String {
         format!("1 {noun}")
     } else {
         format!("{n} {noun}s")
+    }
+}
+
+pub(crate) fn presence_text(data: &serde_json::Value) -> String {
+    if let Some(status) = data["status"].as_str() {
+        return format!(
+            "Your status is \"{status}\", set {}.",
+            super::autonomy::format_local_timestamp(data["set_at"].as_str().unwrap_or("?"))
+        );
+    }
+    let choices: Vec<&str> = data["choices"]
+        .as_array()
+        .into_iter()
+        .flatten()
+        .filter_map(serde_json::Value::as_str)
+        .collect();
+    if choices.is_empty() {
+        "You have no status set.".to_owned()
+    } else {
+        format!(
+            "You have no status set. You can set one of: {}.",
+            choices.join(", ")
+        )
     }
 }
 

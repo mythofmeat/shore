@@ -43,6 +43,7 @@ fn config_modes(command: &CliCommand) -> (bool, bool) {
         | CliCommand::Provider { .. }
         | CliCommand::Usage { .. }
         | CliCommand::Dream { .. }
+        | CliCommand::Presence { .. }
         | CliCommand::Completions { .. }
         | CliCommand::View { .. }
         | CliCommand::Ui { .. } => (false, false),
@@ -508,6 +509,7 @@ pub(crate) fn render(
         )),
         "refresh_all_provider_models" => Some(render_provider_refresh_all(data)),
         "dream" => Some(crate::output::commands::dream_report_text(data)),
+        "presence" => Some(crate::output::commands::presence_text(data)),
         "heartbeat_tick_now" => Some(format!(
             "Scheduled a heartbeat tick for {}.",
             data.get("character")
@@ -608,4 +610,31 @@ fn workspace_note(rewind: &serde_json::Value) -> Option<String> {
         Some(note) => format!("{note}; {left}."),
         None => format!("{left}."),
     })
+}
+
+#[cfg(test)]
+mod tests {
+    use serde_json::json;
+
+    #[test]
+    fn the_palette_shows_a_status_in_the_same_words_as_the_command_line() {
+        assert_eq!(
+            super::render(
+                "presence asleep",
+                "presence",
+                &json!({ "status": "asleep", "set_at": "just now", "choices": ["asleep"] }),
+                "ada"
+            ),
+            Some("Your status is \"asleep\", set just now.".to_owned())
+        );
+        assert_eq!(
+            super::render(
+                "presence --clear",
+                "presence",
+                &json!({ "choices": ["asleep", "busy"] }),
+                "ada"
+            ),
+            Some("You have no status set. You can set one of: asleep, busy.".to_owned())
+        );
+    }
 }

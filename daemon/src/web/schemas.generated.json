@@ -922,6 +922,22 @@
             "properties": {
               "name": {
                 "type": "string",
+                "const": "presence"
+              },
+              "data": {
+                "$ref": "#/$defs/PresenceResult"
+              }
+            },
+            "required": [
+              "name",
+              "data"
+            ]
+          },
+          {
+            "type": "object",
+            "properties": {
+              "name": {
+                "type": "string",
                 "const": "heartbeat_set_dormant"
               },
               "data": {
@@ -6378,6 +6394,32 @@
           "round_limit",
           "shutdown",
           "budget"
+        ]
+      },
+      "PresenceResult": {
+        "type": "object",
+        "properties": {
+          "status": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "set_at": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "choices": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        },
+        "required": [
+          "choices"
         ]
       },
       "KeepalivePingResult": {
@@ -10885,6 +10927,22 @@
             "properties": {
               "name": {
                 "type": "string",
+                "const": "presence"
+              },
+              "data": {
+                "$ref": "#/$defs/PresenceResult"
+              }
+            },
+            "required": [
+              "name",
+              "data"
+            ]
+          },
+          {
+            "type": "object",
+            "properties": {
+              "name": {
+                "type": "string",
                 "const": "heartbeat_set_dormant"
               },
               "data": {
@@ -16341,6 +16399,32 @@
           "round_limit",
           "shutdown",
           "budget"
+        ]
+      },
+      "PresenceResult": {
+        "type": "object",
+        "properties": {
+          "status": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "set_at": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "choices": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        },
+        "required": [
+          "choices"
         ]
       },
       "KeepalivePingResult": {

@@ -49,6 +49,7 @@ pub(crate) enum Completes {
     Segments,
     SettingKeys,
     SettingValues,
+    Statuses,
     SubagentRuns,
     Subagents,
     Threads,
@@ -85,6 +86,7 @@ impl Completes {
             Self::Sections => &[Source::Status],
             Self::SegmentSteps | Self::Segments => &[Source::Segments],
             Self::SettingKeys | Self::SettingValues => &[Source::Settings],
+            Self::Statuses => &[Source::Presence],
             Self::SubagentRuns => &[Source::SubagentRuns],
             Self::Subagents | Self::Tools => &[Source::Tools],
             Self::UsageApiKeys => &[Source::UsageApiKeys],
@@ -103,6 +105,7 @@ pub(crate) enum Source {
     Config,
     History,
     Models,
+    Presence,
     Presets,
     Providers,
     Segments,
@@ -134,6 +137,7 @@ impl Source {
         matches!(
             self,
             Self::Calls
+                | Self::Presence
                 | Self::Presets
                 | Self::Segments
                 | Self::SubagentRuns
@@ -153,6 +157,7 @@ impl Source {
             Self::Calls => ("call_log", json!({ "count": 20 })),
             Self::Config => ("config_schema", json!({})),
             Self::Models => ("list_models", json!({})),
+            Self::Presence => ("presence", json!({})),
             Self::Presets => ("provider_presets", json!({})),
             Self::Providers => ("list_providers", json!({})),
             Self::Segments => ("segments", json!({})),
@@ -261,6 +266,7 @@ pub(crate) struct PaletteCatalog {
     pub global_keys: Vec<PaletteValue>,
     pub budget_names: Vec<PaletteValue>,
     pub workspace_files: Vec<PaletteValue>,
+    pub statuses: Vec<PaletteValue>,
     tool_arguments: Vec<PaletteValue>,
     arguments_of: Option<String>,
     arguments_wanted: Option<String>,
@@ -275,6 +281,7 @@ impl PaletteCatalog {
             Source::Calls => self.calls = call_values(data),
             Source::Config => self.absorb_config(data),
             Source::Models => self.absorb_models(data),
+            Source::Presence => self.statuses = named_values(data, "choices"),
             Source::Presets => self.absorb_presets(data),
             Source::Providers => self.absorb_providers(data),
             Source::Segments => self.segments = segment_values(data),
@@ -620,6 +627,7 @@ impl PaletteCatalog {
                 .view_key()
                 .map_or_else(Vec::new, |key| self.view_values(key)),
             Completes::WorkspaceFiles => self.workspace_files.clone(),
+            Completes::Statuses => self.statuses.clone(),
         }
     }
 }
@@ -1498,6 +1506,10 @@ mod tests {
             Source::WorkspaceFiles,
             &json!({ "files": ["MEMORY.md", "notes/lighthouse.md"] }),
         );
+        catalog.absorb(
+            Source::Presence,
+            &json!({ "status": "asleep", "choices": ["asleep", "busy"] }),
+        );
         catalog
     }
 
@@ -1525,6 +1537,8 @@ mod tests {
                 &["models", "refresh", "add", "anthropic", "openrouter"],
             ),
             ("provider open", &["openrouter"]),
+            ("presence ", &["asleep", "busy"]),
+            ("presence b", &["busy"]),
             (
                 "provider openrouter ",
                 &[

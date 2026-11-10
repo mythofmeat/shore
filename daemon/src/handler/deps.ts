@@ -641,6 +641,7 @@ function commandDeps(a: CommandAssembly): CommandDeps {
   return {
     threads: runtime.registry,
     ...(a.reads === undefined ? {} : { reads: a.reads }),
+    presenceChanged: async () => { await runtime.triggers.statusChanged(); },
     autonomy: runtime.autonomy,
     diagnostics: a.diagnostics,
     callStore: runtime.callStore,

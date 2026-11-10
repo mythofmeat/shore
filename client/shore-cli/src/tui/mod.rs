@@ -2331,6 +2331,7 @@ fn absorb_palette_catalog(app: &mut App, source: Source, data: &serde_json::Valu
         | Source::Characters
         | Source::Config
         | Source::History
+        | Source::Presence
         | Source::Presets
         | Source::Providers
         | Source::Segments
