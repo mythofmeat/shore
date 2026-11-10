@@ -157,7 +157,8 @@ describe("a menu at a point", () => {
     document.body.append(opener);
     opener.focus();
     let closes = 0;
-    const view = await mount(<PointMenu label="Message" items={[{ label: "Copy", onSelect: () => {} }, { label: "Quote", onSelect: () => {} }]} at={{ x: 10, y: 10 }} close={() => { closes += 1; }} />);
+    const items = ["Copy", "Off", "Quote", "Edit"].map((label) => ({ label, disabled: label === "Off", onSelect: () => {} }));
+    const view = await mount(<PointMenu label="Message" items={items} at={{ x: 10, y: 10 }} close={() => { closes += 1; }} />);
     const list = document.body.querySelector<HTMLElement>(".menu-list.point");
     if (list === null) throw new Error("no menu");
     await acting(() => { list.dispatchEvent(new PointerEvent("pointerdown", { bubbles: true })); });
@@ -176,7 +177,7 @@ describe("a menu at a point", () => {
       expect(event?.defaultPrevented, name).toBe(true);
     }
     expect([closes, outer]).toEqual([5, 0]);
-    for (const [direction, expected] of [["ArrowDown", "Quote"], ["ArrowDown", "Copy"], ["ArrowUp", "Quote"]] as const) {
+    for (const [direction, expected] of [["ArrowDown", "Quote"], ["ArrowDown", "Edit"], ["ArrowDown", "Copy"], ["ArrowUp", "Edit"], ["ArrowUp", "Quote"]] as const) {
       await acting(() => { key(document.activeElement ?? list, direction); });
       expect(document.activeElement?.textContent).toBe(expected);
     }
