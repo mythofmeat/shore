@@ -52,6 +52,7 @@ export interface HeartbeatLoopDeps {
   wrapUpGrace: number;
   maxToolIterations: number | undefined;
   checkPictures?: (text: string) => Promise<string[]>;
+  news?: () => string | undefined;
   persist?: (round: HeartbeatRound) => Promise<void>;
   timeLimitMs?: number;
   wrapUpMs?: number;
@@ -189,6 +190,11 @@ export async function runHeartbeatToolLoop(
     messages: [],
     parallel: false,
     beforeTurn: async (call) => {
+      const news = deps.news?.();
+      if (news !== undefined) {
+        appendWrapUpNudge(call.messages, news);
+        await deps.persist?.({ role: "system", blocks: [{ type: "text", text: news }] });
+      }
       if (wrapUpEnd !== undefined) {
         if (iteration < wrapUpEnd) return;
         result.stoppedAt = wrapUpFor;

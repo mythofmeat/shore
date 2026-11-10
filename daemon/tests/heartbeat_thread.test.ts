@@ -10,7 +10,8 @@ import { emptyCatalog } from "../src/config/models.ts";
 import { ProviderRegistry } from "../src/config/providers.ts";
 import { Diagnostics } from "../src/diagnostics.ts";
 import type { History } from "../src/engine/conversation.ts";
-import { DIARY_FOR_CHAT, DIARY_FOR_HEARTBEAT, diaryText } from "../src/engine/prompt.ts";
+import { userWroteNote } from "../src/autonomy/heartbeat_shape.ts";
+import { DIARY_FOR_CHAT, DIARY_FOR_HEARTBEAT, diaryText, heartbeatRunningText } from "../src/engine/prompt.ts";
 import { markThreadRead, threadActivityNow } from "../src/engine/threads.ts";
 import type { DiaryNote, Message } from "../src/engine/types.ts";
 import { dispatchCommand } from "../src/handler/commands.ts";
@@ -51,6 +52,8 @@ interface Script {
   held: { started: PromiseWithResolvers<void>; release: PromiseWithResolvers<void> } | undefined;
   closing: string;
   aside?: string | undefined;
+  again?: number;
+  beatHeld?: { started: PromiseWithResolvers<void>; release: PromiseWithResolvers<void> } | undefined;
   wake?: Record<string, unknown> | undefined;
   replyWake?: Record<string, unknown> | undefined;
 }
@@ -88,6 +91,17 @@ function scriptedProvider(script: Script): SidecarProvider {
       }
       script.heartbeats.push(structuredClone(request));
       const resultsIn = request.messages.at(-1)?.content.some((block) => block.type === "tool_result") === true;
+      const beat = script.beatHeld;
+      if (beat !== undefined && !resultsIn) {
+        script.beatHeld = undefined;
+        beat.started.resolve();
+        await beat.release.promise;
+      }
+      if (resultsIn && (script.again ?? 0) > 0) {
+        script.again = (script.again ?? 0) - 1;
+        yield* eventsForResponse(respond(request, [{ type: "tool_use", id: `again-${String(script.heartbeats.length)}`, name: "read", input: { file_path: "SOUL.md" } }]));
+        return;
+      }
       const wake = resultsIn ? undefined : script.wake;
       if (wake !== undefined) {
         script.wake = undefined;
@@ -746,4 +760,108 @@ test("the user's next message in each thread arrives with the notes left since t
     expect(resumed).toEndWith("reply to: and the door?\nanything new?");
     expect(times(resumed, "[New in your diary")).toBe(1);
   }, undefined, root);
+});
+
+function hold(): { started: PromiseWithResolvers<void>; release: PromiseWithResolvers<void> } {
+  return { started: Promise.withResolvers<void>(), release: Promise.withResolvers<void>() };
+}
+
+test("a heartbeat is told once, at its next step, that the user wrote while it was running, whichever thread they wrote in", async () => {
+  await withCharacter(async ({ runtime, script, say, heartbeat, thread }) => {
+    await runtime.registry.createThread("ada", "garden");
+    await say("hello");
+    at(10);
+    await heartbeat();
+    expect(script.heartbeats.map(textOf).join("\n")).not.toContain("has just written to you");
+
+    for (const [minutes, where] of [[20, "main"], [40, "garden"]] as const) {
+      script.heartbeats.length = 0;
+      script.again = 1;
+      const held = hold();
+      script.beatHeld = held;
+      at(minutes);
+      const ticking = heartbeat();
+      await held.started.promise;
+      at(minutes + 1);
+      await say("are you there?", where);
+      at(minutes + 2);
+      await say("hello?", where);
+      held.release.resolve();
+      await ticking;
+
+      const note = userWroteNote(T0 + (minutes + 1) * MINUTE, "User", hostZone());
+      expect(script.heartbeats).toHaveLength(3);
+      expect(textOf(script.heartbeats[0] as SidecarRequest)).not.toContain("has just written to you");
+      expect(textOf(script.heartbeats[1] as SidecarRequest)).toEndWith(note);
+      expect(times(textOf(script.heartbeats[2] as SidecarRequest), "has just written to you")).toBe(1);
+      expect((await thread("heartbeat")).filter((message) => message.role === "system").at(-1)?.content).toBe(note);
+    }
+  });
+});
+
+test("a message sent while a heartbeat runs tells that turn a heartbeat is running, since when and why, once in each thread, and the note stays with the message", async () => {
+  const started = new Date(T0 + 20 * MINUTE).toISOString();
+  const running = heartbeatRunningText({ started_at: started, reason: "check the tide table" }, hostZone());
+  let root = "";
+  await withCharacter(async ({ runtime, script, data, say, heartbeat, thread }) => {
+    root = dirname(data);
+    await runtime.registry.createThread("ada", "garden");
+    await say("hello");
+    script.wake = { hours_from_now: 2, reason: "check the tide table" };
+    at(10);
+    await heartbeat();
+    at(11);
+    await say("nothing is running now");
+    expect(textOf(script.replies.at(-1) as SidecarRequest)).not.toContain("A heartbeat of yours");
+
+    const held = hold();
+    script.beatHeld = held;
+    at(20);
+    const ticking = heartbeat();
+    await held.started.promise;
+    expect(runtime.autonomy.runningHeartbeats()).toEqual([{ character: "ada", startedAt: T0 + 20 * MINUTE }]);
+    at(21);
+    await say("is the lamp lit?");
+    expect(textOf(script.replies.at(-1) as SidecarRequest)).toEndWith(`${running}\nis the lamp lit?`);
+
+    at(22);
+    await say("and the door?");
+    const later = textOf(script.replies.at(-1) as SidecarRequest);
+    expect(times(later, "A heartbeat of yours")).toBe(1);
+    expect(later).toEndWith("reply to: is the lamp lit?\nand the door?");
+
+    at(23);
+    await say("the beans are up", "garden");
+    expect(textOf(script.replies.at(-1) as SidecarRequest)).toEndWith(`${running}\nthe beans are up`);
+
+    held.release.resolve();
+    await ticking;
+    expect(runtime.autonomy.runningHeartbeats()).toEqual([]);
+    expect((await thread("main")).flatMap((message) => message.heartbeat_running === undefined ? [] : [[message.content, message.heartbeat_running]])).toEqual([
+      ["is the lamp lit?", { started_at: started, reason: "check the tide table" }],
+    ]);
+  });
+
+  await withCharacter(async ({ script, say }) => {
+    at(30);
+    await say("anything new?");
+    const resumed = textOf(script.replies[0] as SidecarRequest);
+    expect(resumed).toContain(`${running}\nis the lamp lit?`);
+    expect(times(resumed, "A heartbeat of yours")).toBe(1);
+  }, undefined, root);
+});
+
+test("each side is told about the other in these words, with the heartbeat's reason only when it has one", () => {
+  const started = new Date(T0).toISOString();
+  expect(heartbeatRunningText({ started_at: started }, "UTC")).toBe(
+    "[A heartbeat of yours has been running since Friday 2026-10-30 · 12:00 PM. It can't see this conversation. It is only told that a message arrived.]",
+  );
+  expect(heartbeatRunningText({ started_at: started, reason: "check the tide table" }, "UTC")).toBe(
+    "[A heartbeat of yours has been running since Friday 2026-10-30 · 12:00 PM. It can't see this conversation. It is only told that a message arrived. " +
+    "You scheduled it with set_next_wake, giving this reason: check the tide table]",
+  );
+  expect(userWroteNote(T0 + MINUTE, "eve", "UTC")).toBe(
+    "[eve has just written to you, at Friday 2026-10-30 · 12:01 PM, while this heartbeat is running. " +
+    "Another turn of you is answering them, and it knows this heartbeat is running.]",
+  );
 });

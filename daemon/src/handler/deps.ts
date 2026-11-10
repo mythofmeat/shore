@@ -95,6 +95,7 @@ export function buildGenerationDeps(a: GenerationAssembly): GenerationDeps {
     providers: a.providers,
     ...(runtime.callStore === undefined ? {} : { callStore: runtime.callStore }),
     autonomy: turnAutonomy(a.autonomy, runtime.cache),
+    runningHeartbeat: (character) => runtime.autonomy.runningHeartbeat(character),
     notifier: runtime.notifier,
     diagnostics: a.diagnostics,
     emitEvent: a.emitEvent,

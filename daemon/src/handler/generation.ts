@@ -1,5 +1,6 @@
 import { withConversation } from "../engine/lifecycle.ts";
 import { unseenDiary } from "../autonomy/diary.ts";
+import type { RunningHeartbeat } from "../autonomy/runner.ts";
 import { characterDataDir, threadDataDir } from "../config/dirs.ts";
 import { isToolResultOnly } from "../engine/message_store.ts";
 import { parseDurationMs } from "../llm/request.ts";
@@ -128,6 +129,7 @@ export interface GenerationDeps {
   providers: Partial<Record<SidecarRequest["sdk"], SidecarProvider>>;
   callStore?: CallRecorder | undefined;
   autonomy: TurnAutonomy & PersistContext["autonomy"];
+  runningHeartbeat?: (character: string) => RunningHeartbeat | undefined;
   notifier: PersistContext["notifier"];
   diagnostics: GenerationDiagnostics;
   emitEvent: (message: ServerMessage) => void;
@@ -296,9 +298,11 @@ async function runGenerationCore(
       ? { cold: false, annotations: {} }
       : await threadArrival(deps, engine, charName, home, resolved, now());
     const diary = unseenDiary(characterDataDir(deps.dataDir, charName), engine.messages(), Date.parse(now()));
+    const running = heartbeatNotTold(deps.runningHeartbeat?.(charName), engine.messages());
     const regenAlt = await appendUserTurn(turnCtx, engine, config.dirs.cache, charName, body, regen, params.rid, imageSettingsFor(config.app.images, "upload"), {
       ...arrival.annotations,
       ...(diary.length === 0 ? {} : { diary }),
+      ...(running === undefined ? {} : { heartbeat_running: running }),
     });
     if (arrival.cold) {
       try {
@@ -437,6 +441,13 @@ async function runGenerationCore(
     deps.compaction,
     crowded,
   );
+}
+
+function heartbeatNotTold(running: RunningHeartbeat | undefined, active: readonly Message[]): Message["heartbeat_running"] {
+  if (running === undefined) return undefined;
+  const startedAt = new Date(running.startedAt).toISOString();
+  if (active.some((message) => message.heartbeat_running?.started_at === startedAt)) return undefined;
+  return { started_at: startedAt, reason: running.reason };
 }
 
 const DEFAULT_CACHE_TTL_SECS = 3_600;
