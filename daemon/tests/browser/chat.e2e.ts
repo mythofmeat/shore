@@ -529,3 +529,25 @@ test("the usage display refreshes after a reply and otherwise leaves the daemon 
   await settled();
   await check();
 });
+
+test("the sidebar's status chip sets one of the user's statuses, shows it after a reload, and clears it", async ({ page }) => {
+  const finish = await watchPage(page);
+  await signIn(page);
+  await createCharacter(page, "plover");
+
+  const chip = page.getByRole("button", { name: "Your status", exact: true });
+  await expect(chip).toHaveText("Set status");
+  await chip.click();
+  const statuses = page.getByRole("menu", { name: "Your status" });
+  await expect(statuses.getByRole("menuitem")).toHaveText(["asleep", "busy", "away"]);
+  await statuses.getByRole("menuitem", { name: "busy" }).click();
+  await expect(chip).toHaveText("busy");
+
+  await page.reload();
+  await expect(chip).toHaveText("busy");
+  await chip.click();
+  await expect(statuses.getByRole("menuitem")).toHaveText(["asleep", "busySet", "away", "Clear status"]);
+  await statuses.getByRole("menuitem", { name: "Clear status" }).click();
+  await expect(chip).toHaveText("Set status");
+  await finish();
+});
