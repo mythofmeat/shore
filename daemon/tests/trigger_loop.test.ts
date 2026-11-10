@@ -91,7 +91,7 @@ test("a schedule starts counting when Shore first sees it, fires when its time c
   expect(w.ran).toEqual([]);
 });
 
-test("nothing runs while triggers are off, or while the character is dormant", async () => {
+test("nothing runs while triggers are off, and what comes due while the character is dormant is passed over, not saved up", async () => {
   const off = await world(HOURLY);
   off.settings = { ...off.settings, enabled: false };
   await off.at(0);
@@ -104,14 +104,22 @@ test("nothing runs while triggers are off, or while the character is dormant", a
   await off.at(121);
   expect(off.woke).toHaveLength(1);
 
-  const asleep = await world(HOURLY);
+  const asleep = await world(`${HOURLY}\n[tide]\nevery = "1h"\ncheck = "tide.sh"\nwake = false\n`);
+  asleep.checks["tide"] = { kind: "fired", output: "The tide is out." };
   await asleep.at(0);
   asleep.dormant = true;
   await asleep.at(60);
+  await asleep.at(200);
   expect(asleep.woke).toEqual([]);
+  expect(asleep.ran).toEqual([]);
   asleep.dormant = false;
-  await asleep.at(61);
-  expect(asleep.woke).toHaveLength(1);
+  await asleep.at(201);
+  await asleep.at(259);
+  expect(asleep.woke).toEqual([]);
+  expect(asleep.ran).toEqual([]);
+  await asleep.at(260);
+  expect(asleep.woke).toEqual([{ name: "lamp", reason: "Trim the lamp.", at: T0 + 260 * MINUTE }]);
+  expect(asleep.notes()).toEqual([["tide", "The tide is out."]]);
 });
 
 test("a trigger that comes due during its cooldown waits for it to end, and its check isn't run until then", async () => {

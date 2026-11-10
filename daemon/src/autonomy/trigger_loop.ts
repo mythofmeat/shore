@@ -91,7 +91,8 @@ export class CharacterTriggers {
   async tick(): Promise<void> {
     await this.#inTurn(async () => {
       const settings = this.#deps.settings();
-      if (!settings.enabled || this.#deps.dormant()) return;
+      if (!settings.enabled) return;
+      const resting = this.#deps.dormant();
       await this.#load(settings);
       const state = this.#state();
       this.#reportProblems(state);
@@ -107,7 +108,7 @@ export class CharacterTriggers {
         const { pending: _was, quietFor: _before, ...kept } = known;
         const next: TriggerRecord = { ...kept, since: now, ...(last === undefined ? {} : { quietFor: last }) };
         state.records[trigger.name] = next;
-        if (inItsHours(trigger.between, now, this.#deps.timeZone)) await this.#run(trigger, next, settings.checkLimitMs, state);
+        if (!resting && inItsHours(trigger.between, now, this.#deps.timeZone)) await this.#run(trigger, next, settings.checkLimitMs, state);
       }
       this.#save(state);
     });
