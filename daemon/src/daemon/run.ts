@@ -183,6 +183,7 @@ export async function startDaemon(options: DaemonOptions): Promise<RunningDaemon
         authenticate: (presented) => tokenMatches(startup.token.token, presented),
         recovery: { dataDir: dataLease.dataDir, cacheDir: loaded.dirs.cache, token: startup.token.token },
         picture: (file) => findSentPicture(dataLease.dataDir, file),
+        dataDir: dataLease.dataDir,
       });
     }
   } catch (error) {

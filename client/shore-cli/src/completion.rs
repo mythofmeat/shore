@@ -1317,15 +1317,47 @@ fn palette_command(words: &[String]) -> Command {
     command
 }
 
+struct OpenWord {
+    start: usize,
+    quote: Option<char>,
+    escaping: bool,
+}
+
+fn open_word(input: &str) -> OpenWord {
+    let mut word = OpenWord {
+        start: 0,
+        quote: None,
+        escaping: false,
+    };
+    for (index, ch) in input.char_indices() {
+        if word.escaping {
+            word.escaping = false;
+            continue;
+        }
+        match ch {
+            '\\' if word.quote != Some('\'') => word.escaping = true,
+            '\'' | '"' if word.quote == Some(ch) => word.quote = None,
+            '\'' | '"' if word.quote.is_none() => word.quote = Some(ch),
+            _ if ch.is_whitespace() && word.quote.is_none() => {
+                word.start = index.saturating_add(ch.len_utf8());
+            }
+            _ => {}
+        }
+    }
+    word
+}
+
 fn completion_argv(input: &str) -> (Vec<OsString>, usize) {
-    let trailing_space = input.chars().last().is_some_and(char::is_whitespace);
-    let mut words = shlex::split(input).unwrap_or_else(|| {
-        input
-            .split_whitespace()
-            .map(str::to_owned)
-            .collect::<Vec<_>>()
-    });
-    if trailing_space || words.is_empty() {
+    let open = open_word(input);
+    let typed = input
+        .strip_suffix('\\')
+        .filter(|_| open.escaping)
+        .unwrap_or(input);
+    let begins_a_word = open.start == typed.len();
+    let mut closed = typed.to_owned();
+    closed.extend(open.quote);
+    let mut words = shlex::split(&closed).unwrap_or_default();
+    if begins_a_word {
         words.push(String::new());
     }
     let mut argv = vec![OsString::from(BIN)];
@@ -1335,25 +1367,7 @@ fn completion_argv(input: &str) -> (Vec<OsString>, usize) {
 }
 
 fn completion_prefix(input: &str) -> &str {
-    let mut quote = None;
-    let mut escaped = false;
-    let mut start = 0;
-    for (index, ch) in input.char_indices() {
-        if escaped {
-            escaped = false;
-            continue;
-        }
-        match ch {
-            '\\' if quote != Some('\'') => escaped = true,
-            '\'' | '"' if quote == Some(ch) => quote = None,
-            '\'' | '"' if quote.is_none() => quote = Some(ch),
-            _ if ch.is_whitespace() && quote.is_none() => {
-                start = index.saturating_add(ch.len_utf8());
-            }
-            _ => {}
-        }
-    }
-    input.get(..start).unwrap_or_default()
+    input.get(..open_word(input).start).unwrap_or_default()
 }
 
 fn palette_spelling(value: &str) -> Option<String> {
@@ -2093,6 +2107,69 @@ mod tests {
                 ["thread move story --folder 'my stories'"],
                 "completing {input:?}"
             );
+        }
+    }
+
+    #[test]
+    fn a_word_still_being_typed_completes_as_if_its_quote_were_closed() {
+        for input in [
+            "thread move story --folder \"my st",
+            "thread move story --folder 'my st",
+            "thread move story --folder \"my",
+            "thread move story --folder \"my ",
+            "thread move story --folder 'my ",
+            "thread move story --folder \"",
+            "thread move story --folder \"my\\",
+            "thread move story --folder my\\ ",
+            "thread move story --folder my\\",
+            "thread move story --folder \\",
+        ] {
+            let mut catalog = PaletteCatalog {
+                folders: plain_values(&["my stories"]),
+                ..PaletteCatalog::default()
+            };
+            let replaced = palette_completions(input, &mut catalog)
+                .candidates
+                .into_iter()
+                .map(|candidate| candidate.replacement)
+                .collect::<Vec<_>>();
+            assert_eq!(
+                replaced,
+                ["thread move story --folder 'my stories'"],
+                "completing {input:?}"
+            );
+        }
+    }
+
+    #[test]
+    fn a_quote_inside_the_other_kind_of_quote_is_part_of_the_word() {
+        for (input, folders, completed) in [
+            (
+                "thread move story --folder \"it's m",
+                &["it's mine", "its mine"][..],
+                "thread move story --folder \"it's mine\"",
+            ),
+            (
+                "thread move story --folder 'say \"h",
+                &["say \"hi\"", "say hi"][..],
+                "thread move story --folder 'say \"hi\"'",
+            ),
+            (
+                "thread move story --folder 'a\\",
+                &["a\\b", "ab"][..],
+                "thread move story --folder \"a\\\\b\"",
+            ),
+        ] {
+            let mut catalog = PaletteCatalog {
+                folders: plain_values(folders),
+                ..PaletteCatalog::default()
+            };
+            let replaced = palette_completions(input, &mut catalog)
+                .candidates
+                .into_iter()
+                .map(|candidate| candidate.replacement)
+                .collect::<Vec<_>>();
+            assert_eq!(replaced, [completed], "completing {input:?}");
         }
     }
 

@@ -34,7 +34,7 @@ export function AppearancePage(_: { state: ChromeSnapshot }) {
   const notify = useNotifications();
   const note = notify.permission === "default" ? notify.enabled ? NOTIFY_UNDECIDED : undefined : NOTIFY_NOTES[notify.permission];
   return <>
-    <SettingsSection title="Theme" description="Saved in this browser.">
+    <SettingsSection title="Theme" description="Kept by the daemon, so every browser and device shows the same.">
       <div className="theme-grid" role="radiogroup" aria-label="Theme">
         {THEMES.map((item) => <button key={item.id} type="button" role="radio" aria-checked={theme === item.id} className={`theme-card ${theme === item.id ? "on" : ""}`} onClick={() => store.select(item.id)}>
           <span className="theme-swatch" data-theme={item.id}><span className="theme-swatch-bar" /><span className="theme-swatch-line" /><span className="theme-swatch-line short" /><span className="theme-swatch-dot" /></span>
@@ -44,13 +44,13 @@ export function AppearancePage(_: { state: ChromeSnapshot }) {
       </div>
       {store.error === "" ? null : <p className="form-error" role="alert">{store.error}</p>}
     </SettingsSection>
-    <SettingsSection title="Text size" description="Saved in this browser.">
+    <SettingsSection title="Text size" description="Kept by the daemon, so every browser and device shows the same.">
       <div className="segmented" role="radiogroup" aria-label="Text size">
         {FONT_SIZES.map((item) => <button key={item.id} type="button" role="radio" aria-checked={fontSize === item.id} onClick={() => fontSizes.select(item.id)}>{item.label}</button>)}
       </div>
       {fontSizes.error === "" ? null : <p className="form-error" role="alert">{fontSizes.error}</p>}
     </SettingsSection>
-    <SettingsSection title="Thread display" description="Saved in this browser.">
+    <SettingsSection title="Thread display" description="Kept by the daemon, so every browser and device shows the same.">
       <div className="rows">
         <SettingRow label="Stream replies" description="Show replies as they’re written instead of all at once.">
           <Switch label="Stream replies" checked={stream} change={setStream} />
@@ -61,7 +61,7 @@ export function AppearancePage(_: { state: ChromeSnapshot }) {
       </div>
       {display.getSnapshot().error === "" ? null : <p className="form-error" role="alert">{display.getSnapshot().error}</p>}
     </SettingsSection>
-    <SettingsSection title="Notifications" description="Saved in this browser.">
+    <SettingsSection title="Notifications" description="Chosen for each browser. A new browser starts with your latest choice.">
       <div className="rows">
         <SettingRow label="Notify when unfocused" description={note === undefined ? NOTIFY_DESCRIPTION : `${NOTIFY_DESCRIPTION} ${note}`}>
           <Switch label="Notify when unfocused" checked={notify.enabled} change={(checked) => { perform(async () => { if (checked) await notifier.enable(); else notifier.disable(); }); }} />

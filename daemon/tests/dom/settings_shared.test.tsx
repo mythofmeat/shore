@@ -202,6 +202,7 @@ describe("pages and banners", () => {
     const listed = () => [...view.host.querySelectorAll(".setting-control.keys")].map((keys) => [...keys.querySelectorAll("kbd")].map((key) => key.textContent).join("+"));
     expect(listed()).toEqual(shortcutsFor(true, false).map((item) => item.keys.map(keyLabel).join("+")));
     expect([...view.host.querySelectorAll("h2")].map((title) => title.textContent)).toEqual(["Writing messages", "Anywhere", "Message box", "Thread"]);
+    expect(view.host.querySelector(".settings-section-head .settings-description")?.textContent).toBe("Kept by the daemon, so every browser and device shows the same.");
     expect(view.host.textContent).toContain(`${keyLabel("Mod")}+Enter sends`);
     await click(view.host.querySelector("[aria-label='Enter sends']"));
     await click(view.host.querySelector("[aria-label='Vim mode']"));

@@ -27,7 +27,7 @@ export function navigate(route: Route): void {
   for (const listener of listeners) listener();
 }
 
-const LAST_PAGE_KEY = "shore.settings-page";
+export const LAST_PAGE_KEY = "shore.settings-page";
 
 export function openSettings(): void {
   const stored = readStored(LAST_PAGE_KEY);

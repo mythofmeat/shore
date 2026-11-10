@@ -6,12 +6,14 @@ import { ConversationRequests, type ConversationScope } from "../chat/requests.t
 import { ReadMarks } from "../chat/read_marks.ts";
 import { conversationCharacter, droppedNotice } from "../chat/sending.ts";
 import { UnsentMessages } from "../chat/unsent.ts";
-import { Notifier, type NotifySnapshot } from "../notifications.ts";
-import { DisplayPreferences, type ViewValues } from "../preferences.ts";
+import { daemonSettings, KeptSettings } from "../kept_settings.ts";
+import { Notifier, NOTIFY_KEY, type NotifySnapshot } from "../notifications.ts";
+import { DisplayPreferences, PREFERENCE_STORAGE_KEY, VIEW_KEYS, type ViewValues } from "../preferences.ts";
 import { listRequests } from "../request_history.ts";
-import { readStored } from "../stored.ts";
-import { FontSizeStore, type FontSizeId } from "../font_size.ts";
-import { ThemeStore, type ThemeId } from "../theme.ts";
+import { followStoredWrites, readStored, storedChanged } from "../stored.ts";
+import { FontSizeStore, FONT_SIZE_STORAGE_KEY, type FontSizeId } from "../font_size.ts";
+import { ThemeStore, THEME_STORAGE_KEY, type ThemeId } from "../theme.ts";
+import { LAST_PAGE_KEY } from "./route.ts";
 import { toasts } from "../ui/toast.tsx";
 import { Workspace, type ChromeSnapshot, type WorkspaceSnapshot } from "../workspace.ts";
 
@@ -38,13 +40,35 @@ export const unsent = new UnsentMessages(workspace.connection, listRequests, (me
   const character = conversationCharacter(message.conversation);
   toasts.show(`Your earlier message${character === undefined ? "" : ` to ${character}`} wasn’t saved, so it’s back in its message box.${droppedNotice(dropped)}`, "error");
 });
-export const themes = new ThemeStore();
-export const fontSizes = new FontSizeStore();
-export const display = new DisplayPreferences(browserStorage());
-export const notifier = new Notifier({ storage: browserStorage() });
-workspace.connection.subscribe((update) => { notifier.observe(update, workspace.getSnapshot()); });
-addEventListener("storage", () => { themes.reload(); fontSizes.reload(); display.reload(); notifier.reload(); });
-addEventListener("focus", () => { notifier.markRead(); });
+export const STREAM_KEY = "shore.stream";
+export const ENTER_SENDS_KEY = "shore.enter-sends";
+export const VIM_MODE_KEY = "shore.vim-mode";
+export const SIDEBAR_KEY = "shore.sidebar";
+const COLLAPSED_FOLDERS_KEY = "shore.folders.collapsed";
+
+export const kept = new KeptSettings(browserStorage(), {
+  everywhere: [THEME_STORAGE_KEY, FONT_SIZE_STORAGE_KEY, STREAM_KEY, ENTER_SENDS_KEY, VIM_MODE_KEY, COLLAPSED_FOLDERS_KEY, ...VIEW_KEYS.map((key) => `${PREFERENCE_STORAGE_KEY}.${key}`)],
+  perBrowser: [NOTIFY_KEY, SIDEBAR_KEY, LAST_PAGE_KEY],
+}, daemonSettings, () => workspace.connection.status === "ready", reloadStored);
+followStoredWrites(kept.wrote);
+export const themes = new ThemeStore(kept);
+export const fontSizes = new FontSizeStore(kept);
+export const display = new DisplayPreferences(kept);
+export const notifier = new Notifier({ storage: kept });
+
+function reloadStored(): void {
+  themes.reload(); fontSizes.reload(); display.reload(); notifier.reload(); collapsedFolders.reload();
+  storedChanged();
+}
+
+function syncKept(): void { kept.sync().catch(() => {}); }
+
+workspace.connection.subscribe((update) => {
+  notifier.observe(update, workspace.getSnapshot());
+  if (update.kind === "status") syncKept();
+});
+addEventListener("storage", reloadStored);
+addEventListener("focus", () => { notifier.markRead(); syncKept(); });
 
 export function useWorkspace(): WorkspaceSnapshot {
   return useSyncExternalStore(workspace.subscribe, workspace.getSnapshot);
@@ -100,21 +124,13 @@ export function useCompactionRecord(): PassRecord | null {
   return useSyncExternalStore(compactionWatch.subscribe, compactionWatch.getSnapshot);
 }
 
-export const STREAM_KEY = "shore.stream";
-
 export function streamReplies(): boolean {
   return readStored(STREAM_KEY) !== "false";
 }
 
-export const ENTER_SENDS_KEY = "shore.enter-sends";
-
 export function enterSends(): boolean {
   return readStored(ENTER_SENDS_KEY) !== "false";
 }
-
-export const VIM_MODE_KEY = "shore.vim-mode";
-
-const COLLAPSED_FOLDERS_KEY = "shore.folders.collapsed";
 
 class CollapsedFolders {
   readonly #listeners = new Set<() => void>();
@@ -150,8 +166,7 @@ class CollapsedFolders {
   }
 }
 
-export const collapsedFolders = new CollapsedFolders(browserStorage());
-addEventListener("storage", () => { collapsedFolders.reload(); });
+export const collapsedFolders = new CollapsedFolders(kept);
 
 export function useCollapsedFolders(character: string | null): ReadonlySet<string> {
   return useSyncExternalStore(collapsedFolders.subscribe, () => collapsedFolders.of(character));

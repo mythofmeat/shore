@@ -237,6 +237,7 @@ describe("the usage page", () => {
     expect([...view.host.querySelectorAll(".setting-row .setting-text")].map((row) => [row.querySelector(".setting-label")?.textContent, row.querySelector(".setting-description")?.textContent])).toEqual([
       ["Usage display", "Show a budget chip in the top bar."], ["Budget focus", "Which budget the chip follows, and whether it tracks the cap or the pace."],
     ]);
+    expect([...view.host.querySelectorAll(".settings-section-head")].map((head) => [head.querySelector("h2")?.textContent, head.querySelector(".settings-description")?.textContent]).at(-1)).toEqual(["In the chat", "Kept by the daemon, so every browser and device shows the same."]);
     expect([...usage?.querySelectorAll("option") ?? []].map((option) => [option.getAttribute("value"), option.textContent])).toEqual([["off", "Never"], ["warn", "Only near a limit"], ["always", "Always"]]);
     expect([...measure?.querySelectorAll("option") ?? []].map((option) => [option.getAttribute("value"), option.textContent])).toEqual([["auto", "Whichever is higher"], ["cap", "Spending cap"], ["pace", "Pace"]]);
     expect([usage?.value, chosen?.value, measure?.value, names()]).toEqual(["off", "", "auto", [["", "Most used"], ["daily", "daily"], ["odd:name", "odd:name"]]]);

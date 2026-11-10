@@ -12,7 +12,7 @@ export function KeyboardPage(_: { state: ChromeSnapshot }) {
   const shortcuts = shortcutsFor(enterSends, vim);
   return <>
     <p className="settings-description">Shortcuts work everywhere in the chat. They can’t be rebound yet.</p>
-    <SettingsSection title="Writing messages" description="Saved in this browser.">
+    <SettingsSection title="Writing messages" description="Kept by the daemon, so every browser and device shows the same.">
       <div className="rows">
         <SettingRow label="Enter sends" description={`When off, Enter adds a new line and ${keyLabel("Mod")}+Enter sends. On phones Enter always adds a new line.`}>
           <Switch label="Enter sends" checked={enterSends} change={setEnterSends} />

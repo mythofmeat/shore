@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState, useSyncExternalStore } from "react";
-import { readStored, writeStored } from "../stored.ts";
+import { readStored, subscribeStored, writeStored } from "../stored.ts";
 
 export function useMediaQuery(query: string): boolean {
   const subscribe = useCallback((listener: () => void) => {
@@ -12,12 +12,14 @@ export function useMediaQuery(query: string): boolean {
 
 export function useStoredFlag(key: string, fallback: boolean): [boolean, (value: boolean) => void] {
   const [value, setValue] = useState(() => { const stored = readStored(key); return stored === null ? fallback : stored === "true"; });
+  useEffect(() => subscribeStored(() => { const stored = readStored(key); if (stored !== null) setValue(stored === "true"); }), [key]);
   const update = useCallback((next: boolean) => { setValue(next); writeStored(key, String(next)); }, [key]);
   return [value, update];
 }
 
 export function useStoredText(key: string, fallback: () => string): [string, (value: string) => void] {
   const [value, setValue] = useState(() => readStored(key) ?? fallback());
+  useEffect(() => subscribeStored(() => { const stored = readStored(key); if (stored !== null) setValue(stored); }), [key]);
   const update = useCallback((next: string) => { setValue(next); writeStored(key, next); }, [key]);
   return [value, update];
 }
