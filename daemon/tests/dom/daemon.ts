@@ -50,6 +50,21 @@ export class FakeSocket {
   }
 }
 
+export const keptSettings = { values: {} as Record<string, string>, lists: 0, saves: [] as Record<string, string>[] };
+
+export function forgetKeptSettings(): void { Object.assign(keptSettings, { values: {}, lists: 0, saves: [] }); }
+
+async function answerPage(path: string, init: RequestInit = {}): Promise<Response> {
+  await Promise.resolve();
+  if (path === "/api/preferences/list") keptSettings.lists += 1;
+  else if (path === "/api/preferences") {
+    const { values } = JSON.parse(init.body as string) as { values: Record<string, string> };
+    keptSettings.saves.push(values);
+    keptSettings.values = { ...keptSettings.values, ...values };
+  } else return Response.json({ contract: "c1", protocol: 2, expires_at: Date.now() + 3_600_000, max_message_bytes: 1_000_000, max_pending_requests: 32 });
+  return Response.json({ values: keptSettings.values });
+}
+
 export function replace(restores: (() => void)[], target: object, key: string, value: unknown): void {
   const original = Object.getOwnPropertyDescriptor(target, key);
   Object.defineProperty(target, key, { configurable: true, writable: true, value });
@@ -57,7 +72,7 @@ export function replace(restores: (() => void)[], target: object, key: string, v
 }
 
 export async function connect(connection: BrowserConnection, restores: (() => void)[], answer: Answer = catalogue): Promise<FakeSocket> {
-  replace(restores, globalThis, "fetch", async () => await Promise.resolve(Response.json({ contract: "c1", protocol: 2, expires_at: Date.now() + 3_600_000, max_message_bytes: 1_000_000, max_pending_requests: 32 })));
+  replace(restores, globalThis, "fetch", answerPage);
   replace(restores, globalThis, "WebSocket", FakeSocket);
   replace(restores, globalThis, "indexedDB", new IDBFactory());
   replace(restores, navigator, "locks", undefined);

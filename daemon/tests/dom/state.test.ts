@@ -1,5 +1,5 @@
 import { afterAll, afterEach, beforeAll, describe, expect, spyOn, test } from "bun:test";
-import { LISTING, connect, replace, type Answer } from "./daemon.ts";
+import { LISTING, connect, forgetKeptSettings, keptSettings, replace, type Answer } from "./daemon.ts";
 import { acting, blockStorage, renderHook, useDom } from "./dom.ts";
 
 useDom("http://shore.test:7340/workspace/ada/story");
@@ -7,9 +7,12 @@ useDom("http://shore.test:7340/workspace/ada/story");
 type State = typeof import("../../src/browser/app/state.ts");
 
 const restores: (() => void)[] = [];
+const loaded: State[] = [];
 afterEach(() => {
+  for (const state of loaded.splice(0)) state.workspace.connection.stop();
   for (const restore of restores.splice(0).reverse()) restore();
   localStorage.clear();
+  forgetKeptSettings();
 });
 
 function swap(target: object, key: string, value: unknown): void { replace(restores, target, key, value); }
@@ -25,7 +28,9 @@ let loads = 0;
 async function load(path = "/workspace/ada/story"): Promise<State> {
   history.replaceState(null, "", path);
   loads += 1;
-  return await import(`../../src/browser/app/state.ts?load=${String(loads)}`) as State;
+  const state = await import(`../../src/browser/app/state.ts?load=${String(loads)}`) as State;
+  loaded.push(state);
+  return state;
 }
 
 async function connected(state: State, answer?: Answer) {
@@ -143,7 +148,12 @@ describe("the app's state", () => {
     expect(state.display.getSnapshot().values.metadata).toBe("off");
     localStorage.setItem(`${PREFERENCE_STORAGE_KEY}.metadata`, "on");
     localStorage.setItem(NOTIFY_KEY, "true");
-    dispatchEvent(new Event("storage"));
+    const { useStoredFlag } = await import("../../src/browser/ui/hooks.ts");
+    const vim = await renderHook(() => useStoredFlag(state.VIM_MODE_KEY, false), undefined);
+    localStorage.setItem(state.VIM_MODE_KEY, "true");
+    await acting(() => { dispatchEvent(new Event("storage")); });
+    expect(vim.current()[0]).toBe(true);
+    await vim.unmount();
     expect([state.themes.getSnapshot(), state.fontSizes.getSnapshot()]).toEqual(["fog", "large"]);
     expect([...state.collapsedFolders.of("ada")]).toEqual(["work"]);
     expect(state.display.getSnapshot().values.metadata).toBe("on");
@@ -170,6 +180,91 @@ describe("the app's state", () => {
     state.perform(async () => await Promise.resolve("fine"));
     await Bun.sleep(1);
     expect(state.workspace.getSnapshot().error).toBe("background broke");
+  });
+});
+
+const EVERYWHERE = {
+  "shore.theme": "fog", "shore.font-size": "large", "shore.stream": "false", "shore.enter-sends": "false", "shore.vim-mode": "true",
+  "shore.folders.collapsed": JSON.stringify({ ada: ["work"] }),
+  "shore.view.v1.timestamps": "off", "shore.view.v1.thinking": "off", "shore.view.v1.tools": "off", "shore.view.v1.subagent": "off", "shore.view.v1.compaction": "off",
+  "shore.view.v1.images": "off", "shore.view.v1.metadata": "on", "shore.view.v1.usage": "always", "shore.view.v1.budget": "pace",
+};
+const PER_BROWSER = { "shore.notify": "true", "shore.sidebar": "false", "shore.settings-page": "usage" };
+
+describe("settings the daemon keeps", () => {
+  test("a browser at a new address starts with them once it is signed in, and shows them without a reload", async () => {
+    Object.assign(keptSettings.values, EVERYWHERE, PER_BROWSER);
+    const state = await load();
+    const { useStoredFlag } = await import("../../src/browser/ui/hooks.ts");
+    const vim = await renderHook(() => useStoredFlag(state.VIM_MODE_KEY, false), undefined);
+    expect([state.themes.getSnapshot(), vim.current()[0], keptSettings.lists]).toEqual(["default", false, 0]);
+    dispatchEvent(new Event("focus"));
+    await Bun.sleep(5);
+    expect(keptSettings.lists, "nothing is asked before the page is connected").toBe(0);
+    await acting(async () => { await connected(state); });
+    expect(keptSettings.lists).toBe(1);
+    expect(Object.fromEntries(Object.keys({ ...EVERYWHERE, ...PER_BROWSER }).map((key) => [key, localStorage.getItem(key)]))).toEqual({ ...EVERYWHERE, ...PER_BROWSER });
+    expect([state.themes.getSnapshot(), document.documentElement.dataset["theme"], state.fontSizes.getSnapshot(), vim.current()[0]]).toEqual(["fog", "fog", "large", true]);
+    expect(state.display.getSnapshot().values).toEqual({ timestamps: "off", thinking: "off", tools: "off", subagent: "off", compaction: "off", images: "off", metadata: "on", usage: "always", budget: "pace" });
+    expect([state.streamReplies(), state.enterSends(), state.notifier.getSnapshot().enabled, [...state.collapsedFolders.of("ada")]]).toEqual([false, false, true, ["work"]]);
+    expect(keptSettings.saves).toEqual([]);
+    await vim.unmount();
+  });
+
+  test("a browser that already has settings hands them to a daemon that has none", async () => {
+    for (const [key, value] of Object.entries({ ...EVERYWHERE, ...PER_BROWSER, "shore.device-address": "box:7340", "shore.draft.v1.x": "words", "shore.reasoning": "false" })) localStorage.setItem(key, value);
+    const state = await load();
+    await connected(state);
+    expect(keptSettings.saves).toEqual([{ ...EVERYWHERE, ...PER_BROWSER }]);
+  });
+
+  test("each setting changed on the page is sent as it is changed, and the ones tied to an address stay here", async () => {
+    const state = await load();
+    const socket = await connected(state);
+    const { writeStored } = await import("../../src/browser/stored.ts");
+    expect([keptSettings.lists, keptSettings.saves]).toEqual([1, []]);
+    state.themes.select("fog");
+    state.fontSizes.select("small");
+    state.display.change("metadata", "on");
+    state.collapsedFolders.toggle("ada", "work");
+    state.notifier.disable();
+    writeStored(state.SIDEBAR_KEY, "false");
+    writeStored("shore.device-address", "box:7340");
+    await Bun.sleep(5);
+    expect(keptSettings.values).toEqual({ "shore.theme": "fog", "shore.font-size": "small", "shore.view.v1.metadata": "on", "shore.folders.collapsed": JSON.stringify({ ada: ["work"] }), "shore.notify": "false", "shore.sidebar": "false" });
+    socket.receive({ type: "stream_chunk", rid: "r_1", text: "hi", content_type: "text" });
+    await Bun.sleep(5);
+    expect(keptSettings.lists, "replies arriving don't ask again").toBe(1);
+  });
+
+  test("coming back to the page picks up what another device changed, but keeps this browser's own notification choice", async () => {
+    const state = await load();
+    await connected(state);
+    state.notifier.disable();
+    await Bun.sleep(5);
+    Object.assign(keptSettings.values, { "shore.theme": "fog", "shore.notify": "true" });
+    dispatchEvent(new Event("focus"));
+    await Bun.sleep(5);
+    expect([keptSettings.lists, state.themes.getSnapshot(), state.notifier.getSnapshot().enabled]).toEqual([2, "fog", false]);
+    state.workspace.connection.stop();
+    dispatchEvent(new Event("focus"));
+    await Bun.sleep(5);
+    expect(keptSettings.lists, "a page that isn't connected doesn't ask").toBe(2);
+  });
+
+  test("a daemon that can't be asked leaves the page working with what this browser has", async () => {
+    localStorage.setItem("shore.theme", "fog");
+    const state = await load();
+    await connected(state);
+    const failures: unknown[] = [];
+    const heard = (event: PromiseRejectionEvent | { reason: unknown }) => { failures.push(event.reason); };
+    process.on("unhandledRejection", heard as never);
+    restores.push(() => { process.off("unhandledRejection", heard as never); });
+    swap(globalThis, "fetch", async () => await Promise.resolve(new Response("", { status: 503 })));
+    dispatchEvent(new Event("focus"));
+    state.themes.select("default");
+    await Bun.sleep(5);
+    expect([state.themes.getSnapshot(), state.themes.error, failures]).toEqual(["default", "", []]);
   });
 });
 

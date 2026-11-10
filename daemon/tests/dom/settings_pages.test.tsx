@@ -12,6 +12,12 @@ describe("the appearance page", () => {
     const { AppearancePage } = await import("../../src/browser/settings/Appearance.tsx");
     const state = app.state();
     const view = await mount(<AppearancePage state={state.workspace.getSnapshot()} />);
+    expect([...view.host.querySelectorAll(".settings-section-head")].map((head) => [head.querySelector("h2")?.textContent, head.querySelector(".settings-description")?.textContent])).toEqual([
+      ["Theme", "Kept by the daemon, so every browser and device shows the same."],
+      ["Text size", "Kept by the daemon, so every browser and device shows the same."],
+      ["Thread display", "Kept by the daemon, so every browser and device shows the same."],
+      ["Notifications", "Chosen for each browser. A new browser starts with your latest choice."],
+    ]);
     const themes = [...view.host.querySelectorAll("[aria-label=Theme] [role=radio]")];
     expect(themes.map((item) => [item.textContent?.startsWith(item.querySelector(".theme-name")?.textContent ?? "x"), item.getAttribute("aria-checked"), item.className, item.querySelector(".theme-swatch")?.getAttribute("data-theme")])).toEqual([
       [true, "true", "theme-card on", "default"], [true, "false", "theme-card ", "fog"],

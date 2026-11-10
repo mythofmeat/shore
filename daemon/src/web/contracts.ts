@@ -9,6 +9,7 @@ import type { WebArchiveInfo } from "../protocol/WebArchiveInfo.ts";
 import type { WebArchiveList } from "../protocol/WebArchiveList.ts";
 import type { WebRequestInfo } from "../protocol/WebRequestInfo.ts";
 import type { WebRequestList } from "../protocol/WebRequestList.ts";
+import type { WebPreferences } from "../protocol/WebPreferences.ts";
 import schemas from "./schemas.generated.json" with { type: "json" };
 
 let validator: ReturnType<typeof contractValidator> | undefined;
@@ -27,3 +28,4 @@ export const validWebArchiveInfo = onFirstUse<WebArchiveInfo>(schemas.archive_in
 export const validWebArchiveList = onFirstUse<WebArchiveList>(schemas.archive_list);
 export const validWebRequestInfo = onFirstUse<WebRequestInfo>(schemas.request_info);
 export const validWebRequestList = onFirstUse<WebRequestList>(schemas.request_list);
+export const validWebPreferences = onFirstUse<WebPreferences>(schemas.preferences);

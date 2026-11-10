@@ -96,6 +96,60 @@ describe("stored settings", () => {
   });
 });
 
+describe("stored settings changed from outside the page", () => {
+  test("a flag and a text follow what is stored once the page is told it changed, until they are no longer shown", async () => {
+    const { useStoredFlag, useStoredText } = await hooks();
+    const { storedChanged } = await import("../../src/browser/stored.ts");
+    const flag = await renderHook(({ key }: { key: string }) => useStoredFlag(key, false), { key: "shore.flag" });
+    const text = await renderHook(({ key }: { key: string }) => useStoredText(key, () => "default"), { key: "shore.text" });
+    localStorage.setItem("shore.flag", "true");
+    localStorage.setItem("shore.text", "elsewhere");
+    expect([flag.current()[0], text.current()[0]], "storage alone says nothing").toEqual([false, "default"]);
+    await acting(() => { storedChanged(); });
+    expect([flag.current()[0], text.current()[0]]).toEqual([true, "elsewhere"]);
+    localStorage.setItem("shore.flag", "false");
+    await acting(() => { storedChanged(); });
+    expect(flag.current()[0]).toBe(false);
+    localStorage.clear();
+    await acting(() => { storedChanged(); });
+    expect([flag.current()[0], text.current()[0]], "a setting nobody stored keeps its value").toEqual([false, "elsewhere"]);
+    localStorage.setItem("shore.other-flag", "true");
+    localStorage.setItem("shore.other-text", "other");
+    await flag.rerender({ key: "shore.other-flag" });
+    await text.rerender({ key: "shore.other-text" });
+    await acting(() => { storedChanged(); });
+    expect([flag.current()[0], text.current()[0]], "it follows the key it is given now").toEqual([true, "other"]);
+    const renders = [flag.renders(), text.renders()];
+    await flag.unmount();
+    await text.unmount();
+    localStorage.setItem("shore.other-flag", "false");
+    storedChanged();
+    expect([flag.renders(), text.renders()]).toEqual(renders);
+  });
+
+  test("whoever asked to hear about changed settings hears each one until they leave", async () => {
+    const { storedChanged, subscribeStored } = await import("../../src/browser/stored.ts");
+    let heard = 0;
+    const leave = subscribeStored(() => { heard += 1; });
+    storedChanged();
+    storedChanged();
+    leave();
+    storedChanged();
+    expect(heard).toBe(2);
+  });
+
+  test("a written setting is passed to whoever follows writes, even when the browser refuses to store it", async () => {
+    const { followStoredWrites, writeStored } = await import("../../src/browser/stored.ts");
+    const seen: string[][] = [];
+    followStoredWrites((key, value) => { seen.push([key, value]); });
+    restores.push(() => { followStoredWrites(() => {}); });
+    writeStored("shore.x", "1");
+    restores.push(blockStorage());
+    writeStored("shore.y", "2");
+    expect(seen).toEqual([["shore.x", "1"], ["shore.y", "2"]]);
+  });
+});
+
 describe("closing with Escape", () => {
   test("runs the action on Escape while active, unless something else handled it or a dialog is open", async () => {
     const { useEscape } = await hooks();

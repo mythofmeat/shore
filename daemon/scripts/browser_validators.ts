@@ -19,6 +19,7 @@ export function browserValidators(): Record<string, string> {
     WebArchiveInfo: web.archive_info,
     WebArchiveList: web.archive_list,
     WebRequestList: web.request_list,
+    WebPreferences: web.preferences,
   };
   const names: Record<string, string> = {};
   for (const [name, schema] of Object.entries(contracts)) {
