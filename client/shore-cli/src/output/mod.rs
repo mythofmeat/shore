@@ -3,6 +3,7 @@ pub(crate) mod catalog;
 pub(crate) mod commands;
 pub(crate) mod compaction;
 pub(crate) mod config;
+pub(crate) mod diary;
 pub(crate) mod history;
 pub(crate) mod reasoning;
 pub(crate) mod running;

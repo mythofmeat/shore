@@ -938,6 +938,22 @@
             "properties": {
               "name": {
                 "type": "string",
+                "const": "diary"
+              },
+              "data": {
+                "$ref": "#/$defs/DiaryResult"
+              }
+            },
+            "required": [
+              "name",
+              "data"
+            ]
+          },
+          {
+            "type": "object",
+            "properties": {
+              "name": {
+                "type": "string",
                 "const": "heartbeat_set_dormant"
               },
               "data": {
@@ -6420,6 +6436,77 @@
         },
         "required": [
           "choices"
+        ]
+      },
+      "DiaryResult": {
+        "type": "object",
+        "properties": {
+          "character": {
+            "type": "string"
+          },
+          "notes": {
+            "type": "array",
+            "items": {
+              "$ref": "#/$defs/DiaryEntry"
+            }
+          },
+          "kept": {
+            "type": "integer",
+            "format": "uint32",
+            "minimum": 0
+          }
+        },
+        "required": [
+          "character",
+          "notes",
+          "kept"
+        ]
+      },
+      "DiaryEntry": {
+        "type": "object",
+        "properties": {
+          "at": {
+            "type": "string"
+          },
+          "thread": {
+            "type": "string"
+          },
+          "source": {
+            "$ref": "#/$defs/DiarySource"
+          },
+          "trigger": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "text": {
+            "type": "string"
+          },
+          "shown": {
+            "type": "boolean"
+          },
+          "dreamed": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "at",
+          "thread",
+          "source",
+          "text",
+          "shown",
+          "dreamed"
+        ]
+      },
+      "DiarySource": {
+        "type": "string",
+        "enum": [
+          "heartbeat",
+          "wake",
+          "trigger",
+          "shore",
+          "note"
         ]
       },
       "KeepalivePingResult": {
@@ -10943,6 +11030,22 @@
             "properties": {
               "name": {
                 "type": "string",
+                "const": "diary"
+              },
+              "data": {
+                "$ref": "#/$defs/DiaryResult"
+              }
+            },
+            "required": [
+              "name",
+              "data"
+            ]
+          },
+          {
+            "type": "object",
+            "properties": {
+              "name": {
+                "type": "string",
                 "const": "heartbeat_set_dormant"
               },
               "data": {
@@ -16425,6 +16528,77 @@
         },
         "required": [
           "choices"
+        ]
+      },
+      "DiaryResult": {
+        "type": "object",
+        "properties": {
+          "character": {
+            "type": "string"
+          },
+          "notes": {
+            "type": "array",
+            "items": {
+              "$ref": "#/$defs/DiaryEntry"
+            }
+          },
+          "kept": {
+            "type": "integer",
+            "format": "uint32",
+            "minimum": 0
+          }
+        },
+        "required": [
+          "character",
+          "notes",
+          "kept"
+        ]
+      },
+      "DiaryEntry": {
+        "type": "object",
+        "properties": {
+          "at": {
+            "type": "string"
+          },
+          "thread": {
+            "type": "string"
+          },
+          "source": {
+            "$ref": "#/$defs/DiarySource"
+          },
+          "trigger": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "text": {
+            "type": "string"
+          },
+          "shown": {
+            "type": "boolean"
+          },
+          "dreamed": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "at",
+          "thread",
+          "source",
+          "text",
+          "shown",
+          "dreamed"
+        ]
+      },
+      "DiarySource": {
+        "type": "string",
+        "enum": [
+          "heartbeat",
+          "wake",
+          "trigger",
+          "shore",
+          "note"
         ]
       },
       "KeepalivePingResult": {

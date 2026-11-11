@@ -168,6 +168,8 @@ const WIRE_EXAMPLES: &[&[&str]] = &[
     &["debug"],
     &["dream"],
     &["dream", "--now"],
+    &["diary"],
+    &["diary", "-n", "0"],
     &["presence"],
     &["presence", "at work"],
     &["presence", "--clear"],

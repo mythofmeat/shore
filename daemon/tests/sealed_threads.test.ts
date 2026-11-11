@@ -3,7 +3,7 @@ import { existsSync } from "node:fs";
 import { mkdir, mkdtemp } from "node:fs/promises";
 import { join } from "node:path";
 
-import { addDiaryNote, recentDiary, unfoldedDiary, unseenDiary } from "../src/autonomy/diary.ts";
+import { addDiaryNote, keptDiary, recentDiary, unfoldedDiary, unseenDiary } from "../src/autonomy/diary.ts";
 import { triggerFiredNote } from "../src/autonomy/heartbeat_shape.ts";
 import { firedBy } from "../src/autonomy/runner.ts";
 import { sealedListNote, sealedWakeNote } from "../src/autonomy/sealed_notes.ts";
@@ -167,8 +167,10 @@ test("diary entries written in a sealed thread are shown nowhere until its seal 
   expect(texts(unseenDiary(characterDir, [], T0 + 10, "main"))).toEqual(["Told part one.", "About the ring."]);
   expect(texts(unseenDiary(characterDir, [], T0 + 10, "gift"))).toEqual(["Told part one.", "About the ring."]);
   expect(texts(unseenDiary(characterDir, [], T0 + 10, "ring"))).toEqual([]);
+  expect(texts(keptDiary(characterDir, T0 + 10))).toEqual(["Told part one.", "About the ring."]);
 
   await openDueSeals(data, "ada", T0 + HOUR);
+  expect(texts(keptDiary(characterDir, T0 + HOUR))).toEqual(["Made a card.", "Buy ribbon.", "Told part one.", "About the ring."]);
   expect(texts(unfoldedDiary(characterDir))).toEqual(["Made a card.", "Buy ribbon.", "Told part one.", "About the ring."]);
   expect(texts(unseenDiary(characterDir, [], T0 + HOUR, "main"))).toEqual(["Made a card.", "Buy ribbon.", "Told part one.", "About the ring."]);
   expect(texts(unseenDiary(characterDir, [], T0 + HOUR, "gift"))).toEqual(["Told part one.", "About the ring."]);
