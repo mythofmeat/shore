@@ -63,6 +63,8 @@ api_key_env = "SHORE_BROWSER_DISCOVERY_KEY"
 discover = true
 [providers.off]
 enabled = false
+[presence]
+statuses = ["asleep", "busy", "reading https://example.org/the_long_article_everyone_keeps_sending_me_this_week"]
 [daemon.web]
 enabled = true
 bind_addr = ${JSON.stringify(process.env["SHORE_BROWSER_WEB_BIND"] ?? "127.0.0.1:0")}

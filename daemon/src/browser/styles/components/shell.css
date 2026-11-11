@@ -351,25 +351,35 @@
 }
 
 .sidebar-footer {
-  display: flex;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
   align-items: center;
-  justify-content: space-between;
-  gap: 8px;
+  gap: 2px 8px;
   padding-top: 10px;
   border-top: 1px solid var(--line);
 }
 
-.sidebar-footer .sidebar-item {
-  width: auto;
-  flex: 1;
+.sidebar-status {
+  grid-column: 1 / -1;
 }
 
-.sidebar-footer .status-chip {
-  display: block;
-  max-width: 9em;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+.sidebar-status .menu {
+  display: flex;
+}
+
+.sidebar-status .unset {
+  color: var(--text-3);
+}
+
+.sidebar-status .sidebar-item > svg:last-child {
+  width: 14px;
+  height: 14px;
+  color: var(--text-3);
+}
+
+.sidebar-status .menu-label {
+  white-space: normal;
+  overflow-wrap: anywhere;
 }
 
 .shell[data-layout="mobile"] .sidebar-item {
