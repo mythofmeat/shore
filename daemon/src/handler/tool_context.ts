@@ -22,6 +22,8 @@ import type { ToolContext } from "../tools/dispatch.ts";
 import type { ActivityStatsLookup } from "../tools/activity.ts";
 import type { McpRegistry } from "../tools/mcp_registry.ts";
 import type { Message } from "../engine/types.ts";
+import type { NewSealedThread } from "../engine/sealed.ts";
+import type { StartedSealedThread } from "../tools/start_sealed_thread.ts";
 import type { StartThreadRequest } from "../tools/start_thread.ts";
 import type { WakeHandOff, WakeInThreadRequest } from "../tools/wake_in_thread.ts";
 import type { EditThreadRequest } from "../tools/edit_thread.ts";
@@ -49,6 +51,7 @@ export interface ToolContextDeps extends Partial<ToolConversation> {
   push?: (character: string, message: string) => Promise<PushOutcome>;
   wakeInThread?: (character: string, from: string, request: WakeInThreadRequest) => WakeHandOff;
   startThread?: (character: string, request: StartThreadRequest) => Promise<void>;
+  sealThread?: (character: string, request: NewSealedThread) => Promise<StartedSealedThread>;
   editThread?: (character: string, request: EditThreadRequest) => Promise<ThreadRecord | undefined>;
 }
 
@@ -86,6 +89,7 @@ export async function buildToolContext(
   const push = deps.push;
   const wakeInThread = deps.wakeInThread;
   const startThread = deps.startThread;
+  const sealThread = deps.sealThread;
   const editThread = deps.editThread;
   const subagentsConfigured = config.app.subagents.size > 0;
 
@@ -122,6 +126,7 @@ export async function buildToolContext(
     ...(startThread === undefined
       ? {}
       : { startThread: (request: StartThreadRequest) => startThread(charName, request) }),
+    ...(sealThread === undefined ? {} : { sealThread: async (request: NewSealedThread) => await sealThread(charName, request) }),
     ...(editThread === undefined
       ? {}
       : { editThread: (request: EditThreadRequest) => editThread(charName, request) }),

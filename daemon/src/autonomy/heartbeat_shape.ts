@@ -101,6 +101,7 @@ export function spanPhrase(ms: number): string {
 
 export function triggerFiredNote(firing: TriggerFiring, timeZone: string): string {
   const when = formatWallClock(firing.at, timeZone);
+  if (firing.seal === true) return `[The seal on this thread came off at ${when}. ${firing.reason}]`;
   return firing.from === undefined
     ? `[Your trigger "${firing.name}" fired at ${when}: ${firing.reason}]`
     : `[You asked for this wake from "${firing.from}" at ${when}: ${firing.reason}]`;

@@ -1,3 +1,6 @@
+import { sealedListNote } from "../autonomy/sealed_notes.ts";
+import { characterDataDir } from "../config/dirs.ts";
+import { sealedThreads } from "../engine/sealed_list.ts";
 import { folderOf } from "../engine/thread_layout.ts";
 import { defaultThreadsIndex, heartbeatThread, homeThread, readThreadsIndex, threadActivities, type ThreadActivity, type ThreadRecord } from "../engine/threads.ts";
 import { agoPhrase, formatWallClock } from "../engine/prompt.ts";
@@ -53,7 +56,9 @@ export async function handleListThreads(options: ListThreadsOptions): Promise<st
   const index = await readThreadsIndex(options.dataDir, options.character) ?? defaultThreadsIndex(new Date(nowMs).toISOString());
   const home = homeThread(index);
   const heartbeat = heartbeatThread(index);
-  const current = index.threads.some((thread) => thread.id === options.thread) ? options.thread ?? home : home;
+  const sealed = sealedThreads(characterDataDir(options.dataDir, options.character));
+  const sealedHere = sealed.find((thread) => thread.id === options.thread)?.id;
+  const current = sealedHere ?? (index.threads.some((thread) => thread.id === options.thread) ? options.thread ?? home : home);
   const activity = await threadActivities(options.dataDir, options.character, index.threads.map((thread) => thread.id));
   const threads = [...index.threads].sort((a, b) => Number(b.id === home) - Number(a.id === home));
   const shown = threads.map((record) => described(record, activity.get(record.id), [
@@ -63,7 +68,8 @@ export async function handleListThreads(options: ListThreadsOptions): Promise<st
     ...(record.locked === true ? ["locked"] : []),
     ...[folderOf(index, record.id)].flatMap((folder) => folder === undefined ? [] : [`in the folder "${folder}"`]),
   ], options, zone, nowMs, record.id === heartbeat));
-  const where = current === home ? `You're in it.` : `You're in "${current}".`;
+  const where = current === home ? `You're in it.` : `You're in "${current}"${sealedHere === undefined ? "" : ", which is sealed"}.`;
   const runs = heartbeat === undefined ? "" : ` Your heartbeats run in "${heartbeat}".`;
-  return [`Your home thread is "${home}", where the messages you send from heartbeats arrive. ${where}${runs}`, ...shown].join("\n\n");
+  const kept = sealedListNote(sealed, zone);
+  return [`Your home thread is "${home}", where the messages you send from heartbeats arrive. ${where}${runs}`, ...shown, ...(kept === undefined ? [] : [kept])].join("\n\n");
 }

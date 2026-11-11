@@ -157,6 +157,8 @@ interface Harness {
   heartbeat: () => Promise<void>;
   thread: (id: string) => Promise<readonly Message[]>;
   shown: (thread: string, match: (message: Message) => boolean) => Promise<void>;
+  heard: (thread: string) => boolean;
+  events: ServerMessage[];
   command: (name: string, args: Record<string, unknown>, thread?: string) => Promise<ServerMessage>;
 }
 
@@ -189,10 +191,12 @@ async function withCharacter(run: (h: Harness) => Promise<void>, configure?: (ap
   const script: Script = { heartbeats: [], replies: [], calls: [], held: undefined, closing: "<sendMessage>I found the keeper's log.</sendMessage>" };
   const emitted: Emitted[] = [];
   const histories: History[] = [];
+  const events: ServerMessage[] = [];
   const waiting: { thread: string; match: (message: Message) => boolean; resolve: () => void }[] = [];
   const env = { [KEY_ENV]: "fixture-key" };
   const runtime = await createRuntime({
     config, providers: { anthropic: scriptedProvider(script) }, env,
+    emitEvent: (event) => { events.push(event); },
     emit: (_character, _revision, msg, thread) => { emitted.push({ thread, msg: structuredClone(msg) }); },
     onHistory: (history) => {
       histories.push(history);
@@ -210,6 +214,8 @@ async function withCharacter(run: (h: Harness) => Promise<void>, configure?: (ap
       data: config.dirs.data,
       workspace,
       emitted,
+      heard: (thread) => histories.some((history) => history.selected_thread === thread),
+      events,
       shown: async (thread, match) => {
         if (histories.some((history) => history.selected_thread === thread && history.messages.some(match))) return;
         const { promise, resolve } = Promise.withResolvers<void>();
@@ -2207,4 +2213,215 @@ test("a wake whose thread the user edits while it runs writes nothing more there
     ]);
     expect(diaryOf(data)).toEqual([]);
   });
+});
+
+function sealing(app: AppConfig): void {
+  app.tools.enabled_tools = [...app.tools.enabled_tools, "start_sealed_thread", "wake_in_thread", "list_threads", "search_chat_logs"];
+}
+
+const SEALED_LIST = "[Your sealed threads. Only a wake inside one can see what is in it, and `wake_in_thread` takes you there.\n- `gift` \"Something for you\", opens Saturday 2026-10-31 · 8:00 AM]";
+
+function giftWake(now: string, lines: readonly string[]): string {
+  return wakeText(now, lines).replace('your thread "ring"', 'your thread "gift"');
+}
+
+async function sealsGift(h: Pick<Harness, "script" | "say" | "heartbeat">): Promise<void> {
+  await h.say("hello");
+  h.script.beatTool = { name: "start_sealed_thread", input: { name: " gift ", label: " Something for you ", opens: "2026-10-31 08:00" } };
+  h.script.closing = "HEARTBEAT_OK";
+  at(10);
+  await h.heartbeat();
+}
+
+test("a sealed thread is kept out of the user's thread list and the character's other turns, which are shown only its label and when it opens", async () => {
+  await withCharacter(async (h) => {
+    const { runtime, script, data, say, heartbeat, thread, command } = h;
+    await sealsGift(h);
+    const filesDir = join(data, "ada", "sealed", "gift");
+    expect(lastToolResult(await thread("heartbeat"))).toEqual({
+      text: `Sealed the thread "gift" (Something for you) until Saturday 2026-10-31 · 8:00 AM. peggy can't see it until then, and your other turns are shown only its label and that time. ` +
+        `\`wake_in_thread\` takes you into it. Keep what you make for it in ${filesDir}, which is outside your workspace.`,
+      failed: false,
+    });
+    expect(existsSync(filesDir)).toBe(true);
+    expect(runtime.registry.listThreads("ada").map((record) => record.id)).toEqual(["main", "heartbeat"]);
+    expect(runtime.registry.sealedThreads("ada")).toEqual([
+      { id: "gift", label: "Something for you", unseal_at: "2026-10-31T08:00:00.000Z", created_at: "2026-10-30T12:10:00.000Z" },
+    ]);
+    expect(JSON.stringify(await command("list_threads", {}))).not.toContain("gift");
+
+    script.replyTool = { name: "list_threads", input: {} };
+    at(11);
+    await say("what threads do you have?");
+    expect(String(lastToolResult(await thread("main"))?.text)).toEndWith(`\n\n${SEALED_LIST}`);
+    expect(String(lastToolResult(await thread("main"))?.text)).not.toContain("gift ·");
+
+    at(20);
+    await heartbeat();
+    expect(textOf(script.heartbeats.at(-2) as SidecarRequest)).toContain(`\n\n${SEALED_LIST}\n\n`);
+
+    expect(await outcomeOf(runtime.registry.createThread("ada", "gift"))).toThrow('thread "gift" already exists for ada');
+    expect(await outcomeOf(runtime.registry.forkThread("ada", "main", "gift"))).toThrow('thread "gift" already exists for ada');
+    expect(await outcomeOf(runtime.registry.getOrCreate("ada", "gift"))).toThrow('no thread "gift" for ada');
+    expect(await runtime.registry.sealedEngine("ada", "main")).toBeUndefined();
+    script.replyTool = { name: "start_sealed_thread", input: { name: "gift", label: "Another", opens: "2026-11-02 08:00" } };
+    await say("go on");
+    expect(lastToolResult(await thread("main"))).toEqual({ text: 'io: thread "gift" already exists for ada', failed: true });
+    script.replyTool = { name: "start_sealed_thread", input: { name: "main", label: "Another", opens: "2026-11-02 08:00" } };
+    await say("go on");
+    expect(lastToolResult(await thread("main"))).toEqual({ text: 'io: thread "main" already exists for ada', failed: true });
+    script.replyTool = { name: "start_sealed_thread", input: { name: "late", label: "Too late", opens: "2026-10-30 12:20" } };
+    await say("go on");
+    expect(lastToolResult(await thread("main"))).toEqual({ text: "io: a sealed thread has to open at a time that is still to come", failed: true });
+    expect(runtime.registry.sealedThreads("ada").map((sealed) => sealed.id)).toEqual(["gift"]);
+
+    const answered = async (input: Record<string, unknown>): Promise<string> => {
+      script.replyTool = { name: "start_sealed_thread", input };
+      await say("go on");
+      return String(lastToolResult(await thread("main"))?.text);
+    };
+    expect(await answered({ name: "t".repeat(65), label: "A", opens: "2026-11-02 08:00" })).toStartWith("The call to start_sealed_thread was not run because argument `name` must NOT have more than 64 characters.");
+    expect(await answered({ name: "box", label: "A", opens: "2026-11-02 08:00", purpose: "a secret" })).toStartWith("The call to start_sealed_thread was not run because argument `purpose` is not allowed.");
+    expect(await answered({ name: "b", label: "A", opens: "2026-11-02 08:00" })).toStartWith('Sealed the thread "b" (A) until Monday 2026-11-02 · 8:00 AM.');
+    expect(runtime.registry.sealedThreads("ada").map((sealed) => sealed.id)).toEqual(["gift", "b"]);
+
+    await rm(join(data, "ada", "sealed"), { recursive: true });
+    await writeFile(join(data, "ada", "sealed"), "in the way");
+    expect(await answered({ name: "box", label: "A", opens: "2026-11-02 08:00" })).toStartWith(`io: nothing was sealed, because the folder for its files, ${join(data, "ada", "sealed", "box")}, could not be made: mkdir:`);
+    expect(runtime.registry.sealedThreads("ada").map((sealed) => sealed.id)).toEqual(["gift", "b"]);
+  }, sealing);
+});
+
+test("a wake inside a sealed thread sends, announces and logs nothing outside it, and its diary entries stay sealed with it", async () => {
+  await withCharacter(async (h) => {
+    const { runtime, script, data, emitted, say, heartbeat, thread } = h;
+    await sealsGift(h);
+    const announced: unknown[][] = [];
+    runtime.notifier.notify = (...told) => { announced.push(told); };
+    script.beatTool = { name: "wake_in_thread", input: { thread: "gift", reason: "Start on it." } };
+    at(20);
+    await heartbeat();
+    expect(lastToolResult(await thread("heartbeat"))?.failed).toBe(false);
+    const captured = runtime.callStore?.callCount();
+    const transcripts = runtime.callStore?.queryTranscripts("heartbeat", "ada", 100).length;
+    script.heartbeats.length = 0;
+    emitted.length = 0;
+    script.closing = "Made a card.\n<sendMessage>Happy birthday!</sendMessage>";
+    at(21);
+    await runtime.autonomy.tick();
+
+    expect(turnsOf(script.heartbeats[0])).toEqual([["user", giftWake("12:21 PM", [
+      '[You asked for this wake from "heartbeat" at Friday 2026-10-30 · 12:20 PM: Start on it.]',
+      `[This thread is sealed until Saturday 2026-10-31 · 8:00 AM. User can't see it, or anything you do or send here, until then, and your other threads are shown only its label, "Something for you". ` +
+        `What you send here waits in the thread for them. Keep what you make for it in ${join(data, "ada", "sealed", "gift")}, which is outside your workspace.]`,
+    ])]]);
+    expect(script.heartbeats.map((request) => [request.context?.thread, request.context?.sealed])).toEqual([["gift", true], ["gift", true]]);
+    expect(emitted).toEqual([]);
+    expect(announced).toEqual([]);
+    expect([runtime.callStore?.callCount(), runtime.callStore?.queryTranscripts("heartbeat", "ada", 100).length]).toEqual([captured, transcripts]);
+    expect(diaryOf(data)).toEqual([]);
+    expect(runtime.autonomy.log("ada", 100).map((event) => [event.kind, event.detail]).slice(-2)).toEqual([
+      ["tick_fired", 'Woken in "gift" by a hand-off from "heartbeat"'],
+      ["message_sent", "A message was left in a sealed thread"],
+    ]);
+    const sealedEngine = await runtime.registry.sealedEngine("ada", "gift");
+    expect(stored(sealedEngine?.messages() ?? []).slice(-2)).toEqual([
+      ["assistant", "", "Made a card.\n[sent to User as the next message here]"],
+      ["assistant", "autonomous", "Happy birthday!"],
+    ]);
+    expect(await runtime.registry.sealedEngine("ada", "gift")).toBe(sealedEngine);
+    expect(h.heard("gift")).toBe(false);
+    expect(h.events.filter((event) => event.type === "threads_changed" && event.thread === "gift")).toEqual([]);
+
+    at(22);
+    await say("anything new?");
+    expect(textOf(script.replies.at(-1) as SidecarRequest)).toEndWith("reply to: hello\nanything new?");
+    script.replyTool = { name: "search_chat_logs", input: { query: "birthday" } };
+    await say("did you say something about a birthday?");
+    expect(String(lastToolResult(await thread("main"))?.text)).toStartWith("birthday: 0 matches.\nSearched 2 messages from every thread");
+    script.closing = "HEARTBEAT_OK";
+    at(30);
+    await heartbeat();
+    expect(textOf(script.heartbeats.at(-2) as SidecarRequest)).not.toContain("Made a card.");
+
+    runtime.autonomy.forceHeartbeatState("ada", "dormant");
+    script.closing = "Gave it.\n<sendMessage>Open the card.</sendMessage>";
+    at(20 * 60);
+    await runtime.autonomy.tick();
+    await h.shown("gift", (message) => message.content === "Open the card.");
+    expect(h.events.filter((event) => event.type === "threads_changed" && event.thread === "gift")).toEqual([{ type: "threads_changed", character: "ada", thread: "gift" }]);
+    expect(await runtime.registry.sealedEngine("ada", "gift")).toBeUndefined();
+  }, sealing);
+});
+
+test("at its time the seal comes off: the thread joins the user's list with what was sent waiting unread, the character is woken there even when dormant, and its diary entries are shown", async () => {
+  let root = "";
+  await withCharacter(async (h) => {
+    const { runtime, script, data, heartbeat } = h;
+    root = dirname(data);
+    await sealsGift(h);
+    script.beatTool = { name: "wake_in_thread", input: { thread: "gift", reason: "Start on it." } };
+    at(20);
+    await heartbeat();
+    script.closing = "Made a card.\n<sendMessage>Happy birthday!</sendMessage>";
+    at(21);
+    await runtime.autonomy.tick();
+  }, sealing);
+
+  await withCharacter(async ({ runtime, script, data, emitted, say, thread, shown }) => {
+    at(19 * 60 + 59);
+    await say("good morning");
+    expect(runtime.autonomy.forceHeartbeatState("ada", "dormant")).toBe(true);
+    await runtime.autonomy.tick();
+    expect(runtime.registry.sealedThreads("ada").map((sealed) => sealed.id)).toEqual(["gift"]);
+    expect(script.heartbeats).toEqual([]);
+
+    const announced: unknown[][] = [];
+    runtime.notifier.notify = (...told) => { announced.push(told); };
+    script.closing = "Gave it.\n<sendMessage>Open the card.</sendMessage>";
+    emitted.length = 0;
+    at(20 * 60);
+    await runtime.autonomy.tick();
+    expect(runtime.registry.sealedThreads("ada")).toEqual([]);
+    expect(runtime.registry.listThreads("ada").at(-1)).toEqual({ id: "gift", label: "Something for you", created_at: "2026-10-30T12:10:00.000Z", created_by: "character", compaction: true });
+    expect(script.heartbeats.map((request) => [request.context?.thread, request.context?.sealed])).toEqual([["gift", undefined], ["gift", undefined]]);
+    expect(turnsOf(script.heartbeats[0]).at(-1)).toEqual(["user", giftWake("8:00 AM", [
+      "[The seal on this thread came off at Saturday 2026-10-31 · 8:00 AM. User can see this thread and everything in it from now on. This wake is for giving them what you made.]",
+    ]).replace("Friday 2026-10-30 · 8:00 AM", "Saturday 2026-10-31 · 8:00 AM").replace("[wake]", "[about a day later · Saturday 2026-10-31 · 8:00 AM]\n\n[wake]")]);
+    expect(emitted.map((each) => [each.thread, each.msg.content])).toEqual([["gift", "Open the card."]]);
+    expect(announced).toEqual([["autonomous_message", "Shore - ada", "Open the card.", undefined]]);
+    expect(threadActivityNow(data, "ada", "gift").unread).toBe(2);
+    expect(runtime.autonomy.log("ada", 100).filter((event) => event.kind === "tick_fired").at(-1)?.detail).toBe('Woken in "gift" by its seal coming off');
+    expect(diaryOf(data)).toEqual([
+      ["wake", "Made a card."],
+      ["shore", 'The seal on "Something for you" came off. Its thread, `gift`, is in User\'s thread list from now on, and you are being woken there.'],
+      ["wake", "Gave it."],
+    ]);
+    expect((await thread("gift")).at(-1)?.content).toBe("Open the card.");
+    await shown("gift", (message) => message.content === "Open the card.");
+    script.replyTool = { name: "search_chat_logs", input: { query: "birthday" } };
+    await say("did you say something about a birthday?");
+    expect(String(lastToolResult(await thread("main"))?.text)).toContain("ada    [gift] (heartbeat) Happy [birthday]!");
+    at(20 * 60 + 1);
+    await runtime.autonomy.tick();
+    expect(script.heartbeats).toHaveLength(2);
+  }, sealing, root);
+});
+
+test("with the character's own time switched off a seal still comes off at its time, and nothing wakes", async () => {
+  let root = "";
+  await withCharacter(async (h) => {
+    root = dirname(h.data);
+    await sealsGift(h);
+  }, sealing);
+  await withCharacter(async ({ runtime, script, say }) => {
+    at(20 * 60);
+    await say("good morning");
+    await runtime.autonomy.tick();
+    expect(runtime.registry.listThreads("ada").map((record) => record.id)).toEqual(["main", "heartbeat", "gift"]);
+    expect(script.heartbeats).toEqual([]);
+  }, (app) => {
+    sealing(app);
+    app.behavior.autonomy.enabled = false;
+  }, root);
 });

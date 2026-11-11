@@ -6,13 +6,16 @@ import { runIdleCompaction } from "./idle_compaction.ts";
 import { runDeepIdleArchive } from "./deep_archive.ts";
 import type { LastRequestCache } from "../cache/last_request.ts";
 import { reloadAndApplyDeferred, repoint, type PostArchiveEngine } from "./post_archive.ts";
-import type { AutonomyActionResult, AutonomyExecutor, DreamActionResult, DreamWindow, ThreadWakeResult, ThreadWakeRun, TickHooks } from "./runner.ts";
+import type { AutonomyActionResult, AutonomyExecutor, DreamActionResult, DreamWindow, OpenedSeal, ThreadWakeResult, ThreadWakeRun, TickHooks } from "./runner.ts";
+import { addDiaryNote } from "./diary.ts";
 import { DEFAULT_WAKE_LIMIT_MS, runThreadWake } from "./thread_wake.ts";
+import { sealedFilesDir } from "../handler/sealed_thread.ts";
 import { DREAM_CALL_TYPE, DREAM_LOOP_CALL_TYPE, DREAM_TOOL_THREAD, runDreamPass } from "../memory/dreaming/run.ts";
 import type { ToolContext } from "../tools/dispatch.ts";
 import type { CompactionReason } from "./tick.ts";
 import type { CharacterRegistry } from "../characters.ts";
-import { rustJoin } from "../config/dirs.ts";
+import { resolveDisplayName } from "../config/app.ts";
+import { characterDataDir, rustJoin } from "../config/dirs.ts";
 import type { LoadedConfig } from "../config/loader.ts";
 import { usageConfigView } from "../ledger/budget.ts";
 import type { Message } from "../engine/types.ts";
@@ -120,11 +123,28 @@ export class InProcessAutonomyExecutor implements AutonomyExecutor {
         ...this.#transcripts("heartbeat", character),
         engine: async (name, thread) => this.#deps.registry.listThreads(name).some((record) => record.id === thread) && thread !== this.#deps.registry.heartbeatThread(name)
           ? await this.#deps.registry.getOrCreate(name, thread)
-          : undefined,
+          : await this.#deps.registry.sealedEngine(name, thread),
+        sealed: async (name, thread) => {
+          const sealed = this.#deps.registry.sealedThreads(name).find((each) => each.id === thread);
+          return sealed === undefined ? undefined : { sealed, filesDir: await sealedFilesDir(config, name, thread) };
+        },
         threadModel: (name, thread) => this.#deps.registry.listThreads(name).find((record) => record.id === thread)?.chat_model,
         ...(this.#deps.emit === undefined ? {} : { emit: this.#deps.emit }),
         ...(this.#deps.notifyAutonomousMessage === undefined ? {} : { notify: this.#deps.notifyAutonomousMessage }),
       });
+    });
+  }
+
+  async openSeals(character: string, now: number): Promise<OpenedSeal[]> {
+    const opened = await this.#deps.registry.openDueSeals(character, now);
+    const config = this.#deps.registry.effectiveConfig(character);
+    const user = resolveDisplayName(config.app.defaults, this.#deps.env);
+    return opened.map((sealed) => {
+      addDiaryNote(characterDataDir(config.dirs.data, character), {
+        at: now, thread: sealed.id, source: "shore", text: `The seal on "${sealed.label}" came off. Its thread, \`${sealed.id}\`, is in ${user}'s thread list from now on, and you are being woken there.`,
+      });
+      this.#deps.emitEvent?.({ type: "threads_changed", character, thread: sealed.id });
+      return { thread: sealed.id, reason: `${user} can see this thread and everything in it from now on. This wake is for giving them what you made.` };
     });
   }
 
@@ -244,6 +264,7 @@ export class InProcessAutonomyExecutor implements AutonomyExecutor {
     const {
       scheduleNextWake: _wake,
       wakeInThread: _handOff,
+      sealThread: _seal,
       startThread: _start,
       editThread: _edit,
       deferEdit: _defer,

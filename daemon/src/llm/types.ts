@@ -94,6 +94,7 @@ export interface CallContext {
   workspace_dir?: string;
   thread?: string;
   call_type: string;
+  sealed?: boolean;
   foreground?: boolean;
   api_key_name?: string;
   thinking_enabled: boolean;

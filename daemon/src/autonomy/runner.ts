@@ -99,17 +99,24 @@ export interface TriggerFiring {
   readonly thread?: string | undefined;
   readonly limitMs?: number | undefined;
   readonly from?: string | undefined;
+  readonly seal?: boolean | undefined;
   readonly interruptedAt?: number | undefined;
+}
+
+export interface OpenedSeal {
+  readonly thread: string;
+  readonly reason: string;
 }
 
 export const WAKE_QUIET_MS = 10 * 60_000;
 
 export function firedBy(firings: readonly TriggerFiring[]): string {
-  const triggers = firings.filter((firing) => firing.from === undefined).map((firing) => `"${firing.name}"`);
+  const triggers = firings.filter((firing) => firing.from === undefined && firing.seal !== true).map((firing) => `"${firing.name}"`);
   const handed = firings.flatMap((firing) => firing.from === undefined ? [] : [`"${firing.from}"`]);
   return [
     ...(triggers.length === 0 ? [] : [`trigger ${triggers.join(", ")}`]),
     ...(handed.length === 0 ? [] : [`a hand-off from ${handed.join(", ")}`]),
+    ...(firings.some((firing) => firing.seal === true) ? ["its seal coming off"] : []),
   ].join(" and ");
 }
 
@@ -159,6 +166,7 @@ export interface AutonomyExecutor {
   runDeepArchive(character: string, coveredTurnCount: number): Promise<AutonomyActionResult>;
   runDream?(character: string, window: DreamWindow): Promise<DreamActionResult>;
   runThreadWake?(character: string, wake: ThreadWakeRun, hooks: TickHooks): Promise<ThreadWakeResult>;
+  openSeals?(character: string, now: number): Promise<OpenedSeal[]>;
 }
 
 export interface TickOutcome {
@@ -525,9 +533,13 @@ export class CharacterAutonomy {
       this.#state.dirty = true;
     }
 
+    for (const opened of await this.#executor.openSeals?.(this.#character, now) ?? []) {
+      this.#queue({ name: "", reason: opened.reason, at: now, thread: opened.thread, seal: true });
+    }
+
     const scheduledReason = this.#clock.wakeReason;
     const heartbeat = this.#runClock(decision, now);
-    const due = this.#fired.splice(0).filter(() => decision.heartbeatMayTick && !this.#clock.isDormant(now));
+    const due = this.#fired.splice(0).filter((firing) => decision.heartbeatMayTick && (firing.seal === true || !this.#clock.isDormant(now)));
     const fired = due.filter((firing) => firing.thread === undefined);
     const inThreads = [...new Set(due.flatMap((firing) => firing.thread === undefined ? [] : [firing.thread]))];
     const wakes = heartbeat === "run_tick" || fired.length > 0;

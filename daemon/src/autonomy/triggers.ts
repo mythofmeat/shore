@@ -69,13 +69,16 @@ function atTime(value: unknown): TriggerWhen {
   return { kind: "at", weekdays: named.length === 0 ? week : week.filter((weekday) => named.includes(weekday)), minute: Number(hour) * 60 + Number(minute) };
 }
 
-function onDate(value: unknown): TriggerWhen {
+export function localDateTime(value: unknown): number | undefined {
   const match = typeof value === "string" ? ON.exec(value.trim()) : null;
   const written = `${match?.[1] ?? ""}T${match?.[2] ?? ""}`;
   const local = Date.parse(`${written}:00Z`);
-  if (Number.isNaN(local) || new Date(local).toISOString().slice(0, 16) !== written) {
-    throw new Error('`on` must be a local date and 24-hour time, like "2026-11-12 00:00"');
-  }
+  return Number.isNaN(local) || new Date(local).toISOString().slice(0, 16) !== written ? undefined : local;
+}
+
+function onDate(value: unknown): TriggerWhen {
+  const local = localDateTime(value);
+  if (local === undefined) throw new Error('`on` must be a local date and 24-hour time, like "2026-11-12 00:00"');
   return { kind: "once", local };
 }
 

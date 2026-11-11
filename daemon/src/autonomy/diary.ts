@@ -1,5 +1,6 @@
 import type { DiaryNote, Message } from "../engine/types.ts";
 import { shoreLog } from "../log.ts";
+import { sealedThreads } from "../engine/sealed_list.ts";
 import { readCharacterState, writeCharacterState } from "../storage/store.ts";
 
 const DIARY_STATE = "diary.json";
@@ -50,6 +51,11 @@ function shown({ folded: _folded, ...note }: StoredNote): DiaryNote {
   return note;
 }
 
+function open(characterDir: string): StoredNote[] {
+  const sealed = new Set(sealedThreads(characterDir).map((thread) => thread.id));
+  return stored(characterDir).filter((note) => !sealed.has(note.thread));
+}
+
 export function closingNote(text: string): string | undefined {
   const note = text.replace(SENT, "").trim();
   return note === "" || note === NOTHING_TO_NOTE ? undefined : note;
@@ -80,19 +86,18 @@ export interface ShownDiary {
 }
 
 export function recentDiary(characterDir: string, now: number): ShownDiary {
-  const recent = stored(characterDir).filter((note) => now - Date.parse(note.at) < DIARY_WINDOW_MS).map(shown);
+  const recent = open(characterDir).filter((note) => now - Date.parse(note.at) < DIARY_WINDOW_MS).map(shown);
   const notes = recent.slice(-DIARY_SHOWN);
   return { notes, omitted: recent.length - notes.length };
 }
 
 export function unseenDiary(characterDir: string, active: readonly Pick<Message, "diary">[], now: number, thread?: string): DiaryNote[] {
   const seen = new Set(active.flatMap((message) => (message.diary ?? []).map((note) => note.id)));
-  const written = (note: DiaryNote): boolean => (note.source === "note" || note.source === "wake") && note.thread === thread;
-  return recentDiary(characterDir, now).notes.filter((note) => !seen.has(note.id) && !written(note));
+  return recentDiary(characterDir, now).notes.filter((note) => !seen.has(note.id) && note.thread !== thread);
 }
 
 export function unfoldedDiary(characterDir: string): DiaryNote[] {
-  return stored(characterDir).filter((note) => note.folded !== true).map(shown);
+  return open(characterDir).filter((note) => note.folded !== true).map(shown);
 }
 
 export function foldDiary(characterDir: string, ids: readonly string[]): void {
