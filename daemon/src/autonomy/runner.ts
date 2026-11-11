@@ -137,7 +137,7 @@ export interface TickHooks {
   readonly wakeReason: string | undefined;
   readonly fired: readonly TriggerFiring[];
   scheduleNextWake(hoursFromNow: number, reason: string): number;
-  news(): HeartbeatNews[];
+  news(wrappingUp: boolean): HeartbeatNews[];
   newsHeard(): void;
 }
 
@@ -633,8 +633,10 @@ export class CharacterAutonomy {
     try {
       result = await run({
         scheduleNextWake: (hours, reason) => this.scheduleNextWake(hours, reason, this.#now()),
-        news: () => {
-          const told = running.news.splice(0);
+        news: (wrappingUp) => {
+          const held = running.news.filter((item) => wrappingUp && item.kind === "trigger");
+          const told = running.news.filter((item) => !held.includes(item));
+          running.news.splice(0, running.news.length, ...held);
           shown.push(...firingsIn(told));
           return told;
         },

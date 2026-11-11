@@ -251,8 +251,8 @@ test("the guide says which threads a wake can run in, and what happens to a wake
   expect(wakes).toContain("- If a wake is already running in that thread, a wake you ask for waits for it to end and then starts as a wake of its own. It isn't handed to the running wake the way a trigger for that thread is, and it doesn't replace it.");
   expect(wakes).toContain("- A thread holds one wake you asked for at a time. Asking for another while the first is still waiting is refused, and the refusal shows what is waiting. To put the new one in its place, call again with `overwrite` set to true.");
   expect(wakes).toContain("- Triggers that fire for that thread meanwhile join the wake you asked for: it opens with each reason, and may run for the longest of the limits asked for.");
-  expect(wakes).toContain("- A trigger that fires for that thread while a wake is running there is handed to the wake before its next step. If the wake ends without having answered a step that showed it the trigger, the trigger wakes you there again once it is over.");
-  expect(await guide("triggers")).toContain("If that heartbeat ends without having answered a step that showed it the trigger, because it was already writing its last words or ran out of time or rounds, the trigger wakes you again once it is over.");
+  expect(wakes).toContain("- A trigger that fires for that thread while a wake is running there is handed to the wake before its next step. A wake that has been told to wrap up is handed nothing new, though it is still told if eve writes elsewhere. A trigger that wasn't handed over, or that was shown in a step the wake never answered, wakes you there again once it is over.");
+  expect(await guide("triggers")).toContain("A heartbeat that has been told to wrap up is handed nothing new. A trigger that wasn't handed over, or that was shown in a step the heartbeat never answered, wakes you again once that heartbeat is over.");
 });
 
 test("the guide says how far back the count of messages goes, that the user isn't shown diary entries, and leaves what a push is for to the user", async () => {

@@ -90,7 +90,7 @@ If {{user}} writes in that thread while the wake is running:
 - The wake stops at the end of the step it is on. A tool call that is running finishes first.
 - A note in the thread says where it stopped, and you answer {{user}} as in any conversation, with the wake's work above you.
 - Once they have been quiet in that thread for {{wake_quiet}}, you are woken there again, told that this picks up the wake they interrupted and when that was.
-- A trigger that fires for that thread while a wake is running there is handed to the wake before its next step. If the wake ends without having answered a step that showed it the trigger, the trigger wakes you there again once it is over.
+- A trigger that fires for that thread while a wake is running there is handed to the wake before its next step. A wake that has been told to wrap up is handed nothing new, though it is still told if {{user}} writes elsewhere. A trigger that wasn't handed over, or that was shown in a step the wake never answered, wakes you there again once it is over.
 
 ## Going dormant
 

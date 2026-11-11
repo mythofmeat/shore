@@ -359,3 +359,43 @@ test("a wake is nudged the moment its wrap-up time begins, and one that uses up 
     { wrapUpRounds: 0 },
   );
 });
+
+test("a trigger that fires once a wake has been told to wrap up isn't handed to it and gets a wake of its own, while word that the user wrote still reaches it", async () => {
+  const seen: SidecarRequest[] = [];
+  let ring: ChatWorld | undefined;
+  const fire = (name: string): unknown => ring?.runtime.autonomy.wakeFor("ada", { name, reason: `The ${name}.`, at: Date.now(), thread: "ring" });
+  const lastTurn = (request: SidecarRequest | undefined): string =>
+    request?.messages.at(-1)?.content.flatMap((block) => block.type === "text" ? [block.text] : []).join("\n") ?? "";
+  await wokenInRing(
+    () => {
+      if (seen.length === 1) expect(fire("overture")).toBe("handed");
+      if (seen.length === 2) expect(fire("encore")).toBe("handed");
+      if (seen.length === 3) expect(fire("curtain")).toBe("handed");
+      if (seen.length === 4) ring?.runtime.autonomy.onUserActivityElsewhere("ada", Date.now());
+      return { minutes: 1, blocks: READ_SOUL };
+    },
+    seen,
+    undefined,
+    async (world) => {
+      expect(seen.map(nudged)).toEqual([false, false, true, false, false]);
+      expect(lastTurn(seen[1])).toContain('[Your trigger "overture" fired at ');
+      const told = seen.map(textOf).join("\n");
+      expect(told).not.toContain("encore");
+      expect(told).not.toContain("curtain");
+      expect(lastTurn(seen[3])).not.toContain("has just written to you");
+      expect(lastTurn(seen[4])).toContain("User has just written to you");
+
+      await world.runtime.autonomy.tick();
+      expect(seen.length).toBeGreaterThan(5);
+      const opener = lastTurn(seen[5]);
+      expect(opener).toContain('[wake]\n\n[Your trigger "encore" fired at ');
+      expect(opener).toContain('[Your trigger "curtain" fired at ');
+      expect(opener).not.toContain("overture");
+      expect(world.runtime.autonomy.log("ada", 100).filter((event) => event.kind === "tick_fired").map((event) => event.detail)).toEqual([
+        'Woken in "ring" by trigger "show"',
+        'Woken in "ring" by trigger "encore", "curtain"',
+      ]);
+    },
+    { maxToolIterations: 2, started: (world) => { ring = world; } },
+  );
+});
