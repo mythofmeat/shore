@@ -312,6 +312,7 @@ async function runGenerationCore(
     const diary = unseenDiary(characterDataDir(deps.dataDir, charName), engine.messages(), Date.parse(now()), engine.thread);
     const running = heartbeatNotTold(deps.runningHeartbeat?.(charName), engine.messages());
     const status = unshownPresence(presence(deps.dataDir), engine.messages());
+    await ensureAndBackfillAutonomy(turnCtx, engine, charName, config);
     const regenAlt = await appendUserTurn(turnCtx, engine, config.dirs.cache, charName, body, regen, params.rid, imageSettingsFor(config.app.images, "upload"), {
       ...arrival.annotations,
       ...(diary.length === 0 ? {} : { diary }),
@@ -326,7 +327,6 @@ async function runGenerationCore(
       }
     }
 
-    await ensureAndBackfillAutonomy(turnCtx, engine, charName, config);
     notifyUserMessageIfFresh(turnCtx, engine, charName, body, regen);
 
     built = await buildGenerationRequest({
