@@ -2006,6 +2006,59 @@ test("a second wake asked for in a thread is refused while the first is still wa
   }, handOff());
 });
 
+test("a wake the character asked for and the user interrupted is not a request still waiting: a new request for its thread is taken, overwriting leaves the interrupted wake be, and it picks up with both", async () => {
+  await withCharacter(async ({ runtime, script, say, thread }) => {
+    await runtime.registry.createThread("ada", "ring");
+    await say("hello");
+    const ask = async (input: Record<string, unknown>): Promise<{ text: unknown; failed: boolean } | undefined> => {
+      script.replyTool = { name: "wake_in_thread", input };
+      await say("go on");
+      return lastToolResult(await thread("main"));
+    };
+    const granted = 'Shore will wake you in "ring" for up to 30 minutes, once this turn is over and peggy has been quiet there for 10 minutes.';
+    at(1);
+    expect(await ask({ thread: "ring", reason: "Tell part two." })).toEqual({ text: granted, failed: false });
+
+    script.again = 3;
+    const held = hold();
+    script.beatHeld = held;
+    at(11);
+    const waking = runtime.autonomy.tick();
+    await held.started.promise;
+    at(12);
+    const asking = say("wait, what is the fox called?", "ring");
+    held.release.resolve();
+    await waking;
+    await asking;
+    script.again = 0;
+    expect((await thread("ring")).some((message) => message.content.includes("Shore stopped it here for you to answer them"))).toBe(true);
+
+    at(13);
+    expect(await ask({ thread: "ring", reason: "And the fox's name." })).toEqual({ text: granted, failed: false });
+    at(14);
+    const later = 'asked for from "main" at Friday 2026-10-30 · 12:13 PM: And the fox\'s name.';
+    expect(await ask({ thread: "ring", reason: "Tell part three." })).toEqual({
+      text: `io: you already have a wake waiting in "ring", ${later}\nNothing was changed. To put this one in its place, call again with \`overwrite\` set to true.`, failed: true,
+    });
+    expect(await ask({ thread: "ring", reason: "Tell part three.", overwrite: true })).toEqual({
+      text: `${granted}\nThis takes the place of the wake you had waiting there, ${later}`, failed: false,
+    });
+
+    script.heartbeats.length = 0;
+    script.closing = "HEARTBEAT_OK";
+    at(30);
+    await runtime.autonomy.tick();
+    expect(script.heartbeats.map((request) => request.context?.thread)).toEqual(["ring", "ring"]);
+    expect(turnsOf(script.heartbeats[0]).at(-1)?.[1]).toStartWith([
+      "[wake]",
+      "[This picks up the wake that User interrupted at Friday 2026-10-30 · 12:12 PM.]",
+      '[You asked for this wake from "main" at Friday 2026-10-30 · 12:01 PM: Tell part two.]',
+      '[You asked for this wake from "main" at Friday 2026-10-30 · 12:14 PM: Tell part three.]',
+      "[Current time: ",
+    ].join("\n\n"));
+  }, handOff());
+});
+
 test("a hand-off is refused when the character's heartbeats aren't running", async () => {
   await withCharacter(async ({ script, say, thread, runtime }) => {
     await runtime.registry.createThread("ada", "ring");

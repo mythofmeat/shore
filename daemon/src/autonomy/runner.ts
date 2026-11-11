@@ -332,7 +332,7 @@ export class CharacterAutonomy {
   }
 
   requestWake(firing: TriggerFiring, overwrite: boolean): WakeRequest {
-    const asked = (other: TriggerFiring): boolean => other.from !== undefined && other.thread === firing.thread;
+    const asked = (other: TriggerFiring): boolean => other.from !== undefined && other.thread === firing.thread && other.interruptedAt === undefined;
     const waiting = this.#fired.find(asked);
     if (waiting !== undefined && !overwrite) return { kind: "waiting", waiting };
     this.#fired.splice(0, this.#fired.length, ...this.#fired.filter((other) => !asked(other)));

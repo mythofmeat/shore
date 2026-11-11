@@ -68,7 +68,7 @@ When it starts:
 - A wake you asked for starts once the turn that asked is over.
 - If {{user}} wrote in that thread in the last {{wake_quiet}}, it waits until they have been quiet there that long, however lately they wrote elsewhere.
 - If a wake is already running in that thread, a wake you ask for waits for it to end and then starts as a wake of its own. It isn't handed to the running wake the way a trigger for that thread is, and it doesn't replace it.
-- A thread holds one wake you asked for at a time. Asking for another while the first is still waiting is refused, and the refusal shows what is waiting. To put the new one in its place, call again with `overwrite` set to true.
+- A thread holds one wake you asked for at a time. Asking for another while the first is still waiting is refused, and the refusal shows what is waiting. To put the new one in its place, call again with `overwrite` set to true. A wake {{user}} interrupted is not a request still waiting, since it has started: it picks up whatever you ask for next, and a new request for its thread joins it.
 - Triggers that fire for that thread meanwhile join the wake you asked for: it opens with each reason, and may run for the longest of the limits asked for.
 
 What it starts with: the thread as you left it, then what set the wake off, either the trigger and its reason or the thread you handed over from and the reason you gave, then the diary entries and the status that thread hasn't been shown yet.
