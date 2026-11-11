@@ -10,7 +10,7 @@ import { openFolderDialog } from "../app/intents.ts";
 import { moveThreadTo } from "../chat/actions.ts";
 import { toasts } from "../ui/toast.tsx";
 import { FolderRow } from "./FolderRow.tsx";
-import { StatusPicker } from "./StatusPicker.tsx";
+import { PresenceStore, StatusPicker } from "./StatusPicker.tsx";
 import { threadSections } from "./order.ts";
 import { useRowMenu } from "./row_menu.ts";
 import { THREAD_DRAG_TYPE, ThreadRow, type ThreadNeighbours } from "./ThreadRow.tsx";
@@ -78,9 +78,7 @@ function CharacterRow({ state, character, selected, openingThis, ready, select }
   </div>;
 }
 
-const askPresence = async (args: { status?: string | null }) => await workspace.actions.run("presence", args);
-
-const showFailure = (error: unknown): void => toasts.show(errorText(error), "error");
+const presence = new PresenceStore(async (args) => await workspace.actions.run("presence", args), (error) => toasts.show(errorText(error), "error"));
 
 function ConnectionStatus({ status }: { status: ChromeSnapshot["status"] }) {
   const [text, tone] = status === "ready" ? ["Connected", "ok"] : status === "error" ? ["Offline", "bad"] : status === "reload_required" ? ["Update ready", "bad"] : ["Reconnecting…", "wait"];
@@ -133,8 +131,8 @@ export function Sidebar({ state, mobile, close, collapse, newCharacter, newThrea
       {state.characters.length > 0 && characters.length === 0 ? <p className="sidebar-empty">No characters match “{query}”.</p> : null}
     </nav>
     <div className="sidebar-footer">
+      <StatusPicker ready={ready} store={presence} />
       <button type="button" className="sidebar-item" onClick={() => { openSettings(); if (mobile) close(); }}><Icon name="settings" /><span className="sidebar-name">Settings</span></button>
-      <StatusPicker ready={ready} ask={askPresence} failed={showFailure} />
       <ConnectionStatus status={state.status} />
     </div>
   </aside>;
