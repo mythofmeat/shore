@@ -10,6 +10,7 @@ import { answerPricingCatalogsWithNoModels } from "../support/pricing_catalogs.t
 import { toolFixture } from "../support/tool_fixture.ts";
 import { seedUsageFixture, USAGE_FIXTURE_CONFIG } from "../support/usage_fixture.ts";
 import { sizedImage } from "../support/sized_image.ts";
+import { SQUARE_WEBM_16X16_ONE_SECOND, STRIP_WEBM_64X16_ONE_SECOND } from "../support/tiny_videos.ts";
 
 answerPricingCatalogsWithNoModels();
 const root = await mkdtemp(join(tmpdir(), "shore-gui-test-"));
@@ -154,6 +155,19 @@ const provider: SidecarProvider = {
         return;
       }
       const text = "I drew this while you slept\n\n![[lighthouse]]\n\nand this one ![[missing-one]] went astray";
+      yield { type: "text", text };
+      yield { type: "done", content: text, finish_reason: "end_turn", usage, timing: { total_ms: 1, time_to_first_token_ms: 1 } };
+      return;
+    }
+    const filmed = request.messages.at(-1)?.content.some((block) => block.type === "tool_result" && block.tool_use_id === "film-loops") === true;
+    if (question.includes("send video fixture") || filmed) {
+      const usage = { input_tokens: 4, output_tokens: 2, cache_read_tokens: 0, cache_creation_tokens: 0 };
+      if (!filmed) {
+        yield { type: "tool_use", id: "film-loops", name: "bash", input: { command: `mkdir -p art && echo ${SQUARE_WEBM_16X16_ONE_SECOND} | base64 -d > art/square.webm && echo ${STRIP_WEBM_64X16_ONE_SECOND} | base64 -d > art/strip.webm` } };
+        yield { type: "done", content: "", finish_reason: "tool_use", usage, timing: { total_ms: 1, time_to_first_token_ms: 1 } };
+        return;
+      }
+      const text = "Two loops from the send video fixture\n\n![[square.webm]]\n\n![[strip.webm]]";
       yield { type: "text", text };
       yield { type: "done", content: text, finish_reason: "end_turn", usage, timing: { total_ms: 1, time_to_first_token_ms: 1 } };
       return;
