@@ -195,7 +195,7 @@ test("the guide states each thing a character could otherwise only learn by tryi
   expect(triggers).toContain("A `user_back` trigger never wakes you, because you are already answering eve. What it says, its `reason` or what its check printed, arrives with their message as a diary entry from that trigger, above what they wrote.");
   expect(triggers).toContain("A trigger that wakes you has a cooldown of 1h unless it sets its own.");
   expect(triggers).toContain("A trigger that comes due during its cooldown is not lost. It waits, its check isn't run meanwhile, and its turn comes when the cooldown ends.");
-  expect(triggers).toContain("A check that fails gets you one diary entry from Shore saying how: its exit status with the first 500 characters of what it wrote on stderr, or that it ran out of time. It keeps being tried on schedule, and you are told again only once it has worked and then failed again.");
+  expect(triggers).toContain("A check that fails gets you one diary entry from Shore saying how: its exit status with the first 500 characters of what it wrote on stderr, or that it ran out of time. The check keeps being tried each time the trigger comes due, and you are told again only once it has worked and then failed again.");
   expect(triggers).toContain("A follower waits for the trigger it names to fire. If that trigger left a diary entry, the follower's turn comes at Shore's next look, within a minute. If that trigger woke you, the follower's turn comes once that wake is over");
   expect(triggers).toContain("The diary keeps only the newest entry from each trigger");
   expect(triggers).toContain("Triggers and checks stop while you are dormant. Nothing fires, no check runs, and what comes due then is passed over, not saved up.");
@@ -218,6 +218,49 @@ test("the guide states each thing a character could otherwise only learn by tryi
 
   expect(await guide("threads")).toContain("Each must be text of at most 32 KB, and they may come to 128 KB together.");
   expect(await guide("messages")).toContain("- The message is cut at 300 characters.");
+});
+
+test("the guide says which way to get time for what, and what each way costs", async () => {
+  const wakes = await (await guideWith('[heartbeat]\nmin_interval = "4h"\n'))("wakes");
+  expect(wakes).toContain("- Something to do soon: `wake_in_thread`, into the thread it belongs in. It starts once your turn is over.");
+  expect(wakes).toContain("- Something to do at a set time: a trigger with `on`, for one time, or with `at`, for a time of day. This is also how to get a heartbeat sooner than `set_next_wake` will give you one, since a trigger isn't held to 4h.");
+  expect(wakes).toContain("- Something to watch for: a trigger with a `check`, and with `wake = false` unless it needs you.");
+  expect(wakes).toContain("- A heartbeat is the fallback, for when nothing else has given you time.");
+  expect(wakes.indexOf("## Which to use")).toBeLessThan(wakes.indexOf("## Heartbeats"));
+
+  expect(wakes).toContain("- A check that stays quiet costs nothing. No model is called.");
+  expect(wakes).toContain("- A trigger with `wake = false`, and a `user_back` trigger, call no model either. The diary entry costs its words in each turn that is shown it.");
+  expect(wakes).toContain("- A heartbeat is one turn of your model. It starts fresh");
+  expect(wakes).toContain("- A wake in a thread is one turn of your model with that whole thread in front of it: about a heartbeat, plus rereading the thread.");
+});
+
+test("the guide says what becomes of a one-off: once fired, when its check fails, and that it has no cooldown", async () => {
+  const triggers = await (await guideWith(OWN_TIME))("triggers");
+  expect(triggers).toContain("A trigger with `on` fires once. After that it stays in the file, and `list_triggers` goes on showing it, as fired and with no next time. It does nothing more there, so take it out whenever you like. Writing a later time in its place arms it again.");
+  expect(triggers).toContain("- A one-off whose check fails isn't tried again. If it was to wake you, it wakes you anyway, and the wake says that the check failed and how. If it was only to leave an entry, the diary entry from Shore says that nothing will come of it.");
+  expect(triggers).toContain("A trigger with `wake = false`, a `user_back` one and a one-off have none unless they set one.");
+  expect(triggers).toContain("One whose time had already passed when Shore first saw it never fires, so write a time a couple of minutes ahead.");
+  expect(triggers).toContain("- `list_triggers` says of each check when it last ran and whether it printed nothing or failed");
+});
+
+test("the guide says which threads a wake can run in, and what happens to a wake asked for where one is already running", async () => {
+  const guide = await guideWith(OWN_TIME);
+  expect(await guide("triggers")).toContain("It can be any thread of yours but the one your heartbeats run in: your home thread and a sealed thread both work.");
+  const wakes = await guide("wakes");
+  expect(wakes).toContain("It takes any thread of yours but the one you are in and the heartbeat thread. Your home thread and a sealed thread both count.");
+  expect(wakes).toContain("- If a wake is already running in that thread, a wake you ask for waits for it to end and then starts as a wake of its own. It isn't handed to the running wake the way a trigger for that thread is, and it doesn't replace it.");
+  expect(wakes).toContain("- Everything waiting for one thread starts together, as one wake that opens with each reason. Asking again from the same thread for the same thread, while the first request is still waiting, keeps only the later one.");
+});
+
+test("the guide says how far back the count of messages goes, that the user isn't shown diary entries, and leaves what a push is for to the user", async () => {
+  const guide = await guideWith();
+  expect(await guide("triggers")).toContain("`messages` is how many of eve's messages are on record, the same figure `activity_heatmap` gives as its total: those from the 90 days before Shore last started, and every one since.");
+  expect(await guide("diary")).toContain("- eve isn't shown those entries. Shore keeps them beside the message and puts them only in what you are sent, so in eve's view the message is just what they wrote. Don't answer as if they had read an entry.");
+  const messages = await guide("messages");
+  expect(messages).toContain("`send_push` sends a notification to eve's phone, so it reaches them when they don't have Shore open. When something is worth a push is between you and eve. Shore only limits how often.");
+  expect(messages).not.toContain("for nothing else");
+  const push = renderToolDefs({ enabled_tools: ["send_push"], enabled_subagents: [] }, "Ada", "eve").find((def) => def.name === "send_push")?.description;
+  expect(push).toBe("Send eve a push notification on their phone, which reaches them when they don't have Shore open. eve decides how often you may use it, and a push sent too soon is refused with the time the next one is allowed.");
 });
 
 test("a limit the user changed in their config is the limit the guide shows", async () => {
@@ -304,7 +347,7 @@ test("a page ends by naming the tools on it that the user hasn't turned on, and 
   for (const page of await everyPage(all)) expect(page).not.toContain("hasn't turned on every tool");
 
   const few = await guideWith("", ["guide", "list_triggers", "bash", "read"]);
-  expect(await few("triggers")).not.toContain("hasn't turned on every tool");
+  expect(await few("triggers")).toEndWith("\n\neve hasn't turned on every tool this page names, so you don't have: `activity_heatmap`.");
   expect(await few("diary")).toEndWith("\n\neve hasn't turned on every tool this page names, so you don't have: `write_diary`.");
   expect(await few("threads")).toEndWith(
     "\n\neve hasn't turned on every tool this page names, so you don't have: `search_chat_logs`, `list_threads`, `start_thread`, `start_sealed_thread`, `edit_thread`, `wake_in_thread`.",

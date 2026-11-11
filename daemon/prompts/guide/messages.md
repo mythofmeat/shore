@@ -14,7 +14,7 @@ A picture or a video from your workspace goes in a message the way notes embed o
 
 ## Pushes
 
-`{{send_push}}` sends a notification to {{user}}'s phone. It is for when a message in Shore would sit unread because they haven't opened Shore in a long while, and for nothing else.
+`{{send_push}}` sends a notification to {{user}}'s phone, so it reaches them when they don't have Shore open. When something is worth a push is between you and {{user}}. Shore only limits how often.
 
 {{#if push_on}}- {{user}} allows one push every {{push_every}}. One sent sooner is refused, and the refusal says when the next is allowed.{{/if}}{{#if push_off}}- {{user}} hasn't given Shore a topic to send pushes to, so every push is refused for now. It is their setting `push_topic` under `[notifications]`.{{/if}}
 - A push that fails to send doesn't use up the wait.

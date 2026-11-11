@@ -2030,6 +2030,37 @@ test("a wake in a thread takes in what fires for that thread while it runs, leav
   });
 });
 
+test("a wake asked for in a thread where one is running waits for it to end and starts as its own, and asking again from the same thread keeps only the later reason", async () => {
+  await withCharacter(async ({ runtime, script, say }) => {
+    const asked = (reason: string, minutes: number) => ({ name: "", from: "main", reason, at: T0 + minutes * MINUTE, thread: "ring" });
+    await runtime.registry.createThread("ada", "ring");
+    await say("hello");
+    script.closing = "HEARTBEAT_OK";
+    const held = hold();
+    script.beatHeld = held;
+    at(10);
+    expect(runtime.autonomy.wakeFor("ada", { name: "show", reason: "show is due", at: T0 + 10 * MINUTE, thread: "ring" })).toBe("queued");
+    const waking = runtime.autonomy.tick();
+    await held.started.promise;
+    at(11);
+    expect(runtime.autonomy.wakeFor("ada", asked("carry on with the first plan", 11))).toBe("queued");
+    at(12);
+    expect(runtime.autonomy.wakeFor("ada", asked("carry on with the second plan", 12))).toBe("queued");
+    held.release.resolve();
+    await waking;
+    expect(script.heartbeats).toHaveLength(2);
+    expect(script.heartbeats.map(textOf).join("\n")).not.toContain("You asked for this wake");
+
+    at(13);
+    await runtime.autonomy.tick();
+    expect(script.heartbeats.map((request) => request.context?.thread)).toEqual(["ring", "ring", "ring", "ring"]);
+    expect(turnsOf(script.heartbeats[2]).at(-1)?.[1]).toStartWith(
+      '[wake]\n\n[You asked for this wake from "main" at Friday 2026-10-30 · 12:12 PM: carry on with the second plan]\n\n[Current time: ',
+    );
+    expect(script.heartbeats.map(textOf).join("\n")).not.toContain("the first plan");
+  });
+});
+
 test("a side thread grown long by a wake compacts once the wake is over, as it would after a reply, unless the user cut the wake short", async () => {
   const long = (app: AppConfig): void => {
     app.memory.compaction.enabled = true;
@@ -2424,6 +2455,29 @@ test("with the character's own time switched off a seal still comes off at its t
     sealing(app);
     app.behavior.autonomy.enabled = false;
   }, root);
+});
+
+test("the activity record a start rebuilds holds the user's messages of the last ninety days and none from before", async () => {
+  const counted = (runtime: ShoreRuntime): number | undefined => runtime.autonomy.activityStats("ada", T0)?.messageCount;
+  const day = 24 * 60;
+  let root = "";
+  at(0);
+  await withCharacter(async ({ runtime, data, say }) => {
+    root = dirname(data);
+    await say("hello");
+    at(2 * day);
+    await say("two days on");
+    expect(counted(runtime)).toBe(2);
+  });
+
+  at(91 * day);
+  await withCharacter(async ({ runtime, say }) => {
+    await say("a season later");
+    expect(counted(runtime)).toBe(2);
+    at(91 * day + 1);
+    await say("and again");
+    expect(counted(runtime)).toBe(3);
+  }, undefined, root);
 });
 
 test("a message is counted once in the character's activity record, whether it is the first after a start or follows a restart in the middle of a conversation", async () => {

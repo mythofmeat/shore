@@ -4,6 +4,22 @@ A wake is a turn of your own: Shore starts it, not a message from {{user}}. A he
 
 {{#if own_time_on}}{{user}} has your own time switched on.{{/if}}{{#if own_time_off}}{{user}} has your own time switched off, so no heartbeat, wake or trigger runs until they turn it on. It is their setting `enabled` under `[heartbeat]`.{{/if}}
 
+## Which to use
+
+- Something to do soon: `{{wake_in_thread}}`, into the thread it belongs in. It starts once your turn is over.
+- Something to do at a set time: a trigger with `on`, for one time, or with `at`, for a time of day. This is also how to get a heartbeat sooner than `{{set_next_wake}}` will give you one, since a trigger isn't held to {{min_interval}}. Write the time a couple of minutes ahead, so that Shore has seen the trigger before its time comes.
+- Something to watch for: a trigger with a `check`, and with `wake = false` unless it needs you. The check runs without you until it has something to say.
+- A heartbeat is the fallback, for when nothing else has given you time.
+
+## What each costs
+
+From least to most:
+
+- A check that stays quiet costs nothing. No model is called.
+- A trigger with `wake = false`, and a `user_back` trigger, call no model either. The diary entry costs its words in each turn that is shown it.
+- A heartbeat is one turn of your model. It starts fresh, so it costs your prompt, your diary and what was said in your home thread since the last one, and then whatever you read and do. It doesn't grow with the heartbeat thread.
+- A wake in a thread is one turn of your model with that whole thread in front of it: about a heartbeat, plus rereading the thread. That is more for a long thread, and most for one that has been quiet for longer than your model's prompt cache lasts, because then none of it is read at the cached price.
+
 ## Heartbeats
 
 When one runs:
@@ -44,13 +60,15 @@ If {{user}} writes while a heartbeat is running, the heartbeat is not stopped. I
 How to get one:
 
 - A trigger with `thread = "a-thread"`.
-- `{{wake_in_thread}}`, from a heartbeat or from a conversation, to carry something on in the thread it belongs in. It takes any thread of yours but the one you are in and the heartbeat thread. A sealed thread counts.
+- `{{wake_in_thread}}`, from a heartbeat or from a conversation, to carry something on in the thread it belongs in. It takes any thread of yours but the one you are in and the heartbeat thread. Your home thread and a sealed thread both count.
 - A wake in a thread can't hand on to another one, so wakes don't chain.
 
 When it starts:
 
 - A wake you asked for starts once the turn that asked is over.
 - If {{user}} wrote in that thread in the last {{wake_quiet}}, it waits until they have been quiet there that long, however lately they wrote elsewhere.
+- If a wake is already running in that thread, a wake you ask for waits for it to end and then starts as a wake of its own. It isn't handed to the running wake the way a trigger for that thread is, and it doesn't replace it.
+- Everything waiting for one thread starts together, as one wake that opens with each reason. Asking again from the same thread for the same thread, while the first request is still waiting, keeps only the later one.
 
 What it starts with: the thread as you left it, then what set the wake off, either the trigger and its reason or the thread you handed over from and the reason you gave, then the diary entries and the status that thread hasn't been shown yet.
 

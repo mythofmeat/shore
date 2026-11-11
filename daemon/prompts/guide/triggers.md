@@ -24,7 +24,7 @@ A trigger says when it fires with exactly one of these:
 
 - `every = "1h"`: again and again, that long apart, and at least a minute. The first time is that long after Shore first sees the trigger, and each later one counts from the time before.
 - `at = "20:00"`: at that local time, on the 24-hour clock, every day. Days in front limit it: `at = "Sat 20:00"`, `at = "Mon,Thu 09:30"`. If Shore wasn't running then, it fires once, late.
-- `on = "2026-11-12 00:00"`: once, at that local date and time, or late if Shore wasn't running then. One whose time had already passed when Shore first saw it never fires.
+- `on = "2026-11-12 00:00"`: once, at that local date and time, or late if Shore wasn't running then. One whose time had already passed when Shore first saw it never fires, so write a time a couple of minutes ahead.
 - `when = "user_quiet"` with `after = "8h"`: once each time {{user}} has gone that long without writing to you.
 - `when = "user_back"` with `after = "8h"`: as {{user}} writes to you again after at least that long. It never wakes you; see below.
 - `when = "status_changed"`: when {{user}} sets or clears their status.
@@ -39,7 +39,7 @@ What it does when it fires:
 - `check = "command"` is run first, and the trigger fires only if the check prints something. What it printed is the reason, under the trigger's own `reason` if it has both. A trigger needs a `reason`, a `check`, or both.
 - With nothing more, it wakes you in a heartbeat that starts with a line like `[Your trigger "mail" fired at ...: 2 new messages]`. Triggers that fire together share one heartbeat, and one that fires while a heartbeat is running is handed to that heartbeat before its next step.
 - `wake = false` leaves a diary entry in place of the wake. That costs no model call at all.
-- `thread = "a-thread"` makes the wake run in that thread, with its conversation in front of you. `limit = "2h"` is how long that wake may run: at least a minute, {{default_wake_limit}} if you leave it out, and never more than {{max_wake_limit}}, which is {{user}}'s ceiling. `thread` only goes with a trigger that wakes you, and `limit` only goes with `thread`. The `wakes` topic says how such a wake runs.
+- `thread = "a-thread"` makes the wake run in that thread, with its conversation in front of you. `limit = "2h"` is how long that wake may run: at least a minute, {{default_wake_limit}} if you leave it out, and never more than {{max_wake_limit}}, which is {{user}}'s ceiling. `thread` only goes with a trigger that wakes you, and `limit` only goes with `thread`. It can be any thread of yours but the one your heartbeats run in: your home thread and a sealed thread both work. The `wakes` topic says how such a wake runs.
 
 What holds it back:
 
@@ -91,7 +91,7 @@ The same facts are on the check's stdin as one line of JSON, with `null` where a
 }
 ```
 
-`messages` is how many of {{user}}'s messages the record holds, `share_of_messages_by_local_hour` is the share of them written in each local hour, from midnight on, and `median_secs_between_sessions` is the middle gap between their recent sittings, or `null` when there aren't two to compare. `activity` is `null` when Shore has no record for you.
+`messages` is how many of {{user}}'s messages are on record, the same figure `{{activity_heatmap}}` gives as its total: those from the 90 days before Shore last started, and every one since. `share_of_messages_by_local_hour` is the share of them written in each local hour, from midnight on, and `median_secs_between_sessions` is the middle gap between their recent sittings, or `null` when there aren't two to compare. `activity` is `null` when Shore has no record for you.
 
 This trigger wakes you when {{user}} sets one particular status, and stays quiet for any other and for a cleared one:
 
@@ -103,11 +103,17 @@ check = 'if [ "$SHORE_USER_STATUS" = "asleep" ]; then echo "They have gone to be
 
 ## Cooldowns and hours
 
-A trigger that wakes you has a cooldown of {{wake_cooldown}} unless it sets its own. {{user}} chooses that default. A trigger with `wake = false`, and a `user_back` one, has none unless it sets one.
+A trigger that wakes you has a cooldown of {{wake_cooldown}} unless it sets its own. {{user}} chooses that default. A trigger with `wake = false`, a `user_back` one and a one-off have none unless they set one.
 
 A trigger that comes due during its cooldown is not lost. It waits, its check isn't run meanwhile, and its turn comes when the cooldown ends. The same holds for a trigger waiting on a dream, a status change or another trigger: what happened is remembered until the cooldown is over.
 
 A trigger that comes due outside its `between` hours is skipped, not held until they open.
+
+## One-offs
+
+A trigger with `on` fires once. After that it stays in the file, and `{{list_triggers}}` goes on showing it, as fired and with no next time. It does nothing more there, so take it out whenever you like. Writing a later time in its place arms it again.
+
+A one-off gets no second try, so a check that fails is handled differently: see the end of this page.
 
 ## `user_back`
 
@@ -129,6 +135,8 @@ Triggers and checks stop while you are dormant. Nothing fires, no check runs, an
 
 - A file that isn't valid TOML runs none of its triggers. A single trigger that doesn't make sense is left out and the rest run.
 - You are told in a diary entry from Shore which triggers aren't running and why, once, and again when what is wrong changes. `{{list_triggers}}` lists them too.
-- A check that fails gets you one diary entry from Shore saying how: its exit status with the first {{check_error_chars}} characters of what it wrote on stderr, or that it ran out of time. It keeps being tried on schedule, and you are told again only once it has worked and then failed again. `{{list_triggers}}` shows it as failing until then.
+- A check that fails gets you one diary entry from Shore saying how: its exit status with the first {{check_error_chars}} characters of what it wrote on stderr, or that it ran out of time. The check keeps being tried each time the trigger comes due, and you are told again only once it has worked and then failed again.
+- A one-off whose check fails isn't tried again. If it was to wake you, it wakes you anyway, and the wake says that the check failed and how. If it was only to leave an entry, the diary entry from Shore says that nothing will come of it.
+- `{{list_triggers}}` says of each check when it last ran and whether it printed nothing or failed, so a check that is quiet can be told from one that isn't running.
 - A trigger whose `thread` isn't a thread of yours, or is the one your heartbeats run in, wakes nothing, and a diary entry from Shore says so.
 - {{user}} can switch a single trigger off by name. `{{list_triggers}}` marks it, and it neither fires nor runs its check until they switch it back on.

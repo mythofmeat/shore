@@ -23,6 +23,7 @@ Each entry says where it came from:
 
 - A heartbeat starts with the entries from the last day.
 - A conversation is shown, above {{user}}'s next message there, the entries from the last day that thread hasn't been shown yet. It is shown each entry once, and they stay with that message.
+- {{user}} isn't shown those entries. Shore keeps them beside the message and puts them only in what you are sent, so in {{user}}'s view the message is just what they wrote. Don't answer as if they had read an entry.
 - A wake in a thread opens the same way, with the entries that thread hasn't been shown.
 - A thread isn't shown an entry that was written in it, because it already holds it.
 - A dream is shown every entry since the last dream that finished, whatever its age. Once a dream finishes, later dreams aren't shown those entries again, so a dream is where what matters is moved into your files.
