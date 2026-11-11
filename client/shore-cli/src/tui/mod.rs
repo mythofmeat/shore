@@ -2331,6 +2331,7 @@ fn absorb_palette_catalog(app: &mut App, source: Source, data: &serde_json::Valu
         | Source::Characters
         | Source::Config
         | Source::History
+        | Source::Presence
         | Source::Presets
         | Source::Providers
         | Source::Segments
@@ -3702,6 +3703,28 @@ pub(crate) fn handle_server_message(app: &mut App, msg: ServerMessage) -> UiEffe
         };
     }
     UiEffect::redraw(redraw)
+}
+
+#[cfg(test)]
+mod palette_catalog_tests {
+    use super::*;
+
+    #[test]
+    fn a_daemon_answer_fills_the_palette_with_what_it_listed() {
+        let mut app = App::default();
+        absorb_palette_catalog(
+            &mut app,
+            Source::Presence,
+            &serde_json::json!({ "choices": ["asleep", "busy"] }),
+        );
+        let offered: Vec<&str> = app
+            .palette_catalog
+            .statuses
+            .iter()
+            .map(|status| status.value.as_str())
+            .collect();
+        assert_eq!(offered, ["asleep", "busy"]);
+    }
 }
 
 #[cfg(test)]

@@ -18,7 +18,10 @@ import { handleSavePicture } from "./save_picture.ts";
 import { handleListThreads } from "./list_threads.ts";
 import { handleListTriggers } from "./list_triggers.ts";
 import { addDiaryNote } from "../autonomy/diary.ts";
+import type { PushOutcome } from "../autonomy/push.ts";
 import type { TriggersView } from "../autonomy/trigger_loop.ts";
+import { formatWallClock } from "../engine/prompt.ts";
+import { hostZone } from "../ledger/zoned.ts";
 import { handleStartThread, type StartThreadRequest } from "./start_thread.ts";
 import { handleEditThread, type EditThreadRequest } from "./edit_thread.ts";
 import type { FetchLike } from "./web.ts";
@@ -77,6 +80,8 @@ export interface ToolContext {
   scheduleNextWake?: (hoursFromNow: number, reason: string) => number | undefined;
 
   triggers?: () => TriggersView;
+
+  push?: (message: string) => Promise<PushOutcome>;
 
   startThread?: (request: StartThreadRequest) => Promise<void>;
 
@@ -234,6 +239,19 @@ export async function dispatchTool(
       if (text === "") throw new InvalidArgs("text must be a non-empty string");
       addDiaryNote(ctx.characterDataDir, { at: Date.now(), thread: ctx.thread ?? "", source: "note", text });
       return "Noted in your diary. Your other turns will see it for the next day.";
+    }
+
+    case "send_push": {
+      const message = typeof args["message"] === "string" ? args["message"].trim() : "";
+      if (message === "") throw new InvalidArgs("message must be a non-empty string");
+      const user = ctx.userName ?? "the user";
+      const outcome = await ctx.push?.(message);
+      if (outcome === undefined || outcome.kind === "not_set_up") throw new ToolIoError(`push notifications aren't set up: ${user} hasn't given Shore a topic to send them to`);
+      const next = formatWallClock(outcome.nextAt, hostZone());
+      if (outcome.kind === "too_soon") {
+        throw new ToolIoError(`not sent: your last push was ${formatWallClock(outcome.lastAt, hostZone())}, and the next one is allowed from ${next}`);
+      }
+      return `Sent to ${user}'s phone. The next push is allowed from ${next}.`;
     }
 
     default: {

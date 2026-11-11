@@ -1507,6 +1507,23 @@ wire_types! {
         pub now: Option<bool>,
     }
 
+    #[serde(deny_unknown_fields)]
+    #[derive(Default)]
+    pub struct PresenceArgs {
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        pub status: Option<String>,
+    }
+
+    pub struct PresenceResult {
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        #[ts(optional)]
+        pub status: Option<String>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        #[ts(optional)]
+        pub set_at: Option<String>,
+        pub choices: Vec<String>,
+    }
+
     #[serde(rename_all = "snake_case")]
     pub enum DreamOutcome { Finished, CutOff, Failed, Interrupted }
 
@@ -3053,6 +3070,7 @@ operations! {
     ReadSubagentTraces: "subagent_trace" (SubagentTraceArgs) => SubagentTraceResult,
     ScheduleHeartbeat: "heartbeat_tick_now" (EmptyOperationArgs) => HeartbeatControlResult,
     Dream: "dream" (DreamArgs) => DreamReport,
+    Presence: "presence" (PresenceArgs) => PresenceResult,
     SetHeartbeatDormant: "heartbeat_set_dormant" (EmptyOperationArgs) => HeartbeatControlResult,
     SetHeartbeatActive: "heartbeat_set_active" (EmptyOperationArgs) => HeartbeatControlResult,
     PingKeepalive: "keepalive_ping_now" (EmptyOperationArgs) => KeepalivePingResult,

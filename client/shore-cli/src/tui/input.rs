@@ -1779,6 +1779,7 @@ fn dispatch_cli_command(app: &mut App, raw_input: &str) -> Action {
         | CliCommand::Config { .. }
         | CliCommand::Usage { .. }
         | CliCommand::Dream { .. }
+        | CliCommand::Presence { .. }
         | CliCommand::View { .. }
         | CliCommand::Ui { .. } => {}
     }
@@ -1970,6 +1971,7 @@ fn dispatch_cli_command(app: &mut App, raw_input: &str) -> Action {
         | CliCommand::Config { .. }
         | CliCommand::Usage { .. }
         | CliCommand::Dream { .. }
+        | CliCommand::Presence { .. }
         | CliCommand::Completions { .. }
         | CliCommand::View { .. }
         | CliCommand::Ui { .. } => {

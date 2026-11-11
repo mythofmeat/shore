@@ -43,6 +43,7 @@ fn config_modes(command: &CliCommand) -> (bool, bool) {
         | CliCommand::Provider { .. }
         | CliCommand::Usage { .. }
         | CliCommand::Dream { .. }
+        | CliCommand::Presence { .. }
         | CliCommand::Completions { .. }
         | CliCommand::View { .. }
         | CliCommand::Ui { .. } => (false, false),
@@ -508,6 +509,7 @@ pub(crate) fn render(
         )),
         "refresh_all_provider_models" => Some(render_provider_refresh_all(data)),
         "dream" => Some(crate::output::commands::dream_report_text(data)),
+        "presence" => Some(crate::output::commands::presence_text(data)),
         "heartbeat_tick_now" => Some(format!(
             "Scheduled a heartbeat tick for {}.",
             data.get("character")
@@ -608,4 +610,57 @@ fn workspace_note(rewind: &serde_json::Value) -> Option<String> {
         Some(note) => format!("{note}; {left}."),
         None => format!("{left}."),
     })
+}
+
+#[cfg(test)]
+mod tests {
+    use serde_json::json;
+
+    #[test]
+    fn config_asked_for_as_toml_is_shown_as_toml_with_defaults_left_out_unless_all_is_asked_for() {
+        let data = json!({
+            "config": { "chat": { "model": "anthropic:fixture", "display_name": "eve" } },
+            "defaults": { "chat": { "display_name": "eve" } }
+        });
+        let changed = crate::run::render_config_toml(&data, false).ok();
+        let all = crate::run::render_config_toml(&data, true).ok();
+        assert!(
+            changed
+                .as_deref()
+                .is_some_and(|toml| toml.contains("model"))
+        );
+        assert_ne!(changed, all);
+        assert_eq!(
+            super::render("config --toml", "config", &data, "ada"),
+            changed
+        );
+        assert_eq!(
+            super::render("config --toml --all", "config", &data, "ada"),
+            all
+        );
+        assert_ne!(super::render("config", "config", &data, "ada"), changed);
+        assert_ne!(super::render("config --all", "config", &data, "ada"), all);
+    }
+
+    #[test]
+    fn the_palette_shows_a_status_in_the_same_words_as_the_command_line() {
+        assert_eq!(
+            super::render(
+                "presence asleep",
+                "presence",
+                &json!({ "status": "asleep", "set_at": "just now", "choices": ["asleep"] }),
+                "ada"
+            ),
+            Some("Your status is \"asleep\", set just now.".to_owned())
+        );
+        assert_eq!(
+            super::render(
+                "presence --clear",
+                "presence",
+                &json!({ "choices": ["asleep", "busy"] }),
+                "ada"
+            ),
+            Some("You have no status set. You can set one of: asleep, busy.".to_owned())
+        );
+    }
 }

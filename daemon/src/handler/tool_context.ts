@@ -1,3 +1,4 @@
+import type { PushOutcome } from "../autonomy/push.ts";
 import type { TriggersView } from "../autonomy/trigger_loop.ts";
 import { characterMediaDir } from "../storage/media.ts";
 import { shoreLog } from "../log.ts";
@@ -44,6 +45,7 @@ export interface ToolContextDeps extends Partial<ToolConversation> {
   activityStats?: (character: string, days: number) => ReturnType<ActivityStatsLookup>;
   scheduleNextWake?: (character: string, hoursFromNow: number, reason: string) => number | undefined;
   triggersView?: (character: string) => TriggersView;
+  push?: (character: string, message: string) => Promise<PushOutcome>;
   startThread?: (character: string, request: StartThreadRequest) => Promise<void>;
   editThread?: (character: string, request: EditThreadRequest) => Promise<ThreadRecord | undefined>;
 }
@@ -79,6 +81,7 @@ export async function buildToolContext(
   const activityStats = deps.activityStats;
   const scheduleNextWake = deps.scheduleNextWake;
   const triggersView = deps.triggersView;
+  const push = deps.push;
   const startThread = deps.startThread;
   const editThread = deps.editThread;
   const subagentsConfigured = config.app.subagents.size > 0;
@@ -109,6 +112,7 @@ export async function buildToolContext(
       ? {}
       : { scheduleNextWake: (hours: number, reason: string) => scheduleNextWake(charName, hours, reason) }),
     ...(triggersView === undefined ? {} : { triggers: () => triggersView(charName) }),
+    ...(push === undefined ? {} : { push: async (message: string) => await push(charName, message) }),
     ...(deps.deferEdit === undefined ? {} : { deferEdit: deps.deferEdit }),
     ...(deps.countReads === true && config.app.memory.dreaming.enabled ? { recordRead: (path: string) => { recordReadBestEffort(charDataDir, path); } } : {}),
     ...(startThread === undefined

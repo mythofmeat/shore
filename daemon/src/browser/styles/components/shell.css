@@ -364,6 +364,14 @@
   flex: 1;
 }
 
+.sidebar-footer .status-chip {
+  display: block;
+  max-width: 9em;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .shell[data-layout="mobile"] .sidebar-item {
   min-height: 48px;
   font-size: var(--text-lg);

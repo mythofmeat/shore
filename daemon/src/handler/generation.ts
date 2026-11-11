@@ -1,5 +1,6 @@
 import { withConversation } from "../engine/lifecycle.ts";
 import { unseenDiary } from "../autonomy/diary.ts";
+import { noteSeen, presence, unshownPresence } from "../autonomy/presence.ts";
 import type { RunningHeartbeat } from "../autonomy/runner.ts";
 import { characterDataDir, threadDataDir } from "../config/dirs.ts";
 import { isToolResultOnly } from "../engine/message_store.ts";
@@ -299,12 +300,15 @@ async function runGenerationCore(
       ? { cold: false, annotations: {} }
       : await threadArrival(deps, engine, charName, home, resolved, now());
     if (!regen && bodyHasContent(body)) await deps.userBack?.(charName);
+    if (!regen && bodyHasContent(body)) noteSeen(deps.dataDir, Date.parse(now()));
     const diary = unseenDiary(characterDataDir(deps.dataDir, charName), engine.messages(), Date.parse(now()), engine.thread);
     const running = heartbeatNotTold(deps.runningHeartbeat?.(charName), engine.messages());
+    const status = unshownPresence(presence(deps.dataDir), engine.messages());
     const regenAlt = await appendUserTurn(turnCtx, engine, config.dirs.cache, charName, body, regen, params.rid, imageSettingsFor(config.app.images, "upload"), {
       ...arrival.annotations,
       ...(diary.length === 0 ? {} : { diary }),
       ...(running === undefined ? {} : { heartbeat_running: running }),
+      ...(status === undefined ? {} : { presence: status }),
     });
     if (arrival.cold) {
       try {

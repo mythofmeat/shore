@@ -13,6 +13,7 @@ import { Diagnostics } from "../src/diagnostics.ts";
 import type { History } from "../src/engine/conversation.ts";
 import { unfoldedDiary } from "../src/autonomy/diary.ts";
 import { heartbeatNewsNote, triggerFiredNote, userWroteNote } from "../src/autonomy/heartbeat_shape.ts";
+import { lastSeen, noteSeen, presence, setPresence } from "../src/autonomy/presence.ts";
 import { checkFacts, startTriggerTimer, type TriggerService } from "../src/autonomy/trigger_service.ts";
 import { DIARY_FOR_CHAT, DIARY_FOR_HEARTBEAT, diaryText, heartbeatRunningText } from "../src/engine/prompt.ts";
 import { markThreadRead, threadActivityNow } from "../src/engine/threads.ts";
@@ -20,6 +21,7 @@ import type { DiaryNote, Message } from "../src/engine/types.ts";
 import { dispatchCommand } from "../src/handler/commands.ts";
 import { buildCommandPathDeps, buildGenerationDeps } from "../src/handler/deps.ts";
 import { runGeneration } from "../src/handler/generation.ts";
+import { ThreadUnreadTracker } from "../src/handler/thread_unread.ts";
 import type { GenerateResponse, SidecarProvider, SidecarRequest } from "../src/llm/types.ts";
 import { runCompactionPass } from "../src/memory/compaction/run.ts";
 import type { ServerMessage } from "../src/protocol/ServerMessage.ts";
@@ -1002,7 +1004,7 @@ function diaryOf(data: string): [from: string, text: string][] {
 }
 
 test("a trigger in the character's file wakes it when its check prints, and the check is handed what Shore knows", async () => {
-  await withCharacter(async ({ runtime, script, workspace, say }) => {
+  await withCharacter(async ({ runtime, script, workspace, data, say }) => {
     await writeFile(join(workspace, "TRIGGERS.toml"), [
       "[tide]",
       'every = "10m"',
@@ -1012,6 +1014,8 @@ test("a trigger in the character's file wakes it when its check prints, and the 
     await say("hello");
     at(1);
     await runtime.triggers.tick();
+    setPresence(data, "asleep", T0 + 2 * MINUTE);
+    noteSeen(data, T0 + 3 * MINUTE);
     at(11);
     await runtime.triggers.tick();
     expect(script.heartbeats).toHaveLength(0);
@@ -1026,7 +1030,7 @@ test("a trigger in the character's file wakes it when its check prints, and the 
     expect([name, now, quiet, last]).toEqual(["tide", "2026-10-30T12:11:00.000Z", "660", "2026-10-30T12:00:00.000Z"]);
     const facts = JSON.parse(stdin.join("|")) as { now: string; user: unknown; activity: { messages: number; share_of_messages_by_local_hour: number[]; median_secs_between_sessions: number | null } };
     expect(facts.now).toBe("2026-10-30T12:11:00.000Z");
-    expect(facts.user).toEqual({ last_message_at: "2026-10-30T12:00:00.000Z", quiet_secs: 660 });
+    expect(facts.user).toEqual({ last_message_at: "2026-10-30T12:00:00.000Z", quiet_secs: 660, last_seen_at: "2026-10-30T12:03:00.000Z", status: "asleep", status_set_at: "2026-10-30T12:02:00.000Z" });
     expect(Object.keys(facts.activity)).toEqual(["messages", "share_of_messages_by_local_hour", "median_secs_between_sessions"]);
     expect(facts.activity.messages).toBeGreaterThan(0);
     expect(facts.activity.share_of_messages_by_local_hour).toHaveLength(24);
@@ -1252,17 +1256,27 @@ test("the timer looks at the triggers again and again until it is stopped, and o
   expect(looked).toBe(seen);
 });
 
-test("a check is told the time, and when the user last wrote and how long ago if they ever did", () => {
+test("a check is told the time, when the user last wrote and was last seen, and their status if they have set one", () => {
   const activity = { messages: 3 };
-  expect(checkFacts(T0 + 90_500, T0, activity)).toEqual({
-    facts: { now: "2026-10-30T12:01:30.500Z", user: { last_message_at: "2026-10-30T12:00:00.000Z", quiet_secs: 90 }, activity },
-    env: { SHORE_NOW: "2026-10-30T12:01:30.500Z", SHORE_USER_LAST_MESSAGE_AT: "2026-10-30T12:00:00.000Z", SHORE_USER_QUIET_SECS: "90" },
+  const status = { status: "asleep", set_at: "2026-10-30T11:00:00.000Z" };
+  expect(checkFacts(T0 + 90_500, { lastUserAt: T0, lastSeenAt: T0 + 30_000, status }, activity)).toEqual({
+    facts: {
+      now: "2026-10-30T12:01:30.500Z",
+      user: { last_message_at: "2026-10-30T12:00:00.000Z", quiet_secs: 90, last_seen_at: "2026-10-30T12:00:30.000Z", status: "asleep", status_set_at: "2026-10-30T11:00:00.000Z" },
+      activity,
+    },
+    env: {
+      SHORE_NOW: "2026-10-30T12:01:30.500Z", SHORE_USER_LAST_MESSAGE_AT: "2026-10-30T12:00:00.000Z", SHORE_USER_QUIET_SECS: "90",
+      SHORE_USER_LAST_SEEN_AT: "2026-10-30T12:00:30.000Z", SHORE_USER_STATUS: "asleep", SHORE_USER_STATUS_SET_AT: "2026-10-30T11:00:00.000Z",
+    },
   });
-  expect(checkFacts(T0, undefined, undefined)).toEqual({
-    facts: { now: "2026-10-30T12:00:00.000Z", user: { last_message_at: null, quiet_secs: null }, activity: null },
-    env: { SHORE_NOW: "2026-10-30T12:00:00.000Z", SHORE_USER_LAST_MESSAGE_AT: "", SHORE_USER_QUIET_SECS: "" },
-  });
-  expect(checkFacts(T0, T0, undefined).env.SHORE_USER_QUIET_SECS).toBe("0");
+  const nothing = {
+    facts: { now: "2026-10-30T12:00:00.000Z", user: { last_message_at: null, quiet_secs: null, last_seen_at: null, status: null, status_set_at: null }, activity: null },
+    env: { SHORE_NOW: "2026-10-30T12:00:00.000Z", SHORE_USER_LAST_MESSAGE_AT: "", SHORE_USER_QUIET_SECS: "", SHORE_USER_LAST_SEEN_AT: "", SHORE_USER_STATUS: "", SHORE_USER_STATUS_SET_AT: "" },
+  };
+  expect(checkFacts(T0, { lastUserAt: undefined, lastSeenAt: undefined, status: undefined }, undefined)).toEqual(nothing);
+  expect(checkFacts(T0, { lastUserAt: undefined, lastSeenAt: undefined, status: { status: "", set_at: "2026-10-30T11:00:00.000Z" } }, undefined)).toEqual(nothing);
+  expect(checkFacts(T0, { lastUserAt: T0, lastSeenAt: undefined, status: undefined }, undefined).env.SHORE_USER_QUIET_SECS).toBe("0");
 });
 
 function lastToolResult(messages: readonly Message[]): { text: unknown; failed: boolean } | undefined {
@@ -1358,4 +1372,210 @@ test("the character can list its triggers from a conversation, and is told when 
       failed: false,
     });
   }, (app) => { app.tools.enabled_tools = [...app.tools.enabled_tools, "list_triggers"]; });
+});
+
+test("the character's push reaches the user's topic once, at normal priority, and a second one the same day is refused", async () => {
+  const pushed: { path: string; method: string; title: string | null; auth: string | null; priority: string | null; body: string }[] = [];
+  const ntfy = Bun.serve({
+    port: 0,
+    fetch: async (request) => {
+      pushed.push({
+        path: new URL(request.url).pathname, method: request.method, title: request.headers.get("title"),
+        auth: request.headers.get("authorization"), priority: request.headers.get("priority"), body: await request.text(),
+      });
+      return new Response("ok");
+    },
+  });
+  try {
+    await withCharacter(async ({ script, say, thread }) => {
+      const result = async (): Promise<{ text: string; failed: boolean }> => {
+        const last = lastToolResult(await thread("main"));
+        return { text: String(last?.text), failed: last?.failed === true };
+      };
+      await say("hello");
+      script.replyTool = { name: "send_push", input: { message: "  I miss you.  " } };
+      at(5);
+      await say("you can reach my phone now");
+      expect(await result()).toEqual({ text: "Sent to peggy's phone. The next push is allowed from Saturday 2026-10-31 · 12:05 PM.", failed: false });
+      expect(pushed).toEqual([{ path: "/phone", method: "POST", title: "Shore - ada", auth: "Bearer fixture-key", priority: null, body: "I miss you." }]);
+
+      script.replyTool = { name: "send_push", input: { message: "Still here." } };
+      at(65);
+      await say("try again");
+      expect(await result()).toMatchObject({ failed: true });
+      expect((await result()).text).toContain("not sent: your last push was Friday 2026-10-30 · 12:05 PM, and the next one is allowed from Saturday 2026-10-31 · 12:05 PM");
+      expect(pushed).toHaveLength(1);
+
+      for (const input of [{ message: "   " }, { message: "" }, { message: "Hello.", loud: true }]) {
+        script.replyTool = { name: "send_push", input };
+        await say("and again");
+        expect(await result(), JSON.stringify(input)).toMatchObject({ failed: true });
+      }
+      script.replyTool = { name: "send_push", input: { message: "   " } };
+      await say("once more");
+      expect((await result()).text).toContain("message must be a non-empty string");
+      expect(pushed).toHaveLength(1);
+    }, (app) => {
+      app.tools.enabled_tools = [...app.tools.enabled_tools, "send_push"];
+      app.notifications.push_topic = "phone";
+      app.notifications.ntfy.url = `http://127.0.0.1:${String(ntfy.port)}`;
+      app.notifications.token_env = KEY_ENV;
+    });
+
+    await withCharacter(async ({ script, say, thread }) => {
+      await say("hello");
+      script.replyTool = { name: "send_push", input: { message: "I miss you." } };
+      await say("can you reach my phone?");
+      const last = lastToolResult(await thread("main"));
+      expect(last?.failed).toBe(true);
+      expect(String(last?.text)).toContain("push notifications aren't set up: peggy hasn't given Shore a topic to send them to");
+      expect(pushed).toHaveLength(1);
+    }, (app) => { app.tools.enabled_tools = [...app.tools.enabled_tools, "send_push"]; });
+
+    await withCharacter(async ({ script, say, thread }) => {
+      await say("hello");
+      script.replyTool = { name: "send_push", input: { message: "Hello.", loud: true } };
+      await say("loudly");
+      expect(lastToolResult(await thread("main"))?.failed).toBe(true);
+      expect(pushed).toHaveLength(1);
+      script.replyTool = { name: "send_push", input: { message: "!" } };
+      await say("briefly");
+      expect(lastToolResult(await thread("main"))?.failed).toBe(false);
+      expect(pushed.map((each) => each.body)).toEqual(["I miss you.", "!"]);
+    }, (app) => {
+      app.tools.enabled_tools = [...app.tools.enabled_tools, "send_push"];
+      app.notifications.push_topic = "phone";
+      app.notifications.ntfy.url = `http://127.0.0.1:${String(ntfy.port)}`;
+    });
+  } finally {
+    await ntfy.stop(true);
+  }
+});
+
+test("the user's status reaches a conversation with their next message, once, and again when it changes or is cleared", async () => {
+  let root = "";
+  await withCharacter(async ({ script, data, say, thread }) => {
+    root = dirname(data);
+    const last = (): string => textOf(script.replies.at(-1) as SidecarRequest);
+    await say("hello");
+    expect(last()).not.toContain("status");
+    setPresence(data, "asleep", T0 + 5 * MINUTE);
+    at(15);
+    await say("you up?");
+    expect(last()).toEndWith('[Their status, set 10 minutes ago: "asleep"]\nyou up?');
+    at(16);
+    await say("hello?");
+    expect(times(last(), "Their status")).toBe(1);
+
+    setPresence(data, "at work", T0 + 20 * MINUTE);
+    at(25);
+    await say("back at it");
+    expect(last()).toEndWith('[Their status, set 5 minutes ago: "at work"]\nback at it');
+    setPresence(data, "", T0 + 30 * MINUTE);
+    at(32);
+    await say("done for the day");
+    expect(last()).toEndWith("[Their status was cleared 2 minutes ago.]\ndone for the day");
+    expect((await thread("main")).flatMap((message) => message.presence === undefined ? [] : [[message.content, message.presence.status]])).toEqual([
+      ["you up?", "asleep"], ["back at it", "at work"], ["done for the day", ""],
+    ]);
+  });
+
+  await withCharacter(async ({ script, say }) => {
+    at(40);
+    await say("anything new?");
+    const resumed = textOf(script.replies[0] as SidecarRequest);
+    expect(resumed).toContain('[Their status, set 10 minutes ago: "asleep"]\nyou up?');
+    expect(times(resumed, "Their status")).toBe(3);
+  }, undefined, root);
+});
+
+test("a heartbeat starts with the user's status and its age while one is set, and a status that changes sets off the trigger for it", async () => {
+  await withCharacter(async ({ runtime, script, workspace, data, say, heartbeat }) => {
+    await writeFile(join(workspace, "TRIGGERS.toml"), `[status]\nwhen = "status_changed"\ncheck = 'echo "now: $SHORE_USER_STATUS"'\nwake = false\n`);
+    await say("hello");
+    script.closing = "HEARTBEAT_OK";
+    at(1);
+    await runtime.triggers.tick();
+    await heartbeat();
+    expect(textOf(script.heartbeats[0] as SidecarRequest)).not.toContain("status");
+
+    setPresence(data, "asleep", T0 + 5 * MINUTE);
+    await runtime.triggers.statusChanged();
+    script.heartbeats.length = 0;
+    at(65);
+    await runtime.triggers.tick();
+    expect(diaryOf(data)).toEqual([["status", "now: asleep"]]);
+    await heartbeat();
+    expect(textOf(script.heartbeats[0] as SidecarRequest)).toContain(`in your home thread "main".]\n\n[User's status, set about an hour ago: "asleep"]\n\n[Your diary from the last day.`);
+
+    setPresence(data, "", T0 + 70 * MINUTE);
+    script.heartbeats.length = 0;
+    at(130);
+    await heartbeat();
+    expect(textOf(script.heartbeats[0] as SidecarRequest)).not.toContain("User's status");
+  }, withTriggers);
+});
+
+test("the user was last seen when they last wrote, or when a client of theirs last marked a thread read, and not when a reply is only asked for again", async () => {
+  await withCharacter(async ({ data, say }) => {
+    expect(lastSeen(data)).toBeUndefined();
+    at(3);
+    await say("hello");
+    expect(lastSeen(data)).toBe(T0 + 3 * MINUTE);
+    at(8);
+    await say("");
+    expect(lastSeen(data)).toBe(T0 + 3 * MINUTE);
+
+    const reads = new ThreadUnreadTracker({ dataDir: data, broadcast: () => {}, now: () => T0 + 20 * MINUTE });
+    reads.markRead("ada", "main", T0 + 15 * MINUTE);
+    expect(lastSeen(data)).toBe(T0 + 20 * MINUTE);
+  });
+});
+
+test("the presence command sets one of the user's own statuses, shows and clears it, refuses any other, and sets off the trigger for a change", async () => {
+  const choices = ["asleep", "at work"];
+  await withCharacter(async ({ runtime, workspace, data, say, command }) => {
+    await writeFile(join(workspace, "TRIGGERS.toml"), `[status]\nwhen = "status_changed"\ncheck = 'echo "now: $SHORE_USER_STATUS"'\nwake = false\n`);
+    await say("hello");
+    at(1);
+    await runtime.triggers.tick();
+    expect((await command("presence", {}) as { data?: unknown }).data).toEqual({ choices });
+    await runtime.triggers.tick();
+    expect(diaryOf(data)).toEqual([]);
+
+    at(5);
+    const set = await command("presence", { status: "  at work " });
+    expect(set).toMatchObject({ type: "command_output", name: "presence" });
+    expect((set as { data?: unknown }).data).toEqual({ status: "at work", set_at: new Date(T0 + 5 * MINUTE).toISOString(), choices });
+    expect(presence(data)).toEqual({ status: "at work", set_at: new Date(T0 + 5 * MINUTE).toISOString() });
+    at(6);
+    await runtime.triggers.tick();
+    expect(diaryOf(data)).toEqual([["status", "now: at work"]]);
+    expect((await command("presence", {}) as { data?: unknown }).data).toEqual({ status: "at work", set_at: new Date(T0 + 5 * MINUTE).toISOString(), choices });
+    expect((await command("presence", { status: null }) as { data?: unknown }).data).toEqual({ status: "at work", set_at: new Date(T0 + 5 * MINUTE).toISOString(), choices });
+
+    at(7);
+    const refused = await command("presence", { status: "on the moon" });
+    expect(refused.type).toBe("error");
+    expect(JSON.stringify(refused)).toContain(`\\"on the moon\\" isn't one of your statuses: yours are asleep, at work. Add it to presence.statuses to use it.`);
+    expect(presence(data)?.status).toBe("at work");
+    await runtime.triggers.tick();
+    expect(diaryOf(data)).toEqual([["status", "now: at work"]]);
+
+    at(8);
+    const cleared = await command("presence", { status: " " });
+    expect((cleared as { data?: unknown }).data).toEqual({ choices });
+    expect(presence(data)).toEqual({ status: "", set_at: new Date(T0 + 8 * MINUTE).toISOString() });
+  }, (app) => {
+    withTriggers(app);
+    app.behavior.presence.statuses = choices;
+  });
+
+  await withCharacter(async ({ say, command }) => {
+    await say("hello");
+    const refused = await command("presence", { status: "asleep" });
+    expect(refused.type).toBe("error");
+    expect(JSON.stringify(refused)).toContain("isn't one of your statuses: presence.statuses in your config is empty. Add it to presence.statuses to use it.");
+    expect((await command("presence", { status: "" }) as { data?: unknown }).data).toEqual({ choices: [] });
+  }, (app) => { app.behavior.presence.statuses = []; });
 });

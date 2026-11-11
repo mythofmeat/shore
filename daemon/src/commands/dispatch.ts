@@ -45,6 +45,7 @@ export interface CommandSession {
 export interface CommandDeps {
   threads?: ThreadRegistry;
   reads?: ThreadReads;
+  presenceChanged?: () => Promise<void>;
   autonomy: AutonomyService;
   diagnostics: Diagnostics;
   callStore: CallStore | undefined;

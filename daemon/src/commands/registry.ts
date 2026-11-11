@@ -1,3 +1,4 @@
+import { presenceCommand } from "./presence.ts";
 import { requestCatalogue } from "../operations/requests.ts";
 import { cancelCompaction, compact, watchCompaction } from "./compact.ts";
 import { deleteCharacter, exportBackup, exportCharacter, importArchive, importCharacter, readTransfer, writeTransfer, type ArchiveContext } from "./archive.ts";
@@ -228,6 +229,9 @@ export const commandOperations: OperationRegistry<CommandOperationContext> = {
   dream: register("dream", { category: "Memory", scope: "character", prerequisites: [], effects: ["runtime_write", "provider_call"], confirmation: "none", label: "Dream", fields: {
     now: { label: "Dream now", hint: "Start a dream at the next autonomy tick instead of waiting for its schedule" },
   } }, (context, args) => dream({ characterName: engineOf(context).characterName, config: context.session.config, autonomy: context.deps.autonomy }, args)),
+  presence: register("presence", { category: "Application", scope: "optional_character", prerequisites: [], effects: ["runtime_write"], confirmation: "none", label: "Your status", fields: {
+    status: { label: "Status", hint: "One of the statuses in presence.statuses, which your characters then see for you. Empty clears it; omit it to only show the current one" },
+  } }, (context, args) => presenceCommand({ dataDir: context.session.dataDir, choices: context.session.config.app.behavior.presence.statuses, ...(context.deps.presenceChanged === undefined ? {} : { changed: context.deps.presenceChanged }) }, args)),
   heartbeat_set_dormant: register("heartbeat_set_dormant", { ...heartbeatPresentation, label: "Make heartbeat dormant", fields: {} },
     (context) => heartbeatSetDormant(statusContext(engineOf(context), context.session, context.deps))),
   heartbeat_set_active: register("heartbeat_set_active", { ...heartbeatPresentation, label: "Activate heartbeat", fields: {} },

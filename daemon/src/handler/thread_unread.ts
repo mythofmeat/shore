@@ -1,4 +1,5 @@
 import { shoreLog } from "../log.ts";
+import { noteSeen } from "../autonomy/presence.ts";
 import { MAIN_THREAD } from "../config/dirs.ts";
 import { markThreadRead, readThreadsIndex, startReadMarkBefore, threadActivityNow, threadRecord } from "../engine/threads.ts";
 import type { ThreadReads } from "../commands/threads.ts";
@@ -33,6 +34,7 @@ export class ThreadUnreadTracker implements ThreadReads {
 
   markRead(character: string, thread: string, through: number): ThreadUnread {
     markThreadRead(this.#data, character, thread, Math.min(through, this.#now()));
+    noteSeen(this.#data, this.#now());
     return this.#announce(character, thread);
   }
 

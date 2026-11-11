@@ -6949,6 +6949,51 @@
     }
   },
   {
+    "name": "presence",
+    "input": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "title": "PresenceArgs",
+      "type": "object",
+      "properties": {
+        "status": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "additionalProperties": false
+    },
+    "output": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "title": "PresenceResult",
+      "type": "object",
+      "properties": {
+        "status": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "set_at": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "choices": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      },
+      "required": [
+        "choices"
+      ]
+    }
+  },
+  {
     "name": "heartbeat_set_dormant",
     "input": {
       "$schema": "https://json-schema.org/draft/2020-12/schema",

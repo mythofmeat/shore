@@ -24,6 +24,7 @@ function whenPhrase(when: TriggerWhen, userName: string, timeZone: string): stri
   if (when.kind === "once") return `once, ${formatWallClock(resolveInZone(asNaive(when.local), timeZone), timeZone)}`;
   if (when.kind === "follows") return `after \`${when.trigger}\``;
   if (when.event === "dream_done") return "after a dream";
+  if (when.event === "status_changed") return `when ${userName} changes their status`;
   return when.event === "user_back"
     ? `when ${userName} comes back after ${length(when.afterMs)} away`
     : `when ${userName} has been quiet for ${length(when.afterMs)}`;

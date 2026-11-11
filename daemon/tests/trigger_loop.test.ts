@@ -264,6 +264,14 @@ test("a trigger for a dream finishing waits for one, and for its own cooldown, w
   expect(early.woke.map((firing) => firing.name)).toEqual(["after-dream"]);
   expect(early.triggers.view().triggers.map((each) => each.fired)).toEqual([1, 0]);
 
+  const status = await world('[status]\nwhen = "status_changed"\nreason = "Their status changed."\ncooldown = "1m"\n\n[after-dream]\nwhen = "dream_done"\nreason = "r"\n');
+  await status.at(0);
+  await status.triggers.statusChanged();
+  await status.at(1);
+  expect(status.woke).toEqual([{ name: "status", reason: "Their status changed.", at: T0 + MINUTE }]);
+  await status.at(2);
+  expect(status.woke).toHaveLength(1);
+
   const off = await world('[after-dream]\nwhen = "dream_done"\nreason = "Read what the dream changed."\n');
   off.settings = { ...off.settings, enabled: false };
   await off.triggers.dreamDone();

@@ -312,6 +312,7 @@ pub(crate) async fn execute(
         | CliCommand::Config { .. }
         | CliCommand::Usage { .. }
         | CliCommand::Dream { .. }
+        | CliCommand::Presence { .. }
         | CliCommand::Completions { .. }) => {
             handle_generic_swp_command(&mut conn, other, cli.character.as_deref()).await?;
         }
@@ -368,6 +369,7 @@ pub(crate) fn wants_json(other: &CliCommand) -> bool {
         | CliCommand::Import { json, .. }
         | CliCommand::Compact { json, .. }
         | CliCommand::Dream { json, .. }
+        | CliCommand::Presence { json, .. }
         | CliCommand::Segments { json, .. }
         | CliCommand::Clear { json, .. }
         | CliCommand::Usage { json, .. } => *json,
@@ -1229,6 +1231,7 @@ fn reads_the_selected_thread(command: &CliCommand) -> bool {
         | CliCommand::Config { .. }
         | CliCommand::Usage { .. }
         | CliCommand::Dream { .. }
+        | CliCommand::Presence { .. }
         | CliCommand::Trace { .. }
         | CliCommand::Debug { .. }
         | CliCommand::Export { .. }

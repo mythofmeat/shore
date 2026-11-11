@@ -4718,6 +4718,102 @@
       ]
     },
     {
+      "path": "shore presence",
+      "about": "Show the status the character sees for you, set it, or clear it",
+      "long_about": null,
+      "hidden": false,
+      "aliases": [],
+      "subcommand_required": false,
+      "arguments": [
+        {
+          "id": "status",
+          "short": null,
+          "long": null,
+          "aliases": [],
+          "short_aliases": [],
+          "help": "The status to set: one of the statuses in your config's presence.statuses",
+          "long_help": null,
+          "action": "Set",
+          "required": false,
+          "global": false,
+          "hidden": false,
+          "require_equals": false,
+          "min_values": 1,
+          "max_values": 1,
+          "defaults": [],
+          "choices": [],
+          "conflicts": [],
+          "env": null
+        },
+        {
+          "id": "clear",
+          "short": null,
+          "long": "clear",
+          "aliases": [],
+          "short_aliases": [],
+          "help": "Clear the status",
+          "long_help": null,
+          "action": "SetTrue",
+          "required": false,
+          "global": false,
+          "hidden": false,
+          "require_equals": false,
+          "min_values": 0,
+          "max_values": 0,
+          "defaults": [
+            "false"
+          ],
+          "choices": [],
+          "conflicts": [
+            "status"
+          ],
+          "env": null
+        },
+        {
+          "id": "json",
+          "short": null,
+          "long": "json",
+          "aliases": [],
+          "short_aliases": [],
+          "help": "Output raw JSON",
+          "long_help": null,
+          "action": "SetTrue",
+          "required": false,
+          "global": false,
+          "hidden": false,
+          "require_equals": false,
+          "min_values": 0,
+          "max_values": 0,
+          "defaults": [
+            "false"
+          ],
+          "choices": [],
+          "conflicts": [],
+          "env": null
+        },
+        {
+          "id": "help",
+          "short": "h",
+          "long": "help",
+          "aliases": [],
+          "short_aliases": [],
+          "help": "Print help",
+          "long_help": null,
+          "action": "Help",
+          "required": false,
+          "global": false,
+          "hidden": false,
+          "require_equals": false,
+          "min_values": 0,
+          "max_values": 0,
+          "defaults": [],
+          "choices": [],
+          "conflicts": [],
+          "env": null
+        }
+      ]
+    },
+    {
       "path": "shore dream",
       "about": "Show the last dream and when the next one is due, or start one now",
       "long_about": null,
@@ -10662,6 +10758,39 @@
         "name": "dream",
         "args": {
           "now": true
+        }
+      }
+    },
+    {
+      "argv": [
+        "presence"
+      ],
+      "mapping": {
+        "name": "presence",
+        "args": {}
+      }
+    },
+    {
+      "argv": [
+        "presence",
+        "at work"
+      ],
+      "mapping": {
+        "name": "presence",
+        "args": {
+          "status": "at work"
+        }
+      }
+    },
+    {
+      "argv": [
+        "presence",
+        "--clear"
+      ],
+      "mapping": {
+        "name": "presence",
+        "args": {
+          "status": ""
         }
       }
     },

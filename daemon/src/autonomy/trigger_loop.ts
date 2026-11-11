@@ -140,6 +140,10 @@ export class CharacterTriggers {
     await this.#happened((trigger) => eventOf(trigger) === "dream_done");
   }
 
+  async statusChanged(): Promise<void> {
+    await this.#happened((trigger) => eventOf(trigger) === "status_changed");
+  }
+
   async #happened(follows: (trigger: Trigger) => boolean): Promise<void> {
     await this.#inTurn(async () => {
       const settings = this.#deps.settings();
