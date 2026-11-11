@@ -1065,7 +1065,7 @@ test("a trigger in the character's file wakes it when its check prints, and the 
     expect(facts.now).toBe("2026-10-30T12:11:00.000Z");
     expect(facts.user).toEqual({ last_message_at: "2026-10-30T12:00:00.000Z", quiet_secs: 660, last_seen_at: "2026-10-30T12:03:00.000Z", status: "asleep", status_set_at: "2026-10-30T12:02:00.000Z" });
     expect(Object.keys(facts.activity)).toEqual(["messages", "share_of_messages_by_local_hour", "median_secs_between_sessions"]);
-    expect(facts.activity.messages).toBeGreaterThan(0);
+    expect(facts.activity.messages).toBe(1);
     expect(facts.activity.share_of_messages_by_local_hour).toHaveLength(24);
     expect(facts.activity.share_of_messages_by_local_hour.reduce((sum, share) => sum + share, 0)).toBe(1);
     expect(facts.activity.median_secs_between_sessions).toBeNull();
@@ -2424,4 +2424,38 @@ test("with the character's own time switched off a seal still comes off at its t
     sealing(app);
     app.behavior.autonomy.enabled = false;
   }, root);
+});
+
+test("a message is counted once in the character's activity record, whether it is the first after a start or follows a restart in the middle of a conversation", async () => {
+  const counted = (runtime: ShoreRuntime): number | undefined => runtime.autonomy.activityStats("ada", T0)?.messageCount;
+  let root = "";
+  await withCharacter(async ({ runtime, data, say }) => {
+    root = dirname(data);
+    await runtime.registry.createThread("ada", "garden");
+    await say("hello");
+    expect(counted(runtime)).toBe(1);
+    at(1);
+    await say("the beans are up", "garden");
+    at(2);
+    await say("and the lamp?");
+    expect(counted(runtime)).toBe(3);
+  });
+
+  await withCharacter(async ({ runtime, say, regenerate }) => {
+    expect(counted(runtime)).toBeUndefined();
+    at(10);
+    await say("back again", "garden");
+    expect(counted(runtime)).toBe(4);
+    at(11);
+    await say("and here");
+    expect(counted(runtime)).toBe(5);
+    await regenerate("main");
+    expect(counted(runtime)).toBe(5);
+  }, undefined, root);
+
+  await withCharacter(async ({ runtime, regenerate }) => {
+    at(20);
+    await regenerate("main");
+    expect(counted(runtime)).toBe(5);
+  }, undefined, root);
 });
