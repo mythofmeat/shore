@@ -146,6 +146,19 @@ function chatLogOptions(ctx: ToolContext): ChatLogOptions {
   };
 }
 
+function hoursPhrase(hours: number): string {
+  const shown = Number(hours.toFixed(2));
+  return `${String(shown)} ${shown === 1 ? "hour" : "hours"}`;
+}
+
+export function nextWakeAnswer(asked: number, scheduled: number, userName: string): string {
+  const wanted = hoursPhrase(asked);
+  const set = hoursPhrase(scheduled);
+  if (wanted === set) return `Your next heartbeat is in ${set}.`;
+  const held = Math.max(asked, scheduled) === scheduled ? "shortest" : "longest";
+  return `You asked for ${wanted}, and your next heartbeat is in ${set}: that is the ${held} gap ${userName} allows between heartbeats.`;
+}
+
 export function writesWorkspace(name: string): boolean {
   return ["bash", "edit", "apply_patch", "save_picture"].includes(name) || name.startsWith("mcp__");
 }
@@ -240,7 +253,7 @@ export async function dispatchTool(
       const reason = typeof args["reason"] === "string" ? args["reason"] : "";
       const used = ctx.scheduleNextWake(hours, reason);
       if (used === undefined) throw new ToolIoError("heartbeats are not running for this character");
-      return `Scheduled next moment in ${used.toFixed(1)} hours.`;
+      return nextWakeAnswer(hours, used, ctx.userName ?? "the user");
     }
 
     case "list_triggers":
