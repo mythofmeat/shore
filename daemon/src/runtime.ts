@@ -37,6 +37,7 @@ import type { HistoryListener } from "./engine/conversation.ts";
 import type { Message } from "./engine/types.ts";
 import type { ServerMessage } from "./protocol/ServerMessage.ts";
 import type { SubagentTurn } from "./handler/generation.ts";
+import { startSealedThread } from "./handler/sealed_thread.ts";
 import { startCharacterThread } from "./handler/start_thread.ts";
 import { editCharacterThread } from "./handler/edit_thread.ts";
 import type { ToolContextDeps } from "./handler/tool_context.ts";
@@ -476,7 +477,7 @@ async function refreshMcpPromptCaches(
 
 export interface SubagentToolDeps {
   providers: Partial<Record<SidecarRequest["sdk"], SidecarProvider>>;
-  registry: Pick<CharacterRegistry, "effectiveConfig" | "heartbeatThread" | "listThreads">;
+  registry: Pick<CharacterRegistry, "effectiveConfig" | "heartbeatThread" | "listThreads" | "sealThread" | "sealedThreads">;
   callStore?: CallStore | undefined;
   env?: NodeJS.ProcessEnv | undefined;
   turn?: SubagentTurn | undefined;
@@ -515,11 +516,16 @@ export function sharedToolDeps(
       wakeInThread: (character, from, request) => {
         if (!autonomy.heartbeatsRunning(character)) return { kind: "off" };
         const { registry } = subagent;
-        if (request.thread === registry.heartbeatThread(character) || !registry.listThreads(character).some((record) => record.id === request.thread)) return { kind: "no_thread" };
+        const known = [...registry.listThreads(character), ...registry.sealedThreads(character)].some((record) => record.id === request.thread);
+        if (request.thread === registry.heartbeatThread(character) || !known) return { kind: "no_thread" };
         const most = registry.effectiveConfig(character).app.behavior.autonomy.triggers.max_wake_limit.asMillis();
         const limitMs = request.limitMs === undefined ? undefined : Math.min(request.limitMs, most);
         autonomy.wakeFor(character, { name: "", from, reason: request.reason, at: Date.now(), thread: request.thread, limitMs });
         return { kind: "queued", limitMs };
+      },
+      sealThread: async (character, request) => {
+        const { sealed, filesDir } = await startSealedThread(subagent.registry, character, request);
+        return { unsealAt: sealed.unseal_at, filesDir };
       },
     }),
     ...(subagent?.turn === undefined ? {} : { signal: subagent.turn.signal }),

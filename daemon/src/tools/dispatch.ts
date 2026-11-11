@@ -22,6 +22,7 @@ import type { PushOutcome } from "../autonomy/push.ts";
 import type { TriggersView } from "../autonomy/trigger_loop.ts";
 import { formatWallClock } from "../engine/prompt.ts";
 import { hostZone } from "../ledger/zoned.ts";
+import { handleStartSealedThread, type StartedSealedThread } from "./start_sealed_thread.ts";
 import { handleStartThread, type StartThreadRequest } from "./start_thread.ts";
 import { handleWakeInThread, type WakeHandOff, type WakeInThreadRequest } from "./wake_in_thread.ts";
 import { handleEditThread, type EditThreadRequest } from "./edit_thread.ts";
@@ -32,6 +33,7 @@ import { McpCancelled } from "../mcp/client.ts";
 import { readWorkspacePath } from "../memory/dreaming/reads.ts";
 import type { ImagesConfig, SubagentConfig, ToolsConfig } from "../config/app.ts";
 import type { ImageRef, Message } from "../engine/types.ts";
+import type { NewSealedThread } from "../engine/sealed.ts";
 import type { ThreadRecord } from "../engine/threads.ts";
 
 export interface ToolContext {
@@ -87,6 +89,8 @@ export interface ToolContext {
   wakeInThread?: (request: WakeInThreadRequest) => WakeHandOff;
 
   startThread?: (request: StartThreadRequest) => Promise<void>;
+
+  sealThread?: (request: NewSealedThread) => Promise<StartedSealedThread>;
 
   editThread?: (request: EditThreadRequest) => Promise<ThreadRecord | undefined>;
 
@@ -149,7 +153,7 @@ export async function dispatchTool(
   input: unknown,
   ctx: ToolContext,
 ): Promise<unknown> {
-  if (ctx.dryRun && (["bash", "edit", "apply_patch", "save_picture", "generate_image", "set_next_wake", "wake_in_thread", "start_thread", "edit_thread"].includes(name) || name.startsWith("mcp__"))) {
+  if (ctx.dryRun && (["bash", "edit", "apply_patch", "save_picture", "generate_image", "set_next_wake", "wake_in_thread", "start_thread", "start_sealed_thread", "edit_thread"].includes(name) || name.startsWith("mcp__"))) {
     throw new ToolIoError(`${name} blocked: dry-run tools cannot change files or external state`);
   }
   const args = (input ?? {}) as ToolInput;
@@ -219,6 +223,9 @@ export async function dispatchTool(
 
     case "start_thread":
       return await handleStartThread(args, ctx.startThread, ctx.userName ?? "the user");
+
+    case "start_sealed_thread":
+      return await handleStartSealedThread(args, ctx.sealThread, ctx.userName ?? "the user", hostZone());
 
     case "edit_thread":
       return await handleEditThread(args, ctx.editThread, ctx.userName ?? "the user");

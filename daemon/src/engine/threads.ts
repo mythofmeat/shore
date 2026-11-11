@@ -26,7 +26,7 @@ export const MAX_THREAD_FILES = 20;
 
 const THREAD_ID = /^[A-Za-z0-9][A-Za-z0-9._-]*$/;
 
-export type ThreadErrorKind = "invalid_id" | "invalid_files" | "invalid_folder" | "exists" | "not_found" | "is_home" | "is_heartbeat" | "is_pinned" | "locked";
+export type ThreadErrorKind = "invalid_id" | "invalid_files" | "invalid_folder" | "invalid_seal" | "exists" | "not_found" | "is_home" | "is_heartbeat" | "is_pinned" | "locked";
 
 export class ThreadError extends Error {
   constructor(

@@ -16,6 +16,8 @@ import {
   type ForkResult,
   type ForkThreadOptions,
 } from "./engine/fork.ts";
+import { openDueSeals, sealThread, type NewSealedThread } from "./engine/sealed.ts";
+import { sealedIn, sealedThreads, type SealedThread } from "./engine/sealed_list.ts";
 import { tryBeginCompaction } from "./memory/compaction/manager.ts";
 import { KeyedMutex } from "./util/keyed_mutex.ts";
 import {
@@ -233,8 +235,33 @@ export class CharacterRegistry {
     }
   }
 
-  async #load(name: string, thread: string): Promise<ConversationEngine> {
-    const engine = await ConversationEngine.load(name, this.#dataDir, this.#onHistory, thread);
+  sealedThreads(name: string): SealedThread[] {
+    return sealedThreads(characterDataDir(this.#dataDir, name));
+  }
+
+  async sealThread(name: string, request: NewSealedThread): Promise<SealedThread> {
+    return await this.#withThreadIndex(name, async () => await sealThread(this.#dataDir, name, request, Date.now()));
+  }
+
+  async openDueSeals(name: string, now: number): Promise<SealedThread[]> {
+    return await this.#withThreadIndex(name, async () => {
+      const { opened, index } = await openDueSeals(this.#dataDir, name, now);
+      if (index !== undefined) this.#remember(name, index);
+      for (const sealed of opened) this.#engines.delete(engineKey(name, sealed.id));
+      return opened;
+    });
+  }
+
+  async sealedEngine(name: string, thread: string): Promise<ConversationEngine | undefined> {
+    if (sealedIn(characterDataDir(this.#dataDir, name), thread) === undefined) return undefined;
+    const key = engineKey(name, thread);
+    const loading = this.#engines.get(key) ?? this.#load(name, thread, false);
+    this.#engines.set(key, loading);
+    return await loading;
+  }
+
+  async #load(name: string, thread: string, heard = true): Promise<ConversationEngine> {
+    const engine = await ConversationEngine.load(name, this.#dataDir, heard ? this.#onHistory : undefined, thread);
     const recovered = await engine.recoverInterruptedToolLoop();
     if (recovered > 0) {
       shoreLog.warn(
@@ -256,13 +283,18 @@ export class CharacterRegistry {
       async () =>
         this.#remember(
           name,
-          await createThread(this.#dataDir, name, id, new Date().toISOString(), {
+          await createThread(this.#dataDir, name, this.#unsealed(name, id), new Date().toISOString(), {
             ...options,
             ...(files === undefined ? {} : { files }),
           }),
         ),
       signal,
     );
+  }
+
+  #unsealed(name: string, id: string): string {
+    if (sealedIn(characterDataDir(this.#dataDir, name), id) === undefined) return id;
+    throw new ThreadError("exists", `thread ${JSON.stringify(id)} already exists for ${name}`);
   }
 
   async #threadFiles(name: string, files: readonly string[], signal?: AbortSignal): Promise<string[]> {

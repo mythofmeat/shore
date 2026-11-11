@@ -13,6 +13,7 @@ import {
 } from "../config/dirs.ts";
 import { shoreLog } from "../log.ts";
 import { HISTORY_DB_FILE, HistoryStore, type ThreadForkRecord } from "./history_store.ts";
+import { sealedIn } from "./sealed_list.ts";
 import {
   MessageStore,
   serializeMessages,
@@ -158,7 +159,7 @@ async function forkThreadLocked(
   if (sourceRecord === undefined) {
     throw new ThreadError("not_found", `no thread ${JSON.stringify(source)} for ${character}`);
   }
-  if (threadRecord(index, child) !== undefined) {
+  if (threadRecord(index, child) !== undefined || sealedIn(characterDataDir(data, character), child) !== undefined) {
     throw new ThreadError("exists", `thread ${JSON.stringify(child)} already exists for ${character}`);
   }
   const childDir = threadDataDir(data, character, child);

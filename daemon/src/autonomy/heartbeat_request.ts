@@ -24,6 +24,8 @@ import { applyDeferredEdits } from "../memory/deferred_edits.ts";
 import { characterWorkspace } from "../tools/character_workspace.ts";
 import type { SidecarRequest } from "../llm/types.ts";
 import { recentDiary } from "./diary.ts";
+import { sealedListNote } from "./sealed_notes.ts";
+import { sealedThreads } from "../engine/sealed_list.ts";
 import { presence } from "./presence.ts";
 import { heartbeatTemplate, renderHeartbeatPrompt, triggerFiredNote } from "./heartbeat_shape.ts";
 import type { TriggerFiring } from "./runner.ts";
@@ -250,7 +252,8 @@ export async function prepareHeartbeatRequest(
   const fired = (deps.fired ?? []).map((firing) => triggerFiredNote(firing, timeZone));
   const set = presence(config.dirs.data);
   const status = set === undefined || set.status === "" ? undefined : presenceText(set, nowMs, `${userName}'s`);
-  const instructions = note("system", [cutOff, wrote, status, diary, ...fired, rendered].filter((part) => part !== undefined).join("\n\n"));
+  const sealed = sealedListNote(sealedThreads(characterDir), timeZone);
+  const instructions = note("system", [cutOff, wrote, status, sealed, diary, ...fired, rendered].filter((part) => part !== undefined).join("\n\n"));
   const messages = [opener, instructions];
 
   let built: Awaited<ReturnType<typeof buildChatShapeRequestFromDisk>>;

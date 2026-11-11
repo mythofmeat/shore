@@ -8,6 +8,7 @@ import { configView, resolveActiveModelAndOverlay } from "../config/preferences.
 import { withConversation } from "../engine/lifecycle.ts";
 import { formatWallClock, renderTemplate } from "../engine/prompt.ts";
 import { homeThreadOf } from "../engine/threads.ts";
+import type { SealedThread } from "../engine/sealed_list.ts";
 import type { ContentBlock, Message } from "../engine/types.ts";
 import { buildChatShapeRequestFromDisk } from "../handler/context.ts";
 import { thinkingEnabled } from "../handler/generation.ts";
@@ -27,6 +28,7 @@ import { HEARTBEAT_TIME_LIMIT_MS, runHeartbeatToolLoop } from "./heartbeat_loop.
 import { heartbeatNewsNote, spanPhrase, timeLeftPhrase, triggerFiredNote } from "./heartbeat_shape.ts";
 import { persistHeartbeatMessage, roundMessage, type HeartbeatEngine, type HeartbeatTickDeps } from "./heartbeat_tick.ts";
 import { presence, unshownPresence } from "./presence.ts";
+import { sealedWakeNote } from "./sealed_notes.ts";
 import { firedBy, WAKE_QUIET_MS, type ThreadWakeResult, type TriggerFiring } from "./runner.ts";
 
 export const WAKE_OPENER = "[wake]";
@@ -46,10 +48,16 @@ export interface ThreadWake {
   interruptedAt?: number | undefined;
 }
 
+export interface SealedWake {
+  sealed: SealedThread;
+  filesDir: string;
+}
+
 export interface ThreadWakeDeps extends Omit<HeartbeatTickDeps, "threads" | "wakeReason" | "fired" | "cutOff"> {
   engine(character: string, thread: string): Promise<HeartbeatEngine | undefined>;
   threadModel(character: string, thread: string): string | undefined;
   interrupted?: () => boolean;
+  sealed?: (character: string, thread: string) => Promise<SealedWake | undefined>;
 }
 
 export function wrapUpMsFor(limitMs: number): number {
@@ -94,11 +102,15 @@ export async function runThreadWake(
   wake: ThreadWake,
   deps: ThreadWakeDeps,
 ): Promise<ThreadWakeResult> {
+  const { thread } = wake;
+  const seal = await deps.sealed?.(character, thread);
+  const { recordTranscript: _recorded, emit: _emitted, notify: _announced, compaction: _compacted, ...unheard } = deps;
+  const heard: ThreadWakeDeps = seal === undefined ? deps : unheard;
   const events: { kind: HeartbeatEventKind; detail: string }[] = [];
   const note = (kind: HeartbeatEventKind, detail: string): void => {
-    events.push({ kind, detail });
+    if (seal === undefined) events.push({ kind, detail });
+    else if (kind !== "tool_use") events.push({ kind, detail: kind === "message_sent" ? "A message was left in a sealed thread" : detail });
   };
-  const { thread } = wake;
   const characterDir = characterDataDir(config.dirs.data, character);
   const engine = await deps.engine(character, thread);
   if (engine === undefined) {
@@ -132,6 +144,7 @@ export async function runThreadWake(
       WAKE_OPENER,
       ...(wake.interruptedAt === undefined ? [] : [pickedUpNote(wake.interruptedAt, userName, timeZone)]),
       ...wake.fired.map((firing) => triggerFiredNote(firing, timeZone)),
+      ...(seal === undefined ? [] : [sealedWakeNote(seal.sealed, seal.filesDir, userName, timeZone)]),
       rendered,
     ].join("\n\n");
     const diary = unseenDiary(characterDir, engine.messages(), nowMs, thread);
@@ -171,6 +184,7 @@ export async function runThreadWake(
       thread,
       call_type: "heartbeat",
       thinking_enabled: thinkingEnabled(request.provider_options),
+      ...(seal === undefined ? {} : { sealed: true }),
     };
     const blocked = (deps.budgetBlockFor ?? budgetBlockFor)(request);
     if (blocked !== undefined) {
@@ -187,7 +201,7 @@ export async function runThreadWake(
     const known = new Set(replyVersions(engine.messages()));
     let closing = "";
     const loop = await runHeartbeatToolLoop(request, {
-      ...deps,
+      ...heard,
       name: "Wake",
       dispatch: (name, input, toolUseId, tools) => deps.dispatch(name, input, toolUseId, tools, { ...conversation, recordWorkspaceWrite: recorder.track }),
       generate: (call, phase, loopSignal) => deps.generate(call, phase, AbortSignal.any([signal, loopSignal])),
@@ -218,7 +232,7 @@ export async function runThreadWake(
         : `Wake in "${thread}" ${stopped === "time" ? `reached its limit of ${spanPhrase(wake.limitMs)}` : "used up its rounds"} and was stopped`);
       await engine.appendMessage(await roundMessage({ role: "system", blocks: [{ type: "text", text: wakeStoppedNote(stopped, userName, wake.limitMs) }] }, request, deps, pictures));
     }
-    await persistHeartbeatMessage(character, request, loop.timedOut === true ? { ...loop, failedRound: undefined } : loop, deps, note, { thread, engine }, pictures);
+    await persistHeartbeatMessage(character, request, loop.timedOut === true ? { ...loop, failedRound: undefined } : loop, heard, note, { thread, engine }, pictures);
     const newest = replyVersions(engine.messages()).filter((version) => !known.has(version)).at(-1);
     if (newest !== undefined) await recorder.settle(thread, newest);
 
@@ -228,7 +242,7 @@ export async function runThreadWake(
     if (stopped === "interrupted") return { events, interrupted: true };
     if (stopped !== undefined) addDiaryNote(characterDir, { at: endedAt, thread: "", source: "shore", text: wakeCutShortNote(stopped, thread, wake.limitMs) });
 
-    const runner = deps.compaction;
+    const runner = heard.compaction;
     if (runner !== undefined && loop.usage !== undefined && thread !== await homeThreadOf(config.dirs.data, character)) {
       await maybeCompact({
         autonomy: {

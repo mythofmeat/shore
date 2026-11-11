@@ -9,9 +9,11 @@ import { ArchiveSpool } from "../src/commands/archive_spool.ts";
 import type { ShoreDirs } from "../src/config/dirs.ts";
 import { loadConfig } from "../src/config/loader.ts";
 import { HistoryStore } from "../src/engine/history_store.ts";
+import { sealThread } from "../src/engine/sealed.ts";
 import { MessageStore } from "../src/engine/message_store.ts";
 import { sha256Hex } from "../src/engine/picture_ids.ts";
 import type { Message } from "../src/engine/types.ts";
+import { sealedFilesDir, startSealedThread } from "../src/handler/sealed_thread.ts";
 import { Ledger } from "../src/ledger/store.ts";
 import { stdioLaunch } from "../src/mcp/client.ts";
 import { loadPromptFileFromWorkspace } from "../src/memory/deferred_edits.ts";
@@ -401,6 +403,31 @@ describe.skipIf(!READY)("a character whose tools run as its own user", () => {
       await home.call("deleteFile", { path: output }).catch(() => {});
     }
   }, 60_000);
+});
+
+describe("a sealed thread's folder", () => {
+  test.skipIf(!READY)("is made in the character's own home, by that user, when its tools run as one", async () => {
+    const root = await privateDir("sealed-folder");
+    await mkdir(join(root, "characters", USER), { recursive: true });
+    await writeFile(join(root, "characters", USER, "config.toml"), `[tools]\nuser = "${USER}"\n`);
+    await writeFile(join(root, "config.toml"), "");
+    const config = loadConfig(join(root, "config.toml"), {
+      env: { SHORE_CONFIG_DIR: root, SHORE_DATA_DIR: join(root, "data"), SHORE_CACHE_DIR: join(root, "cache") },
+      onWarn: () => {},
+    });
+    const user = await ownUser();
+    const id = `gift-${randomUUID().slice(0, 8)}`;
+    const expected = join(user.home ?? "", "sealed", id);
+    expect(await sealedFilesDir(config, USER, id)).toBe(expected);
+    const started = await startSealedThread({
+      effectiveConfig: () => config,
+      sealThread: async (character, request) => await sealThread(config.dirs.data, character, request, Date.now()),
+    }, USER, { id, label: "Something for you", unsealAt: Date.now() + 3_600_000 });
+    expect(started.filesDir).toBe(expected);
+    const home = new CharacterWorkspace(user.home ?? "", OWN_USER);
+    expect((await home.run("stat", ["-c", "%u %F", expected])).stdout.trim()).toBe(`${String(user.uid)} directory`);
+    expect(existsSync(join(config.dirs.data, USER, "sealed"))).toBe(false);
+  });
 });
 
 describe("tools.no_new_privs", () => {

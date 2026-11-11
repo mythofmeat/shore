@@ -13,6 +13,7 @@ import wakeInThreadDesc from "../../prompts/tools/autonomy/wake_in_thread.md" wi
 import writeDiaryDesc from "../../prompts/tools/autonomy/write_diary.md" with { type: "text" };
 import sendPushDesc from "../../prompts/tools/autonomy/send_push.md" with { type: "text" };
 import listThreadsDesc from "../../prompts/tools/threads/list_threads.md" with { type: "text" };
+import startSealedThreadDesc from "../../prompts/tools/threads/start_sealed_thread.md" with { type: "text" };
 import startThreadDesc from "../../prompts/tools/threads/start_thread.md" with { type: "text" };
 import editThreadDesc from "../../prompts/tools/threads/edit_thread.md" with { type: "text" };
 import modelHistoryDesc from "../../prompts/tools/history/model_history.md" with { type: "text" };
@@ -236,6 +237,20 @@ export const ALL_TOOLS: readonly ToolDef[] = Object.freeze([
         folder: { type: "string", description: "Folder in the thread list to put the thread in, such as `Projects`. It is made if there isn't one by that name." },
       },
       required: ["name", "label"],
+      additionalProperties: false,
+    },
+  },
+  {
+    name: "start_sealed_thread",
+    description: stripOneTrailingNewline(startSealedThreadDesc),
+    parameters: {
+      type: "object",
+      properties: {
+        name: { type: "string", minLength: 1, maxLength: 64, description: "Thread id: letters, digits, dot, dash or underscore, starting with a letter or digit." },
+        label: { type: "string", minLength: 1, description: "The name the thread is known by. It is all your other turns see of it, and what the thread list shows once it opens." },
+        opens: { type: "string", description: 'Local date and 24-hour time the seal comes off, like "2026-12-24 08:00".' },
+      },
+      required: ["name", "label", "opens"],
       additionalProperties: false,
     },
   },

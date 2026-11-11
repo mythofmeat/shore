@@ -138,16 +138,19 @@ export function withCallCapture(
     }
   };
 
+  const kept = (req: SidecarRequest): CallRecorder | undefined => req.context?.sealed === true ? undefined : store;
+
   const wrapped: SidecarProvider = {
     streamWithTools(req, tools, signal, options) {
-      return capturedEvents(store, req, () => toolLoopEvents(provider, req, tools, signal, options?.retry, options), now);
+      return capturedEvents(kept(req), req, () => toolLoopEvents(provider, req, tools, signal, options?.retry, options), now);
     },
 
     stream(req: SidecarRequest, signal?: AbortSignal): AsyncIterable<StreamEvent> {
-      return capturedEvents(store, req, () => provider.stream(req, signal), now);
+      return capturedEvents(kept(req), req, () => provider.stream(req, signal), now);
     },
 
     async generate(req: SidecarRequest, signal?: AbortSignal): Promise<GenerateResponse> {
+      if (req.context?.sealed === true) return await provider.generate(req, signal);
       const ts = new Date();
       const startedAt = now();
       const base = baseRecord(req, ts);
