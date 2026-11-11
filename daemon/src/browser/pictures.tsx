@@ -1,4 +1,4 @@
-import { createContext, useContext, useRef, useState, type ReactNode } from "react";
+import { createContext, useContext, useState, type ReactNode } from "react";
 import type { ImageRef } from "../protocol/ImageRef.ts";
 import { embedName, embedsIn, isVideoFile, sentFor, type Embed } from "../engine/embeds.ts";
 import { mediaSource, pictureUrl } from "./media.ts";
@@ -28,28 +28,11 @@ export function unplacedPictures(images: readonly ImageRef[], texts: readonly st
   return images.filter((image) => isSentPicture(image) && !placed.has(image.embed ?? ""));
 }
 
-interface SoundControls {
-  muted: boolean;
-  play: () => Promise<void>;
-}
-
 function SentVideo({ image }: { image: ImageRef }) {
   const caption = pictureCaption(image);
-  const player = useRef<HTMLVideoElement & SoundControls>(null);
-  const [muted, setMuted] = useState(true);
   const [failed, setFailed] = useState(false);
   if (failed) return <NamedPicture name={image.name ?? caption} title="This video can’t play here" video />;
-  const toggleSound = () => {
-    const video = player.current;
-    if (video === null) return;
-    video.muted = !video.muted;
-    setMuted(video.muted);
-    void video.play().catch(() => undefined);
-  };
-  return <button type="button" className="picture picture-video" title={caption} aria-pressed={!muted} aria-label={`${muted ? "Turn on the sound of" : "Turn off the sound of"} ${caption}`} onClick={toggleSound}>
-    <video ref={player} src={pictureUrl(image.path)} poster={mediaSource(image.data)} autoPlay loop muted={muted} playsInline preload="metadata" onError={() => setFailed(true)} />
-    <span className="picture-sound"><Icon name={muted ? "soundOff" : "soundOn"} size={14} /></span>
-  </button>;
+  return <video className="picture picture-video" src={pictureUrl(image.path)} poster={mediaSource(image.data)} aria-label={caption} controls autoPlay loop muted playsInline preload="metadata" onError={() => setFailed(true)} />;
 }
 
 export function SentPicture({ image, open }: { image: ImageRef; open: OpenPicture }) {
