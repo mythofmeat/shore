@@ -4,7 +4,7 @@ import { chmod, mkdir, rename, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 
 import { HistoryStore } from "../src/engine/history_store.ts";
-import { sha256Hex } from "../src/engine/picture_ids.ts";
+import { sha256Hex } from "../src/engine/picture_files.ts";
 import type { ImageRef, Message } from "../src/engine/types.ts";
 import { repointArchivedImages } from "../src/storage/archived_images.ts";
 import { initializeDatabase } from "../src/storage/database.ts";

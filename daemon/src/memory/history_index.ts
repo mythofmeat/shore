@@ -8,13 +8,13 @@ import { CharacterHistoryReader, type CharacterHistoryRef } from "../engine/char
 import { deriveContentFromBlocks, isToolResultOnly } from "../engine/message_store.ts";
 import { isAutonomousNote } from "../engine/threads.ts";
 import { pictureText } from "../engine/embeds.ts";
-import { pictureLabel } from "../engine/picture_ids.ts";
+import { pictureFileLabel } from "../engine/picture_files.ts";
 import type { Message } from "../engine/types.ts";
 import { versionOf } from "../engine/versions.ts";
 
 export const HISTORY_INDEX_FILE = "chat_logs.db";
 const LEGACY_INDEX_FILE = "history_search.db";
-const SCHEMA_VERSION = "4";
+const SCHEMA_VERSION = "5";
 
 const SCHEMA = `
 CREATE TABLE metadata (
@@ -35,6 +35,7 @@ CREATE TABLE messages (
   copy_of   INTEGER,
   key       TEXT    NOT NULL,
   live      INTEGER NOT NULL DEFAULT 0,
+  pictures  TEXT,
   text      TEXT    NOT NULL
 );
 CREATE INDEX messages_ts ON messages (ts);
@@ -61,6 +62,7 @@ export interface ChatLogMessage {
   copy_of: number | null;
   key: string;
   live: number;
+  pictures: string | null;
   text: string;
 }
 
@@ -108,6 +110,7 @@ interface Item {
   speaker: Speaker;
   heartbeat: boolean;
   model: string | null;
+  pictures: string | null;
   text: string;
   alsoIn: string[];
   copyOf: Item | undefined;
@@ -136,18 +139,39 @@ function compareKeys(a: string, b: string): number {
 
 const ATTACHMENT_STAMP = /^\d{8}_\d{6}_/;
 
-function shownPictures(message: Message): string[] {
+function shownPictures(message: Message): { label: string; path: string }[] {
   if (message.role !== "user" || isToolResultOnly(message)) return [];
-  return message.images.flatMap((image) => {
-    if (image.embed !== undefined) return [];
-    if (image.sha256 !== undefined) return [pictureLabel(image.sha256)];
-    return [`[picture: ${basename(image.path).replace(ATTACHMENT_STAMP, "")}]`];
-  });
+  return message.images.flatMap((image) => image.embed !== undefined ? [] : [{
+    label: `[picture: ${image.name ?? basename(image.path).replace(ATTACHMENT_STAMP, "")}]`,
+    path: image.path,
+  }]);
+}
+
+function indexed(message: Message): { text: string; pictures: string | null } {
+  const shown = shownPictures(message);
+  const text = pictureText(deriveContentFromBlocks(message.content_blocks, false), message.images);
+  return {
+    text: [...shown.map((picture) => picture.label), ...(text === "" ? [] : [text])].join("\n"),
+    pictures: shown.length === 0 ? null : JSON.stringify(shown.map((picture) => picture.path)),
+  };
+}
+
+function withPictureFiles(text: string, pictures: string | null): string {
+  if (pictures === null) return text;
+  const lines = text.split("\n");
+  for (const [line, path] of (JSON.parse(pictures) as string[]).entries()) {
+    if (path !== "" && existsSync(path)) lines[line] = pictureFileLabel(path);
+  }
+  return lines.join("\n");
 }
 
 export function messageText(message: Message): string {
-  const text = pictureText(deriveContentFromBlocks(message.content_blocks, false), message.images);
-  return [...shownPictures(message), ...(text === "" ? [] : [text])].join("\n");
+  const { text, pictures } = indexed(message);
+  return withPictureFiles(text, pictures);
+}
+
+export function shownText(row: Pick<ChatLogMessage, "text" | "pictures">): string {
+  return withPictureFiles(row.text, row.pictures);
 }
 
 function messageKey(message: Message, text: string): string {
@@ -172,7 +196,7 @@ async function readCorpus(ref: CharacterHistoryRef): Promise<Item[]> {
       }
       for (const message of await reader.readSegment(entry.archiveKey, entry.idx)) {
         if (isAutonomousNote(message)) continue;
-        const text = messageText(message);
+        const { text, pictures } = indexed(message);
         if (text === "") continue;
         const key = messageKey(message, text);
         if (seenInThread.has(`${thread}\0${key}`)) continue;
@@ -195,6 +219,7 @@ async function readCorpus(ref: CharacterHistoryRef): Promise<Item[]> {
           speaker: speakerOf(message.role),
           heartbeat: message.origin === "autonomous",
           model: message.model ?? null,
+          pictures,
           text,
           alsoIn: [],
           copyOf: original,
@@ -255,15 +280,15 @@ function writeIndex(path: string, items: Item[], fingerprint: string): void {
     try {
       db.run(SCHEMA);
       const put = db.query(
-        `INSERT INTO messages (id, msg_id, thread, seq, run, ts, speaker, heartbeat, model, also_in, copy_of, key, text)
-         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13)`,
+        `INSERT INTO messages (id, msg_id, thread, seq, run, ts, speaker, heartbeat, model, also_in, copy_of, key, pictures, text)
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14)`,
       );
       const meta = db.query("INSERT INTO metadata (key, value) VALUES (?1, ?2)");
       db.transaction(() => {
         for (const item of items) {
           put.run(
             item.id, item.msgId, item.thread, item.seq, item.run, item.ts, item.speaker, item.heartbeat ? 1 : 0,
-            item.model, item.alsoIn.length === 0 ? null : JSON.stringify(item.alsoIn), item.copyOf?.id ?? null, item.key, item.text,
+            item.model, item.alsoIn.length === 0 ? null : JSON.stringify(item.alsoIn), item.copyOf?.id ?? null, item.key, item.pictures, item.text,
           );
         }
         db.run("INSERT INTO messages_fts (messages_fts) VALUES ('rebuild')");
@@ -274,7 +299,7 @@ function writeIndex(path: string, items: Item[], fingerprint: string): void {
     } finally {
       db.close();
     }
-    chmodSync(temp, 0o644);
+    chmodSync(temp, 0o600);
     renameSync(temp, path);
   } catch (error) {
     rmSync(temp, { force: true });
@@ -307,7 +332,7 @@ export function liveFingerprint(caller: string, threads: readonly LiveThread[]):
 
 export function refreshLiveRows(path: string, caller: string, threads: readonly LiveThread[]): boolean {
   const fingerprint = liveFingerprint(caller, threads);
-  chmodSync(path, 0o644);
+  chmodSync(path, 0o600);
   const db = new Database(path, { readwrite: true });
   try {
     const current = (db.query("SELECT value FROM metadata WHERE key = 'live'").get() as { value: string } | null)?.value;
@@ -325,14 +350,14 @@ export function refreshLiveRows(path: string, caller: string, threads: readonly 
         .map((row) => [row.thread, { seq: row.seq, run: row.run, ts: row.ts }]));
       let id = (db.query("SELECT COALESCE(MAX(id), 0) AS id FROM messages").get() as { id: number }).id;
       const put = db.query(
-        `INSERT INTO messages (id, msg_id, thread, seq, run, ts, speaker, heartbeat, model, also_in, copy_of, key, live, text)
-         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, NULL, ?10, ?11, 1, ?12)`,
+        `INSERT INTO messages (id, msg_id, thread, seq, run, ts, speaker, heartbeat, model, also_in, copy_of, key, live, pictures, text)
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, NULL, ?10, ?11, 1, ?12, ?13)`,
       );
       for (const live of threads) {
         const cursor = cursors.get(live.thread) ?? { seq: 0, run: 0, ts: 0 };
         for (const message of live.messages) {
           if (isAutonomousNote(message)) continue;
-          const text = messageText(message);
+          const { text, pictures } = indexed(message);
           if (text === "") continue;
           const key = messageKey(message, text);
           if (seenInThread.has(`${live.thread}\0${key}`)) continue;
@@ -344,7 +369,7 @@ export function refreshLiveRows(path: string, caller: string, threads: readonly 
           const original = originals.get(key);
           if (original === undefined) originals.set(key, id);
           put.run(id, message.msg_id, live.thread, cursor.seq, cursor.run, cursor.ts, speakerOf(message.role),
-            message.origin === "autonomous" ? 1 : 0, message.model ?? null, original ?? null, key, text);
+            message.origin === "autonomous" ? 1 : 0, message.model ?? null, original ?? null, key, pictures, text);
         }
       }
       db.run("INSERT INTO messages_fts (rowid, text) SELECT id, text FROM messages WHERE live = 1");

@@ -3,7 +3,7 @@ import { basename } from "node:path";
 
 import type { ImageRef, ContentBlock } from "../engine/types.ts";
 import { isToolResultOnly } from "../engine/message_store.ts";
-import { pictureLabel, pictureSha256 } from "../engine/picture_ids.ts";
+import { pictureFileLabel } from "../engine/picture_files.ts";
 import type { AssembledPrompt, PromptMessage } from "../engine/prompt.ts";
 import { imageLabel, omissionNotice } from "../llm/images.ts";
 import type { Sdk, SystemBlock, WireMessage } from "../llm/types.ts";
@@ -91,10 +91,10 @@ async function renderMessageContent(
   let content: ContentBlock[] = [];
   for (const img of turnImages) {
     const source = await encodeImageBlock(img, true);
-    const sha256 = source === undefined ? undefined : pictureSha256(img);
-    if (sha256 !== undefined) content.push({ type: "text", text: pictureLabel(sha256) });
+    const kept = existsSync(img.path);
+    if (source !== undefined && kept) content.push({ type: "text", text: pictureFileLabel(img.path) });
     if (source !== undefined) content.push({ type: "image", source });
-    else if (!existsSync(img.path)) content.push({ type: "text", text: omissionNotice(imageLabel(img), EVICTED_IMAGE) });
+    else if (!kept) content.push({ type: "text", text: omissionNotice(imageLabel(img), EVICTED_IMAGE) });
   }
   content.push(...m.content_blocks.filter((block) => !(block.type === "text" && block.text.trim() === "")));
 

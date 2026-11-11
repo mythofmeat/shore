@@ -4,18 +4,12 @@ import { basename } from "node:path";
 
 import type { ImageRef } from "./types.ts";
 
-const PICTURE_ID_LENGTH = 8;
-
 export function sha256Hex(bytes: Uint8Array): string {
   return createHash("sha256").update(bytes).digest("hex");
 }
 
-export function pictureId(sha256: string): string {
-  return sha256.slice(0, PICTURE_ID_LENGTH);
-}
-
-export function pictureLabel(sha256: string): string {
-  return `[picture ${pictureId(sha256)}]`;
+export function pictureFileLabel(path: string): string {
+  return `[picture: ${path}]`;
 }
 
 const hashedFiles = new Map<string, { ino: number; size: number; mtimeMs: number; sha256: string }>();
@@ -33,12 +27,6 @@ function fileSha256(path: string): string | undefined {
   }
   hashedFiles.set(path, { ino: stat.ino, size: stat.size, mtimeMs: stat.mtimeMs, sha256 });
   return sha256;
-}
-
-export function pictureSha256(image: ImageRef): string | undefined {
-  if (image.sha256 !== undefined) return image.sha256;
-  if (image.path === "") return undefined;
-  return fileSha256(image.path);
 }
 
 export function namedByHash(path: string, sha256: string): boolean {

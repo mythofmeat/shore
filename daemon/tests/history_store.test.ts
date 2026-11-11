@@ -1,6 +1,6 @@
 import { expect, test } from "bun:test";
 import { Database } from "bun:sqlite";
-import { access, mkdir } from "node:fs/promises";
+import { access, mkdir, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 
 import { HISTORY_DB_FILE, HistoryStore } from "../src/engine/history_store.ts";
@@ -199,14 +199,17 @@ test("a compaction remains readable after its JSONL recovery copy is removed", a
   ].join("\n"));
 });
 
-test("chat logs show the pictures the user sent, so a picture-only message can be read and found", async () => {
+test("chat logs show where each picture the user sent is kept, or just its name once the file is gone, and search by name alone", async () => {
   const dataDir = testTmp(`history-pictures-${crypto.randomUUID()}`);
   const characterDir = join(dataDir, "ada");
   const dbPath = join(dataDir, HISTORY_DB_FILE);
   await mkdir(join(characterDir, "threads", "main"), { recursive: true });
   const sha256 = `3f2a91c0${"0".repeat(56)}`;
+  const kept = join(dataDir, "attachments", `${sha256}.jpeg`);
+  await mkdir(join(dataDir, "attachments"));
+  await writeFile(kept, "jpeg");
   const messages: Message[] = [
-    { ...message("u1", ""), content_blocks: [], images: [{ path: "/cache/attachments/20261021_163212_IMG_0955.jpeg", sha256 }] },
+    { ...message("u1", ""), content_blocks: [], images: [{ path: kept, name: "IMG_0955.jpeg", sha256 }] },
     { ...message("u2", "look at this one"), images: [{ path: "/cache/attachments/20261021_163901_IMG_0956.jpeg" }] },
     { ...message("a1", "mine ![[cat.png]]"), images: [{ path: "/cache/cat.png", embed: "![[cat.png]]", name: "cat.png" }] },
     {
@@ -227,16 +230,19 @@ test("chat logs show the pictures the user sent, so a picture-only message can b
   );
 
   const options = { character: "ada", dbPath, timeZone: "Australia/Canberra" };
-  expect(await handleSearchChatLogs({ query: "3f2a91c0", all_time: true }, characterDir, options)).toBe([
-    "3f2a91c0: 1 match, showing 1–1, best match first",
+  expect(await handleSearchChatLogs({ query: "IMG_0955", all_time: true }, characterDir, options)).toBe([
+    "IMG_0955: 1 match, showing 1–1, best match first",
     "",
-    "2026-08-13 Thu 10:00  user  [picture [3f2a91c0]]  u1",
+    "2026-08-13 Thu 10:00  user  [picture: [IMG_0955].jpeg]  u1",
   ].join("\n"));
-  expect(await handleReadChatLogs({ around: "u1" }, characterDir, options)).toBe([
+  for (const query of ["attachments", "3f2a91c0"]) {
+    expect(await handleSearchChatLogs({ query, match: "substring", all_time: true }, characterDir, options), query).not.toContain("u1");
+  }
+  const read = (first: string) => [
     "u1 in main: 0 before, 2 after (Australia/Canberra)",
     "",
     "▶ 2026-08-13 Thu 10:00  user  u1",
-    "[picture 3f2a91c0]",
+    first,
     "",
     "2026-08-13 Thu 10:00  user  u2",
     "[picture: IMG_0956.jpeg]",
@@ -244,5 +250,8 @@ test("chat logs show the pictures the user sent, so a picture-only message can b
     "",
     "2026-08-13 Thu 10:00  ada  a1",
     "mine [picture: cat.png]",
-  ].join("\n"));
+  ].join("\n");
+  expect(await handleReadChatLogs({ around: "u1" }, characterDir, options)).toBe(read(`[picture: ${kept}]`));
+  await rm(kept);
+  expect(await handleReadChatLogs({ around: "u1" }, characterDir, options)).toBe(read("[picture: IMG_0955.jpeg]"));
 });

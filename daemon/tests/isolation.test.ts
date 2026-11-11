@@ -10,20 +10,23 @@ import type { ShoreDirs } from "../src/config/dirs.ts";
 import { loadConfig } from "../src/config/loader.ts";
 import { HistoryStore } from "../src/engine/history_store.ts";
 import { sealThread } from "../src/engine/sealed.ts";
-import { MessageStore } from "../src/engine/message_store.ts";
-import { sha256Hex } from "../src/engine/picture_ids.ts";
 import type { Message } from "../src/engine/types.ts";
+import { ingestImages } from "../src/handler/images.ts";
 import { sealedFilesDir, startSealedThread } from "../src/handler/sealed_thread.ts";
+import { buildLlmMessages } from "../src/handler/wire_messages.ts";
 import { Ledger } from "../src/ledger/store.ts";
+import { shoreLog } from "../src/log.ts";
 import { stdioLaunch } from "../src/mcp/client.ts";
 import { loadPromptFileFromWorkspace } from "../src/memory/deferred_edits.ts";
-import { threadFile, writeDurable } from "../src/storage/files.ts";
+import { historyIndexPath, refreshHistoryIndex } from "../src/memory/history_index.ts";
+import { writeDurable } from "../src/storage/files.ts";
 import type { BashResult } from "../src/tools/bash.ts";
 import { canSwitchUser, characterUser, runsWithNoNewPrivs, setprivArgs, type CharacterUser } from "../src/tools/character_user.ts";
 import {
   CharacterWorkspace, characterToolsFor, closeWorkspaceHelpers, warnIfNoNewPrivsInherited, type CharacterTools,
 } from "../src/tools/character_workspace.ts";
 import { dispatchTool, dispatchWithinDeadline, type ToolContext } from "../src/tools/dispatch.ts";
+import { sharePictureFolders } from "../src/tools/picture_access.ts";
 import { ensureWorkspaceGitRepo, gitCommitAll, gitHead } from "../src/tools/workspace.ts";
 import { redoTurns, restorePaths, undoTurns, WorkspaceRecorder, workspaceChanges, workspaceTree, type WorkspaceTurns } from "../src/tools/workspace_turns.ts";
 import { setTestEnv } from "./support/env.ts";
@@ -156,21 +159,64 @@ describe.skipIf(!READY)("a character whose tools run as its own user", () => {
     expect(readFileSync(SECRET, "utf8")).toBe("isolation-secret\n");
   });
 
-  test("saves a picture it was shown into its workspace as the character", async () => {
+  test("copies a picture from the path it is shown with, and can open neither another character's pictures nor its own chat logs", async () => {
     const user = await ownUser();
-    const workspace = await freshWorkspace();
-    const ctx = await context(workspace);
-    const data = dirname(ctx.historyDbPath);
+    const base = await privateDir("isolation-pictures");
+    for (const name of [USER, OTHER]) {
+      await mkdir(join(base, "characters", name), { recursive: true });
+      await writeFile(join(base, "characters", name, "config.toml"), `[tools]\nuser = "${name}"\n`);
+    }
+    await writeFile(join(base, "config.toml"), "");
+    const cache = join(ROOT, `cache-${randomUUID()}`);
+    await mkdir(cache);
+    await chmod(cache, 0o700);
+    const config = loadConfig(join(base, "config.toml"), {
+      env: { SHORE_CONFIG_DIR: base, SHORE_DATA_DIR: join(base, "data"), SHORE_CACHE_DIR: cache, SHORE_WORKSPACE_DIR: join(ROOT, "workspace") },
+      onWarn: () => {},
+    });
     const png = Buffer.from("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==", "base64");
-    const cached = join(data, "cached.png");
-    await writeFile(cached, png);
-    const active = await MessageStore.load(threadFile(data, "Ada", "main", "active.jsonl"));
-    await active.append({ msg_id: "m1", role: "user", content: "", images: [{ path: cached, sha256: sha256Hex(png) }], content_blocks: [], timestamp: "2026-10-21T10:00:00Z" });
-    const picture = sha256Hex(png).slice(0, 8);
-    expect(await dispatchTool("save_picture", { picture, path: "pictures/dot" }, ctx)).toContain("Saved picture");
-    expect(readFileSync(join(workspace.dir, "pictures", "dot.png"))).toEqual(png);
-    expect(statSync(join(workspace.dir, "pictures", "dot.png")).uid).toBe(user.uid);
-    expect(await failure(dispatchTool("save_picture", { picture, path: "pictures/dot.png" }, ctx))).toContain("already exists");
+    const sent = async (character: string): Promise<Message> => {
+      const { images } = await ingestImages(cache, character, ["dot.png"], [{ filename: "dot.png", data: png.toString("base64") }]);
+      return { msg_id: randomUUID(), role: "user", content: "look", images, content_blocks: [{ type: "text", text: "look" }], timestamp: "2026-11-12T10:00:00Z" };
+    };
+    const [own, others, unshared] = [await sent(USER), await sent(OTHER), await sent("cal")];
+    const chatLogs = historyIndexPath(cache, USER);
+    await refreshHistoryIndex({ character: USER, dbPath: join(base, "data", "shore.db"), mainConversationDir: join(base, "data", USER, "threads", "main") }, chatLogs, true);
+
+    await sharePictureFolders(config, [USER, OTHER, "cal"]);
+
+    const { messages } = await buildLlmMessages({ system: [], messages: [own] }, "text_standin");
+    const shown = messages[0]?.content.flatMap((block) => block.type === "text" ? [/^\[picture: (.+)\]$/.exec(block.text)?.[1] ?? ""] : []).find((path) => path !== "") ?? "";
+    expect(shown).toBe(own.images[0]?.path ?? "none");
+    const workspace = await freshWorkspace();
+    const result = await bash(workspace, [
+      `cp '${shown}' kept.png && cmp '${shown}' kept.png && echo copied`,
+      `echo more >> '${shown}'`, `rm -f '${shown}'`, `touch '${join(dirname(shown), "added.png")}'`,
+      `cat '${others.images[0]?.path ?? ""}'`, `cat '${unshared.images[0]?.path ?? ""}'`, `cat '${chatLogs}'`, `ls '${dirname(chatLogs)}'`, "echo done",
+    ].join("; "));
+    expect(result.stdout).toBe("copied\ndone\n");
+    expect(result.stderr.match(/Permission denied/g)).toHaveLength(7);
+    expect(statSync(join(workspace.dir, "kept.png")).uid).toBe(user.uid);
+    expect(readFileSync(shown)).toEqual(png);
+    expect(existsSync(join(dirname(shown), "added.png"))).toBe(false);
+  });
+
+  test("is told about at start when it cannot reach its pictures", async () => {
+    const base = await privateDir("isolation-unreachable-pictures");
+    await writeFile(join(base, "config.toml"), `[tools]\nuser = "${USER}"\n`);
+    const config = loadConfig(join(base, "config.toml"), {
+      env: { SHORE_CONFIG_DIR: base, SHORE_DATA_DIR: join(base, "data"), SHORE_CACHE_DIR: join(base, "cache"), SHORE_WORKSPACE_DIR: join(ROOT, "workspace") },
+      onWarn: () => {},
+    });
+    const warned = spyOn(shoreLog, "warn").mockImplementation(() => {});
+    try {
+      await sharePictureFolders(config, [USER]);
+      expect(warned.mock.calls.map(([line]) => String(line))).toEqual([
+        expect.stringContaining(`that user cannot reach ${join(base, "cache", "characters", USER, "images")}`) as unknown as string,
+      ]);
+    } finally {
+      warned.mockRestore();
+    }
   });
 
   test("keeps a prompt file linked to the daemon's secrets out of the prompt, and can still replace it", async () => {

@@ -71,6 +71,7 @@ import type {
 } from "./router.ts";
 import type { ToolContextDeps } from "./tool_context.ts";
 import { characterWorkspace } from "../tools/character_workspace.ts";
+import { sharePictureFolders } from "../tools/picture_access.ts";
 
 export interface GenerationAssembly {
   runtime: ShoreRuntime;
@@ -478,6 +479,7 @@ export async function applyReloadedConfig(
   config.adoptEnvironment?.();
   applySubscriptionProviders(a.runtime.registry);
   await a.runtime.refreshHistoryIndexes();
+  await sharePictureFolders(config, a.runtime.registry.availableCharacters());
   await reconnectMcpIfChanged(a, config);
   a.autonomy.reloadConfig((name) => a.runtime.registry.effectiveConfig(name));
   await pushHistorySnapshots(a);

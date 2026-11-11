@@ -1,7 +1,7 @@
 import fs from "node:fs";
 import path from "node:path";
 
-import { namedByHash, sha256Hex } from "../engine/picture_ids.ts";
+import { namedByHash, sha256Hex } from "../engine/picture_files.ts";
 import type { ImageRef } from "../engine/types.ts";
 import { base64Bytes } from "../util/base64.ts";
 

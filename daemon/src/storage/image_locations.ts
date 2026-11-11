@@ -1,7 +1,7 @@
 import { readdirSync, readFileSync, realpathSync, statSync, type Stats } from "node:fs";
 import { basename, isAbsolute, join, relative, resolve, sep } from "node:path";
 
-import { sha256Hex } from "../engine/picture_ids.ts";
+import { sha256Hex } from "../engine/picture_files.ts";
 import type { ImageRef } from "../engine/types.ts";
 import { imageCacheFor } from "./image_blobs.ts";
 import { imageCacheDir } from "./image_cache.ts";

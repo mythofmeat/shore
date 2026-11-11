@@ -4,7 +4,7 @@ import { readFileSync } from "node:fs";
 
 import type { ImageRef, Message } from "./types";
 import { isSentPicture, isSentVideo, shownPicturePath } from "../storage/sent_pictures.ts";
-import { pictureFileMatches } from "./picture_ids.ts";
+import { pictureFileMatches } from "./picture_files.ts";
 
 export function imageDataForPath(path: string): string | undefined {
   if (path === "") return undefined;

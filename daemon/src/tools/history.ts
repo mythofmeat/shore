@@ -9,6 +9,7 @@ import {
   HistoryIndex,
   refreshHistoryIndex,
   refreshLiveRows,
+  shownText,
   withHistoryIndexLock,
   type LiveThread,
   type ChatLogFilter,
@@ -433,7 +434,7 @@ function entryHead(row: ChatLogMessage, view: View, marked: boolean): string {
 }
 
 function entrySize(row: ChatLogMessage, view: View): number {
-  return entryHead(row, view, false).length + row.text.length + 3;
+  return entryHead(row, view, false).length + shownText(row).length + 3;
 }
 
 function gapText(ms: number): string {
@@ -449,7 +450,7 @@ function transcript(rows: readonly ChatLogMessage[], view: View, markId?: number
   let previous: ChatLogMessage | undefined;
   for (const row of rows) {
     if (previous !== undefined && row.ts - previous.ts >= GAP_MS) lines.push(`· · · ${gapText(row.ts - previous.ts)} later · · ·`, "");
-    lines.push(entryHead(row, view, row.id === markId), row.text, "");
+    lines.push(entryHead(row, view, row.id === markId), shownText(row), "");
     previous = row;
   }
   return lines;
