@@ -153,6 +153,91 @@ test("a quiet check does nothing, and one that prints fires with the trigger's r
   expect(w.notes()).toEqual([]);
 });
 
+test("when a check last ran is kept, whether it printed, stayed quiet or failed, and through a restart, and a trigger with no check has no such time", async () => {
+  const w = await world(`[tide]\nevery = "1h"\ncheck = "tide.sh"\nwake = false\n\n${HOURLY}`);
+  const checked = (): (number | undefined)[] => w.triggers.view().triggers.map((each) => each.checkedAt);
+  await w.at(0);
+  expect(checked()).toEqual([undefined, undefined]);
+  await w.at(60);
+  expect(checked()).toEqual([T0 + HOUR, undefined]);
+  expect(w.triggers.view().triggers[0]).toMatchObject({ fired: 0, lastFiredAt: undefined, failing: false });
+
+  w.checks["tide"] = { kind: "fired", output: "The tide is out." };
+  await w.at(120);
+  expect(w.triggers.view().triggers[0]).toMatchObject({ fired: 1, lastFiredAt: T0 + 2 * HOUR, checkedAt: T0 + 2 * HOUR });
+
+  w.checks["tide"] = { kind: "failed", problem: "it exited with status 2" };
+  await w.at(180);
+  expect(w.triggers.view().triggers[0]).toMatchObject({ failing: true, lastFiredAt: T0 + 2 * HOUR, checkedAt: T0 + 3 * HOUR });
+  w.restart();
+  await w.at(181);
+  expect(checked()).toEqual([T0 + 3 * HOUR, undefined]);
+
+  writeCharacterState(w.dir, "triggers.json", JSON.stringify({ records: { tide: { since: T0 + 181 * MINUTE, fired: 1, checkedAt: "then" } } }));
+  await w.at(182);
+  expect(checked()).toEqual([undefined, undefined]);
+});
+
+test("a one-off that was to wake the character does so even when its check fails, saying why, and one that only leaves an entry says nothing will come of it", async () => {
+  const w = await world([
+    '[call]\non = "2026-10-30 13:00"\ncheck = "call.sh"\nreason = "Time to call."\n',
+    '[bare]\non = "2026-10-30 13:00"\ncheck = "bare.sh"\n',
+    '[note]\non = "2026-10-30 13:00"\ncheck = "note.sh"\nwake = false\n',
+    '[after]\nfollows = "call"\nreason = "Write up the call."\nwake = false\n',
+    '[watch]\nevery = "1h"\ncheck = "watch.sh"\nreason = "Keep watch."\n',
+  ].join("\n"));
+  for (const name of ["call", "bare", "note", "watch"]) w.checks[name] = { kind: "failed", problem: "it exited with status 2" };
+  await w.at(0);
+  await w.at(60);
+  const woken = "Shore couldn't tell from this one-off's check whether to wake you, because the check failed: it exited with status 2. A one-off gets no second try, so you are woken anyway.";
+  expect(w.woke).toEqual([
+    { name: "call", reason: `Time to call.\n${woken}`, at: T0 + HOUR },
+    { name: "bare", reason: woken, at: T0 + HOUR },
+  ]);
+  expect(w.notes()).toEqual([
+    ["shore", "The check for your trigger `note` failed: it exited with status 2. It is a one-off, which gets no second try, so nothing will come of it."],
+    ["shore", "The check for your trigger `watch` failed: it exited with status 2. It keeps being tried, and you'll be told again only once it has worked and then failed again."],
+  ]);
+  expect(w.triggers.view().triggers.slice(0, 3).map((each) => [each.fired, each.failing, each.lastFiredAt, each.checkedAt, each.nextAt])).toEqual([
+    [1, true, T0 + HOUR, T0 + HOUR, undefined],
+    [1, true, T0 + HOUR, T0 + HOUR, undefined],
+    [0, true, undefined, T0 + HOUR, undefined],
+  ]);
+
+  await w.at(61);
+  await w.at(119);
+  expect(w.ran.map(([name]) => name)).toEqual(["call", "bare", "note", "watch"]);
+  await w.at(120);
+  expect(w.ran.map(([name]) => name)).toEqual(["call", "bare", "note", "watch", "watch"]);
+  expect(w.woke).toHaveLength(2);
+  await w.triggers.finished(["call"]);
+  await w.at(121);
+  expect(w.notes().map(([from]) => from)).toEqual(["shore", "shore", "after"]);
+});
+
+test("a one-off stays listed as fired with no next time, and a later time written in its place arms it again with no cooldown to wait out", async () => {
+  const w = await world('[call]\non = "2026-10-30 13:00"\nreason = "Time to call."\n');
+  await w.at(0);
+  await w.at(60);
+  expect(w.woke).toHaveLength(1);
+  await w.at(70);
+  expect(w.triggers.view().triggers.map((each) => [each.trigger.name, each.fired, each.lastFiredAt, each.nextAt])).toEqual([["call", 1, T0 + HOUR, undefined]]);
+
+  w.file = '[call]\non = "2026-10-30 13:30"\nreason = "Time to call again."\n';
+  await w.at(71);
+  expect(w.triggers.view().triggers[0]).toMatchObject({ fired: 1, nextAt: T0 + 90 * MINUTE });
+  await w.at(89);
+  expect(w.woke).toHaveLength(1);
+  await w.at(90);
+  expect(w.woke).toEqual([
+    { name: "call", reason: "Time to call.", at: T0 + HOUR },
+    { name: "call", reason: "Time to call again.", at: T0 + 90 * MINUTE },
+  ]);
+  await w.at(600);
+  expect(w.woke).toHaveLength(2);
+  expect(w.triggers.view().triggers[0]).toMatchObject({ fired: 2, lastFiredAt: T0 + 90 * MINUTE, nextAt: undefined });
+});
+
 test("a failing check is reported once, and again only after it has worked in between", async () => {
   const w = await world('[tide]\nevery = "10m"\ncheck = "tide.sh"\nwake = false\n');
   const failed = "The check for your trigger `tide` failed: it exited with status 2. It keeps being tried, and you'll be told again only once it has worked and then failed again.";

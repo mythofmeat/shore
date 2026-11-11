@@ -18,6 +18,7 @@ export interface TriggerRecord {
   fired: number;
   lastFiredAt?: number;
   quietFor?: number;
+  checkedAt?: number;
   failing?: true;
   pending?: true;
 }
@@ -53,6 +54,7 @@ export interface TriggerView {
   failing: boolean;
   fired: number;
   lastFiredAt: number | undefined;
+  checkedAt: number | undefined;
   nextAt: number | undefined;
 }
 
@@ -64,16 +66,28 @@ export interface TriggersView {
 
 function record(raw: unknown): TriggerRecord | undefined {
   if (typeof raw !== "object" || raw === null) return undefined;
-  const { since, fired, lastFiredAt, quietFor, failing, pending } = raw as Record<string, unknown>;
+  const { since, fired, lastFiredAt, quietFor, checkedAt, failing, pending } = raw as Record<string, unknown>;
   if (typeof since !== "number" || typeof fired !== "number") return undefined;
   return {
     since,
     fired,
     ...(typeof lastFiredAt === "number" ? { lastFiredAt } : {}),
     ...(typeof quietFor === "number" ? { quietFor } : {}),
+    ...(typeof checkedAt === "number" ? { checkedAt } : {}),
     ...(failing === true ? { failing } : {}),
     ...(pending === true ? { pending } : {}),
   };
+}
+
+export function checkFailedNote(trigger: string, problem: string, oneOff: boolean): string {
+  const failed = `The check for your trigger \`${trigger}\` failed: ${problem}.`;
+  return oneOff
+    ? `${failed} It is a one-off, which gets no second try, so nothing will come of it.`
+    : `${failed} It keeps being tried, and you'll be told again only once it has worked and then failed again.`;
+}
+
+export function wokenWithoutCheckNote(problem: string): string {
+  return `Shore couldn't tell from this one-off's check whether to wake you, because the check failed: ${problem}. A one-off gets no second try, so you are woken anyway.`;
 }
 
 function eventOf(trigger: Trigger): string | undefined {
@@ -176,6 +190,7 @@ export class CharacterTriggers {
           failing: known?.failing === true,
           fired: known?.fired ?? 0,
           lastFiredAt: known?.lastFiredAt,
+          checkedAt: known?.checkedAt,
           nextAt: scheduled === undefined ? undefined : Math.max(scheduled, cooled ?? scheduled),
         };
       }),
@@ -239,19 +254,20 @@ export class CharacterTriggers {
 
   async #run(trigger: Trigger, known: TriggerRecord, settings: TriggerSettings, limitMs: number, state: TriggerState): Promise<void> {
     const outcome: CheckOutcome = trigger.check === undefined ? { kind: "fired", output: "" } : await this.#deps.runCheck(trigger, limitMs);
-    const { failing: wasFailing, ...sound } = known;
-    if (outcome.kind === "failed") {
+    const now = this.#deps.now();
+    const { failing: wasFailing, ...before } = known;
+    const sound: TriggerRecord = trigger.check === undefined ? before : { ...before, checkedAt: now };
+    const oneOff = trigger.when.kind === "once";
+    if (outcome.kind === "failed" && !(oneOff && trigger.wakes)) {
       state.records[trigger.name] = { ...sound, failing: true };
-      if (wasFailing !== true) {
-        this.#tell(`The check for your trigger \`${trigger.name}\` failed: ${outcome.problem}. It keeps being tried, and you'll be told again only once it has worked and then failed again.`);
-      }
+      if (wasFailing !== true) this.#tell(checkFailedNote(trigger.name, outcome.problem, oneOff));
       return;
     }
     state.records[trigger.name] = sound;
     if (outcome.kind === "quiet") return;
-    const now = this.#deps.now();
-    const reason = [trigger.reason ?? "", outcome.output].filter((part) => part !== "").join("\n");
-    state.records[trigger.name] = { ...sound, fired: sound.fired + 1, lastFiredAt: now };
+    const said = outcome.kind === "failed" ? wokenWithoutCheckNote(outcome.problem) : outcome.output;
+    const reason = [trigger.reason ?? "", said].filter((part) => part !== "").join("\n");
+    state.records[trigger.name] = { ...sound, ...(outcome.kind === "failed" ? { failing: true as const } : {}), fired: sound.fired + 1, lastFiredAt: now };
     if (trigger.wakes) {
       this.#deps.wake({
         name: trigger.name, reason, at: now,

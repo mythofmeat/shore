@@ -30,6 +30,14 @@ function whenPhrase(when: TriggerWhen, userName: string, timeZone: string): stri
     : `when ${userName} has been quiet for ${length(when.afterMs)}`;
 }
 
+function checkStatus(each: TriggerView, timeZone: string): string[] {
+  if (each.trigger.check === undefined) return [];
+  const at = each.checkedAt === undefined ? undefined : formatWallClock(each.checkedAt, timeZone);
+  if (each.failing) return [at === undefined ? "its check is failing" : `its check failed when last tried, ${at}`];
+  if (at === undefined) return ["its check hasn't run yet"];
+  return each.checkedAt === each.lastFiredAt ? [] : [`last checked ${at}, printed nothing`];
+}
+
 function described(each: TriggerView, userName: string, timeZone: string): string {
   const { trigger } = each;
   const arrives = trigger.when.kind === "event" && trigger.when.event === "user_back";
@@ -48,7 +56,7 @@ function described(each: TriggerView, userName: string, timeZone: string): strin
     ...(each.nextAt === undefined ? [] : [`next ${formatWallClock(each.nextAt, timeZone)}`]),
     each.lastFiredAt === undefined ? "never fired" : `fired ${String(each.fired)} ${each.fired === 1 ? "time" : "times"}, last ${formatWallClock(each.lastFiredAt, timeZone)}`,
     ...(each.off ? [`switched off by ${userName}`] : []),
-    ...(each.failing ? ["its check is failing"] : []),
+    ...checkStatus(each, timeZone),
   ];
   return `${trigger.name}: ${parts.join(", ")}\n  ${status.join(" · ")}`;
 }
