@@ -1,4 +1,4 @@
-import type { Page } from "@playwright/test";
+import type { Locator, Page, WebSocketRoute } from "@playwright/test";
 import { expect, test } from "./fixtures.ts";
 import { createCharacter, createThread, send, signIn, watchPage } from "./helpers.ts";
 
@@ -530,24 +530,98 @@ test("the usage display refreshes after a reply and otherwise leaves the daemon 
   await check();
 });
 
-test("the sidebar's status chip sets one of the user's statuses, shows it after a reload, and clears it", async ({ page }) => {
+const LONG_STATUS = "reading https://example.org/the_long_article_everyone_keeps_sending_me_this_week";
+
+test("the sidebar's status row sets one of the user's statuses, shows it after a reload, and clears it", async ({ page }) => {
   const finish = await watchPage(page);
   await signIn(page);
   await createCharacter(page, "plover");
 
-  const chip = page.getByRole("button", { name: "Your status", exact: true });
-  await expect(chip).toHaveText("Set status");
-  await chip.click();
+  const unset = page.getByRole("button", { name: "Your status", exact: true });
+  const busy = page.getByRole("button", { name: "Your status: busy", exact: true });
+  await expect(unset).toHaveText("Set status");
+  await unset.click();
   const statuses = page.getByRole("menu", { name: "Your status" });
-  await expect(statuses.getByRole("menuitem")).toHaveText(["asleep", "busy", "away"]);
+  await expect(statuses.getByRole("menuitem")).toHaveText(["asleep", "busy", LONG_STATUS]);
   await statuses.getByRole("menuitem", { name: "busy" }).click();
-  await expect(chip).toHaveText("busy");
+  await expect(busy).toHaveText("busy");
 
   await page.reload();
-  await expect(chip).toHaveText("busy");
-  await chip.click();
-  await expect(statuses.getByRole("menuitem")).toHaveText(["asleep", "busySet", "away", "Clear status"]);
+  await expect(busy).toHaveText("busy");
+  await busy.click();
+  await expect(statuses.getByRole("menuitem")).toHaveText(["asleep", "busySet", LONG_STATUS, "Clear status"]);
   await statuses.getByRole("menuitem", { name: "Clear status" }).click();
-  await expect(chip).toHaveText("Set status");
+  await expect(unset).toHaveText("Set status");
+  await finish();
+});
+
+interface Sized { scrollWidth: number; clientWidth: number }
+
+async function expectFooterInsideSidebar(page: Page, connection: string): Promise<void> {
+  const sidebar = page.getByRole("complementary", { name: "Characters and threads" });
+  await sidebar.evaluate(async (side: { getAnimations: () => { finished: Promise<unknown> }[] }) => { await Promise.all(side.getAnimations().map((animation) => animation.finished)); });
+  const edges = async (part: Locator) => {
+    const box = await part.boundingBox();
+    if (box === null) throw new Error("a part of the sidebar's footer is not on the page");
+    return { left: box.x, right: box.x + box.width, top: box.y, bottom: box.y + box.height, middle: box.y + box.height / 2 };
+  };
+  const around = await edges(sidebar);
+  const status = await edges(page.getByRole("button", { name: /^Your status/ }));
+  const settings = await edges(page.getByRole("button", { name: "Settings", exact: true }));
+  const link = await edges(page.getByText(connection, { exact: true }));
+  expect(await sidebar.evaluate((side: Sized) => side.scrollWidth - side.clientWidth)).toBe(0);
+  for (const part of [status, settings, link]) {
+    expect(part.left).toBeGreaterThanOrEqual(around.left);
+    expect(part.right).toBeLessThanOrEqual(around.right);
+    expect(part.bottom).toBeLessThanOrEqual(around.bottom);
+  }
+  expect(status.bottom).toBeLessThanOrEqual(settings.top);
+  expect(settings.right).toBeLessThanOrEqual(link.left);
+  expect(Math.abs(settings.middle - link.middle)).toBeLessThanOrEqual(1);
+}
+
+test("the sidebar's footer keeps the user's status, settings and the connection inside the sidebar, with the longest status and the largest text, while reconnecting and on the narrowest phone", async ({ page }) => {
+  const finish = await watchPage(page);
+  let cut = false;
+  let live: WebSocketRoute | undefined;
+  await page.routeWebSocket(/\/api\/swp$/, (socket) => {
+    if (cut) { void socket.close(); return; }
+    socket.connectToServer();
+    live = socket;
+  });
+  await signIn(page);
+  await createCharacter(page, "plover");
+  const status = page.getByRole("button", { name: /^Your status/ });
+  await expect(status).toHaveText("Set status");
+  await expectFooterInsideSidebar(page, "Connected");
+
+  await status.click();
+  await page.getByRole("menuitem", { name: LONG_STATUS }).click();
+  await expect(status).toHaveText(LONG_STATUS);
+  await expect(status).toHaveAttribute("title", `Your status: ${LONG_STATUS}`);
+  await expectFooterInsideSidebar(page, "Connected");
+
+  await status.click();
+  const choice = page.getByRole("menuitem", { name: LONG_STATUS });
+  await expect(choice).toBeVisible();
+  expect(await choice.evaluate((item: Sized & { querySelectorAll: (selector: string) => Iterable<Sized> }) => [item, ...item.querySelectorAll("*")].every((part) => part.scrollWidth <= part.clientWidth))).toBe(true);
+  await expectFooterInsideSidebar(page, "Connected");
+  await page.keyboard.press("Escape");
+  await expect(choice).toBeHidden();
+
+  await page.evaluate("localStorage.setItem('shore.font-size', 'larger')");
+  await page.reload();
+  await expect(status).toHaveText(LONG_STATUS);
+  await expect(page.getByText("Connected", { exact: true })).toBeVisible();
+  await expectFooterInsideSidebar(page, "Connected");
+
+  cut = true;
+  await live?.close();
+  await expect(page.getByText("Reconnecting…", { exact: true })).toBeVisible();
+  await expectFooterInsideSidebar(page, "Reconnecting…");
+
+  await page.setViewportSize({ width: 280, height: 653 });
+  await page.getByRole("button", { name: "Open sidebar", exact: true }).click();
+  await expectFooterInsideSidebar(page, "Reconnecting…");
   await finish();
 });
