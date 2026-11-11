@@ -555,6 +555,61 @@ test("the sidebar's status row sets one of the user's statuses, shows it after a
   await finish();
 });
 
+interface Player { controls: boolean; muted: boolean; paused: boolean; currentTime: number }
+interface Boxed { getBoundingClientRect: () => { left: number; right: number; width: number; height: number } }
+
+test("a sent video plays in the browser's own player at a size its controls fit however small the clip, a click pauses it and the next reply leaves it paused where it was, and it keeps inside the column on the narrowest phone and under the height of a short window", async ({ page }) => {
+  const finish = await watchPage(page);
+  await signIn(page);
+  await createCharacter(page, "gannet");
+  await send(page, "send video fixture");
+  const reply = page.locator("article.message.assistant", { has: page.locator("video") });
+  const square = reply.locator("video").nth(0);
+  const strip = reply.locator("video").nth(1);
+  await expect(reply.locator("video")).toHaveCount(2);
+  const playing = (player: Locator) => player.evaluate((video: Player) => video.controls && video.muted && !video.paused && video.currentTime > 0);
+  const measure = () => reply.evaluate((article: { querySelector: (selector: string) => Boxed | null; querySelectorAll: (selector: string) => Iterable<Boxed> }) => {
+    const edges = (part: Boxed | null) => {
+      if (part === null) throw new Error("the reply has no body");
+      const { left, right, width, height } = part.getBoundingClientRect();
+      return { left, right, width, height };
+    };
+    return { column: edges(article.querySelector(".message-body")), players: [...article.querySelectorAll("video")].map(edges) };
+  });
+  const expectInsideColumn = async (layout: "desktop" | "mobile") => {
+    await expect(page.locator(".shell")).toHaveAttribute("data-layout", layout);
+    const { column: around, players } = await measure();
+    expect(players).toHaveLength(2);
+    for (const box of players) {
+      expect(box.left).toBeGreaterThanOrEqual(around.left);
+      expect(box.right).toBeLessThanOrEqual(around.right);
+      expect(box.width).toBeGreaterThanOrEqual(Math.min(240, around.width));
+      expect(box.height).toBeGreaterThanOrEqual(135);
+    }
+    return players;
+  };
+  for (const player of [square, strip]) {
+    await expect.poll(() => playing(player)).toBe(true);
+    await expect(player, "pictures zoom on a click, a video does not").toHaveCSS("cursor", "auto");
+  }
+  await expectInsideColumn("desktop");
+
+  await square.click({ position: { x: 120, y: 40 } });
+  await expect.poll(() => square.evaluate((video: Player) => video.paused)).toBe(true);
+  const stoppedAt = await square.evaluate((video: Player) => video.currentTime);
+  await send(page, "words after the video");
+  expect(await square.evaluate((video: Player) => [video.paused, video.currentTime])).toEqual([true, stoppedAt]);
+  await expect.poll(() => playing(strip)).toBe(true);
+
+  await page.setViewportSize({ width: 280, height: 653 });
+  await expectInsideColumn("mobile");
+
+  await page.setViewportSize({ width: 1440, height: 300 });
+  const short = await expectInsideColumn("desktop");
+  expect(short[0]?.height).toBeLessThanOrEqual(210);
+  await finish();
+});
+
 interface Sized { scrollWidth: number; clientWidth: number }
 
 async function expectFooterInsideSidebar(page: Page, connection: string): Promise<void> {

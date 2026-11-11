@@ -580,27 +580,20 @@ button.chip:hover {
 }
 
 .picture img,
-.picture video {
+.picture-video {
+  max-height: min(70dvh, 640px);
+}
+
+.picture img {
   display: block;
   max-width: 100%;
-  max-height: min(70dvh, 640px);
   height: auto;
 }
 
 .picture-video {
-  position: relative;
-  cursor: pointer;
-}
-
-.picture-sound {
-  position: absolute;
-  right: 8px;
-  bottom: 8px;
-  display: flex;
-  padding: 5px;
-  border-radius: 50%;
-  background: rgb(0 0 0 / 55%);
-  color: #fff;
+  min-width: min(100%, 240px);
+  min-height: 135px;
+  cursor: auto;
 }
 
 .picture-name {

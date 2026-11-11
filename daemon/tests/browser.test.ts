@@ -39,15 +39,16 @@ test("a sent picture inside a block-level tag shows in place, once, with the tex
   expect(unplacedPictures(images, [text])).toEqual([]);
 });
 
-test("a sent video loops inline without sound, which is what lets a phone start it without being asked", () => {
+test("a sent video has the browser's own player controls and loops inline without sound, which is what lets a phone start it without being asked", () => {
   const text = "![[clip.mp4]]";
   const images = [{ path: "/data/media/ada/sent/abc.mp4", embed: "![[clip.mp4]]", name: "clip.mp4", data: "UklGR123" }];
   const html = renderToStaticMarkup(createElement(Pictures.Provider, { value: { images, open: () => {}, live: false, shown: true } }, createElement(Markdown, { text })));
   const video = /<video[^>]*>/.exec(html)?.[0] ?? "";
   expect(video).toContain('src="/api/pictures/abc.mp4"');
   expect(video).toContain('poster="data:image/webp;base64,UklGR123"');
-  for (const attribute of ["autoPlay", "loop", "muted", "playsInline"]) expect(video.toLowerCase()).toContain(attribute.toLowerCase());
+  for (const attribute of ["controls", "autoPlay", "loop", "muted", "playsInline"]) expect(video.toLowerCase()).toContain(attribute.toLowerCase());
   expect(html).not.toContain("<img");
+  expect(html, "a button around the player would take the clicks meant for its controls").not.toContain("<button");
   const hidden = renderToStaticMarkup(createElement(Pictures.Provider, { value: { images, open: () => {}, live: false, shown: false } }, createElement(Markdown, { text })));
   expect(hidden).not.toContain("<video");
   expect(hidden).toContain("clip.mp4");
