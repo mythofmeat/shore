@@ -14,7 +14,7 @@ const HOUR = 60 * MINUTE;
 const DAY = 24 * HOUR;
 const DEFAULT_COOLDOWN = HOUR;
 const WEEK = [0, 1, 2, 3, 4, 5, 6];
-const SETTINGS = "every, at, on, when, after, follows, check, wake, reason, cooldown, between";
+const SETTINGS = "every, at, on, when, after, follows, check, wake, thread, limit, reason, cooldown, between";
 const AT_HELP = '`at` must be a 24-hour local time, with the days it applies to in front if not every day, like "20:00" or "Sat 20:00" or "Mon,Thu 09:30"';
 
 function parse(content: string): ReturnType<typeof parseTriggers> {
@@ -62,10 +62,10 @@ test("a triggers file is read one trigger per table, each with when it fires and
   ].join("\n"))).toEqual({
     problems: [],
     triggers: [
-      { name: "tide-table", when: { kind: "every", everyMs: 90 * MINUTE }, wakes: false, reason: undefined, check: "scripts/tide.sh", cooldownMs: 0, between: undefined },
-      { name: "saturday_show", when: { kind: "at", weekdays: [6], minute: 20 * 60 }, wakes: true, reason: "Write the show.", check: undefined, cooldownMs: 6 * HOUR, between: { startMinute: 8 * 60, endMinute: 23 * 60 } },
-      { name: "welcome_back", when: { kind: "event", event: "user_back", afterMs: 8 * HOUR }, wakes: false, reason: "They are back.", check: "scripts/gone_long.sh", cooldownMs: 0, between: undefined },
-      { name: "show-recap", when: { kind: "follows", trigger: "saturday_show" }, wakes: true, reason: "Write up how it went.", check: undefined, cooldownMs: DEFAULT_COOLDOWN, between: undefined },
+      { name: "tide-table", when: { kind: "every", everyMs: 90 * MINUTE }, wakes: false, reason: undefined, check: "scripts/tide.sh", cooldownMs: 0, between: undefined, thread: undefined, limitMs: undefined },
+      { name: "saturday_show", when: { kind: "at", weekdays: [6], minute: 20 * 60 }, wakes: true, reason: "Write the show.", check: undefined, cooldownMs: 6 * HOUR, between: { startMinute: 8 * 60, endMinute: 23 * 60 }, thread: undefined, limitMs: undefined },
+      { name: "welcome_back", when: { kind: "event", event: "user_back", afterMs: 8 * HOUR }, wakes: false, reason: "They are back.", check: "scripts/gone_long.sh", cooldownMs: 0, between: undefined, thread: undefined, limitMs: undefined },
+      { name: "show-recap", when: { kind: "follows", trigger: "saturday_show" }, wakes: true, reason: "Write up how it went.", check: undefined, cooldownMs: DEFAULT_COOLDOWN, between: undefined, thread: undefined, limitMs: undefined },
     ],
   });
   expect(parse("")).toEqual({ triggers: [], problems: [] });
@@ -295,9 +295,9 @@ test("triggers that follow each other in a ring are all refused, and so is anyth
   ]);
   expect(parse(link("d", "a") + link("a", "b") + link("b", "a") + '[e]\nevery = "1h"\nreason = "r"\n' + link("f", "e") + link("g", "f"))).toEqual({
     triggers: [
-      { name: "e", when: { kind: "every", everyMs: HOUR }, wakes: true, reason: "r", check: undefined, cooldownMs: DEFAULT_COOLDOWN, between: undefined },
-      { name: "f", when: { kind: "follows", trigger: "e" }, wakes: true, reason: "r", check: undefined, cooldownMs: DEFAULT_COOLDOWN, between: undefined },
-      { name: "g", when: { kind: "follows", trigger: "f" }, wakes: true, reason: "r", check: undefined, cooldownMs: DEFAULT_COOLDOWN, between: undefined },
+      { name: "e", when: { kind: "every", everyMs: HOUR }, wakes: true, reason: "r", check: undefined, cooldownMs: DEFAULT_COOLDOWN, between: undefined, thread: undefined, limitMs: undefined },
+      { name: "f", when: { kind: "follows", trigger: "e" }, wakes: true, reason: "r", check: undefined, cooldownMs: DEFAULT_COOLDOWN, between: undefined, thread: undefined, limitMs: undefined },
+      { name: "g", when: { kind: "follows", trigger: "f" }, wakes: true, reason: "r", check: undefined, cooldownMs: DEFAULT_COOLDOWN, between: undefined, thread: undefined, limitMs: undefined },
     ],
     problems: [ring("a", "b"), ring("b", "a"), "`d` isn't running: it follows `a`, which isn't a running trigger in this file"],
   });
@@ -307,13 +307,13 @@ test("[triggers] is read under its own name, off unless turned on, and a check t
   const root = await mkdtemp(testTmp("shore-triggers-config-"));
   const read = (): (boolean | number | string[])[] => {
     const triggers = loadConfig(join(root, "config.toml"), { env: { SHORE_CONFIG_DIR: root }, onWarn: () => {} }).app.behavior.autonomy.triggers;
-    return [triggers.enabled, Number(triggers.wake_cooldown.asSecs()), Number(triggers.check_time_limit.asSecs()), triggers.off];
+    return [triggers.enabled, Number(triggers.wake_cooldown.asSecs()), Number(triggers.check_time_limit.asSecs()), Number(triggers.max_wake_limit.asSecs()), triggers.off];
   };
   await writeFile(join(root, "config.toml"), '[chat]\ndisplay_name = "eve"\n');
-  expect(read()).toEqual([false, 3600, 60, []]);
+  expect(read()).toEqual([false, 3600, 60, 7200, []]);
 
-  await writeFile(join(root, "config.toml"), '[triggers]\nenabled = true\nwake_cooldown = "2h"\ncheck_time_limit = "10s"\noff = ["tide-table"]\n');
-  expect(read()).toEqual([true, 7200, 10, ["tide-table"]]);
+  await writeFile(join(root, "config.toml"), '[triggers]\nenabled = true\nwake_cooldown = "2h"\ncheck_time_limit = "10s"\nmax_wake_limit = "4h"\noff = ["tide-table"]\n');
+  expect(read()).toEqual([true, 7200, 10, 14400, ["tide-table"]]);
 
   await writeFile(join(root, "config.toml"), '[triggers]\ncheck_time_limit = "0s"\n');
   expect(read).toThrow("triggers.check_time_limit must be greater than zero");
@@ -324,6 +324,7 @@ test("each [triggers] setting is described in the config schema", () => {
   expect(described).toEqual([
     ["triggers.check_time_limit", "Longest a trigger's check"],
     ["triggers.enabled", "Run the triggers the"],
+    ["triggers.max_wake_limit", "Longest a wake in"],
     ["triggers.off", "Names of triggers that"],
     ["triggers.wake_cooldown", "Least time between two"],
   ]);
@@ -393,4 +394,27 @@ test("the list covers every trigger and those that aren't running, and says so w
     "Your triggers, from TRIGGERS.toml in your workspace root. eve hasn't turned triggers on, so none of them run.\n\nNot running:\n- `lamp` isn't running: why",
   );
   expect(() => handleListTriggers(undefined, "eve", "UTC")).toThrow("triggers are not available in this context");
+});
+
+test("a trigger can name the thread its wake runs in and how long that wake may run, but only if it wakes", () => {
+  const where = (body: string): Pick<Trigger, "thread" | "limitMs"> | string => {
+    const parsed = only(`every = "1h"\nreason = "r"\n${body}`);
+    return typeof parsed === "string" ? parsed : { thread: parsed.thread, limitMs: parsed.limitMs };
+  };
+  expect(where("")).toEqual({ thread: undefined, limitMs: undefined });
+  expect(where('thread = " garden "')).toEqual({ thread: "garden", limitMs: undefined });
+  expect(where('thread = "garden"\nlimit = "2h"')).toEqual({ thread: "garden", limitMs: 2 * HOUR });
+  expect(where('thread = "garden"\nlimit = "1m"')).toEqual({ thread: "garden", limitMs: MINUTE });
+  expect(where('thread = "garden"\nlimit = "59s"')).toBe("`t` isn't running: `limit` can't be shorter than a minute");
+  expect(where('thread = "garden"\nlimit = 2')).toBe('`t` isn\'t running: `limit` must be a length of time in quotes, like "90m" or "6h"');
+  expect(where('limit = "2h"')).toBe("`t` isn't running: `limit` is how long a wake in a thread may run, so it only goes with `thread`");
+  expect(where('thread = "the garden"')).toBe('`t` isn\'t running: `thread` must be a thread\'s id, as `list_threads` shows it, and "the garden" can\'t be one');
+  expect(where("thread = 5")).toBe("`t` isn't running: `thread` must be text in quotes");
+  expect(where('thread = "garden"\nwake = false')).toBe("`t` isn't running: `thread` is where a wake runs, and this trigger doesn't wake you");
+  expect(only('when = "user_back"\nafter = "8h"\nreason = "r"\nthread = "garden"')).toBe("`t` isn't running: `thread` is where a wake runs, and this trigger doesn't wake you");
+});
+
+test("the list says which thread a trigger wakes the character in and for how long", () => {
+  expect(shown('at = "Sat 20:00"\nreason = "The show."\nthread = "ring"\nlimit = "2h"')).toBe('t: Sat at 20:00, wakes you in "ring", "The show.", for up to 2h, at most every 1h\n  never fired');
+  expect(shown('every = "1d"\nreason = "r"\nthread = "ring"\ncooldown = "0s"')).toBe('t: every 1d, wakes you in "ring", "r"\n  never fired');
 });

@@ -6,7 +6,8 @@ import { runIdleCompaction } from "./idle_compaction.ts";
 import { runDeepIdleArchive } from "./deep_archive.ts";
 import type { LastRequestCache } from "../cache/last_request.ts";
 import { reloadAndApplyDeferred, repoint, type PostArchiveEngine } from "./post_archive.ts";
-import type { AutonomyActionResult, AutonomyExecutor, DreamActionResult, DreamWindow, TickHooks } from "./runner.ts";
+import type { AutonomyActionResult, AutonomyExecutor, DreamActionResult, DreamWindow, ThreadWakeResult, ThreadWakeRun, TickHooks } from "./runner.ts";
+import { DEFAULT_WAKE_LIMIT_MS, runThreadWake } from "./thread_wake.ts";
 import { DREAM_CALL_TYPE, DREAM_LOOP_CALL_TYPE, DREAM_TOOL_THREAD, runDreamPass } from "../memory/dreaming/run.ts";
 import type { ToolContext } from "../tools/dispatch.ts";
 import type { CompactionReason } from "./tick.ts";
@@ -89,6 +90,40 @@ export class InProcessAutonomyExecutor implements AutonomyExecutor {
         ...(this.#deps.notifyAutonomousMessage === undefined
           ? {}
           : { notify: this.#deps.notifyAutonomousMessage }),
+      });
+    });
+  }
+
+  async runThreadWake(character: string, wake: ThreadWakeRun, hooks: TickHooks): Promise<ThreadWakeResult> {
+    return await this.#withForeground(async () => {
+      const config = this.#deps.registry.effectiveConfig(character);
+      const calls = this.#loopCalls(config, character, "wake", ["heartbeat", "heartbeat_tool_loop"]);
+      let toolCtx: ReturnType<typeof buildToolContext> | undefined;
+      return await runThreadWake(character, config, { thread: wake.thread, fired: wake.fired, limitMs: wake.limitMs ?? DEFAULT_WAKE_LIMIT_MS, interruptedAt: wake.interruptedAt }, {
+        rebuild: this.#deps.rebuild,
+        interrupted: wake.interrupted,
+        compaction: this.#threadCompaction(config),
+        ...(this.#deps.env === undefined ? {} : { env: this.#deps.env }),
+        news: () => hooks.news(),
+        generate: calls.generate,
+        dispatch: async (name, input, toolUseId, tools, conversation) => {
+          const { wakeInThread: _handOff, ...here } = this.#deps.tools ?? {};
+          toolCtx ??= buildToolContext(config, config.dirs.data, character, {
+            ...here,
+            thread: conversation.thread,
+            conversation: conversation.conversation,
+            scheduleNextWake: (_character, hours, reason) => hooks.scheduleNextWake(hours, reason),
+          });
+          const ctx = { ...await toolCtx, ...(conversation.recordWorkspaceWrite === undefined ? {} : { recordWorkspaceWrite: conversation.recordWorkspaceWrite }) };
+          return await runLoopTool(ctx, config, calls.imageLimits(), { id: toolUseId ?? `wk_${crypto.randomUUID()}`, name, input }, tools);
+        },
+        ...this.#transcripts("heartbeat", character),
+        engine: async (name, thread) => this.#deps.registry.listThreads(name).some((record) => record.id === thread) && thread !== this.#deps.registry.heartbeatThread(name)
+          ? await this.#deps.registry.getOrCreate(name, thread)
+          : undefined,
+        threadModel: (name, thread) => this.#deps.registry.listThreads(name).find((record) => record.id === thread)?.chat_model,
+        ...(this.#deps.emit === undefined ? {} : { emit: this.#deps.emit }),
+        ...(this.#deps.notifyAutonomousMessage === undefined ? {} : { notify: this.#deps.notifyAutonomousMessage }),
       });
     });
   }
@@ -208,6 +243,7 @@ export class InProcessAutonomyExecutor implements AutonomyExecutor {
   async #dreamToolContext(config: LoadedConfig, character: string, signal: AbortSignal): Promise<ToolContext> {
     const {
       scheduleNextWake: _wake,
+      wakeInThread: _handOff,
       startThread: _start,
       editThread: _edit,
       deferEdit: _defer,

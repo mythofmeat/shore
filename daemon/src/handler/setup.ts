@@ -59,6 +59,15 @@ export class HeartbeatThreadError extends Error {
   }
 }
 
+export class WakeTurnError extends Error {
+  readonly code: ErrorCode = "invalid_request";
+
+  constructor(character: string) {
+    super(`The last turn here is a wake of ${character}'s own, not a reply to you, so there is nothing to regenerate. Write to ${character} instead.`);
+    this.name = "WakeTurnError";
+  }
+}
+
 export function resolveGenerationModel(
   activeModel: ResolvedModel | undefined,
   config: LoadedConfig,

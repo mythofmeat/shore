@@ -207,7 +207,7 @@ export async function persistHeartbeatMessage(
   return persisted;
 }
 
-async function roundMessage(round: HeartbeatRound, request: SidecarRequest, deps: Pick<HeartbeatTickDeps, "newId" | "nowIso">, pictures: PictureSender): Promise<Message> {
+export async function roundMessage(round: HeartbeatRound, request: SidecarRequest, deps: Pick<HeartbeatTickDeps, "newId" | "nowIso">, pictures: PictureSender): Promise<Message> {
   const model = round.model === undefined || round.model === "" ? request.model : round.model;
   const sent = round.role === "assistant" ? sendMessageIn(round.blocks) : undefined;
   return {

@@ -1,6 +1,7 @@
 import type { CharacterRegistry } from "../characters.ts";
 import { threadDataDir } from "../config/dirs.ts";
 import { withConversation } from "../engine/lifecycle.ts";
+import { placeInFolder } from "../engine/thread_layout.ts";
 import type { Message } from "../engine/types.ts";
 import type { ServerMessage } from "../protocol/ServerMessage.ts";
 import type { StartThreadRequest } from "../tools/start_thread.ts";
@@ -21,6 +22,10 @@ export async function startCharacterThread(starter: ThreadStarter, character: st
     ...(request.purpose === undefined ? {} : { purpose: request.purpose }),
     ...(request.files === undefined ? {} : { files: request.files }),
   });
+  if (request.folder !== undefined) {
+    const folder = request.folder;
+    await registry.changeThreadLayout(character, (index) => placeInFolder(index, character, request.name, folder));
+  }
   if (request.opening !== undefined) {
     const opening = request.opening;
     const engine = await registry.getOrCreate(character, request.name);

@@ -355,14 +355,19 @@ export function presenceText(presence: NonNullable<Message["presence"]>, at: num
 }
 
 export function heartbeatRunningText(running: NonNullable<Message["heartbeat_running"]>, timeZone: string): string {
+  const since = formatWallClock(Date.parse(running.started_at), timeZone);
+  if (running.thread !== undefined) {
+    return `[A wake of yours in "${running.thread}" has been running since ${since}. It can't see this conversation. It is only told that a message arrived.]`;
+  }
   const why = running.reason === undefined ? "" : ` You scheduled it with set_next_wake, giving this reason: ${running.reason}`;
-  return `[A heartbeat of yours has been running since ${formatWallClock(Date.parse(running.started_at), timeZone)}. ` +
+  return `[A heartbeat of yours has been running since ${since}. ` +
     `It can't see this conversation. It is only told that a message arrived.${why}]`;
 }
 
 function noteFrom(note: DiaryNote): string {
   if (note.source === "trigger") return `from your trigger "${note.trigger ?? ""}"`;
   if (note.source === "note") return `your note, written in "${note.thread}"`;
+  if (note.source === "wake") return `your note at the end of a wake in "${note.thread}"`;
   return note.source === "shore" ? "from Shore" : "your note at the end of a heartbeat";
 }
 

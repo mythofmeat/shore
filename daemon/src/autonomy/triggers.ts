@@ -1,5 +1,6 @@
 import { parseDayWindow } from "../config/app.ts";
 import { ConfigDuration } from "../config/duration.ts";
+import { isValidThreadId } from "../engine/threads.ts";
 import { asNaive, DAY_MS, naiveInZone, resolveInZone } from "../ledger/zoned.ts";
 import { inDayWindow, type DayWindow } from "./tick.ts";
 
@@ -7,7 +8,7 @@ export const TRIGGERS_FILE = "TRIGGERS.toml";
 
 const TRIGGER_NAME = /^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$/;
 
-const SETTINGS = ["every", "at", "on", "when", "after", "follows", "check", "wake", "reason", "cooldown", "between"];
+const SETTINGS = ["every", "at", "on", "when", "after", "follows", "check", "wake", "thread", "limit", "reason", "cooldown", "between"];
 
 const EVENTS = ["user_back", "user_quiet", "dream_done", "status_changed"] as const;
 
@@ -36,6 +37,8 @@ export interface Trigger {
   check: string | undefined;
   cooldownMs: number;
   between: DayWindow | undefined;
+  thread: string | undefined;
+  limitMs: number | undefined;
 }
 
 export interface ParsedTriggers {
@@ -118,7 +121,13 @@ function trigger(name: string, raw: unknown, defaultCooldownMs: number): Trigger
   const between = settings["between"] === undefined ? undefined : parseDayWindow(typeof settings["between"] === "string" ? settings["between"] : "");
   if (settings["between"] !== undefined && between === undefined) throw new Error('`between` must be a local time range like "08:00-23:00"');
   const cooldownMs = settings["cooldown"] === undefined ? (wakes ? defaultCooldownMs : 0) : duration(settings["cooldown"], "cooldown");
-  return { name, when, wakes, reason, check, cooldownMs, between };
+  const thread = settings["thread"] === undefined ? undefined : text(settings["thread"], "thread");
+  if (thread !== undefined && !wakes) throw new Error("`thread` is where a wake runs, and this trigger doesn't wake you");
+  if (thread !== undefined && !isValidThreadId(thread)) throw new Error(`\`thread\` must be a thread's id, as \`list_threads\` shows it, and ${JSON.stringify(thread)} can't be one`);
+  if (settings["limit"] !== undefined && thread === undefined) throw new Error("`limit` is how long a wake in a thread may run, so it only goes with `thread`");
+  const limitMs = settings["limit"] === undefined ? undefined : duration(settings["limit"], "limit");
+  if (limitMs !== undefined && limitMs < MINUTE_MS) throw new Error("`limit` can't be shorter than a minute");
+  return { name, when, wakes, reason, check, cooldownMs, between, thread, limitMs };
 }
 
 export function parseTriggers(content: string, defaultCooldownMs: number): ParsedTriggers {

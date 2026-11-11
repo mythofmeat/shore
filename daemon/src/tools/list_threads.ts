@@ -1,3 +1,4 @@
+import { folderOf } from "../engine/thread_layout.ts";
 import { defaultThreadsIndex, heartbeatThread, homeThread, readThreadsIndex, threadActivities, type ThreadActivity, type ThreadRecord } from "../engine/threads.ts";
 import { agoPhrase, formatWallClock } from "../engine/prompt.ts";
 import { hostZone } from "../ledger/zoned.ts";
@@ -60,6 +61,7 @@ export async function handleListThreads(options: ListThreadsOptions): Promise<st
     ...(record.id === heartbeat ? ["heartbeats"] : []),
     ...(record.id === current ? ["you're here"] : []),
     ...(record.locked === true ? ["locked"] : []),
+    ...[folderOf(index, record.id)].flatMap((folder) => folder === undefined ? [] : [`in the folder "${folder}"`]),
   ], options, zone, nowMs, record.id === heartbeat));
   const where = current === home ? `You're in it.` : `You're in "${current}".`;
   const runs = heartbeat === undefined ? "" : ` Your heartbeats run in "${heartbeat}".`;

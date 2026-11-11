@@ -243,6 +243,10 @@ export class AutonomyService {
     return this.#entries.get(character)?.runner.wakeFor(firing);
   }
 
+  userActiveIn(character: string, thread: string): void {
+    this.#entries.get(character)?.runner.userActiveIn(thread, this.#now());
+  }
+
   runningHeartbeat(character: string): RunningHeartbeat | undefined {
     return this.#entries.get(character)?.runner.runningHeartbeat;
   }

@@ -109,7 +109,7 @@ export function setThreadsSort(index: ThreadsIndex, byActivity: boolean, activit
   return { ...index, order: looseOnScreen(index, activity) };
 }
 
-function cleanFolderName(raw: string): string {
+export function cleanFolderName(raw: string): string {
   const name = raw.trim();
   if (name === "") throw new ThreadError("invalid_folder", "a folder needs a name");
   if (name.length > MAX_FOLDER_NAME_LENGTH) throw new ThreadError("invalid_folder", `a folder name can be at most ${String(MAX_FOLDER_NAME_LENGTH)} characters`);
@@ -121,6 +121,16 @@ function requireFreeName(index: ThreadsIndex, name: string, except?: string): vo
   if (folderList(index).some((folder) => folder.name !== except && folder.name.toLowerCase() === name.toLowerCase())) {
     throw new ThreadError("exists", `there is already a thread folder called ${JSON.stringify(name)}`);
   }
+}
+
+export function folderOf(index: ThreadsIndex, id: string): string | undefined {
+  return folderList(index).find((folder) => folder.threads.includes(id))?.name;
+}
+
+export function placeInFolder(index: ThreadsIndex, character: string, id: string, raw: string): ThreadsIndex {
+  const name = cleanFolderName(raw);
+  const there = folderList(index).find((folder) => folder.name.toLowerCase() === name.toLowerCase());
+  return moveThread(there === undefined ? createFolder(index, name) : index, character, id, { folder: there?.name ?? name }, () => undefined);
 }
 
 export function createFolder(index: ThreadsIndex, raw: string): ThreadsIndex {

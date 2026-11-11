@@ -46,6 +46,7 @@ import {
   HeartbeatThreadError,
   ImagesUnsupportedError,
   resolveGenerationModel,
+  WakeTurnError,
   type SetupEngine,
 } from "./setup.ts";
 import {
@@ -54,7 +55,7 @@ import {
   type PersistEngine,
 } from "./persistence.ts";
 import type { GenerationParams, RunGeneration } from "./router.ts";
-import { homeThreadOf, threadActivities, threadModelOf, type ThreadRecord } from "../engine/threads.ts";
+import { homeThreadOf, isHeartbeatOpener, threadActivities, threadModelOf, type ThreadRecord } from "../engine/threads.ts";
 import { liveThread } from "./commands.ts";
 import {
   appendUserTurn,
@@ -131,6 +132,7 @@ export interface GenerationDeps {
   callStore?: CallRecorder | undefined;
   autonomy: TurnAutonomy & PersistContext["autonomy"];
   runningHeartbeat?: (character: string) => RunningHeartbeat | undefined;
+  userActiveIn?: (character: string, thread: string) => void;
   userBack?: (character: string) => Promise<void>;
   notifier: PersistContext["notifier"];
   diagnostics: GenerationDiagnostics;
@@ -194,6 +196,7 @@ export async function runGeneration(
     params.charName, liveThread(deps.registry, params.charName, params.meta.session.selectedThread),
   );
   if (engine.thread === deps.registry.heartbeatThread?.(params.charName)) throw new HeartbeatThreadError(params.charName, engine.thread);
+  deps.userActiveIn?.(params.charName, engine.thread);
   return await withConversation(threadDataDir(deps.dataDir, params.charName, engine.thread), "turn", async (signal) => {
   params = { ...params, signal };
   const delivery = new OrderedDelivery(params.send);
@@ -231,6 +234,11 @@ async function runGenerationCore(
   const { charName, regen } = params;
 
   const config = deps.registry.effectiveConfig(charName);
+  if (regen) {
+    const all = engine.messages();
+    const asked = all[all.length - engine.messagesAfterLastUserTurn().length - 1];
+    if (asked !== undefined && isHeartbeatOpener(asked)) throw new WakeTurnError(charName);
+  }
 
   const home = await homeThreadOf(deps.dataDir, charName);
   const isHome = engine.thread === home;
@@ -453,7 +461,7 @@ function heartbeatNotTold(running: RunningHeartbeat | undefined, active: readonl
   if (running === undefined) return undefined;
   const startedAt = new Date(running.startedAt).toISOString();
   if (active.some((message) => message.heartbeat_running?.started_at === startedAt)) return undefined;
-  return { started_at: startedAt, reason: running.reason };
+  return running.thread === undefined ? { started_at: startedAt, reason: running.reason } : { started_at: startedAt, thread: running.thread };
 }
 
 const DEFAULT_CACHE_TTL_SECS = 3_600;
@@ -468,7 +476,7 @@ function cacheTtlSecs(resolved: ResolvedModel): number {
 function lastUserAt(messages: readonly Message[]): string | undefined {
   for (let i = messages.length - 1; i >= 0; i -= 1) {
     const message = messages[i];
-    if (message === undefined || message.role !== "user" || isToolResultOnly(message)) continue;
+    if (message === undefined || message.role !== "user" || isToolResultOnly(message) || isHeartbeatOpener(message)) continue;
     if (!Number.isNaN(Date.parse(message.timestamp))) return message.timestamp;
   }
   return undefined;
@@ -729,7 +737,7 @@ function toolLimits(config: LoadedConfig): ToolLimitsView {
   return toolLimitsFrom(config.app.tools, config.app.subagents);
 }
 
-function thinkingEnabled(opts: ProviderOptions | undefined): boolean {
+export function thinkingEnabled(opts: ProviderOptions | undefined): boolean {
   if (opts === undefined) return false;
   if (opts.thinking_enabled === false) return false;
   return (opts.budget_tokens !== undefined && opts.budget_tokens > 0) ||

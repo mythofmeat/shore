@@ -23,6 +23,7 @@ import type { ActivityStatsLookup } from "../tools/activity.ts";
 import type { McpRegistry } from "../tools/mcp_registry.ts";
 import type { Message } from "../engine/types.ts";
 import type { StartThreadRequest } from "../tools/start_thread.ts";
+import type { WakeHandOff, WakeInThreadRequest } from "../tools/wake_in_thread.ts";
 import type { EditThreadRequest } from "../tools/edit_thread.ts";
 import type { ThreadRecord } from "../engine/threads.ts";
 
@@ -46,6 +47,7 @@ export interface ToolContextDeps extends Partial<ToolConversation> {
   scheduleNextWake?: (character: string, hoursFromNow: number, reason: string) => number | undefined;
   triggersView?: (character: string) => TriggersView;
   push?: (character: string, message: string) => Promise<PushOutcome>;
+  wakeInThread?: (character: string, from: string, request: WakeInThreadRequest) => WakeHandOff;
   startThread?: (character: string, request: StartThreadRequest) => Promise<void>;
   editThread?: (character: string, request: EditThreadRequest) => Promise<ThreadRecord | undefined>;
 }
@@ -82,6 +84,7 @@ export async function buildToolContext(
   const scheduleNextWake = deps.scheduleNextWake;
   const triggersView = deps.triggersView;
   const push = deps.push;
+  const wakeInThread = deps.wakeInThread;
   const startThread = deps.startThread;
   const editThread = deps.editThread;
   const subagentsConfigured = config.app.subagents.size > 0;
@@ -113,6 +116,7 @@ export async function buildToolContext(
       : { scheduleNextWake: (hours: number, reason: string) => scheduleNextWake(charName, hours, reason) }),
     ...(triggersView === undefined ? {} : { triggers: () => triggersView(charName) }),
     ...(push === undefined ? {} : { push: async (message: string) => await push(charName, message) }),
+    ...(wakeInThread === undefined ? {} : { wakeInThread: (request: WakeInThreadRequest) => wakeInThread(charName, deps.thread ?? MAIN_THREAD, request) }),
     ...(deps.deferEdit === undefined ? {} : { deferEdit: deps.deferEdit }),
     ...(deps.countReads === true && config.app.memory.dreaming.enabled ? { recordRead: (path: string) => { recordReadBestEffort(charDataDir, path); } } : {}),
     ...(startThread === undefined

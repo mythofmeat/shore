@@ -96,6 +96,21 @@ export interface TriggerFiring {
   readonly name: string;
   readonly reason: string;
   readonly at: number;
+  readonly thread?: string | undefined;
+  readonly limitMs?: number | undefined;
+  readonly from?: string | undefined;
+  readonly interruptedAt?: number | undefined;
+}
+
+export const WAKE_QUIET_MS = 10 * 60_000;
+
+export function firedBy(firings: readonly TriggerFiring[]): string {
+  const triggers = firings.filter((firing) => firing.from === undefined).map((firing) => `"${firing.name}"`);
+  const handed = firings.flatMap((firing) => firing.from === undefined ? [] : [`"${firing.from}"`]);
+  return [
+    ...(triggers.length === 0 ? [] : [`trigger ${triggers.join(", ")}`]),
+    ...(handed.length === 0 ? [] : [`a hand-off from ${handed.join(", ")}`]),
+  ].join(" and ");
 }
 
 export type HeartbeatNews =
@@ -112,11 +127,24 @@ export interface TickHooks {
 export interface RunningHeartbeat {
   readonly startedAt: number;
   readonly reason: string | undefined;
+  readonly thread: string | undefined;
+}
+
+export interface ThreadWakeRun {
+  readonly thread: string;
+  readonly fired: readonly TriggerFiring[];
+  readonly limitMs: number | undefined;
+  readonly interruptedAt: number | undefined;
+  readonly interrupted: () => boolean;
+}
+
+export interface ThreadWakeResult extends AutonomyActionResult {
+  interrupted?: true;
 }
 
 interface LiveHeartbeat extends RunningHeartbeat {
   readonly news: HeartbeatNews[];
-  readonly carried: string[];
+  readonly firings: TriggerFiring[];
   userTold: boolean;
 }
 
@@ -130,6 +158,7 @@ export interface AutonomyExecutor {
   runCompaction(character: string, reason: CompactionReason): Promise<AutonomyActionResult>;
   runDeepArchive(character: string, coveredTurnCount: number): Promise<AutonomyActionResult>;
   runDream?(character: string, window: DreamWindow): Promise<DreamActionResult>;
+  runThreadWake?(character: string, wake: ThreadWakeRun, hooks: TickHooks): Promise<ThreadWakeResult>;
 }
 
 export interface TickOutcome {
@@ -168,6 +197,7 @@ export class CharacterAutonomy {
   #state: RunnerState;
   #heartbeat: LiveHeartbeat | undefined;
   readonly #fired: TriggerFiring[] = [];
+  readonly #userActiveAt = new Map<string, number>();
   readonly #events: AutonomyEvents | undefined;
   #dream: RunningDream | undefined;
 
@@ -268,14 +298,26 @@ export class CharacterAutonomy {
     running.news.push({ kind: "user_wrote", at: now });
   }
 
+  userActiveIn(thread: string, now: number): void {
+    this.#userActiveAt.set(thread, now);
+  }
+
   wakeFor(firing: TriggerFiring): "handed" | "queued" {
-    if (this.#heartbeat !== undefined) {
-      this.#heartbeat.news.push({ kind: "trigger", firing });
-      this.#heartbeat.carried.push(firing.name);
+    const running = this.#heartbeat;
+    if (running !== undefined && firing.thread === running.thread && firing.from === undefined) {
+      running.news.push({ kind: "trigger", firing });
+      running.firings.push(firing);
       return "handed";
     }
-    this.#fired.push(firing);
+    this.#queue(firing);
     return "queued";
+  }
+
+  #queue(firing: TriggerFiring): void {
+    const same = (other: TriggerFiring): boolean => other.name === firing.name && other.thread === firing.thread && other.from === firing.from;
+    const waiting = this.#fired.find(same);
+    const kept = this.#fired.filter((other) => !same(other));
+    this.#fired.splice(0, this.#fired.length, ...kept, { ...firing, interruptedAt: firing.interruptedAt ?? waiting?.interruptedAt });
   }
 
   onAssistantMessage(turnCount: number, now: number): void {
@@ -485,29 +527,30 @@ export class CharacterAutonomy {
 
     const scheduledReason = this.#clock.wakeReason;
     const heartbeat = this.#runClock(decision, now);
-    const fired = this.#fired.splice(0).filter(() => decision.heartbeatMayTick && !this.#clock.isDormant(now));
+    const due = this.#fired.splice(0).filter(() => decision.heartbeatMayTick && !this.#clock.isDormant(now));
+    const fired = due.filter((firing) => firing.thread === undefined);
+    const inThreads = [...new Set(due.flatMap((firing) => firing.thread === undefined ? [] : [firing.thread]))];
     const wakes = heartbeat === "run_tick" || fired.length > 0;
     try {
       if (wakes) {
         const wakeReason = heartbeat === "run_tick" ? scheduledReason : undefined;
-        const byTrigger = fired.map((firing) => `"${firing.name}"`).join(", ");
-        this.note("tick_fired", heartbeat === "run_tick" ? "Heartbeat tick fired" : `Woken by trigger ${byTrigger}`, now);
-        const running: LiveHeartbeat = { startedAt: now, reason: wakeReason, news: [], carried: fired.map((firing) => firing.name), userTold: false };
-        this.#heartbeat = running;
-        try {
-          this.#apply(
-            await this.#executor.runHeartbeatTick(this.#character, {
-              wakeReason,
-              fired,
-              scheduleNextWake: (hours, reason) =>
-                this.scheduleNextWake(hours, reason, this.#now()),
-              news: () => running.news.splice(0),
-            }),
-          );
-        } finally {
-          this.#heartbeat = undefined;
-          this.#events?.wakeDone(running.carried);
+        this.note("tick_fired", heartbeat === "run_tick" ? "Heartbeat tick fired" : `Woken by ${firedBy(fired)}`, now);
+        await this.#wake({ startedAt: now, reason: wakeReason, thread: undefined, news: [], firings: [...fired], userTold: false }, async (hooks) =>
+          await this.#executor.runHeartbeatTick(this.#character, { ...hooks, wakeReason, fired }));
+      }
+      for (const thread of inThreads) {
+        const here = due.filter((firing) => firing.thread === thread);
+        const started = this.#now();
+        const lastActive = (): number => this.#userActiveAt.get(thread) ?? Number.NEGATIVE_INFINITY;
+        if (started - lastActive() < WAKE_QUIET_MS) {
+          for (const firing of here) this.#queue(firing);
+          continue;
         }
+        this.note("tick_fired", `Woken in "${thread}" by ${firedBy(here)}`, started);
+        const limitMs = here.find((firing) => firing.limitMs !== undefined)?.limitMs;
+        const interruptedAt = here.find((firing) => firing.interruptedAt !== undefined)?.interruptedAt;
+        await this.#wake({ startedAt: started, reason: undefined, thread, news: [], firings: [...here], userTold: false }, async (hooks) =>
+          await this.#executor.runThreadWake?.(this.#character, { thread, fired: here, limitMs, interruptedAt, interrupted: () => lastActive() >= started }, { ...hooks, wakeReason: undefined, fired: here }) ?? { events: [] });
       }
 
       if (decision.compaction !== undefined) {
@@ -549,6 +592,23 @@ export class CharacterAutonomy {
       deepArchive: decision.deepArchive && !abandoned.includes("deep_archive"),
       abandoned,
     };
+  }
+
+  async #wake(running: LiveHeartbeat, run: (hooks: Pick<TickHooks, "scheduleNextWake" | "news">) => Promise<ThreadWakeResult>): Promise<void> {
+    this.#heartbeat = running;
+    let result: ThreadWakeResult | undefined;
+    try {
+      result = await run({
+        scheduleNextWake: (hours, reason) => this.scheduleNextWake(hours, reason, this.#now()),
+        news: () => running.news.splice(0),
+      });
+      this.#apply(result);
+    } finally {
+      this.#heartbeat = undefined;
+      const stoppedAt = this.#now();
+      if (result?.interrupted === true) for (const firing of running.firings) this.#queue({ ...firing, interruptedAt: stoppedAt });
+      else this.#events?.wakeDone(running.firings.map((firing) => firing.name));
+    }
   }
 
   #apply(result: AutonomyActionResult): void {

@@ -23,6 +23,7 @@ import type { TriggersView } from "../autonomy/trigger_loop.ts";
 import { formatWallClock } from "../engine/prompt.ts";
 import { hostZone } from "../ledger/zoned.ts";
 import { handleStartThread, type StartThreadRequest } from "./start_thread.ts";
+import { handleWakeInThread, type WakeHandOff, type WakeInThreadRequest } from "./wake_in_thread.ts";
 import { handleEditThread, type EditThreadRequest } from "./edit_thread.ts";
 import type { FetchLike } from "./web.ts";
 import type { ToolInput } from "./workspace.ts";
@@ -82,6 +83,8 @@ export interface ToolContext {
   triggers?: () => TriggersView;
 
   push?: (message: string) => Promise<PushOutcome>;
+
+  wakeInThread?: (request: WakeInThreadRequest) => WakeHandOff;
 
   startThread?: (request: StartThreadRequest) => Promise<void>;
 
@@ -146,7 +149,7 @@ export async function dispatchTool(
   input: unknown,
   ctx: ToolContext,
 ): Promise<unknown> {
-  if (ctx.dryRun && (["bash", "edit", "apply_patch", "save_picture", "generate_image", "set_next_wake", "start_thread", "edit_thread"].includes(name) || name.startsWith("mcp__"))) {
+  if (ctx.dryRun && (["bash", "edit", "apply_patch", "save_picture", "generate_image", "set_next_wake", "wake_in_thread", "start_thread", "edit_thread"].includes(name) || name.startsWith("mcp__"))) {
     throw new ToolIoError(`${name} blocked: dry-run tools cannot change files or external state`);
   }
   const args = (input ?? {}) as ToolInput;
@@ -240,6 +243,9 @@ export async function dispatchTool(
       addDiaryNote(ctx.characterDataDir, { at: Date.now(), thread: ctx.thread ?? "", source: "note", text });
       return "Noted in your diary. Your other turns will see it for the next day.";
     }
+
+    case "wake_in_thread":
+      return handleWakeInThread(args, ctx.thread, ctx.wakeInThread, ctx.userName ?? "the user");
 
     case "send_push": {
       const message = typeof args["message"] === "string" ? args["message"].trim() : "";
