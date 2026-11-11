@@ -5,13 +5,13 @@ import { readCharacterState, writeCharacterState } from "../storage/store.ts";
 
 const DIARY_STATE = "diary.json";
 
-const DIARY_NOTE_CHARS = 1500;
+export const DIARY_NOTE_CHARS = 1500;
 
-const DIARY_KEPT = 100;
+export const DIARY_KEPT = 100;
 
-const DIARY_SHOWN = 20;
+export const DIARY_SHOWN = 20;
 
-const DIARY_WINDOW_MS = 86_400_000;
+export const DIARY_WINDOW_MS = 86_400_000;
 
 const SENT = /<sendMessage>[\s\S]*?<\/sendMessage>/g;
 

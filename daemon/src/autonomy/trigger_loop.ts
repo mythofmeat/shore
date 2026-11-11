@@ -9,6 +9,10 @@ const TRIGGER_STATE = "triggers.json";
 
 export const ARRIVAL_CHECK_LIMIT_MS = 10_000;
 
+export function arrivalCheckLimitMs(checkLimitMs: number): number {
+  return Math.min(checkLimitMs, ARRIVAL_CHECK_LIMIT_MS);
+}
+
 export interface TriggerRecord {
   since: number;
   fired: number;
@@ -127,7 +131,7 @@ export class CharacterTriggers {
         const known = state.records[trigger.name] ?? { since: now, fired: 0 };
         if (trigger.when.kind !== "event" || awayMs < trigger.when.afterMs) continue;
         if (coolingDown(trigger.cooldownMs, known.lastFiredAt, now) || !inItsHours(trigger.between, now, this.#deps.timeZone)) continue;
-        await this.#run(trigger, known, settings, Math.min(settings.checkLimitMs, ARRIVAL_CHECK_LIMIT_MS), state);
+        await this.#run(trigger, known, settings, arrivalCheckLimitMs(settings.checkLimitMs), state);
       }
       this.#save(state);
     });

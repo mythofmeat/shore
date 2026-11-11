@@ -86,6 +86,8 @@ export interface ToolContext {
 
   push?: (message: string) => Promise<PushOutcome>;
 
+  guide?: (input: ToolInput) => string;
+
   wakeInThread?: (request: WakeInThreadRequest) => WakeHandOff;
 
   startThread?: (request: StartThreadRequest) => Promise<void>;
@@ -266,6 +268,10 @@ export async function dispatchTool(
       }
       return `Sent to ${user}'s phone. The next push is allowed from ${next}.`;
     }
+
+    case "guide":
+      if (ctx.guide === undefined) throw new ToolIoError("the guide is not available in this context");
+      return ctx.guide(args);
 
     default: {
       if (name.startsWith("ask_")) {

@@ -12,6 +12,7 @@ import listTriggersDesc from "../../prompts/tools/autonomy/list_triggers.md" wit
 import wakeInThreadDesc from "../../prompts/tools/autonomy/wake_in_thread.md" with { type: "text" };
 import writeDiaryDesc from "../../prompts/tools/autonomy/write_diary.md" with { type: "text" };
 import sendPushDesc from "../../prompts/tools/autonomy/send_push.md" with { type: "text" };
+import guideDesc from "../../prompts/tools/guide.md" with { type: "text" };
 import listThreadsDesc from "../../prompts/tools/threads/list_threads.md" with { type: "text" };
 import startSealedThreadDesc from "../../prompts/tools/threads/start_sealed_thread.md" with { type: "text" };
 import startThreadDesc from "../../prompts/tools/threads/start_thread.md" with { type: "text" };
@@ -337,6 +338,17 @@ export const ALL_TOOLS: readonly ToolDef[] = Object.freeze([
       additionalProperties: false,
     },
   },
+  {
+    name: "guide",
+    description: stripOneTrailingNewline(guideDesc),
+    parameters: {
+      type: "object",
+      properties: {
+        topic: { type: "string", description: "The topic to read, by the name the list gives it. Leave it out for the list." },
+      },
+      additionalProperties: false,
+    },
+  },
 ]);
 
 export { toolPatternMatches };
@@ -358,14 +370,12 @@ export function templateVars(charName: string, userName: string): Map<string, st
 }
 
 export interface WakeToolNotes {
-  readonly defers?: boolean;
   readonly reasonShown?: boolean;
 }
 
 export function toolTemplateVars(cfg: ToolsConfigView, charName: string, userName: string, wake: WakeToolNotes = {}): Map<string, string> {
   const vars = templateVars(charName, userName);
   for (const tool of availableTools(cfg)) vars.set(tool.name, tool.name);
-  vars.set(wake.defers === true ? "wake_defers" : "wake_stays", "yes");
   vars.set(wake.reasonShown === true ? "wake_reason_shown" : "wake_reason_logged", "yes");
   return vars;
 }

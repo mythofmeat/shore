@@ -420,7 +420,7 @@ test("heartbeats and compaction keep the reasoning effort set for each on chat's
 });
 
 test("with defer_on_activity, each message and the end of each reply push the next heartbeat to min_interval after them, in a side thread too", async () => {
-  await withCharacter(async ({ runtime, script, say }) => {
+  await withCharacter(async ({ runtime, script, say, command }) => {
     const wake = (): number | undefined => runtime.autonomy.status("ada")?.next_wake_at;
     await say("hello");
     await runtime.autonomy.tick();
@@ -441,7 +441,7 @@ test("with defer_on_activity, each message and the end of each reply push the ne
     held.release.resolve();
     await replying;
     expect(wake()).toBe(T0 + 140 * MINUTE);
-    expect(wakeTool(script.replies[0]).description).toMatch(/A later call replaces the earlier schedule\. Each message from \S+, and the end of each reply to one, pushes it to at least the minimum interval later\.\n/);
+    expect(JSON.stringify(await command("run_tool", { tool: "guide", input: { topic: "wakes" } }))).toMatch(/- Each message from \S+, in any thread, and the end of each reply to one, pushes the next heartbeat to at least 1h later\. It never brings it closer\./);
   }, (app) => {
     app.behavior.autonomy.heartbeat.defer_on_activity = true;
   });
@@ -636,15 +636,17 @@ test("a heartbeat starts with the reason its set_next_wake call gave, word for w
 test("a reason given in a chat reply waits for its heartbeat through later messages and a restart, and a later call replaces it", async () => {
   const root = await mkdtemp(testTmp("shore-wake-reason-"));
   at(0);
-  await withCharacter(async ({ runtime, script, say }) => {
+  await withCharacter(async ({ runtime, script, say, command }) => {
     script.replyWake = { hours_from_now: 2, reason: "an earlier plan" };
     await say("goodnight");
     script.replyWake = { hours_from_now: 4, reason: "ask how the interview went" };
     await say("actually, the interview is tomorrow");
     expect(runtime.autonomy.status("ada")?.next_wake_at).toBe(T0 + 240 * MINUTE);
-    expect(script.replies.map((request) => wakeTool(request).description).every((text) => text.includes("that heartbeat shows it to you when it starts"))).toBe(true);
-    expect(wakeTool(script.replies[0]).description).toMatch(/A later call replaces the earlier schedule\. Messages from \S+ don't move it\.\n/);
-    expect(wakeTool(script.replies[0]).reason).toBe("A note to yourself for that heartbeat, which shows it to you when it starts. Also recorded in the heartbeat log.");
+    expect(script.replies.map((request) => wakeTool(request).reason)).toEqual(Array.from(script.replies, () => "A note to yourself for that heartbeat, which shows it to you when it starts. Also recorded in the heartbeat log."));
+    expect(wakeTool(script.replies[0]).description).toContain("A later call replaces the earlier schedule, and the result says how many hours were actually scheduled.");
+    const guide = JSON.stringify(await command("run_tool", { tool: "guide", input: { topic: "wakes" } }));
+    expect(guide).toMatch(/- Messages from \S+ don't move the next heartbeat\./);
+    expect(guide).toContain("The `reason` you give `set_next_wake` is shown to you when that heartbeat starts, word for word.");
   }, undefined, root);
 
   at(60);
@@ -686,9 +688,8 @@ test("a character whose own heartbeat.md leaves the reason out is told set_next_
     script.replyWake = { hours_from_now: 2, reason: "look in on the bees" };
     await say("hello");
     const offered = wakeTool(script.replies[0]);
-    expect(offered.description).toContain("`reason` is recorded in the heartbeat log next to the scheduled time. That heartbeat doesn't show it to you, so a note for it belongs in `HEARTBEAT.md`.");
-    expect(offered.description).not.toContain("shows it to you");
     expect(offered.reason).toBe("Why this time. Recorded in the heartbeat log. That heartbeat doesn't show it to you.");
+    expect(JSON.stringify(await command("run_tool", { tool: "guide", input: { topic: "wakes" } }))).toContain("The `reason` you give `set_next_wake` is only kept in the heartbeat log. That heartbeat doesn't show it to you, so leave a note for it in a file or in your diary.");
     at(10);
     await heartbeat();
     expect(textOf(script.heartbeats[0] as SidecarRequest)).toContain("PM. You left a note.]");
@@ -696,8 +697,7 @@ test("a character whose own heartbeat.md leaves the reason out is told set_next_
 
     await writeFile(join(prompts, "heartbeat.md"), "[Private turn. {{wake_reason}}]");
     const described = await command("run_tool", { tool: "set_next_wake", describe: true });
-    expect(JSON.stringify(described)).toContain("A note to yourself for that heartbeat");
-    expect(JSON.stringify(described)).toContain("that heartbeat shows it to you when it starts");
+    expect(JSON.stringify(described)).toContain("A note to yourself for that heartbeat, which shows it to you when it starts.");
     expect(JSON.stringify(described)).not.toContain("{{");
     script.heartbeats.length = 0;
     at(20);

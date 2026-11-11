@@ -19,6 +19,8 @@ import { historyIndexPath } from "../memory/history_index.ts";
 import { resolveDisplayName } from "../config/app.ts";
 import { characterWorkspace } from "../tools/character_workspace.ts";
 import type { ToolContext } from "../tools/dispatch.ts";
+import { guideValues, readGuide } from "../tools/guide.ts";
+import { ALL_TOOLS, toolEnabled } from "../tools/registry.ts";
 import type { ActivityStatsLookup } from "../tools/activity.ts";
 import type { McpRegistry } from "../tools/mcp_registry.ts";
 import type { Message } from "../engine/types.ts";
@@ -92,6 +94,7 @@ export async function buildToolContext(
   const sealThread = deps.sealThread;
   const editThread = deps.editThread;
   const subagentsConfigured = config.app.subagents.size > 0;
+  const userName = resolveDisplayName(config.app.defaults);
 
   const ctx: ToolContext = {
     thread: deps.thread ?? MAIN_THREAD,
@@ -110,7 +113,8 @@ export async function buildToolContext(
     characterName: charName,
     configDir,
     historyIndexPath: historyIndexPath(config.dirs.cache, charName),
-    userName: resolveDisplayName(config.app.defaults),
+    userName,
+    guide: (input) => readGuide(input, guideValues(config, charName, userName), ALL_TOOLS.map((tool) => ({ name: tool.name, enabled: toolEnabled(config.app.tools, tool.name) }))),
     ...("ok" in imageGen ? { imageGenConfig: imageGen.ok } : {}),
     ...(deps.imageGenerator === undefined ? {} : { imageGenerator: deps.imageGenerator }),
     ...(deps.modelHistoryQuery === undefined ? {} : { modelHistoryQuery: deps.modelHistoryQuery }),
