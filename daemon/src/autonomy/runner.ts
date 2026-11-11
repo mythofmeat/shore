@@ -109,6 +109,10 @@ export interface OpenedSeal {
   readonly reason: string;
 }
 
+export type WakeRequest =
+  | { readonly kind: "queued"; readonly replaced: TriggerFiring | undefined }
+  | { readonly kind: "waiting"; readonly waiting: TriggerFiring };
+
 export const WAKE_QUIET_MS = 10 * 60_000;
 
 export function firedBy(firings: readonly TriggerFiring[]): string {
@@ -325,6 +329,15 @@ export class CharacterAutonomy {
     }
     this.#queue(firing);
     return "queued";
+  }
+
+  requestWake(firing: TriggerFiring, overwrite: boolean): WakeRequest {
+    const asked = (other: TriggerFiring): boolean => other.from !== undefined && other.thread === firing.thread;
+    const waiting = this.#fired.find(asked);
+    if (waiting !== undefined && !overwrite) return { kind: "waiting", waiting };
+    this.#fired.splice(0, this.#fired.length, ...this.#fired.filter((other) => !asked(other)));
+    this.#queue(firing);
+    return { kind: "queued", replaced: waiting };
   }
 
   #queue(firing: TriggerFiring): void {

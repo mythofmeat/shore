@@ -244,7 +244,7 @@ export async function createRuntime(options: RuntimeOptions): Promise<ShoreRunti
           activityStats: (character, localAt, days) => autonomy.activityStats(character, localAt, days),
           heartbeatsRunning: (character) => autonomy.heartbeatsRunning(character),
           scheduleNextWake: (character, hours, reason) => autonomy.scheduleNextWake(character, hours, reason),
-          wakeFor: (character, firing) => autonomy.wakeFor(character, firing),
+          requestWake: (character, firing, overwrite) => autonomy.requestWake(character, firing, overwrite),
         }, {
           providers,
           registry,
@@ -486,7 +486,7 @@ export interface SubagentToolDeps {
 export function sharedToolDeps(
   config: LoadedConfig,
   mcp: McpHolder,
-  autonomy: Pick<AutonomyService, "activityStats" | "heartbeatsRunning" | "scheduleNextWake" | "wakeFor">,
+  autonomy: Pick<AutonomyService, "activityStats" | "heartbeatsRunning" | "scheduleNextWake" | "requestWake">,
   subagent?: SubagentToolDeps,
   triggers?: Pick<TriggerService, "view">,
 ): ToolContextDeps {
@@ -520,8 +520,8 @@ export function sharedToolDeps(
         if (request.thread === registry.heartbeatThread(character) || !known) return { kind: "no_thread" };
         const most = registry.effectiveConfig(character).app.behavior.autonomy.triggers.max_wake_limit.asMillis();
         const limitMs = request.limitMs === undefined ? undefined : Math.min(request.limitMs, most);
-        autonomy.wakeFor(character, { name: "", from, reason: request.reason, at: Date.now(), thread: request.thread, limitMs });
-        return { kind: "queued", limitMs };
+        const asked = autonomy.requestWake(character, { name: "", from, reason: request.reason, at: Date.now(), thread: request.thread, limitMs }, request.overwrite);
+        return asked.kind === "waiting" ? asked : { kind: "queued", limitMs, replaced: asked.replaced };
       },
       sealThread: async (character, request) => {
         const { sealed, filesDir } = await startSealedThread(subagent.registry, character, request);

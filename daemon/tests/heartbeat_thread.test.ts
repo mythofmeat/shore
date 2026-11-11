@@ -1959,6 +1959,53 @@ test("a hand-off is refused for a thread the character doesn't have, the one it 
   }, handOff());
 });
 
+test("a second wake asked for in a thread is refused while the first is still waiting and says what is waiting, and with overwrite it takes the first one's place", async () => {
+  await withCharacter(async ({ runtime, script, say, thread }) => {
+    await runtime.registry.createThread("ada", "ring");
+    await runtime.registry.createThread("ada", "garden");
+    await say("hello");
+    const ask = async (input: Record<string, unknown>): Promise<{ text: unknown; failed: boolean } | undefined> => {
+      script.replyTool = { name: "wake_in_thread", input };
+      await say("go on");
+      return lastToolResult(await thread("main"));
+    };
+    const granted = (where: string, length = "30 minutes"): string => `Shore will wake you in "${where}" for up to ${length}, once this turn is over and peggy has been quiet there for 10 minutes.`;
+    const waiting = 'asked for from "main" at Friday 2026-10-30 · 12:20 PM: Tell part two.';
+    at(19);
+    expect(runtime.autonomy.wakeFor("ada", { name: "show", reason: "show is due", at: T0 + 19 * MINUTE, thread: "ring" })).toBe("queued");
+    at(20);
+    expect(await ask({ thread: "ring", reason: "Tell part two." })).toEqual({ text: granted("ring"), failed: false });
+    expect(await ask({ thread: "garden", reason: "Water the beans.", overwrite: true })).toEqual({ text: granted("garden"), failed: false });
+
+    at(21);
+    expect(await ask({ thread: "ring", reason: "Tell part three." })).toEqual({
+      text: `io: you already have a wake waiting in "ring", ${waiting}\nNothing was changed. To put this one in its place, call again with \`overwrite\` set to true.`, failed: true,
+    });
+    expect(await ask({ thread: "ring", reason: "Tell part three.", overwrite: "yes" })).toMatchObject({ failed: true });
+    at(22);
+    expect(await ask({ thread: "ring", reason: "Tell part three.", limit: "1h", overwrite: true })).toEqual({
+      text: `${granted("ring", "1 hour")}\nThis takes the place of the wake you had waiting there, ${waiting}`, failed: false,
+    });
+
+    script.closing = "HEARTBEAT_OK";
+    at(40);
+    await runtime.autonomy.tick();
+    expect(script.heartbeats.map((request) => request.context?.thread)).toEqual(["ring", "ring", "garden", "garden"]);
+    const ring = turnsOf(script.heartbeats[0]).at(-1)?.[1] ?? "";
+    expect(ring).toStartWith([
+      "[wake]",
+      '[Your trigger "show" fired at Friday 2026-10-30 · 12:19 PM: show is due]',
+      '[You asked for this wake from "main" at Friday 2026-10-30 · 12:22 PM: Tell part three.]',
+      "[Current time: ",
+    ].join("\n\n"));
+    expect(ring).not.toContain("Tell part two.");
+    expect(turnsOf(script.heartbeats[2]).at(-1)?.[1]).toStartWith('[wake]\n\n[You asked for this wake from "main" at Friday 2026-10-30 · 12:20 PM: Water the beans.]\n\n[Current time: ');
+
+    at(41);
+    expect(await ask({ thread: "ring", reason: "And once more." })).toEqual({ text: granted("ring"), failed: false });
+  }, handOff());
+});
+
 test("a hand-off is refused when the character's heartbeats aren't running", async () => {
   await withCharacter(async ({ script, say, thread, runtime }) => {
     await runtime.registry.createThread("ada", "ring");
@@ -2076,7 +2123,7 @@ test("a wake in a thread takes in what fires for that thread while it runs, leav
   });
 });
 
-test("a wake asked for in a thread where one is running waits for it to end and starts as its own, opening with every reason asked for and running to the longest limit asked for", async () => {
+test("what is waiting for a thread where a wake is running starts together once that wake is over, as one wake that opens with each reason and runs to the longest limit, a repeat counted once", async () => {
   await withCharacter(async ({ runtime, script, say }) => {
     const asked = (reason: string, minutes: number, limitMs: number) => ({ name: "", from: "main", reason, at: T0 + minutes * MINUTE, thread: "ring", limitMs });
     const show = (reason: string, minutes: number) => ({ name: "show", reason, at: T0 + minutes * MINUTE, thread: "ring" });

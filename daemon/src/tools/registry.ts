@@ -321,6 +321,7 @@ export const ALL_TOOLS: readonly ToolDef[] = Object.freeze([
         thread: { type: "string", minLength: 1, maxLength: 64, description: "Id of the thread to be woken in, as `list_threads` shows it." },
         reason: { type: "string", minLength: 1, description: "What the wake is for. Shown to you when it starts." },
         limit: { type: "string", description: 'How long the wake may run, like "45m" or "2h". Defaults to 30 minutes.' },
+        overwrite: { type: "boolean", description: "Put this wake in the place of one you already asked for in that thread and that hasn't started. Without it, a second request is refused." },
       },
       required: ["thread", "reason"],
       additionalProperties: false,
