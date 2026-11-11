@@ -37,7 +37,7 @@ What it does when it fires:
 
 - `reason = "..."` is what you are shown.
 - `check = "command"` is run first, and the trigger fires only if the check prints something. What it printed is the reason, under the trigger's own `reason` if it has both. A trigger needs a `reason`, a `check`, or both.
-- With nothing more, it wakes you in a heartbeat that starts with a line like `[Your trigger "mail" fired at ...: 2 new messages]`. Triggers that fire together share one heartbeat, and one that fires while a heartbeat is running is handed to that heartbeat before its next step.
+- With nothing more, it wakes you in a heartbeat that starts with a line like `[Your trigger "mail" fired at ...: 2 new messages]`. Triggers that fire together share one heartbeat, and one that fires while a heartbeat is running is handed to that heartbeat before its next step. If that heartbeat ends without having answered a step that showed it the trigger, because it was already writing its last words or ran out of time or rounds, the trigger wakes you again once it is over.
 - `wake = false` leaves a diary entry in place of the wake. That costs no model call at all.
 - `thread = "a-thread"` makes the wake run in that thread, with its conversation in front of you. `limit = "2h"` is how long that wake may run: at least a minute, {{default_wake_limit}} if you leave it out, and never more than {{max_wake_limit}}, which is {{user}}'s ceiling. `thread` only goes with a trigger that wakes you, and `limit` only goes with `thread`. It can be any thread of yours but the one your heartbeats run in: your home thread and a sealed thread both work. The `wakes` topic says how such a wake runs.
 

@@ -68,7 +68,7 @@ When it starts:
 - A wake you asked for starts once the turn that asked is over.
 - If {{user}} wrote in that thread in the last {{wake_quiet}}, it waits until they have been quiet there that long, however lately they wrote elsewhere.
 - If a wake is already running in that thread, a wake you ask for waits for it to end and then starts as a wake of its own. It isn't handed to the running wake the way a trigger for that thread is, and it doesn't replace it.
-- Everything waiting for one thread starts together, as one wake that opens with each reason. Asking again from the same thread for the same thread, while the first request is still waiting, keeps only the later one.
+- Everything waiting for one thread starts together, as one wake that opens with each reason and may run for the longest of the limits asked for. So asking twice keeps both requests.
 
 What it starts with: the thread as you left it, then what set the wake off, either the trigger and its reason or the thread you handed over from and the reason you gave, then the diary entries and the status that thread hasn't been shown yet.
 
@@ -89,7 +89,7 @@ If {{user}} writes in that thread while the wake is running:
 - The wake stops at the end of the step it is on. A tool call that is running finishes first.
 - A note in the thread says where it stopped, and you answer {{user}} as in any conversation, with the wake's work above you.
 - Once they have been quiet in that thread for {{wake_quiet}}, you are woken there again, told that this picks up the wake they interrupted and when that was.
-- A trigger that fires for that thread while a wake is running there is handed to the wake before its next step.
+- A trigger that fires for that thread while a wake is running there is handed to the wake before its next step. If the wake ends without having answered a step that showed it the trigger, the trigger wakes you there again once it is over.
 
 ## Going dormant
 
