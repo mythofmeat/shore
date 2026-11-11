@@ -42,7 +42,7 @@ export const DREAM_LOOP_CALL_TYPE = "dreaming_tool_loop";
 
 const DREAM_NOTES_FILE = "DREAMS.md";
 
-const LEFT_OUT_TOOLS = new Set(["set_next_wake", "list_triggers", "write_diary", "send_push", "start_thread", "edit_thread", "list_threads", "generate_image", "save_picture"]);
+const LEFT_OUT_TOOLS = new Set(["set_next_wake", "wake_in_thread", "list_triggers", "write_diary", "send_push", "start_thread", "edit_thread", "list_threads", "generate_image", "save_picture"]);
 
 const MOST_READ = 15;
 

@@ -36,7 +36,7 @@ async function world(file: string | undefined, dir?: string): Promise<World> {
     now: T0,
     file,
     unreadable: false,
-    settings: { enabled: true, wakeCooldownMs: HOUR, checkLimitMs: 60_000, off: [] as string[] },
+    settings: { enabled: true, wakeCooldownMs: HOUR, checkLimitMs: 60_000, maxWakeLimitMs: 2 * HOUR, off: [] as string[] },
     dormant: false,
     lastUserAt: undefined,
     checks: {},
@@ -478,4 +478,21 @@ test("a one-off fires once at its time, late if Shore wasn't looking then, and n
   await w.at(3 * 24 * 60);
   expect(w.woke).toHaveLength(1);
   expect(w.triggers.view().triggers.map((each) => [each.fired, each.nextAt])).toEqual([[1, undefined], [0, undefined]]);
+});
+
+test("a firing says which thread to wake the character in, with the limit it asked for held to the user's ceiling", async () => {
+  const w = await world([
+    '[show]\nevery = "1h"\nreason = "The show."\nthread = "ring"\nlimit = "90m"\n',
+    '[long]\nevery = "1h"\nreason = "A long sit."\nthread = "bench"\nlimit = "6h"\n',
+    '[walk]\nevery = "1h"\nreason = "A walk."\nthread = "garden"\n',
+    '[lamp]\nevery = "1h"\nreason = "Trim the lamp."\n',
+  ].join("\n"));
+  await w.at(0);
+  await w.at(60);
+  expect(w.woke).toEqual([
+    { name: "show", reason: "The show.", at: T0 + HOUR, thread: "ring", limitMs: 90 * MINUTE },
+    { name: "long", reason: "A long sit.", at: T0 + HOUR, thread: "bench", limitMs: 2 * HOUR },
+    { name: "walk", reason: "A walk.", at: T0 + HOUR, thread: "garden" },
+    { name: "lamp", reason: "Trim the lamp.", at: T0 + HOUR },
+  ]);
 });

@@ -33,13 +33,15 @@ function whenPhrase(when: TriggerWhen, userName: string, timeZone: string): stri
 function described(each: TriggerView, userName: string, timeZone: string): string {
   const { trigger } = each;
   const arrives = trigger.when.kind === "event" && trigger.when.event === "user_back";
-  const does = arrives ? `arrives with ${userName}'s message` : trigger.wakes ? "wakes you" : "leaves a diary entry";
+  const where = trigger.thread === undefined ? "wakes you" : `wakes you in "${trigger.thread}"`;
+  const does = arrives ? `arrives with ${userName}'s message` : trigger.wakes ? where : "leaves a diary entry";
   const parts = [
     whenPhrase(trigger.when, userName, timeZone),
     ...(trigger.check === undefined ? [] : [`if \`${trigger.check}\` prints`]),
     does,
     ...(trigger.reason === undefined ? [] : [`"${trigger.reason}"`]),
     ...(trigger.between === undefined ? [] : [`only ${clock(trigger.between.startMinute)}-${clock(trigger.between.endMinute)}`]),
+    ...(trigger.limitMs === undefined ? [] : [`for up to ${length(trigger.limitMs)}`]),
     ...(trigger.cooldownMs === 0 ? [] : [`at most every ${length(trigger.cooldownMs)}`]),
   ];
   const status = [

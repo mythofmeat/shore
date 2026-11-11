@@ -18,7 +18,7 @@ import { conversation, errorText, perform, streamReplies, workspace } from "../a
 import { activityHeadline, blockViews, bodyItems, chatLogMessageId, formatToolInput, isChatLogTool, messageCopyLabel, swipeState, timeLabel, toolSummary, type BlockView, type StepView } from "./transcript.ts";
 import { showWorkspaceNote, swipe as swipeTo } from "./actions.ts";
 
-const HEARTBEAT_OPENER = "[heartbeat]";
+const OPENERS: readonly (readonly [prefix: string, label: string])[] = [["[heartbeat]", "Heartbeat"], ["[wake]", "Wake"]];
 
 function truncatedLine(text: string): string {
   const line = Array.from(text.trim().split("\n")[0] ?? "");
@@ -263,12 +263,12 @@ export const MessageRow = memo(function MessageRow({ message, character, avatar,
   const regenerate = () => { void conversation.regenerate(undefined, streamReplies()).catch((error: unknown) => toasts.show(errorText(error), "error")); };
   const reply = last ? assistant ? { label: "Regenerate", icon: "regenerate" as const } : { label: "Generate reply", icon: "send" as const } : undefined;
   if (message.origin === "autonomous" && !assistant) {
-    const opener = message.role === "user" && message.content.startsWith(HEARTBEAT_OPENER);
+    const opener = message.role === "user" ? OPENERS.find(([prefix]) => message.content.startsWith(prefix)) : undefined;
     const when = timeLabel(message.timestamp);
-    const summary = opener ? when === "" ? "Heartbeat" : `Heartbeat · ${when}` : truncatedLine(message.content);
+    const summary = opener === undefined ? truncatedLine(message.content) : when === "" ? opener[1] : `${opener[1]} · ${when}`;
     return <details className="system-note heartbeat-note">
       <summary>{summary}</summary>
-      <Markdown text={opener ? message.content.slice(HEARTBEAT_OPENER.length).trim() : message.content} />
+      <Markdown text={opener === undefined ? message.content : message.content.slice(opener[0].length).trim()} />
     </details>;
   }
   if (message.role === "system") return <div className="system-note"><Markdown text={message.content} /></div>;

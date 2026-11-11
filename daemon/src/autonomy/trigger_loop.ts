@@ -27,6 +27,7 @@ export interface TriggerSettings {
   enabled: boolean;
   wakeCooldownMs: number;
   checkLimitMs: number;
+  maxWakeLimitMs: number;
   off: readonly string[];
 }
 
@@ -108,7 +109,7 @@ export class CharacterTriggers {
         const { pending: _was, quietFor: _before, ...kept } = known;
         const next: TriggerRecord = { ...kept, since: now, ...(last === undefined ? {} : { quietFor: last }) };
         state.records[trigger.name] = next;
-        if (!resting && inItsHours(trigger.between, now, this.#deps.timeZone)) await this.#run(trigger, next, settings.checkLimitMs, state);
+        if (!resting && inItsHours(trigger.between, now, this.#deps.timeZone)) await this.#run(trigger, next, settings, settings.checkLimitMs, state);
       }
       this.#save(state);
     });
@@ -126,7 +127,7 @@ export class CharacterTriggers {
         const known = state.records[trigger.name] ?? { since: now, fired: 0 };
         if (trigger.when.kind !== "event" || awayMs < trigger.when.afterMs) continue;
         if (coolingDown(trigger.cooldownMs, known.lastFiredAt, now) || !inItsHours(trigger.between, now, this.#deps.timeZone)) continue;
-        await this.#run(trigger, known, Math.min(settings.checkLimitMs, ARRIVAL_CHECK_LIMIT_MS), state);
+        await this.#run(trigger, known, settings, Math.min(settings.checkLimitMs, ARRIVAL_CHECK_LIMIT_MS), state);
       }
       this.#save(state);
     });
@@ -232,7 +233,7 @@ export class CharacterTriggers {
     return at === undefined ? known.pending === true : now >= at;
   }
 
-  async #run(trigger: Trigger, known: TriggerRecord, limitMs: number, state: TriggerState): Promise<void> {
+  async #run(trigger: Trigger, known: TriggerRecord, settings: TriggerSettings, limitMs: number, state: TriggerState): Promise<void> {
     const outcome: CheckOutcome = trigger.check === undefined ? { kind: "fired", output: "" } : await this.#deps.runCheck(trigger, limitMs);
     const { failing: wasFailing, ...sound } = known;
     if (outcome.kind === "failed") {
@@ -248,7 +249,11 @@ export class CharacterTriggers {
     const reason = [trigger.reason ?? "", outcome.output].filter((part) => part !== "").join("\n");
     state.records[trigger.name] = { ...sound, fired: sound.fired + 1, lastFiredAt: now };
     if (trigger.wakes) {
-      this.#deps.wake({ name: trigger.name, reason, at: now });
+      this.#deps.wake({
+        name: trigger.name, reason, at: now,
+        ...(trigger.thread === undefined ? {} : { thread: trigger.thread }),
+        ...(trigger.limitMs === undefined ? {} : { limitMs: Math.min(trigger.limitMs, settings.maxWakeLimitMs) }),
+      });
       return;
     }
     addDiaryNote(this.#deps.characterDir, { at: now, thread: "", source: "trigger", trigger: trigger.name, text: reason });

@@ -1,5 +1,6 @@
 import { afterAll, expect, test } from "bun:test";
 import { readThreadsIndex } from "../src/engine/threads.ts";
+import { handleListThreads } from "../src/tools/list_threads.ts";
 import type { GenerateResponse, SidecarProvider, SidecarRequest } from "../src/llm/types.ts";
 import type { ServerMessage } from "../src/protocol/ServerMessage.ts";
 import { eventsForResponse } from "./support/stream.ts";
@@ -10,16 +11,17 @@ const KEY_ENV = "SHORE_HEARTBEAT_START_THREAD_KEY";
 
 afterAll(restoreTestEnv);
 
-function threadToolsProvider(toolResults: string[]): SidecarProvider {
-  const calls: GenerateResponse["content_blocks"] = [
-    {
-      type: "tool_use",
-      id: "start",
-      name: "start_thread",
-      input: { name: "lighthouse", label: "The lighthouse story", opening: "The lamp was already lit when we got there." },
-    },
-    { type: "tool_use", id: "edit", name: "edit_thread", input: { name: "lighthouse", purpose: "The keeper's winter, a chapter at a time." } },
-  ];
+const START_AND_EDIT: GenerateResponse["content_blocks"] = [
+  {
+    type: "tool_use",
+    id: "start",
+    name: "start_thread",
+    input: { name: "lighthouse", label: "The lighthouse story", opening: "The lamp was already lit when we got there." },
+  },
+  { type: "tool_use", id: "edit", name: "edit_thread", input: { name: "lighthouse", purpose: "The keeper's winter, a chapter at a time." } },
+];
+
+function threadToolsProvider(toolResults: string[], calls: GenerateResponse["content_blocks"] = START_AND_EDIT): SidecarProvider {
   const reply = (request: SidecarRequest): GenerateResponse => {
     const heartbeat = request.context?.call_type.startsWith("heartbeat") === true;
     const tail = request.messages.at(-1)?.content;
@@ -73,5 +75,42 @@ test("a thread started and edited on a heartbeat opens with her message, takes t
       { type: "threads_changed", character: "ada", thread: "lighthouse" },
       { type: "threads_changed", character: "ada", thread: "lighthouse" },
     ]);
+  });
+});
+
+test("a thread started with a folder goes in that folder of the user's thread list, which is made if it isn't there, and a folder name that can't be used starts nothing", async () => {
+  const toolResults: string[] = [];
+  const start = (id: string, name: string, folder: string): GenerateResponse["content_blocks"][number] => ({
+    type: "tool_use", id, name: "start_thread", input: { name, label: name, folder },
+  });
+  await afterFirstChat({
+    name: "start-thread-folder",
+    keyEnv: KEY_ENV,
+    provider: threadToolsProvider(toolResults, [
+      start("a", "lighthouse", " Projects "),
+      start("b", "harbor", "projects"),
+      start("c", "quay", "p".repeat(65)),
+      start("d", "pier", "Stories"),
+    ]),
+    tools: ["start_thread"],
+    autonomy: true,
+    model: { maxToolIterations: 5 },
+  }, async ({ config, runtime }) => {
+    expect(runtime.autonomy.forceHeartbeatNow("ada")).toBeDefined();
+    await runtime.autonomy.tick();
+
+    expect(toolResults.map((result) => (JSON.parse(result) as { content: string }).content)).toEqual([
+      'Started the thread "lighthouse" (lighthouse). It\'s in the "Projects" folder of peggy\'s thread list, and peggy decides when to switch to it; you\'re still in this thread.',
+      'Started the thread "harbor" (harbor). It\'s in the "projects" folder of peggy\'s thread list, and peggy decides when to switch to it; you\'re still in this thread.',
+      "io: a folder name can be at most 64 characters",
+      'Started the thread "pier" (pier). It\'s in the "Stories" folder of peggy\'s thread list, and peggy decides when to switch to it; you\'re still in this thread.',
+    ]);
+    const index = await readThreadsIndex(config.dirs.data, "ada");
+    expect(index?.folders).toEqual([{ name: "Projects", threads: ["lighthouse", "harbor"] }, { name: "Stories", threads: ["pier"] }]);
+    expect(index?.threads.map((thread) => thread.id)).toEqual(["main", "heartbeat", "lighthouse", "harbor", "pier"]);
+    const listed = await handleListThreads({ dataDir: config.dirs.data, character: "ada", userName: "peggy", timeZone: "UTC" });
+    expect(listed).toContain('harbor "harbor" (in the folder "Projects") · compaction on');
+    expect(listed).toContain('pier "pier" (in the folder "Stories") · compaction on');
+    expect(listed).toContain("main (home, you're here) · compaction on");
   });
 });

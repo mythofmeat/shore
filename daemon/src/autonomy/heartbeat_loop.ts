@@ -59,6 +59,7 @@ export interface HeartbeatLoopDeps {
   wrapUpText?: (msLeft: number, rounds: number) => string;
   callTypes?: readonly [string, string];
   name?: string;
+  interrupted?: () => boolean;
 }
 
 export interface HeartbeatLoopResult {
@@ -67,7 +68,7 @@ export interface HeartbeatLoopResult {
   failedRound?: number | undefined;
   failure?: unknown;
   timedOut?: boolean;
-  stoppedAt?: "time" | "rounds";
+  stoppedAt?: "time" | "rounds" | "interrupted";
   usage?: Usage;
 }
 
@@ -190,6 +191,10 @@ export async function runHeartbeatToolLoop(
     messages: [],
     parallel: false,
     beforeTurn: async (call) => {
+      if (deps.interrupted?.() === true) {
+        result.stoppedAt = "interrupted";
+        throw new ToolLoopStop();
+      }
       const news = deps.news?.();
       if (news !== undefined) {
         appendWrapUpNudge(call.messages, news);

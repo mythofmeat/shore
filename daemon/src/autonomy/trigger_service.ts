@@ -105,6 +105,7 @@ export class TriggerService {
           enabled: settings.enabled && settings.triggers.enabled,
           wakeCooldownMs: settings.triggers.wake_cooldown.asMillis(),
           checkLimitMs: settings.triggers.check_time_limit.asMillis(),
+          maxWakeLimitMs: settings.triggers.max_wake_limit.asMillis(),
           off: settings.triggers.off,
         };
       },

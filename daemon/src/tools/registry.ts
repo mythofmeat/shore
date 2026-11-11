@@ -9,6 +9,7 @@ import bashDesc from "../../prompts/tools/bash.md" with { type: "text" };
 import activityHeatmapDesc from "../../prompts/tools/activity/activity_heatmap.md" with { type: "text" };
 import setNextWakeDesc from "../../prompts/tools/autonomy/set_next_wake.md" with { type: "text" };
 import listTriggersDesc from "../../prompts/tools/autonomy/list_triggers.md" with { type: "text" };
+import wakeInThreadDesc from "../../prompts/tools/autonomy/wake_in_thread.md" with { type: "text" };
 import writeDiaryDesc from "../../prompts/tools/autonomy/write_diary.md" with { type: "text" };
 import sendPushDesc from "../../prompts/tools/autonomy/send_push.md" with { type: "text" };
 import listThreadsDesc from "../../prompts/tools/threads/list_threads.md" with { type: "text" };
@@ -232,6 +233,7 @@ export const ALL_TOOLS: readonly ToolDef[] = Object.freeze([
         purpose: { type: "string", description: "A line or two on what the thread is for." },
         files: { type: "array", items: { type: "string" }, description: "Files to keep in the thread's prompt: paths relative to the workspace root, or links like `[[notes]]` and `[[lighthouse/]]`." },
         opening: { type: "string", description: "Your first message in the new thread." },
+        folder: { type: "string", description: "Folder in the thread list to put the thread in, such as `Projects`. It is made if there isn't one by that name." },
       },
       required: ["name", "label"],
       additionalProperties: false,
@@ -291,6 +293,20 @@ export const ALL_TOOLS: readonly ToolDef[] = Object.freeze([
         text: { type: "string", minLength: 1, description: "The note, in your own words, for a turn of yours that has none of this conversation in front of it." },
       },
       required: ["text"],
+      additionalProperties: false,
+    },
+  },
+  {
+    name: "wake_in_thread",
+    description: stripOneTrailingNewline(wakeInThreadDesc),
+    parameters: {
+      type: "object",
+      properties: {
+        thread: { type: "string", minLength: 1, maxLength: 64, description: "Id of the thread to be woken in, as `list_threads` shows it." },
+        reason: { type: "string", minLength: 1, description: "What the wake is for. Shown to you when it starts." },
+        limit: { type: "string", description: 'How long the wake may run, like "45m" or "2h". Defaults to 30 minutes.' },
+      },
+      required: ["thread", "reason"],
       additionalProperties: false,
     },
   },

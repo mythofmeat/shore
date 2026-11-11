@@ -1,4 +1,5 @@
 import { InvalidArgs, ToolIoError } from "./errors.ts";
+import { cleanFolderName } from "../engine/thread_layout.ts";
 import { isValidThreadId, MAX_THREAD_ID_LENGTH, ThreadError } from "../engine/threads.ts";
 
 export interface StartThreadRequest {
@@ -7,6 +8,7 @@ export interface StartThreadRequest {
   purpose?: string;
   files?: string[];
   opening?: string;
+  folder?: string;
 }
 
 function text(input: Record<string, unknown>, field: string): string | undefined {
@@ -32,6 +34,8 @@ export function startThreadRequest(input: Record<string, unknown>): StartThreadR
   }
   const purpose = text(input, "purpose");
   const opening = text(input, "opening");
+  const named = text(input, "folder");
+  const folder = named === undefined ? undefined : cleanFolderName(named);
   const paths = files?.map((file) => file.trim()).filter((file) => file !== "") ?? [];
   return {
     name,
@@ -39,6 +43,7 @@ export function startThreadRequest(input: Record<string, unknown>): StartThreadR
     ...(purpose === undefined ? {} : { purpose }),
     ...(paths.length === 0 ? {} : { files: paths }),
     ...(opening === undefined ? {} : { opening }),
+    ...(folder === undefined ? {} : { folder }),
   };
 }
 
@@ -48,13 +53,15 @@ export async function handleStartThread(
   userName: string,
 ): Promise<string> {
   if (start === undefined) throw new ToolIoError("threads can't be started from here");
-  const request = startThreadRequest(input);
+  let request: StartThreadRequest;
   try {
+    request = startThreadRequest(input);
     await start(request);
   } catch (e) {
     if (e instanceof ThreadError) throw new ToolIoError(e.message);
     throw e;
   }
   const opened = request.opening === undefined ? "" : " Your opening message is waiting there.";
-  return `Started the thread "${request.name}" (${request.label}).${opened} It's in ${userName}'s thread list, and ${userName} decides when to switch to it; you're still in this thread.`;
+  const listed = request.folder === undefined ? "" : `the "${request.folder}" folder of `;
+  return `Started the thread "${request.name}" (${request.label}).${opened} It's in ${listed}${userName}'s thread list, and ${userName} decides when to switch to it; you're still in this thread.`;
 }

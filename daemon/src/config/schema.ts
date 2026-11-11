@@ -221,6 +221,7 @@ const TRIGGER_DESCRIPTIONS: Record<string, string> = {
   enabled: "Run the triggers the character keeps in TRIGGERS.toml in its workspace: schedules, things that happen and checks, each of which wakes it or leaves it a diary entry. A check is a command run as the character with no model call. Off by default, and needs heartbeats on.",
   wake_cooldown: "Least time between two wakes from the same trigger, unless the trigger sets its own cooldown. A trigger that comes due sooner waits, and its check isn't run until then. Defaults to 1h.",
   check_time_limit: "Longest a trigger's check may run before it is stopped and counted as failed. Defaults to 60s.",
+  max_wake_limit: "Longest a wake in a thread may run, whatever limit the character's trigger asks for. A plain heartbeat keeps its own 30 minutes. Defaults to 2h.",
   off: "Names of triggers that are switched off: they don't fire and their checks don't run until the name is taken out again.",
 };
 

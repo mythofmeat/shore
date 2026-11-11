@@ -87,17 +87,27 @@ export function wrapUpNudgeText(msLeft: number, rounds: number, offersWake: bool
     "Only what you put in <sendMessage> tags is sent.]";
 }
 
-export function userWroteNote(at: number, userName: string, timeZone: string): string {
-  return `[${userName} has just written to you, at ${formatWallClock(at, timeZone)}, while this heartbeat is running. ` +
-    "Another turn of you is answering them, and it knows this heartbeat is running.]";
+export function userWroteNote(at: number, userName: string, timeZone: string, running = "heartbeat"): string {
+  return `[${userName} has just written to you, at ${formatWallClock(at, timeZone)}, while this ${running} is running. ` +
+    `Another turn of you is answering them, and it knows this ${running} is running.]`;
+}
+
+export function spanPhrase(ms: number): string {
+  const secs = Math.trunc(ms / 1000);
+  const counted = (count: number, unit: string): string => `${String(count)} ${unit}${count === 1 ? "" : "s"}`;
+  if (secs < 60) return counted(secs, "second");
+  return secs % 3600 === 0 ? counted(secs / 3600, "hour") : counted(Math.trunc(secs / 60), "minute");
 }
 
 export function triggerFiredNote(firing: TriggerFiring, timeZone: string): string {
-  return `[Your trigger "${firing.name}" fired at ${formatWallClock(firing.at, timeZone)}: ${firing.reason}]`;
+  const when = formatWallClock(firing.at, timeZone);
+  return firing.from === undefined
+    ? `[Your trigger "${firing.name}" fired at ${when}: ${firing.reason}]`
+    : `[You asked for this wake from "${firing.from}" at ${when}: ${firing.reason}]`;
 }
 
-export function heartbeatNewsNote(news: readonly HeartbeatNews[], userName: string, timeZone: string): string | undefined {
-  const notes = news.map((item) => item.kind === "trigger" ? triggerFiredNote(item.firing, timeZone) : userWroteNote(item.at, userName, timeZone));
+export function heartbeatNewsNote(news: readonly HeartbeatNews[], userName: string, timeZone: string, running?: string): string | undefined {
+  const notes = news.map((item) => item.kind === "trigger" ? triggerFiredNote(item.firing, timeZone) : userWroteNote(item.at, userName, timeZone, running));
   return notes.length === 0 ? undefined : notes.join("\n\n");
 }
 

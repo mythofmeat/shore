@@ -243,6 +243,7 @@ export async function createRuntime(options: RuntimeOptions): Promise<ShoreRunti
           activityStats: (character, localAt, days) => autonomy.activityStats(character, localAt, days),
           heartbeatsRunning: (character) => autonomy.heartbeatsRunning(character),
           scheduleNextWake: (character, hours, reason) => autonomy.scheduleNextWake(character, hours, reason),
+          wakeFor: (character, firing) => autonomy.wakeFor(character, firing),
         }, {
           providers,
           registry,
@@ -475,7 +476,7 @@ async function refreshMcpPromptCaches(
 
 export interface SubagentToolDeps {
   providers: Partial<Record<SidecarRequest["sdk"], SidecarProvider>>;
-  registry: Pick<CharacterRegistry, "effectiveConfig">;
+  registry: Pick<CharacterRegistry, "effectiveConfig" | "heartbeatThread" | "listThreads">;
   callStore?: CallStore | undefined;
   env?: NodeJS.ProcessEnv | undefined;
   turn?: SubagentTurn | undefined;
@@ -484,7 +485,7 @@ export interface SubagentToolDeps {
 export function sharedToolDeps(
   config: LoadedConfig,
   mcp: McpHolder,
-  autonomy: Pick<AutonomyService, "activityStats" | "heartbeatsRunning" | "scheduleNextWake">,
+  autonomy: Pick<AutonomyService, "activityStats" | "heartbeatsRunning" | "scheduleNextWake" | "wakeFor">,
   subagent?: SubagentToolDeps,
   triggers?: Pick<TriggerService, "view">,
 ): ToolContextDeps {
@@ -510,6 +511,17 @@ export function sharedToolDeps(
       autonomy.heartbeatsRunning(character)
         ? autonomy.scheduleNextWake(character, hours, reason)
         : undefined,
+    ...(subagent === undefined ? {} : {
+      wakeInThread: (character, from, request) => {
+        if (!autonomy.heartbeatsRunning(character)) return { kind: "off" };
+        const { registry } = subagent;
+        if (request.thread === registry.heartbeatThread(character) || !registry.listThreads(character).some((record) => record.id === request.thread)) return { kind: "no_thread" };
+        const most = registry.effectiveConfig(character).app.behavior.autonomy.triggers.max_wake_limit.asMillis();
+        const limitMs = request.limitMs === undefined ? undefined : Math.min(request.limitMs, most);
+        autonomy.wakeFor(character, { name: "", from, reason: request.reason, at: Date.now(), thread: request.thread, limitMs });
+        return { kind: "queued", limitMs };
+      },
+    }),
     ...(subagent?.turn === undefined ? {} : { signal: subagent.turn.signal }),
     ...(subagent?.turn === undefined ? {} : { conversation: subagent.turn.conversation }),
     ...(subagent?.turn?.thread === undefined ? {} : { thread: subagent.turn.thread }),

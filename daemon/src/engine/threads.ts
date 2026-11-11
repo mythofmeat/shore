@@ -145,6 +145,10 @@ function isReplyLine(raw: unknown): boolean {
   return msg.role === "assistant" && Array.isArray(msg.content_blocks) && deriveContentFromBlocks(msg.content_blocks, false) !== "";
 }
 
+function isUnpromptedLine(raw: unknown): boolean {
+  return (raw as Partial<Message>).origin === "autonomous";
+}
+
 const READ_MARK_FILE = "read.json";
 
 export function threadReadMark(data: string, character: string, id: string): number | undefined {
@@ -205,7 +209,7 @@ function scanInto(scan: ActiveScan, lines: readonly unknown[]): ActiveScan {
       scan.heartbeatTurn = isHeartbeatOpener(line as Message);
       if (time > scan.latestUser && !scan.heartbeatTurn) scan.latestUser = time;
     }
-    if (isReplyLine(line) && !scan.heartbeatTurn) scan.replies.push({ at, time });
+    if (isReplyLine(line) && (!scan.heartbeatTurn || isUnpromptedLine(line))) scan.replies.push({ at, time });
     if (time > scan.latest) scan.latest = time;
   }
   return scan;
