@@ -349,7 +349,7 @@ describe("marking replies", () => {
   });
 
   test("words run on through a link's text, brackets in plain text stay text, and a single letter is a word", async () => {
-    const at = await world(["**Tides** go [deep](https://example.com/deep) too; call f(x) now, grab ten, see [x]() y and [z](broken link."]);
+    const at = await world(["**Tides** go [deep](https://example.com/deep) too; call f(x) now, grab ten, see [x]() y, [a)](https://x.test) b and [z](broken link."]);
     await at.say("Go on.");
     const found = async (phrase: string): Promise<string | null> => (await marked(at, { phrase })).phrase;
     expect(await found("go deep too")).toBe("go [deep](https://example.com/deep) too");
@@ -359,7 +359,14 @@ describe("marking replies", () => {
     expect(await found("z](broken")).toBe("z](broken");
     expect(await found("  tides")).toBe("**Tides**");
     expect(await found("ten\n- ")).toBe("ten");
+    expect(await found("a) b")).toBe("a)](https://x.test) b");
   }, 20_000);
+
+  test("a list marker that opens the reply is not part of the words", async () => {
+    const at = await world(["- item one\n- item two"]);
+    await at.say("List them.");
+    expect((await marked(at, { phrase: "- item one" })).phrase).toBe("item one");
+  });
 
   test("words picked out of formatted text take the formatting that wraps them", async () => {
     const at = await world(["Tell me about the **wide** sea, the _cold_ one, and `ropes`."]);
@@ -615,7 +622,9 @@ describe("an attempt's id", () => {
     expect(await outcomeOf(store.stampAttempt("m_alts", 2, "at_x"))).toThrow("attempt 3 out of range (reply has 2 attempt(s))");
     expect(await outcomeOf(store.stampAttempt("m_plain", 1, "at_x"))).toThrow("attempt 2 out of range (reply has 1 attempt(s))");
     expect(await store.stampAttempt("m_alts", 1, "at_x")).toBe("at_b");
+    const unchanged = store.messages();
     expect(await store.stampAttempt("m_plain", 0, "at_x")).toBe("at_e");
+    expect(store.messages(), "a reply already stamped is not written again").toBe(unchanged);
     expect(await store.stampAttempt("m_alts", 0, "at_a")).toBe("at_a");
     const alts = store.messages().find((message) => message.msg_id === "m_alts");
     expect([alts?.attempt, alts?.alternatives?.map((alternative) => alternative.attempt)], "with no shown index the last attempt is the one shown").toEqual([undefined, ["at_a", "at_b"]]);
@@ -755,25 +764,29 @@ describe("stamping and storing attempts", () => {
     }
   });
 
-  test("a ledger written before attempts existed gains the column, and its calls read back with the attempt they were for", async () => {
+  test("a ledger written before attempts existed gains the column whether it is opened or created, and its calls read back with their attempt", async () => {
     const data = await mkdtemp(testTmp("shore-old-ledger-"));
-    const path = join(data, "shore.db");
-    const old = new Database(path);
-    old.run(`CREATE TABLE calls (id INTEGER PRIMARY KEY AUTOINCREMENT, ts TEXT NOT NULL, character TEXT NOT NULL, provider TEXT NOT NULL, api_key_name TEXT,
-      model TEXT NOT NULL, call_type TEXT NOT NULL, input_tokens INTEGER NOT NULL, output_tokens INTEGER NOT NULL, cache_read_tokens INTEGER NOT NULL,
-      cache_write_tokens INTEGER NOT NULL, cache_ttl TEXT DEFAULT '1h', reasoning_effort TEXT, tool_surface TEXT, total_ms INTEGER NOT NULL, ttft_ms INTEGER NOT NULL,
-      finish_reason TEXT NOT NULL, thinking_enabled INTEGER NOT NULL, cache_state TEXT, cache_anomaly TEXT, input_cost REAL, output_cost REAL, cache_read_cost REAL,
-      cache_write_cost REAL, cost_source TEXT DEFAULT 'pricing_catalog', total_cost REAL, output_tokens_estimated INTEGER NOT NULL DEFAULT 0,
-      thinking_dropped INTEGER NOT NULL DEFAULT 0, cache_state_reason TEXT)`);
-    old.close();
-    const ledger = Ledger.open(path);
-    try {
-      ledger.record({ provider: "fixture", model: "m", call_type: "message", character: "ada", usage, timing, finish_reason: "end_turn", thinking_enabled: false, attempt: "at_1", subscription: true });
-      ledger.database.run("UPDATE calls SET cache_anomaly = 'unexpected_write'");
-      expect(queryAnomalies(ledger.database, {}).map((row) => row.attempt)).toEqual(["at_1"]);
-      expect(ledger.database.query("SELECT name FROM sqlite_master WHERE name = 'idx_calls_attempt'").get()).toEqual({ name: "idx_calls_attempt" });
-    } finally {
-      ledger.close();
+    const older = (name: string): string => {
+      const path = join(data, name);
+      const old = new Database(path);
+      old.run(`CREATE TABLE calls (id INTEGER PRIMARY KEY AUTOINCREMENT, ts TEXT NOT NULL, character TEXT NOT NULL, provider TEXT NOT NULL, api_key_name TEXT,
+        model TEXT NOT NULL, call_type TEXT NOT NULL, input_tokens INTEGER NOT NULL, output_tokens INTEGER NOT NULL, cache_read_tokens INTEGER NOT NULL,
+        cache_write_tokens INTEGER NOT NULL, cache_ttl TEXT DEFAULT '1h', reasoning_effort TEXT, tool_surface TEXT, total_ms INTEGER NOT NULL, ttft_ms INTEGER NOT NULL,
+        finish_reason TEXT NOT NULL, thinking_enabled INTEGER NOT NULL, cache_state TEXT, cache_anomaly TEXT, input_cost REAL, output_cost REAL, cache_read_cost REAL,
+        cache_write_cost REAL, cost_source TEXT DEFAULT 'pricing_catalog', total_cost REAL, output_tokens_estimated INTEGER NOT NULL DEFAULT 0,
+        thinking_dropped INTEGER NOT NULL DEFAULT 0, cache_state_reason TEXT)`);
+      old.close();
+      return path;
+    };
+    for (const ledger of [Ledger.open(older("opened.db")), Ledger.create(older("created.db"))]) {
+      try {
+        ledger.record({ provider: "fixture", model: "m", call_type: "message", character: "ada", usage, timing, finish_reason: "end_turn", thinking_enabled: false, attempt: "at_1", subscription: true });
+        ledger.database.run("UPDATE calls SET cache_anomaly = 'unexpected_write'");
+        expect(queryAnomalies(ledger.database, {}).map((row) => row.attempt)).toEqual(["at_1"]);
+        expect(ledger.database.query("SELECT name FROM sqlite_master WHERE name = 'idx_calls_attempt'").get()).toEqual({ name: "idx_calls_attempt" });
+      } finally {
+        ledger.close();
+      }
     }
   });
 

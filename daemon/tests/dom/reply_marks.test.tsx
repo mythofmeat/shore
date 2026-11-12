@@ -379,8 +379,9 @@ test("words are lit only in the reply's own text, across paragraphs, from where 
     { kind: "like", phrase: "very wide", reason: null, tags: [], at: AT },
     { kind: "like", phrase: "Reasoning", reason: null, tags: [], at: AT },
     { kind: "like", phrase: "**", reason: null, tags: [], at: AT },
+    { kind: "dislike", phrase: "un**der**stood", reason: null, tags: [], at: AT },
   ] });
-  const message = reply({ content_blocks: [{ type: "thinking", thinking: "quiet" }, { type: "text", text: "End of one.\n\nStart of the **very** wide two." }] });
+  const message = reply({ content_blocks: [{ type: "thinking", thinking: "quiet" }, { type: "text", text: "End of one.\n\nStart of the **very** wide two, un**der**stood." }] });
   const lit = new Map<string, { ranges: Range[] }>();
   class FakeHighlight { ranges: Range[]; constructor(...ranges: Range[]) { this.ranges = ranges; } }
   patch(globalThis, "CSS", { writable: true, value: { highlights: lit } });
@@ -395,7 +396,7 @@ test("words are lit only in the reply's own text, across paragraphs, from where 
   await plain.unmount();
   patch(globalThis, "CSS", { writable: true, value: { highlights: lit } });
   const view = await row(message);
-  expect(lit.get("shore-dislike")?.ranges.map((range) => range.toString())).toEqual(["one.Start"]);
+  expect(lit.get("shore-dislike")?.ranges.map((range) => range.toString())).toEqual(["one.Start", "understood"]);
   expect(lit.get("shore-like")?.ranges.map((range) => [range.toString(), range.startContainer.textContent])).toEqual([["very wide", "very"]]);
   await click(button(view.host, "Edit"));
   expect(view.host.querySelector(".edit-box"), "editing a lit reply doesn't break").not.toBeNull();
@@ -408,6 +409,10 @@ test("a reply's row carries which attempt it shows, a mark made before its marks
   const shown = (message: Message) => mount(<MessageRow message={message} character="ada" avatar={null} last={false} metadata={undefined} display={defaultViews()} busy={false} mobile={false} openImage={() => {}} />);
   const plain = await shown(reply({ msg_id: "m_unloaded" }));
   expect([plain.host.querySelector("article")?.getAttribute("data-alt-index"), plain.host.querySelector("article")?.getAttribute("data-alt-count")]).toEqual(["0", "1"]);
+  await click(button(plain.host, "Like"));
+  await settle();
+  expect(state.sent.at(-1)).toEqual(["mark", { ref: "m_unloaded", position: 1, kind: "like" }]);
+  await click(button(plain.host, "Close"));
   const second = await shown(reply({ msg_id: "m_second", alt_index: 1, alt_count: 2 }));
   await click(button(second.host, "Like"));
   await settle();
