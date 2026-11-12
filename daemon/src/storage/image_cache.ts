@@ -3,7 +3,7 @@ import { basename, dirname, join } from "node:path";
 
 import { characterCacheDir } from "../config/dirs.ts";
 import { atomicWrite } from "../engine/atomic.ts";
-import { sha256Hex } from "../engine/picture_ids.ts";
+import { sha256Hex } from "../engine/picture_files.ts";
 import { shoreLog } from "../log.ts";
 
 export const DEFAULT_IMAGE_CACHE_BYTES = 512 * 1024 * 1024;

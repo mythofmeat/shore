@@ -99,7 +99,6 @@ export async function buildToolContext(
   const ctx: ToolContext = {
     thread: deps.thread ?? MAIN_THREAD,
     conversation: deps.conversation ?? [],
-    shownPictures: [],
     ...(deps.dryRun === undefined ? {} : { dryRun: deps.dryRun }),
     ...(deps.signal === undefined ? {} : { signal: deps.signal }),
     images: config.app.images,

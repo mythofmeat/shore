@@ -2,7 +2,7 @@ import { required } from "../src/util/required.ts";
 
 import { afterEach, describe, expect, jest, spyOn, test } from "bun:test";
 import { connect, createServer, type Socket } from "node:net";
-import { mkdir, mkdtemp, readFile, writeFile } from "node:fs/promises";
+import { chmod, mkdir, mkdtemp, readFile, stat, writeFile } from "node:fs/promises";
 import { existsSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -13,6 +13,8 @@ import type { InstanceInfo } from "../src/daemon/instances.ts";
 import type { SidecarProvider, SidecarRequest } from "../src/llm/types.ts";
 import { threadActivityNow } from "../src/engine/threads.ts";
 import { loadCompactionCheckpoint, saveCompactionCheckpoint } from "../src/memory/compaction/checkpoint.ts";
+import { shoreLog } from "../src/log.ts";
+import { CharacterWorkspace } from "../src/tools/character_workspace.ts";
 import { compactionFixture } from "./support/memory_fixture.ts";
 import { until } from "./support/until.ts";
 
@@ -331,6 +333,17 @@ describe("what a client gets", () => {
     }
   });
 
+  test("a character's pictures that an older daemon left open to everyone are the daemon's alone once it has started", async () => {
+    const place = await layout("", ["ada"]);
+    const folder = join(place.env.XDG_CACHE_HOME ?? "", "shore", "characters", "ada");
+    await mkdir(join(folder, "images"), { recursive: true });
+    await chmod(folder, 0o755);
+
+    await start(place);
+
+    expect((await stat(folder)).mode & 0o777).toBe(0o700);
+  });
+
   test("a command is answered, so the handler was draining before the accept", async () => {
     const place = await layout("", ["ada", "nova"]);
     const daemon = await start(place);
@@ -460,6 +473,40 @@ describe("hot reload", () => {
       expect(daemon.runtime.registry.globalConfig().app.tools.max_result_chars).toBe(4242);
     } finally {
       client.close();
+    }
+  });
+
+  test("a character's pictures are opened to the user its tools run as, and closed again, without a restart", async () => {
+    const place = await layout("", ["ada"]);
+    const folder = join(place.env.XDG_CACHE_HOME ?? "", "shore", "characters", "ada");
+    const pictures = join(folder, "images");
+    await mkdir(pictures, { recursive: true });
+    const uid = process.getuid?.() ?? 0;
+    const gid = process.getgid?.() ?? 0;
+    const call = Object.getOwnPropertyDescriptor(CharacterWorkspace.prototype, "call")?.value as typeof CharacterWorkspace.prototype.call;
+    const asked: string[] = [];
+    const reach = spyOn(CharacterWorkspace.prototype, "call").mockImplementation(function (this: CharacterWorkspace, op, args, signal) {
+      if (op !== "exists") return call.call(this, op, args, signal);
+      asked.push(JSON.stringify(args));
+      return Promise.resolve([true]);
+    } as typeof CharacterWorkspace.prototype.call);
+    const info = spyOn(shoreLog, "info");
+    const reloads = () => info.mock.calls.filter(([line]) => String(line).startsWith("shore: config hot reload applied")).length;
+    try {
+      await start(place);
+      expect((await stat(folder)).mode & 0o777).toBe(0o700);
+
+      await writeFile(place.configPath, `[tools]\nuser = "${String(uid)}:${String(gid)}"\n`);
+      await until(() => reloads() === 1, "the reload giving ada's tools a user");
+      expect([(await stat(folder)).mode & 0o777, (await stat(folder)).gid]).toEqual([0o710, gid]);
+
+      await writeFile(place.configPath, "");
+      await until(() => reloads() === 2, "the reload taking it away");
+      expect((await stat(folder)).mode & 0o777).toBe(0o700);
+      expect(asked).toEqual([JSON.stringify({ paths: [pictures] })]);
+    } finally {
+      info.mockRestore();
+      reach.mockRestore();
     }
   });
 });

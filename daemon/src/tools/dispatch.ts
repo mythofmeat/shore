@@ -14,7 +14,6 @@ import { InvalidArgs, NotImplemented, ToolIoError, ToolTimedOut } from "./errors
 import { handleReadChatLogs, handleSearchChatLogs, type ChatLogOptions } from "./history.ts";
 import { handleGenerateImage, type ImageGenConfigView, type ImageGenerator } from "./images.ts";
 import { handleModelHistory, type ModelHistoryQuery } from "./model_history.ts";
-import { handleSavePicture } from "./save_picture.ts";
 import { handleListThreads } from "./list_threads.ts";
 import { handleListTriggers } from "./list_triggers.ts";
 import { addDiaryNote } from "../autonomy/diary.ts";
@@ -32,14 +31,13 @@ import { normalizeProtectedPath, normalizePromptVisiblePath } from "./workspace_
 import { McpCancelled } from "../mcp/client.ts";
 import { readWorkspacePath } from "../memory/dreaming/reads.ts";
 import type { ImagesConfig, SubagentConfig, ToolsConfig } from "../config/app.ts";
-import type { ImageRef, Message } from "../engine/types.ts";
+import type { Message } from "../engine/types.ts";
 import type { NewSealedThread } from "../engine/sealed.ts";
 import type { ThreadRecord } from "../engine/threads.ts";
 
 export interface ToolContext {
   thread?: string;
   conversation?: readonly Message[];
-  shownPictures?: ImageRef[];
   dryRun?: boolean;
   maxResultChars?: number;
   maxInlineImageBytes?: number;
@@ -160,7 +158,7 @@ export function nextWakeAnswer(asked: number, scheduled: number, userName: strin
 }
 
 export function writesWorkspace(name: string): boolean {
-  return ["bash", "edit", "apply_patch", "save_picture"].includes(name) || name.startsWith("mcp__");
+  return ["bash", "edit", "apply_patch"].includes(name) || name.startsWith("mcp__");
 }
 
 export async function dispatchTool(
@@ -168,7 +166,7 @@ export async function dispatchTool(
   input: unknown,
   ctx: ToolContext,
 ): Promise<unknown> {
-  if (ctx.dryRun && (["bash", "edit", "apply_patch", "save_picture", "generate_image", "set_next_wake", "wake_in_thread", "start_thread", "start_sealed_thread", "edit_thread"].includes(name) || name.startsWith("mcp__"))) {
+  if (ctx.dryRun && (["bash", "edit", "apply_patch", "generate_image", "set_next_wake", "wake_in_thread", "start_thread", "start_sealed_thread", "edit_thread"].includes(name) || name.startsWith("mcp__"))) {
     throw new ToolIoError(`${name} blocked: dry-run tools cannot change files or external state`);
   }
   const args = (input ?? {}) as ToolInput;
@@ -191,10 +189,6 @@ export async function dispatchTool(
     case "apply_patch": {
       const write = () => withPromptChanges(workspace,
         () => name === "edit" ? workspace.call("edit", { input: args, workspaceDir: ctx.workspaceDir }, ctx.signal) : handleApplyPatch(args, workspace, ctx.signal), ctx.deferEdit);
-      return await (ctx.trackWorkspaceWrite?.(name, input, write) ?? write());
-    }
-    case "save_picture": {
-      const write = () => handleSavePicture(args, ctx, workspace);
       return await (ctx.trackWorkspaceWrite?.(name, input, write) ?? write());
     }
     case "search_chat_logs":

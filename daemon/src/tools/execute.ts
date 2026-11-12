@@ -17,7 +17,7 @@ import { insideWorkspace } from "../storage/image_locations.ts";
 import { deriveContentFromBlocks } from "../engine/message_store.ts";
 import type { ContentBlock, ImageRef, Message, Role } from "../engine/types.ts";
 import { imageDataForPath } from "../engine/wire_images.ts";
-import { pictureId, sha256Hex } from "../engine/picture_ids.ts";
+import { sha256Hex } from "../engine/picture_files.ts";
 import type { ToolUseEvent } from "../engine/tool_loop.ts";
 import type { ServerMessage } from "../protocol/ServerMessage.ts";
 import {
@@ -263,14 +263,13 @@ async function attachToolMedia(
         continue;
       }
       const note = toolImageNote(item, reduced, exec, toolUse);
-      const notes = [...unsaved, ...(note === undefined ? [] : [note]), `[${item.label} attached${saved === undefined ? "" : ` as picture ${pictureId(saved.sha256)}`}]`];
+      const file = saved === undefined || item.path !== undefined ? "" : `; its file is ${saved.path}`;
+      const notes = [...unsaved, ...(note === undefined ? [] : [note]), `[${item.label} attached${file}]`];
       attached.placed.push({ block, notes, ...(item.at === undefined ? {} : { at: item.at }) });
       inlinedBytes += bytes;
       attached.images.push({ ...original, data: block.source.data });
       if (saved !== undefined) {
-        const shown: ImageRef = { path: saved.path, caption: item.label, sha256: saved.sha256 };
-        attached.shown.push(shown);
-        exec.ctx.shownPictures?.push(shown);
+        attached.shown.push({ path: saved.path, caption: item.label, sha256: saved.sha256 });
       }
     } catch (error) {
       attached.failed = true;

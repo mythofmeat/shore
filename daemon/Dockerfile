@@ -111,6 +111,7 @@ RUN groupadd -g "$SHORE_GID" shore \
         groupadd ${uid:+-g "$uid"} "$name" \
         && useradd -M ${uid:+-u "$uid"} -g "$name" -d "/home/$name" -s /bin/bash "$name" \
         && usermod -aG "$name" shore \
+        && usermod -aG shore "$name" \
         && install -d -o "$name" -g "$name" -m 700 "/home/$name" \
         && install -d -o "$name" -g "$name" -m 2770 "/workspace/$name" \
         || exit 1; \

@@ -36,6 +36,7 @@ import { describeWork, runningReport, type ShutdownWindowState } from "./running
 import { parseArgs, resolveStartup, sourceLabel, StartupError } from "./startup.ts";
 import { findSentPicture } from "../storage/sent_pictures.ts";
 import { startCharacterInits } from "../tools/character_init.ts";
+import { sharePictureFolders } from "../tools/picture_access.ts";
 import { stopBackgroundCompactions } from "../memory/compaction/background.ts";
 import { adoptHomeThreadModels } from "../config/home_model.ts";
 
@@ -294,6 +295,7 @@ export async function startDaemon(options: DaemonOptions): Promise<RunningDaemon
     const settling = performance.now();
     const compactionHolds = runtime.registry.availableCharacters().map((character) => runtime.autonomy.beginForeground(character));
     const seeded = seedActivity(runtime, assembly.autonomy, log);
+    await sharePictureFolders(runtime.config, runtime.registry.availableCharacters());
     startCharacterInits(runtime.config, runtime.registry.availableCharacters(), log);
     const clocks = startRuntimeClocks(runtime, options.clockIntervals ?? {});
     rollback.push(() => { clocks.stop(); });

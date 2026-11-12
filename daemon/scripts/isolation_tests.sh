@@ -17,6 +17,7 @@ for entry in ada:3001 bea:3002; do
 	groupadd -g "${entry#*:}" "$name"
 	useradd -m -u "${entry#*:}" -g "$name" "$name"
 	usermod -aG "$name" shore
+	usermod -aG shore "$name"
 done
 chmod 700 /home/shore /home/ada /home/bea
 install -d -o shore -g shore -m 755 /srv/isolation /srv/isolation/workspace
