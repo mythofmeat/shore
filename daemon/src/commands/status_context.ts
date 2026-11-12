@@ -6,6 +6,7 @@ import { conversationTokens } from "../ledger/conversation_spend.ts";
 import { estimateHistoryTokens } from "../engine/prompt.ts";
 import { imageTierForModel } from "../llm/image_tokens.ts";
 import { localWallClock } from "../autonomy/activity.ts";
+import { withoutWakeWorking } from "../autonomy/wake_working.ts";
 
 export function statusContext(
   engine: ConversationEngine,
@@ -25,7 +26,7 @@ export function statusContext(
       engine.startedAt(),
     ),
     contextTokens: estimateHistoryTokens(
-      engine.messages(),
+      withoutWakeWorking(engine.messages()),
       model === undefined ? undefined : imageTierForModel(model.modelId),
     ),
     autonomy: deps.autonomy,
