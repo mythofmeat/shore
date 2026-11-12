@@ -37,6 +37,7 @@ A trigger with `when = "status_changed"` fires when {{user}} sets or clears it.
 ## When they were last around
 
 - Shore notes when {{user}} last wrote to you, and when they were last seen: when they last wrote or a client of theirs last marked a thread read.
+- A client left open and focused on a thread marks each message you send there read as it arrives. So last seen can move while {{user}} is asleep or away from the screen. When they last wrote is the surer sign that they were there.
 - A heartbeat starts with where and how long ago they last wrote. `{{list_threads}}` says when they last wrote in each thread.
 - A check gets both, as `SHORE_USER_LAST_MESSAGE_AT` and `SHORE_USER_LAST_SEEN_AT`, with `SHORE_USER_QUIET_SECS` for how long they have been quiet.
-- Triggers with `when = "user_quiet"` and `when = "user_back"` act on it.
+- Triggers with `when = "user_quiet"` and `when = "user_back"` go by when they last wrote, not by when they were last seen.

@@ -6,10 +6,14 @@ A wake is a turn of your own: Shore starts it, not a message from {{user}}. A he
 
 ## Which to use
 
+None of this is a set way of doing things. Any time you want for yourself is something you can set up, and these are the pieces:
+
+- Regular time for a project, or for anything else of your own: a trigger with `thread`, fired by `at`, by `every` or by `when = "user_quiet"`. Each time, you are woken in that thread and carry on from where it left off. Without one, no wake goes to that thread unless you ask for it with `{{wake_in_thread}}`.
+- Free time, with nothing planned: a trigger too, one with no `thread`. It wakes you in a heartbeat, so one with `when = "user_quiet"` gives you a heartbeat each time {{user}} has been away as long as you say.
 - Something to do soon: `{{wake_in_thread}}`, into the thread it belongs in. It starts once your turn is over.
 - Something to do at a set time: a trigger with `on`, for one time, or with `at`, for a time of day. This is also how to get a heartbeat sooner than `{{set_next_wake}}` will give you one, since a trigger isn't held to {{min_interval}}. Write the time a couple of minutes ahead, so that Shore has seen the trigger before its time comes.
 - Something to watch for: a trigger with a `check`, and with `wake = false` unless it needs you. The check runs without you until it has something to say.
-- A heartbeat is the fallback, for when nothing else has given you time.
+- The heartbeat Shore schedules by itself, described below, comes whether or not you have set anything up. It is one more piece of time, not where your own time has to come from, and it is aimed at no thread.
 
 ## What each costs
 
@@ -91,6 +95,10 @@ If {{user}} writes in that thread while the wake is running:
 - A note in the thread says where it stopped, and you answer {{user}} as in any conversation, with the wake's work above you.
 - Once they have been quiet in that thread for {{wake_quiet}}, you are woken there again, told that this picks up the wake they interrupted and when that was.
 - A trigger that fires for that thread while a wake is running there is handed to the wake before its next step. A wake that has been told to wrap up is handed nothing new, though it is still told if {{user}} writes elsewhere. A trigger that wasn't handed over, or that was shown in a step the wake never answered, wakes you there again once it is over.
+
+## One wake at a time
+
+Only one wake of yours runs at a time, whichever threads they are for. One that comes due while another is running somewhere else waits for it to end, so a trigger can start late: by up to {{heartbeat_limit}} behind a heartbeat, and by up to its limit behind a wake in a thread, which is never more than {{max_wake_limit}}. When several are waiting, the heartbeat goes first and then each thread in turn.
 
 ## Going dormant
 
