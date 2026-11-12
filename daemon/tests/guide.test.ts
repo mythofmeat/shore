@@ -2,7 +2,9 @@ import { expect, test } from "bun:test";
 import { mkdir, mkdtemp, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 
+import type { TriggerFiring } from "../src/autonomy/runner.ts";
 import { runCheck, type CheckOutcome } from "../src/autonomy/trigger_check.ts";
+import { CharacterTriggers } from "../src/autonomy/trigger_loop.ts";
 import { checkFacts } from "../src/autonomy/trigger_service.ts";
 import { parseTriggers } from "../src/autonomy/triggers.ts";
 import { loadConfig } from "../src/config/loader.ts";
@@ -108,7 +110,64 @@ test("every example trigger in the guide is one the trigger parser accepts", asy
   const examples = pages.flatMap((page) => fenced(page, "toml"));
   const parsed = examples.map((example) => parseTriggers(example, HOUR));
   expect(parsed.flatMap((each) => each.problems)).toEqual([]);
-  expect(parsed.map((each) => each.triggers.map((trigger) => trigger.name))).toEqual([["morning", "mail"], ["gone-to-bed"]]);
+  expect(parsed.map((each) => each.triggers.map((trigger) => trigger.name))).toEqual([["mail", "lighthouse", "free-time", "parcel"], ["gone-to-bed"]]);
+});
+
+test("the guide's example file does what the guide says of it: a check that wakes only when it prints, a thread's own hour on two nights a week, free time once the user has been away, and one thing once", async () => {
+  const page = await (await guideWith())("triggers");
+  expect(page).toContain("`mail` watches for something and wakes you only when its check prints. `lighthouse` gives one thread an hour of its own on two nights a week. `free-time` wakes you with nothing planned each time eve has been quiet for three hours. `parcel` fires once.");
+
+  const woke: TriggerFiring[] = [];
+  const of = (name: string): TriggerFiring[] => woke.filter((firing) => firing.name === name);
+  const world: { now: number; lastUserAt: number; mail: CheckOutcome } = { now: T0, lastUserAt: T0, mail: { kind: "quiet" } };
+  const triggers = new CharacterTriggers({
+    characterDir: join(await mkdtemp(testTmp("shore-guide-loop-")), "ada"),
+    timeZone: "UTC",
+    now: () => world.now,
+    settings: () => ({ enabled: true, wakeCooldownMs: HOUR, checkLimitMs: 60_000, maxWakeLimitMs: 2 * HOUR, off: [] }),
+    dormant: () => false,
+    lastUserAt: () => world.lastUserAt,
+    readFile: async () => fenced(page, "toml")[0],
+    runCheck: async () => world.mail,
+    wake: (firing) => { woke.push(firing); },
+  });
+  const at = async (hours: number): Promise<void> => {
+    world.now = T0 + hours * HOUR;
+    await triggers.tick();
+  };
+
+  await at(0);
+  await at(2.9);
+  expect(woke).toEqual([]);
+  await at(3);
+  expect(woke).toEqual([{ name: "free-time", reason: "Time of your own. Nothing is planned for it.", at: T0 + 3 * HOUR }]);
+  expect(woke[0]?.thread).toBeUndefined();
+  await at(40);
+  expect(of("free-time")).toHaveLength(1);
+  world.lastUserAt = T0 + 41 * HOUR;
+  await at(44);
+  expect(of("free-time")).toHaveLength(2);
+
+  await at(63.9);
+  expect(of("lighthouse")).toEqual([]);
+  await at(64);
+  expect(of("lighthouse")).toEqual([{ name: "lighthouse", reason: "Your night on the lighthouse. Pick up where this thread left off.", at: T0 + 64 * HOUR, thread: "lighthouse", limitMs: HOUR }]);
+  await at(88);
+  await at(112);
+  expect(of("lighthouse")).toHaveLength(1);
+  await at(160);
+  expect(of("lighthouse").map((firing) => firing.at)).toEqual([T0 + 64 * HOUR, T0 + 160 * HOUR]);
+
+  expect(of("mail")).toEqual([]);
+  world.mail = { kind: "fired", output: "2 new messages" };
+  await at(165);
+  expect(of("mail")).toEqual([{ name: "mail", reason: "2 new messages", at: T0 + 165 * HOUR }]);
+
+  expect(of("parcel")).toEqual([]);
+  await at(510);
+  await at(511);
+  await at(600);
+  expect(of("parcel")).toEqual([{ name: "parcel", reason: "The parcel was due today. See whether it came.", at: T0 + 510 * HOUR }]);
 });
 
 function aroundSetting(line: string): string {
@@ -225,7 +284,11 @@ test("the guide says which way to get time for what, and what each way costs", a
   expect(wakes).toContain("- Something to do soon: `wake_in_thread`, into the thread it belongs in. It starts once your turn is over.");
   expect(wakes).toContain("- Something to do at a set time: a trigger with `on`, for one time, or with `at`, for a time of day. This is also how to get a heartbeat sooner than `set_next_wake` will give you one, since a trigger isn't held to 4h.");
   expect(wakes).toContain("- Something to watch for: a trigger with a `check`, and with `wake = false` unless it needs you.");
-  expect(wakes).toContain("- A heartbeat is the fallback, for when nothing else has given you time.");
+  expect(wakes).toContain("- Regular time for a project, or for anything else of your own: a trigger with `thread`, fired by `at`, by `every` or by `when = \"user_quiet\"`. Each time, you are woken in that thread and carry on from where it left off. Without one, no wake goes to that thread unless you ask for it with `wake_in_thread`.");
+  expect(wakes).toContain("- Free time, with nothing planned: a trigger too, one with no `thread`. It wakes you in a heartbeat, so one with `when = \"user_quiet\"` gives you a heartbeat each time eve has been away as long as you say.");
+  expect(wakes).toContain("- The heartbeat Shore schedules by itself, described below, comes whether or not you have set anything up. It is one more piece of time, not where your own time has to come from, and it is aimed at no thread.");
+  expect(wakes).not.toContain("fallback");
+  expect(wakes).toContain("## Which to use\n\nNone of this is a set way of doing things. Any time you want for yourself is something you can set up, and these are the pieces:\n\n- Regular time");
   expect(wakes.indexOf("## Which to use")).toBeLessThan(wakes.indexOf("## Heartbeats"));
 
   expect(wakes).toContain("- A check that stays quiet costs nothing. No model is called.");
@@ -234,6 +297,47 @@ test("the guide says which way to get time for what, and what each way costs", a
   expect(wakes).toContain("- A wake in a thread is one turn of your model with that thread in front of it: about a heartbeat, plus rereading the thread, less the working of your earlier wakes there.");
   expect(wakes).toContain("- Your working isn't shown to you again. Later wakes there, your replies there and that thread's compaction are shown the wake as how it opened, a line saying how many tool calls it made, your note without its thinking, and the message you sent. What you will need again belongs in the note or in a file.");
   expect(wakes).toContain("- A note in the thread says where it stopped, and you answer eve as in any conversation. The wake's working isn't shown to that turn. In its place is a line saying how many tool calls the wake had made, which one was last, and the last thing you wrote in it.");
+});
+
+test("the guide starts from time being the character's own to set up: what triggers are for as a whole, and that a side thread has no time until a trigger gives it some", async () => {
+  const guide = await guideWith(OWN_TIME);
+  expect(await guide()).toContain("It isn't a set way of doing things: these are tools, and what you make of your own time with them is up to you.");
+  expect(await guide()).toContain("- `triggers`: how you give yourself time, in `TRIGGERS.toml`: to watch for something, regular time for a project, free time, or one thing once.");
+
+  const triggers = await guide("triggers");
+  expect(triggers).toStartWith([
+    "# Triggers and checks",
+    "",
+    "Triggers are how you give yourself time. Each one names a time or an event, and when it comes Shore wakes you, or leaves you a diary entry, without eve prompting it. What the time is for is up to you:",
+    "",
+    "- Watching for something: a `check`, which runs without you and fires only when it has something to say.",
+    "- Regular time for a project, or for anything else of your own: `thread`, so that each wake carries on in that thread.",
+    "- Free time, with nothing planned: no `thread`, at an hour you choose or once eve has been away a while.",
+    "- One thing, once: `on`.",
+    "",
+    "You set triggers up yourself in `TRIGGERS.toml`, in your workspace root.",
+  ].join("\n"));
+  expect(triggers).not.toContain("when something happens");
+  expect(triggers).toContain("- A heartbeat that a trigger set off starts with everything any heartbeat starts with, so a trigger with no `thread` is how you get free time at a time you choose.");
+  expect(triggers).toContain("makes the wake run in that thread, with its conversation in front of you. This is how a thread gets regular time of its own.");
+
+  expect(await guide("threads")).toContain(
+    "A side thread has no time of its own until you give it some: your heartbeats don't run there, and nothing wakes you in it unasked. A trigger with `thread` set to the thread's id gives it regular time, at the hours or the interval you choose, and `wake_in_thread` takes you there once. The `triggers` topic has an example.",
+  );
+});
+
+test("the guide says that a client left open moves when the user was last seen, and that wakes run one at a time, so a trigger can start late by a wake's limit", async () => {
+  const guide = await guideWith('[triggers]\nmax_wake_limit = "5h"\n');
+  expect(await guide("messages")).toContain(
+    "- A client left open and focused on a thread marks each message you send there read as it arrives. So last seen can move while eve is asleep or away from the screen. When they last wrote is the surer sign that they were there.",
+  );
+  expect(await guide("messages")).toContain('- Triggers with `when = "user_quiet"` and `when = "user_back"` go by when they last wrote, not by when they were last seen.');
+  const triggers = await guide("triggers");
+  expect(triggers).toContain("- `SHORE_USER_LAST_SEEN_AT`: when eve last wrote to you or a client of theirs last marked a thread read, in the same form. That can be while they are away: the `messages` topic says how.");
+  expect(triggers).toContain("- Only one wake of yours runs at a time. A trigger that fires while a wake is running somewhere else, in a heartbeat or in another thread, waits for that wake to end, so it can start late by as much as that wake's time limit.");
+  expect(await guide("wakes")).toContain(
+    "## One wake at a time\n\nOnly one wake of yours runs at a time, whichever threads they are for. One that comes due while another is running somewhere else waits for it to end, so a trigger can start late: by up to 30m behind a heartbeat, and by up to its limit behind a wake in a thread, which is never more than 5h. When several are waiting, the heartbeat goes first and then each thread in turn.",
+  );
 });
 
 test("the guide says what becomes of a one-off: once fired, when its check fails, and that it has no cooldown", async () => {

@@ -29,6 +29,8 @@ A thread is a conversation with a context of its own. What is said in one isn't 
 
 `{{edit_thread}}` changes a side thread's label, purpose or files, whoever started it. Give only what should change. An empty `label` or `purpose` clears it, and `files` replaces the whole list. If any file can't be found or doesn't fit, nothing changes, the label and purpose included. It is refused for your home thread and for a thread {{user}} has locked, which `{{list_threads}}` marks.
 
+A side thread has no time of its own until you give it some: your heartbeats don't run there, and nothing wakes you in it unasked. A trigger with `thread` set to the thread's id gives it regular time, at the hours or the interval you choose, and `{{wake_in_thread}}` takes you there once. The `triggers` topic has an example.
+
 ## Sealed threads
 
 `{{start_sealed_thread}}` makes a thread that {{user}} can't see until the time you set, for something you want ready for them by then, such as a surprise. `opens` is a local date and 24-hour time that is still to come, like "2026-12-24 08:00".

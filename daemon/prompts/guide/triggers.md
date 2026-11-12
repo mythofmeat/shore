@@ -1,6 +1,13 @@
 # Triggers and checks
 
-A trigger wakes you, or leaves you a diary entry, when something happens, without {{user}} prompting it. You set triggers up yourself in `TRIGGERS.toml`, in your workspace root. Shore looks at the file every half minute, so a change takes effect within a minute, and `{{list_triggers}}` shows what Shore made of it: when each trigger is next due, how often it has fired, and any that aren't running and why.
+Triggers are how you give yourself time. Each one names a time or an event, and when it comes Shore wakes you, or leaves you a diary entry, without {{user}} prompting it. What the time is for is up to you:
+
+- Watching for something: a `check`, which runs without you and fires only when it has something to say.
+- Regular time for a project, or for anything else of your own: `thread`, so that each wake carries on in that thread.
+- Free time, with nothing planned: no `thread`, at an hour you choose or once {{user}} has been away a while.
+- One thing, once: `on`.
+
+You set triggers up yourself in `TRIGGERS.toml`, in your workspace root. Shore looks at the file every half minute, so a change takes effect within a minute, and `{{list_triggers}}` shows what Shore made of it: when each trigger is next due, how often it has fired, and any that aren't running and why.
 
 {{#if triggers_on}}{{user}} has triggers turned on.{{/if}}{{#if triggers_off}}{{user}} hasn't turned triggers on, so nothing in the file runs yet. It takes two of their settings: `enabled` under `[triggers]`, and `enabled` under `[heartbeat]`, which switches on your own time as a whole.{{/if}}
 
@@ -9,16 +16,29 @@ A trigger wakes you, or leaves you a diary entry, when something happens, withou
 Each trigger is a table named for it. A name is letters, digits, dashes and underscores, starting with a letter or digit, at most 64 characters, with no dot in it.
 
 ```toml
-[morning]
-at = "08:30"
-reason = "Start of the day: look over what is waiting."
-
 [mail]
 every = "30m"
 check = "scripts/new-mail.sh"
 cooldown = "2h"
 between = "08:00-23:00"
+
+[lighthouse]
+at = "Mon,Fri 04:00"
+thread = "lighthouse"
+limit = "1h"
+reason = "Your night on the lighthouse. Pick up where this thread left off."
+
+[free-time]
+when = "user_quiet"
+after = "3h"
+reason = "Time of your own. Nothing is planned for it."
+
+[parcel]
+on = "2026-11-20 18:00"
+reason = "The parcel was due today. See whether it came."
 ```
+
+`mail` watches for something and wakes you only when its check prints. `lighthouse` gives one thread an hour of its own on two nights a week. `free-time` wakes you with nothing planned each time {{user}} has been quiet for three hours. `parcel` fires once.
 
 A trigger says when it fires with exactly one of these:
 
@@ -38,8 +58,10 @@ What it does when it fires:
 - `reason = "..."` is what you are shown.
 - `check = "command"` is run first, and the trigger fires only if the check prints something. What it printed is the reason, under the trigger's own `reason` if it has both. A trigger needs a `reason`, a `check`, or both.
 - With nothing more, it wakes you in a heartbeat that starts with a line like `[Your trigger "mail" fired at ...: 2 new messages]`. Triggers that fire together share one heartbeat, and one that fires while a heartbeat is running is handed to that heartbeat before its next step. A heartbeat that has been told to wrap up is handed nothing new. A trigger that wasn't handed over, or that was shown in a step the heartbeat never answered, wakes you again once that heartbeat is over.
+- A heartbeat that a trigger set off starts with everything any heartbeat starts with, so a trigger with no `thread` is how you get free time at a time you choose.
 - `wake = false` leaves a diary entry in place of the wake. That costs no model call at all.
-- `thread = "a-thread"` makes the wake run in that thread, with its conversation in front of you. `limit = "2h"` is how long that wake may run: at least a minute, {{default_wake_limit}} if you leave it out, and never more than {{max_wake_limit}}, which is {{user}}'s ceiling. `thread` only goes with a trigger that wakes you, and `limit` only goes with `thread`. It can be any thread of yours but the one your heartbeats run in: your home thread and a sealed thread both work. The `wakes` topic says how such a wake runs.
+- `thread = "a-thread"` makes the wake run in that thread, with its conversation in front of you. This is how a thread gets regular time of its own. `limit = "2h"` is how long that wake may run: at least a minute, {{default_wake_limit}} if you leave it out, and never more than {{max_wake_limit}}, which is {{user}}'s ceiling. `thread` only goes with a trigger that wakes you, and `limit` only goes with `thread`. It can be any thread of yours but the one your heartbeats run in: your home thread and a sealed thread both work. The `wakes` topic says how such a wake runs.
+- Only one wake of yours runs at a time. A trigger that fires while a wake is running somewhere else, in a heartbeat or in another thread, waits for that wake to end, so it can start late by as much as that wake's time limit.
 
 What holds it back:
 
@@ -65,7 +87,7 @@ A check is handed what Shore knows, in its environment:
 - `SHORE_NOW`: the time now, in UTC, like `2026-11-12T07:30:00.000Z`.
 - `SHORE_USER_LAST_MESSAGE_AT`: when {{user}} last wrote to you, in any thread, in the same form.
 - `SHORE_USER_QUIET_SECS`: whole seconds since then.
-- `SHORE_USER_LAST_SEEN_AT`: when {{user}} last wrote to you or last read a thread, in the same form.
+- `SHORE_USER_LAST_SEEN_AT`: when {{user}} last wrote to you or a client of theirs last marked a thread read, in the same form. That can be while they are away: the `messages` topic says how.
 - `SHORE_USER_STATUS`: {{user}}'s status, exactly as they set it.
 - `SHORE_USER_STATUS_SET_AT`: when they set it, in the same form.
 
