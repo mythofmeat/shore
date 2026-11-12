@@ -92,7 +92,8 @@ CREATE TABLE IF NOT EXISTS history_messages (
     display_kind INTEGER NOT NULL,
     display_seq  INTEGER,
     is_user_turn INTEGER NOT NULL,
-    version      TEXT
+    version      TEXT,
+    attempt      TEXT
 );
 
 CREATE UNIQUE INDEX IF NOT EXISTS idx_history_messages_slot
@@ -107,6 +108,7 @@ CREATE TABLE IF NOT EXISTS history_alternatives (
     images       TEXT,
     blocks_hash  TEXT    NOT NULL,
     version      TEXT,
+    attempt      TEXT,
     PRIMARY KEY (message_id, ordinal)
 );
 
@@ -201,6 +203,7 @@ interface BodyRow {
   provider_key: string | null;
   model: string | null;
   version: string | null;
+  attempt: string | null;
 }
 
 interface MessageRow extends BodyRow {
@@ -244,6 +247,7 @@ export class HistoryStore {
     db.run(`PRAGMA auto_vacuum = INCREMENTAL;
              PRAGMA journal_mode = WAL;
              PRAGMA busy_timeout = 5000;`);
+    addAttemptColumns(db);
     db.run(HISTORY_SCHEMA);
     dropRowCounts(db);
   }
@@ -686,11 +690,52 @@ export class HistoryStore {
       .run(character, idx, note).changes > 0;
   }
 
+  replyOrdinals(character: string, msgId: string): { segment: number; ordinals: number[] } | undefined {
+    const row = this.#db.query(
+      `SELECT m.segment, m.ordinal FROM history_messages m
+       JOIN history_segments s ON s.character = m.character AND s.idx = m.segment
+       WHERE m.character = ?1 AND m.msg_id = ?2 AND s.committed = 1
+       ORDER BY m.segment DESC, m.ordinal DESC LIMIT 1`,
+    ).get(character, msgId) as { segment: number; ordinal: number } | null;
+    if (row === null) return undefined;
+    const bounds = this.#db.query(
+      `SELECT (SELECT COALESCE(MAX(ordinal), -1) FROM history_messages
+                WHERE character = ?1 AND segment = ?2 AND ordinal < ?3 AND is_user_turn = 1) AS first,
+              (SELECT COALESCE(MIN(ordinal), (SELECT MAX(ordinal) + 1 FROM history_messages WHERE character = ?1 AND segment = ?2))
+                 FROM history_messages
+                WHERE character = ?1 AND segment = ?2 AND ordinal > ?3 AND is_user_turn = 1) AS last`,
+    ).get(character, row.segment, row.ordinal) as { first: number; last: number };
+    return { segment: row.segment, ordinals: Array.from({ length: bounds.last - bounds.first - 1 }, (_, offset) => bounds.first + 1 + offset) };
+  }
+
+  stampAttempt(character: string, msgId: string, ordinal: number | undefined, shown: boolean, attempt: string): string {
+    return this.#db.transaction(() => {
+      const row = this.#db.query(
+        `SELECT m.id FROM history_messages m
+         JOIN history_segments s ON s.character = m.character AND s.idx = m.segment
+         WHERE m.character = ?1 AND m.msg_id = ?2 AND s.committed = 1
+         ORDER BY m.segment DESC, m.ordinal DESC LIMIT 1`,
+      ).get(character, msgId) as { id: number } | null;
+      if (row === null) throw new Error(`no archived message ${msgId} in ${character}`);
+      let stamped = attempt;
+      if (ordinal !== undefined) {
+        this.#db.query("UPDATE history_alternatives SET attempt = ?3 WHERE message_id = ?1 AND ordinal = ?2 AND attempt IS NULL").run(row.id, ordinal, attempt);
+        const held = this.#db.query("SELECT attempt FROM history_alternatives WHERE message_id = ?1 AND ordinal = ?2").get(row.id, ordinal) as { attempt: string | null } | null;
+        if (held === null || held.attempt === null) throw new Error(`no attempt ${String(ordinal + 1)} on archived message ${msgId}`);
+        stamped = held.attempt;
+      }
+      if (shown) this.#db.query("UPDATE history_messages SET attempt = ?2 WHERE id = ?1 AND attempt IS NULL").run(row.id, stamped);
+      return ordinal === undefined
+        ? (this.#db.query("SELECT attempt FROM history_messages WHERE id = ?1").get(row.id) as { attempt: string }).attempt
+        : stamped;
+    })();
+  }
+
   readSegment(character: string, idx: number): Message[] {
     const rows = this.#db
       .query(
         `SELECT id, msg_id, role, timestamp, provider_key, model, origin, segment,
-                alt_index, alt_count, images, blocks_hash, version
+                alt_index, alt_count, images, blocks_hash, version, attempt
          FROM history_messages
          WHERE character = ?1 AND segment = ?2
            AND EXISTS (
@@ -708,7 +753,7 @@ export class HistoryStore {
     const rows = this.#db
       .query(
         `SELECT id, msg_id, role, timestamp, provider_key, model, origin, segment, ordinal,
-                alt_index, alt_count, images, blocks_hash, version
+                alt_index, alt_count, images, blocks_hash, version, attempt
          FROM history_messages
          WHERE character = ?1 AND segment = ?2
            AND ordinal IN (SELECT value FROM json_each(?3))
@@ -734,7 +779,7 @@ export class HistoryStore {
     const rows = this.#db
       .query(
         `SELECT m.id, m.msg_id, m.role, m.timestamp, m.provider_key, m.model, m.origin,
-                m.segment, m.alt_index, m.alt_count, m.images, m.blocks_hash, m.version
+                m.segment, m.alt_index, m.alt_count, m.images, m.blocks_hash, m.version, m.attempt
          FROM history_messages m
          JOIN history_segments s ON s.character = m.character AND s.idx = m.segment
          WHERE m.character = ?1 AND m.segment = ?2 AND s.committed = 1
@@ -750,7 +795,7 @@ export class HistoryStore {
 
   #messagesFromRows(rows: MessageRow[], character: string, metrics?: HistoryReadMetrics): Message[] {
     const altQuery = this.#db.query(
-      `SELECT timestamp, provider_key, model, images, blocks_hash, version
+      `SELECT timestamp, provider_key, model, images, blocks_hash, version, attempt
        FROM history_alternatives WHERE message_id = ?1 ORDER BY ordinal`,
     );
 
@@ -770,6 +815,7 @@ export class HistoryStore {
       if (row.model !== null) message.model = row.model;
       if (row.origin !== null) message.origin = row.origin;
       if (row.version !== null) message.version = row.version;
+      if (row.attempt !== null) message.attempt = row.attempt;
 
       const altRows = altQuery.all(row.id) as BodyRow[];
       if (altRows.length > 0) {
@@ -787,8 +833,8 @@ export class HistoryStore {
         `INSERT INTO history_messages
              (character, segment, ordinal, msg_id, role, timestamp,
               provider_key, model, origin, alt_index, alt_count, images, blocks_hash,
-              display_kind, display_seq, is_user_turn, version)
-         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, NULL, ?15, ?16)`,
+              display_kind, display_seq, is_user_turn, version, attempt)
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, NULL, ?15, ?16, ?17)`,
       )
       .run(
         character,
@@ -807,6 +853,7 @@ export class HistoryStore {
         kind,
         message.role === "user" && kind !== DISPLAY_TOOL_RESULT ? 1 : 0,
         versionOf(message) ?? null,
+        message.attempt ?? null,
       );
 
     if (message.alternatives === undefined || message.alternatives.length === 0) return;
@@ -814,8 +861,8 @@ export class HistoryStore {
       .id;
     const insertAlt = this.#db.query(
       `INSERT INTO history_alternatives
-           (message_id, ordinal, timestamp, provider_key, model, images, blocks_hash, version)
-       VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)`,
+           (message_id, ordinal, timestamp, provider_key, model, images, blocks_hash, version, attempt)
+       VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)`,
     );
     message.alternatives.forEach((alternative, altOrdinal) => {
       insertAlt.run(
@@ -827,6 +874,7 @@ export class HistoryStore {
         storedImages(alternative.images),
         this.#storeBlob(utf8.encode(JSON.stringify(this.#referenced(character, alternative.content_blocks)))),
         alternativeVersionOf(alternative) ?? null,
+        alternative.attempt ?? null,
       );
     });
   }
@@ -914,6 +962,7 @@ export class HistoryStore {
       ...(row.provider_key === null ? {} : { provider_key: row.provider_key }),
       ...(row.model === null ? {} : { model: row.model }),
       ...(row.version === null ? {} : { version: row.version }),
+      ...(row.attempt === null ? {} : { attempt: row.attempt }),
     };
   }
 
@@ -1040,6 +1089,13 @@ function imagesColumn(images: StoredImageRef[] | undefined): string | null {
 
 function textHash(text: string): string {
   return createHash("sha256").update(text).digest("hex");
+}
+
+function addAttemptColumns(db: Database): void {
+  for (const table of ["history_messages", "history_alternatives"]) {
+    const columns = db.query(`PRAGMA table_info(${table})`).all() as { name: string }[];
+    if (columns.length > 0 && !columns.some((column) => column.name === "attempt")) db.run(`ALTER TABLE ${table} ADD COLUMN attempt TEXT`);
+  }
 }
 
 function dropRowCounts(db: Database): void {

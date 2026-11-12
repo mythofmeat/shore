@@ -320,3 +320,60 @@ test("the filter tells injected context from the conversation by role, shape and
   expect(filtered.removed.map((item) => item.kind)).toEqual(["billing header", "system reminder", "resume prompt", "retry nudge", "system reminder"]);
   expect(filterInjectedContext({ system: [text("x-anthropic-billing-header: cc_version=1")] })).toStrictEqual({ body: { system: [] }, removed: [{ at: "system[0]", after: "the start", kind: "billing header", text: "x-anthropic-billing-header: cc_version=1" }] });
 });
+
+test("a regenerate's note reaches the model with the new attempt and is gone from the next message, while an ordinary note stays", async () => {
+  const dir = await mkdtemp(join(tmpdir(), "shore-agent-regen-note-"));
+  const workspace = join(dir, "heidi");
+  await mkdir(workspace);
+  const mock = await startMockAnthropic({ script: [
+    { text: "First answer." }, { text: "Second answer." }, { text: "Third answer." },
+    { text: "Fourth answer." }, { text: "Fifth answer." },
+  ] });
+  const provider = new ClaudeAgentProvider({
+    bookPath: () => join(dir, "sessions.json"),
+    runQuery: params => query({ ...params, options: { ...params.options, env: {
+      ...params.options.env, HOME: dir, CLAUDE_CONFIG_DIR: dir,
+      CLAUDE_SECURESTORAGE_CONFIG_DIR: dir, CLAUDE_CODE_OAUTH_TOKEN: "test-oauth-token",
+    } } }),
+  });
+  const deps = {
+    config: {
+      app: defaultAppConfig(), models: emptyCatalog(), providers: ProviderRegistry.empty(), rawTable: undefined,
+      dirs: { config: dir, data: dir, cache: dir, runtime: dir },
+    },
+    providers: { claude_agent: provider }, retry: { maxRetries: 0, backoffBaseMs: 0 },
+  };
+  const send = async (thread: string, messages: WireMessage[]): Promise<string> => {
+    const { result } = await runGeneration({
+      sdk: "claude_agent", api_key: "", base_url: mock.url, model: "opus",
+      system: [{ label: "soul", text: SOUL }],
+      context: { character: "heidi", workspace_dir: workspace, thread, thinking_enabled: false, call_type: "message" },
+      max_tokens: 1024, replay_prior_thinking: "all", messages,
+    }, { providerKey: "claude-code" }, deps, { signal: AbortSignal.timeout(30_000), sink: () => {} });
+    return result.content;
+  };
+  const user = (text: string): WireMessage => ({ role: "user", content: [{ type: "text", text }] });
+  const said = (text: string): WireMessage => ({ role: "assistant", content: [{ type: "text", text }] });
+  const note = (text: string, attemptOnly: boolean): WireMessage => ({
+    role: "system", content: [{ type: "text", text }], ...(attemptOnly ? { attempt_only: true as const } : {}),
+  });
+  const wire = (index: number): string => JSON.stringify(required(mock.requests[index]).body.messages);
+  try {
+    const ask = user("What is in your room?");
+    expect(await send("main", [ask])).toBe("First answer.");
+    expect(await send("main", [ask, note("EARLIER ATTEMPT: First answer. REASON: too short", true)])).toBe("Second answer.");
+    expect(await send("main", [ask, said("Second answer."), user("Tell me more.")])).toBe("Third answer.");
+    expect(wire(1)).toContain("EARLIER ATTEMPT: First answer. REASON: too short");
+    expect(wire(2)).toContain("Second answer.");
+    expect(wire(2)).not.toContain("EARLIER ATTEMPT");
+
+    const other = user("And outside?");
+    expect(await send("side", [other, note("ORDINARY NOTE", false)])).toBe("Fourth answer.");
+    expect(await send("side", [other, said("Fourth answer."), user("Go on.")])).toBe("Fifth answer.");
+    expect(wire(3)).toContain("ORDINARY NOTE");
+    expect(wire(4), "a note without the flag is still carried to later turns").toContain("ORDINARY NOTE");
+  } finally {
+    await mock.stop();
+    await rm(dir, { recursive: true, force: true });
+  }
+}, 90_000);

@@ -39,6 +39,7 @@ export interface MessageAlternative {
   provider_key?: string;
   model?: string;
   version?: string;
+  attempt?: string;
 }
 
 export interface DiaryNote {
@@ -64,6 +65,7 @@ export interface Message {
   model?: string;
   origin?: MessageOrigin;
   version?: string;
+  attempt?: string;
   last_elsewhere?: { thread: string; at: string };
   diary?: DiaryNote[];
   heartbeat_running?: { started_at: string; reason?: string | undefined; thread?: string | undefined };

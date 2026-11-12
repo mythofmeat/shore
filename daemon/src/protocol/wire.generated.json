@@ -186,11 +186,20 @@
             "type": "boolean",
             "default": false
           },
-          "guidance": {
+          "another_take": {
+            "type": "boolean"
+          },
+          "reason": {
             "type": [
               "string",
               "null"
             ]
+          },
+          "tags": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
           }
         }
       },

@@ -4,6 +4,7 @@ import { chromeOf } from "../chrome.ts";
 import { CompactionWatch, type PassRecord } from "../chat/compaction_watch.ts";
 import { ConversationRequests, type ConversationScope } from "../chat/requests.ts";
 import { ReadMarks } from "../chat/read_marks.ts";
+import { ReplyMarkStore } from "../chat/reply_marks.ts";
 import { conversationCharacter, droppedNotice } from "../chat/sending.ts";
 import { UnsentMessages } from "../chat/unsent.ts";
 import { daemonSettings, KeptSettings } from "../kept_settings.ts";
@@ -36,6 +37,7 @@ export const workspace = new Workspace(new BrowserConnection({
 }), (callback) => { requestAnimationFrame(callback); });
 export const conversation = new ConversationRequests(workspace.connection);
 export const readMarks = new ReadMarks(workspace, () => document.hasFocus());
+export const replyMarks = new ReplyMarkStore(async (name, input) => await workspace.actions.run(name, input));
 export const unsent = new UnsentMessages(workspace.connection, listRequests, (message, dropped) => {
   const character = conversationCharacter(message.conversation);
   toasts.show(`Your earlier message${character === undefined ? "" : ` to ${character}`} wasn’t saved, so it’s back in its message box.${droppedNotice(dropped)}`, "error");

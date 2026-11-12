@@ -244,12 +244,38 @@
       "subcommand_required": false,
       "arguments": [
         {
-          "id": "guidance",
-          "short": "g",
-          "long": "guidance",
+          "id": "another_take",
+          "short": null,
+          "long": "another-take",
           "aliases": [],
           "short_aliases": [],
-          "help": "Ephemeral system guidance for this regeneration",
+          "help": "Show the new attempt the earlier ones and ask for something different. This doesn't dislike them",
+          "long_help": null,
+          "action": "SetTrue",
+          "required": false,
+          "global": false,
+          "hidden": false,
+          "require_equals": false,
+          "min_values": 0,
+          "max_values": 0,
+          "defaults": [
+            "false"
+          ],
+          "choices": [],
+          "conflicts": [],
+          "env": null
+        },
+        {
+          "id": "reason",
+          "short": "r",
+          "long": "reason",
+          "aliases": [
+            "guidance"
+          ],
+          "short_aliases": [
+            "g"
+          ],
+          "help": "Why the shown attempt missed. The new attempt sees the earlier ones and this reason, and the shown attempt is disliked with it",
           "long_help": null,
           "action": "Set",
           "required": false,
@@ -259,6 +285,514 @@
           "min_values": 1,
           "max_values": 1,
           "defaults": [],
+          "choices": [],
+          "conflicts": [],
+          "env": null
+        },
+        {
+          "id": "tags",
+          "short": null,
+          "long": "tag",
+          "aliases": [],
+          "short_aliases": [],
+          "help": "A reason tag from marks.tags in your config, alone or with --reason; repeat for more",
+          "long_help": null,
+          "action": "Append",
+          "required": false,
+          "global": false,
+          "hidden": false,
+          "require_equals": false,
+          "min_values": 1,
+          "max_values": 1,
+          "defaults": [],
+          "choices": [],
+          "conflicts": [],
+          "env": null
+        },
+        {
+          "id": "help",
+          "short": "h",
+          "long": "help",
+          "aliases": [],
+          "short_aliases": [],
+          "help": "Print help",
+          "long_help": null,
+          "action": "Help",
+          "required": false,
+          "global": false,
+          "hidden": false,
+          "require_equals": false,
+          "min_values": 0,
+          "max_values": 0,
+          "defaults": [],
+          "choices": [],
+          "conflicts": [],
+          "env": null
+        }
+      ]
+    },
+    {
+      "path": "shore msg like",
+      "about": "Like a reply, or words in it",
+      "long_about": null,
+      "hidden": false,
+      "aliases": [],
+      "subcommand_required": false,
+      "arguments": [
+        {
+          "id": "msg_ref",
+          "short": null,
+          "long": null,
+          "aliases": [],
+          "short_aliases": [],
+          "help": "Reply reference (last, -1, 3, or a message id, archived ones included); defaults to the latest reply",
+          "long_help": null,
+          "action": "Set",
+          "required": false,
+          "global": false,
+          "hidden": false,
+          "require_equals": false,
+          "min_values": 1,
+          "max_values": 1,
+          "defaults": [],
+          "choices": [],
+          "conflicts": [],
+          "env": null
+        },
+        {
+          "id": "attempt",
+          "short": "a",
+          "long": "attempt",
+          "aliases": [],
+          "short_aliases": [],
+          "help": "One-based attempt of the reply; defaults to the one shown",
+          "long_help": null,
+          "action": "Set",
+          "required": false,
+          "global": false,
+          "hidden": false,
+          "require_equals": false,
+          "min_values": 1,
+          "max_values": 1,
+          "defaults": [],
+          "choices": [],
+          "conflicts": [],
+          "env": null
+        },
+        {
+          "id": "phrase",
+          "short": "p",
+          "long": "phrase",
+          "aliases": [],
+          "short_aliases": [],
+          "help": "Words from the reply to mark instead of the whole reply",
+          "long_help": null,
+          "action": "Set",
+          "required": false,
+          "global": false,
+          "hidden": false,
+          "require_equals": false,
+          "min_values": 1,
+          "max_values": 1,
+          "defaults": [],
+          "choices": [],
+          "conflicts": [],
+          "env": null
+        },
+        {
+          "id": "reason",
+          "short": "r",
+          "long": "reason",
+          "aliases": [],
+          "short_aliases": [],
+          "help": "Why, in your own words",
+          "long_help": null,
+          "action": "Set",
+          "required": false,
+          "global": false,
+          "hidden": false,
+          "require_equals": false,
+          "min_values": 1,
+          "max_values": 1,
+          "defaults": [],
+          "choices": [],
+          "conflicts": [],
+          "env": null
+        },
+        {
+          "id": "tags",
+          "short": null,
+          "long": "tag",
+          "aliases": [],
+          "short_aliases": [],
+          "help": "A reason tag from marks.tags in your config; repeat for more",
+          "long_help": null,
+          "action": "Append",
+          "required": false,
+          "global": false,
+          "hidden": false,
+          "require_equals": false,
+          "min_values": 1,
+          "max_values": 1,
+          "defaults": [],
+          "choices": [],
+          "conflicts": [],
+          "env": null
+        },
+        {
+          "id": "json",
+          "short": null,
+          "long": "json",
+          "aliases": [],
+          "short_aliases": [],
+          "help": "Output raw JSON",
+          "long_help": null,
+          "action": "SetTrue",
+          "required": false,
+          "global": false,
+          "hidden": false,
+          "require_equals": false,
+          "min_values": 0,
+          "max_values": 0,
+          "defaults": [
+            "false"
+          ],
+          "choices": [],
+          "conflicts": [],
+          "env": null
+        },
+        {
+          "id": "help",
+          "short": "h",
+          "long": "help",
+          "aliases": [],
+          "short_aliases": [],
+          "help": "Print help",
+          "long_help": null,
+          "action": "Help",
+          "required": false,
+          "global": false,
+          "hidden": false,
+          "require_equals": false,
+          "min_values": 0,
+          "max_values": 0,
+          "defaults": [],
+          "choices": [],
+          "conflicts": [],
+          "env": null
+        }
+      ]
+    },
+    {
+      "path": "shore msg dislike",
+      "about": "Dislike a reply, or words in it",
+      "long_about": null,
+      "hidden": false,
+      "aliases": [],
+      "subcommand_required": false,
+      "arguments": [
+        {
+          "id": "msg_ref",
+          "short": null,
+          "long": null,
+          "aliases": [],
+          "short_aliases": [],
+          "help": "Reply reference (last, -1, 3, or a message id, archived ones included); defaults to the latest reply",
+          "long_help": null,
+          "action": "Set",
+          "required": false,
+          "global": false,
+          "hidden": false,
+          "require_equals": false,
+          "min_values": 1,
+          "max_values": 1,
+          "defaults": [],
+          "choices": [],
+          "conflicts": [],
+          "env": null
+        },
+        {
+          "id": "attempt",
+          "short": "a",
+          "long": "attempt",
+          "aliases": [],
+          "short_aliases": [],
+          "help": "One-based attempt of the reply; defaults to the one shown",
+          "long_help": null,
+          "action": "Set",
+          "required": false,
+          "global": false,
+          "hidden": false,
+          "require_equals": false,
+          "min_values": 1,
+          "max_values": 1,
+          "defaults": [],
+          "choices": [],
+          "conflicts": [],
+          "env": null
+        },
+        {
+          "id": "phrase",
+          "short": "p",
+          "long": "phrase",
+          "aliases": [],
+          "short_aliases": [],
+          "help": "Words from the reply to mark instead of the whole reply",
+          "long_help": null,
+          "action": "Set",
+          "required": false,
+          "global": false,
+          "hidden": false,
+          "require_equals": false,
+          "min_values": 1,
+          "max_values": 1,
+          "defaults": [],
+          "choices": [],
+          "conflicts": [],
+          "env": null
+        },
+        {
+          "id": "reason",
+          "short": "r",
+          "long": "reason",
+          "aliases": [],
+          "short_aliases": [],
+          "help": "Why, in your own words",
+          "long_help": null,
+          "action": "Set",
+          "required": false,
+          "global": false,
+          "hidden": false,
+          "require_equals": false,
+          "min_values": 1,
+          "max_values": 1,
+          "defaults": [],
+          "choices": [],
+          "conflicts": [],
+          "env": null
+        },
+        {
+          "id": "tags",
+          "short": null,
+          "long": "tag",
+          "aliases": [],
+          "short_aliases": [],
+          "help": "A reason tag from marks.tags in your config; repeat for more",
+          "long_help": null,
+          "action": "Append",
+          "required": false,
+          "global": false,
+          "hidden": false,
+          "require_equals": false,
+          "min_values": 1,
+          "max_values": 1,
+          "defaults": [],
+          "choices": [],
+          "conflicts": [],
+          "env": null
+        },
+        {
+          "id": "json",
+          "short": null,
+          "long": "json",
+          "aliases": [],
+          "short_aliases": [],
+          "help": "Output raw JSON",
+          "long_help": null,
+          "action": "SetTrue",
+          "required": false,
+          "global": false,
+          "hidden": false,
+          "require_equals": false,
+          "min_values": 0,
+          "max_values": 0,
+          "defaults": [
+            "false"
+          ],
+          "choices": [],
+          "conflicts": [],
+          "env": null
+        },
+        {
+          "id": "help",
+          "short": "h",
+          "long": "help",
+          "aliases": [],
+          "short_aliases": [],
+          "help": "Print help",
+          "long_help": null,
+          "action": "Help",
+          "required": false,
+          "global": false,
+          "hidden": false,
+          "require_equals": false,
+          "min_values": 0,
+          "max_values": 0,
+          "defaults": [],
+          "choices": [],
+          "conflicts": [],
+          "env": null
+        }
+      ]
+    },
+    {
+      "path": "shore msg unmark",
+      "about": "Remove a like or dislike from a reply, or from words in it",
+      "long_about": null,
+      "hidden": false,
+      "aliases": [],
+      "subcommand_required": false,
+      "arguments": [
+        {
+          "id": "msg_ref",
+          "short": null,
+          "long": null,
+          "aliases": [],
+          "short_aliases": [],
+          "help": "Reply reference (last, -1, 3, or a message id, archived ones included); defaults to the latest reply",
+          "long_help": null,
+          "action": "Set",
+          "required": false,
+          "global": false,
+          "hidden": false,
+          "require_equals": false,
+          "min_values": 1,
+          "max_values": 1,
+          "defaults": [],
+          "choices": [],
+          "conflicts": [],
+          "env": null
+        },
+        {
+          "id": "attempt",
+          "short": "a",
+          "long": "attempt",
+          "aliases": [],
+          "short_aliases": [],
+          "help": "One-based attempt of the reply; defaults to the one shown",
+          "long_help": null,
+          "action": "Set",
+          "required": false,
+          "global": false,
+          "hidden": false,
+          "require_equals": false,
+          "min_values": 1,
+          "max_values": 1,
+          "defaults": [],
+          "choices": [],
+          "conflicts": [],
+          "env": null
+        },
+        {
+          "id": "phrase",
+          "short": "p",
+          "long": "phrase",
+          "aliases": [],
+          "short_aliases": [],
+          "help": "The marked words; left off, the mark on the whole reply goes",
+          "long_help": null,
+          "action": "Set",
+          "required": false,
+          "global": false,
+          "hidden": false,
+          "require_equals": false,
+          "min_values": 1,
+          "max_values": 1,
+          "defaults": [],
+          "choices": [],
+          "conflicts": [],
+          "env": null
+        },
+        {
+          "id": "json",
+          "short": null,
+          "long": "json",
+          "aliases": [],
+          "short_aliases": [],
+          "help": "Output raw JSON",
+          "long_help": null,
+          "action": "SetTrue",
+          "required": false,
+          "global": false,
+          "hidden": false,
+          "require_equals": false,
+          "min_values": 0,
+          "max_values": 0,
+          "defaults": [
+            "false"
+          ],
+          "choices": [],
+          "conflicts": [],
+          "env": null
+        },
+        {
+          "id": "help",
+          "short": "h",
+          "long": "help",
+          "aliases": [],
+          "short_aliases": [],
+          "help": "Print help",
+          "long_help": null,
+          "action": "Help",
+          "required": false,
+          "global": false,
+          "hidden": false,
+          "require_equals": false,
+          "min_values": 0,
+          "max_values": 0,
+          "defaults": [],
+          "choices": [],
+          "conflicts": [],
+          "env": null
+        }
+      ]
+    },
+    {
+      "path": "shore msg marks",
+      "about": "Show the likes and dislikes on a reply's attempts",
+      "long_about": null,
+      "hidden": false,
+      "aliases": [],
+      "subcommand_required": false,
+      "arguments": [
+        {
+          "id": "msg_refs",
+          "short": null,
+          "long": null,
+          "aliases": [],
+          "short_aliases": [],
+          "help": "Reply references (last, -1, 3, or message ids, archived ones included); defaults to the latest reply",
+          "long_help": null,
+          "action": "Append",
+          "required": false,
+          "global": false,
+          "hidden": false,
+          "require_equals": false,
+          "min_values": 1,
+          "max_values": null,
+          "defaults": [],
+          "choices": [],
+          "conflicts": [],
+          "env": null
+        },
+        {
+          "id": "json",
+          "short": null,
+          "long": "json",
+          "aliases": [],
+          "short_aliases": [],
+          "help": "Output raw JSON",
+          "long_help": null,
+          "action": "SetTrue",
+          "required": false,
+          "global": false,
+          "hidden": false,
+          "require_equals": false,
+          "min_values": 0,
+          "max_values": 0,
+          "defaults": [
+            "false"
+          ],
           "choices": [],
           "conflicts": [],
           "env": null
@@ -9375,6 +9909,133 @@
         "consult memory"
       ],
       "mapping": null
+    },
+    {
+      "argv": [
+        "msg",
+        "regen",
+        "--another-take"
+      ],
+      "mapping": null
+    },
+    {
+      "argv": [
+        "msg",
+        "regen",
+        "--reason",
+        "too formal",
+        "--tag",
+        "too long"
+      ],
+      "mapping": null
+    },
+    {
+      "argv": [
+        "msg",
+        "like"
+      ],
+      "mapping": {
+        "name": "mark",
+        "args": {
+          "kind": "like"
+        }
+      }
+    },
+    {
+      "argv": [
+        "msg",
+        "like",
+        "-1",
+        "--attempt",
+        "2",
+        "--phrase",
+        "the sea",
+        "--reason",
+        "vivid",
+        "--tag",
+        "too long"
+      ],
+      "mapping": {
+        "name": "mark",
+        "args": {
+          "ref": "-1",
+          "position": 2,
+          "kind": "like",
+          "phrase": "the sea",
+          "reason": "vivid",
+          "tags": [
+            "too long"
+          ]
+        }
+      }
+    },
+    {
+      "argv": [
+        "msg",
+        "dislike",
+        "m_1",
+        "--tag",
+        "too long",
+        "--tag",
+        "repetitive"
+      ],
+      "mapping": {
+        "name": "mark",
+        "args": {
+          "ref": "m_1",
+          "kind": "dislike",
+          "tags": [
+            "too long",
+            "repetitive"
+          ]
+        }
+      }
+    },
+    {
+      "argv": [
+        "msg",
+        "unmark",
+        "-1",
+        "--attempt",
+        "1",
+        "--phrase",
+        "the sea"
+      ],
+      "mapping": {
+        "name": "unmark",
+        "args": {
+          "ref": "-1",
+          "position": 1,
+          "phrase": "the sea"
+        }
+      }
+    },
+    {
+      "argv": [
+        "msg",
+        "marks"
+      ],
+      "mapping": {
+        "name": "marks",
+        "args": {}
+      }
+    },
+    {
+      "argv": [
+        "msg",
+        "marks",
+        "last",
+        "m_1"
+      ],
+      "mapping": {
+        "name": "marks",
+        "args": {
+          "refs": [
+            "last",
+            "m_1"
+          ]
+        }
+      }
     },
     {
       "argv": [

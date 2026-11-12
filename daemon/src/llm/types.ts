@@ -39,6 +39,7 @@ export interface WireMessage {
   provider_key?: string;
   model?: string;
   transient_tail?: number;
+  attempt_only?: true;
 }
 
 export type ThinkingReplay = "all" | "none";
@@ -103,6 +104,7 @@ export interface CallContext {
   keepalive_window_secs?: number;
   forensics_dir?: string;
   rid?: string;
+  attempt?: string;
   usage?: UsageConfig;
   thinking_dropped?: number;
 }

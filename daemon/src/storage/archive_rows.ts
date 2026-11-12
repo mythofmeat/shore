@@ -10,11 +10,14 @@ export const HISTORY_TABLES = [
 type Row = Record<string, SQLQueryBindings>;
 type Column = { name: string; pk: number; type: string };
 
-export function copyArchiveTables(source: Database, destination: Database, kind: "history" | "ledger" | "capture"): void {
-  const tables = kind === "capture" ? CAPTURE_TABLES : kind === "ledger" ? LEDGER_TABLES : HISTORY_TABLES;
+export const MARK_TABLES = ["reply_attempts", "reply_marks"];
+
+export function copyArchiveTables(source: Database, destination: Database, kind: "history" | "ledger" | "capture" | "marks"): void {
+  const tables = kind === "capture" ? CAPTURE_TABLES : kind === "ledger" ? LEDGER_TABLES : kind === "marks" ? MARK_TABLES : HISTORY_TABLES;
   const mappings = new Map<string, Map<number, number>>();
   for (const table of tables) {
     const sourceColumns = new Set((source.query(`PRAGMA table_info(${table})`).all() as Column[]).map(column => column.name));
+    if (sourceColumns.size === 0) continue;
     const columns = (destination.query(`PRAGMA table_info(${table})`).all() as Column[]).filter(column => sourceColumns.has(column.name));
     const primary = columns.filter(column => column.pk > 0);
     const autoId = primary.length === 1 && primary[0]?.name === "id" && primary[0].type === "INTEGER";

@@ -209,6 +209,7 @@ function record(
     tool_surface: toolSurfaceFingerprint(req.tools),
     ...(call.output_tokens_estimated === true ? { output_tokens_estimated: true } : {}),
     ...(ctx.thinking_dropped === undefined ? {} : { thinking_dropped: ctx.thinking_dropped }),
+    ...(ctx.attempt === undefined ? {} : { attempt: ctx.attempt }),
     ...(call.error === undefined ? {} : { error: call.error }),
   };
   const row = ledger.record(entry, () => new Date(), attempt?.id);

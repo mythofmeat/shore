@@ -2665,6 +2665,82 @@ wire_types! {
         pub workspace: Option<WorkspaceRewind>,
     }
 
+    #[serde(rename_all = "snake_case")]
+    pub enum MarkKind { Like, Dislike }
+
+    #[serde(rename_all = "snake_case")]
+    pub enum AttemptAsked { First, Reroll, AnotherTake, WithReason }
+
+    #[serde(deny_unknown_fields)]
+    pub struct MarkArgs {
+        #[serde(default, skip_serializing_if = "Option::is_none", rename = "ref")]
+        pub reference: Option<String>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        #[ts(type = "number | null")]
+        pub position: Option<u64>,
+        pub kind: MarkKind,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        pub phrase: Option<String>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        pub reason: Option<String>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        pub tags: Option<Vec<String>>,
+    }
+
+    #[serde(deny_unknown_fields)]
+    pub struct UnmarkArgs {
+        #[serde(default, skip_serializing_if = "Option::is_none", rename = "ref")]
+        pub reference: Option<String>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        #[ts(type = "number | null")]
+        pub position: Option<u64>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        pub phrase: Option<String>,
+    }
+
+    #[serde(deny_unknown_fields)]
+    pub struct ListMarksArgs {
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        pub refs: Option<MessageReferences>,
+    }
+
+    pub struct MarkView {
+        pub kind: MarkKind,
+        pub phrase: Option<String>,
+        pub reason: Option<String>,
+        pub tags: Vec<String>,
+        pub at: String,
+    }
+
+    pub struct AttemptMarks {
+        pub position: usize,
+        pub shown: bool,
+        pub attempt: Option<String>,
+        pub asked: Option<AttemptAsked>,
+        pub marks: Vec<MarkView>,
+    }
+
+    pub struct ReplyMarks {
+        #[serde(rename = "ref")]
+        pub reference: String,
+        pub attempts: Vec<AttemptMarks>,
+    }
+
+    pub struct MarkListing {
+        pub tags: Vec<String>,
+        pub replies: Vec<ReplyMarks>,
+    }
+
+    pub struct MarkChanged {
+        #[serde(rename = "ref")]
+        pub reference: String,
+        pub position: usize,
+        pub attempt: String,
+        pub phrase: Option<String>,
+        pub changed: bool,
+        pub marks: Vec<MarkView>,
+    }
+
     pub struct SystemInjected { pub injected: bool }
 
     #[serde(deny_unknown_fields)]
@@ -3119,6 +3195,9 @@ operations! {
     DeleteMessages: "delete" (DeleteMessagesArgs) => MessagesDeleted,
     ListAlternatives: "list_alternatives" (ListAlternativesArgs) => AlternativeListing,
     SelectAlternative: "alt" (SelectAlternativeArgs) => AlternativeSelected,
+    MarkReply: "mark" (MarkArgs) => MarkChanged,
+    UnmarkReply: "unmark" (UnmarkArgs) => MarkChanged,
+    ListMarks: "marks" (ListMarksArgs) => MarkListing,
     InjectSystem: "inject_system" (InjectSystemArgs) => SystemInjected,
     ListCharacters: "list_characters" (EmptyOperationArgs) => CharacterListing,
     CreateCharacter: "create_character" (NamedOperationArgs) => CharacterCreated,

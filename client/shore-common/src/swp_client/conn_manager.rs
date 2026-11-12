@@ -574,7 +574,9 @@ mod lifecycle_tests {
             crate::protocol::client_msg::ClientMessage::Regen(crate::protocol::client_msg::Regen {
                 rid: Some("pending".into()),
                 stream: true,
-                guidance: None,
+                another_take: false,
+                reason: None,
+                tags: Vec::new(),
             }),
         ))
         .await

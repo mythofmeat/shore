@@ -124,6 +124,18 @@ export class SegmentReader {
     return this.history.readSegmentOrdinals(this.character, index, ordinals);
   }
 
+  replyMessages(msgId: string): Message[] | undefined {
+    const found = this.history?.replyOrdinals(this.character, msgId);
+    if (found === undefined) return undefined;
+    const rows = this.readSegmentOrdinals(found.segment, found.ordinals);
+    return found.ordinals.flatMap((ordinal) => rows.get(ordinal) ?? []);
+  }
+
+  stampAttempt(msgId: string, ordinal: number | undefined, shown: boolean, attempt: string): string {
+    if (this.history === undefined) throw new MessageNotFound(msgId);
+    return this.history.stampAttempt(this.character, msgId, ordinal, shown, attempt);
+  }
+
   close(): void {
     this.history?.close();
   }

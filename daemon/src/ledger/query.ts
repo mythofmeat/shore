@@ -118,6 +118,7 @@ function rowFromSqlite(r: Record<string, unknown>): CallRow {
     output_tokens_estimated: r["output_tokens_estimated"] === 1 ? 1 : 0,
     thinking_dropped: count(r["thinking_dropped"]),
     cache_state_reason: optText(r["cache_state_reason"]),
+    attempt: optText(r["attempt"]),
   };
 }
 

@@ -54,6 +54,7 @@ export interface SystemNote {
   anchor: string;
   text: string;
   delivered?: boolean;
+  attempt_only?: true;
 }
 
 function blocksOf(content: unknown): Block[] {

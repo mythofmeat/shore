@@ -2,7 +2,9 @@ use std::io::Write;
 
 use crossterm::style::{Attribute, SetAttribute};
 use shore_common::duration::format_duration_ms;
-use shore_common::protocol::operations::{FoundMessage, MessageCopy};
+use shore_common::protocol::operations::{
+    AttemptAsked, FoundMessage, MarkChanged, MarkKind, MarkListing, MarkView, MessageCopy,
+};
 
 use super::transcript::{LogFilter, character_color, format_time, print_log, turns};
 use super::vocab::{COLOR_ERROR, Tone, indent_to, paint, wrap_line};
@@ -64,6 +66,7 @@ pub(crate) fn format_command(name: &str, data: &serde_json::Value) {
         "dream" => cli_out!("{}", dream_report_text(data)),
         "diary" => super::diary::print_diary(data),
         "presence" => cli_out!("{}", presence_text(data)),
+        "mark" | "unmark" | "marks" => cli_out!("{}", marks_text(name, data)),
         "heartbeat_set_dormant" => print_heartbeat_status_change(data, "dormant"),
         "heartbeat_set_active" => print_heartbeat_status_change(data, "active"),
         "session_activate" => print_session_activate(data),
@@ -848,6 +851,88 @@ pub(crate) fn presence_text(data: &serde_json::Value) -> String {
             choices.join(", ")
         )
     }
+}
+
+fn mark_line(mark: &MarkView) -> String {
+    let verb = match mark.kind {
+        MarkKind::Like => "liked",
+        MarkKind::Dislike => "disliked",
+    };
+    let what = mark
+        .phrase
+        .as_ref()
+        .map_or_else(String::new, |phrase| format!(" \"{phrase}\""));
+    let why: Vec<&str> = mark
+        .tags
+        .iter()
+        .map(String::as_str)
+        .chain(mark.reason.as_deref())
+        .collect();
+    if why.is_empty() {
+        format!("{verb}{what}")
+    } else {
+        format!("{verb}{what}: {}", why.join("; "))
+    }
+}
+
+fn asked_label(asked: &AttemptAsked) -> &'static str {
+    match asked {
+        AttemptAsked::First => "first",
+        AttemptAsked::Reroll => "reroll",
+        AttemptAsked::AnotherTake => "another take",
+        AttemptAsked::WithReason => "with a reason",
+    }
+}
+
+pub(crate) fn marks_text(name: &str, data: &serde_json::Value) -> String {
+    if name == "marks" {
+        let Ok(listing) = serde_json::from_value::<MarkListing>(data.clone()) else {
+            return "The daemon sent marks this client can't read.".to_owned();
+        };
+        let mut lines = Vec::new();
+        for reply in &listing.replies {
+            lines.push(reply.reference.clone());
+            for attempt in &reply.attempts {
+                let labels: Vec<&str> = attempt
+                    .shown
+                    .then_some("shown")
+                    .into_iter()
+                    .chain(attempt.asked.as_ref().map(asked_label))
+                    .collect();
+                let head = if labels.is_empty() {
+                    format!("  {}.", attempt.position)
+                } else {
+                    format!("  {}. {}", attempt.position, labels.join(", "))
+                };
+                if attempt.marks.is_empty() {
+                    lines.push(format!("{head}: no marks"));
+                } else {
+                    lines.push(format!("{head}:"));
+                    lines.extend(
+                        attempt
+                            .marks
+                            .iter()
+                            .map(|mark| format!("     {}", mark_line(mark))),
+                    );
+                }
+            }
+        }
+        lines.push(if listing.tags.is_empty() {
+            "No reason tags are set in marks.tags.".to_owned()
+        } else {
+            format!("Reason tags: {}.", listing.tags.join(", "))
+        });
+        return lines.join("\n");
+    }
+    let Ok(changed) = serde_json::from_value::<MarkChanged>(data.clone()) else {
+        return "The daemon sent a mark this client can't read.".to_owned();
+    };
+    let at = format!("Attempt {} of {}", changed.position, changed.reference);
+    if changed.marks.is_empty() {
+        return format!("{at} has no marks now.");
+    }
+    let marks: Vec<String> = changed.marks.iter().map(mark_line).collect();
+    format!("{at}: {}.", marks.join("; "))
 }
 
 pub(crate) fn dream_report_text(data: &serde_json::Value) -> String {

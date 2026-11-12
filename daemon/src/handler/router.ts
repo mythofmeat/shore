@@ -11,6 +11,7 @@ import type { Error as ProtocolError } from "../protocol/Error.ts";
 import type { RequestOutcome } from "../protocol/RequestOutcome.ts";
 import { sanitiseRid } from "../swp/admission.ts";
 import { HeartbeatThreadError, ImagesUnsupportedError, NoModelError, WakeTurnError } from "./setup.ts";
+import { NothingToReplaceError, UnknownTagError } from "./attempts.ts";
 import {
   isControlRoutedMessage,
   REQUEST_LIFECYCLE_CAPABILITY,
@@ -44,7 +45,9 @@ function generationErrorCode(error: unknown): ErrorCode {
     error instanceof CharacterConfigError ||
     error instanceof ImagesUnsupportedError ||
     error instanceof HeartbeatThreadError ||
-    error instanceof WakeTurnError
+    error instanceof WakeTurnError ||
+    error instanceof NothingToReplaceError ||
+    error instanceof UnknownTagError
   ) {
     return error.code;
   }
@@ -110,8 +113,12 @@ export interface EngineBody {
   readonly images: readonly string[];
   readonly image_data: readonly unknown[];
   readonly absence_seconds?: number | null;
-  readonly guidance?: string;
+  readonly regen?: RegenChoice;
 }
+
+export type RegenChoice =
+  | { readonly kind: "reroll" | "another_take" }
+  | { readonly kind: "with_reason"; readonly reason?: string; readonly tags: readonly string[] };
 
 export interface HandlerNotifier {
   notify(event: "error", title: string, body: string): void;

@@ -3,6 +3,7 @@ import type { RequestFinished } from "../../protocol/RequestFinished.ts";
 import { conversationRequest } from "../request_forms.ts";
 
 export interface ConversationScope { character: string | null; thread: string | null }
+export interface RegenChoice { anotherTake?: boolean; reason?: string; tags?: readonly string[] }
 
 interface Sent { scope: ConversationScope; regen: boolean; accepted: (() => void) | undefined; started: boolean }
 
@@ -46,8 +47,15 @@ export class ConversationRequests {
   awaitingStream(scope?: ConversationScope): string | undefined { return [...this.#active].find((rid) => this.#sent.get(rid)?.started === false && this.#within(rid, scope)); }
   regens(scope?: ConversationScope): readonly string[] { return [...this.#sent].filter(([rid, sent]) => sent.regen && this.#within(rid, scope)).map(([rid]) => rid); }
   pendingRegens(scope?: ConversationScope): readonly string[] { return this.regens(scope).filter((rid) => this.#sent.get(rid)?.started === false); }
-  async regenerate(guidance?: string, stream = true): Promise<void> {
-    const result = await this.submit("regen", { stream, ...(guidance === undefined || guidance.trim() === "" ? {} : { guidance: guidance.trim() }) });
+  async regenerate(choice: RegenChoice = {}, stream = true): Promise<void> {
+    const reason = choice.reason?.trim() ?? "";
+    const tags = choice.tags ?? [];
+    const result = await this.submit("regen", {
+      stream,
+      ...(choice.anotherTake === true ? { another_take: true } : {}),
+      ...(reason === "" ? {} : { reason }),
+      ...(tags.length === 0 ? {} : { tags: [...tags] }),
+    });
     if (result.outcome !== "completed") throw new Error(result.error?.message ?? (result.outcome === "cancelled" ? "Regeneration stopped" : `Regeneration ${result.outcome}`));
   }
   cancel(): void { this.connection.cancel(); }
