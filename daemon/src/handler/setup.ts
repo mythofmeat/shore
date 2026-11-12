@@ -16,6 +16,7 @@ import {
 import { toolGrants } from "../config/app.ts";
 import { characterDataDir } from "../config/dirs.ts";
 import { resolvedReplayPriorThinking } from "../config/models.ts";
+import type { PriorContext } from "../engine/segments.ts";
 import type { Message } from "../engine/types.ts";
 import { buildRequestWithResolvedKey, type BuiltRequest } from "../llm/request.ts";
 import type { McpRegistry } from "../tools/mcp_registry.ts";
@@ -25,7 +26,7 @@ export interface SetupEngine {
   readonly thread?: string;
   messages(): readonly Message[];
   messagesThroughLastUserTurn(): Message[];
-  segmentCount(): number;
+  priorContext(): PriorContext;
 }
 
 export class NoModelError extends Error {
@@ -113,7 +114,6 @@ export async function buildGenerationRequest(
   const messages = params.regen
     ? engine.messagesThroughLastUserTurn()
     : [...engine.messages()];
-  const hasPriorContext = engine.segmentCount() > 0;
 
   const mcpToolDefs = params.mcpRegistry.toolDefsFiltered(toolGrants(config.app.tools));
 
@@ -124,7 +124,7 @@ export async function buildGenerationRequest(
     config,
     resolved,
     messages,
-    hasPriorContext,
+    prior: engine.priorContext(),
     mcpToolDefs,
     ...(params.timeZone === undefined ? {} : { timeZone: params.timeZone }),
   });

@@ -7,7 +7,7 @@ import { join } from "node:path";
 
 import type { LoadedConfig } from "../../config/loader.ts";
 import { HISTORY_DB_FILE, HistoryStore } from "../../engine/history_store.ts";
-import { conversationRef } from "../../engine/segments.ts";
+import { conversationRef, type PriorContext } from "../../engine/segments.ts";
 import { loadCharacterConfig } from "../../config/loader.ts";
 import { resolvePromptTemplate } from "../../config/dirs.ts";
 import { MAIN_THREAD, archiveKey, characterDataDir, characterMemoryDir } from "../../config/dirs.ts";
@@ -39,7 +39,7 @@ import { CharacterWorkspace, characterWorkspace } from "../../tools/character_wo
 import { workspaceTurnsFor } from "../../tools/workspace_turns.ts";
 import { applyDeferredEdits, queueDeferredEdit } from "../deferred_edits.ts";
 import type { CompactionRunner } from "../../handler/turn.ts";
-import { conversationManager, hasCompactionOperation, segmentCount } from "./archive.ts";
+import { conversationManager, hasCompactionOperation, priorContext } from "./archive.ts";
 import { type CompactionCompletion, handleCompactionOutcome, loadMessagesForCompaction, pushAfterCompaction } from "./background.ts";
 import { RealCompactionLlm, type RealCompactionLlmOptions } from "./llm.ts";
 import { compact, compactSegment, countTurns, tryBeginCompaction, type CompactionRunGuard } from "./manager.ts";
@@ -453,7 +453,7 @@ async function segmentPass(
     throw CompactionError.llm("memory writes are turned off (compaction.write_memory = false)");
   }
   const chatRequest = await resolveChatRequest(character, thread, archived.messages, effective,
-    deps.tools?.mcpToolDefs?.(toolGrants(effective.app.tools)) ?? [], deps.env, archived.priorContext);
+    deps.tools?.mcpToolDefs?.(toolGrants(effective.app.tools)) ?? [], deps.env, { archived: archived.priorContext });
   const { scheduleNextWake: _unscheduled, ...tools } = deps.tools ?? {};
   const resolved = await resolveDeps(character, { ...deps, tools }, effective, thread, archived.messages, chatRequest.tools, false);
   const outcome = await compactSegment({
@@ -733,7 +733,7 @@ async function resolveChatRequest(
   effective: LoadedConfig,
   mcpToolDefs: readonly ToolDefinition[],
   env: NodeJS.ProcessEnv | undefined,
-  priorContext?: boolean,
+  prior?: PriorContext,
 ): Promise<SidecarRequest> {
   const chatModel = resolveChatModelForCharacter(
     configView(effective),
@@ -745,15 +745,13 @@ async function resolveChatRequest(
     throw CompactionError.llm("No chat model configured for compaction prefix rebuild");
   }
 
-  const hasPriorContext = priorContext ??
-    (await segmentCount(conversationRef(effective.dirs.data, character, thread, false))) > 0;
   const built = await buildChatShapeRequestFromDisk(
     character,
     characterDataDir(effective.dirs.data, character),
     effective,
     chatModel,
     [...messages],
-    hasPriorContext,
+    prior ?? priorContext(effective.dirs.data, character, thread),
     { thread, mcpToolDefs, ...(env === undefined ? {} : { env }) },
   );
   return built.request;

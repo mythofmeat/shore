@@ -93,6 +93,7 @@ export interface PromptParams {
   user_definition?: string | undefined;
   memory_index?: string | undefined;
   has_prior_context: boolean;
+  archived_last_at?: string | undefined;
   messages: Message[];
   max_context_tokens?: number | undefined;
   max_output_tokens?: number | undefined;
@@ -116,6 +117,7 @@ export function assemblePrompt(
       params.messages,
       availableForMessages,
       params.has_prior_context,
+      params.archived_last_at,
       params.user_timestamp_mode,
       timeZone,
       params.image_tier ?? HIGH_RESOLUTION_IMAGE_TIER,
@@ -427,6 +429,7 @@ function trimMessages(
   messages: Message[],
   tokenBudget: number,
   hasPriorContext: boolean,
+  archivedLastAt: string | undefined,
   mode: UserTimestampMode,
   timeZone: string,
   imageTier: ImageTier,
@@ -462,9 +465,11 @@ function trimMessages(
     selected.shift();
   }
 
-  const lostContext = hasPriorContext || selected.length < messages.length;
+  const dropped = messages.length - selected.length;
+  const lostContext = hasPriorContext || dropped > 0;
 
-  let prevMs: number | undefined;
+  const before = dropped > 0 ? required(messages[dropped - 1]).timestamp : archivedLastAt;
+  let prevMs = before === undefined ? undefined : parseRfc3339(before);
   let lastMarkerMs: number | undefined;
   let firstUserPending = true;
   let unsent: ImageRef[] = [];

@@ -15,6 +15,7 @@ import { resolveDisplayName, toolGrants, type HeartbeatConfig } from "../config/
 import { characterDataDir } from "../config/dirs.ts";
 import { credentialEntry, type ToolConversation } from "../handler/tool_context.ts";
 import { buildChatShapeRequestFromDisk } from "../handler/context.ts";
+import { NO_PRIOR_CONTEXT } from "../engine/segments.ts";
 import { agoPhrase, DIARY_FOR_HEARTBEAT, diaryText, formatWallClock, presenceText } from "../engine/prompt.ts";
 import { readThreadsIndex, threadActivities, threadChatModel } from "../engine/threads.ts";
 import type { Message } from "../engine/types.ts";
@@ -258,7 +259,7 @@ export async function prepareHeartbeatRequest(
 
   let built: Awaited<ReturnType<typeof buildChatShapeRequestFromDisk>>;
   try {
-    built = await buildChatShapeRequestFromDisk(character, characterDir, config, resolved, messages, false, {
+    built = await buildChatShapeRequestFromDisk(character, characterDir, config, resolved, messages, NO_PRIOR_CONTEXT, {
       mcpToolDefs: deps.rebuild.mcpRegistry.toolDefsFiltered(toolGrants(config.app.tools)),
       thread,
       activeConversation: true,
