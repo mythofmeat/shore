@@ -2,6 +2,7 @@ import { createHash, randomUUID } from "node:crypto";
 import type { Server } from "bun";
 import { shoreLog } from "../../log.ts";
 import { outsideWireScope, recordWireNote, withWireScope, type WireScope } from "../wire_capture.ts";
+import { restoredToolNames, restoringToolNames, withBareToolNames, type WireNames } from "./claude_agent_wire_names.ts";
 
 const ANTHROPIC_API = "https://api.anthropic.com";
 const REMINDER = "<system-reminder>";
@@ -222,7 +223,7 @@ export function withoutInjectedContext(body: Record<string, unknown>): Record<st
   return filterInjectedContext(body).body;
 }
 
-function filteredBody(raw: ArrayBuffer, notes: readonly SystemNote[]): { body: ArrayBuffer | string; removed: RemovedContext[] } {
+function filteredBody(raw: ArrayBuffer, notes: readonly SystemNote[]): { body: ArrayBuffer | string; removed: RemovedContext[]; wireNames?: WireNames } {
   let parsed: unknown;
   try {
     parsed = JSON.parse(new TextDecoder().decode(raw));
@@ -231,7 +232,15 @@ function filteredBody(raw: ArrayBuffer, notes: readonly SystemNote[]): { body: A
   }
   if (typeof parsed !== "object" || parsed === null || Array.isArray(parsed)) return { body: raw, removed: [] };
   const filtered = filterInjectedContext(parsed as Record<string, unknown>);
-  return { body: JSON.stringify(insertSystemNotes(filtered.body, notes)), removed: filtered.removed };
+  const named = withBareToolNames(insertSystemNotes(filtered.body, notes));
+  return { body: JSON.stringify(named.body), removed: filtered.removed, wireNames: named.wireNames };
+}
+
+async function withWireToolNames(response: Response, wireNames: WireNames): Promise<ReadableStream<Uint8Array> | string | null> {
+  if (response.headers.get("content-type")?.startsWith("text/event-stream") === true) {
+    return response.body?.pipeThrough(restoringToolNames(wireNames)) ?? null;
+  }
+  return restoredToolNames(await response.text(), wireNames);
 }
 
 function preview(text: string): string {
@@ -272,7 +281,8 @@ async function forward(request: Request, target: URL, notes: readonly SystemNote
     const response = await fetch(target, { method: request.method, headers, body, redirect: "manual", signal: request.signal });
     const returned = new Headers(response.headers);
     for (const name of ["content-encoding", "content-length", "transfer-encoding"]) returned.delete(name);
-    return new Response(response.body, { status: response.status, statusText: response.statusText, headers: returned });
+    const named = filtered?.wireNames === undefined ? response.body : await withWireToolNames(response, filtered.wireNames);
+    return new Response(named, { status: response.status, statusText: response.statusText, headers: returned });
   } catch (error) {
     if (request.signal.aborted) throw error;
     shoreLog.warn(`claude_agent: context filter could not reach ${target.origin}: ${String(error)}`);

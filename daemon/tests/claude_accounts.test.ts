@@ -113,7 +113,7 @@ test("a tool-using reply whose account hits its limit partway through carries on
   const mock = await startMockAnthropic({
     fallback: (request) => {
       if (request.headers["authorization"] === "Bearer token-second") return { text: "Done on the next account." };
-      if (!toolResultsSent(request)) return { toolUses: [{ name: "mcp__shore__note", input: { text: "groceries" } }], usage: { output_tokens: 40 } };
+      if (!toolResultsSent(request)) return { toolUses: [{ name: "note", input: { text: "groceries" } }], usage: { output_tokens: 40 } };
       return sessionLimitFor(["first"])(request);
     },
   });
@@ -355,7 +355,7 @@ test("a reply that crosses its login's own limit partway finishes on that login,
   const results = (request: AnthropicRequestRecord): number => (JSON.stringify(request.body.messages).match(/noted: /g) ?? []).length;
   const mock = await startMockAnthropic({
     fallback: (request) => results(request) < 2
-      ? { toolUses: [{ id: `toolu_round_${String(results(request))}`, name: "mcp__shore__note", input: { text: `round ${String(results(request))}` } }] }
+      ? { toolUses: [{ id: `toolu_round_${String(results(request))}`, name: "note", input: { text: `round ${String(results(request))}` } }] }
       : { text: "All noted." },
   });
   const ran: unknown[] = [];
