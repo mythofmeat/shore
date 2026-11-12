@@ -6,7 +6,7 @@ import { findEffectiveModel } from "../config/effective_catalog.ts";
 import type { LoadedConfig } from "../config/loader.ts";
 import { configView, resolveActiveModelAndOverlay } from "../config/preferences.ts";
 import { withConversation } from "../engine/lifecycle.ts";
-import { formatWallClock, renderTemplate } from "../engine/prompt.ts";
+import { estimateHistoryTokens, formatWallClock, renderTemplate } from "../engine/prompt.ts";
 import { homeThreadOf } from "../engine/threads.ts";
 import type { SealedThread } from "../engine/sealed_list.ts";
 import type { ContentBlock, Message } from "../engine/types.ts";
@@ -14,10 +14,11 @@ import { buildChatShapeRequestFromDisk } from "../handler/context.ts";
 import { thinkingEnabled } from "../handler/generation.ts";
 import { pictureProblems, type PictureSender } from "../handler/pictures.ts";
 import { resolveGenerationModel } from "../handler/setup.ts";
-import { contextTokensFor, maybeCompact, threadShouldCompact } from "../handler/turn.ts";
+import { maybeCompact, threadShouldCompact } from "../handler/turn.ts";
 import { usageConfigView } from "../ledger/budget.ts";
 import { budgetBlockFor } from "../ledger/gate.ts";
 import { hostZone } from "../ledger/zoned.ts";
+import { imageTierForModel } from "../llm/image_tokens.ts";
 import { shoreLog } from "../log.ts";
 import { sentPicturesDir } from "../storage/sent_pictures.ts";
 import { characterWorkspace } from "../tools/character_workspace.ts";
@@ -30,6 +31,7 @@ import { persistHeartbeatMessage, roundMessage, type HeartbeatEngine, type Heart
 import { presence, unshownPresence } from "./presence.ts";
 import { sealedWakeNote } from "./sealed_notes.ts";
 import { firedBy, WAKE_QUIET_MS, type ThreadWakeResult, type TriggerFiring } from "./runner.ts";
+import { withoutWakeWorking } from "./wake_working.ts";
 
 export const WAKE_OPENER = "[wake]";
 
@@ -250,7 +252,7 @@ export async function runThreadWake(
           onCompactionComplete: () => {},
           onCompactionFailed: () => {},
         },
-      }, engine, character, config, config.dirs.data, contextTokensFor(loop.usage), runner);
+      }, engine, character, config, config.dirs.data, estimateHistoryTokens(withoutWakeWorking(engine.messages()), imageTierForModel(resolved.modelId)), runner);
     }
     return { events };
   });

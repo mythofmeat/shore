@@ -1703,8 +1703,8 @@ function wakeText(now: string, lines: readonly string[], limit = "30 minutes", n
     "[wake]",
     ...lines,
     `[Current time: Friday 2026-10-30 · ${now}]`,
-    '[This is a wake in your thread "ring": time of your own here, without User having written. Everything above is this thread as you left it. You are free to use your tools as you wish.',
-    "What you write in your final response is your note to yourself. It goes in your diary, where your other turns see it for the next day, and it stays here in this thread. To say something to User, wrap it in `<sendMessage>...</sendMessage>` tags in your final response. That text is posted in this thread as a message to them. The rest of what you do in a wake stays in this thread as your working: they can read it if they look, but nothing tells them it is there.",
+    `[This is a wake in your thread "ring": time of your own here, without User having written. Everything above is this thread as you left it, apart from the working of your earlier wakes here, which isn't shown again. You are free to use your tools as you wish.`,
+    "What you write in your final response is your note to yourself. It goes in your diary, where your other turns see it for the next day, and it stays here in this thread. To say something to User, wrap it in `<sendMessage>...</sendMessage>` tags in your final response. That text is posted in this thread as a message to them. The rest of what you do in a wake stays in this thread as your working: they can read it if they look, but nothing tells them it is there. Your later turns here aren't shown it either, only a line saying how much of it there was, so put what you will need again in your note or in a file.",
     `A wake here can run for up to ${limit}. After ${nudgeAfter}, you will get a nudge to wrap up, with a few more rounds to finish. If User writes in this thread while you are working, the wake stops at the end of the step it is on so that you can answer them, and you are woken here again to pick it up once they have been quiet here for 10 minutes.]`,
   ].join("\n\n");
 }
@@ -1769,9 +1769,8 @@ test("a trigger that names a thread wakes the character there, with that thread'
     await say("and then?", "ring");
     expect(turnsOf(script.replies.at(-1)).slice(2)).toEqual([
       ["user", opener],
-      ["assistant", "<tool_use>"],
-      ["user", "<tool_result>"],
-      ["assistant", "<thinking>|Told part one; the fox is at the gate.\n[sent to User as the next message here]"],
+      ["system", "[Your working in this wake isn't shown here: 1 tool call. Your note from the end of it follows.]"],
+      ["assistant", "Told part one; the fox is at the gate.\n[sent to User as the next message here]"],
       ["user", "[heartbeat · Friday 2026-10-30 · 12:11 PM]"],
       ["assistant", "Part one: the fox came to the gate."],
       ["user", "and then?"],
@@ -1844,13 +1843,13 @@ test("the user's message stops a wake in that thread at the end of its step and 
       ["user", "", "wait, what is the fox called?"],
       ["assistant", "", "reply to: wait, what is the fox called?"],
     ]);
-    expect(turnsOf(script.replies.at(-1)).slice(2)).toEqual([
+    const cutShort: [role: string, text: string][] = [
       ["user", opener],
-      ["assistant", "Let me look.|<tool_use>"],
-      ["user", "<tool_result>"],
+      ["system", "[Your working in this wake isn't shown here: 1 tool call, ending with `read`. It ended without a note from you. The last thing you wrote in it: \"Let me look.\"]"],
       ["system", stopped],
       ["user", "wait, what is the fox called?"],
-    ]);
+    ];
+    expect(turnsOf(script.replies.at(-1)).slice(2)).toEqual(cutShort);
     expect(emitted.filter((each) => each.msg.origin === "autonomous")).toEqual([]);
     expect(runtime.autonomy.log("ada", 100).filter((event) => event.kind !== "tool_use").map((event) => [event.kind, event.detail]).slice(-3)).toEqual([
       ["tick_fired", 'Woken in "ring" by trigger "show"'],
@@ -1871,7 +1870,11 @@ test("the user's message stops a wake in that thread at the end of its step and 
     at(22);
     await runtime.autonomy.tick();
     expect(script.heartbeats).toHaveLength(3);
-    expect(turnsOf(script.heartbeats[1]).at(-1)).toEqual(["user", wakeText("12:22 PM", ["[This picks up the wake that User interrupted at Friday 2026-10-30 · 12:12 PM.]", FIRED])]);
+    expect(turnsOf(script.heartbeats[1]).slice(2)).toEqual([
+      ...cutShort,
+      ["assistant", "reply to: wait, what is the fox called?"],
+      ["user", wakeText("12:22 PM", ["[This picks up the wake that User interrupted at Friday 2026-10-30 · 12:12 PM.]", FIRED])],
+    ]);
     expect((await thread("ring")).at(-1)?.content).toBe("Part one: Rue came to the gate.");
     await runtime.triggers.tick();
     expect(diaryOf(data)).toEqual([["wake", "Told part one."], ["after", "Write it up."]]);
@@ -1879,6 +1882,135 @@ test("the user's message stops a wake in that thread at the end of its step and 
     await runtime.autonomy.tick();
     expect(script.heartbeats).toHaveLength(3);
   }, withTriggers);
+});
+
+const RING_FIRED = (time: string): string => `[Your trigger "show" fired at Friday 2026-10-30 · ${time}: r]`;
+
+async function wakesInRing(runtime: ShoreRuntime, minutes: number): Promise<void> {
+  runtime.autonomy.wakeFor("ada", { name: "show", reason: "r", at: T0 + minutes * MINUTE, thread: "ring" });
+  at(minutes);
+  await runtime.autonomy.tick();
+}
+
+test("a wake's working stays in its thread for the user, and is left out of what a later wake there, a reply there, the request rebuilt from disk and that thread's compaction are sent", async () => {
+  await withCharacter(async ({ runtime, script, data, say, thread }) => {
+    await runtime.registry.createThread("ada", "ring");
+    await say("hello");
+    at(1);
+    await say("tell me a story in parts", "ring");
+    script.aside = "Let me find my place.";
+    script.again = 1;
+    script.closing = "Told part one.\n<sendMessage>Part one: the fox came to the gate.</sendMessage>";
+    await wakesInRing(runtime, 11);
+
+    const first = wakeText("12:11 PM", [RING_FIRED("12:11 PM")]);
+    expect(stored(await thread("ring")).slice(2)).toEqual([
+      ["user", "autonomous", first],
+      ["assistant", "", "Let me find my place."],
+      ["user", "", "<SOUL.md>"],
+      ["assistant", "", ""],
+      ["user", "", "<SOUL.md>"],
+      ["assistant", "", "Told part one.\n[sent to User as the next message here]"],
+      ["assistant", "autonomous", "Part one: the fox came to the gate."],
+    ]);
+    expect((await thread("ring")).at(-2)?.content_blocks.map((block) => block.type)).toEqual(["thinking", "text"]);
+    const firstSeen: [role: string, text: string][] = [
+      ["user", "tell me a story in parts"],
+      ["assistant", "reply to: tell me a story in parts"],
+      ["user", first],
+      ["system", "[Your working in this wake isn't shown here: 2 tool calls. Your note from the end of it follows.]"],
+      ["assistant", "Told part one.\n[sent to User as the next message here]"],
+      ["user", "[heartbeat · Friday 2026-10-30 · 12:11 PM]"],
+      ["assistant", "Part one: the fox came to the gate."],
+    ];
+
+    script.heartbeats.length = 0;
+    script.aside = undefined;
+    script.closing = "Nothing to add yet.";
+    await wakesInRing(runtime, 12);
+    const second = wakeText("12:12 PM", [RING_FIRED("12:12 PM")]);
+    expect(turnsOf(script.heartbeats[0])).toEqual([...firstSeen, ["user", second]]);
+    expect(turnsOf(script.heartbeats[1]).slice(firstSeen.length)).toEqual([
+      ["user", second],
+      ["assistant", "<tool_use>"],
+      ["user", "<tool_result>"],
+    ]);
+
+    at(13);
+    await say("and then?", "ring");
+    const bothSeen: [role: string, text: string][] = [
+      ...firstSeen,
+      ["user", second],
+      ["system", "[Your working in this wake isn't shown here: 1 tool call. Your note from the end of it follows.]"],
+      ["assistant", "Nothing to add yet."],
+      ["user", "and then?"],
+    ];
+    expect(turnsOf(script.replies.at(-1))).toEqual(bothSeen);
+    expect((await thread("ring")).filter((message) => message.content_blocks.some((block) => block.type === "tool_use"))).toHaveLength(3);
+
+    const answered: [role: string, text: string][] = [...bothSeen, ["assistant", "reply to: and then?"]];
+    const rebuilt = await rebuildRequestFromDisk("ada", data, runtime.config, { ...NO_MCP, thread: "ring" });
+    expect(turnsOf(rebuilt?.request)).toEqual(answered);
+
+    markThreadRead(data, "ada", "ring", T0 + 14 * MINUTE);
+    const compacting: SidecarRequest[] = [];
+    await compactByHand(runtime, "ring", compacting);
+    expect(turnsOf(compacting[0]).slice(0, -1)).toEqual(answered);
+    expect(await thread("ring")).toEqual([]);
+  }, keepNothing);
+});
+
+test("a wake's working doesn't count towards its thread's size: a thread is trimmed or compacted for what later turns are sent of it", async () => {
+  const aLot = "the lamp ".repeat(80_000);
+  await withCharacter(async ({ runtime, script, say, thread, command }) => {
+    await runtime.registry.createThread("ada", "ring");
+    await say("hello");
+    at(1);
+    await say("tell me a story in parts", "ring");
+    script.aside = aLot;
+    script.closing = "Told part one.";
+    await wakesInRing(runtime, 11);
+    at(12);
+    await say("and then?", "ring");
+    expect((await thread("ring")).map((message) => message.content.length > 100_000 ? "a lot" : message.role)).toEqual([
+      "user", "assistant", "user", "a lot", "user", "assistant", "user", "assistant",
+    ]);
+    const status = await command("status", {}, "ring");
+    expect(status.type === "command_output" ? (status.data as { context_tokens: number }).context_tokens : undefined).toBeLessThan(1000);
+
+    script.aside = undefined;
+    script.closing = aLot;
+    await wakesInRing(runtime, 23);
+    at(24);
+    await say("go on", "ring");
+    expect(await thread("ring")).toEqual([]);
+  }, (app) => {
+    app.memory.compaction.keep_recent_turns = 0;
+  });
+
+  const compactions = (script: Script): number => script.calls.filter((call) => call === "compaction").length;
+  await withCharacter(async ({ runtime, script, data, say }) => {
+    await runtime.registry.createThread("ada", "ring", { compaction: true });
+    await say("hello");
+    at(1);
+    await say("tell me a story in parts", "ring");
+    script.aside = aLot;
+    script.closing = "Told part one.";
+    await wakesInRing(runtime, 11);
+    await queuedCompactionsEnded(data, "ada");
+    expect(compactions(script)).toBe(0);
+
+    script.aside = undefined;
+    script.closing = aLot;
+    await wakesInRing(runtime, 12);
+    await queuedCompactionsEnded(data, "ada");
+    expect(compactions(script)).toBe(1);
+  }, (app) => {
+    app.memory.compaction.enabled = true;
+    app.memory.compaction.keep_recent_turns = 0;
+    app.memory.compaction.min_turns = 1;
+    app.memory.compaction.max_context_tokens = 100_000;
+  });
 });
 
 test("a wake waits for the user to have been quiet in its thread for ten minutes, however lately they wrote elsewhere", async () => {

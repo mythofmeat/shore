@@ -294,7 +294,9 @@ test("the guide says which way to get time for what, and what each way costs", a
   expect(wakes).toContain("- A check that stays quiet costs nothing. No model is called.");
   expect(wakes).toContain("- A trigger with `wake = false`, and a `user_back` trigger, call no model either. The diary entry costs its words in each turn that is shown it.");
   expect(wakes).toContain("- A heartbeat is one turn of your model. It starts fresh");
-  expect(wakes).toContain("- A wake in a thread is one turn of your model with that whole thread in front of it: about a heartbeat, plus rereading the thread.");
+  expect(wakes).toContain("- A wake in a thread is one turn of your model with that thread in front of it: about a heartbeat, plus rereading the thread, less the working of your earlier wakes there.");
+  expect(wakes).toContain("- Your working isn't shown to you again. Later wakes there, your replies there and that thread's compaction are shown the wake as how it opened, a line saying how many tool calls it made, your note without its thinking, and the message you sent. What you will need again belongs in the note or in a file.");
+  expect(wakes).toContain("- A note in the thread says where it stopped, and you answer eve as in any conversation. The wake's working isn't shown to that turn. In its place is a line saying how many tool calls the wake had made, which one was last, and the last thing you wrote in it.");
 });
 
 test("the guide starts from time being the character's own to set up: what triggers are for as a whole, and that a side thread has no time until a trigger gives it some", async () => {
