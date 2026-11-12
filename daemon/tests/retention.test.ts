@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { mkdtempSync, existsSync, mkdirSync, readdirSync, writeFileSync } from "node:fs";
+import { mkdtempSync, existsSync, mkdirSync, readdirSync, readlinkSync, realpathSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { CallStore, ZERO_USAGE } from "../src/call_store.ts";
@@ -67,11 +67,23 @@ test("an old subagent trace keeps its result and loses its messages, and one mis
   expect(readEvents(data, "ada", "subagent")).toEqual(kept);
 });
 
+function filesOpenIn(folder: string) {
+  const inside = `${realpathSync(folder)}/`;
+  return readdirSync("/proc/self/fd").flatMap((fd) => {
+    try {
+      const target = readlinkSync(join("/proc/self/fd", fd));
+      return target.startsWith(inside) ? [target] : [];
+    } catch {
+      return [];
+    }
+  });
+}
+
 test("a data folder without a database yet is pruned without error, and no file is left open", () => {
   const data = mkdtempSync(join(tmpdir(), "shore-retention-fresh-"));
-  const open = readdirSync("/proc/self/fd").length;
   expect(pruneDiagnostics(data, NOW)).toEqual({ captures: 0, heartbeats: 0, subagentTraces: 0, unreadableTraces: 0 });
-  expect(readdirSync("/proc/self/fd").length).toBe(open);
+  expect(existsSync(databasePath(data))).toBe(true);
+  expect(filesOpenIn(data)).toEqual([]);
 });
 
 test("a write failure rolls back the entire cleanup", async () => {
