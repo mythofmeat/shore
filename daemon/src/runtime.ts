@@ -7,6 +7,7 @@ import { markOldClaudeAgentCallsAsSubscription } from "./storage/claude_agent_ca
 import { useWorkspacesFor } from "./storage/image_locations.ts";
 import { moveImagesOutOfDatabase } from "./storage/image_db_migration.ts";
 import { moveImagesToCache } from "./storage/image_migration.ts";
+import { closeProviderCaches } from "./storage/provider_cache.ts";
 import { startDiagnosticRetention } from "./storage/retention.ts";
 import { shoreLog } from "./log.ts";
 
@@ -123,6 +124,7 @@ export async function createRuntime(options: RuntimeOptions): Promise<ShoreRunti
     loadConfig(options.configPath, options.env === undefined ? {} : { env: options.env });
 
   createRuntimeDirs(config);
+  closeProviderCaches(config.dirs.cache);
   initializeDatabase(config.dirs.data);
   setImageCacheLimit(config.app.daemon.image_cache_bytes);
   useImageCacheFor(config.dirs.data, config.dirs.cache);

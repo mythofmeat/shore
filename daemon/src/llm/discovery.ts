@@ -7,9 +7,10 @@ import {
   NANOGPT_PAID_MODELS_URL,
   NANOGPT_SUBSCRIPTION_MODELS_URL,
 } from "./providers/nanogpt_config.ts";
-import { mkdir, readFile, rename, writeFile } from "node:fs/promises";
+import { readFile, rename, writeFile } from "node:fs/promises";
 import { readFileSync } from "node:fs";
-import { dirname, join } from "node:path";
+import { join } from "node:path";
+import { makeProviderCacheFolder, providerCacheDir } from "../storage/provider_cache.ts";
 
 export const CACHE_VERSION = 2;
 
@@ -62,7 +63,7 @@ export interface ProviderModelsCache {
 }
 
 export function cachePath(cacheDir: string, providerKey: string): string {
-  return join(cacheDir, "providers", providerKey, "models.json");
+  return join(providerCacheDir(cacheDir, providerKey), "models.json");
 }
 
 export async function readCache(path: string): Promise<ProviderModelsCache | undefined> {
@@ -270,7 +271,7 @@ function parseRfc3339(value: string): number | undefined {
 }
 
 export async function writeCache(path: string, cache: ProviderModelsCache): Promise<void> {
-  await mkdir(dirname(path), { recursive: true });
+  await makeProviderCacheFolder(path);
   const bytes = serializeCache(cache);
   const tmp = `${path.replace(/\.json$/, "")}.json.tmp`;
   await writeFile(tmp, bytes);

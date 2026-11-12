@@ -14,12 +14,16 @@ import type { Message } from "../src/engine/types.ts";
 import { ingestImages } from "../src/handler/images.ts";
 import { sealedFilesDir, startSealedThread } from "../src/handler/sealed_thread.ts";
 import { buildLlmMessages } from "../src/handler/wire_messages.ts";
+import { claudeAccountInUsePath, claudePlanLimitsPath } from "../src/ledger/plan_limits.ts";
 import { Ledger } from "../src/ledger/store.ts";
+import { cachePath } from "../src/llm/discovery.ts";
 import { shoreLog } from "../src/log.ts";
 import { stdioLaunch } from "../src/mcp/client.ts";
 import { loadPromptFileFromWorkspace } from "../src/memory/deferred_edits.ts";
 import { historyIndexPath, refreshHistoryIndex } from "../src/memory/history_index.ts";
 import { writeDurable } from "../src/storage/files.ts";
+import { imageCacheDir } from "../src/storage/image_cache.ts";
+import { closeProviderCaches } from "../src/storage/provider_cache.ts";
 import type { BashResult } from "../src/tools/bash.ts";
 import { canSwitchUser, characterUser, runsWithNoNewPrivs, setprivArgs, type CharacterUser } from "../src/tools/character_user.ts";
 import {
@@ -217,6 +221,36 @@ describe.skipIf(!READY)("a character whose tools run as its own user", () => {
     } finally {
       warned.mockRestore();
     }
+  });
+
+  test("can neither list nor read the provider caches an older daemon left open, once the daemon has started", async () => {
+    const base = await privateDir("isolation-provider-caches");
+    await writeFile(join(base, "config.toml"), `[tools]\nuser = "${USER}"\n`);
+    const cache = join(ROOT, `cache-${randomUUID()}`);
+    await mkdir(cache);
+    await chmod(cache, 0o700);
+    const config = loadConfig(join(base, "config.toml"), {
+      env: { SHORE_CONFIG_DIR: base, SHORE_DATA_DIR: join(base, "data"), SHORE_CACHE_DIR: cache, SHORE_WORKSPACE_DIR: join(ROOT, "workspace") },
+      onWarn: () => {},
+    });
+    const inUse = claudeAccountInUsePath(cache);
+    const limits = claudePlanLimitsPath(cache, "ada@example.com");
+    const catalog = cachePath(cache, "openrouter");
+    for (const file of [inUse, limits, catalog]) {
+      await mkdir(dirname(file), { recursive: true, mode: 0o755 });
+      await writeFile(file, "the user's\n", { mode: 0o644 });
+    }
+
+    closeProviderCaches(cache);
+    await sharePictureFolders(config, [USER]);
+
+    const result = await bash(await freshWorkspace(), [
+      `cd '${imageCacheDir(cache, USER)}' && echo reached`,
+      `ls '${join(cache, "providers")}'`, `ls '${dirname(dirname(limits))}'`, `cat '${inUse}'`, `cat '${limits}'`, `cat '${catalog}'`, "echo done",
+    ].join("; "));
+    expect(result.stdout).toBe("reached\ndone\n");
+    expect(result.stderr.match(/Permission denied/g)).toHaveLength(5);
+    expect(readFileSync(limits, "utf8")).toBe("the user's\n");
   });
 
   test("keeps a prompt file linked to the daemon's secrets out of the prompt, and can still replace it", async () => {
