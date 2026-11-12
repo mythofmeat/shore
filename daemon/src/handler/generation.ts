@@ -381,7 +381,7 @@ async function runGenerationCore(
         await engine.appendMessage(persisted);
       }
       intermediatePersisted = true;
-      if (message.role === "assistant") noteAttempt();
+      noteAttempt();
     };
 
     const streamed = await streamTurn(deps, {

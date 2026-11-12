@@ -96,7 +96,6 @@ CREATE INDEX IF NOT EXISTS idx_calls_ts        ON calls (ts);
 CREATE INDEX IF NOT EXISTS idx_calls_character ON calls (character);
 CREATE INDEX IF NOT EXISTS idx_calls_provider  ON calls (provider);
 CREATE INDEX IF NOT EXISTS idx_calls_anomaly   ON calls (cache_anomaly) WHERE cache_anomaly IS NOT NULL;
-CREATE INDEX IF NOT EXISTS idx_calls_attempt   ON calls (attempt) WHERE attempt IS NOT NULL;
 CREATE INDEX IF NOT EXISTS idx_call_attempts_status ON call_attempts (status, started_at);
 CREATE INDEX IF NOT EXISTS idx_usage_budget_warnings_window
     ON usage_budget_warnings (budget_name, period_start);
@@ -104,7 +103,8 @@ CREATE INDEX IF NOT EXISTS idx_usage_budget_warnings_window
 
 function addAttemptColumn(db: Database): void {
   const columns = db.query("PRAGMA table_info(calls)").all() as { name: string }[];
-  if (columns.length > 0 && !columns.some((column) => column.name === "attempt")) db.run("ALTER TABLE calls ADD COLUMN attempt TEXT");
+  if (!columns.some((column) => column.name === "attempt")) db.run("ALTER TABLE calls ADD COLUMN attempt TEXT");
+  db.run("CREATE INDEX IF NOT EXISTS idx_calls_attempt ON calls (attempt) WHERE attempt IS NOT NULL");
 }
 
 let subscriptionProviders = new Set(["opencode-go", "opencode"]);
@@ -287,8 +287,8 @@ export class Ledger {
     db.run("PRAGMA busy_timeout = 5000;");
     db.run("PRAGMA auto_vacuum = INCREMENTAL;");
     db.run("PRAGMA journal_mode = WAL;");
-    addAttemptColumn(db);
     db.run(SCHEMA);
+    addAttemptColumn(db);
     if (recoverPending) db.query("UPDATE call_attempts SET status = 'unresolved' WHERE status = 'pending'").run();
     return new Ledger(db, pricing);
   }

@@ -5,20 +5,21 @@ import { Icon } from "../ui/icons.tsx";
 import { toasts } from "../ui/toast.tsx";
 import { markScope } from "./marks.tsx";
 import { QUOTE_EVENT, QUOTE_SELECTION_EVENT } from "./quote.ts";
-import { shownAttempt, type ReplyKey } from "./reply_marks.ts";
+import { shownAttempt } from "./reply_marks.ts";
 
-interface Spot { range: Range; top: number; left: number; reply: ReplyKey | undefined }
+interface Shown { msg_id: string; alt_index: number; alt_count: number }
+interface Spot { range: Range; top: number; left: number; reply: Shown | undefined }
 
-function replyOf(range: Range): ReplyKey | undefined {
+function replyOf(range: Range): Shown | undefined {
   const article = messageBody(range.startContainer)?.closest("article.message[data-role=assistant]");
   if (!(article instanceof HTMLElement) || article.dataset["msgId"] === undefined) return undefined;
   return { msg_id: article.dataset["msgId"], alt_index: Number(article.dataset["altIndex"] ?? 0), alt_count: Number(article.dataset["altCount"] ?? 1) };
 }
 
-function markPhrase(reply: ReplyKey, kind: MarkKind, phrase: string): void {
+function markPhrase(reply: Shown, kind: MarkKind, phrase: string): void {
   const state = workspace.getSnapshot();
   const scope = markScope(state.character, state.thread);
-  const position = shownAttempt(replyMarks.attempts(reply))?.position ?? (reply.alt_index ?? 0) + 1;
+  const position = shownAttempt(replyMarks.attempts(reply))?.position ?? reply.alt_index + 1;
   void replyMarks.mark(scope, reply, position, { kind, phrase }).then((changed) => {
     replyMarks.edit({ ref: reply.msg_id, position, phrase: changed.phrase, place: "row" });
   }).catch((error: unknown) => toasts.show(errorText(error), "error"));
@@ -78,14 +79,8 @@ function onButton(event: Event): boolean {
 export function QuoteButton() {
   const [spot, setSpot] = useState<Spot | null>(null);
   const toolbar = useRef<HTMLDivElement>(null);
-  const [nudge, setNudge] = useState(0);
-  useLayoutEffect(() => {
-    const rect = toolbar.current?.getBoundingClientRect();
-    if (rect === undefined) return;
-    const over = rect.right - nudge - (innerWidth - GAP);
-    const under = GAP - (rect.left - nudge);
-    setNudge(over > 0 ? -over : under > 0 ? under : 0);
-  }, [spot]);
+  const [width, setWidth] = useState<number>();
+  useLayoutEffect(() => { setWidth(toolbar.current?.offsetWidth); }, [spot]);
   useEffect(() => {
     let pressed = false;
     const update = () => {
@@ -126,10 +121,10 @@ export function QuoteButton() {
   if (reply === undefined) return quoteButton;
   const mark = (kind: MarkKind) => {
     const selection = getSelection();
-    setSpot(null);
     if (selection !== null) markPhrase(reply, kind, renderedText(selection, spot.range));
   };
-  return <div ref={toolbar} className="quote-selection selection-actions" role="toolbar" aria-label="Selected words" style={{ top: spot.top, left: spot.left + nudge }}>
+  const half = (width ?? 0) / 2;
+  return <div ref={toolbar} className="quote-selection selection-actions" role="toolbar" aria-label="Selected words" style={{ top: spot.top, left: Math.min(Math.max(spot.left, half + GAP), innerWidth - half - GAP) }}>
     {quoteButton}
     {(["like", "dislike"] as const).map((kind) => <button key={kind} type="button" className="quote-selection"
       onPointerDown={(event) => { event.preventDefault(); mark(kind); }} onClick={() => mark(kind)}>

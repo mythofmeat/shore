@@ -52,7 +52,9 @@ describe("the marks a transcript shows", () => {
     const link = daemon();
     const store = new ReplyMarkStore(link.run);
     let heard = 0;
+    let gone = 0;
     store.subscribe(() => { heard += 1; });
+    store.subscribe(() => { gone += 1; })();
     store.want("ada/story", [{ msg_id: "m_1" }, { msg_id: "m_2" }, { msg_id: "m_gone" }]);
     store.want("ada/story", [{ msg_id: "m_1" }]);
     await settled();
@@ -60,7 +62,7 @@ describe("the marks a transcript shows", () => {
     expect(store.attempts({ msg_id: "m_1" })).toEqual([attempt(1, true)]);
     expect(store.attempts({ msg_id: "m_gone" }), "a reply the daemon didn't list has none").toEqual([]);
     expect(store.tags()).toEqual(["too long"]);
-    expect(heard).toBe(1);
+    expect([heard, gone]).toEqual([1, 0]);
     expect(store.getSnapshot()).toBe(1);
 
     store.want("ada/story", [{ msg_id: "m_1" }, { msg_id: "m_1", alt_index: 1, alt_count: 2 }]);
@@ -73,6 +75,7 @@ describe("the marks a transcript shows", () => {
     store.edit({ ref: "m_1", position: 1, phrase: null, place: "row" });
     store.want("ada/other", [{ msg_id: "m_1" }]);
     expect(store.editing(), "leaving the thread closes an open editor").toBeNull();
+    expect(store.tags(), "and the tags are asked for again").toEqual([]);
     expect(store.attempts({ msg_id: "m_1" })).toBeUndefined();
     await settled();
     expect(link.calls.at(-1)).toEqual({ name: "marks", input: { refs: ["m_1"] } });
@@ -160,7 +163,7 @@ describe("marking from the browser", () => {
       expect(store.editing(), JSON.stringify(open)).not.toBeNull();
     }
     store.edit({ ref: "m_1", position: 1, phrase: "sea", place: "dialog" });
-    await store.unmark("ada/story", { msg_id: "m_1" }, 1, "sea");
+    expect(await store.unmark("ada/story", { msg_id: "m_1" }, 1, "sea")).toEqual({ ref: "m_1", position: 1, attempt: "at_1", phrase: null, changed: true, marks: [] });
     expect(link.calls.at(-1)).toEqual({ name: "unmark", input: { ref: "m_1", position: 1, phrase: "sea" } });
     expect(store.editing()).toBeNull();
     expect(store.attempts({ msg_id: "m_1" })?.[0]?.marks).toEqual([]);

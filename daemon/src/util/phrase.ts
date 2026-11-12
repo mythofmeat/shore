@@ -55,7 +55,7 @@ export function locatePhrase(source: string, phrase: string): string | undefined
   if (start === -1) return undefined;
   let from = required(plain.at[start]);
   let to = required(plain.at[start + wanted.length - 1]) + 1;
-  while (from > 0 && MARKUP.has(source[from - 1] ?? "")) from -= 1;
-  while (to < source.length && MARKUP.has(source[to] ?? "")) to += 1;
+  while (MARKUP.has(source[from - 1] ?? "")) from -= 1;
+  while (MARKUP.has(source[to] ?? "")) to += 1;
   return source.slice(from, to);
 }

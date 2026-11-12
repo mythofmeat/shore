@@ -2,7 +2,7 @@ import { expect, spyOn, test } from "bun:test";
 
 import type { MarkView } from "../../src/protocol/MarkView.ts";
 import type { Message } from "../../src/protocol/Message.ts";
-import { useApp } from "./app.ts";
+import { HOLD, useApp } from "./app.ts";
 import { acting, button, click, mount, type } from "./dom.ts";
 
 const app = useApp();
@@ -125,13 +125,8 @@ test("a mark on words is shown with them, opens their own editor, and is lit up 
   daemon({ 1: [{ kind: "dislike", phrase: "sea **is**", reason: null, tags: ["repetitive"], at: AT }, { kind: "like", phrase: "nowhere", reason: null, tags: [], at: AT }] });
   const lit = new Map<string, { size: number; ranges: Range[] }>();
   class FakeHighlight { ranges: Range[]; size: number; constructor(...ranges: Range[]) { this.ranges = ranges; this.size = ranges.length; } }
-  const patch = (target: object, name: string, value: unknown) => {
-    const had = Object.getOwnPropertyDescriptor(target, name);
-    Object.defineProperty(target, name, { configurable: true, writable: true, value });
-    app.restores.push(() => { if (had === undefined) Reflect.deleteProperty(target, name); else Object.defineProperty(target, name, had); });
-  };
-  patch(globalThis, "Highlight", FakeHighlight);
-  patch(globalThis, "CSS", { highlights: lit });
+  patch(globalThis, "Highlight", { writable: true, value: FakeHighlight });
+  patch(globalThis, "CSS", { writable: true, value: { highlights: lit } });
   const view = await row(reply({ content: "The sea is wide.", content_blocks: [{ type: "text", text: "The sea **is** wide." }] }));
   expect(chips(view.host)).toEqual([["mark-chip dislike", "“sea **is**”repetitive"], ["mark-chip like", "“nowhere”"]]);
   expect(lit.get("shore-dislike")?.ranges.map((range) => range.toString())).toEqual(["sea is"]);
@@ -309,4 +304,268 @@ test("the thread menu and the palette offer another take and a reason, and the t
   await click([...palette.host.querySelectorAll("[role=option]")].find((item) => (item.textContent ?? "").startsWith("Another take")));
   expect(closed).toBe(1);
   expect(app.sent(regens).find((request) => request["type"] === "regen")).toMatchObject({ type: "regen", another_take: true });
+});
+
+function patch(target: object, name: string, value: PropertyDescriptor): void {
+  const had = Object.getOwnPropertyDescriptor(target, name);
+  Object.defineProperty(target, name, { configurable: true, ...value });
+  app.restores.push(() => { if (had === undefined) Reflect.deleteProperty(target, name); else Object.defineProperty(target, name, had); });
+}
+
+const width = (root: ParentNode | null | undefined, selector: string) => root?.querySelector(selector)?.querySelector("svg")?.getAttribute("width");
+
+test("toggles and chips are drawn at their sizes and say when a mark has no reason yet, and the toggles wait while a mark is saved", async () => {
+  const state = daemon({ 1: [{ kind: "like", phrase: null, reason: null, tags: [], at: AT }, { kind: "dislike", phrase: "sea", reason: "flat", tags: [], at: AT }] });
+  const view = await row(reply());
+  expect([width(view.host, ".mark-toggle.like"), width(view.host, ".mark-toggle.dislike"), width(view.host, ".mark-chip")]).toEqual(["15", "15", "13"]);
+  expect([...view.host.querySelectorAll(".mark-toggle")].map((toggle) => toggle.className)).toEqual(["icon-button mark-toggle like on", "icon-button mark-toggle dislike"]);
+  expect([...view.host.querySelectorAll(".mark-chip")].map((chip) => chip.getAttribute("title"))).toEqual(["Add a reason", "flat"]);
+  let answer = (): void => {};
+  app.answer((asked) => {
+    if (asked["name"] !== "mark") return undefined;
+    const held = Promise.withResolvers<void>();
+    answer = () => { held.resolve(); };
+    void held.promise.then(() => { app.socket().receive({ type: "command_output", rid: asked["rid"], name: "mark", data: { ref: "m_reply", position: 1, attempt: "at_1", phrase: null, changed: true, marks: [] } }); app.socket().receive({ type: "request_finished", rid: asked["rid"], outcome: "completed" }); });
+    return HOLD;
+  });
+  await click(button(view.host, "Dislike"));
+  expect([...view.host.querySelectorAll(".mark-toggle")].map((toggle) => (toggle as HTMLButtonElement).disabled)).toEqual([true, true]);
+  await acting(async () => { answer(); await Bun.sleep(10); });
+  expect([...view.host.querySelectorAll(".mark-toggle")].map((toggle) => (toggle as HTMLButtonElement).disabled)).toEqual([false, false]);
+  expect(state.sent).toHaveLength(1);
+  const bare = await row(reply({ msg_id: "m_bare" }));
+  expect(bare.host.querySelector(".mark-chips"), "no marks, no chips").toBeNull();
+});
+
+test("the editor takes the focus without scrolling, keeps its keys to itself, and shows it is saving", async () => {
+  daemon();
+  const focused: [string, FocusOptions | undefined][] = [];
+  patch(HTMLElement.prototype, "focus", { writable: true, value: function (this: HTMLElement, options?: FocusOptions) { focused.push([this.className, options]); } });
+  const view = await row(reply());
+  await click(button(view.host, "Like"));
+  await settle();
+  expect(focused.filter(([name]) => name.includes("mark-reason"))).toEqual([["input textarea mark-reason", { preventScroll: true }]]);
+  const area = view.host.querySelector(".mark-reason");
+  expect([area?.getAttribute("rows"), width(view.host, ".mark-editor [role=radio]")]).toEqual(["2", "14"]);
+  await click(button(view.host, "too long"));
+  expect([...view.host.querySelectorAll(".mark-tag")].map((tag) => tag.className)).toEqual(["mark-tag on", "mark-tag "]);
+  const keyed = (name: string, ctrlKey = false) => {
+    const event = new KeyboardEvent("keydown", { key: name, ctrlKey, bubbles: true, cancelable: true });
+    area?.dispatchEvent(event);
+    return event;
+  };
+  app.answer((asked) => asked["name"] === "mark" ? HOLD : undefined);
+  let saving: KeyboardEvent | undefined;
+  await acting(() => { saving = keyed("Enter", true); });
+  expect(saving?.defaultPrevented).toBe(true);
+  expect([button(view.host, "Saving…").disabled, (area as HTMLTextAreaElement).disabled]).toEqual([true, true]);
+  let escaping: KeyboardEvent | undefined;
+  await acting(() => { escaping = keyed("Escape"); });
+  expect(escaping?.defaultPrevented).toBe(true);
+  expect(editor(view.host)).toBeNull();
+});
+
+test("words are lit only in the reply's own text, across paragraphs, from where they start, and nothing breaks without the highlight API or a body", async () => {
+  daemon({ 1: [
+    { kind: "like", phrase: null, reason: null, tags: [], at: AT },
+    { kind: "dislike", phrase: "one. Start", reason: null, tags: [], at: AT },
+    { kind: "like", phrase: "very wide", reason: null, tags: [], at: AT },
+    { kind: "like", phrase: "Reasoning", reason: null, tags: [], at: AT },
+    { kind: "like", phrase: "**", reason: null, tags: [], at: AT },
+  ] });
+  const message = reply({ content_blocks: [{ type: "thinking", thinking: "quiet" }, { type: "text", text: "End of one.\n\nStart of the **very** wide two." }] });
+  const lit = new Map<string, { ranges: Range[] }>();
+  class FakeHighlight { ranges: Range[]; constructor(...ranges: Range[]) { this.ranges = ranges; } }
+  patch(globalThis, "CSS", { writable: true, value: { highlights: lit } });
+  const bare = await row(message);
+  expect(lit.size, "no Highlight, nothing lit and nothing thrown").toBe(0);
+  await bare.unmount();
+  Reflect.deleteProperty(globalThis, "CSS");
+  patch(globalThis, "Highlight", { writable: true, value: FakeHighlight });
+  patch(globalThis, "CSS", { writable: true, value: {} });
+  const plain = await row(message);
+  expect(lit.size, "no CSS.highlights, nothing lit and nothing thrown").toBe(0);
+  await plain.unmount();
+  patch(globalThis, "CSS", { writable: true, value: { highlights: lit } });
+  const view = await row(message);
+  expect(lit.get("shore-dislike")?.ranges.map((range) => range.toString())).toEqual(["one.Start"]);
+  expect(lit.get("shore-like")?.ranges.map((range) => [range.toString(), range.startContainer.textContent])).toEqual([["very wide", "very"]]);
+  await click(button(view.host, "Edit"));
+  expect(view.host.querySelector(".edit-box"), "editing a lit reply doesn't break").not.toBeNull();
+});
+
+test("a reply's row carries which attempt it shows, a mark made before its marks load goes on the shown attempt, and only replies being read get marks", async () => {
+  const state = daemon();
+  const { MessageRow } = await import("../../src/browser/chat/Message.tsx");
+  const { defaultViews } = await import("../../src/browser/preferences.ts");
+  const shown = (message: Message) => mount(<MessageRow message={message} character="ada" avatar={null} last={false} metadata={undefined} display={defaultViews()} busy={false} mobile={false} openImage={() => {}} />);
+  const plain = await shown(reply({ msg_id: "m_unloaded" }));
+  expect([plain.host.querySelector("article")?.getAttribute("data-alt-index"), plain.host.querySelector("article")?.getAttribute("data-alt-count")]).toEqual(["0", "1"]);
+  const second = await shown(reply({ msg_id: "m_second", alt_index: 1, alt_count: 2 }));
+  await click(button(second.host, "Like"));
+  await settle();
+  expect(state.sent.at(-1)).toEqual(["mark", { ref: "m_second", position: 2, kind: "like" }]);
+  const asked = await shown({ ...reply({ msg_id: "m_user" }), role: "user" });
+  expect(asked.host.querySelector(".reply-footer")).toBeNull();
+  await click(button(plain.host, "Edit"));
+  expect(plain.host.querySelector(".reply-footer"), "editing hides the marks").toBeNull();
+});
+
+test("the list of responses tags only the one shown, and closing it closes any editor open in it", async () => {
+  daemon({}, 2);
+  const message = reply({ alt_index: 1, alt_count: 2, alternatives: [
+    { content: "Try 1", images: [], content_blocks: [{ type: "text", text: "Try 1" }], timestamp: AT },
+    { content: "Try 2", images: [], content_blocks: [{ type: "text", text: "Try 2" }], timestamp: AT },
+  ] });
+  const view = await row(message, { last: true });
+  await click(button(view.host, "Response 2 of 2. Show all responses"));
+  await settle();
+  expect([...document.body.querySelectorAll(".alternative")].map((item) => item.querySelector(".tag")?.textContent ?? null)).toEqual([null, "shown"]);
+  const first = document.body.querySelector(".alternative");
+  if (!(first instanceof HTMLElement)) throw new Error("no first response");
+  await click(button(first, "Like"));
+  await settle();
+  expect(app.state().replyMarks.editing()?.place).toBe("dialog");
+  await click(button(document.body.querySelector("dialog") ?? document.body, "Close"));
+  expect(document.body.querySelector(".alternatives")).toBeNull();
+  expect(app.state().replyMarks.editing()).toBeNull();
+});
+
+test("the selection's buttons sit under it and stay on screen, the toolbar keeps its buttons in line, and marking happens on press", async () => {
+  const state = daemon({}, 2);
+  const { QuoteButton } = await import("../../src/browser/chat/QuoteButton.tsx");
+  let rect = { left: 400, width: 100, top: 100, bottom: 120, right: 500, height: 20, x: 400, y: 100 };
+  patch(Range.prototype, "getBoundingClientRect", { writable: true, value: () => rect });
+  patch(HTMLElement.prototype, "offsetWidth", { get(this: HTMLElement) { return this.classList.contains("selection-actions") ? 200 : 0; } });
+  app.state().replyMarks.want("", []);
+  app.state().replyMarks.want("ada/story", [{ msg_id: "m_reply" }]);
+  await settle();
+  const host = document.createElement("div");
+  host.innerHTML = `<article class="message assistant" data-role="assistant" data-msg-id="m_reply"><div class="message-body"><p class="prose">The sea is wide.</p></div></article>
+    <article class="message assistant" data-role="assistant" data-msg-id="m_unknown"><div class="message-body"><p class="prose">Fog rolls.</p></div></article>
+    <article class="message user" data-role="user" data-msg-id="m_ask"><div class="message-body"><p class="prose">Tell me.</p></div></article>`;
+  document.body.append(host);
+  const view = await mount(<QuoteButton />);
+  const choose = async (selector: string, at: typeof rect) => {
+    rect = at;
+    const text = host.querySelector(selector)?.firstChild;
+    if (text === null || text === undefined) throw new Error("no text");
+    const range = document.createRange();
+    range.setStart(text, 0);
+    range.setEnd(text, 3);
+    await acting(() => { getSelection()?.removeAllRanges(); getSelection()?.addRange(range); document.dispatchEvent(new Event("selectionchange")); });
+  };
+  const middle = { ...rect };
+  const right = { ...rect, left: 1000, width: 40 };
+  const left = { ...rect, left: 0, width: 20 };
+  const edge = innerWidth;
+  const placed = () => view.host.querySelector<HTMLElement>(".quote-selection")?.style.left;
+  await choose("[data-msg-id=m_ask] p", middle);
+  expect(placed()).toBe("450px");
+  await choose("[data-msg-id=m_ask] p", right);
+  expect(placed()).toBe(`${String(edge - 56)}px`);
+  await choose("[data-msg-id=m_reply] p", middle);
+  expect(placed()).toBe("450px");
+  expect(view.host.querySelector(".selection-actions button")?.getAttribute("style"), "the buttons inside sit in line").toBeNull();
+  expect(width(view.host, ".selection-actions button:nth-child(2)")).toBe("14");
+  await choose("[data-msg-id=m_reply] p", right);
+  expect(placed()).toBe(`${String(edge - 108)}px`);
+  await choose("[data-msg-id=m_reply] p", left);
+  expect(placed()).toBe("108px");
+  const press = new PointerEvent("pointerdown", { bubbles: true, cancelable: true });
+  await acting(async () => { button(view.host, "Like").dispatchEvent(press); await Bun.sleep(10); });
+  expect(press.defaultPrevented).toBe(true);
+  expect(state.sent.at(-1)).toEqual(["mark", { ref: "m_reply", position: 2, kind: "like", phrase: "The" }]);
+  await choose("[data-msg-id=m_unknown] p", middle);
+  await click(button(view.host, "Dislike"));
+  await settle();
+  expect(state.sent.at(-1)).toEqual(["mark", { ref: "m_unknown", position: 1, kind: "dislike", phrase: "Fog" }]);
+  host.remove();
+});
+
+test("the reason dialog and the editor load the tags when nothing has yet, show a single tag, and say tags can stand in for words", async () => {
+  let tags = ["only"];
+  app.answer((asked) => {
+    if (asked["name"] === "marks") return { tags, replies: [] };
+    if (asked["name"] === "mark") return { ref: "m_fresh", position: 1, attempt: "at_1", phrase: null, changed: true, marks: [{ kind: "like", phrase: null, reason: null, tags: [], at: AT }] };
+    return undefined;
+  });
+  const { ConversationDialogs } = await import("../../src/browser/chat/dialogs.tsx");
+  app.state().replyMarks.want("fresh", []);
+  const dialog = await mount(<ConversationDialogs dialog="reason" state={app.state().workspace.getSnapshot()} close={() => {}} />);
+  await settle();
+  expect([...dialog.host.querySelectorAll(".mark-tag")].map((tag) => tag.textContent)).toEqual(["only"]);
+  expect(dialog.host.querySelector(".field span .muted")?.textContent).toBe("(optional with a tag)");
+  expect(dialog.host.querySelector("textarea")?.getAttribute("rows")).toBe("4");
+  await click(button(dialog.host, "only"));
+  expect(dialog.host.querySelector(".mark-tag")?.className).toBe("mark-tag on");
+  await dialog.unmount();
+
+  tags = [];
+  app.state().replyMarks.want("fresher", []);
+  const none = await mount(<ConversationDialogs dialog="reason" state={app.state().workspace.getSnapshot()} close={() => {}} />);
+  await settle();
+  expect([none.host.querySelector(".mark-tags"), none.host.querySelector(".field span .muted")]).toEqual([null, null]);
+  await none.unmount();
+
+  tags = ["only"];
+  app.state().replyMarks.want("freshest", []);
+  const { MessageRow } = await import("../../src/browser/chat/Message.tsx");
+  const { defaultViews } = await import("../../src/browser/preferences.ts");
+  const view = await mount(<MessageRow message={reply({ msg_id: "m_fresh" })} character="ada" avatar={null} last={false} metadata={undefined} display={defaultViews()} busy={false} mobile={false} openImage={() => {}} />);
+  await click(button(view.host, "Like"));
+  await settle();
+  expect([...view.host.querySelectorAll(".mark-editor .mark-tag")].map((tag) => tag.textContent)).toEqual(["only"]);
+});
+
+test("the thread menu offers another take and a reason only when it can, and opens the reason dialog when asked", async () => {
+  daemon();
+  const turns = [{ msg_id: "m_ask", role: "user", content: "Hi.", images: [], content_blocks: [{ type: "text", text: "Hi." }], timestamp: AT }, reply()];
+  await acting(async () => {
+    for (const request of app.socket().sent) if (request["type"] === "regen") app.socket().receive({ type: "request_finished", rid: request["rid"], outcome: "completed" });
+    app.socket().receive({ type: "history", messages: turns, config: {}, revision: 20, selected_character: "ada", selected_thread: "story" });
+    await Bun.sleep(5);
+  });
+  const { Chat } = await import("../../src/browser/chat/Chat.tsx");
+  const { chromeOf } = await import("../../src/browser/chrome.ts");
+  const { openConversationDialog } = await import("../../src/browser/app/intents.ts");
+  const chrome = chromeOf(undefined, app.state().workspace.getSnapshot());
+  const takes = async (host: HTMLElement) => {
+    await click(button(host, "Thread options"));
+    const found = [...host.querySelectorAll(".topbar [role=menuitem]")].filter((item) => ["Another take", "Regenerate with a reason…"].includes(item.textContent ?? "")).map((item) => (item as HTMLButtonElement).disabled);
+    await click(button(host, "Thread options"));
+    return found;
+  };
+  const offline = await mount(<Chat state={{ ...chrome, status: "connecting" }} sidebarOpen toggleSidebar={() => {}} mobile={false} />);
+  expect(await takes(offline.host)).toEqual([true, true]);
+  await offline.unmount();
+  const view = await mount(<Chat state={chrome} sidebarOpen toggleSidebar={() => {}} mobile={false} />);
+  expect(await takes(view.host)).toEqual([false, false]);
+  await acting(() => { openConversationDialog("nonsense"); });
+  expect(view.host.querySelector("dialog")).toBeNull();
+  await acting(() => { openConversationDialog("reason"); });
+  expect(view.host.querySelector("dialog h2")?.textContent).toBe("Regenerate with a reason");
+  await click(button(view.host.querySelector("dialog") ?? view.host, "Cancel"));
+  await click(button(view.host, "Regenerate"));
+  expect(await takes(view.host), "a regenerate in flight makes them wait").toEqual([true, true]);
+});
+
+test("in a heartbeat thread the palette offers neither another take nor a model, and taking another one returns to the chat", async () => {
+  daemon();
+  const { Palette } = await import("../../src/browser/app/Palette.tsx");
+  const { chromeOf } = await import("../../src/browser/chrome.ts");
+  const { navigate } = await import("../../src/browser/app/route.ts");
+  const chrome = chromeOf(undefined, app.state().workspace.getSnapshot());
+  const offered = async (state: typeof chrome) => {
+    const palette = await mount(<Palette state={state} close={() => {}} newThread={() => {}} newCharacter={() => {}} />);
+    const labels = [...palette.host.querySelectorAll("[role=option]")].map((item) => item.textContent ?? "");
+    await palette.unmount();
+    return [labels.some((label) => label.startsWith("Another take")), labels.some((label) => label.startsWith("Choose a model"))];
+  };
+  expect(await offered({ ...chrome, threads: chrome.threads.map((thread) => ({ ...thread, heartbeat: true })) })).toEqual([false, false]);
+  expect(await offered(chrome)).toEqual([true, true]);
+  navigate({ view: "settings", page: "models" });
+  const palette = await mount(<Palette state={chrome} close={() => {}} newThread={() => {}} newCharacter={() => {}} />);
+  await click([...palette.host.querySelectorAll("[role=option]")].find((item) => (item.textContent ?? "").startsWith("Another take")));
+  expect(location.hash).toBe("");
 });

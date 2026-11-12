@@ -4,16 +4,14 @@ const CAPTURE_TABLES = ["capture_blobs", "capture_payloads", "capture_calls", "c
 const LEDGER_TABLES = ["calls", "call_attempts", "pricing", "pricing_catalog_checks", "usage_budget_warnings"];
 export const HISTORY_TABLES = [
   "history_blobs", "history_segments", "history_messages", "history_alternatives", "history_pending",
-  "history_thread_forks", "memory_coverage", "history_archive_revision",
+  "history_thread_forks", "memory_coverage", "history_archive_revision", "reply_attempts", "reply_marks",
 ];
 
 type Row = Record<string, SQLQueryBindings>;
 type Column = { name: string; pk: number; type: string };
 
-export const MARK_TABLES = ["reply_attempts", "reply_marks"];
-
-export function copyArchiveTables(source: Database, destination: Database, kind: "history" | "ledger" | "capture" | "marks"): void {
-  const tables = kind === "capture" ? CAPTURE_TABLES : kind === "ledger" ? LEDGER_TABLES : kind === "marks" ? MARK_TABLES : HISTORY_TABLES;
+export function copyArchiveTables(source: Database, destination: Database, kind: "history" | "ledger" | "capture"): void {
+  const tables = kind === "capture" ? CAPTURE_TABLES : kind === "ledger" ? LEDGER_TABLES : HISTORY_TABLES;
   const mappings = new Map<string, Map<number, number>>();
   for (const table of tables) {
     const sourceColumns = new Set((source.query(`PRAGMA table_info(${table})`).all() as Column[]).map(column => column.name));

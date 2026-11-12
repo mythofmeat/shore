@@ -1,6 +1,5 @@
 import regenerateTemplate from "../../prompts/engine/regenerate.md" with { type: "text" };
 
-import type { ErrorCode } from "../protocol/ErrorCode.ts";
 import { mergeToolLoopMessages } from "../engine/merge.ts";
 import { marksOf, newAttemptId, replyOf, setMark, type AttemptAsked, type AttemptScope, type Mark } from "../engine/marks.ts";
 import { renderTemplate } from "../engine/prompt.ts";
@@ -8,6 +7,7 @@ import type { Message } from "../engine/types.ts";
 import type { WireMessage } from "../llm/types.ts";
 import { required } from "../util/required.ts";
 import type { RegenChoice } from "./router.ts";
+import { CommandError } from "../commands/errors.ts";
 
 export interface AttemptEngine {
   messagesAfterLastUserTurn(): readonly Message[];
@@ -27,21 +27,15 @@ export interface AttemptSettings {
   now: string;
 }
 
-export class NothingToReplaceError extends Error {
-  readonly code: ErrorCode = "invalid_request";
-
+export class NothingToReplaceError extends CommandError {
   constructor() {
-    super("There's no reply here to give a reason about. Regenerate without one, or write to the character instead.");
-    this.name = "NothingToReplaceError";
+    super("invalid_request", "There's no reply here to give a reason about. Regenerate without one, or write to the character instead.");
   }
 }
 
-export class UnknownTagError extends Error {
-  readonly code: ErrorCode = "invalid_request";
-
+export class UnknownTagError extends CommandError {
   constructor(tag: string, tags: readonly string[]) {
-    super(`${JSON.stringify(tag)} isn't one of your tags: ${tags.length === 0 ? "marks.tags in your config is empty" : `yours are ${tags.join(", ")}`}. Add it to marks.tags to use it.`);
-    this.name = "UnknownTagError";
+    super("invalid_request", `${JSON.stringify(tag)} isn't one of your tags: ${tags.length === 0 ? "marks.tags in your config is empty" : `yours are ${tags.join(", ")}`}. Add it to marks.tags to use it.`);
   }
 }
 

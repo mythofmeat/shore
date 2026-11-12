@@ -61,6 +61,7 @@ export class ReplyMarkStore {
     this.#replies = new Map();
     this.#asked = new Set();
     this.#queue = new Map();
+    this.#tags = undefined;
     this.#editing = null;
   }
 

@@ -1,10 +1,10 @@
 import type { ConversationEngine } from "../engine/conversation.ts";
 import { askedFor, locatePhrase, marksOf, removeMark, setMark, type AttemptScope, type Mark, type Reply } from "../engine/marks.ts";
 import { mergeToolLoopMessages } from "../engine/merge.ts";
-import { checkTags, UnknownTagError } from "../handler/attempts.ts";
+import { checkTags } from "../handler/attempts.ts";
 import type { OperationInput, OperationResult } from "../operations/types.ts";
 import type { MarkView } from "../protocol/MarkView.ts";
-import { engineError, invalidRequest, notFound } from "./errors.ts";
+import { invalidRequest, notFound } from "./errors.ts";
 import { resolveRef } from "./conversation.ts";
 
 export const MAX_MARK_REASON_CHARS = 4000;
@@ -43,14 +43,6 @@ function targetOf(engine: ConversationEngine, reference: string | null | undefin
   return { reply, index: position - 1 };
 }
 
-async function attemptOf(engine: ConversationEngine, target: Target): Promise<string> {
-  try {
-    return await engine.attemptOf(target.reply.msgId, target.index);
-  } catch (e) {
-    throw engineError(e);
-  }
-}
-
 function view(held: Mark): MarkView {
   return { kind: held.kind, phrase: held.phrase, reason: held.reason, tags: held.tags, at: held.at };
 }
@@ -69,21 +61,12 @@ function reasonOf(reason: string | null | undefined): string | undefined {
   return written === "" ? undefined : written;
 }
 
-function tagsOf(tags: readonly string[] | null | undefined, configured: readonly string[]): string[] {
-  try {
-    return checkTags(tags ?? [], configured);
-  } catch (e) {
-    if (e instanceof UnknownTagError) throw invalidRequest(e.message);
-    throw e;
-  }
-}
-
 export async function mark(context: MarkContext, args: OperationInput<"mark">): Promise<OperationResult<"mark">> {
   const target = targetOf(context.engine, args.ref, args.position);
   const phrase = phraseIn(target, args.phrase);
   const reason = reasonOf(args.reason);
-  const tags = tagsOf(args.tags, context.tags);
-  const attempt = await attemptOf(context.engine, target);
+  const tags = checkTags(args.tags ?? [], context.tags);
+  const attempt = await context.engine.attemptOf(target.reply.msgId, target.index);
   const scope = scopeOf(context);
   const changed = setMark(scope, attempt, { kind: args.kind, phrase, reason, tags }, context.now());
   return changedResult(scope, target, attempt, phrase, changed);
@@ -91,7 +74,7 @@ export async function mark(context: MarkContext, args: OperationInput<"mark">): 
 
 export async function unmark(context: MarkContext, args: OperationInput<"unmark">): Promise<OperationResult<"unmark">> {
   const target = targetOf(context.engine, args.ref, args.position);
-  const phrase = args.phrase === undefined || args.phrase === null ? undefined : phraseIn(target, args.phrase);
+  const phrase = phraseIn(target, args.phrase);
   const held = target.reply.attempts[target.index]?.attempt;
   const scope = scopeOf(context);
   if (held === undefined) throw notFound(`Attempt ${String(target.index + 1)} has no marks`);

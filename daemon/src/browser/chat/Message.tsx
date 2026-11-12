@@ -208,7 +208,6 @@ function DeleteConfirm({ message, done }: { message: Message; done: () => void }
 }
 
 function AlternativesDialog({ message, scope, close }: { message: Message; scope: string; close: () => void }) {
-  useReplyMarks();
   const attempts = replyMarks.attempts(message);
   const editing = replyMarks.editing();
   const [listing, setListing] = useState<AlternativeListing>();

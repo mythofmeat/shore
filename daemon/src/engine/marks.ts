@@ -66,7 +66,7 @@ export function replyOf(message: Message): Reply {
   if (alternatives.length === 0) {
     return { msgId: message.msg_id, alternatives: false, attempts: [{ index: 0, shown: true, attempt: message.attempt, text: attemptText(message) }] };
   }
-  const shown = Math.min(message.alt_index ?? alternatives.length - 1, alternatives.length - 1);
+  const shown = Math.min(message.alt_index ?? Infinity, alternatives.length - 1);
   return {
     msgId: message.msg_id,
     alternatives: true,
@@ -161,7 +161,6 @@ export function attemptsIn(messages: readonly Message[]): string[] {
 }
 
 export function forgetAttempts(scope: AttemptScope, attempts: readonly string[]): void {
-  if (attempts.length === 0) return;
   withStorage(scope.data, (db) => db.transaction(() => {
     for (const table of ["reply_marks", "reply_attempts"]) {
       db.query(`DELETE FROM ${table} WHERE character = ?1 AND thread = ?2 AND attempt IN (SELECT value FROM json_each(?3))`)
@@ -179,7 +178,6 @@ export function forgetThreadAttempts(data: string, character: string, thread: st
 }
 
 export function copyAttempts(data: string, character: string, source: string, child: string, attempts: readonly string[]): void {
-  if (attempts.length === 0) return;
   withStorage(data, (db) => db.transaction(() => {
     db.query(
       `INSERT INTO reply_attempts(character, thread, attempt, asked, replaces, created_at)

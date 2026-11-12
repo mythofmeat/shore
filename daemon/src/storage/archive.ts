@@ -5,7 +5,7 @@ import { dirname } from "node:path";
 import { CallStore } from "../call_store.ts";
 import { CHARACTER_ARCHIVES_SQL, HistoryStore } from "../engine/history_store.ts";
 import { Ledger } from "../ledger/store.ts";
-import { copyArchiveTables, HISTORY_TABLES, MARK_TABLES } from "./archive_rows.ts";
+import { copyArchiveTables, HISTORY_TABLES } from "./archive_rows.ts";
 import { openStorage, pack, unpack, STORAGE_SCHEMA } from "./store.ts";
 
 export function exportUnifiedDatabase(path: string, character: string, output: string, maxBytes?: number): void {
@@ -28,7 +28,7 @@ export function exportUnifiedDatabase(path: string, character: string, output: s
       for (const table of HISTORY_TABLES.filter((name) => !["history_blobs", "history_alternatives"].includes(name))) {
         copy.query(`DELETE FROM ${table} WHERE NOT ${CHARACTER_ARCHIVES_SQL}`).run(character);
       }
-      for (const table of ["calls", "call_attempts", "capture_calls", "capture_http_calls", "capture_transcripts", "state_files", "events", ...MARK_TABLES]) {
+      for (const table of ["calls", "call_attempts", "capture_calls", "capture_http_calls", "capture_transcripts", "state_files", "events"]) {
         copy.query(`DELETE FROM ${table} WHERE character IS NOT ?1`).run(character);
       }
       copy.run(`DELETE FROM pricing; DELETE FROM pricing_catalog_checks; DELETE FROM usage_budget_warnings;
@@ -55,14 +55,14 @@ export function importUnifiedDatabase(path: string, sourcePath: string, characte
   const source = new Database(sourcePath, { readonly: true });
   const destination = new Database(path);
   try {
-    const scoped = ["calls", "call_attempts", "capture_calls", "capture_http_calls", "capture_transcripts", "state_files", "events", ...MARK_TABLES];
+    const scoped = ["calls", "call_attempts", "capture_calls", "capture_http_calls", "capture_transcripts", "state_files", "events"];
     for (const table of scoped) {
-      if (!hasTable(source, table)) continue;
       if (source.query(`SELECT 1 FROM ${table} WHERE character IS NOT ?1 LIMIT 1`).get(character) !== null) {
         throw new Error("archive database contains another character");
       }
     }
     for (const table of HISTORY_TABLES.filter((name) => !["history_blobs", "history_alternatives"].includes(name))) {
+      if (source.query("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = ?1").get(table) === null) continue;
       if (source.query(`SELECT 1 FROM ${table} WHERE NOT ${CHARACTER_ARCHIVES_SQL} LIMIT 1`).get(character) !== null) {
         throw new Error("archive database contains another character");
       }
@@ -74,7 +74,7 @@ export function importUnifiedDatabase(path: string, sourcePath: string, characte
       if (destination.query(`SELECT 1 FROM ${table} WHERE character = ?1 LIMIT 1`).get(character) !== null) throw new Error(`stored data already exists for ${character}`);
     }
     destination.transaction(() => {
-      for (const kind of ["history", "ledger", "capture", "marks"] as const) {
+      for (const kind of ["history", "ledger", "capture"] as const) {
         copyArchiveTables(source, destination, kind);
       }
       for (const row of source.query("SELECT path, character, content FROM state_files").iterate() as Iterable<{ path: string; character: string; content: Uint8Array }>) {
@@ -97,10 +97,6 @@ export function importUnifiedDatabase(path: string, sourcePath: string, characte
       }
     })();
   } finally { source.close(); destination.close(); }
-}
-
-function hasTable(db: Database, table: string): boolean {
-  return db.query("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = ?1").get(table) !== null;
 }
 
 function relocateMediaReferences(db: Database, character: string, from: string, to: string): void {
@@ -154,7 +150,6 @@ export function removeStoredCharacter(path: string, character: string): void {
       db.query("DELETE FROM calls WHERE character = ?1").run(character);
       db.query("DELETE FROM state_files WHERE character = ?1").run(character);
       db.query("DELETE FROM events WHERE character = ?1").run(character);
-      for (const table of MARK_TABLES) db.query(`DELETE FROM ${table} WHERE character = ?1`).run(character);
     })();
   } finally { db.close(); }
   const capture = CallStore.open(path);

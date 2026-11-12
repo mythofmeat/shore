@@ -247,8 +247,8 @@ export class HistoryStore {
     db.run(`PRAGMA auto_vacuum = INCREMENTAL;
              PRAGMA journal_mode = WAL;
              PRAGMA busy_timeout = 5000;`);
-    addAttemptColumns(db);
     db.run(HISTORY_SCHEMA);
+    addAttemptColumns(db);
     dropRowCounts(db);
   }
 
@@ -698,14 +698,16 @@ export class HistoryStore {
        ORDER BY m.segment DESC, m.ordinal DESC LIMIT 1`,
     ).get(character, msgId) as { segment: number; ordinal: number } | null;
     if (row === null) return undefined;
-    const bounds = this.#db.query(
-      `SELECT (SELECT COALESCE(MAX(ordinal), -1) FROM history_messages
-                WHERE character = ?1 AND segment = ?2 AND ordinal < ?3 AND is_user_turn = 1) AS first,
-              (SELECT COALESCE(MIN(ordinal), (SELECT MAX(ordinal) + 1 FROM history_messages WHERE character = ?1 AND segment = ?2))
-                 FROM history_messages
-                WHERE character = ?1 AND segment = ?2 AND ordinal > ?3 AND is_user_turn = 1) AS last`,
-    ).get(character, row.segment, row.ordinal) as { first: number; last: number };
-    return { segment: row.segment, ordinals: Array.from({ length: bounds.last - bounds.first - 1 }, (_, offset) => bounds.first + 1 + offset) };
+    const ordinals = this.#db.query(
+      `SELECT m.ordinal FROM history_messages m
+       WHERE m.character = ?1 AND m.segment = ?2
+         AND NOT EXISTS (
+           SELECT 1 FROM history_messages u
+           WHERE u.character = ?1 AND u.segment = ?2 AND u.is_user_turn = 1
+             AND u.ordinal BETWEEN min(m.ordinal, ?3) AND max(m.ordinal, ?3))
+       ORDER BY m.ordinal`,
+    ).all(character, row.segment, row.ordinal) as { ordinal: number }[];
+    return { segment: row.segment, ordinals: ordinals.map((found) => found.ordinal) };
   }
 
   stampAttempt(character: string, msgId: string, ordinal: number | undefined, shown: boolean, attempt: string): string {
@@ -1094,7 +1096,7 @@ function textHash(text: string): string {
 function addAttemptColumns(db: Database): void {
   for (const table of ["history_messages", "history_alternatives"]) {
     const columns = db.query(`PRAGMA table_info(${table})`).all() as { name: string }[];
-    if (columns.length > 0 && !columns.some((column) => column.name === "attempt")) db.run(`ALTER TABLE ${table} ADD COLUMN attempt TEXT`);
+    if (!columns.some((column) => column.name === "attempt")) db.run(`ALTER TABLE ${table} ADD COLUMN attempt TEXT`);
   }
 }
 

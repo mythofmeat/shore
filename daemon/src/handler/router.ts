@@ -11,7 +11,7 @@ import type { Error as ProtocolError } from "../protocol/Error.ts";
 import type { RequestOutcome } from "../protocol/RequestOutcome.ts";
 import { sanitiseRid } from "../swp/admission.ts";
 import { HeartbeatThreadError, ImagesUnsupportedError, NoModelError, WakeTurnError } from "./setup.ts";
-import { NothingToReplaceError, UnknownTagError } from "./attempts.ts";
+import { CommandError } from "../commands/errors.ts";
 import {
   isControlRoutedMessage,
   REQUEST_LIFECYCLE_CAPABILITY,
@@ -46,8 +46,7 @@ function generationErrorCode(error: unknown): ErrorCode {
     error instanceof ImagesUnsupportedError ||
     error instanceof HeartbeatThreadError ||
     error instanceof WakeTurnError ||
-    error instanceof NothingToReplaceError ||
-    error instanceof UnknownTagError
+    error instanceof CommandError
   ) {
     return error.code;
   }

@@ -11,6 +11,7 @@ import {
 } from "./history_store.ts";
 import { MessageNotFound } from "./message_store";
 import type { Message } from "./types";
+import { required } from "../util/required.ts";
 import type { SegmentSummary } from "../protocol/SegmentSummary.ts";
 
 export type { SegmentRecord } from "./history_store.ts";
@@ -132,8 +133,7 @@ export class SegmentReader {
   }
 
   stampAttempt(msgId: string, ordinal: number | undefined, shown: boolean, attempt: string): string {
-    if (this.history === undefined) throw new MessageNotFound(msgId);
-    return this.history.stampAttempt(this.character, msgId, ordinal, shown, attempt);
+    return required(this.history).stampAttempt(this.character, msgId, ordinal, shown, attempt);
   }
 
   close(): void {

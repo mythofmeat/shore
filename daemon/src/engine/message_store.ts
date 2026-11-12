@@ -521,15 +521,14 @@ export class MessageStore {
     return [altIndex, all.length];
   }
 
-  async stampAttempt(msgId: string, index: number | undefined, attempt: string): Promise<string> {
+  async stampAttempt(msgId: string, at: number, attempt: string): Promise<string> {
     return await this.#mutate((messages) => {
       const group = toolLoopGroups(messages).find((members) => members.some((message) => message.msg_id === msgId));
       const reply = group === undefined ? undefined : mergeToolLoopMessages(group)[0];
       if (group === undefined || reply?.role !== "assistant") throw new MessageNotFound(msgId);
       const target = required(group.find((message) => message.msg_id === reply.msg_id));
       const alternatives = target.alternatives ?? [];
-      const shownAt = Math.min(target.alt_index ?? alternatives.length - 1, alternatives.length - 1);
-      const at = index ?? Math.max(shownAt, 0);
+      const shownAt = Math.min(target.alt_index ?? Infinity, alternatives.length - 1);
       if (at >= Math.max(alternatives.length, 1)) {
         throw new InvalidAlt(`attempt ${String(at + 1)} out of range (reply has ${String(Math.max(alternatives.length, 1))} attempt(s))`);
       }

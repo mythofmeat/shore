@@ -3,6 +3,7 @@ import type { AttemptMarks } from "../../protocol/AttemptMarks.ts";
 import type { MarkKind } from "../../protocol/MarkKind.ts";
 import type { MarkView } from "../../protocol/MarkView.ts";
 import { plainOf } from "../../util/phrase.ts";
+import { required } from "../../util/required.ts";
 import { errorText, replyMarks } from "../app/state.ts";
 import { IconButton } from "../ui/controls.tsx";
 import { Icon } from "../ui/icons.tsx";
@@ -120,35 +121,33 @@ function repaint(): void {
 
 function textRanges(body: Element, marks: readonly MarkView[]): { like: Range[]; dislike: Range[] } {
   const found = { like: [] as Range[], dislike: [] as Range[] };
-  const phrases = marks.filter((mark) => mark.phrase !== null);
-  if (phrases.length === 0) return found;
   const nodes: { node: Text; start: number }[] = [];
   let text = "";
   let block: Element | null = null;
   const walker = document.createTreeWalker(body, NodeFilter.SHOW_TEXT);
   for (let node = walker.nextNode(); node !== null; node = walker.nextNode()) {
-    if (!(node instanceof Text) || node.parentElement?.closest(".prose") === null) continue;
+    if (node.parentElement?.closest(".prose") === null) continue;
     const owner = node.parentElement?.closest(blocks) ?? null;
     if (block !== null && owner !== block) text += "\n";
     block = owner;
-    nodes.push({ node, start: text.length });
-    text += node.data;
+    nodes.push({ node: node as Text, start: text.length });
+    text += (node as Text).data;
   }
   const plain = plainOf(text);
-  const point = (index: number): [Text, number] | undefined => {
-    const at = plain.at[index];
-    const holder = at === undefined ? undefined : nodes.findLast((entry) => entry.start <= at);
-    return holder === undefined || at === undefined ? undefined : [holder.node, at - holder.start];
+  const point = (index: number): [Text, number] => {
+    const at = required(plain.at[index]);
+    const holder = required(nodes.findLast((entry) => entry.start <= at));
+    return [holder.node, at - holder.start];
   };
-  for (const mark of phrases) {
-    const wanted = plainOf(mark.phrase ?? "").text;
-    const start = wanted === "" ? -1 : plain.text.indexOf(wanted);
-    const from = point(start);
-    const to = point(start + wanted.length - 1);
-    if (start === -1 || from === undefined || to === undefined) continue;
+  for (const mark of marks) {
+    if (mark.phrase === null) continue;
+    const wanted = plainOf(mark.phrase).text;
+    const start = plain.text.indexOf(wanted);
+    if (wanted === "" || start === -1) continue;
     const range = document.createRange();
-    range.setStart(...from);
-    range.setEnd(to[0], to[1] + 1);
+    range.setStart(...point(start));
+    const [last, offset] = point(start + wanted.length - 1);
+    range.setEnd(last, offset + 1);
     found[mark.kind].push(range);
   }
   return found;
