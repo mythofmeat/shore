@@ -59,6 +59,7 @@ export interface MockAnthropicOptions {
   fallback?: AnthropicReply | ((req: AnthropicRequestRecord) => AnthropicReply) | null;
   now?: () => number;
   chunkChars?: number;
+  streamBytesPerChunk?: number;
   onRequest?: (req: AnthropicRequestRecord) => void;
 }
 
@@ -266,7 +267,7 @@ export async function startMockAnthropic(
       const model = typeof body.model === "string" ? body.model : "claude-mock";
       const id = `msg_mock_${String(requests.length)}`;
       return streaming
-        ? streamResponse(reply, id, model, usage, chunkChars)
+        ? streamResponse(reply, id, model, usage, chunkChars, options.streamBytesPerChunk)
         : Response.json(messageResponse(reply, id, model, usage));
     },
   });
@@ -371,8 +372,9 @@ function streamResponse(
   model: string,
   usage: AnthropicUsage,
   chunkChars: number,
+  bytesPerChunk: number | undefined,
 ): Response {
-  const stream = new ReadableStream<Uint8Array>({
+  const events = new ReadableStream<Uint8Array>({
     async start(controller) {
       const encoder = new TextEncoder();
       const send = (type: string, payload: Record<string, unknown>) =>
@@ -440,6 +442,14 @@ function streamResponse(
     },
   });
 
+  const stream = bytesPerChunk === undefined ? events : events.pipeThrough(new TransformStream<Uint8Array, Uint8Array>({
+    async transform(chunk, controller) {
+      for (let at = 0; at < chunk.length; at += bytesPerChunk) {
+        controller.enqueue(chunk.slice(at, at + bytesPerChunk));
+        await Bun.sleep(1);
+      }
+    },
+  }));
   return new Response(stream, {
     headers: {
       "content-type": "text/event-stream",
