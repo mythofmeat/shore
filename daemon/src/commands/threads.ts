@@ -40,7 +40,6 @@ function optionalText(value: unknown, field: string): string | undefined {
 export interface ThreadRegistry {
   listThreads(character: string): readonly ThreadRecord[];
   homeThread(character: string): string;
-  ownThread?(character: string): string | undefined;
   createThread(
     character: string,
     id: string,
@@ -144,7 +143,7 @@ function lastActivity(ctx: ThreadContext): (id: string) => string | undefined {
 function listing(ctx: ThreadContext, index?: ThreadsIndex): ThreadListing {
   const known = index ?? ctx.registry.threads?.(ctx.character);
   const home = known === undefined ? ctx.registry.homeThread(ctx.character) : homeThread(known);
-  const heartbeat = known === undefined ? ctx.registry.ownThread?.(ctx.character) : ownThread(known);
+  const heartbeat = ownThread(known);
   const records = known?.threads ?? ctx.registry.listThreads(ctx.character);
   const current = records.some((t) => t.id === ctx.current) ? ctx.current : home;
   const placed: readonly PlacedThread[] = known === undefined ? records.map((record) => ({ record })) : placedThreads(known, lastActivity(ctx));

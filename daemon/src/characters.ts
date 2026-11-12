@@ -51,6 +51,7 @@ import {
   resetActivePromptSnapshotIfEmpty,
 } from "./memory/deferred_edits.ts";
 import { characterWorkspace } from "./tools/character_workspace.ts";
+import { required } from "./util/required.ts";
 
 export interface RuntimeReloadSummary {
   availableBefore: number;
@@ -207,9 +208,7 @@ export class CharacterRegistry {
   async ensureOwnThread(name: string): Promise<{ thread: string; created: boolean }> {
     return await this.#withThreadIndex(name, async () => {
       const { index, created } = await ensureOwnThread(this.#dataDir, name, new Date().toISOString());
-      const thread = ownThread(this.#remember(name, index));
-      if (thread === undefined) throw new Error(`no own-time thread could be made for ${name}`);
-      return { thread, created };
+      return { thread: required(ownThread(this.#remember(name, index))), created };
     });
   }
 

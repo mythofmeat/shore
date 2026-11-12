@@ -347,7 +347,7 @@ test("a wake's own turn stays in its thread for the user to read, without what i
 });
 
 test("a wake in the own-time thread runs on home's model, and that thread is never compacted, however many wakes it holds, not even by hand", async () => {
-  await withCharacter(async ({ runtime, script, say, wakeNow, thread }) => {
+  await withCharacter(async ({ runtime, script, say, wakeNow, thread, command }) => {
     await runtime.registry.setThreadModel("ada", "main", "pinned");
     await say("hello");
     at(10);
@@ -364,6 +364,9 @@ test("a wake in the own-time thread runs on home's model, and that thread is nev
       generate: () => Promise.reject(new Error("compacting the own-time thread called the model")),
     }, { thread: "own-time" });
     expect(await outcomeOf(asked)).toThrow(`"own-time" is where ada's own time runs. It only keeps a log of its wakes, so it is never compacted`);
+    expect(await command("compact", {}, "own-time")).toMatchObject({ type: "error", code: "invalid_request" });
+    expect(JSON.stringify(await command("compact", {}, "own-time"))).toContain("is where ada's own time runs. It only keeps a log of its wakes, so it is never compacted");
+    expect(await command("compact", { keep_turns: 99 })).toMatchObject({ type: "error", code: "invalid_request", message: "insufficient messages" });
   }, (app) => {
     app.memory.compaction.enabled = true;
     app.memory.compaction.keep_recent_turns = 0;
@@ -471,7 +474,10 @@ test("the user can read the own-time thread but not write there", async () => {
     await wakeNow();
     const before = await thread("own-time");
 
-    expect(await outcomeOf(say("can I join?", "own-time"))).toThrow(`"own-time" is where ada's own time runs, so you can read it but not write there. Write to ada in another thread.`);
+    const refusal = await rejectionOf(say("can I join?", "own-time"));
+    expect([(refusal as Error).name, (refusal as Error).message, (refusal as { code?: string }).code]).toEqual([
+      "OwnThreadError", `"own-time" is where ada's own time runs, so you can read it but not write there. Write to ada in another thread.`, "invalid_request",
+    ]);
     expect(await thread("own-time")).toEqual(before);
   });
 });
@@ -557,6 +563,13 @@ test("bare --background tunes wakes and compaction on their pinned model while d
     expect(set).toMatchObject({ type: "command_output", data: { model: "chat.pinned", background_task: "all" } });
     expect(await command("model_settings", { background_task: "all" })).toMatchObject({ type: "command_output", data: { model: "chat.pinned" } });
     expect(await command("model_settings", { background_task: "dreaming" })).toMatchObject({ type: "command_output", data: { model: "chat.fixture", saved_character: null } });
+    const listed = await command("list_models", {});
+    const roles = listed.type === "command_output" ? (listed.data as { roles: { role: string; model: string | null; source: string | null }[] }).roles : [];
+    expect(roles.filter((role) => ["heartbeat", "compaction", "dreaming"].includes(role.role))).toEqual([
+      { role: "heartbeat", model: "chat.pinned", source: "triggers.model" },
+      { role: "compaction", model: "chat.pinned", source: "compaction.model" },
+      { role: "dreaming", model: "chat.fixture", source: "inherits chat" },
+    ]);
   }, (app) => {
     app.defaults.background.heartbeat = "pinned";
     app.defaults.background.compaction = "pinned";
@@ -2925,6 +2938,62 @@ test("a wake whose request can't be built, or that a budget holds back, leaves i
   });
 });
 
+test("a wake started by hand runs at the next look, one for a dormant character is dropped with word of how to change that, and making the character active again starts nothing by itself", async () => {
+  await withCharacter(async ({ runtime, script, say, command }) => {
+    const answered = async (name: string): Promise<unknown> => {
+      const reply = await command(name, {});
+      return reply.type === "command_output" ? reply.data : reply;
+    };
+    expect(await answered("session_activate")).toEqual({ character: "ada", registered: true, keepalive: { status: "off" }, own_time: "Active" });
+    await say("hello");
+    at(1);
+    expect(await answered("heartbeat_tick_now")).toEqual({ status: "scheduled", character: "ada" });
+    await runtime.autonomy.tick();
+    expect(script.wakes).toHaveLength(2);
+
+    expect(await answered("heartbeat_set_dormant")).toEqual({ status: "dormant", character: "ada" });
+    expect(await answered("session_activate")).toEqual({ character: "ada", registered: false, keepalive: { status: "off" }, own_time: "Dormant" });
+    expect(await answered("heartbeat_tick_now")).toEqual({
+      status: "scheduled", character: "ada",
+      warning: "ada is dormant, so nothing wakes them and this wake is dropped. Run `shore debug heartbeat_status_active` first.",
+    });
+    await runtime.autonomy.tick();
+    expect(script.wakes).toHaveLength(2);
+
+    expect(await answered("heartbeat_set_active")).toEqual({ status: "active", character: "ada" });
+    expect(runtime.autonomy.status("ada")?.state).toBe("Active");
+    await runtime.autonomy.tick();
+    expect(script.wakes).toHaveLength(2);
+  });
+});
+
+test("writing memory again from an archived segment changes the character's files for real, and leaves the conversation as it is", async () => {
+  await withCharacter(async ({ script, workspace, data, say, thread, command }) => {
+    await writeFile(join(workspace, "MEMORY.md"), "nothing yet\n");
+    await say("hello");
+    at(1);
+    await say("the keeper is called Mara");
+    expect(await command("compact", {})).toMatchObject({ type: "command_output", data: { status: "compacted", compacted_turns: 2 } });
+    await queuedCompactionsEnded(data, "ada");
+    at(2);
+    await say("and the lamp?");
+    const before = await thread("main");
+
+    script.replyTool = { name: "edit", input: { file_path: "MEMORY.md", old_string: "nothing yet", new_string: "The keeper is Mara." } };
+    expect(await command("compact", { segment: 0 })).toMatchObject({
+      type: "command_output",
+      data: { status: "segment", character: "ada", segment: 0, compacted_turns: 2, memory_files_written: ["MEMORY.md"], tool_rounds: 1, tools_called: ["edit"] },
+    });
+    expect(await Bun.file(join(workspace, "MEMORY.md")).text()).toBe("The keeper is Mara.\n");
+    expect(await thread("main")).toEqual(before);
+  }, (app) => {
+    app.memory.compaction.enabled = true;
+    app.memory.compaction.keep_recent_turns = 0;
+    app.memory.compaction.min_turns = 1;
+    app.tools.enabled_tools = [...app.tools.enabled_tools, "edit"];
+  });
+});
+
 test("a wake for a character left with no chat model at all is skipped, and the log says so", async () => {
   await withCharacter(async ({ runtime, script, say, thread, wakeNow }) => {
     await say("hello");
@@ -2950,6 +3019,21 @@ test("each round of a wake is kept for the trace of what wakes thought and did",
       ["heartbeat", 0, "tool_use"],
       ["heartbeat_tool_loop", 1, "end_turn"],
     ]);
+  });
+});
+
+test("the log shows each tool a wake called with the start of what came back", async () => {
+  await withCharacter(async ({ runtime, script, workspace, say, wakeNow }) => {
+    await writeFile(join(workspace, "tides.md"), "high water ".repeat(40));
+    await say("hello");
+    script.beatTool = { name: "read", input: { file_path: "tides.md" } };
+    at(1);
+    await wakeNow();
+    const called = runtime.autonomy.log("ada", 100).filter((event) => event.kind === "tool_use").map((event) => event.detail);
+    expect(called).toHaveLength(1);
+    expect(called[0]).toMatch(/^Tool: read → .*…$/);
+    expect(called[0]).toContain(workspace.slice(0, 40));
+    expect(Buffer.byteLength(called[0] ?? "")).toBe(Buffer.byteLength("Tool: read → …") + 80);
   });
 });
 
@@ -3240,11 +3324,19 @@ test("the activity record a start rebuilds holds the user's messages of the last
   const day = 24 * 60;
   let root = "";
   at(0);
-  await withCharacter(async ({ runtime, data, say }) => {
+  await withCharacter(async ({ runtime, script, data, say, thread }) => {
     root = dirname(data);
     await say("hello");
     at(2 * day);
+    script.replyTool = { name: "read", input: { file_path: "SOUL.md" } };
     await say("two days on");
+    expect(counted(runtime)).toBe(2);
+    runtime.autonomy.wakeFor("ada", { name: "lamp", reason: "r", at: T0 + (2 * day + 20) * MINUTE, thread: "main" });
+    at(2 * day + 20);
+    await runtime.autonomy.tick();
+    expect((await thread("main")).filter((message) => message.role === "user").map((message) => message.origin === "autonomous" ? "wake" : message.content_blocks[0]?.type)).toEqual([
+      "text", "text", "tool_result", "wake", "tool_result",
+    ]);
     expect(counted(runtime)).toBe(2);
   });
 

@@ -60,6 +60,16 @@ async function build(
   };
 }
 
+describe("the switch for a character's own time", () => {
+  test("is shown under [triggers], on or off, beside what else the user set there", async () => {
+    const on = await build(undefined, "[triggers]\nenabled = true\nmax_idle_wakes = 9\n");
+    expect(config(on.ctx, { key: "triggers.enabled" })).toMatchObject({ key: "triggers.enabled", config: true });
+    expect(config(on.ctx, { key: "triggers.max_idle_wakes" })).toMatchObject({ config: 9 });
+    const off = await build(undefined, '[chat]\ndisplay_name = "eve"\n');
+    expect(config(off.ctx, { key: "triggers.enabled" })).toMatchObject({ key: "triggers.enabled", config: false });
+  });
+});
+
 describe("secrets in config output", () => {
   const SECRETS = `
 [notifications]

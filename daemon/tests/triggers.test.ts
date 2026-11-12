@@ -343,6 +343,14 @@ test("[triggers] holds every setting of a character's own time, the switch among
   expect(read).toThrow("triggers.check_time_limit must be greater than zero");
 });
 
+test("a model set for wakes that Shore can't place is warned about under that setting's name", async () => {
+  const root = await mkdtemp(testTmp("shore-triggers-model-"));
+  const warned: unknown[][] = [];
+  await writeFile(join(root, "config.toml"), '[triggers]\nmodel = "nowhere"\n');
+  loadConfig(join(root, "config.toml"), { env: { SHORE_CONFIG_DIR: root }, onWarn: (message, fields) => { warned.push([message.split(" was not found")[0], fields]); } });
+  expect(warned).toContainEqual(['configured default model "nowhere"', [["field", "triggers.model"], ["name", "nowhere"]]]);
+});
+
 test("each [triggers] setting is described in the config schema, and the switch says what else waits on it", () => {
   const schema = configSchema({ instancesAt: () => [] });
   const described = schema.filter((entry) => entry.key.startsWith("triggers.")).map((entry) => [entry.key, (entry.description ?? "").split(" ").slice(0, 4).join(" ")]);
