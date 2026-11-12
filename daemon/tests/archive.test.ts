@@ -143,7 +143,7 @@ describe("character archives", () => {
     const sourceHistory = HistoryStore.open(join(source.data, "shore.db"));
     for (const key of ["ada/side", "ada/retired", "adam/side", "bea/side"]) {
       sourceHistory.putSegment(key, 0, {
-        file: "history.db", message_count: 1, compacted_at: "2026-09-05T00:00:00Z",
+        file: "history.db", compacted_at: "2026-09-05T00:00:00Z",
       }, [userMessage(key, `archived ${key}`)]);
     }
     sourceHistory.close();
@@ -220,7 +220,7 @@ describe("character archives", () => {
     await seedCharacter(source, "ada", "main");
     const store = HistoryStore.open(join(source.data, "shore.db"));
     store.putSegment("ada/retired", 0, {
-      file: "history.db", message_count: 1, compacted_at: "2026-09-05T00:00:00Z",
+      file: "history.db", compacted_at: "2026-09-05T00:00:00Z",
     }, [userMessage("ada", "retired")]);
     store.close();
     const output = join(source.runtime, "ada.shore.tar");
@@ -321,7 +321,7 @@ describe("character archives", () => {
 
     await writeFile(join(source.workspace as string, "ada", "notes.md"), "two\n");
     const history = HistoryStore.open(join(source.data, "shore.db"));
-    history.putSegment("ada", 1, { file: "segment-1.jsonl", message_count: 1, compacted_at: "2026-09-02T00:00:00Z" }, [userMessage("ada", "second segment")]);
+    history.putSegment("ada", 1, { file: "segment-1.jsonl", compacted_at: "2026-09-02T00:00:00Z" }, [userMessage("ada", "second segment")]);
     history.close();
     const second = await exportBackup(sending, { base: await uploaded(sending, full.get("manifest.json") ?? Buffer.alloc(0)) });
     const delta = await tarEntries(await download(sending, second.transfer));
@@ -473,7 +473,7 @@ async function seedCharacter(dirs: ShoreDirs, character: string, text: string): 
   history.putSegment(
     character,
     0,
-    { file: "segment-0.jsonl", message_count: 1, compacted_at: "2026-09-01T00:00:00Z" },
+    { file: "segment-0.jsonl", compacted_at: "2026-09-01T00:00:00Z" },
     [message],
   );
   history.close();
@@ -644,7 +644,7 @@ describe("export, import and delete edges", () => {
     await mkdir(dirname(lamp), { recursive: true });
     await writeFile(lamp, "png bytes");
     const history = HistoryStore.open(join(source.data, "shore.db"));
-    history.putSegment("ada", 1, { file: "segment-1.jsonl", message_count: 1, compacted_at: "2026-09-02T00:00:00Z" }, [{ ...userMessage("ada", "a lamp"), msg_id: "m_lamp", images: [{ path: lamp }] }]);
+    history.putSegment("ada", 1, { file: "segment-1.jsonl", compacted_at: "2026-09-02T00:00:00Z" }, [{ ...userMessage("ada", "a lamp"), msg_id: "m_lamp", images: [{ path: lamp }] }]);
     history.close();
     const legacy = new Database(join(source.data, "shore.db"));
     legacy.query("UPDATE history_messages SET images = ?1 WHERE msg_id = 'm_lamp'").run(JSON.stringify([{ path: lamp }]));
@@ -688,7 +688,7 @@ describe("export, import and delete edges", () => {
 
     const leftover = await root("cache-leftover");
     const store = HistoryStore.open(join(leftover.data, "shore.db"));
-    store.putSegment("ada", 0, { file: "segment-0.jsonl", message_count: 1, compacted_at: "2026-09-01T00:00:00Z" }, [userMessage("ada", "left behind")]);
+    store.putSegment("ada", 0, { file: "segment-0.jsonl", compacted_at: "2026-09-01T00:00:00Z" }, [userMessage("ada", "left behind")]);
     store.close();
     await mkdir(join(leftover.workspace as string, "ada"), { recursive: true });
     expect(await outcomeOf(importCharacter(context(leftover, new Set()), { archive: output }))).toThrow("Refusing to overwrite existing character 'ada'");

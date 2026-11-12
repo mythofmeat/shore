@@ -178,7 +178,7 @@ async function seedCharacter(dirs: ShoreDirs, character: string): Promise<void> 
   history.putSegment(
     character,
     0,
-    { file: "segment-0.jsonl", message_count: 1, compacted_at: "2026-09-01T00:00:00Z" },
+    { file: "segment-0.jsonl", compacted_at: "2026-09-01T00:00:00Z" },
     [message],
   );
   history.close();

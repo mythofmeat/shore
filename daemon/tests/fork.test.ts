@@ -66,7 +66,7 @@ describe("forking a thread", () => {
       expect(await outcomeOf(forkThread(root, "ada", "main", "spin", { now: () => NOW, turns }))).toThrow("--turns must be a positive whole number of turns");
     }
     const one = await forkThread(root, "ada", "main", "spin", { now: () => NOW, turns: 1 });
-    expect([one.fork.turn_count, one.fork.message_count]).toEqual([1, 2]);
+    expect(one.fork.turn_count).toBe(1);
     expect(Object.hasOwn(one.child, "chat_model")).toBe(false);
   });
 
@@ -94,7 +94,7 @@ describe("forking a thread", () => {
     const root = await character({ main: ["first"], side: ["other"] });
     const history = HistoryStore.open(join(root, HISTORY_DB_FILE));
     try {
-      history.beginCompaction(archiveKey("ada", "side"), { file: HISTORY_DB_FILE, message_count: 1, compacted_at: NOW }, [message("side-0", "user", "other")], "before\n", "after\n");
+      history.beginCompaction(archiveKey("ada", "side"), { file: HISTORY_DB_FILE, compacted_at: NOW }, [message("side-0", "user", "other")], "before\n", "after\n");
     } finally {
       history.close();
     }
@@ -115,10 +115,20 @@ describe("forking a thread", () => {
       created_at: NOW,
       compaction: true,
       chat_model: "anthropic:claude-x",
-      forked_from: { fork_id: "fk_test", source: "main", created_at: NOW, messages: 2, turns: 1 },
+      forked_from: { fork_id: "fk_test", source: "main", created_at: NOW, turns: 1 },
     });
     expect(forksOf(root)).toEqual(["spin"]);
     expect(existsSync(join(root, "ada", "threads", "spin", FORK_MARKER_FILE))).toBe(false);
+  });
+
+  test("a fork recorded with the stored row count of an earlier version reads back with its turns alone", async () => {
+    const root = await character({ main: ["q", "a"] });
+    const { index } = await forkThread(root, "ada", "main", "spin", { now: () => NOW, newForkId: () => "fk_test" });
+    const earlier = index.threads.map((thread) => thread.forked_from === undefined ? thread : { ...thread, forked_from: { ...thread.forked_from, messages: 7 } });
+    await writeThreadsIndex(root, "ada", { ...index, threads: earlier });
+    const spin = (await readThreadsIndex(root, "ada"))?.threads.find((thread) => thread.id === "spin");
+    expect(spin?.forked_from).toStrictEqual({ fork_id: "fk_test", source: "main", created_at: NOW, turns: 1 });
+    expect((await readThreadsIndex(root, "ada"))?.threads.find((thread) => thread.id === "main")).toStrictEqual({ id: "main", created_at: NOW, compaction: true });
   });
 
   test("forks of different threads of one character run one at a time, so each lands in the index", async () => {

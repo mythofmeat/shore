@@ -19,7 +19,6 @@ import { hitTokenCeiling } from "../../llm/finish_reason.ts";
 import { budgetStopIn, describeError, resetAtIn } from "../../llm/errors.ts";
 import type { ContentBlock, Message } from "../../engine/types";
 import type { MarkdownMemoryStore } from "../markdown_store";
-import { rustLines, rustTrim } from "../lines";
 import { hasCompactionOperation } from "./archive.ts";
 import { conversationRef } from "../../engine/segments.ts";
 import { PathError, resolvePath, normalizePromptVisiblePath } from "../../tools/workspace_path";
@@ -652,7 +651,6 @@ export async function compact(opts: CompactOptions, settings: CompactionSettings
   const workspaceHead = opts.dryRun ? undefined : await tools.gitHead?.(workspaceDir);
 
   const compactedTurns = countTurns(messages.slice(0, splitAt));
-  const originalRetained = messages.length - splitAt;
   const originalRetainedTurns = countTurns(messages.slice(splitAt));
   const recovered = await recoverArchivedPass(opts, plan);
   if (recovered !== undefined) return recovered;
@@ -723,9 +721,7 @@ export async function compact(opts: CompactOptions, settings: CompactionSettings
       kind: "dry_run",
       wouldWriteFiles: state.dryRunPreviews.length,
       fileOpsPreview: state.dryRunPreviews,
-      messageCount: splitAt,
       compactedTurns,
-      retainedCount: originalRetained,
       retainedTurns: originalRetainedTurns,
       markdownPreview: state.dryRunPreviews.map((op) => op.path),
       toolRounds: state.toolRounds,
@@ -751,7 +747,6 @@ export async function compact(opts: CompactOptions, settings: CompactionSettings
     return {
       kind: "truncated",
       conversationId: opts.conversationId,
-      messageCount: splitAt,
       compactedTurns,
       toolRounds: state.toolRounds,
       toolsCalled: state.toolsCalled,
@@ -792,11 +787,10 @@ export async function compact(opts: CompactOptions, settings: CompactionSettings
     }
     await clearCheckpoint(opts);
     await opts.afterArchive?.();
-    return { id, retained: commit.retained, retainedTurns: commit.retainedTurns };
+    return { id, retainedTurns: commit.retainedTurns };
   });
   if ("kind" in committed) return committed;
-  const { id: newConversationId, retained, retainedTurns } = committed;
-  const archivedCount = plan.splitAt;
+  const { id: newConversationId, retainedTurns } = committed;
   const archivedTurns = checkpoint.compactedTurns;
 
   const markdownPaths = changedFilePaths(state.writesApplied);
@@ -806,9 +800,7 @@ export async function compact(opts: CompactOptions, settings: CompactionSettings
     memoryFilesWritten: markdownPaths,
     conversationId: opts.conversationId,
     newConversationId,
-    messageCount: archivedCount,
     compactedTurns: archivedTurns,
-    retainedCount: retained,
     retainedTurns,
     markdownPaths,
     toolRounds: state.toolRounds,
@@ -852,7 +844,6 @@ export async function compactSegment(opts: SegmentCompactOptions): Promise<Compa
   return {
     kind: "segment",
     segment: opts.segment,
-    messageCount: opts.messages.length,
     compactedTurns: countTurns(conversationView(opts.messages)),
     memoryFilesWritten: written,
     toolRounds: state.toolRounds,
@@ -948,7 +939,6 @@ async function recoverArchivedPass(
   const liveContent = await currentActiveContent(opts);
   if (archivedRangeIsCurrent(prior, liveContent)) return undefined;
 
-  const liveLines = rustLines(liveContent).filter((line) => rustTrim(line) !== "");
   const markdownPaths = changedFilePaths(prior.loop.writesApplied);
   await clearCheckpoint(opts);
   return {
@@ -956,9 +946,7 @@ async function recoverArchivedPass(
     memoryFilesWritten: markdownPaths,
     conversationId: opts.conversationId,
     newConversationId: prior.id,
-    messageCount: prior.splitAt,
     compactedTurns: prior.compactedTurns,
-    retainedCount: liveLines.length,
     retainedTurns: retainedTurnCount(liveContent, 0),
     markdownPaths,
     toolRounds: prior.loop.toolRounds,
@@ -1088,7 +1076,6 @@ function pausedOutcome(
     kind: "paused",
     conversationId: opts.conversationId,
     checkpointId: checkpoint.id,
-    messageCount: opts.plan.splitAt,
     compactedTurns: checkpoint.compactedTurns,
     toolRounds: checkpoint.loop.toolRounds,
     toolsCalled: checkpoint.loop.toolsCalled,

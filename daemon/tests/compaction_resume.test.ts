@@ -434,7 +434,7 @@ test("turns that arrive while a pass runs are kept, not archived with the planne
     { keepRecentTurns: 1 },
   );
 
-  expect(outcome).toMatchObject({ kind: "compacted", messageCount: 2, retainedCount: 3 });
+  expect(outcome).toMatchObject({ kind: "compacted", compactedTurns: 1, retainedTurns: 2 });
   const kept = (await readFile(activePath, "utf8"))
     .trim()
     .split("\n")
@@ -478,7 +478,7 @@ test("regenerating the newest reply while a pass runs still archives the planned
     { keepRecentTurns: 1 },
   );
 
-  expect(outcome).toMatchObject({ kind: "compacted", messageCount: 2, retainedCount: 2 });
+  expect(outcome).toMatchObject({ kind: "compacted", compactedTurns: 1, retainedTurns: 1 });
   const kept = (await readFile(activePath, "utf8"))
     .trim()
     .split("\n")
@@ -548,9 +548,7 @@ describe("a pass that stopped part way", () => {
       memoryFilesWritten: ["memory/fact.md"],
       conversationId: "ada",
       newConversationId: id,
-      messageCount: 2,
       compactedTurns: 1,
-      retainedCount: 4,
       retainedTurns: 2,
       markdownPaths: ["memory/fact.md"],
       toolRounds: 1,
@@ -567,7 +565,7 @@ describe("a pass that stopped part way", () => {
     const id = (JSON.parse(await readFile(w.checkpointPath, "utf8")) as { id: string }).id;
     const lines = w.activeContent.trim().split("\n");
     const history = HistoryStore.open(join(w.dataDir, HISTORY_DB_FILE));
-    const segment = history.beginCompaction("ada", { file: HISTORY_DB_FILE, message_count: 2, compacted_at: "2026-08-12T00:00:00Z", compaction_id: id }, lines.slice(0, 2).map((line) => JSON.parse(line) as Message), w.activeContent, lines.slice(2).join("\n") + "\n");
+    const segment = history.beginCompaction("ada", { file: HISTORY_DB_FILE, compacted_at: "2026-08-12T00:00:00Z", compaction_id: id }, lines.slice(0, 2).map((line) => JSON.parse(line) as Message), w.activeContent, lines.slice(2).join("\n") + "\n");
     history.finishCompaction("ada", segment);
     history.close();
 
