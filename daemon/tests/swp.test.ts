@@ -7,6 +7,7 @@ import { handleConnection, messageLoop, type ConnectionContext, type PingClock }
 import { SessionRouter, type RoutedMessage, type SessionMeta } from "../src/swp/session";
 import { Server } from "../src/swp/server.ts";
 import { eventMatchesSession } from "../src/swp/routing.ts";
+import { MAX_MARK_TAGS } from "../src/swp/limits.ts";
 import { MAX_TOTAL_ATTACHMENT_BYTES, AdmissionError, admitCapabilities, admitClientMessage, MAX_ATTACHMENTS, MAX_ATTACHMENT_BYTES, MAX_CAPABILITIES } from "../src/swp/admission.ts";
 import { rejectionOf } from "./support/outcome.ts";
 
@@ -434,7 +435,9 @@ describe("what a client may send", () => {
   const over = (limit: number) => "é".repeat(Math.floor(limit / 2) + 1);
   const at = (limit: number) => "x".repeat(limit);
   const hello = (capability: string) => ({ type: "hello", client_type: "tui", client_name: "t", capabilities: [capability] });
-  const regen = (guidance: string) => ({ type: "regen", stream: true, guidance });
+  const regen = (reason: string) => ({ type: "regen", stream: true, reason });
+  const oldRegen = (guidance: string) => ({ type: "regen", stream: true, guidance });
+  const tagged = (tag: string) => ({ type: "regen", stream: true, tags: [tag] });
   const withText = (text: string) => ({ ...message(), text });
   const withImage = (path: string) => ({ ...message(), images: [path] });
   const withFile = (filename: string) => message([upload(filename, "AQIDBA==")]);
@@ -444,7 +447,9 @@ describe("what a client may send", () => {
     ["message text", withText, 1024 * 1024],
     ["image path", withImage, 4096],
     ["capability", hello, 128],
-    ["regeneration guidance", regen, 1024 * 1024],
+    ["regeneration reason", regen, 1024 * 1024],
+    ["regeneration guidance from an older client", oldRegen, 1024 * 1024],
+    ["regeneration tag", tagged, 256],
     ["attachment filename", withFile, 255],
     ["attachment mime type", withMime, 255],
   ] as const)("%s is held to its byte limit, counted in bytes", (_name, build, limit) => {
@@ -458,7 +463,8 @@ describe("what a client may send", () => {
 
   test("optional fields stay absent rather than arriving as something else", () => {
     expect(admitClientMessage({ type: "regen", stream: false })).toEqual({ type: "regen", stream: false });
-    expect(admitClientMessage({ type: "regen", stream: false, guidance: "shorter" })).toEqual({ type: "regen", stream: false, guidance: "shorter" });
+    expect(admitClientMessage({ type: "regen", stream: false, reason: "shorter", tags: ["too long"], another_take: false })).toEqual({ type: "regen", stream: false, reason: "shorter", tags: ["too long"], another_take: false });
+    expect(admitClientMessage({ type: "regen", stream: false, guidance: "shorter" }), "an older client's guidance is the reason").toEqual({ type: "regen", stream: false, reason: "shorter" });
     expect(admitClientMessage({ type: "command", name: "status" })).toEqual({ type: "command", name: "status", args: null });
     expect(admitClientMessage({ type: "command", name: "log", args: { turns: 2 } })).toEqual({ type: "command", name: "log", args: { turns: 2 } });
   });
@@ -537,6 +543,8 @@ describe("client request admission", () => {
     expect(() =>
       admitCapabilities(Array.from({ length: MAX_CAPABILITIES + 1 }, () => "streaming")),
     ).toThrow(/maximum/);
+    expect(() => admitClientMessage({ type: "regen", stream: true, tags: Array.from({ length: MAX_MARK_TAGS }, (_, i) => String(i)) })).not.toThrow();
+    expect(() => admitClientMessage({ type: "regen", stream: true, tags: Array.from({ length: MAX_MARK_TAGS + 1 }, (_, i) => String(i)) })).toThrow(/maximum/);
   });
 
   test("caps each decoded attachment rather than trusting base64 length vaguely", () => {
@@ -578,9 +586,18 @@ describe("wire array decoding", () => {
     ["missing upload data", message([{ filename: "shot.png" }])],
     ["non-string MIME type", message([{ filename: "shot.png", data: "AAAA", mime_type: 42 }])],
     ["non-string capability", { type: "hello", client_type: "tui", client_name: "t", capabilities: [42] }],
+    ["non-string regeneration tag", { type: "regen", stream: true, tags: [42] }],
+    ["non-boolean another take", { type: "regen", stream: true, another_take: "yes" }],
   ] as const) {
     test(`rejects ${label}`, async () => {
       expect(await rejectionOf(decode(value))).toBeInstanceOf(WireError);
     });
   }
+
+  test("a regeneration keeps what it was given and nothing it wasn't, and an older client's guidance is its reason", async () => {
+    expect(await decode({ type: "regen", stream: true })).toEqual({ type: "regen", stream: true });
+    expect(await decode({ type: "regen", stream: true, another_take: true, reason: "shorter", tags: ["too long"] }))
+      .toEqual({ type: "regen", stream: true, another_take: true, reason: "shorter", tags: ["too long"] });
+    expect(await decode({ type: "regen", stream: false, guidance: "warmer" })).toEqual({ type: "regen", stream: false, reason: "warmer" });
+  });
 });

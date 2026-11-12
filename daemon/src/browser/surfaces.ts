@@ -10,7 +10,9 @@ export const SURFACES: Readonly<Record<string, Tier>> = {
   ...inline(
     "switch_character", "switch_character.name", "switch_thread", "switch_thread.name",
     "message", "message.text", "message.image_data", "message.images", "request:message.images", "@attachments", "inject_system", "inject_system.text",
-    "regen", "regen.guidance",
+    "regen", "regen.another_take", "regen.reason", "regen.tags",
+    "mark", "mark.ref", "mark.position", "mark.kind", "mark.phrase", "mark.reason", "mark.tags",
+    "unmark", "unmark.ref", "unmark.position", "unmark.phrase", "marks", "marks.refs",
     "alt", "alt.direction", "alt.position", "alt.ref", "list_alternatives", "list_alternatives.ref",
     "edit", "edit.ref", "edit.content", "get", "get.ref", "@editor",
     "delete", "delete.refs",
@@ -27,7 +29,7 @@ export const SURFACES: Readonly<Record<string, Tier>> = {
     "fork_thread", "fork_thread.name", "fork_thread.from", "fork_thread.turns",
     "switch_model", "switch_model.name", "@chat_role", "list_models", "list_models.include_hidden", "list_models.favorites_only", "favorite_model", "favorite_model.name",
     "local:images", "local:subagents", "local:palette", "local:image", "local:cancel", "local:edit_cancel", "local:editor", "local:insert", "local:normal", "local:scroll", "local:segment", "local:help",
-    "request:message", "request:message.text", "request:message.image_data", "request:regen", "request:regen.guidance", "request:cancel",
+    "request:message", "request:message.text", "request:message.image_data", "request:regen", "request:regen.another_take", "request:regen.reason", "request:regen.tags", "request:cancel",
     "renderer:compaction_status",
   ),
   ...settings(

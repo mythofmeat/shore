@@ -11,7 +11,8 @@ import {
 
 import { HISTORY_DB_FILE } from "./history_store.ts";
 import { toolLoopGroups, mergeToolLoopMessages } from "./merge";
-import { MessageStore, type AltSelection, type PendingAlt } from "./message_store";
+import { MessageNotFound, MessageStore, type AltSelection, type PendingAlt } from "./message_store";
+import { attemptsIn, forgetAttempts, newAttemptId, replyIn, type Reply } from "./marks.ts";
 import { SegmentReader, presentSegment, type SegmentRecord } from "./segments";
 import type { Message } from "./types";
 import type { SegmentSummary } from "../protocol/SegmentSummary.ts";
@@ -259,7 +260,14 @@ export class ConversationEngine {
 
   async deleteMessages(msgIds: readonly string[]): Promise<void> {
     return await withConversation(this.#conversationDir, "rewrite", async () => {
+      const doomed = new Set(msgIds);
+      const attempts = attemptsIn(this.#messages.messages().filter((message) => doomed.has(message.msg_id)));
       await this.#messages.deleteAll(msgIds);
+      const kept = new Set(attemptsIn(this.#messages.messages()));
+      forgetAttempts(
+        { data: dirname(this.#historyDbPath), character: this.#characterName, thread: this.#thread },
+        attempts.filter((attempt) => !kept.has(attempt)),
+      );
       this.#advanceRevision();
       this.broadcastHistory();
     });
@@ -274,6 +282,31 @@ export class ConversationEngine {
       this.#advanceRevision();
       this.#broadcastDelta();
       return removed;
+    });
+  }
+
+  reply(msgId: string): { reply: Reply; archived: boolean } | undefined {
+    const active = replyIn(this.#messages.messages(), msgId);
+    if (active !== undefined) return { reply: active, archived: false };
+    const archived = this.#segments.replyMessages(msgId);
+    const found = archived === undefined ? undefined : replyIn(archived, msgId);
+    return found === undefined ? undefined : { reply: found, archived: true };
+  }
+
+  async attemptOf(msgId: string, index: number): Promise<string> {
+    const found = this.reply(msgId);
+    const slot = found?.reply.attempts[index];
+    if (found === undefined || slot === undefined) throw new MessageNotFound(msgId);
+    if (slot.attempt !== undefined) return slot.attempt;
+    if (found.archived) return this.#segments.stampAttempt(found.reply.msgId, found.reply.alternatives ? index : undefined, slot.shown, newAttemptId());
+    return await withConversation(this.#conversationDir, "update", async () => {
+      const before = this.#messages.messages();
+      const attempt = await this.#messages.stampAttempt(found.reply.msgId, index, newAttemptId());
+      if (this.#messages.messages() !== before) {
+        this.#advanceRevision();
+        this.broadcastHistory();
+      }
+      return attempt;
     });
   }
 

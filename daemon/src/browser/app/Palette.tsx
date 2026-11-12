@@ -9,7 +9,7 @@ import { threadLabel } from "../sidebar/Sidebar.tsx";
 import { openCompactionView, openConversationDialog, openEffortMenu, openThreadDialog, requestConfigSearch } from "./intents.ts";
 import { navigate, SETTINGS_PAGES } from "./route.ts";
 import { keyLabel, paletteMatches, shortcutsFor } from "./shortcuts.ts";
-import { compactionWatch, enterSends, errorText, perform, workspace } from "./state.ts";
+import { compactionWatch, conversation as requests, enterSends, errorText, perform, streamReplies, workspace } from "./state.ts";
 
 export type PaletteScope = "full" | "shortcuts" | "config";
 interface Command { id: string; label: string; detail?: string; icon: IconName; group: string; run: () => void }
@@ -38,9 +38,10 @@ export function Palette({ state, close, newThread, newCharacter, initialScope = 
         label: { settings: "Thread settings", fork: "Fork thread", archive: "Archive thread" }[kind],
       }))),
       ...(openThread === undefined || openThread.home || openThread.heartbeat === true ? [] : [{ id: "make-home", label: "Make home", icon: "home" as const, group: "Thread", run: run(() => { void makeHome(openThread); }) }]),
-      ...(["guidance", "system", "compact", "clear", "gallery", ...(openThread?.heartbeat === true ? [] : ["model"] as const)] as const).map((name) => ({
+      ...(openThread?.heartbeat === true ? [] : [{ id: "another-take", label: "Another take", icon: "shuffle" as const, group: "Thread", run: run(() => { navigate({ view: "chat" }); void requests.regenerate({ anotherTake: true }, streamReplies()).catch((failure: unknown) => toasts.show(errorText(failure), "error")); }) }]),
+      ...(["reason", "system", "compact", "clear", "gallery", ...(openThread?.heartbeat === true ? [] : ["model"] as const)] as const).map((name) => ({
         id: `dialog:${name}`, icon: "chat" as const, group: "Thread", run: run(() => { navigate({ view: "chat" }); requestAnimationFrame(() => openConversationDialog(name)); }),
-        label: { guidance: "Regenerate with guidance", system: "Add system message", compact: "Compact context", clear: "Clear context", gallery: "Images", model: "Choose a model" }[name],
+        label: { reason: "Regenerate with a reason", system: "Add system message", compact: "Compact context", clear: "Clear context", gallery: "Images", model: "Choose a model" }[name],
       })),
       { id: "compaction-view", label: "Show the compaction", icon: "chat" as const, group: "Thread", run: run(() => { navigate({ view: "chat" }); openCompactionView(); }) },
       ...(state.compaction === null ? [] : [{ id: "compaction-stop", label: "Stop the compaction", icon: "stop" as const, group: "Thread", run: run(() => { compactionWatch.stop().then((summary) => toasts.show(summary)).catch((failure: unknown) => toasts.show(errorText(failure), "error")); }) }]),

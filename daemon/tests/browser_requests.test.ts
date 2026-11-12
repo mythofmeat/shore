@@ -16,7 +16,7 @@ function image(bytes: number, filename = "a.png"): ImageUpload {
 describe("conversation requests", () => {
   test("are checked against the protocol before they go", () => {
     expect(conversationRequest("message", { text: "hi", stream: true, images: [] })).toEqual({ type: "message", text: "hi", stream: true, images: [] });
-    expect(conversationRequest("regen", { stream: false, guidance: "shorter" })).toEqual({ type: "regen", stream: false, guidance: "shorter" });
+    expect(conversationRequest("regen", { stream: false, reason: "shorter", tags: ["too long"] })).toEqual({ type: "regen", stream: false, reason: "shorter", tags: ["too long"] });
     expect(() => conversationRequest("message", { text: 3, stream: true, images: [] })).toThrow("Check the conversation request fields before sending.");
     expect(() => conversationRequest("regen", { stream: "yes" })).toThrow("Check the conversation request fields before sending.");
   });
@@ -177,8 +177,8 @@ describe("a conversation's requests in flight", () => {
   test("regenerations are listed until they finish, and pending until their stream starts", async () => {
     const link = connection();
     const requests = new ConversationRequests(link.fake);
-    const regenerating = requests.regenerate("  shorter please  ", false);
-    expect(link.submitted.at(-1)?.request).toEqual({ type: "regen", stream: false, guidance: "shorter please" });
+    const regenerating = requests.regenerate({ reason: "  shorter please  ", tags: ["too long"] }, false);
+    expect(link.submitted.at(-1)?.request).toEqual({ type: "regen", stream: false, reason: "shorter please", tags: ["too long"] });
     expect(requests.regens()).toEqual(["r_1"]);
     expect(requests.pendingRegens({ character: "ada", thread: "main" })).toEqual(["r_1"]);
     expect(requests.regens({ character: "bo", thread: "main" })).toEqual([]);
@@ -187,8 +187,10 @@ describe("a conversation's requests in flight", () => {
     await link.finish("r_1");
     await regenerating;
     expect(requests.regens()).toEqual([]);
-    void requests.regenerate("   ");
-    expect(link.submitted.at(-1)?.request, "blank guidance is no guidance").toEqual({ type: "regen", stream: true });
+    void requests.regenerate({ reason: "   ", tags: [] });
+    expect(link.submitted.at(-1)?.request, "a blank reason and no tags is a plain reroll").toEqual({ type: "regen", stream: true });
+    void requests.regenerate({ anotherTake: true });
+    expect(link.submitted.at(-1)?.request).toEqual({ type: "regen", stream: true, another_take: true });
   });
 
   test("a regeneration that does not complete says why", async () => {

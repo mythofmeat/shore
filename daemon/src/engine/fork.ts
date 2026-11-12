@@ -29,6 +29,7 @@ import {
   type ThreadsIndex,
 } from "./threads.ts";
 import type { Message } from "./types.ts";
+import { attemptsIn, copyAttempts, forgetThreadAttempts } from "./marks.ts";
 import { realUserTurnIndices, tailTurnStart } from "./versions.ts";
 
 export const FORK_MARKER_FILE = ".fork-pending.json";
@@ -191,6 +192,7 @@ async function forkThreadLocked(
   await mkdir(childDir, { recursive: true });
   await writeFile(join(childDir, FORK_MARKER_FILE), `${JSON.stringify(marker)}\n`, "utf8");
   writeDurable(threadFile(data, character, child, "active.jsonl"), serializeMessages(copied));
+  copyAttempts(data, character, source, child, attemptsIn(copied));
   await forkPromptState(characterDataDir(data, character), source, child);
   if (options.failAfter === "context") throw new Error("injected fork failure after context");
 
@@ -269,6 +271,7 @@ export async function recoverForks(data: string, character: string): Promise<str
     }
     await rm(dir, { recursive: true });
     deleteThreadState(data, character, entry);
+    forgetThreadAttempts(data, character, entry);
     const dbPath = join(data, HISTORY_DB_FILE);
     if (existsSync(dbPath)) {
       const store = HistoryStore.open(dbPath);

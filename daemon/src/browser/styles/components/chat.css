@@ -874,6 +874,204 @@ button.chip:hover {
   color: var(--accent);
 }
 
+.selection-actions {
+  gap: 0;
+  padding: 0 2px;
+}
+
+.selection-actions:hover {
+  color: var(--text-2);
+}
+
+.selection-actions .quote-selection {
+  position: static;
+  height: 30px;
+  padding: 0 10px;
+  border: 0;
+  background: transparent;
+  box-shadow: none;
+  transform: none;
+}
+
+.selection-actions .quote-selection + .quote-selection {
+  border-left: 1px solid var(--line-2);
+  border-radius: 0;
+}
+
+.reply-footer {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 2px 12px;
+  margin: 6px 0 0 -8px;
+}
+
+.reply-footer .swipe {
+  margin: 0;
+}
+
+.mark-toggles {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+}
+
+.mark-toggles .icon-button {
+  width: 30px;
+  height: 30px;
+  color: var(--text-3);
+}
+
+.shell[data-layout="mobile"] .mark-toggles .icon-button {
+  width: 40px;
+  height: 40px;
+}
+
+.mark-toggles .mark-toggle.like.on {
+  color: var(--accent);
+}
+
+.mark-toggles .mark-toggle.dislike.on {
+  color: var(--danger-text);
+}
+
+.mark-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 8px;
+}
+
+.mark-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  max-width: 100%;
+  padding: 2px 10px;
+  border: 1px solid var(--accent-line);
+  border-radius: var(--radius-pill);
+  background: var(--accent-soft);
+  color: var(--accent);
+  font-size: var(--text-sm);
+}
+
+.mark-chip.dislike {
+  border-color: var(--danger-line);
+  background: var(--danger-soft);
+  color: var(--danger-text);
+}
+
+.mark-chip .icon {
+  flex-shrink: 0;
+}
+
+.mark-chip-what,
+.mark-chip-why {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.mark-chip-what {
+  flex: 0 1 auto;
+  max-width: 24ch;
+}
+
+.mark-chip.whole .mark-chip-what {
+  flex-shrink: 0;
+}
+
+.mark-chip-why {
+  flex: 0 100 auto;
+  color: var(--text-2);
+}
+
+.mark-editor {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-top: 8px;
+  padding: 10px 12px;
+  border: 1px solid var(--line-3);
+  border-radius: 10px;
+  background: var(--surface);
+}
+
+.mark-editor-head {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px 12px;
+}
+
+.mark-editor-what {
+  flex: 1;
+  min-width: 0;
+  overflow-wrap: anywhere;
+  color: var(--text);
+  font-size: var(--text-md);
+}
+
+.mark-editor .segmented button {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.mark-editor .segmented button[aria-checked="true"]:last-child {
+  background: var(--danger-soft);
+  color: var(--danger-text);
+}
+
+.mark-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.mark-tag {
+  max-width: 100%;
+  padding: 3px 10px;
+  overflow-wrap: anywhere;
+  border: 1px solid var(--line-3);
+  border-radius: var(--radius-pill);
+  background: transparent;
+  color: var(--text-2);
+  font-size: var(--text-sm);
+  text-align: left;
+}
+
+.mark-tag:hover {
+  color: var(--text);
+}
+
+.mark-tag.on {
+  border-color: var(--accent-line);
+  background: var(--accent-soft);
+  color: var(--accent);
+}
+
+.mark-editor .edit-actions {
+  margin-top: 0;
+}
+
+.mark-reason {
+  width: 100%;
+  min-height: 56px;
+  resize: vertical;
+}
+
+::highlight(shore-like) {
+  background-color: var(--accent-soft);
+}
+
+::highlight(shore-dislike) {
+  background-color: var(--danger-soft);
+  text-decoration: underline wavy var(--danger-line);
+}
+
 .composer-wrap {
   flex-shrink: 0;
   padding: 8px 0 20px;
@@ -1213,12 +1411,35 @@ button.swipe-count:hover:not(:disabled) {
   border-radius: var(--radius-md);
   background: transparent;
   color: var(--text-body);
+}
+
+.alternative:hover {
+  border-color: var(--line-3);
+  background: var(--surface);
+}
+
+.alternative-pick {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: inherit;
   text-align: left;
 }
 
-.alternative:hover:not(:disabled) {
-  border-color: var(--line-3);
-  background: var(--surface);
+.alternative-marks {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 4px 8px;
+  margin-left: -8px;
+}
+
+.alternative-marks .mark-chips {
+  margin-top: 0;
 }
 
 .alternative.on {

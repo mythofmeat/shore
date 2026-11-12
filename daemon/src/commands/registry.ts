@@ -26,6 +26,7 @@ import { characterInfo, createCharacterAs, listCharacters, switchCharacter } fro
 import { archiveThread, forkThread, listThreads, markRead, newThread, switchThread, threadCompaction, threadFiles, threadFolderCreate, threadFolderDelete, threadFolderMove, threadFolderRename, threadFolderSort, threadHome, threadLabel, threadLock, threadModel, threadMove, threadPurpose, threadSort } from "./threads.ts";
 import { archiveWithSignal, threadContext, threadListingContext } from "./thread_context.ts";
 import { alt, deleteMessages, edit, get, historyPage, injectSystem, listAlternatives, log } from "./conversation.ts";
+import { listMarks, mark, unmark, type MarkContext } from "./marks.ts";
 import { workspaceTurnsFor, type WorkspaceTurns } from "../tools/workspace_turns.ts";
 import { characterWorkspace } from "../tools/character_workspace.ts";
 import { config, configCheck, configSchemaCommand, configReload, tools } from "./config.ts";
@@ -51,6 +52,16 @@ function engineOf(context: CommandOperationContext): ConversationEngine {
 function workspaceTurnsOf(context: CommandOperationContext): WorkspaceTurns {
   const character = engineOf(context).characterName;
   return workspaceTurnsFor(context.session.config.dirs, character, characterWorkspace(context.session.config, character));
+}
+
+function markContext(context: CommandOperationContext): MarkContext {
+  const now = context.deps.now;
+  return {
+    engine: engineOf(context),
+    data: context.session.dataDir,
+    tags: context.session.config.app.behavior.marks.tags,
+    now: now === undefined ? () => new Date().toISOString() : () => new Date(now()).toISOString(),
+  };
 }
 
 function archiveContext({ session, deps }: CommandOperationContext): ArchiveContext {
@@ -368,6 +379,22 @@ export const commandOperations: OperationRegistry<CommandOperationContext> = {
     position: { label: "One-based position", hint: "Used when index is omitted" },
     direction: { label: "Direction", hint: "Defaults to next; used when index and position are omitted" },
   } }, (context, args) => alt(engineOf(context), args, workspaceTurnsOf(context))),
+  mark: register("mark", { ...conversationPresentation, label: "Mark a reply", effects: ["history_write"], fields: {
+    ref: { ...messageRef, hint: "A reply's message ID or index, including archived replies; omit for the latest reply" },
+    position: { label: "Attempt", hint: "One-based attempt of the reply; omit for the one shown" },
+    kind: { label: "Mark", hint: "like or dislike" },
+    phrase: { label: "Phrase", hint: "Words from the attempt to mark instead of the whole reply" },
+    reason: { label: "Reason", multiline: true, hint: "Why, in your own words; optional" },
+    tags: { label: "Reason tags", hint: "Tags from marks.tags in your config; optional" },
+  } }, (context, args) => mark(markContext(context), args)),
+  unmark: register("unmark", { ...conversationPresentation, label: "Remove a mark", effects: ["history_write"], fields: {
+    ref: { ...messageRef, hint: "A reply's message ID or index, including archived replies; omit for the latest reply" },
+    position: { label: "Attempt", hint: "One-based attempt of the reply; omit for the one shown" },
+    phrase: { label: "Phrase", hint: "The marked words; omit to remove the mark on the whole reply" },
+  } }, (context, args) => unmark(markContext(context), args)),
+  marks: register("marks", { ...conversationPresentation, label: "Read marks", fields: {
+    refs: { label: "Replies", hint: "One reply reference or a collection; omit for the latest reply" },
+  } }, (context, args) => listMarks(markContext(context), args)),
   inject_system: register("inject_system", { ...conversationPresentation, label: "Add system instruction", effects: ["history_write"], fields: { text: { label: "Instruction", multiline: true } } },
     (context, args) => injectSystem(engineOf(context), args)),
   list_characters: register("list_characters", {

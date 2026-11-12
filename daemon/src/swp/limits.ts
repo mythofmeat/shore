@@ -8,3 +8,5 @@ export const MAX_CAPABILITY_BYTES = 128;
 export const MAX_FILENAME_BYTES = 255;
 export const MAX_MIME_TYPE_BYTES = 255;
 export const MAX_IMAGE_PATH_BYTES = 4096;
+export const MAX_MARK_TAGS = 32;
+export const MAX_MARK_TAG_BYTES = 256;

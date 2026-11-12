@@ -3,7 +3,7 @@ import type { ImageUpload } from "../protocol/ImageUpload";
 import { base64Rejection } from "../tools/images.ts";
 import { base64Bytes } from "../util/base64.ts";
 
-import { MAX_CAPABILITIES, MAX_ATTACHMENTS, MAX_ATTACHMENT_BYTES, MAX_TOTAL_ATTACHMENT_BYTES, MAX_TEXT_BYTES, MAX_CAPABILITY_BYTES, MAX_FILENAME_BYTES, MAX_MIME_TYPE_BYTES, MAX_IMAGE_PATH_BYTES } from "./limits.ts";
+import { MAX_CAPABILITIES, MAX_ATTACHMENTS, MAX_ATTACHMENT_BYTES, MAX_TOTAL_ATTACHMENT_BYTES, MAX_TEXT_BYTES, MAX_CAPABILITY_BYTES, MAX_FILENAME_BYTES, MAX_MIME_TYPE_BYTES, MAX_IMAGE_PATH_BYTES, MAX_MARK_TAGS, MAX_MARK_TAG_BYTES } from "./limits.ts";
 export { MAX_CAPABILITIES, MAX_ATTACHMENTS, MAX_ATTACHMENT_BYTES, MAX_TOTAL_ATTACHMENT_BYTES } from "./limits.ts";
 
 export class AdmissionError extends Error {
@@ -59,13 +59,17 @@ export function admitClientMessage(value: unknown): ClientMessage {
     }
 
     case "regen": {
-      const guidance = optionalStringValue(raw, "guidance");
-      if (guidance !== undefined) byteLimit(guidance, "regeneration guidance", MAX_TEXT_BYTES);
+      const reason = optionalStringValue(raw, "reason") ?? optionalStringValue(raw, "guidance");
+      if (reason !== undefined) byteLimit(reason, "regeneration reason", MAX_TEXT_BYTES);
+      const tags = raw.tags === undefined || raw.tags === null ? undefined : stringArray(raw.tags, "tags", MAX_MARK_TAGS);
+      for (const tag of tags ?? []) byteLimit(tag, "tag", MAX_MARK_TAG_BYTES);
       return {
         type: "regen",
         ...optionalString(raw, "rid"),
         stream: booleanField(raw, "stream"),
-        ...(guidance === undefined ? {} : { guidance }),
+        ...(raw.another_take === undefined || raw.another_take === null ? {} : { another_take: booleanField(raw, "another_take") }),
+        ...(reason === undefined ? {} : { reason }),
+        ...(tags === undefined ? {} : { tags }),
       };
     }
 

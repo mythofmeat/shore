@@ -62,6 +62,7 @@ export function importUnifiedDatabase(path: string, sourcePath: string, characte
       }
     }
     for (const table of HISTORY_TABLES.filter((name) => !["history_blobs", "history_alternatives"].includes(name))) {
+      if (source.query("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = ?1").get(table) === null) continue;
       if (source.query(`SELECT 1 FROM ${table} WHERE NOT ${CHARACTER_ARCHIVES_SQL} LIMIT 1`).get(character) !== null) {
         throw new Error("archive database contains another character");
       }

@@ -5,7 +5,8 @@ import { Avatar } from "../ui/avatar.tsx";
 import { IconButton, Menu, type MenuItem } from "../ui/controls.tsx";
 import { ConnectionBanner } from "../app/banner.tsx";
 import { threadLabel } from "../sidebar/Sidebar.tsx";
-import { readMarks, useConversationActive, useWorkspaceValue, workspace } from "../app/state.ts";
+import { conversation, errorText, readMarks, streamReplies, useConversationActive, useWorkspaceValue, workspace } from "../app/state.ts";
+import { toasts } from "../ui/toast.tsx";
 import { makeHome } from "./actions.ts";
 import { BudgetChip } from "./budget.tsx";
 import { CompactionChip } from "./CompactionView.tsx";
@@ -31,7 +32,7 @@ function SidebarToggle({ open, mobile, toggle, unread }: { open: boolean; mobile
 function ChatTopbar({ state, sidebarOpen, toggleSidebar, mobile }: { state: ChromeSnapshot; sidebarOpen: boolean; toggleSidebar: () => void; mobile: boolean }) {
   const [dialog, setDialog] = useState<ConversationDialog | "gallery" | null>(null);
   useEffect(() => {
-    const open = (event: Event) => { const name = (event as CustomEvent<string>).detail; if (["guidance", "system", "compact", "clear", "gallery"].includes(name)) setDialog(name as ConversationDialog | "gallery"); };
+    const open = (event: Event) => { const name = (event as CustomEvent<string>).detail; if (["reason", "system", "compact", "clear", "gallery"].includes(name)) setDialog(name as ConversationDialog | "gallery"); };
     addEventListener(CONVERSATION_DIALOG_EVENT, open);
     return () => removeEventListener(CONVERSATION_DIALOG_EVENT, open);
   }, []);
@@ -52,7 +53,8 @@ function ChatTopbar({ state, sidebarOpen, toggleSidebar, mobile }: { state: Chro
       : { label: "Show the compaction…", icon: "compact", onSelect: openCompactionView },
     { label: "Fork…", icon: "branch", onSelect: () => openThreadDialog("fork", threadId), disabled: !ready },
     "separator",
-    { label: "Regenerate with guidance…", icon: "regenerate", onSelect: () => setDialog("guidance"), disabled: !ready || busy || !hasTurns },
+    { label: "Another take", icon: "shuffle", onSelect: () => { void conversation.regenerate({ anotherTake: true }, streamReplies()).catch((error: unknown) => toasts.show(errorText(error), "error")); }, disabled: !ready || busy || !hasTurns },
+    { label: "Regenerate with a reason…", icon: "regenerate", onSelect: () => setDialog("reason"), disabled: !ready || busy || !hasTurns },
     { label: "Clear context…", icon: "refresh", onSelect: () => setDialog("clear"), disabled: !ready || busy },
     "separator",
     ...(thread === undefined || thread.home || thread.heartbeat === true ? [] : [{ label: "Make home", icon: "home" as const, onSelect: () => { void makeHome(thread); }, disabled: !ready }]),
