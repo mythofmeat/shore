@@ -139,7 +139,7 @@ describe("what the archive writer records and refuses", () => {
   test("a compaction a crash left pending is settled before the next one, and nothing stays open", async () => {
     const { data, dir, dbPath } = await conversation("pending");
     const crashed = HistoryStore.open(dbPath);
-    crashed.beginCompaction("ada", { file: "shore.db", message_count: 1, compacted_at: stamp }, [messages[0] as Message], jsonl(messages), jsonl(messages.slice(1)));
+    crashed.beginCompaction("ada", { file: "shore.db", compacted_at: stamp }, [messages[0] as Message], jsonl(messages), jsonl(messages.slice(1)));
     crashed.close();
     closeStorageConnections();
     const before = handlesUnder(data);

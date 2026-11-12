@@ -1,14 +1,14 @@
 import { refreshConversation, withConversation } from "../../engine/lifecycle.ts";
 import { writeDurable, archiveFile } from "../../storage/files.ts";
 import { existsSync } from "node:fs";
-import { dirname } from "node:path";
+import { dirname, join } from "node:path";
 import { forgetThreadSessions } from "../../llm/providers/agent_sessions.ts";
-import { MAIN_THREAD } from "../../config/dirs.ts";
+import { MAIN_THREAD, archiveKey } from "../../config/dirs.ts";
 
 
 import { HISTORY_DB_FILE, HistoryStore } from "../../engine/history_store.ts";
 import { normalizeMessage } from "../../engine/message_store.ts";
-import { type ConversationRef } from "../../engine/segments.ts";
+import { NO_PRIOR_CONTEXT, priorContextOf, type ConversationRef, type PriorContext } from "../../engine/segments.ts";
 import type { Message } from "../../engine/types.ts";
 import { rustLines, rustTrim } from "../lines.ts";
 import { CompactionError } from "./types.ts";
@@ -114,7 +114,6 @@ async function archiveToDatabase(
         history.archiveKey,
         {
           file: HISTORY_DB_FILE,
-          message_count: messages.length,
           compacted_at: now(),
           ...(operationId === undefined ? {} : { compaction_id: operationId }),
           ...segmentMetadata,
@@ -137,12 +136,13 @@ async function archiveToDatabase(
   }
 }
 
-export async function segmentCount(ref: ConversationRef): Promise<number> {
-  return withHistoryStore(ref, (store, character) => store.segmentCount(character)) ?? 0;
+export function priorContext(dataDir: string, character: string, thread: string): PriorContext {
+  const history = { dbPath: join(dataDir, HISTORY_DB_FILE), archiveKey: archiveKey(character, thread) };
+  return withHistoryStore(history, (store, key) => priorContextOf(store.latestEntry(key))) ?? NO_PRIOR_CONTEXT;
 }
 
 function withHistoryStore<T>(
-  ref: ConversationRef,
+  ref: DurableHistoryLocation,
   read: (store: HistoryStore, character: string) => T,
 ): T | undefined {
   if (!existsSync(ref.dbPath)) return undefined;

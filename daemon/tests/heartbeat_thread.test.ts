@@ -4,6 +4,7 @@ import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 
 import { TurnAutonomyBridge } from "../src/autonomy/registration.ts";
+import { rebuildRequestFromDisk } from "../src/cache/rebuild.ts";
 import { defaultAppConfig, type AppConfig } from "../src/config/app.ts";
 import { ConfigDuration } from "../src/config/duration.ts";
 import type { LoadedConfig } from "../src/config/loader.ts";
@@ -33,6 +34,7 @@ import { SessionRouter } from "../src/swp/session.ts";
 import { sizedImage } from "./support/sized_image.ts";
 import { eventsForResponse } from "./support/stream.ts";
 import { restoreTestEnv, setTestEnv, unsetTestEnv } from "./support/env.ts";
+import { NO_MCP } from "./support/rebuild.ts";
 import { outcomeOf, rejectionOf } from "./support/outcome.ts";
 import { testTmp } from "./support/tmp.ts";
 
@@ -2316,6 +2318,61 @@ test("a side thread grown long by a wake compacts once the wake is over, as it w
   }, long);
 });
 
+function keepNothing(app: AppConfig): void {
+  app.memory.compaction.keep_recent_turns = 0;
+  app.memory.compaction.min_turns = 1;
+}
+
+async function compactByHand(runtime: ShoreRuntime, thread: string, sent: SidecarRequest[] = []): Promise<void> {
+  await runCompactionPass("ada", {
+    config: runtime.config,
+    generate: (request) => {
+      sent.push(structuredClone(request));
+      return Promise.resolve({
+        model: request.model, content: "noted", content_blocks: [{ type: "text", text: "noted" }], finish_reason: "end_turn",
+        usage: { input_tokens: 1, output_tokens: 1, cache_read_tokens: 0, cache_creation_tokens: 0 },
+        timing: { total_ms: 1, time_to_first_token_ms: 1 },
+      });
+    },
+  }, { thread });
+}
+
+test("after a compaction that kept nothing, the next reply, the request rebuilt from disk and the next compaction all open with how long it had been", async () => {
+  await withCharacter(async ({ runtime, script, data, say, thread }) => {
+    await say("goodnight");
+    await compactByHand(runtime, "main");
+    expect(await thread("main")).toEqual([]);
+
+    at(300);
+    await say("good morning");
+    const opening: [role: string, text: string] = ["user", "[5 hours later · Friday 2026-10-30 · 5:00 PM]\n\ngood morning"];
+    expect(turnsOf(script.replies.at(-1))[0]).toEqual(opening);
+
+    const rebuilt = await rebuildRequestFromDisk("ada", data, runtime.config, { ...NO_MCP, thread: "main" });
+    expect(turnsOf(rebuilt?.request)[0]).toEqual(opening);
+
+    const compacting: SidecarRequest[] = [];
+    await compactByHand(runtime, "main", compacting);
+    expect(turnsOf(compacting[0])[0]).toEqual(opening);
+  }, keepNothing);
+});
+
+test("a wake in a side thread compacted down to nothing opens with how long it has been since the thread's last message", async () => {
+  await withCharacter(async ({ runtime, script, say, thread }) => {
+    await runtime.registry.createThread("ada", "ring", { compaction: true });
+    await say("tell me a story in parts", "ring");
+    await compactByHand(runtime, "ring");
+    expect(await thread("ring")).toEqual([]);
+
+    runtime.autonomy.wakeFor("ada", { name: "show", reason: "r", at: T0 + 300 * MINUTE, thread: "ring" });
+    at(300);
+    await runtime.autonomy.tick();
+    expect(turnsOf(script.heartbeats[0])).toEqual([
+      ["user", `[5 hours later · Friday 2026-10-30 · 5:00 PM]\n\n${wakeText("5:00 PM", ['[Your trigger "show" fired at Friday 2026-10-30 · 5:00 PM: r]'])}`],
+    ]);
+  }, keepNothing);
+});
+
 test("the message a wake sends is announced like a heartbeat's, and deleting it puts back the files that wake changed", async () => {
   await withCharacter(async ({ runtime, script, workspace, say, thread, command }) => {
     await runtime.registry.createThread("ada", "ring");
@@ -2667,6 +2724,21 @@ test("the activity record a start rebuilds holds the user's messages of the last
     await say("and again");
     expect(counted(runtime)).toBe(3);
   }, undefined, root);
+});
+
+test("the activity heatmap tells the character how many messages the user has sent, the figure the status shows", async () => {
+  await withCharacter(async ({ runtime, script, say, thread }) => {
+    await say("hello");
+    at(1);
+    await say("the beans are up");
+    script.replyTool = { name: "activity_heatmap", input: { days: 7 } };
+    at(2);
+    await say("how often do we talk?");
+    expect(runtime.autonomy.activityStats("ada", T0)?.messageCount).toBe(3);
+    expect(String(lastToolResult(await thread("main"))?.text).split("\n")[0]).toBe("Activity over 7 days: 3 messages (3 total)");
+  }, (app) => {
+    app.tools.enabled_tools = [...app.tools.enabled_tools, "activity_heatmap"];
+  });
 });
 
 test("a message is counted once in the character's activity record, whether it is the first after a start or follows a restart in the middle of a conversation", async () => {

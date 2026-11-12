@@ -826,16 +826,15 @@ fn fork_note(data: &Value) -> Option<String> {
     let fork = data.get("fork")?;
     let thread = fork.get("thread").and_then(Value::as_str)?;
     let source = fork.get("source").and_then(Value::as_str)?;
-    let messages = fork.get("messages").and_then(Value::as_u64).unwrap_or(0);
-    let turns = fork.get("turns").and_then(Value::as_u64).unwrap_or(0);
+    let copied = super::turns(fork.get("turns").and_then(Value::as_u64).unwrap_or(0));
     let scope = if fork.get("scope").and_then(Value::as_str) == Some("last_turns") {
-        format!("the last {}", thread_turns(turns))
+        format!("the last {copied}")
     } else {
-        "the whole active context".to_owned()
+        format!("the whole active context, {copied}")
     };
     Some(format!(
-        "{thread} is a snapshot of {source}: {scope}, {messages} message(s), \
-         {turns} of your turn(s). Each side is edited and compacted on its own from here"
+        "{thread} is a snapshot of {source}: {scope}. \
+         Each side is edited and compacted on its own from here"
     ))
 }
 

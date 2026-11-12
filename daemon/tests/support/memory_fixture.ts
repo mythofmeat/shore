@@ -45,6 +45,6 @@ export function compactionFixture(cleanup?: AbortSignal): SidecarProvider["strea
 export function seedArchivedSegment(runtime: ShoreRuntime, character: string): void {
   const store = HistoryStore.open(join(runtime.registry.globalConfig().dirs.data, HISTORY_DB_FILE));
   try {
-    store.putSegment(character, 0, { file: HISTORY_DB_FILE, message_count: 1, compacted_at: "2026-09-01T12:00:00Z", label: "Recovery fixture" }, [{ msg_id: "archived-fixture-message", role: "user", content: "Archived message from an earlier session", content_blocks: [{ type: "text", text: "Archived message from an earlier session" }], images: [], timestamp: "2026-09-01T11:00:00Z" }]);
+    store.putSegment(character, 0, { file: HISTORY_DB_FILE, compacted_at: "2026-09-01T12:00:00Z", label: "Recovery fixture" }, [{ msg_id: "archived-fixture-message", role: "user", content: "Archived message from an earlier session", content_blocks: [{ type: "text", text: "Archived message from an earlier session" }], images: [], timestamp: "2026-09-01T11:00:00Z" }]);
   } finally { store.close(); }
 }

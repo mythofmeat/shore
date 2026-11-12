@@ -1041,7 +1041,7 @@
               "compacted_at": {
                 "type": "string"
               },
-              "message_count": {
+              "turn_count": {
                 "type": "integer",
                 "format": "uint",
                 "minimum": 0
@@ -1079,7 +1079,7 @@
               "first_message_at",
               "last_message_at",
               "compacted_at",
-              "message_count",
+              "turn_count",
               "excluded",
               "label",
               "note",
@@ -2644,7 +2644,7 @@
               "compacted_at": {
                 "type": "string"
               },
-              "message_count": {
+              "turn_count": {
                 "type": "integer",
                 "format": "uint",
                 "minimum": 0
@@ -2682,7 +2682,7 @@
               "first_message_at",
               "last_message_at",
               "compacted_at",
-              "message_count",
+              "turn_count",
               "excluded",
               "label",
               "note",
@@ -3767,7 +3767,7 @@
   "protocol": {
     "ActivatedHeartbeat": "{ state: AutonomyHeartbeatState, next_wake_at?: string, seconds_until_wake?: number, }",
     "ActivityHourClass": "\"peak\" | \"trough\" | \"normal\"",
-    "ActivityStatusReport": "{ hour_histogram: Array<number>, hour_classifications: Array<ActivityHourClass>, has_sufficient_heatmap: boolean, engagement_score: number, sessions_per_day: number, message_count: number, turn_count: number, }",
+    "ActivityStatusReport": "{ hour_histogram: Array<number>, hour_classifications: Array<ActivityHourClass>, has_sufficient_heatmap: boolean, engagement_score: number, sessions_per_day: number, message_count: number, }",
     "AddCredentialArgs": "{ provider: string, name?: string, secret?: string, env?: string, no_check?: boolean, allow_unencrypted?: boolean, }",
     "AddProviderArgs": "{ name: string, sdk?: string, base_url?: string, no_auth?: boolean, discover?: boolean, }",
     "AlternativeDirection": "\"next\" | \"prev\" | \"previous\" | \"first\" | \"last\"",
@@ -3806,7 +3806,7 @@
     "ClaudePlanLimitsReport": "{ updated_at: string, subscription_type: string | null, windows: Array<ClaudePlanLimit>, account?: string, accounts: Array<ClaudeAccountReport>, }",
     "ClaudePlanWindow": "\"five_hour\" | \"seven_day\"",
     "ClearArgs": "{ exclude?: boolean | null, note?: string | null, }",
-    "ClearResult": "{ \"status\": \"clear\", character: string, thread: string, message_count: number, segment: SegmentSummary | null, }",
+    "ClearResult": "{ \"status\": \"clear\", character: string, thread: string, segment: SegmentSummary, }",
     "ClientHello": "{ client_type: string, client_name: string, capabilities: Array<string>, character?: string | null, thread?: string | null, token?: string | null, }",
     "ClientMessage": "{ \"type\": \"hello\" } & ClientHello | { \"type\": \"message\" } & ClientMessageBody | { \"type\": \"regen\" } & Regen | { \"type\": \"command\" } & Command | { \"type\": \"cancel\" } & Cancel",
     "ClientMessageBody": "{ rid?: string | null, text: string, stream: boolean, images: Array<string>, image_data?: Array<ImageUpload>, absence_seconds?: number, }",
@@ -3817,7 +3817,7 @@
     "CompactionPassEnd": "{ thread: string, trigger: CompactionTrigger, started_at: string, ended_at: string, report: CompactionReport | null, error: string | null, }",
     "CompactionPassProgress": "{ thread: string, trigger: CompactionTrigger, started_at: string, phase: string | null, last_tool: string | null, }",
     "CompactionPreviewFile": "{ path: string, content_preview: string, }",
-    "CompactionReport": "{ \"status\": \"compacted\", character: string, message_count: number, turn_count: number, compacted_turns: number, retained_count: number, retained_turns: number, memory_files_written: Array<string>, new_conversation_id: string, tool_rounds: number, tools_called: Array<string>, } | { \"status\": \"rotated\", character: string, message_count: number, turn_count: number, compacted_turns: number, retained_count: number, retained_turns: number, dry_run: boolean, memory_files_written: Array<string>, archived_messages: number, } | { \"status\": \"dry_run\", character: string, message_count: number, turn_count: number, compacted_turns: number, retained_count: number, retained_turns: number, would_write_files: number, file_ops_preview: Array<CompactionPreviewFile>, tool_rounds: number, tools_called: Array<string>, } | { \"status\": \"truncated\", character: string, message_count: number, turn_count: number, compacted_turns: number, tool_rounds: number, tools_called: Array<string>, truncated_turns: number, partial_writes: Array<string>, } | { \"status\": \"segment\", character: string, segment: number, message_count: number, turn_count: number, compacted_turns: number, memory_files_written: Array<string>, tool_rounds: number, tools_called: Array<string>, } | { \"status\": \"paused\", character: string, message_count: number, compacted_turns: number, checkpoint_id: string, tool_rounds: number, tools_called: Array<string>, reason: string, detail: string | null, resume_at: string | null, }",
+    "CompactionReport": "{ \"status\": \"compacted\", character: string, compacted_turns: number, retained_turns: number, memory_files_written: Array<string>, new_conversation_id: string, tool_rounds: number, tools_called: Array<string>, } | { \"status\": \"rotated\", character: string, compacted_turns: number, retained_turns: number, dry_run: boolean, memory_files_written: Array<string>, } | { \"status\": \"dry_run\", character: string, compacted_turns: number, retained_turns: number, would_write_files: number, file_ops_preview: Array<CompactionPreviewFile>, tool_rounds: number, tools_called: Array<string>, } | { \"status\": \"truncated\", character: string, compacted_turns: number, tool_rounds: number, tools_called: Array<string>, truncated_turns: number, partial_writes: Array<string>, } | { \"status\": \"segment\", character: string, segment: number, compacted_turns: number, memory_files_written: Array<string>, tool_rounds: number, tools_called: Array<string>, } | { \"status\": \"paused\", character: string, compacted_turns: number, checkpoint_id: string, tool_rounds: number, tools_called: Array<string>, reason: string, detail: string | null, resume_at: string | null, }",
     "CompactionStatusReport": "{ running: CompactionPassProgress | null, paused: CompactionCheckpointStatus | null, last: CompactionPassEnd | null, }",
     "CompactionTrigger": "\"manual\" | \"idle\" | \"turn\" | \"deep_archive\"",
     "CompactionWatchResult": "{ character: string, state: CompactionWatchState, pass: CompactionPassEnd | null, }",
@@ -4028,7 +4028,7 @@
     "SegmentsFound": "{ character: string, found: Array<FoundMessage>, }",
     "SegmentsListing": "{ character: string, thread: string, segments: Array<SegmentSummary>, count: number, }",
     "SegmentsResult": "SegmentsListing | SegmentInspection | SegmentChanged | SegmentsFound",
-    "SegmentSummary": "{ index: number, first_message_at: string | null, last_message_at: string | null, compacted_at: string, message_count: number, excluded: boolean, label: string | null, note: string | null, memory_before: string | null, memory_after: string | null, }",
+    "SegmentSummary": "{ index: number, first_message_at: string | null, last_message_at: string | null, compacted_at: string, turn_count: number, excluded: boolean, label: string | null, note: string | null, memory_before: string | null, memory_after: string | null, }",
     "SelectAlternativeArgs": "{ ref?: string | null, index?: number | null, position?: number | null, direction?: AlternativeDirection | null, }",
     "SelectCredentialArgs": "{ provider: string, credential: string | null, }",
     "SendImage": "{ rid?: string | null, path: string, caption?: string | null, data?: string | null, subagent?: string | null, task_id?: string | null, }",
@@ -4043,7 +4043,7 @@
     "SignInStarted": "{ provider: string, credential: string, url: string, expires_at: string, message: string, }",
     "StartSignInArgs": "{ provider: string, credential?: string, add?: boolean, }",
     "StaticModelSource": "\"static\"",
-    "StatusReport": "{ character: string, keepalive_halts: Array<KeepaliveHaltReport>, message_count: number, turn_count: number, context_tokens?: number, active_model: string | null, config_dir: string, data_dir: string, cache_dir: string, pending_deferred_edit_count: number, pending_deferred_edits: Array<string>, tokens: TokenCounts, autonomy: AutonomyStatusReport | null, activity: ActivityStatusReport | null, history_index: HistoryIndexResult | null, mcp?: McpStatusReport, compaction?: CompactionStatusReport, running?: RunningStatusReport, sections: Array<string>, }",
+    "StatusReport": "{ character: string, keepalive_halts: Array<KeepaliveHaltReport>, turn_count: number, context_tokens?: number, active_model: string | null, config_dir: string, data_dir: string, cache_dir: string, pending_deferred_edit_count: number, pending_deferred_edits: Array<string>, tokens: TokenCounts, autonomy: AutonomyStatusReport | null, activity: ActivityStatusReport | null, history_index: HistoryIndexResult | null, mcp?: McpStatusReport, compaction?: CompactionStatusReport, running?: RunningStatusReport, sections: Array<string>, }",
     "StoredSubagentTrace": "{ ts: string, subagent: string, parent_tool_use_id: string, rid?: string, model: string, messages: Array<Message>, messages_expired?: boolean, result?: string, error?: string, }",
     "StreamChunk": "{ rid?: string | null, text: string, content_type: string, subagent?: string | null, task_id?: string | null, }",
     "StreamEnd": "{ rid?: string | null, msg_id?: string | null, revision?: number, content: string, terminal_content_blocks?: Array<ContentBlock> | null, metadata: StreamMetadata, finish_reason?: string, is_final: boolean, subagent?: string | null, task_id?: string | null, }",
@@ -4061,8 +4061,8 @@
     "ThreadFolderRenameArgs": "{ name: string, to: string, }",
     "ThreadFolderSortArgs": "{ name: string, by_activity: boolean, }",
     "ThreadFolderView": "{ name: string, by_activity?: boolean, }",
-    "ThreadForkDetails": "{ fork_id: string, thread: string, source: string, created_at: string, messages: number, turns: number, scope: ForkScope, requested_turns?: number, }",
-    "ThreadForkOrigin": "{ fork_id: string, source: string, created_at: string, messages: number, turns: number, }",
+    "ThreadForkDetails": "{ fork_id: string, thread: string, source: string, created_at: string, turns: number, scope: ForkScope, requested_turns?: number, }",
+    "ThreadForkOrigin": "{ fork_id: string, source: string, created_at: string, turns: number, }",
     "ThreadForkResult": "{ fork: ThreadForkDetails, character: string, threads: Array<ThreadView>, home: string, heartbeat?: string, current: string, folders?: Array<ThreadFolderView>, manual_order?: boolean, compaction?: RunningCompaction, invalidated?: CacheInvalidation, }",
     "ThreadLabelArgs": "{ name: string, label?: string | null, }",
     "ThreadListing": "{ character: string, threads: Array<ThreadView>, home: string, heartbeat?: string, current: string, folders?: Array<ThreadFolderView>, manual_order?: boolean, compaction?: RunningCompaction, invalidated?: CacheInvalidation, }",

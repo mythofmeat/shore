@@ -118,8 +118,8 @@ const conversationPresentation = {
 } as const;
 const messageRef = { label: "Message reference", hint: "Message ID, 1-based index, negative index from the end, or last" } as const;
 const historyFields = {
-  turns: { label: "Recent turns", hint: "Defaults to 64; takes precedence over message count" },
-  count: { label: "Message count", hint: "Used when recent turns is omitted" },
+  turns: { label: "Recent turns", hint: "Defaults to 64; takes precedence over messages" },
+  count: { label: "Messages", hint: "The newest messages, a reply and its tool calls counting as one; used when recent turns is omitted" },
   role: { label: "Role filter" },
   segment: { label: "Segment", hint: "An archived segment's index; omit for the current context" },
 } as const;

@@ -10,7 +10,6 @@ export interface DreamConversation {
   segment: number;
   from: string | undefined;
   to: string | undefined;
-  messages: number;
   turns: number;
   label?: string;
   memoryBefore?: string;
@@ -40,8 +39,7 @@ export async function conversationsSince(
         segment: entry.idx,
         from: entry.first_message_at ?? undefined,
         to: entry.last_message_at ?? undefined,
-        messages: entry.message_count,
-        turns: reader.store?.segmentTurnCount(entry.archiveKey, entry.idx) ?? 0,
+        turns: entry.turn_count,
         ...(entry.label === undefined ? {} : { label: entry.label }),
         ...(entry.memory_before === undefined ? {} : { memoryBefore: entry.memory_before }),
         ...(entry.memory_after === undefined ? {} : { memoryAfter: entry.memory_after }),
@@ -72,14 +70,13 @@ function compactionChanges(conversation: DreamConversation): string {
 
 export function conversationLines(
   conversations: readonly DreamConversation[],
-  userName: string,
   changesSince: string | undefined,
 ): string {
   const lines = conversations.map((conversation) => {
     const label = conversation.label === undefined ? "" : ` (${conversation.label})`;
-    const from = conversation.turns === 1 ? "1 from" : `${String(conversation.turns)} from`;
+    const turns = conversation.turns === 1 ? "1 turn" : `${String(conversation.turns)} turns`;
     return `- thread \`${conversation.thread}\`${label}, ${localTime(conversation.from)} to ${localTime(conversation.to)}: ` +
-      `${String(conversation.messages)} messages, ${from} ${userName}.${compactionChanges(conversation)}`;
+      `${turns}.${compactionChanges(conversation)}`;
   });
   if (lines.length === 0) lines.push("- nothing new has been archived since the last dream");
   if (changesSince !== undefined) lines.push(`- every change to the workspace since then: \`git log --stat ${changesSince}\``);

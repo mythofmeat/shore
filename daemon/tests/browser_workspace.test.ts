@@ -13,7 +13,7 @@ import type { ThreadView } from "../src/protocol/ThreadView.ts";
 
 const message = (id: string, extra: Partial<Message> = {}): Message => ({ msg_id: id, role: "assistant", content: id, images: [], content_blocks: [], timestamp: "2026-11-10T00:00:00Z", ...extra });
 const thread = (id: string, extra: Partial<ThreadView> = {}): ThreadView => ({ id, created_at: "2026-11-01T00:00:00Z", compaction: true, home: id === "main", current: id === "main", ...extra });
-const segment = (index: number): SegmentSummary => ({ index, first_message_at: null, last_message_at: null, compacted_at: "2026-11-01T00:00:00Z", message_count: 2, excluded: false, label: null, note: null, memory_before: null, memory_after: null });
+const segment = (index: number): SegmentSummary => ({ index, first_message_at: null, last_message_at: null, compacted_at: "2026-11-01T00:00:00Z", turn_count: 2, excluded: false, label: null, note: null, memory_before: null, memory_after: null });
 const listing = (threads: ThreadView[], extra: Partial<ThreadListing> = {}): ThreadListing => ({ character: "ada", threads, home: "main", current: "main", ...extra });
 const page = (messages: Message[], index: number | null, extra: Record<string, unknown> = {}) => ({ messages, cursor: 0, next_before: 7, has_more_before: true, total_turns: 9, segment: index === null ? null : segment(index), previous_segment: index === null || index === 0 ? null : segment(index - 1), next_segment: index === null ? null : segment(index + 1), ...extra });
 const history = (extra: Record<string, unknown> = {}): ServerMessage => ({ type: "history", messages: [], config: { model: "opus" }, revision: 1, selected_character: "ada", selected_thread: "main", ...extra });

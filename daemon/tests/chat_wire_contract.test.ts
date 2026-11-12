@@ -9,6 +9,7 @@ import { emptyCatalog, type ResolvedModel } from "../src/config/models.ts";
 import { ProviderRegistry } from "../src/config/providers.ts";
 import type { LoadedConfig } from "../src/config/loader.ts";
 import { MessageStore } from "../src/engine/message_store.ts";
+import { NO_PRIOR_CONTEXT } from "../src/engine/segments.ts";
 import type { ContentBlock, Message } from "../src/engine/types.ts";
 import { buildGenerationRequest, type SetupEngine } from "../src/handler/setup.ts";
 import { AnthropicProvider } from "../src/llm/providers/anthropic.ts";
@@ -77,7 +78,7 @@ function engineOver(store: MessageStore): SetupEngine {
   return {
     messages: () => store.messages(),
     messagesThroughLastUserTurn: () => store.messagesThroughLastUserTurn(),
-    segmentCount: () => 0,
+    priorContext: () => NO_PRIOR_CONTEXT,
   };
 }
 

@@ -56,7 +56,6 @@ interface ThreadForkOrigin {
   fork_id: string;
   source: string;
   created_at: string;
-  messages: number;
   turns: number;
 }
 
@@ -187,17 +186,40 @@ function archivedUserTurnAt(data: string, character: string, id: string): number
   }
 }
 
+interface Reply {
+  at: number;
+  time: number;
+}
+
 interface ActiveScan {
   turns: number;
   latest: number;
   latestUser: number;
-  replies: { at: number; time: number }[];
+  replies: Reply[];
   heartbeatTurn: boolean;
   seen: number;
+  toolLoop: "none" | "tool_use" | "tool_result";
+  reply: Reply | undefined;
 }
 
 function emptyScan(): ActiveScan {
-  return { turns: 0, latest: -Infinity, latestUser: -Infinity, replies: [], heartbeatTurn: false, seen: 0 };
+  return { turns: 0, latest: -Infinity, latestUser: -Infinity, replies: [], heartbeatTurn: false, seen: 0, toolLoop: "none", reply: undefined };
+}
+
+function followToolLoop(scan: ActiveScan, line: unknown, at: number): void {
+  const message = typeof line === "object" && line !== null ? line as Partial<Message> : {};
+  const blocks: unknown[] = Array.isArray(message.content_blocks) ? message.content_blocks : [];
+  const types = blocks.map((block) => (block as { type?: unknown }).type);
+  if (message.role !== "assistant") {
+    const results = message.role === "user" && types.length > 0 && types.every((type) => type === "tool_result");
+    scan.toolLoop = results && scan.toolLoop === "tool_use" ? "tool_result" : "none";
+    return;
+  }
+  if (scan.toolLoop === "none") {
+    scan.reply = { at, time: Number.NaN };
+    scan.replies.push(scan.reply);
+  }
+  scan.toolLoop = types.includes("tool_use") ? "tool_use" : "none";
 }
 
 function scanInto(scan: ActiveScan, lines: readonly unknown[]): ActiveScan {
@@ -209,7 +231,8 @@ function scanInto(scan: ActiveScan, lines: readonly unknown[]): ActiveScan {
       scan.heartbeatTurn = isHeartbeatOpener(line as Message);
       if (time > scan.latestUser && !scan.heartbeatTurn) scan.latestUser = time;
     }
-    if (isReplyLine(line) && (!scan.heartbeatTurn || isUnpromptedLine(line))) scan.replies.push({ at, time });
+    followToolLoop(scan, line, at);
+    if (isReplyLine(line) && (!scan.heartbeatTurn || isUnpromptedLine(line)) && scan.reply !== undefined) scan.reply.time = time;
     if (time > scan.latest) scan.latest = time;
   }
   return scan;
@@ -327,12 +350,18 @@ function isThreadsIndex(raw: unknown): raw is ThreadsIndex {
   return threads.every(isThreadRecord);
 }
 
+function withForkTurnsOnly(record: ThreadRecord): ThreadRecord {
+  if (record.forked_from === undefined) return record;
+  const { fork_id, source, created_at, turns } = record.forked_from;
+  return { ...record, forked_from: { fork_id, source, created_at, turns } };
+}
+
 export async function readThreadsIndexIn(
   characterDir: string,
 ): Promise<ThreadsIndex | undefined> {
   try {
     const raw: unknown = JSON.parse(readDurable(threadsIndexIn(characterDir)));
-    return isThreadsIndex(raw) ? raw : undefined;
+    return isThreadsIndex(raw) ? { ...raw, threads: raw.threads.map(withForkTurnsOnly) } : undefined;
   } catch {
     return undefined;
   }

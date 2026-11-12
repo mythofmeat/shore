@@ -4,7 +4,7 @@ import { Dialog } from "../ui/controls.tsx";
 import { toasts } from "../ui/toast.tsx";
 import { conversation, errorText, streamReplies, workspace } from "../app/state.ts";
 import { threadLabel } from "../sidebar/Sidebar.tsx";
-import { compactionSummary } from "./transcript.ts";
+import { compactionSummary, turnCount } from "./transcript.ts";
 
 export type ConversationDialog = "compact" | "clear" | "guidance" | "system";
 
@@ -70,7 +70,7 @@ export function ConversationDialogs({ dialog, state, close }: { dialog: Conversa
     </Form>;
     case "clear": return <Form title="Clear context" close={close} busy={busy} error={error} action="Clear" danger submit={() => run(async () => {
       const result = await workspace.actions.run("clear", { ...(text.trim() === "" ? {} : { note: text.trim() }), ...(restart ? { exclude: true } : {}) });
-      await resync(state); return `Cleared ${String(result.message_count)} messages from the active context`;
+      await resync(state); return `Cleared ${turnCount(result.segment.turn_count)} from the active context`;
     })}>
       <p className="form-text">Starts a fresh context. Earlier messages are kept as a segment you can open from the top of the thread.</p>
       <label className="field"><span>Note for the segment <span className="muted">(optional)</span></span><input className="input" value={text} onChange={(event) => setText(event.target.value)} /></label>

@@ -11,16 +11,19 @@ import { archiveKey, characterDataDir, threadDataDir } from "../src/config/dirs.
 import type { LoadedConfig } from "../src/config/loader.ts";
 import { emptyCatalog, type ResolvedModel } from "../src/config/models.ts";
 import { ProviderRegistry } from "../src/config/providers.ts";
+import { ConversationEngine } from "../src/engine/conversation.ts";
 import { HISTORY_DB_FILE } from "../src/engine/history_store.ts";
 import { serializeMessages } from "../src/engine/message_store.ts";
 import { assemblePrompt } from "../src/engine/prompt.ts";
+import { NO_PRIOR_CONTEXT } from "../src/engine/segments.ts";
 import { createThread, ensureHeartbeatThread, readThreadsIndex } from "../src/engine/threads.ts";
 import type { Message } from "../src/engine/types.ts";
+import { generationEngine } from "../src/handler/generation.ts";
 import { buildGenerationRequest } from "../src/handler/setup.ts";
 import { archiveAndRetain } from "../src/memory/compaction/archive.ts";
 import { applyDeferredEdits } from "../src/memory/deferred_edits.ts";
 import { initializeDatabase } from "../src/storage/database.ts";
-import { threadFile, writeDurable } from "../src/storage/files.ts";
+import { readDurable, threadFile, writeDurable } from "../src/storage/files.ts";
 import { characterWorkspace } from "../src/tools/character_workspace.ts";
 import { handleReadChatLogs, handleSearchChatLogs } from "../src/tools/history.ts";
 import { handleListThreads } from "../src/tools/list_threads.ts";
@@ -80,7 +83,7 @@ async function registryWith(config: LoadedConfig, files: Record<string, string>)
 
 async function systemText(config: LoadedConfig, thread: string, messages: Message[]): Promise<string> {
   const built = await buildGenerationRequest({
-    engine: { thread, messages: () => messages, messagesThroughLastUserTurn: () => messages, segmentCount: () => 0 },
+    engine: { thread, messages: () => messages, messagesThroughLastUserTurn: () => messages, priorContext: () => NO_PRIOR_CONTEXT },
     dataDir: config.dirs.data,
     charName: "frank",
     config,
@@ -324,6 +327,134 @@ describe("coming back to a side thread", () => {
       user_timestamp_mode: "auto",
     }, "UTC");
     expect(prompt.messages.at(-1)?.content).toBe("[21 days later · Sunday 2026-11-01 · 9:00 AM · last in main 2 hours ago]\n\nback");
+  });
+});
+
+function replying(): { provider: Parameters<typeof reliabilityGeneration>[0]; sent: SidecarRequest[] } {
+  const sent: SidecarRequest[] = [];
+  return {
+    sent,
+    provider: {
+      generate: async () => { throw new Error("stream only"); },
+      async *stream(request) {
+        sent.push(structuredClone(request));
+        yield {
+          type: "done", content: "welcome back", finish_reason: "end_turn",
+          usage: { input_tokens: 1, output_tokens: 1, cache_read_tokens: 0, cache_creation_tokens: 0 },
+          timing: { total_ms: 1, time_to_first_token_ms: 1 },
+        };
+      },
+    },
+  };
+}
+
+async function compactEverything(h: Awaited<ReturnType<typeof reliabilityGeneration>>): Promise<void> {
+  const data = h.config.dirs.data;
+  const history = { dbPath: join(data, HISTORY_DB_FILE), archiveKey: archiveKey("ada", h.engine.thread) };
+  await archiveAndRetain(threadDataDir(data, "ada", h.engine.thread), history, 0, readDurable(threadFile(data, "ada", h.engine.thread, "active.jsonl")));
+  await h.engine.reload();
+}
+
+const textOf = (request: SidecarRequest | undefined, index: number): string =>
+  (request?.messages[index]?.content ?? []).flatMap((block) => block.type === "text" ? [block.text] : []).join("\n");
+
+describe("coming back after a compaction that kept nothing", () => {
+  const at = (time: string) => `2026-11-02T${time}:00Z`;
+
+  test("the first message says how long it has been since the archived conversation, and where the user wrote in between", async () => {
+    const { provider, sent } = replying();
+    const h = await reliabilityGeneration(provider);
+    await h.engine.appendMessage(message("u1", "off to the lighthouse", at("18:40")));
+    await h.engine.appendMessage(message("a1", "have fun", at("18:41")));
+    await compactEverything(h);
+    writeDurable(threadFile(h.config.dirs.data, "ada", "lighthouse", "active.jsonl"), serializeMessages([
+      message("u3", "last chapter tonight", at("23:37")),
+      message("a3", "the light goes out", at("23:38")),
+    ]));
+    h.deps.registry.listThreads = () => ["main", "lighthouse"].map((id) => ({ id, created_at: NOW, compaction: true }));
+    h.deps.now = () => at("23:40");
+
+    await h.run(undefined, "back");
+
+    expect(h.engine.messages()[0]?.last_elsewhere).toEqual({ thread: "lighthouse", at: "2026-11-02T23:37:00.000Z" });
+    expect(textOf(sent[0], 0)).toMatch(/^\[5 hours later · [^\]]* · last in lighthouse 3 minutes ago\]\n\nback$/);
+  });
+
+  test("a message a few minutes after the archived conversation still says the time, since the earlier conversation isn't shown", async () => {
+    const { provider, sent } = replying();
+    const h = await reliabilityGeneration(provider);
+    await h.engine.appendMessage(message("u1", "one more thing", at("18:40")));
+    await h.engine.appendMessage(message("a1", "go on", at("18:41")));
+    await compactEverything(h);
+    h.deps.now = () => at("18:50");
+
+    await h.run(undefined, "never mind");
+
+    expect(textOf(sent[0], 0)).toMatch(/^\[[A-Z][a-z]+day 2026-11-02 · \d+:50 [AP]M\]\n\nnever mind$/);
+  });
+
+  test("in a side thread, a pause longer than the cache lasts refreshes the thread's files and says when the user was last home", async () => {
+    const { provider, sent } = replying();
+    const h = await reliabilityGeneration(provider, "story");
+    const home = await ConversationEngine.load("ada", h.config.dirs.data);
+    await home.appendMessage(message("u0", "going to write", at("09:30")));
+    h.deps.registry.getOrCreate = async (_name, thread) => generationEngine(thread === "main" ? home : h.engine);
+    h.deps.registry.listThreads = () => ["main", "story"].map((id) => ({ id, created_at: NOW, compaction: true }));
+    const refreshed: (string | undefined)[] = [];
+    h.deps.compaction.applyDeferredEdits = async (_dir, _workspace, thread) => { refreshed.push(thread); };
+    await h.engine.appendMessage(message("u1", "chapter one", at("08:00")));
+    await h.engine.appendMessage(message("a1", "the keeper wakes", at("08:01")));
+    await compactEverything(h);
+    h.deps.now = () => at("10:00");
+
+    await h.run(undefined, "chapter two");
+
+    expect(refreshed).toEqual(["story"]);
+    expect(textOf(sent[0], 0)).toMatch(/^\[2 hours later · [^\]]* · last in main 30 minutes ago\]\n\nchapter two$/);
+  });
+
+  test("a message within half an hour of the last reply notes nowhere else the user wrote, however long ago their own last message was", async () => {
+    const { provider } = replying();
+    const h = await reliabilityGeneration(provider);
+    await h.engine.appendMessage(message("u1", "tell me everything", at("18:00")));
+    await h.engine.appendMessage(message("a1", "a long answer", at("18:50")));
+    writeDurable(threadFile(h.config.dirs.data, "ada", "lighthouse", "active.jsonl"), serializeMessages([message("u3", "quick note", at("19:00"))]));
+    h.deps.registry.listThreads = () => ["main", "lighthouse"].map((id) => ({ id, created_at: NOW, compaction: true }));
+    h.deps.now = () => at("19:10");
+
+    await h.run(undefined, "thanks");
+
+    expect(h.engine.messages().find((m) => m.content === "thanks")?.last_elsewhere).toBeUndefined();
+  });
+});
+
+describe("a history trimmed to fit", () => {
+  test("measures the first message kept from the one dropped just before it, and says the time even when that was minutes earlier", () => {
+    const keptAfter = (dropped: Message) => assemblePrompt({
+      character_name: "frank",
+      display_name: "sam",
+      has_prior_context: false,
+      messages: [dropped, message("u2", "back", "2026-11-01T12:00:00Z"), message("a2", "hello again", "2026-11-01T12:01:00Z")],
+      max_context_tokens: 40_000,
+      max_output_tokens: 1_000,
+      user_timestamp_mode: "auto",
+    }, "UTC").messages.map((m) => m.content);
+    const long = "word ".repeat(40_000);
+
+    expect(keptAfter(message("a1", long, "2026-11-01T09:01:00Z"))).toEqual(["[3 hours later · Sunday 2026-11-01 · 12:00 PM]\n\nback", "hello again"]);
+    expect(keptAfter(message("u1", long, "2026-11-01T11:50:00Z"))).toEqual(["[Sunday 2026-11-01 · 12:00 PM]\n\nback", "hello again"]);
+  });
+
+  test("with nothing dropped, measures the first message from the newest archived one", () => {
+    const prompt = assemblePrompt({
+      character_name: "frank",
+      display_name: "sam",
+      has_prior_context: true,
+      archived_last_at: "2026-11-01T06:00:00Z",
+      messages: [message("u1", "back", "2026-11-01T09:00:00Z"), message("a1", "hello again", "2026-11-01T09:01:00Z")],
+      user_timestamp_mode: "auto",
+    }, "UTC");
+    expect(prompt.messages.map((m) => m.content)).toEqual(["[3 hours later · Sunday 2026-11-01 · 9:00 AM]\n\nback", "hello again"]);
   });
 });
 

@@ -6,7 +6,7 @@ import { acting, button, click, mount, type } from "./dom.ts";
 const app = useApp();
 
 const summary = (index: number, extra: Record<string, unknown> = {}) => ({
-  index, first_message_at: "2026-11-01T00:00:00Z", last_message_at: "2026-11-02T00:00:00Z", compacted_at: "2026-11-03T00:00:00Z", message_count: 12, excluded: false,
+  index, first_message_at: "2026-11-01T00:00:00Z", last_message_at: "2026-11-02T00:00:00Z", compacted_at: "2026-11-03T00:00:00Z", turn_count: 12, excluded: false,
   label: null, note: null, memory_before: null, memory_after: null, ...extra,
 });
 const settle = async () => { await acting(() => Bun.sleep(5)); };
@@ -27,7 +27,7 @@ describe("the memory page", () => {
     expect(view.host.querySelector("h2")?.textContent).toBe("Segments in ada / story");
     const segments = [...view.host.querySelectorAll(".segment")];
     expect(segments.map((segment) => [segment.className, segment.querySelector(".setting-label")?.textContent])).toEqual([["segment excluded", "The startexcluded"], ["segment ", "Segment 2"]]);
-    expect(segments[0]?.querySelectorAll(".setting-description")[0]?.textContent).toBe(`12 messages · ${formatTime("2026-11-01T00:00:00Z")} – ${formatTime("2026-11-02T00:00:00Z")} · compacted ${formatTime("2026-11-03T00:00:00Z")}`);
+    expect(segments[0]?.querySelectorAll(".setting-description")[0]?.textContent).toBe(`12 turns · ${formatTime("2026-11-01T00:00:00Z")} – ${formatTime("2026-11-02T00:00:00Z")} · compacted ${formatTime("2026-11-03T00:00:00Z")}`);
     expect([segments[0]?.querySelectorAll(".setting-description")[1]?.textContent, segments[1]?.querySelectorAll(".setting-description").length]).toEqual(["Note: keep", 1]);
     const main = await mount(<MemoryPage state={{ ...snapshot, character: "ada", thread: null }} />);
     await settle();
@@ -130,7 +130,7 @@ describe("the memory page", () => {
 
 describe("the diagnostics page", () => {
   const report = (extra: Record<string, unknown> = {}) => ({
-    character: "ada", keepalive_halts: [], message_count: 1234, turn_count: 56, context_tokens: 7890, active_model: "opus", config_dir: "/cfg", data_dir: "/data", cache_dir: "/cache",
+    character: "ada", keepalive_halts: [], turn_count: 56, context_tokens: 7890, active_model: "opus", config_dir: "/cfg", data_dir: "/data", cache_dir: "/cache",
     pending_deferred_edit_count: 1, pending_deferred_edits: ["A.md"], tokens: { input: 1, output: 2, cache_read: 3, cache_write: 4 }, autonomy: null, activity: null, history_index: null,
     sections: ["conversation", "autonomy", "unknown", "folders"], ...extra,
   });
@@ -157,7 +157,7 @@ describe("the diagnostics page", () => {
     await settle();
     expect(view.host.querySelector(".settings-description")?.textContent).toBe("What the daemon knows about ada right now.");
     expect([...view.host.querySelectorAll(".stat")].map((stat) => [stat.querySelector(".stat-label")?.textContent, stat.querySelector(".stat-value")?.textContent])).toEqual([
-      ["Messages", (1234).toLocaleString()], ["Turns", "56"], ["Context tokens", (7890).toLocaleString()], ["Model", "opus"],
+      ["Turns", "56"], ["Context tokens", (7890).toLocaleString()], ["Model", "opus"],
     ]);
     const select = view.host.querySelector<HTMLSelectElement>("select[aria-label='Status section']");
     expect([...(select?.options ?? [])].map((option) => [option.value, option.textContent])).toEqual([["all", "All sections"], ["conversation", "Conversation"], ["folders", "Folders"], ["autonomy", "Autonomy"], ["edits", "Edits"]]);
@@ -177,7 +177,7 @@ describe("the diagnostics page", () => {
     app.answer((asked) => asked["name"] === "status" ? report({ active_model: null, context_tokens: undefined, sections: [] }) : undefined);
     const view = await mount(<DiagnosticsPage state={{ ...app.state().workspace.getSnapshot(), character: "ada" }} />);
     await settle();
-    expect([...view.host.querySelectorAll(".stat-value")].slice(2).map((value) => value.textContent)).toEqual(["—", "—"]);
+    expect([...view.host.querySelectorAll(".stat-value")].slice(1).map((value) => value.textContent)).toEqual(["—", "—"]);
     const before = app.socket().sent.length;
     const none = await mount(<DiagnosticsPage state={{ ...app.state().workspace.getSnapshot(), character: null }} />);
     await settle();

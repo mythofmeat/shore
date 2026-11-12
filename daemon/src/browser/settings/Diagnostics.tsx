@@ -43,7 +43,7 @@ function RequestHistory({ state }: { state: ChromeSnapshot }) {
 }
 
 const SECTION_FIELDS: Record<string, readonly (keyof StatusReport)[]> = {
-  conversation: ["message_count", "turn_count", "context_tokens", "active_model", "tokens"],
+  conversation: ["turn_count", "context_tokens", "active_model", "tokens"],
   folders: ["config_dir", "data_dir", "cache_dir"],
   autonomy: ["autonomy"], activity: ["activity"], history_index: ["history_index"], mcp: ["mcp"], keepalive: ["keepalive_halts"], edits: ["pending_deferred_edit_count", "pending_deferred_edits"],
 };
@@ -54,7 +54,6 @@ function StatusView({ report }: { report: StatusReport }) {
   const shown = section === "all" ? sections : [section];
   return <>
     <div className="stat-grid">
-      <div className="stat"><div className="stat-label">Messages</div><div className="stat-value">{formatNumber(report.message_count)}</div></div>
       <div className="stat"><div className="stat-label">Turns</div><div className="stat-value">{formatNumber(report.turn_count)}</div></div>
       <div className="stat"><div className="stat-label">Context tokens</div><div className="stat-value">{formatNumber(report.context_tokens)}</div></div>
       <div className="stat"><div className="stat-label">Model</div><div className="stat-value small mono">{report.active_model ?? "—"}</div></div>

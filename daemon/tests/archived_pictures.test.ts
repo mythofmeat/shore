@@ -34,7 +34,7 @@ function shown(images: ImageRef[]): Message {
 function archive(data: string, messages: Message[]): void {
   const store = HistoryStore.open(join(data, "shore.db"));
   try {
-    store.putSegment("ada", 0, { file: "0001.jsonl", message_count: messages.length, compacted_at: "2026-10-01T11:00:00+10:00" }, messages);
+    store.putSegment("ada", 0, { file: "0001.jsonl", compacted_at: "2026-10-01T11:00:00+10:00" }, messages);
   } finally {
     store.close();
   }

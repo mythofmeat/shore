@@ -15,6 +15,17 @@ import type { SegmentSummary } from "../protocol/SegmentSummary.ts";
 
 export type { SegmentRecord } from "./history_store.ts";
 
+export interface PriorContext {
+  archived: boolean;
+  lastAt?: string | undefined;
+}
+
+export const NO_PRIOR_CONTEXT: PriorContext = { archived: false };
+
+export function priorContextOf(latest: SegmentRecord | undefined): PriorContext {
+  return latest === undefined ? NO_PRIOR_CONTEXT : { archived: true, lastAt: latest.last_message_at ?? undefined };
+}
+
 export interface ConversationRef {
   dir: string;
   dbPath: string;
@@ -54,6 +65,10 @@ export class SegmentReader {
 
   latestEntry(): SegmentRecord | undefined {
     return this.history?.latestEntry(this.character);
+  }
+
+  priorContext(): PriorContext {
+    return priorContextOf(this.latestEntry());
   }
 
   entry(index: number): SegmentRecord | undefined {
@@ -141,7 +156,7 @@ export function presentSegment(record: SegmentRecord): SegmentSummary {
     first_message_at: record.first_message_at,
     last_message_at: record.last_message_at,
     compacted_at: record.compacted_at,
-    message_count: record.message_count,
+    turn_count: record.turn_count,
     excluded: record.excluded === true,
     label: record.label ?? null,
     note: record.note ?? null,

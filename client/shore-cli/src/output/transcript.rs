@@ -114,7 +114,7 @@ impl SegmentFrame {
             let mut hint = vec![format!("before this: {}", segment_name(previous))];
             if page.segment.is_none() {
                 hint.extend(segment_dates(previous, now));
-                hint.push(message_count(previous.message_count));
+                hint.push(turns(previous.turn_count));
             }
             hint.push(format!("shore log --segment {}", previous.index));
             hint.join(" \u{00b7} ")
@@ -147,7 +147,7 @@ impl SegmentFrame {
 pub(crate) fn segment_detail(segment: &SegmentSummary, now: DateTime<Local>) -> String {
     let mut parts = vec![segment_name(segment)];
     parts.extend(segment_dates(segment, now));
-    parts.push(message_count(segment.message_count));
+    parts.push(turns(segment.turn_count));
     if segment.excluded {
         parts.push("excluded from search".to_owned());
     }
@@ -182,19 +182,11 @@ fn segment_dates(segment: &SegmentSummary, now: DateTime<Local>) -> Option<Strin
     }
 }
 
-fn turns(count: usize) -> String {
-    if count == 1 {
+pub(crate) fn turns<T: std::fmt::Display + PartialEq + From<u8>>(count: T) -> String {
+    if count == T::from(1) {
         "1 turn".to_owned()
     } else {
         format!("{count} turns")
-    }
-}
-
-fn message_count(count: usize) -> String {
-    if count == 1 {
-        "1 message".to_owned()
-    } else {
-        format!("{count} messages")
     }
 }
 
