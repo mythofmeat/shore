@@ -330,14 +330,18 @@ impl SWPConnection {
     pub async fn send_regen(
         &mut self,
         stream: bool,
-        guidance: Option<String>,
+        another_take: bool,
+        reason: Option<String>,
+        tags: Vec<String>,
     ) -> Result<Option<String>> {
         use crate::protocol::client_msg::Regen;
         let rid = Some(request_id());
         let msg = ClientMessage::Regen(Regen {
             rid: rid.clone(),
             stream,
-            guidance,
+            another_take,
+            reason,
+            tags,
         });
         self.send(&msg).await?;
         Ok(rid)
@@ -520,7 +524,7 @@ pub fn request_id() -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use tokio::io::AsyncReadExt;
+    use tokio::io::{AsyncBufReadExt, AsyncReadExt};
     use tokio::time::{Duration, timeout};
 
     #[tokio::test]
@@ -547,6 +551,28 @@ mod tests {
             refused.to_string().contains("maximum size of 16 bytes"),
             "{refused}"
         );
+    }
+
+    #[tokio::test]
+    async fn a_regenerate_sends_its_kind_reason_and_tags_under_the_request_id_it_returns() {
+        let (client_stream, server_stream) = tokio::io::duplex(4096);
+        let mut conn = SWPConnection::from_raw_stream(client_stream);
+        let rid = conn
+            .send_regen(true, true, Some("flat".into()), vec!["too long".into()])
+            .await
+            .unwrap()
+            .expect("a regenerate has a request id");
+        let mut line = String::new();
+        let _read = BufReader::new(server_stream)
+            .read_line(&mut line)
+            .await
+            .unwrap();
+        let sent: serde_json::Value = serde_json::from_str(&line).unwrap();
+        assert_eq!(
+            sent,
+            serde_json::json!({ "type": "regen", "rid": rid, "stream": true, "another_take": true, "reason": "flat", "tags": ["too long"] })
+        );
+        assert!(rid.len() > 8, "{rid}");
     }
 
     #[tokio::test]

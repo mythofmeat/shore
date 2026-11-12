@@ -7,15 +7,16 @@ use shore_common::protocol::operations::{
     ConfigurationSchema, ConversationLog, ConversationLogArgs, DeleteMessages, DeleteMessagesArgs,
     DiagnosticCountArgs, DiaryArgs, Dream, DreamArgs, EditMessage, EditMessageArgs,
     EmptyOperationArgs, ExecuteTool, FavoriteModel, FavoriteModelArgs, GetMessage, GetMessageArgs,
-    InjectSystem, InjectSystemArgs, InspectCalls, InspectModel, InspectSegments, ListModels,
-    ListModelsArgs, ListProviderModels, ListProviders, MessageReferences, ModelInfoArgs,
-    ModelPreferenceScope, ModelSettings, ModelSettingsArgs, Operation, PingKeepalive, Presence,
-    PresenceArgs, ProviderArgs, ProviderModelsArgs, ReadDiary, ReadErrorLog, ReadHeartbeatLog,
-    ReadStatus, ReadSubagentTraces, ReadTranscript, RefreshAllProviderModels,
-    RefreshProviderModels, ResetModel, ResetModelArgs, RunToolArgs, ScheduleHeartbeat,
-    SegmentAction, SegmentsArgs, SetHeartbeatActive, SetHeartbeatDormant, SetModelSetting,
-    SetModelSettingArgs, SubagentTraceArgs, SwitchModel, SwitchModelArgs, ToolAccessListing,
-    TranscriptArgs, TranscriptSource, WatchCompaction,
+    InjectSystem, InjectSystemArgs, InspectCalls, InspectModel, InspectSegments, ListMarks,
+    ListMarksArgs, ListModels, ListModelsArgs, ListProviderModels, ListProviders, MarkArgs,
+    MarkKind, MarkReply, MessageReferences, ModelInfoArgs, ModelPreferenceScope, ModelSettings,
+    ModelSettingsArgs, Operation, PingKeepalive, Presence, PresenceArgs, ProviderArgs,
+    ProviderModelsArgs, ReadDiary, ReadErrorLog, ReadHeartbeatLog, ReadStatus, ReadSubagentTraces,
+    ReadTranscript, RefreshAllProviderModels, RefreshProviderModels, ResetModel, ResetModelArgs,
+    RunToolArgs, ScheduleHeartbeat, SegmentAction, SegmentsArgs, SetHeartbeatActive,
+    SetHeartbeatDormant, SetModelSetting, SetModelSettingArgs, SubagentTraceArgs, SwitchModel,
+    SwitchModelArgs, ToolAccessListing, TranscriptArgs, TranscriptSource, UnmarkArgs, UnmarkReply,
+    WatchCompaction,
 };
 use shore_common::protocol::types::Role;
 use std::collections::BTreeMap;
@@ -693,9 +694,58 @@ pub(crate) enum MsgCommand {
 
     /// Regenerate the last assistant response
     Regen {
-        /// Ephemeral system guidance for this regeneration
+        /// Show the new attempt the earlier ones and ask for something
+        /// different. This doesn't dislike them
+        #[arg(long)]
+        another_take: bool,
+
+        /// Why the shown attempt missed. The new attempt sees the earlier ones
+        /// and this reason, and the shown attempt is disliked with it
+        #[arg(short, long, alias = "guidance", short_alias = 'g')]
+        reason: Option<String>,
+
+        /// A reason tag from marks.tags in your config, alone or with
+        /// --reason; repeat for more
+        #[arg(long = "tag", value_name = "TAG")]
+        tags: Vec<String>,
+    },
+
+    /// Like a reply, or words in it
+    Like(MarkOptions),
+
+    /// Dislike a reply, or words in it
+    Dislike(MarkOptions),
+
+    /// Remove a like or dislike from a reply, or from words in it
+    Unmark {
+        /// Reply reference (last, -1, 3, or a message id, archived ones
+        /// included); defaults to the latest reply
+        #[arg(allow_negative_numbers = true, value_parser = message_ref, add = values(Completes::MessageRefs))]
+        msg_ref: Option<String>,
+
+        /// One-based attempt of the reply; defaults to the one shown
         #[arg(short, long)]
-        guidance: Option<String>,
+        attempt: Option<u64>,
+
+        /// The marked words; left off, the mark on the whole reply goes
+        #[arg(short, long)]
+        phrase: Option<String>,
+
+        /// Output raw JSON
+        #[arg(long)]
+        json: bool,
+    },
+
+    /// Show the likes and dislikes on a reply's attempts
+    Marks {
+        /// Reply references (last, -1, 3, or message ids, archived ones
+        /// included); defaults to the latest reply
+        #[arg(allow_negative_numbers = true, value_parser = message_ref, add = values(Completes::MessageRefs))]
+        msg_refs: Vec<String>,
+
+        /// Output raw JSON
+        #[arg(long)]
+        json: bool,
     },
 
     /// List or select alternate responses for the latest assistant message
@@ -741,6 +791,34 @@ pub(crate) enum MsgCommand {
         #[arg(long)]
         json: bool,
     },
+}
+
+#[derive(Args, Debug)]
+pub(crate) struct MarkOptions {
+    /// Reply reference (last, -1, 3, or a message id, archived ones
+    /// included); defaults to the latest reply
+    #[arg(allow_negative_numbers = true, value_parser = message_ref, add = values(Completes::MessageRefs))]
+    pub(crate) msg_ref: Option<String>,
+
+    /// One-based attempt of the reply; defaults to the one shown
+    #[arg(short, long)]
+    pub(crate) attempt: Option<u64>,
+
+    /// Words from the reply to mark instead of the whole reply
+    #[arg(short, long)]
+    pub(crate) phrase: Option<String>,
+
+    /// Why, in your own words
+    #[arg(short, long)]
+    pub(crate) reason: Option<String>,
+
+    /// A reason tag from marks.tags in your config; repeat for more
+    #[arg(long = "tag", value_name = "TAG")]
+    pub(crate) tags: Vec<String>,
+
+    /// Output raw JSON
+    #[arg(long)]
+    pub(crate) json: bool,
 }
 
 #[derive(Subcommand, Debug)]
@@ -2947,7 +3025,33 @@ fn msg_to_swp(cmd: &MsgCommand) -> Option<(&'static str, serde_json::Value)> {
                 refs: MessageReferences::Many(msg_refs.clone()),
             })
         }
+        MsgCommand::Like(options) => mark_to_swp(options, MarkKind::Like),
+        MsgCommand::Dislike(options) => mark_to_swp(options, MarkKind::Dislike),
+        MsgCommand::Unmark {
+            msg_ref,
+            attempt,
+            phrase,
+            ..
+        } => operation_to_swp::<UnmarkReply>(UnmarkArgs {
+            reference: msg_ref.clone(),
+            position: *attempt,
+            phrase: phrase.clone(),
+        }),
+        MsgCommand::Marks { msg_refs, .. } => operation_to_swp::<ListMarks>(ListMarksArgs {
+            refs: (!msg_refs.is_empty()).then(|| MessageReferences::Many(msg_refs.clone())),
+        }),
     }
+}
+
+fn mark_to_swp(options: &MarkOptions, kind: MarkKind) -> Option<(&'static str, serde_json::Value)> {
+    operation_to_swp::<MarkReply>(MarkArgs {
+        reference: options.msg_ref.clone(),
+        position: options.attempt,
+        kind,
+        phrase: options.phrase.clone(),
+        reason: options.reason.clone(),
+        tags: (!options.tags.is_empty()).then(|| options.tags.clone()),
+    })
 }
 
 fn log_to_swp(cmd: &CliCommand) -> Option<(&'static str, serde_json::Value)> {
@@ -3409,6 +3513,58 @@ mod tests {
     }
 
     #[test]
+    fn a_regenerate_takes_another_take_or_a_reason_with_tags_and_old_guidance_is_a_reason() {
+        type Case<'case> = (
+            &'case [&'case str],
+            bool,
+            Option<&'case str>,
+            &'case [&'case str],
+        );
+        let cases: [Case<'_>; 4] = [
+            (&["msg", "regen"], false, None, &[]),
+            (&["msg", "regen", "--another-take"], true, None, &[]),
+            (
+                &[
+                    "msg",
+                    "regen",
+                    "-r",
+                    "flat",
+                    "--tag",
+                    "too long",
+                    "--tag",
+                    "repetitive",
+                ],
+                false,
+                Some("flat"),
+                &["too long", "repetitive"],
+            ),
+            (
+                &["msg", "regen", "-g", "warmer"],
+                false,
+                Some("warmer"),
+                &[],
+            ),
+        ];
+        for (args, take, why, tagged) in cases {
+            let cli = parse(args);
+            let CliCommand::Msg {
+                command:
+                    MsgCommand::Regen {
+                        another_take,
+                        reason,
+                        tags,
+                    },
+            } = parsed_command(&cli)
+            else {
+                panic!("{args:?} should parse as a regenerate");
+            };
+            assert_eq!(*another_take, take, "{args:?}");
+            assert_eq!(reason.as_deref(), why, "{args:?}");
+            assert_eq!(tags, tagged, "{args:?}");
+        }
+    }
+
+    #[test]
     fn each_command_line_sends_the_daemon_exactly_this_command() {
         use serde_json::json;
         type Sent<'name> = Option<(&'name str, serde_json::Value)>;
@@ -3424,6 +3580,42 @@ mod tests {
             ),
             (&["msg", "regen"], None),
             (&["msg", "regen", "--guidance", "be more concise"], None),
+            (&["msg", "regen", "--another-take"], None),
+            (&["msg", "like"], Some(("mark", json!({"kind": "like"})))),
+            (
+                &[
+                    "msg",
+                    "dislike",
+                    "-2",
+                    "--attempt",
+                    "1",
+                    "--phrase",
+                    "the sea",
+                    "--reason",
+                    "flat",
+                    "--tag",
+                    "too long",
+                    "--tag",
+                    "repetitive",
+                ],
+                Some((
+                    "mark",
+                    json!({"ref": "-2", "position": 1, "kind": "dislike", "phrase": "the sea", "reason": "flat", "tags": ["too long", "repetitive"]}),
+                )),
+            ),
+            (&["msg", "unmark"], Some(("unmark", json!({})))),
+            (
+                &["msg", "unmark", "m_1", "-a", "2", "-p", "the sea", "--json"],
+                Some((
+                    "unmark",
+                    json!({"ref": "m_1", "position": 2, "phrase": "the sea"}),
+                )),
+            ),
+            (&["msg", "marks"], Some(("marks", json!({})))),
+            (
+                &["msg", "marks", "last", "-1"],
+                Some(("marks", json!({"refs": ["last", "-1"]}))),
+            ),
             (&["msg", "alt"], Some(("list_alternatives", json!({})))),
             (
                 &["msg", "alt", "2", "--ref", "-1", "--json"],

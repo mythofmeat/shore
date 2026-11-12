@@ -53,7 +53,7 @@ test("a message the character sent on its own is marked unprompted, and what the
   const reply = await row(message({ role: "assistant", content: "Hello.", content_blocks: [{ type: "text", text: "Hello." }] }), true);
   expect(reply.querySelector(".message-meta .tag")).toBeNull();
   expect(reply.querySelector("article")?.className).toBe("message assistant  last");
-  expect([...reply.querySelectorAll(".message-actions button")].map((button) => button.getAttribute("aria-label"))).toEqual(["Copy", "Edit", "Regenerate", "Delete"]);
+  expect([...reply.querySelectorAll(".message-actions button")].map((button) => button.getAttribute("aria-label"))).toEqual(["Copy", "Edit", "Regenerate", "Other ways to regenerate", "Delete"]);
 
   const asked = await row(message({ content: "And then?", content_blocks: [{ type: "text", text: "And then?" }] }));
   expect(asked.querySelector("article.message.user")?.getAttribute("aria-label")).toBe(`You, ${clock}`);

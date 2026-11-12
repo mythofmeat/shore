@@ -13,6 +13,7 @@ import {
   validateCompaction,
   validateDreaming,
   validatePresence,
+  validateMarks,
   validateTriggers,
   validateHeartbeat,
   validateImages,
@@ -518,6 +519,8 @@ function validateConfig(
   if (triggers !== undefined) throw validationError(triggers);
   const presence = validatePresence(app.behavior.presence);
   if (presence !== undefined) throw validationError(presence);
+  const marks = validateMarks(app.behavior.marks);
+  if (marks !== undefined) throw validationError(marks);
 
   const images = validateImages(app.images);
   if (images !== undefined) throw validationError(images);

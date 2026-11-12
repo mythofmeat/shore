@@ -34,7 +34,7 @@ import type {
 } from "../llm/types.ts";
 import { usageConfigView } from "../ledger/budget.ts";
 import { runsOnClaudePlan } from "../ledger/plan_limits.ts";
-import { anyToolEnabled, imageSettingsFor } from "../config/app.ts";
+import { anyToolEnabled, imageSettingsFor, resolveDisplayName } from "../config/app.ts";
 import { imageLimitsFor } from "../llm/prepare_images.ts";
 import { imageTierForModel } from "../llm/image_tokens.ts";
 import { nearMessageBudget } from "../engine/prompt.ts";
@@ -42,6 +42,8 @@ import { canArchiveTurns } from "../memory/compaction/plan.ts";
 import { toolPhase } from "../tools/execute.ts";
 import { toolLimitsFrom, type ToolContext, type ToolLimitsView } from "../tools/dispatch.ts";
 import { buildToolContext, type ToolContextDeps } from "./tool_context.ts";
+import { planAttempt, withAttemptNote, type AttemptEngine } from "./attempts.ts";
+import { recordAttempt } from "../engine/marks.ts";
 import {
   buildGenerationRequest,
   HeartbeatThreadError,
@@ -81,7 +83,7 @@ import { pruneTurns, redoTurns, replyVersions, undoTurns, WorkspaceRecorder, wor
 import { characterWorkspace } from "../tools/character_workspace.ts";
 import { sentPicturesDir } from "../storage/sent_pictures.ts";
 
-export interface GenerationEngine extends TurnEngine, PersistEngine, SetupEngine {
+export interface GenerationEngine extends TurnEngine, PersistEngine, SetupEngine, AttemptEngine {
   readonly thread: string;
 }
 
@@ -98,6 +100,7 @@ export function generationEngine(engine: ConversationEngine): GenerationEngine {
     turnCount: () => engine.turnCount(),
     pendingRegenAlt: () => engine.pendingRegenAlt(),
     messagesAfterLastUserTurn: () => engine.messagesAfterLastUserTurn(),
+    attemptOf: (msgId, index) => engine.attemptOf(msgId, index),
     reload: () => engine.reload(),
   };
 }
@@ -240,6 +243,15 @@ async function runGenerationCore(
     const asked = all[all.length - engine.messagesAfterLastUserTurn().length - 1];
     if (asked !== undefined && isHeartbeatOpener(asked)) throw new WakeTurnError(charName);
   }
+  const scope = { data: deps.dataDir, character: charName, thread: engine.thread };
+  const plan = await planAttempt(engine, scope, regen ? params.body.regen ?? { kind: "reroll" } : undefined, {
+    tags: config.app.behavior.marks.tags,
+    user: resolveDisplayName(config.app.defaults),
+    now: now(),
+  });
+  const noteAttempt = (): void => {
+    recordAttempt(scope, { attempt: plan.attempt, asked: plan.asked, replaces: plan.replaces, at: now() });
+  };
 
   const home = await homeThreadOf(deps.dataDir, charName);
   const isHome = engine.thread === home;
@@ -342,13 +354,10 @@ async function runGenerationCore(
     const request: SidecarRequest = {
       ...built.request,
       ...(imageSupport === undefined ? {} : { supports_images: imageSupport }),
-      messages: withRegenGuidance(
-        built.request.messages,
-        regen ? params.body.guidance : undefined,
-      ),
-      context: callContext(deps, config, charName, engine.thread, params.rid, keepaliveWindowSecs(built.keepalive_interval_ms, built.keepalive_pings), (built.request.provider_options === undefined
+      messages: withAttemptNote(built.request.messages, plan.note),
+      context: { ...callContext(deps, config, charName, engine.thread, params.rid, keepaliveWindowSecs(built.keepalive_interval_ms, built.keepalive_pings), (built.request.provider_options === undefined
           ? {}
-          : { options: built.request.provider_options })),
+          : { options: built.request.provider_options })), attempt: plan.attempt },
     };
 
     const subagentHistory: Message[] =
@@ -364,6 +373,7 @@ async function runGenerationCore(
             ...message,
             provider_key: resolved.providerKey,
             model: request.model,
+            attempt: plan.attempt,
           }
         : message;
       if (regen && !intermediatePersisted) {
@@ -372,6 +382,7 @@ async function runGenerationCore(
         await engine.appendMessage(persisted);
       }
       intermediatePersisted = true;
+      noteAttempt();
     };
 
     const streamed = await streamTurn(deps, {
@@ -428,7 +439,9 @@ async function runGenerationCore(
       wallClockMs: clock() - startedAt,
       ...(regenAlt === undefined ? {} : { regenAlt }),
       pictures: { workspace, dir: sentPicturesDir(deps.dataDir, charName) },
+      attempt: plan.attempt,
     });
+    noteAttempt();
 
     emitPostPersistStreamEnd(turnCtx, engine, params.rid ?? undefined, result);
     await flushFrames();
@@ -677,17 +690,6 @@ function recordKeyFallback(
     status: event.status ?? null,
     message: event.warning,
   });
-}
-
-export function withRegenGuidance(
-  messages: readonly WireMessage[],
-  guidance: string | undefined,
-): WireMessage[] {
-  if (guidance === undefined || guidance.trim() === "") return [...messages];
-  return [...messages, {
-    role: "system",
-    content: [{ type: "text", text: guidance }],
-  }];
 }
 
 export function applyIntermediateMessages(

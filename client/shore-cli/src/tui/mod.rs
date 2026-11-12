@@ -4002,7 +4002,9 @@ mod send_failure_tests {
         ClientMessage::Regen(shore_common::protocol::client_msg::Regen {
             rid: Some(rid.into()),
             stream: true,
-            guidance: None,
+            another_take: false,
+            reason: None,
+            tags: Vec::new(),
         })
     }
 

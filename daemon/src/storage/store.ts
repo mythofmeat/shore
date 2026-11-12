@@ -40,6 +40,30 @@ CREATE TABLE IF NOT EXISTS events (
 );
 CREATE INDEX IF NOT EXISTS events_character_kind ON events(character, kind, id);
 CREATE INDEX IF NOT EXISTS events_key ON events(character, kind, event_key, id);
+
+CREATE TABLE IF NOT EXISTS reply_attempts (
+  character TEXT NOT NULL,
+  thread TEXT NOT NULL,
+  attempt TEXT NOT NULL,
+  asked TEXT CHECK(asked IN ('first', 'reroll', 'another_take', 'with_reason')),
+  replaces TEXT,
+  created_at TEXT NOT NULL,
+  PRIMARY KEY(character, thread, attempt)
+);
+CREATE INDEX IF NOT EXISTS reply_attempts_attempt ON reply_attempts(attempt);
+CREATE TABLE IF NOT EXISTS reply_marks (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  character TEXT NOT NULL,
+  thread TEXT NOT NULL,
+  attempt TEXT NOT NULL,
+  kind TEXT NOT NULL CHECK(kind IN ('like', 'dislike')),
+  phrase TEXT,
+  reason TEXT,
+  tags TEXT NOT NULL DEFAULT '[]',
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL
+);
+CREATE UNIQUE INDEX IF NOT EXISTS reply_marks_slot ON reply_marks(character, thread, attempt, coalesce(phrase, ''));
 `;
 
 export function openStorage(data: string): Database {

@@ -14,7 +14,10 @@ import { Avatar, UserAvatar } from "../ui/avatar.tsx";
 import { Dialog, IconButton, Menu, Spinner, type MenuItem } from "../ui/controls.tsx";
 import { Icon } from "../ui/icons.tsx";
 import { toasts } from "../ui/toast.tsx";
-import { conversation, errorText, perform, streamReplies, workspace } from "../app/state.ts";
+import { conversation, errorText, perform, replyMarks, streamReplies, useWorkspaceValue, workspace } from "../app/state.ts";
+import { openConversationDialog } from "../app/intents.ts";
+import { markScope, MarkChips, MarkEditor, MarkToggles, RowMarkEditor, usePhraseHighlights, useReplyMarks } from "./marks.tsx";
+import { shownAttempt } from "./reply_marks.ts";
 import { activityHeadline, blockViews, bodyItems, chatLogMessageId, formatToolInput, isChatLogTool, messageCopyLabel, swipeState, timeLabel, toolSummary, type BlockView, type StepView } from "./transcript.ts";
 import { showWorkspaceNote, swipe as swipeTo } from "./actions.ts";
 
@@ -204,7 +207,9 @@ function DeleteConfirm({ message, done }: { message: Message; done: () => void }
   </div>;
 }
 
-function AlternativesDialog({ message, close }: { message: Message; close: () => void }) {
+function AlternativesDialog({ message, scope, close }: { message: Message; scope: string; close: () => void }) {
+  const attempts = replyMarks.attempts(message);
+  const editing = replyMarks.editing();
   const [listing, setListing] = useState<AlternativeListing>();
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
@@ -221,16 +226,27 @@ function AlternativesDialog({ message, close }: { message: Message; close: () =>
   return <Dialog title="Responses" close={close} wide>
     {error === "" ? null : <p className="form-error" role="alert">{error}</p>}
     {listing === undefined && error === "" ? <Spinner label="Loading responses" /> : null}
-    <div className="alternatives" role="listbox" aria-label="Responses">
-      {listing?.alternatives.map((item) => <button key={item.index} type="button" role="option" aria-selected={item.active} className={`alternative ${item.active ? "on" : ""}`} disabled={busy} onClick={() => void choose(item.position)}>
-        <span className="alternative-head"><span>Response {item.position}</span>{item.active ? <span className="tag">shown</span> : null}<time dateTime={item.timestamp}>{timeLabel(item.timestamp)}</time></span>
-        <span className="alternative-text">{item.content}</span>
-      </button>)}
+    <div className="alternatives" role="list" aria-label="Responses">
+      {listing?.alternatives.map((item) => {
+        const attempt = attempts?.find((candidate) => candidate.position === item.position);
+        const open = editing !== null && editing.place === "dialog" && editing.ref === message.msg_id && editing.position === item.position ? editing : null;
+        return <div key={item.index} role="listitem" className={`alternative ${item.active ? "on" : ""}`}>
+          <button type="button" className="alternative-pick" aria-current={item.active} aria-label={`Response ${String(item.position)}${item.active ? ", shown" : ". Show it"}`} disabled={busy} onClick={() => void choose(item.position)}>
+            <span className="alternative-head"><span>Response {item.position}</span>{item.active ? <span className="tag">shown</span> : null}<time dateTime={item.timestamp}>{timeLabel(item.timestamp)}</time></span>
+            <span className="alternative-text">{item.content}</span>
+          </button>
+          <div className="alternative-marks">
+            <MarkToggles message={message} scope={scope} attempt={attempt} position={item.position} place="dialog" />
+            <MarkChips message={message} attempt={attempt} position={item.position} place="dialog" />
+          </div>
+          {open === null ? null : <MarkEditor key={open.phrase ?? ""} message={message} scope={scope} editing={open} attempt={attempt} />}
+        </div>;
+      })}
     </div>
   </Dialog>;
 }
 
-function Swipe({ message, last, busy }: { message: Message; last: boolean; busy: boolean }) {
+function Swipe({ message, last, busy, scope }: { message: Message; last: boolean; busy: boolean; scope: string }) {
   const swipe = swipeState(message);
   const [listing, setListing] = useState(false);
   const [moving, setMoving] = useState(false);
@@ -243,7 +259,7 @@ function Swipe({ message, last, busy }: { message: Message; last: boolean; busy:
     <IconButton icon="chevronLeft" label="Previous response" size={16} disabled={busy || moving || !swipe.canPrevious} onClick={() => move("prev")} />
     <button type="button" className="swipe-count" aria-live="polite" aria-label={`Response ${String(swipe.position)} of ${String(swipe.count)}. Show all responses`} title="Show all responses" disabled={swipe.count <= 1} onClick={() => setListing(true)}><span className="swipe-current">{swipe.position}</span> / {swipe.count}</button>
     <IconButton icon="chevronRight" label={swipe.atLast ? "Generate another response" : "Next response"} size={16} disabled={busy || moving || (swipe.atLast && !last)} onClick={() => move("next")} />
-    {listing ? <AlternativesDialog message={message} close={() => setListing(false)} /> : null}
+    {listing ? <AlternativesDialog message={message} scope={scope} close={() => { replyMarks.edit(null); setListing(false); }} /> : null}
   </div>;
 }
 
@@ -252,6 +268,12 @@ export const MessageRow = memo(function MessageRow({ message, character, avatar,
   display: ViewValues; busy: boolean; mobile: boolean; openImage: OpenImage; readOnly?: boolean;
 }) {
   const [mode, setMode] = useState<"view" | "edit" | "delete">("view");
+  const scope = useWorkspaceValue((live) => markScope(live.character, live.thread));
+  useReplyMarks();
+  const body = useRef<HTMLDivElement>(null);
+  const shown = message.role === "assistant" ? shownAttempt(replyMarks.attempts(message)) : undefined;
+  const position = shown?.position ?? (message.alt_index ?? 0) + 1;
+  usePhraseHighlights(message.msg_id, body, shown?.marks ?? []);
   useEffect(() => {
     if (!lastUser) return;
     const edit = () => setMode("edit");
@@ -260,8 +282,12 @@ export const MessageRow = memo(function MessageRow({ message, character, avatar,
   }, [lastUser]);
   const assistant = message.role === "assistant";
   const copy = () => { void copyText(message.content).then(() => toasts.show("Copied")).catch((error: unknown) => toasts.show(errorText(error), "error")); };
-  const regenerate = () => { void conversation.regenerate(undefined, streamReplies()).catch((error: unknown) => toasts.show(errorText(error), "error")); };
+  const regenerate = (choice = {}) => { void conversation.regenerate(choice, streamReplies()).catch((error: unknown) => toasts.show(errorText(error), "error")); };
   const reply = last ? assistant ? { label: "Regenerate", icon: "regenerate" as const } : { label: "Generate reply", icon: "send" as const } : undefined;
+  const takes: MenuItem[] = last && assistant ? [
+    { label: "Another take", icon: "shuffle", onSelect: () => regenerate({ anotherTake: true }), disabled: busy },
+    { label: "Regenerate with a reason…", icon: "regenerate", onSelect: () => openConversationDialog("reason"), disabled: busy },
+  ] : [];
   if (message.origin === "autonomous" && !assistant) {
     const opener = message.role === "user" ? OPENERS.find(([prefix]) => message.content.startsWith(prefix)) : undefined;
     const when = timeLabel(message.timestamp);
@@ -275,17 +301,20 @@ export const MessageRow = memo(function MessageRow({ message, character, avatar,
   const actions: MenuItem[] = readOnly ? [{ label: "Copy", icon: "copy", onSelect: copy }] : [
     { label: "Copy", icon: "copy", onSelect: copy },
     { label: "Edit", icon: "edit", onSelect: () => setMode("edit") },
-    ...(reply === undefined ? [] : [{ ...reply, onSelect: regenerate, disabled: busy }]),
+    ...(reply === undefined ? [] : [{ ...reply, onSelect: () => regenerate(), disabled: busy }]),
+    ...takes,
     { label: "Delete", icon: "trash", onSelect: () => setMode("delete"), danger: true },
   ];
   const time = display.timestamps === "off" ? "" : timeLabel(message.timestamp);
   const meta = display.metadata === "on" ? [metadata === undefined ? message.model ?? "" : metadataLabel(metadata)].filter(Boolean).join(" · ") : "";
-  return <article className={`message ${message.role} ${mode !== "view" ? "active" : ""} ${last ? "last" : ""}`} aria-label={`${assistant ? character : "You"}, ${timeLabel(message.timestamp)}`} data-role={message.role}>
+  return <article className={`message ${message.role} ${mode !== "view" ? "active" : ""} ${last ? "last" : ""}`} aria-label={`${assistant ? character : "You"}, ${timeLabel(message.timestamp)}`} data-role={message.role}
+    data-msg-id={message.msg_id} data-alt-index={message.alt_index ?? 0} data-alt-count={message.alt_count ?? 1}>
     {mode === "view" && !mobile ? <div className="message-actions" role="toolbar" aria-label="Message actions">
       <IconButton icon="copy" label="Copy" onClick={copy} />
       {readOnly ? null : <>
         <IconButton icon="edit" label="Edit" onClick={() => setMode("edit")} />
-        {reply === undefined ? null : <IconButton icon={reply.icon} label={reply.label} disabled={busy} onClick={regenerate} />}
+        {reply === undefined ? null : <IconButton icon={reply.icon} label={reply.label} disabled={busy} onClick={() => regenerate()} />}
+        {takes.length === 0 ? null : <Menu label="Other ways to regenerate" items={takes} icon="chevronDown" />}
         <IconButton icon="trash" label="Delete" onClick={() => setMode("delete")} />
       </>}
     </div> : null}
@@ -297,9 +326,16 @@ export const MessageRow = memo(function MessageRow({ message, character, avatar,
         {time === "" ? null : <time dateTime={message.timestamp}>{time}</time>}
         {mobile && mode === "view" ? <span className="message-menu"><Menu label="Message actions" items={actions} /></span> : null}
       </div>
-      {mode === "edit" ? <EditBox message={message} done={() => setMode("view")} /> : <div className="message-body"><MessageBody message={message} display={display} openImage={openImage} embeds={assistant} /></div>}
+      {mode === "edit" ? <EditBox message={message} done={() => setMode("view")} /> : <div className="message-body" ref={body}><MessageBody message={message} display={display} openImage={openImage} embeds={assistant} /></div>}
       {meta === "" ? null : <div className="message-metadata">{meta}</div>}
-      {assistant && mode === "view" && !readOnly ? <Swipe message={message} last={last} busy={busy} /> : null}
+      {assistant && mode === "view" ? <>
+        <MarkChips message={message} attempt={shown} position={position} />
+        <div className="reply-footer">
+          <MarkToggles message={message} scope={scope} attempt={shown} position={position} />
+          {readOnly ? null : <Swipe message={message} last={last} busy={busy} scope={scope} />}
+        </div>
+        <RowMarkEditor message={message} scope={scope} attempt={shown} position={position} />
+      </> : null}
       {mode === "delete" ? <DeleteConfirm message={message} done={() => setMode("view")} /> : null}
     </div>
   </article>;

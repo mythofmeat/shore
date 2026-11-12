@@ -11,7 +11,7 @@ import {
   type AlternativeDefect,
 } from "./alt_audit.ts";
 import { backupBeforeWrite, quarantineLines } from "./backup.ts";
-import { mergeToolLoopMessages } from "./merge";
+import { mergeToolLoopMessages, toolLoopGroups } from "./merge";
 import type { ContentBlock, ImageRef, Message, MessageAlternative } from "./types";
 import { alternativeVersionOf, isRealUserTurn, newMessageVersion, versionOf } from "./versions.ts";
 
@@ -140,11 +140,13 @@ function serializeForStorage(msg: Message): string {
         if (a.provider_key !== undefined) out["provider_key"] = a.provider_key;
         if (a.model !== undefined) out["model"] = a.model;
         if (a.version !== undefined) out["version"] = a.version;
+        if (a.attempt !== undefined) out["attempt"] = a.attempt;
         return out;
       }),
     ]);
   }
   if (msg.version !== undefined) ordered.push(["version", msg.version]);
+  if (msg.attempt !== undefined) ordered.push(["attempt", msg.attempt]);
   ordered.push(["timestamp", msg.timestamp]);
   if (msg.provider_key !== undefined) ordered.push(["provider_key", msg.provider_key]);
   if (msg.model !== undefined) ordered.push(["model", msg.model]);
@@ -250,6 +252,7 @@ function alternativeFromMessage(msg: Message): MessageAlternative {
     ...(msg.provider_key !== undefined ? { provider_key: msg.provider_key } : {}),
     ...(msg.model !== undefined ? { model: msg.model } : {}),
     ...(versionOf(msg) === undefined ? {} : { version: msg.version }),
+    ...(msg.attempt === undefined ? {} : { attempt: msg.attempt }),
   };
 }
 
@@ -278,6 +281,7 @@ function messageFromAlternative(template: Message, index: number): Message | und
     ...(provider !== undefined ? { provider_key: provider } : {}),
     ...(model !== undefined ? { model } : {}),
     ...(template.origin !== undefined ? { origin: template.origin } : {}),
+    ...(alt.attempt === undefined ? {} : { attempt: alt.attempt }),
     timestamp: alt.timestamp === "" ? template.timestamp : alt.timestamp,
   });
 }
@@ -515,6 +519,28 @@ export class MessageStore {
     target.alt_count = all.length;
     target.alternatives = all;
     return [altIndex, all.length];
+  }
+
+  async stampAttempt(msgId: string, at: number, attempt: string): Promise<string> {
+    return await this.#mutate((messages) => {
+      const group = toolLoopGroups(messages).find((members) => members.some((message) => message.msg_id === msgId));
+      const reply = group === undefined ? undefined : mergeToolLoopMessages(group)[0];
+      if (group === undefined || reply?.role !== "assistant") throw new MessageNotFound(msgId);
+      const target = required(group.find((message) => message.msg_id === reply.msg_id));
+      const alternatives = target.alternatives ?? [];
+      const shownAt = Math.min(target.alt_index ?? Infinity, alternatives.length - 1);
+      if (at >= Math.max(alternatives.length, 1)) {
+        throw new InvalidAlt(`attempt ${String(at + 1)} out of range (reply has ${String(Math.max(alternatives.length, 1))} attempt(s))`);
+      }
+      const alternative = alternatives[at];
+      if (alternative?.attempt !== undefined) return unchanged(alternative.attempt);
+      if (alternative === undefined && target.attempt !== undefined) return unchanged(target.attempt);
+      const shown = alternative === undefined || at === shownAt;
+      const stamped = (shown ? target.attempt : undefined) ?? attempt;
+      if (alternative !== undefined) alternative.attempt = stamped;
+      if (shown) for (const message of group) if (message.role === "assistant") message.attempt ??= stamped;
+      return changed(stamped);
+    });
   }
 
   async selectAlt(msgId: string, index: number): Promise<AltSelection> {

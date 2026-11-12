@@ -173,9 +173,21 @@ pub(crate) async fn execute(
     match command_ref {
         CliCommand::Msg { command: message } => match message {
             MsgCommand::Send { .. } => handle_send_command(&mut conn, message).await?,
-            MsgCommand::Regen { guidance } => {
-                _ = conn.send_regen(true, guidance.clone()).await?;
+            MsgCommand::Regen {
+                another_take,
+                reason,
+                tags,
+            } => {
+                _ = conn
+                    .send_regen(true, *another_take, reason.clone(), tags.clone())
+                    .await?;
                 recv_streaming_response(&mut conn).await?;
+            }
+            MsgCommand::Like(crate::cli::MarkOptions { json, .. })
+            | MsgCommand::Dislike(crate::cli::MarkOptions { json, .. })
+            | MsgCommand::Unmark { json, .. }
+            | MsgCommand::Marks { json, .. } => {
+                handle_marks_command(&mut conn, command_ref, *json).await?;
             }
             MsgCommand::Alt { .. } => handle_alt_command(&mut conn, message).await?,
             MsgCommand::Edit { .. } => handle_edit_command(&mut conn, message).await?,
@@ -745,6 +757,24 @@ async fn handle_message_change(
         return Ok(());
     }
     output::format_command(name, &response_with_display_refs(data, display_refs));
+    Ok(())
+}
+
+async fn handle_marks_command(
+    conn: &mut SWPConnection,
+    cmd: &CliCommand,
+    json: bool,
+) -> Result<(), Box<dyn std::error::Error>> {
+    let Some((name, args)) = crate::cli::to_swp_command(cmd, None) else {
+        return Ok(());
+    };
+    _ = conn.send_command(name, args).await?;
+    let data = recv_command_data(conn).await?;
+    if json {
+        cli_out!("{}", serde_json::to_string_pretty(&data)?);
+    } else {
+        output::format_command(name, &data);
+    }
     Ok(())
 }
 

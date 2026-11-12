@@ -1131,8 +1131,12 @@ fn submenu_fetch_action(app: &mut App, parent: &str) -> Action {
     })))
 }
 
-const PALETTE_ALIASES: [(&str, &str); 14] = [
+const PALETTE_ALIASES: [(&str, &str); 18] = [
     ("regen", "msg regen"),
+    ("like", "msg like"),
+    ("dislike", "msg dislike"),
+    ("unmark", "msg unmark"),
+    ("marks", "msg marks"),
     ("edit", "msg edit"),
     ("delete", "msg delete"),
     ("alt", "msg alt"),
@@ -1847,7 +1851,12 @@ fn dispatch_cli_command(app: &mut App, raw_input: &str) -> Action {
             })))
         }
         CliCommand::Msg {
-            command: MsgCommand::Regen { guidance },
+            command:
+                MsgCommand::Regen {
+                    another_take,
+                    reason,
+                    tags,
+                },
         } => {
             if app.stream.active {
                 app.set_error("a reply is already in progress");
@@ -1859,7 +1868,9 @@ fn dispatch_cli_command(app: &mut App, raw_input: &str) -> Action {
             Action::Send(ConnCommand::Send(ClientMessage::Regen(Regen {
                 rid: Some(rid),
                 stream: true,
-                guidance: guidance.clone(),
+                another_take: *another_take,
+                reason: reason.clone(),
+                tags: tags.clone(),
             })))
         }
         CliCommand::Msg {
@@ -2106,6 +2117,53 @@ mod tests {
             modifiers,
             kind: KeyEventKind::Press,
             state: KeyEventState::NONE,
+        }
+    }
+
+    #[test]
+    fn marks_and_the_three_regenerates_go_out_as_typed() {
+        let mut app = App::default();
+        let liked = sent_command(parse_command(
+            &mut app,
+            "like -1 --phrase \"the sea\" --reason vivid --tag \"too long\"",
+        ));
+        assert_eq!(liked.name, "mark");
+        assert_eq!(
+            liked.args,
+            serde_json::json!({"ref": "-1", "kind": "like", "phrase": "the sea", "reason": "vivid", "tags": ["too long"]})
+        );
+        for (typed, name) in [
+            ("dislike", "mark"),
+            ("unmark --phrase sea", "unmark"),
+            ("marks m_1", "marks"),
+        ] {
+            assert_eq!(
+                sent_command(parse_command(&mut app, typed)).name,
+                name,
+                "{typed}"
+            );
+        }
+        for (typed, take, why, tagged) in [
+            ("regen", false, None, Vec::<String>::new()),
+            ("regen --another-take", true, None, Vec::new()),
+            (
+                "regen --reason flat --tag repetitive",
+                false,
+                Some("flat".to_owned()),
+                vec!["repetitive".to_owned()],
+            ),
+        ] {
+            let mut fresh = App::default();
+            let Action::Send(ConnCommand::Send(ClientMessage::Regen(regen))) =
+                parse_command(&mut fresh, typed)
+            else {
+                panic!("{typed} should regenerate");
+            };
+            assert_eq!(
+                (regen.another_take, regen.reason, regen.tags),
+                (take, why, tagged),
+                "{typed}"
+            );
         }
     }
 

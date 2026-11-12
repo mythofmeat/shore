@@ -8,7 +8,8 @@ import { Dialog, Spinner } from "../ui/controls.tsx";
 import { Icon } from "../ui/icons.tsx";
 import { Markdown } from "../markdown.tsx";
 import { FullPicture } from "../pictures.tsx";
-import { conversation, perform, useActiveRequests, useDisplay, useWorkspace, workspace } from "../app/state.ts";
+import { conversation, perform, replyMarks, useActiveRequests, useDisplay, useWorkspace, workspace } from "../app/state.ts";
+import { markScope } from "./marks.tsx";
 import { openCompactionView } from "../app/intents.ts";
 import { navigate } from "../app/route.ts";
 import { ImageThumb, MessageBody, MessageRow, type OpenImage } from "./Message.tsx";
@@ -144,6 +145,8 @@ export function Transcript({ character, mobile }: { character: string; mobile: b
     return () => clearTimeout(timer);
   }, [rowLimit, items.length]);
   const rows = items.length > rowLimit ? items.slice(-rowLimit) : items;
+  const markable = rows.flatMap((item) => item.kind === "message" && item.message.role === "assistant" ? [item.message] : []);
+  useEffect(() => { replyMarks.want(markScope(state.character, state.thread), markable); });
   const lastUser = live ? state.messages.findLast((message) => message.role === "user")?.msg_id : undefined;
   const waiting = live && streams.length === 0 ? conversation.awaitingStream(scope) : undefined;
   const info = state.characters.find((item) => item.name === character);

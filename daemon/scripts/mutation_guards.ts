@@ -455,6 +455,7 @@ export const DAEMON_EQUIVALENTS: readonly string[] = [
   "src/tools/workspace_turns.ts:completeSegments: …-1 : Number(a)) - (b === \"\" ? -「1 → 2」 : Number(b)))",
   "src/tools/workspace_turns.ts:WorkspaceRecorder.#finish: …ength === 0 && !headAmbiguous) 「return { before: before.id, after: afte… → {}」",
   "src/engine/threads.ts:writeThreadsIndex: …`${JSON.stringify(index, null, 「2 → 3」)}\\n`);",
+  "src/browser/chat/QuoteButton.tsx:QuoteButton: const half = (width ?? 「0 → 1」) / 2;",
 ];
 
 export const CLIENT_FLOORS: Readonly<Record<string, number>> = {

@@ -4,7 +4,7 @@ const CAPTURE_TABLES = ["capture_blobs", "capture_payloads", "capture_calls", "c
 const LEDGER_TABLES = ["calls", "call_attempts", "pricing", "pricing_catalog_checks", "usage_budget_warnings"];
 export const HISTORY_TABLES = [
   "history_blobs", "history_segments", "history_messages", "history_alternatives", "history_pending",
-  "history_thread_forks", "memory_coverage", "history_archive_revision",
+  "history_thread_forks", "memory_coverage", "history_archive_revision", "reply_attempts", "reply_marks",
 ];
 
 type Row = Record<string, SQLQueryBindings>;
@@ -15,6 +15,7 @@ export function copyArchiveTables(source: Database, destination: Database, kind:
   const mappings = new Map<string, Map<number, number>>();
   for (const table of tables) {
     const sourceColumns = new Set((source.query(`PRAGMA table_info(${table})`).all() as Column[]).map(column => column.name));
+    if (sourceColumns.size === 0) continue;
     const columns = (destination.query(`PRAGMA table_info(${table})`).all() as Column[]).filter(column => sourceColumns.has(column.name));
     const primary = columns.filter(column => column.pk > 0);
     const autoId = primary.length === 1 && primary[0]?.name === "id" && primary[0].type === "INTEGER";
