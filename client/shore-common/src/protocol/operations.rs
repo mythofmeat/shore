@@ -806,7 +806,7 @@ wire_types! {
         #[serde(deserialize_with = "deserialize_nullable")]
         pub last_message_at: Option<String>,
         pub compacted_at: String,
-        pub message_count: usize,
+        pub turn_count: usize,
         pub excluded: bool,
         #[serde(deserialize_with = "deserialize_nullable")]
         pub label: Option<String>,
@@ -865,9 +865,7 @@ wire_types! {
         Clear {
             character: String,
             thread: String,
-            message_count: usize,
-            #[serde(deserialize_with = "deserialize_nullable")]
-            segment: Option<SegmentSummary>,
+            segment: SegmentSummary,
         },
     }
 
@@ -880,10 +878,7 @@ wire_types! {
     pub enum CompactionReport {
         Compacted {
             character: String,
-            message_count: usize,
-            turn_count: usize,
             compacted_turns: usize,
-            retained_count: usize,
             retained_turns: usize,
             memory_files_written: Vec<String>,
             new_conversation_id: String,
@@ -892,21 +887,14 @@ wire_types! {
         },
         Rotated {
             character: String,
-            message_count: usize,
-            turn_count: usize,
             compacted_turns: usize,
-            retained_count: usize,
             retained_turns: usize,
             dry_run: bool,
             memory_files_written: Vec<String>,
-            archived_messages: usize,
         },
         DryRun {
             character: String,
-            message_count: usize,
-            turn_count: usize,
             compacted_turns: usize,
-            retained_count: usize,
             retained_turns: usize,
             would_write_files: usize,
             file_ops_preview: Vec<CompactionPreviewFile>,
@@ -915,8 +903,6 @@ wire_types! {
         },
         Truncated {
             character: String,
-            message_count: usize,
-            turn_count: usize,
             compacted_turns: usize,
             tool_rounds: usize,
             tools_called: Vec<String>,
@@ -927,8 +913,6 @@ wire_types! {
             character: String,
             #[ts(type = "number")]
             segment: u64,
-            message_count: usize,
-            turn_count: usize,
             compacted_turns: usize,
             memory_files_written: Vec<String>,
             tool_rounds: usize,
@@ -936,7 +920,6 @@ wire_types! {
         },
         Paused {
             character: String,
-            message_count: usize,
             compacted_turns: usize,
             checkpoint_id: String,
             tool_rounds: usize,
@@ -1178,8 +1161,6 @@ wire_types! {
         pub sessions_per_day: f64,
         #[ts(type = "number")]
         pub message_count: u64,
-        #[ts(type = "number")]
-        pub turn_count: u64,
     }
 
     pub struct DiagnosticIndexError {
@@ -1252,7 +1233,6 @@ wire_types! {
     pub struct StatusReport {
         pub character: String,
         pub keepalive_halts: Vec<KeepaliveHaltReport>,
-        pub message_count: usize,
         pub turn_count: usize,
         #[serde(default, skip_serializing_if = "Option::is_none")]
         #[ts(optional)]
@@ -2872,8 +2852,6 @@ wire_types! {
         pub source: String,
         pub created_at: String,
         #[ts(type = "number")]
-        pub messages: u64,
-        #[ts(type = "number")]
         pub turns: u64,
     }
 
@@ -2992,8 +2970,6 @@ wire_types! {
         pub thread: String,
         pub source: String,
         pub created_at: String,
-        #[ts(type = "number")]
-        pub messages: u64,
         #[ts(type = "number")]
         pub turns: u64,
         pub scope: ForkScope,

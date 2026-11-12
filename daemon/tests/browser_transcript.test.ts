@@ -46,7 +46,7 @@ const toolResult = (id: string, content: Extract<ContentBlock, { type: "tool_res
 function segment(overrides: Partial<SegmentSummary> = {}): SegmentSummary {
   return {
     index: 3, first_message_at: null, last_message_at: null, compacted_at: "2026-11-10T00:00:00Z",
-    message_count: 2, excluded: false, label: null, note: null, memory_before: null, memory_after: null, ...overrides,
+    turn_count: 2, excluded: false, label: null, note: null, memory_before: null, memory_after: null, ...overrides,
   };
 }
 
@@ -102,15 +102,15 @@ describe("segments and chat logs", () => {
     expect(segmentName({ index: 3, label: "the storm" })).toBe("Segment 3 · the storm");
     const now = new Date(2026, 10, 10);
     const day = (value: string) => new Date(value).toLocaleDateString(undefined, { month: "short", day: "numeric" });
-    expect(segmentDetail(segment({ message_count: 1 }), now)).toBe("1 message");
+    expect(segmentDetail(segment({ turn_count: 1 }), now)).toBe("1 turn");
     expect(segmentDetail(segment({ first_message_at: "2026-11-01T10:00:00", last_message_at: "2026-11-01T11:00:00" }), now))
-      .toBe(`2 messages · ${day("2026-11-01T10:00:00")}`);
+      .toBe(`2 turns · ${day("2026-11-01T10:00:00")}`);
     expect(segmentDetail(segment({ first_message_at: "2026-11-01T10:00:00", last_message_at: "2026-11-03T11:00:00", excluded: true }), now))
-      .toBe(`2 messages · ${day("2026-11-01T10:00:00")} – ${day("2026-11-03T11:00:00")} · excluded from memory`);
-    expect(segmentDetail(segment({ last_message_at: "2026-11-03T11:00:00" }), now)).toBe(`2 messages · ${day("2026-11-03T11:00:00")}`);
-    expect(segmentDetail(segment({ first_message_at: "2026-11-01T10:00:00", last_message_at: "garbled" }), now)).toBe(`2 messages · ${day("2026-11-01T10:00:00")}`);
+      .toBe(`2 turns · ${day("2026-11-01T10:00:00")} – ${day("2026-11-03T11:00:00")} · excluded from memory`);
+    expect(segmentDetail(segment({ last_message_at: "2026-11-03T11:00:00" }), now)).toBe(`2 turns · ${day("2026-11-03T11:00:00")}`);
+    expect(segmentDetail(segment({ first_message_at: "2026-11-01T10:00:00", last_message_at: "garbled" }), now)).toBe(`2 turns · ${day("2026-11-01T10:00:00")}`);
     expect(segmentDetail(segment({ first_message_at: "2025-12-30T10:00:00" }), now))
-      .toBe(`2 messages · ${new Date("2025-12-30T10:00:00").toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" })}`);
+      .toBe(`2 turns · ${new Date("2025-12-30T10:00:00").toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" })}`);
   });
 
   test("a chat log line names its message at the end, with or without a marker, and other lines name none", () => {
@@ -269,11 +269,11 @@ describe("compaction", () => {
     expect(compactionPhase([phase(1, "compacting"), output(2, "compact"), phase(3, "compacting round 2")]), "a new pass after the last ended").toBe("Compacting context (round 2)…");
   });
 
-  const counts = { character: "ada", message_count: 10, turn_count: 5, compacted_turns: 4, tool_rounds: 1, tools_called: [] };
+  const counts = { character: "ada", compacted_turns: 4, tool_rounds: 1, tools_called: [] };
   const reports: [CompactionReport, string][] = [
-    [{ status: "compacted", ...counts, retained_count: 2, retained_turns: 1, memory_files_written: [], new_conversation_id: "c" }, "Summarized 4 turns and kept the last 1."],
-    [{ status: "rotated", ...counts, retained_count: 2, retained_turns: 1, dry_run: false, memory_files_written: [], archived_messages: 8 }, "Archived 4 turns and kept the last 1."],
-    [{ status: "dry_run", ...counts, retained_count: 2, retained_turns: 1, would_write_files: 3, file_ops_preview: [] }, "Compaction would summarize 4 turns and write 3 memory files."],
+    [{ status: "compacted", ...counts, retained_turns: 1, memory_files_written: [], new_conversation_id: "c" }, "Summarized 4 turns and kept the last 1."],
+    [{ status: "rotated", ...counts, retained_turns: 1, dry_run: false, memory_files_written: [] }, "Archived 4 turns and kept the last 1."],
+    [{ status: "dry_run", ...counts, retained_turns: 1, would_write_files: 3, file_ops_preview: [] }, "Compaction would summarize 4 turns and write 3 memory files."],
     [{ status: "truncated", ...counts, truncated_turns: 2, partial_writes: [] }, "Compaction stopped early after summarizing 4 turns; 2 turns were left as they were."],
     [{ status: "segment", ...counts, segment: 6, memory_files_written: ["a.md", "b.md"] }, "Wrote memory from archived segment 6 (4 turns, 2 files)."],
     [{ status: "paused", ...counts, checkpoint_id: "k", reason: "budget", detail: null, resume_at: null }, "Compaction paused: budget."],

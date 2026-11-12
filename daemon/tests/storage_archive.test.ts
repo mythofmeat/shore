@@ -72,7 +72,7 @@ describe("one character's slice of the database", () => {
   function seed(data: string, character: string): void {
     const path = databasePath(data);
     const history = HistoryStore.open(path);
-    history.putSegment(character, 0, { file: "segment-0.jsonl", message_count: 1, compacted_at: NOW }, [message(character)]);
+    history.putSegment(character, 0, { file: "segment-0.jsonl", compacted_at: NOW }, [message(character)]);
     history.close();
     const ledger = Ledger.create(path, undefined, false);
     ledger.record({ ...call, character, usage: { input_tokens: 1, output_tokens: 1, cache_read_tokens: 0, cache_creation_tokens: 0 }, timing: { total_ms: 1, time_to_first_token_ms: 1 }, finish_reason: "end_turn", thinking_enabled: false });
@@ -173,7 +173,7 @@ describe("one character's slice of the database", () => {
     const withHistory = dirs();
     initializeDatabase(withHistory.data);
     const store = HistoryStore.open(databasePath(withHistory.data));
-    store.putSegment("ada", 0, { file: "segment-0.jsonl", message_count: 1, compacted_at: NOW }, [message("ada")]);
+    store.putSegment("ada", 0, { file: "segment-0.jsonl", compacted_at: NOW }, [message("ada")]);
     store.close();
     expect(() => importUnifiedDatabase(databasePath(withHistory.data), archive, "ada")).toThrow("history already exists for ada");
     const withState = dirs();

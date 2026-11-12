@@ -3605,22 +3605,7 @@
               "character": {
                 "type": "string"
               },
-              "message_count": {
-                "type": "integer",
-                "format": "uint",
-                "minimum": 0
-              },
-              "turn_count": {
-                "type": "integer",
-                "format": "uint",
-                "minimum": 0
-              },
               "compacted_turns": {
-                "type": "integer",
-                "format": "uint",
-                "minimum": 0
-              },
-              "retained_count": {
                 "type": "integer",
                 "format": "uint",
                 "minimum": 0
@@ -3654,10 +3639,7 @@
             "required": [
               "status",
               "character",
-              "message_count",
-              "turn_count",
               "compacted_turns",
-              "retained_count",
               "retained_turns",
               "memory_files_written",
               "new_conversation_id",
@@ -3675,22 +3657,7 @@
               "character": {
                 "type": "string"
               },
-              "message_count": {
-                "type": "integer",
-                "format": "uint",
-                "minimum": 0
-              },
-              "turn_count": {
-                "type": "integer",
-                "format": "uint",
-                "minimum": 0
-              },
               "compacted_turns": {
-                "type": "integer",
-                "format": "uint",
-                "minimum": 0
-              },
-              "retained_count": {
                 "type": "integer",
                 "format": "uint",
                 "minimum": 0
@@ -3708,24 +3675,15 @@
                 "items": {
                   "type": "string"
                 }
-              },
-              "archived_messages": {
-                "type": "integer",
-                "format": "uint",
-                "minimum": 0
               }
             },
             "required": [
               "status",
               "character",
-              "message_count",
-              "turn_count",
               "compacted_turns",
-              "retained_count",
               "retained_turns",
               "dry_run",
-              "memory_files_written",
-              "archived_messages"
+              "memory_files_written"
             ]
           },
           {
@@ -3738,22 +3696,7 @@
               "character": {
                 "type": "string"
               },
-              "message_count": {
-                "type": "integer",
-                "format": "uint",
-                "minimum": 0
-              },
-              "turn_count": {
-                "type": "integer",
-                "format": "uint",
-                "minimum": 0
-              },
               "compacted_turns": {
-                "type": "integer",
-                "format": "uint",
-                "minimum": 0
-              },
-              "retained_count": {
                 "type": "integer",
                 "format": "uint",
                 "minimum": 0
@@ -3789,10 +3732,7 @@
             "required": [
               "status",
               "character",
-              "message_count",
-              "turn_count",
               "compacted_turns",
-              "retained_count",
               "retained_turns",
               "would_write_files",
               "file_ops_preview",
@@ -3809,16 +3749,6 @@
               },
               "character": {
                 "type": "string"
-              },
-              "message_count": {
-                "type": "integer",
-                "format": "uint",
-                "minimum": 0
-              },
-              "turn_count": {
-                "type": "integer",
-                "format": "uint",
-                "minimum": 0
               },
               "compacted_turns": {
                 "type": "integer",
@@ -3851,8 +3781,6 @@
             "required": [
               "status",
               "character",
-              "message_count",
-              "turn_count",
               "compacted_turns",
               "tool_rounds",
               "tools_called",
@@ -3873,16 +3801,6 @@
               "segment": {
                 "type": "integer",
                 "format": "uint64",
-                "minimum": 0
-              },
-              "message_count": {
-                "type": "integer",
-                "format": "uint",
-                "minimum": 0
-              },
-              "turn_count": {
-                "type": "integer",
-                "format": "uint",
                 "minimum": 0
               },
               "compacted_turns": {
@@ -3912,8 +3830,6 @@
               "status",
               "character",
               "segment",
-              "message_count",
-              "turn_count",
               "compacted_turns",
               "memory_files_written",
               "tool_rounds",
@@ -3929,11 +3845,6 @@
               },
               "character": {
                 "type": "string"
-              },
-              "message_count": {
-                "type": "integer",
-                "format": "uint",
-                "minimum": 0
               },
               "compacted_turns": {
                 "type": "integer",
@@ -3973,7 +3884,6 @@
             "required": [
               "status",
               "character",
-              "message_count",
               "compacted_turns",
               "checkpoint_id",
               "tool_rounds",
@@ -4151,7 +4061,7 @@
           "compacted_at": {
             "type": "string"
           },
-          "message_count": {
+          "turn_count": {
             "type": "integer",
             "format": "uint",
             "minimum": 0
@@ -4189,7 +4099,7 @@
           "first_message_at",
           "last_message_at",
           "compacted_at",
-          "message_count",
+          "turn_count",
           "excluded",
           "label",
           "note",
@@ -4638,27 +4548,14 @@
               "thread": {
                 "type": "string"
               },
-              "message_count": {
-                "type": "integer",
-                "format": "uint",
-                "minimum": 0
-              },
               "segment": {
-                "anyOf": [
-                  {
-                    "$ref": "#/$defs/SegmentSummary"
-                  },
-                  {
-                    "type": "null"
-                  }
-                ]
+                "$ref": "#/$defs/SegmentSummary"
               }
             },
             "required": [
               "status",
               "character",
               "thread",
-              "message_count",
               "segment"
             ]
           }
@@ -4675,11 +4572,6 @@
             "items": {
               "$ref": "#/$defs/KeepaliveHaltReport"
             }
-          },
-          "message_count": {
-            "type": "integer",
-            "format": "uint",
-            "minimum": 0
           },
           "turn_count": {
             "type": "integer",
@@ -4793,7 +4685,6 @@
         "required": [
           "character",
           "keepalive_halts",
-          "message_count",
           "turn_count",
           "active_model",
           "config_dir",
@@ -5020,11 +4911,6 @@
             "type": "integer",
             "format": "uint64",
             "minimum": 0
-          },
-          "turn_count": {
-            "type": "integer",
-            "format": "uint64",
-            "minimum": 0
           }
         },
         "required": [
@@ -5033,8 +4919,7 @@
           "has_sufficient_heatmap",
           "engagement_score",
           "sessions_per_day",
-          "message_count",
-          "turn_count"
+          "message_count"
         ]
       },
       "ActivityHourClass": {
@@ -10205,11 +10090,6 @@
           "created_at": {
             "type": "string"
           },
-          "messages": {
-            "type": "integer",
-            "format": "uint64",
-            "minimum": 0
-          },
           "turns": {
             "type": "integer",
             "format": "uint64",
@@ -10220,7 +10100,6 @@
           "fork_id",
           "source",
           "created_at",
-          "messages",
           "turns"
         ]
       },
@@ -10426,11 +10305,6 @@
           "created_at": {
             "type": "string"
           },
-          "messages": {
-            "type": "integer",
-            "format": "uint64",
-            "minimum": 0
-          },
           "turns": {
             "type": "integer",
             "format": "uint64",
@@ -10453,7 +10327,6 @@
           "thread",
           "source",
           "created_at",
-          "messages",
           "turns",
           "scope"
         ]
@@ -13697,22 +13570,7 @@
               "character": {
                 "type": "string"
               },
-              "message_count": {
-                "type": "integer",
-                "format": "uint",
-                "minimum": 0
-              },
-              "turn_count": {
-                "type": "integer",
-                "format": "uint",
-                "minimum": 0
-              },
               "compacted_turns": {
-                "type": "integer",
-                "format": "uint",
-                "minimum": 0
-              },
-              "retained_count": {
                 "type": "integer",
                 "format": "uint",
                 "minimum": 0
@@ -13746,10 +13604,7 @@
             "required": [
               "status",
               "character",
-              "message_count",
-              "turn_count",
               "compacted_turns",
-              "retained_count",
               "retained_turns",
               "memory_files_written",
               "new_conversation_id",
@@ -13767,22 +13622,7 @@
               "character": {
                 "type": "string"
               },
-              "message_count": {
-                "type": "integer",
-                "format": "uint",
-                "minimum": 0
-              },
-              "turn_count": {
-                "type": "integer",
-                "format": "uint",
-                "minimum": 0
-              },
               "compacted_turns": {
-                "type": "integer",
-                "format": "uint",
-                "minimum": 0
-              },
-              "retained_count": {
                 "type": "integer",
                 "format": "uint",
                 "minimum": 0
@@ -13800,24 +13640,15 @@
                 "items": {
                   "type": "string"
                 }
-              },
-              "archived_messages": {
-                "type": "integer",
-                "format": "uint",
-                "minimum": 0
               }
             },
             "required": [
               "status",
               "character",
-              "message_count",
-              "turn_count",
               "compacted_turns",
-              "retained_count",
               "retained_turns",
               "dry_run",
-              "memory_files_written",
-              "archived_messages"
+              "memory_files_written"
             ]
           },
           {
@@ -13830,22 +13661,7 @@
               "character": {
                 "type": "string"
               },
-              "message_count": {
-                "type": "integer",
-                "format": "uint",
-                "minimum": 0
-              },
-              "turn_count": {
-                "type": "integer",
-                "format": "uint",
-                "minimum": 0
-              },
               "compacted_turns": {
-                "type": "integer",
-                "format": "uint",
-                "minimum": 0
-              },
-              "retained_count": {
                 "type": "integer",
                 "format": "uint",
                 "minimum": 0
@@ -13881,10 +13697,7 @@
             "required": [
               "status",
               "character",
-              "message_count",
-              "turn_count",
               "compacted_turns",
-              "retained_count",
               "retained_turns",
               "would_write_files",
               "file_ops_preview",
@@ -13901,16 +13714,6 @@
               },
               "character": {
                 "type": "string"
-              },
-              "message_count": {
-                "type": "integer",
-                "format": "uint",
-                "minimum": 0
-              },
-              "turn_count": {
-                "type": "integer",
-                "format": "uint",
-                "minimum": 0
               },
               "compacted_turns": {
                 "type": "integer",
@@ -13943,8 +13746,6 @@
             "required": [
               "status",
               "character",
-              "message_count",
-              "turn_count",
               "compacted_turns",
               "tool_rounds",
               "tools_called",
@@ -13965,16 +13766,6 @@
               "segment": {
                 "type": "integer",
                 "format": "uint64",
-                "minimum": 0
-              },
-              "message_count": {
-                "type": "integer",
-                "format": "uint",
-                "minimum": 0
-              },
-              "turn_count": {
-                "type": "integer",
-                "format": "uint",
                 "minimum": 0
               },
               "compacted_turns": {
@@ -14004,8 +13795,6 @@
               "status",
               "character",
               "segment",
-              "message_count",
-              "turn_count",
               "compacted_turns",
               "memory_files_written",
               "tool_rounds",
@@ -14021,11 +13810,6 @@
               },
               "character": {
                 "type": "string"
-              },
-              "message_count": {
-                "type": "integer",
-                "format": "uint",
-                "minimum": 0
               },
               "compacted_turns": {
                 "type": "integer",
@@ -14065,7 +13849,6 @@
             "required": [
               "status",
               "character",
-              "message_count",
               "compacted_turns",
               "checkpoint_id",
               "tool_rounds",
@@ -14243,7 +14026,7 @@
           "compacted_at": {
             "type": "string"
           },
-          "message_count": {
+          "turn_count": {
             "type": "integer",
             "format": "uint",
             "minimum": 0
@@ -14281,7 +14064,7 @@
           "first_message_at",
           "last_message_at",
           "compacted_at",
-          "message_count",
+          "turn_count",
           "excluded",
           "label",
           "note",
@@ -14730,27 +14513,14 @@
               "thread": {
                 "type": "string"
               },
-              "message_count": {
-                "type": "integer",
-                "format": "uint",
-                "minimum": 0
-              },
               "segment": {
-                "anyOf": [
-                  {
-                    "$ref": "#/$defs/SegmentSummary"
-                  },
-                  {
-                    "type": "null"
-                  }
-                ]
+                "$ref": "#/$defs/SegmentSummary"
               }
             },
             "required": [
               "status",
               "character",
               "thread",
-              "message_count",
               "segment"
             ]
           }
@@ -14767,11 +14537,6 @@
             "items": {
               "$ref": "#/$defs/KeepaliveHaltReport"
             }
-          },
-          "message_count": {
-            "type": "integer",
-            "format": "uint",
-            "minimum": 0
           },
           "turn_count": {
             "type": "integer",
@@ -14885,7 +14650,6 @@
         "required": [
           "character",
           "keepalive_halts",
-          "message_count",
           "turn_count",
           "active_model",
           "config_dir",
@@ -15112,11 +14876,6 @@
             "type": "integer",
             "format": "uint64",
             "minimum": 0
-          },
-          "turn_count": {
-            "type": "integer",
-            "format": "uint64",
-            "minimum": 0
           }
         },
         "required": [
@@ -15125,8 +14884,7 @@
           "has_sufficient_heatmap",
           "engagement_score",
           "sessions_per_day",
-          "message_count",
-          "turn_count"
+          "message_count"
         ]
       },
       "ActivityHourClass": {
@@ -20297,11 +20055,6 @@
           "created_at": {
             "type": "string"
           },
-          "messages": {
-            "type": "integer",
-            "format": "uint64",
-            "minimum": 0
-          },
           "turns": {
             "type": "integer",
             "format": "uint64",
@@ -20312,7 +20065,6 @@
           "fork_id",
           "source",
           "created_at",
-          "messages",
           "turns"
         ]
       },
@@ -20518,11 +20270,6 @@
           "created_at": {
             "type": "string"
           },
-          "messages": {
-            "type": "integer",
-            "format": "uint64",
-            "minimum": 0
-          },
           "turns": {
             "type": "integer",
             "format": "uint64",
@@ -20545,7 +20292,6 @@
           "thread",
           "source",
           "created_at",
-          "messages",
           "turns",
           "scope"
         ]

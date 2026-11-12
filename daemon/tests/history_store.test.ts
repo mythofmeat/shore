@@ -50,7 +50,6 @@ test("canonical history round-trips message bodies and alternatives", () => {
     0,
     {
       file: "0001.jsonl",
-      message_count: 2,
       compacted_at: "2026-08-13T10:01:00+10:00",
       compaction_id: "compact-1",
     },
@@ -66,7 +65,6 @@ test("pending compactions are hidden and recover from either side of the active-
   const store = HistoryStore.openInMemory();
   const entry = {
     file: HISTORY_DB_FILE,
-    message_count: 1,
     compacted_at: "2026-08-13T10:01:00+10:00",
   };
   const messages = [message("u1", "hello")];
@@ -93,7 +91,7 @@ test("a finished compaction turns its memory claim into coverage; an aborted one
   await mkdir(dataDir, { recursive: true });
   const path = join(dataDir, HISTORY_DB_FILE);
   const store = HistoryStore.open(path);
-  const entry = { file: HISTORY_DB_FILE, message_count: 1, compacted_at: "2026-08-13T10:01:00+10:00" };
+  const entry = { file: HISTORY_DB_FILE, compacted_at: "2026-08-13T10:01:00+10:00" };
   const now = Date.parse("2026-08-13T00:00:00Z");
   const blobs = (): unknown => {
     const db = new Database(path, { readonly: true });
@@ -123,7 +121,7 @@ test("a finished compaction turns its memory claim into coverage; an aborted one
 
 test("one compaction at a time, and a pending one matching neither side of its write is left alone", () => {
   const store = HistoryStore.openInMemory();
-  const entry = { file: HISTORY_DB_FILE, message_count: 1, compacted_at: "2026-08-13T10:01:00+10:00" };
+  const entry = { file: HISTORY_DB_FILE, compacted_at: "2026-08-13T10:01:00+10:00" };
   const messages = [message("u1", "hello")];
 
   const pending = store.beginCompaction("ada", entry, messages, "before\n", "after\n");

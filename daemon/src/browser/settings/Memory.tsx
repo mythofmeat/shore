@@ -7,6 +7,7 @@ import { Spinner } from "../ui/controls.tsx";
 import { perform, workspace } from "../app/state.ts";
 import { navigate } from "../app/route.ts";
 import { SettingsSection } from "./layout.tsx";
+import { turnCount } from "../chat/transcript.ts";
 import { formatTime, Loading, NeedsCharacter, useAction, useOperation } from "./shared.tsx";
 
 function TextEdit({ label, value, save, busy }: { label: string; value: string | null; save: (value: string) => void; busy: boolean }) {
@@ -40,7 +41,7 @@ function Segment({ segment, changed }: { segment: SegmentSummary; changed: () =>
     <div className="segment-head">
       <div>
         <div className="setting-label">{segment.label ?? `Segment ${String(segment.index)}`}{segment.excluded ? <span className="tag muted-tag">excluded</span> : null}</div>
-        <div className="setting-description">{segment.message_count} messages · {formatTime(segment.first_message_at)} – {formatTime(segment.last_message_at)} · compacted {formatTime(segment.compacted_at)}</div>
+        <div className="setting-description">{turnCount(segment.turn_count)} · {formatTime(segment.first_message_at)} – {formatTime(segment.last_message_at)} · compacted {formatTime(segment.compacted_at)}</div>
         {segment.note === null ? null : <div className="setting-description">Note: {segment.note}</div>}
       </div>
     </div>

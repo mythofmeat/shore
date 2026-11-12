@@ -67,8 +67,8 @@ pub(crate) fn write_activity_section(
         return;
     }
 
-    let turn_count = activity["turn_count"].as_u64().unwrap_or(0);
-    if turn_count == 0 {
+    let messages = activity["message_count"].as_u64().unwrap_or(0);
+    if messages == 0 {
         write_section_header(out, "activity", "", width);
         note(
             out,
@@ -110,7 +110,10 @@ pub(crate) fn write_activity_section(
     write_row(
         out,
         "engagement",
-        &format!("{engagement:.2} \u{00b7} {sessions:.1} sessions/day \u{00b7} {turn_count} turns"),
+        &format!(
+            "{engagement:.2} \u{00b7} {sessions:.1} sessions/day \u{00b7} {messages} {}",
+            if messages == 1 { "message" } else { "messages" }
+        ),
     );
 
     _ = writeln!(out);

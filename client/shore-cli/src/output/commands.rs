@@ -4,7 +4,7 @@ use crossterm::style::{Attribute, SetAttribute};
 use shore_common::duration::format_duration_ms;
 use shore_common::protocol::operations::{FoundMessage, MessageCopy};
 
-use super::transcript::{LogFilter, character_color, format_time, print_log};
+use super::transcript::{LogFilter, character_color, format_time, print_log, turns};
 use super::vocab::{COLOR_ERROR, Tone, indent_to, paint, wrap_line};
 use super::{
     COLOR_RESULT, COLOR_SUBAGENT, COLOR_THINKING, COLOR_TOOL, SIGIL_ERROR, SIGIL_OK,
@@ -162,11 +162,11 @@ fn print_segment_row(segment: &serde_json::Value) {
         .as_str()
         .map_or_else(String::new, |value| format!("  {value}"));
     cli_out!(
-        "#{:<4} {} → {}  {} messages{}{}",
+        "#{:<4} {} → {}  {}{}{}",
         segment["index"].as_u64().unwrap_or(0),
         segment["first_message_at"].as_str().unwrap_or("?"),
         segment["last_message_at"].as_str().unwrap_or("?"),
-        segment["message_count"].as_u64().unwrap_or(0),
+        turns(segment["turn_count"].as_u64().unwrap_or(0)),
         excluded,
         label,
     );
@@ -187,13 +187,20 @@ fn print_segment_row(segment: &serde_json::Value) {
 }
 
 fn print_clear_result(data: &serde_json::Value) {
-    cli_out!(
-        "Cleared {} messages into segment #{}.",
-        data["message_count"].as_u64().unwrap_or(0),
-        data.pointer("/segment/index")
+    cli_out!("{}", cleared(data));
+}
+
+pub(crate) fn cleared(data: &serde_json::Value) -> String {
+    let count = |field: &str| {
+        data.pointer(&format!("/segment/{field}"))
             .and_then(serde_json::Value::as_u64)
-            .unwrap_or(0),
-    );
+            .unwrap_or(0)
+    };
+    format!(
+        "Cleared {} into segment #{}.",
+        turns(count("turn_count")),
+        count("index")
+    )
 }
 
 const CALL_BODY_PREVIEW: usize = 4000;
@@ -1561,10 +1568,7 @@ fn print_compaction_watch(data: &serde_json::Value) {
 }
 
 fn planned_turns(data: &serde_json::Value) -> u64 {
-    data["compacted_turns"]
-        .as_u64()
-        .or_else(|| data["turn_count"].as_u64())
-        .unwrap_or(0)
+    data["compacted_turns"].as_u64().unwrap_or(0)
 }
 
 fn string_list(data: &serde_json::Value, key: &str) -> Vec<String> {
@@ -1681,28 +1685,20 @@ pub(crate) fn write_compact_result<W: Write>(out: &mut W, data: &serde_json::Val
             );
         }
         "rotated" => {
-            let archived = data["archived_messages"].as_u64().unwrap_or(0);
             let dry = data["dry_run"].as_bool().unwrap_or(false);
             write_row(
                 out,
                 "Memory files",
                 "none written (memory.compaction.write_memory = false)",
             );
-            write_row(
-                out,
-                "Messages",
-                &format!(
-                    "{} {archived} into history",
-                    if dry { "would archive" } else { "archived" }
-                ),
-            );
             let retained_turns = data["retained_turns"].as_u64().unwrap_or(0);
             write_row(
                 out,
                 "Turns",
                 &format!(
-                    "{} archived, {retained_turns} retained",
-                    planned_turns(data)
+                    "{} {} into history, {retained_turns} retained",
+                    planned_turns(data),
+                    if dry { "would be archived" } else { "archived" }
                 ),
             );
         }

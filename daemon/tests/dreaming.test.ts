@@ -124,17 +124,26 @@ function message(id: string, role: "user" | "assistant", text: string, timestamp
   return { msg_id: id, role, content: text, images: [], content_blocks: [{ type: "text", text }], alternatives: [], timestamp };
 }
 
-function putSegment(dataDir: string, archiveKey: string, idx: number, compactedAt: number, extra: { memory_before?: string; memory_after?: string; excluded?: boolean } = {}): void {
+function toolTurn(id: string, at: string): Message[] {
+  return [
+    message(`${id}u`, "user", "look this up", at),
+    { ...message(`${id}c`, "assistant", "", at), content_blocks: [{ type: "tool_use", id: `${id}t`, name: "read", input: {} }] },
+    { ...message(`${id}r`, "user", "", at), content_blocks: [{ type: "tool_result", tool_use_id: `${id}t`, content: "found" }] },
+    message(`${id}a`, "assistant", "here it is", at),
+  ];
+}
+
+function putSegment(dataDir: string, archiveKey: string, idx: number, compactedAt: number, extra: { memory_before?: string; memory_after?: string; excluded?: boolean; toolTurns?: number } = {}): void {
   const store = HistoryStore.open(join(dataDir, HISTORY_DB_FILE));
   try {
     const at = new Date(compactedAt - HOUR).toISOString();
+    const toolTurns = Array.from({ length: extra.toolTurns ?? 0 }, (_unused, turn) => toolTurn(`t${archiveKey}${String(idx)}${String(turn)}`, at)).flat();
     store.putSegment(archiveKey, idx, {
       file: `${String(idx).padStart(4, "0")}.jsonl`,
-      message_count: 2,
       compacted_at: new Date(compactedAt).toISOString(),
       ...(extra.memory_before === undefined ? {} : { memory_before: extra.memory_before }),
       ...(extra.memory_after === undefined ? {} : { memory_after: extra.memory_after }),
-    }, [message(`u${archiveKey}${String(idx)}`, "user", "hello", at), message(`a${archiveKey}${String(idx)}`, "assistant", "hi", at)]);
+    }, [message(`u${archiveKey}${String(idx)}`, "user", "hello", at), message(`a${archiveKey}${String(idx)}`, "assistant", "hi", at), ...toolTurns]);
     if (extra.excluded === true) store.setExcluded(archiveKey, idx, true);
   } finally {
     store.close();
@@ -149,18 +158,17 @@ test("a dream is shown only what was archived since the last one, outside the he
   putSegment(dataDir, "ada", 1, since + HOUR, { memory_before: "1111111aaaa", memory_after: "2222222bbbb" });
   putSegment(dataDir, "ada", 2, since + 2 * HOUR, { excluded: true });
   putSegment(dataDir, "ada/heartbeat", 0, since + HOUR);
-  putSegment(dataDir, "ada/garden", 0, since + 3 * HOUR, { memory_before: "3333333cccc", memory_after: "3333333cccc" });
+  putSegment(dataDir, "ada/garden", 0, since + 3 * HOUR, { memory_before: "3333333cccc", memory_after: "3333333cccc", toolTurns: 2 });
 
   const found = await conversationsSince(dataDir, "ada", since, new Set(["heartbeat"]));
   expect(found.map((conversation) => [conversation.thread, conversation.segment])).toEqual([["main", 1], ["garden", 0]]);
-  expect(found.map((conversation) => conversation.turns)).toEqual([1, 1]);
+  expect(found.map((conversation) => conversation.turns)).toEqual([1, 3]);
 
-  const lines = conversationLines(found, "eve", "2222222..HEAD").split("\n");
+  const lines = conversationLines(found, "2222222..HEAD").split("\n");
   expect(lines).toHaveLength(3);
   expect(lines[0]).toContain("thread `main`");
-  expect(lines[0]).toContain("2 messages, 1 from eve.");
-  expect(lines[0]).toContain("Its compaction's commits: 1111111..2222222.");
-  expect(lines[1]).toContain("Its compaction changed nothing.");
+  expect(lines[0]).toMatch(/: 1 turn\. Its compaction's commits: 1111111\.\.2222222\.$/);
+  expect(lines[1]).toMatch(/: 3 turns\. Its compaction changed nothing\.$/);
   expect(lines[2]).toBe("- every change to the workspace since then: `git log --stat 2222222..HEAD`");
 });
 

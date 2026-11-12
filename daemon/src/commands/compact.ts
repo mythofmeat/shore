@@ -198,8 +198,8 @@ export async function buildCompactionResponse(
   if (outcome.kind === "compacted") {
     shoreLog.info(
       `shore: compaction completed for ${character} ` +
-        `(entries=${outcome.memoryFilesWritten.length}, message_count=${outcome.messageCount}, ` +
-        `retained_count=${outcome.retainedCount})`,
+        `(entries=${outcome.memoryFilesWritten.length}, compacted_turns=${outcome.compactedTurns}, ` +
+        `retained_turns=${outcome.retainedTurns})`,
     );
     await completeCompaction(engine, ctx, character, outcome.retainedTurns);
   }
@@ -207,7 +207,7 @@ export async function buildCompactionResponse(
   if (outcome.kind === "rotated") {
     shoreLog.info(
       `shore: archive-only rotation for ${character} ` +
-        `(dry_run=${String(outcome.dryRun)}, archived_messages=${String(outcome.archivedMessages)}, ` +
+        `(dry_run=${String(outcome.dryRun)}, compacted_turns=${String(outcome.compactedTurns)}, ` +
         `retained_turns=${String(outcome.retainedTurns)})`,
     );
     if (!outcome.dryRun) {
@@ -248,10 +248,7 @@ export function compactionReport(character: string, outcome: CompactionOutcome):
         status: "compacted",
         character,
         memory_files_written: outcome.memoryFilesWritten,
-        message_count: outcome.messageCount,
-        turn_count: outcome.compactedTurns,
         compacted_turns: outcome.compactedTurns,
-        retained_count: outcome.retainedCount,
         retained_turns: outcome.retainedTurns,
         new_conversation_id: outcome.newConversationId,
         tool_rounds: outcome.toolRounds,
@@ -263,19 +260,13 @@ export function compactionReport(character: string, outcome: CompactionOutcome):
         character,
         dry_run: outcome.dryRun,
         memory_files_written: [],
-        message_count: outcome.messageCount,
-        archived_messages: outcome.archivedMessages,
-        turn_count: outcome.compactedTurns,
         compacted_turns: outcome.compactedTurns,
-        retained_count: outcome.retainedCount,
         retained_turns: outcome.retainedTurns,
       };
     case "truncated":
       return {
         status: "truncated",
         character,
-        message_count: outcome.messageCount,
-        turn_count: outcome.compactedTurns,
         compacted_turns: outcome.compactedTurns,
         tool_rounds: outcome.toolRounds,
         tools_called: outcome.toolsCalled,
@@ -287,7 +278,6 @@ export function compactionReport(character: string, outcome: CompactionOutcome):
         status: "paused",
         character,
         checkpoint_id: outcome.checkpointId,
-        message_count: outcome.messageCount,
         compacted_turns: outcome.compactedTurns,
         tool_rounds: outcome.toolRounds,
         tools_called: outcome.toolsCalled,
@@ -300,8 +290,6 @@ export function compactionReport(character: string, outcome: CompactionOutcome):
         status: "segment",
         character,
         segment: outcome.segment,
-        message_count: outcome.messageCount,
-        turn_count: outcome.compactedTurns,
         compacted_turns: outcome.compactedTurns,
         memory_files_written: outcome.memoryFilesWritten,
         tool_rounds: outcome.toolRounds,
@@ -313,10 +301,7 @@ export function compactionReport(character: string, outcome: CompactionOutcome):
         character,
         would_write_files: outcome.wouldWriteFiles,
         file_ops_preview: outcome.fileOpsPreview.map(previewOf),
-        message_count: outcome.messageCount,
-        turn_count: outcome.compactedTurns,
         compacted_turns: outcome.compactedTurns,
-        retained_count: outcome.retainedCount,
         retained_turns: outcome.retainedTurns,
         tool_rounds: outcome.toolRounds,
         tools_called: outcome.toolsCalled,

@@ -25,7 +25,7 @@ export interface HeatmapResult {
 
 export type ActivityStatsLookup = (
   days: number,
-) => { stats: ActivityStats; turnCount: number } | undefined;
+) => { stats: ActivityStats; messageCount: number } | undefined;
 
 const HOURS_IN_DAY = 24;
 const DEFAULT_DAYS = 30;
@@ -70,7 +70,7 @@ export function handleActivityHeatmap(
     };
   }
 
-  const { stats, turnCount } = found;
+  const { stats, messageCount } = found;
   const hours: HeatmapHour[] = Array.from({ length: HOURS_IN_DAY }, (_unused, hour) => ({
     hour,
     density: stats.pooledHourHistogram[hour] ?? 0.0,
@@ -91,7 +91,7 @@ export function handleActivityHeatmap(
     days,
     hours,
     weekdays,
-    total_messages: turnCount,
+    total_messages: messageCount,
     messages_in_window: inWindow,
     has_sufficient_data: stats.hasSufficientHeatmap,
     engagement_score: stats.engagementScore,

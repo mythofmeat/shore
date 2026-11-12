@@ -1002,7 +1002,7 @@
           "compacted_at": {
             "type": "string"
           },
-          "message_count": {
+          "turn_count": {
             "type": "integer",
             "format": "uint",
             "minimum": 0
@@ -1040,7 +1040,7 @@
           "first_message_at",
           "last_message_at",
           "compacted_at",
-          "message_count",
+          "turn_count",
           "excluded",
           "label",
           "note",

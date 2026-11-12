@@ -49,9 +49,7 @@ interface CompactionResult {
   memoryFilesWritten: string[];
   conversationId: string;
   newConversationId: string;
-  messageCount: number;
   compactedTurns: number;
-  retainedCount: number;
   retainedTurns: number;
   markdownPaths: string[];
   toolRounds: number;
@@ -61,9 +59,7 @@ interface CompactionResult {
 interface DryRunResult {
   wouldWriteFiles: number;
   fileOpsPreview: MemoryFileOp[];
-  messageCount: number;
   compactedTurns: number;
-  retainedCount: number;
   retainedTurns: number;
   markdownPreview: string[];
   toolRounds: number;
@@ -73,7 +69,6 @@ interface DryRunResult {
 interface PausedCompactionResult {
   conversationId: string;
   checkpointId: string;
-  messageCount: number;
   compactedTurns: number;
   toolRounds: number;
   toolsCalled: string[];
@@ -86,16 +81,12 @@ interface PausedCompactionResult {
 interface RotatedResult {
   conversationId: string;
   dryRun: boolean;
-  messageCount: number;
-  archivedMessages: number;
   compactedTurns: number;
-  retainedCount: number;
   retainedTurns: number;
 }
 
 interface SegmentCompactionResult {
   segment: number;
-  messageCount: number;
   compactedTurns: number;
   memoryFilesWritten: string[];
   toolRounds: number;
@@ -104,7 +95,6 @@ interface SegmentCompactionResult {
 
 interface TruncatedCompactionResult {
   conversationId: string;
-  messageCount: number;
   compactedTurns: number;
   toolRounds: number;
   toolsCalled: string[];

@@ -181,10 +181,7 @@ async function rotate(
     kind: "rotated",
     conversationId: character,
     dryRun,
-    messageCount: plan.splitAt + commit.retained,
-    archivedMessages: plan.splitAt,
     compactedTurns: countTurns([...plan.conversation].slice(0, plan.splitAt)),
-    retainedCount: commit.retained,
     retainedTurns: commit.retainedTurns,
   };
 }
@@ -252,7 +249,6 @@ function heldOutcome(character: string, checkpoint: CompactionCheckpoint): Compa
     kind: "paused",
     conversationId: character,
     checkpointId: checkpoint.id,
-    messageCount: checkpoint.splitAt,
     compactedTurns: checkpoint.compactedTurns,
     toolRounds: checkpoint.loop.toolRounds,
     toolsCalled: checkpoint.loop.toolsCalled,

@@ -39,11 +39,15 @@ function segmentDay(value: string | null, now: Date): string {
   return date.toLocaleDateString(undefined, { month: "short", day: "numeric", year: date.getFullYear() === now.getFullYear() ? undefined : "numeric" });
 }
 
+export function turnCount(count: number): string {
+  return `${String(count)} ${count === 1 ? "turn" : "turns"}`;
+}
+
 export function segmentDetail(segment: SegmentSummary, now = new Date()): string {
   const first = segmentDay(segment.first_message_at, now);
   const last = segmentDay(segment.last_message_at, now);
   const dates = first === last || last === "" ? first : first === "" ? last : `${first} – ${last}`;
-  return [`${String(segment.message_count)} ${segment.message_count === 1 ? "message" : "messages"}`, ...(dates === "" ? [] : [dates]), ...(segment.excluded ? ["excluded from memory"] : [])].join(" · ");
+  return [turnCount(segment.turn_count), ...(dates === "" ? [] : [dates]), ...(segment.excluded ? ["excluded from memory"] : [])].join(" · ");
 }
 
 const CHAT_LOG_ENTRY = /^(?:\u25B6 )?\d{4}-\d{2}-\d{2} [A-Za-z]{3} \d{2}:\d{2} {2}/;

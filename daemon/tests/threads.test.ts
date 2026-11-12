@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { createFolder, deleteFolder, moveFolder, moveThread, placedThreads, renameFolder, setFolderSort } from "../src/engine/thread_layout.ts";
-import { MAX_THREAD_ID_LENGTH, archiveThread, assertThreadId, isValidThreadId, createThread, ensureHeartbeatThread, ensureThreads, heartbeatThread, markThreadRead, readThreadsIndex, setThreadCompaction, threadActivityNow, threadFilePaths, writeThreadsIndex, type ThreadsIndex } from "../src/engine/threads.ts";
+import { MAX_THREAD_ID_LENGTH, archiveThread, assertThreadId, isValidThreadId, createThread, ensureHeartbeatThread, ensureThreads, firstUnreadReply, heartbeatThread, markThreadRead, readThreadsIndex, setThreadCompaction, threadActivityNow, threadFilePaths, writeThreadsIndex, type ThreadsIndex } from "../src/engine/threads.ts";
 import { readFileSync, readFile } from "./support/stored_files.ts";
 import { mkdirSync, mkdtempSync, writeFileSync, existsSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -249,7 +249,6 @@ describe("forking a thread", () => {
     ]);
 
     const result = await forkThread(root, "ada", "main", "spin", { now: () => NOW });
-    expect(result.fork.message_count).toBe(2);
     expect(result.fork.turn_count).toBe(1);
 
     const parent = await MessageStore.load(path);
@@ -365,6 +364,47 @@ describe("thread activity", () => {
 
       writeDurable(file, "");
       expect(activity().turns).toBe(0);
+    });
+  });
+
+  const at = (minute: number): string => `2026-10-01T10:${String(minute).padStart(2, "0")}:00.000Z`;
+  const call = (timestamp: string, id: string, text?: string): string => line({
+    role: "assistant", timestamp,
+    content_blocks: [...(text === undefined ? [] : [{ type: "text" as const, text }]), { type: "tool_use", id, name: "read", input: {} }],
+  });
+  const result = (timestamp: string, id: string): string => line({ role: "user", timestamp, content_blocks: [{ type: "tool_result", tool_use_id: id, content: "found" }] });
+
+  test("a reply is one unread message however many tool rounds it speaks across, and unread again when it goes on after being read", async () => {
+    await scanned(async (data, file) => {
+      const unread = () => threadActivityNow(data, "ada", "side").unread;
+      writeDurable(file, reply(at(1), "you're back"));
+      markThreadRead(data, "ada", "side", Date.parse(at(0)));
+      expect(unread(), "the character can speak first").toBe(1);
+      writeDurable(file, "null\n" + asked(at(0)) + call(at(1), "c1", "let me look") + result(at(2), "c1") + call(at(3), "c2", "one more place") + result(at(4), "c2") + reply(at(5), "found it"));
+      markThreadRead(data, "ada", "side", Date.parse(at(0)));
+      expect(unread()).toBe(1);
+      markThreadRead(data, "ada", "side", Date.parse(at(3)));
+      expect(unread()).toBe(1);
+      markThreadRead(data, "ada", "side", Date.parse(at(5)));
+      expect(unread()).toBe(0);
+
+      initializeDurableLines(file, () => readDurable(file));
+      appendDurableLine(file, reply(at(6), "and another thing"));
+      appendDurableLine(file, line({ role: "assistant", timestamp: at(7), content: "a line from before content blocks" }));
+      appendDurableLine(file, reply(at(8), "one more"));
+      expect(unread()).toBe(2);
+    });
+  });
+
+  test("the first unread reply starts where its tool rounds start, and a message from the user between a call and a reply starts a new one", async () => {
+    await scanned(async (data) => {
+      const parsed = (...lines: string[]): Message[] => lines.map((text) => JSON.parse(text) as Message);
+      markThreadRead(data, "ada", "side", Date.parse(at(0)));
+      const looped = parsed(asked(at(0)), call(at(1), "c1"), result(at(2), "c1"), call(at(3), "c2", "checking"), result(at(4), "c2"), reply(at(5), "done"));
+      expect(firstUnreadReply(data, "ada", "side", looped)).toBe(1);
+      const interrupted = (said: string) => parsed(asked(at(0)), reply(at(1)), call(at(2), "c1", "let me check"), said, reply(at(4), "all right"));
+      expect(firstUnreadReply(data, "ada", "side", interrupted(asked(at(3), "never mind")))).toBe(4);
+      expect(firstUnreadReply(data, "ada", "side", interrupted(line({ role: "user", timestamp: at(3), content: "never mind", content_blocks: [] })))).toBe(4);
     });
   });
 });

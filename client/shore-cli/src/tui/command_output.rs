@@ -69,10 +69,12 @@ fn segment_row(segment: &serde_json::Value) -> String {
         .get("last_message_at")
         .and_then(serde_json::Value::as_str)
         .unwrap_or("?");
-    let messages = segment
-        .get("message_count")
-        .and_then(serde_json::Value::as_u64)
-        .unwrap_or(0);
+    let turns = crate::output::turns(
+        segment
+            .get("turn_count")
+            .and_then(serde_json::Value::as_u64)
+            .unwrap_or(0),
+    );
     let excluded = if segment
         .get("excluded")
         .and_then(serde_json::Value::as_bool)
@@ -92,7 +94,7 @@ fn segment_row(segment: &serde_json::Value) -> String {
         .and_then(serde_json::Value::as_str)
         .map(|value| format!("\n  {value}"))
         .unwrap_or_default();
-    format!("#{index}  {first} → {last} · {messages} messages{excluded}{label}{note}")
+    format!("#{index}  {first} → {last} · {turns}{excluded}{label}{note}")
 }
 
 fn render_segments(data: &serde_json::Value) -> String {
@@ -389,15 +391,7 @@ pub(crate) fn render(
             crate::output::compaction::write_watch_result(out, data, TUI_OUTPUT_WIDTH);
         })),
         "segments" => Some(render_segments(data)),
-        "clear" => Some(format!(
-            "Archived {} messages into segment #{}.",
-            data.get("message_count")
-                .and_then(serde_json::Value::as_u64)
-                .unwrap_or(0),
-            data.pointer("/segment/index")
-                .and_then(serde_json::Value::as_u64)
-                .unwrap_or(0)
-        )),
+        "clear" => Some(crate::output::commands::cleared(data)),
         "config_reload" => Some(render_config_reload(data)),
         "call_log" => Some(written(|out| {
             crate::output::commands::write_call_log(out, data, TUI_OUTPUT_WIDTH);
@@ -694,6 +688,41 @@ mod tests {
                 ]
                 .join("\n")
             )
+        );
+    }
+
+    fn segment(index: u64, turns: u64, overrides: &serde_json::Value) -> serde_json::Value {
+        let mut summary = json!({
+            "index": index, "first_message_at": "Nov 1", "last_message_at": "Nov 2", "compacted_at": "Nov 3",
+            "turn_count": turns, "excluded": false, "label": null, "note": null, "memory_before": null, "memory_after": null,
+        });
+        if let (Some(fields), Some(changed)) = (summary.as_object_mut(), overrides.as_object()) {
+            fields.extend(changed.clone());
+        }
+        summary
+    }
+
+    #[test]
+    fn segments_and_what_a_clear_left_are_told_in_turns() {
+        let listing = json!({ "character": "ada", "thread": "main", "count": 2, "segments": [
+            segment(0, 1, &json!({})),
+            segment(1, 30, &json!({ "excluded": true, "label": "the storm", "note": "rough seas" })),
+        ] });
+        assert_eq!(
+            super::render("segments", "segments", &listing, "ada"),
+            Some(
+                [
+                    "#0  Nov 1 → Nov 2 · 1 turn",
+                    "#1  Nov 1 → Nov 2 · 30 turns · excluded · the storm",
+                    "  rough seas",
+                ]
+                .join("\n")
+            )
+        );
+        let cleared = json!({ "status": "clear", "character": "ada", "thread": "main", "segment": segment(3, 30, &json!({})) });
+        assert_eq!(
+            super::render("clear", "clear", &cleared, "ada"),
+            Some("Cleared 30 turns into segment #3.".to_owned())
         );
     }
 

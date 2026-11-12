@@ -299,7 +299,7 @@ pub(crate) enum CliCommand {
         msg_ref: Option<String>,
 
         /// Number of turns to show
-        #[arg(short = 'n', long = "turns", alias = "count", default_value = "64")]
+        #[arg(short = 'n', long = "turns", default_value = "64")]
         count: u32,
 
         /// Read an archived segment instead of the current context
@@ -3431,7 +3431,7 @@ mod tests {
             ),
             (&["log"], Some(("log", json!({"turns": 64})))),
             (
-                &["log", "--count", "50"],
+                &["log", "--turns", "50"],
                 Some(("log", json!({"turns": 50}))),
             ),
             (&["log", "last"], Some(("get", json!({"ref": "last"})))),

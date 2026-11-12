@@ -55,7 +55,6 @@ CREATE TABLE IF NOT EXISTS history_segments (
     character     TEXT    NOT NULL,
     idx           INTEGER NOT NULL,
     file          TEXT    NOT NULL,
-    message_count INTEGER NOT NULL,
     compacted_at  TEXT    NOT NULL,
     compaction_id TEXT,
     committed     INTEGER NOT NULL DEFAULT 1,
@@ -117,7 +116,6 @@ CREATE TABLE IF NOT EXISTS history_thread_forks (
     child         TEXT    NOT NULL,
     source        TEXT    NOT NULL,
     created_at    TEXT    NOT NULL,
-    message_count INTEGER NOT NULL,
     turn_count    INTEGER NOT NULL,
     PRIMARY KEY (character, fork_id)
 );
@@ -156,7 +154,6 @@ ${ARCHIVE_REVISION_TRIGGERS}
 
 export interface SegmentEntry {
   file: string;
-  message_count: number;
   compacted_at: string;
   compaction_id?: string;
   memory_before?: string;
@@ -168,6 +165,7 @@ export interface SegmentEntry {
 
 export interface SegmentRecord extends SegmentEntry {
   idx: number;
+  turn_count: number;
   first_message_at: string | null;
   last_message_at: string | null;
 }
@@ -186,7 +184,6 @@ export interface ThreadForkRecord {
   child: string;
   source: string;
   created_at: string;
-  message_count: number;
   turn_count: number;
 }
 
@@ -248,6 +245,7 @@ export class HistoryStore {
              PRAGMA journal_mode = WAL;
              PRAGMA busy_timeout = 5000;`);
     db.run(HISTORY_SCHEMA);
+    dropRowCounts(db);
   }
 
   static open(path: string): HistoryStore {
@@ -480,8 +478,10 @@ export class HistoryStore {
 
   #segmentRecords(clause: string, character: string, idx?: number): SegmentRecord[] {
     const query = this.#db.query(
-      `SELECT s.idx, s.file, s.message_count, s.compacted_at, s.compaction_id,
+      `SELECT s.idx, s.file, s.compacted_at, s.compaction_id,
               s.memory_before, s.memory_after, s.excluded, s.label, s.note,
+              (SELECT COUNT(*) FROM history_messages m
+               WHERE m.character = s.character AND m.segment = s.idx AND m.is_user_turn = 1) AS turn_count,
               (SELECT m.timestamp FROM history_messages m
                WHERE m.character = s.character AND m.segment = s.idx
                ORDER BY m.ordinal ASC LIMIT 1) AS first_message_at,
@@ -504,7 +504,7 @@ export class HistoryStore {
     return rows.map((row) => ({
       idx: row.idx,
       file: row.file,
-      message_count: row.message_count,
+      turn_count: row.turn_count,
       compacted_at: row.compacted_at,
       first_message_at: row.first_message_at,
       last_message_at: row.last_message_at,
@@ -528,13 +528,12 @@ export class HistoryStore {
     this.#db
       .query(
         `INSERT INTO history_thread_forks
-             (character, fork_id, child, source, created_at, message_count, turn_count)
-         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)
+             (character, fork_id, child, source, created_at, turn_count)
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6)
          ON CONFLICT (character, fork_id) DO UPDATE SET
            child = excluded.child,
            source = excluded.source,
            created_at = excluded.created_at,
-           message_count = excluded.message_count,
            turn_count = excluded.turn_count`,
       )
       .run(
@@ -543,7 +542,6 @@ export class HistoryStore {
         record.child,
         record.source,
         record.created_at,
-        record.message_count,
         record.turn_count,
       );
   }
@@ -551,7 +549,7 @@ export class HistoryStore {
   threadForks(character: string): ThreadForkRecord[] {
     return this.#db
       .query(
-        `SELECT fork_id, child, source, created_at, message_count, turn_count
+        `SELECT fork_id, child, source, created_at, turn_count
          FROM history_thread_forks WHERE character = ?1
          ORDER BY created_at, fork_id`,
       )
@@ -845,12 +843,11 @@ export class HistoryStore {
     this.#db
       .query(
         `INSERT INTO history_segments
-             (character, idx, file, message_count, compacted_at, compaction_id, committed,
+             (character, idx, file, compacted_at, compaction_id, committed,
               memory_before, memory_after, excluded, label, note)
-         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12)
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11)
          ON CONFLICT (character, idx) DO UPDATE SET
            file = excluded.file,
-           message_count = excluded.message_count,
            compacted_at = excluded.compacted_at,
            compaction_id = excluded.compaction_id,
            committed = excluded.committed,
@@ -864,7 +861,6 @@ export class HistoryStore {
         character,
         idx,
         entry.file,
-        entry.message_count,
         entry.compacted_at,
         entry.compaction_id ?? null,
         committed ? 1 : 0,
@@ -1044,6 +1040,13 @@ function imagesColumn(images: StoredImageRef[] | undefined): string | null {
 
 function textHash(text: string): string {
   return createHash("sha256").update(text).digest("hex");
+}
+
+function dropRowCounts(db: Database): void {
+  for (const table of ["history_segments", "history_thread_forks"]) {
+    const columns = db.query(`PRAGMA table_info(${table})`).all() as { name: string }[];
+    if (columns.some((column) => column.name === "message_count")) db.run(`ALTER TABLE ${table} DROP COLUMN message_count`);
+  }
 }
 
 function displayKind(message: Pick<Message, "role" | "content_blocks">): number {

@@ -50,7 +50,6 @@ interface ForkMarker {
   child: string;
   source: string;
   created_at: string;
-  message_count: number;
   turn_count: number;
 }
 
@@ -186,7 +185,6 @@ async function forkThreadLocked(
     child,
     source,
     created_at: now(),
-    message_count: copied.length,
     turn_count: forkTurnCount(copied),
   };
 
@@ -213,7 +211,6 @@ async function forkThreadLocked(
       fork_id: marker.fork_id,
       source,
       created_at: marker.created_at,
-      messages: marker.message_count,
       turns: marker.turn_count,
     },
   };
@@ -231,7 +228,6 @@ function forkRecordOf(marker: ForkMarker): ThreadForkRecord {
     child: marker.child,
     source: marker.source,
     created_at: marker.created_at,
-    message_count: marker.message_count,
     turn_count: marker.turn_count,
   };
 }

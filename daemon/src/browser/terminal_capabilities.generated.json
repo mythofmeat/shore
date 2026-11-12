@@ -573,9 +573,7 @@
           "id": "count",
           "short": "n",
           "long": "turns",
-          "aliases": [
-            "count"
-          ],
+          "aliases": [],
           "short_aliases": [],
           "help": "Number of turns to show",
           "long_help": null,
