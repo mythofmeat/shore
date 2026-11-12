@@ -1,7 +1,8 @@
-import { mkdirSync, readFileSync, renameSync, rmSync, writeFileSync } from "node:fs";
+import { readFileSync, renameSync, rmSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 
 import type { CredentialStanding } from "../protocol/CredentialStanding.ts";
+import { makeProviderCacheFolderSync, providerCacheDir } from "../storage/provider_cache.ts";
 import type { CredentialFailureKind } from "./credentials.ts";
 import { shoreLog } from "../log.ts";
 
@@ -20,7 +21,7 @@ export function configureCredentialStanding(dir: string | undefined): void {
 }
 
 function standingPath(dir: string, provider: string): string {
-  return join(dir, "providers", provider, "credentials.json");
+  return join(providerCacheDir(dir, provider), "credentials.json");
 }
 
 function recordsFor(provider: string): Map<string, StandingRecord> {
@@ -44,7 +45,7 @@ function persist(provider: string, records: Map<string, StandingRecord>): void {
   const path = standingPath(cacheDir, provider);
   const tmp = join(dirname(path), `.${crypto.randomUUID()}.tmp`);
   try {
-    mkdirSync(dirname(path), { recursive: true });
+    makeProviderCacheFolderSync(path);
     writeFileSync(tmp, `${JSON.stringify({ version: 1, credentials: Object.fromEntries(records) }, null, 2)}\n`);
     renameSync(tmp, path);
   } catch (e) {
