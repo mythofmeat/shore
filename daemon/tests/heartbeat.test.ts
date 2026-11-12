@@ -4,6 +4,7 @@ import {
   HeartbeatClock,
   type HeartbeatClockConfig,
 } from "../src/autonomy/heartbeat.ts";
+import { dispatchTool, nextWakeAnswer, type ToolContext } from "../src/tools/dispatch.ts";
 
 const HOUR = 3_600_000;
 const CONFIG_MIN = HOUR;
@@ -326,4 +327,29 @@ describe("the reason a character gave for a wake stays with that wake", () => {
     none.restore({ ticks_without_user: 0, next_wake_at: undefined, last_user_at: undefined, wake_reason: "stale" });
     expect(none.wakeReason).toBeUndefined();
   });
+});
+
+test("the character is told when its next heartbeat is, and when what it asked for was held to the shortest or longest gap the user allows", async () => {
+  expect(nextWakeAnswer(5, 5, "eve")).toBe("Your next heartbeat is in 5 hours.");
+  expect(nextWakeAnswer(1, 1, "eve")).toBe("Your next heartbeat is in 1 hour.");
+  expect(nextWakeAnswer(2, 2, "eve")).toBe("Your next heartbeat is in 2 hours.");
+  expect(nextWakeAnswer(2.456, 2.456, "eve")).toBe("Your next heartbeat is in 2.46 hours.");
+  expect(nextWakeAnswer(0.1, 0.1000000001, "eve")).toBe("Your next heartbeat is in 0.1 hours.");
+  expect(nextWakeAnswer(2.5, 4, "eve")).toBe("You asked for 2.5 hours, and your next heartbeat is in 4 hours: that is the shortest gap eve allows between heartbeats.");
+  expect(nextWakeAnswer(100, 48, "eve")).toBe("You asked for 100 hours, and your next heartbeat is in 48 hours: that is the longest gap eve allows between heartbeats.");
+
+  const reasons: string[] = [];
+  const ctx: ToolContext = {
+    workspaceDir: "/nowhere", characterName: "ada", characterDataDir: "/nowhere", imageDir: "/nowhere", conversationDir: "/nowhere",
+    historyDbPath: "/nowhere/shore.db", configDir: "/nowhere", userName: "eve",
+    scheduleNextWake: (hours, reason) => {
+      reasons.push(reason);
+      return Math.min(Math.max(hours, 4), 48);
+    },
+  };
+  expect(await dispatchTool("set_next_wake", { hours_from_now: 2.5, reason: "look at the tide" }, ctx)).toBe(
+    "You asked for 2.5 hours, and your next heartbeat is in 4 hours: that is the shortest gap eve allows between heartbeats.",
+  );
+  expect(await dispatchTool("set_next_wake", { hours_from_now: 6, reason: "trim the lamp" }, ctx)).toBe("Your next heartbeat is in 6 hours.");
+  expect(reasons).toEqual(["look at the tide", "trim the lamp"]);
 });

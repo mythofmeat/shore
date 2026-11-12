@@ -161,7 +161,14 @@ test("the wrap-up nudge asks for the closing note, and for set_next_wake only wh
   );
 });
 
-async function wokenInRing(script: Script, seen: SidecarRequest[], limitMs: number | undefined, after: (world: ChatWorld) => Promise<void>, maxToolIterations?: number): Promise<void> {
+interface RingOptions {
+  maxToolIterations?: number;
+  wrapUpRounds?: number;
+  started?: (world: ChatWorld) => void;
+}
+
+async function wokenInRing(script: Script, seen: SidecarRequest[], limitMs: number | undefined, after: (world: ChatWorld) => Promise<void>, options: RingOptions = {}): Promise<void> {
+  const { maxToolIterations, wrapUpRounds } = options;
   await afterFirstChat({
     name: "wake-time-limit",
     keyEnv: KEY_ENV,
@@ -169,8 +176,10 @@ async function wokenInRing(script: Script, seen: SidecarRequest[], limitMs: numb
     tools: ["read"],
     autonomy: true,
     ...(maxToolIterations === undefined ? {} : { model: { maxToolIterations } }),
+    ...(wrapUpRounds === undefined ? {} : { tune: (app) => { app.behavior.autonomy.heartbeat.wrap_up_grace_rounds = wrapUpRounds; } }),
   }, async (world) => {
     await world.runtime.registry.createThread("ada", "ring");
+    options.started?.(world);
     jest.useFakeTimers();
     try {
       world.runtime.autonomy.wakeFor("ada", { name: "show", reason: "The show.", at: Date.now(), thread: "ring", limitMs });
@@ -256,6 +265,137 @@ test("a wake in a thread that keeps using tools past its rounds is stopped, and 
         'Wake in "ring" used up its rounds and was stopped',
       ]);
     },
-    2,
+    { maxToolIterations: 2 },
+  );
+});
+
+test("a trigger handed to a wake as it runs out of rounds isn't lost with the wake: it isn't written into the thread, and it wakes the character there again", async () => {
+  for (const [wrapUpRounds, lastCall] of [[3, 5], [0, 2]] as const) {
+    const seen: SidecarRequest[] = [];
+    let ring: ChatWorld | undefined;
+    await wokenInRing(
+      () => {
+        if (seen.length === lastCall) {
+          expect(ring?.runtime.autonomy.wakeFor("ada", { name: "encore", reason: "The encore.", at: Date.now(), thread: "ring" })).toBe("handed");
+        }
+        return { minutes: 1, blocks: READ_SOUL };
+      },
+      seen,
+      undefined,
+      async (world) => {
+        expect(seen).toHaveLength(lastCall);
+        expect(seen.map(textOf).join("\n")).not.toContain("encore");
+        const kept = (await world.runtime.registry.getOrCreate("ada", "ring")).messages();
+        expect(kept.filter((message) => message.content.includes("encore"))).toEqual([]);
+        expect(kept.at(-1)?.content).toBe("[This wake used up its rounds of tool use, and Shore stopped it here.]");
+
+        await world.runtime.autonomy.tick();
+        expect(seen.length).toBeGreaterThan(lastCall);
+        expect(textOf(required(seen[lastCall]))).toContain('[Your trigger "encore" fired at ');
+        expect(world.runtime.autonomy.log("ada", 100).filter((event) => event.kind === "tick_fired").map((event) => event.detail)).toEqual([
+          'Woken in "ring" by trigger "show"',
+          'Woken in "ring" by trigger "encore"',
+        ]);
+      },
+      { maxToolIterations: 2, wrapUpRounds, started: (world) => { ring = world; } },
+    );
+  }
+});
+
+test("a trigger shown to a wake in a step that its time limit then cuts off wakes the character there again", async () => {
+  const seen: SidecarRequest[] = [];
+  let ring: ChatWorld | undefined;
+  await wokenInRing(
+    () => {
+      if (seen.length === 1) {
+        expect(ring?.runtime.autonomy.wakeFor("ada", { name: "encore", reason: "The encore.", at: Date.now(), thread: "ring" })).toBe("handed");
+        return { minutes: 1, blocks: READ_SOUL };
+      }
+      return seen.length === 2 ? { minutes: 40, blocks: READ_SOUL } : { minutes: 1, blocks: [{ type: "text", text: "HEARTBEAT_OK" }] };
+    },
+    seen,
+    undefined,
+    async (world) => {
+      expect(seen).toHaveLength(2);
+      expect(textOf(required(seen[1]))).toContain('[Your trigger "encore" fired at ');
+      expect(world.runtime.autonomy.log("ada", 100).map((event) => event.kind)).toContain("timeout");
+
+      await world.runtime.autonomy.tick();
+      expect(seen).toHaveLength(3);
+      expect(world.runtime.autonomy.log("ada", 100).filter((event) => event.kind === "tick_fired").map((event) => event.detail)).toEqual([
+        'Woken in "ring" by trigger "show"',
+        'Woken in "ring" by trigger "encore"',
+      ]);
+      await world.runtime.autonomy.tick();
+      expect(seen).toHaveLength(3);
+    },
+    { started: (world) => { ring = world; } },
+  );
+});
+
+test("a wake is nudged the moment its wrap-up time begins, and one that uses up its wrap-up rounds, or is allowed none, is stopped as out of time", async () => {
+  const seen: SidecarRequest[] = [];
+  await wokenInRing(
+    () => ({ minutes: seen.length <= 3 ? 35 : 1, blocks: READ_SOUL }),
+    seen,
+    120 * MINUTE,
+    async (world) => {
+      expect(seen.map(nudged)).toEqual([false, false, false, true, false, false]);
+      expect(textOf(required(seen[3]))).toContain("[System nudge: this wake stops in about 15 minutes or after 3 more rounds, counting this one, whichever comes first.");
+      expect((await ringEnd(world)).at(-1)).toEqual(["system", "autonomous", "[This wake reached its limit of 2 hours, and Shore stopped it here.]"]);
+      expect(ringNotes(world)).toEqual([["shore", 'Your wake in "ring" reached its limit of 2 hours before you finished. Where it stopped is in that thread.']]);
+    },
+  );
+
+  const unwarned: SidecarRequest[] = [];
+  await wokenInRing(
+    () => ({ minutes: 35, blocks: READ_SOUL }),
+    unwarned,
+    120 * MINUTE,
+    async (world) => {
+      expect(unwarned.map(nudged)).toEqual([false, false, false]);
+      expect((await ringEnd(world)).at(-1)).toEqual(["system", "autonomous", "[This wake reached its limit of 2 hours, and Shore stopped it here.]"]);
+    },
+    { wrapUpRounds: 0 },
+  );
+});
+
+test("a trigger that fires once a wake has been told to wrap up isn't handed to it and gets a wake of its own, while word that the user wrote still reaches it", async () => {
+  const seen: SidecarRequest[] = [];
+  let ring: ChatWorld | undefined;
+  const fire = (name: string): unknown => ring?.runtime.autonomy.wakeFor("ada", { name, reason: `The ${name}.`, at: Date.now(), thread: "ring" });
+  const lastTurn = (request: SidecarRequest | undefined): string =>
+    request?.messages.at(-1)?.content.flatMap((block) => block.type === "text" ? [block.text] : []).join("\n") ?? "";
+  await wokenInRing(
+    () => {
+      if (seen.length === 1) expect(fire("overture")).toBe("handed");
+      if (seen.length === 2) expect(fire("encore")).toBe("handed");
+      if (seen.length === 3) expect(fire("curtain")).toBe("handed");
+      if (seen.length === 4) ring?.runtime.autonomy.onUserActivityElsewhere("ada", Date.now());
+      return { minutes: 1, blocks: READ_SOUL };
+    },
+    seen,
+    undefined,
+    async (world) => {
+      expect(seen.map(nudged)).toEqual([false, false, true, false, false]);
+      expect(lastTurn(seen[1])).toContain('[Your trigger "overture" fired at ');
+      const told = seen.map(textOf).join("\n");
+      expect(told).not.toContain("encore");
+      expect(told).not.toContain("curtain");
+      expect(lastTurn(seen[3])).not.toContain("has just written to you");
+      expect(lastTurn(seen[4])).toContain("User has just written to you");
+
+      await world.runtime.autonomy.tick();
+      expect(seen.length).toBeGreaterThan(5);
+      const opener = lastTurn(seen[5]);
+      expect(opener).toContain('[wake]\n\n[Your trigger "encore" fired at ');
+      expect(opener).toContain('[Your trigger "curtain" fired at ');
+      expect(opener).not.toContain("overture");
+      expect(world.runtime.autonomy.log("ada", 100).filter((event) => event.kind === "tick_fired").map((event) => event.detail)).toEqual([
+        'Woken in "ring" by trigger "show"',
+        'Woken in "ring" by trigger "encore", "curtain"',
+      ]);
+    },
+    { maxToolIterations: 2, started: (world) => { ring = world; } },
   );
 });

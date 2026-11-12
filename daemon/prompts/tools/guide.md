@@ -1,0 +1,1 @@
+Read Shore's guide to your own time and how you reach {{user}}, with the limits and settings in force now. Give a `topic`, one of `triggers`, `wakes`, `diary`, `threads` or `messages`, to read that part, or none to list them with a line on each.

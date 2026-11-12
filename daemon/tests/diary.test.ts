@@ -2,7 +2,7 @@ import { expect, test } from "bun:test";
 import { mkdtemp } from "node:fs/promises";
 import { join } from "node:path";
 
-import { addDiaryNote, closingNote, foldDiary, recentDiary, unfoldedDiary, unseenDiary } from "../src/autonomy/diary.ts";
+import { addDiaryNote, closingNote, foldDiary, keptDiary, recentDiary, unfoldedDiary, unseenDiary } from "../src/autonomy/diary.ts";
 import { assemblePrompt, DIARY_FOR_CHAT, diaryText, estimateMessageTokens, heartbeatRunningText } from "../src/engine/prompt.ts";
 import { estimateTokens } from "../src/engine/tokens.ts";
 import type { DiaryNote, Message } from "../src/engine/types.ts";
@@ -98,6 +98,22 @@ test("a dream is shown notes of any age until one has folded them, and folded no
     note("d2", T0 + 3 * DAY, "Folded this morning."),
     note("d3", T0 + 3 * DAY + HOUR, "Left after the dream."),
   ]);
+});
+
+test("every kept note can be listed with whether turns still start with it and whether a dream has read it", async () => {
+  const dir = await character();
+  const newId = counter();
+  leave(dir, T0 - DAY, "A day old.", newId);
+  for (let n = 1; n <= 21; n += 1) leave(dir, T0 + n, `note ${String(n)}`, newId);
+  foldDiary(dir, ["d1", "d3"]);
+
+  const kept = keptDiary(dir, T0 + HOUR);
+  expect(kept.map((each) => each.id)).toEqual(Array.from({ length: 22 }, (_unused, n) => `d${String(n + 1)}`));
+  expect(kept[0]).toEqual({ ...note("d1", T0 - DAY, "A day old."), shown: false, dreamed: true });
+  expect(kept[1]).toEqual({ ...note("d2", T0 + 1, "note 1"), shown: false, dreamed: false });
+  expect(kept[2]).toEqual({ ...note("d3", T0 + 2, "note 2"), shown: true, dreamed: true });
+  expect(kept.filter((each) => each.shown).map((each) => each.id)).toEqual(recentDiary(dir, T0 + HOUR).notes.map((each) => each.id));
+  expect(keptDiary(dir, T0 + DAY + 20).filter((each) => each.shown).map((each) => each.id)).toEqual(["d22"]);
 });
 
 test("a turn is given only the notes its conversation doesn't hold yet", async () => {

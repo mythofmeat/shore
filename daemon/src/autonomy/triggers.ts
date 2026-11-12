@@ -123,7 +123,8 @@ function trigger(name: string, raw: unknown, defaultCooldownMs: number): Trigger
   if (reason === undefined && check === undefined) throw new Error("it needs a `reason` to show you when it fires, or a `check` whose output is the reason");
   const between = settings["between"] === undefined ? undefined : parseDayWindow(typeof settings["between"] === "string" ? settings["between"] : "");
   if (settings["between"] !== undefined && between === undefined) throw new Error('`between` must be a local time range like "08:00-23:00"');
-  const cooldownMs = settings["cooldown"] === undefined ? (wakes ? defaultCooldownMs : 0) : duration(settings["cooldown"], "cooldown");
+  const wakesAgain = wakes && when.kind !== "once";
+  const cooldownMs = settings["cooldown"] === undefined ? (wakesAgain ? defaultCooldownMs : 0) : duration(settings["cooldown"], "cooldown");
   const thread = settings["thread"] === undefined ? undefined : text(settings["thread"], "thread");
   if (thread !== undefined && !wakes) throw new Error("`thread` is where a wake runs, and this trigger doesn't wake you");
   if (thread !== undefined && !isValidThreadId(thread)) throw new Error(`\`thread\` must be a thread's id, as \`list_threads\` shows it, and ${JSON.stringify(thread)} can't be one`);

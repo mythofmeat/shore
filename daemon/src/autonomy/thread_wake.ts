@@ -217,7 +217,7 @@ export async function runThreadWake(
       wrapUpMs,
       wrapUpText: (msLeft, rounds) => wakeWrapUpText(msLeft, rounds, userName),
       note: (detail) => note("tool_use", detail),
-      news: () => heartbeatNewsNote(deps.news?.() ?? [], userName, timeZone, "wake"),
+      news: (wrappingUp) => heartbeatNewsNote(deps.news?.(wrappingUp) ?? [], userName, timeZone, "wake"),
       checkPictures: async (sent) => await pictureProblems([sent], workspace, signal),
     });
 

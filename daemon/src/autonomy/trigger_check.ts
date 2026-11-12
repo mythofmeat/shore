@@ -4,9 +4,9 @@ import { BASH_ARGS, bashEnvironment } from "../tools/bash.ts";
 import type { CharacterWorkspace } from "../tools/character_workspace.ts";
 import type { ProcessOutput } from "../tools/process.ts";
 
-const OUTPUT_CHARS = 2000;
+export const CHECK_OUTPUT_CHARS = 2000;
 
-const ERROR_CHARS = 500;
+export const CHECK_ERROR_CHARS = 500;
 
 export type CheckOutcome =
   | { kind: "quiet" }
@@ -47,8 +47,8 @@ export async function runCheck(run: CheckRun): Promise<CheckOutcome> {
   }
   if (output.code !== 0) {
     const said = output.stderr.trim();
-    return { kind: "failed", problem: `it exited with status ${String(output.code)}${said === "" ? "" : `: ${cut(said, ERROR_CHARS)}`}` };
+    return { kind: "failed", problem: `it exited with status ${String(output.code)}${said === "" ? "" : `: ${cut(said, CHECK_ERROR_CHARS)}`}` };
   }
   const said = output.stdout.trim();
-  return said === "" ? { kind: "quiet" } : { kind: "fired", output: cut(said, OUTPUT_CHARS) };
+  return said === "" ? { kind: "quiet" } : { kind: "fired", output: cut(said, CHECK_OUTPUT_CHARS) };
 }

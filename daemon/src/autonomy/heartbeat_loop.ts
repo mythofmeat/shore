@@ -52,7 +52,8 @@ export interface HeartbeatLoopDeps {
   wrapUpGrace: number;
   maxToolIterations: number | undefined;
   checkPictures?: (text: string) => Promise<string[]>;
-  news?: () => string | undefined;
+  news?: (wrappingUp: boolean) => string | undefined;
+  newsHeard?: () => void;
   persist?: (round: HeartbeatRound) => Promise<void>;
   timeLimitMs?: number;
   wrapUpMs?: number;
@@ -195,23 +196,19 @@ export async function runHeartbeatToolLoop(
         result.stoppedAt = "interrupted";
         throw new ToolLoopStop();
       }
-      const news = deps.news?.();
+      const left = deadline - performance.now();
+      const nudgeDue = wrapUpEnd === undefined && !(left > wrapUpMs && iteration < normalCap);
+      if (nudgeDue) wrapUpFor = left > wrapUpMs ? "rounds" : "time";
+      if (wrapUpEnd === undefined ? nudgeDue && deps.wrapUpGrace === 0 : iteration >= wrapUpEnd) {
+        result.stoppedAt = wrapUpFor;
+        throw new ToolLoopStop();
+      }
+      const news = deps.news?.(nudgeDue || wrapUpEnd !== undefined);
       if (news !== undefined) {
         appendWrapUpNudge(call.messages, news);
         await deps.persist?.({ role: "system", blocks: [{ type: "text", text: news }] });
       }
-      if (wrapUpEnd !== undefined) {
-        if (iteration < wrapUpEnd) return;
-        result.stoppedAt = wrapUpFor;
-        throw new ToolLoopStop();
-      }
-      const left = deadline - performance.now();
-      if (left > wrapUpMs && iteration < normalCap) return;
-      wrapUpFor = left > wrapUpMs ? "rounds" : "time";
-      if (deps.wrapUpGrace === 0) {
-        result.stoppedAt = wrapUpFor;
-        throw new ToolLoopStop();
-      }
+      if (!nudgeDue) return;
       wrapUpEnd = iteration + deps.wrapUpGrace;
       const nudge = deps.wrapUpText?.(left, deps.wrapUpGrace) ?? wrapUpNudgeText(left, deps.wrapUpGrace, offersWake);
       appendWrapUpNudge(call.messages, nudge);
@@ -223,6 +220,7 @@ export async function runHeartbeatToolLoop(
       observe(turn.content_blocks);
     },
     afterTurn: async (response) => {
+      deps.newsHeard?.();
       const recorded = persisted;
       persisted = false;
       result.usage = response.usage;

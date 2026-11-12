@@ -12,6 +12,7 @@ import listTriggersDesc from "../../prompts/tools/autonomy/list_triggers.md" wit
 import wakeInThreadDesc from "../../prompts/tools/autonomy/wake_in_thread.md" with { type: "text" };
 import writeDiaryDesc from "../../prompts/tools/autonomy/write_diary.md" with { type: "text" };
 import sendPushDesc from "../../prompts/tools/autonomy/send_push.md" with { type: "text" };
+import guideDesc from "../../prompts/tools/guide.md" with { type: "text" };
 import listThreadsDesc from "../../prompts/tools/threads/list_threads.md" with { type: "text" };
 import startSealedThreadDesc from "../../prompts/tools/threads/start_sealed_thread.md" with { type: "text" };
 import startThreadDesc from "../../prompts/tools/threads/start_thread.md" with { type: "text" };
@@ -306,6 +307,7 @@ export const ALL_TOOLS: readonly ToolDef[] = Object.freeze([
         thread: { type: "string", minLength: 1, maxLength: 64, description: "Id of the thread to be woken in, as `list_threads` shows it." },
         reason: { type: "string", minLength: 1, description: "What the wake is for. Shown to you when it starts." },
         limit: { type: "string", description: 'How long the wake may run, like "45m" or "2h". Defaults to 30 minutes.' },
+        overwrite: { type: "boolean", description: "Put this wake in the place of one you already asked for in that thread and that hasn't started. Without it, a second request is refused." },
       },
       required: ["thread", "reason"],
       additionalProperties: false,
@@ -320,6 +322,17 @@ export const ALL_TOOLS: readonly ToolDef[] = Object.freeze([
         message: { type: "string", minLength: 1, description: "What the notification says. A line or two." },
       },
       required: ["message"],
+      additionalProperties: false,
+    },
+  },
+  {
+    name: "guide",
+    description: stripOneTrailingNewline(guideDesc),
+    parameters: {
+      type: "object",
+      properties: {
+        topic: { type: "string", description: "The topic to read, by the name the list gives it. Leave it out for the list." },
+      },
       additionalProperties: false,
     },
   },
@@ -344,14 +357,12 @@ export function templateVars(charName: string, userName: string): Map<string, st
 }
 
 export interface WakeToolNotes {
-  readonly defers?: boolean;
   readonly reasonShown?: boolean;
 }
 
 export function toolTemplateVars(cfg: ToolsConfigView, charName: string, userName: string, wake: WakeToolNotes = {}): Map<string, string> {
   const vars = templateVars(charName, userName);
   for (const tool of availableTools(cfg)) vars.set(tool.name, tool.name);
-  vars.set(wake.defers === true ? "wake_defers" : "wake_stays", "yes");
   vars.set(wake.reasonShown === true ? "wake_reason_shown" : "wake_reason_logged", "yes");
   return vars;
 }

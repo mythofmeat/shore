@@ -3,7 +3,7 @@ import type { NtfyDelivery } from "../notifications.ts";
 
 const PUSH_STATE = "push.json";
 
-const PUSH_CHARS = 300;
+export const PUSH_CHARS = 300;
 
 export interface PushSettings extends NtfyDelivery {
   everyMs: number;
