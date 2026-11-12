@@ -483,10 +483,12 @@ describe("hot reload", () => {
     await mkdir(pictures, { recursive: true });
     const uid = process.getuid?.() ?? 0;
     const gid = process.getgid?.() ?? 0;
-    const call = CharacterWorkspace.prototype.call;
+    const call = Object.getOwnPropertyDescriptor(CharacterWorkspace.prototype, "call")?.value as typeof CharacterWorkspace.prototype.call;
+    const asked: string[] = [];
     const reach = spyOn(CharacterWorkspace.prototype, "call").mockImplementation(function (this: CharacterWorkspace, op, args, signal) {
-      if (op === "exists" && JSON.stringify(args) === JSON.stringify({ paths: [pictures] })) return Promise.resolve([true]);
-      return call.call(this, op, args, signal);
+      if (op !== "exists") return call.call(this, op, args, signal);
+      asked.push(JSON.stringify(args));
+      return Promise.resolve([true]);
     } as typeof CharacterWorkspace.prototype.call);
     const info = spyOn(shoreLog, "info");
     const reloads = () => info.mock.calls.filter(([line]) => String(line).startsWith("shore: config hot reload applied")).length;
@@ -501,6 +503,7 @@ describe("hot reload", () => {
       await writeFile(place.configPath, "");
       await until(() => reloads() === 2, "the reload taking it away");
       expect((await stat(folder)).mode & 0o777).toBe(0o700);
+      expect(asked).toEqual([JSON.stringify({ paths: [pictures] })]);
     } finally {
       info.mockRestore();
       reach.mockRestore();
