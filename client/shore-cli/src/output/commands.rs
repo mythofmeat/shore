@@ -62,6 +62,7 @@ pub(crate) fn format_command(name: &str, data: &serde_json::Value) {
         "subagent_trace" => print_subagent_trace(data),
         "heartbeat_tick_now" => print_heartbeat_tick_now(data),
         "dream" => cli_out!("{}", dream_report_text(data)),
+        "diary" => super::diary::print_diary(data),
         "presence" => cli_out!("{}", presence_text(data)),
         "heartbeat_set_dormant" => print_heartbeat_status_change(data, "dormant"),
         "heartbeat_set_active" => print_heartbeat_status_change(data, "active"),
@@ -811,7 +812,7 @@ fn print_command_output_fallback(name: &str, data: &serde_json::Value) {
     }
 }
 
-fn counted(n: u64, noun: &str) -> String {
+pub(super) fn counted(n: u64, noun: &str) -> String {
     if n == 1 {
         format!("1 {noun}")
     } else {

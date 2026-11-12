@@ -6994,6 +6994,100 @@
     }
   },
   {
+    "name": "diary",
+    "input": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "title": "DiaryArgs",
+      "type": "object",
+      "properties": {
+        "count": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "uint32",
+          "minimum": 0
+        }
+      },
+      "additionalProperties": false
+    },
+    "output": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "title": "DiaryResult",
+      "type": "object",
+      "properties": {
+        "character": {
+          "type": "string"
+        },
+        "notes": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/DiaryEntry"
+          }
+        },
+        "kept": {
+          "type": "integer",
+          "format": "uint32",
+          "minimum": 0
+        }
+      },
+      "required": [
+        "character",
+        "notes",
+        "kept"
+      ],
+      "$defs": {
+        "DiaryEntry": {
+          "type": "object",
+          "properties": {
+            "at": {
+              "type": "string"
+            },
+            "thread": {
+              "type": "string"
+            },
+            "source": {
+              "$ref": "#/$defs/DiarySource"
+            },
+            "trigger": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "text": {
+              "type": "string"
+            },
+            "shown": {
+              "type": "boolean"
+            },
+            "dreamed": {
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "at",
+            "thread",
+            "source",
+            "text",
+            "shown",
+            "dreamed"
+          ]
+        },
+        "DiarySource": {
+          "type": "string",
+          "enum": [
+            "heartbeat",
+            "wake",
+            "trigger",
+            "shore",
+            "note"
+          ]
+        }
+      }
+    }
+  },
+  {
     "name": "heartbeat_set_dormant",
     "input": {
       "$schema": "https://json-schema.org/draft/2020-12/schema",

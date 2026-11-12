@@ -5,17 +5,17 @@ use shore_common::protocol::operations::{
     ActivateSession, BackgroundModelTarget, CallLogArgs, CancelCompaction, CheckConfiguration,
     ClearArgs, ClearConversation, CompactArgs, CompactConversation, ConfigArgs, Configuration,
     ConfigurationSchema, ConversationLog, ConversationLogArgs, DeleteMessages, DeleteMessagesArgs,
-    DiagnosticCountArgs, Dream, DreamArgs, EditMessage, EditMessageArgs, EmptyOperationArgs,
-    ExecuteTool, FavoriteModel, FavoriteModelArgs, GetMessage, GetMessageArgs, InjectSystem,
-    InjectSystemArgs, InspectCalls, InspectModel, InspectSegments, ListModels, ListModelsArgs,
-    ListProviderModels, ListProviders, MessageReferences, ModelInfoArgs, ModelPreferenceScope,
-    ModelSettings, ModelSettingsArgs, Operation, PingKeepalive, Presence, PresenceArgs,
-    ProviderArgs, ProviderModelsArgs, ReadErrorLog, ReadHeartbeatLog, ReadStatus,
-    ReadSubagentTraces, ReadTranscript, RefreshAllProviderModels, RefreshProviderModels,
-    ResetModel, ResetModelArgs, RunToolArgs, ScheduleHeartbeat, SegmentAction, SegmentsArgs,
-    SetHeartbeatActive, SetHeartbeatDormant, SetModelSetting, SetModelSettingArgs,
-    SubagentTraceArgs, SwitchModel, SwitchModelArgs, ToolAccessListing, TranscriptArgs,
-    TranscriptSource, WatchCompaction,
+    DiagnosticCountArgs, DiaryArgs, Dream, DreamArgs, EditMessage, EditMessageArgs,
+    EmptyOperationArgs, ExecuteTool, FavoriteModel, FavoriteModelArgs, GetMessage, GetMessageArgs,
+    InjectSystem, InjectSystemArgs, InspectCalls, InspectModel, InspectSegments, ListModels,
+    ListModelsArgs, ListProviderModels, ListProviders, MessageReferences, ModelInfoArgs,
+    ModelPreferenceScope, ModelSettings, ModelSettingsArgs, Operation, PingKeepalive, Presence,
+    PresenceArgs, ProviderArgs, ProviderModelsArgs, ReadDiary, ReadErrorLog, ReadHeartbeatLog,
+    ReadStatus, ReadSubagentTraces, ReadTranscript, RefreshAllProviderModels,
+    RefreshProviderModels, ResetModel, ResetModelArgs, RunToolArgs, ScheduleHeartbeat,
+    SegmentAction, SegmentsArgs, SetHeartbeatActive, SetHeartbeatDormant, SetModelSetting,
+    SetModelSettingArgs, SubagentTraceArgs, SwitchModel, SwitchModelArgs, ToolAccessListing,
+    TranscriptArgs, TranscriptSource, WatchCompaction,
 };
 use shore_common::protocol::types::Role;
 use std::collections::BTreeMap;
@@ -502,6 +502,18 @@ pub(crate) enum CliCommand {
         /// Clear the status
         #[arg(long, conflicts_with = "status")]
         clear: bool,
+
+        /// Output raw JSON
+        #[arg(long)]
+        json: bool,
+    },
+
+    /// Show the notes the character has left in its diary for its other turns
+    #[command(display_order = 7)]
+    Diary {
+        /// Number of notes to show, newest last; 0 shows every note the diary keeps
+        #[arg(short = 'n', long = "count", default_value = "20")]
+        count: u32,
 
         /// Output raw JSON
         #[arg(long)]
@@ -2769,6 +2781,9 @@ pub(crate) fn to_swp_command(
         CliCommand::Dream { now, .. } => operation_to_swp::<Dream>(DreamArgs {
             now: now.then_some(true),
         }),
+        CliCommand::Diary { count, .. } => operation_to_swp::<ReadDiary>(DiaryArgs {
+            count: Some(*count),
+        }),
         CliCommand::Presence { status, clear, .. } => operation_to_swp::<Presence>(PresenceArgs {
             status: if *clear {
                 Some(String::new())
@@ -3580,6 +3595,8 @@ mod tests {
             (&["status"], Some(("status", json!({})))),
             (&["dream"], Some(("dream", json!({})))),
             (&["dream", "--now"], Some(("dream", json!({"now": true})))),
+            (&["diary"], Some(("diary", json!({"count": 20})))),
+            (&["diary", "-n", "0"], Some(("diary", json!({"count": 0})))),
             (&["presence"], Some(("presence", json!({})))),
             (
                 &["presence", "at work"],
