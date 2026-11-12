@@ -2,6 +2,7 @@ import { withConversation } from "../engine/lifecycle.ts";
 import { unseenDiary } from "../autonomy/diary.ts";
 import { noteSeen, presence, unshownPresence } from "../autonomy/presence.ts";
 import type { RunningHeartbeat } from "../autonomy/runner.ts";
+import { withoutWakeWorking } from "../autonomy/wake_working.ts";
 import { characterDataDir, threadDataDir } from "../config/dirs.ts";
 import { isToolResultOnly } from "../engine/message_store.ts";
 import { parseDurationMs } from "../llm/request.ts";
@@ -439,7 +440,7 @@ async function runGenerationCore(
 
   const compaction = config.app.memory.compaction;
   const active = engine.messages();
-  const crowded = nearMessageBudget(active, built.messageBudget, imageTierForModel(resolved.modelId)) &&
+  const crowded = nearMessageBudget(withoutWakeWorking(active), built.messageBudget, imageTierForModel(resolved.modelId)) &&
     canArchiveTurns(active, compaction.keep_recent_turns);
   if (deps.registry.listThreads(charName).find((thread) => thread.id === engine.thread)?.compaction === false) {
     if (crowded) await archiveTrimmedTurns(deps.dataDir, engine, charName, workspace, compaction.keep_recent_turns, now, deps.compaction);

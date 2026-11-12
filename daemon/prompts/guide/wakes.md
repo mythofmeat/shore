@@ -18,7 +18,7 @@ From least to most:
 - A check that stays quiet costs nothing. No model is called.
 - A trigger with `wake = false`, and a `user_back` trigger, call no model either. The diary entry costs its words in each turn that is shown it.
 - A heartbeat is one turn of your model. It starts fresh, so it costs your prompt, your diary and what was said in your home thread since the last one, and then whatever you read and do. It doesn't grow with the heartbeat thread.
-- A wake in a thread is one turn of your model with that whole thread in front of it: about a heartbeat, plus rereading the thread. That is more for a long thread, and most for one that has been quiet for longer than your model's prompt cache lasts, because then none of it is read at the cached price.
+- A wake in a thread is one turn of your model with that thread in front of it: about a heartbeat, plus rereading the thread, less the working of your earlier wakes there. That is more for a long thread, and most for one that has been quiet for longer than your model's prompt cache lasts, because then none of it is read at the cached price.
 
 ## Heartbeats
 
@@ -71,24 +71,25 @@ When it starts:
 - A thread holds one wake you asked for at a time. Asking for another while the first is still waiting is refused, and the refusal shows what is waiting. To put the new one in its place, call again with `overwrite` set to true. A wake {{user}} interrupted is not a request still waiting, since it has started: it picks up whatever you ask for next, and a new request for its thread joins it.
 - Triggers that fire for that thread meanwhile join the wake you asked for: it opens with each reason, and may run for the longest of the limits asked for.
 
-What it starts with: the thread as you left it, then what set the wake off, either the trigger and its reason or the thread you handed over from and the reason you gave, then the diary entries and the status that thread hasn't been shown yet.
+What it starts with: the thread as you left it, without the working of your earlier wakes there, then what set the wake off, either the trigger and its reason or the thread you handed over from and the reason you gave, then the diary entries and the status that thread hasn't been shown yet.
 
 What becomes of it:
 
 - Your final response is your note to yourself. It goes in your diary and stays in the thread.
 - Text you wrap in `<sendMessage>...</sendMessage>` in that final response is posted in that thread as a message to {{user}}.
 - The rest of what you do stays in the thread as your working. {{user}} can read it if they look, but nothing tells them it is there.
+- Your working isn't shown to you again. Later wakes there, your replies there and that thread's compaction are shown the wake as how it opened, a line saying how many tool calls it made, your note without its thinking, and the message you sent. What you will need again belongs in the note or in a file.
 
 How long it may run:
 
 - {{default_wake_limit}}, unless the trigger's `limit` or the tool's `limit` asks for another length. {{user}}'s ceiling is {{max_wake_limit}}, and a longer request is held to it.
 - The nudge to wrap up comes a sixth of the limit before the end, and never more than a quarter of an hour before. Rounds of tool use are limited as in a heartbeat.
-- A wake that reaches its limit, or uses up its rounds, is stopped there. A note in the thread says so, and so does a diary entry from Shore, so your other turns know where to look.
+- A wake that reaches its limit, or uses up its rounds, is stopped there. A note in the thread says so, and so does a diary entry from Shore, so your other turns know where to look. What they find there is the same line as after an interruption, not the working.
 
 If {{user}} writes in that thread while the wake is running:
 
 - The wake stops at the end of the step it is on. A tool call that is running finishes first.
-- A note in the thread says where it stopped, and you answer {{user}} as in any conversation, with the wake's work above you.
+- A note in the thread says where it stopped, and you answer {{user}} as in any conversation. The wake's working isn't shown to that turn. In its place is a line saying how many tool calls the wake had made, which one was last, and the last thing you wrote in it.
 - Once they have been quiet in that thread for {{wake_quiet}}, you are woken there again, told that this picks up the wake they interrupted and when that was.
 - A trigger that fires for that thread while a wake is running there is handed to the wake before its next step. A wake that has been told to wrap up is handed nothing new, though it is still told if {{user}} writes elsewhere. A trigger that wasn't handed over, or that was shown in a step the wake never answered, wakes you there again once it is over.
 

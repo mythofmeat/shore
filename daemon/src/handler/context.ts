@@ -34,6 +34,7 @@ import { toCredentialsEntry } from "../config/providers.ts";
 import { characterWorkspace } from "../tools/character_workspace.ts";
 import { assembleToolSurface, renderToolDefs, subagentToolDefs } from "../tools/registry.ts";
 import { wakeToolNotes } from "../autonomy/heartbeat_shape.ts";
+import { withoutWakeWorking } from "../autonomy/wake_working.ts";
 import { assistantImageModeForRequest, buildLlmMessages } from "./wire_messages.ts";
 
 export interface PrepareChatContextParams {
@@ -163,7 +164,7 @@ export async function prepareChatContext(
     memory_index: memoryIndex,
     has_prior_context: params.prior.archived,
     archived_last_at: params.prior.lastAt,
-    messages,
+    messages: withoutWakeWorking(messages),
     max_context_tokens: resolved.maxContextTokens,
     max_output_tokens: resolved.maxOutputTokens,
     user_timestamp_mode: config.app.behavior.user_message_timestamps,
