@@ -413,6 +413,27 @@ describe("chat logs across threads", () => {
     expect(listed(read)).toEqual(["u1", "a1", "h1", "u3", "u4"]);
   });
 
+  test("a message still in another thread's conversation is marked as from the character's own time only when it was", async () => {
+    const config = await setup();
+    const data = config.dirs.data;
+    await createThread(data, "frank", "story", NOW);
+    const at = (time: string) => `2026-11-01T${time}:00Z`;
+    writeDurable(threadFile(data, "frank", "main", "active.jsonl"), serializeMessages([
+      message("u1", "where is Mara?", at("09:00")),
+      message("a1", "Mara is out", at("09:01")),
+      message("h1", "Mara came back", at("12:00"), { origin: "autonomous" }),
+    ]));
+    const options = { character: "frank", dbPath: join(data, HISTORY_DB_FILE), dataDir: data, thread: "story", indexPath: join(config.dirs.cache, "chat_logs.db"), timeZone: "UTC", userName: "sam" };
+
+    const search = await handleSearchChatLogs({ query: "Mara", all_time: true, sort: "oldest" }, threadDataDir(data, "frank", "story"), options);
+
+    expect(search.split("\n").slice(2)).toEqual([
+      "2026-11-01 Sun 09:00  sam    where is [Mara]?  u1",
+      "2026-11-01 Sun 09:01  frank  [Mara] is out  a1",
+      "2026-11-01 Sun 12:00  frank  (heartbeat) [Mara] came back  h1",
+    ]);
+  });
+
   test("a heartbeat finds what earlier heartbeats did in its own thread, since none of it is in its context", async () => {
     const config = await setup();
     const data = config.dirs.data;

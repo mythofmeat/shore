@@ -2,7 +2,7 @@ import { required } from "../src/util/required.ts";
 
 import { afterEach, describe, expect, jest, spyOn, test } from "bun:test";
 import { connect, createServer, type Socket } from "node:net";
-import { mkdir, mkdtemp, readFile, writeFile } from "node:fs/promises";
+import { chmod, mkdir, mkdtemp, readFile, stat, writeFile } from "node:fs/promises";
 import { existsSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -329,6 +329,17 @@ describe("what a client gets", () => {
     } finally {
       client.close();
     }
+  });
+
+  test("a character's pictures that an older daemon left open to everyone are the daemon's alone once it has started", async () => {
+    const place = await layout("", ["ada"]);
+    const folder = join(place.env.XDG_CACHE_HOME ?? "", "shore", "characters", "ada");
+    await mkdir(join(folder, "images"), { recursive: true });
+    await chmod(folder, 0o755);
+
+    await start(place);
+
+    expect((await stat(folder)).mode & 0o777).toBe(0o700);
   });
 
   test("a command is answered, so the handler was draining before the accept", async () => {

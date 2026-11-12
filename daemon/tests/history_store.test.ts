@@ -1,6 +1,7 @@
-import { expect, test } from "bun:test";
+import { expect, spyOn, test } from "bun:test";
 import { Database } from "bun:sqlite";
-import { access, mkdir, rm, writeFile } from "node:fs/promises";
+import * as fs from "node:fs";
+import { access, chmod, mkdir, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 
 import { HISTORY_DB_FILE, HistoryStore } from "../src/engine/history_store.ts";
@@ -254,4 +255,75 @@ test("chat logs show where each picture the user sent is kept, or just its name 
   expect(await handleReadChatLogs({ around: "u1" }, characterDir, options)).toBe(read(`[picture: ${kept}]`));
   await rm(kept);
   expect(await handleReadChatLogs({ around: "u1" }, characterDir, options)).toBe(read("[picture: IMG_0955.jpeg]"));
+});
+
+function historyDirs(): { dataDir: string; characterDir: string; dbPath: string } {
+  const dataDir = testTmp(`history-${crypto.randomUUID().slice(0, 8)}`);
+  return { dataDir, characterDir: join(dataDir, "ada"), dbPath: join(dataDir, HISTORY_DB_FILE) };
+}
+
+async function archiveMain(dirs: { characterDir: string; dbPath: string }, messages: readonly Message[]): Promise<void> {
+  await mkdir(join(dirs.characterDir, "threads", "main"), { recursive: true });
+  await archiveAndRetain(
+    join(dirs.characterDir, "threads", "main"),
+    { dbPath: dirs.dbPath, archiveKey: "ada" },
+    0,
+    messages.map((entry) => JSON.stringify(entry)).join("\n") + "\n",
+    () => "2026-08-13T10:01:00+10:00",
+    () => "conversation-2",
+    "compact-2",
+  );
+}
+
+function modeOf(path: string): number {
+  return fs.statSync(path).mode & 0o777;
+}
+
+test("a page of chat logs holds what fits in 12,000 characters as they are shown, picture paths and all", async () => {
+  const dirs = historyDirs();
+  const { dataDir, characterDir, dbPath } = dirs;
+  await mkdir(dataDir, { recursive: true });
+  const sha256 = `5e${"0".repeat(62)}`;
+  const kept = join(dataDir, `${sha256}.jpeg`);
+  await writeFile(kept, "jpeg");
+  const head = "2026-08-13 Thu 10:00  user  u01";
+  const label = `[picture: ${kept}]`;
+  const text = "x".repeat(272 - head.length - label.length - 1 - 3);
+  const messages = Array.from({ length: 45 }, (_, i) => ({
+    ...message(`u${String(i + 1).padStart(2, "0")}`, text),
+    images: [{ path: kept, name: "IMG_0957.jpeg", sha256 }],
+  }));
+  await archiveMain(dirs, messages);
+
+  const page = (await handleReadChatLogs({ start: "2026-08-13", end: "2026-08-13" }, characterDir, { character: "ada", dbPath, timeZone: "Australia/Canberra" })).split("\n");
+
+  expect(page[0]).toBe("main, 2026-08-13 → 2026-08-13: messages 1–44 of 45 (Australia/Canberra)");
+  expect(page.filter((line) => line === label)).toHaveLength(44);
+  expect(page.at(-1)).toBe("Next page: offset=44");
+});
+
+test("the chat log index is put in place readable by the daemon alone, and closed again when it is found open", async () => {
+  const dirs = historyDirs();
+  const { dataDir, characterDir, dbPath } = dirs;
+  await archiveMain(dirs, [message("u1", "hello"), message("a1", "hi")]);
+  const options = { character: "ada", dbPath, timeZone: "Australia/Canberra", indexPath: join(dataDir, "chat_logs.db") };
+  const renameSync = fs.renameSync;
+  const modesPutInPlace: number[] = [];
+  const placing = spyOn(fs, "renameSync").mockImplementation((from, to) => {
+    if (String(to) === options.indexPath) modesPutInPlace.push(modeOf(String(from)));
+    renameSync(from, to);
+  });
+  try {
+    await handleSearchChatLogs({ query: "hello", all_time: true }, characterDir, options);
+    expect(modesPutInPlace).toEqual([0o600]);
+    expect(modeOf(options.indexPath)).toBe(0o600);
+
+    await chmod(options.indexPath, 0o644);
+    await handleSearchChatLogs({ query: "hello", all_time: true }, characterDir, options);
+  } finally {
+    placing.mockRestore();
+  }
+
+  expect(modesPutInPlace).toHaveLength(1);
+  expect(modeOf(options.indexPath)).toBe(0o600);
 });
