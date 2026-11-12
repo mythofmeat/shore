@@ -4,6 +4,7 @@ import fs from "node:fs";
 import path from "node:path";
 
 import type { ContentBlock } from "../engine/types.ts";
+import { makeProviderCacheFolderSync, providerCacheDir } from "../storage/provider_cache.ts";
 import { describeError } from "./errors.ts";
 import { omissionNotice } from "./images.ts";
 import { toolResultImages, type WireMessage } from "./types.ts";
@@ -16,7 +17,7 @@ interface LearnedFile {
 }
 
 export function learnedImageSupportPath(cacheDir: string, providerKey: string): string {
-  return path.join(cacheDir, "providers", providerKey, "image_support.json");
+  return path.join(providerCacheDir(cacheDir, providerKey), "image_support.json");
 }
 
 export function readLearnedImageSupport(
@@ -62,7 +63,7 @@ export function recordImageRejection(
   };
   const target = learnedImageSupportPath(cacheDir, providerKey);
   try {
-    fs.mkdirSync(path.dirname(target), { recursive: true });
+    makeProviderCacheFolderSync(target);
     fs.writeFileSync(target, `${JSON.stringify(next, null, 2)}\n`);
   } catch (e) {
     shoreLog.warn(
