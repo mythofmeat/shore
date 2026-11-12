@@ -72,13 +72,13 @@ export function handleCompactionOutcome(
   if (outcome.kind === "rotated" && !outcome.dryRun) {
     shoreLog.info(
       `shore: archive-only rotation completed for ${character} ` +
-        `(archived_messages=${String(outcome.archivedMessages)}, ` +
+        `(compacted_turns=${String(outcome.compactedTurns)}, ` +
         `retained_turns=${String(outcome.retainedTurns)})`,
     );
     notify(
       `Shore - ${character}`,
-      `Conversation rotated into history (${String(outcome.archivedMessages)} messages, ` +
-        `no memory write)`,
+      `Conversation rotated into history (${String(outcome.compactedTurns)} ` +
+        `turn${outcome.compactedTurns === 1 ? "" : "s"}, no memory write)`,
     );
     return { kind: "completed", retained: outcome.retainedTurns };
   }

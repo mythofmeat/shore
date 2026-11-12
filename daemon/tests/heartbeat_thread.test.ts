@@ -2726,6 +2726,21 @@ test("the activity record a start rebuilds holds the user's messages of the last
   }, undefined, root);
 });
 
+test("the activity heatmap tells the character how many messages the user has sent, the figure the status shows", async () => {
+  await withCharacter(async ({ runtime, script, say, thread }) => {
+    await say("hello");
+    at(1);
+    await say("the beans are up");
+    script.replyTool = { name: "activity_heatmap", input: { days: 7 } };
+    at(2);
+    await say("how often do we talk?");
+    expect(runtime.autonomy.activityStats("ada", T0)?.messageCount).toBe(3);
+    expect(String(lastToolResult(await thread("main"))?.text).split("\n")[0]).toBe("Activity over 7 days: 3 messages (3 total)");
+  }, (app) => {
+    app.tools.enabled_tools = [...app.tools.enabled_tools, "activity_heatmap"];
+  });
+});
+
 test("a message is counted once in the character's activity record, whether it is the first after a start or follows a restart in the middle of a conversation", async () => {
   const counted = (runtime: ShoreRuntime): number | undefined => runtime.autonomy.activityStats("ada", T0)?.messageCount;
   let root = "";

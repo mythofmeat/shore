@@ -247,7 +247,6 @@ export async function runDreamPass(
     lastDream: Number.isNaN(anchoredAt) ? undefined : formatWallClock(anchoredAt, timeZone),
     conversations: conversationLines(
       conversations,
-      userName,
       finishedBefore?.head === undefined ? `--since=${new Date(sinceMs).toISOString()}` : `${finishedBefore.head.slice(0, 7)}..HEAD`,
     ),
     reads: reads.length === 0 ? undefined : reads.join("\n"),

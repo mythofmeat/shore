@@ -156,7 +156,7 @@ export function presentSegment(record: SegmentRecord): SegmentSummary {
     first_message_at: record.first_message_at,
     last_message_at: record.last_message_at,
     compacted_at: record.compacted_at,
-    message_count: record.message_count,
+    turn_count: record.turn_count,
     excluded: record.excluded === true,
     label: record.label ?? null,
     note: record.note ?? null,

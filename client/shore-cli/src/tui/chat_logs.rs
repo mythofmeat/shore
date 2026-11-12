@@ -168,7 +168,7 @@ mod tests {
                 "type": "command_output", "name": "segments", "rid": "palette-exclude",
                 "data": {"character": "ada", "thread": "main", "action": "exclude", "segment": {
                     "index": 3, "first_message_at": null, "last_message_at": null, "compacted_at": "2026-11-01T00:00:00Z",
-                    "message_count": 2, "excluded": true, "label": null, "note": null, "memory_before": null, "memory_after": null,
+                    "turn_count": 2, "excluded": true, "label": null, "note": null, "memory_before": null, "memory_after": null,
                 }},
             })),
         );

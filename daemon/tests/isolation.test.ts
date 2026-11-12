@@ -602,7 +602,7 @@ async function seedCharacter(dirs: ShoreDirs, name: string): Promise<void> {
   };
   writeDurable(join(data, "threads", "main", "active.jsonl"), `${JSON.stringify(message)}\n`);
   const history = HistoryStore.open(join(dirs.data, "shore.db"));
-  history.putSegment(name, 0, { file: "segment-0.jsonl", message_count: 1, compacted_at: "2026-09-01T00:00:00Z" }, [message]);
+  history.putSegment(name, 0, { file: "segment-0.jsonl", compacted_at: "2026-09-01T00:00:00Z" }, [message]);
   history.close();
 }
 

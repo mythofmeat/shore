@@ -502,12 +502,7 @@ export function sharedToolDeps(
         everyMs: notifications.push_every.asMillis(),
       }, Date.now(), async (delivery, title, body) => { await realSink.ntfy(delivery, title, body); });
     },
-    activityStats: (character, days) => {
-      const report = autonomy.activityStats(character, localWallClock(Date.now()), days);
-      return report === undefined
-        ? undefined
-        : { stats: report.stats, turnCount: report.messageCount };
-    },
+    activityStats: (character, days) => autonomy.activityStats(character, localWallClock(Date.now()), days),
     scheduleNextWake: (character, hours, reason) =>
       autonomy.heartbeatsRunning(character)
         ? autonomy.scheduleNextWake(character, hours, reason)

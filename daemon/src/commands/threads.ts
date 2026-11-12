@@ -386,7 +386,6 @@ export async function forkThread(ctx: ThreadContext, args: Args): Promise<Thread
         thread: result.fork.child,
         source: result.fork.source,
         created_at: result.fork.created_at,
-        messages: result.fork.message_count,
         turns: result.fork.turn_count,
         scope: turns === undefined ? "full" : "last_turns",
         ...(turns === undefined ? {} : { requested_turns: turns }),

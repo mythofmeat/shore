@@ -107,7 +107,6 @@ function activityWire(stats: ActivitySource, recorded: number): ActivityStatusRe
     engagement_score: stats.engagementScore,
     sessions_per_day: stats.sessionsPerDay,
     message_count: recorded,
-    turn_count: recorded,
   };
 }
 
@@ -154,7 +153,6 @@ export async function status(ctx: StatusContext): Promise<OperationResult<"statu
       reason: halt.reason,
       at: rfc3339(halt.at),
     })),
-    message_count: ctx.turnCount,
     turn_count: ctx.turnCount,
     ...(ctx.contextTokens === undefined ? {} : { context_tokens: ctx.contextTokens }),
     active_model: effectiveModel,

@@ -114,7 +114,6 @@ async function archiveToDatabase(
         history.archiveKey,
         {
           file: HISTORY_DB_FILE,
-          message_count: messages.length,
           compacted_at: now(),
           ...(operationId === undefined ? {} : { compaction_id: operationId }),
           ...segmentMetadata,

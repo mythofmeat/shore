@@ -697,10 +697,10 @@ fn segment_values(data: &Json) -> Vec<PaletteValue> {
     let mut segments = rows(data, "segments")
         .filter_map(|segment| {
             let index = segment.get("index").and_then(Json::as_u64)?;
-            let count = segment.get("message_count").and_then(Json::as_u64);
+            let count = segment.get("turn_count").and_then(Json::as_u64);
             let help = text(segment, "label")
                 .map(str::to_owned)
-                .or_else(|| count.map(|messages| format!("{messages} messages")));
+                .or_else(|| count.map(crate::output::turns));
             Some((index, help))
         })
         .collect::<Vec<_>>();
@@ -1490,8 +1490,8 @@ mod tests {
         catalog.absorb(
             Source::Segments,
             &json!({ "segments": [
-                { "index": 1, "message_count": 4 },
-                { "index": 2, "message_count": 9, "label": "the storm" },
+                { "index": 1, "turn_count": 4 },
+                { "index": 2, "turn_count": 9, "label": "the storm" },
             ]}),
         );
         catalog.absorb(
@@ -1656,6 +1656,27 @@ mod tests {
             palette_completions("segments show ", &mut catalog).needed,
             [Source::Segments],
             "reopening the palette refreshes values that go stale"
+        );
+    }
+
+    #[test]
+    fn a_segment_is_offered_newest_first_with_its_label_or_else_how_many_turns_it_holds() {
+        let mut catalog = PaletteCatalog::default();
+        catalog.absorb(
+            Source::Segments,
+            &json!({ "segments": [
+                { "index": 1, "turn_count": 1 },
+                { "index": 2, "turn_count": 9, "label": "the storm" },
+                { "index": 3, "turn_count": 30 },
+            ]}),
+        );
+        assert_eq!(
+            offered_with_help("log --segment ", &mut catalog),
+            described(&[
+                ("3", Some("30 turns")),
+                ("2", Some("the storm")),
+                ("1", Some("1 turn")),
+            ])
         );
     }
 

@@ -16,6 +16,7 @@ import { archiveAndRetain } from "../memory/compaction/archive.ts";
 import { tryBeginCompaction } from "../memory/compaction/manager.ts";
 import { resetActivePromptSnapshot } from "../memory/deferred_edits.ts";
 import { withHistoryIndexLock } from "../memory/history_index.ts";
+import { required } from "../util/required.ts";
 import { CommandError, internalError, invalidRequest, notFound } from "./errors.ts";
 import type { OperationInput, OperationResult } from "../operations/types.ts";
 import type { MessageCopy } from "../protocol/MessageCopy.ts";
@@ -175,13 +176,11 @@ export async function clear(
 
       const store = HistoryStore.open(join(ctx.dataDir, HISTORY_DB_FILE));
       try {
-        const record = store.entries(archiveKey(character, engine.thread)).at(-1);
         return {
           status: "clear",
           character,
           thread: engine.thread,
-          message_count: record?.message_count ?? 0,
-          segment: record === undefined ? null : presentSegment(record),
+          segment: presentSegment(required(store.latestEntry(archiveKey(character, engine.thread)))),
         };
       } finally {
         store.close();
