@@ -8,6 +8,7 @@ import { describeTool, runTool } from "./run_tool.ts";
 import { clear, segments } from "./segments.ts";
 import { status, errorLog, heartbeatLog, heartbeatTickNow, heartbeatSetDormant, heartbeatSetActive } from "./status.ts";
 import { dream } from "./dream.ts";
+import { diary } from "./diary.ts";
 import { statusContext } from "./status_context.ts";
 import { callLog, transcript } from "./call_log.ts";
 import { subagentTrace } from "./subagent_trace.ts";
@@ -232,6 +233,9 @@ export const commandOperations: OperationRegistry<CommandOperationContext> = {
   presence: register("presence", { category: "Application", scope: "optional_character", prerequisites: [], effects: ["runtime_write"], confirmation: "none", label: "Your status", fields: {
     status: { label: "Status", hint: "One of the statuses in presence.statuses, which your characters then see for you. Empty clears it; omit it to only show the current one" },
   } }, (context, args) => presenceCommand({ dataDir: context.session.dataDir, choices: context.session.config.app.behavior.presence.statuses, ...(context.deps.presenceChanged === undefined ? {} : { changed: context.deps.presenceChanged }) }, args)),
+  diary: register("diary", { category: "Memory", scope: "character", prerequisites: [], effects: ["read"], confirmation: "none", label: "Diary", fields: {
+    count: { label: "Newest notes", hint: "Zero returns every note the diary keeps; omit for the newest 20" },
+  } }, (context, args) => diary({ characterName: engineOf(context).characterName, dataDir: context.session.dataDir, now: (context.deps.now ?? Date.now)() }, args)),
   heartbeat_set_dormant: register("heartbeat_set_dormant", { ...heartbeatPresentation, label: "Make heartbeat dormant", fields: {} },
     (context) => heartbeatSetDormant(statusContext(engineOf(context), context.session, context.deps))),
   heartbeat_set_active: register("heartbeat_set_active", { ...heartbeatPresentation, label: "Activate heartbeat", fields: {} },

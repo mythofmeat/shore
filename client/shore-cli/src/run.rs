@@ -311,6 +311,7 @@ pub(crate) async fn execute(
         | CliCommand::Clear { .. }
         | CliCommand::Config { .. }
         | CliCommand::Usage { .. }
+        | CliCommand::Diary { .. }
         | CliCommand::Dream { .. }
         | CliCommand::Presence { .. }
         | CliCommand::Completions { .. }) => {
@@ -368,6 +369,7 @@ pub(crate) fn wants_json(other: &CliCommand) -> bool {
         | CliCommand::Export { json, .. }
         | CliCommand::Import { json, .. }
         | CliCommand::Compact { json, .. }
+        | CliCommand::Diary { json, .. }
         | CliCommand::Dream { json, .. }
         | CliCommand::Presence { json, .. }
         | CliCommand::Segments { json, .. }
@@ -1230,6 +1232,7 @@ fn reads_the_selected_thread(command: &CliCommand) -> bool {
         | CliCommand::Provider { .. }
         | CliCommand::Config { .. }
         | CliCommand::Usage { .. }
+        | CliCommand::Diary { .. }
         | CliCommand::Dream { .. }
         | CliCommand::Presence { .. }
         | CliCommand::Trace { .. }

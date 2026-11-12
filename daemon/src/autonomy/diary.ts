@@ -85,10 +85,25 @@ export interface ShownDiary {
   omitted: number;
 }
 
+function lastDay(notes: readonly StoredNote[], now: number): StoredNote[] {
+  return notes.filter((note) => now - Date.parse(note.at) < DIARY_WINDOW_MS);
+}
+
 export function recentDiary(characterDir: string, now: number): ShownDiary {
-  const recent = open(characterDir).filter((note) => now - Date.parse(note.at) < DIARY_WINDOW_MS).map(shown);
+  const recent = lastDay(open(characterDir), now).map(shown);
   const notes = recent.slice(-DIARY_SHOWN);
   return { notes, omitted: recent.length - notes.length };
+}
+
+export interface KeptNote extends DiaryNote {
+  shown: boolean;
+  dreamed: boolean;
+}
+
+export function keptDiary(characterDir: string, now: number): KeptNote[] {
+  const kept = open(characterDir);
+  const current = new Set(lastDay(kept, now).slice(-DIARY_SHOWN));
+  return kept.map((note) => ({ ...shown(note), shown: current.has(note), dreamed: note.folded === true }));
 }
 
 export function unseenDiary(characterDir: string, active: readonly Pick<Message, "diary">[], now: number, thread?: string): DiaryNote[] {

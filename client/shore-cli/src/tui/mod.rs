@@ -3424,6 +3424,9 @@ pub(crate) fn handle_server_message(app: &mut App, msg: ServerMessage) -> UiEffe
             }
             if let (Some(command), Some(rendered)) = (palette_command, palette_rendered) {
                 app.push_command_text(&command, rendered);
+                if co.name == "diary" {
+                    app.scroll_output_pager(i32::MAX);
+                }
             }
             if refresh_usage {
                 follow_up.extend(usage_budget_conn_commands(app));
@@ -3724,6 +3727,54 @@ mod palette_catalog_tests {
             .map(|status| status.value.as_str())
             .collect();
         assert_eq!(offered, ["asleep", "busy"]);
+    }
+}
+
+#[cfg(test)]
+mod diary_pager_tests {
+    use super::*;
+    use serde_json::json;
+
+    fn answered(app: &mut App, command: &str, name: &str, data: &serde_json::Value) -> String {
+        let rid = app.begin_palette_command(command);
+        let frame = serde_json::from_value(
+            json!({ "type": "command_output", "name": name, "rid": rid, "data": data }),
+        )
+        .unwrap_or(ServerMessage::Unknown);
+        let _effect = handle_server_message(app, frame);
+        render_app_to_string(app, 80, 20).unwrap_or_default()
+    }
+
+    #[test]
+    fn the_diary_opens_at_its_newest_note_and_other_output_at_its_top() {
+        let mut app = App::default();
+        let notes: Vec<serde_json::Value> = (1..=30)
+            .map(|n| {
+                json!({ "at": "dawn", "thread": "heartbeat", "source": "heartbeat", "text": format!("the {n}th thought"), "shown": true, "dreamed": false })
+            })
+            .collect();
+        let diary = answered(
+            &mut app,
+            "diary -n 0",
+            "diary",
+            &json!({ "character": "ada", "kept": 30, "notes": notes }),
+        );
+        assert!(diary.contains("the 30th thought"), "{diary}");
+        assert!(!diary.contains("diary (ada, 30 notes)"), "{diary}");
+        assert!(diary.contains("of 91 "), "{diary}");
+
+        let events: Vec<serde_json::Value> = (1..=30)
+            .map(|n| json!({ "timestamp": "dawn", "kind": "tick_fired", "detail": format!("tick {n}") }))
+            .collect();
+        let log = answered(
+            &mut app,
+            "trace events",
+            "heartbeat_log",
+            &json!({ "events": events }),
+        );
+        assert!(log.contains("heartbeat events (30 events)"), "{log}");
+        assert!(log.contains(" 1-"), "{log}");
+        assert!(!log.contains("tick 30"), "{log}");
     }
 }
 

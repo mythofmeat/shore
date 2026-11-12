@@ -11,7 +11,7 @@ import { emptyCatalog } from "../src/config/models.ts";
 import { ProviderRegistry } from "../src/config/providers.ts";
 import { Diagnostics } from "../src/diagnostics.ts";
 import type { History } from "../src/engine/conversation.ts";
-import { unfoldedDiary } from "../src/autonomy/diary.ts";
+import { addDiaryNote, foldDiary, unfoldedDiary } from "../src/autonomy/diary.ts";
 import { heartbeatNewsNote, triggerFiredNote, userWroteNote } from "../src/autonomy/heartbeat_shape.ts";
 import { lastSeen, noteSeen, presence, setPresence } from "../src/autonomy/presence.ts";
 import { checkFacts, startTriggerTimer, type TriggerService } from "../src/autonomy/trigger_service.ts";
@@ -1657,6 +1657,39 @@ test("the presence command sets one of the user's own statuses, shows and clears
     expect(JSON.stringify(refused)).toContain("isn't one of your statuses: presence.statuses in your config is empty. Add it to presence.statuses to use it.");
     expect((await command("presence", { status: "" }) as { data?: unknown }).data).toEqual({ choices: [] });
   }, (app) => { app.behavior.presence.statuses = []; });
+});
+
+test("the diary command lists the newest twenty notes oldest first, as many as asked for, or all of them for zero, with which ones the character still sees and which a dream has read", async () => {
+  await withCharacter(async ({ data, command }) => {
+    const dir = join(data, "ada");
+    const listed = async (args: Record<string, unknown>): Promise<{ character: string; kept: number; notes: Record<string, unknown>[] }> =>
+      (await command("diary", args) as unknown as { data: { character: string; kept: number; notes: Record<string, unknown>[] } }).data;
+    expect(await listed({})).toEqual({ character: "ada", notes: [], kept: 0 });
+
+    let made = 0;
+    const newId = (): string => `d${String(++made)}`;
+    addDiaryNote(dir, { at: T0 - 25 * 60 * MINUTE, thread: "main", source: "note", text: "Promised the ferry times." }, newId);
+    for (let n = 1; n <= 21; n += 1) addDiaryNote(dir, { at: T0 + n * MINUTE, thread: "heartbeat", source: "heartbeat", text: `note ${String(n)}` }, newId);
+    addDiaryNote(dir, { at: T0 + 22 * MINUTE, thread: "heartbeat", source: "trigger", trigger: "mail", text: "Two letters." }, newId);
+    foldDiary(dir, ["d1", "d22"]);
+    at(30);
+
+    const newest = await listed({});
+    expect(newest.kept).toBe(23);
+    expect(newest.notes.map((note) => note["text"])).toEqual([...Array.from({ length: 19 }, (_unused, n) => `note ${String(n + 3)}`), "Two letters."]);
+    expect(newest.notes.at(-1)).toEqual({ at: new Date(T0 + 22 * MINUTE).toISOString(), thread: "heartbeat", source: "trigger", trigger: "mail", text: "Two letters.", shown: true, dreamed: false });
+    expect(newest.notes.at(-2)).toEqual({ at: new Date(T0 + 21 * MINUTE).toISOString(), thread: "heartbeat", source: "heartbeat", text: "note 21", shown: true, dreamed: true });
+
+    expect((await listed({ count: 2 })).notes.map((note) => note["text"])).toEqual(["note 21", "Two letters."]);
+    const all = await listed({ count: 0 });
+    expect(all.kept).toBe(23);
+    expect(all.notes).toHaveLength(23);
+    expect(all.notes[0]).toEqual({ at: new Date(T0 - 25 * 60 * MINUTE).toISOString(), thread: "main", source: "note", text: "Promised the ferry times.", shown: false, dreamed: true });
+    expect(all.notes.filter((note) => note["shown"] === false).map((note) => note["text"])).toEqual(["Promised the ferry times.", "note 1", "note 2"]);
+
+    expect((await command("diary", { count: -1 })).type).toBe("error");
+    expect((await command("diary", { newest: 2 })).type).toBe("error");
+  });
 });
 
 const SHOW = '[show]\nevery = "10m"\nreason = "Tell the next part."\nthread = "ring"\n';
