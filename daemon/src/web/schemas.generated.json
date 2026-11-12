@@ -1642,6 +1642,54 @@
             "properties": {
               "name": {
                 "type": "string",
+                "const": "mark"
+              },
+              "data": {
+                "$ref": "#/$defs/MarkChanged"
+              }
+            },
+            "required": [
+              "name",
+              "data"
+            ]
+          },
+          {
+            "type": "object",
+            "properties": {
+              "name": {
+                "type": "string",
+                "const": "unmark"
+              },
+              "data": {
+                "$ref": "#/$defs/MarkChanged"
+              }
+            },
+            "required": [
+              "name",
+              "data"
+            ]
+          },
+          {
+            "type": "object",
+            "properties": {
+              "name": {
+                "type": "string",
+                "const": "marks"
+              },
+              "data": {
+                "$ref": "#/$defs/MarkListing"
+              }
+            },
+            "required": [
+              "name",
+              "data"
+            ]
+          },
+          {
+            "type": "object",
+            "properties": {
+              "name": {
+                "type": "string",
                 "const": "inject_system"
               },
               "data": {
@@ -9711,6 +9759,178 @@
           "position",
           "alt_count",
           "content"
+        ]
+      },
+      "MarkChanged": {
+        "type": "object",
+        "properties": {
+          "ref": {
+            "type": "string"
+          },
+          "position": {
+            "type": "integer",
+            "format": "uint",
+            "minimum": 0
+          },
+          "attempt": {
+            "type": "string"
+          },
+          "phrase": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "changed": {
+            "type": "boolean"
+          },
+          "marks": {
+            "type": "array",
+            "items": {
+              "$ref": "#/$defs/MarkView"
+            }
+          }
+        },
+        "required": [
+          "ref",
+          "position",
+          "attempt",
+          "phrase",
+          "changed",
+          "marks"
+        ]
+      },
+      "MarkView": {
+        "type": "object",
+        "properties": {
+          "kind": {
+            "$ref": "#/$defs/MarkKind"
+          },
+          "phrase": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "reason": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "tags": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "at": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "kind",
+          "phrase",
+          "reason",
+          "tags",
+          "at"
+        ]
+      },
+      "MarkKind": {
+        "type": "string",
+        "enum": [
+          "like",
+          "dislike"
+        ]
+      },
+      "MarkListing": {
+        "type": "object",
+        "properties": {
+          "tags": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "replies": {
+            "type": "array",
+            "items": {
+              "$ref": "#/$defs/ReplyMarks"
+            }
+          }
+        },
+        "required": [
+          "tags",
+          "replies"
+        ]
+      },
+      "ReplyMarks": {
+        "type": "object",
+        "properties": {
+          "ref": {
+            "type": "string"
+          },
+          "attempts": {
+            "type": "array",
+            "items": {
+              "$ref": "#/$defs/AttemptMarks"
+            }
+          }
+        },
+        "required": [
+          "ref",
+          "attempts"
+        ]
+      },
+      "AttemptMarks": {
+        "type": "object",
+        "properties": {
+          "position": {
+            "type": "integer",
+            "format": "uint",
+            "minimum": 0
+          },
+          "shown": {
+            "type": "boolean"
+          },
+          "attempt": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "asked": {
+            "anyOf": [
+              {
+                "$ref": "#/$defs/AttemptAsked"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "marks": {
+            "type": "array",
+            "items": {
+              "$ref": "#/$defs/MarkView"
+            }
+          }
+        },
+        "required": [
+          "position",
+          "shown",
+          "attempt",
+          "asked",
+          "marks"
+        ]
+      },
+      "AttemptAsked": {
+        "type": "string",
+        "enum": [
+          "first",
+          "reroll",
+          "another_take",
+          "with_reason"
         ]
       },
       "SystemInjected": {
@@ -11607,6 +11827,54 @@
             "properties": {
               "name": {
                 "type": "string",
+                "const": "mark"
+              },
+              "data": {
+                "$ref": "#/$defs/MarkChanged"
+              }
+            },
+            "required": [
+              "name",
+              "data"
+            ]
+          },
+          {
+            "type": "object",
+            "properties": {
+              "name": {
+                "type": "string",
+                "const": "unmark"
+              },
+              "data": {
+                "$ref": "#/$defs/MarkChanged"
+              }
+            },
+            "required": [
+              "name",
+              "data"
+            ]
+          },
+          {
+            "type": "object",
+            "properties": {
+              "name": {
+                "type": "string",
+                "const": "marks"
+              },
+              "data": {
+                "$ref": "#/$defs/MarkListing"
+              }
+            },
+            "required": [
+              "name",
+              "data"
+            ]
+          },
+          {
+            "type": "object",
+            "properties": {
+              "name": {
+                "type": "string",
                 "const": "inject_system"
               },
               "data": {
@@ -19676,6 +19944,178 @@
           "position",
           "alt_count",
           "content"
+        ]
+      },
+      "MarkChanged": {
+        "type": "object",
+        "properties": {
+          "ref": {
+            "type": "string"
+          },
+          "position": {
+            "type": "integer",
+            "format": "uint",
+            "minimum": 0
+          },
+          "attempt": {
+            "type": "string"
+          },
+          "phrase": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "changed": {
+            "type": "boolean"
+          },
+          "marks": {
+            "type": "array",
+            "items": {
+              "$ref": "#/$defs/MarkView"
+            }
+          }
+        },
+        "required": [
+          "ref",
+          "position",
+          "attempt",
+          "phrase",
+          "changed",
+          "marks"
+        ]
+      },
+      "MarkView": {
+        "type": "object",
+        "properties": {
+          "kind": {
+            "$ref": "#/$defs/MarkKind"
+          },
+          "phrase": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "reason": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "tags": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "at": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "kind",
+          "phrase",
+          "reason",
+          "tags",
+          "at"
+        ]
+      },
+      "MarkKind": {
+        "type": "string",
+        "enum": [
+          "like",
+          "dislike"
+        ]
+      },
+      "MarkListing": {
+        "type": "object",
+        "properties": {
+          "tags": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "replies": {
+            "type": "array",
+            "items": {
+              "$ref": "#/$defs/ReplyMarks"
+            }
+          }
+        },
+        "required": [
+          "tags",
+          "replies"
+        ]
+      },
+      "ReplyMarks": {
+        "type": "object",
+        "properties": {
+          "ref": {
+            "type": "string"
+          },
+          "attempts": {
+            "type": "array",
+            "items": {
+              "$ref": "#/$defs/AttemptMarks"
+            }
+          }
+        },
+        "required": [
+          "ref",
+          "attempts"
+        ]
+      },
+      "AttemptMarks": {
+        "type": "object",
+        "properties": {
+          "position": {
+            "type": "integer",
+            "format": "uint",
+            "minimum": 0
+          },
+          "shown": {
+            "type": "boolean"
+          },
+          "attempt": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "asked": {
+            "anyOf": [
+              {
+                "$ref": "#/$defs/AttemptAsked"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "marks": {
+            "type": "array",
+            "items": {
+              "$ref": "#/$defs/MarkView"
+            }
+          }
+        },
+        "required": [
+          "position",
+          "shown",
+          "attempt",
+          "asked",
+          "marks"
+        ]
+      },
+      "AttemptAsked": {
+        "type": "string",
+        "enum": [
+          "first",
+          "reroll",
+          "another_take",
+          "with_reason"
         ]
       },
       "SystemInjected": {

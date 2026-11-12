@@ -1,8 +1,29 @@
-import { useEffect, useState } from "react";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
+import type { MarkKind } from "../../protocol/MarkKind.ts";
+import { errorText, replyMarks, workspace } from "../app/state.ts";
 import { Icon } from "../ui/icons.tsx";
+import { toasts } from "../ui/toast.tsx";
+import { markScope } from "./marks.tsx";
 import { QUOTE_EVENT, QUOTE_SELECTION_EVENT } from "./quote.ts";
+import { shownAttempt } from "./reply_marks.ts";
 
-interface Spot { range: Range; top: number; left: number }
+interface Shown { msg_id: string; alt_index: number; alt_count: number }
+interface Spot { range: Range; top: number; left: number; reply: Shown | undefined }
+
+function replyOf(range: Range): Shown | undefined {
+  const article = messageBody(range.startContainer)?.closest("article.message[data-role=assistant]");
+  if (!(article instanceof HTMLElement) || article.dataset["msgId"] === undefined) return undefined;
+  return { msg_id: article.dataset["msgId"], alt_index: Number(article.dataset["altIndex"] ?? 0), alt_count: Number(article.dataset["altCount"] ?? 1) };
+}
+
+function markPhrase(reply: Shown, kind: MarkKind, phrase: string): void {
+  const state = workspace.getSnapshot();
+  const scope = markScope(state.character, state.thread);
+  const position = shownAttempt(replyMarks.attempts(reply))?.position ?? reply.alt_index + 1;
+  void replyMarks.mark(scope, reply, position, { kind, phrase }).then((changed) => {
+    replyMarks.edit({ ref: reply.msg_id, position, phrase: changed.phrase, place: "row" });
+  }).catch((error: unknown) => toasts.show(errorText(error), "error"));
+}
 
 function requestQuote(text: string): void {
   dispatchEvent(new CustomEvent<string>(QUOTE_EVENT, { detail: text }));
@@ -48,7 +69,7 @@ function spotFor(range: Range): Spot {
   const rect = range.getBoundingClientRect();
   const below = rect.bottom + GAP;
   const top = below + HEIGHT > innerHeight ? Math.max(rect.top - GAP - HEIGHT, GAP) : below;
-  return { range, top, left: Math.min(Math.max(rect.left + rect.width / 2, EDGE), innerWidth - EDGE) };
+  return { range, top, left: Math.min(Math.max(rect.left + rect.width / 2, EDGE), innerWidth - EDGE), reply: replyOf(range) };
 }
 
 function onButton(event: Event): boolean {
@@ -57,6 +78,9 @@ function onButton(event: Event): boolean {
 
 export function QuoteButton() {
   const [spot, setSpot] = useState<Spot | null>(null);
+  const toolbar = useRef<HTMLDivElement>(null);
+  const [width, setWidth] = useState<number>();
+  useLayoutEffect(() => { setWidth(toolbar.current?.offsetWidth); }, [spot]);
   useEffect(() => {
     let pressed = false;
     const update = () => {
@@ -89,8 +113,22 @@ export function QuoteButton() {
     setSpot(null);
     if (selection !== null) requestQuote(renderedText(selection, spot.range));
   };
-  return <button type="button" className="quote-selection" style={{ top: spot.top, left: spot.left }}
+  const quoteButton = <button type="button" className="quote-selection" style={spot.reply === undefined ? { top: spot.top, left: spot.left } : undefined}
     onPointerDown={(event) => { event.preventDefault(); quote(); }} onClick={quote}>
     <Icon name="quote" size={14} />Quote
   </button>;
+  const reply = spot.reply;
+  if (reply === undefined) return quoteButton;
+  const mark = (kind: MarkKind) => {
+    const selection = getSelection();
+    if (selection !== null) markPhrase(reply, kind, renderedText(selection, spot.range));
+  };
+  const half = (width ?? 0) / 2;
+  return <div ref={toolbar} className="quote-selection selection-actions" role="toolbar" aria-label="Selected words" style={{ top: spot.top, left: Math.min(Math.max(spot.left, half + GAP), innerWidth - half - GAP) }}>
+    {quoteButton}
+    {(["like", "dislike"] as const).map((kind) => <button key={kind} type="button" className="quote-selection"
+      onPointerDown={(event) => { event.preventDefault(); mark(kind); }} onClick={() => mark(kind)}>
+      <Icon name={kind} size={14} />{kind === "like" ? "Like" : "Dislike"}
+    </button>)}
+  </div>;
 }

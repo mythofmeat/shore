@@ -48,8 +48,12 @@ pub struct Regen {
     pub rid: Option<String>,
     #[serde(default)]
     pub stream: bool,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub guidance: Option<String>,
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub another_take: bool,
+    #[serde(default, skip_serializing_if = "Option::is_none", alias = "guidance")]
+    pub reason: Option<String>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub tags: Vec<String>,
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone, schemars::JsonSchema, ts_rs::TS)]

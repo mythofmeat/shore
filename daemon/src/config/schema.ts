@@ -307,6 +307,7 @@ function describeOption(path: readonly string[]): string {
     warn_fractions: "Budget fractions that trigger warnings (0.9 means 90%).",
     pace_warn_fractions: "Pacing fractions that trigger warnings.",
     statuses: "The statuses you can set for yourself with shore presence, in the order they are offered. Your characters see the one that is set, with how long ago you set it. Defaults to asleep, busy and away.",
+    tags: "Reasons you can give in one click when you like or dislike a reply, or regenerate one with a reason, in the order they are offered. A written reason can go with them. Defaults to didn't look hard enough, out of character, too long and repetitive.",
     push_topic: "ntfy topic the character's send_push tool sends to, on the server in notifications.url. Give it a topic of its own, apart from notifications.topic. Unset means the character can't push.",
     push_every: "Least time between two pushes from the character's send_push tool. Defaults to 1d.",
   };

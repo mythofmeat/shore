@@ -204,7 +204,9 @@ export function decodeClientMessage(value: unknown): ClientMessage {
         type: "regen",
         ...opt("rid", str("rid", false)),
         stream: bool("stream"),
-        ...opt("guidance", str("guidance", false)),
+        ...opt("another_take", raw.another_take === undefined || raw.another_take === null ? undefined : bool("another_take")),
+        ...opt("reason", str("reason", false) ?? str("guidance", false)),
+        ...opt("tags", raw.tags === undefined || raw.tags === null ? undefined : strArr("tags")),
       };
     case "command":
       return {

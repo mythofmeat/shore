@@ -11,7 +11,7 @@ export async function swipe(message: Message, direction: "prev" | "next", last: 
   const state = swipeState(message);
   if (direction === "prev" && !state.canPrevious) return;
   if (direction === "next" && state.atLast) {
-    if (last) await conversation.regenerate(undefined, streamReplies());
+    if (last) await conversation.regenerate({}, streamReplies());
     return;
   }
   showWorkspaceNote((await workspace.actions.run("alt", { ref: message.msg_id, direction })).workspace);

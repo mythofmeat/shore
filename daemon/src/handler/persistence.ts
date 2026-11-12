@@ -66,6 +66,7 @@ export interface PersistParams {
   wallClockMs: number;
   regenAlt?: PendingAlt;
   pictures?: PictureSender;
+  attempt?: string;
 }
 
 export async function persistAndNotify(
@@ -93,6 +94,7 @@ export async function persistAndNotify(
     ),
     ...responseMessages,
   ];
+  if (params.attempt !== undefined) for (const message of generatedMessages) if (message.role === "assistant") message.attempt = params.attempt;
   if (params.pictures !== undefined) await attachSentPictures(generatedMessages, params.pictures);
   const sentImages = generatedMessages.flatMap((message) => message.images);
   const notifyContent = pictureText(notifyContentFromResponseMessages(completedMessages), sentImages);
@@ -107,7 +109,7 @@ export async function persistAndNotify(
     charName,
     replaceGeneratedTail: params.replaceGeneratedTail === true,
   });
-  ctx.autonomy.notifyLastRequest(charName, lastRequestWithResponse(request, completedMessages), {
+  ctx.autonomy.notifyLastRequest(charName, lastRequestWithResponse({ ...request, messages: request.messages.filter((message) => message.attempt_only !== true) }, completedMessages), {
     intervalMs: params.keepaliveIntervalMs,
     pings: params.keepalivePings,
     cachedTokens: cachedPrefixTokens(result.context_usage ?? result.usage),

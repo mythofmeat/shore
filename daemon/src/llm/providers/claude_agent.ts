@@ -251,7 +251,7 @@ function splitSystemNotes(req: SidecarRequest): { request: SidecarRequest; notes
       shoreLog.warn("claude_agent: left out a system message with no user turn before the reply it applies to");
       continue;
     }
-    notes.push({ anchor, text });
+    notes.push({ anchor, text, ...(message.attempt_only === true ? { attempt_only: true } : {}) });
   }
   return { request: { ...req, messages }, notes };
 }
@@ -266,7 +266,7 @@ function turnNotes(record: SessionRecord | undefined, plan: NativeTurnPlan, mess
 }
 
 function deliveredNotes(notes: readonly SystemNote[]): Pick<SessionRecord, "systemNotes"> {
-  const sent = notes.flatMap((note) => note.delivered === true ? [{ anchor: note.anchor, text: note.text }] : []);
+  const sent = notes.flatMap((note) => note.delivered === true && note.attempt_only !== true ? [{ anchor: note.anchor, text: note.text }] : []);
   return sent.length === 0 ? {} : { systemNotes: sent };
 }
 

@@ -1,12 +1,13 @@
-import { useState, type ReactNode } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import type { ChromeSnapshot } from "../workspace.ts";
 import { Dialog } from "../ui/controls.tsx";
 import { toasts } from "../ui/toast.tsx";
-import { conversation, errorText, streamReplies, workspace } from "../app/state.ts";
+import { conversation, errorText, replyMarks, streamReplies, workspace } from "../app/state.ts";
+import { useReplyMarks } from "./marks.tsx";
 import { threadLabel } from "../sidebar/Sidebar.tsx";
 import { compactionSummary, turnCount } from "./transcript.ts";
 
-export type ConversationDialog = "compact" | "clear" | "guidance" | "system";
+export type ConversationDialog = "compact" | "clear" | "reason" | "system";
 
 export function useSubmit(close: () => void) {
   const [busy, setBusy] = useState(false);
@@ -30,6 +31,24 @@ export function Form({ title, close, submit, busy, error, action, danger = false
   </Dialog>;
 }
 
+
+function ReasonForm({ close, busy, error }: { close: () => void; busy: boolean; error: string }) {
+  useReplyMarks();
+  const [text, setText] = useState("");
+  const [tags, setTags] = useState<readonly string[]>([]);
+  useEffect(() => { void replyMarks.loadTags().catch(() => {}); }, []);
+  const offered = replyMarks.tags();
+  return <Form title="Regenerate with a reason" close={close} busy={busy} error={error} action="Regenerate" disabled={text.trim() === "" && tags.length === 0} submit={() => {
+    close();
+    void conversation.regenerate({ reason: text, tags }, streamReplies()).catch((failure: unknown) => toasts.show(errorText(failure), "error"));
+  }}>
+    <p className="form-text">The new response sees the earlier ones and why the shown one missed, and the shown one is kept as disliked with this reason. After it, the character doesn’t see any of this again.</p>
+    {offered.length === 0 ? null : <div className="mark-tags" role="group" aria-label="Reasons">
+      {offered.map((tag) => <button key={tag} type="button" className={`mark-tag ${tags.includes(tag) ? "on" : ""}`} aria-pressed={tags.includes(tag)} onClick={() => setTags(tags.includes(tag) ? tags.filter((item) => item !== tag) : [...tags, tag])}>{tag}</button>)}
+    </div>}
+    <label className="field"><span>Why it missed {offered.length === 0 ? null : <span className="muted">(optional with a tag)</span>}</span><textarea className="input textarea" data-autofocus rows={4} value={text} onChange={(event) => setText(event.target.value)} /></label>
+  </Form>;
+}
 
 async function resync(state: ChromeSnapshot): Promise<void> {
   await workspace.refreshThreads();
@@ -76,10 +95,7 @@ export function ConversationDialogs({ dialog, state, close }: { dialog: Conversa
       <label className="field"><span>Note for the segment <span className="muted">(optional)</span></span><input className="input" value={text} onChange={(event) => setText(event.target.value)} /></label>
       <label className="check"><input type="checkbox" checked={restart} onChange={(event) => setRestart(event.target.checked)} />Exclude the cleared messages from memory</label>
     </Form>;
-    case "guidance": return <Form title="Regenerate with guidance" close={close} busy={busy} error={error} action="Regenerate" disabled={text.trim() === ""} submit={() => { close(); void conversation.regenerate(text, streamReplies()).catch((failure: unknown) => toasts.show(errorText(failure), "error")); }}>
-      <label className="field"><span>Guidance for the new response</span><textarea className="input textarea" data-autofocus rows={4} value={text} onChange={(event) => setText(event.target.value)} /></label>
-      <p className="form-hint">Used only for this regeneration; it isn’t saved to the thread.</p>
-    </Form>;
+    case "reason": return <ReasonForm close={close} busy={busy} error={error} />;
     case "system": return <Form title="Add system message" close={close} busy={busy} error={error} action="Add" disabled={text.trim() === ""} submit={() => run(async () => {
       await workspace.actions.run("inject_system", { text: text.trim() }); return undefined;
     })}>

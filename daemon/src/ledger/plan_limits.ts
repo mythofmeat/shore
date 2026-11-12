@@ -2,10 +2,10 @@ import { shoreLog } from "../log.ts";
 
 import type { Database } from "bun:sqlite";
 import type { SDKRateLimitInfo } from "@anthropic-ai/claude-agent-sdk";
-import { mkdirSync, readFileSync, renameSync, writeFileSync } from "node:fs";
-import { mkdir, rename, writeFile } from "node:fs/promises";
+import { readFileSync, renameSync, writeFileSync } from "node:fs";
+import { rename, writeFile } from "node:fs/promises";
 import { homedir } from "node:os";
-import { dirname, join } from "node:path";
+import { join } from "node:path";
 
 import { defaultPlanLimitPolicy, type PlanLimitPolicyConfig } from "../config/app.ts";
 import {
@@ -44,6 +44,7 @@ import {
   type UsageConfig,
 } from "./budget.ts";
 import { formatLocalAmPm, toRfc3339, zoneFor } from "./zoned.ts";
+import { makeProviderCacheFolder, makeProviderCacheFolderSync, providerCacheDir } from "../storage/provider_cache.ts";
 import { required } from "../util/required.ts";
 
 const CLAUDE_PLAN_WINDOWS: readonly ClaudePlanWindow[] = ["five_hour", "seven_day"];
@@ -144,12 +145,12 @@ function freshPlan(account: ClaudeAccount, state?: ClaudePlanLimitsState): Accou
 
 export function claudePlanLimitsPath(dir: string, account: string = DEFAULT_CLAUDE_ACCOUNT): string {
   return account === DEFAULT_CLAUDE_ACCOUNT
-    ? join(dir, "providers", "claude_agent", "plan_limits.json")
-    : join(dir, "providers", "claude_agent", "accounts", encodeURIComponent(account), "plan_limits.json");
+    ? join(providerCacheDir(dir, "claude_agent"), "plan_limits.json")
+    : join(providerCacheDir(dir, "claude_agent"), "accounts", encodeURIComponent(account), "plan_limits.json");
 }
 
 export function claudeAccountInUsePath(dir: string): string {
-  return join(dir, "providers", "claude_agent", "account_in_use");
+  return join(providerCacheDir(dir, "claude_agent"), "account_in_use");
 }
 
 export function configureClaudePlanLimits(options: ClaudePlanLimitsOptions = {}): void {
@@ -366,7 +367,7 @@ export function useClaudeAccount(name: string, reason: string): void {
   if (dir === undefined) return;
   const path = claudeAccountInUsePath(dir);
   try {
-    mkdirSync(dirname(path), { recursive: true });
+    makeProviderCacheFolderSync(path);
     writeFileSync(`${path}.tmp`, `${name}\n`);
     renameSync(`${path}.tmp`, path);
   } catch (e) {
@@ -490,7 +491,7 @@ function persist(plan: AccountPlan): Promise<void> {
 }
 
 async function writeClaudePlanLimits(path: string, state: ClaudePlanLimitsState): Promise<void> {
-  await mkdir(dirname(path), { recursive: true });
+  await makeProviderCacheFolder(path);
   const tmp = `${path}.tmp`;
   await writeFile(tmp, JSON.stringify(state, null, 2));
   await rename(tmp, path);

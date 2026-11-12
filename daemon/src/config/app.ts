@@ -513,15 +513,40 @@ const PRESENCE: StructSpec<PresenceConfig> = {
   fields: { statuses: readStringSeq },
 };
 
+export interface MarksConfig {
+  tags: string[];
+}
+
+export const defaultMarksConfig = (): MarksConfig => ({
+  tags: ["didn't look hard enough", "out of character", "too long", "repetitive"],
+});
+
+export const MAX_MARK_TAG_CHARS = 80;
+
+export function validateMarks(marks: MarksConfig): string | undefined {
+  const wrong = marks.tags.find((tag) => tag.trim() !== tag || tag === "" || Array.from(tag).length > MAX_MARK_TAG_CHARS);
+  if (wrong !== undefined) return `marks.tags has ${JSON.stringify(wrong)}; a tag is 1 to ${String(MAX_MARK_TAG_CHARS)} characters with no space at either end`;
+  const repeated = marks.tags.find((tag, index) => marks.tags.indexOf(tag) !== index);
+  return repeated === undefined ? undefined : `marks.tags lists ${JSON.stringify(repeated)} twice`;
+}
+
+const MARKS: StructSpec<MarksConfig> = {
+  name: "MarksConfig",
+  make: defaultMarksConfig,
+  fields: { tags: readStringSeq },
+};
+
 export interface BehaviorConfig {
   autonomy: AutonomyConfig;
   presence: PresenceConfig;
+  marks: MarksConfig;
   user_message_timestamps: UserTimestampMode;
 }
 
 const defaultBehaviorConfig = (): BehaviorConfig => ({
   autonomy: defaultAutonomyConfig(),
   presence: defaultPresenceConfig(),
+  marks: defaultMarksConfig(),
   user_message_timestamps: "auto",
 });
 
@@ -531,6 +556,7 @@ const BEHAVIOR: StructSpec<BehaviorConfig> = {
   fields: {
     autonomy: struct(AUTONOMY),
     presence: struct(PRESENCE),
+    marks: struct(MARKS),
     user_message_timestamps: readEnum(USER_TIMESTAMP_MODES),
   },
 };

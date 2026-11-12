@@ -11,6 +11,7 @@ import {
 } from "./history_store.ts";
 import { MessageNotFound } from "./message_store";
 import type { Message } from "./types";
+import { required } from "../util/required.ts";
 import type { SegmentSummary } from "../protocol/SegmentSummary.ts";
 
 export type { SegmentRecord } from "./history_store.ts";
@@ -122,6 +123,17 @@ export class SegmentReader {
       throw new MessageNotFound(`segment index ${index}`);
     }
     return this.history.readSegmentOrdinals(this.character, index, ordinals);
+  }
+
+  replyMessages(msgId: string): Message[] | undefined {
+    const found = this.history?.replyOrdinals(this.character, msgId);
+    if (found === undefined) return undefined;
+    const rows = this.readSegmentOrdinals(found.segment, found.ordinals);
+    return found.ordinals.flatMap((ordinal) => rows.get(ordinal) ?? []);
+  }
+
+  stampAttempt(msgId: string, ordinal: number | undefined, shown: boolean, attempt: string): string {
+    return required(this.history).stampAttempt(this.character, msgId, ordinal, shown, attempt);
   }
 
   close(): void {

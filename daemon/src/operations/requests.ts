@@ -1,7 +1,7 @@
 import type { ClientMessage } from "../protocol/ClientMessage.ts";
 import type { OperationDescriptor } from "../protocol/OperationDescriptor.ts";
 import type { OperationField } from "../protocol/OperationField.ts";
-import type { EngineBody } from "../handler/router.ts";
+import type { EngineBody, RegenChoice } from "../handler/router.ts";
 import wire from "../protocol/wire.generated.json" with { type: "json" };
 
 export type CoreRequest = Exclude<ClientMessage, { type: "hello" | "command" }>;
@@ -29,13 +29,22 @@ export const coreRequests = {
     ...(request.absence_seconds === undefined ? {} : { absence_seconds: request.absence_seconds }),
   } })),
   regen: register("regen", { label: "Regenerate response", scope: "character", effects: ["history_write", "workspace_write", "provider_call"], fields: {
-    stream, guidance: { label: "Guidance", multiline: true, hint: "Optional instructions for the alternative response." },
+    stream,
+    another_take: { label: "Another take", hint: "Show the new attempt the earlier ones and ask for something different. This is not a dislike." },
+    reason: { label: "Reason", multiline: true, hint: "Why the shown attempt missed. The new attempt sees the earlier ones and this reason, and the shown attempt is disliked with it." },
+    tags: { label: "Reason tags", hint: "Tags from the configured list, given with or instead of a written reason" },
   } }, (request) => ({ kind: "generation", regen: true, body: {
     rid: request.rid ?? null, text: "", stream: request.stream, images: [], image_data: [],
-    ...(request.guidance === undefined || request.guidance === null ? {} : { guidance: request.guidance }),
+    regen: regenChoice(request.another_take === true, request.reason ?? undefined, request.tags ?? []),
   } })),
   cancel: register("cancel", { label: "Stop work", scope: "global", effects: ["runtime_write"], fields: {} }, () => ({ kind: "cancel" })),
 } satisfies Record<CoreRequest["type"], { invoke(request: CoreRequest): RequestPlan }>;
+
+function regenChoice(anotherTake: boolean, reason: string | undefined, tags: readonly string[]): RegenChoice {
+  const written = reason?.trim() ?? "";
+  if (written !== "" || tags.length > 0) return { kind: "with_reason", ...(written === "" ? {} : { reason: written }), tags: [...tags] };
+  return { kind: anotherTake ? "another_take" : "reroll" };
+}
 
 export function requestCatalogue(characterAvailable = true): OperationDescriptor[] {
   const variants = wire.client.oneOf.filter((variant) => !["hello", "command"].includes(variant.properties.type.const));

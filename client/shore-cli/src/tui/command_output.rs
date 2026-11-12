@@ -513,6 +513,7 @@ pub(crate) fn render(
             crate::output::diary::write_diary(out, data, pager_width(crate::output::term_width()));
         })),
         "presence" => Some(crate::output::commands::presence_text(data)),
+        "mark" | "unmark" | "marks" => Some(crate::output::commands::marks_text(wire_name, data)),
         "heartbeat_tick_now" => Some(format!(
             "Scheduled a heartbeat tick for {}.",
             data.get("character")
@@ -723,6 +724,71 @@ mod tests {
         assert_eq!(
             super::render("clear", "clear", &cleared, "ada"),
             Some("Cleared 30 turns into segment #3.".to_owned())
+        );
+    }
+
+    #[test]
+    fn marks_read_as_what_was_liked_or_disliked_and_why() {
+        let listing = json!({
+            "tags": ["too long", "repetitive"],
+            "replies": [{ "ref": "m_1", "attempts": [
+                { "position": 1, "shown": false, "attempt": "at_1", "asked": "first", "marks": [
+                    { "kind": "dislike", "phrase": null, "reason": "flat", "tags": ["too long"], "at": "now" },
+                    { "kind": "like", "phrase": "the sea", "reason": null, "tags": [], "at": "now" },
+                ] },
+                { "position": 2, "shown": true, "attempt": "at_2", "asked": "with_reason", "marks": [] },
+                { "position": 3, "shown": false, "attempt": null, "asked": null, "marks": [] },
+                { "position": 4, "shown": false, "attempt": "at_4", "asked": "another_take", "marks": [] },
+                { "position": 5, "shown": false, "attempt": "at_5", "asked": "reroll", "marks": [] },
+            ] }],
+        });
+        assert_eq!(
+            super::render("msg marks", "marks", &listing, "ada"),
+            Some(
+                [
+                    "m_1",
+                    "  1. first:",
+                    "     disliked: too long; flat",
+                    "     liked \"the sea\"",
+                    "  2. shown, with a reason: no marks",
+                    "  3.: no marks",
+                    "  4. another take: no marks",
+                    "  5. reroll: no marks",
+                    "Reason tags: too long, repetitive.",
+                ]
+                .join("\n")
+            )
+        );
+        assert_eq!(
+            super::render(
+                "msg marks",
+                "marks",
+                &json!({ "tags": [], "replies": [] }),
+                "ada"
+            ),
+            Some("No reason tags are set in marks.tags.".to_owned())
+        );
+        let changed = json!({ "ref": "m_1", "position": 2, "attempt": "at_2", "changed": true, "marks": [
+            { "kind": "like", "phrase": null, "reason": "warm", "tags": [], "at": "now" },
+            { "kind": "dislike", "phrase": "the sea", "reason": null, "tags": ["repetitive"], "at": "now" },
+        ] });
+        assert_eq!(
+            super::render("msg like", "mark", &changed, "ada"),
+            Some("Attempt 2 of m_1: liked: warm; disliked \"the sea\": repetitive.".to_owned())
+        );
+        let cleared =
+            json!({ "ref": "m_1", "position": 1, "attempt": "at_1", "changed": true, "marks": [] });
+        assert_eq!(
+            super::render("msg unmark", "unmark", &cleared, "ada"),
+            Some("Attempt 1 of m_1 has no marks now.".to_owned())
+        );
+        assert_eq!(
+            crate::output::commands::marks_text("marks", &json!({ "replies": 3 })),
+            "The daemon sent marks this client can't read."
+        );
+        assert_eq!(
+            crate::output::commands::marks_text("mark", &json!({})),
+            "The daemon sent a mark this client can't read."
         );
     }
 

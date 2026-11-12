@@ -1,10 +1,11 @@
 import { shoreLog } from "../log.ts";
 
-import { mkdir, readFile, rename, writeFile } from "node:fs/promises";
+import { readFile, rename, writeFile } from "node:fs/promises";
 import { readFileSync } from "node:fs";
-import { dirname, join } from "node:path";
+import { join } from "node:path";
 
 import { toRfc3339 } from "../ledger/zoned.ts";
+import { makeProviderCacheFolder, providerCacheDir } from "../storage/provider_cache.ts";
 import { truncateForLog, type DiscoveryResult } from "./discovery.ts";
 import {
   NANOGPT_BASE_URL,
@@ -19,7 +20,7 @@ type NanoGptWeeklyInputTokens = import("../protocol/NanoGptWeeklyInputTokens.ts"
 export type NanoGptSubscriptionState = import("../protocol/NanoGptSubscriptionState.ts").NanoGptSubscriptionState;
 
 export function nanoGptSubscriptionPath(cacheDir: string): string {
-  return join(cacheDir, "providers", NANOGPT_PROVIDER, "subscription.json");
+  return join(providerCacheDir(cacheDir, NANOGPT_PROVIDER), "subscription.json");
 }
 
 export function nanoGptUsageUrl(baseUrl: string): string {
@@ -126,7 +127,7 @@ export async function writeNanoGptSubscription(
   path: string,
   state: NanoGptSubscriptionState,
 ): Promise<void> {
-  await mkdir(dirname(path), { recursive: true });
+  await makeProviderCacheFolder(path);
   const tmp = `${path}.tmp`;
   await writeFile(tmp, JSON.stringify(state, null, 2));
   await rename(tmp, path);
