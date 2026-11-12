@@ -47,7 +47,7 @@ test("the model sees only what Shore sent, plus the SDK identity line subscripti
   await mkdir(memory, { recursive: true });
   await writeFile(join(memory, "MEMORY.md"), "- [AUTO MEMORY MARKER](note.md)");
   const mock = await startMockAnthropic({ script: [
-    { toolUses: [{ id: "toolu_look", name: "mcp__shore__bash", input: { command: "ls" } }] },
+    { toolUses: [{ id: "toolu_look", name: "bash", input: { command: "ls" } }] },
     { text: "First answer." }, { text: "Second answer." }, { text: "Third answer." },
   ] });
   const provider = new ClaudeAgentProvider({
@@ -131,8 +131,8 @@ test("a long tool result reaches the model as Shore made it, whole or cut once, 
   const workspace = join(dir, "heidi");
   await mkdir(workspace);
   const mock = await startMockAnthropic({ script: [
-    { toolUses: [{ id: "toolu_long", name: "mcp__shore__bash", input: { command: "seq 1 30000" } }] },
-    { toolUses: [{ id: "toolu_longer", name: "mcp__shore__bash", input: { command: "head -c 300000 /dev/zero | tr '\\0' x" } }] },
+    { toolUses: [{ id: "toolu_long", name: "bash", input: { command: "seq 1 30000" } }] },
+    { toolUses: [{ id: "toolu_longer", name: "bash", input: { command: "head -c 300000 /dev/zero | tr '\\0' x" } }] },
     { text: "Done." },
   ] });
   const provider = new ClaudeAgentProvider({
@@ -173,7 +173,7 @@ test("a long tool result reaches the model as Shore made it, whole or cut once, 
     const sent = required(mock.requests.at(-1));
     const tools = sent.body.tools as { name: string; description: string }[];
     expect(description.length).toBeGreaterThan(6_000);
-    expect(required(tools.find(tool => tool.name === "mcp__shore__bash")).description).toBe(description);
+    expect(required(tools.find(tool => tool.name === "bash")).description).toBe(description);
 
     const results = (sent.body.messages as WireMessage[]).flatMap(message => message.content)
       .flatMap(block => block.type === "tool_result" ? [toolResultText(block.content)] : []);
