@@ -2,7 +2,7 @@ import { describe, expect, test } from "bun:test";
 
 import { afterCommand, type DispatchContext } from "../src/handler/command_dispatch.ts";
 import { CharacterConfigError } from "../src/characters.ts";
-import { HeartbeatThreadError, ImagesUnsupportedError, NoModelError, WakeTurnError } from "../src/handler/setup.ts";
+import { OwnThreadError, ImagesUnsupportedError, NoModelError, WakeTurnError } from "../src/handler/setup.ts";
 import { NothingToReplaceError, UnknownTagError } from "../src/handler/attempts.ts";
 import { MessageHandler, withRid, type GenerationParams, type HandlerRegistry, type MessageHandlerDeps } from "../src/handler/router.ts";
 import type { ErrorCode } from "../src/protocol/ErrorCode.ts";
@@ -558,7 +558,7 @@ describe("replies", () => {
     const failures: Array<readonly [unknown, ErrorCode, string, number | undefined]> = [
       [new NoModelError("no model chosen"), "invalid_request", "no model chosen", undefined],
       [new ImagesUnsupportedError("chat.x", 2), "invalid_request", "chat.x does not accept images, so the 2 attachments were not sent. Switch to a vision-capable model and send again.", undefined],
-      [new HeartbeatThreadError("ada", "beats"), "invalid_request", `"beats" is where ada's heartbeats run, so you can read it but not write there. Write to ada in another thread.`, undefined],
+      [new OwnThreadError("ada", "beats"), "invalid_request", `"beats" is where ada's own time runs, so you can read it but not write there. Write to ada in another thread.`, undefined],
       [new WakeTurnError("ada"), "invalid_request", "The last turn here is a wake of ada's own, not a reply to you, so there is nothing to regenerate. Write to ada instead.", undefined],
       [new NothingToReplaceError(), "invalid_request", "There's no reply here to give a reason about. Regenerate without one, or write to the character instead.", undefined],
       [new UnknownTagError("rude", []), "invalid_request", "\"rude\" isn't one of your tags: marks.tags in your config is empty. Add it to marks.tags to use it.", undefined],

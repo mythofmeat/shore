@@ -1,10 +1,6 @@
-import heartbeatTemplateRaw from "../../prompts/autonomy/heartbeat.md" with { type: "text" };
-
-import { resolvePromptTemplate } from "../config/dirs.ts";
-import type { LoadedConfig } from "../config/loader.ts";
-import { formatWallClock, renderTemplate } from "../engine/prompt.ts";
+import { formatWallClock } from "../engine/prompt.ts";
 import type { ContentBlock } from "../engine/types.ts";
-import type { HeartbeatNews, TriggerFiring } from "./runner.ts";
+import type { TriggerFiring, WakeNews } from "./runner.ts";
 
 export type WireRole = "user" | "assistant" | "system";
 
@@ -78,18 +74,9 @@ export function timeLeftPhrase(ms: number): string {
   return minutes === 1 ? "about a minute" : `about ${String(minutes)} minutes`;
 }
 
-export function wrapUpNudgeText(msLeft: number, rounds: number, offersWake: boolean): string {
-  const stop = rounds === 1 ? "after this round" : `after ${String(rounds)} more rounds, counting this one`;
-  return `[System nudge: this heartbeat stops in ${timeLeftPhrase(msLeft)} or ${stop}, whichever comes first. ` +
-    "Wrap up now: " +
-    (offersWake ? "call set_next_wake if you haven't yet, then " : "") +
-    "finish with your note to yourself, saying where you stopped so future-you can pick it up. " +
-    "Only what you put in <sendMessage> tags is sent.]";
-}
-
-export function userWroteNote(at: number, userName: string, timeZone: string, running = "heartbeat"): string {
-  return `[${userName} has just written to you, at ${formatWallClock(at, timeZone)}, while this ${running} is running. ` +
-    `Another turn of you is answering them, and it knows this ${running} is running.]`;
+export function userWroteNote(at: number, userName: string, timeZone: string): string {
+  return `[${userName} has just written to you, at ${formatWallClock(at, timeZone)}, while this wake is running. ` +
+    "Another turn of you is answering them, and it knows this wake is running.]";
 }
 
 export function spanPhrase(ms: number): string {
@@ -101,14 +88,15 @@ export function spanPhrase(ms: number): string {
 
 export function triggerFiredNote(firing: TriggerFiring, timeZone: string): string {
   const when = formatWallClock(firing.at, timeZone);
+  if (firing.byHand === true) return `[This wake was started by hand at ${when}, from Shore's command line or its settings.]`;
   if (firing.seal === true) return `[The seal on this thread came off at ${when}. ${firing.reason}]`;
   return firing.from === undefined
     ? `[Your trigger "${firing.name}" fired at ${when}: ${firing.reason}]`
     : `[You asked for this wake from "${firing.from}" at ${when}: ${firing.reason}]`;
 }
 
-export function heartbeatNewsNote(news: readonly HeartbeatNews[], userName: string, timeZone: string, running?: string): string | undefined {
-  const notes = news.map((item) => item.kind === "trigger" ? triggerFiredNote(item.firing, timeZone) : userWroteNote(item.at, userName, timeZone, running));
+export function wakeNewsNote(news: readonly WakeNews[], userName: string, timeZone: string): string | undefined {
+  const notes = news.map((item) => item.kind === "trigger" ? triggerFiredNote(item.firing, timeZone) : userWroteNote(item.at, userName, timeZone));
   return notes.length === 0 ? undefined : notes.join("\n\n");
 }
 
@@ -170,45 +158,4 @@ export function buildAutonomousMessage(
 
 function deriveContentFromBlocks(blocks: readonly ContentBlock[]): string {
   return blocks.flatMap((block) => (block.type === "text" ? [block.text] : [])).join("");
-}
-
-export const DEFAULT_HEARTBEAT_TEMPLATE = heartbeatTemplateRaw.trimEnd();
-
-export interface HeartbeatPromptVars {
-  now: string;
-  userName: string;
-  defaultInterval: string;
-  timeLimit: string;
-  wrapUpAfter: string;
-  maxRounds: number | undefined;
-  wakeReason?: string | undefined;
-}
-
-const WAKE_REASON_SLOT = "\uE000wake_reason\uE001";
-
-export function heartbeatTemplate(config: LoadedConfig, character: string): string {
-  return resolvePromptTemplate(config.dirs.config, character, "heartbeat.md") ?? DEFAULT_HEARTBEAT_TEMPLATE;
-}
-
-export function wakeToolNotes(config: LoadedConfig, character: string): { defers: boolean; reasonShown: boolean } {
-  return {
-    defers: config.app.behavior.autonomy.heartbeat.defer_on_activity,
-    reasonShown: heartbeatTemplate(config, character).includes("{{wake_reason}}"),
-  };
-}
-
-export function renderHeartbeatPrompt(template: string, vars: HeartbeatPromptVars): string {
-  const wakeReason = vars.wakeReason ?? "";
-  return renderTemplate(
-    template,
-    new Map([
-      ["wake_reason", wakeReason === "" ? "" : WAKE_REASON_SLOT],
-      ["now", vars.now],
-      ["user", vars.userName],
-      ["default_interval", vars.defaultInterval],
-      ["time_limit", vars.timeLimit],
-      ["wrap_up_after", vars.wrapUpAfter],
-      ["max_rounds", vars.maxRounds === undefined ? "" : String(vars.maxRounds)],
-    ]),
-  ).replaceAll(WAKE_REASON_SLOT, () => wakeReason);
 }

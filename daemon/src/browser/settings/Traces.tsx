@@ -10,7 +10,7 @@ import { formatNumber, formatTime, Loading, NeedsCharacter, useAction, useOperat
 import { Tree } from "./tree.tsx";
 
 type Tab = "calls" | "log" | "heartbeat" | "dreams" | "events" | "errors" | "subagents";
-const TABS: readonly [Tab, string][] = [["calls", "Model calls"], ["log", "Thread log"], ["heartbeat", "Heartbeat transcript"], ["dreams", "Dream transcript"], ["events", "Heartbeat events"], ["errors", "Errors"], ["subagents", "Subagents"]];
+const TABS: readonly [Tab, string][] = [["calls", "Model calls"], ["log", "Thread log"], ["heartbeat", "Wake transcript"], ["dreams", "Dream transcript"], ["events", "Wake events"], ["errors", "Errors"], ["subagents", "Subagents"]];
 
 function Count({ value, change }: { value: number; change: (value: number) => void }) {
   return <select className="select" aria-label="Entries to show" value={value} onChange={(event) => change(Number(event.target.value))}>{[10, 25, 50, 100].map((count) => <option key={count} value={count}>Last {count}</option>)}</select>;
@@ -114,9 +114,9 @@ function Diagnostic({ state, tab }: { state: ChromeSnapshot; tab: "heartbeat" | 
       {tab === "subagents" ? <input className="input" aria-label="Tool call IDs" placeholder="Filter by tool call IDs" value={ids} onChange={(event) => setIds(event.target.value)} /> : null}
     </div>
     {tab === "heartbeat" ? <Loading error={heartbeat.error} ready={heartbeat.data !== undefined}>
-      {heartbeat.data?.enabled === false ? <p className="settings-empty">Heartbeat transcripts are off.</p> : null}
+      {heartbeat.data?.enabled === false ? <p className="settings-empty">Wake transcripts are off.</p> : null}
       {heartbeat.data?.entries.map((row) => <details key={row.id} className="disclosure payload"><summary>{formatTime(row.ts)} · round {row.iteration} · {row.model ?? "?"} · {row.finish_reason ?? ""}</summary><Tree value={row.entry} /></details>)}
-      {heartbeat.data?.entries.length === 0 ? <p className="settings-empty">No heartbeat calls yet.</p> : null}
+      {heartbeat.data?.entries.length === 0 ? <p className="settings-empty">No wake calls yet.</p> : null}
     </Loading> : null}
     {tab === "dreams" ? <Loading error={dreams.error} ready={dreams.data !== undefined}>
       {dreams.data?.enabled === false ? <p className="settings-empty">Dream transcripts are off.</p> : null}
@@ -126,7 +126,7 @@ function Diagnostic({ state, tab }: { state: ChromeSnapshot; tab: "heartbeat" | 
     {tab === "events" ? <Loading error={events.error} ready={events.data !== undefined}>
       <div className="table-wrap"><table className="data-table"><thead><tr><th>When</th><th>Event</th><th>Detail</th></tr></thead>
         <tbody>{events.data?.events.map((event, index) => <tr key={index}><td>{formatTime(event.timestamp)}</td><td>{event.kind.replaceAll("_", " ")}</td><td>{event.detail}</td></tr>)}</tbody></table></div>
-      {events.data?.events.length === 0 ? <p className="settings-empty">No heartbeat events yet.</p> : null}
+      {events.data?.events.length === 0 ? <p className="settings-empty">No wake events yet.</p> : null}
     </Loading> : null}
     {tab === "errors" ? <Loading error={errors.error} ready={errors.data !== undefined}>
       <div className="table-wrap"><table className="data-table"><thead><tr><th>When</th><th>Type</th><th>Message</th><th>Context</th></tr></thead>

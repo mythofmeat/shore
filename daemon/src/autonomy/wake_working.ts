@@ -1,5 +1,5 @@
 import { isToolResultOnly } from "../engine/message_store.ts";
-import { isHeartbeatOpener } from "../engine/threads.ts";
+import { isWakeOpener } from "../engine/threads.ts";
 import type { Message } from "../engine/types.ts";
 import { required } from "../util/required.ts";
 import { DIARY_NOTE_CHARS } from "./diary.ts";
@@ -76,5 +76,5 @@ export function withoutWakeWorking(messages: readonly Message[]): Message[] {
     if (turn === undefined || startsTurn(message)) turns.push([message]);
     else turn.push(message);
   }
-  return turns.flatMap((turn) => isHeartbeatOpener(required(turn[0])) ? wakeSeenLater(turn) : turn);
+  return turns.flatMap((turn) => isWakeOpener(required(turn[0])) ? wakeSeenLater(turn) : turn);
 }

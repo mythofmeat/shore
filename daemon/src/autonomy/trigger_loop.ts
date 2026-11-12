@@ -30,6 +30,7 @@ interface TriggerState {
 
 export interface TriggerSettings {
   enabled: boolean;
+  checks: boolean;
   wakeCooldownMs: number;
   checkLimitMs: number;
   maxWakeLimitMs: number;
@@ -213,7 +214,7 @@ export class CharacterTriggers {
       shoreLog.warn(`shore: could not read ${TRIGGERS_FILE} at ${this.#deps.characterDir}: ${String(error)}`);
       return;
     }
-    this.#parsed = parseTriggers(content ?? "", settings.wakeCooldownMs);
+    this.#parsed = parseTriggers(content ?? "", settings.wakeCooldownMs, settings.checks);
   }
 
   #state(): TriggerState {

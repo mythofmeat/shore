@@ -231,7 +231,7 @@ export async function runSubagent(
 }
 
 export function nestedContext(ctx: ToolContext, signal?: AbortSignal): ToolContext {
-  const { runSubagent: _dropped, scheduleNextWake: _unscheduled, recordRead: _uncounted, ...rest } = ctx;
+  const { runSubagent: _dropped, recordRead: _uncounted, ...rest } = ctx;
   return { ...rest, ...(signal === undefined ? {} : { signal }) };
 }
 

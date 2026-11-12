@@ -152,7 +152,7 @@ const actionDebug = (a: UsageBudgetAction): string =>
     warn: "Warn",
     block: "Block",
     pause_background: "PauseBackground",
-    pause_heartbeat: "PauseHeartbeat",
+    pause_wakes: "PauseWakes",
   })[a];
 
 const WEEKDAY_FROM_MONDAY: Record<BudgetWeekday, number> = {
@@ -1093,7 +1093,7 @@ export function actionBlocks(action: UsageBudgetAction, call: GatedCall): boolea
       return true;
     case "pause_background":
       return call.foreground !== true && isBackgroundCall(call.call_type);
-    case "pause_heartbeat":
+    case "pause_wakes":
       return isHeartbeatCall(call.call_type);
   }
 }

@@ -7,7 +7,6 @@ import { toolPatternMatches } from "../config/app.ts";
 
 import bashDesc from "../../prompts/tools/bash.md" with { type: "text" };
 import activityHeatmapDesc from "../../prompts/tools/activity/activity_heatmap.md" with { type: "text" };
-import setNextWakeDesc from "../../prompts/tools/autonomy/set_next_wake.md" with { type: "text" };
 import listTriggersDesc from "../../prompts/tools/autonomy/list_triggers.md" with { type: "text" };
 import wakeInThreadDesc from "../../prompts/tools/autonomy/wake_in_thread.md" with { type: "text" };
 import writeDiaryDesc from "../../prompts/tools/autonomy/write_diary.md" with { type: "text" };
@@ -257,27 +256,6 @@ export const ALL_TOOLS: readonly ToolDef[] = Object.freeze([
     },
   },
   {
-    name: "set_next_wake",
-    description: stripOneTrailingNewline(setNextWakeDesc),
-    parameters: {
-      type: "object",
-      properties: {
-        hours_from_now: {
-          type: "number",
-          description: "Hours from now until the next heartbeat. Fractions are allowed. Clamped to the configured minimum and maximum interval.",
-        },
-        reason: {
-          type: "string",
-          description:
-            "{{#if wake_reason_shown}}A note to yourself for that heartbeat, which shows it to you when it starts. Also recorded in the heartbeat log.{{/if}}" +
-            "{{#if wake_reason_logged}}Why this time. Recorded in the heartbeat log. That heartbeat doesn't show it to you.{{/if}}",
-        },
-      },
-      required: ["hours_from_now", "reason"],
-      additionalProperties: false,
-    },
-  },
-  {
     name: "list_triggers",
     description: stripOneTrailingNewline(listTriggersDesc),
     parameters: {
@@ -356,14 +334,9 @@ export function templateVars(charName: string, userName: string): Map<string, st
   ]);
 }
 
-export interface WakeToolNotes {
-  readonly reasonShown?: boolean;
-}
-
-export function toolTemplateVars(cfg: ToolsConfigView, charName: string, userName: string, wake: WakeToolNotes = {}): Map<string, string> {
+export function toolTemplateVars(cfg: ToolsConfigView, charName: string, userName: string): Map<string, string> {
   const vars = templateVars(charName, userName);
   for (const tool of availableTools(cfg)) vars.set(tool.name, tool.name);
-  vars.set(wake.reasonShown === true ? "wake_reason_shown" : "wake_reason_logged", "yes");
   return vars;
 }
 
@@ -379,9 +352,8 @@ export function renderToolDefs(
   cfg: ToolsConfigView,
   charName: string,
   userName: string,
-  wake: WakeToolNotes = {},
 ): ToolDefinition[] {
-  const vars = toolTemplateVars(cfg, charName, userName, wake);
+  const vars = toolTemplateVars(cfg, charName, userName);
   return availableTools(cfg).map((t) => ({
     name: t.name,
     description: renderTemplate(t.description, vars),

@@ -404,7 +404,7 @@ pub(crate) enum CliCommand {
     },
 
     /// Inspect what the daemon did behind the conversation: raw model calls,
-    /// heartbeat activity, stored sub-agent runs, and errors it hit.
+    /// wakes, stored sub-agent runs, and errors it hit.
     #[command(display_order = 10)]
     Trace {
         #[command(subcommand)]
@@ -635,7 +635,7 @@ pub(crate) enum CliCommand {
         #[arg(long, global = true, add = values(Completes::UsageModels))]
         model: Option<String>,
 
-        /// Filter by ledger call type, e.g. message, heartbeat, or subagent
+        /// Filter by ledger call type, e.g. message, heartbeat (wakes), or subagent
         #[arg(long, global = true, add = values(Completes::CallTypes))]
         call_type: Option<String>,
 
@@ -1077,8 +1077,8 @@ pub(crate) enum PaletteScope {
     Config,
 }
 
-/// Background task to retarget `shore model setting` at. `all` targets heartbeat
-/// and compaction together and errors if they resolve to different models, or,
+/// Background task to retarget `shore model setting` at. `all` targets wakes
+/// (`heartbeat`) and compaction together and errors if they resolve to different models, or,
 /// when only showing settings, if their own settings differ. Dreaming is only
 /// ever targeted by name.
 #[derive(ValueEnum, Clone, Copy, Debug, PartialEq, Eq)]
@@ -1209,7 +1209,7 @@ pub(crate) enum TraceCommand {
         json: bool,
     },
 
-    /// The heartbeat transcript: what each tick thought, the tools it called
+    /// The wake transcript: what each wake thought, the tools it called
     /// and their results, and the model that served it
     Heartbeat {
         /// Number of entries to show
@@ -1232,7 +1232,7 @@ pub(crate) enum TraceCommand {
         json: bool,
     },
 
-    /// The heartbeat operational timeline: tick fired, dormant, woke, timeout
+    /// The wake timeline: woken, dormant, user back, timeout
     Events {
         /// Number of events to show
         #[arg(short = 'n', long = "count", default_value = "20")]
@@ -1279,7 +1279,7 @@ pub(crate) struct ModelTarget {
     #[arg(long)]
     pub(crate) chat: bool,
 
-    /// Background tasks: bare means heartbeat and compaction; naming one requires =compaction, =heartbeat or =dreaming
+    /// Background tasks: bare means wakes and compaction; naming one requires =compaction, =heartbeat (wakes) or =dreaming
     #[arg(
         long,
         value_enum,
@@ -1326,8 +1326,8 @@ pub(crate) enum ModelCommand {
     /// Bare, this sets the character's chat model, which every thread without a model of its
     /// own uses. With --thread (or SHORE_THREAD) it gives just that thread its own model.
     /// Every other target writes the config file,
-    /// which is global: `--background=<task>` writes `<task>.model`,
-    /// bare `--background` writes `heartbeat.model` and `compaction.model` but never `dreaming.model`; `--subagent=<name>` writes `subagents.<name>.model`,
+    /// which is global: `--background=compaction` and `=dreaming` write `<task>.model`, `--background=heartbeat` writes `triggers.model`, the model wakes run on,
+    /// bare `--background` writes `triggers.model` and `compaction.model` but never `dreaming.model`; `--subagent=<name>` writes `subagents.<name>.model`,
     /// and bare `--subagent` writes `subagents.model`.
     Use {
         /// Model name or provider:model_id
@@ -1370,10 +1370,10 @@ pub(crate) enum ModelCommand {
     /// belongs to the model, changing subagents.model picks up that model's
     /// settings rather than carrying the old ones over.
     ///
-    /// A background task's settings sit on top of its model's: heartbeat,
+    /// A background task's settings sit on top of its model's: wakes,
     /// compaction and dreaming take whatever their model has, chat's when they
     /// share it, and override only the keys set for them, so tuning a task never
-    /// moves chat. Bare --background writes the same value for heartbeat and
+    /// moves chat. Bare --background writes the same value for wakes and
     /// compaction; dreaming takes its own with --background=dreaming.
     ///
     /// The keys are temperature, top_p, reasoning_effort, reasoning_budget_tokens,
@@ -1448,7 +1448,7 @@ pub(crate) enum ModelCommand {
     /// model, so the thread uses the character's again. Other targets clear
     /// the config keys `use` would have written, so the role falls back the
     /// way it did before anything was pinned. Bare --background clears
-    /// heartbeat.model and compaction.model; bare --subagent clears subagents.model
+    /// triggers.model and compaction.model; bare --subagent clears subagents.model
     /// and every per-sub-agent override.
     Reset {
         #[command(flatten)]
@@ -1585,7 +1585,7 @@ pub(crate) enum ThreadCommand {
         mode: String,
     },
 
-    /// Move a thread to another place in the list, or into or out of a folder. The home and heartbeat threads stay at the top
+    /// Move a thread to another place in the list, or into or out of a folder. The home and own-time threads stay at the top
     Move {
         /// Thread id
         #[arg(add = values(Completes::Threads))]
@@ -1626,7 +1626,7 @@ pub(crate) enum ThreadCommand {
         model: Option<String>,
     },
 
-    /// Make a thread home. This is where the messages the character sends from heartbeats arrive
+    /// Make a thread home. This is where what the character sends from its own-time thread arrives
     Home {
         /// Thread id
         #[arg(add = values(Completes::Threads))]
@@ -2359,7 +2359,7 @@ pub(crate) enum ConfigCommand {
     /// `shore config get compaction`
     #[command(verbatim_doc_comment)]
     Get {
-        /// Dotted key, e.g. heartbeat.enabled, daemon.listen_addr, mcp.beets.command
+        /// Dotted key, e.g. triggers.enabled, daemon.listen_addr, mcp.beets.command
         #[arg(add = values(Completes::ConfigSections))]
         key: String,
 
@@ -2388,7 +2388,7 @@ pub(crate) enum ConfigCommand {
     /// `shore config set tools.enabled bash,search`
     #[command(verbatim_doc_comment)]
     Set {
-        /// Dotted key, e.g. heartbeat.enabled, compaction.idle_after
+        /// Dotted key, e.g. triggers.enabled, compaction.idle_after
         #[arg(add = values(Completes::ConfigKeys))]
         key: String,
 
@@ -2440,19 +2440,19 @@ pub(crate) enum ConfigCommand {
 #[derive(Subcommand, Debug)]
 #[command(rename_all = "snake_case")]
 pub(crate) enum DebugCommand {
-    /// Schedule a heartbeat tick to fire immediately
+    /// Start a wake in the character's own-time thread now
     #[command(name = "heartbeat_tick_now")]
     TickNow,
-    /// Force heartbeat into dormant state (reverts on next user message)
+    /// Make the character dormant, so that nothing wakes it until your next message
     #[command(name = "heartbeat_status_dormant")]
     StatusDormant,
-    /// Force heartbeat into active state (reverts naturally via abandonment guard)
+    /// Make the character active again, so that its triggers wake it
     #[command(name = "heartbeat_status_active")]
     StatusActive,
     /// Send a cache-keepalive ping now and report whether it read the cache
     #[command(name = "keepalive_ping_now")]
     KeepalivePingNow,
-    /// Start this character's heartbeat and keepalive without sending a
+    /// Start this character's own time and keepalive without sending a
     /// message. If the prefix is cold this pays one cache write to recreate
     /// it, which is what starts the keepalive cadence.
     #[command(name = "session_activate")]

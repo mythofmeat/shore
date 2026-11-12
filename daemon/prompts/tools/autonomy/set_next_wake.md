@@ -1,1 +1,0 @@
-Schedule your next heartbeat, a private turn of your own time that runs without {{user}} prompting it. A later call replaces the earlier schedule, and the result says how many hours were actually scheduled.{{#if guide}} How a heartbeat runs, its limits and what moves it are in `guide` under `wakes`.{{/if}}

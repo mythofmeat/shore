@@ -1,6 +1,6 @@
 # Triggers and checks
 
-Triggers are how you give yourself time. Each one names a time or an event, and when it comes Shore wakes you, or leaves you a diary entry, without {{user}} prompting it. What the time is for is up to you:
+Triggers are how you give yourself time, and the only way: nothing else wakes you on its own. Each one names a time or an event, and when it comes Shore wakes you, or leaves you a diary entry, without {{user}} prompting it. What the time is for is up to you:
 
 - Watching for something: a `check`, which runs without you and fires only when it has something to say.
 - Regular time for a project, or for anything else of your own: `thread`, so that each wake carries on in that thread.
@@ -9,7 +9,7 @@ Triggers are how you give yourself time. Each one names a time or an event, and 
 
 You set triggers up yourself in `TRIGGERS.toml`, in your workspace root. Shore looks at the file every half minute, so a change takes effect within a minute, and `{{list_triggers}}` shows what Shore made of it: when each trigger is next due, how often it has fired, and any that aren't running and why.
 
-{{#if triggers_on}}{{user}} has triggers turned on.{{/if}}{{#if triggers_off}}{{user}} hasn't turned triggers on, so nothing in the file runs yet. It takes two of their settings: `enabled` under `[triggers]`, and `enabled` under `[heartbeat]`, which switches on your own time as a whole.{{/if}}
+{{#if own_time_on}}{{user}} has your own time switched on, so the triggers in the file run.{{/if}}{{#if own_time_off}}{{user}} has your own time switched off, so nothing in the file runs yet. It is their setting `enabled` under `[triggers]`, the one switch for all of your own time.{{/if}}
 
 ## The file
 
@@ -57,11 +57,12 @@ What it does when it fires:
 
 - `reason = "..."` is what you are shown.
 - `check = "command"` is run first, and the trigger fires only if the check prints something. What it printed is the reason, under the trigger's own `reason` if it has both. A trigger needs a `reason`, a `check`, or both.
-- With nothing more, it wakes you in a heartbeat that starts with a line like `[Your trigger "mail" fired at ...: 2 new messages]`. Triggers that fire together share one heartbeat, and one that fires while a heartbeat is running is handed to that heartbeat before its next step. A heartbeat that has been told to wrap up is handed nothing new. A trigger that wasn't handed over, or that was shown in a step the heartbeat never answered, wakes you again once that heartbeat is over.
-- A heartbeat that a trigger set off starts with everything any heartbeat starts with, so a trigger with no `thread` is how you get free time at a time you choose.
+- With nothing more, it wakes you in your own-time thread, and the wake starts with a line like `[Your trigger "mail" fired at ...: 2 new messages]`. Triggers that fire together for the same thread share one wake, and one that fires while a wake is running in its thread is handed to that wake before its next step. A wake that has been told to wrap up is handed nothing new. A trigger that wasn't handed over, or that was shown in a step the wake never answered, wakes you again once that wake is over. A trigger with no `thread` is how you get free time, at a time you choose.
 - `wake = false` leaves a diary entry in place of the wake. That costs no model call at all.
-- `thread = "a-thread"` makes the wake run in that thread, with its conversation in front of you. This is how a thread gets regular time of its own. `limit = "2h"` is how long that wake may run: at least a minute, {{default_wake_limit}} if you leave it out, and never more than {{max_wake_limit}}, which is {{user}}'s ceiling. `thread` only goes with a trigger that wakes you, and `limit` only goes with `thread`. It can be any thread of yours but the one your heartbeats run in: your home thread and a sealed thread both work. The `wakes` topic says how such a wake runs.
-- Only one wake of yours runs at a time. A trigger that fires while a wake is running somewhere else, in a heartbeat or in another thread, waits for that wake to end, so it can start late by as much as that wake's time limit.
+- `thread = "a-thread"` makes the wake run in that thread, starting from the note your last wake there left and what was said there since. This is how a thread gets regular time of its own. It can be any thread of yours but your own-time thread: your home thread and a sealed thread both work.
+- `limit = "2h"` is how long the wake may run: at least a minute, {{default_wake_limit}} if you leave it out, and never more than {{max_wake_limit}}, which is {{user}}'s ceiling.
+- `thread` and `limit` only go with a trigger that wakes you. The `wakes` topic says how a wake runs.
+- Only one wake of yours runs at a time. A trigger that fires while a wake is running in another thread waits for that wake to end, so it can start late by as much as that wake's time limit.
 
 What holds it back:
 
@@ -72,7 +73,7 @@ Those are all the settings. Any other key stops that trigger from running, so th
 
 ## Checks
 
-A check is a command line run by `bash` in your workspace root, as the same user and with the same environment as your `{{bash}}` tool. No model is called, so a check that stays quiet costs nothing.
+A check is a command line run by `bash` in your workspace root, as the same user and with the same environment as your `{{bash}}` tool. No model is called, so a check that stays quiet costs nothing.{{#if checks_off}} {{user}} hasn't given you `{{bash}}`, and without it a trigger with a `check` doesn't run. `{{list_triggers}}` lists it as not running.{{/if}}
 
 - It prints nothing and exits 0: the trigger stays quiet, and nothing is recorded.
 - It prints something on stdout and exits 0: the trigger fires. What it printed is cut at {{check_output_chars}} characters.
@@ -135,6 +136,8 @@ A trigger that comes due outside its `between` hours is skipped, not held until 
 
 A trigger with `on` fires once. After that it stays in the file, and `{{list_triggers}}` goes on showing it, as fired and with no next time. It does nothing more there, so take it out whenever you like. Writing a later time in its place arms it again.
 
+With `wake = false` a one-off is a reminder: its `reason` lands in your diary at that time, where your next turn in any thread finds it. That is the place for something you are waiting on for longer than the day your diary shows.
+
 A one-off gets no second try, so a check that fails is handled differently: see the end of this page.
 
 ## `user_back`
@@ -160,5 +163,5 @@ Triggers and checks stop while you are dormant. Nothing fires, no check runs, an
 - A check that fails gets you one diary entry from Shore saying how: its exit status with the first {{check_error_chars}} characters of what it wrote on stderr, or that it ran out of time. The check keeps being tried each time the trigger comes due, and you are told again only once it has worked and then failed again.
 - A one-off whose check fails isn't tried again. If it was to wake you, it wakes you anyway, and the wake says that the check failed and how. If it was only to leave an entry, the diary entry from Shore says that nothing will come of it.
 - `{{list_triggers}}` says of each check when it last ran and whether it printed nothing or failed, so a check that is quiet can be told from one that isn't running.
-- A trigger whose `thread` isn't a thread of yours, or is the one your heartbeats run in, wakes nothing, and a diary entry from Shore says so.
+- A trigger whose `thread` isn't a thread of yours, or is your own-time thread, wakes nothing, and a diary entry from Shore says so.
 - {{user}} can switch a single trigger off by name. `{{list_triggers}}` marks it, and it neither fires nor runs its check until they switch it back on.

@@ -27,13 +27,9 @@ export interface PersistedDream {
 export const NO_DREAM: PersistedDream = { turnsSince: 0, failures: 0, forced: false };
 
 export interface AutonomyStateFile {
-  readonly ticksWithoutUser: number;
-  readonly nextWakeAt: number | undefined;
+  readonly wakesWithoutUser: number;
   readonly lastUserAt: number | undefined;
-  readonly forcedDormant?: boolean;
-  readonly defaultWake?: boolean;
-  readonly wakeAnchorAt?: number;
-  readonly wakeReason?: string;
+  readonly forcedDormant: boolean;
   readonly coveredTurnCount: number;
   readonly keepalive: PersistedKeepalive | undefined;
   readonly dream?: PersistedDream;
@@ -53,13 +49,9 @@ export function encodeState(state: AutonomyStateFile): string {
   return JSON.stringify(
     {
       version: STATE_VERSION,
-      ticks_without_user: state.ticksWithoutUser,
-      next_wake_at: state.nextWakeAt === undefined ? null : toRfc3339(state.nextWakeAt),
+      ticks_without_user: state.wakesWithoutUser,
       last_user_at: state.lastUserAt === undefined ? null : toRfc3339(state.lastUserAt),
-      forced_dormant: state.forcedDormant === true,
-      default_wake: state.defaultWake === true,
-      wake_anchor_at: state.wakeAnchorAt === undefined ? null : toRfc3339(state.wakeAnchorAt),
-      wake_reason: state.wakeReason ?? null,
+      forced_dormant: state.forcedDormant,
       covered_turn_count: state.coveredTurnCount,
       keepalive_model: k?.model ?? null,
       keepalive_identity: k?.identity ?? null,
@@ -87,16 +79,15 @@ export function decodeState(raw: string): AutonomyStateFile | undefined {
   const o = parsed as Record<string, unknown>;
   if (o["version"] !== STATE_VERSION) return undefined;
 
-  const ticksWithoutUser = o["ticks_without_user"];
-  if (typeof ticksWithoutUser !== "number") return undefined;
+  const wakesWithoutUser = o["ticks_without_user"];
+  if (typeof wakesWithoutUser !== "number") return undefined;
 
   const coveredTurnCount = o["covered_turn_count"];
 
   return {
-    ticksWithoutUser,
-    nextWakeAt: timeField(o["next_wake_at"]),
+    wakesWithoutUser,
     lastUserAt: timeField(o["last_user_at"]),
-    ...wakeProvenance(o),
+    forcedDormant: o["forced_dormant"] === true,
     coveredTurnCount: typeof coveredTurnCount === "number" ? coveredTurnCount : 0,
     keepalive: keepaliveField(o),
     dream: dreamField(o),
@@ -126,17 +117,6 @@ function dreamField(o: Record<string, unknown>): PersistedDream {
     ...(retryAt === undefined ? {} : { retryAt }),
     failures: count(o["dream_failures"]),
     forced: o["dream_forced"] === true,
-  };
-}
-
-function wakeProvenance(o: Record<string, unknown>): Pick<AutonomyStateFile, "forcedDormant" | "defaultWake" | "wakeAnchorAt" | "wakeReason"> {
-  const wakeAnchorAt = timeField(o["wake_anchor_at"]);
-  const wakeReason = o["wake_reason"];
-  return {
-    ...(typeof wakeReason === "string" ? { wakeReason } : {}),
-    ...(o["forced_dormant"] === true ? { forcedDormant: true } : {}),
-    ...(o["default_wake"] === true ? { defaultWake: true } : {}),
-    ...(wakeAnchorAt === undefined ? {} : { wakeAnchorAt }),
   };
 }
 

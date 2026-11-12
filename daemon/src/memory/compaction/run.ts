@@ -11,7 +11,7 @@ import { conversationRef, type PriorContext } from "../../engine/segments.ts";
 import { loadCharacterConfig } from "../../config/loader.ts";
 import { resolvePromptTemplate } from "../../config/dirs.ts";
 import { MAIN_THREAD, archiveKey, characterDataDir, characterMemoryDir } from "../../config/dirs.ts";
-import { heartbeatThread, homeThread, readThreadsIndex, threadChatModel, threadRecord, homeThreadOf } from "../../engine/threads.ts";
+import { ownThread, homeThread, readThreadsIndex, threadChatModel, threadRecord, homeThreadOf } from "../../engine/threads.ts";
 import { resolveDisplayName, toolGrants } from "../../config/app.ts";
 import { resolveBackgroundModel, resolveChatModelForCharacter } from "../../config/preferences.ts";
 import { configView } from "../../config/preferences.ts";
@@ -196,8 +196,8 @@ export async function runCompactionPass(
   const dataDir = deps.config.dirs.data;
 
   const thread = options.thread ?? (await homeThreadOf(dataDir, character));
-  if (thread === heartbeatThread(await readThreadsIndex(dataDir, character))) {
-    throw CompactionError.heartbeatThread(character, thread);
+  if (thread === ownThread(await readThreadsIndex(dataDir, character))) {
+    throw CompactionError.ownThread(character, thread);
   }
 
   const guard = tryBeginCompaction(dataDir, character);
@@ -454,8 +454,7 @@ async function segmentPass(
   }
   const chatRequest = await resolveChatRequest(character, thread, archived.messages, effective,
     deps.tools?.mcpToolDefs?.(toolGrants(effective.app.tools)) ?? [], deps.env, { archived: archived.priorContext });
-  const { scheduleNextWake: _unscheduled, ...tools } = deps.tools ?? {};
-  const resolved = await resolveDeps(character, { ...deps, tools }, effective, thread, archived.messages, chatRequest.tools, false);
+  const resolved = await resolveDeps(character, deps, effective, thread, archived.messages, chatRequest.tools, false);
   const outcome = await compactSegment({
     segment,
     messages: archived.messages,

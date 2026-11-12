@@ -19,6 +19,7 @@ import type { Message } from "./types.ts";
 import { forgetThreadSessions } from "../llm/providers/agent_sessions.ts";
 import { archiveAndRetain } from "../memory/compaction/archive.ts";
 import { normalizePromptVisiblePath, normalizeWorkspacePath, pathComponents, WORKSPACE_LINK } from "../tools/workspace_path.ts";
+import { required } from "../util/required.ts";
 
 export const MAX_THREAD_ID_LENGTH = 64;
 
@@ -26,7 +27,7 @@ export const MAX_THREAD_FILES = 20;
 
 const THREAD_ID = /^[A-Za-z0-9][A-Za-z0-9._-]*$/;
 
-export type ThreadErrorKind = "invalid_id" | "invalid_files" | "invalid_folder" | "invalid_seal" | "exists" | "not_found" | "is_home" | "is_heartbeat" | "is_pinned" | "locked";
+export type ThreadErrorKind = "invalid_id" | "invalid_files" | "invalid_folder" | "invalid_seal" | "exists" | "not_found" | "is_home" | "is_own_time" | "is_pinned" | "locked";
 
 export class ThreadError extends Error {
   constructor(
@@ -87,9 +88,11 @@ export interface ThreadsIndex {
   folders?: ThreadFolder[];
 }
 
-const HEARTBEAT_THREAD = "heartbeat";
+const OWN_THREAD = "own-time";
 
-const HEARTBEAT_THREAD_LABEL = "Heartbeats";
+const OWN_THREAD_LABEL = "Own time";
+
+const OLD_OWN_THREAD_LABEL = "Heartbeats";
 
 export function defaultThreadsIndex(now: string): ThreadsIndex {
   return {
@@ -121,7 +124,7 @@ export function isAutonomousNote(message: Pick<Message, "role" | "origin">): boo
   return message.role !== "assistant" && message.origin === "autonomous";
 }
 
-export function isHeartbeatOpener(message: Pick<Message, "role" | "origin">): boolean {
+export function isWakeOpener(message: Pick<Message, "role" | "origin">): boolean {
   return message.role === "user" && isAutonomousNote(message);
 }
 
@@ -196,14 +199,14 @@ interface ActiveScan {
   latest: number;
   latestUser: number;
   replies: Reply[];
-  heartbeatTurn: boolean;
+  wakeTurn: boolean;
   seen: number;
   toolLoop: "none" | "tool_use" | "tool_result";
   reply: Reply | undefined;
 }
 
 function emptyScan(): ActiveScan {
-  return { turns: 0, latest: -Infinity, latestUser: -Infinity, replies: [], heartbeatTurn: false, seen: 0, toolLoop: "none", reply: undefined };
+  return { turns: 0, latest: -Infinity, latestUser: -Infinity, replies: [], wakeTurn: false, seen: 0, toolLoop: "none", reply: undefined };
 }
 
 function followToolLoop(scan: ActiveScan, line: unknown, at: number): void {
@@ -228,11 +231,11 @@ function scanInto(scan: ActiveScan, lines: readonly unknown[]): ActiveScan {
     const time = messageTime(line);
     if (isUserTurnLine(line)) {
       scan.turns += 1;
-      scan.heartbeatTurn = isHeartbeatOpener(line as Message);
-      if (time > scan.latestUser && !scan.heartbeatTurn) scan.latestUser = time;
+      scan.wakeTurn = isWakeOpener(line as Message);
+      if (time > scan.latestUser && !scan.wakeTurn) scan.latestUser = time;
     }
     followToolLoop(scan, line, at);
-    if (isReplyLine(line) && (!scan.heartbeatTurn || isUnpromptedLine(line)) && scan.reply !== undefined) scan.reply.time = time;
+    if (isReplyLine(line) && (!scan.wakeTurn || isUnpromptedLine(line)) && scan.reply !== undefined) scan.reply.time = time;
     if (time > scan.latest) scan.latest = time;
   }
   return scan;
@@ -329,7 +332,7 @@ export function homeThread(index: ThreadsIndex | undefined): string {
   return threadRecord(index, index.home) === undefined ? MAIN_THREAD : index.home;
 }
 
-export function heartbeatThread(index: ThreadsIndex | undefined): string | undefined {
+export function ownThread(index: ThreadsIndex | undefined): string | undefined {
   const id = index?.heartbeat;
   if (index === undefined || id === undefined || threadRecord(index, id) === undefined) return undefined;
   return id === homeThread(index) ? undefined : id;
@@ -494,27 +497,28 @@ export async function createThread(
   return next;
 }
 
-export async function ensureHeartbeatThread(
+export async function ensureOwnThread(
   data: string,
   character: string,
   now: string,
 ): Promise<{ index: ThreadsIndex; created: boolean }> {
   const index = await ensureThreads(data, character, now);
-  const existing = heartbeatThread(index);
+  const existing = ownThread(index);
   if (existing !== undefined) {
-    const record = threadRecord(index, existing);
-    if (record === undefined || !record.compaction) return { index, created: false };
-    const trimmed = replaceThread(index, { ...record, compaction: false });
-    await writeThreadsIndex(data, character, trimmed);
-    return { index: trimmed, created: false };
+    const record = required(threadRecord(index, existing));
+    const relabelled = record.label === OLD_OWN_THREAD_LABEL ? { label: OWN_THREAD_LABEL } : {};
+    const stale = record.compaction || record.label === OLD_OWN_THREAD_LABEL;
+    const kept = stale ? replaceThread(index, { ...record, compaction: false, ...relabelled }) : index;
+    if (stale) await writeThreadsIndex(data, character, kept);
+    return { index: kept, created: false };
   }
-  let id = HEARTBEAT_THREAD;
-  for (let n = 2; threadRecord(index, id) !== undefined; n += 1) id = `${HEARTBEAT_THREAD}-${String(n)}`;
+  let id = OWN_THREAD;
+  for (let n = 2; threadRecord(index, id) !== undefined; n += 1) id = `${OWN_THREAD}-${String(n)}`;
   await mkdir(threadDataDir(data, character, id), { recursive: true });
   const next: ThreadsIndex = {
     ...index,
     heartbeat: id,
-    threads: [...index.threads, { id, label: HEARTBEAT_THREAD_LABEL, created_at: now, compaction: false }],
+    threads: [...index.threads, { id, label: OWN_THREAD_LABEL, created_at: now, compaction: false }],
   };
   await writeThreadsIndex(data, character, next);
   return { index: next, created: true };
@@ -540,8 +544,8 @@ export async function setHomeThread(
 ): Promise<ThreadsIndex> {
   const index = await ensureThreads(data, character, now);
   requireThread(index, character, id);
-  if (id === heartbeatThread(index)) {
-    throw new ThreadError("is_heartbeat", `thread ${JSON.stringify(id)} is where ${character}'s heartbeats run, so it can't be home`);
+  if (id === ownThread(index)) {
+    throw new ThreadError("is_own_time", `thread ${JSON.stringify(id)} is where ${character}'s own time runs, so it can't be home`);
   }
   const next: ThreadsIndex = { ...index, home: id };
   await writeThreadsIndex(data, character, next);
@@ -629,8 +633,8 @@ export async function setThreadCompaction(
 ): Promise<ThreadsIndex> {
   const index = await ensureThreads(data, character, now);
   const record = requireThread(index, character, id);
-  if (compaction && id === heartbeatThread(index)) {
-    throw new ThreadError("is_heartbeat", `thread ${JSON.stringify(id)} is where ${character}'s heartbeats run, and a heartbeat thread never compacts`);
+  if (compaction && id === ownThread(index)) {
+    throw new ThreadError("is_own_time", `thread ${JSON.stringify(id)} is where ${character}'s own time runs, and that thread never compacts`);
   }
   const next = replaceThread(index, { ...record, compaction });
   await writeThreadsIndex(data, character, next);

@@ -7,10 +7,8 @@ import triggersText from "../../prompts/guide/triggers.md" with { type: "text" }
 import wakesText from "../../prompts/guide/wakes.md" with { type: "text" };
 
 import { DIARY_KEPT, DIARY_NOTE_CHARS, DIARY_SHOWN, DIARY_WINDOW_MS } from "../autonomy/diary.ts";
-import { HEARTBEAT_TIME_LIMIT_MS, HEARTBEAT_WRAP_UP_MS } from "../autonomy/heartbeat_loop.ts";
-import { wakeToolNotes } from "../autonomy/heartbeat_shape.ts";
 import { PUSH_CHARS } from "../autonomy/push.ts";
-import { WAKE_QUIET_MS } from "../autonomy/runner.ts";
+import { DEFAULT_WAKE_LIMIT_MS, WAKE_QUIET_MS } from "../autonomy/runner.ts";
 import { CHECK_ERROR_CHARS, CHECK_OUTPUT_CHARS } from "../autonomy/trigger_check.ts";
 import { arrivalCheckLimitMs } from "../autonomy/trigger_loop.ts";
 import { triggerSettings } from "../autonomy/trigger_service.ts";
@@ -53,36 +51,26 @@ function either(holds: boolean, whenTrue: string, whenFalse: string): [string, s
   return [holds ? whenTrue : whenFalse, "yes"];
 }
 
-export function guideValues(config: LoadedConfig, character: string, userName: string): Map<string, string> {
+export function guideValues(config: LoadedConfig, userName: string): Map<string, string> {
   const { autonomy, presence } = config.app.behavior;
-  const { heartbeat } = autonomy;
   const { notifications } = config.app;
-  const triggers = triggerSettings(autonomy);
-  const wake = wakeToolNotes(config, character);
+  const triggers = triggerSettings(config.app);
   const statuses = presence.statuses.map((status) => `\`${status}\``).join(", ");
-  const defaultMs = Math.min(Math.max(heartbeat.default_interval.asMillis(), heartbeat.min_interval.asMillis()), heartbeat.max_interval.asMillis());
   return new Map([
     ["user", userName],
-    either(autonomy.enabled, "own_time_on", "own_time_off"),
-    either(triggers.enabled, "triggers_on", "triggers_off"),
+    either(triggers.enabled, "own_time_on", "own_time_off"),
+    either(triggers.checks, "checks_on", "checks_off"),
     ["wake_cooldown", span(triggers.wakeCooldownMs)],
     ["check_time_limit", span(triggers.checkLimitMs)],
     ["arrival_check_limit", span(arrivalCheckLimitMs(triggers.checkLimitMs))],
     ["max_wake_limit", span(triggers.maxWakeLimitMs)],
-    ["default_wake_limit", span(HEARTBEAT_TIME_LIMIT_MS)],
+    ["default_wake_limit", span(DEFAULT_WAKE_LIMIT_MS)],
     ["check_output_chars", count(CHECK_OUTPUT_CHARS)],
     ["check_error_chars", count(CHECK_ERROR_CHARS)],
-    ["min_interval", heartbeat.min_interval.toString()],
-    ["max_interval", heartbeat.max_interval.toString()],
-    ["default_interval", span(defaultMs)],
-    either(wake.defers, "wake_defers", "wake_stays"),
-    either(wake.reasonShown, "wake_reason_shown", "wake_reason_logged"),
-    ["heartbeat_limit", span(HEARTBEAT_TIME_LIMIT_MS)],
-    ["heartbeat_nudge_after", span(HEARTBEAT_TIME_LIMIT_MS - HEARTBEAT_WRAP_UP_MS)],
-    ["wrap_up_rounds", String(heartbeat.wrap_up_grace_rounds)],
+    ["wrap_up_rounds", String(autonomy.triggers.max_wrap_up_rounds)],
     ["wake_quiet", span(WAKE_QUIET_MS)],
-    ["dormant_after_turns", String(heartbeat.dormant_after_heartbeat_turns)],
-    ["dormant_after_idle", heartbeat.dormant_after_idle_time.toString()],
+    ["dormant_after_wakes", String(autonomy.triggers.max_idle_wakes)],
+    ["dormant_after_idle", autonomy.triggers.idle_timeout.toString()],
     ["diary_note_chars", count(DIARY_NOTE_CHARS)],
     ["diary_window", span(DIARY_WINDOW_MS)],
     ["diary_shown", String(DIARY_SHOWN)],

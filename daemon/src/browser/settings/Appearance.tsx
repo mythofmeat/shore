@@ -18,7 +18,7 @@ const TOGGLES: readonly { key: ViewKey; description: string }[] = [
   { key: "compaction", description: "Show a notice while the thread is being compacted." },
 ];
 
-const NOTIFY_DESCRIPTION = "When this tab isn’t focused, show a desktop notification and a count in the tab title for new replies, heartbeat messages and errors.";
+const NOTIFY_DESCRIPTION = "When this tab isn’t focused, show a desktop notification and a count in the tab title for new replies, messages sent from wakes, and errors.";
 const NOTIFY_NOTES: Partial<Record<NotifyPermission, string>> = {
   unavailable: "This browser only allows desktop notifications over HTTPS or localhost, so only the tab title count is shown.",
   denied: "Notifications are blocked for this site in the browser’s settings, so only the tab title count is shown.",

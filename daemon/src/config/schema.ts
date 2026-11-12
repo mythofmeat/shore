@@ -202,7 +202,7 @@ function modelInfo(field: string): ConfigTypeInfo {
 const PLAN_LIMIT_DESCRIPTIONS: Record<string, string> = {
   warn_fractions: "Claude plan utilization fractions that trigger warnings (0.8 means 80% of the window).",
   limit_fraction: "Claude plan utilization fraction at which limit_action applies; 1.0 is the whole window.",
-  limit_action: "What reaching limit_fraction does to calls on the Claude subscription: warn, block, pause_background or pause_heartbeat.",
+  limit_action: "What reaching limit_fraction does to calls on the Claude subscription: warn, block, pause_background or pause_wakes, which pauses the character's wakes.",
 };
 
 const DREAMING_DESCRIPTIONS: Record<string, string> = {
@@ -218,10 +218,14 @@ const DREAMING_DESCRIPTIONS: Record<string, string> = {
 };
 
 const TRIGGER_DESCRIPTIONS: Record<string, string> = {
-  enabled: "Run the triggers the character keeps in TRIGGERS.toml in its workspace: schedules, things that happen and checks, each of which wakes it or leaves it a diary entry. A check is a command run as the character with no model call. Off by default, and needs heartbeats on.",
+  enabled: "Give the character time of its own. It is woken by the triggers it keeps in TRIGGERS.toml in its workspace, which are schedules, things that happen and checks, and by nothing else. A check is a command run as the character with no model call, and needs it to have the bash tool. Compaction after compaction.idle_after and the deep archive wait on this switch too. Off by default.",
+  model: "Model wakes run on, as provider:model_id. Unset runs a wake on the chat model of the thread it runs in, and on the home thread's when its trigger names no thread.",
   wake_cooldown: "Least time between two wakes from the same trigger, unless the trigger sets its own cooldown. A trigger that comes due sooner waits, and its check isn't run until then. Defaults to 1h.",
   check_time_limit: "Longest a trigger's check may run before it is stopped and counted as failed. Defaults to 60s.",
-  max_wake_limit: "Longest a wake in a thread may run, whatever limit the character's trigger asks for. A plain heartbeat keeps its own 30 minutes. Defaults to 2h.",
+  max_wake_limit: "Longest a wake may run, whatever limit the character's trigger asks for. A trigger that asks for none gets 30 minutes. Defaults to 2h.",
+  max_wrap_up_rounds: "Rounds of tool use a wake still gets once it has been told to wrap up. Defaults to 3.",
+  max_idle_wakes: "Wakes in a row with no message from the user before the character goes dormant, so that nothing wakes it until the user writes again. Defaults to 3.",
+  idle_timeout: "Time since the user's last message after which the character goes dormant. Defaults to 2d.",
   off: "Names of triggers that are switched off: they don't fire and their checks don't run until the name is taken out again.",
 };
 
@@ -273,10 +277,6 @@ function describeOption(path: readonly string[]): string {
     enabled: "Enable this feature or select the names granted access.",
     mcp: "MCP servers granted by name; each grants every tool of that [mcp.<name>] server.",
     bearer_token_env: "Environment variable holding a bearer token sent as the Authorization header; HTTP servers only.",
-    default_interval: "Time until the next heartbeat when the character does not schedule one.",
-    min_interval: "Shortest time before any heartbeat, measured from the last heartbeat or daemon start, and with defer_on_activity also from the user's last message or the end of the last reply.",
-    defer_on_activity: "Push the next heartbeat to at least min_interval after each message from the user and the end of each reply, in any thread. Off by default, so only heartbeats space each other.",
-    max_interval: "Longest time the character may schedule its next heartbeat.",
     via: "Notification delivery method; off disables delivery.",
     events: "Notification events to deliver; a list replaces the inherited selection.",
     discover: "Discover this provider's models; false by default.",
@@ -294,7 +294,7 @@ function describeOption(path: readonly string[]): string {
     pass_env: "Environment variables of the daemon's that a character with its own tools.user gets. It gets no others besides its locale and time zone.",
     no_new_privs: "Whether a character with its own tools.user runs its commands under no_new_privs, which stops sudo and other setuid programs from raising privileges. True by default; false only takes effect when the daemon itself runs without NoNewPrivileges.",
     image_cache_bytes: "Most bytes the image cache keeps for every character together: images users send, their reduced copies and images tools return. Past it the least recently used go first; an image a model request read in the last hour stays. Defaults to 512 MiB.",
-    shutdown_grace: "How long a stopping daemon waits for replies, heartbeats and compactions already running before it stops anyway. New messages are refused meanwhile, and a second stop signal stops at once. Defaults to 29m, which covers 90% of heartbeat turns and leaves a minute of a 30m Docker stop_grace_period for the exit itself.",
+    shutdown_grace: "How long a stopping daemon waits for replies, wakes and compactions already running before it stops anyway. New messages are refused meanwhile, and a second stop signal stops at once. Defaults to 29m, which leaves a minute of a 30m Docker stop_grace_period for the exit itself.",
     cost_usd: "Spending ceiling in US dollars for this budget window.",
     allow_compaction: "Allow compaction to exceed this budget's ceiling.",
     warn_fractions: "Budget fractions that trigger warnings (0.9 means 90%).",

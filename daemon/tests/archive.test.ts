@@ -257,11 +257,14 @@ describe("character archives", () => {
     expect(await readdir(join(target.cache, "archive-transfers"))).toEqual([]);
   });
 
-  test("a backup restores every missing character and global file and leaves what exists alone", async () => {
+  test("a backup restores every missing character and global file, a [heartbeat] section in one read as [triggers], and leaves what exists alone", async () => {
     const source = await root("backup-source");
     await seedCharacter(source, "ada", "ada history"); await seedCharacter(source, "bea", "bea in the backup");
     await mkdir(join(source.config, "prompts")); await writeFile(join(source.config, "prompts", "style.md"), "be brief\n");
     await writeFile(join(source.config, "config.toml"), "[chat]\nmodel = \"openai:from-backup\"\n");
+    await mkdir(join(source.config, "conf.d"));
+    await writeFile(join(source.config, "conf.d", "10-own-time.toml"), '[heartbeat]\nenabled = true\nmin_interval = "4h"\nmax_idle_turns = 9\n');
+    await writeFile(join(source.config, "conf.d", "notes.txt"), "[heartbeat]\nenabled = true\n");
     await mkdir(join(source.data, "preferences")); await writeFile(join(source.data, "preferences", "models.toml"), "favorites = []\n");
     const sending = spooling(source, new Set(["ada", "bea"]), 1);
     const backup = await exportBackup(sending);
@@ -271,8 +274,10 @@ describe("character archives", () => {
     await writeFile(join(target.config, "config.toml"), "[chat]\nmodel = \"openai:kept\"\n");
     const receiving = spooling(target, new Set(["bea"]), 2);
     expect(await importArchive(receiving, { transfer: await uploaded(receiving, await download(sending, backup.transfer)) })).toEqual({
-      characters: ["ada"], skipped: ["bea"], restored: ["config/prompts/style.md", "data/preferences/models.toml"], kept: ["config/config.toml"],
+      characters: ["ada"], skipped: ["bea"], restored: ["config/conf.d/10-own-time.toml", "config/conf.d/notes.txt", "config/prompts/style.md", "data/preferences/models.toml"], kept: ["config/config.toml"],
     });
+    expect(await readFile(join(target.config, "conf.d", "10-own-time.toml"), "utf8")).toBe("[triggers]\nenabled = true\nmax_idle_wakes = 9\n");
+    expect(await readFile(join(target.config, "conf.d", "notes.txt"), "utf8")).toBe("[heartbeat]\nenabled = true\n");
     expect(await readFile(join(target.config, "config.toml"), "utf8")).toContain("openai:kept");
     expect(await readFile(join(target.config, "prompts", "style.md"), "utf8")).toBe("be brief\n");
     expect(await readFile(join(target.config, "characters", "ada", "config.toml"), "utf8")).toContain("openai:gpt-test");
@@ -372,19 +377,21 @@ describe("character archives", () => {
     }
   });
 
-  test("a gzipped backup holding gzipped character archives still restores", async () => {
+  test("a gzipped backup holding gzipped character archives still restores, with a config from when Shore had heartbeats brought up to date", async () => {
     const source = await root("gzip-backup-source"); await seedCharacter(source, "ada", "ada from a gzipped backup");
     const stage = join(source.runtime, "backup"); await mkdir(join(stage, "characters"), { recursive: true }); await mkdir(join(stage, "config")); await mkdir(join(stage, "data"));
     const inner = join(source.runtime, "ada.shore.tar");
     await exportCharacter(context(source, new Set(["ada"])), { character: "ada", output: inner });
     await writeFile(join(stage, "characters", "ada.shore.tar.gz"), Bun.gzipSync(await readFile(inner)));
     await writeFile(join(stage, "manifest.json"), JSON.stringify({ format: "shore-backup", version: 1, created_at: "2026-10-20T00:00:00Z", characters: ["ada"] }));
+    await writeFile(join(stage, "config", "config.toml"), '[heartbeat]\nenabled = true\ndefault_interval = "24h"\n');
     const backup = join(source.runtime, "shore-backup.tar.gz");
     await create({ cwd: stage, file: backup, gzip: true, portable: true }, ["manifest.json", "config", "data", "characters"]);
     const target = await root("gzip-backup-target");
     const receiving = spooling(target, new Set(), 2);
     expect(await importArchive(receiving, { transfer: await uploaded(receiving, await readFile(backup)) }))
-      .toEqual({ characters: ["ada"], skipped: [], restored: [], kept: [] });
+      .toEqual({ characters: ["ada"], skipped: [], restored: ["config/config.toml"], kept: [] });
+    expect(await readFile(join(target.config, "config.toml"), "utf8")).toBe("[triggers]\nenabled = true\n");
     const history = HistoryStore.open(join(target.data, "shore.db"));
     try { expect(history.readSegment("ada", 0)[0]?.content).toBe("ada from a gzipped backup"); }
     finally { history.close(); }

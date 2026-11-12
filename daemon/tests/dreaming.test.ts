@@ -150,17 +150,17 @@ function putSegment(dataDir: string, archiveKey: string, idx: number, compactedA
   }
 }
 
-test("a dream is shown only what was archived since the last one, outside the heartbeat thread and not excluded", async () => {
+test("a dream is shown only what was archived since the last one, outside the own-time thread and not excluded", async () => {
   const dataDir = await mkdtemp(testTmp("shore-dreaming-manifest-"));
   await mkdir(join(dataDir, "ada", "threads", "main"), { recursive: true });
   const since = Date.parse("2026-11-05T00:00:00Z");
   putSegment(dataDir, "ada", 0, since - HOUR);
   putSegment(dataDir, "ada", 1, since + HOUR, { memory_before: "1111111aaaa", memory_after: "2222222bbbb" });
   putSegment(dataDir, "ada", 2, since + 2 * HOUR, { excluded: true });
-  putSegment(dataDir, "ada/heartbeat", 0, since + HOUR);
+  putSegment(dataDir, "ada/own-time", 0, since + HOUR);
   putSegment(dataDir, "ada/garden", 0, since + 3 * HOUR, { memory_before: "3333333cccc", memory_after: "3333333cccc", toolTurns: 2 });
 
-  const found = await conversationsSince(dataDir, "ada", since, new Set(["heartbeat"]));
+  const found = await conversationsSince(dataDir, "ada", since, new Set(["own-time"]));
   expect(found.map((conversation) => [conversation.thread, conversation.segment])).toEqual([["main", 1], ["garden", 0]]);
   expect(found.map((conversation) => conversation.turns)).toEqual([1, 3]);
 
@@ -225,7 +225,7 @@ async function afterOneChat(seen: SidecarRequest[], dream: DreamScript, tune: (a
     name: "dreaming",
     keyEnv: KEY_ENV,
     provider: provider(seen, dream),
-    tools: ["read", "bash", "set_next_wake", "start_thread"],
+    tools: ["read", "bash", "wake_in_thread", "start_thread"],
     models: ["fixture", "small"],
     tune: (app, models) => {
       app.defaults.display_name = "eve";
@@ -277,12 +277,13 @@ test("a dream asked for works on the current files, not the home thread's frozen
     expect(systemText(opening)).not.toContain("before the chat");
     const offered = (opening.tools ?? []).map((tool) => tool.name);
     expect(offered).toContain("bash");
-    expect(offered).not.toContain("set_next_wake");
+    expect(offered).not.toContain("wake_in_thread");
     expect(offered).not.toContain("start_thread");
     const instructions = instructionsOf(opening);
     expect(instructions).toContain("thread `main`");
     expect(instructions).toContain(`..${head.slice(0, 7)}.`);
     expect(instructions).toContain("`SOUL.md`: read once");
+    expect(instructions).toContain("You have 90 minutes, and after 80 minutes you'll be told to wrap up.");
 
     const record = required(lastDream(characterDir));
     expect(record.outcome).toBe("finished");
@@ -367,7 +368,7 @@ test("a running dream lets a snapshot through between calls, can't be queued twi
     await runtime.autonomy.tick();
     await called;
 
-    const report = runningReport({ dataDir: config.dirs.data, generations: () => [], heartbeats: () => [], dreams: () => runtime.autonomy.runningDreams(), shutdown: () => undefined });
+    const report = runningReport({ dataDir: config.dirs.data, generations: () => [], wakes: () => [], dreams: () => runtime.autonomy.runningDreams(), shutdown: () => undefined });
     expect(report.work.map((item) => [item.kind, item.character])).toEqual([["dream", "ada"]]);
     expect(await runtime.snapshotGate.withSnapshot(async () => "taken")).toBe("taken");
     expect(runtime.autonomy.forceDreamNow("ada")).toBe("running");
@@ -384,7 +385,7 @@ test("a running dream lets a snapshot through between calls, can't be queued twi
   });
 });
 
-test("a dream runs on the chat model whatever heartbeats use, and counts only the commits it made itself", async () => {
+test("a dream runs on the chat model whatever wakes use, and counts only the commits it made itself", async () => {
   const seen: SidecarRequest[] = [];
   let workspaceDir = "";
   await afterOneChat(seen, (_request, round) => {
@@ -471,7 +472,7 @@ test("a wildcard grant never gives a dream a left-out tool, and a list of its ow
   const open = dreamToolsConfig(tools, undefined);
   expect(open.enabled_tools).toContain("read");
   expect(open.enabled_tools).toContain("bash");
-  for (const name of ["set_next_wake", "start_thread", "edit_thread", "list_threads", "generate_image", "guide"]) {
+  for (const name of ["wake_in_thread", "list_triggers", "write_diary", "start_thread", "edit_thread", "list_threads", "generate_image", "guide"]) {
     expect(open.enabled_tools).not.toContain(name);
   }
   expect(open.enabled_mcp).toEqual([]);
@@ -525,8 +526,8 @@ test("a dream's first call may start cold, but a follow-up that loses its cache 
 });
 
 function leaveNote(characterDir: string, id: string, at: number, text: string): DiaryNote {
-  addDiaryNote(characterDir, { at, thread: "heartbeat", source: "heartbeat", text }, () => id);
-  return { id, at: new Date(at).toISOString(), thread: "heartbeat", source: "heartbeat", text };
+  addDiaryNote(characterDir, { at, thread: "own-time", source: "wake", text }, () => id);
+  return { id, at: new Date(at).toISOString(), thread: "own-time", source: "wake", text };
 }
 
 test("a dream ends its instructions with the diary notes no finished dream has been shown, however old they are", async () => {
@@ -547,7 +548,7 @@ test("a dream ends its instructions with the diary notes no finished dream has b
     expect(shown).toEndWith(`kept as this dream's record.\n\n${diaryText([march], DIARY_FOR_DREAM, hostZone())}`);
     expect(shown).toContain(
       "[Your diary since your last dream. Each entry says where it came from. " +
-      "Fold what matters into your files, because once this dream finishes, later dreams aren't shown these entries.]\n\nyour note at the end of a heartbeat · ",
+      "Fold what matters into your files, because once this dream finishes, later dreams aren't shown these entries.]\n\nyour note at the end of a wake in \"own-time\" · ",
     );
 
     const april = leaveNote(characterDir, "d2", Date.now() - HOUR, "April is next.");

@@ -10,7 +10,7 @@ import type { ServerMessage } from "../protocol/ServerMessage.ts";
 import type { Error as ProtocolError } from "../protocol/Error.ts";
 import type { RequestOutcome } from "../protocol/RequestOutcome.ts";
 import { sanitiseRid } from "../swp/admission.ts";
-import { HeartbeatThreadError, ImagesUnsupportedError, NoModelError, WakeTurnError } from "./setup.ts";
+import { OwnThreadError, ImagesUnsupportedError, NoModelError, WakeTurnError } from "./setup.ts";
 import { CommandError } from "../commands/errors.ts";
 import {
   isControlRoutedMessage,
@@ -44,7 +44,7 @@ function generationErrorCode(error: unknown): ErrorCode {
     error instanceof NoModelError ||
     error instanceof CharacterConfigError ||
     error instanceof ImagesUnsupportedError ||
-    error instanceof HeartbeatThreadError ||
+    error instanceof OwnThreadError ||
     error instanceof WakeTurnError ||
     error instanceof CommandError
   ) {

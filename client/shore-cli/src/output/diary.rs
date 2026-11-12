@@ -178,9 +178,9 @@ mod tests {
 
     #[test]
     fn each_note_says_where_it_came_from_and_keeps_its_own_lines() {
-        let trigger = json!({ "at": "dusk", "thread": "heartbeat", "source": "trigger", "trigger": "mail check", "text": "Two letters.", "shown": true, "dreamed": false });
+        let trigger = json!({ "at": "dusk", "thread": "own-time", "source": "trigger", "trigger": "mail check", "text": "Two letters.", "shown": true, "dreamed": false });
         let data = json!({ "character": "ada", "kept": 6, "notes": [
-            note("dawn", "heartbeat", "heartbeat", "The lamp is lit."),
+            note("dawn", "wake", "own-time", "The lamp is lit."),
             note("noon", "note", "main", "Ferry times.\n\n- Friday\n  - back by ten"),
             note("three", "wake", "ring", "Told part one."),
             trigger,
@@ -192,7 +192,7 @@ mod tests {
             [
                 "\u{2500}\u{2500} diary (ada, 6 notes) \u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}",
                 "",
-                "  dawn            heartbeat",
+                "  dawn            wake in \"own-time\"",
                 "    The lamp is lit.",
                 "",
                 "  noon            note in \"main\"",
@@ -220,15 +220,15 @@ mod tests {
 
     #[test]
     fn the_heading_counts_the_notes_and_says_when_older_ones_were_left_out() {
-        let one = json!({ "character": "ada", "kept": 1, "notes": [note("dawn", "heartbeat", "heartbeat", "a")] });
+        let one = json!({ "character": "ada", "kept": 1, "notes": [note("dawn", "wake", "own-time", "a")] });
         assert!(
             written(&one, 40).starts_with("\u{2500}\u{2500} diary (ada, 1 note) \u{2500}"),
             "{}",
             written(&one, 40)
         );
         let two = [
-            note("dawn", "heartbeat", "heartbeat", "a"),
-            note("noon", "heartbeat", "heartbeat", "b"),
+            note("dawn", "wake", "own-time", "a"),
+            note("noon", "wake", "own-time", "b"),
         ];
         let some = json!({ "character": "ada", "kept": 5, "notes": two });
         assert!(
@@ -308,7 +308,7 @@ mod tests {
             "one two three four five six seven\n{wide}\n{}",
             "x".repeat(20)
         );
-        let data = json!({ "character": "ada", "kept": 1, "notes": [note("dawn", "heartbeat", "heartbeat", &text)] });
+        let data = json!({ "character": "ada", "kept": 1, "notes": [note("dawn", "wake", "own-time", &text)] });
         let body: Vec<String> = written(&data, 20)
             .lines()
             .skip_while(|line| !line.starts_with("    one"))

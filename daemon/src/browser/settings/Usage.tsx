@@ -28,7 +28,7 @@ function BudgetBar({ budget }: { budget: UsageBudget }) {
   </div>;
 }
 
-const PLAN_ACTIONS = { warn: "warns only", block: "blocks Claude calls", pause_background: "pauses background work", pause_heartbeat: "pauses the heartbeat" } as const;
+const PLAN_ACTIONS = { warn: "warns only", block: "blocks Claude calls", pause_background: "pauses background work", pause_wakes: "pauses wakes" } as const;
 
 function PlanLimitBar({ limit }: { limit: ClaudePlanLimit }) {
   const used = limit.percent_used * 100;

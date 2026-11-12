@@ -214,7 +214,7 @@ describe("browser authentication boundary", () => {
     await denied.closed;
     expect(denied.messages).toEqual([]);
     const { cookie, response, info } = await f.login();
-    expect(info).toMatchObject({ contract: WEB_CONTRACT, protocol: 3, max_pending_requests: 32 });
+    expect(info).toMatchObject({ contract: WEB_CONTRACT, protocol: 4, max_pending_requests: 32 });
     expect(JSON.stringify(info)).not.toContain(TOKEN);
     expect(response.headers.get("set-cookie")).toContain("HttpOnly");
     expect(response.headers.get("set-cookie")).toContain("SameSite=Strict");

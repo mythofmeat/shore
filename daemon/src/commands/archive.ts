@@ -14,6 +14,7 @@ import { pipeline } from "node:stream/promises";
 import { create, extract, type Unpack } from "tar";
 
 import type { ShoreDirs } from "../config/dirs.ts";
+import { withCurrentNames } from "../config/old_sections.ts";
 import {
   SOUL_FILE,
   characterCacheDir,
@@ -230,9 +231,20 @@ export async function importArchive(ctx: ArchiveContext, args: Args): Promise<Ar
   }
 }
 
+async function bringConfigUpToDate(dir: string): Promise<void> {
+  const added = await readdir(join(dir, "conf.d")).catch(() => []);
+  for (const file of [join(dir, "config.toml"), ...added.filter((name) => name.endsWith(".toml")).map((name) => join(dir, "conf.d", name))]) {
+    if (!await exists(file)) continue;
+    const written = await readFile(file, "utf8");
+    const current = withCurrentNames(written);
+    if (current !== written) await writeFile(file, current, "utf8");
+  }
+}
+
 async function restoreBackup(ctx: ArchiveContext, stage: string, manifest: BackupManifest, scratch: string): Promise<ArchiveImported> {
   const restored: string[] = [];
   const kept: string[] = [];
+  await bringConfigUpToDate(join(stage, "config"));
   await restoreMissing(join(stage, "config"), ctx.dirs.config, "config", restored, kept);
   await restoreMissing(join(stage, "data"), ctx.dirs.data, "data", restored, kept);
   return await restoreCharacters(ctx, manifest.characters, scratch, restored, kept, async (name, inner) => {
@@ -278,6 +290,7 @@ async function restoreTree(ctx: ArchiveContext, stage: string, manifest: TreeMan
   if (!await exists(join(stage, DATABASE_ENTRY))) throw invalidRequest(`The backup has no ${DATABASE_ENTRY}`);
   const restored: string[] = [];
   const kept: string[] = [];
+  await bringConfigUpToDate(join(stage, "config"));
   await restoreMissing(join(stage, "config"), ctx.dirs.config, "config", restored, kept, new Set(["characters"]));
   for (const name of BACKUP_DATA) {
     const source = join(stage, "data", name);
@@ -640,6 +653,7 @@ async function installCharacter(ctx: ArchiveContext, stage: string, character: s
   let imported = false;
   try {
     await mkdir(dirname(configTarget), { recursive: true });
+    await bringConfigUpToDate(join(stage, "config"));
     if (await hasEntries(join(stage, "config"))) {
       await cp(join(stage, "config"), configTarget, copyOptions());
       created.push(configTarget);

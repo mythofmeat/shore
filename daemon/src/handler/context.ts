@@ -13,7 +13,7 @@ import {
   type ResolvedModel,
 } from "../config/models.ts";
 import { assemblePrompt, type AssembledPrompt, type ThreadPrompt } from "../engine/prompt.ts";
-import { heartbeatThread, homeThread, readThreadsIndexIn, threadRecord } from "../engine/threads.ts";
+import { ownThread, homeThread, readThreadsIndexIn, threadRecord } from "../engine/threads.ts";
 import type { PriorContext } from "../engine/segments.ts";
 import type { Message } from "../engine/types.ts";
 import {
@@ -33,7 +33,6 @@ import type { SystemBlock, ToolDefinition, WireMessage } from "../llm/types.ts";
 import { toCredentialsEntry } from "../config/providers.ts";
 import { characterWorkspace } from "../tools/character_workspace.ts";
 import { assembleToolSurface, renderToolDefs, subagentToolDefs } from "../tools/registry.ts";
-import { wakeToolNotes } from "../autonomy/heartbeat_shape.ts";
 import { withoutWakeWorking } from "../autonomy/wake_working.ts";
 import { assistantImageModeForRequest, buildLlmMessages } from "./wire_messages.ts";
 
@@ -90,7 +89,7 @@ async function threadPrompt(
   return {
     id: record.id,
     home,
-    heartbeat: record.id === heartbeatThread(index),
+    own: record.id === ownThread(index),
     created_at: record.created_at,
     started_by_you: record.created_by === "character",
     label: record.label,
@@ -184,7 +183,7 @@ export async function prepareChatContext(
 
   const toolDefs = toolsAvailable
     ? assembleToolSurface(
-        renderToolDefs(config.app.tools, character, displayName, wakeToolNotes(config, character)),
+        renderToolDefs(config.app.tools, character, displayName),
         subagentToolDefs(
           config.app.subagents,
           config.app.tools.enabled_subagents,

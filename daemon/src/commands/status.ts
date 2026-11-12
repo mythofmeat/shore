@@ -62,21 +62,14 @@ export const untilSecs = (at: number, now: number): number => Math.trunc((at - n
 const sinceSecs = (at: number, now: number): number => Math.max(0, Math.trunc((now - at) / 1000));
 
 export function autonomyWire(autonomy: AutonomyStatus, now: number): AutonomyStatusReport {
-  const wake = autonomy.next_wake_at;
   const user = autonomy.last_user_at;
   return {
-    heartbeat_state: autonomy.heartbeat_state,
-    ticks_without_user: autonomy.ticks_without_user,
-    dormant_after_heartbeat_turns: autonomy.max_idle_ticks,
-    default_interval_secs: asSecs(autonomy.default_interval_ms),
-    ...(wake === undefined
-      ? {}
-      : { next_wake_at: rfc3339(wake), seconds_until_wake: untilSecs(wake, now) }),
+    state: autonomy.state,
+    wakes_without_user: autonomy.wakes_without_user,
+    dormant_after_wakes: autonomy.max_idle_wakes,
     ...(user === undefined
       ? {}
       : { last_user_at: rfc3339(user), seconds_since_user: sinceSecs(user, now) }),
-    min_interval_secs: asSecs(autonomy.min_interval_ms),
-    max_interval_secs: asSecs(autonomy.max_interval_ms),
     dormant_after_idle_time_secs: asSecs(autonomy.max_silent_ms),
     recent_events: autonomy.recent_events,
   };
@@ -220,7 +213,7 @@ const noState = (character: string): Error =>
   invalidRequest(`No autonomy state for character '${character}'`);
 
 export function heartbeatTickNow(ctx: StatusContext): OperationResult<"heartbeat_tick_now"> {
-  const dormant = ctx.autonomy.forceHeartbeatNow(ctx.characterName);
+  const dormant = ctx.autonomy.wakeNow(ctx.characterName);
   if (dormant === undefined) throw noState(ctx.characterName);
   return {
     status: "scheduled",
@@ -228,23 +221,22 @@ export function heartbeatTickNow(ctx: StatusContext): OperationResult<"heartbeat
     ...(dormant
       ? {
           warning:
-            "Heartbeat is dormant. The scheduled tick will be suppressed " +
-            "by the abandonment guard. Run `shore debug heartbeat_status_active` " +
-            "first to wake the clock.",
+            `${ctx.characterName} is dormant, so nothing wakes them and this wake is dropped. ` +
+            "Run `shore debug heartbeat_status_active` first.",
         }
       : {}),
   };
 }
 
 export function heartbeatSetDormant(ctx: StatusContext): OperationResult<"heartbeat_set_dormant"> {
-  if (!ctx.autonomy.forceHeartbeatState(ctx.characterName, "dormant")) {
+  if (!ctx.autonomy.forceDormancy(ctx.characterName, "dormant")) {
     throw noState(ctx.characterName);
   }
   return { status: "dormant", character: ctx.characterName };
 }
 
 export function heartbeatSetActive(ctx: StatusContext): OperationResult<"heartbeat_set_active"> {
-  if (!ctx.autonomy.forceHeartbeatState(ctx.characterName, "active")) {
+  if (!ctx.autonomy.forceDormancy(ctx.characterName, "active")) {
     throw noState(ctx.characterName);
   }
   return { status: "active", character: ctx.characterName };

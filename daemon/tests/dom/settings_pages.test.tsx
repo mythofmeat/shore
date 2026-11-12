@@ -69,7 +69,7 @@ describe("the appearance page", () => {
     const { AppearancePage } = await import("../../src/browser/settings/Appearance.tsx");
     const state = app.state();
     const description = () => view.host.querySelector(".setting-row:has([aria-label='Notify when unfocused']) .setting-description")?.textContent ?? "";
-    const base = "When this tab isn’t focused, show a desktop notification and a count in the tab title for new replies, heartbeat messages and errors.";
+    const base = "When this tab isn’t focused, show a desktop notification and a count in the tab title for new replies, messages sent from wakes, and errors.";
     const view = await mount(<AppearancePage state={state.workspace.getSnapshot()} />);
     expect(state.notifier.getSnapshot().permission, "no secure context in tests").toBe("unavailable");
     expect(description()).toBe(`${base} This browser only allows desktop notifications over HTTPS or localhost, so only the tab title count is shown.`);

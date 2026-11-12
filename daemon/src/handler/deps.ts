@@ -96,7 +96,7 @@ export function buildGenerationDeps(a: GenerationAssembly): GenerationDeps {
     providers: a.providers,
     ...(runtime.callStore === undefined ? {} : { callStore: runtime.callStore }),
     autonomy: turnAutonomy(a.autonomy, runtime.cache),
-    runningHeartbeat: (character) => runtime.autonomy.runningHeartbeat(character),
+    runningWake: (character) => runtime.autonomy.runningWake(character),
     userActiveIn: (character, thread) => { runtime.autonomy.userActiveIn(character, thread); },
     userBack: async (character) => { await runtime.triggers.userBack(character); },
     notifier: runtime.notifier,
@@ -121,7 +121,7 @@ export function generationRegistry(registry: CharacterRegistry): GenerationRegis
       generationEngine(await registry.getOrCreate(name, thread)),
     effectiveConfig: (name) => registry.effectiveConfig(name),
     listThreads: (name) => registry.listThreads(name),
-    heartbeatThread: (name) => registry.heartbeatThread(name),
+    ownThread: (name) => registry.ownThread(name),
   };
 }
 
@@ -140,9 +140,6 @@ export function turnAutonomy(
     },
     onUserActivityElsewhere: (character) => {
       bridge.onUserActivityElsewhere(character);
-    },
-    onReplyElsewhere: (character) => {
-      bridge.onReplyElsewhere(character);
     },
     shouldCompactNow: (character, turnCount, contextTokens, crowded) =>
       bridge.shouldCompactNow(character, turnCount, contextTokens, crowded),

@@ -1011,7 +1011,7 @@ pub(crate) fn dream_report_text(data: &serde_json::Value) -> String {
 
 fn print_heartbeat_tick_now(data: &serde_json::Value) {
     let character = data["character"].as_str().unwrap_or("?");
-    cli_out!("Tick scheduled for {character}.");
+    cli_out!("Started a wake for {character}.");
     if let Some(warning) = data["warning"].as_str() {
         let stdout = crate::output::stdout();
         let mut out = stdout.lock();
@@ -1022,7 +1022,7 @@ fn print_heartbeat_tick_now(data: &serde_json::Value) {
 
 fn print_heartbeat_status_change(data: &serde_json::Value, status: &str) {
     let character = data["character"].as_str().unwrap_or("?");
-    cli_out!("Heartbeat forced {status} for {character}.");
+    cli_out!("{character} is now {status}.");
 }
 
 fn print_session_activate(data: &serde_json::Value) {
@@ -1037,8 +1037,11 @@ fn print_session_activate(data: &serde_json::Value) {
         session_activate_keepalive(&data["keepalive"])
     );
     cli_out!(
-        "  Heartbeat: {}",
-        session_activate_heartbeat(&data["heartbeat"])
+        "  Own time: {}",
+        data["own_time"]
+            .as_str()
+            .unwrap_or("no state (registration failed)")
+            .to_lowercase()
     );
 }
 
@@ -1261,16 +1264,6 @@ fn session_activate_keepalive(k: &serde_json::Value) -> String {
             k["detail"].as_str().unwrap_or("")
         ),
         other => other.to_owned(),
-    }
-}
-
-fn session_activate_heartbeat(h: &serde_json::Value) -> String {
-    let Some(state) = h["state"].as_str() else {
-        return "no state (registration failed)".to_owned();
-    };
-    match h["seconds_until_wake"].as_i64() {
-        Some(secs) => format!("{state}, next wake in {}", format_duration_compact(secs)),
-        None => format!("{state}, no wake scheduled"),
     }
 }
 

@@ -235,15 +235,9 @@ pub(crate) async fn execute(
                 "what the daemon did behind the conversation",
                 &[
                     ("trace calls", "raw model call payloads"),
-                    (
-                        "trace heartbeat",
-                        "what each heartbeat tick thought and did",
-                    ),
+                    ("trace heartbeat", "what each wake thought and did"),
                     ("trace dreams", "what each dream read and changed"),
-                    (
-                        "trace events",
-                        "the heartbeat timeline: fired, dormant, woke",
-                    ),
+                    ("trace events", "the wake timeline: fired, dormant, woke"),
                     ("trace errors", "errors hit since start, and key fallbacks"),
                     ("trace subagent", "stored sub-agent runs and their tools"),
                 ],
@@ -254,14 +248,14 @@ pub(crate) async fn execute(
                 "debug",
                 "make the daemon do something now, out of band",
                 &[
-                    ("debug tick-now", "run a heartbeat tick immediately"),
+                    ("debug tick-now", "start a wake immediately"),
                     (
                         "debug keepalive-ping-now",
                         "send a cache keepalive ping now",
                     ),
                     ("debug session-activate", "mark the session active"),
-                    ("debug status-dormant", "force the heartbeat dormant"),
-                    ("debug status-active", "force the heartbeat active"),
+                    ("debug status-dormant", "make the character dormant"),
+                    ("debug status-active", "make the character active"),
                     ("debug tool <name>", "invoke one tool directly"),
                     ("debug subagent <name>", "invoke one sub-agent directly"),
                 ],

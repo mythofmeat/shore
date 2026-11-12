@@ -2,7 +2,7 @@ import { join } from "node:path";
 
 import { asNaive, hostZone, naiveInZone, resolveInZone } from "../ledger/zoned.ts";
 import { MessageStore } from "../engine/message_store.ts";
-import { heartbeatThread, readThreadsIndex } from "../engine/threads.ts";
+import { ownThread, readThreadsIndex } from "../engine/threads.ts";
 import { threadFile } from "../storage/files.ts";
 import {
   HISTORY_INDEX_FILE,
@@ -129,7 +129,7 @@ async function otherThreads(options: ChatLogOptions): Promise<LiveThread[]> {
   if (options.dataDir === undefined) return [];
   const dataDir = options.dataDir;
   const index = await readThreadsIndex(dataDir, options.character);
-  const heartbeat = heartbeatThread(index);
+  const heartbeat = ownThread(index);
   const live: LiveThread[] = [];
   for (const record of index?.threads ?? []) {
     if (record.id === (options.thread ?? "main") && record.id !== heartbeat) continue;
@@ -351,11 +351,11 @@ function sortText(sort: ChatLogSort, match: ChatLogMatch): string {
 
 function hitLine(hit: ChatLogHit, view: View, query: string): string {
   const thread = hit.thread === "main" ? "" : `[${hit.thread}] `;
-  const heartbeat = hit.heartbeat === 1 ? "(heartbeat) " : "";
+  const onOwnTime = hit.heartbeat === 1 ? "(wake) " : "";
   const snippet = oneLine(hit.snippet ?? substringSnippet(hit.text, query));
   const copies = alsoIn(hit);
   const also = copies.length === 0 ? "" : ` · also in ${copies.join(", ")}`;
-  return `${stamp(hit.ts, view.zone)}  ${labelOf(hit.speaker, view).padEnd(view.width)}  ${thread}${heartbeat}${snippet}  ${hit.msg_id}${also}`;
+  return `${stamp(hit.ts, view.zone)}  ${labelOf(hit.speaker, view).padEnd(view.width)}  ${thread}${onOwnTime}${snippet}  ${hit.msg_id}${also}`;
 }
 
 export async function handleSearchChatLogs(
@@ -429,8 +429,8 @@ export async function handleSearchChatLogs(
 }
 
 function entryHead(row: ChatLogMessage, view: View, marked: boolean): string {
-  const heartbeat = row.heartbeat === 1 ? "  (heartbeat)" : "";
-  return `${marked ? "▶ " : ""}${stamp(row.ts, view.zone)}  ${labelOf(row.speaker, view)}${heartbeat}  ${row.msg_id}`;
+  const onOwnTime = row.heartbeat === 1 ? "  (wake)" : "";
+  return `${marked ? "▶ " : ""}${stamp(row.ts, view.zone)}  ${labelOf(row.speaker, view)}${onOwnTime}  ${row.msg_id}`;
 }
 
 function entrySize(row: ChatLogMessage, view: View): number {
@@ -570,11 +570,11 @@ function dayOverview(index: HistoryIndex, view: View, date: string): string {
     const last = required(c[c.length - 1]);
     const at = (row: ChatLogMessage) => dayOf(row.ts, view.zone) === date ? clockOf(row.ts, view.zone) : `${weekdayOf(row.ts, view.zone)} ${clockOf(row.ts, view.zone)}`;
     const opener = c.find((row) => row.speaker === "user");
-    const heartbeats = c.filter((row) => row.heartbeat === 1).length;
+    const fromWakes = c.filter((row) => row.heartbeat === 1).length;
     const rest = opener !== undefined
       ? `first: ${truncate(oneLine(opener.text), FIRST_LINE_CHARS)}`
-      : heartbeats === c.length
-        ? `${heartbeats === 1 ? "a heartbeat" : `${String(heartbeats)} heartbeats`} from ${view.character}, no reply from ${view.user}`
+      : fromWakes === c.length
+        ? `${fromWakes === 1 ? "1 message" : `${String(fromWakes)} messages`} ${view.character} sent from ${fromWakes === 1 ? "a wake" : "wakes"}, no reply from ${view.user}`
         : `${String(c.length)} from ${view.character}, none from ${view.user}`;
     return {
       range: `${at(first)} → ${at(last)}`,

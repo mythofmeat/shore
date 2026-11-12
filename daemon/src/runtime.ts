@@ -244,8 +244,7 @@ export async function createRuntime(options: RuntimeOptions): Promise<ShoreRunti
       tools: {
         ...sharedToolDeps(config, mcp, {
           activityStats: (character, localAt, days) => autonomy.activityStats(character, localAt, days),
-          heartbeatsRunning: (character) => autonomy.heartbeatsRunning(character),
-          scheduleNextWake: (character, hours, reason) => autonomy.scheduleNextWake(character, hours, reason),
+          wakesMayRun: (character) => autonomy.wakesMayRun(character),
           requestWake: (character, firing, overwrite) => autonomy.requestWake(character, firing, overwrite),
         }, {
           providers,
@@ -479,7 +478,7 @@ async function refreshMcpPromptCaches(
 
 export interface SubagentToolDeps {
   providers: Partial<Record<SidecarRequest["sdk"], SidecarProvider>>;
-  registry: Pick<CharacterRegistry, "effectiveConfig" | "heartbeatThread" | "listThreads" | "sealThread" | "sealedThreads">;
+  registry: Pick<CharacterRegistry, "effectiveConfig" | "ownThread" | "listThreads" | "sealThread" | "sealedThreads">;
   callStore?: CallStore | undefined;
   env?: NodeJS.ProcessEnv | undefined;
   turn?: SubagentTurn | undefined;
@@ -488,7 +487,7 @@ export interface SubagentToolDeps {
 export function sharedToolDeps(
   config: LoadedConfig,
   mcp: McpHolder,
-  autonomy: Pick<AutonomyService, "activityStats" | "heartbeatsRunning" | "scheduleNextWake" | "requestWake">,
+  autonomy: Pick<AutonomyService, "activityStats" | "wakesMayRun" | "requestWake">,
   subagent?: SubagentToolDeps,
   triggers?: Pick<TriggerService, "view">,
 ): ToolContextDeps {
@@ -505,16 +504,12 @@ export function sharedToolDeps(
       }, Date.now(), async (delivery, title, body) => { await realSink.ntfy(delivery, title, body); });
     },
     activityStats: (character, days) => autonomy.activityStats(character, localWallClock(Date.now()), days),
-    scheduleNextWake: (character, hours, reason) =>
-      autonomy.heartbeatsRunning(character)
-        ? autonomy.scheduleNextWake(character, hours, reason)
-        : undefined,
     ...(subagent === undefined ? {} : {
       wakeInThread: (character, from, request) => {
-        if (!autonomy.heartbeatsRunning(character)) return { kind: "off" };
+        if (!autonomy.wakesMayRun(character)) return { kind: "off" };
         const { registry } = subagent;
         const known = [...registry.listThreads(character), ...registry.sealedThreads(character)].some((record) => record.id === request.thread);
-        if (request.thread === registry.heartbeatThread(character) || !known) return { kind: "no_thread" };
+        if (request.thread === registry.ownThread(character) || !known) return { kind: "no_thread" };
         const most = registry.effectiveConfig(character).app.behavior.autonomy.triggers.max_wake_limit.asMillis();
         const limitMs = request.limitMs === undefined ? undefined : Math.min(request.limitMs, most);
         const asked = autonomy.requestWake(character, { name: "", from, reason: request.reason, at: Date.now(), thread: request.thread, limitMs }, request.overwrite);

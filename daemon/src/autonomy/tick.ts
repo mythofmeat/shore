@@ -4,7 +4,6 @@ export type CompactionReason =
 
 export interface TickInputs {
   readonly autonomyEnabled: boolean;
-  readonly heartbeatEnabled: boolean;
 
   readonly compactionEnabled: boolean;
   readonly compactionTriggered: boolean;
@@ -18,7 +17,7 @@ export interface TickInputs {
 }
 
 export interface TickDecision {
-  readonly heartbeatMayTick: boolean;
+  readonly wakesMayRun: boolean;
   readonly compaction: CompactionReason | undefined;
   readonly deepArchive: boolean;
 }
@@ -27,7 +26,7 @@ export function tickDecision(i: TickInputs): TickDecision {
   const compaction = compactionReason(i);
 
   return {
-    heartbeatMayTick: i.autonomyEnabled && i.heartbeatEnabled,
+    wakesMayRun: i.autonomyEnabled,
     compaction,
     deepArchive:
       i.autonomyEnabled &&

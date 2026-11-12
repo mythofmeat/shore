@@ -322,7 +322,7 @@ wire_types! {
     pub enum UsageBudgetPeriod { Hour, Day, Week, Month }
 
     #[serde(rename_all = "snake_case")]
-    pub enum UsageBudgetAction { Warn, Block, PauseBackground, PauseHeartbeat }
+    pub enum UsageBudgetAction { Warn, Block, PauseBackground, PauseWakes }
 
     #[serde(rename_all = "snake_case")]
     pub enum UsageBudgetLevel { Ok, Warning, OverLimit }
@@ -989,7 +989,7 @@ wire_types! {
     }
 
     #[serde(rename_all = "snake_case")]
-    pub enum RunningWorkKind { Message, Heartbeat, Compaction, Dream }
+    pub enum RunningWorkKind { Message, Wake, Compaction, Dream }
 
     pub struct RunningWork {
         pub kind: RunningWorkKind,
@@ -1117,26 +1117,17 @@ wire_types! {
         pub key_fallbacks: DiagnosticKeyFallbackRing,
     }
 
-    pub enum AutonomyHeartbeatState { Active, Dormant }
+    pub enum AutonomyState { Active, Dormant }
 
     #[serde(rename_all = "snake_case")]
     pub enum ActivityHourClass { Peak, Trough, Normal }
 
     pub struct AutonomyStatusReport {
-        pub heartbeat_state: AutonomyHeartbeatState,
+        pub state: AutonomyState,
         #[ts(type = "number")]
-        pub ticks_without_user: u64,
+        pub wakes_without_user: u64,
         #[ts(type = "number")]
-        pub dormant_after_heartbeat_turns: u64,
-        #[ts(type = "number")]
-        pub default_interval_secs: u64,
-        #[serde(default, skip_serializing_if = "Option::is_none")]
-        #[ts(optional)]
-        pub next_wake_at: Option<String>,
-        #[serde(default, skip_serializing_if = "Option::is_none")]
-        #[ts(optional)]
-        #[ts(type = "number")]
-        pub seconds_until_wake: Option<i64>,
+        pub dormant_after_wakes: u64,
         #[serde(default, skip_serializing_if = "Option::is_none")]
         #[ts(optional)]
         pub last_user_at: Option<String>,
@@ -1144,10 +1135,6 @@ wire_types! {
         #[ts(optional)]
         #[ts(type = "number")]
         pub seconds_since_user: Option<u64>,
-        #[ts(type = "number")]
-        pub min_interval_secs: u64,
-        #[ts(type = "number")]
-        pub max_interval_secs: u64,
         #[ts(type = "number")]
         pub dormant_after_idle_time_secs: u64,
         pub recent_events: Vec<HeartbeatEvent>,
@@ -1512,7 +1499,7 @@ wire_types! {
     }
 
     #[serde(rename_all = "snake_case")]
-    pub enum DiarySource { Heartbeat, Wake, Trigger, Shore, Note }
+    pub enum DiarySource { Wake, Trigger, Shore, Note }
 
     pub struct DiaryEntry {
         pub at: String,
@@ -1622,23 +1609,12 @@ wire_types! {
     #[serde(tag = "status", rename_all = "snake_case")]
     pub enum KeepaliveActivation { Unavailable(KeepaliveActivationDetail), Off, Resumed(ScheduledKeepalivePing), Primed(PrimedKeepalivePing), Skipped(KeepaliveActivationDetail), Failed(KeepaliveActivationDetail) }
 
-    pub struct ActivatedHeartbeat {
-        pub state: AutonomyHeartbeatState,
-        #[serde(default, skip_serializing_if = "Option::is_none")]
-        #[ts(optional)]
-        pub next_wake_at: Option<String>,
-        #[serde(default, skip_serializing_if = "Option::is_none")]
-        #[ts(optional)]
-        #[ts(type = "number")]
-        pub seconds_until_wake: Option<i64>,
-    }
-
     pub struct SessionActivated {
         pub character: String,
         pub registered: bool,
         pub keepalive: KeepaliveActivation,
         #[serde(deserialize_with = "deserialize_nullable")]
-        pub heartbeat: Option<ActivatedHeartbeat>,
+        pub own_time: Option<AutonomyState>,
     }
 
     #[serde(rename_all = "snake_case")]

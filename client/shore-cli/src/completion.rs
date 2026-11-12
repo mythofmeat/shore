@@ -1479,7 +1479,7 @@ mod tests {
         catalog.absorb(
             Source::Config,
             &json!({ "schema": [
-                { "key": "heartbeat.enabled", "type": "boolean", "settable": true, "values": ["true", "false"] },
+                { "key": "triggers.enabled", "type": "boolean", "settable": true, "values": ["true", "false"] },
                 { "key": "chat.model", "type": "string", "settable": true, "values": [], "source": "chat_models" },
                 { "key": "providers.openrouter.discover", "type": "boolean", "settable": true, "values": ["true", "false"] },
                 { "key": "providers.openrouter.base_url", "type": "string", "settable": true, "values": [] },
@@ -1580,12 +1580,12 @@ mod tests {
             ("--thread ", &["main", "story"]),
             ("model unfav ", &["opus"]),
             ("model fav ", &["sonnet", "opus"]),
-            ("config set heartbeat.enabled ", &["true", "false"]),
+            ("config set triggers.enabled ", &["true", "false"]),
             ("config set chat.model ", &["anthropic:opus"]),
             (
                 "config keys ",
                 &[
-                    "heartbeat.enabled",
+                    "triggers.enabled",
                     "chat.model",
                     "providers.openrouter.discover",
                     "providers.openrouter.base_url",

@@ -100,7 +100,7 @@ const ACTION_PHRASES: Record<UsageBudgetAction, string> = {
   warn: "warning only",
   block: "Claude calls blocked",
   pause_background: "background work paused",
-  pause_heartbeat: "heartbeat paused",
+  pause_wakes: "wakes paused",
 };
 
 const CHECKS_AT_ONCE = 2;

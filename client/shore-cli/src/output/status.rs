@@ -156,7 +156,7 @@ fn all_zero(map: &serde_json::Map<String, Value>) -> bool {
 
 fn not_started(name: &str) -> &'static str {
     match name {
-        "autonomy" => "not started \u{00b7} the heartbeat is scheduled on your first message",
+        "autonomy" => "not started \u{00b7} own time starts with your first message",
         "activity" => "nothing recorded yet \u{00b7} activity is learned from your messages",
         "history_index" => "no history index for this character",
         "mcp" => "no MCP servers configured",
@@ -280,4 +280,48 @@ pub(crate) fn print_section(data: &Value, name: &str) -> bool {
     let stdout = crate::output::stdout();
     let mut out = stdout.lock();
     write_section(&mut out, data, name)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use serde_json::json;
+
+    fn section_shown(name: &str) -> Vec<String> {
+        crate::output::set_color_enabled(false);
+        let mut out = Vec::new();
+        let data = json!({ "autonomy": null, "activity": null, "history_index": null, "mcp": null, "keepalive": null });
+        assert!(write_section(&mut out, &data, name));
+        String::from_utf8(out)
+            .unwrap_or_default()
+            .lines()
+            .skip(1)
+            .map(|line| line.trim().to_owned())
+            .collect()
+    }
+
+    #[test]
+    fn a_section_that_has_not_started_says_what_it_waits_on() {
+        assert_eq!(
+            section_shown("autonomy"),
+            ["(not started \u{00b7} own time starts with your first message)"]
+        );
+        assert_eq!(
+            section_shown("activity"),
+            ["(nothing recorded yet \u{00b7} activity is learned from your messages)"]
+        );
+        assert_eq!(
+            section_shown("history_index"),
+            ["(no history index for this character)"]
+        );
+        assert_eq!(section_shown("mcp"), ["(no MCP servers configured)"]);
+        assert_eq!(section_shown("keepalive"), ["(not started)"]);
+    }
+
+    #[test]
+    fn a_section_the_daemon_did_not_send_is_not_written() {
+        let mut out = Vec::new();
+        assert!(!write_section(&mut out, &json!({}), "autonomy"));
+        assert!(out.is_empty());
+    }
 }

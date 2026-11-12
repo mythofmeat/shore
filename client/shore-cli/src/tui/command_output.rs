@@ -515,21 +515,21 @@ pub(crate) fn render(
         "presence" => Some(crate::output::commands::presence_text(data)),
         "mark" | "unmark" | "marks" => Some(crate::output::commands::marks_text(wire_name, data)),
         "heartbeat_tick_now" => Some(format!(
-            "Scheduled a heartbeat tick for {}.",
+            "Started a wake for {}.",
             data.get("character")
                 .and_then(serde_json::Value::as_str)
                 .unwrap_or("?")
         )),
         "heartbeat_set_dormant" | "heartbeat_set_active" => Some(format!(
-            "Heartbeat forced {} for {}.",
+            "{} is now {}.",
+            data.get("character")
+                .and_then(serde_json::Value::as_str)
+                .unwrap_or("?"),
             if wire_name == "heartbeat_set_active" {
                 "active"
             } else {
                 "dormant"
-            },
-            data.get("character")
-                .and_then(serde_json::Value::as_str)
-                .unwrap_or("?")
+            }
         )),
         "session_activate" => Some(format!(
             "{} {}.",
@@ -647,6 +647,41 @@ mod tests {
     }
 
     #[test]
+    fn a_wake_started_or_a_change_of_dormancy_from_the_palette_says_what_happened() {
+        let data = json!({ "status": "scheduled", "character": "ada" });
+        assert_eq!(
+            super::render(
+                "debug heartbeat_tick_now",
+                "heartbeat_tick_now",
+                &data,
+                "eve"
+            )
+            .as_deref(),
+            Some("Started a wake for ada.")
+        );
+        assert_eq!(
+            super::render(
+                "debug heartbeat_status_dormant",
+                "heartbeat_set_dormant",
+                &data,
+                "eve"
+            )
+            .as_deref(),
+            Some("ada is now dormant.")
+        );
+        assert_eq!(
+            super::render(
+                "debug heartbeat_status_active",
+                "heartbeat_set_active",
+                &data,
+                "eve"
+            )
+            .as_deref(),
+            Some("ada is now active.")
+        );
+    }
+
+    #[test]
     fn the_diary_is_wrapped_to_fit_inside_the_pager_however_narrow_the_terminal() {
         assert_eq!(super::pager_width(200), 80);
         assert_eq!(super::pager_width(88), 80);
@@ -668,7 +703,7 @@ mod tests {
         let long = ["lamps"; 13].join(" ");
         let data = json!({ "character": "ada", "kept": 2, "notes": [
             { "at": "dawn", "thread": "main", "source": "note", "text": "Ferry times.", "shown": false, "dreamed": false },
-            { "at": "noon", "thread": "heartbeat", "source": "heartbeat", "text": long, "shown": true, "dreamed": true },
+            { "at": "noon", "thread": "own-time", "source": "wake", "text": long, "shown": true, "dreamed": true },
         ] });
         assert_eq!(
             super::render("diary -n 5", "diary", &data, "ada"),
@@ -683,7 +718,7 @@ mod tests {
                     "  dawn            note in \"main\"  \u{00b7} no longer shown to ada",
                     "    Ferry times.",
                     "",
-                    "  noon            heartbeat  \u{00b7} dreamed",
+                    "  noon            wake in \"own-time\"  \u{00b7} dreamed",
                     "    lamps lamps lamps lamps lamps lamps lamps lamps lamps lamps lamps",
                     "    lamps lamps",
                 ]

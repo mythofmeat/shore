@@ -1,5 +1,5 @@
-import { HEARTBEAT_TIME_LIMIT_MS } from "../autonomy/heartbeat_loop.ts";
-import { spanPhrase } from "../autonomy/heartbeat_shape.ts";
+import { DEFAULT_WAKE_LIMIT_MS } from "../autonomy/runner.ts";
+import { spanPhrase } from "../autonomy/wake_shape.ts";
 import { ConfigDuration } from "../config/duration.ts";
 import { formatWallClock } from "../engine/prompt.ts";
 import { isValidThreadId } from "../engine/threads.ts";
@@ -56,7 +56,7 @@ export function handleWakeInThread(
   const request = wakeInThreadRequest(input);
   if (request.thread === here) throw new ToolIoError(`you are in "${request.thread}" now, so there is nothing to hand over`);
   const outcome = handOff(request);
-  if (outcome.kind === "off") throw new ToolIoError("heartbeats are not running for this character");
+  if (outcome.kind === "off") throw new ToolIoError(`${userName} has your own time switched off, so nothing would wake you`);
   if (outcome.kind === "no_thread") throw new ToolIoError(`you have no thread "${request.thread}" to be woken in; \`list_threads\` shows the ones you have`);
   if (outcome.kind === "waiting") {
     throw new ToolIoError(
@@ -64,5 +64,5 @@ export function handleWakeInThread(
     );
   }
   const replaced = outcome.replaced === undefined ? "" : `\nThis takes the place of the wake you had waiting there, ${askedFor(outcome.replaced, timeZone)}`;
-  return `Shore will wake you in "${request.thread}" for up to ${spanPhrase(outcome.limitMs ?? HEARTBEAT_TIME_LIMIT_MS)}, once this turn is over and ${userName} has been quiet there for 10 minutes.${replaced}`;
+  return `Shore will wake you in "${request.thread}" for up to ${spanPhrase(outcome.limitMs ?? DEFAULT_WAKE_LIMIT_MS)}, once this turn is over and ${userName} has been quiet there for 10 minutes.${replaced}`;
 }

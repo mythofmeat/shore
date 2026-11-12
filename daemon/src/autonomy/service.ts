@@ -1,7 +1,7 @@
 import { shoreLog } from "../log.ts";
 
 import type { ActivityStats } from "./activity.ts";
-import { HeartbeatClock, type HeartbeatClockConfig } from "./heartbeat.ts";
+import { Dormancy, type DormancyConfig } from "./dormancy.ts";
 import { HeartbeatLog, type HeartbeatEvent } from "./heartbeat_log.ts";
 import {
   type KeepaliveHalt,
@@ -16,7 +16,7 @@ import {
   type DreamRunnerConfig,
   type DreamStatus,
   type RestoredIdle,
-  type RunningHeartbeat,
+  type RunningWake,
   type TriggerFiring,
   type WakeRequest,
 } from "./runner.ts";
@@ -32,21 +32,17 @@ export interface RegisterCharacter {
   character: string;
   data_dir: string;
   config: AutonomyRunnerConfig;
-  clock: HeartbeatClockConfig;
+  dormancy: DormancyConfig;
   restoreIdle?: () => Promise<RestoredIdle | undefined>;
 }
 
 export interface AutonomyStatus {
   character: string;
-  heartbeat_state: import("../protocol/AutonomyHeartbeatState.ts").AutonomyHeartbeatState;
-  ticks_without_user: number;
+  state: import("../protocol/AutonomyState.ts").AutonomyState;
+  wakes_without_user: number;
   covered_turn_count: number;
-  next_wake_at?: number;
   last_user_at?: number;
-  default_interval_ms: number;
-  max_idle_ticks: number;
-  min_interval_ms: number;
-  max_interval_ms: number;
+  max_idle_wakes: number;
   max_silent_ms: number;
   recent_events: HeartbeatEvent[];
 }
@@ -58,7 +54,7 @@ export interface ActivityReport {
   messageCount: number;
 }
 
-export interface HeartbeatView {
+export interface RunningView {
   character: string;
   startedAt: number;
 }
@@ -141,7 +137,7 @@ export class AutonomyService {
       config: request.config,
       executor: this.#executor,
       statePath,
-      clock: new HeartbeatClock(request.clock, this.#now()),
+      dormancy: new Dormancy(request.dormancy),
       log: await HeartbeatLog.load(`${dataDir}/${HEARTBEAT_LOG_FILENAME}`),
       restored,
       idle,
@@ -163,8 +159,8 @@ export class AutonomyService {
     this.#entries.get(character)?.runner.setCompactionConfig(compaction);
   }
 
-  setHeartbeatConfig(character: string, clock: HeartbeatClockConfig): void {
-    this.#entries.get(character)?.runner.setHeartbeatConfig(clock, this.#now());
+  setDormancyConfig(character: string, config: DormancyConfig): void {
+    this.#entries.get(character)?.runner.setDormancyConfig(config);
   }
 
   setDreamConfig(character: string, dream: DreamRunnerConfig): void {
@@ -175,7 +171,7 @@ export class AutonomyService {
     return this.#entries.get(character)?.runner.forceDream();
   }
 
-  runningDreams(): HeartbeatView[] {
+  runningDreams(): RunningView[] {
     return [...this.#entries].flatMap(([character, { runner }]) => {
       const startedAt = runner.dreamStartedAt;
       return startedAt === undefined ? [] : [{ character, startedAt }];
@@ -234,9 +230,9 @@ export class AutonomyService {
     await stopDreams();
   }
 
-  runningHeartbeats(): HeartbeatView[] {
+  runningWakes(): RunningView[] {
     return [...this.#entries].flatMap(([character, { runner }]) => {
-      const startedAt = runner.heartbeatStartedAt;
+      const startedAt = runner.runningWake?.startedAt;
       return startedAt === undefined ? [] : [{ character, startedAt }];
     });
   }
@@ -253,8 +249,8 @@ export class AutonomyService {
     this.#entries.get(character)?.runner.userActiveIn(thread, this.#now());
   }
 
-  runningHeartbeat(character: string): RunningHeartbeat | undefined {
-    return this.#entries.get(character)?.runner.runningHeartbeat;
+  runningWake(character: string): RunningWake | undefined {
+    return this.#entries.get(character)?.runner.runningWake;
   }
 
   async #tickDue(): Promise<void> {
@@ -308,10 +304,6 @@ export class AutonomyService {
     this.#entries.get(character)?.runner.onAssistantMessage(turnCount, this.#now());
   }
 
-  onReplyElsewhere(character: string): void {
-    this.#entries.get(character)?.runner.onReplyElsewhere(this.#now());
-  }
-
   onCompactionComplete(character: string, turnCount: number): void {
     this.#entries.get(character)?.runner.onCompactionComplete(turnCount, this.#now());
   }
@@ -321,32 +313,22 @@ export class AutonomyService {
     if (runner === undefined) return undefined;
     const now = this.#now();
     const snapshot = runner.snapshot();
-    const bounds = runner.clock.config;
+    const bounds = runner.dormancy.config;
     const status: AutonomyStatus = {
       character,
-      heartbeat_state: runner.clock.stateAt(now),
-      ticks_without_user: snapshot.ticksWithoutUser,
+      state: runner.dormancy.isDormant(now) ? "Dormant" : "Active",
+      wakes_without_user: snapshot.wakesWithoutUser,
       covered_turn_count: snapshot.coveredTurnCount,
-      default_interval_ms: bounds.defaultIntervalMs,
-      max_idle_ticks: bounds.maxIdleTicks,
-      min_interval_ms: bounds.minIntervalMs,
-      max_interval_ms: bounds.maxIntervalMs,
+      max_idle_wakes: bounds.maxIdleWakes,
       max_silent_ms: bounds.maxSilentMs,
       recent_events: runner.log.recent(RECENT_EVENT_LIMIT),
     };
-    if (snapshot.nextWakeAt !== undefined) status.next_wake_at = snapshot.nextWakeAt;
     if (snapshot.lastUserAt !== undefined) status.last_user_at = snapshot.lastUserAt;
     return status;
   }
 
-  heartbeatsRunning(character: string): boolean {
-    return this.#entries.get(character)?.runner.heartbeatMayTick ?? false;
-  }
-
-  scheduleNextWake(character: string, hoursFromNow: number, reason: string): number | undefined {
-    return this.#entries
-      .get(character)
-      ?.runner.scheduleNextWake(hoursFromNow, reason, this.#now());
+  wakesMayRun(character: string): boolean {
+    return this.#entries.get(character)?.runner.wakesMayRun ?? false;
   }
 
   onCompactionFailed(character: string, retryAt?: number): void {
@@ -362,11 +344,11 @@ export class AutonomyService {
     return this.#entries.get(character)?.runner.shouldCompactNow(turnCount, contextTokens, crowded);
   }
 
-  forceHeartbeatNow(character: string): boolean | undefined {
-    return this.#entries.get(character)?.runner.forceHeartbeatNow(this.#now());
+  wakeNow(character: string): boolean | undefined {
+    return this.#entries.get(character)?.runner.wakeNow(this.#now());
   }
 
-  forceHeartbeatState(character: string, state: "dormant" | "active"): boolean {
+  forceDormancy(character: string, state: "dormant" | "active"): boolean {
     const runner = this.#entries.get(character)?.runner;
     if (runner === undefined) return false;
     if (state === "dormant") runner.forceDormant();

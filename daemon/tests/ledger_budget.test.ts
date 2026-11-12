@@ -391,7 +391,7 @@ describe("which calls a budget covers and stops", () => {
       expect(actionBlocks("warn", { call_type: callType })).toBe(false);
       expect(actionBlocks("block", { call_type: callType })).toBe(true);
       expect(actionBlocks("pause_background", { call_type: callType }), callType).toBe(background.includes(callType));
-      expect(actionBlocks("pause_heartbeat", { call_type: callType }), callType).toBe(callType.startsWith("heartbeat"));
+      expect(actionBlocks("pause_wakes", { call_type: callType }), callType).toBe(callType.startsWith("heartbeat"));
     }
     expect(actionBlocks("pause_background", { call_type: "compaction", foreground: true })).toBe(false);
   });
