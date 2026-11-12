@@ -1,4 +1,4 @@
-import { expect, spyOn, test } from "bun:test";
+import { afterEach, expect, spyOn, test } from "bun:test";
 
 import type { MarkView } from "../../src/protocol/MarkView.ts";
 import type { Message } from "../../src/protocol/Message.ts";
@@ -6,6 +6,13 @@ import { HOLD, useApp } from "./app.ts";
 import { acting, button, click, mount, type } from "./dom.ts";
 
 const app = useApp();
+
+afterEach(async () => {
+  await acting(async () => {
+    for (const request of app.socket().sent) if (typeof request["rid"] === "string") app.socket().receive({ type: "request_finished", rid: request["rid"], outcome: "completed" });
+    await Bun.sleep(10);
+  });
+});
 const AT = "2026-11-12T10:00:00.000Z";
 const settle = async (): Promise<void> => { await acting(async () => { await Bun.sleep(10); }); };
 
