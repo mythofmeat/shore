@@ -2,7 +2,7 @@ import { expect, test } from "bun:test";
 
 import { spanPhrase, triggerFiredNote } from "../src/autonomy/heartbeat_shape.ts";
 import { firedBy } from "../src/autonomy/runner.ts";
-import { pickedUpNote, wakeCutShortNote, wakeStoppedNote, wakeWrapUpText, withoutSent, wrapUpMsFor } from "../src/autonomy/thread_wake.ts";
+import { wakeCutShortNote, wakeStoppedNote, wakeWrapUpText, withoutSent, wrapUpMsFor } from "../src/autonomy/thread_wake.ts";
 import { dispatchTool, type ToolContext } from "../src/tools/dispatch.ts";
 import { handleWakeInThread, wakeInThreadRequest } from "../src/tools/wake_in_thread.ts";
 
@@ -59,7 +59,6 @@ test("a wake that is stopped is told why in its thread, and the diary says when 
   expect(wakeStoppedNote("rounds", "eve", 90 * MINUTE)).toBe("[This wake used up its rounds of tool use, and Shore stopped it here.]");
   expect(wakeCutShortNote("time", "ring", 2 * 60 * MINUTE)).toBe('Your wake in "ring" reached its limit of 2 hours before you finished. Where it stopped is in that thread.');
   expect(wakeCutShortNote("rounds", "ring", 2 * 60 * MINUTE)).toBe('Your wake in "ring" used up its rounds of tool use before you finished. Where it stopped is in that thread.');
-  expect(pickedUpNote(T0 + 12 * MINUTE, "eve", "UTC")).toBe("[This picks up the wake that eve interrupted at Friday 2026-10-30 · 12:12 PM.]");
 });
 
 test("a wake says what set it off: its triggers, or the turn that handed it over", () => {
@@ -154,7 +153,7 @@ test("a dry run doesn't hand a wake over, start a thread or call an outside tool
   expect(await blocked("start_thread", { name: "ring", label: "Ring" })).toContain("start_thread blocked: dry-run tools cannot change files or external state");
   expect(await blocked("mcp__weather__look", {})).toContain("mcp__weather__look blocked: dry-run tools cannot change files or external state");
   expect(asked).toEqual([]);
-  expect(String(await dispatchTool("list_triggers", {}, ctx))).toContain("You have none yet.");
+  expect(String(await dispatchTool("list_triggers", {}, ctx))).toContain("You have none there yet.");
   expect(await dispatchTool("wake_in_thread", { thread: "ring", reason: "r" }, { ...ctx, dryRun: false })).toBe(
     'Shore will wake you in "ring" for up to 30 minutes, once this turn is over and the user has been quiet there for 10 minutes.',
   );

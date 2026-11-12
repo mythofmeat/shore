@@ -113,7 +113,7 @@ export async function buildToolContext(
     configDir,
     historyIndexPath: historyIndexPath(config.dirs.cache, charName),
     userName,
-    guide: (input) => readGuide(input, guideValues(config, charName, userName), ALL_TOOLS.map((tool) => ({ name: tool.name, enabled: toolEnabled(config.app.tools, tool.name) }))),
+    guide: (input) => readGuide(input, guideValues(config, userName), ALL_TOOLS.map((tool) => ({ name: tool.name, enabled: toolEnabled(config.app.tools, tool.name) }))),
     ...("ok" in imageGen ? { imageGenConfig: imageGen.ok } : {}),
     ...(deps.imageGenerator === undefined ? {} : { imageGenerator: deps.imageGenerator }),
     ...(deps.modelHistoryQuery === undefined ? {} : { modelHistoryQuery: deps.modelHistoryQuery }),

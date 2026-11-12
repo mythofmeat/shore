@@ -2,6 +2,7 @@ import { parseDayWindow } from "../config/app.ts";
 import { ConfigDuration } from "../config/duration.ts";
 import { isValidThreadId } from "../engine/threads.ts";
 import { asNaive, DAY_MS, naiveInZone, resolveInZone } from "../ledger/zoned.ts";
+import { HEARTBEAT_TRIGGER } from "./own_time.ts";
 import { inDayWindow, type DayWindow } from "./tick.ts";
 
 export const TRIGGERS_FILE = "TRIGGERS.toml";
@@ -103,9 +104,10 @@ function whenOf(raw: Record<string, unknown>): TriggerWhen {
   return { kind: "event", event, afterMs: timed ? duration(raw["after"], "after") : 0 };
 }
 
-function trigger(name: string, raw: unknown, defaultCooldownMs: number): Trigger {
+function trigger(name: string, raw: unknown, defaultCooldownMs: number, checks: boolean): Trigger {
   if (typeof raw !== "object" || raw === null || Array.isArray(raw)) throw new Error(`write it as \`[${name}]\` with its settings on the lines under it`);
   if (!TRIGGER_NAME.test(name)) throw new Error("a trigger's name is letters, digits, dashes and underscores, starting with a letter or digit, at most 64 characters");
+  if (name === HEARTBEAT_TRIGGER) throw new Error(`\`${HEARTBEAT_TRIGGER}\` is the name of the trigger Shore gives you, so one of your own needs another name`);
   const settings = raw as Record<string, unknown>;
   const unknown = Object.keys(settings).filter((setting) => !SETTINGS.includes(setting));
   const nested = unknown.find((setting) => typeof settings[setting] === "object" && !Array.isArray(settings[setting]));
@@ -121,6 +123,7 @@ function trigger(name: string, raw: unknown, defaultCooldownMs: number): Trigger
   const reason = settings["reason"] === undefined ? undefined : text(settings["reason"], "reason");
   const check = settings["check"] === undefined ? undefined : text(settings["check"], "check");
   if (reason === undefined && check === undefined) throw new Error("it needs a `reason` to show you when it fires, or a `check` whose output is the reason");
+  if (check !== undefined && !checks) throw new Error("its `check` is a command, and you don't have the `bash` tool to run commands with");
   const between = settings["between"] === undefined ? undefined : parseDayWindow(typeof settings["between"] === "string" ? settings["between"] : "");
   if (settings["between"] !== undefined && between === undefined) throw new Error('`between` must be a local time range like "08:00-23:00"');
   const wakesAgain = wakes && when.kind !== "once";
@@ -134,7 +137,7 @@ function trigger(name: string, raw: unknown, defaultCooldownMs: number): Trigger
   return { name, when, wakes, reason, check, cooldownMs, between, thread, limitMs };
 }
 
-export function parseTriggers(content: string, defaultCooldownMs: number): ParsedTriggers {
+export function parseTriggers(content: string, defaultCooldownMs: number, checks = true): ParsedTriggers {
   let table: Record<string, unknown>;
   try {
     table = Bun.TOML.parse(content) as Record<string, unknown>;
@@ -144,7 +147,7 @@ export function parseTriggers(content: string, defaultCooldownMs: number): Parse
   const parsed: ParsedTriggers = { triggers: [], problems: [] };
   for (const [name, raw] of Object.entries(table)) {
     try {
-      parsed.triggers.push(trigger(name, raw, defaultCooldownMs));
+      parsed.triggers.push(trigger(name, raw, defaultCooldownMs, checks));
     } catch (error) {
       parsed.problems.push(`\`${name}\` isn't running: ${(error as Error).message}`);
     }

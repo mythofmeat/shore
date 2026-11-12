@@ -1,7 +1,7 @@
 import { shoreLog } from "../log.ts";
 
 import type { ActivityStats } from "./activity.ts";
-import { HeartbeatClock, type HeartbeatClockConfig } from "./heartbeat.ts";
+import { OwnTime, type AskedWake, type OwnTimeConfig } from "./own_time.ts";
 import { HeartbeatLog, type HeartbeatEvent } from "./heartbeat_log.ts";
 import {
   type KeepaliveHalt,
@@ -32,7 +32,7 @@ export interface RegisterCharacter {
   character: string;
   data_dir: string;
   config: AutonomyRunnerConfig;
-  clock: HeartbeatClockConfig;
+  ownTime: OwnTimeConfig;
   restoreIdle?: () => Promise<RestoredIdle | undefined>;
 }
 
@@ -42,8 +42,11 @@ export interface AutonomyStatus {
   ticks_without_user: number;
   covered_turn_count: number;
   next_wake_at?: number;
+  asked_wake?: AskedWake;
   last_user_at?: number;
   default_interval_ms: number;
+  heartbeat_interval_ms: number;
+  heartbeat_off: boolean;
   max_idle_ticks: number;
   min_interval_ms: number;
   max_interval_ms: number;
@@ -141,7 +144,7 @@ export class AutonomyService {
       config: request.config,
       executor: this.#executor,
       statePath,
-      clock: new HeartbeatClock(request.clock, this.#now()),
+      ownTime: new OwnTime(request.ownTime, this.#now()),
       log: await HeartbeatLog.load(`${dataDir}/${HEARTBEAT_LOG_FILENAME}`),
       restored,
       idle,
@@ -163,8 +166,8 @@ export class AutonomyService {
     this.#entries.get(character)?.runner.setCompactionConfig(compaction);
   }
 
-  setHeartbeatConfig(character: string, clock: HeartbeatClockConfig): void {
-    this.#entries.get(character)?.runner.setHeartbeatConfig(clock, this.#now());
+  setOwnTimeConfig(character: string, config: OwnTimeConfig): void {
+    this.#entries.get(character)?.runner.setOwnTimeConfig(config, this.#now());
   }
 
   setDreamConfig(character: string, dream: DreamRunnerConfig): void {
@@ -321,20 +324,24 @@ export class AutonomyService {
     if (runner === undefined) return undefined;
     const now = this.#now();
     const snapshot = runner.snapshot();
-    const bounds = runner.clock.config;
+    const bounds = runner.ownTime.config;
+    const next = runner.ownTime.nextAt(now);
     const status: AutonomyStatus = {
       character,
-      heartbeat_state: runner.clock.stateAt(now),
-      ticks_without_user: snapshot.ticksWithoutUser,
+      heartbeat_state: runner.ownTime.stateAt(now),
+      ticks_without_user: snapshot.wakesWithoutUser,
       covered_turn_count: snapshot.coveredTurnCount,
       default_interval_ms: bounds.defaultIntervalMs,
-      max_idle_ticks: bounds.maxIdleTicks,
+      heartbeat_interval_ms: runner.ownTime.heartbeatIntervalMs,
+      heartbeat_off: bounds.heartbeatOff === true,
+      max_idle_ticks: bounds.maxIdleWakes,
       min_interval_ms: bounds.minIntervalMs,
       max_interval_ms: bounds.maxIntervalMs,
       max_silent_ms: bounds.maxSilentMs,
       recent_events: runner.log.recent(RECENT_EVENT_LIMIT),
     };
-    if (snapshot.nextWakeAt !== undefined) status.next_wake_at = snapshot.nextWakeAt;
+    if (next !== undefined) status.next_wake_at = next;
+    if (snapshot.asked !== undefined) status.asked_wake = snapshot.asked;
     if (snapshot.lastUserAt !== undefined) status.last_user_at = snapshot.lastUserAt;
     return status;
   }

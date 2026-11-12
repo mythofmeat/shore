@@ -68,7 +68,6 @@ export class InProcessAutonomyExecutor implements AutonomyExecutor {
       return await runHeartbeatTick(character, config, {
         rebuild: this.#deps.rebuild,
         ...(this.#deps.env === undefined ? {} : { env: this.#deps.env }),
-        ...(hooks.wakeReason === undefined ? {} : { wakeReason: hooks.wakeReason }),
         fired: hooks.fired,
         news: (wrappingUp) => hooks.news(wrappingUp),
         newsHeard: () => { hooks.newsHeard(); },
@@ -103,7 +102,7 @@ export class InProcessAutonomyExecutor implements AutonomyExecutor {
       const config = this.#deps.registry.effectiveConfig(character);
       const calls = this.#loopCalls(config, character, "wake", ["heartbeat", "heartbeat_tool_loop"]);
       let toolCtx: ReturnType<typeof buildToolContext> | undefined;
-      return await runThreadWake(character, config, { thread: wake.thread, fired: wake.fired, limitMs: wake.limitMs ?? DEFAULT_WAKE_LIMIT_MS, interruptedAt: wake.interruptedAt }, {
+      return await runThreadWake(character, config, { thread: wake.thread, fired: wake.fired, limitMs: wake.limitMs ?? DEFAULT_WAKE_LIMIT_MS }, {
         rebuild: this.#deps.rebuild,
         interrupted: wake.interrupted,
         compaction: this.#threadCompaction(config),

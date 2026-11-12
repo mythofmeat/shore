@@ -277,6 +277,11 @@ describe("a thread whose messages were archived", () => {
     expect(await lastWroteNote(data, "frank", "heartbeat", "main", "sam", nowMs)).toBe(
       '[sam last wrote to you 2 hours ago, in the side thread "lighthouse" (The lighthouse), which isn\'t shown here.]',
     );
+    expect(await lastWroteNote(data, "frank", "heartbeat", "main", "sam", nowMs, "harbor")).toBe(
+      '[sam last wrote to you 2 hours ago, in the side thread "lighthouse" (The lighthouse), which isn\'t shown here.]',
+    );
+    expect(await lastWroteNote(data, "frank", "heartbeat", "main", "sam", nowMs, "lighthouse")).toBe("[sam last wrote to you 2 hours ago, in this thread.]");
+    expect(await lastWroteNote(data, "frank", undefined, "lighthouse", "sam", nowMs, "lighthouse")).toBe("[sam last wrote to you 2 hours ago, in this thread.]");
   });
 });
 

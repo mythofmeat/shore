@@ -120,7 +120,7 @@ test("a heartbeat still busy at 25 minutes is told how long it has left, and its
   );
 });
 
-test("a heartbeat stopped at its 30-minute limit is logged as such, and only the next heartbeat is told", async () => {
+test("a heartbeat stopped at its 30-minute limit is logged as such, and the next heartbeat is told and shown the same of home again, until one finishes", async () => {
   const seen: SidecarRequest[] = [];
   await afterOneChat(
     (_request, heartbeat) => heartbeat === 1
@@ -140,10 +140,13 @@ test("a heartbeat stopped at its 30-minute limit is logged as such, and only the
       const opening = seen.filter((request) => request.context?.call_type === "heartbeat");
       expect(opening).toHaveLength(3);
       const told = instructionsOf(required(opening[1]));
-      expect(told).toContain("reached its 30-minute limit");
-      expect(told).toContain("after 4 rounds");
-      expect(told).toContain("Nothing from it was sent");
-      expect(instructionsOf(required(opening[2]))).not.toContain("30-minute limit and was stopped");
+      expect(told).toStartWith("[Your last heartbeat reached its limit of 30 minutes and was stopped at ");
+      expect(told).toContain(", after 4 rounds, before it had finished. Nothing from it was sent to User. Whatever it had already changed with its tools is still in place.]\n\n[User last wrote to you ");
+      expect(instructionsOf(required(opening[2]))).not.toContain("was stopped");
+      const homeShown = opening.map((request) => required(request.messages[0]).content.flatMap((block) => block.type === "text" ? [block.text] : []).join(""));
+      expect(homeShown[0]).toStartWith("[heartbeat]\n\nThe last of what was said in your home thread, \"main\", before your first heartbeat here:");
+      expect(homeShown[1]).toBe(required(homeShown[0]));
+      expect(homeShown[2]).toBe("[heartbeat]\n\nNothing has been said in your home thread, \"main\", since your last heartbeat.");
     },
   );
 });
@@ -387,8 +390,11 @@ test("a trigger that fires once a wake has been told to wrap up isn't handed to 
 
       await world.runtime.autonomy.tick();
       expect(seen.length).toBeGreaterThan(5);
+      expect(required(seen[5]).messages).toHaveLength(1);
       const opener = lastTurn(seen[5]);
-      expect(opener).toContain('[wake]\n\n[Your trigger "encore" fired at ');
+      expect(opener).toStartWith("[wake]\n\nNothing has been said in this thread yet.\n\n[Your last wake here used up its rounds of tool use and was stopped at ");
+      expect(opener).toContain(", after 5 rounds, before it had finished. Nothing from it was sent to User. Whatever it had already changed with its tools is still in place.]\n\n[User last wrote to you ");
+      expect(opener).toContain('[Your trigger "encore" fired at ');
       expect(opener).toContain('[Your trigger "curtain" fired at ');
       expect(opener).not.toContain("overture");
       expect(world.runtime.autonomy.log("ada", 100).filter((event) => event.kind === "tick_fired").map((event) => event.detail)).toEqual([

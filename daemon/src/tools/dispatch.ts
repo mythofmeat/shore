@@ -152,9 +152,9 @@ function hoursPhrase(hours: number): string {
 export function nextWakeAnswer(asked: number, scheduled: number, userName: string): string {
   const wanted = hoursPhrase(asked);
   const set = hoursPhrase(scheduled);
-  if (wanted === set) return `Your next heartbeat is in ${set}.`;
-  const held = Math.max(asked, scheduled) === scheduled ? "shortest" : "longest";
-  return `You asked for ${wanted}, and your next heartbeat is in ${set}: that is the ${held} gap ${userName} allows between heartbeats.`;
+  if (wanted === set) return `The heartbeat you asked for is in ${set}.`;
+  const held = Math.max(asked, scheduled) === scheduled ? "soonest" : "furthest ahead";
+  return `You asked for ${wanted}, and the heartbeat is in ${set}: that is the ${held} ${userName} lets you ask for one.`;
 }
 
 export function writesWorkspace(name: string): boolean {

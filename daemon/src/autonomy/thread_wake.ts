@@ -6,30 +6,37 @@ import { findEffectiveModel } from "../config/effective_catalog.ts";
 import type { LoadedConfig } from "../config/loader.ts";
 import { configView, resolveActiveModelAndOverlay } from "../config/preferences.ts";
 import { withConversation } from "../engine/lifecycle.ts";
-import { formatWallClock, renderTemplate } from "../engine/prompt.ts";
-import { homeThreadOf } from "../engine/threads.ts";
+import { isToolResultOnly } from "../engine/message_store.ts";
+import { estimateHistoryTokens, formatWallClock, nearMessageBudget, renderTemplate } from "../engine/prompt.ts";
+import { NO_PRIOR_CONTEXT } from "../engine/segments.ts";
+import { heartbeatThread, homeThread, isHeartbeatOpener, readThreadsIndex, threadActivityNow } from "../engine/threads.ts";
 import type { SealedThread } from "../engine/sealed_list.ts";
 import type { ContentBlock, Message } from "../engine/types.ts";
 import { buildChatShapeRequestFromDisk } from "../handler/context.ts";
-import { thinkingEnabled } from "../handler/generation.ts";
+import { cacheTtlSecs, thinkingEnabled } from "../handler/generation.ts";
 import { pictureProblems, type PictureSender } from "../handler/pictures.ts";
 import { resolveGenerationModel } from "../handler/setup.ts";
-import { contextTokensFor, maybeCompact, threadShouldCompact } from "../handler/turn.ts";
+import { archiveTrimmedTurns, maybeCompact, threadShouldCompact } from "../handler/turn.ts";
 import { usageConfigView } from "../ledger/budget.ts";
 import { budgetBlockFor } from "../ledger/gate.ts";
 import { hostZone } from "../ledger/zoned.ts";
+import { imageTierForModel } from "../llm/image_tokens.ts";
 import { shoreLog } from "../log.ts";
+import { canArchiveTurns } from "../memory/compaction/plan.ts";
+import { applyDeferredEdits } from "../memory/deferred_edits.ts";
 import { sentPicturesDir } from "../storage/sent_pictures.ts";
 import { characterWorkspace } from "../tools/character_workspace.ts";
 import { replyVersions, WorkspaceRecorder, workspaceTurnsFor } from "../tools/workspace_turns.ts";
-import { addDiaryNote, closingNote, unseenDiary } from "./diary.ts";
+import { addDiaryNote, closingNote } from "./diary.ts";
 import type { HeartbeatEventKind } from "./heartbeat_log.ts";
 import { HEARTBEAT_TIME_LIMIT_MS, runHeartbeatToolLoop } from "./heartbeat_loop.ts";
+import { wakeStart } from "./heartbeat_request.ts";
 import { heartbeatNewsNote, spanPhrase, timeLeftPhrase, triggerFiredNote } from "./heartbeat_shape.ts";
+import { THREAD_WORDS, threadDigest } from "./heartbeat_thread.ts";
 import { persistHeartbeatMessage, roundMessage, type HeartbeatEngine, type HeartbeatTickDeps } from "./heartbeat_tick.ts";
-import { presence, unshownPresence } from "./presence.ts";
 import { sealedWakeNote } from "./sealed_notes.ts";
 import { firedBy, WAKE_QUIET_MS, type ThreadWakeResult, type TriggerFiring } from "./runner.ts";
+import { recordWakeEnd, stopOf, wakeRecord, WakeWords } from "./wake_record.ts";
 
 export const WAKE_OPENER = "[wake]";
 
@@ -45,7 +52,6 @@ export interface ThreadWake {
   thread: string;
   fired: readonly TriggerFiring[];
   limitMs: number;
-  interruptedAt?: number | undefined;
 }
 
 export interface SealedWake {
@@ -53,7 +59,7 @@ export interface SealedWake {
   filesDir: string;
 }
 
-export interface ThreadWakeDeps extends Omit<HeartbeatTickDeps, "threads" | "wakeReason" | "fired" | "cutOff"> {
+export interface ThreadWakeDeps extends Omit<HeartbeatTickDeps, "threads" | "fired"> {
   engine(character: string, thread: string): Promise<HeartbeatEngine | undefined>;
   threadModel(character: string, thread: string): string | undefined;
   interrupted?: () => boolean;
@@ -92,8 +98,10 @@ export function wakeCutShortNote(why: "time" | "rounds", thread: string, limitMs
   return `Your wake in "${thread}" ${ran} before you finished. Where it stopped is in that thread.`;
 }
 
-export function pickedUpNote(interruptedAt: number, userName: string, timeZone: string): string {
-  return `[This picks up the wake that ${userName} interrupted at ${formatWallClock(interruptedAt, timeZone)}.]`;
+export function leadingWakeTurns(messages: readonly Message[]): number {
+  const turns = messages.filter((message) => message.role === "user" && !isToolResultOnly(message));
+  const written = turns.findIndex((message) => !isHeartbeatOpener(message));
+  return written === -1 ? turns.length : written;
 }
 
 export async function runThreadWake(
@@ -140,17 +148,27 @@ export async function runThreadWake(
       ["max_rounds", resolved.maxToolIterations === undefined ? "" : String(resolved.maxToolIterations)],
       ["resume_after", spanPhrase(WAKE_QUIET_MS)],
     ]));
-    const text = [
-      WAKE_OPENER,
-      ...(wake.interruptedAt === undefined ? [] : [pickedUpNote(wake.interruptedAt, userName, timeZone)]),
+    const index = await readThreadsIndex(config.dirs.data, character);
+    const home = homeThread(index);
+    const workspace = characterWorkspace(config, character);
+    const lastUser = Date.parse(threadActivityNow(config.dirs.data, character, thread).last_user ?? "");
+    if (thread !== home && !(nowMs - lastUser < cacheTtlSecs(resolved) * 1000)) {
+      try {
+        await applyDeferredEdits(characterDir, workspace, thread);
+      } catch (error) {
+        shoreLog.warn(`shore: could not refresh the prompt files of ${character}/${thread} before a wake: ${String(error)}`);
+      }
+    }
+    const record = wakeRecord(characterDir, thread);
+    const { stopped: stoppedBefore, wrote, status, kept, diary } = await wakeStart(config, character, record, { what: "wake here", heartbeat: heartbeatThread(index), home, here: thread }, userName, nowMs, timeZone);
+    const setOff = [
       ...wake.fired.map((firing) => triggerFiredNote(firing, timeZone)),
       ...(seal === undefined ? [] : [sealedWakeNote(seal.sealed, seal.filesDir, userName, timeZone)]),
       rendered,
-    ].join("\n\n");
-    const diary = unseenDiary(characterDir, engine.messages(), nowMs, thread);
-    const status = unshownPresence(presence(config.dirs.data), engine.messages());
-    const opener: Message = {
-      msg_id: (deps.newId ?? (() => `m_${crypto.randomUUID()}`))(),
+    ];
+    const id = (deps.newId ?? (() => `m_${crypto.randomUUID()}`))();
+    const opener = (text: string): Message => ({
+      msg_id: id,
       role: "user",
       origin: "autonomous",
       content: text,
@@ -158,13 +176,14 @@ export async function runThreadWake(
       content_blocks: [{ type: "text", text }],
       alternatives: [],
       timestamp: new Date(nowMs).toISOString(),
-      ...(diary.length === 0 ? {} : { diary }),
-      ...(status === undefined ? {} : { presence: status }),
-    };
+    });
+    const shown = opener([
+      WAKE_OPENER, await threadDigest(engine, THREAD_WORDS, record.through, userName, timeZone), stoppedBefore, wrote, status, kept, diary, ...setOff,
+    ].filter((part) => part !== undefined).join("\n\n"));
 
     let built: Awaited<ReturnType<typeof buildChatShapeRequestFromDisk>>;
     try {
-      built = await buildChatShapeRequestFromDisk(character, characterDir, config, resolved, [...engine.messages(), opener], engine.segments().priorContext(), {
+      built = await buildChatShapeRequestFromDisk(character, characterDir, config, resolved, [shown], NO_PRIOR_CONTEXT, {
         mcpToolDefs: deps.rebuild.mcpRegistry.toolDefsFiltered(toolGrants(config.app.tools)),
         thread,
         timeZone,
@@ -192,22 +211,21 @@ export async function runThreadWake(
       return { events };
     }
 
-    await engine.appendMessage(opener);
-    const conversation = { thread, conversation: [...engine.messages()] };
-    const workspace = characterWorkspace(config, character);
+    await engine.appendMessage(opener([WAKE_OPENER, ...setOff].join("\n\n")));
+    const conversation = { thread, conversation: [shown] };
     const pictures: PictureSender = { workspace, dir: sentPicturesDir(config.dirs.data, character) };
     const workspaceTurns = workspaceTurnsFor(config.dirs, character, workspace);
     const recorder = new WorkspaceRecorder(workspaceTurns);
     const known = new Set(replyVersions(engine.messages()));
-    let closing = "";
+    const words = new WakeWords();
     const loop = await runHeartbeatToolLoop(request, {
       ...heard,
       name: "Wake",
       dispatch: (name, input, toolUseId, tools) => deps.dispatch(name, input, toolUseId, tools, { ...conversation, recordWorkspaceWrite: recorder.track }),
       generate: (call, phase, loopSignal) => deps.generate(call, phase, AbortSignal.any([signal, loopSignal])),
       persist: async (round) => {
+        words.heard(round);
         const last = round.role === "assistant" && !round.blocks.some((block) => block.type === "tool_use");
-        if (last) closing = round.blocks.flatMap((block) => block.type === "text" ? [block.text] : []).join("");
         await engine.appendMessage(await roundMessage(last ? { ...round, blocks: withoutSent(round.blocks, userName) } : round, request, deps, pictures));
       },
       character,
@@ -225,33 +243,52 @@ export async function runThreadWake(
       note("call_failed", `Wake in "${thread}" stopped: the thread was changed while it ran`);
       return { events };
     }
-    const stopped: WakeStop | undefined = loop.timedOut === true ? "time" : loop.stoppedAt;
+    const stopped = stopOf(loop);
     if (stopped !== undefined) {
       note(stopped === "interrupted" ? "wake" : "timeout", stopped === "interrupted"
         ? `Wake in "${thread}" stopped for ${userName}'s message`
         : `Wake in "${thread}" ${stopped === "time" ? `reached its limit of ${spanPhrase(wake.limitMs)}` : "used up its rounds"} and was stopped`);
       await engine.appendMessage(await roundMessage({ role: "system", blocks: [{ type: "text", text: wakeStoppedNote(stopped, userName, wake.limitMs) }] }, request, deps, pictures));
     }
-    await persistHeartbeatMessage(character, request, loop.timedOut === true ? { ...loop, failedRound: undefined } : loop, heard, note, { thread, engine }, pictures);
+    const sent = await persistHeartbeatMessage(character, request, loop.timedOut === true ? { ...loop, failedRound: undefined } : loop, heard, note, { thread, engine }, pictures);
     const newest = replyVersions(engine.messages()).filter((version) => !known.has(version)).at(-1);
     if (newest !== undefined) await recorder.settle(thread, newest);
 
     const endedAt = deps.now?.() ?? Date.now();
-    const noted = closingNote(closing);
-    if (noted !== undefined) addDiaryNote(characterDir, { at: endedAt, thread, source: "wake", text: noted });
+    const noted = closingNote(words.closing);
+    const left = noted === undefined ? undefined : addDiaryNote(characterDir, { at: endedAt, thread, source: "wake", text: noted });
+    recordWakeEnd(characterDir, thread, record, { startedAt: nowMs, endedAt, limitMs: wake.limitMs, loop, words, sent: sent !== undefined, note: left });
     if (stopped === "interrupted") return { events, interrupted: true };
     if (stopped !== undefined) addDiaryNote(characterDir, { at: endedAt, thread: "", source: "shore", text: wakeCutShortNote(stopped, thread, wake.limitMs) });
 
     const runner = heard.compaction;
-    if (runner !== undefined && loop.usage !== undefined && thread !== await homeThreadOf(config.dirs.data, character)) {
-      await maybeCompact({
-        autonomy: {
-          shouldCompactNow: (_character, turns, tokens) => threadShouldCompact(config, turns, tokens, false),
-          onCompactionComplete: () => {},
-          onCompactionFailed: () => {},
-        },
-      }, engine, character, config, config.dirs.data, contextTokensFor(loop.usage), runner);
+    if (runner === undefined || thread === home) return { events };
+    const active = engine.messages();
+    const settings = config.app.memory.compaction;
+    const tier = imageTierForModel(resolved.modelId);
+    const crowded = nearMessageBudget(active, built.messageBudget, tier) && canArchiveTurns(active, settings.keep_recent_turns);
+    const trim = async (keep: number): Promise<void> => {
+      await archiveTrimmedTurns(config.dirs.data, engine, character, workspace, keep, () => new Date().toISOString(), runner);
+    };
+    if (index?.threads.find((each) => each.id === thread)?.compaction === false) {
+      if (crowded) await trim(settings.keep_recent_turns);
+      return { events };
     }
+    const turns = engine.turnCount();
+    const tokens = estimateHistoryTokens(active, tier);
+    if (!threadShouldCompact(config, turns, tokens, crowded)) return { events };
+    const written = Math.max(turns - leadingWakeTurns(active), 1);
+    if (written < turns) {
+      await trim(written);
+      return { events };
+    }
+    await maybeCompact({
+      autonomy: {
+        shouldCompactNow: () => true,
+        onCompactionComplete: () => {},
+        onCompactionFailed: () => {},
+      },
+    }, engine, character, config, config.dirs.data, tokens, runner, crowded);
     return { events };
   });
 }

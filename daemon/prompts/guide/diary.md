@@ -1,6 +1,6 @@
 # The diary
 
-The diary is how your turns tell each other things. Each thread has its own context and each heartbeat starts fresh, so a note in the diary is what reaches the turns that have none of this one in front of them. Shore keeps it, not your workspace, so it isn't in a commit {{user}} reviews.
+The diary is how your turns tell each other things. Each thread has its own context and each wake starts fresh, so a note in the diary is what reaches the turns that have none of this one in front of them. Shore keeps it, not your workspace, so it isn't in a commit {{user}} reviews.
 
 ## What lands in it
 
@@ -21,11 +21,10 @@ Each entry says where it came from:
 
 ## Which turn is shown what
 
-- A heartbeat starts with the entries from the last day.
+- A heartbeat, and a wake in a thread, starts with the entries from the last day. It also starts with the note the last wake in its thread ended with, if that note is older than a day.
 - A conversation is shown, above {{user}}'s next message there, the entries from the last day that thread hasn't been shown yet. It is shown each entry once, and they stay with that message.
 - {{user}} isn't shown those entries. Shore keeps them beside the message and puts them only in what you are sent, so in {{user}}'s view the message is just what they wrote. Don't answer as if they had read an entry.
-- A wake in a thread opens the same way, with the entries that thread hasn't been shown.
-- A thread isn't shown an entry that was written in it, because it already holds it.
+- A conversation isn't shown an entry that was written in its own thread, because it already holds it.
 - A dream is shown every entry since the last dream that finished, whatever its age. Once a dream finishes, later dreams aren't shown those entries again, so a dream is where what matters is moved into your files.
 - Entries written inside a sealed thread are shown nowhere until its seal comes off.
 
@@ -33,4 +32,4 @@ Each entry says where it came from:
 
 - To pass something to your heartbeats or your other threads from a conversation, call `{{write_diary}}`.
 - From a heartbeat or a wake, say it in your final response.
-- The diary is for the next day. What should outlast that belongs in a file.
+- The diary is for the next day. What you want back on a later day belongs in a trigger with `on` and `wake = false`, which puts it in the diary then, and what should outlast that belongs in a file.

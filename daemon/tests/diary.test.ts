@@ -41,7 +41,7 @@ test("a note is the closing text without what was sent, and a heartbeat with not
 
 test("a note shows at the start of turns for a day, and no longer", async () => {
   const dir = await character();
-  leave(dir, T0, "The lamp is lit.", counter());
+  expect(addDiaryNote(dir, { at: T0, thread: "heartbeat", source: "heartbeat", text: "The lamp is lit." }, counter())).toEqual(note("d1", T0, "The lamp is lit."));
 
   expect(recentDiary(dir, T0 + DAY - 1)).toEqual({ notes: [note("d1", T0, "The lamp is lit.")], omitted: 0 });
   expect(recentDiary(dir, T0 + DAY)).toEqual({ notes: [], omitted: 0 });

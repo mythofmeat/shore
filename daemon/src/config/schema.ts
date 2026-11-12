@@ -217,12 +217,21 @@ const DREAMING_DESCRIPTIONS: Record<string, string> = {
   model: "Model dreams run on, as provider:model_id. Unset runs them on the character's chat model; a bare --background in shore model use never sets it.",
 };
 
+const HEARTBEAT_DESCRIPTIONS: Record<string, string> = {
+  enabled: "Give the character time of its own: the heartbeat Shore gives it, the wakes it asks for, and the triggers it keeps in TRIGGERS.toml in its workspace, which are schedules, things that happen and checks. A check is a command run as the character with no model call, and needs it to have the bash tool. Off by default.",
+  default_interval: "How long after the character's last heartbeat Shore's own trigger, heartbeat, wakes it again when it has asked for no wake. Held between min_interval and max_interval.",
+  min_interval: "Soonest a heartbeat the character asks for may be, counted from when it asks, and with defer_on_activity also from the user's last message or the end of the last reply.",
+  max_interval: "Furthest ahead the character may ask for a heartbeat.",
+  defer_on_activity: "Push the heartbeat the character asked for, or Shore's own, to at least min_interval after each message from the user and the end of each reply, in any thread. The character's own triggers aren't moved. Off by default.",
+  max_idle_turns: "Wakes in a row, of any kind, with no message from the user before the character goes dormant, so that nothing wakes it until the user writes again. Defaults to 3.",
+  idle_timeout: "Time since the user's last message after which the character goes dormant. Defaults to 2d.",
+};
+
 const TRIGGER_DESCRIPTIONS: Record<string, string> = {
-  enabled: "Run the triggers the character keeps in TRIGGERS.toml in its workspace: schedules, things that happen and checks, each of which wakes it or leaves it a diary entry. A check is a command run as the character with no model call. Off by default, and needs heartbeats on.",
   wake_cooldown: "Least time between two wakes from the same trigger, unless the trigger sets its own cooldown. A trigger that comes due sooner waits, and its check isn't run until then. Defaults to 1h.",
   check_time_limit: "Longest a trigger's check may run before it is stopped and counted as failed. Defaults to 60s.",
   max_wake_limit: "Longest a wake in a thread may run, whatever limit the character's trigger asks for. A plain heartbeat keeps its own 30 minutes. Defaults to 2h.",
-  off: "Names of triggers that are switched off: they don't fire and their checks don't run until the name is taken out again.",
+  off: "Names of triggers that are switched off: they don't fire and their checks don't run until the name is taken out again. Shore's own trigger is named heartbeat.",
 };
 
 const IMAGE_DESCRIPTIONS: Record<string, string> = {
@@ -262,6 +271,8 @@ function describeOption(path: readonly string[]): string {
   if (plan !== undefined) return plan;
   const dreaming = path[0] === "dreaming" ? DREAMING_DESCRIPTIONS[leaf] : undefined;
   if (dreaming !== undefined) return dreaming;
+  const heartbeat = path[0] === "heartbeat" ? HEARTBEAT_DESCRIPTIONS[leaf] : undefined;
+  if (heartbeat !== undefined) return heartbeat;
   const triggers = path[0] === "triggers" ? TRIGGER_DESCRIPTIONS[leaf] : undefined;
   if (triggers !== undefined) return triggers;
   const user = leaf === "user" ? USER_DESCRIPTIONS[path[0] ?? ""] : undefined;
@@ -273,10 +284,6 @@ function describeOption(path: readonly string[]): string {
     enabled: "Enable this feature or select the names granted access.",
     mcp: "MCP servers granted by name; each grants every tool of that [mcp.<name>] server.",
     bearer_token_env: "Environment variable holding a bearer token sent as the Authorization header; HTTP servers only.",
-    default_interval: "Time until the next heartbeat when the character does not schedule one.",
-    min_interval: "Shortest time before any heartbeat, measured from the last heartbeat or daemon start, and with defer_on_activity also from the user's last message or the end of the last reply.",
-    defer_on_activity: "Push the next heartbeat to at least min_interval after each message from the user and the end of each reply, in any thread. Off by default, so only heartbeats space each other.",
-    max_interval: "Longest time the character may schedule its next heartbeat.",
     via: "Notification delivery method; off disables delivery.",
     events: "Notification events to deliver; a list replaces the inherited selection.",
     discover: "Discover this provider's models; false by default.",

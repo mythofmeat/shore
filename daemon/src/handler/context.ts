@@ -33,7 +33,6 @@ import type { SystemBlock, ToolDefinition, WireMessage } from "../llm/types.ts";
 import { toCredentialsEntry } from "../config/providers.ts";
 import { characterWorkspace } from "../tools/character_workspace.ts";
 import { assembleToolSurface, renderToolDefs, subagentToolDefs } from "../tools/registry.ts";
-import { wakeToolNotes } from "../autonomy/heartbeat_shape.ts";
 import { assistantImageModeForRequest, buildLlmMessages } from "./wire_messages.ts";
 
 export interface PrepareChatContextParams {
@@ -183,7 +182,7 @@ export async function prepareChatContext(
 
   const toolDefs = toolsAvailable
     ? assembleToolSurface(
-        renderToolDefs(config.app.tools, character, displayName, wakeToolNotes(config, character)),
+        renderToolDefs(config.app.tools, character, displayName),
         subagentToolDefs(
           config.app.subagents,
           config.app.tools.enabled_subagents,

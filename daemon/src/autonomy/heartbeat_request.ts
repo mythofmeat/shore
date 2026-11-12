@@ -31,7 +31,8 @@ import { presence } from "./presence.ts";
 import { heartbeatTemplate, renderHeartbeatPrompt, triggerFiredNote } from "./heartbeat_shape.ts";
 import type { TriggerFiring } from "./runner.ts";
 import { HEARTBEAT_TIME_LIMIT_MS, HEARTBEAT_WRAP_UP_MS } from "./heartbeat_loop.ts";
-import { HEARTBEAT_OPENER, homeDigest, readHomeThrough, type HomeReader } from "./heartbeat_thread.ts";
+import { HEARTBEAT_OPENER, homeWords, threadDigest, type HomeReader } from "./heartbeat_thread.ts";
+import { heartbeatRecord, keptNote, wakeStopNote, type WakeRecord } from "./wake_record.ts";
 import type { RebuildDeps } from "../cache/rebuild.ts";
 
 const SECONDS_PER_MINUTE = 60n;
@@ -128,10 +129,11 @@ export function applyHeartbeatModelOverride(
 export async function lastWroteNote(
   dataDir: string,
   character: string,
-  heartbeat: string,
+  heartbeat: string | undefined,
   home: string,
   userName: string,
   nowMs: number,
+  here?: string,
 ): Promise<string | undefined> {
   const index = await readThreadsIndex(dataDir, character);
   if (index === undefined) return undefined;
@@ -145,25 +147,39 @@ export async function lastWroteNote(
   }
   if (latest === undefined) return undefined;
   const ago = agoPhrase(Math.max(0, (nowMs - latest.at) / 1000));
+  if (latest.id === here) return `[${userName} last wrote to you ${ago}, in this thread.]`;
   if (latest.id === home) return `[${userName} last wrote to you ${ago}, in your home thread "${home}".]`;
   const name = latest.label === undefined ? `"${latest.id}"` : `"${latest.id}" (${latest.label})`;
   return `[${userName} last wrote to you ${ago}, in the side thread ${name}, which isn't shown here.]`;
 }
 
-export interface HeartbeatCutOff {
-  at: number;
-  rounds: number;
-  sent: boolean;
+export interface WakeStart {
+  stopped: string | undefined;
+  wrote: string | undefined;
+  status: string | undefined;
+  kept: string | undefined;
+  diary: string | undefined;
 }
 
-export function cutOffNote(cutOff: HeartbeatCutOff, userName: string, timeZone: string): string {
-  const rounds = cutOff.rounds === 1 ? "1 round" : `${String(cutOff.rounds)} rounds`;
-  const sent = cutOff.sent
-    ? `The message it had already written was still sent to ${userName}.`
-    : `Nothing from it was sent to ${userName}.`;
-  return `[Your last heartbeat reached its ${String(HEARTBEAT_TIME_LIMIT_MS / 60_000)}-minute limit and was stopped at ` +
-    `${formatWallClock(cutOff.at, timeZone)}, after ${rounds}, before it had finished. ${sent} ` +
-    "Whatever it had already changed with its tools is still in place.]";
+export async function wakeStart(
+  config: LoadedConfig,
+  character: string,
+  record: WakeRecord,
+  where: { what: string; heartbeat: string | undefined; home: string; here?: string },
+  userName: string,
+  nowMs: number,
+  timeZone: string,
+): Promise<WakeStart> {
+  const characterDir = characterDataDir(config.dirs.data, character);
+  const recent = recentDiary(characterDir, nowMs);
+  const set = presence(config.dirs.data);
+  return {
+    stopped: record.stopped === undefined ? undefined : wakeStopNote(record.stopped, where.what, userName, timeZone),
+    wrote: await lastWroteNote(config.dirs.data, character, where.heartbeat, where.home, userName, nowMs, where.here).catch(() => undefined),
+    status: set === undefined || set.status === "" ? undefined : presenceText(set, nowMs, `${userName}'s`),
+    kept: keptNote(record, recent.notes, where.what, timeZone),
+    diary: recent.notes.length === 0 ? undefined : diaryText(recent.notes, DIARY_FOR_HEARTBEAT, timeZone, recent.omitted),
+  };
 }
 
 export interface PrepareHeartbeatDeps {
@@ -171,8 +187,6 @@ export interface PrepareHeartbeatDeps {
   env?: NodeJS.ProcessEnv;
   now?: () => number;
   timeZone?: string;
-  cutOff?: HeartbeatCutOff;
-  wakeReason?: string;
   fired?: readonly TriggerFiring[];
   newId?: () => string;
 }
@@ -191,6 +205,7 @@ export interface PreparedHeartbeat extends ToolConversation {
   modelId: string;
   maxToolIterations: number | undefined;
   override: ResolvedModel | undefined;
+  record: WakeRecord;
 }
 
 export async function prepareHeartbeatRequest(
@@ -216,7 +231,7 @@ export async function prepareHeartbeatRequest(
   const timeZone = deps.timeZone ?? hostZone();
   const userName = resolveDisplayName(config.app.defaults, deps.env);
   const characterDir = characterDataDir(config.dirs.data, character);
-  const since = readHomeThrough(characterDir);
+  const record = heartbeatRecord(characterDir, thread, HEARTBEAT_TIME_LIMIT_MS);
   const configured = heartbeatModel(config, character);
   const maxToolIterations = (configured ?? resolved).maxToolIterations;
   try {
@@ -231,12 +246,8 @@ export async function prepareHeartbeatRequest(
     timeLimit: fallbackIntervalPhrase(BigInt(HEARTBEAT_TIME_LIMIT_MS / 1000)),
     wrapUpAfter: fallbackIntervalPhrase(BigInt((HEARTBEAT_TIME_LIMIT_MS - HEARTBEAT_WRAP_UP_MS) / 1000)),
     maxRounds: maxToolIterations,
-    wakeReason: deps.wakeReason,
   });
-  const wrote = await lastWroteNote(config.dirs.data, character, thread, home, userName, nowMs).catch(() => undefined);
-  const cutOff = deps.cutOff === undefined ? undefined : cutOffNote(deps.cutOff, userName, timeZone);
-  const recent = recentDiary(characterDir, nowMs);
-  const diary = recent.notes.length === 0 ? undefined : diaryText(recent.notes, DIARY_FOR_HEARTBEAT, timeZone, recent.omitted);
+  const { stopped, wrote, status, kept, diary } = await wakeStart(config, character, record, { what: "heartbeat", heartbeat: thread, home }, userName, nowMs, timeZone);
   const newId = deps.newId ?? (() => `m_${crypto.randomUUID()}`);
   const timestamp = new Date(nowMs).toISOString();
   const note = (role: "user" | "system", text: string): Message => ({
@@ -249,12 +260,10 @@ export async function prepareHeartbeatRequest(
     alternatives: [],
     timestamp,
   });
-  const opener = note("user", `${HEARTBEAT_OPENER}\n\n${await homeDigest(conversation.homeThread, home, since, userName, timeZone)}`);
+  const opener = note("user", `${HEARTBEAT_OPENER}\n\n${await threadDigest(conversation.homeThread, homeWords(home), record.through, userName, timeZone)}`);
   const fired = (deps.fired ?? []).map((firing) => triggerFiredNote(firing, timeZone));
-  const set = presence(config.dirs.data);
-  const status = set === undefined || set.status === "" ? undefined : presenceText(set, nowMs, `${userName}'s`);
   const sealed = sealedListNote(sealedThreads(characterDir), timeZone);
-  const instructions = note("system", [cutOff, wrote, status, sealed, diary, ...fired, rendered].filter((part) => part !== undefined).join("\n\n"));
+  const instructions = note("system", [stopped, wrote, status, sealed, kept, diary, ...fired, rendered].filter((part) => part !== undefined).join("\n\n"));
   const messages = [opener, instructions];
 
   let built: Awaited<ReturnType<typeof buildChatShapeRequestFromDisk>>;
@@ -299,5 +308,6 @@ export async function prepareHeartbeatRequest(
     modelId: (override ?? resolved).modelId,
     maxToolIterations: (override ?? resolved).maxToolIterations,
     override,
+    record,
   };
 }

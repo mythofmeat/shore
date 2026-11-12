@@ -423,7 +423,6 @@ const HEARTBEAT: StructSpec<HeartbeatConfig> = {
 };
 
 export interface TriggersConfig {
-  enabled: boolean;
   wake_cooldown: ConfigDuration;
   check_time_limit: ConfigDuration;
   max_wake_limit: ConfigDuration;
@@ -431,7 +430,6 @@ export interface TriggersConfig {
 }
 
 export const defaultTriggersConfig = (): TriggersConfig => ({
-  enabled: false,
   wake_cooldown: ConfigDuration.fromSecs(3600),
   check_time_limit: ConfigDuration.fromSecs(60),
   max_wake_limit: ConfigDuration.fromSecs(7200),
@@ -447,7 +445,6 @@ const TRIGGERS: StructSpec<TriggersConfig> = {
   name: "TriggersConfig",
   make: defaultTriggersConfig,
   fields: {
-    enabled: readBool,
     wake_cooldown: readDuration,
     check_time_limit: readDuration,
     max_wake_limit: readDuration,

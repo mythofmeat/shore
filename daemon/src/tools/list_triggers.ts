@@ -1,4 +1,5 @@
-import type { TriggersView, TriggerView } from "../autonomy/trigger_loop.ts";
+import { HEARTBEAT_TRIGGER } from "../autonomy/own_time.ts";
+import type { OwnTriggers, TriggersView, TriggerView } from "../autonomy/trigger_loop.ts";
 import { TRIGGERS_FILE, type TriggerWhen } from "../autonomy/triggers.ts";
 import { ConfigDuration } from "../config/duration.ts";
 import { formatWallClock } from "../engine/prompt.ts";
@@ -61,13 +62,23 @@ function described(each: TriggerView, userName: string, timeZone: string): strin
   return `${trigger.name}: ${parts.join(", ")}\n  ${status.join(" · ")}`;
 }
 
+function ownTriggers(own: OwnTriggers, userName: string, timeZone: string): string[] {
+  const next = own.nextAt === undefined ? [] : [`\n  next ${formatWallClock(own.nextAt, timeZone)}`];
+  const waits = own.asked === undefined ? next : ["\n  waiting behind the heartbeat you asked for"];
+  const status = own.off ? [`\n  switched off by ${userName}`] : waits;
+  const does = `${HEARTBEAT_TRIGGER}: ${length(own.everyMs)} after your last heartbeat, unless you have asked for one, wakes you`;
+  const asked = own.asked === undefined ? [] : [`The heartbeat you asked for: ${own.asked.reason === "" ? "no reason given" : `"${own.asked.reason}"`}${next.join("")}`];
+  return [`Shore's own trigger, which isn't in your file:\n${does}${status.join("")}`, ...asked];
+}
+
 export function handleListTriggers(view: TriggersView | undefined, userName: string, timeZone: string = hostZone()): string {
   if (view === undefined) throw new ToolIoError("triggers are not available in this context");
   const where = `Your triggers, from ${TRIGGERS_FILE} in your workspace root.`;
   return [
-    view.enabled ? where : `${where} ${userName} hasn't turned triggers on, so none of them run.`,
-    ...(view.triggers.length === 0 && view.problems.length === 0 ? ["You have none yet."] : []),
+    view.enabled ? where : `${where} ${userName} has your own time switched off, so nothing fires.`,
+    ...(view.triggers.length === 0 && view.problems.length === 0 ? ["You have none there yet."] : []),
     ...view.triggers.map((each) => described(each, userName, timeZone)),
     ...(view.problems.length === 0 ? [] : [`Not running:\n${view.problems.map((problem) => `- ${problem}`).join("\n")}`]),
+    ...(view.own === undefined || !view.enabled ? [] : ownTriggers(view.own, userName, timeZone)),
   ].join("\n\n");
 }

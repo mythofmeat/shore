@@ -23,7 +23,7 @@ A thread is a conversation with a context of its own. What is said in one isn't 
 - `name` is its id: letters, digits, dot, dash or underscore, starting with a letter or digit, at most 64 characters. `label` is the name {{user}}'s thread list shows.
 - `purpose` is a line or two on what the thread is for. You are shown it whenever you are in that thread.
 - `files` are workspace files kept in the thread's prompt, given as paths or as `[[links]]` the way `{{read}}` takes them. A folder link like `[[lighthouse/]]` means its `INDEX.md`. Each must be text of at most {{thread_file_size}}, and they may come to {{thread_files_size}} together. If any can't be found or doesn't fit, the thread isn't started, and the error names each one.
-- The files are shown as they were when you last arrived. A change to one shows up in that thread after a long pause there, or after the thread compacts, so that its prompt doesn't change in the middle of a conversation.
+- The files are shown as they were when you last arrived. A change to one shows up in that thread after a long pause there, or after the thread compacts, so that its prompt doesn't change in the middle of a conversation. A wake there reads them afresh, unless {{user}} has just been writing in the thread.
 - `opening` is your first message there, so {{user}} finds something when they switch to it.
 - `folder` puts the thread in a folder of {{user}}'s thread list, which is made if there isn't one by that name.
 

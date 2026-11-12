@@ -28,8 +28,7 @@ A picture or a video from your workspace goes in a message the way notes embed o
 Where you see it:
 
 - In a conversation, above {{user}}'s next message in that thread, once for each change: `[Their status, set 3 hours ago: "asleep"]`. A cleared status is told the same way, to a thread that had been shown one.
-- At the start of a heartbeat, while one is set.
-- At the start of a wake in a thread, if that thread hasn't been shown it.
+- At the start of a heartbeat or a wake in a thread, while one is set.
 - In a check, as `SHORE_USER_STATUS`, which is empty when the status is cleared. The `triggers` topic has an example.
 
 A trigger with `when = "status_changed"` fires when {{user}} sets or clears it.
@@ -37,6 +36,6 @@ A trigger with `when = "status_changed"` fires when {{user}} sets or clears it.
 ## When they were last around
 
 - Shore notes when {{user}} last wrote to you, and when they were last seen: when they last wrote or a client of theirs last marked a thread read.
-- A heartbeat starts with where and how long ago they last wrote. `{{list_threads}}` says when they last wrote in each thread.
+- A heartbeat, and a wake in a thread, starts with where and how long ago they last wrote. `{{list_threads}}` says when they last wrote in each thread.
 - A check gets both, as `SHORE_USER_LAST_MESSAGE_AT` and `SHORE_USER_LAST_SEEN_AT`, with `SHORE_USER_QUIET_SECS` for how long they have been quiet.
 - Triggers with `when = "user_quiet"` and `when = "user_back"` act on it.

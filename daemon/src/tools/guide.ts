@@ -8,7 +8,7 @@ import wakesText from "../../prompts/guide/wakes.md" with { type: "text" };
 
 import { DIARY_KEPT, DIARY_NOTE_CHARS, DIARY_SHOWN, DIARY_WINDOW_MS } from "../autonomy/diary.ts";
 import { HEARTBEAT_TIME_LIMIT_MS, HEARTBEAT_WRAP_UP_MS } from "../autonomy/heartbeat_loop.ts";
-import { wakeToolNotes } from "../autonomy/heartbeat_shape.ts";
+import { HEARTBEAT_TRIGGER } from "../autonomy/own_time.ts";
 import { PUSH_CHARS } from "../autonomy/push.ts";
 import { WAKE_QUIET_MS } from "../autonomy/runner.ts";
 import { CHECK_ERROR_CHARS, CHECK_OUTPUT_CHARS } from "../autonomy/trigger_check.ts";
@@ -53,18 +53,18 @@ function either(holds: boolean, whenTrue: string, whenFalse: string): [string, s
   return [holds ? whenTrue : whenFalse, "yes"];
 }
 
-export function guideValues(config: LoadedConfig, character: string, userName: string): Map<string, string> {
+export function guideValues(config: LoadedConfig, userName: string): Map<string, string> {
   const { autonomy, presence } = config.app.behavior;
   const { heartbeat } = autonomy;
   const { notifications } = config.app;
-  const triggers = triggerSettings(autonomy);
-  const wake = wakeToolNotes(config, character);
+  const triggers = triggerSettings(config.app);
   const statuses = presence.statuses.map((status) => `\`${status}\``).join(", ");
   const defaultMs = Math.min(Math.max(heartbeat.default_interval.asMillis(), heartbeat.min_interval.asMillis()), heartbeat.max_interval.asMillis());
   return new Map([
     ["user", userName],
-    either(autonomy.enabled, "own_time_on", "own_time_off"),
-    either(triggers.enabled, "triggers_on", "triggers_off"),
+    either(triggers.enabled, "own_time_on", "own_time_off"),
+    either(triggers.checks, "checks_on", "checks_off"),
+    either(autonomy.triggers.off.includes(HEARTBEAT_TRIGGER), "heartbeat_off", "heartbeat_on"),
     ["wake_cooldown", span(triggers.wakeCooldownMs)],
     ["check_time_limit", span(triggers.checkLimitMs)],
     ["arrival_check_limit", span(arrivalCheckLimitMs(triggers.checkLimitMs))],
@@ -75,8 +75,7 @@ export function guideValues(config: LoadedConfig, character: string, userName: s
     ["min_interval", heartbeat.min_interval.toString()],
     ["max_interval", heartbeat.max_interval.toString()],
     ["default_interval", span(defaultMs)],
-    either(wake.defers, "wake_defers", "wake_stays"),
-    either(wake.reasonShown, "wake_reason_shown", "wake_reason_logged"),
+    either(heartbeat.defer_on_activity, "wake_defers", "wake_stays"),
     ["heartbeat_limit", span(HEARTBEAT_TIME_LIMIT_MS)],
     ["heartbeat_nudge_after", span(HEARTBEAT_TIME_LIMIT_MS - HEARTBEAT_WRAP_UP_MS)],
     ["wrap_up_rounds", String(heartbeat.wrap_up_grace_rounds)],

@@ -308,17 +308,20 @@ test("triggers that follow each other in a ring are all refused, and so is anyth
   });
 });
 
-test("[triggers] is read under its own name, off unless turned on, and a check time limit of zero is refused", async () => {
+test("[triggers] is read under its own name, has no switch of its own, and a check time limit of zero is refused", async () => {
   const root = await mkdtemp(testTmp("shore-triggers-config-"));
-  const read = (): (boolean | number | string[])[] => {
+  const read = (): (number | string[])[] => {
     const triggers = loadConfig(join(root, "config.toml"), { env: { SHORE_CONFIG_DIR: root }, onWarn: () => {} }).app.behavior.autonomy.triggers;
-    return [triggers.enabled, Number(triggers.wake_cooldown.asSecs()), Number(triggers.check_time_limit.asSecs()), Number(triggers.max_wake_limit.asSecs()), triggers.off];
+    return [Number(triggers.wake_cooldown.asSecs()), Number(triggers.check_time_limit.asSecs()), Number(triggers.max_wake_limit.asSecs()), triggers.off];
   };
   await writeFile(join(root, "config.toml"), '[chat]\ndisplay_name = "eve"\n');
-  expect(read()).toEqual([false, 3600, 60, 7200, []]);
+  expect(read()).toEqual([3600, 60, 7200, []]);
 
-  await writeFile(join(root, "config.toml"), '[triggers]\nenabled = true\nwake_cooldown = "2h"\ncheck_time_limit = "10s"\nmax_wake_limit = "4h"\noff = ["tide-table"]\n');
-  expect(read()).toEqual([true, 7200, 10, 14400, ["tide-table"]]);
+  await writeFile(join(root, "config.toml"), '[triggers]\nwake_cooldown = "2h"\ncheck_time_limit = "10s"\nmax_wake_limit = "4h"\noff = ["tide-table", "heartbeat"]\n');
+  expect(read()).toEqual([7200, 10, 14400, ["tide-table", "heartbeat"]]);
+
+  await writeFile(join(root, "config.toml"), '[triggers]\nenabled = true\n');
+  expect(read).toThrow("unknown field `triggers.enabled`");
 
   await writeFile(join(root, "config.toml"), '[triggers]\ncheck_time_limit = "0s"\n');
   expect(read).toThrow("triggers.check_time_limit must be greater than zero");
@@ -328,11 +331,29 @@ test("each [triggers] setting is described in the config schema", () => {
   const described = configSchema({ instancesAt: () => [] }).filter((entry) => entry.key.startsWith("triggers.")).map((entry) => [entry.key, (entry.description ?? "").split(" ").slice(0, 4).join(" ")]);
   expect(described).toEqual([
     ["triggers.check_time_limit", "Longest a trigger's check"],
-    ["triggers.enabled", "Run the triggers the"],
     ["triggers.max_wake_limit", "Longest a wake in"],
     ["triggers.off", "Names of triggers that"],
     ["triggers.wake_cooldown", "Least time between two"],
   ]);
+});
+
+test("each [heartbeat] setting that the one system changed says what it does now, and another section's switch keeps its own words", () => {
+  const schema = configSchema({ instancesAt: () => [] });
+  const start = (key: string): string => (schema.find((entry) => entry.key === key)?.description ?? "").split(" ").slice(0, 6).join(" ");
+  expect(["enabled", "default_interval", "min_interval", "max_interval", "defer_on_activity", "max_idle_turns", "idle_timeout"].map((key) => start(`heartbeat.${key}`))).toEqual([
+    "Give the character time of its",
+    "How long after the character's last",
+    "Soonest a heartbeat the character asks",
+    "Furthest ahead the character may ask",
+    "Push the heartbeat the character asked",
+    "Wakes in a row, of any",
+    "Time since the user's last message",
+  ]);
+  expect(schema.find((entry) => entry.key === "heartbeat.enabled")?.description).toContain("the triggers it keeps in TRIGGERS.toml");
+  expect(schema.find((entry) => entry.key === "heartbeat.enabled")?.description).toContain("needs it to have the bash tool");
+  expect(start("compaction.enabled")).toBe("Enable this feature or select the");
+  expect(start("heartbeat.model")).toBe("Fallback model as provider:model_id; stored chat");
+  expect(schema.find((entry) => entry.key === "triggers.off")?.description).toEndWith("Shore's own trigger is named heartbeat.");
 });
 
 test("`on` is one local date and time, and a date that doesn't exist is refused", () => {
@@ -398,7 +419,7 @@ test("the list says of a check when it last ran and whether it printed nothing o
   expect(shown(body, { failing: true })).toBe(`${head}never fired · its check is failing`);
 });
 
-test("the list covers every trigger and those that aren't running, and says so when there are none or triggers are off", () => {
+test("the list covers every trigger and those that aren't running, and says so when there are none or the character's own time is off", () => {
   const parsed = parse('[show]\nat = "Sat 20:00"\nreason = "The show."\n\n[recap]\nfollows = "show"\nreason = "Write it up."\nwake = false\n\n[lamp]\nreason = "r"\n');
   const view: TriggersView = { enabled: true, problems: parsed.problems, triggers: parsed.triggers.map((trigger) => ({ trigger, off: false, failing: false, fired: 0, lastFiredAt: undefined, checkedAt: undefined, nextAt: undefined })) };
   expect(handleListTriggers(view, "eve", "UTC")).toBe([
@@ -407,11 +428,49 @@ test("the list covers every trigger and those that aren't running, and says so w
     'recap: after `show`, leaves a diary entry, "Write it up."\n  never fired',
     "Not running:\n- `lamp` isn't running: it needs exactly one of `every`, `at`, `on`, `when` or `follows` to say when it fires",
   ].join("\n\n"));
-  expect(handleListTriggers({ enabled: true, triggers: [], problems: [] }, "eve", "UTC")).toBe("Your triggers, from TRIGGERS.toml in your workspace root.\n\nYou have none yet.");
+  expect(handleListTriggers({ enabled: true, triggers: [], problems: [] }, "eve", "UTC")).toBe("Your triggers, from TRIGGERS.toml in your workspace root.\n\nYou have none there yet.");
   expect(handleListTriggers({ enabled: false, triggers: [], problems: ["`lamp` isn't running: why"] }, "eve", "UTC")).toBe(
-    "Your triggers, from TRIGGERS.toml in your workspace root. eve hasn't turned triggers on, so none of them run.\n\nNot running:\n- `lamp` isn't running: why",
+    "Your triggers, from TRIGGERS.toml in your workspace root. eve has your own time switched off, so nothing fires.\n\nNot running:\n- `lamp` isn't running: why",
   );
   expect(() => handleListTriggers(undefined, "eve", "UTC")).toThrow("triggers are not available in this context");
+});
+
+test("the list ends with the trigger Shore gives the character and the heartbeat it asked for, each with when it is next due", () => {
+  const next = Date.UTC(2026, 9, 30, 13);
+  const listed = (own: TriggersView["own"]): string => handleListTriggers({ enabled: true, triggers: [], problems: [], own }, "eve", "UTC").split("\n\n").slice(2).join("\n\n");
+  const shores = "Shore's own trigger, which isn't in your file:\nheartbeat: 90m after your last heartbeat, unless you have asked for one, wakes you";
+  expect(listed({ everyMs: 90 * 60_000, off: false, nextAt: next, asked: undefined })).toBe(`${shores}\n  next Friday 2026-10-30 · 1:00 PM`);
+  expect(listed({ everyMs: 90 * 60_000, off: false, nextAt: undefined, asked: undefined })).toBe(shores);
+  expect(listed({ everyMs: 90 * 60_000, off: true, nextAt: undefined, asked: undefined })).toBe(`${shores}\n  switched off by eve`);
+  expect(listed({ everyMs: 90 * 60_000, off: false, nextAt: next, asked: { at: next, reason: "check the tide table" } })).toBe(
+    `${shores}\n  waiting behind the heartbeat you asked for\n\nThe heartbeat you asked for: "check the tide table"\n  next Friday 2026-10-30 · 1:00 PM`,
+  );
+  expect(listed({ everyMs: 90 * 60_000, off: true, nextAt: next + HOUR, asked: { at: next, reason: "" } })).toBe(
+    `${shores}\n  switched off by eve\n\nThe heartbeat you asked for: no reason given\n  next Friday 2026-10-30 · 2:00 PM`,
+  );
+  expect(listed({ everyMs: 90 * 60_000, off: false, nextAt: undefined, asked: { at: next, reason: "r" } })).toBe(
+    `${shores}\n  waiting behind the heartbeat you asked for\n\nThe heartbeat you asked for: "r"`,
+  );
+  expect(handleListTriggers({ enabled: true, triggers: [], problems: [] }, "eve", "UTC")).not.toContain("Shore's own");
+  expect(handleListTriggers({ enabled: false, triggers: [], problems: [], own: { everyMs: 90 * 60_000, off: false, nextAt: next, asked: undefined } }, "eve", "UTC")).toBe(
+    "Your triggers, from TRIGGERS.toml in your workspace root. eve has your own time switched off, so nothing fires.\n\nYou have none there yet.",
+  );
+});
+
+test("a trigger can't take the name of the one Shore gives the character, and one with a check isn't run for a character without the bash tool", () => {
+  expect(parse('[heartbeat]\nevery = "1h"\nreason = "r"\n\n[heartbeats]\nevery = "1h"\nreason = "r"\n')).toMatchObject({
+    triggers: [{ name: "heartbeats" }],
+    problems: ["`heartbeat` isn't running: `heartbeat` is the name of the trigger Shore gives you, so one of your own needs another name"],
+  });
+  const file = '[mail]\nevery = "30m"\ncheck = "new-mail.sh"\n\n[supper]\nat = "20:00"\nreason = "Supper."\n\n[after-mail]\nfollows = "mail"\nreason = "r"\n';
+  expect(parseTriggers(file, DEFAULT_COOLDOWN).triggers.map((trigger) => trigger.name)).toEqual(["mail", "supper", "after-mail"]);
+  expect(parseTriggers(file, DEFAULT_COOLDOWN, true).problems).toEqual([]);
+  const without = parseTriggers(file, DEFAULT_COOLDOWN, false);
+  expect(without.triggers.map((trigger) => trigger.name)).toEqual(["supper"]);
+  expect(without.problems).toEqual([
+    "`mail` isn't running: its `check` is a command, and you don't have the `bash` tool to run commands with",
+    "`after-mail` isn't running: it follows `mail`, which isn't a running trigger in this file",
+  ]);
 });
 
 test("a trigger can name the thread its wake runs in and how long that wake may run, but only if it wakes", () => {

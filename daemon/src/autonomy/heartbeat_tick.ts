@@ -13,9 +13,9 @@ import {
   type HeartbeatLoopResult,
   type HeartbeatRound,
 } from "./heartbeat_loop.ts";
-import { prepareHeartbeatRequest, type HeartbeatCutOff, type PrepareHeartbeatDeps, type PreparedHeartbeat } from "./heartbeat_request.ts";
-import { recordHomeThrough, type HomeReader } from "./heartbeat_thread.ts";
-import { deleteCharacterState, readCharacterState, writeCharacterState } from "../storage/store.ts";
+import { prepareHeartbeatRequest, type PrepareHeartbeatDeps, type PreparedHeartbeat } from "./heartbeat_request.ts";
+import type { HomeReader } from "./heartbeat_thread.ts";
+import { recordWakeEnd, WakeWords } from "./wake_record.ts";
 import type { HeartbeatEventKind } from "./heartbeat_log.ts";
 import type { AutonomyActionResult, HeartbeatNews } from "./runner.ts";
 import { resolveDisplayName } from "../config/app.ts";
@@ -74,30 +74,6 @@ export interface HeartbeatTickDeps
 
 function shortPreview(text: string): string {
   return Array.from(text).slice(0, 80).join("");
-}
-
-const CUT_OFF_STATE = "heartbeat_cut_off.json";
-
-function readCutOff(characterDir: string): HeartbeatCutOff | undefined {
-  try {
-    const raw = readCharacterState(characterDir, CUT_OFF_STATE);
-    if (raw === undefined) return undefined;
-    const { at, rounds, sent } = JSON.parse(raw) as Record<string, unknown>;
-    if (typeof at !== "number" || typeof rounds !== "number" || typeof sent !== "boolean") return undefined;
-    return { at, rounds, sent };
-  } catch (error) {
-    shoreLog.error(`shore: could not read the last heartbeat's cut-off at ${characterDir}: ${String(error)}`);
-    return undefined;
-  }
-}
-
-function settleCutOff(characterDir: string, cutOff: HeartbeatCutOff | undefined): void {
-  try {
-    if (cutOff === undefined) deleteCharacterState(characterDir, CUT_OFF_STATE);
-    else writeCharacterState(characterDir, CUT_OFF_STATE, JSON.stringify(cutOff));
-  } catch (error) {
-    shoreLog.error(`shore: could not record the heartbeat's cut-off at ${characterDir}: ${String(error)}`);
-  }
 }
 
 function noteTickFailure(
@@ -267,13 +243,7 @@ export async function runHeartbeatTick(
 
   return await withConversation(threadDataDir(config.dirs.data, character, thread), "turn", async (signal) => {
     const characterDir = characterDataDir(config.dirs.data, character);
-    const cutOff = readCutOff(characterDir);
-    const prepared = await prepareHeartbeatRequest(
-      character,
-      config,
-      { thread, home: home.thread, homeThread: home },
-      { ...deps, ...(cutOff === undefined ? {} : { cutOff }) },
-    );
+    const prepared = await prepareHeartbeatRequest(character, config, { thread, home: home.thread, homeThread: home }, deps);
     if (prepared === undefined) return { events };
 
     const blocked = (deps.budgetBlockFor ?? budgetBlockFor)(prepared.request);
@@ -284,22 +254,19 @@ export async function runHeartbeatTick(
 
     await engine.appendMessage(prepared.opener);
     await engine.appendMessage(prepared.instructions);
-    recordHomeThrough(characterDir, Date.parse(prepared.opener.timestamp));
 
     const workspace = characterWorkspace(config, character);
     const pictures: PictureSender = { workspace, dir: sentPicturesDir(config.dirs.data, character) };
     const workspaceTurns = workspaceTurnsFor(config.dirs, character, workspace);
     const recorder = new WorkspaceRecorder(workspaceTurns);
     const known = new Set(replyVersions(engine.messages()));
-    let closing = "";
+    const words = new WakeWords();
     const loop = await runHeartbeatToolLoop(prepared.request, {
       ...deps,
       dispatch: (name, input, toolUseId, tools) => deps.dispatch(name, input, toolUseId, tools, { ...prepared, recordWorkspaceWrite: recorder.track }),
       generate: (request, phase, loopSignal) => deps.generate(request, phase, AbortSignal.any([signal, loopSignal])),
       persist: async (round) => {
-        if (round.role === "assistant") {
-          closing = round.blocks.some((block) => block.type === "tool_use") ? "" : round.blocks.flatMap((block) => block.type === "text" ? [block.text] : []).join("");
-        }
+        words.heard(round);
         await engine.appendMessage(await roundMessage(round, prepared.request, deps, pictures));
       },
       character,
@@ -327,12 +294,6 @@ export async function runHeartbeatTick(
       await recorder.settle(thread, newest);
       await pruneTurns(workspaceTurns, thread, engine.messages());
     }
-    if (loop.timedOut === true) {
-      settleCutOff(characterDir, { at: deps.now?.() ?? Date.now(), rounds: loop.failedRound ?? 0, sent: sent !== undefined });
-    } else if (cutOff !== undefined && loop.failedRound !== 0) {
-      settleCutOff(characterDir, undefined);
-    }
-
     if (deps.compaction !== undefined) {
       try {
         await trimHeartbeatThread(character, config, engine, prepared, deps.compaction);
@@ -341,8 +302,12 @@ export async function runHeartbeatTick(
       }
     }
 
-    const noted = closingNote(closing);
-    if (noted !== undefined) addDiaryNote(characterDir, { at: deps.now?.() ?? Date.now(), thread, source: "heartbeat", text: noted });
+    const endedAt = deps.now?.() ?? Date.now();
+    const noted = closingNote(words.closing);
+    const left = noted === undefined ? undefined : addDiaryNote(characterDir, { at: endedAt, thread, source: "heartbeat", text: noted });
+    recordWakeEnd(characterDir, thread, prepared.record, {
+      startedAt: Date.parse(prepared.opener.timestamp), endedAt, limitMs: HEARTBEAT_TIME_LIMIT_MS, loop, words, sent: sent !== undefined, note: left,
+    });
 
     return { events };
   });

@@ -1,6 +1,7 @@
 import { basename, dirname } from "node:path";
 import { readCharacterState, writeCharacterState } from "../storage/store.ts";
 import { shoreLog } from "../log.ts";
+import type { AskedWake } from "./own_time.ts";
 
 export const STATE_VERSION = 4;
 
@@ -27,13 +28,12 @@ export interface PersistedDream {
 export const NO_DREAM: PersistedDream = { turnsSince: 0, failures: 0, forced: false };
 
 export interface AutonomyStateFile {
-  readonly ticksWithoutUser: number;
-  readonly nextWakeAt: number | undefined;
+  readonly wakesWithoutUser: number;
   readonly lastUserAt: number | undefined;
-  readonly forcedDormant?: boolean;
-  readonly defaultWake?: boolean;
-  readonly wakeAnchorAt?: number;
-  readonly wakeReason?: string;
+  readonly forcedDormant: boolean;
+  readonly asked: AskedWake | undefined;
+  readonly lastHeartbeatAt: number | undefined;
+  readonly notBefore: number | undefined;
   readonly coveredTurnCount: number;
   readonly keepalive: PersistedKeepalive | undefined;
   readonly dream?: PersistedDream;
@@ -53,13 +53,13 @@ export function encodeState(state: AutonomyStateFile): string {
   return JSON.stringify(
     {
       version: STATE_VERSION,
-      ticks_without_user: state.ticksWithoutUser,
-      next_wake_at: state.nextWakeAt === undefined ? null : toRfc3339(state.nextWakeAt),
+      ticks_without_user: state.wakesWithoutUser,
+      next_wake_at: state.asked === undefined ? null : toRfc3339(state.asked.at),
       last_user_at: state.lastUserAt === undefined ? null : toRfc3339(state.lastUserAt),
-      forced_dormant: state.forcedDormant === true,
-      default_wake: state.defaultWake === true,
-      wake_anchor_at: state.wakeAnchorAt === undefined ? null : toRfc3339(state.wakeAnchorAt),
-      wake_reason: state.wakeReason ?? null,
+      forced_dormant: state.forcedDormant,
+      wake_anchor_at: state.lastHeartbeatAt === undefined ? null : toRfc3339(state.lastHeartbeatAt),
+      wake_reason: state.asked?.reason ?? null,
+      not_before: state.notBefore === undefined ? null : toRfc3339(state.notBefore),
       covered_turn_count: state.coveredTurnCount,
       keepalive_model: k?.model ?? null,
       keepalive_identity: k?.identity ?? null,
@@ -87,16 +87,18 @@ export function decodeState(raw: string): AutonomyStateFile | undefined {
   const o = parsed as Record<string, unknown>;
   if (o["version"] !== STATE_VERSION) return undefined;
 
-  const ticksWithoutUser = o["ticks_without_user"];
-  if (typeof ticksWithoutUser !== "number") return undefined;
+  const wakesWithoutUser = o["ticks_without_user"];
+  if (typeof wakesWithoutUser !== "number") return undefined;
 
   const coveredTurnCount = o["covered_turn_count"];
 
   return {
-    ticksWithoutUser,
-    nextWakeAt: timeField(o["next_wake_at"]),
+    wakesWithoutUser,
     lastUserAt: timeField(o["last_user_at"]),
-    ...wakeProvenance(o),
+    forcedDormant: o["forced_dormant"] === true,
+    asked: askedField(o),
+    lastHeartbeatAt: timeField(o["wake_anchor_at"]),
+    notBefore: timeField(o["not_before"]),
     coveredTurnCount: typeof coveredTurnCount === "number" ? coveredTurnCount : 0,
     keepalive: keepaliveField(o),
     dream: dreamField(o),
@@ -129,15 +131,11 @@ function dreamField(o: Record<string, unknown>): PersistedDream {
   };
 }
 
-function wakeProvenance(o: Record<string, unknown>): Pick<AutonomyStateFile, "forcedDormant" | "defaultWake" | "wakeAnchorAt" | "wakeReason"> {
-  const wakeAnchorAt = timeField(o["wake_anchor_at"]);
-  const wakeReason = o["wake_reason"];
-  return {
-    ...(typeof wakeReason === "string" ? { wakeReason } : {}),
-    ...(o["forced_dormant"] === true ? { forcedDormant: true } : {}),
-    ...(o["default_wake"] === true ? { defaultWake: true } : {}),
-    ...(wakeAnchorAt === undefined ? {} : { wakeAnchorAt }),
-  };
+function askedField(o: Record<string, unknown>): AskedWake | undefined {
+  const at = timeField(o["next_wake_at"]);
+  const reason = o["wake_reason"];
+  if (at === undefined || o["default_wake"] === true) return undefined;
+  return { at, reason: typeof reason === "string" ? reason : "" };
 }
 
 function timeField(value: unknown): number | undefined {

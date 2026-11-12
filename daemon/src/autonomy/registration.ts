@@ -6,7 +6,7 @@ import { hostZone } from "../ledger/zoned.ts";
 import type { LoadedConfig } from "../config/loader.ts";
 import { loadCompactionCheckpoint } from "../memory/compaction/checkpoint.ts";
 import { dreamRunnerConfig, type AutonomyRunnerConfig, type CompactionRunnerConfig, type DreamRunnerConfig, type RestoredIdle } from "./runner.ts";
-import type { HeartbeatClockConfig } from "./heartbeat.ts";
+import { HEARTBEAT_TRIGGER, type OwnTimeConfig } from "./own_time.ts";
 import type { AutonomyService, RegisterCharacter } from "./service.ts";
 
 export function runnerConfigFor(config: LoadedConfig): AutonomyRunnerConfig {
@@ -35,15 +35,16 @@ function compactionConfigFor(config: LoadedConfig): CompactionRunnerConfig {
   };
 }
 
-export function clockConfigFor(config: LoadedConfig): HeartbeatClockConfig {
-  const heartbeat = config.app.behavior.autonomy.heartbeat;
+export function ownTimeConfigFor(config: LoadedConfig): OwnTimeConfig {
+  const { heartbeat, triggers } = config.app.behavior.autonomy;
   return {
     defaultIntervalMs: Number(heartbeat.default_interval.asMillisExact()),
-    maxIdleTicks: heartbeat.dormant_after_heartbeat_turns,
+    maxIdleWakes: heartbeat.dormant_after_heartbeat_turns,
     maxSilentMs: Number(heartbeat.dormant_after_idle_time.asMillisExact()),
     minIntervalMs: Number(heartbeat.min_interval.asMillisExact()),
     maxIntervalMs: Number(heartbeat.max_interval.asMillisExact()),
     deferOnActivity: heartbeat.defer_on_activity,
+    heartbeatOff: triggers.off.includes(HEARTBEAT_TRIGGER),
   };
 }
 
@@ -68,7 +69,7 @@ export function registrationFor(character: string, config: LoadedConfig): Regist
     character,
     data_dir: `${config.dirs.data}/${character}`,
     config: runnerConfigFor(config),
-    clock: clockConfigFor(config),
+    ownTime: ownTimeConfigFor(config),
     restoreIdle: async () => await restoredIdle(config.dirs.data, character),
   };
 }
@@ -77,7 +78,7 @@ type ServiceSlice = Pick<
   AutonomyService,
   | "register"
   | "setCompactionConfig"
-  | "setHeartbeatConfig"
+  | "setOwnTimeConfig"
   | "setDreamConfig"
   | "backfillActivity"
   | "onUserMessage"
@@ -157,7 +158,7 @@ export class TurnAutonomyBridge {
           character,
           compactionConfigFor(config),
         );
-        this.#service.setHeartbeatConfig(character, clockConfigFor(config));
+        this.#service.setOwnTimeConfig(character, ownTimeConfigFor(config));
         this.#service.setDreamConfig(character, dreamConfigFor(config));
       });
     }

@@ -2,7 +2,7 @@
 
 A trigger wakes you, or leaves you a diary entry, when something happens, without {{user}} prompting it. You set triggers up yourself in `TRIGGERS.toml`, in your workspace root. Shore looks at the file every half minute, so a change takes effect within a minute, and `{{list_triggers}}` shows what Shore made of it: when each trigger is next due, how often it has fired, and any that aren't running and why.
 
-{{#if triggers_on}}{{user}} has triggers turned on.{{/if}}{{#if triggers_off}}{{user}} hasn't turned triggers on, so nothing in the file runs yet. It takes two of their settings: `enabled` under `[triggers]`, and `enabled` under `[heartbeat]`, which switches on your own time as a whole.{{/if}}
+{{#if own_time_on}}{{user}} has your own time switched on, so the triggers in the file run.{{/if}}{{#if own_time_off}}{{user}} has your own time switched off, so nothing in the file runs yet. It is their setting `enabled` under `[heartbeat]`, the one switch for all of your own time.{{/if}}
 
 ## The file
 
@@ -39,7 +39,7 @@ What it does when it fires:
 - `check = "command"` is run first, and the trigger fires only if the check prints something. What it printed is the reason, under the trigger's own `reason` if it has both. A trigger needs a `reason`, a `check`, or both.
 - With nothing more, it wakes you in a heartbeat that starts with a line like `[Your trigger "mail" fired at ...: 2 new messages]`. Triggers that fire together share one heartbeat, and one that fires while a heartbeat is running is handed to that heartbeat before its next step. A heartbeat that has been told to wrap up is handed nothing new. A trigger that wasn't handed over, or that was shown in a step the heartbeat never answered, wakes you again once that heartbeat is over.
 - `wake = false` leaves a diary entry in place of the wake. That costs no model call at all.
-- `thread = "a-thread"` makes the wake run in that thread, with its conversation in front of you. `limit = "2h"` is how long that wake may run: at least a minute, {{default_wake_limit}} if you leave it out, and never more than {{max_wake_limit}}, which is {{user}}'s ceiling. `thread` only goes with a trigger that wakes you, and `limit` only goes with `thread`. It can be any thread of yours but the one your heartbeats run in: your home thread and a sealed thread both work. The `wakes` topic says how such a wake runs.
+- `thread = "a-thread"` makes the wake run in that thread, starting from the note your last wake there left and what was said there since. `limit = "2h"` is how long that wake may run: at least a minute, {{default_wake_limit}} if you leave it out, and never more than {{max_wake_limit}}, which is {{user}}'s ceiling. `thread` only goes with a trigger that wakes you, and `limit` only goes with `thread`. It can be any thread of yours but the one your heartbeats run in: your home thread and a sealed thread both work. The `wakes` topic says how such a wake runs.
 
 What holds it back:
 
@@ -50,7 +50,7 @@ Those are all the settings. Any other key stops that trigger from running, so th
 
 ## Checks
 
-A check is a command line run by `bash` in your workspace root, as the same user and with the same environment as your `{{bash}}` tool. No model is called, so a check that stays quiet costs nothing.
+A check is a command line run by `bash` in your workspace root, as the same user and with the same environment as your `{{bash}}` tool. No model is called, so a check that stays quiet costs nothing.{{#if checks_off}} {{user}} hasn't given you `{{bash}}`, and without it a trigger with a `check` doesn't run. `{{list_triggers}}` lists it as not running.{{/if}}
 
 - It prints nothing and exits 0: the trigger stays quiet, and nothing is recorded.
 - It prints something on stdout and exits 0: the trigger fires. What it printed is cut at {{check_output_chars}} characters.
@@ -113,6 +113,8 @@ A trigger that comes due outside its `between` hours is skipped, not held until 
 
 A trigger with `on` fires once. After that it stays in the file, and `{{list_triggers}}` goes on showing it, as fired and with no next time. It does nothing more there, so take it out whenever you like. Writing a later time in its place arms it again.
 
+With `wake = false` a one-off is a reminder: its `reason` lands in your diary at that time, where your next turn in any thread finds it. That is the place for something you are waiting on for longer than the day your diary shows.
+
 A one-off gets no second try, so a check that fails is handled differently: see the end of this page.
 
 ## `user_back`
@@ -126,6 +128,10 @@ A follower waits for the trigger it names to fire. If that trigger left a diary 
 ## The diary entries
 
 A trigger with `wake = false` leaves an entry marked as from that trigger. The diary keeps only the newest entry from each trigger, so one that fires often replaces its own last entry and can't crowd out the rest.
+
+## Shore's own trigger
+
+One trigger isn't in your file: `heartbeat`, which Shore gives you so that you have time even with nothing set up. {{#if heartbeat_on}}It wakes you {{default_interval}} after your last heartbeat, whatever started that one, unless you have asked for a heartbeat that is still to come.{{/if}}{{#if heartbeat_off}}{{user}} has switched it off.{{/if}} `{{list_triggers}}` shows it with the rest. You can't use its name for a trigger of your own, and {{user}} can switch it off by name like any other. The `wakes` topic says more about it.
 
 ## While you are dormant
 

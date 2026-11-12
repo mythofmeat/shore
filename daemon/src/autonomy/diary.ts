@@ -69,15 +69,19 @@ export interface NewDiaryNote {
   text: string;
 }
 
-export function addDiaryNote(characterDir: string, note: NewDiaryNote, newId: () => string = () => `d_${crypto.randomUUID()}`): void {
-  const chars = Array.from(note.text);
-  const text = chars.length > DIARY_NOTE_CHARS ? `${chars.slice(0, DIARY_NOTE_CHARS).join("")}… [cut]` : note.text;
-  const added: StoredNote = {
+export function cutNote(text: string): string {
+  const chars = Array.from(text);
+  return chars.length > DIARY_NOTE_CHARS ? `${chars.slice(0, DIARY_NOTE_CHARS).join("")}… [cut]` : text;
+}
+
+export function addDiaryNote(characterDir: string, note: NewDiaryNote, newId: () => string = () => `d_${crypto.randomUUID()}`): DiaryNote {
+  const added: DiaryNote = {
     id: newId(), at: new Date(note.at).toISOString(), thread: note.thread, source: note.source,
-    ...(note.trigger === undefined ? {} : { trigger: note.trigger }), text,
+    ...(note.trigger === undefined ? {} : { trigger: note.trigger }), text: cutNote(note.text),
   };
   const earlier = stored(characterDir).filter((each) => note.trigger === undefined || each.trigger !== note.trigger);
   keep(characterDir, [...earlier, added]);
+  return added;
 }
 
 export interface ShownDiary {

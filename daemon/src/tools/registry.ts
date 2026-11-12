@@ -264,13 +264,11 @@ export const ALL_TOOLS: readonly ToolDef[] = Object.freeze([
       properties: {
         hours_from_now: {
           type: "number",
-          description: "Hours from now until the next heartbeat. Fractions are allowed. Clamped to the configured minimum and maximum interval.",
+          description: "Hours from now until that heartbeat. Fractions are allowed. Held between the soonest and the furthest ahead {{user}} lets you ask for one.",
         },
         reason: {
           type: "string",
-          description:
-            "{{#if wake_reason_shown}}A note to yourself for that heartbeat, which shows it to you when it starts. Also recorded in the heartbeat log.{{/if}}" +
-            "{{#if wake_reason_logged}}Why this time. Recorded in the heartbeat log. That heartbeat doesn't show it to you.{{/if}}",
+          description: "A note to yourself for that heartbeat, which starts with it. Also recorded in the heartbeat log.",
         },
       },
       required: ["hours_from_now", "reason"],
@@ -356,14 +354,9 @@ export function templateVars(charName: string, userName: string): Map<string, st
   ]);
 }
 
-export interface WakeToolNotes {
-  readonly reasonShown?: boolean;
-}
-
-export function toolTemplateVars(cfg: ToolsConfigView, charName: string, userName: string, wake: WakeToolNotes = {}): Map<string, string> {
+export function toolTemplateVars(cfg: ToolsConfigView, charName: string, userName: string): Map<string, string> {
   const vars = templateVars(charName, userName);
   for (const tool of availableTools(cfg)) vars.set(tool.name, tool.name);
-  vars.set(wake.reasonShown === true ? "wake_reason_shown" : "wake_reason_logged", "yes");
   return vars;
 }
 
@@ -379,9 +372,8 @@ export function renderToolDefs(
   cfg: ToolsConfigView,
   charName: string,
   userName: string,
-  wake: WakeToolNotes = {},
 ): ToolDefinition[] {
-  const vars = toolTemplateVars(cfg, charName, userName, wake);
+  const vars = toolTemplateVars(cfg, charName, userName);
   return availableTools(cfg).map((t) => ({
     name: t.name,
     description: renderTemplate(t.description, vars),

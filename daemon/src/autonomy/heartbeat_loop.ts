@@ -70,6 +70,7 @@ export interface HeartbeatLoopResult {
   failure?: unknown;
   timedOut?: boolean;
   stoppedAt?: "time" | "rounds" | "interrupted";
+  rounds: number;
   usage?: Usage;
 }
 
@@ -123,7 +124,7 @@ export async function dispatchHeartbeatTools(
 
 async function retryPictures(
   request: SidecarRequest,
-  result: HeartbeatLoopResult,
+  result: Pick<HeartbeatLoopResult, "sendMessageText">,
   deps: HeartbeatLoopDeps,
   run: () => Promise<GenerateResponse | undefined>,
   inTime: () => boolean,
@@ -154,7 +155,7 @@ export async function runHeartbeatToolLoop(
   request: SidecarRequest,
   deps: HeartbeatLoopDeps,
 ): Promise<HeartbeatLoopResult> {
-  const result: HeartbeatLoopResult = { sendMessageText: undefined, images: [] };
+  const result: Omit<HeartbeatLoopResult, "rounds"> = { sendMessageText: undefined, images: [] };
   let iteration = 0;
   let captured: CapturedTool[] = [];
   const deadline = performance.now() + (deps.timeLimitMs ?? HEARTBEAT_TIME_LIMIT_MS);
@@ -264,5 +265,5 @@ export async function runHeartbeatToolLoop(
     clearTimeout(timer);
   }
   if (result.failedRound !== undefined && abort.signal.aborted) result.timedOut = true;
-  return result;
+  return { ...result, rounds: iteration };
 }

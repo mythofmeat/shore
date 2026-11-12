@@ -1,6 +1,7 @@
 import { shoreLog } from "../log.ts";
 import { readCharacterState, writeCharacterState } from "../storage/store.ts";
 import { addDiaryNote } from "./diary.ts";
+import type { AskedWake } from "./own_time.ts";
 import type { TriggerFiring } from "./runner.ts";
 import type { CheckOutcome } from "./trigger_check.ts";
 import { coolingDown, inItsHours, parseTriggers, scheduledAt, TRIGGERS_FILE, type ParsedTriggers, type Trigger } from "./triggers.ts";
@@ -30,6 +31,7 @@ interface TriggerState {
 
 export interface TriggerSettings {
   enabled: boolean;
+  checks: boolean;
   wakeCooldownMs: number;
   checkLimitMs: number;
   maxWakeLimitMs: number;
@@ -58,10 +60,18 @@ export interface TriggerView {
   nextAt: number | undefined;
 }
 
+export interface OwnTriggers {
+  everyMs: number;
+  off: boolean;
+  nextAt: number | undefined;
+  asked: AskedWake | undefined;
+}
+
 export interface TriggersView {
   enabled: boolean;
   triggers: TriggerView[];
   problems: string[];
+  own?: OwnTriggers | undefined;
 }
 
 function record(raw: unknown): TriggerRecord | undefined {
@@ -213,7 +223,7 @@ export class CharacterTriggers {
       shoreLog.warn(`shore: could not read ${TRIGGERS_FILE} at ${this.#deps.characterDir}: ${String(error)}`);
       return;
     }
-    this.#parsed = parseTriggers(content ?? "", settings.wakeCooldownMs);
+    this.#parsed = parseTriggers(content ?? "", settings.wakeCooldownMs, settings.checks);
   }
 
   #state(): TriggerState {

@@ -468,7 +468,7 @@ const DEFAULT_CACHE_TTL_SECS = 3_600;
 const MARKED_GAP_SECS = 1_800;
 const HOME_SEGMENTS_SEARCHED = 3;
 
-function cacheTtlSecs(resolved: ResolvedModel): number {
+export function cacheTtlSecs(resolved: ResolvedModel): number {
   const ms = resolved.cacheTtl === undefined ? undefined : parseDurationMs(resolved.cacheTtl);
   return ms === undefined ? DEFAULT_CACHE_TTL_SECS : ms / 1000;
 }

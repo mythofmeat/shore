@@ -361,7 +361,7 @@ export function heartbeatRunningText(running: NonNullable<Message["heartbeat_run
   if (running.thread !== undefined) {
     return `[A wake of yours in "${running.thread}" has been running since ${since}. It can't see this conversation. It is only told that a message arrived.]`;
   }
-  const why = running.reason === undefined ? "" : ` You scheduled it with set_next_wake, giving this reason: ${running.reason}`;
+  const why = running.reason === undefined ? "" : ` You asked for it, and gave this reason: ${running.reason}`;
   return `[A heartbeat of yours has been running since ${since}. ` +
     `It can't see this conversation. It is only told that a message arrived.${why}]`;
 }

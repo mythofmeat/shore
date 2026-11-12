@@ -1,7 +1,6 @@
 export const DAEMON_FLOORS: Readonly<Record<string, number>> = {
   "src/autonomy/activity.ts": 0,
   "src/autonomy/deep_archive.ts": 0,
-  "src/autonomy/heartbeat.ts": 0.6,
   "src/autonomy/heartbeat_log.ts": 0.35,
   "src/autonomy/heartbeat_loop.ts": 0.35,
   "src/autonomy/heartbeat_request.ts": 0.4,
@@ -436,8 +435,6 @@ export const DAEMON_EQUIVALENTS: readonly string[] = [
   "src/ledger/zoned.ts:candidatesFor: const probes = [guess - 12 「* → /」 HOUR_MS, guess, guess + 12 * H…",
   "src/ledger/zoned.ts:candidatesFor: …- 12 * HOUR_MS, guess, guess + 「12 → 13」 * HOUR_MS];",
   "src/ledger/gate.ts:projectedLoopCost: if (cap === undefined || cap 「<= → <」 1) return undefined;",
-  "src/autonomy/heartbeat.ts:HeartbeatClock.tick: 「this.#defaultFloor = undefined; → {}」",
-  "src/autonomy/heartbeat.ts:HeartbeatClock.schedule: 「this.#lastAnchor = now; → {}」",
   "src/config/token.ts:resolveDaemonToken: …nc(path, `${token}\\n`, { mode: 「0o600 → 385」 });",
   "src/web/auth.ts:WebSessions.#presented: return token === null 「|| → &&」 token === undefined || !/^[A-Z…",
   "src/web/auth.ts:WebSessions.#presented: …== null || token === undefined 「|| → &&」 !/^[A-Za-z0-9_-]{43}$/.test(to…",
