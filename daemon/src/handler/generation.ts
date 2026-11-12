@@ -89,7 +89,7 @@ export function generationEngine(engine: ConversationEngine): GenerationEngine {
     thread: engine.thread,
     messages: () => engine.messages(),
     messagesThroughLastUserTurn: () => engine.messagesThroughLastUserTurn(),
-    segmentCount: () => engine.segments().segmentCount(),
+    priorContext: () => engine.segments().priorContext(),
     segments: () => engine.segments(),
     appendMessage: (msg) => engine.appendMessage(msg),
     replaceAfterLastUserTurn: (msgs) => engine.replaceAfterLastUserTurn(msgs),
@@ -534,7 +534,7 @@ async function threadArrival(
   resolved: ResolvedModel,
   arrivedAt: string,
 ): Promise<{ cold: boolean; annotations: Pick<Message, "last_elsewhere"> }> {
-  const previous = engine.messages().at(-1)?.timestamp;
+  const previous = engine.messages().at(-1)?.timestamp ?? engine.priorContext().lastAt;
   const gapSecs = previous === undefined ? Number.NaN : (Date.parse(arrivedAt) - Date.parse(previous)) / 1000;
   if (previous === undefined || Number.isNaN(gapSecs)) return { cold: false, annotations: {} };
   let elsewhere: Message["last_elsewhere"];

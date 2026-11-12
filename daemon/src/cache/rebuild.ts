@@ -16,8 +16,7 @@ import { MessageStore, isToolResultOnly } from "../engine/message_store.ts";
 import type { Message } from "../engine/types.ts";
 import { buildChatShapeRequestFromDisk } from "../handler/context.ts";
 import type { BuiltRequest } from "../llm/request.ts";
-import { segmentCount } from "../memory/compaction/archive.ts";
-import { conversationRef } from "../engine/segments.ts";
+import { priorContext } from "../memory/compaction/archive.ts";
 import { homeThreadOf, threadChatModel } from "../engine/threads.ts";
 import type { McpRegistry } from "../tools/mcp_registry.ts";
 import type { ToolConversation } from "../handler/tool_context.ts";
@@ -120,7 +119,6 @@ export async function rebuildRequestFromDisk(
   );
   if (resolved === undefined) return undefined;
 
-  const hasPriorContext = (await segmentCount(conversationRef(dataDir, character, thread, false))) > 0;
   const mcpToolDefs = deps.mcpRegistry.toolDefsFiltered(toolGrants(config.app.tools));
 
   try {
@@ -130,7 +128,7 @@ export async function rebuildRequestFromDisk(
       config,
       resolved,
       selected,
-      hasPriorContext,
+      priorContext(dataDir, character, thread),
       {
         mcpToolDefs,
         thread,

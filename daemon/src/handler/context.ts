@@ -14,6 +14,7 @@ import {
 } from "../config/models.ts";
 import { assemblePrompt, type AssembledPrompt, type ThreadPrompt } from "../engine/prompt.ts";
 import { heartbeatThread, homeThread, readThreadsIndexIn, threadRecord } from "../engine/threads.ts";
+import type { PriorContext } from "../engine/segments.ts";
 import type { Message } from "../engine/types.ts";
 import {
   ensureActivePromptSnapshot,
@@ -42,7 +43,7 @@ export interface PrepareChatContextParams {
   config: LoadedConfig;
   resolved: ResolvedModel;
   messages: Message[];
-  hasPriorContext: boolean;
+  prior: PriorContext;
   activeConversation?: boolean;
   canonicalPromptFiles?: boolean;
   mcpToolDefs: readonly ToolDefinition[];
@@ -160,7 +161,8 @@ export async function prepareChatContext(
     character_definition: characterDefinition,
     user_definition: userDefinition,
     memory_index: memoryIndex,
-    has_prior_context: params.hasPriorContext,
+    has_prior_context: params.prior.archived,
+    archived_last_at: params.prior.lastAt,
     messages,
     max_context_tokens: resolved.maxContextTokens,
     max_output_tokens: resolved.maxOutputTokens,
@@ -201,7 +203,7 @@ export async function buildChatShapeRequestFromDisk(
   config: LoadedConfig,
   resolved: ResolvedModel,
   messages: Message[],
-  hasPriorContext: boolean,
+  prior: PriorContext,
   options: {
     thread?: string;
     mcpToolDefs?: readonly ToolDefinition[];
@@ -218,7 +220,7 @@ export async function buildChatShapeRequestFromDisk(
     config,
     resolved,
     messages,
-    hasPriorContext,
+    prior,
     mcpToolDefs: options.mcpToolDefs ?? [],
     ...(options.activeConversation === undefined
       ? {}

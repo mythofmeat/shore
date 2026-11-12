@@ -1,6 +1,7 @@
 import { formatWallClock } from "../engine/prompt.ts";
 import { isToolResultOnly } from "../engine/message_store.ts";
 import { isAutonomousNote } from "../engine/threads.ts";
+import type { PriorContext } from "../engine/segments.ts";
 import type { Message } from "../engine/types.ts";
 import { messageText } from "../memory/history_index.ts";
 import { readCharacterState, writeCharacterState } from "../storage/store.ts";
@@ -8,7 +9,7 @@ import { shoreLog } from "../log.ts";
 
 export interface HomeReader {
   messages(): readonly Message[];
-  segments(): { segmentCount(): number; readSegment(index: number): Promise<Message[]> };
+  segments(): { segmentCount(): number; readSegment(index: number): Promise<Message[]>; priorContext(): PriorContext };
 }
 
 export const HEARTBEAT_OPENER = "[heartbeat]";

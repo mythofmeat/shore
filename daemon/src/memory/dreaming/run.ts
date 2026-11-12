@@ -15,6 +15,7 @@ import { DIARY_FOR_DREAM, diaryText, formatWallClock } from "../../engine/prompt
 import { heartbeatThread, homeThreadOf, readThreadsIndex, threadChatModel } from "../../engine/threads.ts";
 import type { ContentBlock, Message } from "../../engine/types.ts";
 import { buildChatShapeRequestFromDisk } from "../../handler/context.ts";
+import { NO_PRIOR_CONTEXT } from "../../engine/segments.ts";
 import { usageConfigView } from "../../ledger/budget.ts";
 import { budgetBlockFor } from "../../ledger/gate.ts";
 import { hostZone } from "../../ledger/zoned.ts";
@@ -273,7 +274,7 @@ export async function runDreamPass(
   }
   let built: Awaited<ReturnType<typeof buildChatShapeRequestFromDisk>>;
   try {
-    built = await buildChatShapeRequestFromDisk(character, characterDir, scoped, resolved, messages, false, {
+    built = await buildChatShapeRequestFromDisk(character, characterDir, scoped, resolved, messages, NO_PRIOR_CONTEXT, {
       mcpToolDefs: [],
       canonicalPromptFiles: true,
       activeConversation: true,

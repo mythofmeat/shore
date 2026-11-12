@@ -8,6 +8,7 @@ import { defaultAppConfig } from "../src/config/app.ts";
 import type { LoadedConfig } from "../src/config/loader.ts";
 import { emptyCatalog, type ResolvedModel } from "../src/config/models.ts";
 import { ProviderRegistry } from "../src/config/providers.ts";
+import { NO_PRIOR_CONTEXT } from "../src/engine/segments.ts";
 import { readThreadsIndex, type ThreadRecord } from "../src/engine/threads.ts";
 import type { Message } from "../src/engine/types.ts";
 import { editCharacterThread } from "../src/handler/edit_thread.ts";
@@ -66,7 +67,7 @@ async function setup(files: Record<string, string>) {
   const stored = async (id: string): Promise<ThreadRecord | undefined> =>
     (await readThreadsIndex(dirs.data, "frank"))?.threads.find((thread) => thread.id === id);
   const system = async (thread: string): Promise<string> => JSON.stringify((await buildGenerationRequest({
-    engine: { thread, messages: () => messages, messagesThroughLastUserTurn: () => messages, segmentCount: () => 0 },
+    engine: { thread, messages: () => messages, messagesThroughLastUserTurn: () => messages, priorContext: () => NO_PRIOR_CONTEXT },
     dataDir: dirs.data,
     charName: "frank",
     config,

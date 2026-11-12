@@ -164,7 +164,7 @@ export async function runThreadWake(
 
     let built: Awaited<ReturnType<typeof buildChatShapeRequestFromDisk>>;
     try {
-      built = await buildChatShapeRequestFromDisk(character, characterDir, config, resolved, [...engine.messages(), opener], engine.segments().segmentCount() > 0, {
+      built = await buildChatShapeRequestFromDisk(character, characterDir, config, resolved, [...engine.messages(), opener], engine.segments().priorContext(), {
         mcpToolDefs: deps.rebuild.mcpRegistry.toolDefsFiltered(toolGrants(config.app.tools)),
         thread,
         timeZone,
