@@ -2,6 +2,7 @@ import { defaultDreamingConfig, parseDayWindow, type DreamingConfig } from "../c
 import { ActivityTracker, localWallClock, weekdayOf, type ActivityStats } from "./activity.ts";
 import { HeartbeatClock, type HeartbeatAction, type HeartbeatClockConfig } from "./heartbeat.ts";
 import { HeartbeatLog, type HeartbeatEventKind } from "./heartbeat_log.ts";
+import { HEARTBEAT_TIME_LIMIT_MS } from "./heartbeat_loop.ts";
 import {
   dreamDue,
   dreamRetryDelayMs,
@@ -108,6 +109,10 @@ export interface OpenedSeal {
   readonly reason: string;
 }
 
+export type WakeRequest =
+  | { readonly kind: "queued"; readonly replaced: TriggerFiring | undefined }
+  | { readonly kind: "waiting"; readonly waiting: TriggerFiring };
+
 export const WAKE_QUIET_MS = 10 * 60_000;
 
 export function firedBy(firings: readonly TriggerFiring[]): string {
@@ -124,11 +129,16 @@ export type HeartbeatNews =
   | { readonly kind: "user_wrote"; readonly at: number }
   | { readonly kind: "trigger"; readonly firing: TriggerFiring };
 
+function firingsIn(news: readonly HeartbeatNews[]): TriggerFiring[] {
+  return news.flatMap((item) => item.kind === "trigger" ? [item.firing] : []);
+}
+
 export interface TickHooks {
   readonly wakeReason: string | undefined;
   readonly fired: readonly TriggerFiring[];
   scheduleNextWake(hoursFromNow: number, reason: string): number;
-  news(): HeartbeatNews[];
+  news(wrappingUp: boolean): HeartbeatNews[];
+  newsHeard(): void;
 }
 
 export interface RunningHeartbeat {
@@ -321,8 +331,18 @@ export class CharacterAutonomy {
     return "queued";
   }
 
+  requestWake(firing: TriggerFiring, overwrite: boolean): WakeRequest {
+    const asked = (other: TriggerFiring): boolean => other.from !== undefined && other.thread === firing.thread && other.interruptedAt === undefined;
+    const waiting = this.#fired.find(asked);
+    if (waiting !== undefined && !overwrite) return { kind: "waiting", waiting };
+    this.#fired.splice(0, this.#fired.length, ...this.#fired.filter((other) => !asked(other)));
+    this.#queue(firing);
+    return { kind: "queued", replaced: waiting };
+  }
+
   #queue(firing: TriggerFiring): void {
-    const same = (other: TriggerFiring): boolean => other.name === firing.name && other.thread === firing.thread && other.from === firing.from;
+    const same = (other: TriggerFiring): boolean =>
+      other.name === firing.name && other.thread === firing.thread && other.from === firing.from && (firing.from === undefined || other.reason === firing.reason);
     const waiting = this.#fired.find(same);
     const kept = this.#fired.filter((other) => !same(other));
     this.#fired.splice(0, this.#fired.length, ...kept, { ...firing, interruptedAt: firing.interruptedAt ?? waiting?.interruptedAt });
@@ -559,7 +579,7 @@ export class CharacterAutonomy {
           continue;
         }
         this.note("tick_fired", `Woken in "${thread}" by ${firedBy(here)}`, started);
-        const limitMs = here.find((firing) => firing.limitMs !== undefined)?.limitMs;
+        const limitMs = Math.max(...here.map((firing) => firing.limitMs ?? HEARTBEAT_TIME_LIMIT_MS));
         const interruptedAt = here.find((firing) => firing.interruptedAt !== undefined)?.interruptedAt;
         await this.#wake({ startedAt: started, reason: undefined, thread, news: [], firings: [...here], userTold: false }, async (hooks) =>
           await this.#executor.runThreadWake?.(this.#character, { thread, fired: here, limitMs, interruptedAt, interrupted: () => lastActive() >= started }, { ...hooks, wakeReason: undefined, fired: here }) ?? { events: [] });
@@ -606,20 +626,32 @@ export class CharacterAutonomy {
     };
   }
 
-  async #wake(running: LiveHeartbeat, run: (hooks: Pick<TickHooks, "scheduleNextWake" | "news">) => Promise<ThreadWakeResult>): Promise<void> {
+  async #wake(running: LiveHeartbeat, run: (hooks: Pick<TickHooks, "scheduleNextWake" | "news" | "newsHeard">) => Promise<ThreadWakeResult>): Promise<void> {
     this.#heartbeat = running;
     let result: ThreadWakeResult | undefined;
+    const shown: TriggerFiring[] = [];
     try {
       result = await run({
         scheduleNextWake: (hours, reason) => this.scheduleNextWake(hours, reason, this.#now()),
-        news: () => running.news.splice(0),
+        news: (wrappingUp) => {
+          const held = running.news.filter((item) => wrappingUp && item.kind === "trigger");
+          const told = running.news.filter((item) => !held.includes(item));
+          running.news.splice(0, running.news.length, ...held);
+          shown.push(...firingsIn(told));
+          return told;
+        },
+        newsHeard: () => { shown.length = 0; },
       });
       this.#apply(result);
     } finally {
       this.#heartbeat = undefined;
       const stoppedAt = this.#now();
+      const unheard = [...shown, ...firingsIn(running.news)];
       if (result?.interrupted === true) for (const firing of running.firings) this.#queue({ ...firing, interruptedAt: stoppedAt });
-      else this.#events?.wakeDone(running.firings.map((firing) => firing.name));
+      else {
+        for (const firing of unheard) this.#queue(firing);
+        this.#events?.wakeDone(running.firings.filter((firing) => !unheard.includes(firing)).map((firing) => firing.name));
+      }
     }
   }
 

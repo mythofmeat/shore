@@ -352,6 +352,7 @@ describe("what a client gets", () => {
     const client = await Client.open(daemon.port, "ada");
     try {
       await client.awaitFrame("hello");
+      expect((await client.awaitFrame("history"))["selected_character"]).toBe("ada");
       client.frames.length = 0;
 
       client.send({ type: "command", name: "switch_character", args: { name: "nova" } });
@@ -410,6 +411,7 @@ describe("what a client gets", () => {
     const client = await Client.open(daemon.port, "ada");
     try {
       await client.awaitFrame("hello");
+      expect((await client.awaitFrame("history"))["messages"]).toEqual([]);
       client.frames.length = 0;
 
       const engine = await daemon.runtime.registry.getOrCreate("ada");

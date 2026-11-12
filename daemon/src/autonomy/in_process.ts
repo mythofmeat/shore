@@ -70,7 +70,8 @@ export class InProcessAutonomyExecutor implements AutonomyExecutor {
         ...(this.#deps.env === undefined ? {} : { env: this.#deps.env }),
         ...(hooks.wakeReason === undefined ? {} : { wakeReason: hooks.wakeReason }),
         fired: hooks.fired,
-        news: () => hooks.news(),
+        news: (wrappingUp) => hooks.news(wrappingUp),
+        newsHeard: () => { hooks.newsHeard(); },
         generate: calls.generate,
         dispatch: async (name, input, toolUseId, tools, conversation) => {
           toolCtx ??= buildToolContext(config, config.dirs.data, character, {
@@ -107,7 +108,8 @@ export class InProcessAutonomyExecutor implements AutonomyExecutor {
         interrupted: wake.interrupted,
         compaction: this.#threadCompaction(config),
         ...(this.#deps.env === undefined ? {} : { env: this.#deps.env }),
-        news: () => hooks.news(),
+        news: (wrappingUp) => hooks.news(wrappingUp),
+        newsHeard: () => { hooks.newsHeard(); },
         generate: calls.generate,
         dispatch: async (name, input, toolUseId, tools, conversation) => {
           const { wakeInThread: _handOff, ...here } = this.#deps.tools ?? {};

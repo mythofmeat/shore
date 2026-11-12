@@ -62,7 +62,7 @@ export interface HeartbeatTickDeps
   generate: HeartbeatLoopDeps["generate"];
   dispatch: (...args: [...Parameters<HeartbeatLoopDeps["dispatch"]>, ToolConversation]) => ReturnType<HeartbeatLoopDeps["dispatch"]>;
   threads: HeartbeatThreads;
-  news?: () => HeartbeatNews[];
+  news?: (wrappingUp: boolean) => HeartbeatNews[];
   emit?: (character: string, revision: number, msg: Message, thread: string) => void;
   threadsChanged?: (character: string, thread: string) => void;
   notify?: (title: string, body: string, picture?: NotificationPicture) => void;
@@ -306,7 +306,7 @@ export async function runHeartbeatTick(
       wrapUpGrace: config.app.behavior.autonomy.heartbeat.wrap_up_grace_rounds,
       maxToolIterations: prepared.maxToolIterations,
       note: (detail) => note("tool_use", detail),
-      news: () => heartbeatNewsNote(deps.news?.() ?? [], resolveDisplayName(config.app.defaults, deps.env), deps.timeZone ?? hostZone()),
+      news: (wrappingUp) => heartbeatNewsNote(deps.news?.(wrappingUp) ?? [], resolveDisplayName(config.app.defaults, deps.env), deps.timeZone ?? hostZone()),
       checkPictures: async (text) => await pictureProblems([text], workspace, signal),
     });
     if (loop.failedRound !== undefined) await engine.recoverInterruptedToolLoop();

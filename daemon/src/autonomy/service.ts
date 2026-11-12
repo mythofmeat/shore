@@ -18,9 +18,11 @@ import {
   type RestoredIdle,
   type RunningHeartbeat,
   type TriggerFiring,
+  type WakeRequest,
 } from "./runner.ts";
 import { loadState, STATE_FILENAME, type PersistedKeepalive } from "./state_file.ts";
 import type { KeepaliveSnapshot } from "../cache/schedule.ts";
+import { required } from "../util/required.ts";
 
 const AUTONOMY_TICK_MS = 10_000;
 
@@ -241,6 +243,10 @@ export class AutonomyService {
 
   wakeFor(character: string, firing: TriggerFiring): "handed" | "queued" | undefined {
     return this.#entries.get(character)?.runner.wakeFor(firing);
+  }
+
+  requestWake(character: string, firing: TriggerFiring, overwrite: boolean): WakeRequest {
+    return required(this.#entries.get(character)).runner.requestWake(firing, overwrite);
   }
 
   userActiveIn(character: string, thread: string): void {

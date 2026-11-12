@@ -9,7 +9,7 @@ import { localWallClock } from "./activity.ts";
 import { lastSeen, presence, type Presence } from "./presence.ts";
 import type { AutonomyService } from "./service.ts";
 import { runCheck } from "./trigger_check.ts";
-import { CharacterTriggers, type TriggersView } from "./trigger_loop.ts";
+import { CharacterTriggers, type TriggerSettings, type TriggersView } from "./trigger_loop.ts";
 import { TRIGGERS_FILE } from "./triggers.ts";
 
 const TRIGGER_TICK_MS = 30_000;
@@ -52,6 +52,16 @@ export function checkFacts(now: number, user: UserFacts, activity: Record<string
       SHORE_USER_STATUS: status?.status ?? "",
       SHORE_USER_STATUS_SET_AT: status?.set_at ?? "",
     },
+  };
+}
+
+export function triggerSettings(autonomy: LoadedConfig["app"]["behavior"]["autonomy"]): TriggerSettings {
+  return {
+    enabled: autonomy.enabled && autonomy.triggers.enabled,
+    wakeCooldownMs: autonomy.triggers.wake_cooldown.asMillis(),
+    checkLimitMs: autonomy.triggers.check_time_limit.asMillis(),
+    maxWakeLimitMs: autonomy.triggers.max_wake_limit.asMillis(),
+    off: autonomy.triggers.off,
   };
 }
 
@@ -99,16 +109,7 @@ export class TriggerService {
       characterDir: characterDataDir(config().dirs.data, character),
       timeZone: hostZone(),
       now: this.#now,
-      settings: () => {
-        const settings = config().app.behavior.autonomy;
-        return {
-          enabled: settings.enabled && settings.triggers.enabled,
-          wakeCooldownMs: settings.triggers.wake_cooldown.asMillis(),
-          checkLimitMs: settings.triggers.check_time_limit.asMillis(),
-          maxWakeLimitMs: settings.triggers.max_wake_limit.asMillis(),
-          off: settings.triggers.off,
-        };
-      },
+      settings: () => triggerSettings(config().app.behavior.autonomy),
       dormant: () => autonomy.status(character)?.heartbeat_state !== "Active",
       lastUserAt: () => autonomy.status(character)?.last_user_at,
       readFile: async () => {
