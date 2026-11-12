@@ -192,6 +192,7 @@ export function renderHeartbeatPrompt(template: string, vars: HeartbeatPromptVar
   return renderTemplate(
     template,
     new Map([
+      ["wake_reason", ""],
       ["now", vars.now],
       ["user", vars.userName],
       ["default_interval", vars.defaultInterval],

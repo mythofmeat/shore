@@ -605,9 +605,7 @@ export class CharacterAutonomy {
   }
 
   #queueOwnWake(now: number): void {
-    const waiting = this.#ownTime.asked;
     const own = this.#ownTime.due(now);
-    if (this.#ownTime.asked !== waiting) this.#state.dirty = true;
     if (own === undefined) return;
     this.#queue(own.kind === "asked"
       ? { name: "", asked: true, reason: own.reason, at: now }

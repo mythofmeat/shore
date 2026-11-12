@@ -714,7 +714,7 @@ test("a heartbeat's reason reaches a character whose own heartbeat.md never name
   await withCharacter(async ({ script, say, heartbeat, workspace, command }) => {
     const prompts = join(workspace, "..", "prompts");
     await mkdir(prompts, { recursive: true });
-    await writeFile(join(prompts, "heartbeat.md"), "[Private turn at {{now}}.{{#if wake_reason}} You left a note: {{wake_reason}}{{/if}}]");
+    await writeFile(join(prompts, "heartbeat.md"), "[Private turn at {{now}}.{{#if wake_reason}} You left a note: {{wake_reason}}{{/if}}{{wake_reason}}]");
     script.replyWake = { hours_from_now: 2, reason: "look in on the bees" };
     await say("hello");
     expect(wakeTool(script.replies[0]).reason).toBe("A note to yourself for that heartbeat, which starts with it. Also recorded in the heartbeat log.");
@@ -861,7 +861,7 @@ test("a heartbeat is told once, at its next step, that the user wrote while it w
   });
 });
 
-test("a message sent while a heartbeat runs tells that turn a heartbeat is running, since when and why, once in each thread, and the note stays with the message", async () => {
+test("a message sent while a heartbeat runs tells that turn a heartbeat is running, since when and, for one the character asked for with a reason, why, once in each thread, and the note stays with the message", async () => {
   const started = new Date(T0 + 20 * MINUTE).toISOString();
   const running = heartbeatRunningText({ started_at: started, reason: "check the tide table" }, hostZone());
   let root = "";
@@ -911,6 +911,30 @@ test("a message sent while a heartbeat runs tells that turn a heartbeat is runni
     expect(resumed).toContain(`${running}\nis the lamp lit?`);
     expect(times(resumed, "A heartbeat of yours")).toBe(1);
   }, undefined, root);
+
+  const unasked = async (start: (h: Harness) => Promise<void>): Promise<void> => {
+    await withCharacter(async (h) => {
+      await h.say("hello");
+      const held = hold();
+      h.script.beatHeld = held;
+      at(20);
+      const ticking = start(h);
+      await held.started.promise;
+      expect(h.runtime.autonomy.runningHeartbeat("ada")).toMatchObject({ reason: undefined, startedAt: T0 + 20 * MINUTE });
+      await h.say("is the lamp lit?");
+      expect(textOf(h.script.replies.at(-1) as SidecarRequest)).toEndWith(`${heartbeatRunningText({ started_at: started }, hostZone())}\nis the lamp lit?`);
+      held.release.resolve();
+      await ticking;
+    });
+  };
+  await unasked(async ({ runtime }) => {
+    runtime.autonomy.wakeFor("ada", { name: "lamp", reason: "the lamp is low", at: T0 + 20 * MINUTE });
+    await runtime.autonomy.tick();
+  });
+  await unasked(async ({ runtime, heartbeat }) => {
+    expect(runtime.autonomy.scheduleNextWake("ada", 2, "  ")).toBe(2);
+    await heartbeat();
+  });
 });
 
 test("each side is told about the other in these words, with the heartbeat's reason only when it has one", () => {
@@ -2622,13 +2646,14 @@ test("a thread holding nothing but the character's own wakes is put away without
 test("wakes from before the user first wrote in a thread are put away the same way, and what was said from then on is left for a compaction", async () => {
   await wakesIn("log", true, (app) => {
     app.memory.compaction.keep_recent_turns = 0;
-    app.memory.compaction.max_turns = 3;
+    app.memory.compaction.max_turns = 4;
   }, async ({ thread, say }, { wake, openers, compactions }) => {
     await wake(10, "One.");
+    await wake(12, "Two.");
     at(15);
     await say("how is it going?", "log");
-    expect(await openers()).toEqual(["10"]);
-    await wake(30, "Two.");
+    expect(await openers()).toEqual(["10", "12"]);
+    await wake(30, "Three.");
     expect(await openers()).toEqual(["30"]);
     expect((await thread("log")).slice(0, 2).map((message) => message.content)).toEqual(["how is it going?", "reply to: how is it going?"]);
     expect(compactions()).toBe(0);

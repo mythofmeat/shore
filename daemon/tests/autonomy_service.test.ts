@@ -2,7 +2,6 @@ import { expect, test } from "bun:test";
 import { mkdtemp } from "node:fs/promises";
 import { join } from "node:path";
 
-import type { OwnTimeConfig } from "../src/autonomy/own_time.ts";
 import type { AutonomyExecutor, DreamActionResult } from "../src/autonomy/runner.ts";
 import { AutonomyService } from "../src/autonomy/service.ts";
 import { testTmp } from "./support/tmp.ts";
@@ -13,20 +12,25 @@ const T0 = Date.UTC(2026, 9, 30, 12);
 interface World {
   service: AutonomyService;
   beats: string[];
+  compactions: string[];
   dream: PromiseWithResolvers<DreamActionResult>;
   clock: { now: number };
 }
 
-async function world(ownTime: Partial<OwnTimeConfig> = {}): Promise<World> {
+async function world(idleCompactionSecs = 0): Promise<World> {
   const clock = { now: T0 };
   const beats: string[] = [];
+  const compactions: string[] = [];
   const dream = Promise.withResolvers<DreamActionResult>();
   const executor: AutonomyExecutor = {
     runHeartbeatTick: async (_character, hooks) => {
       beats.push(hooks.fired.map((firing) => firing.name).join(","));
       return { events: [] };
     },
-    runCompaction: async () => ({ events: [] }),
+    runCompaction: async (_character, reason) => {
+      compactions.push(reason);
+      return { events: [] };
+    },
     runDeepArchive: async () => ({ events: [] }),
     runDream: async () => await dream.promise,
   };
@@ -34,10 +38,10 @@ async function world(ownTime: Partial<OwnTimeConfig> = {}): Promise<World> {
   await service.register({
     character: "ada",
     data_dir: join(await mkdtemp(testTmp("shore-autonomy-service-")), "ada"),
-    config: { autonomyEnabled: true, heartbeatEnabled: true, compactionEnabled: false, minTurns: 0, maxTurns: 0, idleTriggerSecs: 0, archiveAfterSecs: 0, maxContextTokens: 0 },
-    ownTime: { defaultIntervalMs: 24 * HOUR, minIntervalMs: HOUR, maxIntervalMs: 48 * HOUR, maxIdleWakes: 10, maxSilentMs: 4 * HOUR, ...ownTime },
+    config: { autonomyEnabled: true, heartbeatEnabled: true, compactionEnabled: idleCompactionSecs > 0, minTurns: 0, maxTurns: 0, idleTriggerSecs: idleCompactionSecs, archiveAfterSecs: 0, maxContextTokens: 0 },
+    ownTime: { defaultIntervalMs: 24 * HOUR, minIntervalMs: HOUR, maxIntervalMs: 48 * HOUR, maxIdleWakes: 10, maxSilentMs: 4 * HOUR },
   });
-  return { service, beats, dream, clock };
+  return { service, beats, compactions, dream, clock };
 }
 
 test("when the user last wrote is taken from the history where nothing is on record, and never over what is", async () => {
@@ -69,4 +73,26 @@ test("nothing wakes the character while it is dreaming, and what came due meanwh
   await service.tick();
   expect(beats).toEqual(["lamp"]);
   await service.shutdown();
+});
+
+test("a dream that is due waits for the next look when this one woke the character or compacted its home thread", async () => {
+  const woken = await world();
+  expect(woken.service.forceDreamNow("ada")).toBe("queued");
+  expect(woken.service.wakeFor("ada", { name: "lamp", reason: "the lamp is low", at: T0 })).toBe("queued");
+  await woken.service.tick();
+  expect([woken.beats, woken.service.runningDreams()]).toEqual([["lamp"], []]);
+  await woken.service.tick();
+  expect(woken.service.runningDreams()).toEqual([{ character: "ada", startedAt: T0 }]);
+  woken.dream.resolve({ events: [], dream: "finished" });
+  await woken.service.shutdown();
+
+  const compacted = await world(60);
+  expect(compacted.service.forceDreamNow("ada")).toBe("queued");
+  compacted.clock.now = T0 + 60_000;
+  await compacted.service.tick();
+  expect([compacted.compactions, compacted.service.runningDreams()]).toEqual([["idle"], []]);
+  await compacted.service.tick();
+  expect([compacted.compactions, compacted.service.runningDreams()]).toEqual([["idle"], [{ character: "ada", startedAt: T0 + 60_000 }]]);
+  compacted.dream.resolve({ events: [], dream: "finished" });
+  await compacted.service.shutdown();
 });
