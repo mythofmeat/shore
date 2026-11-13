@@ -3,8 +3,6 @@ export type CompactionReason =
   | "idle";
 
 export interface TickInputs {
-  readonly autonomyEnabled: boolean;
-
   readonly compactionEnabled: boolean;
   readonly compactionTriggered: boolean;
   readonly deepArchiveDone: boolean;
@@ -13,11 +11,9 @@ export interface TickInputs {
   readonly idleSecs: number;
   readonly idleTriggerSecs: number;
   readonly archiveAfterSecs: number;
-
 }
 
 export interface TickDecision {
-  readonly wakesMayRun: boolean;
   readonly compaction: CompactionReason | undefined;
   readonly deepArchive: boolean;
 }
@@ -26,10 +22,8 @@ export function tickDecision(i: TickInputs): TickDecision {
   const compaction = compactionReason(i);
 
   return {
-    wakesMayRun: i.autonomyEnabled,
     compaction,
     deepArchive:
-      i.autonomyEnabled &&
       i.compactionEnabled &&
       i.archiveAfterSecs > 0 &&
       compaction === undefined &&
@@ -40,7 +34,7 @@ export function tickDecision(i: TickInputs): TickDecision {
 }
 
 function compactionReason(i: TickInputs): CompactionReason | undefined {
-  if (!(i.autonomyEnabled && i.compactionEnabled && !i.compactionTriggered)) {
+  if (!(i.compactionEnabled && !i.compactionTriggered)) {
     return undefined;
   }
   if (

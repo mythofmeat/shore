@@ -545,6 +545,40 @@ test("a reply the user never saw stays in home through idle compaction and the d
   });
 });
 
+test("with triggers off an idle conversation is still compacted and later archived, and nothing wakes the character", async () => {
+  await withCharacter(async ({ runtime, data, script, say, thread }) => {
+    await say("is the lamp lit?");
+    await say("and the door?");
+    markThreadRead(data, "ada", "main", T0 + MINUTE);
+    expect(runtime.autonomy.wakeFor("ada", { name: "lamp", reason: "the lamp is low", at: T0 })).toBe("queued");
+
+    at(49);
+    await runtime.autonomy.tick();
+    expect(script.calls).not.toContain("compaction");
+
+    at(50);
+    await runtime.autonomy.tick();
+    expect(script.calls.filter((call) => call === "compaction")).toHaveLength(1);
+    expect(await shownIn(thread)).toEqual([["user", "", "and the door?"], ["assistant", "", "reply to: and the door?"]]);
+
+    at(24 * 60 + 49);
+    await runtime.autonomy.tick();
+    expect(await shownIn(thread)).toHaveLength(2);
+
+    at(24 * 60 + 50);
+    await runtime.autonomy.tick();
+    expect(await shownIn(thread)).toEqual([]);
+    expect(script.calls.filter((call) => call === "compaction")).toHaveLength(1);
+    expect(script.wakes).toEqual([]);
+  }, (app) => {
+    compactsWhenIdle(app);
+    app.memory.compaction.keep_recent_turns = 1;
+    app.memory.compaction.min_turns = 2;
+    app.memory.compaction.archive_after = ConfigDuration.fromSecs(24 * 60 * 60);
+    app.behavior.autonomy.enabled = false;
+  });
+});
+
 test("a side thread trimmed for room without compaction keeps its newest reply while the user hasn't read it", async () => {
   await withCharacter(async ({ runtime, data, script, say, thread }) => {
     await runtime.registry.createThread("ada", "side");

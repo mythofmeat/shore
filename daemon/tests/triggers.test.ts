@@ -368,7 +368,6 @@ test("each [triggers] setting is described in the config schema, and the switch 
   const about = (key: string): string => schema.find((entry) => entry.key === key)?.description ?? "";
   expect(about("triggers.enabled")).toContain("the triggers it keeps in TRIGGERS.toml");
   expect(about("triggers.enabled")).toContain("needs it to have the bash tool");
-  expect(about("triggers.enabled")).toContain("Compaction after compaction.idle_after and the deep archive wait on this switch too.");
   expect(about("compaction.enabled")).toBe("Enable this feature or select the names granted access.");
   expect(schema.filter((entry) => entry.key.split(".")[0] === "heartbeat")).toEqual([]);
   expect(schema.map((entry) => entry.description ?? "").filter((text) => /heartbeat/i.test(text))).toEqual([]);
