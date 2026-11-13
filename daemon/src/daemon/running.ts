@@ -1,4 +1,4 @@
-import type { HeartbeatView } from "../autonomy/service.ts";
+import type { RunningView } from "../autonomy/service.ts";
 import { rfc3339 } from "../commands/status.ts";
 import type { GenerationView } from "../handler/router.ts";
 import { runningPasses } from "../memory/compaction/activity.ts";
@@ -14,8 +14,8 @@ export interface ShutdownWindowState {
 export interface RunningSources {
   readonly dataDir: string;
   readonly generations: () => readonly GenerationView[];
-  readonly heartbeats: () => readonly HeartbeatView[];
-  readonly dreams: () => readonly HeartbeatView[];
+  readonly wakes: () => readonly RunningView[];
+  readonly dreams: () => readonly RunningView[];
   readonly shutdown: () => ShutdownWindowState | undefined;
   readonly now?: () => number;
 }
@@ -34,7 +34,7 @@ export function runningReport(sources: RunningSources): RunningStatusReport {
   });
   const work = [
     ...sources.generations().map((g) => item("message", g.character, g.thread, g.startedAt)),
-    ...sources.heartbeats().map((h) => item("heartbeat", h.character, null, h.startedAt)),
+    ...sources.wakes().map((w) => item("wake", w.character, null, w.startedAt)),
     ...sources.dreams().map((d) => item("dream", d.character, null, d.startedAt)),
     ...runningPasses(sources.dataDir).map((p) => item("compaction", p.character, p.thread, p.startedAt)),
   ]

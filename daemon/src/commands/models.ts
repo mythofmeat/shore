@@ -301,11 +301,13 @@ function chatRole(ctx: ModelsContext): ModelRole {
 
 interface ChatInheritance { thread: ModelRole; home: ModelRole }
 
+const backgroundModelKey = (task: BackgroundTask): string => `${task === "heartbeat" ? "triggers" : task}.model`;
+
 function backgroundRole(ctx: ModelsContext, task: BackgroundTask, inherits?: ChatInheritance): ModelRole {
   const bg = ctx.config.app.defaults.background;
   const perTask = bg[task];
   if (perTask !== undefined) {
-    return { role: task, model: qualify(ctx, perTask), source: `${task}.model` };
+    return { role: task, model: qualify(ctx, perTask), source: backgroundModelKey(task) };
   }
   const chat = task === "compaction" ? inherits?.thread ?? chatRole(ctx) : inherits?.home ?? homeChatRole(ctx);
   return { role: task, model: chat.model, source: chat.model === null ? null : "inherits chat" };
@@ -540,8 +542,8 @@ function loadPreferencesFor(
 
 const backgroundKeys = (selector: string): string[] =>
   selector === "all"
-    ? SHARED_BACKGROUND_TASKS.map((task) => `${task}.model`)
-    : [`${backgroundTask(selector)}.model`];
+    ? SHARED_BACKGROUND_TASKS.map(backgroundModelKey)
+    : [backgroundModelKey(backgroundTask(selector))];
 
 function configContext(ctx: ModelsContext): ConfigContext {
   if (ctx.configPath === undefined || ctx.runtime === undefined) {

@@ -1,7 +1,7 @@
 import { withConversation } from "../engine/lifecycle.ts";
 import { unseenDiary } from "../autonomy/diary.ts";
 import { noteSeen, presence, unshownPresence } from "../autonomy/presence.ts";
-import type { RunningHeartbeat } from "../autonomy/runner.ts";
+import type { RunningWake } from "../autonomy/runner.ts";
 import { withoutWakeWorking } from "../autonomy/wake_working.ts";
 import { characterDataDir, threadDataDir } from "../config/dirs.ts";
 import { isToolResultOnly } from "../engine/message_store.ts";
@@ -46,7 +46,7 @@ import { planAttempt, withAttemptNote, type AttemptEngine } from "./attempts.ts"
 import { recordAttempt } from "../engine/marks.ts";
 import {
   buildGenerationRequest,
-  HeartbeatThreadError,
+  OwnThreadError,
   ImagesUnsupportedError,
   resolveGenerationModel,
   WakeTurnError,
@@ -58,7 +58,7 @@ import {
   type PersistEngine,
 } from "./persistence.ts";
 import type { GenerationParams, RunGeneration } from "./router.ts";
-import { homeThreadOf, isHeartbeatOpener, threadActivities, threadModelOf, type ThreadRecord } from "../engine/threads.ts";
+import { homeThreadOf, isWakeOpener, threadActivities, threadModelOf, type ThreadRecord } from "../engine/threads.ts";
 import { liveThread } from "./commands.ts";
 import {
   appendUserTurn,
@@ -109,7 +109,7 @@ export interface GenerationRegistry {
   getOrCreate(name: string, thread?: string): Promise<GenerationEngine>;
   effectiveConfig(name: string): LoadedConfig;
   listThreads(name: string): readonly ThreadRecord[];
-  heartbeatThread?(name: string): string | undefined;
+  ownThread?(name: string): string | undefined;
 }
 
 interface GenerationDiagnostics {
@@ -135,7 +135,7 @@ export interface GenerationDeps {
   providers: Partial<Record<SidecarRequest["sdk"], SidecarProvider>>;
   callStore?: CallRecorder | undefined;
   autonomy: TurnAutonomy & PersistContext["autonomy"];
-  runningHeartbeat?: (character: string) => RunningHeartbeat | undefined;
+  runningWake?: (character: string) => RunningWake | undefined;
   userActiveIn?: (character: string, thread: string) => void;
   userBack?: (character: string) => Promise<void>;
   notifier: PersistContext["notifier"];
@@ -199,7 +199,7 @@ export async function runGeneration(
   const engine = await deps.registry.getOrCreate(
     params.charName, liveThread(deps.registry, params.charName, params.meta.session.selectedThread),
   );
-  if (engine.thread === deps.registry.heartbeatThread?.(params.charName)) throw new HeartbeatThreadError(params.charName, engine.thread);
+  if (engine.thread === deps.registry.ownThread?.(params.charName)) throw new OwnThreadError(params.charName, engine.thread);
   deps.userActiveIn?.(params.charName, engine.thread);
   return await withConversation(threadDataDir(deps.dataDir, params.charName, engine.thread), "turn", async (signal) => {
   params = { ...params, signal };
@@ -241,7 +241,7 @@ async function runGenerationCore(
   if (regen) {
     const all = engine.messages();
     const asked = all[all.length - engine.messagesAfterLastUserTurn().length - 1];
-    if (asked !== undefined && isHeartbeatOpener(asked)) throw new WakeTurnError(charName);
+    if (asked !== undefined && isWakeOpener(asked)) throw new WakeTurnError(charName);
   }
   const scope = { data: deps.dataDir, character: charName, thread: engine.thread };
   const plan = await planAttempt(engine, scope, regen ? params.body.regen ?? { kind: "reroll" } : undefined, {
@@ -323,7 +323,7 @@ async function runGenerationCore(
     if (!regen && bodyHasContent(body)) await deps.userBack?.(charName);
     if (!regen && bodyHasContent(body)) noteSeen(deps.dataDir, Date.parse(now()));
     const diary = unseenDiary(characterDataDir(deps.dataDir, charName), engine.messages(), Date.parse(now()), engine.thread);
-    const running = heartbeatNotTold(deps.runningHeartbeat?.(charName), engine.messages());
+    const running = wakeNotTold(deps.runningWake?.(charName), engine.messages());
     const status = unshownPresence(presence(deps.dataDir), engine.messages());
     await ensureAndBackfillAutonomy(turnCtx, engine, charName, config);
     const regenAlt = await appendUserTurn(turnCtx, engine, config.dirs.cache, charName, body, regen, params.rid, imageSettingsFor(config.app.images, "upload"), {
@@ -471,18 +471,18 @@ async function runGenerationCore(
   );
 }
 
-function heartbeatNotTold(running: RunningHeartbeat | undefined, active: readonly Message[]): Message["heartbeat_running"] {
+function wakeNotTold(running: RunningWake | undefined, active: readonly Message[]): Message["heartbeat_running"] {
   if (running === undefined) return undefined;
   const startedAt = new Date(running.startedAt).toISOString();
   if (active.some((message) => message.heartbeat_running?.started_at === startedAt)) return undefined;
-  return running.thread === undefined ? { started_at: startedAt, reason: running.reason } : { started_at: startedAt, thread: running.thread };
+  return { started_at: startedAt, thread: running.thread };
 }
 
 const DEFAULT_CACHE_TTL_SECS = 3_600;
 const MARKED_GAP_SECS = 1_800;
 const HOME_SEGMENTS_SEARCHED = 3;
 
-function cacheTtlSecs(resolved: ResolvedModel): number {
+export function cacheTtlSecs(resolved: ResolvedModel): number {
   const ms = resolved.cacheTtl === undefined ? undefined : parseDurationMs(resolved.cacheTtl);
   return ms === undefined ? DEFAULT_CACHE_TTL_SECS : ms / 1000;
 }
@@ -490,7 +490,7 @@ function cacheTtlSecs(resolved: ResolvedModel): number {
 function lastUserAt(messages: readonly Message[]): string | undefined {
   for (let i = messages.length - 1; i >= 0; i -= 1) {
     const message = messages[i];
-    if (message === undefined || message.role !== "user" || isToolResultOnly(message) || isHeartbeatOpener(message)) continue;
+    if (message === undefined || message.role !== "user" || isToolResultOnly(message) || isWakeOpener(message)) continue;
     if (!Number.isNaN(Date.parse(message.timestamp))) return message.timestamp;
   }
   return undefined;
@@ -515,7 +515,7 @@ async function sideThreadLastUser(
   afterMs: number,
   beforeMs: number,
 ): Promise<Message["last_elsewhere"]> {
-  const heartbeat = deps.registry.heartbeatThread?.(charName);
+  const heartbeat = deps.registry.ownThread?.(charName);
   const sides = deps.registry.listThreads(charName).map((thread) => thread.id).filter((id) => id !== home && id !== heartbeat);
   let latest: { thread: string; at: string; ms: number } | undefined;
   for (const [thread, activity] of await threadActivities(deps.dataDir, charName, sides)) {
@@ -760,7 +760,7 @@ function sideThreadAutonomy(config: LoadedConfig, home: GenerationDeps["autonomy
     onUserMessage: (character) => home.onUserActivityElsewhere?.(character),
     onCompactionComplete: () => {},
     onCompactionFailed: () => {},
-    notifyAssistantMessage: (character) => home.onReplyElsewhere?.(character),
+    notifyAssistantMessage: () => {},
     notifyLastRequest: () => {},
     shouldCompactNow: (_character, turns, tokens, crowded) => threadShouldCompact(config, turns, tokens, crowded === true),
   };

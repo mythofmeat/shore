@@ -10,7 +10,7 @@ import type { StreamResult } from "../llm/stream.ts";
 import { emitStreamEnd } from "../llm/stream.ts";
 import type { Usage } from "../llm/types.ts";
 import { compactionHeld } from "../memory/compaction/checkpoint.ts";
-import { firstUnreadReply, heartbeatThread, homeThread, homeThreadOf, isHeartbeatOpener, readThreadsIndex } from "../engine/threads.ts";
+import { firstUnreadReply, ownThread, homeThread, homeThreadOf, isWakeOpener, readThreadsIndex } from "../engine/threads.ts";
 import { MessageStore } from "../engine/message_store.ts";
 import { conversationRef, SegmentReader } from "../engine/segments.ts";
 import { readDurable, threadFile } from "../storage/files.ts";
@@ -44,7 +44,6 @@ export interface TurnAutonomy {
   backfillActivity(character: string, timestamps: readonly Date[]): void;
   onUserMessage(character: string, turnCount: number): void;
   onUserActivityElsewhere?(character: string): void;
-  onReplyElsewhere?(character: string): void;
   shouldCompactNow(character: string, turnCount: number, contextTokens: number, crowded?: boolean): boolean;
   onCompactionComplete(character: string, retained: number): void;
   onCompactionFailed(character: string, retryAt?: number): void;
@@ -140,7 +139,7 @@ export async function ensureAndBackfillAutonomy(
   const collect = (msgs: readonly Message[]): number => {
     let kept = 0;
     for (const msg of msgs) {
-      if (msg.role !== "user" || isToolResultOnly(msg) || isHeartbeatOpener(msg)) continue;
+      if (msg.role !== "user" || isToolResultOnly(msg) || isWakeOpener(msg)) continue;
       const at = new Date(msg.timestamp);
       if (Number.isNaN(at.getTime()) || at < cutoff) continue;
       timestamps.push(at);
@@ -168,7 +167,7 @@ export async function ensureAndBackfillAutonomy(
   const index = await readThreadsIndex(dataDir, charName);
   const current = engine.thread ?? homeThread(index);
   for (const thread of index?.threads ?? []) {
-    if (thread.id === current || thread.id === heartbeatThread(index)) continue;
+    if (thread.id === current || thread.id === ownThread(index)) continue;
     try {
       const store = await MessageStore.load(threadFile(dataDir, charName, thread.id, "active.jsonl"));
       const segments = await SegmentReader.load(conversationRef(dataDir, charName, thread.id, false));

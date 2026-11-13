@@ -715,7 +715,7 @@ describe("going down", () => {
 });
 
 describe("coming back up", () => {
-  const IDLE_CONFIG = `${MODEL_CONFIG}[tools]\nenabled = ["bash"]\n[heartbeat]\nenabled = true\n[compaction]\nidle_after = "1s"\nmin_turns = 2\nkeep_recent_turns = 0\n`;
+  const IDLE_CONFIG = `${MODEL_CONFIG}[tools]\nenabled = ["bash"]\n[triggers]\nenabled = true\n[compaction]\nidle_after = "1s"\nmin_turns = 2\nkeep_recent_turns = 0\n`;
   const PAST_IDLE_MS = 1_100;
 
   function compacting(onPass: (signal?: AbortSignal) => Promise<void> = () => Promise.resolve()): SidecarProvider {

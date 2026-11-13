@@ -1,9 +1,9 @@
-import { afterAll, afterEach, expect, jest, setSystemTime, test } from "bun:test";
+import { afterAll, afterEach, expect, jest, setSystemTime, spyOn, test } from "bun:test";
 import { existsSync } from "node:fs";
 import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 
-import { TurnAutonomyBridge } from "../src/autonomy/registration.ts";
+import { registrationFor, TurnAutonomyBridge } from "../src/autonomy/registration.ts";
 import { rebuildRequestFromDisk } from "../src/cache/rebuild.ts";
 import { defaultAppConfig, type AppConfig } from "../src/config/app.ts";
 import { ConfigDuration } from "../src/config/duration.ts";
@@ -13,11 +13,11 @@ import { ProviderRegistry } from "../src/config/providers.ts";
 import { Diagnostics } from "../src/diagnostics.ts";
 import type { History } from "../src/engine/conversation.ts";
 import { addDiaryNote, foldDiary, unfoldedDiary } from "../src/autonomy/diary.ts";
-import { heartbeatNewsNote, triggerFiredNote, userWroteNote } from "../src/autonomy/heartbeat_shape.ts";
+import { triggerFiredNote, userWroteNote, wakeNewsNote } from "../src/autonomy/wake_shape.ts";
 import { lastSeen, noteSeen, presence, setPresence } from "../src/autonomy/presence.ts";
 import { checkFacts, startTriggerTimer, type TriggerService } from "../src/autonomy/trigger_service.ts";
-import { DIARY_FOR_CHAT, DIARY_FOR_HEARTBEAT, diaryText, heartbeatRunningText } from "../src/engine/prompt.ts";
-import { markThreadRead, threadActivityNow } from "../src/engine/threads.ts";
+import { DIARY_FOR_CHAT, DIARY_FOR_WAKE, diaryText, wakeRunningText } from "../src/engine/prompt.ts";
+import { isWakeOpener, markThreadRead, threadActivityNow } from "../src/engine/threads.ts";
 import type { DiaryNote, Message } from "../src/engine/types.ts";
 import { dispatchCommand } from "../src/handler/commands.ts";
 import { buildCommandPathDeps, buildGenerationDeps } from "../src/handler/deps.ts";
@@ -29,6 +29,10 @@ import { runCompactionPass } from "../src/memory/compaction/run.ts";
 import type { ServerMessage } from "../src/protocol/ServerMessage.ts";
 import { hostZone } from "../src/ledger/zoned.ts";
 import { createRuntime, startRuntimeClocks, type ShoreRuntime } from "../src/runtime.ts";
+import { readCharacterState, writeCharacterState } from "../src/storage/store.ts";
+import { characterWorkspace } from "../src/tools/character_workspace.ts";
+import * as execute from "../src/tools/execute.ts";
+import { recordedTurns, replyVersions, workspaceTurnsFor } from "../src/tools/workspace_turns.ts";
 import { DEFAULT_HANDSHAKE } from "../src/swp/connection.ts";
 import { SessionRouter } from "../src/swp/session.ts";
 import { sizedImage } from "./support/sized_image.ts";
@@ -40,7 +44,7 @@ import { testTmp } from "./support/tmp.ts";
 
 const MINUTE = 60_000;
 const T0 = Date.UTC(2026, 9, 30, 12);
-const KEY_ENV = "SHORE_HEARTBEAT_THREAD_KEY";
+const KEY_ENV = "SHORE_WAKES_TEST_KEY";
 
 afterAll(restoreTestEnv);
 afterEach(() => setSystemTime());
@@ -54,7 +58,7 @@ function textOf(request: SidecarRequest): string {
 }
 
 interface Script {
-  heartbeats: SidecarRequest[];
+  wakes: SidecarRequest[];
   replies: SidecarRequest[];
   calls: string[];
   held: { started: PromiseWithResolvers<void>; release: PromiseWithResolvers<void> } | undefined;
@@ -63,9 +67,7 @@ interface Script {
   again?: number;
   beatHeld?: { started: PromiseWithResolvers<void>; release: PromiseWithResolvers<void> } | undefined;
   endHeld?: { started: PromiseWithResolvers<void>; release: PromiseWithResolvers<void> } | undefined;
-  wake?: Record<string, unknown> | undefined;
   beatTool?: { name: string; input: Record<string, unknown> } | undefined;
-  replyWake?: Record<string, unknown> | undefined;
   replyTool?: { name: string; input: Record<string, unknown> } | undefined;
 }
 
@@ -99,14 +101,10 @@ function scriptedProvider(script: Script): SidecarProvider {
           yield* eventsForResponse(respond(request, [{ type: "tool_use", id: "reply-tool", name: replyTool.name, input: replyTool.input }]));
           return;
         }
-        const replyWake = script.replyWake;
-        script.replyWake = undefined;
-        yield* eventsForResponse(respond(request, replyWake === undefined
-          ? [{ type: "text", text: `reply to: ${textOf(request).split("\n").at(-1) ?? ""}` }]
-          : [{ type: "tool_use", id: "reply-wake", name: "set_next_wake", input: replyWake }]));
+        yield* eventsForResponse(respond(request, [{ type: "text", text: `reply to: ${textOf(request).split("\n").at(-1) ?? ""}` }]));
         return;
       }
-      script.heartbeats.push(structuredClone(request));
+      script.wakes.push(structuredClone(request));
       const resultsIn = request.messages.at(-1)?.content.some((block) => block.type === "tool_result") === true;
       const beat = script.beatHeld;
       if (beat !== undefined && !resultsIn) {
@@ -116,7 +114,7 @@ function scriptedProvider(script: Script): SidecarProvider {
       }
       if (resultsIn && (script.again ?? 0) > 0) {
         script.again = (script.again ?? 0) - 1;
-        yield* eventsForResponse(respond(request, [{ type: "tool_use", id: `again-${String(script.heartbeats.length)}`, name: "read", input: { file_path: "SOUL.md" } }]));
+        yield* eventsForResponse(respond(request, [{ type: "tool_use", id: `again-${String(script.wakes.length)}`, name: "read", input: { file_path: "SOUL.md" } }]));
         return;
       }
       const end = script.endHeld;
@@ -128,13 +126,7 @@ function scriptedProvider(script: Script): SidecarProvider {
       const beatTool = resultsIn ? undefined : script.beatTool;
       if (beatTool !== undefined) {
         script.beatTool = undefined;
-        yield* eventsForResponse(respond(request, [{ type: "tool_use", id: `tool-${String(script.heartbeats.length)}`, name: beatTool.name, input: beatTool.input }]));
-        return;
-      }
-      const wake = resultsIn ? undefined : script.wake;
-      if (wake !== undefined) {
-        script.wake = undefined;
-        yield* eventsForResponse(respond(request, [{ type: "tool_use", id: `wake-${String(script.heartbeats.length)}`, name: "set_next_wake", input: wake }]));
+        yield* eventsForResponse(respond(request, [{ type: "tool_use", id: `tool-${String(script.wakes.length)}`, name: beatTool.name, input: beatTool.input }]));
         return;
       }
       yield* eventsForResponse(respond(request, resultsIn
@@ -144,7 +136,7 @@ function scriptedProvider(script: Script): SidecarProvider {
           ]
         : [
             ...(script.aside === undefined ? [] : [{ type: "text" as const, text: script.aside }]),
-            { type: "tool_use", id: `read-${String(script.heartbeats.length)}`, name: "read", input: { file_path: "SOUL.md" } },
+            { type: "tool_use", id: `read-${String(script.wakes.length)}`, name: "read", input: { file_path: "SOUL.md" } },
           ]));
     },
   };
@@ -163,7 +155,8 @@ interface Harness {
   emitted: Emitted[];
   say: (text: string, thread?: string) => Promise<void>;
   regenerate: (thread: string) => Promise<void>;
-  heartbeat: () => Promise<void>;
+  wakeNow: () => Promise<void>;
+  reload: () => Promise<void>;
   thread: (id: string) => Promise<readonly Message[]>;
   shown: (thread: string, match: (message: Message) => boolean) => Promise<void>;
   heard: (thread: string) => boolean;
@@ -174,12 +167,12 @@ interface Harness {
 async function withCharacter(run: (h: Harness) => Promise<void>, configure?: (app: AppConfig) => void, kept?: string): Promise<void> {
   setTestEnv(KEY_ENV, "fixture-key");
   if (kept === undefined) at(0);
-  const root = kept ?? await mkdtemp(testTmp("shore-heartbeat-thread-"));
+  const root = kept ?? await mkdtemp(testTmp("shore-wakes-"));
   const app = defaultAppConfig();
   app.defaults.model = "fixture";
   app.advanced.max_retries = 0;
   app.memory.compaction.enabled = false;
-  app.tools.enabled_tools = ["read", "set_next_wake"];
+  app.tools.enabled_tools = ["read"];
   app.behavior.autonomy.enabled = true;
   configure?.(app);
   const models = emptyCatalog();
@@ -197,7 +190,7 @@ async function withCharacter(run: (h: Harness) => Promise<void>, configure?: (ap
   const workspace = join(config.dirs.config, "characters", "ada", "workspace");
   await mkdir(workspace, { recursive: true });
   await writeFile(join(workspace, "SOUL.md"), "Ada");
-  const script: Script = { heartbeats: [], replies: [], calls: [], held: undefined, closing: "<sendMessage>I found the keeper's log.</sendMessage>" };
+  const script: Script = { wakes: [], replies: [], calls: [], held: undefined, closing: "<sendMessage>I found the keeper's log.</sendMessage>" };
   const emitted: Emitted[] = [];
   const histories: History[] = [];
   const events: ServerMessage[] = [];
@@ -258,9 +251,13 @@ async function withCharacter(run: (h: Harness) => Promise<void>, configure?: (ap
         });
         await autonomy.settled("ada");
       },
-      heartbeat: async () => {
-        expect(runtime.autonomy.forceHeartbeatNow("ada")).toBeDefined();
+      wakeNow: async () => {
+        expect(runtime.autonomy.wakeNow("ada")).toBeDefined();
         await runtime.autonomy.tick();
+      },
+      reload: async () => {
+        autonomy.reloadConfig((name) => runtime.registry.effectiveConfig(name));
+        await autonomy.settled("ada");
       },
       thread: async (id) => (await runtime.registry.getOrCreate("ada", id)).messages(),
       command: async (name, args, thread = "main") => await dispatchCommand(buildCommandPathDeps({
@@ -278,8 +275,8 @@ async function withCharacter(run: (h: Harness) => Promise<void>, configure?: (ap
   }
 }
 
-test("a heartbeat runs while a reply in home is still generating, and its message lands in home after that reply", async () => {
-  await withCharacter(async ({ runtime, script, say, heartbeat, thread, shown }) => {
+test("a wake in the own-time thread runs while a reply in home is still generating, and its message lands in home after that reply", async () => {
+  await withCharacter(async ({ runtime, script, say, wakeNow, thread, shown }) => {
     await say("hello");
     const held = { started: Promise.withResolvers<void>(), release: Promise.withResolvers<void>() };
     script.held = held;
@@ -288,9 +285,9 @@ test("a heartbeat runs while a reply in home is still generating, and its messag
     await held.started.promise;
 
     at(2);
-    const ticking = heartbeat();
-    await shown("heartbeat", (message) => message.role === "assistant" && message.content.includes("I found the keeper's log."));
-    expect(script.heartbeats).toHaveLength(2);
+    const ticking = wakeNow();
+    await shown("own-time", (message) => message.role === "assistant" && message.content.includes("I found the keeper's log."));
+    expect(script.wakes).toHaveLength(2);
     expect((await thread("main")).filter((message) => message.origin === "autonomous")).toEqual([]);
 
     at(3);
@@ -306,63 +303,70 @@ test("a heartbeat runs while a reply in home is still generating, and its messag
       ["assistant", "autonomous", "I found the keeper's log."],
     ]);
     expect((await thread("main")).at(-1)?.content_blocks).toEqual([{ type: "text", text: "I found the keeper's log." }]);
-    expect(runtime.registry.heartbeatThread("ada")).toBe("heartbeat");
+    expect(runtime.registry.ownThread("ada")).toBe("own-time");
+    expect(runtime.registry.listThreads("ada").find((record) => record.id === "own-time")).toMatchObject({ label: "Own time", compaction: false });
   });
 });
 
-test("the heartbeat's own turn stays in its thread for the user to read, and the next one starts fresh with only what was said in home since", async () => {
-  await withCharacter(async ({ script, say, heartbeat, thread }) => {
+test("a wake's own turn stays in its thread for the user to read, without what it was shown of home, and the next one starts fresh with only what was said in home since", async () => {
+  await withCharacter(async ({ script, say, wakeNow, thread }) => {
     await say("the keeper's name is Mara");
     at(10);
-    await heartbeat();
+    await wakeNow();
 
-    const kept = await thread("heartbeat");
+    const kept = await thread("own-time");
     expect(kept.map((message) => [message.role, message.origin ?? ""])).toEqual([
       ["user", "autonomous"],
-      ["system", "autonomous"],
       ["assistant", ""],
       ["user", ""],
       ["assistant", ""],
     ]);
-    expect(kept[0]?.content).toContain("the keeper's name is Mara");
-    expect(kept[1]?.content).toContain("This is a private heartbeat turn");
+    expect(kept[0]?.content).toStartWith("[wake]\n\n[This wake was started by hand at Friday 2026-10-30 · 12:10 PM, from Shore's command line or its settings.]\n\n[Current time: Friday 2026-10-30 · 12:10 PM]\n\n[This is a wake in your own-time thread, where a wake runs when its trigger names no thread: time of your own, without ");
+    expect(kept[0]?.content).not.toContain("the keeper's name is Mara");
     expect(kept.at(-1)?.content_blocks.map((block) => block.type)).toEqual(["thinking", "text"]);
+    const first = script.wakes[0] as SidecarRequest;
+    expect(first.messages).toHaveLength(1);
+    expect(textOf(first)).toStartWith('[wake]\n\nThe last of what was said in your home thread "main":\n\n');
+    expect(textOf(first)).toContain("the keeper's name is Mara");
 
     at(20);
     await say("she keeps a cat too");
     at(30);
-    await heartbeat();
+    await wakeNow();
 
-    const opener = (await thread("heartbeat")).filter((message) => message.role === "user" && message.origin === "autonomous").at(-1)?.content ?? "";
-    expect(opener).toContain("since your last heartbeat");
-    expect(opener).toContain("she keeps a cat too");
-    expect(opener).toContain("reply to: she keeps a cat too");
-    expect(opener).not.toContain("the keeper's name is Mara");
-    const next = script.heartbeats.at(-2) as SidecarRequest;
+    const next = script.wakes.at(-2) as SidecarRequest;
+    expect(next.messages).toHaveLength(1);
+    expect(textOf(next)).toStartWith('[wake]\n\nWhat was said in your home thread "main" since your last wake here:\n\n');
+    expect(textOf(next)).toContain("she keeps a cat too");
+    expect(textOf(next)).toContain("reply to: she keeps a cat too");
     expect(textOf(next)).not.toContain("the keeper's name is Mara");
     expect(textOf(next)).not.toContain("She asked about the lamp");
     expect(next.messages.flatMap((message) => message.content).filter((block) => block.type === "tool_use" || block.type === "tool_result")).toEqual([]);
+    expect((await thread("own-time")).filter((message) => message.role === "user" && message.origin === "autonomous")).toHaveLength(2);
   });
 });
 
-test("a heartbeat runs on home's model, and its thread is never compacted, however many heartbeats it holds, not even by hand", async () => {
-  await withCharacter(async ({ runtime, script, say, heartbeat, thread }) => {
+test("a wake in the own-time thread runs on home's model, and that thread is never compacted, however many wakes it holds, not even by hand", async () => {
+  await withCharacter(async ({ runtime, script, say, wakeNow, thread, command }) => {
     await runtime.registry.setThreadModel("ada", "main", "pinned");
     await say("hello");
     at(10);
-    await heartbeat();
+    await wakeNow();
     at(20);
-    await heartbeat();
+    await wakeNow();
 
-    expect(script.heartbeats.map((request) => request.model)).toEqual(["claude-pinned", "claude-pinned", "claude-pinned", "claude-pinned"]);
+    expect(script.wakes.map((request) => request.model)).toEqual(["claude-pinned", "claude-pinned", "claude-pinned", "claude-pinned"]);
     expect(script.calls).not.toContain("compaction");
-    expect((await thread("heartbeat")).filter((message) => message.role === "user" && message.origin === "autonomous")).toHaveLength(2);
-    expect(runtime.registry.listThreads("ada").find((record) => record.id === "heartbeat")?.compaction).toBe(false);
-    const byHand = runCompactionPass("ada", {
+    expect((await thread("own-time")).filter((message) => message.role === "user" && message.origin === "autonomous")).toHaveLength(2);
+    expect(runtime.registry.listThreads("ada").find((record) => record.id === "own-time")?.compaction).toBe(false);
+    const asked = runCompactionPass("ada", {
       config: runtime.config,
-      generate: () => Promise.reject(new Error("compacting the heartbeat thread called the model")),
-    }, { thread: "heartbeat" });
-    expect(await outcomeOf(byHand)).toThrow("never compacted");
+      generate: () => Promise.reject(new Error("compacting the own-time thread called the model")),
+    }, { thread: "own-time" });
+    expect(await outcomeOf(asked)).toThrow(`"own-time" is where ada's own time runs. It only keeps a log of its wakes, so it is never compacted`);
+    expect(await command("compact", {}, "own-time")).toMatchObject({ type: "error", code: "invalid_request" });
+    expect(JSON.stringify(await command("compact", {}, "own-time"))).toContain("is where ada's own time runs. It only keeps a log of its wakes, so it is never compacted");
+    expect(await command("compact", { keep_turns: 99 })).toMatchObject({ type: "error", code: "invalid_request", message: "insufficient messages" });
   }, (app) => {
     app.memory.compaction.enabled = true;
     app.memory.compaction.keep_recent_turns = 0;
@@ -371,8 +375,8 @@ test("a heartbeat runs on home's model, and its thread is never compacted, howev
   });
 });
 
-test("heartbeats and compaction keep the reasoning effort set for each on chat's model, and setting it for them never moves chat's", async () => {
-  await withCharacter(async ({ runtime, script, say, heartbeat, command }) => {
+test("wakes and compaction keep the reasoning effort set for each on chat's model, and setting it for them never moves chat's", async () => {
+  await withCharacter(async ({ runtime, script, say, wakeNow, command }) => {
     const effort = async (args: Record<string, unknown>): Promise<void> => {
       expect((await command("set_model_setting", { key: "reasoning_effort", ...args })).type).toBe("command_output");
     };
@@ -398,29 +402,29 @@ test("heartbeats and compaction keep the reasoning effort set for each on chat's
     await effort({ value: "low", background_task: "heartbeat" });
     await effort({ value: "medium", background_task: "compaction", scope: "global" });
     await say("hello");
-    await heartbeat();
+    await wakeNow();
 
     expect(effortOf(script.replies)).toEqual(["high"]);
-    expect(script.heartbeats.map((request) => request.model)).toContain("claude-fixture");
-    expect(effortOf(script.heartbeats)).toEqual(["low"]);
+    expect(script.wakes.map((request) => request.model)).toContain("claude-fixture");
+    expect(effortOf(script.wakes)).toEqual(["low"]);
     expect(await compactionEffort()).toBe("medium");
 
     await effort({ value: "max", background_task: "all" });
-    script.heartbeats.length = 0;
+    script.wakes.length = 0;
     at(10);
-    await heartbeat();
+    await wakeNow();
     await say("again");
 
-    expect(effortOf(script.heartbeats)).toEqual(["max"]);
+    expect(effortOf(script.wakes)).toEqual(["max"]);
     expect(await compactionEffort()).toBe("max");
     expect(effortOf(script.replies)).toEqual(["high"]);
 
     await effort({ value: null, background_task: "heartbeat" });
-    script.heartbeats.length = 0;
+    script.wakes.length = 0;
     at(20);
-    await heartbeat();
+    await wakeNow();
 
-    expect(effortOf(script.heartbeats)).toEqual(["high"]);
+    expect(effortOf(script.wakes)).toEqual(["high"]);
   }, (app) => {
     app.memory.compaction.enabled = true;
     app.memory.compaction.keep_recent_turns = 0;
@@ -428,78 +432,53 @@ test("heartbeats and compaction keep the reasoning effort set for each on chat's
   });
 });
 
-test("with defer_on_activity, each message and the end of each reply push the next heartbeat to min_interval after them, in a side thread too", async () => {
-  await withCharacter(async ({ runtime, script, say, command }) => {
-    const wake = (): number | undefined => runtime.autonomy.status("ada")?.next_wake_at;
-    await say("hello");
-    await runtime.autonomy.tick();
-    expect(wake()).toBe(T0 + 60 * MINUTE);
-
-    at(50);
-    await say("are you there?");
-    expect(wake()).toBe(T0 + 110 * MINUTE);
-
-    await runtime.registry.createThread("ada", "side");
-    at(70);
-    const held = { started: Promise.withResolvers<void>(), release: Promise.withResolvers<void>() };
-    script.held = held;
-    const replying = say("psst", "side");
-    await held.started.promise;
-    expect(wake()).toBe(T0 + 130 * MINUTE);
-    at(80);
-    held.release.resolve();
-    await replying;
-    expect(wake()).toBe(T0 + 140 * MINUTE);
-    expect(JSON.stringify(await command("run_tool", { tool: "guide", input: { topic: "wakes" } }))).toMatch(/- Each message from \S+, in any thread, and the end of each reply to one, pushes the next heartbeat to at least 1h later\. It never brings it closer\./);
-  }, (app) => {
-    app.behavior.autonomy.heartbeat.defer_on_activity = true;
-  });
-});
-
-test("a heartbeat's own turn notifies nobody and leaves its thread with nothing unread, while its message counts in home", async () => {
-  await withCharacter(async ({ data, emitted, say, heartbeat, thread }) => {
+test("a wake's own turn in the own-time thread notifies nobody and leaves that thread with nothing unread, while its message counts in home", async () => {
+  await withCharacter(async ({ data, emitted, say, wakeNow, thread }) => {
     await say("hello");
     at(5);
-    await heartbeat();
-    markThreadRead(data, "ada", "heartbeat", T0 + 6 * MINUTE);
+    await wakeNow();
+    markThreadRead(data, "ada", "own-time", T0 + 6 * MINUTE);
     markThreadRead(data, "ada", "main", T0 + 6 * MINUTE);
 
     at(10);
-    await heartbeat();
-    expect((await thread("heartbeat")).filter((message) => message.role === "assistant" && message.content.includes("I found the keeper's log."))).toHaveLength(2);
+    await wakeNow();
+    expect((await thread("own-time")).filter((message) => message.role === "assistant" && message.content.includes("I found the keeper's log."))).toHaveLength(2);
     expect(emitted.map((event) => [event.thread, event.msg.role, event.msg.content])).toEqual([
       ["main", "assistant", "I found the keeper's log."],
       ["main", "assistant", "I found the keeper's log."],
     ]);
-    expect(threadActivityNow(data, "ada", "heartbeat").unread).toBe(0);
+    expect(threadActivityNow(data, "ada", "own-time").unread).toBe(0);
     expect(threadActivityNow(data, "ada", "main").unread).toBe(1);
   });
 });
 
-test("a picture a heartbeat sends is in its thread as well as home, and one it only mentions is in neither", async () => {
-  await withCharacter(async ({ script, workspace, say, heartbeat, thread }) => {
+test("a picture a wake sends from the own-time thread is in that thread as well as home, and one it only mentions is in neither", async () => {
+  await withCharacter(async ({ script, workspace, say, wakeNow, thread }) => {
     await writeFile(join(workspace, "lamp.png"), await sizedImage(8, 8));
     await writeFile(join(workspace, "sketch.png"), await sizedImage(16, 16));
     script.closing = "I kept ![[sketch.png]] to myself.\n\n<sendMessage>\nThe lamp tonight\n![[lamp.png]]\n</sendMessage>";
     await say("hello");
     at(10);
-    await heartbeat();
+    await wakeNow();
 
     const delivered = (await thread("main")).at(-1);
     expect(delivered?.content).toBe("The lamp tonight\n![[lamp.png]]");
     expect(delivered?.images).toEqual([{ path: expect.stringContaining("/sent/") as string, embed: "![[lamp.png]]", name: "lamp.png" }]);
-    expect((await thread("heartbeat")).at(-1)?.images).toEqual(delivered?.images ?? []);
+    expect((await thread("own-time")).at(-1)?.images).toEqual(delivered?.images ?? []);
   });
 });
 
-test("the user can read the heartbeat thread but not write there", async () => {
-  await withCharacter(async ({ say, heartbeat, thread }) => {
+test("the user can read the own-time thread but not write there", async () => {
+  await withCharacter(async ({ say, wakeNow, thread }) => {
     await say("hello");
-    await heartbeat();
-    const before = await thread("heartbeat");
+    await wakeNow();
+    const before = await thread("own-time");
 
-    expect(await outcomeOf(say("can I join?", "heartbeat"))).toThrow("is where ada's heartbeats run");
-    expect(await thread("heartbeat")).toEqual(before);
+    const refusal = await rejectionOf(say("can I join?", "own-time"));
+    expect([(refusal as Error).name, (refusal as Error).message, (refusal as { code?: string }).code]).toEqual([
+      "OwnThreadError", `"own-time" is where ada's own time runs, so you can read it but not write there. Write to ada in another thread.`, "invalid_request",
+    ]);
+    expect(await thread("own-time")).toEqual(before);
   });
 });
 
@@ -523,13 +502,13 @@ async function repliedAt(minutes: number, script: Script, send: () => Promise<vo
   await replying;
 }
 
-test("a heartbeat's message that lands in home just before idle compaction stays there unread, and the next reply has it in context", async () => {
-  await withCharacter(async ({ data, script, say, heartbeat, thread }) => {
+test("a wake's message that lands in home just before idle compaction stays there unread, and the next reply has it in context", async () => {
+  await withCharacter(async ({ data, script, say, wakeNow, thread }) => {
     await say("the keeper's name is Mara");
     markThreadRead(data, "ada", "main", T0);
 
     at(60);
-    await heartbeat();
+    await wakeNow();
 
     expect(script.calls).toContain("compaction");
     expect(await shownIn(thread)).toEqual([["assistant", "autonomous", "I found the keeper's log."]]);
@@ -547,7 +526,7 @@ test("a reply the user never saw stays in home through idle compaction and the d
   await withCharacter(async ({ runtime, data, script, say, thread }) => {
     markThreadRead(data, "ada", "main", T0 - MINUTE);
     await repliedAt(1, script, () => say("is the lamp lit?"));
-    runtime.autonomy.forceHeartbeatState("ada", "dormant");
+    runtime.autonomy.forceDormancy("ada", "dormant");
     const unseen = [["assistant", "", "reply to: is the lamp lit?"]];
 
     at(60);
@@ -578,191 +557,80 @@ test("a side thread trimmed for room without compaction keeps its newest reply w
   });
 });
 
-test("bare --background tunes heartbeats and compaction on their pinned model while dreams keep the chat model's settings", async () => {
+test("bare --background tunes wakes and compaction on their pinned model while dreams keep the chat model's settings", async () => {
   await withCharacter(async ({ command }) => {
     const set = await command("set_model_setting", { key: "reasoning_effort", value: "low", background_task: "all" });
     expect(set).toMatchObject({ type: "command_output", data: { model: "chat.pinned", background_task: "all" } });
     expect(await command("model_settings", { background_task: "all" })).toMatchObject({ type: "command_output", data: { model: "chat.pinned" } });
     expect(await command("model_settings", { background_task: "dreaming" })).toMatchObject({ type: "command_output", data: { model: "chat.fixture", saved_character: null } });
+    const listed = await command("list_models", {});
+    const roles = listed.type === "command_output" ? (listed.data as { roles: { role: string; model: string | null; source: string | null }[] }).roles : [];
+    expect(roles.filter((role) => ["heartbeat", "compaction", "dreaming"].includes(role.role))).toEqual([
+      { role: "heartbeat", model: "chat.pinned", source: "triggers.model" },
+      { role: "compaction", model: "chat.pinned", source: "compaction.model" },
+      { role: "dreaming", model: "chat.fixture", source: "inherits chat" },
+    ]);
   }, (app) => {
     app.defaults.background.heartbeat = "pinned";
     app.defaults.background.compaction = "pinned";
   });
 });
 
-const SHOWN = "[You scheduled this heartbeat with set_next_wake, giving this reason: ";
-
-function wakeNote(request: SidecarRequest | undefined): string | undefined {
-  const text = request === undefined ? "" : textOf(request);
-  const start = text.indexOf(SHOWN);
-  return start === -1 ? undefined : text.slice(start + SHOWN.length, text.indexOf("]\n", start));
+function byHand(time: string): string {
+  return `[This wake was started by hand at Friday 2026-10-30 · ${time}, from Shore's command line or its settings.]`;
 }
-
-function wakeTool(request: SidecarRequest | undefined): { description: string; reason: string } {
-  const tool = request?.tools?.find((def) => def.name === "set_next_wake");
-  const properties = tool?.input_schema["properties"] as Record<string, { description: string }>;
-  return { description: tool?.description ?? "", reason: properties["reason"]?.description ?? "" };
-}
-
-test("a heartbeat starts with the reason its set_next_wake call gave, word for word, and only that heartbeat does", async () => {
-  await withCharacter(async ({ runtime, script, say, heartbeat, thread }) => {
-    const first = "check the tide table for {{user}} {{#if now}}at {{now}}{{/if}} $& wake_reason";
-    await say("hello");
-    script.wake = { hours_from_now: 2, reason: first };
-    at(10);
-    await heartbeat();
-    expect(wakeNote(script.heartbeats[0]), "a heartbeat no set_next_wake call scheduled").toBeUndefined();
-    expect(textOf(script.heartbeats[0] as SidecarRequest)).toContain("PM]\n\n[This is a private heartbeat turn.");
-    expect(runtime.autonomy.status("ada")?.next_wake_at).toBe(T0 + 130 * MINUTE);
-    expect(runtime.autonomy.status("ada")?.recent_events.map((event) => event.detail)).toContain(`set_next_wake: 2.0h - ${first}`);
-
-    script.heartbeats.length = 0;
-    script.wake = { hours_from_now: 3, reason: "water the fern" };
-    at(20);
-    await heartbeat();
-    expect(wakeNote(script.heartbeats[0])).toBe(first);
-    expect(textOf(script.heartbeats[0] as SidecarRequest)).toContain(`PM]\n\n${SHOWN}${first}]\n\n[This is a private heartbeat turn.`);
-    expect(wakeNote(script.heartbeats[1]), "a call made during a heartbeat leaves that heartbeat's own reason alone").toBe(first);
-    expect((await thread("heartbeat")).filter((message) => message.role === "system").at(-1)?.content).toContain(`${SHOWN}${first}]`);
-
-    script.heartbeats.length = 0;
-    at(30);
-    await heartbeat();
-    expect(wakeNote(script.heartbeats[0])).toBe("water the fern");
-
-    script.heartbeats.length = 0;
-    await say("still here");
-    at(40);
-    await heartbeat();
-    expect(script.heartbeats).toHaveLength(2);
-    expect(wakeNote(script.heartbeats[0]), "a reason is shown once").toBeUndefined();
-    expect(runtime.autonomy.scheduleNextWake("ada", 3, "later")).toBe(3);
-  }, (app) => {
-    app.behavior.autonomy.heartbeat.min_interval = ConfigDuration.fromSecs(60n);
-  });
-});
-
-test("a reason given in a chat reply waits for its heartbeat through later messages and a restart, and a later call replaces it", async () => {
-  const root = await mkdtemp(testTmp("shore-wake-reason-"));
-  at(0);
-  await withCharacter(async ({ runtime, script, say, command }) => {
-    script.replyWake = { hours_from_now: 2, reason: "an earlier plan" };
-    await say("goodnight");
-    script.replyWake = { hours_from_now: 4, reason: "ask how the interview went" };
-    await say("actually, the interview is tomorrow");
-    expect(runtime.autonomy.status("ada")?.next_wake_at).toBe(T0 + 240 * MINUTE);
-    expect(script.replies.map((request) => wakeTool(request).reason)).toEqual(Array.from(script.replies, () => "A note to yourself for that heartbeat, which shows it to you when it starts. Also recorded in the heartbeat log."));
-    expect(wakeTool(script.replies[0]).description).toContain("A later call replaces the earlier schedule, and the result says how many hours were actually scheduled.");
-    const guide = JSON.stringify(await command("run_tool", { tool: "guide", input: { topic: "wakes" } }));
-    expect(guide).toMatch(/- Messages from \S+ don't move the next heartbeat\./);
-    expect(guide).toContain("The `reason` you give `set_next_wake` is shown to you when that heartbeat starts, word for word.");
-  }, undefined, root);
-
-  at(60);
-  await withCharacter(async ({ runtime, script, say, heartbeat }) => {
-    await say("good morning");
-    expect(runtime.autonomy.status("ada")?.next_wake_at).toBe(T0 + 240 * MINUTE);
-    at(70);
-    await heartbeat();
-    expect(wakeNote(script.heartbeats[0])).toBe("ask how the interview went");
-  }, undefined, root);
-});
-
-test("a reason is dropped when its wake is, by dormancy or a blank reason, so a later heartbeat doesn't start with a stale one", async () => {
-  await withCharacter(async ({ script, say, heartbeat, command }) => {
-    script.replyWake = { hours_from_now: 2, reason: "look in on the bees" };
-    await say("hello");
-    expect((await command("heartbeat_set_dormant", {})).type).toBe("command_output");
-    at(10);
-    await say("back again");
-    await heartbeat();
-    expect(wakeNote(script.heartbeats[0]), "after the character was put to sleep").toBeUndefined();
-
-    script.heartbeats.length = 0;
-    script.replyWake = { hours_from_now: 2, reason: "count the hives" };
-    await say("one");
-    script.replyWake = { hours_from_now: 2, reason: "  \n" };
-    await say("two");
-    at(20);
-    await heartbeat();
-    expect(wakeNote(script.heartbeats[0]), "after a call with a blank reason").toBeUndefined();
-  });
-});
-
-test("a character whose own heartbeat.md leaves the reason out is told set_next_wake only logs it", async () => {
-  await withCharacter(async ({ script, say, heartbeat, workspace, command }) => {
-    const prompts = join(workspace, "..", "prompts");
-    await mkdir(prompts, { recursive: true });
-    await writeFile(join(prompts, "heartbeat.md"), "[Private turn at {{now}}. {{#if wake_reason}}You left a note.{{/if}}]");
-    script.replyWake = { hours_from_now: 2, reason: "look in on the bees" };
-    await say("hello");
-    const offered = wakeTool(script.replies[0]);
-    expect(offered.reason).toBe("Why this time. Recorded in the heartbeat log. That heartbeat doesn't show it to you.");
-    expect(JSON.stringify(await command("run_tool", { tool: "guide", input: { topic: "wakes" } }))).toContain("The `reason` you give `set_next_wake` is only kept in the heartbeat log. That heartbeat doesn't show it to you, so leave a note for it in a file or in your diary.");
-    at(10);
-    await heartbeat();
-    expect(textOf(script.heartbeats[0] as SidecarRequest)).toContain("PM. You left a note.]");
-    expect(textOf(script.heartbeats[0] as SidecarRequest)).not.toContain("bees");
-
-    await writeFile(join(prompts, "heartbeat.md"), "[Private turn. {{wake_reason}}]");
-    const described = await command("run_tool", { tool: "set_next_wake", describe: true });
-    expect(JSON.stringify(described)).toContain("A note to yourself for that heartbeat, which shows it to you when it starts.");
-    expect(JSON.stringify(described)).not.toContain("{{");
-    script.heartbeats.length = 0;
-    at(20);
-    await heartbeat();
-    expect(textOf(script.heartbeats[0] as SidecarRequest), "a heartbeat with no reason leaves the macro empty").toContain("[Private turn. ]");
-  });
-});
 
 function left(minutes: number, text: string): DiaryNote {
-  return { id: "", at: new Date(T0 + minutes * MINUTE).toISOString(), thread: "heartbeat", source: "heartbeat", text };
+  return { id: "", at: new Date(T0 + minutes * MINUTE).toISOString(), thread: "own-time", source: "wake", text };
 }
 
 function times(text: string, part: string): number {
   return text.split(part).length - 1;
 }
 
-test("what a heartbeat says at the end, apart from the message it sends, is the note its later heartbeats start with for a day", async () => {
-  await withCharacter(async ({ script, say, heartbeat, thread }) => {
+test("what a wake says at the end, apart from the message it sends, is the note its later wakes in that thread start with: in the diary for a day, and after that kept for the next one", async () => {
+  await withCharacter(async ({ script, say, wakeNow, thread }) => {
     await say("hello");
     script.closing = "Read the keeper's log up to March.\n<sendMessage>I found the keeper's log.</sendMessage>";
     at(10);
-    await heartbeat();
-    expect(textOf(script.heartbeats[0] as SidecarRequest)).not.toContain("[Your diary");
+    await wakeNow();
+    expect(textOf(script.wakes[0] as SidecarRequest)).not.toContain("[Your diary");
     expect((await thread("main")).at(-1)?.content).toBe("I found the keeper's log.");
 
-    const diary = diaryText([left(10, "Read the keeper's log up to March.")], DIARY_FOR_HEARTBEAT, hostZone());
-    script.heartbeats.length = 0;
+    const diary = diaryText([left(10, "Read the keeper's log up to March.")], DIARY_FOR_WAKE, hostZone());
+    script.wakes.length = 0;
     script.aside = "March is done, so April is next.";
-    script.closing = "HEARTBEAT_OK";
+    script.closing = "NO_NOTE";
     at(70);
-    await heartbeat();
-    expect(textOf(script.heartbeats[0] as SidecarRequest)).toContain(`in your home thread "main".]\n\n${diary}\n\n[Current time: `);
-    expect(diary).toStartWith("[Your diary from the last day. Each entry says where it came from.]\n\nyour note at the end of a heartbeat · ");
+    await wakeNow();
+    expect(textOf(script.wakes[0] as SidecarRequest)).toContain(`in your home thread "main".]\n\n${diary}\n\n${byHand("1:10 PM")}\n\n[Current time: `);
+    expect(textOf(script.wakes[0] as SidecarRequest)).not.toContain("kept for this one");
+    expect(diary).toStartWith('[Your diary from the last day. Each entry says where it came from.]\n\nyour note at the end of a wake in "own-time" · ');
     expect(diary).toEndWith("\nRead the keeper's log up to March.\n\n[End of your diary.]");
 
-    script.heartbeats.length = 0;
+    script.wakes.length = 0;
     script.aside = undefined;
     script.closing = "<sendMessage>Goodnight.</sendMessage>";
     at(130);
-    await heartbeat();
-    const third = textOf(script.heartbeats[0] as SidecarRequest);
-    expect(third).toContain(`${diary}\n\n[Current time: `);
+    await wakeNow();
+    const third = textOf(script.wakes[0] as SidecarRequest);
+    expect(third).toContain(`${diary}\n\n${byHand("2:10 PM")}`);
     expect(third).not.toContain("April is next");
 
     at(24 * 60 + 9);
     await say("good morning");
-    script.heartbeats.length = 0;
-    script.closing = "HEARTBEAT_OK";
-    await heartbeat();
-    expect(textOf(script.heartbeats[0] as SidecarRequest)).toContain(diary);
+    script.wakes.length = 0;
+    script.closing = "NO_NOTE";
+    await wakeNow();
+    expect(textOf(script.wakes[0] as SidecarRequest)).toContain(diary);
 
     at(24 * 60 + 11);
     await say("still here");
-    script.heartbeats.length = 0;
-    await heartbeat();
-    expect(textOf(script.heartbeats[0] as SidecarRequest)).not.toContain("[Your diary");
+    script.wakes.length = 0;
+    await wakeNow();
+    const later = textOf(script.wakes[0] as SidecarRequest);
+    expect(later).not.toContain("[Your diary");
+    expect(later).toContain('in your home thread "main".]\n\n[Your note from the end of your last wake here, Friday 2026-10-30 · 12:10 PM, kept for this one:]\n\nRead the keeper\'s log up to March.\n\n[This wake was started by hand at Saturday 2026-10-31 · 12:11 PM, ');
   });
 });
 
@@ -770,14 +638,14 @@ test("the user's next message in each thread arrives with the notes left since t
   const note = left(10, "The log is read up to March.");
   const block = diaryText([note], DIARY_FOR_CHAT, hostZone());
   let root = "";
-  await withCharacter(async ({ runtime, script, data, say, heartbeat, thread }) => {
+  await withCharacter(async ({ runtime, script, data, say, wakeNow, thread }) => {
     root = dirname(data);
     await runtime.registry.createThread("ada", "garden");
     await say("hello");
     expect(textOf(script.replies[0] as SidecarRequest)).not.toContain("diary");
     script.closing = "The log is read up to March.";
     at(10);
-    await heartbeat();
+    await wakeNow();
     expect((await thread("main")).filter((message) => message.origin === "autonomous")).toEqual([]);
 
     at(20);
@@ -791,7 +659,7 @@ test("the user's next message in each thread arrives with the notes left since t
     expect(later).toEndWith("reply to: is the lamp lit?\nand the door?");
     expect(times(later, "[New in your diary")).toBe(1);
     expect((await thread("main")).flatMap((message) => message.diary === undefined ? [] : [[message.content, message.diary.map((each) => [each.at, each.thread, each.source, each.text])]])).toEqual([
-      ["is the lamp lit?", [[note.at, "heartbeat", "heartbeat", "The log is read up to March."]]],
+      ["is the lamp lit?", [[note.at, "own-time", "wake", "The log is read up to March."]]],
     ]);
 
     at(22);
@@ -813,21 +681,21 @@ function hold(): { started: PromiseWithResolvers<void>; release: PromiseWithReso
   return { started: Promise.withResolvers<void>(), release: Promise.withResolvers<void>() };
 }
 
-test("a heartbeat is told once, at its next step, that the user wrote while it was running, whichever thread they wrote in", async () => {
-  await withCharacter(async ({ runtime, script, say, heartbeat, thread }) => {
+test("a wake in the own-time thread is told once, at its next step, that the user wrote while it was running, whichever thread they wrote in", async () => {
+  await withCharacter(async ({ runtime, script, say, wakeNow, thread }) => {
     await runtime.registry.createThread("ada", "garden");
     await say("hello");
     at(10);
-    await heartbeat();
-    expect(script.heartbeats.map(textOf).join("\n")).not.toContain("has just written to you");
+    await wakeNow();
+    expect(script.wakes.map(textOf).join("\n")).not.toContain("has just written to you");
 
     for (const [minutes, where] of [[20, "main"], [40, "garden"]] as const) {
-      script.heartbeats.length = 0;
+      script.wakes.length = 0;
       script.again = 1;
       const held = hold();
       script.beatHeld = held;
       at(minutes);
-      const ticking = heartbeat();
+      const ticking = wakeNow();
       await held.started.promise;
       at(minutes + 1);
       await say("are you there?", where);
@@ -837,36 +705,36 @@ test("a heartbeat is told once, at its next step, that the user wrote while it w
       await ticking;
 
       const note = userWroteNote(T0 + (minutes + 1) * MINUTE, "User", hostZone());
-      expect(script.heartbeats).toHaveLength(3);
-      expect(textOf(script.heartbeats[0] as SidecarRequest)).not.toContain("has just written to you");
-      expect(textOf(script.heartbeats[1] as SidecarRequest)).toEndWith(note);
-      expect(times(textOf(script.heartbeats[2] as SidecarRequest), "has just written to you")).toBe(1);
-      expect((await thread("heartbeat")).filter((message) => message.role === "system").at(-1)?.content).toBe(note);
+      expect(script.wakes).toHaveLength(3);
+      expect(textOf(script.wakes[0] as SidecarRequest)).not.toContain("has just written to you");
+      expect(textOf(script.wakes[1] as SidecarRequest)).toEndWith(note);
+      expect(times(textOf(script.wakes[2] as SidecarRequest), "has just written to you")).toBe(1);
+      expect((await thread("own-time")).filter((message) => message.role === "system").at(-1)?.content).toBe(note);
     }
   });
 });
 
-test("a message sent while a heartbeat runs tells that turn a heartbeat is running, since when and why, once in each thread, and the note stays with the message", async () => {
+test("a message sent while a wake runs tells that turn a wake is running, where and since when, once in each thread, and the note stays with the message", async () => {
   const started = new Date(T0 + 20 * MINUTE).toISOString();
-  const running = heartbeatRunningText({ started_at: started, reason: "check the tide table" }, hostZone());
+  const running = wakeRunningText({ started_at: started }, hostZone());
   let root = "";
-  await withCharacter(async ({ runtime, script, data, say, heartbeat, thread }) => {
+  await withCharacter(async ({ runtime, script, data, say, wakeNow, thread }) => {
     root = dirname(data);
     await runtime.registry.createThread("ada", "garden");
     await say("hello");
-    script.wake = { hours_from_now: 2, reason: "check the tide table" };
     at(10);
-    await heartbeat();
+    await wakeNow();
     at(11);
     await say("nothing is running now");
-    expect(textOf(script.replies.at(-1) as SidecarRequest)).not.toContain("A heartbeat of yours");
+    expect(textOf(script.replies.at(-1) as SidecarRequest)).not.toContain("A wake of yours");
 
     const held = hold();
     script.beatHeld = held;
     at(20);
-    const ticking = heartbeat();
+    const ticking = wakeNow();
     await held.started.promise;
-    expect(runtime.autonomy.runningHeartbeats()).toEqual([{ character: "ada", startedAt: T0 + 20 * MINUTE }]);
+    expect(runtime.autonomy.runningWakes()).toEqual([{ character: "ada", startedAt: T0 + 20 * MINUTE }]);
+    expect(runtime.autonomy.runningWake("ada")).toMatchObject({ thread: undefined, startedAt: T0 + 20 * MINUTE });
     at(21);
     await say("is the lamp lit?");
     expect(textOf(script.replies.at(-1) as SidecarRequest)).toEndWith(`${running}\nis the lamp lit?`);
@@ -874,7 +742,7 @@ test("a message sent while a heartbeat runs tells that turn a heartbeat is runni
     at(22);
     await say("and the door?");
     const later = textOf(script.replies.at(-1) as SidecarRequest);
-    expect(times(later, "A heartbeat of yours")).toBe(1);
+    expect(times(later, "A wake of yours")).toBe(1);
     expect(later).toEndWith("reply to: is the lamp lit?\nand the door?");
 
     at(23);
@@ -883,9 +751,9 @@ test("a message sent while a heartbeat runs tells that turn a heartbeat is runni
 
     held.release.resolve();
     await ticking;
-    expect(runtime.autonomy.runningHeartbeats()).toEqual([]);
+    expect(runtime.autonomy.runningWakes()).toEqual([]);
     expect((await thread("main")).flatMap((message) => message.heartbeat_running === undefined ? [] : [[message.content, message.heartbeat_running]])).toEqual([
-      ["is the lamp lit?", { started_at: started, reason: "check the tide table" }],
+      ["is the lamp lit?", { started_at: started }],
     ]);
   });
 
@@ -894,96 +762,158 @@ test("a message sent while a heartbeat runs tells that turn a heartbeat is runni
     await say("anything new?");
     const resumed = textOf(script.replies[0] as SidecarRequest);
     expect(resumed).toContain(`${running}\nis the lamp lit?`);
-    expect(times(resumed, "A heartbeat of yours")).toBe(1);
+    expect(times(resumed, "A wake of yours")).toBe(1);
   }, undefined, root);
 });
 
-test("each side is told about the other in these words, with the heartbeat's reason only when it has one", () => {
+test("each side is told about the other in these words, with the thread the wake is in", () => {
   const started = new Date(T0).toISOString();
-  expect(heartbeatRunningText({ started_at: started }, "UTC")).toBe(
-    "[A heartbeat of yours has been running since Friday 2026-10-30 · 12:00 PM. It can't see this conversation. It is only told that a message arrived.]",
+  expect(wakeRunningText({ started_at: started }, "UTC")).toBe(
+    "[A wake of yours in your own-time thread has been running since Friday 2026-10-30 · 12:00 PM. It can't see this conversation. It is only told that a message arrived.]",
   );
-  expect(heartbeatRunningText({ started_at: started, reason: "check the tide table" }, "UTC")).toBe(
-    "[A heartbeat of yours has been running since Friday 2026-10-30 · 12:00 PM. It can't see this conversation. It is only told that a message arrived. " +
-    "You scheduled it with set_next_wake, giving this reason: check the tide table]",
-  );
-  expect(userWroteNote(T0 + MINUTE, "eve", "UTC")).toBe(
-    "[eve has just written to you, at Friday 2026-10-30 · 12:01 PM, while this heartbeat is running. " +
-    "Another turn of you is answering them, and it knows this heartbeat is running.]",
-  );
-  expect(heartbeatRunningText({ started_at: started, thread: "ring" }, "UTC")).toBe(
+  expect(wakeRunningText({ started_at: started, thread: "ring" }, "UTC")).toBe(
     '[A wake of yours in "ring" has been running since Friday 2026-10-30 · 12:00 PM. It can\'t see this conversation. It is only told that a message arrived.]',
   );
-  expect(userWroteNote(T0 + MINUTE, "eve", "UTC", "wake")).toBe(
+  expect(userWroteNote(T0 + MINUTE, "eve", "UTC")).toBe(
     "[eve has just written to you, at Friday 2026-10-30 · 12:01 PM, while this wake is running. " +
     "Another turn of you is answering them, and it knows this wake is running.]",
   );
 });
 
-test("a trigger that fires wakes the character with what it said, and leaves the heartbeat it scheduled for itself alone", async () => {
-  await withCharacter(async ({ runtime, script, say, heartbeat }) => {
-    const events = (): string[] => runtime.autonomy.log("ada", 100).map((event) => event.detail);
+test("a trigger that names no thread wakes the character in the own-time thread with what it said, shares that wake with whatever else fired, and nothing wakes it between firings", async () => {
+  await withCharacter(async ({ runtime, script, say, wakeNow }) => {
+    const events = (): string[] => runtime.autonomy.log("ada", 100).filter((event) => event.kind === "tick_fired").map((event) => event.detail);
     await say("hello");
-    script.wake = { hours_from_now: 2, reason: "water the fern" };
     at(10);
-    await heartbeat();
-    expect(textOf(script.heartbeats[0] as SidecarRequest)).not.toContain("Your trigger");
-    expect(events().filter((detail) => detail === "Heartbeat tick fired")).toHaveLength(1);
+    await wakeNow();
+    expect(times(textOf(script.wakes[0] as SidecarRequest), "Your trigger")).toBe(0);
+    expect(textOf(script.wakes[0] as SidecarRequest)).toContain(`in your home thread "main".]\n\n${byHand("12:10 PM")}\n\n[Current time: Friday 2026-10-30 · 12:10 PM]\n\n[This is a wake in your own-time thread, `);
+    expect(events()).toEqual(["Woken by a start by hand"]);
 
     const tide = { name: "tide-table", reason: "the tide is out", at: T0 + 19 * MINUTE };
     const lamp = { name: "lamp", reason: "the lamp is low", at: T0 + 20 * MINUTE };
-    script.heartbeats.length = 0;
+    script.wakes.length = 0;
     at(20);
     expect(runtime.autonomy.wakeFor("ada", tide)).toBe("queued");
     expect(runtime.autonomy.wakeFor("ada", lamp)).toBe("queued");
     await runtime.autonomy.tick();
-    expect(script.heartbeats).toHaveLength(2);
-    const woken = textOf(script.heartbeats[0] as SidecarRequest);
+    expect(script.wakes).toHaveLength(2);
+    const woken = textOf(script.wakes[0] as SidecarRequest);
     expect(woken).toContain(`in your home thread "main".]\n\n${triggerFiredNote(tide, hostZone())}\n\n${triggerFiredNote(lamp, hostZone())}\n\n[Current time: `);
-    expect(woken).not.toContain("water the fern");
-    expect(runtime.autonomy.status("ada")?.next_wake_at).toBe(T0 + 130 * MINUTE);
-    expect(events()).toContain('Woken by trigger "tide-table", "lamp"');
-    expect(events().filter((detail) => detail === "Heartbeat tick fired")).toHaveLength(1);
+    expect(events()).toEqual(["Woken by a start by hand", 'Woken by trigger "tide-table", "lamp"']);
 
-    script.heartbeats.length = 0;
+    script.wakes.length = 0;
     at(21);
     await runtime.autonomy.tick();
-    expect(script.heartbeats).toHaveLength(0);
-
-    at(22);
-    expect(runtime.autonomy.wakeFor("ada", { ...tide, at: T0 + 22 * MINUTE })).toBe("queued");
+    at(24 * 60);
     await runtime.autonomy.tick();
-    expect(script.heartbeats).toHaveLength(2);
-    expect(events()).toContain('Woken by trigger "tide-table"');
-    script.heartbeats.length = 0;
+    expect(script.wakes).toHaveLength(0);
 
-    at(131);
-    expect(runtime.autonomy.wakeFor("ada", { ...lamp, at: T0 + 131 * MINUTE })).toBe("queued");
+    expect(runtime.autonomy.wakeFor("ada", { ...tide, at: T0 + 24 * 60 * MINUTE })).toBe("queued");
     await runtime.autonomy.tick();
-    const both = textOf(script.heartbeats[0] as SidecarRequest);
-    expect(both).toContain(`${triggerFiredNote({ ...lamp, at: T0 + 131 * MINUTE }, hostZone())}\n\n[Current time: `);
-    expect(both).toContain("giving this reason: water the fern]");
-    expect(events().filter((detail) => detail === "Heartbeat tick fired")).toHaveLength(2);
+    expect(script.wakes).toHaveLength(2);
+    expect(events().at(-1)).toBe('Woken by trigger "tide-table"');
     expect(runtime.autonomy.wakeFor("nobody", lamp)).toBeUndefined();
   });
 });
 
-test("a trigger that fires while the character is dormant, or with heartbeats off, wakes nothing then or later", async () => {
+test("every wake counts towards going dormant, in a thread or not: after the user's limit nothing fires, what was waiting is dropped, and a message from the user starts it again", async () => {
+  let root = "";
+  const dormant = (runtime: ShoreRuntime): string[] => runtime.autonomy.log("ada", 100).filter((event) => event.kind === "dormant" || event.kind === "wake").map((event) => event.detail);
+  const twoWakes = (app: AppConfig): void => { app.behavior.autonomy.triggers.max_idle_wakes = 2; };
+  await withCharacter(async ({ runtime, script, data, say }) => {
+    root = dirname(data);
+    const log = (): string[] => dormant(runtime);
+    const wakeIn = async (minute: number, thread?: string): Promise<void> => {
+      at(minute);
+      runtime.autonomy.wakeFor("ada", { name: "show", reason: "r", at: T0 + minute * MINUTE, ...(thread === undefined ? {} : { thread }) });
+      await runtime.autonomy.tick();
+    };
+    await runtime.registry.createThread("ada", "ring");
+    await runtime.registry.createThread("ada", "garden");
+    await say("hello");
+    await say("psst", "garden");
+    expect(log()).toEqual([]);
+    script.closing = "NO_NOTE";
+    await wakeIn(10, "ring");
+    at(11);
+    await say("thanks");
+    expect(log()).toEqual(["User returned — idle counter reset"]);
+    await say("and here", "garden");
+    expect(log()).toHaveLength(1);
+
+    await wakeIn(20, "ring");
+    expect(runtime.autonomy.status("ada")).toMatchObject({ state: "Active", wakes_without_user: 1 });
+    await wakeIn(21);
+    expect(runtime.autonomy.status("ada")).toMatchObject({ state: "Dormant", wakes_without_user: 2 });
+    expect(log()).toHaveLength(1);
+
+    script.wakes.length = 0;
+    await wakeIn(22);
+    await wakeIn(23, "ring");
+    at(200);
+    await runtime.autonomy.tick();
+    expect(script.wakes).toEqual([]);
+    expect(log()).toEqual(["User returned — idle counter reset", "Went dormant (wakes without the user: 2)"]);
+  }, twoWakes);
+
+  at(210);
+  await withCharacter(async ({ runtime, script, say }) => {
+    await runtime.autonomy.register(registrationFor("ada", runtime.registry.effectiveConfig("ada")));
+    await runtime.autonomy.tick();
+    expect(runtime.autonomy.status("ada")?.state).toBe("Dormant");
+    expect(dormant(runtime).filter((detail) => detail.startsWith("Went dormant"))).toHaveLength(1);
+
+    at(211);
+    await say("I'm back");
+    expect(dormant(runtime).at(-1)).toBe("User returned — idle counter reset");
+    expect(runtime.autonomy.status("ada")).toMatchObject({ state: "Active", wakes_without_user: 0 });
+    script.closing = "NO_NOTE";
+    at(271);
+    await runtime.autonomy.tick();
+    expect(script.wakes, "what fired while it was dormant is not made up").toHaveLength(0);
+    runtime.autonomy.wakeFor("ada", { name: "show", reason: "r", at: T0 + 271 * MINUTE });
+    await runtime.autonomy.tick();
+    expect(script.wakes).toHaveLength(2);
+  }, twoWakes, root);
+});
+
+test("the user's limits on a character's own time take hold as soon as they change them", async () => {
+  await withCharacter(async ({ runtime, say, reload }) => {
+    await say("hello");
+    runtime.autonomy.wakeFor("ada", { name: "show", reason: "r", at: T0 });
+    await runtime.autonomy.tick();
+    expect(runtime.autonomy.status("ada")).toMatchObject({ state: "Dormant", wakes_without_user: 1, max_idle_wakes: 1, max_silent_ms: 48 * 60 * MINUTE });
+
+    const { triggers } = runtime.registry.effectiveConfig("ada").app.behavior.autonomy;
+    triggers.max_idle_wakes = 4;
+    await reload();
+    expect(runtime.autonomy.status("ada")).toMatchObject({ state: "Active", max_idle_wakes: 4 });
+
+    triggers.idle_timeout = ConfigDuration.fromSecs(90);
+    await reload();
+    at(1.5);
+    expect(runtime.autonomy.status("ada")).toMatchObject({ state: "Dormant", max_silent_ms: 90_000 });
+    at(1.4);
+    expect(runtime.autonomy.status("ada")?.state).toBe("Active");
+  }, (app) => { app.behavior.autonomy.triggers.max_idle_wakes = 1; });
+});
+
+test("a trigger that fires while the character is dormant, or with its own time switched off, wakes nothing then or later", async () => {
   const lamp = { name: "lamp", reason: "the lamp is low", at: T0 + 10 * MINUTE };
   await withCharacter(async ({ runtime, script, say }) => {
     await say("hello");
-    expect(runtime.autonomy.forceHeartbeatState("ada", "dormant")).toBe(true);
+    expect(runtime.autonomy.forceDormancy("ada", "dormant")).toBe(true);
     at(10);
     expect(runtime.autonomy.wakeFor("ada", lamp)).toBe("queued");
     await runtime.autonomy.tick();
-    expect(script.heartbeats).toHaveLength(0);
+    expect(script.wakes).toHaveLength(0);
 
     at(20);
     await say("I'm back");
     at(90);
     await runtime.autonomy.tick();
-    expect(script.heartbeats.length).toBeGreaterThan(0);
-    expect(script.heartbeats.map(textOf).join("\n")).not.toContain("Your trigger");
+    expect(script.wakes).toHaveLength(0);
   });
 
   await withCharacter(async ({ runtime, script, say }) => {
@@ -991,18 +921,18 @@ test("a trigger that fires while the character is dormant, or with heartbeats of
     at(10);
     expect(runtime.autonomy.wakeFor("ada", lamp)).toBe("queued");
     await runtime.autonomy.tick();
-    expect(script.heartbeats).toHaveLength(0);
+    expect(script.wakes).toHaveLength(0);
   }, (app) => { app.behavior.autonomy.enabled = false; });
 });
 
-test("a trigger that fires during a heartbeat is handed to that heartbeat at its next step, along with word that the user wrote", async () => {
-  await withCharacter(async ({ runtime, script, say, heartbeat }) => {
+test("a trigger that fires during a wake in its thread is handed to that wake at its next step, along with word that the user wrote", async () => {
+  await withCharacter(async ({ runtime, script, say, wakeNow }) => {
     await say("hello");
     const held = hold();
     script.beatHeld = held;
     script.again = 1;
     at(10);
-    const ticking = heartbeat();
+    const ticking = wakeNow();
     await held.started.promise;
     const tide = { name: "tide-table", reason: "the tide is out", at: T0 + 11 * MINUTE };
     const lamp = { name: "lamp", reason: "the lamp is low", at: T0 + 13 * MINUTE };
@@ -1015,30 +945,33 @@ test("a trigger that fires during a heartbeat is handed to that heartbeat at its
     held.release.resolve();
     await ticking;
 
-    expect(script.heartbeats).toHaveLength(3);
-    expect(textOf(script.heartbeats[1] as SidecarRequest)).toEndWith(
+    expect(script.wakes).toHaveLength(3);
+    expect(textOf(script.wakes[1] as SidecarRequest)).toEndWith(
       `${triggerFiredNote(tide, hostZone())}\n\n${userWroteNote(T0 + 12 * MINUTE, "User", hostZone())}\n\n${triggerFiredNote(lamp, hostZone())}`,
     );
-    expect(times(textOf(script.heartbeats[2] as SidecarRequest), "Your trigger")).toBe(2);
+    expect(times(textOf(script.wakes[2] as SidecarRequest), "Your trigger")).toBe(2);
 
-    script.heartbeats.length = 0;
+    script.wakes.length = 0;
     at(14);
     await runtime.autonomy.tick();
-    expect(script.heartbeats).toHaveLength(0);
+    expect(script.wakes).toHaveLength(0);
   });
 });
 
-test("a trigger's firing is told in these words, and nothing new means no note", () => {
+test("what set a wake off is told in these words, and nothing new means no note", () => {
   const tide = { name: "tide-table", reason: "the tide is out", at: T0 + MINUTE };
   expect(triggerFiredNote(tide, "UTC")).toBe('[Your trigger "tide-table" fired at Friday 2026-10-30 · 12:01 PM: the tide is out]');
-  expect(heartbeatNewsNote([], "eve", "UTC")).toBeUndefined();
-  expect(heartbeatNewsNote([{ kind: "user_wrote", at: T0 }, { kind: "trigger", firing: tide }], "eve", "UTC")).toBe(
+  expect(triggerFiredNote({ name: "", byHand: true, reason: "", at: T0 }, "UTC")).toBe("[This wake was started by hand at Friday 2026-10-30 · 12:00 PM, from Shore's command line or its settings.]");
+  expect(triggerFiredNote({ name: "", from: "main", reason: "Tell part two.", at: T0, thread: "ring" }, "UTC")).toBe('[You asked for this wake from "main" at Friday 2026-10-30 · 12:00 PM: Tell part two.]');
+  expect(triggerFiredNote({ name: "", seal: true, reason: "It is open.", at: T0, thread: "gift" }, "UTC")).toBe("[The seal on this thread came off at Friday 2026-10-30 · 12:00 PM. It is open.]");
+  expect(wakeNewsNote([], "eve", "UTC")).toBeUndefined();
+  expect(wakeNewsNote([{ kind: "user_wrote", at: T0 }, { kind: "trigger", firing: tide }], "eve", "UTC")).toBe(
     `${userWroteNote(T0, "eve", "UTC")}\n\n${triggerFiredNote(tide, "UTC")}`,
   );
 });
 
 function withTriggers(app: AppConfig): void {
-  app.behavior.autonomy.triggers.enabled = true;
+  app.tools.enabled_tools.push("bash");
 }
 
 function diaryOf(data: string): [from: string, text: string][] {
@@ -1060,10 +993,10 @@ test("a trigger in the character's file wakes it when its check prints, and the 
     noteSeen(data, T0 + 3 * MINUTE);
     at(11);
     await runtime.triggers.tick();
-    expect(script.heartbeats).toHaveLength(0);
+    expect(script.wakes).toHaveLength(0);
     await runtime.autonomy.tick();
 
-    const woken = textOf(script.heartbeats[0] as SidecarRequest);
+    const woken = textOf(script.wakes[0] as SidecarRequest);
     expect(woken).toContain(
       '[Your trigger "tide" fired at Friday 2026-10-30 · ',
     );
@@ -1120,14 +1053,14 @@ test("a follower's turn comes once the wake its leader caused is over, whether t
     await runtime.triggers.tick();
     expect(diaryOf(data)).toEqual([]);
     await runtime.autonomy.tick();
-    expect(script.heartbeats.length).toBeGreaterThan(0);
+    expect(script.wakes.length).toBeGreaterThan(0);
     await runtime.triggers.tick();
     expect(diaryOf(data)).toEqual([["after", "Write it up."]]);
 
     const held = hold();
     script.beatHeld = held;
     at(20);
-    const ticking = runtime.autonomy.forceHeartbeatNow("ada") === undefined ? Promise.resolve() : runtime.autonomy.tick();
+    const ticking = runtime.autonomy.wakeNow("ada") === undefined ? Promise.resolve() : runtime.autonomy.tick();
     await held.started.promise;
     at(21);
     await runtime.triggers.tick();
@@ -1140,7 +1073,7 @@ test("a follower's turn comes once the wake its leader caused is over, whether t
   }, withTriggers);
 });
 
-test("a trigger that fires while a heartbeat is writing its last words isn't lost: it wakes the character once that heartbeat is over, and only then is its follower set off", async () => {
+test("a trigger that fires while a wake is writing its last words isn't lost: it wakes the character once that wake is over, and only then is its follower set off", async () => {
   const file = '[lamp]\nevery = "10m"\nreason = "Trim the lamp."\ncooldown = "1m"\n\n[after]\nfollows = "lamp"\nreason = "Write it up."\nwake = false\n';
   await withCharacter(async ({ runtime, script, workspace, data, say }) => {
     await writeFile(join(workspace, "TRIGGERS.toml"), file);
@@ -1150,32 +1083,32 @@ test("a trigger that fires while a heartbeat is writing its last words isn't los
     const end = hold();
     script.endHeld = end;
     at(10);
-    const ticking = runtime.autonomy.forceHeartbeatNow("ada") === undefined ? Promise.resolve() : runtime.autonomy.tick();
+    const ticking = runtime.autonomy.wakeNow("ada") === undefined ? Promise.resolve() : runtime.autonomy.tick();
     await end.started.promise;
     at(11);
     await runtime.triggers.tick();
     expect(runtime.triggers.view("ada").triggers.map((each) => each.fired)).toEqual([1, 0]);
     end.release.resolve();
     await ticking;
-    expect(script.heartbeats).toHaveLength(2);
-    expect(script.heartbeats.map(textOf).join("\n")).not.toContain("Trim the lamp.");
+    expect(script.wakes).toHaveLength(2);
+    expect(script.wakes.map(textOf).join("\n")).not.toContain("Trim the lamp.");
     at(12);
     await runtime.triggers.tick();
     expect(diaryOf(data)).toEqual([]);
 
-    script.heartbeats.length = 0;
+    script.wakes.length = 0;
     await runtime.autonomy.tick();
-    expect(script.heartbeats).toHaveLength(2);
-    expect(textOf(script.heartbeats[0] as SidecarRequest)).toContain('[Your trigger "lamp" fired at Friday 2026-10-30 · 12:11 PM: Trim the lamp.]');
+    expect(script.wakes).toHaveLength(2);
+    expect(textOf(script.wakes[0] as SidecarRequest)).toContain('[Your trigger "lamp" fired at Friday 2026-10-30 · 12:11 PM: Trim the lamp.]');
     expect(runtime.autonomy.log("ada", 100).map((event) => event.detail)).toContain('Woken by trigger "lamp"');
     await runtime.triggers.tick();
     expect(diaryOf(data)).toEqual([["after", "Write it up."]]);
     expect(runtime.triggers.view("ada").triggers.map((each) => each.fired)).toEqual([1, 1]);
 
-    script.heartbeats.length = 0;
+    script.wakes.length = 0;
     at(13);
     await runtime.autonomy.tick();
-    expect(script.heartbeats).toHaveLength(0);
+    expect(script.wakes).toHaveLength(0);
   }, withTriggers);
 });
 
@@ -1203,13 +1136,16 @@ async function looks(runtime: ShoreRuntime): Promise<void> {
   await runtime.triggers.tick();
 }
 
-test("the character's triggers run only when the user has turned them on, with heartbeats on, and not while it is dormant", async () => {
-  await withCharacter(async ({ runtime, workspace, say }) => {
-    await writeFile(join(workspace, "TRIGGERS.toml"), TOUCH);
+test("the character's triggers run whenever its own time is switched on, a check only when it has the bash tool, and nothing while it is dormant", async () => {
+  const noBash = "`touch` isn't running: its `check` is a command, and you don't have the `bash` tool to run commands with";
+  await withCharacter(async ({ runtime, workspace, data, say }) => {
+    await writeFile(join(workspace, "TRIGGERS.toml"), `${TOUCH}\n[lamp]\nevery = "10m"\nreason = "Trim the lamp."\nwake = false\n`);
     await say("hello");
     await looks(runtime);
     expect(existsSync(join(workspace, "ran"))).toBe(false);
-    expect(runtime.triggers.view("ada").enabled).toBe(false);
+    const view = runtime.triggers.view("ada");
+    expect([view.enabled, view.triggers.map((each) => each.trigger.name), view.problems]).toEqual([true, ["lamp"], [noBash]]);
+    expect(diaryOf(data)).toEqual([["shore", `These triggers in TRIGGERS.toml aren't running:\n- ${noBash}`], ["lamp", "Trim the lamp."]]);
   });
 
   await withCharacter(async ({ runtime, workspace, say }) => {
@@ -1226,10 +1162,11 @@ test("the character's triggers run only when the user has turned them on, with h
   await withCharacter(async ({ runtime, workspace, say }) => {
     await writeFile(join(workspace, "TRIGGERS.toml"), TOUCH);
     await say("hello");
-    expect(runtime.autonomy.forceHeartbeatState("ada", "dormant")).toBe(true);
+    expect(runtime.autonomy.forceDormancy("ada", "dormant")).toBe(true);
     await looks(runtime);
     expect(existsSync(join(workspace, "ran"))).toBe(false);
-    expect(runtime.autonomy.forceHeartbeatState("ada", "active")).toBe(true);
+    expect(runtime.triggers.view("ada").problems).toEqual([]);
+    expect(runtime.autonomy.forceDormancy("ada", "active")).toBe(true);
     at(12);
     await runtime.triggers.tick();
     at(22);
@@ -1372,8 +1309,8 @@ function withTools(...names: string[]): (app: AppConfig) => void {
   };
 }
 
-test("a note the character writes in its diary from a conversation reaches its heartbeats and its other threads, and isn't shown again where it was written", async () => {
-  await withCharacter(async ({ runtime, script, data, say, heartbeat, thread }) => {
+test("a note the character writes in its diary from a conversation reaches its wakes and its other threads, and isn't shown again where it was written", async () => {
+  await withCharacter(async ({ runtime, script, data, say, wakeNow, thread }) => {
     await runtime.registry.createThread("ada", "garden");
     await say("hello");
     script.replyTool = { name: "write_diary", input: { text: "  Water the fern on Friday.  " } };
@@ -1392,10 +1329,10 @@ test("a note the character writes in its diary from a conversation reaches its h
     expect(textOf(script.replies.at(-1) as SidecarRequest)).toEndWith(
       '[New in your diary. Each entry says where it came from.]\n\nyour note, written in "main" · Friday 2026-10-30 · 12:05 PM\nWater the fern on Friday.\n\n[End of your diary.]\nthe beans are up',
     );
-    script.closing = "HEARTBEAT_OK";
+    script.closing = "NO_NOTE";
     at(10);
-    await heartbeat();
-    expect(textOf(script.heartbeats[0] as SidecarRequest)).toContain('your note, written in "main" · Friday 2026-10-30 · 12:05 PM\nWater the fern on Friday.');
+    await wakeNow();
+    expect(textOf(script.wakes[0] as SidecarRequest)).toContain('your note, written in "main" · Friday 2026-10-30 · 12:05 PM\nWater the fern on Friday.');
 
     script.replyTool = { name: "write_diary", input: { text: "   " } };
     at(11);
@@ -1423,15 +1360,18 @@ test("a note the character writes in its diary from a conversation reaches its h
   }, withTools("write_diary"));
 });
 
-test("the character can list its triggers from a conversation, and is told when the user hasn't turned them on", async () => {
+test("the character can list its triggers from a conversation, and is told when it has none or its own time is off", async () => {
   const file = '[lamp]\nevery = "1h"\nreason = "Trim the lamp."\n';
   await withCharacter(async ({ runtime, script, workspace, say, thread }) => {
+    script.replyTool = { name: "list_triggers", input: {} };
+    await say("what have you set up?");
+    expect(lastToolResult(await thread("main"))).toEqual({ text: "Your triggers, from TRIGGERS.toml in your workspace root.\n\nYou have none there yet, so nothing wakes you on its own.", failed: false });
+
     await writeFile(join(workspace, "TRIGGERS.toml"), file);
-    await say("hello");
     at(1);
     await runtime.triggers.tick();
     script.replyTool = { name: "list_triggers", input: {} };
-    await say("what have you set up?");
+    await say("and now?");
     expect(lastToolResult(await thread("main"))).toEqual({
       text: 'Your triggers, from TRIGGERS.toml in your workspace root.\n\nlamp: every 1h, wakes you, "Trim the lamp.", at most every 1h\n  next Friday 2026-10-30 · 1:01 PM · never fired',
       failed: false,
@@ -1449,10 +1389,13 @@ test("the character can list its triggers from a conversation, and is told when 
     script.replyTool = { name: "list_triggers", input: {} };
     await say("what have you set up?");
     expect(lastToolResult(await thread("main"))).toEqual({
-      text: "Your triggers, from TRIGGERS.toml in your workspace root. peggy hasn't turned triggers on, so none of them run.\n\nYou have none yet.",
+      text: "Your triggers, from TRIGGERS.toml in your workspace root. peggy has your own time switched off, so nothing fires.\n\nYou have none there yet, so nothing wakes you on its own.",
       failed: false,
     });
-  }, (app) => { app.tools.enabled_tools = [...app.tools.enabled_tools, "list_triggers"]; });
+  }, (app) => {
+    app.tools.enabled_tools = [...app.tools.enabled_tools, "list_triggers"];
+    app.behavior.autonomy.enabled = false;
+  });
 });
 
 test("the character's push reaches the user's topic once, at normal priority, and a second one the same day is refused", async () => {
@@ -1570,30 +1513,30 @@ test("the user's status reaches a conversation with their next message, once, an
   }, undefined, root);
 });
 
-test("a heartbeat starts with the user's status and its age while one is set, and a status that changes sets off the trigger for it", async () => {
-  await withCharacter(async ({ runtime, script, workspace, data, say, heartbeat }) => {
+test("a wake starts with the user's status and its age while one is set, and a status that changes sets off the trigger for it", async () => {
+  await withCharacter(async ({ runtime, script, workspace, data, say, wakeNow }) => {
     await writeFile(join(workspace, "TRIGGERS.toml"), `[status]\nwhen = "status_changed"\ncheck = 'echo "now: $SHORE_USER_STATUS"'\nwake = false\n`);
     await say("hello");
-    script.closing = "HEARTBEAT_OK";
+    script.closing = "NO_NOTE";
     at(1);
     await runtime.triggers.tick();
-    await heartbeat();
-    expect(textOf(script.heartbeats[0] as SidecarRequest)).not.toContain("status");
+    await wakeNow();
+    expect(textOf(script.wakes[0] as SidecarRequest)).not.toContain("status");
 
     setPresence(data, "asleep", T0 + 5 * MINUTE);
     await runtime.triggers.statusChanged();
-    script.heartbeats.length = 0;
+    script.wakes.length = 0;
     at(65);
     await runtime.triggers.tick();
     expect(diaryOf(data)).toEqual([["status", "now: asleep"]]);
-    await heartbeat();
-    expect(textOf(script.heartbeats[0] as SidecarRequest)).toContain(`in your home thread "main".]\n\n[User's status, set about an hour ago: "asleep"]\n\n[Your diary from the last day.`);
+    await wakeNow();
+    expect(textOf(script.wakes[0] as SidecarRequest)).toContain(`in your home thread "main".]\n\n[User's status, set about an hour ago: "asleep"]\n\n[Your diary from the last day.`);
 
     setPresence(data, "", T0 + 70 * MINUTE);
-    script.heartbeats.length = 0;
+    script.wakes.length = 0;
     at(130);
-    await heartbeat();
-    expect(textOf(script.heartbeats[0] as SidecarRequest)).not.toContain("User's status");
+    await wakeNow();
+    expect(textOf(script.wakes[0] as SidecarRequest)).not.toContain("User's status");
   }, withTriggers);
 });
 
@@ -1671,16 +1614,16 @@ test("the diary command lists the newest twenty notes oldest first, as many as a
     let made = 0;
     const newId = (): string => `d${String(++made)}`;
     addDiaryNote(dir, { at: T0 - 25 * 60 * MINUTE, thread: "main", source: "note", text: "Promised the ferry times." }, newId);
-    for (let n = 1; n <= 21; n += 1) addDiaryNote(dir, { at: T0 + n * MINUTE, thread: "heartbeat", source: "heartbeat", text: `note ${String(n)}` }, newId);
-    addDiaryNote(dir, { at: T0 + 22 * MINUTE, thread: "heartbeat", source: "trigger", trigger: "mail", text: "Two letters." }, newId);
+    for (let n = 1; n <= 21; n += 1) addDiaryNote(dir, { at: T0 + n * MINUTE, thread: "own-time", source: "wake", text: `note ${String(n)}` }, newId);
+    addDiaryNote(dir, { at: T0 + 22 * MINUTE, thread: "own-time", source: "trigger", trigger: "mail", text: "Two letters." }, newId);
     foldDiary(dir, ["d1", "d22"]);
     at(30);
 
     const newest = await listed({});
     expect(newest.kept).toBe(23);
     expect(newest.notes.map((note) => note["text"])).toEqual([...Array.from({ length: 19 }, (_unused, n) => `note ${String(n + 3)}`), "Two letters."]);
-    expect(newest.notes.at(-1)).toEqual({ at: new Date(T0 + 22 * MINUTE).toISOString(), thread: "heartbeat", source: "trigger", trigger: "mail", text: "Two letters.", shown: true, dreamed: false });
-    expect(newest.notes.at(-2)).toEqual({ at: new Date(T0 + 21 * MINUTE).toISOString(), thread: "heartbeat", source: "heartbeat", text: "note 21", shown: true, dreamed: true });
+    expect(newest.notes.at(-1)).toEqual({ at: new Date(T0 + 22 * MINUTE).toISOString(), thread: "own-time", source: "trigger", trigger: "mail", text: "Two letters.", shown: true, dreamed: false });
+    expect(newest.notes.at(-2)).toEqual({ at: new Date(T0 + 21 * MINUTE).toISOString(), thread: "own-time", source: "wake", text: "note 21", shown: true, dreamed: true });
 
     expect((await listed({ count: 2 })).notes.map((note) => note["text"])).toEqual(["note 21", "Two letters."]);
     const all = await listed({ count: 0 });
@@ -1698,15 +1641,48 @@ const SHOW = '[show]\nevery = "10m"\nreason = "Tell the next part."\nthread = "r
 
 const FIRED = '[Your trigger "show" fired at Friday 2026-10-30 · 12:11 PM: Tell the next part.]';
 
-function wakeText(now: string, lines: readonly string[], limit = "30 minutes", nudgeAfter = "25 minutes"): string {
+function wakeShown(now: string, shown: readonly string[], lines: readonly string[], limit = "30 minutes", nudgeAfter = "25 minutes"): string {
   return [
     "[wake]",
+    ...shown,
     ...lines,
     `[Current time: Friday 2026-10-30 · ${now}]`,
-    `[This is a wake in your thread "ring": time of your own here, without User having written. Everything above is this thread as you left it, apart from the working of your earlier wakes here, which isn't shown again. You are free to use your tools as you wish.`,
-    "What you write in your final response is your note to yourself. It goes in your diary, where your other turns see it for the next day, and it stays here in this thread. To say something to User, wrap it in `<sendMessage>...</sendMessage>` tags in your final response. That text is posted in this thread as a message to them. The rest of what you do in a wake stays in this thread as your working: they can read it if they look, but nothing tells them it is there. Your later turns here aren't shown it either, only a line saying how much of it there was, so put what you will need again in your note or in a file.",
+    '[This is a wake in your thread "ring": time of your own, without User having written. A wake starts fresh. Nothing that happened in this thread before is in front of you, only what is above: what was said here since your last wake here, the note that wake left you, and your diary. Any files this thread keeps are in your prompt, and the rest of what was said here is in your chat logs. You are free to use your tools as you wish.',
+    "What you write in your final response is your note to yourself. It goes in your diary, where your other turns see it for the next day, and your next wake here starts with it however much later that is. So end with where you stopped and what comes next. Keep it short, because a long note is cut, and put anything longer in a file that the note points to. To say something to User, wrap it in `<sendMessage>...</sendMessage>` tags in your final response. That text is posted in this thread as a message to them. The rest of what you do in a wake stays in this thread as your working: they can read it if they look, but nothing tells them it is there. Your later turns here aren't shown it either, only a line saying how much of it there was.",
     `A wake here can run for up to ${limit}. After ${nudgeAfter}, you will get a nudge to wrap up, with a few more rounds to finish. If User writes in this thread while you are working, the wake stops at the end of the step it is on so that you can answer them, and you are woken here again to pick it up once they have been quiet here for 10 minutes.]`,
   ].join("\n\n");
+}
+
+function wakeText(now: string, lines: readonly string[], limit = "30 minutes", nudgeAfter = "25 minutes"): string {
+  return wakeShown(now, [], lines, limit, nudgeAfter);
+}
+
+function ownWakeShown(now: string, shown: readonly string[], lines: readonly string[], limit = "30 minutes", nudgeAfter = "25 minutes"): string {
+  return [
+    "[wake]",
+    ...shown,
+    ...lines,
+    `[Current time: Friday 2026-10-30 · ${now}]`,
+    '[This is a wake in your own-time thread, where a wake runs when its trigger names no thread: time of your own, without User having written. A wake starts fresh. Nothing that happened in this thread before is in front of you, only what is above: what was said in your home thread, "main", since your last wake here, the note that wake left you, and your diary. You are free to use your tools as you wish.',
+    'What you write in your final response is your note to yourself. It goes in your diary, where your other turns see it for the next day, and your next wake here starts with it however much later that is. So end with where you stopped and what comes next. Keep it short, because a long note is cut, and put anything longer in a file that the note points to. To say something to User, wrap it in `<sendMessage>...</sendMessage>` tags in your final response. That text arrives in "main" as a message to them. The rest of what you do stays in this thread, which they can read but don\'t write in, and your later wakes aren\'t shown it.',
+    `A wake here can run for up to ${limit}. After ${nudgeAfter}, you will get a nudge to wrap up, with a few more rounds to finish. If User writes to you while you are working, the wake goes on, and another turn of you answers them. That turn can change your workspace too, so when you commit, stage only the files you changed.]`,
+  ].join("\n\n");
+}
+
+function setOffBy(opener: string | undefined): string[] {
+  return (opener ?? "").split("\n\n").filter((part) => /^\[(Your trigger "|You asked for this |The seal on |This wake was started by hand )/.test(part));
+}
+
+function said(who: string, time: string, text: string): string {
+  return `${who} · Friday 2026-10-30 · ${time}\n${text}`;
+}
+
+function wroteLast(ago: string, where = "this thread"): string {
+  return `[User last wrote to you ${ago}, in ${where}.]`;
+}
+
+function diaryOfDay(...entries: [from: string, time: string, text: string][]): string {
+  return ["[Your diary from the last day. Each entry says where it came from.]", ...entries.map(([from, time, text]) => `${from} · Friday 2026-10-30 · ${time}\n${text}`), "[End of your diary.]"].join("\n\n");
 }
 
 function turnsOf(request: SidecarRequest | undefined): [role: string, text: string][] {
@@ -1725,7 +1701,7 @@ function stored(messages: readonly Message[]): [role: string, origin: string, co
   return messages.map((message) => [message.role, message.origin ?? "", message.content.endsWith(SOUL_READ) ? "<SOUL.md>" : message.content]);
 }
 
-test("a trigger that names a thread wakes the character there, with that thread's history, and what it sends lands there unread", async () => {
+test("a trigger that names a thread wakes the character there, fresh, with what was said there since its last wake there, and what it sends lands there unread", async () => {
   await withCharacter(async ({ runtime, script, workspace, data, emitted, say, thread }) => {
     await runtime.registry.createThread("ada", "ring");
     await runtime.registry.setThreadModel("ada", "ring", "pinned");
@@ -1737,18 +1713,23 @@ test("a trigger that names a thread wakes the character there, with that thread'
     markThreadRead(data, "ada", "ring", 2);
     script.closing = "Told part one; the fox is at the gate.\n<sendMessage>Part one: the fox came to the gate.</sendMessage>";
     emitted.length = 0;
-    await fires(runtime, 11);
+    const held = hold();
+    script.beatHeld = held;
+    const waking = fires(runtime, 11);
+    await held.started.promise;
+    at(11.5);
+    held.release.resolve();
+    await waking;
 
     const opener = wakeText("12:11 PM", [FIRED]);
-    expect(script.heartbeats.map((request) => [request.model, request.context?.call_type, request.context?.thread])).toEqual([
+    expect(script.wakes.map((request) => [request.model, request.context?.call_type, request.context?.thread])).toEqual([
       ["claude-pinned", "heartbeat", "ring"],
       ["claude-pinned", "heartbeat_tool_loop", "ring"],
     ]);
-    expect(turnsOf(script.heartbeats[0])).toEqual([
-      ["user", "tell me a story in parts"],
-      ["assistant", "reply to: tell me a story in parts"],
-      ["user", opener],
-    ]);
+    expect(turnsOf(script.wakes[0])).toEqual([["user", wakeShown("12:11 PM", [
+      `The last of what was said in this thread:\n\n${said("User", "12:01 PM", "tell me a story in parts")}\n\n${said("you", "12:01 PM", "reply to: tell me a story in parts")}`,
+      wroteLast("10 minutes ago"),
+    ], [FIRED])]]);
     expect(stored(await thread("ring"))).toEqual([
       ["user", "", "tell me a story in parts"],
       ["assistant", "", "reply to: tell me a story in parts"],
@@ -1761,7 +1742,7 @@ test("a trigger that names a thread wakes the character there, with that thread'
     expect(emitted.map((each) => [each.thread, each.msg.content])).toEqual([["ring", "Part one: the fox came to the gate."]]);
     expect(runtime.registry.listThreads("ada").map((record) => record.id)).toEqual(["main", "ring"]);
     expect(threadActivityNow(data, "ada", "ring")).toEqual({
-      turns: 2, last_active: new Date(T0 + 11 * MINUTE).toISOString(), last_user: new Date(T0 + MINUTE).toISOString(), unread: 1,
+      turns: 2, last_active: new Date(T0 + 11.5 * MINUTE).toISOString(), last_user: new Date(T0 + MINUTE).toISOString(), unread: 1,
     });
     expect(unfoldedDiary(join(data, "ada")).map((note) => [note.source, note.thread, note.text])).toEqual([["wake", "ring", "Told part one; the fox is at the gate."]]);
 
@@ -1771,7 +1752,7 @@ test("a trigger that names a thread wakes the character there, with that thread'
       ["user", opener],
       ["system", "[Your working in this wake isn't shown here: 1 tool call. Your note from the end of it follows.]"],
       ["assistant", "Told part one; the fox is at the gate.\n[sent to User as the next message here]"],
-      ["user", "[heartbeat · Friday 2026-10-30 · 12:11 PM]"],
+      ["user", "[wake · Friday 2026-10-30 · 12:11 PM]"],
       ["assistant", "Part one: the fox came to the gate."],
       ["user", "and then?"],
     ]);
@@ -1780,36 +1761,57 @@ test("a trigger that names a thread wakes the character there, with that thread'
     expect(textOf(script.replies.at(-1) as SidecarRequest)).toEndWith(
       '[New in your diary. Each entry says where it came from.]\n\nyour note at the end of a wake in "ring" · Friday 2026-10-30 · 12:11 PM\nTold part one; the fox is at the gate.\n\n[End of your diary.]\nanything new?',
     );
-  }, withTriggers);
+
+    script.wakes.length = 0;
+    script.closing = "NO_NOTE";
+    await fires(runtime, 71);
+    expect(script.wakes.map((request) => request.context?.thread)).toEqual(["ring", "ring"]);
+    expect(turnsOf(script.wakes[0])).toEqual([["user", wakeShown("1:11 PM", [
+      `What was said in this thread since your last wake here:\n\n${said("you, on your own time", "12:11 PM", "Part one: the fox came to the gate.")}\n\n${said("User", "12:12 PM", "and then?")}\n\n${said("you", "12:12 PM", "reply to: and then?")}`,
+      wroteLast("58 minutes ago", 'your home thread "main"'),
+      diaryOfDay(['your note at the end of a wake in "ring"', "12:11 PM", "Told part one; the fox is at the gate."]),
+    ], ['[Your trigger "show" fired at Friday 2026-10-30 · 1:11 PM: Tell the next part.]'])]]);
+
+    script.wakes.length = 0;
+    await fires(runtime, 25 * 60 + 11);
+    expect(turnsOf(script.wakes[0])).toEqual([["user", wakeShown("1:11 PM", [
+      "Nothing has been said in this thread since your last wake here.",
+      wroteLast("about a day ago", 'your home thread "main"'),
+      "[Your note from the end of your last wake here, Friday 2026-10-30 · 12:11 PM, kept for this one:]\n\nTold part one; the fox is at the gate.",
+    ], ['[Your trigger "show" fired at Saturday 2026-10-31 · 1:11 PM: Tell the next part.]']).replace("[Current time: Friday 2026-10-30", "[Current time: Saturday 2026-10-31")]]);
+  }, (app) => {
+    withTriggers(app);
+    app.behavior.autonomy.triggers.max_idle_wakes = 10;
+  });
 });
 
-test("a trigger that names a thread the character doesn't have, or the one its heartbeats run in, wakes nothing and says so in the diary", async () => {
-  await withCharacter(async ({ runtime, script, workspace, data, say, heartbeat }) => {
+test("a trigger that names a thread the character doesn't have, or its own-time thread, wakes nothing and says so in the diary", async () => {
+  await withCharacter(async ({ runtime, script, workspace, data, say, wakeNow }) => {
     await say("hello");
-    script.closing = "HEARTBEAT_OK";
+    script.closing = "NO_NOTE";
     at(1);
-    await heartbeat();
-    script.heartbeats.length = 0;
-    await writeFile(join(workspace, "TRIGGERS.toml"), '[lost]\nevery = "10m"\nreason = "r"\nthread = "nowhere"\n\n[beat]\nevery = "10m"\nreason = "r"\nthread = "heartbeat"\n');
+    await wakeNow();
+    script.wakes.length = 0;
+    await writeFile(join(workspace, "TRIGGERS.toml"), '[lost]\nevery = "10m"\nreason = "r"\nthread = "nowhere"\n\n[beat]\nevery = "10m"\nreason = "r"\nthread = "own-time"\n');
     await runtime.triggers.tick();
     await fires(runtime, 12);
-    expect(script.heartbeats).toEqual([]);
+    expect(script.wakes).toEqual([]);
     expect(diaryOf(data)).toEqual([
       ["shore", 'You were to be woken in the thread "nowhere" by trigger "lost", but you have no such thread, so nothing ran. `list_threads` shows the threads you do have.'],
-      ["shore", 'You were to be woken in the thread "heartbeat" by trigger "beat", but you have no such thread, so nothing ran. `list_threads` shows the threads you do have.'],
+      ["shore", 'You were to be woken in the thread "own-time" by trigger "beat", but you have no such thread, so nothing ran. `list_threads` shows the threads you do have.'],
     ]);
     expect(runtime.autonomy.log("ada", 100).map((event) => [event.kind, event.detail]).slice(-4)).toEqual([
       ["tick_fired", 'Woken in "nowhere" by trigger "lost"'],
       ["call_failed", 'Wake skipped: no thread "nowhere"'],
-      ["tick_fired", 'Woken in "heartbeat" by trigger "beat"'],
-      ["call_failed", 'Wake skipped: no thread "heartbeat"'],
+      ["tick_fired", 'Woken in "own-time" by trigger "beat"'],
+      ["call_failed", 'Wake skipped: no thread "own-time"'],
     ]);
   }, withTriggers);
 });
 
 const AFTER = '\n[after]\nfollows = "show"\nreason = "Write it up."\nwake = false\n';
 
-test("the user's message stops a wake in that thread at the end of its step and is answered, and the wake picks up once they have been quiet there for ten minutes", async () => {
+test("the user's message stops a wake in that thread at the end of its step and is answered, and once they have been quiet there for ten minutes a fresh wake picks it up, told how the last one stopped", async () => {
   await withCharacter(async ({ runtime, script, workspace, data, emitted, say, thread }) => {
     await runtime.registry.createThread("ada", "ring");
     await writeFile(join(workspace, "TRIGGERS.toml"), SHOW + AFTER);
@@ -1824,8 +1826,8 @@ test("the user's message stops a wake in that thread at the end of its step and 
     emitted.length = 0;
     const waking = fires(runtime, 11);
     await held.started.promise;
-    const running = runtime.autonomy.runningHeartbeat("ada");
-    expect([running?.thread, running?.reason, running?.startedAt]).toEqual(["ring", undefined, T0 + 11 * MINUTE]);
+    const running = runtime.autonomy.runningWake("ada");
+    expect([running?.thread, running?.startedAt]).toEqual(["ring", T0 + 11 * MINUTE]);
     at(12);
     const asking = say("wait, what is the fox called?", "ring");
     held.release.resolve();
@@ -1834,7 +1836,7 @@ test("the user's message stops a wake in that thread at the end of its step and 
 
     const opener = wakeText("12:11 PM", [FIRED]);
     const stopped = "[User wrote here while this wake was running, so Shore stopped it here for you to answer them. Once they have been quiet in this thread for 10 minutes, Shore wakes you here again to pick it up.]";
-    expect(script.heartbeats).toHaveLength(1);
+    expect(script.wakes).toHaveLength(1);
     expect(stored(await thread("ring")).slice(2)).toEqual([
       ["user", "autonomous", opener],
       ["assistant", "", "Let me look."],
@@ -1851,10 +1853,11 @@ test("the user's message stops a wake in that thread at the end of its step and 
     ];
     expect(turnsOf(script.replies.at(-1)).slice(2)).toEqual(cutShort);
     expect(emitted.filter((each) => each.msg.origin === "autonomous")).toEqual([]);
-    expect(runtime.autonomy.log("ada", 100).filter((event) => event.kind !== "tool_use").map((event) => [event.kind, event.detail]).slice(-3)).toEqual([
+    expect(runtime.autonomy.log("ada", 100).filter((event) => event.kind !== "tool_use").map((event) => [event.kind, event.detail]).slice(-4)).toEqual([
       ["tick_fired", 'Woken in "ring" by trigger "show"'],
       ["wake", 'Wake in "ring" stopped for User\'s message'],
-      ["message_skipped", "Tick completed — no message sent"],
+      ["message_skipped", "Wake completed — no message sent"],
+      ["wake", "User active in another thread — idle counter reset"],
     ]);
     await runtime.triggers.tick();
     expect(diaryOf(data)).toEqual([]);
@@ -1865,22 +1868,22 @@ test("the user's message stops a wake in that thread at the end of its step and 
     await say("is the lamp lit?");
     at(21);
     await runtime.autonomy.tick();
-    expect(script.heartbeats).toHaveLength(1);
+    expect(script.wakes).toHaveLength(1);
     script.closing = "Told part one.\n<sendMessage>Part one: Rue came to the gate.</sendMessage>";
     at(22);
     await runtime.autonomy.tick();
-    expect(script.heartbeats).toHaveLength(3);
-    expect(turnsOf(script.heartbeats[1]).slice(2)).toEqual([
-      ...cutShort,
-      ["assistant", "reply to: wait, what is the fox called?"],
-      ["user", wakeText("12:22 PM", ["[This picks up the wake that User interrupted at Friday 2026-10-30 · 12:12 PM.]", FIRED])],
-    ]);
+    expect(script.wakes).toHaveLength(3);
+    expect(turnsOf(script.wakes[1])).toEqual([["user", wakeShown("12:22 PM", [
+      `The last of what was said in this thread:\n\n${said("User", "12:01 PM", "tell me a story in parts")}\n\n${said("you", "12:01 PM", "reply to: tell me a story in parts")}\n\n${said("User", "12:12 PM", "wait, what is the fox called?")}\n\n${said("you", "12:12 PM", "reply to: wait, what is the fox called?")}`,
+      "[Your last wake here was stopped for User's message at Friday 2026-10-30 · 12:12 PM, after 1 round, before it had finished. Nothing from it was sent to User. The last thing it wrote: \"Let me look.\" Whatever it had already changed with its tools is still in place.]",
+      wroteLast("9 minutes ago", 'your home thread "main"'),
+    ], [FIRED])]]);
     expect((await thread("ring")).at(-1)?.content).toBe("Part one: Rue came to the gate.");
     await runtime.triggers.tick();
     expect(diaryOf(data)).toEqual([["wake", "Told part one."], ["after", "Write it up."]]);
     at(40);
     await runtime.autonomy.tick();
-    expect(script.heartbeats).toHaveLength(3);
+    expect(script.wakes).toHaveLength(3);
   }, withTriggers);
 });
 
@@ -1892,7 +1895,7 @@ async function wakesInRing(runtime: ShoreRuntime, minutes: number): Promise<void
   await runtime.autonomy.tick();
 }
 
-test("a wake's working stays in its thread for the user, and is left out of what a later wake there, a reply there, the request rebuilt from disk and that thread's compaction are sent", async () => {
+test("a wake's working stays in its thread for the user, and is left out of what a reply there, the request rebuilt from disk and that thread's compaction are sent, while a later wake there starts fresh", async () => {
   await withCharacter(async ({ runtime, script, data, say, thread }) => {
     await runtime.registry.createThread("ada", "ring");
     await say("hello");
@@ -1920,18 +1923,23 @@ test("a wake's working stays in its thread for the user, and is left out of what
       ["user", first],
       ["system", "[Your working in this wake isn't shown here: 2 tool calls. Your note from the end of it follows.]"],
       ["assistant", "Told part one.\n[sent to User as the next message here]"],
-      ["user", "[heartbeat · Friday 2026-10-30 · 12:11 PM]"],
+      ["user", "[wake · Friday 2026-10-30 · 12:11 PM]"],
       ["assistant", "Part one: the fox came to the gate."],
     ];
 
-    script.heartbeats.length = 0;
+    script.wakes.length = 0;
     script.aside = undefined;
     script.closing = "Nothing to add yet.";
     await wakesInRing(runtime, 12);
     const second = wakeText("12:12 PM", [RING_FIRED("12:12 PM")]);
-    expect(turnsOf(script.heartbeats[0])).toEqual([...firstSeen, ["user", second]]);
-    expect(turnsOf(script.heartbeats[1]).slice(firstSeen.length)).toEqual([
-      ["user", second],
+    const shownSecond = wakeShown("12:12 PM", [
+      "Nothing has been said in this thread since your last wake here.",
+      wroteLast("11 minutes ago"),
+      diaryOfDay(['your note at the end of a wake in "ring"', "12:11 PM", "Told part one."]),
+    ], [RING_FIRED("12:12 PM")]);
+    expect(turnsOf(script.wakes[0])).toEqual([["user", shownSecond]]);
+    expect(turnsOf(script.wakes[1])).toEqual([
+      ["user", shownSecond],
       ["assistant", "<tool_use>"],
       ["user", "<tool_result>"],
     ]);
@@ -1981,9 +1989,10 @@ test("a wake's working doesn't count towards its thread's size: a thread is trim
     script.aside = undefined;
     script.closing = aLot;
     await wakesInRing(runtime, 23);
+    expect(await thread("ring"), "put away once the wake is over, as after a reply").toEqual([]);
     at(24);
     await say("go on", "ring");
-    expect(await thread("ring")).toEqual([]);
+    expect((await thread("ring")).map((message) => message.content)).toEqual(["go on", "reply to: go on"]);
   }, (app) => {
     app.memory.compaction.keep_recent_turns = 0;
   });
@@ -2019,18 +2028,21 @@ test("a wake waits for the user to have been quiet in its thread for ten minutes
     await say("hello");
     at(5);
     await say("one more thing", "ring");
-    script.closing = "HEARTBEAT_OK";
+    script.closing = "NO_NOTE";
     expect(runtime.autonomy.wakeFor("ada", { name: "show", reason: "Tell the next part.", at: T0 + 6 * MINUTE, thread: "ring" })).toBe("queued");
     at(14);
     await say("is the lamp lit?");
     await runtime.autonomy.tick();
     at(14.999);
     await runtime.autonomy.tick();
-    expect(script.heartbeats).toHaveLength(0);
+    expect(script.wakes).toHaveLength(0);
     at(15);
     await runtime.autonomy.tick();
-    expect(script.heartbeats.map((request) => request.context?.thread)).toEqual(["ring", "ring"]);
-    expect(turnsOf(script.heartbeats[0]).at(-1)?.[1]).toBe(wakeText("12:15 PM", ['[Your trigger "show" fired at Friday 2026-10-30 · 12:06 PM: Tell the next part.]']));
+    expect(script.wakes.map((request) => request.context?.thread)).toEqual(["ring", "ring"]);
+    expect(turnsOf(script.wakes[0])).toEqual([["user", wakeShown("12:15 PM", [
+      `The last of what was said in this thread:\n\n${said("User", "12:05 PM", "one more thing")}\n\n${said("you", "12:05 PM", "reply to: one more thing")}`,
+      wroteLast("a minute ago", 'your home thread "main"'),
+    ], ['[Your trigger "show" fired at Friday 2026-10-30 · 12:06 PM: Tell the next part.]'])]]);
   }, withTriggers);
 });
 
@@ -2038,46 +2050,47 @@ function handOff(...names: string[]): (app: AppConfig) => void {
   return (app) => {
     app.tools.enabled_tools = [...app.tools.enabled_tools, "wake_in_thread", ...names];
     app.behavior.autonomy.triggers.max_wake_limit = ConfigDuration.fromSecs(2 * 3600);
+    app.behavior.autonomy.triggers.max_idle_wakes = 10;
   };
 }
 
-test("from a heartbeat the character hands off into a thread, and is woken there next with its reason and the limit it asked for, held to the user's ceiling", async () => {
-  await withCharacter(async ({ runtime, script, say, heartbeat, thread }) => {
+test("from a wake in the own-time thread the character hands off into another thread, and is woken there next with its reason and the limit it asked for, held to the user's ceiling", async () => {
+  await withCharacter(async ({ runtime, script, say, wakeNow, thread }) => {
     await runtime.registry.createThread("ada", "ring");
     await say("hello");
     script.beatTool = { name: "wake_in_thread", input: { thread: " ring ", reason: " Tell part two. ", limit: "6h" } };
-    script.closing = "HEARTBEAT_OK";
+    script.closing = "NO_NOTE";
     at(10);
-    await heartbeat();
-    expect(lastToolResult(await thread("heartbeat"))).toEqual({
+    await wakeNow();
+    expect(lastToolResult(await thread("own-time"))).toEqual({
       text: 'Shore will wake you in "ring" for up to 2 hours, once this turn is over and peggy has been quiet there for 10 minutes.', failed: false,
     });
-    expect(script.heartbeats.map((request) => request.context?.thread)).toEqual(["heartbeat", "heartbeat"]);
+    expect(script.wakes.map((request) => request.context?.thread)).toEqual(["own-time", "own-time"]);
 
     script.closing = "Told part two.\n<sendMessage>Part two: the gate opened.</sendMessage>";
     at(11);
     await runtime.autonomy.tick();
-    expect(script.heartbeats.map((request) => request.context?.thread)).toEqual(["heartbeat", "heartbeat", "ring", "ring"]);
-    expect(turnsOf(script.heartbeats[2])).toEqual([
-      ["user", wakeText("12:11 PM", ['[You asked for this wake from "heartbeat" at Friday 2026-10-30 · 12:10 PM: Tell part two.]'], "2 hours", "105 minutes")],
+    expect(script.wakes.map((request) => request.context?.thread)).toEqual(["own-time", "own-time", "ring", "ring"]);
+    expect(turnsOf(script.wakes[2])).toEqual([
+      ["user", wakeShown("12:11 PM", ["Nothing has been said in this thread yet.", wroteLast("11 minutes ago", 'your home thread "main"')], ['[You asked for this wake from "own-time" at Friday 2026-10-30 · 12:10 PM: Tell part two.]'], "2 hours", "105 minutes")],
     ]);
     expect((await thread("ring")).at(-1)?.content).toBe("Part two: the gate opened.");
-    expect(runtime.autonomy.log("ada", 100).filter((event) => event.kind === "tick_fired").at(-1)?.detail).toBe('Woken in "ring" by a hand-off from "heartbeat"');
+    expect(runtime.autonomy.log("ada", 100).filter((event) => event.kind === "tick_fired").at(-1)?.detail).toBe('Woken in "ring" by a hand-off from "own-time"');
 
     script.beatTool = { name: "wake_in_thread", input: { thread: "ring", reason: "Tell part three." } };
-    script.closing = "HEARTBEAT_OK";
+    script.closing = "NO_NOTE";
     at(30);
-    await heartbeat();
-    expect(lastToolResult(await thread("heartbeat"))?.text).toBe('Shore will wake you in "ring" for up to 30 minutes, once this turn is over and peggy has been quiet there for 10 minutes.');
+    await wakeNow();
+    expect(lastToolResult(await thread("own-time"))?.text).toBe('Shore will wake you in "ring" for up to 30 minutes, once this turn is over and peggy has been quiet there for 10 minutes.');
     script.beatTool = { name: "wake_in_thread", input: { thread: "main", reason: "And tell them." } };
     at(31);
     await runtime.autonomy.tick();
-    expect(turnsOf(script.heartbeats.at(-2)).at(-1)?.[1]).toContain("A wake here can run for up to 30 minutes. After 25 minutes,");
+    expect(turnsOf(script.wakes.at(-2)).at(-1)?.[1]).toContain("A wake here can run for up to 30 minutes. After 25 minutes,");
     expect(lastToolResult(await thread("ring"))).toEqual({ text: "io: a wake can't be handed on from here", failed: true });
-    expect(script.heartbeats).toHaveLength(8);
+    expect(script.wakes).toHaveLength(8);
     at(32);
     await runtime.autonomy.tick();
-    expect(script.heartbeats).toHaveLength(8);
+    expect(script.wakes).toHaveLength(8);
   }, handOff());
 });
 
@@ -2103,16 +2116,16 @@ test("a hand-off is refused for a thread the character doesn't have, the one it 
     expect(await refused({ thread: "t".repeat(64), reason: "r" })).toBe(`io: you have no thread "${"t".repeat(64)}" to be woken in; \`list_threads\` shows the ones you have`);
     expect(await refused({ thread: "t".repeat(65), reason: "r" })).toStartWith("The call to wake_in_thread was not run because argument `thread` must NOT have more than 64 characters.");
     expect(await refused({ thread: "ring", reason: "r", urgent: true })).toStartWith("The call to wake_in_thread was not run because argument `urgent` is not allowed.");
-    script.closing = "HEARTBEAT_OK";
-    script.replyTool = { name: "wake_in_thread", input: { thread: "heartbeat", reason: "r" } };
+    script.closing = "NO_NOTE";
+    script.replyTool = { name: "wake_in_thread", input: { thread: "own-time", reason: "r" } };
     at(1);
-    expect(runtime.autonomy.forceHeartbeatNow("ada")).toBeDefined();
+    expect(runtime.autonomy.wakeNow("ada")).toBeDefined();
     await runtime.autonomy.tick();
-    expect(await refused({ thread: "heartbeat", reason: "r" })).toBe('io: you have no thread "heartbeat" to be woken in; `list_threads` shows the ones you have');
-    script.heartbeats.length = 0;
+    expect(await refused({ thread: "own-time", reason: "r" })).toBe('io: you have no thread "own-time" to be woken in; `list_threads` shows the ones you have');
+    script.wakes.length = 0;
     at(20);
     await runtime.autonomy.tick();
-    expect(script.heartbeats).toEqual([]);
+    expect(script.wakes).toEqual([]);
 
     script.replyTool = { name: "wake_in_thread", input: { thread: "ring", reason: "Tell the next part.", limit: "1m" } };
     await say("off you go");
@@ -2120,8 +2133,8 @@ test("a hand-off is refused for a thread the character doesn't have, the one it 
       text: 'Shore will wake you in "ring" for up to 1 minute, once this turn is over and peggy has been quiet there for 10 minutes.', failed: false,
     });
     await runtime.autonomy.tick();
-    expect(turnsOf(script.heartbeats[0])).toEqual([
-      ["user", wakeText("12:20 PM", ['[You asked for this wake from "main" at Friday 2026-10-30 · 12:20 PM: Tell the next part.]'], "1 minute", "50 seconds")],
+    expect(turnsOf(script.wakes[0])).toEqual([
+      ["user", wakeShown("12:20 PM", ["Nothing has been said in this thread yet.", wroteLast("a minute ago", 'your home thread "main"')], ['[You asked for this wake from "main" at Friday 2026-10-30 · 12:20 PM: Tell the next part.]'], "1 minute", "50 seconds")],
     ]);
   }, handOff());
 });
@@ -2154,19 +2167,18 @@ test("a second wake asked for in a thread is refused while the first is still wa
       text: `${granted("ring", "1 hour")}\nThis takes the place of the wake you had waiting there, ${waiting}`, failed: false,
     });
 
-    script.closing = "HEARTBEAT_OK";
+    script.closing = "NO_NOTE";
     at(40);
     await runtime.autonomy.tick();
-    expect(script.heartbeats.map((request) => request.context?.thread)).toEqual(["ring", "ring", "garden", "garden"]);
-    const ring = turnsOf(script.heartbeats[0]).at(-1)?.[1] ?? "";
-    expect(ring).toStartWith([
-      "[wake]",
+    expect(script.wakes.map((request) => request.context?.thread)).toEqual(["ring", "ring", "garden", "garden"]);
+    const ring = turnsOf(script.wakes[0]).at(-1)?.[1] ?? "";
+    expect(ring).toStartWith("[wake]\n\nNothing has been said in this thread yet.\n\n");
+    expect(setOffBy(ring)).toEqual([
       '[Your trigger "show" fired at Friday 2026-10-30 · 12:19 PM: show is due]',
       '[You asked for this wake from "main" at Friday 2026-10-30 · 12:22 PM: Tell part three.]',
-      "[Current time: ",
-    ].join("\n\n"));
+    ]);
     expect(ring).not.toContain("Tell part two.");
-    expect(turnsOf(script.heartbeats[2]).at(-1)?.[1]).toStartWith('[wake]\n\n[You asked for this wake from "main" at Friday 2026-10-30 · 12:20 PM: Water the beans.]\n\n[Current time: ');
+    expect(setOffBy(turnsOf(script.wakes[2]).at(-1)?.[1])).toEqual(['[You asked for this wake from "main" at Friday 2026-10-30 · 12:20 PM: Water the beans.]']);
 
     at(41);
     expect(await ask({ thread: "ring", reason: "And once more." })).toEqual({ text: granted("ring"), failed: false });
@@ -2211,28 +2223,27 @@ test("a wake the character asked for and the user interrupted is not a request s
       text: `${granted}\nThis takes the place of the wake you had waiting there, ${later}`, failed: false,
     });
 
-    script.heartbeats.length = 0;
-    script.closing = "HEARTBEAT_OK";
+    script.wakes.length = 0;
+    script.closing = "NO_NOTE";
     at(30);
     await runtime.autonomy.tick();
-    expect(script.heartbeats.map((request) => request.context?.thread)).toEqual(["ring", "ring"]);
-    expect(turnsOf(script.heartbeats[0]).at(-1)?.[1]).toStartWith([
-      "[wake]",
-      "[This picks up the wake that User interrupted at Friday 2026-10-30 · 12:12 PM.]",
+    expect(script.wakes.map((request) => request.context?.thread)).toEqual(["ring", "ring"]);
+    const pickUp = turnsOf(script.wakes[0]).at(-1)?.[1] ?? "";
+    expect(pickUp).toContain("\n\n[Your last wake here was stopped for User's message at Friday 2026-10-30 · 12:12 PM, after 1 round, before it had finished. Nothing from it was sent to User. Whatever it had already changed with its tools is still in place.]\n\n");
+    expect(setOffBy(pickUp)).toEqual([
       '[You asked for this wake from "main" at Friday 2026-10-30 · 12:01 PM: Tell part two.]',
       '[You asked for this wake from "main" at Friday 2026-10-30 · 12:14 PM: Tell part three.]',
-      "[Current time: ",
-    ].join("\n\n"));
+    ]);
   }, handOff());
 });
 
-test("a hand-off is refused when the character's heartbeats aren't running", async () => {
+test("a hand-off is refused when the character's own time is switched off", async () => {
   await withCharacter(async ({ script, say, thread, runtime }) => {
     await runtime.registry.createThread("ada", "ring");
     await say("hello");
     script.replyTool = { name: "wake_in_thread", input: { thread: "ring", reason: "r" } };
     await say("go on");
-    expect(lastToolResult(await thread("main"))).toEqual({ text: "io: heartbeats are not running for this character", failed: true });
+    expect(lastToolResult(await thread("main"))).toEqual({ text: "io: peggy has your own time switched off, so nothing would wake you", failed: true });
   }, (app) => {
     handOff()(app);
     app.behavior.autonomy.enabled = false;
@@ -2269,11 +2280,11 @@ test("a wake in a thread takes in what fires for that thread while it runs, leav
   await withCharacter(async ({ runtime, script, say, thread }) => {
     const zone = hostZone();
     const fired = (name: string, minutes: number, where?: string) => ({ name, reason: `${name} is due`, at: T0 + minutes * MINUTE, ...(where === undefined ? {} : { thread: where }) });
-    const where = (): (string | undefined)[] => script.heartbeats.map((request) => request.context?.thread);
+    const where = (): (string | undefined)[] => script.wakes.map((request) => request.context?.thread);
     await runtime.registry.createThread("ada", "ring");
     await runtime.registry.createThread("ada", "garden");
     await say("hello");
-    script.closing = "HEARTBEAT_OK";
+    script.closing = "NO_NOTE";
 
     let held = hold();
     script.beatHeld = held;
@@ -2283,7 +2294,7 @@ test("a wake in a thread takes in what fires for that thread while it runs, leav
     expect(runtime.autonomy.wakeFor("ada", fired("show", 10, "ring"))).toBe("queued");
     let waking = runtime.autonomy.tick();
     await held.started.promise;
-    expect(turnsOf(script.heartbeats[0])).toEqual([["user", wakeText("12:10 PM", [triggerFiredNote(fired("show", 10), zone)])]]);
+    expect(turnsOf(script.wakes[0])).toEqual([["user", wakeShown("12:10 PM", ["Nothing has been said in this thread yet.", wroteLast("10 minutes ago", 'your home thread "main"')], [triggerFiredNote(fired("show", 10), zone)])]]);
     at(11);
     expect(runtime.autonomy.wakeFor("ada", fired("encore", 11, "ring"))).toBe("handed");
     expect(runtime.autonomy.wakeFor("ada", fired("lamp", 11))).toBe("queued");
@@ -2292,7 +2303,7 @@ test("a wake in a thread takes in what fires for that thread while it runs, leav
     held.release.resolve();
     await waking;
     expect(where()).toEqual(["ring", "ring", "ring"]);
-    expect(textOf(script.heartbeats[1] as SidecarRequest)).toEndWith(
+    expect(textOf(script.wakes[1] as SidecarRequest)).toEndWith(
       `${triggerFiredNote(fired("encore", 11), zone)}\n\n[User has just written to you, at Friday 2026-10-30 · 12:11 PM, while this wake is running. Another turn of you is answering them, and it knows this wake is running.]`,
     );
     expect(textOf(script.replies.at(-1) as SidecarRequest)).toEndWith(
@@ -2302,12 +2313,12 @@ test("a wake in a thread takes in what fires for that thread while it runs, leav
 
     at(12);
     await runtime.autonomy.tick();
-    expect(where().slice(3)).toEqual(["heartbeat", "heartbeat", "garden", "garden"]);
-    expect(textOf(script.heartbeats[3] as SidecarRequest)).toContain(triggerFiredNote(fired("lamp", 11), zone));
-    expect(textOf(script.heartbeats[3] as SidecarRequest)).not.toContain("beans");
-    expect(turnsOf(script.heartbeats[5]).at(-1)?.[1]).toStartWith(`[wake]\n\n${triggerFiredNote(fired("beans", 11), zone)}\n\n[Current time: `);
+    expect(where().slice(3)).toEqual(["own-time", "own-time", "garden", "garden"]);
+    expect(textOf(script.wakes[3] as SidecarRequest)).toContain(triggerFiredNote(fired("lamp", 11), zone));
+    expect(textOf(script.wakes[3] as SidecarRequest)).not.toContain("beans");
+    expect(setOffBy(turnsOf(script.wakes[5]).at(-1)?.[1])).toEqual([triggerFiredNote(fired("beans", 11), zone)]);
 
-    script.heartbeats.length = 0;
+    script.wakes.length = 0;
     held = hold();
     script.beatHeld = held;
     script.again = 2;
@@ -2333,12 +2344,14 @@ test("a wake in a thread takes in what fires for that thread while it runs, leav
     at(51);
     await runtime.autonomy.tick();
     expect(where()).toEqual(["ring", "ring", "ring"]);
-    expect(turnsOf(script.heartbeats[1]).at(-1)).toEqual(["user", wakeText("12:51 PM", [
-      "[This picks up the wake that User interrupted at Friday 2026-10-30 · 12:41 PM.]",
+    const pickUp = turnsOf(script.wakes[1]).at(-1)?.[1] ?? "";
+    expect(turnsOf(script.wakes[1])).toHaveLength(1);
+    expect(pickUp).toContain("[Your last wake here was stopped for User's message at Friday 2026-10-30 · 12:41 PM, after 1 round, before it had finished.");
+    expect(setOffBy(pickUp)).toEqual([
       '[You asked for this wake from "main" at Friday 2026-10-30 · 12:41 PM:  is due]',
       triggerFiredNote(fired("encore", 41), zone),
       triggerFiredNote(fired("show", 45), zone),
-    ])]);
+    ]);
     expect(runtime.autonomy.log("ada", 100).filter((event) => event.kind === "tick_fired").at(-1)?.detail).toBe('Woken in "ring" by trigger "encore", "show" and a hand-off from "main"');
   });
 });
@@ -2349,7 +2362,7 @@ test("what is waiting for a thread where a wake is running starts together once 
     const show = (reason: string, minutes: number) => ({ name: "show", reason, at: T0 + minutes * MINUTE, thread: "ring" });
     await runtime.registry.createThread("ada", "ring");
     await say("hello");
-    script.closing = "HEARTBEAT_OK";
+    script.closing = "NO_NOTE";
     const held = hold();
     script.beatHeld = held;
     at(9);
@@ -2358,8 +2371,8 @@ test("what is waiting for a thread where a wake is running starts together once 
     expect(runtime.autonomy.wakeFor("ada", show("the late show", 10))).toBe("queued");
     const waking = runtime.autonomy.tick();
     await held.started.promise;
-    expect(textOf(script.heartbeats[0] as SidecarRequest)).toContain('[Your trigger "show" fired at Friday 2026-10-30 · 12:10 PM: the late show]');
-    expect(textOf(script.heartbeats[0] as SidecarRequest)).not.toContain("the early show");
+    expect(textOf(script.wakes[0] as SidecarRequest)).toContain('[Your trigger "show" fired at Friday 2026-10-30 · 12:10 PM: the late show]');
+    expect(textOf(script.wakes[0] as SidecarRequest)).not.toContain("the early show");
     at(11);
     expect(runtime.autonomy.wakeFor("ada", asked("carry on with the first plan", 11, 45 * MINUTE))).toBe("queued");
     at(12);
@@ -2367,19 +2380,18 @@ test("what is waiting for a thread where a wake is running starts together once 
     expect(runtime.autonomy.wakeFor("ada", asked("carry on with the second plan", 12, 90 * MINUTE))).toBe("queued");
     held.release.resolve();
     await waking;
-    expect(script.heartbeats).toHaveLength(2);
-    expect(script.heartbeats.map(textOf).join("\n")).not.toContain("You asked for this wake");
+    expect(script.wakes).toHaveLength(2);
+    expect(script.wakes.map(textOf).join("\n")).not.toContain("You asked for this wake");
 
     at(13);
     await runtime.autonomy.tick();
-    expect(script.heartbeats.map((request) => request.context?.thread)).toEqual(["ring", "ring", "ring", "ring"]);
-    const opener = turnsOf(script.heartbeats[2]).at(-1)?.[1] ?? "";
-    expect(opener).toStartWith([
-      "[wake]",
+    expect(script.wakes.map((request) => request.context?.thread)).toEqual(["ring", "ring", "ring", "ring"]);
+    const opener = turnsOf(script.wakes[2]).at(-1)?.[1] ?? "";
+    expect(opener).toStartWith("[wake]\n\nNothing has been said in this thread since your last wake here.\n\n");
+    expect(setOffBy(opener)).toEqual([
       '[You asked for this wake from "main" at Friday 2026-10-30 · 12:11 PM: carry on with the first plan]',
       '[You asked for this wake from "main" at Friday 2026-10-30 · 12:12 PM: carry on with the second plan]',
-      "[Current time: ",
-    ].join("\n\n"));
+    ]);
     expect(opener).toContain("A wake here can run for up to 90 minutes.");
   });
 });
@@ -2406,16 +2418,25 @@ test("a side thread grown long by a wake compacts once the wake is over, as it w
     await queuedCompactionsEnded(data, "ada");
     expect(compactions(script)).toBe(1);
     expect(await thread("ring")).toEqual([]);
+    expect(runtime.autonomy.log("ada", 100).filter((event) => event.kind !== "tool_use").map((event) => [event.kind, event.detail]).slice(-2)).toEqual([
+      ["tick_fired", 'Woken in "ring" by trigger "show"'],
+      ["message_skipped", "Wake completed — no message sent"],
+    ]);
 
-    script.heartbeats.length = 0;
+    script.wakes.length = 0;
     runtime.autonomy.wakeFor("ada", { name: "show", reason: "r", at: T0 + 21 * MINUTE, thread: "ring" });
     at(21);
     await runtime.autonomy.tick();
     await queuedCompactionsEnded(data, "ada");
-    expect(turnsOf(script.heartbeats[0])).toEqual([
-      ["user", `[Friday 2026-10-30 · 12:21 PM]\n\n${wakeText("12:21 PM", ['[Your trigger "show" fired at Friday 2026-10-30 · 12:21 PM: r]'])}`],
+    expect(turnsOf(script.wakes[0])).toEqual([
+      ["user", wakeShown("12:21 PM", [
+        "Nothing has been said in this thread since your last wake here.",
+        wroteLast("20 minutes ago"),
+        diaryOfDay(['your note at the end of a wake in "ring"', "12:20 PM", "Told part one."]),
+      ], ['[Your trigger "show" fired at Friday 2026-10-30 · 12:21 PM: r]'])],
     ]);
     expect(compactions(script)).toBe(1);
+    expect((await thread("ring")).filter(isWakeOpener)).toHaveLength(1);
 
     const held = hold();
     script.beatHeld = held;
@@ -2448,6 +2469,132 @@ test("a side thread grown long by a wake compacts once the wake is over, as it w
     expect(compactions(script)).toBe(0);
     expect(await thread("main")).toHaveLength(6);
   }, long);
+
+  await withCharacter(async ({ runtime, script, data, say, thread }) => {
+    await runtime.registry.createThread("ada", "ring", { compaction: true });
+    await say("tell me a story in parts", "ring");
+    script.closing = "Told part one.";
+    runtime.autonomy.wakeFor("ada", { name: "show", reason: "r", at: T0 + 20 * MINUTE, thread: "ring" });
+    at(20);
+    await runtime.autonomy.tick();
+    await queuedCompactionsEnded(data, "ada");
+    expect(compactions(script), "by the size of the thread, which the wake itself was never sent").toBe(1);
+    expect(await thread("ring")).toEqual([]);
+  }, (app) => {
+    long(app);
+    app.memory.compaction.max_turns = 0;
+    app.memory.compaction.max_context_tokens = 20;
+  });
+});
+
+interface WakesIn {
+  wake: (minute: number, closing: string) => Promise<void>;
+  openers: () => Promise<string[]>;
+  compactions: () => number;
+}
+
+async function wakesIn(name: string, compaction: boolean, configure: (app: AppConfig) => void, run: (h: Harness, wakes: WakesIn) => Promise<void>): Promise<void> {
+  await withCharacter(async (h) => {
+    await h.runtime.registry.createThread("ada", name, { compaction });
+    await h.say("hello");
+    await run(h, {
+      wake: async (minute, closing) => {
+        h.script.closing = closing;
+        h.runtime.autonomy.wakeFor("ada", { name: "show", reason: `at ${String(minute)}`, at: T0 + minute * MINUTE, thread: name });
+        at(minute);
+        await h.runtime.autonomy.tick();
+        await queuedCompactionsEnded(h.data, "ada");
+      },
+      openers: async () => (await h.thread(name)).filter(isWakeOpener).map((message) => /fired at [^:]+:\d\d [AP]M: at (\d+)\]/.exec(message.content)?.[1] ?? ""),
+      compactions: () => h.script.calls.filter((call) => call === "compaction").length,
+    });
+  }, (app) => {
+    app.memory.compaction.enabled = true;
+    app.memory.compaction.min_turns = 1;
+    app.behavior.autonomy.triggers.max_idle_wakes = 10;
+    configure(app);
+  });
+}
+
+test("a thread holding nothing but the character's own wakes is put away without a model call once it would compact, down to the newest wake", async () => {
+  await wakesIn("log", true, (app) => {
+    app.memory.compaction.keep_recent_turns = 0;
+    app.memory.compaction.max_turns = 2;
+  }, async ({ thread, script }, { wake, openers, compactions }) => {
+    await wake(10, "One.");
+    expect(await openers()).toEqual(["10"]);
+    await wake(20, "Two.");
+    expect(await openers()).toEqual(["20"]);
+    expect((await thread("log")).map((message) => message.role)).toEqual(["user", "assistant", "user", "assistant"]);
+    script.wakes.length = 0;
+    await wake(30, "Three.");
+    expect(await openers()).toEqual(["30"]);
+    expect(compactions()).toBe(0);
+    expect(setOffBy(turnsOf(script.wakes[0]).at(-1)?.[1])).toEqual(['[Your trigger "show" fired at Friday 2026-10-30 · 12:30 PM: at 30]']);
+    expect(turnsOf(script.wakes[0]).at(-1)?.[1]).toContain(diaryOfDay(
+      ['your note at the end of a wake in "log"', "12:10 PM", "One."],
+      ['your note at the end of a wake in "log"', "12:20 PM", "Two."],
+    ));
+  });
+});
+
+test("what Shore keeps to undo a wake's file changes goes once that wake is no longer in its thread", async () => {
+  await wakesIn("log", true, (app) => {
+    app.memory.compaction.keep_recent_turns = 0;
+    app.memory.compaction.max_turns = 2;
+    app.tools.enabled_tools = [...app.tools.enabled_tools, "bash"];
+  }, async ({ runtime, script, thread }, { wake, openers }) => {
+    const turns = workspaceTurnsFor(runtime.config.dirs, "ada", characterWorkspace(runtime.config, "ada"));
+    const wrote = async (minute: number): Promise<string> => {
+      script.beatTool = { name: "bash", input: { command: `printf 'page' > at-${String(minute)}.md` } };
+      await wake(minute, "Wrote a page.");
+      return replyVersions(await thread("log")).at(-1) ?? "";
+    };
+    const first = await wrote(10);
+    const second = await wrote(20);
+    expect(await openers()).toEqual(["20"]);
+    expect(await recordedTurns(turns, "log", [first, second])).toEqual([first, second]);
+    const third = await wrote(30);
+    expect(await openers()).toEqual(["30"]);
+    expect(await recordedTurns(turns, "log", [first, second, third])).toEqual([second, third]);
+  });
+});
+
+test("wakes from before the user first wrote in a thread are put away the same way, and what was said from then on is left for a compaction", async () => {
+  await wakesIn("log", true, (app) => {
+    app.memory.compaction.keep_recent_turns = 0;
+    app.memory.compaction.max_turns = 4;
+  }, async ({ thread, say }, { wake, openers, compactions }) => {
+    await wake(10, "One.");
+    await wake(12, "Two.");
+    at(15);
+    await say("how is it going?", "log");
+    expect(await openers()).toEqual(["10", "12"]);
+    await wake(30, "Three.");
+    expect(await openers()).toEqual(["30"]);
+    expect((await thread("log")).slice(0, 2).map((message) => message.content)).toEqual(["how is it going?", "reply to: how is it going?"]);
+    expect(compactions()).toBe(0);
+  });
+});
+
+test("in a thread whose compaction is off a wake's turns stay while there is room, and when it runs out the oldest turns are put away without a model call", async () => {
+  await wakesIn("ring", false, (app) => {
+    app.memory.compaction.keep_recent_turns = 1;
+    app.memory.compaction.max_turns = 2;
+  }, async ({ thread, say }, { wake, openers, compactions }) => {
+    await wake(10, "One.");
+    await wake(20, "Two.");
+    await wake(30, "Three.");
+    expect(await openers()).toEqual(["10", "20", "30"]);
+
+    at(35);
+    await say(`${"the lamp ".repeat(80_000)}\nwhich lamp?`, "ring");
+    expect((await thread("ring")).map((message) => message.content.slice(-11))).toEqual(["which lamp?", "which lamp?"]);
+    await wake(50, "Four.");
+    expect(await openers()).toEqual(["50"]);
+    expect((await thread("ring")).map((message) => message.role)).toEqual(["user", "assistant", "user", "assistant"]);
+    expect(compactions()).toBe(0);
+  });
 });
 
 function keepNothing(app: AppConfig): void {
@@ -2489,7 +2636,7 @@ test("after a compaction that kept nothing, the next reply, the request rebuilt 
   }, keepNothing);
 });
 
-test("a wake in a side thread compacted down to nothing opens with how long it has been since the thread's last message", async () => {
+test("a wake in a side thread compacted down to nothing is shown the last of what was said there, with when", async () => {
   await withCharacter(async ({ runtime, script, say, thread }) => {
     await runtime.registry.createThread("ada", "ring", { compaction: true });
     await say("tell me a story in parts", "ring");
@@ -2499,13 +2646,53 @@ test("a wake in a side thread compacted down to nothing opens with how long it h
     runtime.autonomy.wakeFor("ada", { name: "show", reason: "r", at: T0 + 300 * MINUTE, thread: "ring" });
     at(300);
     await runtime.autonomy.tick();
-    expect(turnsOf(script.heartbeats[0])).toEqual([
-      ["user", `[5 hours later · Friday 2026-10-30 · 5:00 PM]\n\n${wakeText("5:00 PM", ['[Your trigger "show" fired at Friday 2026-10-30 · 5:00 PM: r]'])}`],
+    expect(turnsOf(script.wakes.find((request) => request.context?.thread === "ring"))).toEqual([
+      ["user", wakeShown("5:00 PM", [
+        `The last of what was said in this thread:\n\n${said("User", "12:00 PM", "tell me a story in parts")}\n\n${said("you", "12:00 PM", "reply to: tell me a story in parts")}`,
+        wroteLast("5 hours ago"),
+      ], ['[Your trigger "show" fired at Friday 2026-10-30 · 5:00 PM: r]'])],
     ]);
   }, keepNothing);
 });
 
-test("the message a wake sends is announced like a heartbeat's, and deleting it puts back the files that wake changed", async () => {
+test("a wake in a side thread reads that thread's files afresh, unless the user has just been writing there, and a wake in the home thread leaves its prompt as it was", async () => {
+  await withCharacter(async ({ runtime, script, workspace, say }) => {
+    const systemOf = (request: SidecarRequest | undefined): string => (request?.system ?? []).map((block) => block.text).join("\n");
+    const wake = async (minute: number, thread: string): Promise<string> => {
+      script.wakes.length = 0;
+      runtime.autonomy.wakeFor("ada", { name: "show", reason: "r", at: T0 + minute * MINUTE, thread });
+      at(minute);
+      await runtime.autonomy.tick();
+      return systemOf(script.wakes.find((request) => request.context?.thread === thread));
+    };
+    await mkdir(join(workspace, "notes"), { recursive: true });
+    await writeFile(join(workspace, "notes", "ring.md"), "the fox is at the gate");
+    await runtime.registry.createThread("ada", "ring", { files: ["notes/ring.md"] });
+    await say("hello");
+    script.closing = "NO_NOTE";
+
+    expect(await wake(1, "ring")).toContain("the fox is at the gate");
+    await writeFile(join(workspace, "notes", "ring.md"), "the fox is in the yard");
+    expect(await wake(2, "ring"), "no one has written there, so nothing of its conversation is cached").toContain("the fox is in the yard");
+
+    at(10);
+    await say("how is the fox?", "ring");
+    await writeFile(join(workspace, "notes", "ring.md"), "the fox is asleep");
+    const warm = await wake(69.9, "ring");
+    expect(warm).toContain("the fox is in the yard");
+    expect(warm).not.toContain("asleep");
+    expect(await wake(70, "ring"), "an hour after they last wrote there").toContain("the fox is asleep");
+
+    await writeFile(join(workspace, "SOUL.md"), "Ada, older now");
+    const home = await wake(300, "main");
+    expect(home).toContain("Ada");
+    expect(home).not.toContain("older now");
+  }, (app) => {
+    app.behavior.autonomy.triggers.max_idle_wakes = 10;
+  });
+});
+
+test("the message a wake sends in a side thread is announced, and deleting it puts back the files that wake changed", async () => {
   await withCharacter(async ({ runtime, script, workspace, say, thread, command }) => {
     await runtime.registry.createThread("ada", "ring");
     await say("hello");
@@ -2526,31 +2713,188 @@ test("the message a wake sends is announced like a heartbeat's, and deleting it 
   }, (app) => { app.tools.enabled_tools = [...app.tools.enabled_tools, "bash"]; });
 });
 
-test("a wake in a thread opens with the diary entries and the user's status that thread hasn't been shown, and is made with the keys Shore was started with", async () => {
-  await withCharacter(async ({ runtime, script, data, say, heartbeat }) => {
+test("a wake in any thread opens with the diary of the last day and the user's status while one is set, and is made with the keys Shore was started with", async () => {
+  await withCharacter(async ({ runtime, script, data, say, wakeNow }) => {
     await runtime.registry.createThread("ada", "ring");
     await say("hello");
     script.closing = "The log is read up to March.";
     at(5);
-    await heartbeat();
+    await wakeNow();
     setPresence(data, "asleep", T0 + 6 * MINUTE);
     unsetTestEnv(KEY_ENV);
-    script.heartbeats.length = 0;
-    script.closing = "HEARTBEAT_OK";
+    script.wakes.length = 0;
+    script.closing = "NO_NOTE";
     for (const minutes of [20, 40]) {
       runtime.autonomy.wakeFor("ada", { name: "show", reason: "r", at: T0 + minutes * MINUTE, thread: "ring" });
       at(minutes);
       await runtime.autonomy.tick();
     }
-    const [first, , second] = script.heartbeats;
-    expect(turnsOf(first)).toEqual([["user", [
-      "[New in your diary. Each entry says where it came from.]\n\nyour note at the end of a heartbeat · Friday 2026-10-30 · 12:05 PM\nThe log is read up to March.\n\n[End of your diary.]",
-      '[Their status, set 14 minutes ago: "asleep"]',
-      wakeText("12:20 PM", ['[Your trigger "show" fired at Friday 2026-10-30 · 12:20 PM: r]']),
-    ].join("|")]]);
+    const [first, , second] = script.wakes;
+    const diary = diaryOfDay(['your note at the end of a wake in "own-time"', "12:05 PM", "The log is read up to March."]);
+    expect(turnsOf(first)).toEqual([["user", wakeShown("12:20 PM", [
+      "Nothing has been said in this thread yet.",
+      wroteLast("20 minutes ago", 'your home thread "main"'),
+      '[User\'s status, set 14 minutes ago: "asleep"]',
+      diary,
+    ], ['[Your trigger "show" fired at Friday 2026-10-30 · 12:20 PM: r]'])]]);
     expect(first?.api_key).toBe("fixture-key");
-    expect(turnsOf(second).at(-1)).toEqual(["user", wakeText("12:40 PM", ['[Your trigger "show" fired at Friday 2026-10-30 · 12:40 PM: r]'])]);
+    expect(turnsOf(second)).toEqual([["user", wakeShown("12:40 PM", [
+      "Nothing has been said in this thread since your last wake here.",
+      wroteLast("40 minutes ago", 'your home thread "main"'),
+      '[User\'s status, set 34 minutes ago: "asleep"]',
+      diary,
+    ], ['[Your trigger "show" fired at Friday 2026-10-30 · 12:40 PM: r]'])]]);
   });
+});
+
+test("a wake in the own-time thread is shown home, sends to home and is told so, word for word, and runs for the limit its trigger asks for", async () => {
+  await withCharacter(async ({ runtime, script, workspace, say, thread }) => {
+    await writeFile(join(workspace, "TRIGGERS.toml"), '[tide]\nevery = "10m"\nreason = "Look at the tide."\nlimit = "45m"\n\n[long]\nevery = "10m"\nreason = "Stay a while."\nlimit = "9h"\ncooldown = "50m"\n');
+    await say("hello");
+    at(1);
+    await runtime.triggers.tick();
+    script.closing = "The tide is out.";
+    await fires(runtime, 11);
+
+    const tide = '[Your trigger "tide" fired at Friday 2026-10-30 · 12:11 PM: Look at the tide.]';
+    const long = '[Your trigger "long" fired at Friday 2026-10-30 · 12:11 PM: Stay a while.]';
+    expect(script.wakes.map((request) => [request.model, request.context?.call_type, request.context?.thread])).toEqual([
+      ["claude-fixture", "heartbeat", "own-time"],
+      ["claude-fixture", "heartbeat_tool_loop", "own-time"],
+    ]);
+    expect(turnsOf(script.wakes[0])).toEqual([["user", ownWakeShown("12:11 PM", [
+      `The last of what was said in your home thread "main":\n\n${said("User", "12:00 PM", "hello")}\n\n${said("you", "12:00 PM", "reply to: hello")}`,
+      wroteLast("11 minutes ago", 'your home thread "main"'),
+    ], [tide, long], "2 hours", "105 minutes")]]);
+    expect(stored(await thread("own-time"))).toEqual([
+      ["user", "autonomous", ownWakeShown("12:11 PM", [], [tide, long], "2 hours", "105 minutes")],
+      ["assistant", "", ""],
+      ["user", "", "<SOUL.md>"],
+      ["assistant", "", "The tide is out."],
+    ]);
+
+    script.wakes.length = 0;
+    await fires(runtime, 21);
+    expect(turnsOf(script.wakes[0])).toEqual([["user", ownWakeShown("12:21 PM", [
+      'Nothing has been said in your home thread "main" since your last wake here.',
+      wroteLast("21 minutes ago", 'your home thread "main"'),
+      diaryOfDay(['your note at the end of a wake in "own-time"', "12:11 PM", "The tide is out."]),
+    ], ['[Your trigger "tide" fired at Friday 2026-10-30 · 12:21 PM: Look at the tide.]'], "45 minutes", "37 minutes")]]);
+  }, (app) => {
+    app.behavior.autonomy.triggers.wake_cooldown = ConfigDuration.fromSecs(60);
+    app.behavior.autonomy.triggers.max_idle_wakes = 10;
+  });
+});
+
+test("the model and settings the user chose for wakes hold in whichever thread a wake runs", async () => {
+  await withCharacter(async ({ runtime, script, say, wakeNow, command }) => {
+    await runtime.registry.createThread("ada", "ring");
+    expect((await command("set_model_setting", { key: "reasoning_effort", value: "low", background_task: "heartbeat" })).type).toBe("command_output");
+    await say("hello");
+    await wakeNow();
+    runtime.autonomy.wakeFor("ada", { name: "show", reason: "r", at: T0, thread: "ring" });
+    await runtime.autonomy.tick();
+    expect(script.wakes.map((request) => [request.context?.thread, request.model, request.provider_options?.reasoning_effort])).toEqual([
+      ["own-time", "claude-pinned", "low"], ["own-time", "claude-pinned", "low"], ["ring", "claude-pinned", "low"], ["ring", "claude-pinned", "low"],
+    ]);
+    expect(script.replies.map((request) => request.model)).toEqual(["claude-fixture"]);
+    const asked = script.wakes[0];
+    expect((asked?.system ?? []).map((block) => block.text).join("\n")).toContain("Ada");
+    expect((asked?.tools ?? []).map((tool) => tool.name)).toEqual(["read"]);
+  }, (app) => {
+    app.defaults.background.heartbeat = "pinned";
+    app.behavior.autonomy.triggers.max_idle_wakes = 10;
+  });
+});
+
+test("a model chosen for wakes that isn't in the catalog, or can't be called, leaves wakes on the chat model", async () => {
+  await withCharacter(async ({ script, say, wakeNow }) => {
+    await say("hello");
+    await wakeNow();
+    expect(script.wakes.map((request) => request.model)).toEqual(["claude-fixture", "claude-fixture"]);
+  }, (app) => { app.defaults.background.heartbeat = "missing"; });
+
+  await withCharacter(async ({ runtime, script, say, wakeNow, thread }) => {
+    const pinned = runtime.config.models.chat.get("chat.pinned");
+    if (pinned === undefined) throw new Error("no pinned model");
+    runtime.config.models.chat.set("chat.keyless", { ...pinned, name: "keyless", qualifiedName: "chat.keyless", apiKeyEnv: "SHORE_NO_SUCH_KEY" });
+    await say("hello");
+    await wakeNow();
+    expect(script.wakes.map((request) => request.model)).toEqual(["claude-fixture", "claude-fixture"]);
+    expect((await thread("main")).at(-1)?.content).toBe("I found the keeper's log.");
+  }, (app) => { app.defaults.background.heartbeat = "keyless"; });
+});
+
+test("a model chosen for wakes is used even when its provider's list keeps it out of the pickers", async () => {
+  await withCharacter(async ({ runtime, script, say, wakeNow }) => {
+    await say("hello");
+    runtime.registry.setRuntimeEffectiveConfig("ada", {
+      ...runtime.registry.effectiveConfig("ada"),
+      providers: ProviderRegistry.fromSection({ anthropic: { sdk: "anthropic", api_key_env: KEY_ENV, discovery: { enabled: true, ignore: ["claude-tucked-*"] } } }),
+    });
+    await wakeNow();
+    expect(script.wakes.map((request) => request.model)).toEqual(["claude-tucked-away", "claude-tucked-away"]);
+  }, (app) => { app.defaults.background.heartbeat = "anthropic:claude-tucked-away"; });
+});
+
+test("a wake set off by a trigger can hand on from whichever thread it runs in, and one that was itself handed over can't, even when a trigger joined it", async () => {
+  await withCharacter(async ({ runtime, script, say, thread }) => {
+    await runtime.registry.createThread("ada", "ring");
+    await runtime.registry.createThread("ada", "garden");
+    await say("hello");
+    script.closing = "NO_NOTE";
+    const refused = { text: "io: a wake can't be handed on from here", failed: true };
+
+    at(10);
+    runtime.autonomy.wakeFor("ada", { name: "show", reason: "Tell part one.", at: T0 + 10 * MINUTE, thread: "ring" });
+    script.beatTool = { name: "wake_in_thread", input: { thread: "garden", reason: "Water the beans." } };
+    await runtime.autonomy.tick();
+    expect(lastToolResult(await thread("ring"))).toEqual({
+      text: 'Shore will wake you in "garden" for up to 30 minutes, once this turn is over and peggy has been quiet there for 10 minutes.', failed: false,
+    });
+
+    at(11);
+    script.beatTool = { name: "wake_in_thread", input: { thread: "ring", reason: "And back." } };
+    await runtime.autonomy.tick();
+    expect(script.wakes.map((request) => request.context?.thread)).toEqual(["ring", "ring", "garden", "garden"]);
+    expect(lastToolResult(await thread("garden"))).toEqual(refused);
+
+    at(12);
+    runtime.autonomy.wakeFor("ada", { name: "weeds", reason: "Pull the weeds.", at: T0 + 12 * MINUTE, thread: "garden" });
+    runtime.autonomy.requestWake("ada", { name: "", from: "main", reason: "Tie up the beans.", at: T0 + 12 * MINUTE, thread: "garden" }, false);
+    script.beatTool = { name: "wake_in_thread", input: { thread: "ring", reason: "And back." } };
+    await runtime.autonomy.tick();
+    expect(setOffBy(turnsOf(script.wakes.at(-2)).at(-1)?.[1])).toHaveLength(2);
+    expect(lastToolResult(await thread("garden"))).toEqual(refused);
+    at(13);
+    await runtime.autonomy.tick();
+    expect(script.wakes).toHaveLength(6);
+  }, handOff());
+});
+
+test("what Shore kept for a character's heartbeats before they went is taken up by its first wake in the own-time thread, and by no other thread's", async () => {
+  await withCharacter(async ({ runtime, script, data, say }) => {
+    await runtime.registry.createThread("ada", "ring");
+    await say("before the last heartbeat");
+    at(6);
+    await say("after it");
+    writeCharacterState(join(data, "ada"), "heartbeat_home.json", JSON.stringify({ through: new Date(T0 + 5 * MINUTE).toISOString() }));
+    script.closing = "NO_NOTE";
+
+    at(10);
+    runtime.autonomy.wakeFor("ada", { name: "show", reason: "r", at: T0 + 10 * MINUTE, thread: "ring" });
+    await runtime.autonomy.tick();
+    expect(textOf(script.wakes[0] as SidecarRequest)).toStartWith("[wake]\n\nNothing has been said in this thread yet.");
+    expect(readCharacterState(join(data, "ada"), "heartbeat_home.json")).toBeDefined();
+
+    at(11);
+    runtime.autonomy.wakeFor("ada", { name: "tide", reason: "r", at: T0 + 11 * MINUTE });
+    await runtime.autonomy.tick();
+    const shown = textOf(script.wakes[2] as SidecarRequest);
+    expect(shown).toStartWith(`[wake]\n\nWhat was said in your home thread "main" since your last wake here:\n\n${said("User", "12:06 PM", "after it")}`);
+    expect(shown).not.toContain("before the last heartbeat");
+    expect(readCharacterState(join(data, "ada"), "heartbeat_home.json")).toBeUndefined();
+  }, (app) => { app.behavior.autonomy.triggers.max_idle_wakes = 10; });
 });
 
 test("a wake whose request can't be built, or that a budget holds back, leaves its thread untouched and the log says why", async () => {
@@ -2564,7 +2908,7 @@ test("a wake whose request can't be built, or that a budget holds back, leaves i
     runtime.autonomy.wakeFor("ada", { name: "show", reason: "r", at: T0 + 20 * MINUTE, thread: "ring" });
     at(20);
     await runtime.autonomy.tick();
-    expect(script.heartbeats).toEqual([]);
+    expect(script.wakes).toEqual([]);
     expect(await thread("ring")).toEqual([]);
     expect(runtime.autonomy.log("ada", 100).map((event) => [event.kind, event.detail]).slice(-2)).toEqual([
       ["tick_fired", 'Woken in "ring" by trigger "show"'],
@@ -2578,7 +2922,7 @@ test("a wake whose request can't be built, or that a budget holds back, leaves i
     runtime.autonomy.wakeFor("ada", { name: "show", reason: "r", at: T0 + 20 * MINUTE, thread: "ring" });
     at(20);
     await runtime.autonomy.tick();
-    expect(script.heartbeats).toEqual([]);
+    expect(script.wakes).toEqual([]);
     expect(await thread("ring")).toEqual([]);
     expect(runtime.autonomy.log("ada", 100).map((event) => [event.kind, event.detail]).slice(-2)).toEqual([
       ["tick_fired", 'Woken in "ring" by trigger "show"'],
@@ -2591,6 +2935,129 @@ test("a wake whose request can't be built, or that a budget holds back, leaves i
       reset_hour: undefined, reset_day_of_week: undefined, reset_day_of_month: undefined, pace_period: undefined,
       pace_action: undefined, pace_warn_at: undefined, warn_action: undefined, pace_warn_action: undefined,
     }];
+  });
+});
+
+test("a wake started by hand runs at the next look, one for a dormant character is dropped with word of how to change that, and making the character active again starts nothing by itself", async () => {
+  await withCharacter(async ({ runtime, script, say, command }) => {
+    const answered = async (name: string): Promise<unknown> => {
+      const reply = await command(name, {});
+      return reply.type === "command_output" ? reply.data : reply;
+    };
+    expect(await answered("session_activate")).toEqual({ character: "ada", registered: true, keepalive: { status: "off" }, own_time: "Active" });
+    await say("hello");
+    at(1);
+    expect(await answered("heartbeat_tick_now")).toEqual({ status: "scheduled", character: "ada" });
+    await runtime.autonomy.tick();
+    expect(script.wakes).toHaveLength(2);
+
+    expect(await answered("heartbeat_set_dormant")).toEqual({ status: "dormant", character: "ada" });
+    expect(await answered("session_activate")).toEqual({ character: "ada", registered: false, keepalive: { status: "off" }, own_time: "Dormant" });
+    expect(await answered("heartbeat_tick_now")).toEqual({
+      status: "scheduled", character: "ada",
+      warning: "ada is dormant, so nothing wakes them and this wake is dropped. Run `shore debug heartbeat_status_active` first.",
+    });
+    await runtime.autonomy.tick();
+    expect(script.wakes).toHaveLength(2);
+
+    expect(await answered("heartbeat_set_active")).toEqual({ status: "active", character: "ada" });
+    expect(runtime.autonomy.status("ada")?.state).toBe("Active");
+    await runtime.autonomy.tick();
+    expect(script.wakes).toHaveLength(2);
+  });
+});
+
+test("writing memory again from an archived segment changes the character's files for real, and leaves the conversation as it is", async () => {
+  await withCharacter(async ({ script, workspace, data, say, thread, command }) => {
+    await writeFile(join(workspace, "MEMORY.md"), "nothing yet\n");
+    await say("hello");
+    at(1);
+    await say("the keeper is called Mara");
+    expect(await command("compact", {})).toMatchObject({ type: "command_output", data: { status: "compacted", compacted_turns: 2 } });
+    await queuedCompactionsEnded(data, "ada");
+    at(2);
+    await say("and the lamp?");
+    const before = await thread("main");
+
+    script.replyTool = { name: "edit", input: { file_path: "MEMORY.md", old_string: "nothing yet", new_string: "The keeper is Mara." } };
+    expect(await command("compact", { segment: 0 })).toMatchObject({
+      type: "command_output",
+      data: { status: "segment", character: "ada", segment: 0, compacted_turns: 2, memory_files_written: ["MEMORY.md"], tool_rounds: 1, tools_called: ["edit"] },
+    });
+    expect(await Bun.file(join(workspace, "MEMORY.md")).text()).toBe("The keeper is Mara.\n");
+    expect(await thread("main")).toEqual(before);
+  }, (app) => {
+    app.memory.compaction.enabled = true;
+    app.memory.compaction.keep_recent_turns = 0;
+    app.memory.compaction.min_turns = 1;
+    app.tools.enabled_tools = [...app.tools.enabled_tools, "edit"];
+  });
+});
+
+test("a wake for a character left with no chat model at all is skipped, and the log says so", async () => {
+  await withCharacter(async ({ runtime, script, say, thread, wakeNow }) => {
+    await say("hello");
+    runtime.config.models.chat.clear();
+    at(20);
+    await wakeNow();
+    expect(script.wakes).toEqual([]);
+    expect(await thread("own-time")).toEqual([]);
+    expect(runtime.autonomy.log("ada", 100).map((event) => [event.kind, event.detail]).slice(-2)).toEqual([
+      ["tick_fired", "Woken by a start by hand"],
+      ["call_failed", "Wake skipped: no chat model resolves"],
+    ]);
+  });
+});
+
+test("each round of a wake is kept for the trace of what wakes thought and did", async () => {
+  await withCharacter(async ({ runtime, say, wakeNow }) => {
+    await say("hello");
+    at(1);
+    await wakeNow();
+    const kept = runtime.callStore?.queryTranscripts("heartbeat", "ada", 100).map((row) => [row.call_type, row.iteration, row.finish_reason]);
+    expect(kept?.reverse()).toEqual([
+      ["heartbeat", 0, "tool_use"],
+      ["heartbeat_tool_loop", 1, "end_turn"],
+    ]);
+  });
+});
+
+test("the log shows each tool a wake called with the start of what came back", async () => {
+  await withCharacter(async ({ runtime, script, workspace, say, wakeNow }) => {
+    await writeFile(join(workspace, "tides.md"), "high water ".repeat(40));
+    await say("hello");
+    script.beatTool = { name: "read", input: { file_path: "tides.md" } };
+    at(1);
+    await wakeNow();
+    const called = runtime.autonomy.log("ada", 100).filter((event) => event.kind === "tool_use").map((event) => event.detail);
+    expect(called).toHaveLength(1);
+    expect(called[0]).toMatch(/^Tool: read → .*…$/);
+    expect(called[0]).toContain(workspace.slice(0, 40));
+    expect(Buffer.byteLength(called[0] ?? "")).toBe(Buffer.byteLength("Tool: read → …") + 80);
+  });
+});
+
+test("a wake whose tool call breaks off leaves its thread with an answer to that call, and the log says what went wrong", async () => {
+  await withCharacter(async ({ runtime, script, say, thread, wakeNow }) => {
+    await say("hello");
+    const broken = spyOn(execute, "runToolUse").mockRejectedValueOnce(new Error("the tool runner broke"));
+    try {
+      at(1);
+      await wakeNow();
+    } finally {
+      broken.mockRestore();
+    }
+    expect(script.wakes).toHaveLength(1);
+    expect((await thread("own-time")).map((message) => [message.role, message.content_blocks.map((block) => block.type === "tool_result" ? [block.type, block.is_error, block.content] : block.type)])).toEqual([
+      ["user", ["text"]],
+      ["assistant", ["tool_use"]],
+      ["user", [["tool_result", true, "Tool execution was interrupted by a Shore daemon restart before it returned a result."]]],
+    ]);
+    expect((await thread("main")).filter((message) => message.origin === "autonomous")).toEqual([]);
+    expect(runtime.autonomy.log("ada", 100).map((event) => [event.kind, event.detail]).slice(-2)).toEqual([
+      ["tick_fired", "Woken by a start by hand"],
+      ["call_failed", "Model call failed on round 0 — the tool runner broke"],
+    ]);
   });
 });
 
@@ -2630,30 +3097,30 @@ function sealing(app: AppConfig): void {
 
 const SEALED_LIST = "[Your sealed threads. Only a wake inside one can see what is in it, and `wake_in_thread` takes you there.\n- `gift` \"Something for you\", opens Saturday 2026-10-31 · 8:00 AM]";
 
-function giftWake(now: string, lines: readonly string[]): string {
-  return wakeText(now, lines).replace('your thread "ring"', 'your thread "gift"');
+function giftWake(now: string, lines: readonly string[], shown: readonly string[] = []): string {
+  return wakeShown(now, shown, lines).replace('your thread "ring"', 'your thread "gift"');
 }
 
-async function sealsGift(h: Pick<Harness, "script" | "say" | "heartbeat">): Promise<void> {
+async function sealsGift(h: Pick<Harness, "script" | "say" | "wakeNow">): Promise<void> {
   await h.say("hello");
   h.script.beatTool = { name: "start_sealed_thread", input: { name: " gift ", label: " Something for you ", opens: "2026-10-31 08:00" } };
-  h.script.closing = "HEARTBEAT_OK";
+  h.script.closing = "NO_NOTE";
   at(10);
-  await h.heartbeat();
+  await h.wakeNow();
 }
 
 test("a sealed thread is kept out of the user's thread list and the character's other turns, which are shown only its label and when it opens", async () => {
   await withCharacter(async (h) => {
-    const { runtime, script, data, say, heartbeat, thread, command } = h;
+    const { runtime, script, data, say, wakeNow, thread, command } = h;
     await sealsGift(h);
     const filesDir = join(data, "ada", "sealed", "gift");
-    expect(lastToolResult(await thread("heartbeat"))).toEqual({
+    expect(lastToolResult(await thread("own-time"))).toEqual({
       text: `Sealed the thread "gift" (Something for you) until Saturday 2026-10-31 · 8:00 AM. peggy can't see it until then, and your other turns are shown only its label and that time. ` +
         `\`wake_in_thread\` takes you into it. Keep what you make for it in ${filesDir}, which is outside your workspace.`,
       failed: false,
     });
     expect(existsSync(filesDir)).toBe(true);
-    expect(runtime.registry.listThreads("ada").map((record) => record.id)).toEqual(["main", "heartbeat"]);
+    expect(runtime.registry.listThreads("ada").map((record) => record.id)).toEqual(["main", "own-time"]);
     expect(runtime.registry.sealedThreads("ada")).toEqual([
       { id: "gift", label: "Something for you", unseal_at: "2026-10-31T08:00:00.000Z", created_at: "2026-10-30T12:10:00.000Z" },
     ]);
@@ -2666,8 +3133,8 @@ test("a sealed thread is kept out of the user's thread list and the character's 
     expect(String(lastToolResult(await thread("main"))?.text)).not.toContain("gift ·");
 
     at(20);
-    await heartbeat();
-    expect(textOf(script.heartbeats.at(-2) as SidecarRequest)).toContain(`\n\n${SEALED_LIST}\n\n`);
+    await wakeNow();
+    expect(textOf(script.wakes.at(-2) as SidecarRequest)).toContain(`\n\n${SEALED_LIST}\n\n`);
 
     expect(await outcomeOf(runtime.registry.createThread("ada", "gift"))).toThrow('thread "gift" already exists for ada');
     expect(await outcomeOf(runtime.registry.forkThread("ada", "main", "gift"))).toThrow('thread "gift" already exists for ada');
@@ -2701,36 +3168,36 @@ test("a sealed thread is kept out of the user's thread list and the character's 
   }, sealing);
 });
 
-test("a wake inside a sealed thread sends, announces and logs nothing outside it, and its diary entries stay sealed with it", async () => {
+test("a wake inside a sealed thread sends, announces and logs nothing outside it, and its diary entries stay sealed with it, but for the note its next wake there starts with", async () => {
   await withCharacter(async (h) => {
-    const { runtime, script, data, emitted, say, heartbeat, thread } = h;
+    const { runtime, script, data, emitted, say, wakeNow, thread } = h;
     await sealsGift(h);
     const announced: unknown[][] = [];
     runtime.notifier.notify = (...told) => { announced.push(told); };
     script.beatTool = { name: "wake_in_thread", input: { thread: "gift", reason: "Start on it." } };
     at(20);
-    await heartbeat();
-    expect(lastToolResult(await thread("heartbeat"))?.failed).toBe(false);
+    await wakeNow();
+    expect(lastToolResult(await thread("own-time"))?.failed).toBe(false);
     const captured = runtime.callStore?.callCount();
     const transcripts = runtime.callStore?.queryTranscripts("heartbeat", "ada", 100).length;
-    script.heartbeats.length = 0;
+    script.wakes.length = 0;
     emitted.length = 0;
     script.closing = "Made a card.\n<sendMessage>Happy birthday!</sendMessage>";
     at(21);
     await runtime.autonomy.tick();
 
-    expect(turnsOf(script.heartbeats[0])).toEqual([["user", giftWake("12:21 PM", [
-      '[You asked for this wake from "heartbeat" at Friday 2026-10-30 · 12:20 PM: Start on it.]',
+    expect(turnsOf(script.wakes[0])).toEqual([["user", giftWake("12:21 PM", [
+      '[You asked for this wake from "own-time" at Friday 2026-10-30 · 12:20 PM: Start on it.]',
       `[This thread is sealed until Saturday 2026-10-31 · 8:00 AM. User can't see it, or anything you do or send here, until then, and your other threads are shown only its label, "Something for you". ` +
         `What you send here waits in the thread for them. Keep what you make for it in ${join(data, "ada", "sealed", "gift")}, which is outside your workspace.]`,
-    ])]]);
-    expect(script.heartbeats.map((request) => [request.context?.thread, request.context?.sealed])).toEqual([["gift", true], ["gift", true]]);
+    ], ["Nothing has been said in this thread yet.", wroteLast("21 minutes ago", 'your home thread "main"')])]]);
+    expect(script.wakes.map((request) => [request.context?.thread, request.context?.sealed])).toEqual([["gift", true], ["gift", true]]);
     expect(emitted).toEqual([]);
     expect(announced).toEqual([]);
     expect([runtime.callStore?.callCount(), runtime.callStore?.queryTranscripts("heartbeat", "ada", 100).length]).toEqual([captured, transcripts]);
     expect(diaryOf(data)).toEqual([]);
     expect(runtime.autonomy.log("ada", 100).map((event) => [event.kind, event.detail]).slice(-2)).toEqual([
-      ["tick_fired", 'Woken in "gift" by a hand-off from "heartbeat"'],
+      ["tick_fired", 'Woken in "gift" by a hand-off from "own-time"'],
       ["message_sent", "A message was left in a sealed thread"],
     ]);
     const sealedEngine = await runtime.registry.sealedEngine("ada", "gift");
@@ -2748,12 +3215,20 @@ test("a wake inside a sealed thread sends, announces and logs nothing outside it
     script.replyTool = { name: "search_chat_logs", input: { query: "birthday" } };
     await say("did you say something about a birthday?");
     expect(String(lastToolResult(await thread("main"))?.text)).toStartWith("birthday: 0 matches.\nSearched 2 messages from every thread");
-    script.closing = "HEARTBEAT_OK";
+    script.closing = "NO_NOTE";
     at(30);
-    await heartbeat();
-    expect(textOf(script.heartbeats.at(-2) as SidecarRequest)).not.toContain("Made a card.");
+    await wakeNow();
+    expect(textOf(script.wakes.at(-2) as SidecarRequest)).not.toContain("Made a card.");
 
-    runtime.autonomy.forceHeartbeatState("ada", "dormant");
+    script.wakes.length = 0;
+    expect(runtime.autonomy.requestWake("ada", { name: "", from: "main", reason: "Wrap it.", at: T0 + 31 * MINUTE, thread: "gift" }, false).kind).toBe("queued");
+    at(31);
+    await runtime.autonomy.tick();
+    const again = turnsOf(script.wakes[0]).at(-1)?.[1] ?? "";
+    expect(again).toContain('in your home thread "main".]\n\n[Your note from the end of your last wake here, Friday 2026-10-30 · 12:21 PM, kept for this one:]\n\nMade a card.\n\n[You asked for this wake from "main" at ');
+    expect(again).not.toContain("[Your diary");
+
+    runtime.autonomy.forceDormancy("ada", "dormant");
     script.closing = "Gave it.\n<sendMessage>Open the card.</sendMessage>";
     at(20 * 60);
     await runtime.autonomy.tick();
@@ -2766,12 +3241,12 @@ test("a wake inside a sealed thread sends, announces and logs nothing outside it
 test("at its time the seal comes off: the thread joins the user's list with what was sent waiting unread, the character is woken there even when dormant, and its diary entries are shown", async () => {
   let root = "";
   await withCharacter(async (h) => {
-    const { runtime, script, data, heartbeat } = h;
+    const { runtime, script, data, wakeNow } = h;
     root = dirname(data);
     await sealsGift(h);
     script.beatTool = { name: "wake_in_thread", input: { thread: "gift", reason: "Start on it." } };
     at(20);
-    await heartbeat();
+    await wakeNow();
     script.closing = "Made a card.\n<sendMessage>Happy birthday!</sendMessage>";
     at(21);
     await runtime.autonomy.tick();
@@ -2780,10 +3255,10 @@ test("at its time the seal comes off: the thread joins the user's list with what
   await withCharacter(async ({ runtime, script, data, emitted, say, thread, shown }) => {
     at(19 * 60 + 59);
     await say("good morning");
-    expect(runtime.autonomy.forceHeartbeatState("ada", "dormant")).toBe(true);
+    expect(runtime.autonomy.forceDormancy("ada", "dormant")).toBe(true);
     await runtime.autonomy.tick();
     expect(runtime.registry.sealedThreads("ada").map((sealed) => sealed.id)).toEqual(["gift"]);
-    expect(script.heartbeats).toEqual([]);
+    expect(script.wakes).toEqual([]);
 
     const announced: unknown[][] = [];
     runtime.notifier.notify = (...told) => { announced.push(told); };
@@ -2793,10 +3268,19 @@ test("at its time the seal comes off: the thread joins the user's list with what
     await runtime.autonomy.tick();
     expect(runtime.registry.sealedThreads("ada")).toEqual([]);
     expect(runtime.registry.listThreads("ada").at(-1)).toEqual({ id: "gift", label: "Something for you", created_at: "2026-10-30T12:10:00.000Z", created_by: "character", compaction: true });
-    expect(script.heartbeats.map((request) => [request.context?.thread, request.context?.sealed])).toEqual([["gift", undefined], ["gift", undefined]]);
-    expect(turnsOf(script.heartbeats[0]).at(-1)).toEqual(["user", giftWake("8:00 AM", [
+    expect(script.wakes.map((request) => [request.context?.thread, request.context?.sealed])).toEqual([["gift", undefined], ["gift", undefined]]);
+    expect(turnsOf(script.wakes[0])).toEqual([["user", giftWake("8:00 AM", [
       "[The seal on this thread came off at Saturday 2026-10-31 · 8:00 AM. User can see this thread and everything in it from now on. This wake is for giving them what you made.]",
-    ]).replace("Friday 2026-10-30 · 8:00 AM", "Saturday 2026-10-31 · 8:00 AM").replace("[wake]", "[about a day later · Saturday 2026-10-31 · 8:00 AM]\n\n[wake]")]);
+    ], [
+      "Nothing has been said in this thread since your last wake here.",
+      wroteLast("a minute ago", 'your home thread "main"'),
+      [
+        "[Your diary from the last day. Each entry says where it came from.]",
+        'your note at the end of a wake in "gift" · Friday 2026-10-30 · 12:21 PM\nMade a card.',
+        'from Shore · Saturday 2026-10-31 · 8:00 AM\nThe seal on "Something for you" came off. Its thread, `gift`, is in User\'s thread list from now on, and you are being woken there.',
+        "[End of your diary.]",
+      ].join("\n\n"),
+    ]).replace("[Current time: Friday 2026-10-30 · 8:00 AM]", "[Current time: Saturday 2026-10-31 · 8:00 AM]")]]);
     expect(emitted.map((each) => [each.thread, each.msg.content])).toEqual([["gift", "Open the card."]]);
     expect(announced).toEqual([["autonomous_message", "Shore - ada", "Open the card.", undefined]]);
     expect(threadActivityNow(data, "ada", "gift").unread).toBe(2);
@@ -2810,10 +3294,10 @@ test("at its time the seal comes off: the thread joins the user's list with what
     await shown("gift", (message) => message.content === "Open the card.");
     script.replyTool = { name: "search_chat_logs", input: { query: "birthday" } };
     await say("did you say something about a birthday?");
-    expect(String(lastToolResult(await thread("main"))?.text)).toContain("ada    [gift] (heartbeat) Happy [birthday]!");
+    expect(String(lastToolResult(await thread("main"))?.text)).toContain("ada    [gift] (wake) Happy [birthday]!");
     at(20 * 60 + 1);
     await runtime.autonomy.tick();
-    expect(script.heartbeats).toHaveLength(2);
+    expect(script.wakes).toHaveLength(2);
   }, sealing, root);
 });
 
@@ -2827,8 +3311,8 @@ test("with the character's own time switched off a seal still comes off at its t
     at(20 * 60);
     await say("good morning");
     await runtime.autonomy.tick();
-    expect(runtime.registry.listThreads("ada").map((record) => record.id)).toEqual(["main", "heartbeat", "gift"]);
-    expect(script.heartbeats).toEqual([]);
+    expect(runtime.registry.listThreads("ada").map((record) => record.id)).toEqual(["main", "own-time", "gift"]);
+    expect(script.wakes).toEqual([]);
   }, (app) => {
     sealing(app);
     app.behavior.autonomy.enabled = false;
@@ -2840,11 +3324,19 @@ test("the activity record a start rebuilds holds the user's messages of the last
   const day = 24 * 60;
   let root = "";
   at(0);
-  await withCharacter(async ({ runtime, data, say }) => {
+  await withCharacter(async ({ runtime, script, data, say, thread }) => {
     root = dirname(data);
     await say("hello");
     at(2 * day);
+    script.replyTool = { name: "read", input: { file_path: "SOUL.md" } };
     await say("two days on");
+    expect(counted(runtime)).toBe(2);
+    runtime.autonomy.wakeFor("ada", { name: "lamp", reason: "r", at: T0 + (2 * day + 20) * MINUTE, thread: "main" });
+    at(2 * day + 20);
+    await runtime.autonomy.tick();
+    expect((await thread("main")).filter((message) => message.role === "user").map((message) => message.origin === "autonomous" ? "wake" : message.content_blocks[0]?.type)).toEqual([
+      "text", "text", "tool_result", "wake", "tool_result",
+    ]);
     expect(counted(runtime)).toBe(2);
   });
 

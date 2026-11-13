@@ -2,8 +2,9 @@ import { join } from "node:path";
 
 import { shoreLog } from "../../log.ts";
 import type { HeartbeatEventKind } from "../../autonomy/heartbeat_log.ts";
-import { runHeartbeatToolLoop, type HeartbeatToolResult, type TranscriptRound } from "../../autonomy/heartbeat_loop.ts";
-import { applyHeartbeatModelOverride, backgroundTaskModel, fallbackIntervalPhrase } from "../../autonomy/heartbeat_request.ts";
+import { runBackgroundLoop, type LoopToolResult, type TranscriptRound } from "../../autonomy/background_loop.ts";
+import { backgroundModelRequest, backgroundTaskModel } from "../../autonomy/background_model.ts";
+import { spanPhrase } from "../../autonomy/wake_shape.ts";
 import { foldDiary, unfoldedDiary } from "../../autonomy/diary.ts";
 import type { DreamWindow } from "../../autonomy/runner.ts";
 import { resolveDisplayName, toolPatternMatches, type ToolsConfig } from "../../config/app.ts";
@@ -12,7 +13,7 @@ import { findEffectiveModel } from "../../config/effective_catalog.ts";
 import type { LoadedConfig } from "../../config/loader.ts";
 import { applyBackgroundSettings, configView, resolveChatModelForCharacter } from "../../config/preferences.ts";
 import { DIARY_FOR_DREAM, diaryText, formatWallClock } from "../../engine/prompt.ts";
-import { heartbeatThread, homeThreadOf, readThreadsIndex, threadChatModel } from "../../engine/threads.ts";
+import { ownThread, homeThreadOf, readThreadsIndex, threadChatModel } from "../../engine/threads.ts";
 import type { ContentBlock, Message } from "../../engine/types.ts";
 import { buildChatShapeRequestFromDisk } from "../../handler/context.ts";
 import { NO_PRIOR_CONTEXT } from "../../engine/segments.ts";
@@ -43,7 +44,7 @@ export const DREAM_LOOP_CALL_TYPE = "dreaming_tool_loop";
 
 const DREAM_NOTES_FILE = "DREAMS.md";
 
-const LEFT_OUT_TOOLS = new Set(["set_next_wake", "wake_in_thread", "list_triggers", "write_diary", "send_push", "start_thread", "start_sealed_thread", "edit_thread", "list_threads", "generate_image", "guide"]);
+const LEFT_OUT_TOOLS = new Set(["wake_in_thread", "list_triggers", "write_diary", "send_push", "start_thread", "start_sealed_thread", "edit_thread", "list_threads", "generate_image", "guide"]);
 
 const MOST_READ = 15;
 
@@ -79,7 +80,7 @@ export interface DreamPassDeps {
     toolUseId: string | undefined,
     tools: readonly ToolDefinition[] | undefined,
     writes: WorkspaceWrites,
-  ) => Promise<HeartbeatToolResult>;
+  ) => Promise<LoopToolResult>;
   recordTranscript?: (round: TranscriptRound) => void;
   refreshHome?: () => Promise<void>;
   env?: NodeJS.ProcessEnv;
@@ -112,10 +113,6 @@ export function dreamLimits(config: LoadedConfig): { limitMs: number; wrapUpMs: 
 
 function counted(n: number, noun: string): string {
   return n === 1 ? `1 ${noun}` : `${String(n)} ${noun}s`;
-}
-
-function phrase(ms: number): string {
-  return fallbackIntervalPhrase(BigInt(Math.trunc(ms / 1000)));
 }
 
 function homeMark(dataDir: string, character: string, home: string): string {
@@ -170,7 +167,7 @@ function dreamWrites(config: LoadedConfig, character: string): { track: Workspac
   return { track, commits: () => [...commits], done: async () => { await recorder.discard(); } };
 }
 
-function stopOf(loop: Awaited<ReturnType<typeof runHeartbeatToolLoop>>, interrupted: boolean): { outcome: "finished" | "cut_off" | "failed" | "interrupted"; stoppedBy?: DreamStop } {
+function stopOf(loop: Awaited<ReturnType<typeof runBackgroundLoop>>, interrupted: boolean): { outcome: "finished" | "cut_off" | "failed" | "interrupted"; stoppedBy?: DreamStop } {
   if (interrupted) return { outcome: "interrupted", stoppedBy: "shutdown" };
   if (budgetStopIn(loop.failure) !== undefined) return { outcome: "interrupted", stoppedBy: "budget" };
   if (loop.timedOut === true || loop.stoppedAt === "time") return { outcome: "cut_off", stoppedBy: "time_limit" };
@@ -217,7 +214,7 @@ export async function runDreamPass(
   const anchoredAt = finishedBefore === undefined ? Number.NaN : Date.parse(finishedBefore.started_at);
   const sinceMs = Number.isNaN(anchoredAt) ? start.since : anchoredAt;
   const home = await homeThreadOf(dataDir, character);
-  const heartbeat = heartbeatThread(await readThreadsIndex(dataDir, character));
+  const heartbeat = ownThread(await readThreadsIndex(dataDir, character));
   const conversations = await conversationsSince(dataDir, character, sinceMs, new Set(heartbeat === undefined ? [] : [heartbeat]));
   if (conversations.length === 0 && !start.forced) {
     shoreLog.info(`shore: dream for ${character} skipped, nothing has been archived since ${new Date(sinceMs).toISOString()}`);
@@ -236,7 +233,7 @@ export async function runDreamPass(
   const configured = backgroundTaskModel(config, character, "dreaming");
 
   const { limitMs, wrapUpMs } = dreamLimits(config);
-  const timeLimit = phrase(limitMs);
+  const timeLimit = spanPhrase(limitMs);
   const seenReads = workspaceReadCounts(characterDir);
   const reads = mostReadLines(seenReads, MOST_READ);
   const template = resolvePromptTemplate(config.dirs.config, character, "dream.md") ?? DEFAULT_DREAM_TEMPLATE;
@@ -252,7 +249,7 @@ export async function runDreamPass(
     reads: reads.length === 0 ? undefined : reads.join("\n"),
     notes: cappedNotes(await loadCanonicalPromptFile(workspace, DREAM_NOTES_FILE).catch(() => undefined)),
     timeLimit,
-    wrapUpAfter: phrase(limitMs - wrapUpMs),
+    wrapUpAfter: spanPhrase(limitMs - wrapUpMs),
   });
   const latest = lastDream(characterDir);
   const stoppedNote = latest === undefined || latest.outcome === "finished"
@@ -284,14 +281,7 @@ export async function runDreamPass(
     shoreLog.warn(`shore: dream for ${character} could not build its request: ${String(e)}`);
     return failed(`Dream could not build its request — ${truncateSummary(String(e), 200)}`);
   }
-  const { request, override } = applyHeartbeatModelOverride(
-    built.request,
-    scoped,
-    character,
-    deps.env === undefined ? {} : { env: deps.env },
-    configured,
-    "dream",
-  );
+  const { request, override } = backgroundModelRequest(built.request, scoped, character, deps.env, configured, "dream");
   request.context = {
     ...request.context,
     ledger: join(dataDir, "shore.db"),
@@ -312,7 +302,7 @@ export async function runDreamPass(
   const headBefore = await gitHead(workspace).catch(() => undefined);
   const writes = dreamWrites(config, character);
   let summary = "";
-  const loop = await runHeartbeatToolLoop(request, {
+  const loop = await runBackgroundLoop(request, {
     character,
     name: "Dream",
     generate: async (call, phase, signal) => await deps.generate(call, phase, AbortSignal.any([start.signal, signal])),

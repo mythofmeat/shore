@@ -6,14 +6,13 @@ import { hostZone } from "../ledger/zoned.ts";
 import type { LoadedConfig } from "../config/loader.ts";
 import { loadCompactionCheckpoint } from "../memory/compaction/checkpoint.ts";
 import { dreamRunnerConfig, type AutonomyRunnerConfig, type CompactionRunnerConfig, type DreamRunnerConfig, type RestoredIdle } from "./runner.ts";
-import type { HeartbeatClockConfig } from "./heartbeat.ts";
+import type { DormancyConfig } from "./dormancy.ts";
 import type { AutonomyService, RegisterCharacter } from "./service.ts";
 
 export function runnerConfigFor(config: LoadedConfig): AutonomyRunnerConfig {
   const autonomy = config.app.behavior.autonomy;
   return {
     autonomyEnabled: autonomy.enabled,
-    heartbeatEnabled: autonomy.enabled,
     ...compactionConfigFor(config),
     dream: dreamConfigFor(config),
   };
@@ -35,15 +34,11 @@ function compactionConfigFor(config: LoadedConfig): CompactionRunnerConfig {
   };
 }
 
-export function clockConfigFor(config: LoadedConfig): HeartbeatClockConfig {
-  const heartbeat = config.app.behavior.autonomy.heartbeat;
+export function dormancyConfigFor(config: LoadedConfig): DormancyConfig {
+  const { triggers } = config.app.behavior.autonomy;
   return {
-    defaultIntervalMs: Number(heartbeat.default_interval.asMillisExact()),
-    maxIdleTicks: heartbeat.dormant_after_heartbeat_turns,
-    maxSilentMs: Number(heartbeat.dormant_after_idle_time.asMillisExact()),
-    minIntervalMs: Number(heartbeat.min_interval.asMillisExact()),
-    maxIntervalMs: Number(heartbeat.max_interval.asMillisExact()),
-    deferOnActivity: heartbeat.defer_on_activity,
+    maxIdleWakes: triggers.max_idle_wakes,
+    maxSilentMs: Number(triggers.idle_timeout.asMillisExact()),
   };
 }
 
@@ -68,7 +63,7 @@ export function registrationFor(character: string, config: LoadedConfig): Regist
     character,
     data_dir: `${config.dirs.data}/${character}`,
     config: runnerConfigFor(config),
-    clock: clockConfigFor(config),
+    dormancy: dormancyConfigFor(config),
     restoreIdle: async () => await restoredIdle(config.dirs.data, character),
   };
 }
@@ -77,13 +72,12 @@ type ServiceSlice = Pick<
   AutonomyService,
   | "register"
   | "setCompactionConfig"
-  | "setHeartbeatConfig"
+  | "setDormancyConfig"
   | "setDreamConfig"
   | "backfillActivity"
   | "onUserMessage"
   | "onUserActivityElsewhere"
   | "onAssistantMessage"
-  | "onReplyElsewhere"
   | "shouldCompactNow"
   | "onCompactionComplete"
   | "onCompactionFailed"
@@ -157,7 +151,7 @@ export class TurnAutonomyBridge {
           character,
           compactionConfigFor(config),
         );
-        this.#service.setHeartbeatConfig(character, clockConfigFor(config));
+        this.#service.setDormancyConfig(character, dormancyConfigFor(config));
         this.#service.setDreamConfig(character, dreamConfigFor(config));
       });
     }
@@ -166,12 +160,6 @@ export class TurnAutonomyBridge {
   onAssistantMessage(character: string, turnCount: number): void {
     this.#after(character, () => {
       this.#service.onAssistantMessage(character, turnCount);
-    });
-  }
-
-  onReplyElsewhere(character: string): void {
-    this.#after(character, () => {
-      this.#service.onReplyElsewhere(character);
     });
   }
 

@@ -24,9 +24,9 @@ import {
   archiveThread,
   createThread,
   editThreadAsCharacter,
-  ensureHeartbeatThread,
+  ensureOwnThread,
   ensureThreads,
-  heartbeatThread,
+  ownThread,
   homeThread,
   requireEditableByCharacter,
   resolveThreadFiles,
@@ -51,6 +51,7 @@ import {
   resetActivePromptSnapshotIfEmpty,
 } from "./memory/deferred_edits.ts";
 import { characterWorkspace } from "./tools/character_workspace.ts";
+import { required } from "./util/required.ts";
 
 export interface RuntimeReloadSummary {
   availableBefore: number;
@@ -200,16 +201,14 @@ export class CharacterRegistry {
     return this.#threads.get(name)?.threads ?? [];
   }
 
-  heartbeatThread(name: string): string | undefined {
-    return heartbeatThread(this.#threads.get(name));
+  ownThread(name: string): string | undefined {
+    return ownThread(this.#threads.get(name));
   }
 
-  async ensureHeartbeatThread(name: string): Promise<{ thread: string; created: boolean }> {
+  async ensureOwnThread(name: string): Promise<{ thread: string; created: boolean }> {
     return await this.#withThreadIndex(name, async () => {
-      const { index, created } = await ensureHeartbeatThread(this.#dataDir, name, new Date().toISOString());
-      const thread = heartbeatThread(this.#remember(name, index));
-      if (thread === undefined) throw new Error(`no heartbeat thread could be made for ${name}`);
-      return { thread, created };
+      const { index, created } = await ensureOwnThread(this.#dataDir, name, new Date().toISOString());
+      return { thread: required(ownThread(this.#remember(name, index))), created };
     });
   }
 

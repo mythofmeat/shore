@@ -51,12 +51,12 @@ export class ImagesUnsupportedError extends Error {
   }
 }
 
-export class HeartbeatThreadError extends Error {
+export class OwnThreadError extends Error {
   readonly code: ErrorCode = "invalid_request";
 
   constructor(character: string, thread: string) {
-    super(`"${thread}" is where ${character}'s heartbeats run, so you can read it but not write there. Write to ${character} in another thread.`);
-    this.name = "HeartbeatThreadError";
+    super(`"${thread}" is where ${character}'s own time runs, so you can read it but not write there. Write to ${character} in another thread.`);
+    this.name = "OwnThreadError";
   }
 }
 

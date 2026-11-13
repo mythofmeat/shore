@@ -421,7 +421,7 @@ function modelRefs(config: LoadedConfig): [string, string | undefined][] {
   const d = config.app.defaults;
   return [
     ["chat.model", d.model],
-    ["heartbeat.model", d.background.heartbeat],
+    ["triggers.model", d.background.heartbeat],
     ["compaction.model", d.background.compaction],
     ["dreaming.model", d.background.dreaming],
     ["subagents.model", d.subagent_model],

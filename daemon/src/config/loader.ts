@@ -15,7 +15,6 @@ import {
   validatePresence,
   validateMarks,
   validateTriggers,
-  validateHeartbeat,
   validateImages,
   validateAppConfigLayer,
   type AppConfig,
@@ -446,7 +445,7 @@ function validateConfig(
   warnOnUnresolvableModelRef(
     catalog,
     providers,
-    "heartbeat.model",
+    "triggers.model",
     app.defaults.background.heartbeat,
     onWarn,
   );
@@ -509,9 +508,6 @@ function validateConfig(
 
   const compaction = validateCompaction(app.memory.compaction);
   if (compaction !== undefined) throw validationError(compaction);
-
-  const heartbeat = validateHeartbeat(app.behavior.autonomy.heartbeat);
-  if (heartbeat !== undefined) throw validationError(heartbeat);
 
   const dreaming = validateDreaming(app.memory.dreaming);
   if (dreaming !== undefined) throw validationError(dreaming);

@@ -36,7 +36,7 @@ async function world(file: string | undefined, dir?: string): Promise<World> {
     now: T0,
     file,
     unreadable: false,
-    settings: { enabled: true, wakeCooldownMs: HOUR, checkLimitMs: 60_000, maxWakeLimitMs: 2 * HOUR, off: [] as string[] },
+    settings: { enabled: true, checks: true, wakeCooldownMs: HOUR, checkLimitMs: 60_000, maxWakeLimitMs: 2 * HOUR, off: [] as string[] },
     dormant: false,
     lastUserAt: undefined,
     checks: {},
@@ -137,6 +137,26 @@ test("a trigger that comes due during its cooldown waits for it to end, and its 
   expect(w.woke).toHaveLength(2);
   await w.at(76);
   expect(w.ran).toHaveLength(2);
+});
+
+test("a trigger with a check isn't run for a character without the bash tool, which it is told once, and runs once it has the tool", async () => {
+  const w = await world('[tide]\nevery = "1h"\ncheck = "tide.sh"\n\n[lamp]\nevery = "1h"\nreason = "Trim the lamp."\nwake = false\n');
+  w.settings = { ...w.settings, checks: false };
+  w.checks["tide"] = { kind: "fired", output: "The tide is out." };
+  await w.at(0);
+  await w.at(60);
+  await w.at(120);
+  expect(w.ran).toEqual([]);
+  expect(w.woke).toEqual([]);
+  const told = "These triggers in TRIGGERS.toml aren't running:\n- `tide` isn't running: its `check` is a command, and you don't have the `bash` tool to run commands with";
+  expect(w.notes()).toEqual([["shore", told], ["lamp", "Trim the lamp."]]);
+  expect(w.triggers.view().triggers.map((each) => each.trigger.name)).toEqual(["lamp"]);
+
+  w.settings = { ...w.settings, checks: true };
+  await w.at(121);
+  await w.at(181);
+  expect(w.ran).toEqual([["tide", 60_000]]);
+  expect(w.woke.map((firing) => [firing.name, firing.reason])).toEqual([["tide", "The tide is out."]]);
 });
 
 test("a quiet check does nothing, and one that prints fires with the trigger's reason above what it printed", async () => {

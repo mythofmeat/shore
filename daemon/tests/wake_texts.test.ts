@@ -1,8 +1,8 @@
 import { expect, test } from "bun:test";
 
-import { spanPhrase, triggerFiredNote } from "../src/autonomy/heartbeat_shape.ts";
+import { spanPhrase, triggerFiredNote } from "../src/autonomy/wake_shape.ts";
 import { firedBy } from "../src/autonomy/runner.ts";
-import { pickedUpNote, wakeCutShortNote, wakeStoppedNote, wakeWrapUpText, withoutSent, wrapUpMsFor } from "../src/autonomy/thread_wake.ts";
+import { wakeCutShortNote, wakeStoppedNote, wakeWrapUpText, withoutSent, wrapUpMsFor } from "../src/autonomy/wake.ts";
 import { dispatchTool, type ToolContext } from "../src/tools/dispatch.ts";
 import { handleWakeInThread, wakeInThreadRequest } from "../src/tools/wake_in_thread.ts";
 
@@ -34,7 +34,7 @@ test("a wake's wrap-up nudge says how long is left, how many rounds, and where t
   expect(wakeWrapUpText(4 * MINUTE, 3, "eve")).toBe(
     "[System nudge: this wake stops in about 4 minutes or after 3 more rounds, counting this one, whichever comes first. " +
     "Wrap up now: finish with your note to yourself, saying where you stopped so you can pick it up here next time. " +
-    "Only what you put in <sendMessage> tags is posted for eve.]",
+    "Only what you put in <sendMessage> tags is sent to eve.]",
   );
   expect(wakeWrapUpText(30_000, 1, "eve")).toStartWith("[System nudge: this wake stops in less than a minute or after this round, whichever comes first. ");
 });
@@ -59,20 +59,24 @@ test("a wake that is stopped is told why in its thread, and the diary says when 
   expect(wakeStoppedNote("rounds", "eve", 90 * MINUTE)).toBe("[This wake used up its rounds of tool use, and Shore stopped it here.]");
   expect(wakeCutShortNote("time", "ring", 2 * 60 * MINUTE)).toBe('Your wake in "ring" reached its limit of 2 hours before you finished. Where it stopped is in that thread.');
   expect(wakeCutShortNote("rounds", "ring", 2 * 60 * MINUTE)).toBe('Your wake in "ring" used up its rounds of tool use before you finished. Where it stopped is in that thread.');
-  expect(pickedUpNote(T0 + 12 * MINUTE, "eve", "UTC")).toBe("[This picks up the wake that eve interrupted at Friday 2026-10-30 · 12:12 PM.]");
 });
 
-test("a wake says what set it off: its triggers, or the turn that handed it over", () => {
+test("a wake says what set it off: its triggers, the turn that handed it over, a seal, or a start by hand", () => {
   const show = { name: "show", reason: "The show.", at: T0, thread: "ring" };
   const lamp = { name: "lamp", reason: "Trim it.", at: T0, thread: "ring" };
-  const handed = { name: "", reason: "Carry on.", at: T0 + MINUTE, thread: "ring", from: "heartbeat" };
+  const handed = { name: "", reason: "Carry on.", at: T0 + MINUTE, thread: "ring", from: "own-time" };
+  const byHand = { name: "", reason: "", at: T0, byHand: true };
+  const seal = { name: "", reason: "It is open.", at: T0, thread: "gift", seal: true };
   const asked = { name: "", reason: "As asked.", at: T0, thread: "ring", from: "main" };
   expect(firedBy([show])).toBe('trigger "show"');
   expect(firedBy([show, lamp])).toBe('trigger "show", "lamp"');
-  expect(firedBy([handed])).toBe('a hand-off from "heartbeat"');
-  expect(firedBy([handed, show, asked])).toBe('trigger "show" and a hand-off from "heartbeat", "main"');
+  expect(firedBy([handed])).toBe('a hand-off from "own-time"');
+  expect(firedBy([handed, show, asked])).toBe('trigger "show" and a hand-off from "own-time", "main"');
+  expect(firedBy([byHand])).toBe("a start by hand");
+  expect(firedBy([seal])).toBe("its seal coming off");
+  expect(firedBy([lamp, byHand, seal, asked])).toBe('trigger "lamp" and a start by hand and a hand-off from "main" and its seal coming off');
   expect(triggerFiredNote(show, "UTC")).toBe('[Your trigger "show" fired at Friday 2026-10-30 · 12:00 PM: The show.]');
-  expect(triggerFiredNote(handed, "UTC")).toBe('[You asked for this wake from "heartbeat" at Friday 2026-10-30 · 12:01 PM: Carry on.]');
+  expect(triggerFiredNote(handed, "UTC")).toBe('[You asked for this wake from "own-time" at Friday 2026-10-30 · 12:01 PM: Carry on.]');
 });
 
 test("a hand-off needs a thread's id and a reason, and takes a limit of a minute or more", () => {
@@ -154,7 +158,7 @@ test("a dry run doesn't hand a wake over, start a thread or call an outside tool
   expect(await blocked("start_thread", { name: "ring", label: "Ring" })).toContain("start_thread blocked: dry-run tools cannot change files or external state");
   expect(await blocked("mcp__weather__look", {})).toContain("mcp__weather__look blocked: dry-run tools cannot change files or external state");
   expect(asked).toEqual([]);
-  expect(String(await dispatchTool("list_triggers", {}, ctx))).toContain("You have none yet.");
+  expect(String(await dispatchTool("list_triggers", {}, ctx))).toContain("You have none there yet, so nothing wakes you on its own.");
   expect(await dispatchTool("wake_in_thread", { thread: "ring", reason: "r" }, { ...ctx, dryRun: false })).toBe(
     'Shore will wake you in "ring" for up to 30 minutes, once this turn is over and the user has been quiet there for 10 minutes.',
   );

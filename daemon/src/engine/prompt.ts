@@ -2,7 +2,7 @@ import { required } from "../util/required.ts";
 
 import builtinSystemTemplate from "../../prompts/engine/builtin_system.md" with { type: "text" };
 import threadTemplate from "../../prompts/engine/thread.md" with { type: "text" };
-import heartbeatThreadTemplate from "../../prompts/engine/heartbeat_thread.md" with { type: "text" };
+import ownThreadTemplate from "../../prompts/engine/own_thread.md" with { type: "text" };
 import { hostZone, naiveInZone, partsOf } from "../ledger/zoned";
 import type { ContentBlock, DiaryNote, ImageRef, Message, Role } from "./types";
 import { estimateTokens, withSafetyMargin } from "./tokens.ts";
@@ -35,12 +35,12 @@ const BUILTIN_SYSTEM_TEMPLATE = builtinSystemTemplate.trimEnd();
 
 const THREAD_TEMPLATE = threadTemplate.trimEnd();
 
-const HEARTBEAT_THREAD_TEMPLATE = heartbeatThreadTemplate.trimEnd();
+const OWN_THREAD_TEMPLATE = ownThreadTemplate.trimEnd();
 
 const THREAD_FILES_HEADER =
   "Files kept in this thread's prompt. Changes to them show up here after a long pause in this thread, or after it compacts.";
 
-export const DIARY_FOR_HEARTBEAT = "Your diary from the last day. Each entry says where it came from.";
+export const DIARY_FOR_WAKE = "Your diary from the last day. Each entry says where it came from.";
 
 export const DIARY_FOR_CHAT = "New in your diary. Each entry says where it came from.";
 
@@ -75,7 +75,7 @@ export interface AssembledPrompt {
 export interface ThreadPrompt {
   id: string;
   home: string;
-  heartbeat: boolean;
+  own: boolean;
   created_at: string;
   started_by_you: boolean;
   label?: string | undefined;
@@ -133,7 +133,7 @@ function present(value: string | undefined): string | undefined {
 function threadBlock(thread: ThreadPrompt, vars: ReadonlyMap<string, string>, timeZone: string): string {
   const created = Date.parse(thread.created_at);
   const started = Number.isNaN(created) ? thread.created_at : required(formatWallClock(created, timeZone).split(" · ")[0]);
-  return renderTemplate(thread.heartbeat ? HEARTBEAT_THREAD_TEMPLATE : THREAD_TEMPLATE, new Map([
+  return renderTemplate(thread.own ? OWN_THREAD_TEMPLATE : THREAD_TEMPLATE, new Map([
     ...vars,
     ["thread", thread.id],
     ["home", thread.home],
@@ -356,21 +356,16 @@ export function presenceText(presence: NonNullable<Message["presence"]>, at: num
   return presence.status === "" ? `[${whose} status was cleared ${ago}.]` : `[${whose} status, set ${ago}: "${presence.status}"]`;
 }
 
-export function heartbeatRunningText(running: NonNullable<Message["heartbeat_running"]>, timeZone: string): string {
+export function wakeRunningText(running: NonNullable<Message["heartbeat_running"]>, timeZone: string): string {
   const since = formatWallClock(Date.parse(running.started_at), timeZone);
-  if (running.thread !== undefined) {
-    return `[A wake of yours in "${running.thread}" has been running since ${since}. It can't see this conversation. It is only told that a message arrived.]`;
-  }
-  const why = running.reason === undefined ? "" : ` You scheduled it with set_next_wake, giving this reason: ${running.reason}`;
-  return `[A heartbeat of yours has been running since ${since}. ` +
-    `It can't see this conversation. It is only told that a message arrived.${why}]`;
+  const where = running.thread === undefined ? "your own-time thread" : `"${running.thread}"`;
+  return `[A wake of yours in ${where} has been running since ${since}. It can't see this conversation. It is only told that a message arrived.]`;
 }
 
 function noteFrom(note: DiaryNote): string {
   if (note.source === "trigger") return `from your trigger "${note.trigger ?? ""}"`;
   if (note.source === "note") return `your note, written in "${note.thread}"`;
-  if (note.source === "wake") return `your note at the end of a wake in "${note.thread}"`;
-  return note.source === "shore" ? "from Shore" : "your note at the end of a heartbeat";
+  return note.source === "shore" ? "from Shore" : `your note at the end of a wake in "${note.thread}"`;
 }
 
 export function diaryText(notes: readonly DiaryNote[], heading: string, timeZone: string, omitted = 0): string {
@@ -486,7 +481,7 @@ function trimMessages(
   for (const { pm, ts, heartbeat, elsewhere, diary, running, presence } of selected) {
     const currentMs = parseRfc3339(ts);
 
-    if (heartbeat) result.push(noticed(syntheticUserTurn(heartbeatMarker(currentMs, mode, timeZone))));
+    if (heartbeat) result.push(noticed(syntheticUserTurn(wakeMarker(currentMs, mode, timeZone))));
     if (pm.role === "user" && !isToolLoopMessage(pm.role, pm.content_blocks)) noticed(pm);
 
     if (pm.role === "user" && currentMs !== undefined) {
@@ -527,7 +522,7 @@ function trimMessages(
     }
 
     if (running !== undefined) {
-      const text = heartbeatRunningText(running, timeZone);
+      const text = wakeRunningText(running, timeZone);
       pm.content = `${text}\n\n${pm.content}`;
       pm.content_blocks = [{ type: "text", text }, ...pm.content_blocks];
     }
@@ -554,8 +549,8 @@ function syntheticUserTurn(text: string): PromptMessage {
   return { role: "user", content: text, images: [], content_blocks: [{ type: "text", text }] };
 }
 
-export function heartbeatMarker(instantMs: number | undefined, mode: UserTimestampMode, timeZone: string): string {
+export function wakeMarker(instantMs: number | undefined, mode: UserTimestampMode, timeZone: string): string {
   return mode === "never" || instantMs === undefined
-    ? "[heartbeat]"
-    : `[heartbeat · ${formatWallClock(instantMs, timeZone)}]`;
+    ? "[wake]"
+    : `[wake · ${formatWallClock(instantMs, timeZone)}]`;
 }

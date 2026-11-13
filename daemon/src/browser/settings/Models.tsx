@@ -121,7 +121,7 @@ export function ModelsPage({ state }: { state: ChromeSnapshot }) {
         {state.thread === null ? null : row({ kind: "thread" }, thread?.chat_model ?? null, thread?.chat_model === undefined ? `thread-default` : `thread ${state.thread}`)}
       </div>
     </SettingsSection>
-    <SettingsSection title="Background tasks" description="Heartbeat check-ins, compaction and dreaming can use a different model or settings from chat.">
+    <SettingsSection title="Background tasks" description="Wakes, compaction and dreaming can use a different model or settings from chat.">
       <div className="rows">
         {(["heartbeat", "compaction", "dreaming"] as const).map((task) => { const item = role(task); return row({ kind: "background", task }, item?.model, item?.source); })}
       </div>
@@ -133,7 +133,7 @@ export function ModelsPage({ state }: { state: ChromeSnapshot }) {
       const value = event.target.value;
       setInspect(value === "character" ? { kind: "character" } : value.startsWith("background:") ? { kind: "background", task: value.slice(11) as "heartbeat" | "compaction" | "dreaming" } : value.startsWith("model:") ? { kind: "model", name: value.slice(6) } : { kind: "subagent", name: value.slice(9) });
     }}>
-      <option value="character">Chat</option><option value="background:heartbeat">Heartbeat</option><option value="background:compaction">Compaction</option><option value="background:dreaming">Dreaming</option>
+      <option value="character">Chat</option><option value="background:heartbeat">Wakes</option><option value="background:compaction">Compaction</option><option value="background:dreaming">Dreaming</option>
       {subagents.map((agent) => <option key={agent.name} value={`subagent:${agent.name}`}>Subagent {agent.name}</option>)}
       <optgroup label="Any model">{flattenModels(listing).map((model) => <option key={model.qualified_name} value={`model:${model.qualified_name}`}>{model.qualified_name}</option>)}</optgroup>
     </select>}>

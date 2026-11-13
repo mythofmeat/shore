@@ -78,7 +78,6 @@ export interface ToolContext {
 
   mcpCall?: (name: string, input: unknown, signal?: AbortSignal) => Promise<unknown>;
 
-  scheduleNextWake?: (hoursFromNow: number, reason: string) => number | undefined;
 
   triggers?: () => TriggersView;
 
@@ -144,19 +143,6 @@ function chatLogOptions(ctx: ToolContext): ChatLogOptions {
   };
 }
 
-function hoursPhrase(hours: number): string {
-  const shown = Number(hours.toFixed(2));
-  return `${String(shown)} ${shown === 1 ? "hour" : "hours"}`;
-}
-
-export function nextWakeAnswer(asked: number, scheduled: number, userName: string): string {
-  const wanted = hoursPhrase(asked);
-  const set = hoursPhrase(scheduled);
-  if (wanted === set) return `Your next heartbeat is in ${set}.`;
-  const held = Math.max(asked, scheduled) === scheduled ? "shortest" : "longest";
-  return `You asked for ${wanted}, and your next heartbeat is in ${set}: that is the ${held} gap ${userName} allows between heartbeats.`;
-}
-
 export function writesWorkspace(name: string): boolean {
   return ["bash", "edit", "apply_patch"].includes(name) || name.startsWith("mcp__");
 }
@@ -166,7 +152,7 @@ export async function dispatchTool(
   input: unknown,
   ctx: ToolContext,
 ): Promise<unknown> {
-  if (ctx.dryRun && (["bash", "edit", "apply_patch", "generate_image", "set_next_wake", "wake_in_thread", "start_thread", "start_sealed_thread", "edit_thread"].includes(name) || name.startsWith("mcp__"))) {
+  if (ctx.dryRun && (["bash", "edit", "apply_patch", "generate_image", "wake_in_thread", "start_thread", "start_sealed_thread", "edit_thread"].includes(name) || name.startsWith("mcp__"))) {
     throw new ToolIoError(`${name} blocked: dry-run tools cannot change files or external state`);
   }
   const args = (input ?? {}) as ToolInput;
@@ -238,17 +224,6 @@ export async function dispatchTool(
 
     case "edit_thread":
       return await handleEditThread(args, ctx.editThread, ctx.userName ?? "the user");
-
-    case "set_next_wake": {
-      if (ctx.scheduleNextWake === undefined) {
-        throw new ToolIoError("the heartbeat schedule is not available in this context");
-      }
-      const hours = typeof args["hours_from_now"] === "number" ? args["hours_from_now"] : 1;
-      const reason = typeof args["reason"] === "string" ? args["reason"] : "";
-      const used = ctx.scheduleNextWake(hours, reason);
-      if (used === undefined) throw new ToolIoError("heartbeats are not running for this character");
-      return nextWakeAnswer(hours, used, ctx.userName ?? "the user");
-    }
 
     case "list_triggers":
       return handleListTriggers(ctx.triggers?.(), ctx.userName ?? "the user");

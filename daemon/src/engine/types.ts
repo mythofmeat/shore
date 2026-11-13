@@ -46,7 +46,7 @@ export interface DiaryNote {
   id: string;
   at: string;
   thread: string;
-  source: "heartbeat" | "wake" | "trigger" | "shore" | "note";
+  source: "wake" | "trigger" | "shore" | "note";
   trigger?: string;
   text: string;
 }
@@ -68,6 +68,6 @@ export interface Message {
   attempt?: string;
   last_elsewhere?: { thread: string; at: string };
   diary?: DiaryNote[];
-  heartbeat_running?: { started_at: string; reason?: string | undefined; thread?: string | undefined };
+  heartbeat_running?: { started_at: string; thread?: string | undefined };
   presence?: { status: string; set_at: string };
 }

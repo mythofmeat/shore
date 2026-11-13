@@ -3750,7 +3750,7 @@ mod diary_pager_tests {
         let mut app = App::default();
         let notes: Vec<serde_json::Value> = (1..=30)
             .map(|n| {
-                json!({ "at": "dawn", "thread": "heartbeat", "source": "heartbeat", "text": format!("the {n}th thought"), "shown": true, "dreamed": false })
+                json!({ "at": "dawn", "thread": "own-time", "source": "wake", "text": format!("the {n}th thought"), "shown": true, "dreamed": false })
             })
             .collect();
         let diary = answered(
@@ -3772,7 +3772,7 @@ mod diary_pager_tests {
             "heartbeat_log",
             &json!({ "events": events }),
         );
-        assert!(log.contains("heartbeat events (30 events)"), "{log}");
+        assert!(log.contains("wake events (30 events)"), "{log}");
         assert!(log.contains(" 1-"), "{log}");
         assert!(!log.contains("tick 30"), "{log}");
     }

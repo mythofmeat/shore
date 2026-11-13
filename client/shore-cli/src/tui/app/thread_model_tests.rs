@@ -72,7 +72,7 @@ fn order(app: &App) -> Vec<&str> {
 }
 
 #[test]
-fn threads_run_home_then_heartbeats_then_by_folder_with_placed_ones_first() {
+fn threads_run_home_then_own_time_then_by_folder_with_placed_ones_first() {
     assert_eq!(
         order(&threads()),
         [

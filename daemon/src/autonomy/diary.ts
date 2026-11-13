@@ -15,9 +15,11 @@ export const DIARY_WINDOW_MS = 86_400_000;
 
 const SENT = /<sendMessage>[\s\S]*?<\/sendMessage>/g;
 
-const NOTHING_TO_NOTE = "HEARTBEAT_OK";
+const NOTHING_TO_NOTE = "NO_NOTE";
 
-const SOURCES = ["heartbeat", "wake", "trigger", "shore", "note"] as const;
+const SOURCES = ["wake", "trigger", "shore", "note"] as const;
+
+const OLD_WAKE_SOURCE = "heartbeat";
 
 interface StoredNote extends DiaryNote {
   folded?: true;
@@ -28,7 +30,7 @@ function storedNote(raw: unknown): StoredNote | undefined {
   const { id, at, thread, source, trigger, text, folded } = raw as Record<string, unknown>;
   if (typeof id !== "string" || typeof thread !== "string" || typeof text !== "string") return undefined;
   if (typeof at !== "string" || Number.isNaN(Date.parse(at))) return undefined;
-  const known = SOURCES.find((each) => each === source);
+  const known = SOURCES.find((each) => each === (source === OLD_WAKE_SOURCE ? "wake" : source));
   if (known === undefined) return undefined;
   return { id, at, thread, source: known, ...(typeof trigger === "string" ? { trigger } : {}), text, ...(folded === true ? { folded } : {}) };
 }
@@ -69,15 +71,19 @@ export interface NewDiaryNote {
   text: string;
 }
 
-export function addDiaryNote(characterDir: string, note: NewDiaryNote, newId: () => string = () => `d_${crypto.randomUUID()}`): void {
-  const chars = Array.from(note.text);
-  const text = chars.length > DIARY_NOTE_CHARS ? `${chars.slice(0, DIARY_NOTE_CHARS).join("")}… [cut]` : note.text;
-  const added: StoredNote = {
+export function cutNote(text: string): string {
+  const chars = Array.from(text);
+  return chars.length > DIARY_NOTE_CHARS ? `${chars.slice(0, DIARY_NOTE_CHARS).join("")}… [cut]` : text;
+}
+
+export function addDiaryNote(characterDir: string, note: NewDiaryNote, newId: () => string = () => `d_${crypto.randomUUID()}`): DiaryNote {
+  const added: DiaryNote = {
     id: newId(), at: new Date(note.at).toISOString(), thread: note.thread, source: note.source,
-    ...(note.trigger === undefined ? {} : { trigger: note.trigger }), text,
+    ...(note.trigger === undefined ? {} : { trigger: note.trigger }), text: cutNote(note.text),
   };
   const earlier = stored(characterDir).filter((each) => note.trigger === undefined || each.trigger !== note.trigger);
   keep(characterDir, [...earlier, added]);
+  return added;
 }
 
 export interface ShownDiary {

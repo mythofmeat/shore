@@ -102,7 +102,7 @@ const heartbeatPresentation = { ...diagnosticPresentation, prerequisites: ["auto
 const modelPresentation = { category: "Models", scope: "optional_character", prerequisites: [], effects: ["read"], confirmation: "none" } as const;
 const modelTargetFields = {
   name: { label: "Model", choices: "models", hint: "Omit for the active model; do not combine with role selectors" },
-  background_task: { label: "Background task", hint: "all, heartbeat, compaction or dreaming" },
+  background_task: { label: "Background task", hint: "all, heartbeat for wakes, compaction or dreaming" },
   subagent: { label: "Subagent", choices: "subagents", hint: "A configured name, or all for the shared subagent model" },
 } as const;
 const modelHiddenField = { label: "Include hidden models", hint: "Allow a model excluded by discovery filters" } as const;
@@ -164,7 +164,7 @@ export const commandOperations: OperationRegistry<CommandOperationContext> = {
     last: { label: "Period", hint: "today, week, month, all, or a count such as 4h, 7d, 2w, 1M; omit for the current budget window or today" },
     character: { label: "Character filter", choices: "characters", hint: "Omit for all characters, including when a conversation is selected" },
     provider: { label: "Provider filter", choices: "providers" }, api_key: { label: "API key name", hint: "Configured name, not a credential; unknown matches older records" },
-    model: { label: "Model filter", hint: "Ledger model ID" }, call_type: { label: "Call type", hint: "For example message, tool_loop, heartbeat or subagent" },
+    model: { label: "Model filter", hint: "Ledger model ID" }, call_type: { label: "Call type", hint: "For example message, tool_loop, heartbeat for wakes, or subagent" },
     group_by: { label: "Group by" }, budget: { label: "Budgets only", hint: "Reports configured budget scopes independently of the report filters; takes precedence over other modes" },
     anomalies: { label: "Cache anomalies", hint: "today uses a seven-day lookback; exports and grouping take precedence" },
     export_csv: { label: "Export CSV", hint: "Full filtered ledger; takes precedence over grouping and anomalies" }, export_tsv: { label: "Export TSV", hint: "Full filtered ledger; takes precedence over CSV" },
@@ -223,7 +223,7 @@ export const commandOperations: OperationRegistry<CommandOperationContext> = {
     (context) => status(statusContext(engineOf(context), context.session, context.deps))),
   error_log: register("error_log", { ...diagnosticPresentation, label: "Errors and key fallbacks", fields: { count: diagnosticCount } },
     (context, args) => errorLog(statusContext(engineOf(context), context.session, context.deps), args)),
-  heartbeat_log: register("heartbeat_log", { ...diagnosticPresentation, label: "Heartbeat events", fields: { count: diagnosticCount } },
+  heartbeat_log: register("heartbeat_log", { ...diagnosticPresentation, label: "Wake events", fields: { count: diagnosticCount } },
     (context, args) => heartbeatLog(statusContext(engineOf(context), context.session, context.deps), args)),
   call_log: register("call_log", { ...diagnosticPresentation, label: "Inspect model calls", fields: {
     id: { label: "Call ID", hint: "Omit to list recent calls" }, count: storedDiagnosticCount,
@@ -232,11 +232,11 @@ export const commandOperations: OperationRegistry<CommandOperationContext> = {
     diff: { label: "Compare calls", hint: "Compare the chosen call with its previous call or an explicit comparison ID" },
     against: { label: "Compare against call ID" }, wire: { label: "Include full HTTP bodies", hint: "Inspect captured request/response bodies and redacted headers" },
   } }, (context, args) => callLog({ characterName: engineOf(context).characterName, callStore: context.deps.callStore }, args)),
-  transcript: register("transcript", { ...diagnosticPresentation, label: "Read transcripts", fields: { source: { label: "Transcript source", hint: "Heartbeat or dream activity" }, count: storedDiagnosticCount } },
+  transcript: register("transcript", { ...diagnosticPresentation, label: "Read transcripts", fields: { source: { label: "Transcript source", hint: "heartbeat for wakes, dreaming for dreams" }, count: storedDiagnosticCount } },
     (context, args) => transcript({ characterName: engineOf(context).characterName, callStore: context.deps.callStore }, args)),
   subagent_trace: register("subagent_trace", { ...diagnosticPresentation, label: "Stored subagent runs", fields: { ids: { label: "Parent tool-use IDs", hint: "Omit to list recent runs" }, count: storedDiagnosticCount } },
     (context, args) => subagentTrace({ characterName: engineOf(context).characterName, dataDir: context.session.dataDir }, args)),
-  heartbeat_tick_now: register("heartbeat_tick_now", { ...heartbeatPresentation, label: "Schedule heartbeat now", effects: ["runtime_write", "provider_call"], fields: {} },
+  heartbeat_tick_now: register("heartbeat_tick_now", { ...heartbeatPresentation, label: "Start a wake now", effects: ["runtime_write", "provider_call"], fields: {} },
     (context) => heartbeatTickNow(statusContext(engineOf(context), context.session, context.deps))),
   dream: register("dream", { category: "Memory", scope: "character", prerequisites: [], effects: ["runtime_write", "provider_call"], confirmation: "none", label: "Dream", fields: {
     now: { label: "Dream now", hint: "Start a dream at the next autonomy tick instead of waiting for its schedule" },
@@ -247,9 +247,9 @@ export const commandOperations: OperationRegistry<CommandOperationContext> = {
   diary: register("diary", { category: "Memory", scope: "character", prerequisites: [], effects: ["read"], confirmation: "none", label: "Diary", fields: {
     count: { label: "Newest notes", hint: "Zero returns every note the diary keeps; omit for the newest 20" },
   } }, (context, args) => diary({ characterName: engineOf(context).characterName, dataDir: context.session.dataDir, now: (context.deps.now ?? Date.now)() }, args)),
-  heartbeat_set_dormant: register("heartbeat_set_dormant", { ...heartbeatPresentation, label: "Make heartbeat dormant", fields: {} },
+  heartbeat_set_dormant: register("heartbeat_set_dormant", { ...heartbeatPresentation, label: "Make dormant", fields: {} },
     (context) => heartbeatSetDormant(statusContext(engineOf(context), context.session, context.deps))),
-  heartbeat_set_active: register("heartbeat_set_active", { ...heartbeatPresentation, label: "Activate heartbeat", fields: {} },
+  heartbeat_set_active: register("heartbeat_set_active", { ...heartbeatPresentation, label: "Make active", fields: {} },
     (context) => heartbeatSetActive(statusContext(engineOf(context), context.session, context.deps))),
   keepalive_ping_now: register("keepalive_ping_now", { ...diagnosticPresentation, prerequisites: ["keepalive"], label: "Send cache keepalive ping", effects: ["runtime_write", "provider_call"], fields: {} },
     (context) => {

@@ -4,11 +4,11 @@
 
 In a conversation your reply is the message. From your own time nothing reaches {{user}} unless you send it:
 
-- In the final response of a heartbeat or a wake, wrap what you want to say in `<sendMessage>...</sendMessage>` tags. Nothing outside the tags is sent.
-- From a heartbeat it arrives in your home thread. From a wake in a thread it is posted in that thread.
+- In the final response of a wake, wrap what you want to say in `<sendMessage>...</sendMessage>` tags. Nothing outside the tags is sent.
+- It is posted in the thread the wake ran in. From your own-time thread, where a wake runs when its trigger names no thread, it arrives in your home thread.
 - It is delivered when the turn ends.
 - The rest of the final response is your diary note, so the two don't repeat each other.
-- A heartbeat stopped at its time limit before it wrote its final response sends nothing.
+- A wake stopped at its limit before it wrote its final response sends nothing.
 
 A picture or a video from your workspace goes in a message the way notes embed one, as `![[name]]` or `![](path)`, and {{user}} sees it where you put it.
 
@@ -28,8 +28,7 @@ A picture or a video from your workspace goes in a message the way notes embed o
 Where you see it:
 
 - In a conversation, above {{user}}'s next message in that thread, once for each change: `[Their status, set 3 hours ago: "asleep"]`. A cleared status is told the same way, to a thread that had been shown one.
-- At the start of a heartbeat, while one is set.
-- At the start of a wake in a thread, if that thread hasn't been shown it.
+- At the start of a wake, while one is set.
 - In a check, as `SHORE_USER_STATUS`, which is empty when the status is cleared. The `triggers` topic has an example.
 
 A trigger with `when = "status_changed"` fires when {{user}} sets or clears it.
@@ -37,7 +36,7 @@ A trigger with `when = "status_changed"` fires when {{user}} sets or clears it.
 ## When they were last around
 
 - Shore notes when {{user}} last wrote to you, and when they were last seen: when they last wrote or a client of theirs last marked a thread read.
-- A client left open and focused on a thread marks each message you send there read as it arrives. So last seen can move while {{user}} is asleep or away from the screen. When they last wrote is the surer sign that they were there.
-- A heartbeat starts with where and how long ago they last wrote. `{{list_threads}}` says when they last wrote in each thread.
+- A wake starts with where and how long ago they last wrote. `{{list_threads}}` says when they last wrote in each thread.
 - A check gets both, as `SHORE_USER_LAST_MESSAGE_AT` and `SHORE_USER_LAST_SEEN_AT`, with `SHORE_USER_QUIET_SECS` for how long they have been quiet.
+- A client left open and focused on a thread marks each message you send there read as it arrives. So last seen can move while {{user}} is asleep or away from the screen. When they last wrote is the surer sign that they were there.
 - Triggers with `when = "user_quiet"` and `when = "user_back"` go by when they last wrote, not by when they were last seen.

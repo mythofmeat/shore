@@ -1,5 +1,5 @@
 import { compareByCodePoint, sortedKeys } from "../util/sort.ts";
-import { ConfigDuration, MAX_SCHEDULE_OFFSET, type ParseResult } from "./duration.ts";
+import { ConfigDuration, type ParseResult } from "./duration.ts";
 import { invalidType } from "./models.ts";
 import { DEFAULT_MAX_INLINE_IMAGE_BYTES } from "../tools/media.ts";
 import { DEFAULT_IMAGE_CACHE_BYTES } from "../storage/image_cache.ts";
@@ -369,72 +369,23 @@ type UserTimestampMode = "auto" | "always" | "never";
 
 const USER_TIMESTAMP_MODES: readonly UserTimestampMode[] = ["auto", "always", "never"];
 
-export interface HeartbeatConfig {
-  default_interval: ConfigDuration;
-  dormant_after_heartbeat_turns: number;
-  dormant_after_idle_time: ConfigDuration;
-  min_interval: ConfigDuration;
-  max_interval: ConfigDuration;
-  wrap_up_grace_rounds: number;
-  defer_on_activity: boolean;
-}
-
-const defaultHeartbeatConfig = (): HeartbeatConfig => ({
-  default_interval: ConfigDuration.fromSecs(3600),
-  dormant_after_heartbeat_turns: 3,
-  dormant_after_idle_time: ConfigDuration.fromSecs(172_800),
-  min_interval: ConfigDuration.fromSecs(3600),
-  max_interval: ConfigDuration.fromSecs(172_800),
-  wrap_up_grace_rounds: 3,
-  defer_on_activity: false,
-});
-
-export function validateHeartbeat(heartbeat: HeartbeatConfig): string | undefined {
-  if (heartbeat.min_interval.asMillisExact() <= 0n) {
-    return "heartbeat.min_interval must be greater than zero";
-  }
-  if (heartbeat.max_interval.asMillisExact() > MAX_SCHEDULE_OFFSET.asMillisExact()) {
-    return (
-      `heartbeat.max_interval (${heartbeat.max_interval.toString()}) must not exceed ` +
-      MAX_SCHEDULE_OFFSET.toString()
-    );
-  }
-  if (heartbeat.min_interval.asMillisExact() > heartbeat.max_interval.asMillisExact()) {
-    return (
-      `heartbeat.min_interval (${heartbeat.min_interval.toString()}) must not exceed ` +
-      `heartbeat.max_interval (${heartbeat.max_interval.toString()})`
-    );
-  }
-  return undefined;
-}
-
-const HEARTBEAT: StructSpec<HeartbeatConfig> = {
-  name: "HeartbeatConfig",
-  make: defaultHeartbeatConfig,
-  fields: {
-    default_interval: readDuration,
-    dormant_after_heartbeat_turns: readU32,
-    dormant_after_idle_time: readDuration,
-    min_interval: readDuration,
-    max_interval: readDuration,
-    wrap_up_grace_rounds: readU32,
-    defer_on_activity: readBool,
-  },
-};
-
 export interface TriggersConfig {
-  enabled: boolean;
   wake_cooldown: ConfigDuration;
   check_time_limit: ConfigDuration;
   max_wake_limit: ConfigDuration;
+  max_wrap_up_rounds: number;
+  max_idle_wakes: number;
+  idle_timeout: ConfigDuration;
   off: string[];
 }
 
 export const defaultTriggersConfig = (): TriggersConfig => ({
-  enabled: false,
   wake_cooldown: ConfigDuration.fromSecs(3600),
   check_time_limit: ConfigDuration.fromSecs(60),
   max_wake_limit: ConfigDuration.fromSecs(7200),
+  max_wrap_up_rounds: 3,
+  max_idle_wakes: 3,
+  idle_timeout: ConfigDuration.fromSecs(172_800),
   off: [],
 });
 
@@ -447,23 +398,23 @@ const TRIGGERS: StructSpec<TriggersConfig> = {
   name: "TriggersConfig",
   make: defaultTriggersConfig,
   fields: {
-    enabled: readBool,
     wake_cooldown: readDuration,
     check_time_limit: readDuration,
     max_wake_limit: readDuration,
+    max_wrap_up_rounds: readU32,
+    max_idle_wakes: readU32,
+    idle_timeout: readDuration,
     off: readStringSeq,
   },
 };
 
 interface AutonomyConfig {
   enabled: boolean;
-  heartbeat: HeartbeatConfig;
   triggers: TriggersConfig;
 }
 
 const defaultAutonomyConfig = (): AutonomyConfig => ({
   enabled: false,
-  heartbeat: defaultHeartbeatConfig(),
   triggers: defaultTriggersConfig(),
 });
 
@@ -472,7 +423,6 @@ const AUTONOMY: StructSpec<AutonomyConfig> = {
   make: defaultAutonomyConfig,
   fields: {
     enabled: readBool,
-    heartbeat: struct(HEARTBEAT),
     triggers: struct(TRIGGERS),
   },
 };
@@ -1120,7 +1070,7 @@ const NOTIFICATIONS: StructSpec<NotificationsConfig> = {
 };
 
 export type UsageBudgetPeriod = "hour" | "day" | "week" | "month";
-export type UsageBudgetAction = "warn" | "block" | "pause_background" | "pause_heartbeat";
+export type UsageBudgetAction = "warn" | "block" | "pause_background" | "pause_wakes";
 export type BudgetWeekday =
   | "monday"
   | "tuesday"
@@ -1135,7 +1085,7 @@ const BUDGET_ACTIONS: readonly UsageBudgetAction[] = [
   "warn",
   "block",
   "pause_background",
-  "pause_heartbeat",
+  "pause_wakes",
 ];
 const BUDGET_WEEKDAYS: readonly BudgetWeekday[] = [
   "monday",

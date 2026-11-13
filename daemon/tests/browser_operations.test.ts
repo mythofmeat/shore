@@ -182,7 +182,7 @@ describe("how the settings pages word things", () => {
     expect(sourceLabel("thread-default", "ada")).toBe("Uses ada’s default");
     expect(sourceLabel("thread-default", null)).toBe("Uses the character’s default");
     expect(sourceLabel("chat.model", null)).toBe("From the configuration (chat.model)");
-    expect(sourceLabel("background.heartbeat.model", null)).toBe("From the configuration (background.heartbeat.model)");
+    expect(sourceLabel("triggers.model", null)).toBe("From the configuration (triggers.model)");
     expect(sourceLabel("chat model", null)).toBe("chat model");
     expect(sourceLabel("x.model.y", null)).toBe("x.model.y");
   });

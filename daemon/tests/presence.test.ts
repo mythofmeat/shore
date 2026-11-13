@@ -6,7 +6,7 @@ import { lastSeen, noteSeen, presence, setPresence, unshownPresence } from "../s
 import { loadConfig } from "../src/config/loader.ts";
 import { configSchema } from "../src/config/schema.ts";
 import { rejectionOf } from "./support/outcome.ts";
-import { assemblePrompt, DIARY_FOR_CHAT, diaryText, heartbeatRunningText, presenceText } from "../src/engine/prompt.ts";
+import { assemblePrompt, DIARY_FOR_CHAT, diaryText, wakeRunningText, presenceText } from "../src/engine/prompt.ts";
 import type { Message } from "../src/engine/types.ts";
 import { writeState } from "../src/storage/store.ts";
 import { testTmp } from "./support/tmp.ts";
@@ -96,9 +96,9 @@ function said(id: string, text: string, at: number, extra: Partial<Message> = {}
   return { msg_id: id, role: "user", content: text, images: [], content_blocks: [{ type: "text", text }], alternatives: [], timestamp: new Date(at).toISOString(), ...extra };
 }
 
-test("a message that arrived with a new status says so right above what the user wrote, after the diary and a running heartbeat", () => {
+test("a message that arrived with a new status says so right above what the user wrote, after the diary and a running wake", () => {
   const asleep = { status: "asleep", set_at: AT };
-  const left = [{ id: "d1", at: AT, thread: "heartbeat", source: "heartbeat" as const, text: "The lamp is lit." }];
+  const left = [{ id: "d1", at: AT, thread: "own-time", source: "wake" as const, text: "The lamp is lit." }];
   const heartbeat = { started_at: new Date(T0 + HOUR).toISOString() };
   const prompt = assemblePrompt({
     character_name: "ada", display_name: "eve", has_prior_context: false, user_timestamp_mode: "never",
@@ -111,7 +111,7 @@ test("a message that arrived with a new status says so right above what the user
 
   expect(prompt.messages.map((message) => message.content_blocks.map((block) => block.type === "text" ? block.text : ""))).toEqual([
     ['[Their status, set about an hour ago: "asleep"]', "good morning"],
-    [diaryText(left, DIARY_FOR_CHAT, "UTC"), heartbeatRunningText(heartbeat, "UTC"), "[Their status was cleared 30 minutes ago.]", "still there?"],
+    [diaryText(left, DIARY_FOR_CHAT, "UTC"), wakeRunningText(heartbeat, "UTC"), "[Their status was cleared 30 minutes ago.]", "still there?"],
     ["and now"],
   ]);
   expect(prompt.messages[0]?.content).toBe('[Their status, set about an hour ago: "asleep"]\n\ngood morning');

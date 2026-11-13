@@ -387,7 +387,7 @@ fn plan_action_phrase(action: &str) -> String {
     match action {
         "block" => "blocks Claude calls".to_owned(),
         "warn" => "only warns".to_owned(),
-        "pause_heartbeat" => "pauses the heartbeat".to_owned(),
+        "pause_wakes" => "pauses wakes".to_owned(),
         "pause_background" => "pauses background work".to_owned(),
         other => other.replace('_', " "),
     }
@@ -415,7 +415,7 @@ fn action_phrase(action: &str) -> String {
     match action {
         "block" => "blocks at limit".to_owned(),
         "warn" => "warns at limit".to_owned(),
-        "pause_heartbeat" => "pauses the heartbeat at limit".to_owned(),
+        "pause_wakes" => "pauses wakes at limit".to_owned(),
         "pause_background" => "pauses background work at limit".to_owned(),
         other => format!("{} at limit", other.replace('_', " ")),
     }
@@ -709,6 +709,73 @@ mod tests {
             }}),
         );
         String::from_utf8(buf).unwrap_or_default()
+    }
+
+    fn budgets_shown(data: &Value) -> Vec<String> {
+        set_color_enabled(false);
+        let mut buf = Vec::new();
+        write_budgets(&mut buf, data);
+        String::from_utf8(buf)
+            .unwrap_or_default()
+            .lines()
+            .map(|line| line.split_whitespace().collect::<Vec<_>>().join(" "))
+            .filter(|line| !line.is_empty())
+            .collect()
+    }
+
+    fn budget_line(action: &str) -> String {
+        let budget = json!({ "name": "beats", "period": "month", "current_cost": 1.0, "cost_limit": 4.0, "action": action });
+        budgets_shown(&json!({ "budgets": [budget] }))
+            .get(1)
+            .cloned()
+            .unwrap_or_default()
+    }
+
+    fn plan_note(action: &str) -> String {
+        let window = json!({ "window": "five_hour", "utilization": 0.9, "limit_at": 0.8, "over_limit": true, "action": action });
+        budgets_shown(&json!({
+            "budgets": [],
+            "claude_plan_limits": { "subscription_type": "max", "windows": [window] },
+        }))
+        .last()
+        .cloned()
+        .unwrap_or_default()
+    }
+
+    #[test]
+    fn a_budget_says_what_it_does_at_its_limit() {
+        assert_eq!(budget_line("pause_wakes"), "beats pauses wakes at limit");
+        assert_eq!(budget_line("block"), "beats blocks at limit");
+        assert_eq!(budget_line("warn"), "beats warns at limit");
+        assert_eq!(
+            budget_line("pause_background"),
+            "beats pauses background work at limit"
+        );
+        assert_eq!(budget_line("stop_all"), "beats stop all at limit");
+    }
+
+    #[test]
+    fn a_claude_plan_window_past_its_limit_says_what_that_stops() {
+        assert_eq!(
+            plan_note("pause_wakes"),
+            "5-hour is past its 80% limit and pauses wakes"
+        );
+        assert_eq!(
+            plan_note("block"),
+            "5-hour is past its 80% limit and blocks Claude calls"
+        );
+        assert_eq!(
+            plan_note("warn"),
+            "5-hour is past its 80% limit and only warns"
+        );
+        assert_eq!(
+            plan_note("pause_background"),
+            "5-hour is past its 80% limit and pauses background work"
+        );
+        assert_eq!(
+            plan_note("stop_all"),
+            "5-hour is past its 80% limit and stop all"
+        );
     }
 
     #[test]

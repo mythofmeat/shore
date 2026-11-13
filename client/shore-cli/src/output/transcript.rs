@@ -690,14 +690,14 @@ pub(crate) fn print_heartbeat_log(data: &serde_json::Value) {
 pub(crate) fn write_heartbeat_log<W: Write>(out: &mut W, data: &serde_json::Value, width: usize) {
     let events: &[serde_json::Value] = data["events"].as_array().map_or(&[], Vec::as_slice);
     if events.is_empty() {
-        write_section_header(out, "heartbeat events", "", width);
-        print_dim_line(out, "(no heartbeat events)");
+        write_section_header(out, "wake events", "", width);
+        print_dim_line(out, "(no wake events)");
         return;
     }
 
     write_section_header(
         out,
-        "heartbeat events",
+        "wake events",
         &format!("{} events", events.len()),
         width,
     );

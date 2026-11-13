@@ -960,7 +960,7 @@
             "warn",
             "block",
             "pause_background",
-            "pause_heartbeat"
+            "pause_wakes"
           ]
         },
         "ClaudeAccountReport": {
@@ -4008,36 +4008,18 @@
         "AutonomyStatusReport": {
           "type": "object",
           "properties": {
-            "heartbeat_state": {
-              "$ref": "#/$defs/AutonomyHeartbeatState"
+            "state": {
+              "$ref": "#/$defs/AutonomyState"
             },
-            "ticks_without_user": {
+            "wakes_without_user": {
               "type": "integer",
               "format": "uint64",
               "minimum": 0
             },
-            "dormant_after_heartbeat_turns": {
+            "dormant_after_wakes": {
               "type": "integer",
               "format": "uint64",
               "minimum": 0
-            },
-            "default_interval_secs": {
-              "type": "integer",
-              "format": "uint64",
-              "minimum": 0
-            },
-            "next_wake_at": {
-              "type": [
-                "string",
-                "null"
-              ]
-            },
-            "seconds_until_wake": {
-              "type": [
-                "integer",
-                "null"
-              ],
-              "format": "int64"
             },
             "last_user_at": {
               "type": [
@@ -4050,16 +4032,6 @@
                 "integer",
                 "null"
               ],
-              "format": "uint64",
-              "minimum": 0
-            },
-            "min_interval_secs": {
-              "type": "integer",
-              "format": "uint64",
-              "minimum": 0
-            },
-            "max_interval_secs": {
-              "type": "integer",
               "format": "uint64",
               "minimum": 0
             },
@@ -4076,17 +4048,14 @@
             }
           },
           "required": [
-            "heartbeat_state",
-            "ticks_without_user",
-            "dormant_after_heartbeat_turns",
-            "default_interval_secs",
-            "min_interval_secs",
-            "max_interval_secs",
+            "state",
+            "wakes_without_user",
+            "dormant_after_wakes",
             "dormant_after_idle_time_secs",
             "recent_events"
           ]
         },
-        "AutonomyHeartbeatState": {
+        "AutonomyState": {
           "type": "string",
           "enum": [
             "Active",
@@ -4895,7 +4864,7 @@
           "type": "string",
           "enum": [
             "message",
-            "heartbeat",
+            "wake",
             "compaction",
             "dream"
           ]
@@ -6692,7 +6661,6 @@
         "DiarySource": {
           "type": "string",
           "enum": [
-            "heartbeat",
             "wake",
             "trigger",
             "shore",
@@ -6923,10 +6891,10 @@
         "keepalive": {
           "$ref": "#/$defs/KeepaliveActivation"
         },
-        "heartbeat": {
+        "own_time": {
           "anyOf": [
             {
-              "$ref": "#/$defs/ActivatedHeartbeat"
+              "$ref": "#/$defs/AutonomyState"
             },
             {
               "type": "null"
@@ -6938,7 +6906,7 @@
         "character",
         "registered",
         "keepalive",
-        "heartbeat"
+        "own_time"
       ],
       "$defs": {
         "KeepaliveActivation": {
@@ -7099,31 +7067,7 @@
             "wrote_cache"
           ]
         },
-        "ActivatedHeartbeat": {
-          "type": "object",
-          "properties": {
-            "state": {
-              "$ref": "#/$defs/AutonomyHeartbeatState"
-            },
-            "next_wake_at": {
-              "type": [
-                "string",
-                "null"
-              ]
-            },
-            "seconds_until_wake": {
-              "type": [
-                "integer",
-                "null"
-              ],
-              "format": "int64"
-            }
-          },
-          "required": [
-            "state"
-          ]
-        },
-        "AutonomyHeartbeatState": {
+        "AutonomyState": {
           "type": "string",
           "enum": [
             "Active",

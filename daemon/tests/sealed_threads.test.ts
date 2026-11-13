@@ -4,7 +4,7 @@ import { mkdir, mkdtemp } from "node:fs/promises";
 import { join } from "node:path";
 
 import { addDiaryNote, keptDiary, recentDiary, unfoldedDiary, unseenDiary } from "../src/autonomy/diary.ts";
-import { triggerFiredNote } from "../src/autonomy/heartbeat_shape.ts";
+import { triggerFiredNote } from "../src/autonomy/wake_shape.ts";
 import { firedBy } from "../src/autonomy/runner.ts";
 import { sealedListNote, sealedWakeNote } from "../src/autonomy/sealed_notes.ts";
 import { CallStore } from "../src/call_store.ts";
@@ -180,14 +180,14 @@ test("from inside a sealed thread the list of threads says where the character i
   const { data } = await world();
   await sealThread(data, "ada", { id: "gift", label: "Something for you", unsealAt: T0 + HOUR }, T0);
   const listed = await handleListThreads({ dataDir: data, character: "ada", thread: "gift", userName: "eve", timeZone: "UTC", now: () => T0 });
-  expect(listed).toStartWith('Your home thread is "main", where the messages you send from heartbeats arrive. You\'re in "gift", which is sealed.\n\nmain (home) · compaction on');
+  expect(listed).toStartWith('Your home thread is "main". You\'re in "gift", which is sealed.\n\nmain (home) · compaction on');
   expect(listed).not.toContain("you're here");
   expect(listed).toEndWith('- `gift` "Something for you", opens Friday 2026-10-30 · 1:00 PM]');
   const elsewhere = await handleListThreads({ dataDir: data, character: "ada", thread: "ring", userName: "eve", timeZone: "UTC", now: () => T0 });
-  expect(elsewhere).toStartWith('Your home thread is "main", where the messages you send from heartbeats arrive. You\'re in "ring".\n\n');
+  expect(elsewhere).toStartWith('Your home thread is "main". You\'re in "ring".\n\n');
   expect(elsewhere).toContain("ring (you're here) · compaction off");
   const nowhere = await handleListThreads({ dataDir: data, character: "ada", thread: "ghost", userName: "eve", timeZone: "UTC", now: () => T0 });
-  expect(nowhere).toStartWith('Your home thread is "main", where the messages you send from heartbeats arrive. You\'re in it.\n\nmain (home, you\'re here) · compaction on');
+  expect(nowhere).toStartWith('Your home thread is "main". You\'re in it.\n\nmain (home, you\'re here) · compaction on');
 });
 
 function request(sealed: boolean): SidecarRequest {

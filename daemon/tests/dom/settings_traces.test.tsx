@@ -55,7 +55,7 @@ describe("the traces page", () => {
     expect([none.host.textContent, asked(before)]).toEqual(["Choose a character in the sidebar first; these settings belong to a character.", []]);
     const view = await traces();
     expect(view.host.querySelector(":scope > .settings-description")?.textContent).toBe("Stored diagnostics for ada: model calls, background activity and errors.");
-    const names = ["Model calls", "Thread log", "Heartbeat transcript", "Dream transcript", "Heartbeat events", "Errors", "Subagents"];
+    const names = ["Model calls", "Thread log", "Wake transcript", "Dream transcript", "Wake events", "Errors", "Subagents"];
     const selected = () => names.map((name) => [button(view.host, name).getAttribute("aria-selected"), button(view.host, name).getAttribute("aria-checked")].join());
     expect(selected()).toEqual(["true,true", ...names.slice(1).map(() => "false,false")]);
     const reads: unknown[] = [asked(before)];
@@ -194,7 +194,7 @@ describe("the traces page", () => {
     expect(asked(before)).toEqual([["log", { turns: 10 }], ["log", { turns: 25 }], ["log", { turns: 25, role: "assistant" }], ["log", { turns: 25, role: "assistant" }]]);
   });
 
-  test("heartbeat and dream transcripts show each round, or say they are off or empty", async () => {
+  test("wake and dream transcripts show each round, or say they are off or empty", async () => {
     const time = await formats();
     const answers: Record<string, unknown[]> = {
       heartbeat: [transcript("heartbeat", [row(1), row(2, { model: null, finish_reason: null })]), transcript("heartbeat", [], false), transcript("heartbeat", [row(3)])],
@@ -204,12 +204,12 @@ describe("the traces page", () => {
     const view = await traces();
     const before = app.socket().sent.length;
     const rounds = () => [...view.host.querySelectorAll(".settings-section details.payload")].map((item) => [item.querySelector("summary")?.textContent, item.querySelector("dd")?.textContent]);
-    await tab(view.host, "Heartbeat transcript");
+    await tab(view.host, "Wake transcript");
     expect([rounds(), empty(view.host)]).toEqual([[[`${time(DAY)} · round 2 · opus · end_turn`, "hello"], [`${time(DAY)} · round 2 · ? · `, "hello"]], []]);
     const count = () => view.host.querySelector("select[aria-label='Entries to show']");
     await type(count(), "10");
     await settle();
-    expect([rounds(), empty(view.host)]).toEqual([[], ["Heartbeat transcripts are off.", "No heartbeat calls yet."]]);
+    expect([rounds(), empty(view.host)]).toEqual([[], ["Wake transcripts are off.", "No wake calls yet."]]);
     await type(count(), "50");
     await settle();
     expect([rounds().length, empty(view.host)]).toEqual([1, []]);
@@ -223,7 +223,7 @@ describe("the traces page", () => {
     ]);
   });
 
-  test("heartbeat events and errors are tables, with API key fallbacks only when there were some", async () => {
+  test("wake events and errors are tables, with API key fallbacks only when there were some", async () => {
     const time = await formats();
     const error = (text: string) => ({ timestamp: DAY, error_type: "provider", message: text, context: "turn 4" });
     const fallback = (extra: Record<string, unknown> = {}) => ({ timestamp: DAY, provider: "anthropic", model: "opus", character: "ada", from_key: "main", kind: "rate_limit", reason: "429", ...extra });
@@ -237,13 +237,13 @@ describe("the traces page", () => {
     };
     app.answer((request) => answers[String(request["name"])]?.shift());
     const view = await traces();
-    await tab(view.host, "Heartbeat events");
+    await tab(view.host, "Wake events");
     const heads = () => [...view.host.querySelectorAll(".settings-section thead")].map((head) => head.textContent);
     expect([heads(), cells(view.host), empty(view.host)]).toEqual([["WhenEventDetail"], [[time(DAY), "message sent", "said hi"]], []]);
     const count = () => view.host.querySelector("select[aria-label='Entries to show']");
     await type(count(), "10");
     await settle();
-    expect([cells(view.host), empty(view.host)]).toEqual([[], ["No heartbeat events yet."]]);
+    expect([cells(view.host), empty(view.host)]).toEqual([[], ["No wake events yet."]]);
     await tab(view.host, "Errors");
     expect([heads(), view.host.querySelector(".tool-label")?.textContent, empty(view.host)]).toEqual([["WhenTypeMessageContext", "WhenProviderModelFrom → toReason"], "API key fallbacks", []]);
     const tables = () => [...view.host.querySelectorAll(".settings-section .table-wrap")].map((wrap) => cells(wrap));
@@ -302,7 +302,7 @@ describe("the traces page", () => {
     app.answer((request) => { if (!["list_threads", "discover_operations", "list_characters"].includes(String(request["name"]))) throw new Error(`no ${String(request["name"])}`); return undefined; });
     const view = await traces();
     const alerts: unknown[] = [view.host.querySelector("[role=alert]")?.textContent];
-    for (const name of ["Thread log", "Heartbeat transcript", "Dream transcript", "Heartbeat events", "Errors", "Subagents"]) {
+    for (const name of ["Thread log", "Wake transcript", "Dream transcript", "Wake events", "Errors", "Subagents"]) {
       await tab(view.host, name);
       alerts.push(view.host.querySelector("[role=alert]")?.textContent);
     }

@@ -1,6 +1,7 @@
 import { join, resolve } from "node:path";
 
 import type { LoadedConfig } from "../config/loader.ts";
+import { toolEnabled } from "../tools/registry.ts";
 import { characterDataDir } from "../config/dirs.ts";
 import { hostZone } from "../ledger/zoned.ts";
 import { shoreLog } from "../log.ts";
@@ -55,9 +56,11 @@ export function checkFacts(now: number, user: UserFacts, activity: Record<string
   };
 }
 
-export function triggerSettings(autonomy: LoadedConfig["app"]["behavior"]["autonomy"]): TriggerSettings {
+export function triggerSettings(app: LoadedConfig["app"]): TriggerSettings {
+  const { autonomy } = app.behavior;
   return {
-    enabled: autonomy.enabled && autonomy.triggers.enabled,
+    enabled: autonomy.enabled,
+    checks: toolEnabled(app.tools, "bash"),
     wakeCooldownMs: autonomy.triggers.wake_cooldown.asMillis(),
     checkLimitMs: autonomy.triggers.check_time_limit.asMillis(),
     maxWakeLimitMs: autonomy.triggers.max_wake_limit.asMillis(),
@@ -109,8 +112,8 @@ export class TriggerService {
       characterDir: characterDataDir(config().dirs.data, character),
       timeZone: hostZone(),
       now: this.#now,
-      settings: () => triggerSettings(config().app.behavior.autonomy),
-      dormant: () => autonomy.status(character)?.heartbeat_state !== "Active",
+      settings: () => triggerSettings(config().app),
+      dormant: () => autonomy.status(character)?.state !== "Active",
       lastUserAt: () => autonomy.status(character)?.last_user_at,
       readFile: async () => {
         const workspace = characterWorkspace(config(), character);

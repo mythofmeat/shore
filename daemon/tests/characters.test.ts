@@ -94,7 +94,7 @@ test("an invalid character overlay fails closed with the rejected field", async 
   writeFileSync(join(configDir, "characters", "Alice", "workspace", "SOUL.md"), "Alice");
   writeFileSync(
     join(configDir, "characters", "Alice", "config.toml"),
-    '[heartbeat]\ninvalid_setting = true\n',
+    '[triggers]\ninvalid_setting = true\n',
   );
 
   const registry = await CharacterRegistry.create(
@@ -105,6 +105,6 @@ test("an invalid character overlay fails closed with the rejected field", async 
 
   expect(() => registry.effectiveConfig("Alice")).toThrow(CharacterConfigError);
   expect(() => registry.effectiveConfig("Alice")).toThrow(
-    `${join(configDir, "characters", "Alice", "config.toml")}: unknown field \`heartbeat.invalid_setting\``,
+    `${join(configDir, "characters", "Alice", "config.toml")}: unknown field \`triggers.invalid_setting\``,
   );
 });

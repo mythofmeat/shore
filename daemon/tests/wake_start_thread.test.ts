@@ -7,7 +7,7 @@ import { eventsForResponse } from "./support/stream.ts";
 import { afterFirstChat } from "./support/chat_world.ts";
 import { restoreTestEnv } from "./support/env.ts";
 
-const KEY_ENV = "SHORE_HEARTBEAT_START_THREAD_KEY";
+const KEY_ENV = "SHORE_WAKE_START_THREAD_KEY";
 
 afterAll(restoreTestEnv);
 
@@ -23,13 +23,13 @@ const START_AND_EDIT: GenerateResponse["content_blocks"] = [
 
 function threadToolsProvider(toolResults: string[], calls: GenerateResponse["content_blocks"] = START_AND_EDIT): SidecarProvider {
   const reply = (request: SidecarRequest): GenerateResponse => {
-    const heartbeat = request.context?.call_type.startsWith("heartbeat") === true;
+    const waking = request.context?.call_type.startsWith("heartbeat") === true;
     const tail = request.messages.at(-1)?.content;
     const results = Array.isArray(tail) ? tail.filter((block) => block.type === "tool_result") : [];
     for (const result of results) toolResults.push(JSON.stringify(result));
-    const call = heartbeat ? calls[toolResults.length] : undefined;
+    const call = waking ? calls[toolResults.length] : undefined;
     const blocks: GenerateResponse["content_blocks"] = call === undefined
-      ? [{ type: "text", text: heartbeat ? "HEARTBEAT_OK" : "hello" }]
+      ? [{ type: "text", text: waking ? "NO_NOTE" : "hello" }]
       : [call];
     return {
       model: request.model,
@@ -43,11 +43,11 @@ function threadToolsProvider(toolResults: string[], calls: GenerateResponse["con
   return { generate: async (request) => reply(request), stream: (request) => eventsForResponse(reply(request)) };
 }
 
-test("a thread started and edited on a heartbeat opens with her message, takes the edit and shows up for the user, as in chat", async () => {
+test("a thread started and edited on a wake opens with her message, takes the edit and shows up for the user, as in chat", async () => {
   const toolResults: string[] = [];
   const events: ServerMessage[] = [];
   await afterFirstChat({
-    name: "heartbeat-start-thread",
+    name: "wake-start-thread",
     keyEnv: KEY_ENV,
     provider: threadToolsProvider(toolResults),
     tools: ["start_thread", "edit_thread"],
@@ -55,7 +55,7 @@ test("a thread started and edited on a heartbeat opens with her message, takes t
     model: { maxToolIterations: 3 },
     emitEvent: (event) => events.push(event),
   }, async ({ config, runtime }) => {
-    expect(runtime.autonomy.forceHeartbeatNow("ada")).toBeDefined();
+    expect(runtime.autonomy.wakeNow("ada")).toBeDefined();
     await runtime.autonomy.tick();
 
     expect(toolResults).toHaveLength(2);
@@ -71,7 +71,7 @@ test("a thread started and edited on a heartbeat opens with her message, takes t
     ]);
     expect(events.filter((event) => event.type === "new_message" && event.thread === "lighthouse")).toHaveLength(1);
     expect(events.filter((event) => event.type === "threads_changed")).toEqual([
-      { type: "threads_changed", character: "ada", thread: "heartbeat" },
+      { type: "threads_changed", character: "ada", thread: "own-time" },
       { type: "threads_changed", character: "ada", thread: "lighthouse" },
       { type: "threads_changed", character: "ada", thread: "lighthouse" },
     ]);
@@ -96,7 +96,7 @@ test("a thread started with a folder goes in that folder of the user's thread li
     autonomy: true,
     model: { maxToolIterations: 5 },
   }, async ({ config, runtime }) => {
-    expect(runtime.autonomy.forceHeartbeatNow("ada")).toBeDefined();
+    expect(runtime.autonomy.wakeNow("ada")).toBeDefined();
     await runtime.autonomy.tick();
 
     expect(toolResults.map((result) => (JSON.parse(result) as { content: string }).content)).toEqual([
@@ -107,7 +107,7 @@ test("a thread started with a folder goes in that folder of the user's thread li
     ]);
     const index = await readThreadsIndex(config.dirs.data, "ada");
     expect(index?.folders).toEqual([{ name: "Projects", threads: ["lighthouse", "harbor"] }, { name: "Stories", threads: ["pier"] }]);
-    expect(index?.threads.map((thread) => thread.id)).toEqual(["main", "heartbeat", "lighthouse", "harbor", "pier"]);
+    expect(index?.threads.map((thread) => thread.id)).toEqual(["main", "own-time", "lighthouse", "harbor", "pier"]);
     const listed = await handleListThreads({ dataDir: config.dirs.data, character: "ada", userName: "peggy", timeZone: "UTC" });
     expect(listed).toContain('harbor "harbor" (in the folder "Projects") · compaction on');
     expect(listed).toContain('pier "pier" (in the folder "Stories") · compaction on');

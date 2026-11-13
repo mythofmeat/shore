@@ -21,7 +21,7 @@ import { shownAttempt } from "./reply_marks.ts";
 import { activityHeadline, blockViews, bodyItems, chatLogMessageId, formatToolInput, isChatLogTool, messageCopyLabel, swipeState, timeLabel, toolSummary, type BlockView, type StepView } from "./transcript.ts";
 import { showWorkspaceNote, swipe as swipeTo } from "./actions.ts";
 
-const OPENERS: readonly (readonly [prefix: string, label: string])[] = [["[heartbeat]", "Heartbeat"], ["[wake]", "Wake"]];
+const OPENERS: readonly string[] = ["[wake]", "[heartbeat]"];
 
 function truncatedLine(text: string): string {
   const line = Array.from(text.trim().split("\n")[0] ?? "");
@@ -289,12 +289,12 @@ export const MessageRow = memo(function MessageRow({ message, character, avatar,
     { label: "Regenerate with a reason…", icon: "regenerate", onSelect: () => openConversationDialog("reason"), disabled: busy },
   ] : [];
   if (message.origin === "autonomous" && !assistant) {
-    const opener = message.role === "user" ? OPENERS.find(([prefix]) => message.content.startsWith(prefix)) : undefined;
+    const opener = message.role === "user" ? OPENERS.find((prefix) => message.content.startsWith(prefix)) : undefined;
     const when = timeLabel(message.timestamp);
-    const summary = opener === undefined ? truncatedLine(message.content) : when === "" ? opener[1] : `${opener[1]} · ${when}`;
+    const summary = opener === undefined ? truncatedLine(message.content) : when === "" ? "Wake" : `Wake · ${when}`;
     return <details className="system-note heartbeat-note">
       <summary>{summary}</summary>
-      <Markdown text={opener === undefined ? message.content : message.content.slice(opener[0].length).trim()} />
+      <Markdown text={opener === undefined ? message.content : message.content.slice(opener.length).trim()} />
     </details>;
   }
   if (message.role === "system") return <div className="system-note"><Markdown text={message.content} /></div>;

@@ -7,18 +7,15 @@ import {
   isSendMessageTool,
   type ImageRef,
   type ToolUse,
-} from "./heartbeat_shape.ts";
-import { appendWrapUpNudge, generatedImageRef, timeLeftPhrase, wrapUpNudgeText } from "./heartbeat_shape.ts";
+} from "./wake_shape.ts";
+import { appendWrapUpNudge, generatedImageRef, timeLeftPhrase } from "./wake_shape.ts";
 import type { GenerateResponse, SidecarRequest, ToolDefinition, Usage } from "../llm/types.ts";
 import type { ContentBlock } from "../engine/types.ts";
 import { truncateSummary } from "../notifications.ts";
 import type { CapturedTool } from "../transcript_capture.ts";
 export type { CapturedTool };
 
-export const HEARTBEAT_TIME_LIMIT_MS = 30 * 60 * 1000;
-export const HEARTBEAT_WRAP_UP_MS = 5 * 60 * 1000;
-
-export interface HeartbeatToolResult {
+export interface LoopToolResult {
   output: string;
   isError: boolean;
   value?: unknown;
@@ -32,13 +29,13 @@ export interface TranscriptRound {
   captured: CapturedTool[];
 }
 
-export interface HeartbeatRound {
+export interface LoopRound {
   role: "user" | "assistant" | "system";
   blocks: ContentBlock[];
   model?: string;
 }
 
-export interface HeartbeatLoopDeps {
+export interface BackgroundLoopDeps {
   character: string;
   generate: (request: SidecarRequest, phase: ToolPhase, signal: AbortSignal) => Promise<GenerateResponse | undefined>;
   dispatch: (
@@ -46,7 +43,7 @@ export interface HeartbeatLoopDeps {
     input: unknown,
     toolUseId?: string,
     tools?: readonly ToolDefinition[],
-  ) => Promise<HeartbeatToolResult>;
+  ) => Promise<LoopToolResult>;
   note: (text: string) => void;
   recordTranscript?: (round: TranscriptRound) => void;
   wrapUpGrace: number;
@@ -54,22 +51,23 @@ export interface HeartbeatLoopDeps {
   checkPictures?: (text: string) => Promise<string[]>;
   news?: (wrappingUp: boolean) => string | undefined;
   newsHeard?: () => void;
-  persist?: (round: HeartbeatRound) => Promise<void>;
-  timeLimitMs?: number;
-  wrapUpMs?: number;
-  wrapUpText?: (msLeft: number, rounds: number) => string;
-  callTypes?: readonly [string, string];
-  name?: string;
+  persist?: (round: LoopRound) => Promise<void>;
+  timeLimitMs: number;
+  wrapUpMs: number;
+  wrapUpText: (msLeft: number, rounds: number) => string;
+  callTypes: readonly [string, string];
+  name: string;
   interrupted?: () => boolean;
 }
 
-export interface HeartbeatLoopResult {
+export interface BackgroundLoopResult {
   sendMessageText: string | undefined;
   images: ImageRef[];
   failedRound?: number | undefined;
   failure?: unknown;
   timedOut?: boolean;
   stoppedAt?: "time" | "rounds" | "interrupted";
+  rounds: number;
   usage?: Usage;
 }
 
@@ -79,9 +77,9 @@ export function pictureRetryText(problems: readonly string[]): string {
     "as it is, with only the names of those pictures shown.]";
 }
 
-export async function dispatchHeartbeatTools(
+export async function dispatchLoopTools(
   toolUses: readonly ToolUse[],
-  deps: Pick<HeartbeatLoopDeps, "dispatch" | "note">,
+  deps: Pick<BackgroundLoopDeps, "dispatch" | "note">,
   tools?: readonly ToolDefinition[],
 ): Promise<{ results: ContentBlock[]; captured: CapturedTool[]; images: ImageRef[] }> {
   const results: ContentBlock[] = [];
@@ -115,7 +113,7 @@ export async function dispatchHeartbeatTools(
     );
     captured.push({ name, input, output, isError });
 
-    if (name !== "set_next_wake" || isError) deps.note(`Tool: ${name} → ${truncateSummary(output, 80)}`);
+    deps.note(`Tool: ${name} → ${truncateSummary(output, 80)}`);
   }
 
   return { results, captured, images };
@@ -123,8 +121,8 @@ export async function dispatchHeartbeatTools(
 
 async function retryPictures(
   request: SidecarRequest,
-  result: HeartbeatLoopResult,
-  deps: HeartbeatLoopDeps,
+  result: Pick<BackgroundLoopResult, "sendMessageText">,
+  deps: BackgroundLoopDeps,
   run: () => Promise<GenerateResponse | undefined>,
   inTime: () => boolean,
 ): Promise<void> {
@@ -150,19 +148,18 @@ async function retryPictures(
   }
 }
 
-export async function runHeartbeatToolLoop(
+export async function runBackgroundLoop(
   request: SidecarRequest,
-  deps: HeartbeatLoopDeps,
-): Promise<HeartbeatLoopResult> {
-  const result: HeartbeatLoopResult = { sendMessageText: undefined, images: [] };
+  deps: BackgroundLoopDeps,
+): Promise<BackgroundLoopResult> {
+  const result: Omit<BackgroundLoopResult, "rounds"> = { sendMessageText: undefined, images: [] };
   let iteration = 0;
   let captured: CapturedTool[] = [];
-  const deadline = performance.now() + (deps.timeLimitMs ?? HEARTBEAT_TIME_LIMIT_MS);
-  const wrapUpMs = deps.wrapUpMs ?? HEARTBEAT_WRAP_UP_MS;
-  const [firstCall, loopCall] = deps.callTypes ?? ["heartbeat", "heartbeat_tool_loop"];
+  const deadline = performance.now() + deps.timeLimitMs;
+  const wrapUpMs = deps.wrapUpMs;
+  const [firstCall, loopCall] = deps.callTypes;
   const normalCap = deps.maxToolIterations ?? Number.POSITIVE_INFINITY;
-  const offersWake = request.tools?.some((tool) => tool.name === "set_next_wake") === true;
-  const name = deps.name ?? "Heartbeat";
+  const name = deps.name;
   let wrapUpEnd: number | undefined;
   let wrapUpFor: "time" | "rounds" = "time";
   let model: string | undefined;
@@ -210,7 +207,7 @@ export async function runHeartbeatToolLoop(
       }
       if (!nudgeDue) return;
       wrapUpEnd = iteration + deps.wrapUpGrace;
-      const nudge = deps.wrapUpText?.(left, deps.wrapUpGrace) ?? wrapUpNudgeText(left, deps.wrapUpGrace, offersWake);
+      const nudge = deps.wrapUpText(left, deps.wrapUpGrace);
       appendWrapUpNudge(call.messages, nudge);
       await deps.persist?.({ role: "system", blocks: [{ type: "text", text: nudge }] });
       deps.note(`Wrap-up nudge on round ${String(iteration)}, with ${timeLeftPhrase(left)} left`);
@@ -228,7 +225,7 @@ export async function runHeartbeatToolLoop(
       if (!recorded) await deps.persist?.({ role: "assistant", blocks: response.content_blocks, model: response.model });
     },
     runTool: async (use) => {
-      const round = await dispatchHeartbeatTools([[use.id, use.name, use.input]], deps, request.tools);
+      const round = await dispatchLoopTools([[use.id, use.name, use.input]], deps, request.tools);
       captured.push(...round.captured);
       result.images.push(...round.images);
       const message = captureToolSendMessage([[use.id, use.name, use.input]]);
@@ -264,5 +261,5 @@ export async function runHeartbeatToolLoop(
     clearTimeout(timer);
   }
   if (result.failedRound !== undefined && abort.signal.aborted) result.timedOut = true;
-  return result;
+  return { ...result, rounds: iteration };
 }

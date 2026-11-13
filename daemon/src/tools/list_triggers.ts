@@ -65,8 +65,8 @@ export function handleListTriggers(view: TriggersView | undefined, userName: str
   if (view === undefined) throw new ToolIoError("triggers are not available in this context");
   const where = `Your triggers, from ${TRIGGERS_FILE} in your workspace root.`;
   return [
-    view.enabled ? where : `${where} ${userName} hasn't turned triggers on, so none of them run.`,
-    ...(view.triggers.length === 0 && view.problems.length === 0 ? ["You have none yet."] : []),
+    view.enabled ? where : `${where} ${userName} has your own time switched off, so nothing fires.`,
+    ...(view.triggers.length === 0 && view.problems.length === 0 ? ["You have none there yet, so nothing wakes you on its own."] : []),
     ...view.triggers.map((each) => described(each, userName, timeZone)),
     ...(view.problems.length === 0 ? [] : [`Not running:\n${view.problems.map((problem) => `- ${problem}`).join("\n")}`]),
   ].join("\n\n");

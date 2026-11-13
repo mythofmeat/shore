@@ -193,13 +193,13 @@ fn the_thread_menu_lists_facts_matches_ids_and_labels_and_starts_on_the_current_
     app.enter_submenu("thread");
     assert_eq!(
         app.completion.header.as_deref(),
-        Some("thread \u{b7} home takes the heartbeat")
+        Some("thread \u{b7} home gets what own time sends")
     );
     assert_eq!(
         app.completion.candidates,
         [
             "main \u{2014} home \u{b7} 3 turns",
-            "beats \u{2014} heartbeats \u{b7} empty",
+            "beats \u{2014} own time \u{b7} empty",
             "story \u{2014} in fiction \u{b7} 2 new \u{b7} 1 turn \u{b7} warm \u{b7} opus \u{b7} locked \u{b7} The Storm",
         ]
     );
@@ -216,7 +216,7 @@ fn the_thread_menu_lists_facts_matches_ids_and_labels_and_starts_on_the_current_
     assert_eq!(filtered(&mut app, "eat").len(), 1, "an id matches anywhere");
     let _shown = filtered(&mut app, "");
     assert_eq!(
-        choose(&mut app, "beats \u{2014} heartbeats \u{b7} empty").as_deref(),
+        choose(&mut app, "beats \u{2014} own time \u{b7} empty").as_deref(),
         Some("thread use beats")
     );
 }

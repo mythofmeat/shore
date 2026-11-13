@@ -2,7 +2,7 @@
 export type ConfigTable = Record<string, unknown>;
 export type ConfigPath = readonly string[];
 
-export const CONFIG_SECTIONS = ["daemon", "chat", "image", "images", "providers", "heartbeat", "triggers", "presence", "marks", "compaction", "dreaming", "tools", "subagents", "budgets", "plan_limits", "notifications", "mcp", "matrix", "usage"] as const;
+export const CONFIG_SECTIONS = ["daemon", "chat", "image", "images", "providers", "triggers", "presence", "marks", "compaction", "dreaming", "tools", "subagents", "budgets", "plan_limits", "notifications", "mcp", "matrix", "usage"] as const;
 
 export interface ConfigField {
   internal: ConfigPath;
@@ -21,22 +21,13 @@ const CONFIG_FIELDS: readonly ConfigField[] = [
   field("defaults.system_prompt", "chat.system_prompt"),
   field("defaults.image_generation", "image.model"),
   field("defaults.subagent_model", "subagents.model"),
-  field("defaults.background.heartbeat", "heartbeat.model"),
+  field("defaults.background.heartbeat", "triggers.model"),
   field("defaults.background.compaction", "compaction.model"),
   field("defaults.background.dreaming", "dreaming.model"),
   field("behavior.user_message_timestamps", "chat.user_timestamps"),
   field("memory.thinking.replay_prior_thinking", "chat.reasoning_replay"),
   ...["max_retries", "retry_backoff"].map((key) => field(`advanced.${key}`, `chat.${key}`)),
-  ...Object.entries({
-    default_interval: "default_interval",
-    min_interval: "min_interval",
-    max_interval: "max_interval",
-    dormant_after_heartbeat_turns: "max_idle_turns",
-    dormant_after_idle_time: "idle_timeout",
-    wrap_up_grace_rounds: "max_wrap_up_rounds",
-    defer_on_activity: "defer_on_activity",
-  }).map(([old, key]) => field(`behavior.autonomy.heartbeat.${old}`, `heartbeat.${key}`)),
-  ...["enabled", "wake_cooldown", "check_time_limit", "max_wake_limit", "off"].map((key) => field(`behavior.autonomy.triggers.${key}`, `triggers.${key}`)),
+  ...["wake_cooldown", "check_time_limit", "max_wake_limit", "max_wrap_up_rounds", "max_idle_wakes", "idle_timeout", "off"].map((key) => field(`behavior.autonomy.triggers.${key}`, `triggers.${key}`)),
   field("behavior.presence.statuses", "presence.statuses"),
   field("behavior.marks.tags", "marks.tags"),
   ...["enabled", "write_memory", "archive_after", "min_turns", "max_turns", "max_context_tokens", "keep_recent_turns"].map((key) => field(`memory.compaction.${key}`, `compaction.${key}`)),
@@ -192,10 +183,10 @@ export function normalizeSettings(input: ConfigTable, source = "model settings")
 
 export function normalizeConfigSource(input: ConfigTable, source = "config"): ConfigTable {
   const table = structuredClone(input);
-  const heartbeat = valueAt(table, ["heartbeat", "enabled"]);
-  if (heartbeat !== undefined) {
-    removeAt(table, ["heartbeat", "enabled"]);
-    putAt(table, ["behavior", "autonomy", "enabled"], heartbeat);
+  const ownTime = valueAt(table, ["triggers", "enabled"]);
+  if (ownTime !== undefined) {
+    removeAt(table, ["triggers", "enabled"]);
+    putAt(table, ["behavior", "autonomy", "enabled"], ownTime);
   }
   const notifications = table.notifications;
   if (isConfigTable(notifications)) {
@@ -245,7 +236,7 @@ export function normalizeConfigSource(input: ConfigTable, source = "config"): Co
   }
   const budgets = valueAt(table, ["usage", "budgets"]);
   if (Array.isArray(budgets)) for (const budget of budgets) if (isConfigTable(budget)) toInternal(budget, BUDGET_FIELDS);
-  for (const section of ["heartbeat", "triggers", "presence", "marks", "compaction", "dreaming", "matrix", "image"]) if (isConfigTable(table[section]) && Object.keys(table[section]).length === 0) delete table[section];
+  for (const section of ["triggers", "presence", "marks", "compaction", "dreaming", "matrix", "image"]) if (isConfigTable(table[section]) && Object.keys(table[section]).length === 0) delete table[section];
   return table;
 }
 
@@ -261,7 +252,7 @@ export function canonicalConfigPath(path: ConfigPath): string[] {
     const mapped = translatePath(path, rule.internal, rule.canonical);
     if (mapped !== undefined) { result = mapped; break; }
   }
-  if (path.join(".") === "behavior.autonomy.enabled") return ["heartbeat", "enabled"];
+  if (path.join(".") === "behavior.autonomy.enabled") return ["triggers", "enabled"];
   if (result[0] === "providers" && result[2] === "defaults") result.splice(2, 1);
   const settingIndex = result[0] === "providers" ? 2 : result[0] === "chat" && result[1]?.includes(":") ? 2 : undefined;
   if (settingIndex !== undefined && result[settingIndex] !== undefined) result[settingIndex] = canonicalSettingKey(result[settingIndex]);
@@ -281,7 +272,7 @@ export function publicConfig(input: ConfigTable): ConfigTable {
     const existing = valueAt(out, target);
     putAt(out, target, isConfigTable(value) && isConfigTable(existing) ? { ...value, ...existing } : value);
   }
-  putAt(out, ["heartbeat", "enabled"], valueAt(input, ["behavior", "autonomy", "enabled"]) === true);
+  putAt(out, ["triggers", "enabled"], valueAt(input, ["behavior", "autonomy", "enabled"]) === true);
   const enabled = valueAt(input, ["notifications", "enabled"]);
   putAt(out, ["notifications", "via"], enabled === true ? valueAt(input, ["notifications", "backend"]) ?? "notify_send" : "off");
   const events = valueAt(input, ["notifications", "events"]);

@@ -48,7 +48,6 @@ export interface ToolContextDeps extends Partial<ToolConversation> {
   imageGenerator?: ToolContext["imageGenerator"];
   modelHistoryQuery?: ToolContext["modelHistoryQuery"];
   activityStats?: (character: string, days: number) => ReturnType<ActivityStatsLookup>;
-  scheduleNextWake?: (character: string, hoursFromNow: number, reason: string) => number | undefined;
   triggersView?: (character: string) => TriggersView;
   push?: (character: string, message: string) => Promise<PushOutcome>;
   wakeInThread?: (character: string, from: string, request: WakeInThreadRequest) => WakeHandOff;
@@ -86,7 +85,6 @@ export async function buildToolContext(
 
   const mcp = deps.mcpRegistry;
   const activityStats = deps.activityStats;
-  const scheduleNextWake = deps.scheduleNextWake;
   const triggersView = deps.triggersView;
   const push = deps.push;
   const wakeInThread = deps.wakeInThread;
@@ -113,14 +111,11 @@ export async function buildToolContext(
     configDir,
     historyIndexPath: historyIndexPath(config.dirs.cache, charName),
     userName,
-    guide: (input) => readGuide(input, guideValues(config, charName, userName), ALL_TOOLS.map((tool) => ({ name: tool.name, enabled: toolEnabled(config.app.tools, tool.name) }))),
+    guide: (input) => readGuide(input, guideValues(config, userName), ALL_TOOLS.map((tool) => ({ name: tool.name, enabled: toolEnabled(config.app.tools, tool.name) }))),
     ...("ok" in imageGen ? { imageGenConfig: imageGen.ok } : {}),
     ...(deps.imageGenerator === undefined ? {} : { imageGenerator: deps.imageGenerator }),
     ...(deps.modelHistoryQuery === undefined ? {} : { modelHistoryQuery: deps.modelHistoryQuery }),
     ...(activityStats === undefined ? {} : { activityStats: (days: number) => activityStats(charName, days) }),
-    ...(scheduleNextWake === undefined
-      ? {}
-      : { scheduleNextWake: (hours: number, reason: string) => scheduleNextWake(charName, hours, reason) }),
     ...(triggersView === undefined ? {} : { triggers: () => triggersView(charName) }),
     ...(push === undefined ? {} : { push: async (message: string) => await push(charName, message) }),
     ...(wakeInThread === undefined ? {} : { wakeInThread: (request: WakeInThreadRequest) => wakeInThread(charName, deps.thread ?? MAIN_THREAD, request) }),

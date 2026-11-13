@@ -2135,7 +2135,7 @@ impl App {
             facts.push("home".to_owned());
         }
         if row.heartbeat {
-            facts.push("heartbeats".to_owned());
+            facts.push("own time".to_owned());
         }
         if let Some(folder) = &row.folder {
             facts.push(format!("in {folder}"));
@@ -2202,7 +2202,7 @@ impl App {
             }
             "view" => Some("view option".into()),
             "model" => Some("model \u{00b7} ctrl+f favorites".into()),
-            "thread" => Some("thread \u{00b7} home takes the heartbeat".into()),
+            "thread" => Some("thread \u{00b7} home gets what own time sends".into()),
             _ => None,
         };
 

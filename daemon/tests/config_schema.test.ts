@@ -140,16 +140,16 @@ describe("config set on disk", () => {
   });
 
   test("writes to the conf.d file that already owns the key", async () => {
-    const ctx = await world("[heartbeat]\nenabled = true\n", [
-      ["conf.d/10-local.toml", "# local\n[heartbeat]\nenabled = false\n"],
+    const ctx = await world("[triggers]\nenabled = true\n", [
+      ["conf.d/10-local.toml", "# local\n[triggers]\nenabled = false\n"],
     ]);
     const confd = join(ctx.config.dirs.config, "conf.d", "10-local.toml");
 
-    const result = config(ctx, { key: "heartbeat.enabled", value: "true" }) as { file: string };
+    const result = config(ctx, { key: "triggers.enabled", value: "true" }) as { file: string };
 
     expect(result.file, "conf.d wins the merge, so that is the file worth editing").toBe(confd);
-    expect(await readFile(confd, "utf8")).toBe("# local\n[heartbeat]\nenabled = true\n");
-    expect(await readFile(ctx.configPath, "utf8")).toBe("[heartbeat]\nenabled = true\n");
+    expect(await readFile(confd, "utf8")).toBe("# local\n[triggers]\nenabled = true\n");
+    expect(await readFile(ctx.configPath, "utf8")).toBe("[triggers]\nenabled = true\n");
   });
 
   test("an accepted change is adopted by the running daemon, environment file included", async () => {
@@ -188,10 +188,10 @@ describe("config set on disk", () => {
   });
 
   test("a config file that can't be read is reported rather than overwritten", async () => {
-    const ctx = await world("[heartbeat]\nenabled = true\n");
+    const ctx = await world("[triggers]\nenabled = true\n");
     await rm(ctx.configPath);
     await mkdir(ctx.configPath);
-    expect(refusalOf(() => config(ctx, { key: "heartbeat.enabled", value: "false" })).message).toStartWith(`failed to read ${ctx.configPath}: `);
+    expect(refusalOf(() => config(ctx, { key: "triggers.enabled", value: "false" })).message).toStartWith(`failed to read ${ctx.configPath}: `);
   });
 
   test("setting the default model points out a character whose own model still wins", async () => {
@@ -221,7 +221,7 @@ describe("config set on disk", () => {
   });
 
   test("several files change together or not at all", async () => {
-    const ctx = await world("[heartbeat]\nenabled = true\n", [["conf.d/10-local.toml", "[tools]\nmax_result_chars = 10\n"]]);
+    const ctx = await world("[triggers]\nenabled = true\n", [["conf.d/10-local.toml", "[tools]\nmax_result_chars = 10\n"]]);
     const confd = join(ctx.config.dirs.config, "conf.d", "10-local.toml");
     const mainBefore = await readFile(ctx.configPath, "utf8");
     const confdBefore = await readFile(confd, "utf8");
@@ -249,7 +249,7 @@ describe("config set on disk", () => {
   });
 
   test.skipIf(process.getuid?.() === 0)("a write that fails part way puts back the files already written", async () => {
-    const ctx = await world("[heartbeat]\nenabled = true\n", [["conf.d/10-local.toml", "[tools]\nmax_result_chars = 10\n"]]);
+    const ctx = await world("[triggers]\nenabled = true\n", [["conf.d/10-local.toml", "[tools]\nmax_result_chars = 10\n"]]);
     const confd = join(ctx.config.dirs.config, "conf.d", "10-local.toml");
     const newFile = join(ctx.config.dirs.config, "conf.d", "20-new.toml");
     const locked = join(ctx.config.dirs.config, "locked");
@@ -299,22 +299,22 @@ describe("config set on disk", () => {
   });
 
   test.skipIf(process.getuid?.() === 0)("a config file that can't be written is reported and left as it was", async () => {
-    const ctx = await world("[heartbeat]\nenabled = true\n");
+    const ctx = await world("[triggers]\nenabled = true\n");
     const folder = dirname(ctx.configPath);
     await chmod(folder, 0o555);
     let refused: Error;
     try {
-      refused = refusalOf(() => config(ctx, { key: "heartbeat.enabled", value: "false" }));
+      refused = refusalOf(() => config(ctx, { key: "triggers.enabled", value: "false" }));
     } finally {
       await chmod(folder, 0o755);
     }
     expect(refused).toMatchObject({ code: "internal_error" });
     expect(refused.message).toStartWith(`failed to write ${ctx.configPath}: `);
-    expect(await readFile(ctx.configPath, "utf8")).toBe("[heartbeat]\nenabled = true\n");
+    expect(await readFile(ctx.configPath, "utf8")).toBe("[triggers]\nenabled = true\n");
   });
 
   test("a rejected change that wrote one new file twice still removes it", async () => {
-    const ctx = await world("[heartbeat]\nenabled = true\n");
+    const ctx = await world("[triggers]\nenabled = true\n");
     const fresh = join(ctx.config.dirs.config, "conf.d", "20-new.toml");
     const rejected = refusalOf(() => commitConfigEdits(ctx, [
       { file: fresh, edit: () => '[tools]\nmax_result_chars = "ten"\n' },
@@ -326,7 +326,7 @@ describe("config set on disk", () => {
   });
 
   test("a rejected change that can't be taken back says the file still holds it", async () => {
-    const ctx = await world("[heartbeat]\nenabled = true\n");
+    const ctx = await world("[triggers]\nenabled = true\n");
     const fresh = join(ctx.config.dirs.config, "conf.d", "20-new.toml");
     const removal = spyOn(fs, "rmSync").mockImplementation(() => {
       throw new Error("the disk went away");
@@ -341,7 +341,7 @@ describe("config set on disk", () => {
   });
 
   test("a key no file defines yet lands in the main config", async () => {
-    const ctx = await world("[heartbeat]\nenabled = true\n", [
+    const ctx = await world("[triggers]\nenabled = true\n", [
       ["conf.d/10-local.toml", "[tools]\nmax_result_chars = 10\n"],
     ]);
     const result = config(ctx, { key: "compaction.idle_after", value: "6h" }) as { file: string };

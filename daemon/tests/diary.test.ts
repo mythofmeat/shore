@@ -3,7 +3,7 @@ import { mkdtemp } from "node:fs/promises";
 import { join } from "node:path";
 
 import { addDiaryNote, closingNote, foldDiary, keptDiary, recentDiary, unfoldedDiary, unseenDiary } from "../src/autonomy/diary.ts";
-import { assemblePrompt, DIARY_FOR_CHAT, diaryText, estimateMessageTokens, heartbeatRunningText } from "../src/engine/prompt.ts";
+import { assemblePrompt, DIARY_FOR_CHAT, diaryText, estimateMessageTokens, wakeRunningText } from "../src/engine/prompt.ts";
 import { estimateTokens } from "../src/engine/tokens.ts";
 import type { DiaryNote, Message } from "../src/engine/types.ts";
 import { writeCharacterState } from "../src/storage/store.ts";
@@ -23,25 +23,26 @@ function counter(): () => string {
 }
 
 function leave(dir: string, at: number, text: string, newId: () => string): void {
-  addDiaryNote(dir, { at, thread: "heartbeat", source: "heartbeat", text }, newId);
+  addDiaryNote(dir, { at, thread: "own-time", source: "wake", text }, newId);
 }
 
 function note(id: string, at: number, text: string): DiaryNote {
-  return { id, at: new Date(at).toISOString(), thread: "heartbeat", source: "heartbeat", text };
+  return { id, at: new Date(at).toISOString(), thread: "own-time", source: "wake", text };
 }
 
-test("a note is the closing text without what was sent, and a heartbeat with nothing to say leaves none", () => {
+test("a note is the closing text without what was sent, and a wake with nothing to say leaves none", () => {
   expect(closingNote("Read the keeper's log up to March.\n<sendMessage>I found the log.</sendMessage>")).toBe("Read the keeper's log up to March.");
   expect(closingNote("<sendMessage>one</sendMessage>Half done.<sendMessage>two\nlines</sendMessage> Lamp next.")).toBe("Half done. Lamp next.");
   expect(closingNote("<sendMessage>I found the log.</sendMessage>")).toBeUndefined();
   expect(closingNote("  \n")).toBeUndefined();
-  expect(closingNote("HEARTBEAT_OK")).toBeUndefined();
-  expect(closingNote("HEARTBEAT_OK, and the lamp is lit.")).toBe("HEARTBEAT_OK, and the lamp is lit.");
+  expect(closingNote("NO_NOTE")).toBeUndefined();
+  expect(closingNote(" NO_NOTE\n")).toBeUndefined();
+  expect(closingNote("NO_NOTE, and the lamp is lit.")).toBe("NO_NOTE, and the lamp is lit.");
 });
 
 test("a note shows at the start of turns for a day, and no longer", async () => {
   const dir = await character();
-  leave(dir, T0, "The lamp is lit.", counter());
+  expect(addDiaryNote(dir, { at: T0, thread: "own-time", source: "wake", text: "The lamp is lit." }, counter())).toEqual(note("d1", T0, "The lamp is lit."));
 
   expect(recentDiary(dir, T0 + DAY - 1)).toEqual({ notes: [note("d1", T0, "The lamp is lit.")], omitted: 0 });
   expect(recentDiary(dir, T0 + DAY)).toEqual({ notes: [], omitted: 0 });
@@ -165,14 +166,14 @@ test("the diary is written out with a heading, each note under where and when it
 
   expect(diaryText(notes, "Your diary.", "UTC")).toBe([
     "[Your diary.]",
-    "your note at the end of a heartbeat · Friday 2026-10-30 · 12:00 PM\nThe lamp is lit.",
-    "your note at the end of a heartbeat · Friday 2026-10-30 · 1:30 PM\nThe log is read.\nMarch is next.",
+    `your note at the end of a wake in "own-time" · Friday 2026-10-30 · 12:00 PM\nThe lamp is lit.`,
+    `your note at the end of a wake in "own-time" · Friday 2026-10-30 · 1:30 PM\nThe log is read.\nMarch is next.`,
     "[End of your diary.]",
   ].join("\n\n"));
   expect(diaryText(notes.slice(1), "Your diary.", "Australia/Sydney", 3)).toBe([
     "[Your diary.]",
     "(Earlier entries not shown: 3.)",
-    "your note at the end of a heartbeat · Saturday 2026-10-31 · 12:30 AM\nThe log is read.\nMarch is next.",
+    `your note at the end of a wake in "own-time" · Saturday 2026-10-31 · 12:30 AM\nThe log is read.\nMarch is next.`,
     "[End of your diary.]",
   ].join("\n\n"));
 });
@@ -196,7 +197,7 @@ test("a message that arrived with diary notes carries them ahead of what the use
     ],
   }, "UTC");
 
-  expect(block).toBe("[New in your diary. Each entry says where it came from.]\n\nyour note at the end of a heartbeat · Friday 2026-10-30 · 12:00 PM\nThe lamp is lit.\n\n[End of your diary.]");
+  expect(block).toBe(`[New in your diary. Each entry says where it came from.]\n\nyour note at the end of a wake in "own-time" · Friday 2026-10-30 · 12:00 PM\nThe lamp is lit.\n\n[End of your diary.]`);
   expect(prompt.messages.map((message) => message.content)).toEqual([`${block}\n\ngood morning`, "morning!", "is the lamp lit?"]);
   expect(prompt.messages.map((message) => message.content_blocks)).toEqual([
     [{ type: "text", text: block }, { type: "text", text: "good morning" }],
@@ -230,11 +231,13 @@ test("diary notes on a message count towards the room the conversation takes", (
     .toBe(estimateMessageTokens(plain) + estimateTokens(text) + estimateTokens(second));
 });
 
-test("a message that arrived while a heartbeat ran says so between the diary notes and what the user wrote", () => {
+test("a message that arrived while a wake ran says so, and where the wake is, between the diary notes and what the user wrote", () => {
   const left = [note("d1", T0, "The lamp is lit.")];
-  const heartbeat = { started_at: new Date(T0 + HOUR).toISOString(), reason: "check the tide table" };
+  const heartbeat = { started_at: new Date(T0 + HOUR).toISOString() };
   const diary = diaryText(left, DIARY_FOR_CHAT, "UTC");
-  const running = heartbeatRunningText(heartbeat, "UTC");
+  const running = wakeRunningText(heartbeat, "UTC");
+  expect(running).toBe("[A wake of yours in your own-time thread has been running since Friday 2026-10-30 · 1:00 PM. It can't see this conversation. It is only told that a message arrived.]");
+  expect(wakeRunningText({ ...heartbeat, thread: "ring" }, "UTC")).toBe('[A wake of yours in "ring" has been running since Friday 2026-10-30 · 1:00 PM. It can\'t see this conversation. It is only told that a message arrived.]');
   const prompt = assemblePrompt({
     character_name: "ada", display_name: "eve", has_prior_context: false, user_timestamp_mode: "never",
     messages: [
@@ -259,9 +262,9 @@ test("a message that arrived while a heartbeat ran says so between the diary not
 test("an entry says whether it is the character's own note, from one of its triggers by name, or from Shore", async () => {
   const dir = await character();
   const newId = counter();
-  addDiaryNote(dir, { at: T0, thread: "heartbeat", source: "heartbeat", text: "The lamp is lit." }, newId);
-  addDiaryNote(dir, { at: T0 + HOUR, thread: "heartbeat", source: "trigger", trigger: "tide-table", text: "The tide is out." }, newId);
-  addDiaryNote(dir, { at: T0 + 2 * HOUR, thread: "heartbeat", source: "shore", text: "Your trigger `lamp` isn't running." }, newId);
+  addDiaryNote(dir, { at: T0, thread: "own-time", source: "wake", text: "The lamp is lit." }, newId);
+  addDiaryNote(dir, { at: T0 + HOUR, thread: "own-time", source: "trigger", trigger: "tide-table", text: "The tide is out." }, newId);
+  addDiaryNote(dir, { at: T0 + 2 * HOUR, thread: "own-time", source: "shore", text: "Your trigger `lamp` isn't running." }, newId);
   const kept = unfoldedDiary(dir);
 
   expect(kept).toEqual([
@@ -272,11 +275,14 @@ test("an entry says whether it is the character's own note, from one of its trig
   expect(Object.keys(kept[0] ?? {})).not.toContain("trigger");
   expect(diaryText(kept, "Your diary.", "UTC")).toBe([
     "[Your diary.]",
-    "your note at the end of a heartbeat · Friday 2026-10-30 · 12:00 PM\nThe lamp is lit.",
+    `your note at the end of a wake in "own-time" · Friday 2026-10-30 · 12:00 PM\nThe lamp is lit.`,
     'from your trigger "tide-table" · Friday 2026-10-30 · 1:00 PM\nThe tide is out.',
     "from Shore · Friday 2026-10-30 · 2:00 PM\nYour trigger `lamp` isn't running.",
     "[End of your diary.]",
   ].join("\n\n"));
+
+  writeCharacterState(dir, "diary.json", JSON.stringify([{ ...note("d5", T0, "From when Shore had heartbeats."), source: "heartbeat" }, { ...note("d6", T0, "From nowhere Shore knows."), source: "dream" }]));
+  expect(unfoldedDiary(dir)).toEqual([note("d5", T0, "From when Shore had heartbeats.")]);
 
   writeCharacterState(dir, "diary.json", JSON.stringify([{ ...note("d4", T0, "A trigger with a name that isn't text."), source: "trigger", trigger: 7 }]));
   expect(unfoldedDiary(dir)).toEqual([{ ...note("d4", T0, "A trigger with a name that isn't text."), source: "trigger" }]);
@@ -286,7 +292,7 @@ test("an entry says whether it is the character's own note, from one of its trig
 test("the diary holds only the newest entry from each trigger, so one that fires often can't crowd the rest out", async () => {
   const dir = await character();
   const newId = counter();
-  const from = (trigger: string, at: number, text: string): void => { addDiaryNote(dir, { at, thread: "heartbeat", source: "trigger", trigger, text }, newId); };
+  const from = (trigger: string, at: number, text: string): void => { addDiaryNote(dir, { at, thread: "own-time", source: "trigger", trigger, text }, newId); };
   from("tide-table", T0, "The tide is out.");
   leave(dir, T0 + 1, "The lamp is lit.", newId);
   from("ferry", T0 + 2, "The ferry is late.");

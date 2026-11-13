@@ -81,24 +81,7 @@ export async function sessionActivateCommand(
   character: string,
   ctx: SessionActivateContext,
 ): Promise<OperationResult<"session_activate">> {
-  const now = (ctx.now ?? Date.now)();
   const registered = await ctx.register(character, ctx.config);
   const keepalive = await activateKeepalive(character, ctx);
-  const status = ctx.autonomy.status(character);
-  const wake = status?.next_wake_at;
-
-  return {
-    character,
-    registered,
-    keepalive,
-    heartbeat:
-      status === undefined
-        ? null
-        : {
-            state: status.heartbeat_state,
-            ...(wake === undefined
-              ? {}
-              : { next_wake_at: rfc3339(wake), seconds_until_wake: untilSecs(wake, now) }),
-          },
-  };
+  return { character, registered, keepalive, own_time: ctx.autonomy.status(character)?.state ?? null };
 }

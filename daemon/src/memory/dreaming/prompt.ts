@@ -1,7 +1,7 @@
 import dreamTemplateRaw from "../../../prompts/memory/dreaming/dream.md" with { type: "text" };
 
 import { renderTemplate, formatWallClock } from "../../engine/prompt.ts";
-import { timeLeftPhrase } from "../../autonomy/heartbeat_shape.ts";
+import { timeLeftPhrase } from "../../autonomy/wake_shape.ts";
 import type { DreamOutcome } from "../../protocol/DreamOutcome.ts";
 import type { DreamStop } from "../../protocol/DreamStop.ts";
 

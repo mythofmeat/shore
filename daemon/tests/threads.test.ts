@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { createFolder, deleteFolder, moveFolder, moveThread, placedThreads, renameFolder, setFolderSort } from "../src/engine/thread_layout.ts";
-import { MAX_THREAD_ID_LENGTH, archiveThread, assertThreadId, isValidThreadId, createThread, ensureHeartbeatThread, ensureThreads, firstUnreadReply, heartbeatThread, markThreadRead, readThreadsIndex, setThreadCompaction, threadActivityNow, threadFilePaths, writeThreadsIndex, type ThreadsIndex } from "../src/engine/threads.ts";
+import { MAX_THREAD_ID_LENGTH, archiveThread, assertThreadId, isValidThreadId, createThread, ensureOwnThread, ensureThreads, firstUnreadReply, ownThread, markThreadRead, readThreadsIndex, setHomeThread, setThreadCompaction, threadActivityNow, threadFilePaths, writeThreadsIndex, type ThreadsIndex } from "../src/engine/threads.ts";
 import { readFileSync, readFile } from "./support/stored_files.ts";
 import { mkdirSync, mkdtempSync, writeFileSync, existsSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -410,7 +410,7 @@ describe("thread activity", () => {
 });
 
 describe("thread compaction setting", () => {
-  test("a thread's choice can change after it was made, and the heartbeat thread can't be made to compact", async () => {
+  test("a thread's choice can change after it was made, and the own-time thread can't be made to compact", async () => {
     const data = join(mkdtempSync(testTmp("shore-thread-compaction-")), "data");
     const now = "2026-11-03T00:00:00.000Z";
     await createThread(data, "ada", "side", now);
@@ -421,10 +421,58 @@ describe("thread compaction setting", () => {
     await setThreadCompaction(data, "ada", "side", false, now);
     expect(await compacts("side")).toBe(false);
 
-    const { index } = await ensureHeartbeatThread(data, "ada", now);
-    const heartbeat = heartbeatThread(index) ?? "";
-    expect(await outcomeOf(setThreadCompaction(data, "ada", heartbeat, true, now))).toThrow("never compacts");
-    expect(await compacts(heartbeat)).toBe(false);
+    const { index } = await ensureOwnThread(data, "ada", now);
+    const own = ownThread(index) ?? "";
+    expect(await outcomeOf(setThreadCompaction(data, "ada", own, true, now))).toThrow(`thread "own-time" is where ada's own time runs, and that thread never compacts`);
+    expect(await compacts(own)).toBe(false);
+    expect(await outcomeOf(setHomeThread(data, "ada", own, now))).toThrow(`thread "own-time" is where ada's own time runs, so it can't be home`);
+    expect((await readThreadsIndex(data, "ada"))?.home).toBe("main");
+  });
+
+  test("the own-time thread is made once, under a name no thread has, labelled for what it is and never compacted", async () => {
+    const data = join(mkdtempSync(testTmp("shore-own-thread-")), "data");
+    const now = "2026-11-03T00:00:00.000Z";
+    expect(ownThread(await readThreadsIndex(data, "ada"))).toBeUndefined();
+    const made = await ensureOwnThread(data, "ada", now);
+    expect(made.created).toBe(true);
+    expect(ownThread(made.index)).toBe("own-time");
+    expect(made.index.threads.find((thread) => thread.id === "own-time")).toEqual({ id: "own-time", label: "Own time", created_at: now, compaction: false });
+    expect(await readThreadsIndex(data, "ada")).toEqual(made.index);
+    const again = await ensureOwnThread(data, "ada", "2026-11-04T00:00:00.000Z");
+    expect([again.created, again.index]).toEqual([false, made.index]);
+
+    const taken = join(mkdtempSync(testTmp("shore-own-thread-taken-")), "data");
+    await createThread(taken, "ada", "own-time", now);
+    const second = await ensureOwnThread(taken, "ada", now);
+    expect([second.created, ownThread(second.index)]).toEqual([true, "own-time-2"]);
+
+    const twice = join(mkdtempSync(testTmp("shore-own-thread-taken-twice-")), "data");
+    await createThread(twice, "ada", "own-time", now);
+    await createThread(twice, "ada", "own-time-2", now);
+    const third = await ensureOwnThread(twice, "ada", now);
+    expect([third.created, ownThread(third.index)]).toEqual([true, "own-time-3"]);
+  });
+
+  test("a thread that was made for heartbeats is the own-time thread: it loses that label unless the user gave it another, and is set not to compact", async () => {
+    const now = "2026-11-03T00:00:00.000Z";
+    const kept = async (label: string | undefined, compaction: boolean): Promise<{ created: boolean; label: string | undefined; compaction: boolean | undefined; stored: boolean }> => {
+      const data = join(mkdtempSync(testTmp("shore-own-thread-old-")), "data");
+      const old: ThreadsIndex = {
+        version: 1, home: "main", heartbeat: "heartbeat",
+        threads: [{ id: "main", created_at: now, compaction: true }, { id: "heartbeat", created_at: now, compaction, ...(label === undefined ? {} : { label }) }],
+      };
+      await writeThreadsIndex(data, "ada", old);
+      const { index, created } = await ensureOwnThread(data, "ada", now);
+      const record = index.threads.find((thread) => thread.id === "heartbeat");
+      expect(ownThread(index)).toBe("heartbeat");
+      expect(index.threads.map((thread) => thread.id)).toEqual(["main", "heartbeat"]);
+      return { created, label: record?.label, compaction: record?.compaction, stored: JSON.stringify(await readThreadsIndex(data, "ada")) === JSON.stringify(index) };
+    };
+    expect(await kept("Heartbeats", false)).toEqual({ created: false, label: "Own time", compaction: false, stored: true });
+    expect(await kept("Heartbeats", true)).toEqual({ created: false, label: "Own time", compaction: false, stored: true });
+    expect(await kept("Night shift", true)).toEqual({ created: false, label: "Night shift", compaction: false, stored: true });
+    expect(await kept("Night shift", false)).toEqual({ created: false, label: "Night shift", compaction: false, stored: true });
+    expect(await kept(undefined, true)).toEqual({ created: false, label: undefined, compaction: false, stored: true });
   });
 });
 
@@ -443,7 +491,7 @@ describe("thread order and folders", () => {
   const shown = (index: ThreadsIndex, activity: (id: string) => string | undefined = noActivity): string[] =>
     placedThreads(index, activity).map(({ record, folder }) => folder === undefined ? record.id : `${folder}/${record.id}`);
 
-  test("with nothing moved the list stays by activity, home and heartbeat on top", () => {
+  test("with nothing moved the list stays by activity, home and the own-time thread on top", () => {
     const active: Record<string, string> = { a: "2026-11-20T00:00:00.000Z", c: "2026-11-21T00:00:00.000Z" };
     expect(shown(indexOf("a", "b", "c"), (id) => active[id])).toEqual(["main", "beats", "c", "a", "b"]);
   });
@@ -460,7 +508,7 @@ describe("thread order and folders", () => {
     expect(shown(fresh)).toEqual(["main", "beats", "new", "b", "Stories/a"]);
   });
 
-  test("home and the heartbeat thread stay at the top and can't move or go in a folder", () => {
+  test("home and the own-time thread stay at the top and can't move or go in a folder", () => {
     const foldered = createFolder(indexOf("a"), "Stories");
     expect(() => moveThread(foldered, "ada", "main", { before: "a" }, noActivity)).toThrow("stay at the top");
     expect(() => moveThread(foldered, "ada", "beats", { folder: "Stories" }, noActivity)).toThrow("stay at the top");

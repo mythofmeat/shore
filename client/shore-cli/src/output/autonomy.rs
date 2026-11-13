@@ -193,36 +193,18 @@ pub(crate) fn add_autonomy_rows(rows: &mut Rows, autonomy: &serde_json::Value) {
         rows.add("last active", &detail);
     }
 
-    let state = autonomy["heartbeat_state"].as_str().unwrap_or("Active");
-    let ticks = autonomy["ticks_without_user"].as_u64().unwrap_or(0);
-    let max_ticks = autonomy["dormant_after_heartbeat_turns"]
-        .as_u64()
-        .unwrap_or(0);
-    if let Some(secs) = autonomy["seconds_until_wake"].as_i64() {
-        let abs_label = autonomy["next_wake_at"]
-            .as_str()
-            .map(format_local_timestamp)
-            .unwrap_or_default();
-        let rel = if secs >= 0 {
-            format!("in {}", format_duration_compact(secs))
-        } else {
-            format!("{} overdue", format_duration_compact(secs.saturating_neg()))
-        };
-        let mut detail = if abs_label.is_empty() {
-            rel
-        } else {
-            format!("{rel}  ({abs_label})")
-        };
-        if max_ticks > 0 {
-            let remaining = max_ticks.saturating_sub(ticks);
-            detail.push_str(&format!(" \u{00b7} {remaining}/{max_ticks} remaining"));
-        }
-        rows.add("next heartbeat", &detail);
-    } else if state.eq_ignore_ascii_case("dormant") {
-        rows.add("next heartbeat", "dormant \u{2014} waiting for you");
-    } else {
-        rows.add("next heartbeat", "(none scheduled)");
+    let state = autonomy["state"].as_str().unwrap_or("Active");
+    if state.eq_ignore_ascii_case("dormant") {
+        rows.add("wakes", "dormant \u{2014} waiting for you");
+        return;
     }
+    let wakes = autonomy["wakes_without_user"].as_u64().unwrap_or(0);
+    let most = autonomy["dormant_after_wakes"].as_u64().unwrap_or(0);
+    let left = most.saturating_sub(wakes);
+    rows.add(
+        "wakes",
+        &format!("{left} of {most} left before going dormant"),
+    );
 }
 
 fn recent_events(autonomy: &serde_json::Value) -> Vec<serde_json::Value> {
@@ -273,5 +255,37 @@ pub(crate) fn write_autonomy_events(out: &mut impl Write, autonomy: &serde_json:
         paint(out, Tone::Muted, &format!("    {time_str:<16}"));
         paint(out, kind_color, &format!("{kind:<17}"));
         _ = writeln!(out, "{detail}");
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use serde_json::json;
+
+    fn rows(autonomy: &serde_json::Value) -> Vec<String> {
+        crate::output::set_color_enabled(false);
+        let mut out = Vec::new();
+        write_autonomy_section(&mut out, autonomy, 40);
+        String::from_utf8(out)
+            .unwrap_or_default()
+            .lines()
+            .skip(1)
+            .map(|line| line.split_whitespace().collect::<Vec<_>>().join(" "))
+            .collect()
+    }
+
+    #[test]
+    fn an_active_character_shows_how_many_wakes_it_has_left_before_going_dormant() {
+        let active = json!({ "state": "Active", "wakes_without_user": 1, "dormant_after_wakes": 3, "recent_events": [] });
+        assert_eq!(rows(&active), ["wakes 2 of 3 left before going dormant"]);
+        let spent = json!({ "state": "Active", "wakes_without_user": 5, "dormant_after_wakes": 3, "recent_events": [] });
+        assert_eq!(rows(&spent), ["wakes 0 of 3 left before going dormant"]);
+    }
+
+    #[test]
+    fn a_dormant_character_is_shown_as_waiting_for_the_user() {
+        let dormant = json!({ "state": "Dormant", "wakes_without_user": 3, "dormant_after_wakes": 3, "recent_events": [] });
+        assert_eq!(rows(&dormant), ["wakes dormant \u{2014} waiting for you"]);
     }
 }

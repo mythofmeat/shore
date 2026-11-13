@@ -4,9 +4,9 @@ A thread is a conversation with a context of its own. What is said in one isn't 
 
 ## The kinds
 
-- Your home thread is where the messages you send from heartbeats arrive.
+- Your home thread is where {{user}} talks with you unless they pick another thread. What you send from your own-time thread arrives there.
 - A side thread is for something you both come back to, such as a long-running story or a project. It compacts when it gets long, the way home does.
-- Your heartbeat thread is where your heartbeats run. {{user}} can read it but doesn't write there, and it never compacts.
+- Your own-time thread is where a wake runs when its trigger names no thread. Shore makes it the first time one does. {{user}} can read it but doesn't write there, and it never compacts.
 - A sealed thread is one of your own that {{user}} can't see until a time you set.
 
 ## What crosses between them
@@ -23,13 +23,13 @@ A thread is a conversation with a context of its own. What is said in one isn't 
 - `name` is its id: letters, digits, dot, dash or underscore, starting with a letter or digit, at most 64 characters. `label` is the name {{user}}'s thread list shows.
 - `purpose` is a line or two on what the thread is for. You are shown it whenever you are in that thread.
 - `files` are workspace files kept in the thread's prompt, given as paths or as `[[links]]` the way `{{read}}` takes them. A folder link like `[[lighthouse/]]` means its `INDEX.md`. Each must be text of at most {{thread_file_size}}, and they may come to {{thread_files_size}} together. If any can't be found or doesn't fit, the thread isn't started, and the error names each one.
-- The files are shown as they were when you last arrived. A change to one shows up in that thread after a long pause there, or after the thread compacts, so that its prompt doesn't change in the middle of a conversation.
+- The files are shown as they were when you last arrived. A change to one shows up in that thread after a long pause there, or after the thread compacts, so that its prompt doesn't change in the middle of a conversation. A wake there reads them afresh, unless {{user}} has just been writing in the thread.
 - `opening` is your first message there, so {{user}} finds something when they switch to it.
 - `folder` puts the thread in a folder of {{user}}'s thread list, which is made if there isn't one by that name.
 
 `{{edit_thread}}` changes a side thread's label, purpose or files, whoever started it. Give only what should change. An empty `label` or `purpose` clears it, and `files` replaces the whole list. If any file can't be found or doesn't fit, nothing changes, the label and purpose included. It is refused for your home thread and for a thread {{user}} has locked, which `{{list_threads}}` marks.
 
-A side thread has no time of its own until you give it some: your heartbeats don't run there, and nothing wakes you in it unasked. A trigger with `thread` set to the thread's id gives it regular time, at the hours or the interval you choose, and `{{wake_in_thread}}` takes you there once. The `triggers` topic has an example.
+A side thread has no time of its own until you give it some: nothing wakes you in it unasked. A trigger with `thread` set to the thread's id gives it regular time, at the hours or the interval you choose, and `{{wake_in_thread}}` takes you there once. The `triggers` topic has an example.
 
 ## Sealed threads
 
@@ -38,7 +38,7 @@ A side thread has no time of its own until you give it some: your heartbeats don
 Until it opens:
 
 - It isn't in {{user}}'s thread list, and nothing in it is sent or announced to them.
-- Your other threads, your heartbeats and your dreams are shown only its label and when it opens. So the label shouldn't give away what is inside.
+- Your other threads, your wakes elsewhere and your dreams are shown only its label and when it opens. So the label shouldn't give away what is inside.
 - Its diary entries stay inside it, and what you do there is kept out of the record of your calls.
 - The call that made it stays in the thread you made it from, where {{user}} can read it. Say what the thread is for inside it, in your first wake there.
 

@@ -46,7 +46,7 @@ mod tests {
             "Mara: 3 matches, showing 1–3, best match first",
             "",
             "2026-11-01 Sun 10:00  sam    [the keeper's name is [Mara]]  u1",
-            "2026-11-01 Sun 10:01  frank  [story] (heartbeat) [Mara] rows  m_0b9c · also in main, harbor",
+            "2026-11-01 Sun 10:01  frank  [story] (wake) [Mara] rows  m_0b9c · also in main, harbor",
             "2026-11-01 Sun 10:02  sam      m_import_st_9f2e",
             "",
             "Next page: offset=3",
@@ -60,7 +60,7 @@ mod tests {
         let read = [
             "u1 in main: 1 before, 1 after (UTC)",
             "",
-            "2026-11-01 Sun 09:58  frank  (heartbeat)  h1",
+            "2026-11-01 Sun 09:58  frank  (wake)  h1",
             "2026-11-01 Sun 09:58 was when the light went out",
             "",
             "· · · 2 h later · · ·",
