@@ -62,7 +62,7 @@ async function loadedConfig(root: string): Promise<LoadedConfig> {
   await mkdir(join(dirs.data, "frank"), { recursive: true });
 
   const app: AppConfig = defaultAppConfig();
-  app.defaults.model = "fixture";
+  app.chat.model = "fixture";
   return {
     app,
     models: emptyCatalog(),

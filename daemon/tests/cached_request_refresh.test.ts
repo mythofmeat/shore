@@ -34,7 +34,7 @@ async function withAda(check: (config: LoadedConfig, env: Record<string, string>
   setTestEnv(KEY_ENV, "fixture-key");
   const root = await mkdtemp(testTmp("shore-cache-refresh-"));
   const app = defaultAppConfig();
-  app.defaults.model = "fixture";
+  app.chat.model = "fixture";
   const models = emptyCatalog();
   models.chat.set("chat.fixture", {
     name: "fixture", qualifiedName: "chat.fixture", category: "chat", providerKey: "anthropic",

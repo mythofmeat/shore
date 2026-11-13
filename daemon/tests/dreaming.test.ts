@@ -228,7 +228,7 @@ async function afterOneChat(seen: SidecarRequest[], dream: DreamScript, tune: (a
     tools: ["read", "bash", "wake_in_thread", "start_thread"],
     models: ["fixture", "small"],
     tune: (app, models) => {
-      app.defaults.display_name = "eve";
+      app.chat.display_name = "eve";
       tune(app, models);
     },
     prepare: async (workspace) => {

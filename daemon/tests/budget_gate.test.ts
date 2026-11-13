@@ -228,7 +228,7 @@ async function chatConfig(root: string, spareKey: boolean): Promise<LoadedConfig
 
   const app = defaultAppConfig();
   app.tools.enabled_tools = [];
-  app.defaults.model = "gpt-test";
+  app.chat.model = "gpt-test";
 
   const models = emptyCatalog();
   models.chat.set("chat.gpt-test", chatModel());

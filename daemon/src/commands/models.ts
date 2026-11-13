@@ -131,7 +131,7 @@ function resolveActiveModel(ctx: ModelsContext): ResolvedModel {
   const resolved = effectiveChatModel(ctx.config, ctx.characterName, ctx.threadModel, ctx.preferences);
   if (resolved !== undefined) return resolved;
 
-  const fallback = ctx.config.app.defaults.model;
+  const fallback = ctx.config.app.chat.model;
   if (fallback !== undefined) return resolve(ctx, fallback, true);
 
   const first = firstChatModel(ctx.config.models);
@@ -288,7 +288,7 @@ function chatRole(ctx: ModelsContext): ModelRole {
       source: ctx.threadModel === undefined ? "character" : `thread ${ctx.thread ?? ""}`.trim(),
     };
   }
-  const fallback = ctx.config.app.defaults.model;
+  const fallback = ctx.config.app.chat.model;
   if (fallback !== undefined && fallback !== "") {
     return { role: "chat", model: qualify(ctx, fallback), source: "chat.model" };
   }
@@ -396,7 +396,7 @@ function activeName(ctx: ModelsContext): string | undefined {
   const resolved = effectiveChatModel(ctx.config, ctx.characterName, ctx.threadModel, ctx.preferences);
   if (resolved !== undefined) return resolved.qualifiedName;
 
-  const fallback = ctx.config.app.defaults.model;
+  const fallback = ctx.config.app.chat.model;
   if (fallback === undefined || fallback === "") {
     return firstChatModel(ctx.config.models)?.qualifiedName;
   }

@@ -69,7 +69,7 @@ export function resolveGenerationModel(
   if (activeModel !== undefined) {
     base = activeModel;
   } else {
-    const name = config.app.defaults.model;
+    const name = config.app.chat.model;
     if (name !== undefined) {
       base = findEffectiveModel(configView(config), config.dirs.cache, name, true);
     } else {
@@ -125,7 +125,7 @@ export async function buildGenerationRequest(
       messages: prepared.llmMessages,
       system: prepared.system,
       ...(prepared.toolDefs === undefined ? {} : { tools: prepared.toolDefs }),
-      replay: resolvedReplayPriorThinking(resolved, config.app.memory.thinking.replay_prior_thinking),
+      replay: resolvedReplayPriorThinking(resolved, config.app.chat.reasoning_replay),
     }),
     messageBudget: prepared.prompt.messageBudget,
   };

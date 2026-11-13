@@ -30,7 +30,7 @@ async function loadedConfig(withModel: boolean, tools: string[] = []): Promise<L
   for (const d of Object.values(dirs)) await mkdir(d, { recursive: true });
   const app = defaultAppConfig();
   app.tools.enabled_tools = tools;
-  app.advanced.max_retries = 0;
+  app.chat.max_retries = 0;
   const models = emptyCatalog();
   if (withModel) {
     models.chat.set("chat.fixture", {
@@ -45,7 +45,7 @@ async function loadedConfig(withModel: boolean, tools: string[] = []): Promise<L
       maxOutputTokens: 4096,
       maxToolIterations: 4,
     });
-    app.defaults.model = "fixture";
+    app.chat.model = "fixture";
   }
   return { app, models, providers: ProviderRegistry.empty(), dirs, rawTable: undefined };
 }

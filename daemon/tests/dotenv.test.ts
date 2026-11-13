@@ -252,6 +252,6 @@ describe("loadRawConfigTable", () => {
       envTarget: {},
       onWarn: () => {},
     });
-    expect(raw.table).toEqual({ defaults: { display_name: "eve" } });
+    expect(raw.table).toEqual({ chat: { display_name: "eve" } });
   });
 });

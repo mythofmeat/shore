@@ -420,7 +420,7 @@ function modelProvider(config: LoadedConfig, ref: string | undefined | null): st
 function modelRefs(config: LoadedConfig): [string, string | undefined][] {
   const d = config.app.defaults;
   return [
-    ["chat.model", d.model],
+    ["chat.model", config.app.chat.model],
     ["triggers.model", config.app.triggers.model],
     ["compaction.model", config.app.compaction.model],
     ["dreaming.model", config.app.dreaming.model],

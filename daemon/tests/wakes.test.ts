@@ -169,8 +169,8 @@ async function withCharacter(run: (h: Harness) => Promise<void>, configure?: (ap
   if (kept === undefined) at(0);
   const root = kept ?? await mkdtemp(testTmp("shore-wakes-"));
   const app = defaultAppConfig();
-  app.defaults.model = "fixture";
-  app.advanced.max_retries = 0;
+  app.chat.model = "fixture";
+  app.chat.max_retries = 0;
   app.compaction.enabled = false;
   app.tools.enabled_tools = ["read"];
   app.triggers.enabled = true;

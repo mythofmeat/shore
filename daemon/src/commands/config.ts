@@ -16,7 +16,7 @@ import { NO_CHAT_MODELS_MESSAGE } from "../config/models.ts";
 import { findEffectiveModel } from "../config/effective_catalog.ts";
 import { configView } from "../config/preferences.ts";
 import { isSecretConfigPath, REDACTED, redactSecrets, serializeConfigValue } from "../config/serialize.ts";
-import { CATALOG_SECTIONS, defaultAppConfig, mcpBearerToken } from "../config/app.ts";
+import { CATALOG_SECTIONS, chatModelProfiles, defaultAppConfig, mcpBearerToken } from "../config/app.ts";
 import { configSchema, findSchemaEntry, type LiveInstances, type SchemaEntry } from "../config/schema.ts";
 import { schemaValueLiteral, SchemaValueError } from "../config/schema_value.ts";
 import {
@@ -123,7 +123,7 @@ export function configCheck(ctx: ConfigContext, env: NodeJS.ProcessEnv = process
   const warnings: string[] = [];
   const info: string[] = [];
 
-  const defaultModel = ctx.config.app.defaults.model;
+  const defaultModel = ctx.config.app.chat.model;
   const defaultResolves =
     defaultModel !== undefined &&
     modelRefResolves(ctx.config.models, ctx.config.providers, defaultModel);
@@ -197,7 +197,8 @@ function catalogSections(ctx: ConfigContext): Record<string, unknown> {
   const raw = ctx.config.rawTable;
   const out: Record<string, unknown> = { providers: {} };
   for (const section of CATALOG_SECTIONS) {
-    if (raw?.[section] !== undefined) out[section] = serializeConfigValue(raw[section]);
+    const written = section === "chat" ? chatModelProfiles(raw?.chat as Record<string, unknown> | undefined) : raw?.[section];
+    if (written !== undefined) out[section] = serializeConfigValue(written);
   }
   return out;
 }
@@ -205,9 +206,12 @@ function catalogSections(ctx: ConfigContext): Record<string, unknown> {
 function reportedConfig(ctx: ConfigContext): Record<string, unknown> {
   const app = ctx.config.app;
   const written = { ...app, usage: { ...app.usage, budgets: app.usage.budgets.filter((budget) => !isCredentialBudget(budget)) } };
+  const settings = serializeConfigValue(written) as Record<string, unknown>;
+  const catalog = catalogSections(ctx);
   return redactSecrets(publicConfig({
-    ...(serializeConfigValue(written) as Record<string, unknown>),
-    ...catalogSections(ctx),
+    ...settings,
+    ...catalog,
+    chat: { ...(catalog.chat as Record<string, unknown> | undefined), ...(settings.chat as Record<string, unknown>) },
   })) as Record<string, unknown>;
 }
 
@@ -475,7 +479,7 @@ const configSet = (ctx: ConfigContext, rawKey: string, value: string): ConfigSet
 function preferredModelMask(ctx: ConfigContext, key: string): string | null {
   if (key !== "chat.model") return null;
   const active = ctx.activeModel;
-  return active === undefined || active === ctx.config.app.defaults.model ? null : active;
+  return active === undefined || active === ctx.config.app.chat.model ? null : active;
 }
 
 const loaderOptions = (ctx: ConfigContext): { env?: Env; deferEnvironment: boolean } =>

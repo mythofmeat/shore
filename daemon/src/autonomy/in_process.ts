@@ -100,7 +100,7 @@ export class InProcessAutonomyExecutor implements AutonomyExecutor {
   async openSeals(character: string, now: number): Promise<OpenedSeal[]> {
     const opened = await this.#deps.registry.openDueSeals(character, now);
     const config = this.#deps.registry.effectiveConfig(character);
-    const user = resolveDisplayName(config.app.defaults, this.#deps.env);
+    const user = resolveDisplayName(config.app.chat, this.#deps.env);
     return opened.map((sealed) => {
       addDiaryNote(characterDataDir(config.dirs.data, character), {
         at: now, thread: sealed.id, source: "shore", text: `The seal on "${sealed.label}" came off. Its thread, \`${sealed.id}\`, is in ${user}'s thread list from now on, and you are being woken there.`,

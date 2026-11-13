@@ -284,7 +284,7 @@ export async function runWake(character: string, config: LoadedConfig, wake: Wak
     const maxToolIterations = (configured ?? resolved).maxToolIterations;
     const nowMs = deps.now?.() ?? Date.now();
     const timeZone = deps.timeZone ?? hostZone();
-    const userName = resolveDisplayName(config.app.defaults, deps.env);
+    const userName = resolveDisplayName(config.app.chat, deps.env);
     const wrapUpMs = wrapUpMsFor(wake.limitMs);
     const workspace = characterWorkspace(config, character);
     const lastUser = Date.parse(threadActivityNow(config.dirs.data, character, thread).last_user ?? "");

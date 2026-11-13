@@ -61,7 +61,7 @@ export async function loadSystemPrompt(
   config: LoadedConfig,
   resolved: ResolvedModel,
 ): Promise<string | undefined> {
-  const configured = resolved.systemPrompt ?? config.app.defaults.system_prompt;
+  const configured = resolved.systemPrompt ?? config.app.chat.system_prompt;
   if (configured === undefined) return undefined;
   const path = resolve(config.dirs.config, configured);
   try {
@@ -101,7 +101,7 @@ export async function prepareChatContext(
   params: PrepareChatContextParams,
 ): Promise<PreparedChatContext> {
   const { character, characterDataDir, config, resolved, messages, mcpToolDefs } = params;
-  const displayName = resolveDisplayName(config.app.defaults);
+  const displayName = resolveDisplayName(config.app.chat);
 
   const workspace = characterWorkspace(config, character);
   const activeConversation = params.activeConversation ?? messages.length > 0;
@@ -165,7 +165,7 @@ export async function prepareChatContext(
     messages: withoutWakeWorking(messages),
     max_context_tokens: resolved.maxContextTokens,
     max_output_tokens: resolved.maxOutputTokens,
-    user_timestamp_mode: config.app.behavior.user_message_timestamps,
+    user_timestamp_mode: config.app.chat.user_timestamps,
     image_tier: imageTierForModel(resolved.modelId),
   };
   const prompt =
@@ -239,7 +239,7 @@ export async function buildChatShapeRequestFromDisk(
         ...(prepared.toolDefs === undefined ? {} : { tools: prepared.toolDefs }),
         replay: resolvedReplayPriorThinking(
           resolved,
-          config.app.memory.thinking.replay_prior_thinking,
+          config.app.chat.reasoning_replay,
         ),
       },
       options.env,

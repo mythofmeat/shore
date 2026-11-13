@@ -93,7 +93,7 @@ export async function buildToolContext(
   const sealThread = deps.sealThread;
   const editThread = deps.editThread;
   const subagentsConfigured = config.app.subagents.size > 0;
-  const userName = resolveDisplayName(config.app.defaults);
+  const userName = resolveDisplayName(config.app.chat);
 
   const ctx: ToolContext = {
     thread: deps.thread ?? MAIN_THREAD,

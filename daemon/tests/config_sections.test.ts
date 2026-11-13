@@ -5,6 +5,7 @@ import { join } from "node:path";
 import { loadConfig } from "../src/config/loader.ts";
 import { restartRequiredChanges } from "../src/config/restart.ts";
 import { resolveListenAddr } from "../src/daemon/startup.ts";
+import { buildSessionHistorySnapshot, type HandshakeRegistry } from "../src/swp/handshake.ts";
 import { testTmp } from "./support/tmp.ts";
 
 async function reading(): Promise<{ write: (toml: string) => Promise<void>; read: () => unknown[] }> {
@@ -79,12 +80,13 @@ test("[presence], [marks], [matrix] and [image] are read from the file, and a se
   ]);
 });
 
-test("a model named in [triggers], [compaction] or [dreaming] that can't be found is warned about under that section's key", async () => {
+test("a model named in [chat], [triggers], [compaction] or [dreaming] that can't be found is warned about under that section's key", async () => {
   const root = await mkdtemp(testTmp("shore-config-sections-"));
-  await writeFile(join(root, "config.toml"), '[triggers]\nmodel = "nope-a"\n[compaction]\nmodel = "nope-b"\n[dreaming]\nmodel = "ghost:nope-c"\n');
+  await writeFile(join(root, "config.toml"), '[chat]\nmodel = "nope"\n[triggers]\nmodel = "nope-a"\n[compaction]\nmodel = "nope-b"\n[dreaming]\nmodel = "ghost:nope-c"\n');
   const warned: (readonly (readonly [string, string])[])[] = [];
   loadConfig(join(root, "config.toml"), { env: { SHORE_CONFIG_DIR: root }, onWarn: (_message, fields) => { warned.push(fields); } });
   expect(warned).toEqual([
+    [["field", "chat.model"], ["name", "nope"]],
     [["field", "triggers.model"], ["name", "nope-a"]],
     [["field", "compaction.model"], ["name", "nope-b"]],
     [["field", "dreaming.model"], ["name", "ghost:nope-c"], ["provider", "ghost"]],
@@ -112,4 +114,25 @@ test("[daemon] holds the address Shore listens on and the cache forensics switch
   expect(restartRequiredChanges(plain, await loaded('[matrix]\nenabled = true\nhomeserver_url = "https://matrix.example"\n'))).toEqual(["[matrix]"]);
   expect(restartRequiredChanges(plain, await loaded('[notifications]\ntopic = "shore"\n'))).toEqual(["[notifications]"]);
   expect(restartRequiredChanges(plain, await loaded('[presence]\nstatuses = ["at sea"]\n[marks]\ntags = ["funny"]\n'))).toEqual([]);
+});
+
+test("a client that connects with no character open is told the model in use: the one it asked for, else chat.model, else the first model configured, else none", async () => {
+  const root = await mkdtemp(testTmp("shore-config-sections-"));
+  const told = async (toml: string, asked?: string): Promise<unknown> => {
+    await writeFile(join(root, "config.toml"), toml);
+    const loaded = loadConfig(join(root, "config.toml"), { env: { SHORE_CONFIG_DIR: root, K: "k" }, onWarn: () => {} });
+    const registry: HandshakeRegistry = {
+      availableCharacters: () => [],
+      globalConfig: () => loaded,
+      effectiveConfig: () => loaded,
+      getOrCreate: () => Promise.reject(new Error("no character is open")),
+      listThreads: () => [],
+    };
+    return (await buildSessionHistorySnapshot(registry, null, null, asked)).config;
+  };
+  const profile = '[chat."anthropic:claude-y"]\nmax_output_tokens = 1000\n[providers.anthropic]\napi_key_env = "K"\n';
+  expect(await told(`[chat]\nmodel = "anthropic:claude-x"\n${profile}`, "anthropic:claude-z")).toEqual({ active_model: "anthropic:claude-z" });
+  expect(await told(`[chat]\nmodel = "anthropic:claude-x"\n${profile}`)).toEqual({ active_model: "anthropic:claude-x" });
+  expect(await told(profile)).toEqual({ active_model: "anthropic:claude-y" });
+  expect(await told('[chat]\ndisplay_name = "eve"\n')).toEqual({ active_model: null });
 });

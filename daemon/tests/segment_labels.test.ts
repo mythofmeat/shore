@@ -78,7 +78,7 @@ async function world(run: (world: World) => Promise<void>, tune?: (app: AppConfi
   await afterFirstChat({
     name: "segment-labels", keyEnv: KEY_ENV, provider: provider(script), tools: ["read"], autonomy: true, models: ["fixture", "pinned"],
     tune: (app) => {
-      app.defaults.display_name = "Mara";
+      app.chat.display_name = "Mara";
       tune?.(app);
     },
     ...(prepare === undefined ? {} : { prepare }),

@@ -58,7 +58,7 @@ export async function prepareLabelCall(
     ...(entry === undefined ? {} : { providerEntry: credentialEntry(entry) }),
   });
   const template = resolvePromptTemplate(effective.dirs.config, character, "label.md") ?? DEFAULT_LABEL_PROMPT;
-  const request = llm.buildInitialRequest(buildFinalMessage(template, character, resolveDisplayName(effective.app.defaults)).trim(), chatRequest);
+  const request = llm.buildInitialRequest(buildFinalMessage(template, character, resolveDisplayName(effective.app.chat)).trim(), chatRequest);
   return async () => {
     const reply = await llm.generate(request, { messages: [], runTool: () => Promise.reject(new ToolLoopStop()), recordTurn: () => {} });
     return reply.finish_reason === "tool_use" ? undefined : labelFromReply(reply.content);

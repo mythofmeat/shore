@@ -38,7 +38,7 @@ test("the oldest supported release's archive restores current data through the c
     env: { SHORE_CONFIG_DIR: dirs.config, SHORE_DATA_DIR: dirs.data, SHORE_CACHE_DIR: dirs.cache },
     onWarn: () => {},
   });
-  expect(loaded.app.defaults.model).toBe("openai:gpt-test");
+  expect(loaded.app.chat.model).toBe("openai:gpt-test");
   expect(await readFile(join(dirs.config, "characters/ada/config.toml"), "utf8")).toBe('[chat]\nmodel = "openai:gpt-test"\n[triggers]\nenabled = false\n');
   expect((await readThreadsIndex(dirs.data, "ada"))?.home).toBe("main");
   const engine = await ConversationEngine.load("ada", dirs.data, undefined, "main");

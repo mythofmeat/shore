@@ -243,7 +243,7 @@ async function runGenerationCore(
   const scope = { data: deps.dataDir, character: charName, thread: engine.thread };
   const plan = await planAttempt(engine, scope, regen ? params.body.regen ?? { kind: "reroll" } : undefined, {
     tags: config.app.marks.tags,
-    user: resolveDisplayName(config.app.defaults),
+    user: resolveDisplayName(config.app.chat),
     now: now(),
   });
   const noteAttempt = (): void => {

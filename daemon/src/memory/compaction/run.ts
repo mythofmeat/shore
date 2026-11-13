@@ -641,7 +641,7 @@ async function resolveDeps(
   return {
     effective,
     promptTemplate,
-    displayName: resolveDisplayName(effective.app.defaults),
+    displayName: resolveDisplayName(effective.app.chat),
     llm: new RealCompactionLlm({
       model: toRequestModel(model),
       character,

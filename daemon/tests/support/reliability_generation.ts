@@ -20,7 +20,7 @@ export async function reliabilityGeneration(provider: SidecarProvider, thread = 
   for (const dir of [config.dirs.config, config.dirs.data, config.dirs.cache, config.dirs.runtime]) await mkdir(dir, { recursive: true });
   await mkdir(join(config.dirs.config, "characters", "ada", "workspace"), { recursive: true });
   await writeFile(join(config.dirs.config, "characters", "ada", "workspace", "SOUL.md"), "Ada");
-  config.app.defaults.model = "fixture";
+  config.app.chat.model = "fixture";
   config.models.chat.set("chat.fixture", {
     name: "fixture", qualifiedName: "chat.fixture", category: "chat", providerKey: "anthropic",
     sdk: "anthropic", modelId: "claude-fixture", apiKeyEnv: "SHORE_RELIABILITY_KEY",

@@ -108,7 +108,7 @@ export async function runSubagent(
     throw new InvalidArgs(`unsupported sdk: ${resolved.sdk}`);
   }
 
-  const displayName = resolveDisplayName(config.app.defaults, deps.env);
+  const displayName = resolveDisplayName(config.app.chat, deps.env);
   const vars = templateVars(charName, displayName);
 
   const systemText = await expandPromptMacros(renderTemplate(spec.prompt, vars), {
@@ -154,7 +154,7 @@ export async function runSubagent(
       messages: [{ role: "user", content: [{ type: "text", text: query }] }],
       system: [{ text: systemText, label: "system" }],
       tools,
-      replay: resolvedReplayPriorThinking(resolved, config.app.memory.thinking.replay_prior_thinking),
+      replay: resolvedReplayPriorThinking(resolved, config.app.chat.reasoning_replay),
     },
     deps.env ?? process.env,
   );

@@ -89,6 +89,7 @@ interface StructSpec<T> {
   fields: { [K in keyof T]?: Reader<T[K]> };
   required?: readonly (keyof T & string)[];
   alsoAccepted?: readonly string[];
+  others?: "read elsewhere";
   make: () => T;
 }
 
@@ -103,7 +104,7 @@ function readStruct<T extends object>(spec: StructSpec<T>, value: TomlValue): Pa
   for (const key of sortedKeys(value)) {
     const read = (spec.fields as Record<string, Reader<unknown> | undefined>)[key];
     if (read === undefined) {
-      if (elsewhere.has(key)) continue;
+      if (elsewhere.has(key) || spec.others !== undefined) continue;
       return { err: unknownField(key, known) };
     }
     const parsed = read(value[key]);
@@ -300,30 +301,21 @@ const DAEMON: StructSpec<DaemonConfig> = {
 };
 
 export interface DefaultsConfig {
-  model: string | undefined;
   image_generation: string | undefined;
   subagent_model: string | undefined;
-  display_name: string | undefined;
-  system_prompt: string | undefined;
 }
 
 const defaultDefaultsConfig = (): DefaultsConfig => ({
-  model: undefined,
   image_generation: undefined,
   subagent_model: undefined,
-  display_name: undefined,
-  system_prompt: undefined,
 });
 
 const DEFAULTS: StructSpec<DefaultsConfig> = {
   name: "DefaultsConfig",
   make: defaultDefaultsConfig,
   fields: {
-    model: optional(readChatModelName),
     image_generation: optional(readImageModelName),
     subagent_model: optional(readChatModelName),
-    display_name: optional(readString),
-    system_prompt: optional(readString),
   },
 };
 
@@ -337,10 +329,10 @@ export function resolveBackgroundModelName(
 }
 
 export function resolveDisplayName(
-  defaults: DefaultsConfig,
+  chat: Pick<ChatConfig, "display_name">,
   env: Record<string, string | undefined> = process.env,
 ): string {
-  return defaults.display_name ?? env["USER"] ?? "User";
+  return chat.display_name ?? env["USER"] ?? "User";
 }
 
 type UserTimestampMode = "auto" | "always" | "never";
@@ -436,22 +428,6 @@ const MARKS: StructSpec<MarksConfig> = {
   name: "MarksConfig",
   make: defaultMarksConfig,
   fields: { tags: readStringSeq },
-};
-
-export interface BehaviorConfig {
-  user_message_timestamps: UserTimestampMode;
-}
-
-const defaultBehaviorConfig = (): BehaviorConfig => ({
-  user_message_timestamps: "auto",
-});
-
-const BEHAVIOR: StructSpec<BehaviorConfig> = {
-  name: "BehaviorConfig",
-  make: defaultBehaviorConfig,
-  fields: {
-    user_message_timestamps: readEnum(USER_TIMESTAMP_MODES),
-  },
 };
 
 interface ToolOverride {
@@ -759,14 +735,6 @@ export function parseThinkingReplay(s: string): ThinkingReplay | undefined {
   }
 }
 
-interface ThinkingConfig {
-  replay_prior_thinking: ThinkingReplay;
-}
-
-const defaultThinkingConfig = (): ThinkingConfig => ({
-  replay_prior_thinking: "all",
-});
-
 const THINKING_REPLAY_MODES: readonly ThinkingReplay[] = ["all", "none"];
 
 const readThinkingReplay: Reader<ThinkingReplay> = typed(
@@ -787,11 +755,45 @@ const readThinkingReplay: Reader<ThinkingReplay> = typed(
   { kind: "enum", variants: THINKING_REPLAY_MODES },
 );
 
-const THINKING: StructSpec<ThinkingConfig> = {
-  name: "ThinkingConfig",
-  make: defaultThinkingConfig,
-  fields: { replay_prior_thinking: readThinkingReplay },
+export interface ChatConfig {
+  model: string | undefined;
+  display_name: string | undefined;
+  system_prompt: string | undefined;
+  user_timestamps: UserTimestampMode;
+  reasoning_replay: ThinkingReplay;
+  max_retries: number | undefined;
+  retry_backoff: ConfigDuration | undefined;
+}
+
+const defaultChatConfig = (): ChatConfig => ({
+  model: undefined,
+  display_name: undefined,
+  system_prompt: undefined,
+  user_timestamps: "auto",
+  reasoning_replay: "all",
+  max_retries: undefined,
+  retry_backoff: undefined,
+});
+
+const CHAT: StructSpec<ChatConfig> = {
+  name: "ChatConfig",
+  make: defaultChatConfig,
+  others: "read elsewhere",
+  fields: {
+    model: optional(readChatModelName),
+    display_name: optional(readString),
+    system_prompt: optional(readString),
+    user_timestamps: readEnum(USER_TIMESTAMP_MODES),
+    reasoning_replay: readThinkingReplay,
+    max_retries: optional(readU32),
+    retry_backoff: optional(readDuration),
+  },
 };
+
+export function chatModelProfiles(chat: Table | undefined): Table | undefined {
+  if (chat === undefined) return undefined;
+  return Object.fromEntries(Object.entries(chat).filter(([key]) => !(key in CHAT.fields)));
+}
 
 export interface DreamingConfig {
   enabled: boolean;
@@ -857,22 +859,6 @@ export function validateDreaming(dreaming: DreamingConfig): string | undefined {
   }
   return undefined;
 }
-
-export interface MemoryConfig {
-  thinking: ThinkingConfig;
-}
-
-const defaultMemoryConfig = (): MemoryConfig => ({
-  thinking: defaultThinkingConfig(),
-});
-
-const MEMORY: StructSpec<MemoryConfig> = {
-  name: "MemoryConfig",
-  make: defaultMemoryConfig,
-  fields: {
-    thinking: struct(THINKING),
-  },
-};
 
 export interface MatrixConfig {
   enabled: boolean;
@@ -1193,25 +1179,6 @@ const USAGE: StructSpec<UsageConfig> = {
   },
 };
 
-export interface AdvancedConfig {
-  max_retries: number | undefined;
-  retry_backoff: ConfigDuration | undefined;
-}
-
-const defaultAdvancedConfig = (): AdvancedConfig => ({
-  max_retries: undefined,
-  retry_backoff: undefined,
-});
-
-const ADVANCED: StructSpec<AdvancedConfig> = {
-  name: "AdvancedConfig",
-  make: defaultAdvancedConfig,
-  fields: {
-    max_retries: optional(readU32),
-    retry_backoff: optional(readDuration),
-  },
-};
-
 export interface SubagentConfig {
   description: string;
   prompt: string;
@@ -1287,8 +1254,8 @@ export function mcpBearerToken(
 
 export interface AppConfig {
   daemon: DaemonConfig;
+  chat: ChatConfig;
   defaults: DefaultsConfig;
-  behavior: BehaviorConfig;
   triggers: TriggersConfig;
   presence: PresenceConfig;
   marks: MarksConfig;
@@ -1296,19 +1263,17 @@ export interface AppConfig {
   dreaming: DreamingConfig;
   tools: ToolsConfig;
   images: ImagesConfig;
-  memory: MemoryConfig;
   connections: ConnectionsConfig;
   notifications: NotificationsConfig;
   usage: UsageConfig;
-  advanced: AdvancedConfig;
   subagents: Map<string, SubagentConfig>;
   mcp: Map<string, McpServerConfig>;
 }
 
 export const defaultAppConfig = (): AppConfig => ({
   daemon: defaultDaemonConfig(),
+  chat: defaultChatConfig(),
   defaults: defaultDefaultsConfig(),
-  behavior: defaultBehaviorConfig(),
   triggers: defaultTriggersConfig(),
   presence: defaultPresenceConfig(),
   marks: defaultMarksConfig(),
@@ -1316,11 +1281,9 @@ export const defaultAppConfig = (): AppConfig => ({
   dreaming: defaultDreamingConfig(),
   tools: defaultToolsConfig(),
   images: defaultImagesConfig(),
-  memory: defaultMemoryConfig(),
   connections: defaultConnectionsConfig(),
   notifications: defaultNotificationsConfig(),
   usage: defaultUsageConfig(),
-  advanced: defaultAdvancedConfig(),
   subagents: new Map(),
   mcp: new Map(),
 });
@@ -1329,12 +1292,12 @@ export const CATALOG_SECTIONS = ["chat", "image_generation", "providers"] as con
 
 const APP: StructSpec<AppConfig> = {
   name: "AppConfig",
-  alsoAccepted: CATALOG_SECTIONS,
+  alsoAccepted: ["image_generation", "providers"],
   make: defaultAppConfig,
   fields: {
     daemon: struct(DAEMON),
+    chat: struct(CHAT),
     defaults: struct(DEFAULTS),
-    behavior: struct(BEHAVIOR),
     triggers: struct(TRIGGERS),
     presence: struct(PRESENCE),
     marks: struct(MARKS),
@@ -1342,11 +1305,9 @@ const APP: StructSpec<AppConfig> = {
     dreaming: struct(DREAMING),
     tools: struct(TOOLS),
     images: struct(IMAGES),
-    memory: struct(MEMORY),
     connections: struct(CONNECTIONS),
     notifications: struct(NOTIFICATIONS),
     usage: struct(USAGE),
-    advanced: struct(ADVANCED),
     subagents: readMap(struct(SUBAGENT)),
     mcp: readMap(struct(MCP_SERVER)),
   },

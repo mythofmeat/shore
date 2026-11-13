@@ -170,8 +170,8 @@ export async function runGeneration(
   ensureCallContext(request, deps);
   const retry = deps.retry ?? {
     ...DEFAULT_RETRY,
-    maxRetries: deps.config.app.advanced.max_retries ?? DEFAULT_RETRY.maxRetries,
-    backoffBaseMs: deps.config.app.advanced.retry_backoff?.asMillis() ?? DEFAULT_RETRY.backoffBaseMs,
+    maxRetries: deps.config.app.chat.max_retries ?? DEFAULT_RETRY.maxRetries,
+    backoffBaseMs: deps.config.app.chat.retry_backoff?.asMillis() ?? DEFAULT_RETRY.backoffBaseMs,
   };
   const callRetry: ModelCallRetryOptions = {
     settings: retry,

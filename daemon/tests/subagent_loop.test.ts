@@ -52,8 +52,8 @@ async function configWith(
 ): Promise<{ config: LoadedConfig; root: string }> {
   const root = await mkdtemp(join(tmpdir(), "shore-subagent-"));
   const app = defaultAppConfig();
-  app.defaults.model = "cheap";
-  app.advanced.max_retries = 0;
+  app.chat.model = "cheap";
+  app.chat.max_retries = 0;
   for (const [name, s] of Object.entries(subagents)) app.subagents.set(name, s);
   over(app);
   return {
