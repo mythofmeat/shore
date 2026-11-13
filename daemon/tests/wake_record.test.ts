@@ -3,10 +3,10 @@ import { mkdtemp } from "node:fs/promises";
 import { join } from "node:path";
 
 import type { BackgroundLoopResult } from "../src/autonomy/background_loop.ts";
-import { keepWakeRecord, keptNote, legacyRecord, recordWakeEnd, stopOf, wakeRecord, wakeStopNote, WakeWords, type WakeEnd, type WakeRecord, type WakeStop } from "../src/autonomy/wake_record.ts";
+import { keepWakeRecord, keptNote, recordWakeEnd, stopOf, wakeRecord, wakeStopNote, WakeWords, type WakeEnd, type WakeRecord, type WakeStop } from "../src/autonomy/wake_record.ts";
 import type { DiaryNote } from "../src/engine/types.ts";
 import { deleteThreadState } from "../src/storage/files.ts";
-import { readCharacterState, writeCharacterState } from "../src/storage/store.ts";
+import { writeCharacterState } from "../src/storage/store.ts";
 import { testTmp } from "./support/tmp.ts";
 
 const MINUTE = 60_000;
@@ -118,29 +118,12 @@ test("the note the last wake in a thread ended with is kept for the next one, un
   expect(keptNote({}, [], "UTC")).toBeUndefined();
 });
 
-test("the own-time thread's record starts from what Shore kept when it had heartbeats, once, and a record goes when its thread does", async () => {
+test("a record goes when its thread does", async () => {
   const dir = await character();
-  writeCharacterState(dir, "heartbeat_home.json", JSON.stringify({ through: new Date(T0).toISOString() }));
-  writeCharacterState(dir, "heartbeat_cut_off.json", JSON.stringify({ at: T0 + 5 * MINUTE, rounds: 7, sent: true }));
-  expect(wakeRecord(dir, "heartbeat")).toEqual({});
-  const adopted: WakeRecord = { through: T0, stopped: { at: T0 + 5 * MINUTE, why: "time", limitMs: 30 * MINUTE, rounds: 7, sent: true, last: "" } };
-  expect(legacyRecord(dir, "heartbeat", 30 * MINUTE)).toEqual(adopted);
-  expect(wakeRecord(dir, "heartbeat")).toEqual(adopted);
-  expect(readCharacterState(dir, "heartbeat_home.json")).toBeUndefined();
-  expect(readCharacterState(dir, "heartbeat_cut_off.json")).toBeUndefined();
-
-  keepWakeRecord(dir, "heartbeat", { through: T0 + 60 * MINUTE });
-  writeCharacterState(dir, "heartbeat_home.json", JSON.stringify({ through: new Date(T0).toISOString() }));
-  expect(legacyRecord(dir, "heartbeat", 30 * MINUTE)).toEqual({ through: T0 + 60 * MINUTE });
-  expect(readCharacterState(dir, "heartbeat_home.json")).toBeDefined();
-
-  const fresh = await character();
-  expect(legacyRecord(fresh, "heartbeat", 30 * MINUTE)).toEqual({});
-  writeCharacterState(fresh, "heartbeat_cut_off.json", JSON.stringify({ at: T0, rounds: 1, sent: false }));
-  expect(legacyRecord(fresh, "heartbeat", 30 * MINUTE)).toEqual({});
-
-  deleteThreadState(join(dir, ".."), "ada", "heartbeat");
-  expect(wakeRecord(dir, "heartbeat")).toEqual({});
+  keepWakeRecord(dir, "ring", { through: T0 });
+  expect(wakeRecord(dir, "ring")).toEqual({ through: T0 });
+  deleteThreadState(join(dir, ".."), "ada", "ring");
+  expect(wakeRecord(dir, "ring")).toEqual({});
 });
 
 test("a record that can't be read is taken as none", async () => {

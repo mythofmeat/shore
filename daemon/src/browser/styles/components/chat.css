@@ -1096,11 +1096,6 @@ button.chip:hover {
   border-radius: 20px;
 }
 
-.composer-note {
-  color: var(--text-2);
-  font-size: var(--text-md);
-}
-
 .composer:focus-within {
   border-color: var(--accent-line);
   box-shadow: 0 0 0 3px var(--accent-soft);

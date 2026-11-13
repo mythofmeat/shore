@@ -1,14 +1,10 @@
 import { formatWallClock } from "../engine/prompt.ts";
 import type { DiaryNote } from "../engine/types.ts";
 import { shoreLog } from "../log.ts";
-import { deleteCharacterState, readCharacterState, writeCharacterState } from "../storage/store.ts";
+import { readCharacterState, writeCharacterState } from "../storage/store.ts";
 import { cutNote } from "./diary.ts";
 import type { BackgroundLoopResult, LoopRound } from "./background_loop.ts";
 import { spanPhrase } from "./wake_shape.ts";
-
-const OLD_HOME_THROUGH = "heartbeat_home.json";
-
-const OLD_CUT_OFF = "heartbeat_cut_off.json";
 
 export type WakeStopReason = "time" | "rounds" | "interrupted";
 
@@ -36,15 +32,6 @@ function read(characterDir: string, file: string): Record<string, unknown> {
   }
 }
 
-function fromBefore(characterDir: string, limitMs: number): WakeRecord {
-  const through = Date.parse(String(read(characterDir, OLD_HOME_THROUGH)["through"]));
-  const { at, rounds, sent } = read(characterDir, OLD_CUT_OFF) as { at?: number; rounds: number; sent: boolean };
-  return {
-    ...(Number.isNaN(through) ? {} : { through }),
-    ...(at === undefined ? {} : { stopped: { at, why: "time", limitMs, rounds, sent, last: "" } }),
-  };
-}
-
 function recordFile(thread: string): string {
   return `threads/${thread}/wake.json`;
 }
@@ -55,15 +42,6 @@ export function keepWakeRecord(characterDir: string, thread: string, record: Wak
 
 export function wakeRecord(characterDir: string, thread: string): WakeRecord {
   return read(characterDir, recordFile(thread));
-}
-
-export function legacyRecord(characterDir: string, thread: string, limitMs: number): WakeRecord {
-  if (readCharacterState(characterDir, recordFile(thread)) !== undefined) return wakeRecord(characterDir, thread);
-  const adopted = fromBefore(characterDir, limitMs);
-  keepWakeRecord(characterDir, thread, adopted);
-  deleteCharacterState(characterDir, OLD_HOME_THROUGH);
-  deleteCharacterState(characterDir, OLD_CUT_OFF);
-  return adopted;
 }
 
 export class WakeWords {

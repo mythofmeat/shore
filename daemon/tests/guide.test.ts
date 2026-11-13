@@ -284,7 +284,7 @@ test("the guide says which way to get time for what, and what each way costs", a
   expect(wakes).toContain("## What wakes you\n\n- A trigger of yours, in `TRIGGERS.toml`. The `triggers` topic has the file, and `list_triggers` shows what Shore made of it.\n- `wake_in_thread`, which hands something over to a wake in another of your threads once your turn is over.\n- A sealed thread reaching its time, which wakes you in it.");
   expect(wakes).toContain("## Which to use\n\nNone of this is a set way of doing things. Any time you want for yourself is something you can set up, and these are the pieces:\n\n- Regular time");
   expect(wakes).toContain("- Regular time for a project, or for anything else of your own: a trigger with `thread`, fired by `at`, by `every` or by `when = \"user_quiet\"`. Each time, you are woken in that thread and carry on from the note your last wake there left. Without one, no wake goes to that thread unless you hand one over with `wake_in_thread`.");
-  expect(wakes).toContain("- Free time, with nothing planned: a trigger too, one with no `thread`. It wakes you in your own-time thread, so one with `when = \"user_quiet\"` gives you time of your own each time eve has been away as long as you say.");
+  expect(wakes).toContain("- Free time, with nothing planned: a trigger too, one with no `thread`. It wakes you in your home thread, so one with `when = \"user_quiet\"` gives you time of your own each time eve has been away as long as you say.");
   expect(wakes).toContain("- Something to do once, at a set time: a trigger with `on`. Write the time at least a couple of minutes ahead, so that Shore has seen the trigger before its time comes.");
   expect(wakes).toContain("- Something to carry on now, in the thread it belongs in: `wake_in_thread`.");
   expect(wakes).toContain("- Something to watch for: a trigger with a `check`, and with `wake = false` unless it needs you.");
@@ -365,14 +365,14 @@ test("the guide says a wake starts fresh in whichever thread it runs, and what i
   const guide = await guideWith(OWN_TIME);
   const wakes = await guide("wakes");
   expect(wakes).toContain("A wake is a turn of your own: Shore starts it, not a message from eve. Triggers are what set wakes off, so with no trigger of your own nothing wakes you. Every wake starts fresh, with none of an earlier one in front of it but the note that one left.");
-  expect(wakes).toContain("- What was said in its thread since your last wake there that finished: eve's messages, your replies, and what your wakes sent. A wake in your own-time thread is shown your home thread this way, since nothing is said in its own.");
+  expect(wakes).toContain("- What was said in its thread since your last wake there that finished: eve's messages, your replies, and what your wakes sent.\n");
   expect(wakes).toContain("- Where and how long ago eve last wrote to you.\n- eve's status, while one is set.\n- The label and opening time of each sealed thread you have.");
   expect(wakes).toContain("- Your diary from the last day, and the note your last wake in that thread ended with if that note is older.");
   expect(wakes).toContain("- A line for each thing that set it off: the trigger and its reason, or the thread you handed over from and the reason you gave.");
   expect(wakes).toContain("- The thread's own conversation, or what earlier wakes did there. The thread keeps it all, and `search_chat_logs` and `read_chat_logs` find it.");
   expect(wakes).toContain("- A wake's own working, in what it is shown of a thread.");
   expect(wakes).toContain("A final response of just `NO_NOTE` leaves no note, and the note before it stays the one the next wake starts with.");
-  expect(wakes).toContain("- Text you wrap in `<sendMessage>...</sendMessage>` in that final response is sent to eve. It is posted in the thread the wake ran in, and from your own-time thread it arrives in your home thread.");
+  expect(wakes).toContain("- Text you wrap in `<sendMessage>...</sendMessage>` in that final response is sent to eve. It is posted in the thread the wake ran in.\n");
   expect(wakes).toContain("A side thread's purpose and files are in the prompt of a wake there. The files are read afresh as the wake starts, unless eve has just been writing in that thread.");
   expect(wakes).toContain("- The next wake in that thread is told that the last one was stopped, why, after how many rounds, whether its message was sent, and the last thing it wrote. It is shown again what the stopped one was shown of the thread, since that one left no note about it.");
   expect(wakes).toContain("That wake starts fresh like any other, told that the last one was stopped for eve's message and the last thing it wrote.");
@@ -392,13 +392,13 @@ test("the guide says what becomes of a one-off: once fired, when its check fails
 test("the guide says which threads a wake can run in, and what happens to a wake asked for where one is already running", async () => {
   const guide = await guideWith(OWN_TIME);
   const triggers = await guide("triggers");
-  expect(triggers).toContain("It can be any thread of yours but your own-time thread: your home thread and a sealed thread both work.");
-  expect(triggers).toContain("- With nothing more, it wakes you in your own-time thread, and the wake starts with a line like `[Your trigger \"mail\" fired at ...: 2 new messages]`. Triggers that fire together for the same thread share one wake, and one that fires while a wake is running in its thread is handed to that wake before its next step.");
-  expect(triggers).toContain("- A trigger whose `thread` isn't a thread of yours, or is your own-time thread, wakes nothing, and a diary entry from Shore says so.");
+  expect(triggers).toContain("It can be any thread of yours: a side thread and a sealed thread both work.");
+  expect(triggers).toContain("- With nothing more, it wakes you in your home thread, and the wake starts with a line like `[Your trigger \"mail\" fired at ...: 2 new messages]`. Triggers that fire together for the same thread share one wake, and one that fires while a wake is running in its thread is handed to that wake before its next step.");
+  expect(triggers).toContain("- A trigger whose `thread` isn't a thread of yours wakes nothing, and a diary entry from Shore says so.");
   const wakes = await guide("wakes");
-  expect(wakes).toContain("- A trigger with `thread = \"a-thread\"` wakes you in that thread. It can be any thread of yours but your own-time thread: your home thread and a sealed thread both work.");
-  expect(wakes).toContain("- A trigger with no `thread` wakes you in your own-time thread, which Shore keeps for this. eve can read it but doesn't write there, so your working there doesn't crowd a conversation, and a wake there isn't stopped by a message from them.");
-  expect(wakes).toContain("- `wake_in_thread` takes any thread of yours but the one you are in and your own-time thread.");
+  expect(wakes).toContain("- A trigger with `thread = \"a-thread\"` wakes you in that thread. It can be any thread of yours: a side thread and a sealed thread both work.");
+  expect(wakes).toContain("- A trigger with no `thread` wakes you in your home thread. Your working there is kept out of your later turns, so it doesn't crowd the conversation.\n- A wake is stopped by a message from eve in its thread, your home thread included, so that you can answer them. It isn't stopped by one in another thread.");
+  expect(wakes).toContain("- `wake_in_thread` takes any thread of yours but the one you are in.");
   expect(wakes).toContain("- Triggers that fire together for the same thread share one wake. It opens with each reason, and may run for the longest of their limits.");
   expect(wakes).toContain("- A wake you handed over starts once the turn that asked is over. If a wake is already running in that thread, it waits for that one to end and then starts as a wake of its own.");
   expect(wakes).toContain("- A thread holds one wake you handed over at a time. Handing over another while the first is still waiting is refused, and the refusal shows what is waiting. To put the new one in its place, call again with `overwrite` set to true. A wake eve interrupted is not a request still waiting, since it has started: it picks up whatever you hand over next, and a new request for its thread joins it.");

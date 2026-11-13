@@ -37,15 +37,15 @@ export function Palette({ state, close, newThread, newCharacter, initialScope = 
         id: `thread-dialog:${kind}`, icon: "chat" as const, group: "Thread", run: run(() => { navigate({ view: "chat" }); openThreadDialog(kind, current); }),
         label: { settings: "Thread settings", fork: "Fork thread", archive: "Archive thread" }[kind],
       }))),
-      ...(openThread === undefined || openThread.home || openThread.heartbeat === true ? [] : [{ id: "make-home", label: "Make home", icon: "home" as const, group: "Thread", run: run(() => { void makeHome(openThread); }) }]),
-      ...(openThread?.heartbeat === true ? [] : [{ id: "another-take", label: "Another take", icon: "shuffle" as const, group: "Thread", run: run(() => { navigate({ view: "chat" }); void requests.regenerate({ anotherTake: true }, streamReplies()).catch((failure: unknown) => toasts.show(errorText(failure), "error")); }) }]),
-      ...(["reason", "system", "compact", "clear", "gallery", ...(openThread?.heartbeat === true ? [] : ["model"] as const)] as const).map((name) => ({
+      ...(openThread === undefined || openThread.home ? [] : [{ id: "make-home", label: "Make home", icon: "home" as const, group: "Thread", run: run(() => { void makeHome(openThread); }) }]),
+      { id: "another-take", label: "Another take", icon: "shuffle" as const, group: "Thread", run: run(() => { navigate({ view: "chat" }); void requests.regenerate({ anotherTake: true }, streamReplies()).catch((failure: unknown) => toasts.show(errorText(failure), "error")); }) },
+      ...(["reason", "system", "compact", "clear", "gallery", "model"] as const).map((name) => ({
         id: `dialog:${name}`, icon: "chat" as const, group: "Thread", run: run(() => { navigate({ view: "chat" }); requestAnimationFrame(() => openConversationDialog(name)); }),
         label: { reason: "Regenerate with a reason", system: "Add system message", compact: "Compact context", clear: "Clear context", gallery: "Images", model: "Choose a model" }[name],
       })),
       { id: "compaction-view", label: "Show the compaction", icon: "chat" as const, group: "Thread", run: run(() => { navigate({ view: "chat" }); openCompactionView(); }) },
       ...(state.compaction === null ? [] : [{ id: "compaction-stop", label: "Stop the compaction", icon: "stop" as const, group: "Thread", run: run(() => { compactionWatch.stop().then((summary) => toasts.show(summary)).catch((failure: unknown) => toasts.show(errorText(failure), "error")); }) }]),
-      ...(openThread?.heartbeat === true ? [] : [{ id: "effort", label: "Change reasoning effort", icon: "chat" as const, group: "Thread", run: run(() => { navigate({ view: "chat" }); requestAnimationFrame(openEffortMenu); }) }]),
+      { id: "effort", label: "Change reasoning effort", icon: "chat" as const, group: "Thread", run: run(() => { navigate({ view: "chat" }); requestAnimationFrame(openEffortMenu); }) },
       ...sortThreads(state.threads, state.folders).map((thread) => ({ id: `thread:${thread.id}`, label: `Open ${threadLabel(thread)}`, detail: state.character ?? "", icon: "chat" as const, group: "Threads", run: run(() => { navigate({ view: "chat" }); perform(() => workspace.openThread(thread.id)); }) })),
     ];
     return [

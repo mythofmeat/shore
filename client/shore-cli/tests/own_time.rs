@@ -110,16 +110,16 @@ fn activating_a_session_shows_the_keepalive_and_the_state_of_own_time() {
 }
 
 #[test]
-fn the_thread_list_marks_home_and_the_own_time_thread() {
-    let thread = |id: &str, own: bool| {
+fn the_thread_list_marks_home_and_says_where_a_wake_runs() {
+    let thread = |id: &str, compaction: bool| {
         json!({
-            "id": id, "created_at": "2026-11-12T00:00:00Z", "compaction": !own, "home": id == "main",
-            "current": id == "main", "heartbeat": own, "turns": 2,
+            "id": id, "created_at": "2026-11-12T00:00:00Z", "compaction": compaction, "home": id == "main",
+            "current": id == "main", "turns": 2,
         })
     };
     let (output, _frames) = asked(
         json!({
-            "character": "ada", "threads": [thread("main", false), thread("own-time", true)],
+            "character": "ada", "threads": [thread("main", true), thread("side", false)],
             "home": "main", "current": "main",
         }),
         &["thread"],
@@ -129,8 +129,8 @@ fn the_thread_list_marks_home_and_the_own_time_thread() {
         Some(
             &[
                 "* main home \u{00b7} 2 turns \u{00b7} compacts".to_owned(),
-                "own-time own time \u{00b7} 2 turns \u{00b7} trims".to_owned(),
-                "home gets what own time sends, unless a trigger names another thread".to_owned(),
+                "side 2 turns \u{00b7} trims".to_owned(),
+                "a wake runs in home, unless its trigger names another thread".to_owned(),
             ][..]
         )
     );

@@ -16,7 +16,7 @@ import { HISTORY_DB_FILE } from "../src/engine/history_store.ts";
 import { serializeMessages } from "../src/engine/message_store.ts";
 import { assemblePrompt } from "../src/engine/prompt.ts";
 import { NO_PRIOR_CONTEXT } from "../src/engine/segments.ts";
-import { createThread, ensureOwnThread, readThreadsIndex } from "../src/engine/threads.ts";
+import { createThread, readThreadsIndex, writeThreadsIndex, type ThreadsIndex } from "../src/engine/threads.ts";
 import type { Message } from "../src/engine/types.ts";
 import { generationEngine } from "../src/handler/generation.ts";
 import { buildGenerationRequest } from "../src/handler/setup.ts";
@@ -244,22 +244,36 @@ describe("listing threads", () => {
   });
 });
 
-describe("the own-time thread in the character's list of threads", () => {
-  test("is named for what it is, with what runs there and where what it sends arrives, once there is one", async () => {
+describe("an own-time thread kept from an older Shore, in the character's list of threads", () => {
+  test("is listed as a thread like any other", async () => {
     const config = await setup();
     const data = config.dirs.data;
-    const list = async (): Promise<string> => await handleListThreads({ dataDir: data, character: "frank", userName: "sam", timeZone: "UTC", now: () => Date.parse(NOW) });
-    expect((await list()).split("\n\n")[0]).toBe('Your home thread is "main". You\'re in it.');
-    expect(await list()).not.toContain("own time");
-
-    await ensureOwnThread(data, "frank", NOW);
-    const listed = (await list()).split("\n\n");
-    expect(listed[0]).toBe('Your home thread is "main". You\'re in it. Your own-time thread is "own-time": a wake runs there when its trigger names no thread, and what it sends arrives in "main".');
+    await writeThreadsIndex(data, "frank", {
+      version: 1 as const, home: "main", heartbeat: "own-time",
+      threads: [{ id: "main", created_at: NOW, compaction: true }, { id: "own-time", label: "Own time", created_at: NOW, compaction: false }],
+    } as ThreadsIndex);
+    const listed = (await handleListThreads({ dataDir: data, character: "frank", userName: "sam", timeZone: "UTC", now: () => Date.parse(NOW) })).split("\n\n");
+    expect(listed[0]).toBe('Your home thread is "main". You\'re in it.');
     expect(listed[1]).toStartWith("main (home, you're here) · compaction on\n  started by sam on ");
     expect(listed[2]).toBe([
-      'own-time "Own time" (own time) · compaction off',
-      "  wakes whose trigger names no thread have run here since Sunday 2026-11-01 · 10:00 AM; sam can read it but doesn't write here",
+      'own-time "Own time" · compaction off',
+      "  started by sam on Sunday 2026-11-01 · 10:00 AM",
+      "  sam hasn't written here yet",
     ].join("\n"));
+    expect(listed).toHaveLength(3);
+  });
+
+  test("says how long ago the user last wrote in each thread, counted to the second and never as less than a minute", async () => {
+    const config = await setup();
+    const data = config.dirs.data;
+    await createThread(data, "frank", "harbor", NOW);
+    await createThread(data, "frank", "pier", NOW);
+    const nowMs = Date.parse("2026-11-02T06:50:00Z");
+    writeDurable(threadFile(data, "frank", "harbor", "active.jsonl"), serializeMessages([message("u1", "fish market tomorrow", "2026-11-02T05:20:00Z")]));
+    writeDurable(threadFile(data, "frank", "pier", "active.jsonl"), serializeMessages([message("u2", "see you there", "2026-11-02T06:50:30Z")]));
+    const listed = await handleListThreads({ dataDir: data, character: "frank", userName: "sam", timeZone: "UTC", now: () => nowMs });
+    expect(listed).toContain("  sam last wrote here Monday 2026-11-02 · 5:20 AM, 2 hours ago");
+    expect(listed).toContain("  sam last wrote here Monday 2026-11-02 · 6:50 AM, a minute ago");
   });
 });
 
@@ -290,13 +304,13 @@ describe("a thread whose messages were archived", () => {
       "  started by sam on Sunday 2026-11-01 · 10:00 AM",
       "  sam last wrote here Sunday 2026-11-01 · 5:58 PM, 13 hours ago",
     ].join("\n"));
-    const { index } = await ensureOwnThread(data, "frank", NOW);
-    expect(await lastWroteNote(data, "frank", index, "own-time", "sam", nowMs)).toBe('[sam last wrote to you 5 hours ago, in your home thread "main".]');
+    const index = await readThreadsIndex(data, "frank");
+    expect(await lastWroteNote(data, "frank", index, "harbor", "sam", nowMs)).toBe('[sam last wrote to you 5 hours ago, in your home thread "main".]');
     expect(await lastWroteNote(data, "frank", index, "main", "sam", nowMs)).toBe("[sam last wrote to you 5 hours ago, in this thread.]");
     expect(await lastWroteNote(data, "frank", undefined, "main", "sam", nowMs)).toBeUndefined();
 
     await archive(data, "lighthouse", [message("u4", "one more page", at(2, "05:00")), message("a4", "just one", at(2, "05:01"))]);
-    expect(await lastWroteNote(data, "frank", index, "own-time", "sam", nowMs)).toBe(
+    expect(await lastWroteNote(data, "frank", index, "main", "sam", nowMs)).toBe(
       '[sam last wrote to you 2 hours ago, in the side thread "lighthouse" (The lighthouse), which isn\'t shown here.]',
     );
     expect(await lastWroteNote(data, "frank", index, "harbor", "sam", nowMs)).toBe(
@@ -639,22 +653,26 @@ describe("chat logs across threads", () => {
     ]);
   });
 
-  test("a wake in the own-time thread finds what earlier wakes did there, since none of it is in its context", async () => {
+  test("a turn that starts fresh, as a wake does, finds what is still in its own thread's conversation, since none of it is in its context", async () => {
     const config = await setup();
     const data = config.dirs.data;
-    await ensureOwnThread(data, "frank", NOW);
-    writeDurable(threadFile(data, "frank", "own-time", "active.jsonl"), serializeMessages([
+    await createThread(data, "frank", "story", NOW);
+    writeDurable(threadFile(data, "frank", "main", "active.jsonl"), serializeMessages([
       message("a1", "I repainted the lighthouse door", NOW),
     ]));
-    const found = await handleSearchChatLogs({ query: "lighthouse door", all_time: true }, threadDataDir(data, "frank", "own-time"), {
+    const search = async (fresh: boolean | undefined): Promise<string> => await handleSearchChatLogs({ query: "lighthouse door", all_time: true }, threadDataDir(data, "frank", "main"), {
       character: "frank",
       dbPath: join(data, HISTORY_DB_FILE),
       dataDir: data,
-      thread: "own-time",
+      thread: "main",
+      ...(fresh === undefined ? {} : { fresh }),
       indexPath: join(config.dirs.cache, "chat_logs.db"),
       timeZone: "UTC",
     });
-    expect(found).toContain("[own-time]");
-    expect(found).toContain("a1");
+    expect(await search(undefined)).not.toContain("a1");
+    expect(await search(false)).not.toContain("a1");
+    const found = await search(true);
+    expect(found).toContain("I repainted the [lighthouse] [door]  a1");
+    expect(await search(undefined)).not.toContain("a1");
   });
 });

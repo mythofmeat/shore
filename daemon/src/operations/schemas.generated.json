@@ -17604,12 +17604,6 @@
         "home": {
           "type": "string"
         },
-        "heartbeat": {
-          "type": [
-            "string",
-            "null"
-          ]
-        },
         "current": {
           "type": "string"
         },
@@ -17729,12 +17723,6 @@
             },
             "home": {
               "type": "boolean"
-            },
-            "heartbeat": {
-              "type": [
-                "boolean",
-                "null"
-              ]
             },
             "current": {
               "type": "boolean"
@@ -18048,12 +18036,6 @@
         "home": {
           "type": "string"
         },
-        "heartbeat": {
-          "type": [
-            "string",
-            "null"
-          ]
-        },
         "current": {
           "type": "string"
         },
@@ -18173,12 +18155,6 @@
             },
             "home": {
               "type": "boolean"
-            },
-            "heartbeat": {
-              "type": [
-                "boolean",
-                "null"
-              ]
             },
             "current": {
               "type": "boolean"
@@ -18361,12 +18337,6 @@
         "home": {
           "type": "string"
         },
-        "heartbeat": {
-          "type": [
-            "string",
-            "null"
-          ]
-        },
         "current": {
           "type": "string"
         },
@@ -18486,12 +18456,6 @@
             },
             "home": {
               "type": "boolean"
-            },
-            "heartbeat": {
-              "type": [
-                "boolean",
-                "null"
-              ]
             },
             "current": {
               "type": "boolean"
@@ -18689,12 +18653,6 @@
         "home": {
           "type": "string"
         },
-        "heartbeat": {
-          "type": [
-            "string",
-            "null"
-          ]
-        },
         "current": {
           "type": "string"
         },
@@ -18818,12 +18776,6 @@
             },
             "home": {
               "type": "boolean"
-            },
-            "heartbeat": {
-              "type": [
-                "boolean",
-                "null"
-              ]
             },
             "current": {
               "type": "boolean"
@@ -19054,12 +19006,6 @@
         "home": {
           "type": "string"
         },
-        "heartbeat": {
-          "type": [
-            "string",
-            "null"
-          ]
-        },
         "current": {
           "type": "string"
         },
@@ -19179,12 +19125,6 @@
             },
             "home": {
               "type": "boolean"
-            },
-            "heartbeat": {
-              "type": [
-                "boolean",
-                "null"
-              ]
             },
             "current": {
               "type": "boolean"
@@ -19373,12 +19313,6 @@
         "home": {
           "type": "string"
         },
-        "heartbeat": {
-          "type": [
-            "string",
-            "null"
-          ]
-        },
         "current": {
           "type": "string"
         },
@@ -19498,12 +19432,6 @@
             },
             "home": {
               "type": "boolean"
-            },
-            "heartbeat": {
-              "type": [
-                "boolean",
-                "null"
-              ]
             },
             "current": {
               "type": "boolean"
@@ -19692,12 +19620,6 @@
         "home": {
           "type": "string"
         },
-        "heartbeat": {
-          "type": [
-            "string",
-            "null"
-          ]
-        },
         "current": {
           "type": "string"
         },
@@ -19817,12 +19739,6 @@
             },
             "home": {
               "type": "boolean"
-            },
-            "heartbeat": {
-              "type": [
-                "boolean",
-                "null"
-              ]
             },
             "current": {
               "type": "boolean"
@@ -20014,12 +19930,6 @@
         "home": {
           "type": "string"
         },
-        "heartbeat": {
-          "type": [
-            "string",
-            "null"
-          ]
-        },
         "current": {
           "type": "string"
         },
@@ -20139,12 +20049,6 @@
             },
             "home": {
               "type": "boolean"
-            },
-            "heartbeat": {
-              "type": [
-                "boolean",
-                "null"
-              ]
             },
             "current": {
               "type": "boolean"
@@ -20331,12 +20235,6 @@
         "home": {
           "type": "string"
         },
-        "heartbeat": {
-          "type": [
-            "string",
-            "null"
-          ]
-        },
         "current": {
           "type": "string"
         },
@@ -20456,12 +20354,6 @@
             },
             "home": {
               "type": "boolean"
-            },
-            "heartbeat": {
-              "type": [
-                "boolean",
-                "null"
-              ]
             },
             "current": {
               "type": "boolean"
@@ -20648,12 +20540,6 @@
         "home": {
           "type": "string"
         },
-        "heartbeat": {
-          "type": [
-            "string",
-            "null"
-          ]
-        },
         "current": {
           "type": "string"
         },
@@ -20773,12 +20659,6 @@
             },
             "home": {
               "type": "boolean"
-            },
-            "heartbeat": {
-              "type": [
-                "boolean",
-                "null"
-              ]
             },
             "current": {
               "type": "boolean"
@@ -20973,12 +20853,6 @@
         "home": {
           "type": "string"
         },
-        "heartbeat": {
-          "type": [
-            "string",
-            "null"
-          ]
-        },
         "current": {
           "type": "string"
         },
@@ -21098,12 +20972,6 @@
             },
             "home": {
               "type": "boolean"
-            },
-            "heartbeat": {
-              "type": [
-                "boolean",
-                "null"
-              ]
             },
             "current": {
               "type": "boolean"
@@ -21286,12 +21154,6 @@
         "home": {
           "type": "string"
         },
-        "heartbeat": {
-          "type": [
-            "string",
-            "null"
-          ]
-        },
         "current": {
           "type": "string"
         },
@@ -21411,12 +21273,6 @@
             },
             "home": {
               "type": "boolean"
-            },
-            "heartbeat": {
-              "type": [
-                "boolean",
-                "null"
-              ]
             },
             "current": {
               "type": "boolean"
@@ -21599,12 +21455,6 @@
         "home": {
           "type": "string"
         },
-        "heartbeat": {
-          "type": [
-            "string",
-            "null"
-          ]
-        },
         "current": {
           "type": "string"
         },
@@ -21724,12 +21574,6 @@
             },
             "home": {
               "type": "boolean"
-            },
-            "heartbeat": {
-              "type": [
-                "boolean",
-                "null"
-              ]
             },
             "current": {
               "type": "boolean"
@@ -21916,12 +21760,6 @@
         "home": {
           "type": "string"
         },
-        "heartbeat": {
-          "type": [
-            "string",
-            "null"
-          ]
-        },
         "current": {
           "type": "string"
         },
@@ -22041,12 +21879,6 @@
             },
             "home": {
               "type": "boolean"
-            },
-            "heartbeat": {
-              "type": [
-                "boolean",
-                "null"
-              ]
             },
             "current": {
               "type": "boolean"
@@ -22229,12 +22061,6 @@
         "home": {
           "type": "string"
         },
-        "heartbeat": {
-          "type": [
-            "string",
-            "null"
-          ]
-        },
         "current": {
           "type": "string"
         },
@@ -22354,12 +22180,6 @@
             },
             "home": {
               "type": "boolean"
-            },
-            "heartbeat": {
-              "type": [
-                "boolean",
-                "null"
-              ]
             },
             "current": {
               "type": "boolean"
@@ -22548,12 +22368,6 @@
         "home": {
           "type": "string"
         },
-        "heartbeat": {
-          "type": [
-            "string",
-            "null"
-          ]
-        },
         "current": {
           "type": "string"
         },
@@ -22673,12 +22487,6 @@
             },
             "home": {
               "type": "boolean"
-            },
-            "heartbeat": {
-              "type": [
-                "boolean",
-                "null"
-              ]
             },
             "current": {
               "type": "boolean"
@@ -22865,12 +22673,6 @@
         "home": {
           "type": "string"
         },
-        "heartbeat": {
-          "type": [
-            "string",
-            "null"
-          ]
-        },
         "current": {
           "type": "string"
         },
@@ -22990,12 +22792,6 @@
             },
             "home": {
               "type": "boolean"
-            },
-            "heartbeat": {
-              "type": [
-                "boolean",
-                "null"
-              ]
             },
             "current": {
               "type": "boolean"
@@ -23184,12 +22980,6 @@
         "home": {
           "type": "string"
         },
-        "heartbeat": {
-          "type": [
-            "string",
-            "null"
-          ]
-        },
         "current": {
           "type": "string"
         },
@@ -23309,12 +23099,6 @@
             },
             "home": {
               "type": "boolean"
-            },
-            "heartbeat": {
-              "type": [
-                "boolean",
-                "null"
-              ]
             },
             "current": {
               "type": "boolean"

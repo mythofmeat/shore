@@ -4,9 +4,8 @@ A thread is a conversation with a context of its own. What is said in one isn't 
 
 ## The kinds
 
-- Your home thread is where {{user}} talks with you unless they pick another thread. What you send from your own-time thread arrives there.
+- Your home thread is where {{user}} talks with you unless they pick another thread. A wake runs there when its trigger names no thread.
 - A side thread is for something you both come back to, such as a long-running story or a project. It compacts when it gets long, the way home does.
-- Your own-time thread is where a wake runs when its trigger names no thread. Shore makes it the first time one does. {{user}} can read it but doesn't write there, and it never compacts.
 - A sealed thread is one of your own that {{user}} can't see until a time you set.
 
 ## What crosses between them

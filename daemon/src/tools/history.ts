@@ -2,7 +2,7 @@ import { join } from "node:path";
 
 import { asNaive, hostZone, naiveInZone, resolveInZone } from "../ledger/zoned.ts";
 import { MessageStore } from "../engine/message_store.ts";
-import { ownThread, readThreadsIndex } from "../engine/threads.ts";
+import { readThreadsIndex } from "../engine/threads.ts";
 import { threadFile } from "../storage/files.ts";
 import {
   HISTORY_INDEX_FILE,
@@ -98,6 +98,7 @@ export interface ChatLogOptions {
   dbPath: string;
   dataDir?: string;
   thread?: string;
+  fresh?: boolean;
   indexPath?: string;
   userName?: string;
   timeZone?: string;
@@ -125,14 +126,13 @@ function checkConfigured(conversationDir: string): void {
   if (conversationDir === "") throw new InvalidArgs("conversation history is not configured");
 }
 
-async function otherThreads(options: ChatLogOptions): Promise<LiveThread[]> {
+async function unseenThreads(options: ChatLogOptions): Promise<LiveThread[]> {
   if (options.dataDir === undefined) return [];
   const dataDir = options.dataDir;
   const index = await readThreadsIndex(dataDir, options.character);
-  const heartbeat = ownThread(index);
   const live: LiveThread[] = [];
   for (const record of index?.threads ?? []) {
-    if (record.id === (options.thread ?? "main") && record.id !== heartbeat) continue;
+    if (record.id === (options.thread ?? "main") && options.fresh !== true) continue;
     try {
       const { store, raw } = await MessageStore.loadWithRaw(threadFile(dataDir, options.character, record.id, "active.jsonl"));
       live.push({ thread: record.id, raw, messages: store.messages() });
@@ -149,7 +149,7 @@ async function withIndex<T>(conversationDir: string, options: ChatLogOptions, ru
   const refreshed = async (force: boolean): Promise<HistoryIndex> => {
     await withHistoryIndexLock(path, async () => {
       await refreshHistoryIndex(ref, path, force);
-      refreshLiveRows(path, options.thread ?? "main", await otherThreads(options));
+      refreshLiveRows(path, options.thread ?? "main", await unseenThreads(options));
     });
     return HistoryIndex.open(path);
   };

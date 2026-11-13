@@ -57,7 +57,7 @@ function ChatTopbar({ state, sidebarOpen, toggleSidebar, mobile }: { state: Chro
     { label: "Regenerate with a reason…", icon: "regenerate", onSelect: () => setDialog("reason"), disabled: !ready || busy || !hasTurns },
     { label: "Clear context…", icon: "refresh", onSelect: () => setDialog("clear"), disabled: !ready || busy },
     "separator",
-    ...(thread === undefined || thread.home || thread.heartbeat === true ? [] : [{ label: "Make home", icon: "home" as const, onSelect: () => { void makeHome(thread); }, disabled: !ready }]),
+    ...(thread === undefined || thread.home ? [] : [{ label: "Make home", icon: "home" as const, onSelect: () => { void makeHome(thread); }, disabled: !ready }]),
     { label: "Archive…", icon: "archive", onSelect: () => openThreadDialog("archive", threadId), disabled: !ready || thread?.home === true, danger: true },
   ];
   return <header className="topbar">
@@ -100,9 +100,7 @@ export function Chat({ state, sidebarOpen, toggleSidebar, mobile }: { state: Chr
     <ConnectionBanner state={state} />
     {state.character === null ? <NoCharacter state={state} /> : <>
       <Transcript key={`${state.character}/${state.thread ?? ""}/${String(state.segmentView?.segment.index ?? "current")}`} character={state.character} mobile={mobile} />
-      {state.threads.find((thread) => thread.id === state.thread)?.heartbeat === true
-        ? <div className="composer-wrap"><p className="composer composer-note" role="note">{`${state.character}'s own time runs here. You can read along, and write to ${state.character} in another thread.`}</p></div>
-        : <Composer key={JSON.stringify([state.character, state.thread])} state={state} character={state.character} mobile={mobile} />}
+      <Composer key={JSON.stringify([state.character, state.thread])} state={state} character={state.character} mobile={mobile} />
       <QuoteButton />
     </>}
   </>;

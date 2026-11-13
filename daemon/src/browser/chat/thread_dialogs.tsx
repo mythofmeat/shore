@@ -46,7 +46,7 @@ function ThreadSettingsDialog({ state, thread, close }: { state: ChromeSnapshot;
       <span>Model</span>
       <button type="button" className="button thread-model" aria-label={`Model: ${model ?? `${character}’s default`}. Change model`} onClick={() => setPicking(true)}><span className="mono">{model === null ? `${character}’s default` : shortModel(model)}</span></button>
     </div>
-    {thread.heartbeat === true ? null : <label className="field"><span>When it gets long</span><select className="select" value={compaction ? "compact" : "trim"} onChange={(event) => setCompaction(event.target.value === "compact")}><option value="trim">Trim its oldest turns into the archive</option><option value="compact">Compact it into memory, as the home thread does</option></select></label>}
+    <label className="field"><span>When it gets long</span><select className="select" value={compaction ? "compact" : "trim"} onChange={(event) => setCompaction(event.target.value === "compact")}><option value="trim">Trim its oldest turns into the archive</option><option value="compact">Compact it into memory, as the home thread does</option></select></label>
     <label className="check"><input type="checkbox" checked={locked} onChange={(event) => setLocked(event.target.checked)} />Lock the label, purpose and files</label>
     <p className="form-hint">Only you can change a locked thread’s label, purpose and files. {character} can still edit the files themselves.</p>
     {picking ? <ModelPicker state={state} close={() => setPicking(false)} target={{ kind: "thread", id: thread.id }} scopes={false} current={model} pick={setModel} /> : null}

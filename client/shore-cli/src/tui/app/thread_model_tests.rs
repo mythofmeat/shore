@@ -46,10 +46,6 @@ fn threads() -> App {
                 ..row("loose", "2026-11-07T00:00:00Z")
             },
             ThreadRow {
-                heartbeat: true,
-                ..row("beats", "2026-11-02T00:00:00Z")
-            },
-            ThreadRow {
                 home: true,
                 ..row("main", "2026-01-01T00:00:00Z")
             },
@@ -72,11 +68,11 @@ fn order(app: &App) -> Vec<&str> {
 }
 
 #[test]
-fn threads_run_home_then_own_time_then_by_folder_with_placed_ones_first() {
+fn threads_run_home_then_by_folder_with_placed_ones_first() {
     assert_eq!(
         order(&threads()),
         [
-            "main", "beats", "busy", "orphan", "old", "loose", "first", "second", "story"
+            "main", "busy", "orphan", "old", "loose", "first", "second", "story"
         ],
         "loose threads newest active first, a missing folder counts as none, and \
          within a folder unplaced threads lead and placed ones follow their position"

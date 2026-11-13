@@ -13,7 +13,7 @@ import {
   type ResolvedModel,
 } from "../config/models.ts";
 import { assemblePrompt, type AssembledPrompt, type ThreadPrompt } from "../engine/prompt.ts";
-import { ownThread, homeThread, readThreadsIndexIn, threadRecord } from "../engine/threads.ts";
+import { homeThread, readThreadsIndexIn, threadRecord } from "../engine/threads.ts";
 import type { PriorContext } from "../engine/segments.ts";
 import type { Message } from "../engine/types.ts";
 import {
@@ -89,7 +89,6 @@ async function threadPrompt(
   return {
     id: record.id,
     home,
-    own: record.id === ownThread(index),
     created_at: record.created_at,
     started_by_you: record.created_by === "character",
     label: record.label,

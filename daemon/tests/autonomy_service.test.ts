@@ -40,6 +40,7 @@ async function world({ idleCompactionSecs = 0, archiveAfterSecs = 0, compaction 
   const during: World["during"] = {};
   const dream = Promise.withResolvers<DreamActionResult>();
   const executor: AutonomyExecutor = {
+    homeThread: () => "main",
     runWake: async (_character, wake, hooks) => {
       ran.push({ thread: wake.thread, fired: wake.fired.map((firing) => firing.name), limitMs: wake.limitMs });
       return await during.run?.(wake, hooks) ?? { events: [] };
@@ -82,37 +83,70 @@ test("when the user last wrote is taken from the history where nothing is on rec
   expect(service.status("ada")?.last_user_at).toBe(T0 - 5 * HOUR);
 });
 
-test("what fired together wakes the character once for each thread, the own-time thread among them, each for the longest limit asked of it or 30 minutes", async () => {
+test("what fired together wakes the character once for each thread, home for a trigger that names none, each for the longest limit asked of it or 30 minutes", async () => {
   const { service, ran, woken } = await world();
   service.wakeFor("ada", fired("lamp"));
   service.wakeFor("ada", fired("song", { thread: "ring", limitMs: 10 * MINUTE }));
   service.wakeFor("ada", fired("tide", { limitMs: 5 * MINUTE }));
   service.wakeFor("ada", fired("verse", { thread: "ring", limitMs: 45 * MINUTE }));
   service.wakeFor("ada", fired("weeds", { thread: "garden", limitMs: 12 * MINUTE }));
+  service.wakeFor("ada", fired("door", { thread: "main" }));
   await service.tick();
 
   expect(ran).toEqual([
-    { thread: undefined, fired: ["lamp", "tide"], limitMs: 1_800_000 },
+    { thread: "main", fired: ["lamp", "tide", "door"], limitMs: 1_800_000 },
     { thread: "ring", fired: ["song", "verse"], limitMs: 45 * MINUTE },
     { thread: "garden", fired: ["weeds"], limitMs: 12 * MINUTE },
   ]);
-  expect(woken()).toEqual(['Woken by trigger "lamp", "tide"', 'Woken in "ring" by trigger "song", "verse"', 'Woken in "garden" by trigger "weeds"']);
+  expect(woken()).toEqual(['Woken in "main" by trigger "lamp", "tide", "door"', 'Woken in "ring" by trigger "song", "verse"', 'Woken in "garden" by trigger "weeds"']);
   await service.tick();
   expect(ran).toHaveLength(3);
 });
 
-test("a wake waits until the user has been quiet in its thread for ten minutes, and one in the own-time thread never waits", async () => {
+test("a wake waits until the user has been quiet in its thread for ten minutes, home included", async () => {
   const { service, ran, clock } = await world();
   service.userActiveIn("ada", "ring");
   clock.now = T0 + 10 * MINUTE - 1;
   service.wakeFor("ada", fired("song", { thread: "ring" }));
   service.wakeFor("ada", fired("lamp"));
   await service.tick();
-  expect(ran.map((each) => each.thread)).toEqual([undefined]);
+  expect(ran.map((each) => each.thread)).toEqual(["main"]);
 
   clock.now = T0 + 10 * MINUTE;
   await service.tick();
-  expect(ran.map((each) => each.thread)).toEqual([undefined, "ring"]);
+  expect(ran.map((each) => each.thread)).toEqual(["main", "ring"]);
+
+  service.userActiveIn("ada", "main");
+  service.wakeFor("ada", fired("lamp"));
+  clock.now = T0 + 20 * MINUTE - 1;
+  await service.tick();
+  expect(ran.map((each) => each.thread)).toEqual(["main", "ring"]);
+  clock.now = T0 + 20 * MINUTE;
+  await service.tick();
+  expect(ran.map((each) => each.thread)).toEqual(["main", "ring", "main"]);
+});
+
+test("a wake started by hand doesn't wait for the user to be quiet in home, but once they stop it by writing there it waits like any other", async () => {
+  const { service, ran, clock, during, woken } = await world();
+  service.userActiveIn("ada", "main");
+  clock.now = T0 + MINUTE;
+  during.run = () => ({ events: [], interrupted: true });
+  service.wakeFor("ada", fired("lamp"));
+  await service.tick();
+  expect(ran).toEqual([]);
+
+  expect(service.wakeNow("ada")).toBe(false);
+  await service.tick();
+  expect(ran).toEqual([{ thread: "main", fired: ["lamp", ""], limitMs: 30 * MINUTE }]);
+  expect(woken()).toEqual(['Woken in "main" by trigger "lamp" and a start by hand']);
+
+  await service.tick();
+  clock.now = T0 + 10 * MINUTE - 1;
+  await service.tick();
+  expect(ran).toHaveLength(1);
+  clock.now = T0 + 10 * MINUTE;
+  await service.tick();
+  expect(ran).toHaveLength(2);
 });
 
 test("a running wake can be asked whether the user has written in its thread since it started", async () => {
@@ -122,7 +156,7 @@ test("a running wake can be asked whether the user has written in its thread sin
     heard.push(wake.interrupted());
     service.userActiveIn("ada", "garden");
     heard.push(wake.interrupted());
-    service.userActiveIn("ada", wake.thread ?? "own-time");
+    service.userActiveIn("ada", wake.thread);
     heard.push(wake.interrupted());
     return { events: [] };
   };
@@ -130,8 +164,8 @@ test("a running wake can be asked whether the user has written in its thread sin
   await service.tick();
   service.wakeFor("ada", fired("lamp"));
   await service.tick();
-  expect(ran.map((each) => each.thread)).toEqual(["ring", undefined]);
-  expect(heard).toEqual([false, false, true, false, false, false]);
+  expect(ran.map((each) => each.thread)).toEqual(["ring", "main"]);
+  expect(heard).toEqual([false, false, true, false, false, true]);
 });
 
 test("while a wake runs, the character counts as having one more wake without the user, on record before the wake does anything", async () => {
@@ -160,7 +194,7 @@ test("a dormant character is woken by nothing but a seal coming off, and what ca
   service.wakeFor("ada", fired("ferry"));
   seals.push({ thread: "gift", reason: "It is open." });
   await service.tick();
-  expect(ran.map((each) => [each.thread, each.fired])).toEqual([[undefined, ["lamp"]], [undefined, ["tide"]], ["gift", [""]]]);
+  expect(ran.map((each) => [each.thread, each.fired])).toEqual([["main", ["lamp"]], ["main", ["tide"]], ["gift", [""]]]);
   expect(woken().at(-1)).toBe('Woken in "gift" by its seal coming off');
   expect(service.log("ada", 20).filter((event) => event.kind === "dormant").map((event) => event.detail)).toEqual(["Went dormant (wakes without the user: 2)"]);
 
@@ -171,12 +205,12 @@ test("a dormant character is woken by nothing but a seal coming off, and what ca
   expect(ran).toHaveLength(3);
 });
 
-test("a wake started by hand runs in the own-time thread unless the character is dormant, and making it dormant or active starts none", async () => {
+test("a wake started by hand runs in home unless the character is dormant, and making it dormant or active starts none", async () => {
   const { service, ran, woken } = await world();
   expect(service.wakeNow("ada")).toBe(false);
   await service.tick();
-  expect(ran).toEqual([{ thread: undefined, fired: [""], limitMs: 30 * MINUTE }]);
-  expect(woken()).toEqual(["Woken by a start by hand"]);
+  expect(ran).toEqual([{ thread: "main", fired: [""], limitMs: 30 * MINUTE }]);
+  expect(woken()).toEqual(['Woken in "main" by a start by hand']);
 
   expect(service.forceDormancy("ada", "dormant")).toBe(true);
   expect(service.status("ada")?.state).toBe("Dormant");
@@ -291,7 +325,7 @@ test("a dream that is due waits for the next look when this one woke the charact
     expect(woken.service.forceDreamNow("ada")).toBe("queued");
     expect(woken.service.wakeFor("ada", fired("lamp", { thread }))).toBe("queued");
     await woken.service.tick();
-    expect([woken.ran.map((each) => each.thread), woken.service.runningDreams()]).toEqual([[thread], []]);
+    expect([woken.ran.map((each) => each.thread), woken.service.runningDreams()]).toEqual([[thread ?? "main"], []]);
     await woken.service.tick();
     expect(woken.service.runningDreams()).toEqual([{ character: "ada", startedAt: T0 }]);
     woken.dream.resolve({ events: [], dream: "finished" });

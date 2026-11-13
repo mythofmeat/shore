@@ -38,6 +38,7 @@ import type { ThreadRecord } from "../engine/threads.ts";
 export interface ToolContext {
   thread?: string;
   conversation?: readonly Message[];
+  fresh?: boolean;
   dryRun?: boolean;
   maxResultChars?: number;
   maxInlineImageBytes?: number;
@@ -138,6 +139,7 @@ function chatLogOptions(ctx: ToolContext): ChatLogOptions {
     dbPath: ctx.historyDbPath,
     dataDir: dirname(ctx.historyDbPath),
     ...(ctx.thread === undefined ? {} : { thread: ctx.thread }),
+    ...(ctx.fresh === undefined ? {} : { fresh: ctx.fresh }),
     ...(ctx.historyIndexPath === undefined ? {} : { indexPath: ctx.historyIndexPath }),
     ...(ctx.userName === undefined ? {} : { userName: ctx.userName }),
   };

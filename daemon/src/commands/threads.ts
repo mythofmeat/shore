@@ -9,7 +9,6 @@ import type { Args } from "./navigation.ts";
 import { busy, internalError, invalidRequest, notFound } from "./errors.ts";
 import { createFolder, deleteFolder, moveFolder, moveThread, placedThreads, renameFolder, setFolderSort, setThreadsSort, type PlacedThread } from "../engine/thread_layout.ts";
 import {
-  ownThread,
   homeThread,
   ThreadError,
   type ArchiveThreadOptions,
@@ -121,14 +120,13 @@ function threadCommandError(e: unknown): unknown {
   return e.kind === "not_found" ? notFound(e.message) : invalidRequest(e.message);
 }
 
-function view(ctx: ThreadContext, { record, folder, position }: PlacedThread, home: string, heartbeat: string | undefined, current: string): ThreadView {
+function view(ctx: ThreadContext, { record, folder, position }: PlacedThread, home: string, current: string): ThreadView {
   const activity = ctx.activity?.get(record.id);
   return {
     ...record,
     ...(folder === undefined ? {} : { folder }),
     ...(position === undefined ? {} : { position }),
     home: record.id === home,
-    ...(record.id === heartbeat ? { heartbeat: true } : {}),
     current: record.id === current,
     ...(ctx.activity === undefined ? {} : { turns: activity?.turns ?? 0, unread: activity?.unread ?? 0 }),
     ...(activity?.last_active === undefined ? {} : { last_active: activity.last_active }),
@@ -143,15 +141,13 @@ function lastActivity(ctx: ThreadContext): (id: string) => string | undefined {
 function listing(ctx: ThreadContext, index?: ThreadsIndex): ThreadListing {
   const known = index ?? ctx.registry.threads?.(ctx.character);
   const home = known === undefined ? ctx.registry.homeThread(ctx.character) : homeThread(known);
-  const heartbeat = ownThread(known);
   const records = known?.threads ?? ctx.registry.listThreads(ctx.character);
   const current = records.some((t) => t.id === ctx.current) ? ctx.current : home;
   const placed: readonly PlacedThread[] = known === undefined ? records.map((record) => ({ record })) : placedThreads(known, lastActivity(ctx));
   return {
     character: ctx.character,
-    threads: placed.map((item) => view(ctx, item, home, heartbeat, current)),
+    threads: placed.map((item) => view(ctx, item, home, current)),
     home,
-    ...(heartbeat === undefined ? {} : { heartbeat }),
     current,
     ...(known?.folders === undefined || known.folders.length === 0 ? {} : { folders: known.folders.map((folder) => ({ name: folder.name, ...(folder.by_activity === true ? { by_activity: true } : {}) })) }),
     ...(known?.order === undefined ? {} : { manual_order: true }),

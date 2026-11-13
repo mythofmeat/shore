@@ -1,5 +1,5 @@
 import type { ThreadFolder, ThreadRecord, ThreadsIndex } from "./threads.ts";
-import { ownThread, homeThread, ThreadError } from "./threads.ts";
+import { homeThread, ThreadError } from "./threads.ts";
 
 export const MAX_FOLDER_NAME_LENGTH = 64;
 
@@ -23,8 +23,7 @@ function newestFirst(activity: (id: string) => string | undefined): (a: ThreadRe
 }
 
 function pinnedThreads(index: ThreadsIndex): string[] {
-  const heartbeat = ownThread(index);
-  return [homeThread(index), ...(heartbeat === undefined ? [] : [heartbeat])];
+  return [homeThread(index)];
 }
 
 function placed(records: readonly ThreadRecord[], folder: string | undefined, manual: boolean): PlacedThread[] {
@@ -85,7 +84,7 @@ function looseOnScreen(index: ThreadsIndex, activity: (id: string) => string | u
 
 export function moveThread(index: ThreadsIndex, character: string, id: string, move: ThreadMove, activity: (id: string) => string | undefined): ThreadsIndex {
   if (!index.threads.some((record) => record.id === id)) throw new ThreadError("not_found", `no thread ${JSON.stringify(id)} for ${character}`);
-  if (pinnedThreads(index).includes(id)) throw new ThreadError("is_pinned", `thread ${JSON.stringify(id)} is the home or own-time thread, and those stay at the top of the list`);
+  if (pinnedThreads(index).includes(id)) throw new ThreadError("is_pinned", `thread ${JSON.stringify(id)} is the home thread, and it stays at the top of the list`);
   const current = folderList(index).find((folder) => folder.threads.includes(id))?.name;
   const target = move.folder === undefined ? current : move.folder === "" ? undefined : requireFolder(index, character, move.folder).name;
   const onScreen = looseOnScreen(index, activity);
