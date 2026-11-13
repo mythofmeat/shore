@@ -239,13 +239,13 @@ test("a failed tool loop is durable before the final answer and repaired after r
   expect(durable[1]?.content_blocks).toEqual([{ type: "tool_use", id: "tool_interrupted", name: "activity", input: {} }]);
 
   const restarted = await ConversationEngine.load("ada", run.dataDir, undefined);
-  expect(await restarted.recoverInterruptedToolLoop()).toBe(1);
+  expect(await restarted.recoverInterruptedToolLoop("the daemon was restarted")).toBe(1);
   const recovered = restarted.messages();
   expect(recovered.map((message) => message.role)).toEqual(["user", "assistant", "user"]);
   expect(recovered[2]?.content_blocks).toEqual([{
     type: "tool_result",
     tool_use_id: "tool_interrupted",
-    content: "Tool execution was interrupted by a Shore daemon restart before it returned a result.",
+    content: "the daemon was restarted",
     is_error: true,
   }]);
 });

@@ -236,11 +236,12 @@ export class ConversationEngine {
     });
   }
 
-  async recoverInterruptedToolLoop(): Promise<number> {
+  async recoverInterruptedToolLoop(reason: string): Promise<number> {
     return await withConversation(this.#conversationDir, "update", async () => {
       const recovered = await this.#messages.recoverInterruptedToolLoop(
         `m_${crypto.randomUUID()}`,
         new Date().toISOString(),
+        reason,
       );
       if (recovered > 0) {
         this.#advanceRevision();

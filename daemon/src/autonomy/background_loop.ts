@@ -37,7 +37,7 @@ export interface LoopRound {
 
 export interface BackgroundLoopDeps {
   character: string;
-  generate: (request: SidecarRequest, phase: ToolPhase, signal: AbortSignal) => Promise<GenerateResponse | undefined>;
+  generate: (request: SidecarRequest, phase: ToolPhase, signal: AbortSignal) => Promise<GenerateResponse>;
   dispatch: (
     name: string,
     input: unknown,
@@ -123,7 +123,7 @@ async function retryPictures(
   request: SidecarRequest,
   result: Pick<BackgroundLoopResult, "sendMessageText">,
   deps: BackgroundLoopDeps,
-  run: () => Promise<GenerateResponse | undefined>,
+  run: () => Promise<GenerateResponse>,
   inTime: () => boolean,
 ): Promise<void> {
   const sent = result.sendMessageText;
@@ -142,7 +142,7 @@ async function retryPictures(
   await deps.persist?.({ role: "user", blocks: retry });
   try {
     const retried = await run();
-    if (retried === undefined || retried.finish_reason.startsWith("error")) deps.note("The retry to fix pictures failed; sending the message as it was");
+    if (retried.finish_reason.startsWith("error")) deps.note("The retry to fix pictures failed; sending the message as it was");
   } catch (error) {
     deps.note(`The retry to fix pictures failed; sending the message as it was: ${truncateSummary(String(error), 120)}`);
   }
@@ -247,12 +247,11 @@ export async function runBackgroundLoop(
   }, phase, abort.signal);
   try {
     const response = await run();
-    if (response !== undefined && !response.finish_reason.startsWith("error")) await retryPictures(request, result, deps, run, () => performance.now() < deadline);
-    if (response === undefined) {
-      result.failedRound = iteration;
-    } else if (response.finish_reason.startsWith("error")) {
+    if (response.finish_reason.startsWith("error")) {
       result.failedRound = iteration - 1;
       result.failure = new Error(`${name} generation ended with ${response.finish_reason}`);
+    } else {
+      await retryPictures(request, result, deps, run, () => performance.now() < deadline);
     }
   } catch (failure) {
     result.failedRound = iteration;

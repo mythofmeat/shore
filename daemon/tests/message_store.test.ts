@@ -10,7 +10,7 @@ import { appendDurableLine, listDurableFiles, readDurable } from "../src/storage
 import { databasePath } from "../src/storage/store.ts";
 import { rejectionOf } from "./support/outcome.ts";
 
-const INTERRUPTED = "Tool execution was interrupted by a Shore daemon restart before it returned a result.";
+const INTERRUPTED = "the tool was cut off";
 
 const cleanups: Array<() => Promise<void>> = [];
 afterEach(async () => {
@@ -84,7 +84,7 @@ describe("recovering a tool loop a restart cut short", () => {
       message("a2", "assistant", [use("call_0"), use("call_1")]),
       message("r2", "user", [result("call_1")]),
     ]);
-    expect(await store.recoverInterruptedToolLoop("m_recovered", "2026-08-27T00:05:00Z")).toBe(1);
+    expect(await store.recoverInterruptedToolLoop("m_recovered", "2026-08-27T00:05:00Z", INTERRUPTED)).toBe(1);
     const recovered = store.messages().at(-1);
     expect(recovered?.msg_id).toBe("m_recovered");
     expect(recovered?.content_blocks).toEqual([{ type: "tool_result", tool_use_id: "call_0", content: INTERRUPTED, is_error: true }]);
@@ -99,7 +99,7 @@ describe("recovering a tool loop a restart cut short", () => {
       [message("q", "user", [text("go")])],
     ]) {
       const { store, path } = await storeWith(history);
-      expect(await store.recoverInterruptedToolLoop("m", "2026-08-27T00:05:00Z")).toBe(0);
+      expect(await store.recoverInterruptedToolLoop("m", "2026-08-27T00:05:00Z", INTERRUPTED)).toBe(0);
       expect(store.messages()).toHaveLength(history.length);
       expect(listDurableFiles(backupDirFor(path))).toEqual([]);
     }

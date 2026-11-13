@@ -63,6 +63,7 @@ interface Script {
   calls: string[];
   held: { started: PromiseWithResolvers<void>; release: PromiseWithResolvers<void> } | undefined;
   closing: string;
+  finishes?: (string | undefined)[];
   aside?: string | undefined;
   again?: number;
   beatHeld?: { started: PromiseWithResolvers<void>; release: PromiseWithResolvers<void> } | undefined;
@@ -72,11 +73,11 @@ interface Script {
 }
 
 function scriptedProvider(script: Script): SidecarProvider {
-  const respond = (request: SidecarRequest, blocks: GenerateResponse["content_blocks"]): GenerateResponse => ({
+  const respond = (request: SidecarRequest, blocks: GenerateResponse["content_blocks"], finish?: string): GenerateResponse => ({
     model: request.model,
     content: blocks.flatMap((block) => block.type === "text" ? [block.text] : []).join(""),
     content_blocks: blocks,
-    finish_reason: blocks.some((block) => block.type === "tool_use") ? "tool_use" : "end_turn",
+    finish_reason: finish ?? (blocks.some((block) => block.type === "tool_use") ? "tool_use" : "end_turn"),
     usage: { input_tokens: 1, output_tokens: 1, cache_read_tokens: 0, cache_creation_tokens: 0 },
     timing: { total_ms: 1, time_to_first_token_ms: 1 },
   });
@@ -137,7 +138,7 @@ function scriptedProvider(script: Script): SidecarProvider {
         : [
             ...(script.aside === undefined ? [] : [{ type: "text" as const, text: script.aside }]),
             { type: "tool_use", id: `read-${String(script.wakes.length)}`, name: "read", input: { file_path: "SOUL.md" } },
-          ]));
+          ], resultsIn ? script.finishes?.shift() : undefined));
     },
   };
 }
@@ -3037,6 +3038,47 @@ test("the log shows each tool a wake called with the start of what came back", a
   });
 });
 
+test("a wake whose model call ends in an error is logged as failed on that round, with the reason the provider gave", async () => {
+  await withCharacter(async ({ runtime, script, say, wakeNow }) => {
+    await say("hello");
+    script.finishes = ["error"];
+    at(1);
+    await wakeNow();
+
+    expect(script.wakes).toHaveLength(2);
+    expect(runtime.autonomy.log("ada", 100).filter((event) => event.kind === "call_failed").map((event) => event.detail)).toEqual([
+      "Model call failed on round 1 — Wake generation ended with error",
+    ]);
+  });
+});
+
+test("a wake that sends a picture Shore can't find is asked once to fix it, and the log says so when that second try ends in an error", async () => {
+  const retryNotes = (runtime: ShoreRuntime): string[] => runtime.autonomy.log("ada", 100).map((event) => event.detail).filter((detail) => detail.includes("ictures"));
+  await withCharacter(async ({ runtime, script, say, wakeNow, thread }) => {
+    script.closing = "<sendMessage>\nThe lamp tonight\n![[missing.png]]\n</sendMessage>";
+    await say("hello");
+    at(1);
+    await wakeNow();
+
+    expect(script.wakes).toHaveLength(4);
+    expect(retryNotes(runtime)).toEqual([expect.stringMatching(/^Pictures not found, asked to fix them before sending: .*missing\.png/) as string]);
+    expect((await thread("main")).at(-1)?.content).toBe("The lamp tonight\n![[missing.png]]");
+  });
+  await withCharacter(async ({ runtime, script, say, wakeNow, thread }) => {
+    script.closing = "<sendMessage>\nThe lamp tonight\n![[missing.png]]\n</sendMessage>";
+    script.finishes = [undefined, "error"];
+    await say("hello");
+    at(1);
+    await wakeNow();
+
+    expect(retryNotes(runtime)).toEqual([
+      expect.stringMatching(/^Pictures not found, asked to fix them before sending: .*missing\.png/) as string,
+      "The retry to fix pictures failed; sending the message as it was",
+    ]);
+    expect((await thread("main")).at(-1)?.content).toBe("The lamp tonight\n![[missing.png]]");
+  });
+});
+
 test("a wake whose tool call breaks off leaves its thread with an answer to that call, and the log says what went wrong", async () => {
   await withCharacter(async ({ runtime, script, say, thread, wakeNow }) => {
     await say("hello");
@@ -3051,7 +3093,7 @@ test("a wake whose tool call breaks off leaves its thread with an answer to that
     expect((await thread("own-time")).map((message) => [message.role, message.content_blocks.map((block) => block.type === "tool_result" ? [block.type, block.is_error, block.content] : block.type)])).toEqual([
       ["user", ["text"]],
       ["assistant", ["tool_use"]],
-      ["user", [["tool_result", true, "Tool execution was interrupted by a Shore daemon restart before it returned a result."]]],
+      ["user", [["tool_result", true, "The wake ended before this tool returned a result."]]],
     ]);
     expect((await thread("main")).filter((message) => message.origin === "autonomous")).toEqual([]);
     expect(runtime.autonomy.log("ada", 100).map((event) => [event.kind, event.detail]).slice(-2)).toEqual([

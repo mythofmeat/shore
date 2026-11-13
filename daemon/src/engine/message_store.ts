@@ -406,7 +406,7 @@ export class MessageStore {
     });
   }
 
-  async recoverInterruptedToolLoop(msgId: string, timestamp: string): Promise<number> {
+  async recoverInterruptedToolLoop(msgId: string, timestamp: string, reason: string): Promise<number> {
     return await this.#mutate((messages) => {
       const tail = messages.slice(this.#keepIndex(messages));
       const missing = unansweredTailToolUseIds(tail);
@@ -414,7 +414,7 @@ export class MessageStore {
       const blocks: ContentBlock[] = missing.map((toolUseId) => ({
         type: "tool_result",
         tool_use_id: toolUseId,
-        content: "Tool execution was interrupted by a Shore daemon restart before it returned a result.",
+        content: reason,
         is_error: true,
       }));
       messages.push({
