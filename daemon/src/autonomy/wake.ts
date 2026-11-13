@@ -58,6 +58,7 @@ export interface WakeEngine extends ThreadReader {
   appendMessage(msg: Message): Promise<void>;
   currentRevision(): number;
   turnCount(): number;
+  userTurnCount(): number;
   reload(): Promise<void>;
   recoverInterruptedToolLoop(reason: string): Promise<number>;
 }
@@ -307,11 +308,8 @@ export async function runWake(character: string, config: LoadedConfig, wake: Wak
     const record = wakeRecord(characterDir, thread);
     const recent = recentDiary(characterDir, nowMs);
     const status = presence(config.dirs.data);
-    const setOff = [
-      ...wake.fired.map((firing) => triggerFiredNote(firing, timeZone)),
-      ...(seal === undefined ? [] : [sealedWakeNote(seal.sealed, seal.filesDir, userName, timeZone)]),
-      rendered,
-    ];
+    const fired = wake.fired.map((firing) => triggerFiredNote(firing, timeZone));
+    const setOff = [...fired, ...(seal === undefined ? [] : [sealedWakeNote(seal.sealed, seal.filesDir, userName, timeZone)]), rendered];
     const id = (deps.newId ?? (() => `m_${crypto.randomUUID()}`))();
     const opener = (text: string): Message => ({
       msg_id: id,
@@ -365,7 +363,7 @@ export async function runWake(character: string, config: LoadedConfig, wake: Wak
       return { events };
     }
 
-    await engine.appendMessage(opener([WAKE_OPENER, ...setOff].join("\n\n")));
+    await engine.appendMessage({ ...opener([WAKE_OPENER, ...setOff].join("\n\n")), shown_later: [WAKE_OPENER, ...fired].join("\n\n") });
     const conversation = { thread, conversation: [shown] };
     const pictures: PictureSender = { workspace, dir: sentPicturesDir(config.dirs.data, character) };
     const workspaceTurns = workspaceTurnsFor(config.dirs, character, workspace);
@@ -438,12 +436,12 @@ export async function runWake(character: string, config: LoadedConfig, wake: Wak
     }
     const turns = engine.turnCount();
     const tokens = estimateHistoryTokens(measured, tier);
-    if (!threadShouldCompact(config, turns, tokens, crowded)) return { events };
     const written = Math.max(turns - leadingWakeTurns(active), 1);
     if (written < turns) {
-      await trim(written);
+      if (threadShouldCompact(config, turns, tokens, crowded)) await trim(written);
       return { events };
     }
+    if (!threadShouldCompact(config, engine.userTurnCount(), tokens, crowded)) return { events };
     await maybeCompact({
       autonomy: {
         shouldCompactNow: () => true,

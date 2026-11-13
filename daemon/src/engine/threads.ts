@@ -122,6 +122,7 @@ export function isWakeOpener(message: Pick<Message, "role" | "origin">): boolean
 
 export interface ThreadActivity {
   turns: number;
+  user_turns: number;
   last_active?: string;
   last_user?: string;
   unread?: number;
@@ -188,6 +189,7 @@ interface Reply {
 
 interface ActiveScan {
   turns: number;
+  userTurns: number;
   latest: number;
   latestUser: number;
   replies: Reply[];
@@ -198,7 +200,7 @@ interface ActiveScan {
 }
 
 function emptyScan(): ActiveScan {
-  return { turns: 0, latest: -Infinity, latestUser: -Infinity, replies: [], wakeTurn: false, seen: 0, toolLoop: "none", reply: undefined };
+  return { turns: 0, userTurns: 0, latest: -Infinity, latestUser: -Infinity, replies: [], wakeTurn: false, seen: 0, toolLoop: "none", reply: undefined };
 }
 
 function followToolLoop(scan: ActiveScan, line: unknown, at: number): void {
@@ -224,6 +226,7 @@ function scanInto(scan: ActiveScan, lines: readonly unknown[]): ActiveScan {
     if (isUserTurnLine(line)) {
       scan.turns += 1;
       scan.wakeTurn = isWakeOpener(line as Message);
+      if (!scan.wakeTurn) scan.userTurns += 1;
       if (time > scan.latestUser && !scan.wakeTurn) scan.latestUser = time;
     }
     followToolLoop(scan, line, at);
@@ -294,6 +297,7 @@ export function threadActivityNow(data: string, character: string, id: string): 
   const lastUser = scan.latestUser === -Infinity ? archivedUserTurnAt(data, character, id) : scan.latestUser;
   return {
     turns: scan.turns,
+    user_turns: scan.userTurns,
     ...(scan.latest === -Infinity ? {} : { last_active: new Date(scan.latest).toISOString() }),
     ...(Number.isNaN(lastUser) ? {} : { last_user: new Date(lastUser).toISOString() }),
     unread: unreadReplies(scan, threadReadMark(data, character, id)).length,

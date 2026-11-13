@@ -31,7 +31,7 @@ export interface TurnEngine {
   messages(): readonly Message[];
   appendMessage(msg: Message): Promise<void>;
   currentRevision(): number;
-  turnCount(): number;
+  userTurnCount(): number;
   pendingRegenAlt(): PendingAlt | undefined;
   messagesAfterLastUserTurn(): readonly Message[];
   segments(): { segmentCount(): number; readSegment(index: number): Promise<Message[]> };
@@ -200,7 +200,7 @@ export function notifyUserMessageIfFresh(
   regen: boolean,
 ): void {
   if (regen || !bodyHasContent(body)) return;
-  ctx.autonomy.onUserMessage(charName, engine.turnCount());
+  ctx.autonomy.onUserMessage(charName, engine.userTurnCount());
 }
 
 export function contextTokensFor(usage: Usage): number {
@@ -248,7 +248,7 @@ export function threadShouldCompact(config: LoadedConfig, turns: number, tokens:
 
 export async function maybeCompact(
   ctx: { autonomy: CompactionAutonomy },
-  engine: Pick<TurnEngine, "thread" | "turnCount">,
+  engine: Pick<TurnEngine, "thread" | "userTurnCount">,
   charName: string,
   config: LoadedConfig,
   dataDir: string,
@@ -256,7 +256,7 @@ export async function maybeCompact(
   runner: CompactionRunner,
   crowded = false,
 ): Promise<boolean> {
-  const turnCount = engine.turnCount();
+  const turnCount = engine.userTurnCount();
   const thread = engine.thread ?? await homeThreadOf(dataDir, charName);
   if (await compactionHeld(dataDir, charName, thread)) return false;
   if (runningPass(dataDir, charName)?.thread === thread) return false;

@@ -27,7 +27,7 @@ export interface PersistEngine {
   appendMessage(msg: Message): Promise<void>;
   replaceAfterLastUserTurn(newMessages: Message[]): Promise<number>;
   currentRevision(): number;
-  turnCount(): number;
+  userTurnCount(): number;
 }
 
 interface PersistAutonomy {
@@ -114,7 +114,7 @@ export async function persistAndNotify(
     pings: params.keepalivePings,
     cachedTokens: cachedPrefixTokens(result.context_usage ?? result.usage),
   }, engine.thread);
-  ctx.autonomy.notifyAssistantMessage(charName, engine.turnCount());
+  ctx.autonomy.notifyAssistantMessage(charName, engine.userTurnCount());
 
   ctx.notifier.notifyMessageComplete(
     `Shore - ${charName}`,

@@ -45,7 +45,7 @@ export function dormancyConfigFor(config: LoadedConfig): DormancyConfig {
 async function restoredIdle(dataDir: string, character: string): Promise<RestoredIdle | undefined> {
   try {
     const thread = await homeThreadOf(dataDir, character);
-    const { turns, last_active: lastActive } = threadActivityNow(dataDir, character, thread);
+    const { user_turns: turns, last_active: lastActive } = threadActivityNow(dataDir, character, thread);
     const checkpoint = await loadCompactionCheckpoint(dataDir, character, thread).catch(() => undefined);
     const diedCompacting = checkpoint?.state === "running";
     return {

@@ -96,7 +96,7 @@ export function generationEngine(engine: ConversationEngine): GenerationEngine {
     appendMessage: (msg) => engine.appendMessage(msg),
     replaceAfterLastUserTurn: (msgs) => engine.replaceAfterLastUserTurn(msgs),
     currentRevision: () => engine.currentRevision(),
-    turnCount: () => engine.turnCount(),
+    userTurnCount: () => engine.userTurnCount(),
     pendingRegenAlt: () => engine.pendingRegenAlt(),
     messagesAfterLastUserTurn: () => engine.messagesAfterLastUserTurn(),
     attemptOf: (msgId, index) => engine.attemptOf(msgId, index),

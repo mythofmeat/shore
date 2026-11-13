@@ -593,6 +593,104 @@ test("with triggers off an idle conversation is still compacted and later archiv
   });
 });
 
+test("home is compacted for the turns the user wrote, however many wakes ran there, and a reply after a wake is sent what set the wake off without the wake's prompt", async () => {
+  await withCharacter(async ({ script, data, say, wakeNow }) => {
+    const compactions = (): number => script.calls.filter((call) => call === "compaction").length;
+    script.closing = "NO_NOTE";
+    let minute = 0;
+    for (const [turn, wakes] of [["one", 2], ["two", 2], ["three", 1]] as const) {
+      at(minute += 1);
+      await say(turn);
+      for (let wake = 0; wake < wakes; wake += 1) {
+        at(minute += 1);
+        await wakeNow();
+      }
+      await queuedCompactionsEnded(data, "ada");
+    }
+    expect(script.wakes).toHaveLength(10);
+    expect(compactions()).toBe(0);
+
+    at(minute += 1);
+    await say("four");
+    const asked = textOf(script.replies.at(-1) as SidecarRequest);
+    expect(asked).toContain("[wake]\n\n[This wake was started by hand at Friday 2026-10-30 · 12:08 PM, from Shore's command line or its settings.]\n[Your working in this wake isn't shown here: 1 tool call.");
+    expect(asked).not.toContain("This is a wake in your thread");
+    await queuedCompactionsEnded(data, "ada");
+    expect(compactions()).toBe(1);
+  }, (app) => {
+    app.memory.compaction.enabled = true;
+    app.memory.compaction.keep_recent_turns = 0;
+    app.memory.compaction.min_turns = 1;
+    app.memory.compaction.max_turns = 4;
+    app.behavior.autonomy.triggers.max_idle_wakes = 10;
+  });
+});
+
+test("the wait before an idle conversation is compacted runs from the end of the character's reply, not from the user's message", async () => {
+  await withCharacter(async ({ runtime, script, say }) => {
+    const compactions = (): number => script.calls.filter((call) => call === "compaction").length;
+    await repliedAt(20, script, () => say("is the lamp lit?"));
+    at(69);
+    await runtime.autonomy.tick();
+    expect(compactions()).toBe(0);
+    at(70);
+    await runtime.autonomy.tick();
+    expect(compactions()).toBe(1);
+  }, compactsWhenIdle);
+});
+
+test("an idle conversation is compacted once the user has written min_turns turns in it, and wakes there don't count, before or after a restart", async () => {
+  const fewTurns = (app: AppConfig): void => {
+    compactsWhenIdle(app);
+    app.memory.compaction.min_turns = 3;
+    app.behavior.autonomy.triggers.max_idle_wakes = 10;
+  };
+  const compactions = (script: Script): number => script.calls.filter((call) => call === "compaction").length;
+  let root = "";
+  await withCharacter(async ({ runtime, script, data, say, wakeNow }) => {
+    root = dirname(data);
+    script.closing = "NO_NOTE";
+    await say("one");
+    for (const minute of [1, 2, 3]) {
+      at(minute);
+      await wakeNow();
+    }
+    at(4);
+    await say("two");
+    at(60);
+    await runtime.autonomy.tick();
+    expect(compactions(script)).toBe(0);
+  }, fewTurns);
+
+  at(120);
+  await withCharacter(async ({ runtime, script, say }) => {
+    await runtime.autonomy.register(registrationFor("ada", runtime.registry.effectiveConfig("ada")));
+    await runtime.autonomy.tick();
+    expect(compactions(script)).toBe(0);
+
+    at(121);
+    await say("three");
+    at(180);
+    await runtime.autonomy.tick();
+    expect(compactions(script)).toBe(1);
+  }, fewTurns, root);
+
+  at(0);
+  await withCharacter(async ({ data, say }) => {
+    root = dirname(data);
+    for (const [minute, turn] of [[0, "one"], [1, "two"], [2, "three"]] as const) {
+      at(minute);
+      await say(turn);
+    }
+  }, fewTurns);
+  at(120);
+  await withCharacter(async ({ runtime, script }) => {
+    await runtime.autonomy.register(registrationFor("ada", runtime.registry.effectiveConfig("ada")));
+    await runtime.autonomy.tick();
+    expect(compactions(script)).toBe(1);
+  }, fewTurns, root);
+});
+
 test("a side thread trimmed for room without compaction keeps its newest reply while the user hasn't read it", async () => {
   await withCharacter(async ({ runtime, data, script, say, thread }) => {
     await runtime.registry.createThread("ada", "side");
@@ -1713,6 +1811,10 @@ function wakeText(now: string, lines: readonly string[], limit = "30 minutes", n
   return wakeShown(now, [], lines, limit, nudgeAfter);
 }
 
+function wakeSeenLater(...setOff: string[]): string {
+  return ["[wake]", ...setOff].join("\n\n");
+}
+
 function homeWakeShown(now: string, shown: readonly string[], lines: readonly string[], limit = "30 minutes", nudgeAfter = "25 minutes"): string {
   return wakeShown(now, shown, lines, limit, nudgeAfter, "main");
 }
@@ -1790,14 +1892,14 @@ test("a trigger that names a thread wakes the character there, fresh, with what 
     expect(emitted.map((each) => [each.thread, each.msg.content])).toEqual([["ring", "Part one: the fox came to the gate."]]);
     expect(runtime.registry.listThreads("ada").map((record) => record.id)).toEqual(["main", "ring"]);
     expect(threadActivityNow(data, "ada", "ring")).toEqual({
-      turns: 2, last_active: new Date(T0 + 11.5 * MINUTE).toISOString(), last_user: new Date(T0 + MINUTE).toISOString(), unread: 1,
+      turns: 2, user_turns: 1, last_active: new Date(T0 + 11.5 * MINUTE).toISOString(), last_user: new Date(T0 + MINUTE).toISOString(), unread: 1,
     });
     expect(unfoldedDiary(join(data, "ada")).map((note) => [note.source, note.thread, note.text])).toEqual([["wake", "ring", "Told part one; the fox is at the gate."]]);
 
     at(12);
     await say("and then?", "ring");
     expect(turnsOf(script.replies.at(-1)).slice(2)).toEqual([
-      ["user", opener],
+      ["user", wakeSeenLater(FIRED)],
       ["system", "[Your working in this wake isn't shown here: 1 tool call. Your note from the end of it follows.]"],
       ["assistant", "Told part one; the fox is at the gate.\n[sent to User as the next message here]"],
       ["user", "[wake · Friday 2026-10-30 · 12:11 PM]"],
@@ -1888,7 +1990,7 @@ test("the user's message stops a wake in that thread at the end of its step and 
       ["assistant", "", "reply to: wait, what is the fox called?"],
     ]);
     const cutShort: [role: string, text: string][] = [
-      ["user", opener],
+      ["user", wakeSeenLater(FIRED)],
       ["system", "[Your working in this wake isn't shown here: 1 tool call, ending with `read`. It ended without a note from you. The last thing you wrote in it: \"Let me look.\"]"],
       ["system", stopped],
       ["user", "wait, what is the fox called?"],
@@ -1962,7 +2064,7 @@ test("a wake's working stays in its thread for the user, and is left out of what
     const firstSeen: [role: string, text: string][] = [
       ["user", "tell me a story in parts"],
       ["assistant", "reply to: tell me a story in parts"],
-      ["user", first],
+      ["user", wakeSeenLater(RING_FIRED("12:11 PM"))],
       ["system", "[Your working in this wake isn't shown here: 2 tool calls. Your note from the end of it follows.]"],
       ["assistant", "Told part one.\n[sent to User as the next message here]"],
       ["user", "[wake · Friday 2026-10-30 · 12:11 PM]"],
@@ -1990,12 +2092,16 @@ test("a wake's working stays in its thread for the user, and is left out of what
     await say("and then?", "ring");
     const bothSeen: [role: string, text: string][] = [
       ...firstSeen,
-      ["user", second],
+      ["user", wakeSeenLater(RING_FIRED("12:12 PM"))],
       ["system", "[Your working in this wake isn't shown here: 1 tool call. Your note from the end of it follows.]"],
       ["assistant", "Nothing to add yet."],
       ["user", "and then?"],
     ];
     expect(turnsOf(script.replies.at(-1))).toEqual(bothSeen);
+    expect((await thread("ring")).filter(isWakeOpener).map((message) => [message.content, message.shown_later])).toEqual([
+      [first, wakeSeenLater(RING_FIRED("12:11 PM"))],
+      [second, wakeSeenLater(RING_FIRED("12:12 PM"))],
+    ]);
     expect((await thread("ring")).filter((message) => message.content_blocks.some((block) => block.type === "tool_use"))).toHaveLength(3);
 
     const answered: [role: string, text: string][] = [...bothSeen, ["assistant", "reply to: and then?"]];
@@ -2433,7 +2539,7 @@ test("what is waiting for a thread where a wake is running starts together once 
   });
 });
 
-test("a side thread grown long by a wake compacts once the wake is over, as it would after a reply, unless the user cut the wake short", async () => {
+test("a wake doesn't bring a thread nearer its compaction, which counts the turns the user wrote, and a side thread grown long by a wake compacts once the wake is over", async () => {
   const long = (app: AppConfig): void => {
     app.memory.compaction.enabled = true;
     app.memory.compaction.keep_recent_turns = 0;
@@ -2446,34 +2552,19 @@ test("a side thread grown long by a wake compacts once the wake is over, as it w
     await say("hello");
     at(1);
     await say("tell me a story in parts", "ring");
-    await queuedCompactionsEnded(data, "ada");
-    expect(compactions(script)).toBe(0);
     script.closing = "Told part one.";
-    runtime.autonomy.wakeFor("ada", { name: "show", reason: "r", at: T0 + 20 * MINUTE, thread: "ring" });
-    at(20);
-    await runtime.autonomy.tick();
-    await queuedCompactionsEnded(data, "ada");
-    expect(compactions(script)).toBe(1);
-    expect(await thread("ring")).toEqual([]);
+    for (const minute of [20, 21]) {
+      runtime.autonomy.wakeFor("ada", { name: "show", reason: "r", at: T0 + minute * MINUTE, thread: "ring" });
+      at(minute);
+      await runtime.autonomy.tick();
+      await queuedCompactionsEnded(data, "ada");
+    }
+    expect(compactions(script)).toBe(0);
+    expect((await thread("ring")).filter(isWakeOpener)).toHaveLength(2);
     expect(runtime.autonomy.log("ada", 100).filter((event) => event.kind !== "tool_use").map((event) => [event.kind, event.detail]).slice(-2)).toEqual([
       ["tick_fired", 'Woken in "ring" by trigger "show"'],
       ["message_skipped", "Wake completed — no message sent"],
     ]);
-
-    script.wakes.length = 0;
-    runtime.autonomy.wakeFor("ada", { name: "show", reason: "r", at: T0 + 21 * MINUTE, thread: "ring" });
-    at(21);
-    await runtime.autonomy.tick();
-    await queuedCompactionsEnded(data, "ada");
-    expect(turnsOf(script.wakes[0])).toEqual([
-      ["user", wakeShown("12:21 PM", [
-        "Nothing has been said in this thread since your last wake here.",
-        wroteLast("20 minutes ago"),
-        diaryOfDay(['your note at the end of a wake in "ring"', "12:20 PM", "Told part one."]),
-      ], ['[Your trigger "show" fired at Friday 2026-10-30 · 12:21 PM: r]'])],
-    ]);
-    expect(compactions(script)).toBe(1);
-    expect((await thread("ring")).filter(isWakeOpener)).toHaveLength(1);
 
     const held = hold();
     script.beatHeld = held;
@@ -2488,12 +2579,13 @@ test("a side thread grown long by a wake compacts once the wake is over, as it w
     held.release.resolve();
     await waking;
     await reply.started.promise;
-    expect(compactions(script)).toBe(1);
+    expect(compactions(script)).toBe(0);
     expect((await thread("ring")).at(-2)?.content).toStartWith("[User wrote here while this wake was running");
     reply.release.resolve();
     await asking;
     await queuedCompactionsEnded(data, "ada");
-    expect(compactions(script)).toBe(2);
+    expect(compactions(script), "the user's second turn there").toBe(1);
+    expect(await thread("ring")).toEqual([]);
   }, long);
 
   await withCharacter(async ({ runtime, script, data, say, thread }) => {

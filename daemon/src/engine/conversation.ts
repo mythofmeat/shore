@@ -141,6 +141,10 @@ export class ConversationEngine {
     return this.#messages.turnCount();
   }
 
+  userTurnCount(): number {
+    return this.#messages.userTurnCount();
+  }
+
   startedAt(): string | undefined {
     return this.#messages.startedAt();
   }
