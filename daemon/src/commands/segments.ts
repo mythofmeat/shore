@@ -13,6 +13,8 @@ import {
 import { HISTORY_DB_FILE, HistoryStore, type ArchivedCopy } from "../engine/history_store.ts";
 import { presentSegment } from "../engine/segments.ts";
 import { archiveAndRetain } from "../memory/compaction/archive.ts";
+import { labelIfUnlabelled, prepareLabelCall, type SegmentLabelDeps } from "../memory/compaction/label.ts";
+import { effectiveConfig, readArchivedSegment } from "../memory/compaction/run.ts";
 import { tryBeginCompaction } from "../memory/compaction/manager.ts";
 import { resetActivePromptSnapshot } from "../memory/deferred_edits.ts";
 import { withHistoryIndexLock } from "../memory/history_index.ts";
@@ -50,10 +52,18 @@ export async function segments(
   thread: string,
   args: Args,
   historyIndex?: SegmentIndexMutationSink,
+  labelling?: SegmentLabelDeps,
 ): Promise<OperationResult<"segments">> {
   const action = args.action ?? "list";
   if (action === "find") return await findMessages(dataDir, character, args["msg_ids"]);
   const target = targetThread(args["thread"], thread);
+  if (args.auto === true) {
+    if (action !== "label") throw invalidRequest("auto only applies to the label action");
+    if (args["value"] !== undefined) throw invalidRequest("give a label or auto, not both");
+    if (labelling === undefined) throw invalidRequest("this daemon has no model to ask for a label");
+    return await autoLabel(dataDir, character, target, segmentIndex(args["index"]), args, labelling);
+  }
+  if (args.replace === true || typeof args.model === "string") throw invalidRequest("replace and model only apply with auto");
   const mutate = () =>
     runSegments(dataDir, character, target, action, args, historyIndex);
   const indexPath =
@@ -63,6 +73,42 @@ export async function segments(
   return indexPath === undefined
     ? mutate()
     : await withHistoryIndexLock(indexPath, async () => mutate());
+}
+
+async function autoLabel(
+  dataDir: string,
+  character: string,
+  thread: string,
+  idx: number,
+  args: Args,
+  deps: SegmentLabelDeps,
+): Promise<OperationResult<"segments">> {
+  const segment = (): ReturnType<typeof presentSegment> => {
+    const store = HistoryStore.open(join(dataDir, HISTORY_DB_FILE));
+    try {
+      const record = store.entries(archiveKey(character, thread)).find((entry) => entry.idx === idx);
+      if (record === undefined) throw notFound(missing(idx, character, thread));
+      return presentSegment(record);
+    } finally {
+      store.close();
+    }
+  };
+  const present = (skipped: boolean): OperationResult<"segments"> => ({ character, thread, action: "label", segment: segment(), skipped });
+  const replace = args.replace === true;
+  if (segment().label !== null && !replace) return present(true);
+  let label: string | undefined;
+  try {
+    const archived = readArchivedSegment(dataDir, character, thread, idx);
+    const ask = await prepareLabelCall(character, thread, archived.messages, deps, effectiveConfig(character, deps.config), {
+      prior: { archived: archived.priorContext },
+      ...(typeof args.model === "string" ? { model: args.model } : {}),
+    });
+    label = await ask();
+  } catch (error) {
+    throw internalError(`could not label segment ${String(idx)}: ${error instanceof Error ? error.message : String(error)}`);
+  }
+  if (label === undefined) throw internalError(`the model gave no label for segment ${String(idx)}`);
+  return present(!labelIfUnlabelled(dataDir, character, thread, idx, label, replace));
 }
 
 function runSegments(

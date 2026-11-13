@@ -22,6 +22,7 @@ export interface ChatWorld {
   config: LoadedConfig;
   workspace: string;
   runtime: ChatRuntime;
+  say: (text: string, thread?: string) => Promise<void>;
 }
 
 export interface ChatWorldOptions {
@@ -76,16 +77,19 @@ export async function afterFirstChat(options: ChatWorldOptions, run: (world: Cha
     const deps = buildGenerationDeps({
       runtime, providers: runtime.providers, autonomy, diagnostics: new Diagnostics(), env, emitEvent: () => {},
     });
-    await runGeneration(deps, {
-      meta: {
-        session: { sessionId: 1, clientId: 1, clientType: "test", clientName: "test", capabilities: [], selectedCharacter: "ada", selectedThread: "main" },
-        rid: "chat", kind: "message",
-      },
-      body: { rid: "chat", text: "hello", stream: true, images: [], image_data: [] },
-      charName: "ada", regen: false, rid: "chat", signal: new AbortController().signal, send: async () => {},
-    });
-    await autonomy.settled("ada");
-    await run({ root, config, workspace, runtime });
+    const say = async (text: string, thread = "main"): Promise<void> => {
+      await runGeneration(deps, {
+        meta: {
+          session: { sessionId: 1, clientId: 1, clientType: "test", clientName: "test", capabilities: [], selectedCharacter: "ada", selectedThread: thread },
+          rid: "chat", kind: "message",
+        },
+        body: { rid: "chat", text, stream: true, images: [], image_data: [] },
+        charName: "ada", regen: false, rid: "chat", signal: new AbortController().signal, send: async () => {},
+      });
+      await autonomy.settled("ada");
+    };
+    await say("hello");
+    await run({ root, config, workspace, runtime, say });
   } finally {
     stop?.();
     await runtime.autonomy.shutdown();

@@ -237,8 +237,8 @@ async function afterOneChat(seen: SidecarRequest[], dream: DreamScript, tune: (a
       git(workspace, "add", "--all");
       git(workspace, "commit", "--quiet", "-m", "start");
     },
-  }, async ({ root, config, workspace, runtime }) => {
-    await run({ root, config, workspace, characterDir: characterDataDir(config.dirs.data, "ada"), runtime });
+  }, async (world) => {
+    await run({ ...world, characterDir: characterDataDir(world.config.dirs.data, "ada") });
   });
 }
 

@@ -4503,6 +4503,12 @@
           },
           "segment": {
             "$ref": "#/$defs/SegmentSummary"
+          },
+          "skipped": {
+            "type": [
+              "boolean",
+              "null"
+            ]
           }
         },
         "required": [
@@ -14632,6 +14638,12 @@
           },
           "segment": {
             "$ref": "#/$defs/SegmentSummary"
+          },
+          "skipped": {
+            "type": [
+              "boolean",
+              "null"
+            ]
           }
         },
         "required": [

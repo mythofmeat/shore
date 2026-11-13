@@ -3070,6 +3070,24 @@
             "string",
             "null"
           ]
+        },
+        "auto": {
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "replace": {
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "model": {
+          "type": [
+            "string",
+            "null"
+          ]
         }
       },
       "additionalProperties": false,
@@ -3598,6 +3616,12 @@
             },
             "segment": {
               "$ref": "#/$defs/SegmentSummary"
+            },
+            "skipped": {
+              "type": [
+                "boolean",
+                "null"
+              ]
             }
           },
           "required": [

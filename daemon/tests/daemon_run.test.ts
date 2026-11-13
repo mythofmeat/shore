@@ -16,7 +16,7 @@ import { loadCompactionCheckpoint, saveCompactionCheckpoint } from "../src/memor
 import { shoreLog } from "../src/log.ts";
 import { CharacterWorkspace } from "../src/tools/character_workspace.ts";
 import { compactionFixture } from "./support/memory_fixture.ts";
-import { until } from "./support/until.ts";
+import { until, untilAsync } from "./support/until.ts";
 
 const running: RunningDaemon[] = [];
 
@@ -278,6 +278,24 @@ describe("archiving a conversation", () => {
     } finally {
       release();
       for (const client of clients) client.close();
+    }
+  });
+
+  test("a running daemon labels the segment a clear makes", async () => {
+    const place = await layout(MODEL_CONFIG);
+    const daemon = await start(place, [], { anthropic: scriptedProvider("Lamp talk") });
+    const client = await Client.open(daemon.port, "ada", ["request-lifecycle"]);
+    try {
+      await client.awaitFrame("history");
+      await finishTurn(client, "hi");
+      await runCommand(client, "clear", {});
+      const label = async (): Promise<unknown> => {
+        const listed = await runCommand(client, "segments", {}) as { data?: { segments?: { label: string | null }[] } };
+        return listed.data?.segments?.[0]?.label;
+      };
+      await untilAsync(async () => await label() === "Lamp talk", "the new segment to be labelled");
+    } finally {
+      client.close();
     }
   });
 

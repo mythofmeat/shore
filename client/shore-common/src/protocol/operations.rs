@@ -796,6 +796,12 @@ wire_types! {
         pub msg_ids: Option<Vec<String>>,
         #[serde(default, skip_serializing_if = "Option::is_none")]
         pub thread: Option<String>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        pub auto: Option<bool>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        pub replace: Option<bool>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        pub model: Option<String>,
     }
 
     pub struct SegmentSummary {
@@ -837,6 +843,9 @@ wire_types! {
         pub thread: String,
         pub action: SegmentMutation,
         pub segment: SegmentSummary,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        #[ts(optional)]
+        pub skipped: Option<bool>,
     }
 
     pub struct MessageCopy {

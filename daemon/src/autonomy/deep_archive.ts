@@ -125,6 +125,7 @@ async function pureArchive(
       {
         dbPath: join(dataDir, HISTORY_DB_FILE),
         archiveKey: archiveKey(character, thread),
+        unlabelled: true,
       },
       deps.now ?? (() => new Date().toISOString()),
       deps.newId ?? (() => crypto.randomUUID()),
