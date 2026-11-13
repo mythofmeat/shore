@@ -102,12 +102,12 @@ export function dreamToolsConfig(tools: ToolsConfig, chosen: readonly string[] |
 export function dreamConfig(config: LoadedConfig): LoadedConfig {
   return {
     ...config,
-    app: { ...config.app, tools: dreamToolsConfig(config.app.tools, config.app.memory.dreaming.tools) },
+    app: { ...config.app, tools: dreamToolsConfig(config.app.tools, config.app.dreaming.tools) },
   };
 }
 
 export function dreamLimits(config: LoadedConfig): { limitMs: number; wrapUpMs: number } {
-  const limitMs = Number(config.app.memory.dreaming.time_limit.asMillisExact());
+  const limitMs = Number(config.app.dreaming.time_limit.asMillisExact());
   return { limitMs, wrapUpMs: Math.min(MAX_WRAP_UP_MS, Math.floor(limitMs / 6)) };
 }
 
@@ -208,7 +208,7 @@ export async function runDreamPass(
   const timeZone = hostZone();
   const userName = resolveDisplayName(config.app.defaults, deps.env);
   const workspace = characterWorkspace(config, character);
-  const dreaming = config.app.memory.dreaming;
+  const dreaming = config.app.dreaming;
 
   const finishedBefore = lastFinishedDream(characterDir);
   const anchoredAt = finishedBefore === undefined ? Number.NaN : Date.parse(finishedBefore.started_at);
@@ -332,7 +332,7 @@ export async function runDreamPass(
   const files = await gitCommitFiles(workspace, commits).catch(() => []);
   const headAfter = await gitHead(workspace).catch(() => headBefore);
   let pushed: boolean | undefined;
-  if (config.app.memory.git_push && commits.length > 0 && !interrupted) {
+  if (config.app.compaction.git_push && commits.length > 0 && !interrupted) {
     try {
       pushed = await defaultPush(config, character);
     } catch (e) {

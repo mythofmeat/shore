@@ -384,7 +384,7 @@ export async function runWake(character: string, config: LoadedConfig, wake: Wak
         await engine.appendMessage(await roundMessage(last ? { ...round, blocks: withoutSent(round.blocks, userName) } : round, request, deps, pictures));
       },
       character,
-      wrapUpGrace: config.app.behavior.autonomy.triggers.max_wrap_up_rounds,
+      wrapUpGrace: config.app.triggers.max_wrap_up_rounds,
       maxToolIterations,
       timeLimitMs: wake.limitMs,
       wrapUpMs,
@@ -424,7 +424,7 @@ export async function runWake(character: string, config: LoadedConfig, wake: Wak
     if (runner === undefined || thread === home) return { events };
     const active = engine.messages();
     const measured = withoutWakeWorking(active);
-    const settings = config.app.memory.compaction;
+    const settings = config.app.compaction;
     const tier = imageTierForModel((override ?? resolved).modelId);
     const crowded = nearMessageBudget(measured, built.messageBudget, tier) && canArchiveTurns(active, settings.keep_recent_turns);
     const trim = async (keep: number): Promise<void> => {

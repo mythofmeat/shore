@@ -57,7 +57,7 @@ describe("a config.toml that cannot be honoured is refused, and says what is wro
   });
 
   test("an unknown nested key is rejected", () => {
-    expect(rejected("[behavior.autonomy]\nenabled = true\nbogus_key = 42\n")).toContain("bogus_key");
+    expect(rejected("[triggers]\nenabled = true\nbogus_key = 42\n")).toContain("bogus_key");
   });
 
 });

@@ -160,7 +160,7 @@ async function wokenInRing(script: Script, seen: SidecarRequest[], limitMs: numb
     tools: ["read"],
     autonomy: true,
     ...(maxToolIterations === undefined ? {} : { model: { maxToolIterations } }),
-    ...(wrapUpRounds === undefined ? {} : { tune: (app) => { app.behavior.autonomy.triggers.max_wrap_up_rounds = wrapUpRounds; } }),
+    ...(wrapUpRounds === undefined ? {} : { tune: (app) => { app.triggers.max_wrap_up_rounds = wrapUpRounds; } }),
   }, async (world) => {
     await world.runtime.registry.createThread("ada", "ring");
     options.started?.(world);

@@ -91,7 +91,7 @@ export async function runDeepIdleArchive(
       return { events: [], deepArchiveDone: true };
     }
 
-    const writeMemory = effectiveConfig(character, deps.config).app.memory.compaction.write_memory;
+    const writeMemory = effectiveConfig(character, deps.config).app.compaction.write_memory;
     if (plan.arm === "pure" || !writeMemory) {
       return await pureArchive(character, thread, deps, loaded.raw, plan.tail, plan.archivable);
     }

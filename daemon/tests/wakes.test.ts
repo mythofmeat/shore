@@ -171,9 +171,9 @@ async function withCharacter(run: (h: Harness) => Promise<void>, configure?: (ap
   const app = defaultAppConfig();
   app.defaults.model = "fixture";
   app.advanced.max_retries = 0;
-  app.memory.compaction.enabled = false;
+  app.compaction.enabled = false;
   app.tools.enabled_tools = ["read"];
-  app.behavior.autonomy.enabled = true;
+  app.triggers.enabled = true;
   configure?.(app);
   const models = emptyCatalog();
   for (const name of ["fixture", "pinned"]) {
@@ -399,10 +399,10 @@ test("a wake whose trigger names no thread runs on home's model, and its ending 
     expect((await thread("main")).filter((message) => message.role === "user" && message.origin === "autonomous")).toHaveLength(2);
     expect(await command("compact", { keep_turns: 99 })).toMatchObject({ type: "error", code: "invalid_request", message: "insufficient messages" });
   }, (app) => {
-    app.memory.compaction.enabled = true;
-    app.memory.compaction.keep_recent_turns = 0;
-    app.memory.compaction.min_turns = 1;
-    app.memory.compaction.max_turns = 2;
+    app.compaction.enabled = true;
+    app.compaction.keep_recent_turns = 0;
+    app.compaction.min_turns = 1;
+    app.compaction.max_turns = 2;
   });
 });
 
@@ -457,9 +457,9 @@ test("wakes and compaction keep the reasoning effort set for each on chat's mode
 
     expect(effortOf(script.wakes)).toEqual(["high"]);
   }, (app) => {
-    app.memory.compaction.enabled = true;
-    app.memory.compaction.keep_recent_turns = 0;
-    app.memory.compaction.min_turns = 1;
+    app.compaction.enabled = true;
+    app.compaction.keep_recent_turns = 0;
+    app.compaction.min_turns = 1;
   });
 });
 
@@ -498,10 +498,10 @@ test("a picture a wake sends is on the message it posts in home, and one it only
 });
 
 function compactsWhenIdle(app: AppConfig): void {
-  app.memory.compaction.enabled = true;
-  app.memory.compaction.keep_recent_turns = 0;
-  app.memory.compaction.min_turns = 1;
-  app.memory.compaction.idle_trigger = ConfigDuration.fromSecs(50 * 60);
+  app.compaction.enabled = true;
+  app.compaction.keep_recent_turns = 0;
+  app.compaction.min_turns = 1;
+  app.compaction.idle_after = ConfigDuration.fromSecs(50 * 60);
 }
 
 const shownIn = async (thread: (id: string) => Promise<readonly Message[]>): Promise<string[][]> =>
@@ -555,7 +555,7 @@ test("a reply the user never saw stays in home through idle compaction and the d
     expect(threadActivityNow(data, "ada", "main").unread).toBe(1);
   }, (app) => {
     compactsWhenIdle(app);
-    app.memory.compaction.archive_after = ConfigDuration.fromSecs(24 * 60 * 60);
+    app.compaction.archive_after = ConfigDuration.fromSecs(24 * 60 * 60);
   });
 });
 
@@ -586,10 +586,10 @@ test("with triggers off an idle conversation is still compacted and later archiv
     expect(script.wakes).toEqual([]);
   }, (app) => {
     compactsWhenIdle(app);
-    app.memory.compaction.keep_recent_turns = 1;
-    app.memory.compaction.min_turns = 2;
-    app.memory.compaction.archive_after = ConfigDuration.fromSecs(24 * 60 * 60);
-    app.behavior.autonomy.enabled = false;
+    app.compaction.keep_recent_turns = 1;
+    app.compaction.min_turns = 2;
+    app.compaction.archive_after = ConfigDuration.fromSecs(24 * 60 * 60);
+    app.triggers.enabled = false;
   });
 });
 
@@ -618,11 +618,11 @@ test("home is compacted for the turns the user wrote, however many wakes ran the
     await queuedCompactionsEnded(data, "ada");
     expect(compactions()).toBe(1);
   }, (app) => {
-    app.memory.compaction.enabled = true;
-    app.memory.compaction.keep_recent_turns = 0;
-    app.memory.compaction.min_turns = 1;
-    app.memory.compaction.max_turns = 4;
-    app.behavior.autonomy.triggers.max_idle_wakes = 10;
+    app.compaction.enabled = true;
+    app.compaction.keep_recent_turns = 0;
+    app.compaction.min_turns = 1;
+    app.compaction.max_turns = 4;
+    app.triggers.max_idle_wakes = 10;
   });
 });
 
@@ -642,8 +642,8 @@ test("the wait before an idle conversation is compacted runs from the end of the
 test("an idle conversation is compacted once the user has written min_turns turns in it, and wakes there don't count, before or after a restart", async () => {
   const fewTurns = (app: AppConfig): void => {
     compactsWhenIdle(app);
-    app.memory.compaction.min_turns = 3;
-    app.behavior.autonomy.triggers.max_idle_wakes = 10;
+    app.compaction.min_turns = 3;
+    app.triggers.max_idle_wakes = 10;
   };
   const compactions = (script: Script): number => script.calls.filter((call) => call === "compaction").length;
   let root = "";
@@ -700,7 +700,7 @@ test("a side thread trimmed for room without compaction keeps its newest reply w
     expect((await thread("side")).map((message) => [message.role, message.content])).toEqual([["assistant", "reply to: which lamp?"]]);
     expect(threadActivityNow(data, "ada", "side").unread).toBe(1);
   }, (app) => {
-    app.memory.compaction.keep_recent_turns = 0;
+    app.compaction.keep_recent_turns = 0;
   });
 });
 
@@ -718,8 +718,8 @@ test("bare --background tunes wakes and compaction on their pinned model while d
       { role: "dreaming", model: "chat.fixture", source: "inherits chat" },
     ]);
   }, (app) => {
-    app.defaults.background.heartbeat = "pinned";
-    app.defaults.background.compaction = "pinned";
+    app.triggers.model = "pinned";
+    app.compaction.model = "pinned";
   });
 });
 
@@ -973,7 +973,7 @@ test("a trigger that names no thread wakes the character in home with what it sa
 test("every wake counts towards going dormant, in a thread or not: after the user's limit nothing fires, what was waiting is dropped, and a message from the user starts it again", async () => {
   let root = "";
   const dormant = (runtime: ShoreRuntime): string[] => runtime.autonomy.log("ada", 100).filter((event) => event.kind === "dormant" || event.kind === "wake").map((event) => event.detail);
-  const twoWakes = (app: AppConfig): void => { app.behavior.autonomy.triggers.max_idle_wakes = 2; };
+  const twoWakes = (app: AppConfig): void => { app.triggers.max_idle_wakes = 2; };
   await withCharacter(async ({ runtime, script, data, say }) => {
     root = dirname(data);
     const log = (): string[] => dormant(runtime);
@@ -1038,7 +1038,7 @@ test("the user's limits on a character's own time take hold as soon as they chan
     await runtime.autonomy.tick();
     expect(runtime.autonomy.status("ada")).toMatchObject({ state: "Dormant", wakes_without_user: 1, max_idle_wakes: 1, max_silent_ms: 48 * 60 * MINUTE });
 
-    const { triggers } = runtime.registry.effectiveConfig("ada").app.behavior.autonomy;
+    const { triggers } = runtime.registry.effectiveConfig("ada").app;
     triggers.max_idle_wakes = 4;
     await reload();
     expect(runtime.autonomy.status("ada")).toMatchObject({ state: "Active", max_idle_wakes: 4 });
@@ -1049,7 +1049,7 @@ test("the user's limits on a character's own time take hold as soon as they chan
     expect(runtime.autonomy.status("ada")).toMatchObject({ state: "Dormant", max_silent_ms: 90_000 });
     at(1.4);
     expect(runtime.autonomy.status("ada")?.state).toBe("Active");
-  }, (app) => { app.behavior.autonomy.triggers.max_idle_wakes = 1; });
+  }, (app) => { app.triggers.max_idle_wakes = 1; });
 });
 
 test("a trigger that fires while the character is dormant, or with its own time switched off, wakes nothing then or later", async () => {
@@ -1075,7 +1075,7 @@ test("a trigger that fires while the character is dormant, or with its own time 
     expect(runtime.autonomy.wakeFor("ada", lamp)).toBe("queued");
     await runtime.autonomy.tick();
     expect(script.wakes).toHaveLength(0);
-  }, (app) => { app.behavior.autonomy.enabled = false; });
+  }, (app) => { app.triggers.enabled = false; });
 });
 
 test("a trigger that fires during a wake in its thread is handed to that wake at its next step, along with word that the user wrote elsewhere", async () => {
@@ -1310,7 +1310,7 @@ test("the character's triggers run whenever its own time is switched on, a check
     expect(runtime.triggers.view("ada").enabled).toBe(false);
   }, (app) => {
     withTriggers(app);
-    app.behavior.autonomy.enabled = false;
+    app.triggers.enabled = false;
   });
 
   await withCharacter(async ({ runtime, workspace, say }) => {
@@ -1345,9 +1345,9 @@ test("the user's settings reach the character's triggers: a longer cooldown, a s
     ]);
   }, (app) => {
     withTriggers(app);
-    app.behavior.autonomy.triggers.off = ["touch"];
-    app.behavior.autonomy.triggers.wake_cooldown = ConfigDuration.fromSecs(3 * 3600);
-    app.behavior.autonomy.triggers.check_time_limit = ConfigDuration.fromMillis(300);
+    app.triggers.off = ["touch"];
+    app.triggers.wake_cooldown = ConfigDuration.fromSecs(3 * 3600);
+    app.triggers.check_time_limit = ConfigDuration.fromMillis(300);
   });
 });
 
@@ -1548,7 +1548,7 @@ test("the character can list its triggers from a conversation, and is told when 
     });
   }, (app) => {
     app.tools.enabled_tools = [...app.tools.enabled_tools, "list_triggers"];
-    app.behavior.autonomy.enabled = false;
+    app.triggers.enabled = false;
   });
 });
 
@@ -1931,7 +1931,7 @@ test("a trigger that names a thread wakes the character there, fresh, with what 
     ], ['[Your trigger "show" fired at Saturday 2026-10-31 · 1:11 PM: Tell the next part.]']).replace("[Current time: Friday 2026-10-30", "[Current time: Saturday 2026-10-31")]]);
   }, (app) => {
     withTriggers(app);
-    app.behavior.autonomy.triggers.max_idle_wakes = 10;
+    app.triggers.max_idle_wakes = 10;
   });
 });
 
@@ -2142,7 +2142,7 @@ test("a wake's working doesn't count towards its thread's size: a thread is trim
     await say("go on", "ring");
     expect((await thread("ring")).map((message) => message.content)).toEqual(["go on", "reply to: go on"]);
   }, (app) => {
-    app.memory.compaction.keep_recent_turns = 0;
+    app.compaction.keep_recent_turns = 0;
   });
 
   const compactions = (script: Script): number => script.calls.filter((call) => call === "compaction").length;
@@ -2163,10 +2163,10 @@ test("a wake's working doesn't count towards its thread's size: a thread is trim
     await queuedCompactionsEnded(data, "ada");
     expect(compactions(script)).toBe(1);
   }, (app) => {
-    app.memory.compaction.enabled = true;
-    app.memory.compaction.keep_recent_turns = 0;
-    app.memory.compaction.min_turns = 1;
-    app.memory.compaction.max_context_tokens = 100_000;
+    app.compaction.enabled = true;
+    app.compaction.keep_recent_turns = 0;
+    app.compaction.min_turns = 1;
+    app.compaction.max_context_tokens = 100_000;
   });
 });
 
@@ -2197,8 +2197,8 @@ test("a wake waits for the user to have been quiet in its thread for ten minutes
 function handOff(...names: string[]): (app: AppConfig) => void {
   return (app) => {
     app.tools.enabled_tools = [...app.tools.enabled_tools, "wake_in_thread", ...names];
-    app.behavior.autonomy.triggers.max_wake_limit = ConfigDuration.fromSecs(2 * 3600);
-    app.behavior.autonomy.triggers.max_idle_wakes = 10;
+    app.triggers.max_wake_limit = ConfigDuration.fromSecs(2 * 3600);
+    app.triggers.max_idle_wakes = 10;
   };
 }
 
@@ -2388,7 +2388,7 @@ test("a hand-off is refused when the character's own time is switched off", asyn
     expect(lastToolResult(await thread("main"))).toEqual({ text: "io: peggy has your own time switched off, so nothing would wake you", failed: true });
   }, (app) => {
     handOff()(app);
-    app.behavior.autonomy.enabled = false;
+    app.triggers.enabled = false;
   });
 });
 
@@ -2541,10 +2541,10 @@ test("what is waiting for a thread where a wake is running starts together once 
 
 test("a wake doesn't bring a thread nearer its compaction, which counts the turns the user wrote, and a side thread grown long by a wake compacts once the wake is over", async () => {
   const long = (app: AppConfig): void => {
-    app.memory.compaction.enabled = true;
-    app.memory.compaction.keep_recent_turns = 0;
-    app.memory.compaction.min_turns = 1;
-    app.memory.compaction.max_turns = 2;
+    app.compaction.enabled = true;
+    app.compaction.keep_recent_turns = 0;
+    app.compaction.min_turns = 1;
+    app.compaction.max_turns = 2;
   };
   const compactions = (script: Script): number => script.calls.filter((call) => call === "compaction").length;
   await withCharacter(async ({ runtime, script, data, say, thread }) => {
@@ -2611,8 +2611,8 @@ test("a wake doesn't bring a thread nearer its compaction, which counts the turn
     expect(await thread("ring")).toEqual([]);
   }, (app) => {
     long(app);
-    app.memory.compaction.max_turns = 0;
-    app.memory.compaction.max_context_tokens = 20;
+    app.compaction.max_turns = 0;
+    app.compaction.max_context_tokens = 20;
   });
 });
 
@@ -2638,17 +2638,17 @@ async function wakesIn(name: string, compaction: boolean, configure: (app: AppCo
       compactions: () => h.script.calls.filter((call) => call === "compaction").length,
     });
   }, (app) => {
-    app.memory.compaction.enabled = true;
-    app.memory.compaction.min_turns = 1;
-    app.behavior.autonomy.triggers.max_idle_wakes = 10;
+    app.compaction.enabled = true;
+    app.compaction.min_turns = 1;
+    app.triggers.max_idle_wakes = 10;
     configure(app);
   });
 }
 
 test("a thread holding nothing but the character's own wakes is put away without a model call once it would compact, down to the newest wake", async () => {
   await wakesIn("log", true, (app) => {
-    app.memory.compaction.keep_recent_turns = 0;
-    app.memory.compaction.max_turns = 2;
+    app.compaction.keep_recent_turns = 0;
+    app.compaction.max_turns = 2;
   }, async ({ thread, script }, { wake, openers, compactions }) => {
     await wake(10, "One.");
     expect(await openers()).toEqual(["10"]);
@@ -2669,8 +2669,8 @@ test("a thread holding nothing but the character's own wakes is put away without
 
 test("what Shore keeps to undo a wake's file changes goes once that wake is no longer in its thread", async () => {
   await wakesIn("log", true, (app) => {
-    app.memory.compaction.keep_recent_turns = 0;
-    app.memory.compaction.max_turns = 2;
+    app.compaction.keep_recent_turns = 0;
+    app.compaction.max_turns = 2;
     app.tools.enabled_tools = [...app.tools.enabled_tools, "bash"];
   }, async ({ runtime, script, thread }, { wake, openers }) => {
     const turns = workspaceTurnsFor(runtime.config.dirs, "ada", characterWorkspace(runtime.config, "ada"));
@@ -2691,8 +2691,8 @@ test("what Shore keeps to undo a wake's file changes goes once that wake is no l
 
 test("wakes from before the user first wrote in a thread are put away the same way, and what was said from then on is left for a compaction", async () => {
   await wakesIn("log", true, (app) => {
-    app.memory.compaction.keep_recent_turns = 0;
-    app.memory.compaction.max_turns = 4;
+    app.compaction.keep_recent_turns = 0;
+    app.compaction.max_turns = 4;
   }, async ({ thread, say }, { wake, openers, compactions }) => {
     await wake(10, "One.");
     await wake(12, "Two.");
@@ -2708,8 +2708,8 @@ test("wakes from before the user first wrote in a thread are put away the same w
 
 test("in a thread whose compaction is off a wake's turns stay while there is room, and when it runs out the oldest turns are put away without a model call", async () => {
   await wakesIn("ring", false, (app) => {
-    app.memory.compaction.keep_recent_turns = 1;
-    app.memory.compaction.max_turns = 2;
+    app.compaction.keep_recent_turns = 1;
+    app.compaction.max_turns = 2;
   }, async ({ thread, say }, { wake, openers, compactions }) => {
     await wake(10, "One.");
     await wake(20, "Two.");
@@ -2727,8 +2727,8 @@ test("in a thread whose compaction is off a wake's turns stay while there is roo
 });
 
 function keepNothing(app: AppConfig): void {
-  app.memory.compaction.keep_recent_turns = 0;
-  app.memory.compaction.min_turns = 1;
+  app.compaction.keep_recent_turns = 0;
+  app.compaction.min_turns = 1;
 }
 
 async function compactByHand(runtime: ShoreRuntime, thread: string, sent: SidecarRequest[] = []): Promise<void> {
@@ -2817,7 +2817,7 @@ test("a wake in a side thread reads that thread's files afresh, unless the user 
     expect(home).toContain("Ada");
     expect(home).not.toContain("older now");
   }, (app) => {
-    app.behavior.autonomy.triggers.max_idle_wakes = 10;
+    app.triggers.max_idle_wakes = 10;
   });
 });
 
@@ -2910,8 +2910,8 @@ test("a wake whose trigger names no thread runs in home, is shown what was said 
       diaryOfDay(['your note at the end of a wake in "main"', "12:11 PM", "The tide is out."]),
     ], ['[Your trigger "tide" fired at Friday 2026-10-30 · 12:21 PM: Look at the tide.]'], "45 minutes", "37 minutes")]]);
   }, (app) => {
-    app.behavior.autonomy.triggers.wake_cooldown = ConfigDuration.fromSecs(60);
-    app.behavior.autonomy.triggers.max_idle_wakes = 10;
+    app.triggers.wake_cooldown = ConfigDuration.fromSecs(60);
+    app.triggers.max_idle_wakes = 10;
   });
 });
 
@@ -2931,8 +2931,8 @@ test("the model and settings the user chose for wakes hold in whichever thread a
     expect((asked?.system ?? []).map((block) => block.text).join("\n")).toContain("Ada");
     expect((asked?.tools ?? []).map((tool) => tool.name)).toEqual(["read"]);
   }, (app) => {
-    app.defaults.background.heartbeat = "pinned";
-    app.behavior.autonomy.triggers.max_idle_wakes = 10;
+    app.triggers.model = "pinned";
+    app.triggers.max_idle_wakes = 10;
   });
 });
 
@@ -2941,7 +2941,7 @@ test("a model chosen for wakes that isn't in the catalog, or can't be called, le
     await say("hello");
     await wakeNow();
     expect(script.wakes.map((request) => request.model)).toEqual(["claude-fixture", "claude-fixture"]);
-  }, (app) => { app.defaults.background.heartbeat = "missing"; });
+  }, (app) => { app.triggers.model = "missing"; });
 
   await withCharacter(async ({ runtime, script, say, wakeNow, thread }) => {
     const pinned = runtime.config.models.chat.get("chat.pinned");
@@ -2951,7 +2951,7 @@ test("a model chosen for wakes that isn't in the catalog, or can't be called, le
     await wakeNow();
     expect(script.wakes.map((request) => request.model)).toEqual(["claude-fixture", "claude-fixture"]);
     expect((await thread("main")).at(-1)?.content).toBe("I found the keeper's log.");
-  }, (app) => { app.defaults.background.heartbeat = "keyless"; });
+  }, (app) => { app.triggers.model = "keyless"; });
 });
 
 test("a model chosen for wakes is used even when its provider's list keeps it out of the pickers", async () => {
@@ -2963,7 +2963,7 @@ test("a model chosen for wakes is used even when its provider's list keeps it ou
     });
     await wakeNow();
     expect(script.wakes.map((request) => request.model)).toEqual(["claude-tucked-away", "claude-tucked-away"]);
-  }, (app) => { app.defaults.background.heartbeat = "anthropic:claude-tucked-away"; });
+  }, (app) => { app.triggers.model = "anthropic:claude-tucked-away"; });
 });
 
 test("a wake set off by a trigger can hand on from whichever thread it runs in, and one that was itself handed over can't, even when a trigger joined it", async () => {
@@ -3091,11 +3091,57 @@ test("writing memory again from an archived segment changes the character's file
     expect(await Bun.file(join(workspace, "MEMORY.md")).text()).toBe("The keeper is Mara.\n");
     expect(await thread("main")).toEqual(before);
   }, (app) => {
-    app.memory.compaction.enabled = true;
-    app.memory.compaction.keep_recent_turns = 0;
-    app.memory.compaction.min_turns = 1;
+    app.compaction.enabled = true;
+    app.compaction.keep_recent_turns = 0;
+    app.compaction.min_turns = 1;
     app.tools.enabled_tools = [...app.tools.enabled_tools, "edit"];
   });
+});
+
+test("with compaction.git_push on, a compaction pushes the character's workspace, and so does writing memory again from a segment; with it off neither does", async () => {
+  const git = (dir: string, ...args: string[]): string => {
+    const run = Bun.spawnSync(["git", "-c", "user.name=t", "-c", "user.email=t@t", "-C", dir, ...args]);
+    if (run.exitCode !== 0) throw new Error(`git ${args.join(" ")} failed: ${run.stderr.toString()}`);
+    return run.stdout.toString().trim();
+  };
+  const reached = async (push: boolean): Promise<boolean[]> => {
+    const seen: boolean[] = [];
+    await withCharacter(async ({ workspace, data, say, command }) => {
+      const remote = join(workspace, "..", "remote.git");
+      git(workspace, "init", "--quiet");
+      git(workspace, "add", "--all");
+      git(workspace, "commit", "--quiet", "-m", "start");
+      git(workspace, "init", "--bare", "--quiet", remote);
+      git(workspace, "remote", "add", "origin", remote);
+      git(workspace, "push", "--quiet", "--set-upstream", "origin", "HEAD");
+      const noted = async (text: string): Promise<void> => {
+        await writeFile(join(workspace, "NOTES.md"), text);
+        git(workspace, "add", "--all");
+        git(workspace, "commit", "--quiet", "-m", text);
+      };
+      const atRemote = (subject: string): boolean => git(remote, "log", "--all", "--format=%s").split("\n").includes(subject);
+
+      await say("hello");
+      at(1);
+      await say("the keeper is called Mara");
+      await noted("first");
+      expect(await command("compact", {})).toMatchObject({ type: "command_output", data: { status: "compacted" } });
+      await queuedCompactionsEnded(data, "ada");
+      seen.push(atRemote("first"));
+
+      await noted("second");
+      expect(await command("compact", { segment: 0 })).toMatchObject({ type: "command_output", data: { status: "segment" } });
+      seen.push(atRemote("second"));
+    }, (app) => {
+      app.compaction.enabled = true;
+      app.compaction.keep_recent_turns = 0;
+      app.compaction.min_turns = 1;
+      app.compaction.git_push = push;
+    });
+    return seen;
+  };
+  expect(await reached(true)).toEqual([true, true]);
+  expect(await reached(false)).toEqual([false, false]);
 });
 
 test("a wake for a character left with no chat model at all is skipped, and the log says so", async () => {
@@ -3488,7 +3534,7 @@ test("with the character's own time switched off a seal still comes off at its t
     expect(script.wakes).toEqual([]);
   }, (app) => {
     sealing(app);
-    app.behavior.autonomy.enabled = false;
+    app.triggers.enabled = false;
   }, root);
 });
 

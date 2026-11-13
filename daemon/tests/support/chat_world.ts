@@ -45,9 +45,9 @@ export async function afterFirstChat(options: ChatWorldOptions, run: (world: Cha
   const app = defaultAppConfig();
   app.defaults.model = "fixture";
   app.advanced.max_retries = 0;
-  app.memory.compaction.enabled = false;
+  app.compaction.enabled = false;
   app.tools.enabled_tools = [...options.tools];
-  if (options.autonomy === true) app.behavior.autonomy.enabled = true;
+  if (options.autonomy === true) app.triggers.enabled = true;
   const models = emptyCatalog();
   for (const name of options.models ?? ["fixture"]) {
     models.chat.set(`chat.${name}`, {

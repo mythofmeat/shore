@@ -47,7 +47,7 @@ import {
   type SamplerScopes,
   type SamplerSettings,
 } from "../config/preferences.ts";
-import type { SubagentConfig } from "../config/app.ts";
+import { resolveBackgroundModelName, type SubagentConfig } from "../config/app.ts";
 import { SETTING_STORAGE_FIELDS, parsedSettingValue, samplerToWire, settingSchema } from "../llm/settings.ts";
 import { missingModelMessage } from "../tools/subagent.ts";
 import type { Env } from "../config/dirs.ts";
@@ -147,7 +147,7 @@ function backgroundTask(selector: string): BackgroundTask {
 }
 
 function backgroundTargetModel(ctx: ModelsContext, task: BackgroundTask): ResolvedModel {
-  const pinned = ctx.config.app.defaults.background[task];
+  const pinned = resolveBackgroundModelName(ctx.config.app, task);
   if (pinned !== undefined) return resolve(ctx, pinned, true);
 
   const inherited = ctx.characterName === undefined
@@ -304,8 +304,7 @@ interface ChatInheritance { thread: ModelRole; home: ModelRole }
 const backgroundModelKey = (task: BackgroundTask): string => `${task === "heartbeat" ? "triggers" : task}.model`;
 
 function backgroundRole(ctx: ModelsContext, task: BackgroundTask, inherits?: ChatInheritance): ModelRole {
-  const bg = ctx.config.app.defaults.background;
-  const perTask = bg[task];
+  const perTask = resolveBackgroundModelName(ctx.config.app, task);
   if (perTask !== undefined) {
     return { role: task, model: qualify(ctx, perTask), source: backgroundModelKey(task) };
   }

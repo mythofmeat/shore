@@ -446,21 +446,21 @@ function validateConfig(
     catalog,
     providers,
     "triggers.model",
-    app.defaults.background.heartbeat,
+    app.triggers.model,
     onWarn,
   );
   warnOnUnresolvableModelRef(
     catalog,
     providers,
     "compaction.model",
-    app.defaults.background.compaction,
+    app.compaction.model,
     onWarn,
   );
   warnOnUnresolvableModelRef(
     catalog,
     providers,
     "dreaming.model",
-    app.defaults.background.dreaming,
+    app.dreaming.model,
     onWarn,
   );
   warnOnUnresolvableModelRef(
@@ -506,12 +506,12 @@ function validateConfig(
     catch (error) { throw validationError(error instanceof Error ? error.message : String(error)); }
   }
 
-  const compaction = validateCompaction(app.memory.compaction);
+  const compaction = validateCompaction(app.compaction);
   if (compaction !== undefined) throw validationError(compaction);
 
-  const dreaming = validateDreaming(app.memory.dreaming);
+  const dreaming = validateDreaming(app.dreaming);
   if (dreaming !== undefined) throw validationError(dreaming);
-  const triggers = validateTriggers(app.behavior.autonomy.triggers);
+  const triggers = validateTriggers(app.triggers);
   if (triggers !== undefined) throw validationError(triggers);
   const presence = validatePresence(app.behavior.presence);
   if (presence !== undefined) throw validationError(presence);

@@ -269,7 +269,7 @@ async function passUnderGuard(
     if (loaded.messages.length === 0) return undefined;
 
     const effective = effectiveConfig(character, deps.config);
-    const compaction = effective.app.memory.compaction;
+    const compaction = effective.app.compaction;
     const plan = await resolveArchivalPlan(dataDir, character, thread, loaded, {
       keepRecentTurns: compaction.keep_recent_turns,
       ...(options.keepTurnsOverride === undefined
@@ -368,10 +368,10 @@ async function passUnderGuard(
         commitUnder: underThread(deps, character, thread),
         afterArchive: settleArchive(deps, character, thread),
       },
-      { keepRecentTurns: resolved.effective.app.memory.compaction.keep_recent_turns },
+      { keepRecentTurns: resolved.effective.app.compaction.keep_recent_turns },
     );
 
-    await pushAfterCompaction(resolved.effective.app.memory.git_push, outcome, async () => {
+    await pushAfterCompaction(resolved.effective.app.compaction.git_push, outcome, async () => {
       await gitPushWorkspaceBestEffort(resolved.tools.workspace ?? resolved.tools.workspaceDir);
     });
 
@@ -446,7 +446,7 @@ async function segmentPass(
   archived: { messages: Message[]; priorContext: boolean },
 ): Promise<CompactionOutcome> {
   const effective = effectiveConfig(character, deps.config);
-  if (!effective.app.memory.compaction.write_memory) {
+  if (!effective.app.compaction.write_memory) {
     throw CompactionError.llm("memory writes are turned off (compaction.write_memory = false)");
   }
   const chatRequest = await resolveChatRequest(character, thread, archived.messages, effective,
@@ -467,7 +467,7 @@ async function segmentPass(
     ...(deps.emit === undefined ? {} : { emit: tagCompactionFrames(deps.emit) }),
     ...(deps.signal === undefined ? {} : { signal: deps.signal }),
   });
-  await pushAfterCompaction(resolved.effective.app.memory.git_push, outcome, async () => {
+  await pushAfterCompaction(resolved.effective.app.compaction.git_push, outcome, async () => {
     await gitPushWorkspaceBestEffort(resolved.tools.workspace ?? resolved.tools.workspaceDir);
   });
   return outcome;
@@ -608,7 +608,7 @@ async function resolveDeps(
   const configDir = effective.dirs.config;
   const promptTemplate = withDreaming(
     resolvePromptTemplate(configDir, character, "compact.md") ?? DEFAULT_COMPACT_PROMPT,
-    effective.app.memory.dreaming.enabled,
+    effective.app.dreaming.enabled,
   );
 
   const threadModel = await threadChatModel(effective.dirs.data, character, thread);

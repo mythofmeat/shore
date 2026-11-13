@@ -21,19 +21,11 @@ const CONFIG_FIELDS: readonly ConfigField[] = [
   field("defaults.system_prompt", "chat.system_prompt"),
   field("defaults.image_generation", "image.model"),
   field("defaults.subagent_model", "subagents.model"),
-  field("defaults.background.heartbeat", "triggers.model"),
-  field("defaults.background.compaction", "compaction.model"),
-  field("defaults.background.dreaming", "dreaming.model"),
   field("behavior.user_message_timestamps", "chat.user_timestamps"),
   field("memory.thinking.replay_prior_thinking", "chat.reasoning_replay"),
   ...["max_retries", "retry_backoff"].map((key) => field(`advanced.${key}`, `chat.${key}`)),
-  ...["wake_cooldown", "check_time_limit", "max_wake_limit", "max_wrap_up_rounds", "max_idle_wakes", "idle_timeout", "off"].map((key) => field(`behavior.autonomy.triggers.${key}`, `triggers.${key}`)),
   field("behavior.presence.statuses", "presence.statuses"),
   field("behavior.marks.tags", "marks.tags"),
-  ...["enabled", "write_memory", "label_segments", "archive_after", "min_turns", "max_turns", "max_context_tokens", "keep_recent_turns"].map((key) => field(`memory.compaction.${key}`, `compaction.${key}`)),
-  field("memory.compaction.idle_trigger", "compaction.idle_after"),
-  ...["enabled", "every", "start_between", "idle_after", "min_turns", "time_limit", "system_prompt", "tools"].map((key) => field(`memory.dreaming.${key}`, `dreaming.${key}`)),
-  field("memory.git_push", "compaction.git_push"),
   field("tools.enabled_tools", "tools.enabled"),
   field("tools.enabled_subagents", "subagents.enabled"),
   field("tools.enabled_mcp", "tools.mcp"),
@@ -183,11 +175,6 @@ export function normalizeSettings(input: ConfigTable, source = "model settings")
 
 export function normalizeConfigSource(input: ConfigTable, source = "config"): ConfigTable {
   const table = structuredClone(input);
-  const ownTime = valueAt(table, ["triggers", "enabled"]);
-  if (ownTime !== undefined) {
-    removeAt(table, ["triggers", "enabled"]);
-    putAt(table, ["behavior", "autonomy", "enabled"], ownTime);
-  }
   const notifications = table.notifications;
   if (isConfigTable(notifications)) {
     if (notifications.via !== undefined) {
@@ -236,13 +223,13 @@ export function normalizeConfigSource(input: ConfigTable, source = "config"): Co
   }
   const budgets = valueAt(table, ["usage", "budgets"]);
   if (Array.isArray(budgets)) for (const budget of budgets) if (isConfigTable(budget)) toInternal(budget, BUDGET_FIELDS);
-  for (const section of ["triggers", "presence", "marks", "compaction", "dreaming", "matrix", "image"]) if (isConfigTable(table[section]) && Object.keys(table[section]).length === 0) delete table[section];
+  for (const section of ["presence", "marks", "matrix", "image"]) if (isConfigTable(table[section]) && Object.keys(table[section]).length === 0) delete table[section];
   return table;
 }
 
 export function canonicalConfigPath(path: ConfigPath): string[] {
   const sections: Record<string, string[]> = {
-    "memory.compaction": ["compaction"], "connections.matrix": ["matrix"],
+    "connections.matrix": ["matrix"],
     "tools.config": ["tools"],
   };
   const section = sections[path.join(".")];
@@ -252,7 +239,6 @@ export function canonicalConfigPath(path: ConfigPath): string[] {
     const mapped = translatePath(path, rule.internal, rule.canonical);
     if (mapped !== undefined) { result = mapped; break; }
   }
-  if (path.join(".") === "behavior.autonomy.enabled") return ["triggers", "enabled"];
   if (result[0] === "providers" && result[2] === "defaults") result.splice(2, 1);
   const settingIndex = result[0] === "providers" ? 2 : result[0] === "chat" && result[1]?.includes(":") ? 2 : undefined;
   if (settingIndex !== undefined && result[settingIndex] !== undefined) result[settingIndex] = canonicalSettingKey(result[settingIndex]);
@@ -272,7 +258,6 @@ export function publicConfig(input: ConfigTable): ConfigTable {
     const existing = valueAt(out, target);
     putAt(out, target, isConfigTable(value) && isConfigTable(existing) ? { ...value, ...existing } : value);
   }
-  putAt(out, ["triggers", "enabled"], valueAt(input, ["behavior", "autonomy", "enabled"]) === true);
   const enabled = valueAt(input, ["notifications", "enabled"]);
   putAt(out, ["notifications", "via"], enabled === true ? valueAt(input, ["notifications", "backend"]) ?? "notify_send" : "off");
   const events = valueAt(input, ["notifications", "events"]);

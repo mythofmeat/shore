@@ -24,7 +24,7 @@ import { parseKeepalivePings } from "./keepalive.ts";
 import { compareByCodePoint, sortedKeys } from "../util/sort.ts";
 import type { ThinkingReplay } from "../llm/types.ts";
 import type { ProviderRegistry } from "./providers.ts";
-import { resolveBackgroundModelName, type DefaultsConfig } from "./app.ts";
+import { resolveBackgroundModelName, type AppConfig } from "./app.ts";
 import {
   SETTING_STORAGE_FIELDS,
   settingApplicability,
@@ -615,7 +615,7 @@ export function configView(config: {
   models: ModelCatalog;
   providers: ProviderRegistry;
   dirs: { data: string; cache: string };
-  app: { defaults: DefaultsConfig };
+  app: Pick<AppConfig, "defaults" | "triggers" | "compaction" | "dreaming">;
 }): LoadedConfigView {
   return {
     models: config.models,
@@ -627,7 +627,7 @@ export function configView(config: {
         ...(config.app.defaults.subagent_model === undefined
           ? {}
           : { subagent_model: config.app.defaults.subagent_model }),
-        backgroundModelName: (task) => resolveBackgroundModelName(config.app.defaults, task),
+        backgroundModelName: (task) => resolveBackgroundModelName(config.app, task),
       },
     },
   };

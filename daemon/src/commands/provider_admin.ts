@@ -421,9 +421,9 @@ function modelRefs(config: LoadedConfig): [string, string | undefined][] {
   const d = config.app.defaults;
   return [
     ["chat.model", d.model],
-    ["triggers.model", d.background.heartbeat],
-    ["compaction.model", d.background.compaction],
-    ["dreaming.model", d.background.dreaming],
+    ["triggers.model", config.app.triggers.model],
+    ["compaction.model", config.app.compaction.model],
+    ["dreaming.model", config.app.dreaming.model],
     ["subagents.model", d.subagent_model],
     ["image.model", d.image_generation],
     ...[...config.app.subagents].map(([sub, def]): [string, string | undefined] => [`subagents.${sub}.model`, def.model]),

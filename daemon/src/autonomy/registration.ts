@@ -10,32 +10,31 @@ import type { DormancyConfig } from "./dormancy.ts";
 import type { AutonomyService, RegisterCharacter } from "./service.ts";
 
 export function runnerConfigFor(config: LoadedConfig): AutonomyRunnerConfig {
-  const autonomy = config.app.behavior.autonomy;
   return {
-    autonomyEnabled: autonomy.enabled,
+    autonomyEnabled: config.app.triggers.enabled,
     ...compactionConfigFor(config),
     dream: dreamConfigFor(config),
   };
 }
 
 export function dreamConfigFor(config: LoadedConfig): DreamRunnerConfig {
-  return dreamRunnerConfig(config.app.memory.dreaming);
+  return dreamRunnerConfig(config.app.dreaming);
 }
 
 function compactionConfigFor(config: LoadedConfig): CompactionRunnerConfig {
-  const compaction = config.app.memory.compaction;
+  const compaction = config.app.compaction;
   return {
     compactionEnabled: compaction.enabled,
     minTurns: compaction.min_turns,
     maxTurns: compaction.max_turns,
-    idleTriggerSecs: Number(compaction.idle_trigger.asSecs()),
+    idleTriggerSecs: Number(compaction.idle_after.asSecs()),
     archiveAfterSecs: Number(compaction.archive_after.asSecs()),
     maxContextTokens: compaction.max_context_tokens,
   };
 }
 
 export function dormancyConfigFor(config: LoadedConfig): DormancyConfig {
-  const { triggers } = config.app.behavior.autonomy;
+  const { triggers } = config.app;
   return {
     maxIdleWakes: triggers.max_idle_wakes,
     maxSilentMs: Number(triggers.idle_timeout.asMillisExact()),
