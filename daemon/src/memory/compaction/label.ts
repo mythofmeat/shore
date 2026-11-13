@@ -6,7 +6,7 @@ import { MAIN_THREAD, archiveKey, resolvePromptTemplate } from "../../config/dir
 import { findEffectiveModel } from "../../config/effective_catalog.ts";
 import type { LoadedConfig } from "../../config/loader.ts";
 import { toRequestModel } from "../../config/models.ts";
-import { configView, resolveChatModelForCharacter } from "../../config/preferences.ts";
+import { configView, pinnedModel, resolveChatModelForCharacter, type FindEffectiveModel } from "../../config/preferences.ts";
 import { HISTORY_DB_FILE, HistoryStore } from "../../engine/history_store.ts";
 import { normalizeMessage } from "../../engine/message_store.ts";
 import type { PriorContext } from "../../engine/segments.ts";
@@ -15,6 +15,7 @@ import type { Message } from "../../engine/types.ts";
 import { credentialEntry } from "../../handler/tool_context.ts";
 import { ToolLoopStop } from "../../llm/tool_loop_control.ts";
 import { shoreLog } from "../../log.ts";
+import { required } from "../../util/required.ts";
 import { rustLines } from "../lines.ts";
 import type { SegmentArchiveHook } from "./archive.ts";
 import { RealCompactionLlm } from "./llm.ts";
@@ -26,7 +27,7 @@ export const DEFAULT_LABEL_PROMPT: string = stripOneTrailingNewline(labelPromptR
 
 export const SEGMENT_LABEL_CHARS = 60;
 
-export type SegmentLabelDeps = Pick<CompactionRunDeps, "config" | "generate" | "tools" | "env" | "signal">;
+export type SegmentLabelDeps = Pick<CompactionRunDeps, "config" | "generate" | "tools" | "env">;
 
 export function labelFromReply(reply: string): string | undefined {
   const line = reply.split("\n").map((each) => each.trim()).find((each) => each !== "");
@@ -42,10 +43,9 @@ export async function prepareLabelCall(
   options: { prior?: PriorContext; model?: string } = {},
 ): Promise<() => Promise<string | undefined>> {
   const view = configView(effective);
-  const model = options.model === undefined
-    ? resolveChatModelForCharacter(view, character, (v, c, n, h) => findEffectiveModel(v, c, n, h), await threadChatModel(effective.dirs.data, character, thread))
-    : findEffectiveModel(view, effective.dirs.cache, options.model, true);
-  if (model === undefined) throw new Error("no chat model is configured");
+  const find: FindEffectiveModel = (v, c, n, h) => findEffectiveModel(v, c, n, h);
+  if (options.model !== undefined && pinnedModel(view, options.model, find) === undefined) throw new Error(`no model named ${JSON.stringify(options.model)}`);
+  const model = required(resolveChatModelForCharacter(view, character, find, options.model ?? await threadChatModel(effective.dirs.data, character, thread)));
   const chatRequest = await resolveChatRequest(character, thread, messages, effective,
     deps.tools?.mcpToolDefs?.(toolGrants(effective.app.tools)) ?? [], deps.env, options.prior, model);
   const entry = effective.providers.get(model.providerKey);
@@ -56,7 +56,6 @@ export async function prepareLabelCall(
     cacheDir: effective.dirs.cache,
     ...(deps.env === undefined ? {} : { env: deps.env }),
     ...(entry === undefined ? {} : { providerEntry: credentialEntry(entry) }),
-    ...(deps.signal === undefined ? {} : { signal: deps.signal }),
   });
   const template = resolvePromptTemplate(effective.dirs.config, character, "label.md") ?? DEFAULT_LABEL_PROMPT;
   const request = llm.buildInitialRequest(buildFinalMessage(template, character, resolveDisplayName(effective.app.defaults)).trim(), chatRequest);
@@ -80,7 +79,7 @@ export function labelIfUnlabelled(dataDir: string, character: string, thread: st
 
 export class SegmentLabels {
   readonly #deps: () => SegmentLabelDeps;
-  readonly #pending = new Set<Promise<void>>();
+  #pending: Promise<unknown> = Promise.resolve();
 
   constructor(deps: () => SegmentLabelDeps) {
     this.#deps = deps;
@@ -99,10 +98,8 @@ export class SegmentLabels {
           if (label !== undefined) labelIfUnlabelled(effective.dirs.data, character, thread, segment, label);
         }).catch((error: unknown) => {
           shoreLog.warn(`shore: segment ${String(segment)} of ${key} was left unlabelled: ${String(error)}`);
-        }).finally(() => {
-          this.#pending.delete(labelling);
         });
-        this.#pending.add(labelling);
+        this.#pending = Promise.all([this.#pending, labelling]);
       };
     } catch (error) {
       shoreLog.warn(`shore: the newest segment of ${key} will be left unlabelled: ${String(error)}`);
@@ -111,6 +108,6 @@ export class SegmentLabels {
   };
 
   async settled(): Promise<void> {
-    await Promise.all(this.#pending);
+    await this.#pending;
   }
 }

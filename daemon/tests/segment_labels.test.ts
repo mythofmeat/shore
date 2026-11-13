@@ -1,4 +1,5 @@
 import { afterEach, expect, setSystemTime, spyOn, test } from "bun:test";
+import { readdirSync, readlinkSync } from "node:fs";
 import { mkdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 
@@ -8,6 +9,7 @@ import { characterActiveJsonl } from "../src/config/dirs.ts";
 import { ConfigDuration } from "../src/config/duration.ts";
 import { Diagnostics } from "../src/diagnostics.ts";
 import { HISTORY_DB_FILE, HistoryStore } from "../src/engine/history_store.ts";
+import { segments as segmentsCommand } from "../src/commands/segments.ts";
 import { dispatchCommand } from "../src/handler/commands.ts";
 import { buildCommandPathDeps, labelNewSegments } from "../src/handler/deps.ts";
 import type { GenerateResponse, SidecarProvider, SidecarRequest } from "../src/llm/types.ts";
@@ -17,13 +19,18 @@ import { readDurable } from "../src/storage/files.ts";
 import { DEFAULT_HANDSHAKE } from "../src/swp/connection.ts";
 import { SessionRouter } from "../src/swp/session.ts";
 import { afterFirstChat, type ChatWorld } from "./support/chat_world.ts";
+import { restoreTestEnv, unsetTestEnv } from "./support/env.ts";
+import { outcomeOf } from "./support/outcome.ts";
 import { eventsForResponse } from "./support/stream.ts";
 
 const KEY_ENV = "SHORE_TEST_SEGMENT_LABELS_KEY";
 const HOUR = 60 * 60_000;
 const PROMPT = "Give a short label for this conversation so Mara can find it later. Reply with only the label.";
 
-afterEach(() => setSystemTime());
+afterEach(() => {
+  setSystemTime();
+  restoreTestEnv();
+});
 
 interface Script {
   calls: SidecarRequest[];
@@ -58,6 +65,7 @@ interface World extends ChatWorld {
   script: Script;
   command: (name: string, args: Record<string, unknown>, thread?: string) => Promise<unknown>;
   settled: () => Promise<void>;
+  stop: () => void;
   segments: (thread?: string) => { idx: number; label: string | undefined }[];
   of: (callType: string) => SidecarRequest[];
 }
@@ -66,6 +74,7 @@ async function world(run: (world: World) => Promise<void>, tune?: (app: AppConfi
   const script: Script = { calls: [], label: "Lighting the lamp", held: undefined };
   const env = { [KEY_ENV]: "fixture-key" };
   let settled = async (): Promise<void> => {};
+  let stop = (): void => {};
   await afterFirstChat({
     name: "segment-labels", keyEnv: KEY_ENV, provider: provider(script), tools: ["read"], autonomy: true, models: ["fixture", "pinned"],
     tune: (app) => {
@@ -78,6 +87,7 @@ async function world(run: (world: World) => Promise<void>, tune?: (app: AppConfi
         runtime, providers: runtime.providers, autonomy: new TurnAutonomyBridge(runtime.autonomy), diagnostics: new Diagnostics(), env, emitEvent: () => {},
       });
       settled = labels.settled;
+      stop = labels.stop;
       return labels.stop;
     },
   }, async (chat) => {
@@ -86,6 +96,7 @@ async function world(run: (world: World) => Promise<void>, tune?: (app: AppConfi
       ...chat,
       script,
       settled: () => settled(),
+      stop: () => { stop(); },
       of: (callType) => script.calls.filter((call) => call.context?.call_type === callType),
       command: async (name, args, thread = "main") => await dispatchCommand(buildCommandPathDeps({
         runtime, autonomy: new TurnAutonomyBridge(runtime.autonomy), diagnostics: new Diagnostics(), router: new SessionRouter(),
@@ -121,6 +132,7 @@ test("a label is the first line the model wrote, trimmed and cut at 60 character
 
 test("clearing a conversation asks the chat's model for a label with the chat's own request plus one message, and the segment gets it", async () => {
   await world(async ({ command, settled, segments, of, config }) => {
+    unsetTestEnv(KEY_ENV);
     await command("clear", {});
     await settled();
 
@@ -245,6 +257,7 @@ test("a conversation compacted for being idle is labelled, and one archived afte
 
 test("label --auto asks for a label for an archived segment, leaves a labelled one alone, and replaces it or uses another model when told to", async () => {
   await world(async ({ script, command, of }) => {
+    unsetTestEnv(KEY_ENV);
     await command("clear", {});
     expect(of("label")).toEqual([]);
 
@@ -286,5 +299,75 @@ test("label --auto is refused with a label, without a segment to label, or when 
     expect(await refused({ auto: true })).toEqual(["error", "internal_error", "could not label segment 0: llm: provider fell over"]);
     expect(await refused({ auto: true, model: "nobody" })).toEqual(["error", "internal_error", expect.stringMatching(/^could not label segment 0: .*nobody/) as string]);
     expect(segments()).toEqual([{ idx: 0, label: undefined }]);
+  }, (app) => { app.memory.compaction.label_segments = false; });
+});
+
+test("settled waits for a label that is still being asked for", async () => {
+  await world(async ({ script, command, settled, segments }) => {
+    script.held = Promise.withResolvers<void>();
+    await command("clear", {});
+    let done = false;
+    const waiting = settled().then(() => { done = true; });
+    await Bun.sleep(20);
+    expect(done).toBe(false);
+    expect(segments()).toEqual([{ idx: 0, label: undefined }]);
+    script.held.resolve();
+    await waiting;
+    expect(segments()).toEqual([{ idx: 0, label: "Lighting the lamp" }]);
+  });
+});
+
+test("once labelling is stopped, a new segment is no longer labelled", async () => {
+  await world(async ({ command, settled, stop, segments, of }) => {
+    stop();
+    await command("clear", {});
+    await settled();
+    expect(segments()).toEqual([{ idx: 0, label: undefined }]);
+    expect(of("label")).toEqual([]);
+  });
+});
+
+test("label --auto reports a segment as skipped when a label was set by hand while the model was answering", async () => {
+  await world(async ({ script, command, segments }) => {
+    await command("clear", {});
+    script.held = Promise.withResolvers<void>();
+    const asking = command("segments", { action: "label", index: 0, auto: true });
+    await Bun.sleep(20);
+    await command("segments", { action: "label", index: 0, value: "By hand" });
+    script.held.resolve();
+    expect(await asking).toMatchObject({ type: "command_output", data: { skipped: true, segment: { index: 0, label: "By hand" } } });
+    expect(segments()).toEqual([{ idx: 0, label: "By hand" }]);
+  }, (app) => { app.memory.compaction.label_segments = false; });
+});
+
+test("labelling a segment, as it is archived or by command, leaves the history database with no more open handles than before", async () => {
+  await world(async ({ command, settled, say, config }) => {
+    const history = join(config.dirs.data, HISTORY_DB_FILE);
+    const open = (): number => readdirSync("/proc/self/fd").filter((descriptor) => {
+      try {
+        return readlinkSync(`/proc/self/fd/${descriptor}`).startsWith(history);
+      } catch {
+        return false;
+      }
+    }).length;
+    await command("clear", {});
+    await settled();
+    const before = open();
+
+    await say("and the door?");
+    await command("clear", {});
+    await settled();
+    expect(open()).toBe(before);
+
+    await command("segments", { action: "label", index: 1, auto: true, replace: true });
+    await command("segments", { action: "label", index: 1, auto: true });
+    expect(open()).toBe(before);
+  });
+});
+
+test("label --auto is refused by a daemon that has no model to ask", async () => {
+  await world(async ({ command, config }) => {
+    await command("clear", {});
+    expect(await outcomeOf(segmentsCommand(config.dirs.data, "ada", "main", { action: "label", index: 0, auto: true }))).toThrow("this daemon has no model to ask for a label");
   }, (app) => { app.memory.compaction.label_segments = false; });
 });
