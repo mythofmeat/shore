@@ -25,7 +25,7 @@ interface Saved { id: string; expires_at: number }
 
 function readSaved<T extends Saved>(text: string, valid: (value: unknown) => value is T, mark: Record<string, unknown>): { info: T; trimmed: boolean } | undefined {
   let saved: unknown;
-  try { saved = JSON.parse(text); } catch { return undefined; }
+  try { saved = JSON.parse(text); } catch {}
   const usable = (value: unknown): value is T => valid(value) && /^[a-f0-9-]{36}$/.test(value.id) && Number.isSafeInteger(value.expires_at);
   if (usable(saved)) return { info: saved, trimmed: false };
   const withoutResult: Record<string, unknown> = { ...(saved as Record<string, unknown>), ...mark };
