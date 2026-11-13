@@ -16,7 +16,7 @@ import { resolveDisplayName, toolGrants } from "../../config/app.ts";
 import { resolveBackgroundModel, resolveChatModelForCharacter } from "../../config/preferences.ts";
 import { configView } from "../../config/preferences.ts";
 import { findEffectiveModel } from "../../config/effective_catalog.ts";
-import { toRequestModel } from "../../config/models.ts";
+import { toRequestModel, type ResolvedModel } from "../../config/models.ts";
 import type { FrameSink } from "../../llm/stream.ts";
 import type { SidecarRequest, ToolDefinition } from "../../llm/types.ts";
 import type { Message } from "../../engine/types.ts";
@@ -419,7 +419,7 @@ export async function runSegmentCompactionPass(
   }
 }
 
-function readArchivedSegment(
+export function readArchivedSegment(
   dataDir: string,
   character: string,
   thread: string,
@@ -725,7 +725,7 @@ export async function renderToolOutcome(
   }
 }
 
-async function resolveChatRequest(
+export async function resolveChatRequest(
   character: string,
   thread: string,
   messages: readonly Message[],
@@ -733,8 +733,9 @@ async function resolveChatRequest(
   mcpToolDefs: readonly ToolDefinition[],
   env: NodeJS.ProcessEnv | undefined,
   prior?: PriorContext,
+  model?: ResolvedModel,
 ): Promise<SidecarRequest> {
-  const chatModel = resolveChatModelForCharacter(
+  const chatModel = model ?? resolveChatModelForCharacter(
     configView(effective),
     character,
     (v, c, n, h) => findEffectiveModel(v, c, n, h),

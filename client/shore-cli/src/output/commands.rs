@@ -118,6 +118,14 @@ fn print_segments(data: &serde_json::Value) {
         return;
     }
     if let Some(segment) = data.get("segment") {
+        if data["skipped"].as_bool() == Some(true) {
+            cli_out!(
+                "Segment {} already has a label: {}. Use --replace to write a new one.",
+                segment["index"].as_u64().unwrap_or(0),
+                segment["label"].as_str().unwrap_or("?"),
+            );
+            return;
+        }
         print_segment_row(segment);
         if let Some(messages) = data.get("messages").and_then(serde_json::Value::as_array) {
             if messages.is_empty() {

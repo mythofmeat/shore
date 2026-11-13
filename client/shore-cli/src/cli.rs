@@ -848,11 +848,21 @@ pub(crate) enum SegmentsCommand {
         index: u32,
     },
 
-    /// Set a segment label, or omit LABEL to clear it
+    /// Set a segment label, omit LABEL to clear it, or have a model write one with --auto
     Label {
         #[arg(add = values(Completes::Segments))]
         index: u32,
+        #[arg(conflicts_with = "auto")]
         label: Option<String>,
+        /// Ask a model to label the segment; one that already has a label is left alone
+        #[arg(long)]
+        auto: bool,
+        /// With --auto, write a new label over the one the segment has
+        #[arg(long, requires = "auto")]
+        replace: bool,
+        /// With --auto, the model to ask instead of the chat model
+        #[arg(long, requires = "auto", add = values(Completes::Models))]
+        model: Option<String>,
     },
 
     /// Set a segment note, or omit NOTE to clear it
@@ -2941,7 +2951,19 @@ pub(crate) fn to_swp_command(
                 Some(SegmentsCommand::Show { index }) => at(SegmentAction::Show, index, None),
                 Some(SegmentsCommand::Exclude { index }) => at(SegmentAction::Exclude, index, None),
                 Some(SegmentsCommand::Include { index }) => at(SegmentAction::Include, index, None),
-                Some(SegmentsCommand::Label { index, label }) => {
+                Some(SegmentsCommand::Label {
+                    index,
+                    auto: true,
+                    replace,
+                    model,
+                    ..
+                }) => SegmentsArgs {
+                    auto: Some(true),
+                    replace: replace.then_some(true),
+                    model: model.clone(),
+                    ..at(SegmentAction::Label, index, None)
+                },
+                Some(SegmentsCommand::Label { index, label, .. }) => {
                     at(SegmentAction::Label, index, Some(label))
                 }
                 Some(SegmentsCommand::Note { index, note }) => {

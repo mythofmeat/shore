@@ -2,4 +2,4 @@
 import type { SegmentMutation } from "./SegmentMutation";
 import type { SegmentSummary } from "./SegmentSummary";
 
-export type SegmentChanged = { character: string, thread: string, action: SegmentMutation, segment: SegmentSummary, };
+export type SegmentChanged = { character: string, thread: string, action: SegmentMutation, segment: SegmentSummary, skipped?: boolean, };

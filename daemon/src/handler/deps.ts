@@ -1,3 +1,7 @@
+import { join } from "node:path";
+import { HISTORY_DB_FILE } from "../engine/history_store.ts";
+import { onSegmentArchive } from "../memory/compaction/archive.ts";
+import { SegmentLabels } from "../memory/compaction/label.ts";
 import { shoreLog } from "../log.ts";
 
 import { compactionGenerate } from "../autonomy/in_process.ts";
@@ -221,6 +225,21 @@ export function chatCompactionRunner(a: GenerationAssembly): GenerationDeps["com
 const SIDE_THREAD_COMPACTION = {
   autonomy: { shouldCompactNow: () => false, onCompactionComplete: () => {}, onCompactionFailed: () => {} },
 };
+
+export function labelNewSegments(a: GenerationAssembly): { stop: () => void; settled: () => Promise<void> } {
+  const { runtime } = a;
+  const labels = new SegmentLabels(() => ({
+    config: runtime.registry.globalConfig(),
+    generate: compactionGenerate({
+      providers: a.providers,
+      config: runtime.config,
+      ...(a.env === undefined ? {} : { env: a.env }),
+    }, { callType: "label" }),
+    tools: runtimeToolDeps(a),
+    ...(a.env === undefined ? {} : { env: a.env }),
+  }));
+  return { stop: onSegmentArchive(join(runtime.config.dirs.data, HISTORY_DB_FILE), labels.hook), settled: () => labels.settled() };
+}
 
 export async function resumeStoppedCompactions(a: GenerationAssembly): Promise<void> {
   const { runtime } = a;
@@ -673,6 +692,11 @@ function commandDeps(a: CommandAssembly): CommandDeps {
         }, { foreground: true }),
         tools: runtimeToolDeps(a),
       },
+      label: compactionGenerate({
+        providers: a.providers,
+        config: runtime.config,
+        ...(a.env === undefined ? {} : { env: a.env }),
+      }, { foreground: true, callType: "label" }),
       repoint: async (character, config) => {
         runtime.cache.invalidate(character, "compaction");
         await runtime.cache.reprimeFromDisk(character, config.dirs.data, config, {

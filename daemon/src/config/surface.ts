@@ -30,7 +30,7 @@ const CONFIG_FIELDS: readonly ConfigField[] = [
   ...["wake_cooldown", "check_time_limit", "max_wake_limit", "max_wrap_up_rounds", "max_idle_wakes", "idle_timeout", "off"].map((key) => field(`behavior.autonomy.triggers.${key}`, `triggers.${key}`)),
   field("behavior.presence.statuses", "presence.statuses"),
   field("behavior.marks.tags", "marks.tags"),
-  ...["enabled", "write_memory", "archive_after", "min_turns", "max_turns", "max_context_tokens", "keep_recent_turns"].map((key) => field(`memory.compaction.${key}`, `compaction.${key}`)),
+  ...["enabled", "write_memory", "label_segments", "archive_after", "min_turns", "max_turns", "max_context_tokens", "keep_recent_turns"].map((key) => field(`memory.compaction.${key}`, `compaction.${key}`)),
   field("memory.compaction.idle_trigger", "compaction.idle_after"),
   ...["enabled", "every", "start_between", "idle_after", "min_turns", "time_limit", "system_prompt", "tools"].map((key) => field(`memory.dreaming.${key}`, `dreaming.${key}`)),
   field("memory.git_push", "compaction.git_push"),

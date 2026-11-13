@@ -326,9 +326,9 @@ export type CompactionGenerate = (
   signal?: AbortSignal,
 ) => Promise<GenerateResponse>;
 
-export function compactionGenerate(deps: GenerateDeps, { foreground = false }: { foreground?: boolean } = {}): CompactionGenerate {
+export function compactionGenerate(deps: GenerateDeps, { foreground = false, callType = "compaction" }: { foreground?: boolean; callType?: "compaction" | "label" } = {}): CompactionGenerate {
   return async (request, model, character, sink, tools, options, signal) => {
-    labelAccountedCall(request, deps.config, character, "compaction", foreground);
+    labelAccountedCall(request, deps.config, character, callType, foreground);
     const { response, fallbacks } = await generateViaStream(
       request,
       { providerKey: model.provider_key, apiKeyEnv: model.api_key_env },

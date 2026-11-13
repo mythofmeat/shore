@@ -19,6 +19,18 @@ export interface DurableHistoryLocation {
   dbPath: string;
   archiveKey: string;
   coverageClaim?: string;
+  unlabelled?: boolean;
+}
+
+export type SegmentArchiveHook = (archiving: { archiveKey: string; activeContent: string }) => Promise<((segment: number) => void) | undefined>;
+
+const archiveHooks = new Map<string, SegmentArchiveHook>();
+
+export function onSegmentArchive(dbPath: string, hook: SegmentArchiveHook): () => void {
+  archiveHooks.set(dbPath, hook);
+  return () => {
+    if (archiveHooks.get(dbPath) === hook) archiveHooks.delete(dbPath);
+  };
 }
 
 export function conversationManager(
@@ -69,7 +81,8 @@ export async function archiveAndRetain(
     const retainedContent = retained.length === 0 ? "" : retained.join("\n") + "\n";
 
     if (archived.length > 0) {
-      await archiveToDatabase(
+      const archivedAs = history.unlabelled === true ? undefined : await archiveHooks.get(history.dbPath)?.({ archiveKey: history.archiveKey, activeContent });
+      const segment = await archiveToDatabase(
         history,
         archived,
         retainedContent,
@@ -80,6 +93,7 @@ export async function archiveAndRetain(
       );
       const [character, thread = MAIN_THREAD] = history.archiveKey.split("/");
       if (character !== undefined) forgetThreadSessions(dirname(history.dbPath), character, thread, Date.parse(now()));
+      if (segment !== undefined) archivedAs?.(segment);
     } else {
       try {
         writeDurable(archiveFile(history.dbPath, history.archiveKey, "active.jsonl"), retainedContent);
@@ -103,7 +117,7 @@ async function archiveToDatabase(
     import("../../engine/history_store.ts").SegmentEntry,
     "memory_before" | "memory_after" | "excluded" | "note"
   >,
-): Promise<void> {
+): Promise<number | undefined> {
   const messages = archived.map((line) => normalizeMessage(JSON.parse(line) as Message));
   const store = HistoryStore.open(history.dbPath);
   let idx: number | undefined;
@@ -131,6 +145,7 @@ async function archiveToDatabase(
       throw CompactionError.conversationManager(`failed to write retained messages: ${message(e)}`);
     }
     if (idx !== undefined) store.finishCompaction(history.archiveKey, idx);
+    return idx;
   } finally {
     store.close();
   }

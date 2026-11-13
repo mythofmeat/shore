@@ -721,6 +721,7 @@ function imageSettingsProblem(settings: ImageOverride | ImageSettings): string |
 export interface CompactionConfig {
   enabled: boolean;
   write_memory: boolean;
+  label_segments: boolean;
   idle_trigger: ConfigDuration;
   archive_after: ConfigDuration;
   min_turns: number;
@@ -732,6 +733,7 @@ export interface CompactionConfig {
 export const defaultCompactionConfig = (): CompactionConfig => ({
   enabled: true,
   write_memory: true,
+  label_segments: true,
   idle_trigger: ConfigDuration.fromSecs(7200),
   archive_after: ConfigDuration.fromSecs(0),
   min_turns: 12,
@@ -746,6 +748,7 @@ const COMPACTION: StructSpec<CompactionConfig> = {
   fields: {
     enabled: readBool,
     write_memory: readBool,
+    label_segments: readBool,
     idle_trigger: readDuration,
     archive_after: readDuration,
     min_turns: readUsize,

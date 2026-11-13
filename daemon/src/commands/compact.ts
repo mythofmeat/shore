@@ -35,6 +35,7 @@ export interface CompactContext {
   config: LoadedConfig;
   autonomy: CompactAutonomy;
   run: Omit<CompactionRunDeps, "config">;
+  label?: CompactionRunDeps["generate"];
   repoint?: (character: string, config: LoadedConfig) => Promise<void>;
 }
 

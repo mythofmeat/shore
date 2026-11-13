@@ -207,10 +207,17 @@ export const commandOperations: OperationRegistry<CommandOperationContext> = {
     value: { label: "Label or note", multiline: true, hint: "Used by label/note; explicitly unset or empty text clears the saved value" },
     msg_ids: { label: "Message IDs", hint: "Used by find: lists every thread and segment holding each message, in any thread" },
     thread: { label: "Thread", choices: "threads", hint: "The thread whose segments to list, show or change; omit for this conversation's thread" },
+    auto: { label: "Have a model write the label", hint: "Used by label: a segment that already has a label is left alone" },
+    replace: { label: "Replace the label it has", hint: "Used with auto" },
+    model: { label: "Model to ask", choices: "models", hint: "Used with auto; omit for the chat model" },
   }, policies: [
     { condition: { kind: "absent", field: "action" }, effects: ["read"], confirmation: "none" },
     ...([null, "list", "show", "find"] as const).map((value) => ({ condition: { kind: "equals" as const, field: "action", value }, effects: ["read" as const], confirmation: "none" as const })),
-  ] }, (context, args) => segments(context.session.dataDir, engineOf(context).characterName, engineOf(context).thread, args, context.deps.historyIndex)),
+  ] }, (context, args) => {
+    const compaction = context.deps.compaction;
+    return segments(context.session.dataDir, engineOf(context).characterName, engineOf(context).thread, args, context.deps.historyIndex,
+      compaction?.label === undefined ? undefined : { ...compaction.run, generate: compaction.label, config: context.session.config });
+  }),
   clear: register("clear", { category: "Memory", scope: "character", prerequisites: [], effects: ["history_write"], confirmation: "archive", label: "Clear active context", fields: {
     exclude: { label: "Exclude from history search", hint: "The archived segment stays inspectable and can be included again" },
     note: { label: "Archive note", multiline: true },

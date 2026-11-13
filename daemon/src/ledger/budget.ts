@@ -658,6 +658,7 @@ function pendingAttemptCost(
       "heartbeat_tool_loop",
       "keepalive",
       "compaction",
+      "label",
       "dreaming",
       "dreaming_tool_loop",
       "memory_query",
@@ -1061,6 +1062,7 @@ function callTypeMatchesUsageKind(callType: string, usageKind: string): boolean 
     case "keepalive":
       return usageKind === "keepalive";
     case "compaction":
+    case "label":
       return usageKind === "compaction";
     case "dreaming":
     case "dreaming_tool_loop":
@@ -1109,6 +1111,7 @@ export function isBackgroundCall(callType: string): boolean {
     isHeartbeatCall(callType) ||
     callType === "keepalive" ||
     callType === "compaction" ||
+    callType === "label" ||
     callType === "dreaming" ||
     callType === "dreaming_tool_loop" ||
     callType === "memory_query"
