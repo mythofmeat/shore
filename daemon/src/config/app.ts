@@ -272,16 +272,18 @@ const WEB: StructSpec<WebConfig> = {
 };
 
 export interface DaemonConfig {
-  addr: string;
+  listen_addr: string;
   image_cache_bytes: number;
   shutdown_grace: ConfigDuration;
+  cache_forensics: boolean;
   web: WebConfig;
 }
 
 const defaultDaemonConfig = (): DaemonConfig => ({
-  addr: "127.0.0.1:7320",
+  listen_addr: "127.0.0.1:7320",
   image_cache_bytes: DEFAULT_IMAGE_CACHE_BYTES,
   shutdown_grace: ConfigDuration.fromSecs(29 * 60),
+  cache_forensics: false,
   web: defaultWebConfig(),
 });
 
@@ -289,9 +291,10 @@ const DAEMON: StructSpec<DaemonConfig> = {
   name: "DaemonConfig",
   make: defaultDaemonConfig,
   fields: {
-    addr: readString,
+    listen_addr: readString,
     image_cache_bytes: readUsize,
     shutdown_grace: readDuration,
+    cache_forensics: readBool,
     web: struct(WEB),
   },
 };
@@ -389,22 +392,6 @@ const TRIGGERS: StructSpec<TriggersConfig> = {
   },
 };
 
-export interface CacheConfig {
-  forensics: boolean;
-}
-
-const defaultCacheConfig = (): CacheConfig => ({
-  forensics: false,
-});
-
-const CACHE: StructSpec<CacheConfig> = {
-  name: "CacheConfig",
-  make: defaultCacheConfig,
-  fields: {
-    forensics: readBool,
-  },
-};
-
 export interface PresenceConfig {
   statuses: string[];
 }
@@ -452,14 +439,10 @@ const MARKS: StructSpec<MarksConfig> = {
 };
 
 export interface BehaviorConfig {
-  presence: PresenceConfig;
-  marks: MarksConfig;
   user_message_timestamps: UserTimestampMode;
 }
 
 const defaultBehaviorConfig = (): BehaviorConfig => ({
-  presence: defaultPresenceConfig(),
-  marks: defaultMarksConfig(),
   user_message_timestamps: "auto",
 });
 
@@ -467,8 +450,6 @@ const BEHAVIOR: StructSpec<BehaviorConfig> = {
   name: "BehaviorConfig",
   make: defaultBehaviorConfig,
   fields: {
-    presence: struct(PRESENCE),
-    marks: struct(MARKS),
     user_message_timestamps: readEnum(USER_TIMESTAMP_MODES),
   },
 };
@@ -1309,12 +1290,13 @@ export interface AppConfig {
   defaults: DefaultsConfig;
   behavior: BehaviorConfig;
   triggers: TriggersConfig;
+  presence: PresenceConfig;
+  marks: MarksConfig;
   compaction: CompactionConfig;
   dreaming: DreamingConfig;
   tools: ToolsConfig;
   images: ImagesConfig;
   memory: MemoryConfig;
-  cache: CacheConfig;
   connections: ConnectionsConfig;
   notifications: NotificationsConfig;
   usage: UsageConfig;
@@ -1328,12 +1310,13 @@ export const defaultAppConfig = (): AppConfig => ({
   defaults: defaultDefaultsConfig(),
   behavior: defaultBehaviorConfig(),
   triggers: defaultTriggersConfig(),
+  presence: defaultPresenceConfig(),
+  marks: defaultMarksConfig(),
   compaction: defaultCompactionConfig(),
   dreaming: defaultDreamingConfig(),
   tools: defaultToolsConfig(),
   images: defaultImagesConfig(),
   memory: defaultMemoryConfig(),
-  cache: defaultCacheConfig(),
   connections: defaultConnectionsConfig(),
   notifications: defaultNotificationsConfig(),
   usage: defaultUsageConfig(),
@@ -1353,12 +1336,13 @@ const APP: StructSpec<AppConfig> = {
     defaults: struct(DEFAULTS),
     behavior: struct(BEHAVIOR),
     triggers: struct(TRIGGERS),
+    presence: struct(PRESENCE),
+    marks: struct(MARKS),
     compaction: struct(COMPACTION),
     dreaming: struct(DREAMING),
     tools: struct(TOOLS),
     images: struct(IMAGES),
     memory: struct(MEMORY),
-    cache: struct(CACHE),
     connections: struct(CONNECTIONS),
     notifications: struct(NOTIFICATIONS),
     usage: struct(USAGE),

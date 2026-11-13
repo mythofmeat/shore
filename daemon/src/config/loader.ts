@@ -513,9 +513,9 @@ function validateConfig(
   if (dreaming !== undefined) throw validationError(dreaming);
   const triggers = validateTriggers(app.triggers);
   if (triggers !== undefined) throw validationError(triggers);
-  const presence = validatePresence(app.behavior.presence);
+  const presence = validatePresence(app.presence);
   if (presence !== undefined) throw validationError(presence);
-  const marks = validateMarks(app.behavior.marks);
+  const marks = validateMarks(app.marks);
   if (marks !== undefined) throw validationError(marks);
 
   const images = validateImages(app.images);

@@ -157,7 +157,7 @@ export function resolveListenAddr(
 ): [string, StartupValueSource] {
   if (cliAddr !== undefined) return [cliAddr, "cli"];
   if (envAddr !== undefined && envAddr.trim() !== "") return [envAddr, "env"];
-  return [loaded.app.daemon.addr, "config"];
+  return [loaded.app.daemon.listen_addr, "config"];
 }
 
 function startupEnvAddr(env: NodeJS.ProcessEnv): string | undefined {

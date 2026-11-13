@@ -52,8 +52,7 @@ function either(holds: boolean, whenTrue: string, whenFalse: string): [string, s
 }
 
 export function guideValues(config: LoadedConfig, userName: string): Map<string, string> {
-  const { presence } = config.app.behavior;
-  const { notifications, triggers: limits } = config.app;
+  const { notifications, presence, triggers: limits } = config.app;
   const triggers = triggerSettings(config.app);
   const statuses = presence.statuses.map((status) => `\`${status}\``).join(", ");
   return new Map([

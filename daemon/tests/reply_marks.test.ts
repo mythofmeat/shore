@@ -84,7 +84,7 @@ async function world(rounds: Round[], options: { tools?: string[]; history?: Mes
   app.advanced.max_retries = 0;
   app.defaults.model = "fixture";
   app.defaults.display_name = "Sam";
-  if (options.tags !== undefined) app.behavior.marks.tags = options.tags;
+  if (options.tags !== undefined) app.marks.tags = options.tags;
   const models = emptyCatalog();
   models.chat.set("chat.fixture", {
     name: "fixture", qualifiedName: "chat.fixture", category: "chat", providerKey: "anthropic", sdk: "anthropic",
@@ -168,7 +168,7 @@ async function world(rounds: Round[], options: { tools?: string[]; history?: Mes
     sent,
     say: async (text) => await turn(text, undefined),
     regen: async (choice) => await turn("", choice ?? { kind: "reroll" }),
-    marks: { engine, data: dirs.data, tags: app.behavior.marks.tags, now: () => NOW },
+    marks: { engine, data: dirs.data, tags: app.marks.tags, now: () => NOW },
     lastRequest: () => kept,
   };
 }
@@ -567,7 +567,7 @@ describe("the tags a reason can carry", () => {
     const root = await mkdtemp(testTmp("shore-marks-config-"));
     const read = async (toml: string): Promise<string[]> => {
       await Bun.write(join(root, "config.toml"), toml);
-      return loadConfig(join(root, "config.toml"), { env: { SHORE_CONFIG_DIR: root }, onWarn: () => {} }).app.behavior.marks.tags;
+      return loadConfig(join(root, "config.toml"), { env: { SHORE_CONFIG_DIR: root }, onWarn: () => {} }).app.marks.tags;
     };
     expect(await read('[chat]\ndisplay_name = "eve"\n')).toEqual(["didn't look hard enough", "out of character", "too long", "repetitive"]);
     expect(await read(`[marks]\ntags = ["cold", "${"🕯".repeat(80)}"]\n`)).toEqual(["cold", "🕯".repeat(80)]);
@@ -673,7 +673,7 @@ describe("marking through the daemon's operations", () => {
   test("run as operations, marks are checked against the protocol and stamped with the daemon's clock", async () => {
     const at = await world(["Hello there."]);
     await at.say("Hi.");
-    const session = { dataDir: at.data, config: { app: { behavior: { marks: { tags: ["cold"] } } } } };
+    const session = { dataDir: at.data, config: { app: { marks: { tags: ["cold"] } } } };
     const context = (now?: () => number) => ({ session, deps: now === undefined ? {} : { now }, engine: at.engine }) as never;
     const liked = await commandOperations.mark.invoke(context(() => Date.parse("2026-11-01T00:00:00Z")), { kind: "like", tags: ["cold"] });
     expect(liked).toMatchObject({ position: 1, changed: true, marks: [{ kind: "like", tags: ["cold"], at: "2026-11-01T00:00:00.000Z" }] });

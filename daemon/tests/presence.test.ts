@@ -33,7 +33,7 @@ test("the statuses the user can set are a list in their config, each 1 to 80 cha
   const root = await mkdtemp(testTmp("shore-presence-config-"));
   const read = async (toml: string): Promise<string[]> => {
     await Bun.write(join(root, "config.toml"), toml);
-    return loadConfig(join(root, "config.toml"), { env: { SHORE_CONFIG_DIR: root }, onWarn: () => {} }).app.behavior.presence.statuses;
+    return loadConfig(join(root, "config.toml"), { env: { SHORE_CONFIG_DIR: root }, onWarn: () => {} }).app.presence.statuses;
   };
   expect(await read('[chat]\ndisplay_name = "eve"\n')).toEqual(["asleep", "busy", "away"]);
   expect(await read(`[presence]\nstatuses = ["at work", "${"🕯".repeat(80)}"]\n`)).toEqual(["at work", "🕯".repeat(80)]);

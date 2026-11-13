@@ -14,8 +14,6 @@ const field = (internal: string, canonical: string): ConfigField => ({
 });
 
 const CONFIG_FIELDS: readonly ConfigField[] = [
-  field("daemon.addr", "daemon.listen_addr"),
-  field("cache.forensics", "daemon.cache_forensics"),
   field("defaults.model", "chat.model"),
   field("defaults.display_name", "chat.display_name"),
   field("defaults.system_prompt", "chat.system_prompt"),
@@ -24,8 +22,6 @@ const CONFIG_FIELDS: readonly ConfigField[] = [
   field("behavior.user_message_timestamps", "chat.user_timestamps"),
   field("memory.thinking.replay_prior_thinking", "chat.reasoning_replay"),
   ...["max_retries", "retry_backoff"].map((key) => field(`advanced.${key}`, `chat.${key}`)),
-  field("behavior.presence.statuses", "presence.statuses"),
-  field("behavior.marks.tags", "marks.tags"),
   field("tools.enabled_tools", "tools.enabled"),
   field("tools.enabled_subagents", "subagents.enabled"),
   field("tools.enabled_mcp", "tools.mcp"),
@@ -223,7 +219,6 @@ export function normalizeConfigSource(input: ConfigTable, source = "config"): Co
   }
   const budgets = valueAt(table, ["usage", "budgets"]);
   if (Array.isArray(budgets)) for (const budget of budgets) if (isConfigTable(budget)) toInternal(budget, BUDGET_FIELDS);
-  for (const section of ["presence", "marks", "matrix", "image"]) if (isConfigTable(table[section]) && Object.keys(table[section]).length === 0) delete table[section];
   return table;
 }
 
