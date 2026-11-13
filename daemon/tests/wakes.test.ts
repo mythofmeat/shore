@@ -3079,6 +3079,31 @@ test("a wake that sends a picture Shore can't find is asked once to fix it, and 
   });
 });
 
+test("a wake that has used up its time isn't asked to fix a picture Shore can't find, and its message goes as it is", async () => {
+  await withCharacter(async ({ runtime, script, say, thread }) => {
+    script.closing = "<sendMessage>\nThe lamp tonight\n![[missing.png]]\n</sendMessage>";
+    await say("hello");
+    at(1);
+    let clock = 5_000;
+    const now = spyOn(performance, "now").mockImplementation(() => clock);
+    try {
+      const end = hold();
+      script.endHeld = end;
+      const ticking = runtime.autonomy.wakeNow("ada") === undefined ? Promise.resolve() : runtime.autonomy.tick();
+      await end.started.promise;
+      clock = 5_000 + 30 * MINUTE;
+      end.release.resolve();
+      await ticking;
+    } finally {
+      now.mockRestore();
+    }
+
+    expect(script.wakes).toHaveLength(2);
+    expect(runtime.autonomy.log("ada", 100).map((event) => event.detail).filter((detail) => detail.includes("ictures"))).toEqual([]);
+    expect((await thread("main")).at(-1)?.content).toBe("The lamp tonight\n![[missing.png]]");
+  });
+});
+
 test("a wake whose tool call breaks off leaves its thread with an answer to that call, and the log says what went wrong", async () => {
   await withCharacter(async ({ runtime, script, say, thread, wakeNow }) => {
     await say("hello");
