@@ -5,6 +5,7 @@ import { join } from "node:path";
 
 import { CacheTracker } from "../src/cache/tracker.ts";
 import { transcript } from "../src/commands/call_log.ts";
+import { dream as dreamCommand } from "../src/commands/dream.ts";
 import { runningReport } from "../src/daemon/running.ts";
 import { addDiaryNote } from "../src/autonomy/diary.ts";
 import { dreamDue, type DreamInputs } from "../src/autonomy/tick.ts";
@@ -392,6 +393,25 @@ test("with compaction.git_push on, a dream pushes the workspace when it committe
     return [];
   };
   expect(await dreamt(commitsThenHangs, pushing, committed)).toEqual(["interrupted", 1, undefined, "start"]);
+});
+
+test("shore dream says whether dreaming is on, what is queued or running and how the last dream went, and --now queues one", async () => {
+  await afterOneChat([], (_request, round) => round === 0
+    ? [{ type: "tool_use", id: "dream-bash", name: "bash", input: { command: COMMIT_A_NOTE } }]
+    : [{ type: "text", text: "Noted." }], (app) => { app.dreaming.enabled = true; }, async ({ config, runtime }) => {
+    const asked = { characterName: "ada", config, autonomy: runtime.autonomy };
+    putSegment(config.dirs.data, "ada", 0, Date.now() - HOUR);
+    const before = dreamCommand(asked, {});
+    expect([before.character, before.enabled, before.queued, before.running, before.last]).toEqual(["ada", true, false, false, undefined]);
+    expect(dreamCommand(asked, { now: true })).toMatchObject({ character: "ada", enabled: true, queued: true, running: false });
+    await runtime.autonomy.tick();
+    await runtime.autonomy.dreamsEnded();
+    expect(dreamCommand(asked, {})).toMatchObject({ queued: false, running: false, last: { outcome: "finished", commits: 1, files: ["MEMORY.md"] } });
+
+    const stranger = { ...asked, characterName: "nobody" };
+    expect(dreamCommand(stranger, {})).toEqual({ character: "nobody", enabled: true, queued: false, running: false });
+    expect(() => dreamCommand(stranger, { now: true })).toThrow("No autonomy state for character 'nobody'");
+  });
 });
 
 test("a running dream lets a snapshot through between calls, can't be queued twice, and a shutdown stops it for later", async () => {

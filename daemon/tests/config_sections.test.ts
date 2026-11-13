@@ -76,3 +76,15 @@ test("[presence], [marks], [matrix] and [image] are read from the file, and a se
     { enabled: false, homeserver: "", user_id: "", room_id: "", mirror_all: true }, undefined,
   ]);
 });
+
+test("a model named in [triggers], [compaction] or [dreaming] that can't be found is warned about under that section's key", async () => {
+  const root = await mkdtemp(testTmp("shore-config-sections-"));
+  await writeFile(join(root, "config.toml"), '[triggers]\nmodel = "nope-a"\n[compaction]\nmodel = "nope-b"\n[dreaming]\nmodel = "ghost:nope-c"\n');
+  const warned: (readonly (readonly [string, string])[])[] = [];
+  loadConfig(join(root, "config.toml"), { env: { SHORE_CONFIG_DIR: root }, onWarn: (_message, fields) => { warned.push(fields); } });
+  expect(warned).toEqual([
+    [["field", "triggers.model"], ["name", "nope-a"]],
+    [["field", "compaction.model"], ["name", "nope-b"]],
+    [["field", "dreaming.model"], ["name", "ghost:nope-c"], ["provider", "ghost"]],
+  ]);
+});
