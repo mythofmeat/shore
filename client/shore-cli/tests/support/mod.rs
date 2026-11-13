@@ -10,16 +10,17 @@ fn send(stream: &mut TcpStream, frame: &Value) {
     let _sent = writeln!(stream, "{frame}");
 }
 
-fn serve(stream: TcpStream, data: &Value, received: &Mutex<Vec<Value>>) {
+fn serve(stream: TcpStream, version: Option<&str>, data: &Value, received: &Mutex<Vec<Value>>) {
     stream.set_nonblocking(false).unwrap();
     stream
         .set_read_timeout(Some(Duration::from_secs(10)))
         .unwrap();
     let mut reader = BufReader::new(stream);
-    send(
-        reader.get_mut(),
-        &json!({ "type": "hello", "v": 1, "server_name": "test", "characters": [{ "name": "ada" }] }),
-    );
+    let mut hello = json!({ "type": "hello", "v": 1, "server_name": "test", "characters": [{ "name": "ada" }] });
+    if let (Some(reported), Some(fields)) = (version, hello.as_object_mut()) {
+        let _replaced = fields.insert("server_version".to_owned(), json!(reported));
+    }
+    send(reader.get_mut(), &hello);
     loop {
         let mut line = String::new();
         if reader.read_line(&mut line).unwrap_or(0) == 0 {
@@ -47,6 +48,11 @@ fn serve(stream: TcpStream, data: &Value, received: &Mutex<Vec<Value>>) {
 }
 
 pub(crate) fn asked(data: Value, args: &[&str]) -> (Output, Vec<Value>) {
+    asked_of(None, data, args)
+}
+
+pub(crate) fn asked_of(version: Option<&str>, data: Value, args: &[&str]) -> (Output, Vec<Value>) {
+    let reported = version.map(str::to_owned);
     let listener = TcpListener::bind("127.0.0.1:0").unwrap();
     let addr = listener.local_addr().unwrap().to_string();
     let received = Arc::new(Mutex::new(Vec::new()));
@@ -56,7 +62,8 @@ pub(crate) fn asked(data: Value, args: &[&str]) -> (Output, Vec<Value>) {
             let Ok(stream) = incoming else { return };
             let log = Arc::clone(&recorded);
             let answer = data.clone();
-            let _worker = std::thread::spawn(move || serve(stream, &answer, &log));
+            let told = reported.clone();
+            let _worker = std::thread::spawn(move || serve(stream, told.as_deref(), &answer, &log));
         }
     });
     let home = tempfile::tempdir().unwrap();
