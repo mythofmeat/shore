@@ -3730,6 +3730,72 @@ mod palette_catalog_tests {
 }
 
 #[cfg(test)]
+mod thread_listing_tests {
+    use super::{App, absorb_thread_listing, app::ThreadRow};
+    use serde_json::json;
+
+    #[test]
+    fn the_daemons_thread_list_fills_the_threads_their_folders_home_and_the_open_thread() {
+        let mut app = App::default();
+        absorb_thread_listing(
+            &mut app,
+            &json!({
+                "character": "ada",
+                "threads": [
+                    { "id": "main", "created_at": "2026-11-01T00:00:00Z", "compaction": true, "home": true, "current": false, "turns": 3 },
+                    {
+                        "id": "story", "label": "The Storm", "purpose": "a story", "chat_model": "opus",
+                        "created_at": "2026-11-05T00:00:00Z", "last_active": "2026-11-09T00:00:00Z", "created_by": "character",
+                        "compaction": false, "home": false, "current": true, "unread": 2, "warm": true, "locked": true,
+                        "folder": "fiction", "position": 1,
+                    },
+                    { "label": "a row with no id" },
+                ],
+                "folders": [{ "name": "fiction" }, { "by_activity": true }],
+                "home": "main",
+                "current": "story",
+            }),
+        );
+        assert_eq!(
+            app.threads,
+            [
+                ThreadRow {
+                    id: "main".to_owned(),
+                    home: true,
+                    turns: Some(3),
+                    created_at: "2026-11-01T00:00:00Z".to_owned(),
+                    ..ThreadRow::default()
+                },
+                ThreadRow {
+                    id: "story".to_owned(),
+                    label: Some("The Storm".to_owned()),
+                    purpose: Some("a story".to_owned()),
+                    model: Some("opus".to_owned()),
+                    unread: Some(2),
+                    warm: true,
+                    created_at: "2026-11-05T00:00:00Z".to_owned(),
+                    last_active: Some("2026-11-09T00:00:00Z".to_owned()),
+                    by_character: true,
+                    locked: true,
+                    folder: Some("fiction".to_owned()),
+                    position: Some(1),
+                    ..ThreadRow::default()
+                },
+            ]
+        );
+        assert_eq!(app.thread_folders, ["fiction"]);
+        assert_eq!(
+            (
+                app.home_thread.as_str(),
+                app.thread_name.as_str(),
+                app.threads_known_for.as_deref()
+            ),
+            ("main", "story", Some("ada"))
+        );
+    }
+}
+
+#[cfg(test)]
 mod diary_pager_tests {
     use super::*;
     use serde_json::json;
