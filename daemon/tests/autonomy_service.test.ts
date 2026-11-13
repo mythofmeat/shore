@@ -23,6 +23,7 @@ interface World {
   dataDir: string;
   ran: Ran[];
   compactions: string[];
+  archives: string[];
   dream: PromiseWithResolvers<DreamActionResult>;
   seals: OpenedSeal[];
   clock: { now: number };
@@ -30,10 +31,11 @@ interface World {
   woken: () => string[];
 }
 
-async function world({ idleCompactionSecs = 0, maxIdleWakes = 10, enabled = true } = {}): Promise<World> {
+async function world({ idleCompactionSecs = 0, archiveAfterSecs = 0, compaction = true, minTurns = 0, maxIdleWakes = 10, enabled = true } = {}): Promise<World> {
   const clock = { now: T0 };
   const ran: Ran[] = [];
   const compactions: string[] = [];
+  const archives: string[] = [];
   const seals: OpenedSeal[] = [];
   const during: World["during"] = {};
   const dream = Promise.withResolvers<DreamActionResult>();
@@ -46,7 +48,10 @@ async function world({ idleCompactionSecs = 0, maxIdleWakes = 10, enabled = true
       compactions.push(reason);
       return { events: [] };
     },
-    runDeepArchive: async () => ({ events: [] }),
+    runDeepArchive: async (character) => {
+      archives.push(character);
+      return { events: [] };
+    },
     runDream: async () => await dream.promise,
     openSeals: async () => seals.splice(0),
   };
@@ -55,11 +60,11 @@ async function world({ idleCompactionSecs = 0, maxIdleWakes = 10, enabled = true
   await service.register({
     character: "ada",
     data_dir: dataDir,
-    config: { autonomyEnabled: enabled, compactionEnabled: idleCompactionSecs > 0, minTurns: 0, maxTurns: 0, idleTriggerSecs: idleCompactionSecs, archiveAfterSecs: 0, maxContextTokens: 0 },
+    config: { autonomyEnabled: enabled, compactionEnabled: compaction, minTurns, maxTurns: 0, idleTriggerSecs: idleCompactionSecs, archiveAfterSecs, maxContextTokens: 0 },
     dormancy: { maxIdleWakes, maxSilentMs: 4 * HOUR },
   });
   const woken = (): string[] => service.log("ada", 20).filter((event) => event.kind === "tick_fired").map((event) => event.detail);
-  return { service, dataDir, ran, compactions, dream, seals, clock, during, woken };
+  return { service, dataDir, ran, compactions, archives, dream, seals, clock, during, woken };
 }
 
 const fired = (name: string, over: Partial<TriggerFiring> = {}): TriggerFiring => ({ name, reason: "the lamp is low", at: T0, ...over });
@@ -205,6 +210,50 @@ test("with the user's switch off nothing wakes the character, and what fired is 
   await service.tick();
   expect(ran).toEqual([]);
   expect((await world()).service.wakesMayRun("ada")).toBe(true);
+});
+
+test("an idle conversation is compacted and then archived whether or not the user's switch is on, and neither happens with compaction off", async () => {
+  for (const enabled of [true, false]) {
+    const { service, compactions, archives, clock } = await world({ idleCompactionSecs: 60, archiveAfterSecs: 3600, minTurns: 1, enabled });
+    service.onAssistantMessage("ada", 1);
+    clock.now = T0 + 59_000;
+    await service.tick();
+    expect([compactions, archives]).toEqual([[], []]);
+    clock.now = T0 + 60_000;
+    await service.tick();
+    expect([compactions, archives]).toEqual([["idle"], []]);
+    service.onCompactionComplete("ada", 0);
+    clock.now = T0 + HOUR + 59_000;
+    await service.tick();
+    expect([compactions, archives]).toEqual([["idle"], []]);
+    clock.now = T0 + HOUR + 60_000;
+    await service.tick();
+    expect([compactions, archives]).toEqual([["idle"], ["ada"]]);
+  }
+
+  const off = await world({ idleCompactionSecs: 60, archiveAfterSecs: 3600, minTurns: 1, compaction: false });
+  off.service.onAssistantMessage("ada", 1);
+  off.clock.now = T0 + 60_000;
+  await off.service.tick();
+  off.clock.now = T0 + HOUR;
+  await off.service.tick();
+  expect([off.compactions, off.archives]).toEqual([[], []]);
+});
+
+test("a conversation being compacted because it is full is not compacted for being idle until that is over", async () => {
+  const { service, compactions, clock } = await world({ idleCompactionSecs: 60 });
+  expect(service.shouldCompactNow("ada", 0, 0, true)).toBe(true);
+  clock.now = T0 + 60_000;
+  await service.tick();
+  expect(compactions).toEqual([]);
+
+  service.onCompactionComplete("ada", 0);
+  clock.now = T0 + 119_000;
+  await service.tick();
+  expect(compactions).toEqual([]);
+  clock.now = T0 + 120_000;
+  await service.tick();
+  expect(compactions).toEqual(["idle"]);
 });
 
 test("the user's new dormancy settings take effect at the next look", async () => {

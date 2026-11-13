@@ -483,8 +483,6 @@ export class CharacterAutonomy {
     const c = this.#config;
     const s = this.#state;
     return {
-      autonomyEnabled: c.autonomyEnabled,
-
       compactionEnabled: c.compactionEnabled,
       compactionTriggered: s.compactionTriggered,
       deepArchiveDone: s.deepArchiveDone,
@@ -517,7 +515,7 @@ export class CharacterAutonomy {
     const resting = this.#dormancy.isDormant(now);
     if (resting && !this.#resting) this.note("dormant", `Went dormant (wakes without the user: ${String(this.#dormancy.wakesWithoutUser)})`, now);
     this.#resting = resting;
-    const due = this.#fired.splice(0).filter((firing) => decision.wakesMayRun && (firing.seal === true || !resting));
+    const due = this.#fired.splice(0).filter((firing) => this.wakesMayRun && (firing.seal === true || !resting));
     let woke = false;
     try {
       for (const thread of new Set(due.map((firing) => firing.thread))) {

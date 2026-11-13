@@ -218,7 +218,7 @@ const DREAMING_DESCRIPTIONS: Record<string, string> = {
 };
 
 const TRIGGER_DESCRIPTIONS: Record<string, string> = {
-  enabled: "Give the character time of its own. It is woken by the triggers it keeps in TRIGGERS.toml in its workspace, which are schedules, things that happen and checks, and by nothing else. A check is a command run as the character with no model call, and needs it to have the bash tool. Compaction after compaction.idle_after and the deep archive wait on this switch too. Off by default.",
+  enabled: "Give the character time of its own. It is woken by the triggers it keeps in TRIGGERS.toml in its workspace, which are schedules, things that happen and checks, and by nothing else. A check is a command run as the character with no model call, and needs it to have the bash tool. Off by default.",
   model: "Model wakes run on, as provider:model_id. Unset runs a wake on the chat model of the thread it runs in, and on the home thread's when its trigger names no thread.",
   wake_cooldown: "Least time between two wakes from the same trigger, unless the trigger sets its own cooldown. A trigger that comes due sooner waits, and its check isn't run until then. Defaults to 1h.",
   check_time_limit: "Longest a trigger's check may run before it is stopped and counted as failed. Defaults to 60s.",
