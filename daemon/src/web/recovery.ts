@@ -4,6 +4,7 @@ import { chmodSync, closeSync, constants, fstatSync, lstatSync, mkdirSync, openS
 import { join } from "node:path";
 import type { WebArchiveInfo } from "../protocol/WebArchiveInfo.ts";
 import type { WebRequestInfo } from "../protocol/WebRequestInfo.ts";
+import { shoreLog } from "../log.ts";
 import { validWebArchiveInfo, validWebRequestInfo } from "./contracts.ts";
 
 export interface WebRecoveryOptions {
@@ -18,6 +19,18 @@ function privateDirectory(path: string): void {
   mkdirSync(path, { recursive: true, mode: 0o700 });
   if (!lstatSync(path).isDirectory()) throw new Error("Browser recovery requires a private directory");
   chmodSync(path, 0o700);
+}
+
+interface Saved { id: string; expires_at: number }
+
+function readSaved<T extends Saved>(text: string, valid: (value: unknown) => value is T, mark: Record<string, unknown>): { info: T; trimmed: boolean } | undefined {
+  let saved: unknown;
+  try { saved = JSON.parse(text); } catch { return undefined; }
+  const usable = (value: unknown): value is T => valid(value) && /^[a-f0-9-]{36}$/.test(value.id) && Number.isSafeInteger(value.expires_at);
+  if (usable(saved)) return { info: saved, trimmed: false };
+  const withoutResult: Record<string, unknown> = { ...(saved as Record<string, unknown>), ...mark };
+  delete withoutResult.result;
+  return usable(withoutResult) ? { info: withoutResult, trimmed: true } : undefined;
 }
 
 export class WebRecovery {
@@ -71,12 +84,26 @@ export class WebRecovery {
 
   revokeSession(id: string): void { this.#db.query("DELETE FROM sessions WHERE id = ?").run(id); }
 
+  #saved<T extends Saved>(table: "archives" | "requests", valid: (value: unknown) => value is T, mark: Record<string, unknown>): { owner: string; info: T }[] {
+    const kept: { owner: string; info: T }[] = [];
+    let dropped = 0;
+    let trimmed = 0;
+    for (const row of this.#db.query<{ id: string; owner: string; info: string }, []>(`SELECT id, owner, info FROM ${table}`).all()) {
+      const read = readSaved(row.info, valid, mark);
+      if (read === undefined) {
+        this.#db.query(`DELETE FROM ${table} WHERE id = ?`).run(row.id);
+        dropped += 1;
+        continue;
+      }
+      if (read.trimmed) trimmed += 1;
+      kept.push({ owner: row.owner, info: read.info });
+    }
+    if (dropped + trimmed > 0) shoreLog.warn(`shore: saved web UI ${table} from an older daemon: ${String(trimmed)} kept without their result, ${String(dropped)} dropped as unreadable`);
+    return kept;
+  }
+
   archives(): { owner: string; info: WebArchiveInfo }[] {
-    return this.#db.query<{ owner: string; info: string }, []>("SELECT owner, info FROM archives").all().map((row) => {
-      const info: unknown = JSON.parse(row.info);
-      if (!validWebArchiveInfo(info) || !/^[a-f0-9-]{36}$/.test(info.id) || !Number.isSafeInteger(info.expires_at)) throw new Error("Invalid saved browser archive outcome");
-      return { owner: row.owner, info };
-    });
+    return this.#saved("archives", validWebArchiveInfo, {});
   }
 
   saveArchive(owner: string, info: WebArchiveInfo): void {
@@ -86,11 +113,7 @@ export class WebRecovery {
   removeArchive(id: string): void { this.#db.query("DELETE FROM archives WHERE id = ?").run(id); }
 
   requests(): { owner: string; info: WebRequestInfo }[] {
-    return this.#db.query<{ owner: string; info: string }, []>("SELECT owner, info FROM requests").all().map((row) => {
-      const info: unknown = JSON.parse(row.info);
-      if (!validWebRequestInfo(info) || !/^[a-f0-9-]{36}$/.test(info.id) || !Number.isSafeInteger(info.expires_at)) throw new Error("Invalid saved browser request outcome");
-      return { owner: row.owner, info };
-    });
+    return this.#saved("requests", validWebRequestInfo, { result_omitted: true });
   }
 
   saveRequest(owner: string, info: WebRequestInfo): void {
