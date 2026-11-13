@@ -15,8 +15,7 @@ describe("the sidebar's thread order", () => {
   const threads = [
     thread("old", { created_at: "2026-10-01T00:00:00Z" }),
     thread("busy", { created_at: "2026-09-01T00:00:00Z", last_active: "2026-11-09T00:00:00Z" }),
-    thread("beats", { heartbeat: true }),
-    thread("main", { home: true, heartbeat: true }),
+    thread("main", { home: true }),
     thread("placed2", { folder: "work", position: 2 }),
     thread("placed1", { folder: "work", position: 1 }),
     thread("unplaced", { folder: "work", last_active: "2026-11-05T00:00:00Z" }),
@@ -26,21 +25,21 @@ describe("the sidebar's thread order", () => {
   ];
   const folders = [{ name: "work", by_activity: true }, { name: "fiction" }];
 
-  test("home leads, heartbeats follow, then loose threads newest first with placed ones after, then each folder", () => {
+  test("home leads, then loose threads newest first with placed ones after, then each folder", () => {
     const sections = threadSections(threads, folders);
-    expect(ids(sections.pinned)).toEqual(["main", "beats"]);
+    expect(ids(sections.pinned)).toEqual(["main"]);
     expect(ids(sections.loose)).toEqual(["busy", "orphan", "old", "pinned"]);
     expect(sections.folders.map((folder) => [folder.name, folder.byActivity, ids(folder.threads)])).toEqual([
       ["work", true, ["unplaced", "placed1", "placed2"]],
       ["fiction", false, ["story"]],
     ]);
-    expect(ids(sortThreads(threads, folders))).toEqual(["main", "beats", "busy", "orphan", "old", "pinned", "unplaced", "placed1", "placed2", "story"]);
-    expect(ids(sortThreads(threads)), "with no folders every thread is loose").toEqual(["main", "beats", "busy", "unplaced", "story", "orphan", "old", "pinned", "placed1", "placed2"]);
+    expect(ids(sortThreads(threads, folders))).toEqual(["main", "busy", "orphan", "old", "pinned", "unplaced", "placed1", "placed2", "story"]);
+    expect(ids(sortThreads(threads)), "with no folders every thread is loose").toEqual(["main", "busy", "unplaced", "story", "orphan", "old", "pinned", "placed1", "placed2"]);
   });
 
   test("a collapsed folder hides its threads except the one open", () => {
-    expect(ids(threadsOnScreen(threads, folders, new Set(["work"]), "placed1"))).toEqual(["main", "beats", "busy", "orphan", "old", "pinned", "placed1", "story"]);
-    expect(ids(threadsOnScreen(threads, folders, new Set(["work", "fiction"]), null))).toEqual(["main", "beats", "busy", "orphan", "old", "pinned"]);
+    expect(ids(threadsOnScreen(threads, folders, new Set(["work"]), "placed1"))).toEqual(["main", "busy", "orphan", "old", "pinned", "placed1", "story"]);
+    expect(ids(threadsOnScreen(threads, folders, new Set(["work", "fiction"]), null))).toEqual(["main", "busy", "orphan", "old", "pinned"]);
   });
 
   test("moving a thread places it before another, or last, in its new section, renumbering only that section", () => {

@@ -58,6 +58,10 @@ export class InProcessAutonomyExecutor implements AutonomyExecutor {
     this.#deps = deps;
   }
 
+  homeThread(character: string): string {
+    return this.#deps.registry.homeThread(character);
+  }
+
   async runWake(character: string, wake: WakeRun, hooks: WakeHooks): Promise<WakeResult> {
     return await this.#withForeground(async () => {
       const config = this.#deps.registry.effectiveConfig(character);
@@ -74,13 +78,12 @@ export class InProcessAutonomyExecutor implements AutonomyExecutor {
         newsHeard: () => { hooks.newsHeard(); },
         generate: calls.generate,
         dispatch: async (name, input, toolUseId, tools, conversation) => {
-          toolCtx ??= buildToolContext(config, config.dirs.data, character, { ...rest, ...handsOn, thread: conversation.thread, conversation: conversation.conversation });
+          toolCtx ??= buildToolContext(config, config.dirs.data, character, { ...rest, ...handsOn, thread: conversation.thread, conversation: conversation.conversation, fresh: true });
           const ctx = { ...await toolCtx, ...(conversation.recordWorkspaceWrite === undefined ? {} : { recordWorkspaceWrite: conversation.recordWorkspaceWrite }) };
           return await runLoopTool(ctx, config, calls.imageLimits(), { id: toolUseId ?? `wk_${crypto.randomUUID()}`, name, input }, tools);
         },
         ...this.#transcripts("heartbeat", character),
-        ownThread: async (name) => await this.#deps.registry.ensureOwnThread(name),
-        engine: async (name, thread) => this.#deps.registry.listThreads(name).some((record) => record.id === thread) && (wake.thread === undefined || thread !== this.#deps.registry.ownThread(name))
+        engine: async (name, thread) => this.#deps.registry.listThreads(name).some((record) => record.id === thread)
           ? await this.#deps.registry.getOrCreate(name, thread)
           : await this.#deps.registry.sealedEngine(name, thread),
         sealed: async (name, thread) => {
@@ -88,7 +91,6 @@ export class InProcessAutonomyExecutor implements AutonomyExecutor {
           return sealed === undefined ? undefined : { sealed, filesDir: await sealedFilesDir(config, name, thread) };
         },
         threadModel: (name, thread) => this.#deps.registry.listThreads(name).find((record) => record.id === thread)?.chat_model,
-        threadsChanged: (name, thread) => { this.#deps.emitEvent?.({ type: "threads_changed", character: name, thread }); },
         ...(this.#deps.emit === undefined ? {} : { emit: this.#deps.emit }),
         ...(this.#deps.notifyAutonomousMessage === undefined ? {} : { notify: this.#deps.notifyAutonomousMessage }),
       });

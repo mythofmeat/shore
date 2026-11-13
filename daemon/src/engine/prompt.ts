@@ -2,7 +2,6 @@ import { required } from "../util/required.ts";
 
 import builtinSystemTemplate from "../../prompts/engine/builtin_system.md" with { type: "text" };
 import threadTemplate from "../../prompts/engine/thread.md" with { type: "text" };
-import ownThreadTemplate from "../../prompts/engine/own_thread.md" with { type: "text" };
 import { hostZone, naiveInZone, partsOf } from "../ledger/zoned";
 import type { ContentBlock, DiaryNote, ImageRef, Message, Role } from "./types";
 import { estimateTokens, withSafetyMargin } from "./tokens.ts";
@@ -34,8 +33,6 @@ const SECS_PER_DAY = 86_400;
 const BUILTIN_SYSTEM_TEMPLATE = builtinSystemTemplate.trimEnd();
 
 const THREAD_TEMPLATE = threadTemplate.trimEnd();
-
-const OWN_THREAD_TEMPLATE = ownThreadTemplate.trimEnd();
 
 const THREAD_FILES_HEADER =
   "Files kept in this thread's prompt. Changes to them show up here after a long pause in this thread, or after it compacts.";
@@ -75,7 +72,6 @@ export interface AssembledPrompt {
 export interface ThreadPrompt {
   id: string;
   home: string;
-  own: boolean;
   created_at: string;
   started_by_you: boolean;
   label?: string | undefined;
@@ -133,7 +129,7 @@ function present(value: string | undefined): string | undefined {
 function threadBlock(thread: ThreadPrompt, vars: ReadonlyMap<string, string>, timeZone: string): string {
   const created = Date.parse(thread.created_at);
   const started = Number.isNaN(created) ? thread.created_at : required(formatWallClock(created, timeZone).split(" · ")[0]);
-  return renderTemplate(thread.own ? OWN_THREAD_TEMPLATE : THREAD_TEMPLATE, new Map([
+  return renderTemplate(THREAD_TEMPLATE, new Map([
     ...vars,
     ["thread", thread.id],
     ["home", thread.home],

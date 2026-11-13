@@ -13,7 +13,7 @@ import { findEffectiveModel } from "../../config/effective_catalog.ts";
 import type { LoadedConfig } from "../../config/loader.ts";
 import { applyBackgroundSettings, configView, resolveChatModelForCharacter } from "../../config/preferences.ts";
 import { DIARY_FOR_DREAM, diaryText, formatWallClock } from "../../engine/prompt.ts";
-import { ownThread, homeThreadOf, readThreadsIndex, threadChatModel } from "../../engine/threads.ts";
+import { homeThreadOf, threadChatModel } from "../../engine/threads.ts";
 import type { ContentBlock, Message } from "../../engine/types.ts";
 import { buildChatShapeRequestFromDisk } from "../../handler/context.ts";
 import { NO_PRIOR_CONTEXT } from "../../engine/segments.ts";
@@ -214,8 +214,7 @@ export async function runDreamPass(
   const anchoredAt = finishedBefore === undefined ? Number.NaN : Date.parse(finishedBefore.started_at);
   const sinceMs = Number.isNaN(anchoredAt) ? start.since : anchoredAt;
   const home = await homeThreadOf(dataDir, character);
-  const heartbeat = ownThread(await readThreadsIndex(dataDir, character));
-  const conversations = await conversationsSince(dataDir, character, sinceMs, new Set(heartbeat === undefined ? [] : [heartbeat]));
+  const conversations = await conversationsSince(dataDir, character, sinceMs);
   if (conversations.length === 0 && !start.forced) {
     shoreLog.info(`shore: dream for ${character} skipped, nothing has been archived since ${new Date(sinceMs).toISOString()}`);
     return { outcome: "skipped", events };

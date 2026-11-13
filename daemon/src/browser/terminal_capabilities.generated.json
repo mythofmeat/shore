@@ -3979,7 +3979,7 @@
     },
     {
       "path": "shore thread move",
-      "about": "Move a thread to another place in the list, or into or out of a folder. The home and own-time threads stay at the top",
+      "about": "Move a thread to another place in the list, or into or out of a folder. The home thread stays at the top",
       "long_about": null,
       "hidden": false,
       "aliases": [],
@@ -4757,7 +4757,7 @@
     },
     {
       "path": "shore thread home",
-      "about": "Make a thread home. This is where what the character sends from its own-time thread arrives",
+      "about": "Make a thread home. This is where a wake runs when its trigger names no thread",
       "long_about": null,
       "hidden": false,
       "aliases": [],
@@ -5591,7 +5591,7 @@
     },
     {
       "path": "shore debug heartbeat_tick_now",
-      "about": "Start a wake in the character's own-time thread now",
+      "about": "Start a wake in the character's home thread now",
       "long_about": null,
       "hidden": false,
       "aliases": [],

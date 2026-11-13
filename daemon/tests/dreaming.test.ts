@@ -150,17 +150,16 @@ function putSegment(dataDir: string, archiveKey: string, idx: number, compactedA
   }
 }
 
-test("a dream is shown only what was archived since the last one, outside the own-time thread and not excluded", async () => {
+test("a dream is shown only what was archived since the last one and not excluded", async () => {
   const dataDir = await mkdtemp(testTmp("shore-dreaming-manifest-"));
   await mkdir(join(dataDir, "ada", "threads", "main"), { recursive: true });
   const since = Date.parse("2026-11-05T00:00:00Z");
   putSegment(dataDir, "ada", 0, since - HOUR);
   putSegment(dataDir, "ada", 1, since + HOUR, { memory_before: "1111111aaaa", memory_after: "2222222bbbb" });
   putSegment(dataDir, "ada", 2, since + 2 * HOUR, { excluded: true });
-  putSegment(dataDir, "ada/own-time", 0, since + HOUR);
   putSegment(dataDir, "ada/garden", 0, since + 3 * HOUR, { memory_before: "3333333cccc", memory_after: "3333333cccc", toolTurns: 2 });
 
-  const found = await conversationsSince(dataDir, "ada", since, new Set(["own-time"]));
+  const found = await conversationsSince(dataDir, "ada", since);
   expect(found.map((conversation) => [conversation.thread, conversation.segment])).toEqual([["main", 1], ["garden", 0]]);
   expect(found.map((conversation) => conversation.turns)).toEqual([1, 3]);
 

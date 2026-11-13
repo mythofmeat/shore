@@ -20,7 +20,6 @@ export async function conversationsSince(
   dataDir: string,
   character: string,
   sinceMs: number,
-  skipThreads: ReadonlySet<string>,
 ): Promise<DreamConversation[]> {
   const reader = await CharacterHistoryReader.load({
     character,
@@ -31,7 +30,7 @@ export async function conversationsSince(
     const found: DreamConversation[] = [];
     for (const entry of reader.entries()) {
       const thread = entry.archiveKey === character ? MAIN_THREAD : entry.archiveKey.slice(character.length + 1);
-      if (skipThreads.has(thread) || entry.excluded === true) continue;
+      if (entry.excluded === true) continue;
       const compacted = Date.parse(entry.compacted_at);
       if (Number.isNaN(compacted) || compacted <= sinceMs) continue;
       found.push({

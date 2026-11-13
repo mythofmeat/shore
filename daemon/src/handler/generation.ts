@@ -46,7 +46,6 @@ import { planAttempt, withAttemptNote, type AttemptEngine } from "./attempts.ts"
 import { recordAttempt } from "../engine/marks.ts";
 import {
   buildGenerationRequest,
-  OwnThreadError,
   ImagesUnsupportedError,
   resolveGenerationModel,
   WakeTurnError,
@@ -109,7 +108,6 @@ export interface GenerationRegistry {
   getOrCreate(name: string, thread?: string): Promise<GenerationEngine>;
   effectiveConfig(name: string): LoadedConfig;
   listThreads(name: string): readonly ThreadRecord[];
-  ownThread?(name: string): string | undefined;
 }
 
 interface GenerationDiagnostics {
@@ -199,7 +197,6 @@ export async function runGeneration(
   const engine = await deps.registry.getOrCreate(
     params.charName, liveThread(deps.registry, params.charName, params.meta.session.selectedThread),
   );
-  if (engine.thread === deps.registry.ownThread?.(params.charName)) throw new OwnThreadError(params.charName, engine.thread);
   deps.userActiveIn?.(params.charName, engine.thread);
   return await withConversation(threadDataDir(deps.dataDir, params.charName, engine.thread), "turn", async (signal) => {
   params = { ...params, signal };
@@ -515,8 +512,7 @@ async function sideThreadLastUser(
   afterMs: number,
   beforeMs: number,
 ): Promise<Message["last_elsewhere"]> {
-  const heartbeat = deps.registry.ownThread?.(charName);
-  const sides = deps.registry.listThreads(charName).map((thread) => thread.id).filter((id) => id !== home && id !== heartbeat);
+  const sides = deps.registry.listThreads(charName).map((thread) => thread.id).filter((id) => id !== home);
   let latest: { thread: string; at: string; ms: number } | undefined;
   for (const [thread, activity] of await threadActivities(deps.dataDir, charName, sides)) {
     const at = activity.last_user;

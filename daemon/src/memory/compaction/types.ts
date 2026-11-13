@@ -116,8 +116,7 @@ export type CompactionErrorKind =
   | "conversation"
   | "markdown_store"
   | "not_found"
-  | "busy"
-  | "own_thread";
+  | "busy";
 
 export class CompactionError extends Error {
   readonly kind: CompactionErrorKind;
@@ -146,13 +145,6 @@ export class CompactionError extends Error {
 
   static busy(character: string): CompactionError {
     return new CompactionError("busy", `Compaction already running for ${character}`);
-  }
-
-  static ownThread(character: string, thread: string): CompactionError {
-    return new CompactionError(
-      "own_thread",
-      `"${thread}" is where ${character}'s own time runs. It only keeps a log of its wakes, so it is never compacted`,
-    );
   }
 }
 

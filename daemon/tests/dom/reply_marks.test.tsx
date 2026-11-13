@@ -562,7 +562,7 @@ test("the thread menu offers another take and a reason only when it can, and ope
   expect(await takes(view.host), "a regenerate in flight makes them wait").toEqual([true, true]);
 });
 
-test("in a heartbeat thread the palette offers neither another take nor a model, and taking another one returns to the chat", async () => {
+test("the palette offers another take and a model for the open thread, and taking another one returns to the chat", async () => {
   daemon();
   const { Palette } = await import("../../src/browser/app/Palette.tsx");
   const { chromeOf } = await import("../../src/browser/chrome.ts");
@@ -574,7 +574,6 @@ test("in a heartbeat thread the palette offers neither another take nor a model,
     await palette.unmount();
     return [labels.some((label) => label.startsWith("Another take")), labels.some((label) => label.startsWith("Choose a model"))];
   };
-  expect(await offered({ ...chrome, threads: chrome.threads.map((thread) => ({ ...thread, heartbeat: true })) })).toEqual([false, false]);
   expect(await offered(chrome)).toEqual([true, true]);
   navigate({ view: "settings", page: "models" });
   const palette = await mount(<Palette state={chrome} close={() => {}} newThread={() => {}} newCharacter={() => {}} />);

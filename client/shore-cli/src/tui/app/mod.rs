@@ -108,7 +108,6 @@ pub(crate) struct ThreadRow {
     pub purpose: Option<String>,
     pub model: Option<String>,
     pub home: bool,
-    pub heartbeat: bool,
     pub turns: Option<u64>,
     pub unread: Option<u64>,
     pub warm: bool,
@@ -1428,11 +1427,7 @@ impl App {
                 .folder
                 .as_ref()
                 .and_then(|name| self.thread_folders.iter().position(|known| known == name));
-            (
-                !row.home,
-                !row.heartbeat,
-                folder.map_or(0, |index| index.saturating_add(1)),
-            )
+            (!row.home, folder.map_or(0, |index| index.saturating_add(1)))
         };
         let mut rows: Vec<&ThreadRow> = self.threads.iter().collect();
         rows.sort_by(|a, b| {
@@ -2134,9 +2129,6 @@ impl App {
         if row.home {
             facts.push("home".to_owned());
         }
-        if row.heartbeat {
-            facts.push("own time".to_owned());
-        }
         if let Some(folder) = &row.folder {
             facts.push(format!("in {folder}"));
         }
@@ -2202,7 +2194,9 @@ impl App {
             }
             "view" => Some("view option".into()),
             "model" => Some("model \u{00b7} ctrl+f favorites".into()),
-            "thread" => Some("thread \u{00b7} home gets what own time sends".into()),
+            "thread" => {
+                Some("thread \u{00b7} a wake runs in home unless its trigger names a thread".into())
+            }
             _ => None,
         };
 

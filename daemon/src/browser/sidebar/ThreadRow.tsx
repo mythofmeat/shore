@@ -11,7 +11,7 @@ export const THREAD_DRAG_TYPE = "application/x-shore-thread";
 const TOUCH_ONLY = typeof matchMedia === "function" && matchMedia("(hover: none)").matches;
 
 export function threadMenuItems(thread: ThreadView, ready: boolean, neighbours: ThreadNeighbours): MenuItem[] {
-  const movable = !thread.home && thread.heartbeat !== true;
+  const movable = !thread.home;
   return [
     { label: "Thread settings…", icon: "settings", onSelect: () => openThreadDialog("settings", thread.id), disabled: !ready },
     { label: "Fork…", icon: "branch", onSelect: () => openThreadDialog("fork", thread.id), disabled: !ready },
@@ -43,7 +43,7 @@ export function ThreadRow({ thread, label, current, unread, replying, opening, c
 }) {
   const menu = useRowMenu();
   const [target, setTarget] = useState<"before" | "after" | null>(null);
-  const movable = !thread.home && thread.heartbeat !== true;
+  const movable = !thread.home;
   const open = () => { if (ready && !menu.swallowClick()) select(); };
   const place = (event: DragEvent<HTMLDivElement>): "before" | "after" => {
     const box = event.currentTarget.getBoundingClientRect();
@@ -63,7 +63,7 @@ export function ThreadRow({ thread, label, current, unread, replying, opening, c
     }}>
     <div role="button" tabIndex={ready ? 0 : -1} className={`sidebar-item thread ${current ? "on" : ""} ${unread > 0 ? "unread" : ""}`} aria-current={current ? "page" : undefined} aria-busy={opening} aria-disabled={!ready} onClick={open}
       onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); open(); } }}>
-      <Icon name={thread.home ? "home" : thread.heartbeat === true ? "heartbeat" : "chat"} size={14} /><span className="sidebar-name">{label}</span>
+      <Icon name={thread.home ? "home" : "chat"} size={14} /><span className="sidebar-name">{label}</span>
       {thread.locked === true ? <span className="sidebar-locked" title="Locked: only you change its label, purpose and files"><Icon name="lock" size={12} /><span className="sr-only">(locked)</span></span> : null}
       {compacting ? <span className="sidebar-compacting" title="Compacting"><Icon name="compact" size={12} /><span className="sr-only">(compacting)</span></span> : null}
       {replying || opening ? <span className="sidebar-replying"><span className="spinner" aria-hidden="true" /><span className="sr-only">{opening ? "(opening)" : "(replying)"}</span></span> : null}

@@ -4,4 +4,4 @@ import type { RunningCompaction } from "./RunningCompaction";
 import type { ThreadFolderView } from "./ThreadFolderView";
 import type { ThreadView } from "./ThreadView";
 
-export type ThreadListing = { character: string, threads: Array<ThreadView>, home: string, heartbeat?: string, current: string, folders?: Array<ThreadFolderView>, manual_order?: boolean, compaction?: RunningCompaction, invalidated?: CacheInvalidation, };
+export type ThreadListing = { character: string, threads: Array<ThreadView>, home: string, current: string, folders?: Array<ThreadFolderView>, manual_order?: boolean, compaction?: RunningCompaction, invalidated?: CacheInvalidation, };

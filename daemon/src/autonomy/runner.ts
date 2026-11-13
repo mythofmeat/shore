@@ -143,11 +143,11 @@ export interface WakeHooks {
 
 export interface RunningWake {
   readonly startedAt: number;
-  readonly thread: string | undefined;
+  readonly thread: string;
 }
 
 export interface WakeRun {
-  readonly thread: string | undefined;
+  readonly thread: string;
   readonly fired: readonly TriggerFiring[];
   readonly limitMs: number;
   readonly interrupted: () => boolean;
@@ -169,6 +169,7 @@ export interface AutonomyEvents {
 }
 
 export interface AutonomyExecutor {
+  homeThread(character: string): string;
   runWake(character: string, wake: WakeRun, hooks: WakeHooks): Promise<WakeResult>;
   runCompaction(character: string, reason: CompactionReason): Promise<AutonomyActionResult>;
   runDeepArchive(character: string, coveredTurnCount: number): Promise<AutonomyActionResult>;
@@ -299,7 +300,7 @@ export class CharacterAutonomy {
 
   wakeFor(firing: TriggerFiring): "handed" | "queued" {
     const running = this.#wakeRunning;
-    if (running !== undefined && firing.thread === running.thread && firing.from === undefined) {
+    if (running !== undefined && this.#threadOf(firing) === running.thread && firing.from === undefined) {
       running.news.push({ kind: "trigger", firing });
       running.firings.push(firing);
       return "handed";
@@ -315,6 +316,10 @@ export class CharacterAutonomy {
     this.#fired.splice(0, this.#fired.length, ...this.#fired.filter((other) => !asked(other)));
     this.#queue(firing);
     return { kind: "queued", replaced: waiting };
+  }
+
+  #threadOf(firing: TriggerFiring): string {
+    return firing.thread ?? this.#executor.homeThread(this.#character);
   }
 
   #queue(firing: TriggerFiring): void {
@@ -518,16 +523,17 @@ export class CharacterAutonomy {
     const due = this.#fired.splice(0).filter((firing) => this.wakesMayRun && (firing.seal === true || !resting));
     let woke = false;
     try {
-      for (const thread of new Set(due.map((firing) => firing.thread))) {
-        const here = due.filter((firing) => firing.thread === thread);
+      for (const thread of new Set(due.map((firing) => this.#threadOf(firing)))) {
+        const here = due.filter((firing) => this.#threadOf(firing) === thread);
         const started = this.#now();
-        const lastActive = (): number => (thread === undefined ? undefined : this.#userActiveAt.get(thread)) ?? Number.NEGATIVE_INFINITY;
-        if (started - lastActive() < WAKE_QUIET_MS) {
+        const lastActive = (): number => this.#userActiveAt.get(thread) ?? Number.NEGATIVE_INFINITY;
+        const byHand = here.some((firing) => firing.byHand === true && firing.interruptedAt === undefined);
+        if (!byHand && started - lastActive() < WAKE_QUIET_MS) {
           for (const firing of here) this.#queue(firing);
           continue;
         }
         woke = true;
-        this.note("tick_fired", `Woken${thread === undefined ? "" : ` in "${thread}"`} by ${firedBy(here)}`, started);
+        this.note("tick_fired", `Woken in "${thread}" by ${firedBy(here)}`, started);
         const limitMs = Math.max(...here.map((firing) => firing.limitMs ?? DEFAULT_WAKE_LIMIT_MS));
         await this.#wake({ startedAt: started, thread, news: [], firings: [...here], userTold: false }, async (hooks) =>
           await this.#executor.runWake(this.#character, { thread, fired: here, limitMs, interrupted: () => lastActive() >= started }, hooks));

@@ -91,7 +91,7 @@ async function afterOneChat(script: Script, seen: SidecarRequest[], ownTime: (h:
   });
 }
 
-test("a wake in the own-time thread still busy at 25 minutes is told how long it has left, and its wrap-up runs before the 30-minute limit", async () => {
+test("a wake in home still busy at 25 minutes is told how long it has left, and its wrap-up runs before the 30-minute limit", async () => {
   const seen: SidecarRequest[] = [];
   await afterOneChat(
     (request) => {
@@ -116,7 +116,7 @@ test("a wake in the own-time thread still busy at 25 minutes is told how long it
   );
 });
 
-test("a wake in the own-time thread stopped at its 30-minute limit says so in that thread, the log and the diary, and the next wake there is told and shown the same of home again, until one finishes", async () => {
+test("a wake in home stopped at its 30-minute limit says so in that thread, the log and the diary, and the next wake there is told and shown the same of that thread again, until one finishes", async () => {
   const seen: SidecarRequest[] = [];
   await afterOneChat(
     (_request, wake) => wake === 1
@@ -125,22 +125,22 @@ test("a wake in the own-time thread stopped at its 30-minute limit says so in th
     seen,
     async ({ run, log, messages, diary }) => {
       await run();
-      expect(log().filter((event) => event.kind === "timeout").map((event) => event.detail)).toEqual(['Wake in "own-time" reached its limit of 30 minutes and was stopped']);
+      expect(log().filter((event) => event.kind === "timeout").map((event) => event.detail)).toEqual(['Wake in "main" reached its limit of 30 minutes and was stopped']);
       expect(log().map((event) => event.kind)).not.toContain("call_failed");
-      expect((await messages()).filter((message) => message.origin === "autonomous")).toEqual([]);
-      expect((await messages("own-time")).at(-1)).toMatchObject({ role: "system", origin: "autonomous", content: "[This wake reached its limit of 30 minutes, and Shore stopped it here.]" });
-      expect(diary()).toEqual([["shore", 'Your wake in "own-time" reached its limit of 30 minutes before you finished. Where it stopped is in that thread.']]);
+      expect((await messages()).filter((message) => message.role === "assistant" && message.origin === "autonomous")).toEqual([]);
+      expect((await messages()).at(-1)).toMatchObject({ role: "system", origin: "autonomous", content: "[This wake reached its limit of 30 minutes, and Shore stopped it here.]" });
+      expect(diary()).toEqual([["shore", 'Your wake in "main" reached its limit of 30 minutes before you finished. Where it stopped is in that thread.']]);
 
       await run();
       await run();
       const opening = seen.filter((request) => request.context?.call_type === "heartbeat").map(textOf);
       expect(opening).toHaveLength(3);
       const shownOfHome = (text: string | undefined): string => (text ?? "").slice(0, (text ?? "").indexOf("\n\n["));
-      expect(shownOfHome(opening[0])).toStartWith('[wake]\n\nThe last of what was said in your home thread "main":\n\n');
+      expect(shownOfHome(opening[0])).toStartWith("[wake]\n\nThe last of what was said in this thread:\n\n");
       expect(opening[1]).toStartWith(`${shownOfHome(opening[0])}\n\n[Your last wake here reached its limit of 30 minutes and was stopped at `);
       expect(opening[1]).toContain(", after 4 rounds, before it had finished. Nothing from it was sent to User. Whatever it had already changed with its tools is still in place.]\n\n[User last wrote to you ");
       expect(opening[2]).not.toContain("was stopped");
-      expect(shownOfHome(opening[2])).toBe('[wake]\n\nNothing has been said in your home thread "main" since your last wake here.');
+      expect(shownOfHome(opening[2])).toBe("[wake]\n\nNothing has been said in this thread since your last wake here.");
     },
   );
 });

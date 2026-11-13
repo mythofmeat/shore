@@ -10,7 +10,7 @@ import type { StreamResult } from "../llm/stream.ts";
 import { emitStreamEnd } from "../llm/stream.ts";
 import type { Usage } from "../llm/types.ts";
 import { compactionHeld } from "../memory/compaction/checkpoint.ts";
-import { firstUnreadReply, ownThread, homeThread, homeThreadOf, isWakeOpener, readThreadsIndex } from "../engine/threads.ts";
+import { firstUnreadReply, homeThread, homeThreadOf, isWakeOpener, readThreadsIndex } from "../engine/threads.ts";
 import { MessageStore } from "../engine/message_store.ts";
 import { conversationRef, SegmentReader } from "../engine/segments.ts";
 import { readDurable, threadFile } from "../storage/files.ts";
@@ -167,7 +167,7 @@ export async function ensureAndBackfillAutonomy(
   const index = await readThreadsIndex(dataDir, charName);
   const current = engine.thread ?? homeThread(index);
   for (const thread of index?.threads ?? []) {
-    if (thread.id === current || thread.id === ownThread(index)) continue;
+    if (thread.id === current) continue;
     try {
       const store = await MessageStore.load(threadFile(dataDir, charName, thread.id, "active.jsonl"));
       const segments = await SegmentReader.load(conversationRef(dataDir, charName, thread.id, false));

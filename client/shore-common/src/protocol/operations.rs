@@ -2948,9 +2948,6 @@ wire_types! {
         #[ts(optional, type = "number")]
         pub position: Option<u64>,
         pub home: bool,
-        #[serde(default, skip_serializing_if = "Option::is_none")]
-        #[ts(optional)]
-        pub heartbeat: Option<bool>,
         pub current: bool,
         #[serde(default, skip_serializing_if = "Option::is_none")]
         #[ts(optional, type = "number")]
@@ -3002,9 +2999,6 @@ wire_types! {
         pub character: String,
         pub threads: Vec<ThreadView>,
         pub home: String,
-        #[serde(default, skip_serializing_if = "Option::is_none")]
-        #[ts(optional)]
-        pub heartbeat: Option<String>,
         pub current: String,
         #[serde(default, skip_serializing_if = "Option::is_none")]
         #[ts(optional)]

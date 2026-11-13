@@ -5,7 +5,7 @@ export interface FolderSection { name: string; byActivity: boolean; threads: Thr
 export interface ThreadSections { pinned: ThreadView[]; loose: ThreadView[]; folders: FolderSection[] }
 
 function pinned(thread: ThreadView): boolean {
-  return thread.home || thread.heartbeat === true;
+  return thread.home;
 }
 
 function recency(thread: ThreadView): string {

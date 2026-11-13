@@ -13,7 +13,7 @@ export function DebugPage({ state }: { state: ChromeSnapshot }) {
     const value = await work(); setResult({ title, value }); return done(value);
   })}>{title}</button>;
   const rows: [string, string, ReactNode][] = [
-    ["Start a wake now", "Wakes the character in its own-time thread at the next autonomy tick, without waiting for one of its triggers.",
+    ["Start a wake now", "Wakes the character in its home thread at the next autonomy tick, without waiting for one of its triggers.",
       action("Start a wake", () => workspace.actions.run("heartbeat_tick_now", {}), (value) => value.warning ?? `Wake ${value.status}`)],
     ["Make dormant", "Stops every wake until you write to the character again.",
       action("Make dormant", () => workspace.actions.run("heartbeat_set_dormant", {}), (value) => `${value.character} is ${value.status}`)],

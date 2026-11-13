@@ -38,6 +38,7 @@ export interface ToolConversation {
 }
 
 export interface ToolContextDeps extends Partial<ToolConversation> {
+  fresh?: boolean;
   dryRun?: boolean;
   countReads?: boolean;
   signal?: AbortSignal;
@@ -97,6 +98,7 @@ export async function buildToolContext(
   const ctx: ToolContext = {
     thread: deps.thread ?? MAIN_THREAD,
     conversation: deps.conversation ?? [],
+    ...(deps.fresh === undefined ? {} : { fresh: deps.fresh }),
     ...(deps.dryRun === undefined ? {} : { dryRun: deps.dryRun }),
     ...(deps.signal === undefined ? {} : { signal: deps.signal }),
     images: config.app.images,

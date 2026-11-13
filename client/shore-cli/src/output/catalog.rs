@@ -759,9 +759,6 @@ fn thread_facts(row: &Value) -> String {
     if flag(row, "home") {
         parts.push("home".to_owned());
     }
-    if flag(row, "heartbeat") {
-        parts.push("own time".to_owned());
-    }
     let folder = text(row, "folder");
     if !folder.is_empty() {
         parts.push(format!("in {folder}"));
@@ -890,7 +887,7 @@ pub(crate) fn write_thread_list<W: Write>(out: &mut W, data: &Value) {
     }
     note(
         out,
-        "home gets what own time sends, unless a trigger names another thread",
+        "a wake runs in home, unless its trigger names another thread",
     );
     if threads.iter().any(|thread| flag(thread, "warm")) {
         note(

@@ -1595,7 +1595,7 @@ pub(crate) enum ThreadCommand {
         mode: String,
     },
 
-    /// Move a thread to another place in the list, or into or out of a folder. The home and own-time threads stay at the top
+    /// Move a thread to another place in the list, or into or out of a folder. The home thread stays at the top
     Move {
         /// Thread id
         #[arg(add = values(Completes::Threads))]
@@ -1636,7 +1636,7 @@ pub(crate) enum ThreadCommand {
         model: Option<String>,
     },
 
-    /// Make a thread home. This is where what the character sends from its own-time thread arrives
+    /// Make a thread home. This is where a wake runs when its trigger names no thread
     Home {
         /// Thread id
         #[arg(add = values(Completes::Threads))]
@@ -2450,7 +2450,7 @@ pub(crate) enum ConfigCommand {
 #[derive(Subcommand, Debug)]
 #[command(rename_all = "snake_case")]
 pub(crate) enum DebugCommand {
-    /// Start a wake in the character's own-time thread now
+    /// Start a wake in the character's home thread now
     #[command(name = "heartbeat_tick_now")]
     TickNow,
     /// Make the character dormant, so that nothing wakes it until your next message
