@@ -296,31 +296,8 @@ const DAEMON: StructSpec<DaemonConfig> = {
   },
 };
 
-interface BackgroundDefaultsConfig {
-  heartbeat: string | undefined;
-  compaction: string | undefined;
-  dreaming: string | undefined;
-}
-
-const defaultBackgroundDefaults = (): BackgroundDefaultsConfig => ({
-  heartbeat: undefined,
-  compaction: undefined,
-  dreaming: undefined,
-});
-
-const BACKGROUND: StructSpec<BackgroundDefaultsConfig> = {
-  name: "BackgroundDefaultsConfig",
-  make: defaultBackgroundDefaults,
-  fields: {
-    heartbeat: optional(readChatModelName),
-    compaction: optional(readChatModelName),
-    dreaming: optional(readChatModelName),
-  },
-};
-
 export interface DefaultsConfig {
   model: string | undefined;
-  background: BackgroundDefaultsConfig;
   image_generation: string | undefined;
   subagent_model: string | undefined;
   display_name: string | undefined;
@@ -329,7 +306,6 @@ export interface DefaultsConfig {
 
 const defaultDefaultsConfig = (): DefaultsConfig => ({
   model: undefined,
-  background: defaultBackgroundDefaults(),
   image_generation: undefined,
   subagent_model: undefined,
   display_name: undefined,
@@ -341,7 +317,6 @@ const DEFAULTS: StructSpec<DefaultsConfig> = {
   make: defaultDefaultsConfig,
   fields: {
     model: optional(readChatModelName),
-    background: struct(BACKGROUND),
     image_generation: optional(readImageModelName),
     subagent_model: optional(readChatModelName),
     display_name: optional(readString),
@@ -352,10 +327,10 @@ const DEFAULTS: StructSpec<DefaultsConfig> = {
 export type BackgroundTask = "heartbeat" | "compaction" | "dreaming";
 
 export function resolveBackgroundModelName(
-  defaults: DefaultsConfig,
+  app: Pick<AppConfig, "triggers" | "compaction" | "dreaming">,
   task: BackgroundTask,
 ): string | undefined {
-  return defaults.background[task];
+  return { heartbeat: app.triggers, compaction: app.compaction, dreaming: app.dreaming }[task].model;
 }
 
 export function resolveDisplayName(
@@ -370,6 +345,8 @@ type UserTimestampMode = "auto" | "always" | "never";
 const USER_TIMESTAMP_MODES: readonly UserTimestampMode[] = ["auto", "always", "never"];
 
 export interface TriggersConfig {
+  enabled: boolean;
+  model: string | undefined;
   wake_cooldown: ConfigDuration;
   check_time_limit: ConfigDuration;
   max_wake_limit: ConfigDuration;
@@ -380,6 +357,8 @@ export interface TriggersConfig {
 }
 
 export const defaultTriggersConfig = (): TriggersConfig => ({
+  enabled: false,
+  model: undefined,
   wake_cooldown: ConfigDuration.fromSecs(3600),
   check_time_limit: ConfigDuration.fromSecs(60),
   max_wake_limit: ConfigDuration.fromSecs(7200),
@@ -398,6 +377,8 @@ const TRIGGERS: StructSpec<TriggersConfig> = {
   name: "TriggersConfig",
   make: defaultTriggersConfig,
   fields: {
+    enabled: readBool,
+    model: optional(readChatModelName),
     wake_cooldown: readDuration,
     check_time_limit: readDuration,
     max_wake_limit: readDuration,
@@ -405,25 +386,6 @@ const TRIGGERS: StructSpec<TriggersConfig> = {
     max_idle_wakes: readU32,
     idle_timeout: readDuration,
     off: readStringSeq,
-  },
-};
-
-interface AutonomyConfig {
-  enabled: boolean;
-  triggers: TriggersConfig;
-}
-
-const defaultAutonomyConfig = (): AutonomyConfig => ({
-  enabled: false,
-  triggers: defaultTriggersConfig(),
-});
-
-const AUTONOMY: StructSpec<AutonomyConfig> = {
-  name: "AutonomyConfig",
-  make: defaultAutonomyConfig,
-  fields: {
-    enabled: readBool,
-    triggers: struct(TRIGGERS),
   },
 };
 
@@ -490,14 +452,12 @@ const MARKS: StructSpec<MarksConfig> = {
 };
 
 export interface BehaviorConfig {
-  autonomy: AutonomyConfig;
   presence: PresenceConfig;
   marks: MarksConfig;
   user_message_timestamps: UserTimestampMode;
 }
 
 const defaultBehaviorConfig = (): BehaviorConfig => ({
-  autonomy: defaultAutonomyConfig(),
   presence: defaultPresenceConfig(),
   marks: defaultMarksConfig(),
   user_message_timestamps: "auto",
@@ -507,7 +467,6 @@ const BEHAVIOR: StructSpec<BehaviorConfig> = {
   name: "BehaviorConfig",
   make: defaultBehaviorConfig,
   fields: {
-    autonomy: struct(AUTONOMY),
     presence: struct(PRESENCE),
     marks: struct(MARKS),
     user_message_timestamps: readEnum(USER_TIMESTAMP_MODES),
@@ -720,26 +679,30 @@ function imageSettingsProblem(settings: ImageOverride | ImageSettings): string |
 
 export interface CompactionConfig {
   enabled: boolean;
+  model: string | undefined;
   write_memory: boolean;
   label_segments: boolean;
-  idle_trigger: ConfigDuration;
+  idle_after: ConfigDuration;
   archive_after: ConfigDuration;
   min_turns: number;
   max_turns: number;
   max_context_tokens: number;
   keep_recent_turns: number;
+  git_push: boolean;
 }
 
 export const defaultCompactionConfig = (): CompactionConfig => ({
   enabled: true,
+  model: undefined,
   write_memory: true,
   label_segments: true,
-  idle_trigger: ConfigDuration.fromSecs(7200),
+  idle_after: ConfigDuration.fromSecs(7200),
   archive_after: ConfigDuration.fromSecs(0),
   min_turns: 12,
   max_turns: 30,
   max_context_tokens: 200_000,
   keep_recent_turns: 2,
+  git_push: false,
 });
 
 const COMPACTION: StructSpec<CompactionConfig> = {
@@ -747,14 +710,16 @@ const COMPACTION: StructSpec<CompactionConfig> = {
   make: defaultCompactionConfig,
   fields: {
     enabled: readBool,
+    model: optional(readChatModelName),
     write_memory: readBool,
     label_segments: readBool,
-    idle_trigger: readDuration,
+    idle_after: readDuration,
     archive_after: readDuration,
     min_turns: readUsize,
     max_turns: readUsize,
     max_context_tokens: readUsize,
     keep_recent_turns: readUsize,
+    git_push: readBool,
   },
 };
 
@@ -773,12 +738,12 @@ export function validateCompaction(compaction: CompactionConfig): string | undef
   if (!compaction.enabled) return undefined;
 
   const idle = rejectFractionalSeconds(
-    "memory.compaction.idle_trigger",
-    compaction.idle_trigger,
+    "compaction.idle_after",
+    compaction.idle_after,
   );
   if (idle !== undefined) return idle;
   const archive = rejectFractionalSeconds(
-    "memory.compaction.archive_after",
+    "compaction.archive_after",
     compaction.archive_after,
   );
   if (archive !== undefined) return archive;
@@ -786,14 +751,14 @@ export function validateCompaction(compaction: CompactionConfig): string | undef
   const k = compaction.keep_recent_turns;
   if (compaction.min_turns <= k || compaction.max_turns <= k) {
     return (
-      `memory.compaction.min_turns (${compaction.min_turns}) and max_turns ` +
+      `compaction.min_turns (${compaction.min_turns}) and max_turns ` +
       `(${compaction.max_turns}) must both be greater than keep_recent_turns ` +
       `(${k}); raise the turn thresholds or lower keep_recent_turns`
     );
   }
   if (compaction.max_turns < compaction.min_turns) {
     return (
-      `memory.compaction.max_turns (${compaction.max_turns}) must be >= ` +
+      `compaction.max_turns (${compaction.max_turns}) must be >= ` +
       `min_turns (${compaction.min_turns})`
     );
   }
@@ -849,6 +814,7 @@ const THINKING: StructSpec<ThinkingConfig> = {
 
 export interface DreamingConfig {
   enabled: boolean;
+  model: string | undefined;
   every: ConfigDuration;
   start_between: string | undefined;
   idle_after: ConfigDuration;
@@ -860,6 +826,7 @@ export interface DreamingConfig {
 
 export const defaultDreamingConfig = (): DreamingConfig => ({
   enabled: false,
+  model: undefined,
   every: ConfigDuration.fromSecs(3 * 86_400),
   start_between: undefined,
   idle_after: ConfigDuration.fromSecs(7200),
@@ -874,6 +841,7 @@ const DREAMING: StructSpec<DreamingConfig> = {
   make: defaultDreamingConfig,
   fields: {
     enabled: readBool,
+    model: optional(readChatModelName),
     every: readDuration,
     start_between: optional(readString),
     idle_after: readDuration,
@@ -910,27 +878,18 @@ export function validateDreaming(dreaming: DreamingConfig): string | undefined {
 }
 
 export interface MemoryConfig {
-  compaction: CompactionConfig;
-  dreaming: DreamingConfig;
   thinking: ThinkingConfig;
-  git_push: boolean;
 }
 
 const defaultMemoryConfig = (): MemoryConfig => ({
-  compaction: defaultCompactionConfig(),
-  dreaming: defaultDreamingConfig(),
   thinking: defaultThinkingConfig(),
-  git_push: false,
 });
 
 const MEMORY: StructSpec<MemoryConfig> = {
   name: "MemoryConfig",
   make: defaultMemoryConfig,
   fields: {
-    compaction: struct(COMPACTION),
-    dreaming: struct(DREAMING),
     thinking: struct(THINKING),
-    git_push: readBool,
   },
 };
 
@@ -1349,6 +1308,9 @@ export interface AppConfig {
   daemon: DaemonConfig;
   defaults: DefaultsConfig;
   behavior: BehaviorConfig;
+  triggers: TriggersConfig;
+  compaction: CompactionConfig;
+  dreaming: DreamingConfig;
   tools: ToolsConfig;
   images: ImagesConfig;
   memory: MemoryConfig;
@@ -1365,6 +1327,9 @@ export const defaultAppConfig = (): AppConfig => ({
   daemon: defaultDaemonConfig(),
   defaults: defaultDefaultsConfig(),
   behavior: defaultBehaviorConfig(),
+  triggers: defaultTriggersConfig(),
+  compaction: defaultCompactionConfig(),
+  dreaming: defaultDreamingConfig(),
   tools: defaultToolsConfig(),
   images: defaultImagesConfig(),
   memory: defaultMemoryConfig(),
@@ -1387,6 +1352,9 @@ const APP: StructSpec<AppConfig> = {
     daemon: struct(DAEMON),
     defaults: struct(DEFAULTS),
     behavior: struct(BEHAVIOR),
+    triggers: struct(TRIGGERS),
+    compaction: struct(COMPACTION),
+    dreaming: struct(DREAMING),
     tools: struct(TOOLS),
     images: struct(IMAGES),
     memory: struct(MEMORY),

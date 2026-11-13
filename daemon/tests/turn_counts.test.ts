@@ -60,8 +60,8 @@ describe("a turn with five tool calls counts as one turn", () => {
     const data = await dataWith([...fiveToolCalls("a"), said("b-ask", "user", "thanks"), said("b-reply", "assistant", "any time")]);
     const root = join(data, "..");
     const app = defaultAppConfig();
-    app.memory.compaction.write_memory = false;
-    app.memory.compaction.keep_recent_turns = 1;
+    app.compaction.write_memory = false;
+    app.compaction.keep_recent_turns = 1;
     const config: LoadedConfig = {
       app, models: emptyCatalog(), providers: ProviderRegistry.empty(), rawTable: undefined,
       dirs: { config: join(root, "config"), data, cache: join(root, "cache"), runtime: join(root, "runtime") },

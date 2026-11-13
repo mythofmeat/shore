@@ -5,6 +5,7 @@ import { join } from "node:path";
 
 import { CacheTracker } from "../src/cache/tracker.ts";
 import { transcript } from "../src/commands/call_log.ts";
+import { dream as dreamCommand } from "../src/commands/dream.ts";
 import { runningReport } from "../src/daemon/running.ts";
 import { addDiaryNote } from "../src/autonomy/diary.ts";
 import { dreamDue, type DreamInputs } from "../src/autonomy/tick.ts";
@@ -88,7 +89,7 @@ function configAt(root: string): LoadedConfig {
 test("[dreaming] is read under its own name, off unless turned on, and a bad start window is refused", async () => {
   const root = await mkdtemp(testTmp("shore-dreaming-config-"));
   await writeFile(join(root, "config.toml"), "[chat]\ndisplay_name = \"eve\"\n");
-  expect(configAt(root).app.memory.dreaming.enabled).toBe(false);
+  expect(configAt(root).app.dreaming.enabled).toBe(false);
 
   await writeFile(join(root, "config.toml"), [
     "[dreaming]",
@@ -103,7 +104,7 @@ test("[dreaming] is read under its own name, off unless turned on, and a bad sta
     "",
   ].join("\n"));
   const loaded = configAt(root);
-  const dreaming = loaded.app.memory.dreaming;
+  const dreaming = loaded.app.dreaming;
   expect(dreaming.enabled).toBe(true);
   expect(Number(dreaming.every.asSecs())).toBe(3 * 24 * 3600);
   expect(dreaming.start_between).toBe("02:00-07:00");
@@ -111,10 +112,10 @@ test("[dreaming] is read under its own name, off unless turned on, and a bad sta
   expect(dreaming.min_turns).toBe(5);
   expect(Number(dreaming.time_limit.asSecs())).toBe(45 * 60);
   expect(dreaming.tools).toEqual(["read", "bash"]);
-  expect(loaded.app.defaults.background.dreaming).toBe("fixture");
+  expect(loaded.app.dreaming.model).toBe("fixture");
 
   await writeFile(join(root, "config.toml"), "[chat]\ndisplay_name = \"eve\"\n\n[dreaming]\n");
-  expect(configAt(root).app.memory.dreaming.enabled).toBe(false);
+  expect(configAt(root).app.dreaming.enabled).toBe(false);
 
   await writeFile(join(root, "config.toml"), "[dreaming]\nstart_between = \"25:00-03:00\"\n");
   expect(() => configAt(root)).toThrow(/start_between/);
@@ -259,7 +260,7 @@ test("a dream asked for works on the current files, not the home thread's frozen
         { type: "tool_use", id: "dream-read", name: "read", input: { file_path: "MEMORY.md" } },
         { type: "tool_use", id: "dream-bash", name: "bash", input: { command: COMMIT_A_NOTE } },
       ]
-    : [{ type: "text", text: "Tidied MEMORY.md." }], (app) => { app.memory.dreaming.enabled = true; }, async ({ config, workspace, characterDir, runtime }) => {
+    : [{ type: "text", text: "Tidied MEMORY.md." }], (app) => { app.dreaming.enabled = true; }, async ({ config, workspace, characterDir, runtime }) => {
     expect(await loadActivePromptFile(characterDir, "MEMORY.md", "main")).toContain("before the chat");
     await writeFile(join(workspace, "MEMORY.md"), "MEMORY as it is now\n");
     git(workspace, "commit", "--quiet", "-am", "compaction");
@@ -308,7 +309,7 @@ test("a dream's own reads aren't counted, and a failed dream leaves the count fo
   await afterOneChat(seen, (_request, round) => {
     if (round === 0) return [{ type: "tool_use", id: "dream-read", name: "read", input: { file_path: "MEMORY.md" } }];
     throw new Error("provider fell over ".padEnd(400, "x"));
-  }, (app) => { app.memory.dreaming.enabled = true; }, async ({ config, characterDir, runtime }) => {
+  }, (app) => { app.dreaming.enabled = true; }, async ({ config, characterDir, runtime }) => {
     putSegment(config.dirs.data, "ada", 0, Date.now() - HOUR);
     runtime.autonomy.forceDreamNow("ada");
     await runtime.autonomy.tick();
@@ -327,9 +328,9 @@ test("a dream's own reads aren't counted, and a failed dream leaves the count fo
 test("a scheduled dream with nothing archived since the last one makes no model call", async () => {
   const seen: SidecarRequest[] = [];
   await afterOneChat(seen, () => [{ type: "text", text: "nothing" }], (app) => {
-    app.memory.dreaming.enabled = true;
-    app.memory.dreaming.min_turns = 0;
-    app.memory.dreaming.idle_after = ConfigDuration.fromSecs(0);
+    app.dreaming.enabled = true;
+    app.dreaming.min_turns = 0;
+    app.dreaming.idle_after = ConfigDuration.fromSecs(0);
   }, async ({ characterDir, runtime }) => {
     await runtime.autonomy.tick();
     expect(seen).toEqual([]);
@@ -340,15 +341,76 @@ test("a scheduled dream with nothing archived since the last one makes no model 
 test("a scheduled dream runs once something has been archived since the last one", async () => {
   const seen: SidecarRequest[] = [];
   await afterOneChat(seen, () => [{ type: "text", text: "Checked." }], (app) => {
-    app.memory.dreaming.enabled = true;
-    app.memory.dreaming.min_turns = 0;
-    app.memory.dreaming.idle_after = ConfigDuration.fromSecs(0);
+    app.dreaming.enabled = true;
+    app.dreaming.min_turns = 0;
+    app.dreaming.idle_after = ConfigDuration.fromSecs(0);
   }, async ({ config, characterDir, runtime }) => {
     putSegment(config.dirs.data, "ada", 0, Date.now() - HOUR);
     await runtime.autonomy.tick();
     await runtime.autonomy.dreamsEnded();
     expect(seen).toHaveLength(1);
     expect(required(lastDream(characterDir)).outcome).toBe("finished");
+  });
+});
+
+test("with compaction.git_push on, a dream pushes the workspace when it committed something and ran to its end, and not otherwise", async () => {
+  const pushing = (app: AppConfig): void => { app.dreaming.enabled = true; app.compaction.git_push = true; };
+  const keeping = (app: AppConfig): void => { app.dreaming.enabled = true; };
+  const commitsThenEnds: DreamScript = (_request, round) => round === 0
+    ? [{ type: "tool_use", id: "dream-bash", name: "bash", input: { command: COMMIT_A_NOTE } }]
+    : [{ type: "text", text: "Noted." }];
+  const dreamt = async (script: DreamScript, tune: (app: AppConfig) => void, shutDownOnceCommitted?: Promise<void>): Promise<unknown[]> => {
+    let seen: unknown[] = [];
+    await afterOneChat([], script, tune, async ({ config, workspace, characterDir, runtime }) => {
+      const remote = join(workspace, "..", "remote.git");
+      git(workspace, "init", "--bare", "--quiet", remote);
+      git(workspace, "remote", "add", "origin", remote);
+      git(workspace, "push", "--quiet", "--set-upstream", "origin", "HEAD");
+      putSegment(config.dirs.data, "ada", 0, Date.now() - HOUR);
+      expect(runtime.autonomy.forceDreamNow("ada")).toBe("queued");
+      await runtime.autonomy.tick();
+      if (shutDownOnceCommitted === undefined) await runtime.autonomy.dreamsEnded();
+      else {
+        await shutDownOnceCommitted;
+        await runtime.autonomy.quiesce();
+      }
+      const record = required(lastDream(characterDir));
+      seen = [record.outcome, record.commits, record.pushed, git(remote, "log", "-1", "--format=%s", "--all")];
+    });
+    return seen;
+  };
+  expect(await dreamt(commitsThenEnds, pushing)).toEqual(["finished", 1, true, "dream: note"]);
+  expect(await dreamt(commitsThenEnds, keeping)).toEqual(["finished", 1, undefined, "start"]);
+  expect(await dreamt(() => [{ type: "text", text: "Nothing to do." }], pushing)).toEqual(["finished", 0, undefined, "start"]);
+
+  const { promise: committed, resolve: afterCommit } = Promise.withResolvers<void>();
+  const commitsThenHangs: DreamScript = async (_request, round, signal) => {
+    if (round === 0) return [{ type: "tool_use", id: "dream-bash", name: "bash", input: { command: COMMIT_A_NOTE } }];
+    afterCommit();
+    await new Promise<never>((_resolve, reject) => {
+      signal?.addEventListener("abort", () => { reject(new Error("stopped")); }, { once: true });
+    });
+    return [];
+  };
+  expect(await dreamt(commitsThenHangs, pushing, committed)).toEqual(["interrupted", 1, undefined, "start"]);
+});
+
+test("shore dream says whether dreaming is on, what is queued or running and how the last dream went, and --now queues one", async () => {
+  await afterOneChat([], (_request, round) => round === 0
+    ? [{ type: "tool_use", id: "dream-bash", name: "bash", input: { command: COMMIT_A_NOTE } }]
+    : [{ type: "text", text: "Noted." }], (app) => { app.dreaming.enabled = true; }, async ({ config, runtime }) => {
+    const asked = { characterName: "ada", config, autonomy: runtime.autonomy };
+    putSegment(config.dirs.data, "ada", 0, Date.now() - HOUR);
+    const before = dreamCommand(asked, {});
+    expect([before.character, before.enabled, before.queued, before.running, before.last]).toEqual(["ada", true, false, false, undefined]);
+    expect(dreamCommand(asked, { now: true })).toMatchObject({ character: "ada", enabled: true, queued: true, running: false });
+    await runtime.autonomy.tick();
+    await runtime.autonomy.dreamsEnded();
+    expect(dreamCommand(asked, {})).toMatchObject({ queued: false, running: false, last: { outcome: "finished", commits: 1, files: ["MEMORY.md"] } });
+
+    const stranger = { ...asked, characterName: "nobody" };
+    expect(dreamCommand(stranger, {})).toEqual({ character: "nobody", enabled: true, queued: false, running: false });
+    expect(() => dreamCommand(stranger, { now: true })).toThrow("No autonomy state for character 'nobody'");
   });
 });
 
@@ -361,7 +423,7 @@ test("a running dream lets a snapshot through between calls, can't be queued twi
       signal?.addEventListener("abort", () => { reject(new Error("stopped")); }, { once: true });
     });
     return [];
-  }, (app) => { app.memory.dreaming.enabled = true; }, async ({ config, characterDir, runtime }) => {
+  }, (app) => { app.dreaming.enabled = true; }, async ({ config, characterDir, runtime }) => {
     putSegment(config.dirs.data, "ada", 0, Date.now() - HOUR);
     expect(runtime.autonomy.forceDreamNow("ada")).toBe("queued");
     await runtime.autonomy.tick();
@@ -396,7 +458,7 @@ test("a dream runs on the chat model whatever wakes use, and counts only the com
       return [{ type: "tool_use", id: "dream-read", name: "read", input: { file_path: "MEMORY.md" } }];
     }
     return [{ type: "text", text: "Done." }];
-  }, (app) => { app.defaults.background.heartbeat = "small"; }, async ({ config, workspace, characterDir, runtime }) => {
+  }, (app) => { app.triggers.model = "small"; }, async ({ config, workspace, characterDir, runtime }) => {
     workspaceDir = workspace;
     expect([...workspaceReadCounts(characterDir)]).toEqual([]);
     putSegment(config.dirs.data, "ada", 0, Date.now() - HOUR);
@@ -444,7 +506,7 @@ test("a dream stopped at its round limit is cut off, keeps no half-written summa
 test("a dream a budget pauses before it starts is no failure, makes no call and stays queued", async () => {
   const seen: SidecarRequest[] = [];
   await afterOneChat(seen, () => [{ type: "text", text: "never" }], (app) => {
-    app.memory.dreaming.enabled = true;
+    app.dreaming.enabled = true;
     app.usage.budgets = [{
       name: "dreams", period: "month", cost_usd: 0, warn_at: [], limit: "block", character: undefined, provider: undefined,
       api_key: undefined, model: undefined, call_type: "dreaming", usage_kind: [], allow_compaction_over_budget: undefined,

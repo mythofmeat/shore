@@ -240,7 +240,7 @@ export interface CompactionRunner {
 type CompactionAutonomy = Pick<TurnAutonomy, "shouldCompactNow" | "onCompactionComplete" | "onCompactionFailed">;
 
 export function threadShouldCompact(config: LoadedConfig, turns: number, tokens: number, crowded: boolean): boolean {
-  const c = config.app.memory.compaction;
+  const c = config.app.compaction;
   return c.enabled && (crowded || (turns >= c.min_turns &&
     ((c.max_turns > 0 && turns >= c.max_turns) ||
      (c.max_context_tokens > 0 && tokens >= c.max_context_tokens))));

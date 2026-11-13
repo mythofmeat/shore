@@ -312,10 +312,10 @@ test("[triggers] holds every setting of a character's own time, the switch among
   const root = await mkdtemp(testTmp("shore-triggers-config-"));
   const read = (): unknown[] => {
     const { app } = loadConfig(join(root, "config.toml"), { env: { SHORE_CONFIG_DIR: root }, onWarn: () => {} });
-    const { enabled, triggers } = app.behavior.autonomy;
+    const { triggers } = app;
     return [
-      enabled, Number(triggers.wake_cooldown.asSecs()), Number(triggers.check_time_limit.asSecs()), Number(triggers.max_wake_limit.asSecs()),
-      triggers.max_wrap_up_rounds, triggers.max_idle_wakes, Number(triggers.idle_timeout.asSecs()), triggers.off, app.defaults.background.heartbeat,
+      triggers.enabled, Number(triggers.wake_cooldown.asSecs()), Number(triggers.check_time_limit.asSecs()), Number(triggers.max_wake_limit.asSecs()),
+      triggers.max_wrap_up_rounds, triggers.max_idle_wakes, Number(triggers.idle_timeout.asSecs()), triggers.off, triggers.model,
     ];
   };
   await writeFile(join(root, "config.toml"), '[chat]\ndisplay_name = "eve"\n');

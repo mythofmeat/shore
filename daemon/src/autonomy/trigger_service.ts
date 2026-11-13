@@ -57,14 +57,14 @@ export function checkFacts(now: number, user: UserFacts, activity: Record<string
 }
 
 export function triggerSettings(app: LoadedConfig["app"]): TriggerSettings {
-  const { autonomy } = app.behavior;
+  const { triggers } = app;
   return {
-    enabled: autonomy.enabled,
+    enabled: triggers.enabled,
     checks: toolEnabled(app.tools, "bash"),
-    wakeCooldownMs: autonomy.triggers.wake_cooldown.asMillis(),
-    checkLimitMs: autonomy.triggers.check_time_limit.asMillis(),
-    maxWakeLimitMs: autonomy.triggers.max_wake_limit.asMillis(),
-    off: autonomy.triggers.off,
+    wakeCooldownMs: triggers.wake_cooldown.asMillis(),
+    checkLimitMs: triggers.check_time_limit.asMillis(),
+    maxWakeLimitMs: triggers.max_wake_limit.asMillis(),
+    off: triggers.off,
   };
 }
 

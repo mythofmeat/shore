@@ -90,7 +90,7 @@ export class SegmentLabels {
     try {
       const resolved = this.#deps();
       const effective = effectiveConfig(character, resolved.config);
-      if (!effective.app.memory.compaction.label_segments) return undefined;
+      if (!effective.app.compaction.label_segments) return undefined;
       const messages = rustLines(activeContent).filter((line) => line.trim() !== "").map((line) => normalizeMessage(JSON.parse(line) as Message));
       const ask = await prepareLabelCall(character, thread, messages, resolved, effective);
       return (segment) => {

@@ -21,7 +21,7 @@ export function dream(ctx: DreamContext, args: OperationInput<"dream">): Operati
   const last = lastDream(characterDataDir(ctx.config.dirs.data, character));
   return {
     character,
-    enabled: status?.enabled ?? ctx.config.app.memory.dreaming.enabled,
+    enabled: status?.enabled ?? ctx.config.app.dreaming.enabled,
     queued: status?.queued ?? false,
     running: status?.running ?? false,
     ...(status?.nextDueAt === undefined ? {} : { next_due_at: toRfc3339(status.nextDueAt) }),

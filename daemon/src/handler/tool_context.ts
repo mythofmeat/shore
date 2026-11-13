@@ -122,7 +122,7 @@ export async function buildToolContext(
     ...(push === undefined ? {} : { push: async (message: string) => await push(charName, message) }),
     ...(wakeInThread === undefined ? {} : { wakeInThread: (request: WakeInThreadRequest) => wakeInThread(charName, deps.thread ?? MAIN_THREAD, request) }),
     ...(deps.deferEdit === undefined ? {} : { deferEdit: deps.deferEdit }),
-    ...(deps.countReads === true && config.app.memory.dreaming.enabled ? { recordRead: (path: string) => { recordReadBestEffort(charDataDir, path); } } : {}),
+    ...(deps.countReads === true && config.app.dreaming.enabled ? { recordRead: (path: string) => { recordReadBestEffort(charDataDir, path); } } : {}),
     ...(startThread === undefined
       ? {}
       : { startThread: (request: StartThreadRequest) => startThread(charName, request) }),

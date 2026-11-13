@@ -52,8 +52,8 @@ function either(holds: boolean, whenTrue: string, whenFalse: string): [string, s
 }
 
 export function guideValues(config: LoadedConfig, userName: string): Map<string, string> {
-  const { autonomy, presence } = config.app.behavior;
-  const { notifications } = config.app;
+  const { presence } = config.app.behavior;
+  const { notifications, triggers: limits } = config.app;
   const triggers = triggerSettings(config.app);
   const statuses = presence.statuses.map((status) => `\`${status}\``).join(", ");
   return new Map([
@@ -67,10 +67,10 @@ export function guideValues(config: LoadedConfig, userName: string): Map<string,
     ["default_wake_limit", span(DEFAULT_WAKE_LIMIT_MS)],
     ["check_output_chars", count(CHECK_OUTPUT_CHARS)],
     ["check_error_chars", count(CHECK_ERROR_CHARS)],
-    ["wrap_up_rounds", String(autonomy.triggers.max_wrap_up_rounds)],
+    ["wrap_up_rounds", String(limits.max_wrap_up_rounds)],
     ["wake_quiet", span(WAKE_QUIET_MS)],
-    ["dormant_after_wakes", String(autonomy.triggers.max_idle_wakes)],
-    ["dormant_after_idle", autonomy.triggers.idle_timeout.toString()],
+    ["dormant_after_wakes", String(limits.max_idle_wakes)],
+    ["dormant_after_idle", limits.idle_timeout.toString()],
     ["diary_note_chars", count(DIARY_NOTE_CHARS)],
     ["diary_window", span(DIARY_WINDOW_MS)],
     ["diary_shown", String(DIARY_SHOWN)],

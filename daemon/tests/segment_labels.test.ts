@@ -216,7 +216,7 @@ test("with compaction.label_segments off no label is asked for", async () => {
     await settled();
     expect(segments()).toEqual([{ idx: 0, label: undefined }]);
     expect(of("label")).toEqual([]);
-  }, (app) => { app.memory.compaction.label_segments = false; });
+  }, (app) => { app.compaction.label_segments = false; });
 });
 
 test("archiving a side thread labels the segment it makes", async () => {
@@ -247,11 +247,11 @@ test("a conversation compacted for being idle is labelled, and one archived afte
     expect(segments()).toEqual([{ idx: 0, label: "Lighting the lamp" }, { idx: 1, label: undefined }]);
     expect(of("label")).toHaveLength(1);
   }, (app) => {
-    app.memory.compaction.enabled = true;
-    app.memory.compaction.keep_recent_turns = 1;
-    app.memory.compaction.min_turns = 2;
-    app.memory.compaction.idle_trigger = ConfigDuration.fromSecs(50 * 60);
-    app.memory.compaction.archive_after = ConfigDuration.fromSecs(24 * 60 * 60);
+    app.compaction.enabled = true;
+    app.compaction.keep_recent_turns = 1;
+    app.compaction.min_turns = 2;
+    app.compaction.idle_after = ConfigDuration.fromSecs(50 * 60);
+    app.compaction.archive_after = ConfigDuration.fromSecs(24 * 60 * 60);
   });
 });
 
@@ -276,7 +276,7 @@ test("label --auto asks for a label for an archived segment, leaves a labelled o
     const replaced = await command("segments", { action: "label", index: 0, auto: true, replace: true, model: "pinned" });
     expect(replaced).toMatchObject({ type: "command_output", data: { skipped: false, segment: { index: 0, label: "Second thoughts" } } });
     expect(of("label").map((request) => request.model)).toEqual(["claude-fixture", "claude-pinned"]);
-  }, (app) => { app.memory.compaction.label_segments = false; });
+  }, (app) => { app.compaction.label_segments = false; });
 });
 
 test("label --auto is refused with a label, without a segment to label, or when the model gives none, and replace and model need it", async () => {
@@ -299,7 +299,7 @@ test("label --auto is refused with a label, without a segment to label, or when 
     expect(await refused({ auto: true })).toEqual(["error", "internal_error", "could not label segment 0: llm: provider fell over"]);
     expect(await refused({ auto: true, model: "nobody" })).toEqual(["error", "internal_error", expect.stringMatching(/^could not label segment 0: .*nobody/) as string]);
     expect(segments()).toEqual([{ idx: 0, label: undefined }]);
-  }, (app) => { app.memory.compaction.label_segments = false; });
+  }, (app) => { app.compaction.label_segments = false; });
 });
 
 test("settled waits for a label that is still being asked for", async () => {
@@ -337,7 +337,7 @@ test("label --auto reports a segment as skipped when a label was set by hand whi
     script.held.resolve();
     expect(await asking).toMatchObject({ type: "command_output", data: { skipped: true, segment: { index: 0, label: "By hand" } } });
     expect(segments()).toEqual([{ idx: 0, label: "By hand" }]);
-  }, (app) => { app.memory.compaction.label_segments = false; });
+  }, (app) => { app.compaction.label_segments = false; });
 });
 
 test("labelling a segment, as it is archived or by command, leaves the history database with no more open handles than before", async () => {
@@ -369,5 +369,5 @@ test("label --auto is refused by a daemon that has no model to ask", async () =>
   await world(async ({ command, config }) => {
     await command("clear", {});
     expect(await outcomeOf(segmentsCommand(config.dirs.data, "ada", "main", { action: "label", index: 0, auto: true }))).toThrow("this daemon has no model to ask for a label");
-  }, (app) => { app.memory.compaction.label_segments = false; });
+  }, (app) => { app.compaction.label_segments = false; });
 });

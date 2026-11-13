@@ -448,7 +448,7 @@ async function runGenerationCore(
   }
   await settleWorkspace();
 
-  const compaction = config.app.memory.compaction;
+  const compaction = config.app.compaction;
   const active = engine.messages();
   const crowded = nearMessageBudget(withoutWakeWorking(active), built.messageBudget, imageTierForModel(resolved.modelId)) &&
     canArchiveTurns(active, compaction.keep_recent_turns);
