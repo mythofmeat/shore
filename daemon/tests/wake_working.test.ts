@@ -169,6 +169,29 @@ test("a wake with nothing but its note keeps the note, and two wakes in a row ar
   ]);
 });
 
+test("a wake's opener is seen later as what set the wake off, without the wake's prompt, and an opener stored before that was kept apart is seen whole", () => {
+  const stored = thread(
+    ["user", "[wake]\n\n[Your trigger \"show\" fired.]\n\n[This is a wake. A long prompt.]", "autonomous"],
+    ["assistant", [call("read", "r0")]],
+    ["user", [result("r0")]],
+    ["assistant", "Told part one."],
+    ["user", "[wake]\n\n[Your trigger \"show\" fired again.]\n\n[This is a wake. A long prompt.]", "autonomous"],
+    ["assistant", "Told part two."],
+  );
+  const opener = stored[4] as Message;
+  stored[4] = { ...opener, shown_later: "[wake]\n\n[Your trigger \"show\" fired again.]" };
+  expect(shown(stored)).toEqual([
+    ["user", "[wake]\n\n[Your trigger \"show\" fired.]\n\n[This is a wake. A long prompt.]"],
+    ["system", "[Your working in this wake isn't shown here: 1 tool call. Your note from the end of it follows.]"],
+    ["assistant", "Told part one."],
+    ["user", "[wake]\n\n[Your trigger \"show\" fired again.]"],
+    ["assistant", "Told part two."],
+  ]);
+  const later = withoutWakeWorking(stored)[3];
+  expect([later?.content, later?.msg_id, later?.origin, later?.timestamp]).toEqual(["[wake]\n\n[Your trigger \"show\" fired again.]", opener.msg_id, "autonomous", opener.timestamp]);
+  expect(stored[4]?.content).toBe(opener.content);
+});
+
 test("everything outside a wake is sent as it is stored: a reply's own tool rounds and thinking, and a thread that opens partway through", () => {
   const opensPartway = thread(
     ["assistant", [{ type: "thinking", thinking: "Hm.", signature: "s" }, call("read", "r0")]],

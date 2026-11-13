@@ -155,6 +155,7 @@ function serializeForStorage(msg: Message): string {
   if (msg.diary !== undefined) ordered.push(["diary", msg.diary]);
   if (msg.heartbeat_running !== undefined) ordered.push(["heartbeat_running", msg.heartbeat_running]);
   if (msg.presence !== undefined) ordered.push(["presence", msg.presence]);
+  if (msg.shown_later !== undefined) ordered.push(["shown_later", msg.shown_later]);
 
   const contentAt = 2;
   const last = required(ordered.pop());
@@ -380,6 +381,10 @@ export class MessageStore {
 
   turnCount(): number {
     return this.#messages.filter(isRealUserTurn).length;
+  }
+
+  userTurnCount(): number {
+    return this.#messages.filter((message) => isRealUserTurn(message) && message.origin !== "autonomous").length;
   }
 
   startedAt(): string | undefined {

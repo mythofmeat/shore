@@ -79,7 +79,7 @@ class CountingEngine {
   currentRevision(): number {
     return this.messages.length;
   }
-  turnCount(): number {
+  userTurnCount(): number {
     return this.messages.length;
   }
 }

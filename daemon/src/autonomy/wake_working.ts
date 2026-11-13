@@ -54,6 +54,11 @@ function wordsOnly(note: Message): Message {
   return { ...note, content_blocks: note.content_blocks.filter((block) => block.type !== "thinking" && block.type !== "redacted_thinking") };
 }
 
+function openerSeenLater(opener: Message): Message {
+  const text = opener.shown_later;
+  return text === undefined ? opener : { ...opener, content: text, content_blocks: [{ type: "text", text }] };
+}
+
 function wakeSeenLater(wake: readonly Message[]): Message[] {
   const first = wake.findIndex(isRound);
   const last = wake.findLastIndex(isRound);
@@ -62,7 +67,8 @@ function wakeSeenLater(wake: readonly Message[]): Message[] {
   const closing = final.role === "assistant" && toolCalls(final).length === 0 ? final : undefined;
   const working = wake.slice(first, closing === undefined ? last + 1 : last);
   return [
-    ...wake.slice(0, first),
+    openerSeenLater(required(wake[0])),
+    ...wake.slice(1, first),
     ...standIn(working, closing !== undefined && words(closing) !== ""),
     ...(closing === undefined ? [] : [wordsOnly(closing)]),
     ...wake.slice(last + 1),
