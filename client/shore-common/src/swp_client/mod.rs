@@ -1,12 +1,14 @@
 pub mod client_config;
 pub mod conn_manager;
 pub mod connection;
+mod daemon_version;
 pub mod discovery;
 pub mod error;
 pub mod sync;
 
 pub use conn_manager::{ConnCommand, ConnEvent, spawn_connection};
 pub use connection::{SWPConnection, ServerAddr, read_image_upload};
+pub use daemon_version::daemon_version;
 pub use discovery::discover_or_default;
 pub use error::{ClientError, DiscoveryKind, Result};
 

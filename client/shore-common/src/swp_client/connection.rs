@@ -153,6 +153,7 @@ impl SWPConnection {
                         characters = h.characters.len(),
                         "received server hello"
                     );
+                    super::daemon_version::note_daemon_version(h.server_version.as_deref());
                     break h;
                 }
                 ServerMessage::Unknown

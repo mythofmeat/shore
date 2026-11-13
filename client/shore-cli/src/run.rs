@@ -545,12 +545,13 @@ async fn handle_generic_swp_command(
 pub(crate) fn validate_registered_output(
     name: &str,
     data: &serde_json::Value,
-) -> Result<(), serde_json::Error> {
+) -> Result<(), crate::skew::UnreadableResult> {
     if !is_registered_operation(name) {
         return Ok(());
     }
     let _: OperationResponse =
-        serde_json::from_value(serde_json::json!({ "name": name, "data": data }))?;
+        serde_json::from_value(serde_json::json!({ "name": name, "data": data }))
+            .map_err(|error| crate::skew::UnreadableResult::new(name, error))?;
     Ok(())
 }
 
@@ -1796,6 +1797,12 @@ pub(crate) async fn print_version(
         ),
         Err(e) => cli_out!("daemon: not reachable at {} ({e})", addr.0),
     }
+    if let Some(hint) = crate::skew::hint(
+        crate::skew::CLIENT_VERSION,
+        shore_common::swp_client::daemon_version().as_deref(),
+    ) {
+        cli_out!("{hint}");
+    }
     Ok(())
 }
 
@@ -1937,7 +1944,9 @@ pub(crate) async fn execute_operation_with_raw<O: Operation>(
 ) -> Result<(O::Output, serde_json::Value), Box<dyn std::error::Error>> {
     let _request = conn.send_operation::<O>(input).await?;
     let data = recv_command_data(conn).await?;
-    Ok((serde_json::from_value(data.clone())?, data))
+    let output = serde_json::from_value(data.clone())
+        .map_err(|error| crate::skew::UnreadableResult::new(O::NAME, error))?;
+    Ok((output, data))
 }
 
 pub(crate) async fn recv_command_data(
