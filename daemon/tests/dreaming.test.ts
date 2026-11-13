@@ -308,7 +308,7 @@ test("a dream's own reads aren't counted, and a failed dream leaves the count fo
   const seen: SidecarRequest[] = [];
   await afterOneChat(seen, (_request, round) => {
     if (round === 0) return [{ type: "tool_use", id: "dream-read", name: "read", input: { file_path: "MEMORY.md" } }];
-    throw new Error("provider fell over");
+    throw new Error("provider fell over ".padEnd(400, "x"));
   }, (app) => { app.memory.dreaming.enabled = true; }, async ({ config, characterDir, runtime }) => {
     putSegment(config.dirs.data, "ada", 0, Date.now() - HOUR);
     runtime.autonomy.forceDreamNow("ada");
@@ -318,7 +318,7 @@ test("a dream's own reads aren't counted, and a failed dream leaves the count fo
     expect(seen).toHaveLength(2);
     const record = required(lastDream(characterDir));
     expect(record.outcome).toBe("failed");
-    expect(record.error).toBeDefined();
+    expect(record.error).toBe(`${"provider fell over ".padEnd(300, "x")}…`);
     expect([...workspaceReadCounts(characterDir)]).toEqual([["SOUL.md", 1]]);
     expect(required(runtime.autonomy.dreamStatus("ada")).lastAt).toBeUndefined();
     expect(runtime.autonomy.log("ada", 100).map((event) => event.kind)).toContain("dream_failed");

@@ -60,7 +60,7 @@ export interface WakeEngine extends ThreadReader {
   currentRevision(): number;
   turnCount(): number;
   reload(): Promise<void>;
-  recoverInterruptedToolLoop(): Promise<number>;
+  recoverInterruptedToolLoop(reason: string): Promise<number>;
 }
 
 export interface Wake {
@@ -426,7 +426,7 @@ export async function runWake(character: string, config: LoadedConfig, wake: Wak
       note("call_failed", `Wake in "${thread}" stopped: the thread was changed while it ran`);
       return { events };
     }
-    if (loop.failedRound !== undefined) await engine.recoverInterruptedToolLoop();
+    if (loop.failedRound !== undefined) await engine.recoverInterruptedToolLoop("The wake ended before this tool returned a result.");
     const stopped = stopOf(loop);
     if (stopped !== undefined) {
       note(stopped === "interrupted" ? "wake" : "timeout", stopped === "interrupted"

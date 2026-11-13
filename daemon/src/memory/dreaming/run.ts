@@ -72,7 +72,7 @@ export interface DreamPass {
 export type WorkspaceWrites = <T>(run: () => Promise<T>) => Promise<T>;
 
 export interface DreamPassDeps {
-  generate: (request: SidecarRequest, phase: ToolPhase, signal: AbortSignal) => Promise<GenerateResponse | undefined>;
+  generate: (request: SidecarRequest, phase: ToolPhase, signal: AbortSignal) => Promise<GenerateResponse>;
   dispatch: (
     config: LoadedConfig,
     name: string,
@@ -344,7 +344,7 @@ export async function runDreamPass(
 
   const budget = budgetStopIn(loop.failure);
   const error = outcome === "failed"
-    ? truncateSummary(loop.failure === undefined ? `the model call failed on round ${String(loop.failedRound ?? 0)}` : describeError(loop.failure), 300)
+    ? truncateSummary(describeError(loop.failure), 300)
     : stoppedBy === "budget" ? truncateSummary(budget?.summary ?? budget?.message ?? "a usage budget was reached", 300) : undefined;
   const record: StoredDream = {
     started_at: new Date(startedAt).toISOString(),
