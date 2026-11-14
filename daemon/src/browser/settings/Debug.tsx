@@ -14,11 +14,11 @@ export function DebugPage({ state }: { state: ChromeSnapshot }) {
   })}>{title}</button>;
   const rows: [string, string, ReactNode][] = [
     ["Start a wake now", "Wakes the character in its home thread at the next autonomy tick, without waiting for one of its triggers.",
-      action("Start a wake", () => workspace.actions.run("heartbeat_tick_now", {}), (value) => value.warning ?? `Wake ${value.status}`)],
+      action("Start a wake", () => workspace.actions.run("wake_now", {}), (value) => value.warning ?? `Wake ${value.status}`)],
     ["Make dormant", "Stops every wake until you write to the character again.",
-      action("Make dormant", () => workspace.actions.run("heartbeat_set_dormant", {}), (value) => `${value.character} is ${value.status}`)],
+      action("Make dormant", () => workspace.actions.run("set_dormant", {}), (value) => `${value.character} is ${value.status}`)],
     ["Make active", "Ends dormancy, so the character's triggers wake it again.",
-      action("Make active", () => workspace.actions.run("heartbeat_set_active", {}), (value) => `${value.character} is ${value.status}`)],
+      action("Make active", () => workspace.actions.run("set_active", {}), (value) => `${value.character} is ${value.status}`)],
     ["Dream now", "Starts a dream at the next autonomy tick instead of waiting for its schedule.",
       action("Dream", () => workspace.actions.run("dream", { now: true }), (value) => value.running ? "Already dreaming" : "Dream queued")],
     ["Send a cache keepalive", "Pings the provider now to keep the prompt cache warm.",

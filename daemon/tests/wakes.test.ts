@@ -3054,20 +3054,20 @@ test("a wake started by hand runs at the next look, one for a dormant character 
     expect(await answered("session_activate")).toEqual({ character: "ada", registered: true, keepalive: { status: "off" }, own_time: "Active" });
     await say("hello");
     at(1);
-    expect(await answered("heartbeat_tick_now")).toEqual({ status: "scheduled", character: "ada" });
+    expect(await answered("wake_now")).toEqual({ status: "queued", character: "ada" });
     await runtime.autonomy.tick();
     expect(script.wakes).toHaveLength(2);
 
-    expect(await answered("heartbeat_set_dormant")).toEqual({ status: "dormant", character: "ada" });
+    expect(await answered("set_dormant")).toEqual({ status: "dormant", character: "ada" });
     expect(await answered("session_activate")).toEqual({ character: "ada", registered: false, keepalive: { status: "off" }, own_time: "Dormant" });
-    expect(await answered("heartbeat_tick_now")).toEqual({
-      status: "scheduled", character: "ada",
-      warning: "ada is dormant, so nothing wakes them and this wake is dropped. Run `shore debug heartbeat_status_active` first.",
+    expect(await answered("wake_now")).toEqual({
+      status: "queued", character: "ada",
+      warning: "ada is dormant, so nothing wakes them and this wake is dropped. Run `shore debug set_active` first.",
     });
     await runtime.autonomy.tick();
     expect(script.wakes).toHaveLength(2);
 
-    expect(await answered("heartbeat_set_active")).toEqual({ status: "active", character: "ada" });
+    expect(await answered("set_active")).toEqual({ status: "active", character: "ada" });
     expect(runtime.autonomy.status("ada")?.state).toBe("Active");
     await runtime.autonomy.tick();
     expect(script.wakes).toHaveLength(2);
@@ -3213,7 +3213,7 @@ test("each round of a wake is kept for the trace of what wakes thought and did",
     await say("hello");
     at(1);
     await wakeNow();
-    const kept = runtime.callStore?.queryTranscripts("heartbeat", "ada", 100).map((row) => [row.call_type, row.iteration, row.finish_reason]);
+    const kept = runtime.callStore?.queryTranscripts("wake", "ada", 100).map((row) => [row.call_type, row.iteration, row.finish_reason]);
     expect(kept?.reverse()).toEqual([
       ["wake", 0, "tool_use"],
       ["wake_tool_loop", 1, "end_turn"],
@@ -3444,7 +3444,7 @@ test("a wake inside a sealed thread sends, announces and logs nothing outside it
     await wakeNow();
     expect(lastToolResult(await thread("main"))?.failed).toBe(false);
     const captured = runtime.callStore?.callCount();
-    const transcripts = runtime.callStore?.queryTranscripts("heartbeat", "ada", 100).length;
+    const transcripts = runtime.callStore?.queryTranscripts("wake", "ada", 100).length;
     script.wakes.length = 0;
     emitted.length = 0;
     script.closing = "Made a card.\n<sendMessage>Happy birthday!</sendMessage>";
@@ -3459,7 +3459,7 @@ test("a wake inside a sealed thread sends, announces and logs nothing outside it
     expect(script.wakes.map((request) => [request.context?.thread, request.context?.sealed])).toEqual([["gift", true], ["gift", true]]);
     expect(emitted).toEqual([]);
     expect(announced).toEqual([]);
-    expect([runtime.callStore?.callCount(), runtime.callStore?.queryTranscripts("heartbeat", "ada", 100).length]).toEqual([captured, transcripts]);
+    expect([runtime.callStore?.callCount(), runtime.callStore?.queryTranscripts("wake", "ada", 100).length]).toEqual([captured, transcripts]);
     expect(diaryOf(data)).toEqual([]);
     expect(runtime.autonomy.log("ada", 100).map((event) => [event.kind, event.detail]).slice(-2)).toEqual([
       ["tick_fired", 'Woken in "gift" by a hand-off from "main"'],

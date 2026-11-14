@@ -11,7 +11,7 @@ import { ConversationEngine } from "../src/engine/conversation.ts";
 import { HistoryStore } from "../src/engine/history_store.ts";
 import { readThreadsIndex } from "../src/engine/threads.ts";
 import { CallStore } from "../src/call_store.ts";
-import { HeartbeatLog } from "../src/autonomy/heartbeat_log.ts";
+import { WakeLog } from "../src/autonomy/wake_log.ts";
 import { bookPathIn, readBook, sessionKey } from "../src/llm/providers/agent_sessions.ts";
 import { readSubagentTraces } from "../src/tools/subagent_trace.ts";
 import { databasePath, withStorage } from "../src/storage/store.ts";
@@ -67,7 +67,7 @@ test("the oldest supported release's archive restores current data through the c
   expect(readBook(bookPathIn(dirs.data))[sessionKey("ada", path, "main")]?.sessionId).toBe("ada-session");
   const character = join(dirs.data, "ada");
   expect(await loadActivePromptFile(character, "SOUL.md")).toBe("You are ada.\n");
-  expect((await HeartbeatLog.load(join(character, "heartbeat.jsonl"))).recent(1)[0]?.detail).toBe("saved heartbeat");
+  expect((await WakeLog.load(join(character, "wakes.jsonl"))).recent(1)[0]?.detail).toBe("saved heartbeat");
   expect((await readSubagentTraces(character))[0]?.result).toBe("saved result");
   const currentArchive = join(root, "current.shore.tar");
   await exportCharacter({ ...context, hasCharacter: () => true }, { character: "ada", output: currentArchive });

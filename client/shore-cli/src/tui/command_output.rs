@@ -405,8 +405,8 @@ pub(crate) fn render(
         "error_log" => Some(written(|out| {
             crate::output::commands::write_error_log(out, data);
         })),
-        "heartbeat_log" => Some(written(|out| {
-            crate::output::transcript::write_heartbeat_log(out, data, TUI_OUTPUT_WIDTH);
+        "wake_log" => Some(written(|out| {
+            crate::output::transcript::write_wake_log(out, data, TUI_OUTPUT_WIDTH);
         })),
         "run_tool" => Some(written(|out| {
             crate::output::commands::write_run_tool(out, data, TUI_OUTPUT_WIDTH);
@@ -514,18 +514,18 @@ pub(crate) fn render(
         })),
         "presence" => Some(crate::output::commands::presence_text(data)),
         "mark" | "unmark" | "marks" => Some(crate::output::commands::marks_text(wire_name, data)),
-        "heartbeat_tick_now" => Some(format!(
+        "wake_now" => Some(format!(
             "Started a wake for {}.",
             data.get("character")
                 .and_then(serde_json::Value::as_str)
                 .unwrap_or("?")
         )),
-        "heartbeat_set_dormant" | "heartbeat_set_active" => Some(format!(
+        "set_dormant" | "set_active" => Some(format!(
             "{} is now {}.",
             data.get("character")
                 .and_then(serde_json::Value::as_str)
                 .unwrap_or("?"),
-            if wire_name == "heartbeat_set_active" {
+            if wire_name == "set_active" {
                 "active"
             } else {
                 "dormant"
@@ -650,33 +650,15 @@ mod tests {
     fn a_wake_started_or_a_change_of_dormancy_from_the_palette_says_what_happened() {
         let data = json!({ "status": "scheduled", "character": "ada" });
         assert_eq!(
-            super::render(
-                "debug heartbeat_tick_now",
-                "heartbeat_tick_now",
-                &data,
-                "eve"
-            )
-            .as_deref(),
+            super::render("debug wake_now", "wake_now", &data, "eve").as_deref(),
             Some("Started a wake for ada.")
         );
         assert_eq!(
-            super::render(
-                "debug heartbeat_status_dormant",
-                "heartbeat_set_dormant",
-                &data,
-                "eve"
-            )
-            .as_deref(),
+            super::render("debug set_dormant", "set_dormant", &data, "eve").as_deref(),
             Some("ada is now dormant.")
         );
         assert_eq!(
-            super::render(
-                "debug heartbeat_status_active",
-                "heartbeat_set_active",
-                &data,
-                "eve"
-            )
-            .as_deref(),
+            super::render("debug set_active", "set_active", &data, "eve").as_deref(),
             Some("ada is now active.")
         );
     }

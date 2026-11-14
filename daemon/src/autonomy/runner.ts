@@ -1,7 +1,7 @@
 import { defaultDreamingConfig, parseDayWindow, type DreamingConfig } from "../config/app.ts";
 import { ActivityTracker, localWallClock, weekdayOf, type ActivityStats } from "./activity.ts";
 import { Dormancy, type DormancyConfig } from "./dormancy.ts";
-import { HeartbeatLog, type HeartbeatEventKind } from "./heartbeat_log.ts";
+import { WakeLog, type WakeEventKind } from "./wake_log.ts";
 import {
   dreamDue,
   dreamRetryDelayMs,
@@ -72,7 +72,7 @@ interface RunningDream {
 
 export interface AutonomyActionResult {
   readonly turnCount?: number | undefined;
-  readonly events: readonly { kind: HeartbeatEventKind; detail: string; at?: number }[];
+  readonly events: readonly { kind: WakeEventKind; detail: string; at?: number }[];
   readonly failed?: string | undefined;
   readonly deepArchiveDone?: boolean | undefined;
   readonly retryAt?: number | undefined;
@@ -200,7 +200,7 @@ export class CharacterAutonomy {
   readonly #statePath: string;
 
   readonly #dormancy: Dormancy;
-  readonly #log: HeartbeatLog;
+  readonly #log: WakeLog;
   readonly #activity = new ActivityTracker();
   readonly #now: () => number;
   #state: RunnerState;
@@ -217,7 +217,7 @@ export class CharacterAutonomy {
     executor: AutonomyExecutor;
     statePath: string;
     dormancy: Dormancy;
-    log: HeartbeatLog;
+    log: WakeLog;
     restored?: AutonomyStateFile | undefined;
     idle?: RestoredIdle | undefined;
     events?: AutonomyEvents | undefined;
@@ -251,7 +251,7 @@ export class CharacterAutonomy {
     return this.#dormancy;
   }
 
-  get log(): HeartbeatLog {
+  get log(): WakeLog {
     return this.#log;
   }
 
@@ -462,7 +462,7 @@ export class CharacterAutonomy {
     };
   }
 
-  note(kind: HeartbeatEventKind, detail: string, now: number): void {
+  note(kind: WakeEventKind, detail: string, now: number): void {
     this.#log.push(kind, detail, toRfc3339(now));
   }
 

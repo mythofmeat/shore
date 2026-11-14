@@ -19,7 +19,7 @@ const exchange = (id: number, extra: Record<string, unknown> = {}) => ({
 const message = (id: string, role: string, content: string) => ({ msg_id: id, role, content, images: [], content_blocks: [], timestamp: DAY });
 const page = (messages: unknown[], total: number) => ({ messages, cursor: 0, next_before: 0, has_more_before: false, total_turns: total, segment: null, previous_segment: null, next_segment: null });
 const transcript = (source: string, entries: unknown[], enabled = true) => ({ enabled, source, entries });
-const row = (id: number, extra: Record<string, unknown> = {}) => ({ id, ts: DAY, source: "heartbeat", character: "ada", call_type: "heartbeat", iteration: 2, model: "opus", provider: "anthropic", finish_reason: "end_turn", usage, entry: { said: "hello" }, ...extra });
+const row = (id: number, extra: Record<string, unknown> = {}) => ({ id, ts: DAY, source: "wake", character: "ada", call_type: "wake", iteration: 2, model: "opus", provider: "anthropic", finish_reason: "end_turn", usage, entry: { said: "hello" }, ...extra });
 const trace = (extra: Record<string, unknown> = {}) => ({ ts: DAY, subagent: "helper", parent_tool_use_id: "toolu_1", model: "haiku", messages: [], ...extra });
 
 async function traces(character: string | null = "ada", thread: string | null = "story") {
@@ -67,7 +67,7 @@ describe("the traces page", () => {
     expect(selected().at(-1)).toBe("true,true");
     expect(reads).toEqual([
       [["call_log", { count: 25 }]], [["log", { turns: 10 }]], [["transcript", { count: 25 }]], [["transcript", { count: 25, source: "dreaming" }]],
-      [["heartbeat_log", { count: 25 }]], [["error_log", { count: 25 }]], [["subagent_trace", { count: 25 }]],
+      [["wake_log", { count: 25 }]], [["error_log", { count: 25 }]], [["subagent_trace", { count: 25 }]],
     ]);
   });
 
@@ -197,7 +197,7 @@ describe("the traces page", () => {
   test("wake and dream transcripts show each round, or say they are off or empty", async () => {
     const time = await formats();
     const answers: Record<string, unknown[]> = {
-      heartbeat: [transcript("heartbeat", [row(1), row(2, { model: null, finish_reason: null })]), transcript("heartbeat", [], false), transcript("heartbeat", [row(3)])],
+      heartbeat: [transcript("wake", [row(1), row(2, { model: null, finish_reason: null })]), transcript("wake", [], false), transcript("wake", [row(3)])],
       dreaming: [transcript("dreaming", [row(4, { source: "dreaming", iteration: 1 })]), transcript("dreaming", [], false)],
     };
     app.answer((request) => request["name"] === "transcript" ? answers[(request["args"] as { source?: string }).source ?? "heartbeat"]?.shift() : undefined);

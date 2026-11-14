@@ -30,16 +30,16 @@ test("only old heartbeat events expire; history, state, ledger and malformed rec
   writeState(data, "ada/autonomy_state.json", "keep state", "ada");
   withStorage(data, (db) => {
     for (const [kind, timestamp, content] of [
-      ["heartbeat", old.toISOString(), "old heartbeat"],
-      ["heartbeat", new Date(cutoff).toISOString(), "boundary heartbeat"],
-      ["heartbeat", "invalid", "undated heartbeat"],
+      ["wake", old.toISOString(), "old heartbeat"],
+      ["wake", new Date(cutoff).toISOString(), "boundary heartbeat"],
+      ["wake", "invalid", "undated heartbeat"],
       ["subagent", old.toISOString(), "malformed trace"],
       ["legacy_invalid", old.toISOString(), "legacy record"],
     ]) insertEvent(db, { character: "ada", kind: kind ?? "", timestamp: timestamp ?? "", content: content ?? "" });
     db.run("INSERT INTO call_attempts(id,started_at,status,character,provider,model,call_type) VALUES ('old','2020','failed','ada','test','test','message')");
   });
-  expect(pruneDiagnostics(data, NOW)).toEqual({ captures: 0, heartbeats: 1, subagentTraces: 0, unreadableTraces: 1 });
-  expect(readEvents(data, "ada", "heartbeat")).toEqual(["boundary heartbeat", "undated heartbeat"]);
+  expect(pruneDiagnostics(data, NOW)).toEqual({ captures: 0, wakeEvents: 1, subagentTraces: 0, unreadableTraces: 1 });
+  expect(readEvents(data, "ada", "wake")).toEqual(["boundary heartbeat", "undated heartbeat"]);
   expect(readEvents(data, "ada", "subagent")).toEqual(["malformed trace"]);
   expect(readEvents(data, "ada", "legacy_invalid")).toEqual(["legacy record"]);
   expect(readState(data, "ada/autonomy_state.json")).toBe("keep state");
@@ -59,7 +59,7 @@ test("an old subagent trace keeps its result and loses its messages, and one mis
       insertEvent(db, { character: "ada", kind: "subagent", timestamp: old.toISOString(), content });
     }
   });
-  expect(pruneDiagnostics(data, NOW)).toEqual({ captures: 0, heartbeats: 0, subagentTraces: 2, unreadableTraces: kept.length });
+  expect(pruneDiagnostics(data, NOW)).toEqual({ captures: 0, wakeEvents: 0, subagentTraces: 2, unreadableTraces: kept.length });
   expect(readEvents(data, "ada", "subagent_result").map((content) => JSON.parse(content) as unknown)).toEqual([
     { ...trace, messages: [], messages_expired: true },
     { ...trace, parent_tool_use_id: "tu_2", messages: [], messages_expired: true },
@@ -81,7 +81,7 @@ function filesOpenIn(folder: string) {
 
 test("a data folder without a database yet is pruned without error, and no file is left open", () => {
   const data = mkdtempSync(join(tmpdir(), "shore-retention-fresh-"));
-  expect(pruneDiagnostics(data, NOW)).toEqual({ captures: 0, heartbeats: 0, subagentTraces: 0, unreadableTraces: 0 });
+  expect(pruneDiagnostics(data, NOW)).toEqual({ captures: 0, wakeEvents: 0, subagentTraces: 0, unreadableTraces: 0 });
   expect(existsSync(databasePath(data))).toBe(true);
   expect(filesOpenIn(data)).toEqual([]);
 });

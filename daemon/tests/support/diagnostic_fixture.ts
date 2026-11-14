@@ -3,8 +3,8 @@ import type { ShoreRuntime } from "../../src/runtime.ts";
 import { ZERO_USAGE } from "../../src/call_store.ts";
 import { appendSubagentTrace } from "../../src/tools/subagent_trace.ts";
 import { redactHeaders } from "../../src/llm/redact.ts";
-import { HeartbeatLog } from "../../src/autonomy/heartbeat_log.ts";
-import { HEARTBEAT_LOG_FILENAME } from "../../src/autonomy/service.ts";
+import { WakeLog } from "../../src/autonomy/wake_log.ts";
+import { WAKE_LOG_FILENAME } from "../../src/autonomy/service.ts";
 
 export async function seedDiagnosticFixture(runtime: ShoreRuntime, character: string): Promise<void> {
   const store = runtime.callStore;
@@ -18,7 +18,7 @@ export async function seedDiagnosticFixture(runtime: ShoreRuntime, character: st
   }
   for (const source of ["heartbeat", "memory_recall"] as const) store.recordTranscript({ ts, source, character, call_type: source, iteration: 1, model: "fixture", provider: "fixture", usage: ZERO_USAGE, entry_json: JSON.stringify(source === "heartbeat" ? { reasoning: ["Checked the clock"], text: "Heartbeat fixture transcript", tool_calls: [{ name: "read", input: { path: "SOUL.md" }, output: "Stored tool output", is_error: false }] } : { query: "Remember the stored fixture", memories: [{ text: "A retained memory", score: 0.9 }], future_detail: "Inspectable recall data" }) });
   const characterDir = join(runtime.registry.globalConfig().dirs.data, character);
-  const log = await HeartbeatLog.load(join(characterDir, HEARTBEAT_LOG_FILENAME));
+  const log = await WakeLog.load(join(characterDir, WAKE_LOG_FILENAME));
   log.push("wake", "Fixture heartbeat wake", ts.toISOString());
   await log.flushIfDirty();
   await appendSubagentTrace(characterDir, { ts: ts.toISOString(), subagent: "worker", parent_tool_use_id: "parent-fixture", rid: "parent-request", model: "fixture", messages: [{ msg_id: "fixture-message", role: "assistant", content: "Stored worker message", content_blocks: [{ type: "text", text: "Stored worker message" }], images: [], timestamp: ts.toISOString() }], result: "Stored worker result" });

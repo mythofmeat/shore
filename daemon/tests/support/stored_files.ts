@@ -15,7 +15,7 @@ function stored(path: fs.PathLike): Buffer | undefined {
   }
   if (basename(name) === "heartbeat.jsonl") {
     const { data, character } = characterScope(dirname(name));
-    return Buffer.from(readEvents(data, character, "heartbeat").join("\n") + "\n");
+    return Buffer.from(readEvents(data, character, "wake").join("\n") + "\n");
   }
   const candidates = [scope, { data: dirname(name), key: basename(name), character: "" }];
   for (const candidate of candidates) {

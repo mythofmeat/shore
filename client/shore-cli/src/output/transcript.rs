@@ -681,13 +681,13 @@ pub(crate) fn print_single_message(
     print_log(std::slice::from_ref(data), character_name, filter);
 }
 
-pub(crate) fn print_heartbeat_log(data: &serde_json::Value) {
+pub(crate) fn print_wake_log(data: &serde_json::Value) {
     let stdout = crate::output::stdout();
     let mut out = stdout.lock();
-    write_heartbeat_log(&mut out, data, term_width());
+    write_wake_log(&mut out, data, term_width());
 }
 
-pub(crate) fn write_heartbeat_log<W: Write>(out: &mut W, data: &serde_json::Value, width: usize) {
+pub(crate) fn write_wake_log<W: Write>(out: &mut W, data: &serde_json::Value, width: usize) {
     let events: &[serde_json::Value] = data["events"].as_array().map_or(&[], Vec::as_slice);
     if events.is_empty() {
         write_section_header(out, "wake events", "", width);

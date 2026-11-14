@@ -9,8 +9,8 @@ import { SettingsSection } from "./layout.tsx";
 import { formatNumber, formatTime, Loading, NeedsCharacter, useAction, useOperation } from "./shared.tsx";
 import { Tree } from "./tree.tsx";
 
-type Tab = "calls" | "log" | "heartbeat" | "dreams" | "events" | "errors" | "subagents";
-const TABS: readonly [Tab, string][] = [["calls", "Model calls"], ["log", "Thread log"], ["heartbeat", "Wake transcript"], ["dreams", "Dream transcript"], ["events", "Wake events"], ["errors", "Errors"], ["subagents", "Subagents"]];
+type Tab = "calls" | "log" | "wakes" | "dreams" | "events" | "errors" | "subagents";
+const TABS: readonly [Tab, string][] = [["calls", "Model calls"], ["log", "Thread log"], ["wakes", "Wake transcript"], ["dreams", "Dream transcript"], ["events", "Wake events"], ["errors", "Errors"], ["subagents", "Subagents"]];
 
 function Count({ value, change }: { value: number; change: (value: number) => void }) {
   return <select className="select" aria-label="Entries to show" value={value} onChange={(event) => change(Number(event.target.value))}>{[10, 25, 50, 100].map((count) => <option key={count} value={count}>Last {count}</option>)}</select>;
@@ -101,22 +101,22 @@ function ConversationLog({ state }: { state: ChromeSnapshot }) {
   </>;
 }
 
-function Diagnostic({ state, tab }: { state: ChromeSnapshot; tab: "heartbeat" | "dreams" | "events" | "errors" | "subagents" }) {
+function Diagnostic({ state, tab }: { state: ChromeSnapshot; tab: "wakes" | "dreams" | "events" | "errors" | "subagents" }) {
   const [count, setCount] = useState(25);
   const [ids, setIds] = useState("");
-  const heartbeat = useOperation(state, "transcript", { count }, [], tab === "heartbeat");
+  const wakes = useOperation(state, "transcript", { count }, [], tab === "wakes");
   const dreams = useOperation(state, "transcript", { count, source: "dreaming" }, [], tab === "dreams");
-  const events = useOperation(state, "heartbeat_log", { count }, [], tab === "events");
+  const events = useOperation(state, "wake_log", { count }, [], tab === "events");
   const errors = useOperation(state, "error_log", { count }, [], tab === "errors");
   const subagents = useOperation(state, "subagent_trace", { count, ...(ids.trim() === "" ? {} : { ids: ids.split(/[\s,]+/).filter(Boolean) }) }, [], tab === "subagents");
   return <>
     <div className="usage-controls"><Count value={count} change={setCount} />
       {tab === "subagents" ? <input className="input" aria-label="Tool call IDs" placeholder="Filter by tool call IDs" value={ids} onChange={(event) => setIds(event.target.value)} /> : null}
     </div>
-    {tab === "heartbeat" ? <Loading error={heartbeat.error} ready={heartbeat.data !== undefined}>
-      {heartbeat.data?.enabled === false ? <p className="settings-empty">Wake transcripts are off.</p> : null}
-      {heartbeat.data?.entries.map((row) => <details key={row.id} className="disclosure payload"><summary>{formatTime(row.ts)} · round {row.iteration} · {row.model ?? "?"} · {row.finish_reason ?? ""}</summary><Tree value={row.entry} /></details>)}
-      {heartbeat.data?.entries.length === 0 ? <p className="settings-empty">No wake calls yet.</p> : null}
+    {tab === "wakes" ? <Loading error={wakes.error} ready={wakes.data !== undefined}>
+      {wakes.data?.enabled === false ? <p className="settings-empty">Wake transcripts are off.</p> : null}
+      {wakes.data?.entries.map((row) => <details key={row.id} className="disclosure payload"><summary>{formatTime(row.ts)} · round {row.iteration} · {row.model ?? "?"} · {row.finish_reason ?? ""}</summary><Tree value={row.entry} /></details>)}
+      {wakes.data?.entries.length === 0 ? <p className="settings-empty">No wake calls yet.</p> : null}
     </Loading> : null}
     {tab === "dreams" ? <Loading error={dreams.error} ready={dreams.data !== undefined}>
       {dreams.data?.enabled === false ? <p className="settings-empty">Dream transcripts are off.</p> : null}

@@ -1052,7 +1052,7 @@ wire_types! {
     }
 
     #[serde(rename_all = "snake_case")]
-    pub enum TranscriptSource { Heartbeat, Dreaming }
+    pub enum TranscriptSource { Wake, Dreaming }
 
     #[serde(deny_unknown_fields)]
     #[derive(Default)]
@@ -1073,16 +1073,16 @@ wire_types! {
     }
 
     #[serde(rename_all = "snake_case")]
-    pub enum HeartbeatEventKind { TickFired, CallFailed, MessageSent, MessageSkipped, ToolUse, Dormant, Wake, Timeout, DormantPing, BudgetPaused, RecapWritten, RecapMissing, DreamStarted, DreamFinished, DreamFailed }
+    pub enum WakeEventKind { TickFired, CallFailed, MessageSent, MessageSkipped, ToolUse, Dormant, Wake, Timeout, DormantPing, BudgetPaused, RecapWritten, RecapMissing, DreamStarted, DreamFinished, DreamFailed }
 
-    pub struct HeartbeatEvent {
+    pub struct WakeEvent {
         pub timestamp: String,
-        pub kind: HeartbeatEventKind,
+        pub kind: WakeEventKind,
         pub detail: String,
     }
 
-    pub struct HeartbeatLogResult {
-        pub events: Vec<HeartbeatEvent>,
+    pub struct WakeLogResult {
+        pub events: Vec<WakeEvent>,
     }
 
     pub struct DiagnosticErrorEntry {
@@ -1146,7 +1146,7 @@ wire_types! {
         pub seconds_since_user: Option<u64>,
         #[ts(type = "number")]
         pub dormant_after_idle_time_secs: u64,
-        pub recent_events: Vec<HeartbeatEvent>,
+        pub recent_events: Vec<WakeEvent>,
     }
 
     pub struct ActivityStatusReport {
@@ -1401,7 +1401,7 @@ wire_types! {
         pub is_error: bool,
     }
 
-    pub struct HeartbeatTranscriptEntry {
+    pub struct TranscriptEntry {
         pub reasoning: Vec<String>,
         pub text: String,
         pub tool_calls: Vec<TranscriptToolCall>,
@@ -1466,10 +1466,10 @@ wire_types! {
     }
 
     #[serde(rename_all = "snake_case")]
-    pub enum HeartbeatControlStatus { Scheduled, Dormant, Active }
+    pub enum WakeControlStatus { Queued, Dormant, Active }
 
-    pub struct HeartbeatControlResult {
-        pub status: HeartbeatControlStatus,
+    pub struct WakeControlResult {
+        pub status: WakeControlStatus,
         pub character: String,
         #[serde(default, skip_serializing_if = "Option::is_none")]
         #[ts(optional)]
@@ -3123,16 +3123,16 @@ operations! {
     ClearConversation: "clear" (ClearArgs) => ClearResult,
     ReadStatus: "status" (EmptyOperationArgs) => StatusReport,
     ReadErrorLog: "error_log" (DiagnosticCountArgs) => ErrorLogResult,
-    ReadHeartbeatLog: "heartbeat_log" (DiagnosticCountArgs) => HeartbeatLogResult,
+    ReadWakeLog: "wake_log" (DiagnosticCountArgs) => WakeLogResult,
     InspectCalls: "call_log" (CallLogArgs) => CallLogResult,
     ReadTranscript: "transcript" (TranscriptArgs) => TranscriptResult,
     ReadSubagentTraces: "subagent_trace" (SubagentTraceArgs) => SubagentTraceResult,
-    ScheduleHeartbeat: "heartbeat_tick_now" (EmptyOperationArgs) => HeartbeatControlResult,
+    StartWake: "wake_now" (EmptyOperationArgs) => WakeControlResult,
     Dream: "dream" (DreamArgs) => DreamReport,
     Presence: "presence" (PresenceArgs) => PresenceResult,
     ReadDiary: "diary" (DiaryArgs) => DiaryResult,
-    SetHeartbeatDormant: "heartbeat_set_dormant" (EmptyOperationArgs) => HeartbeatControlResult,
-    SetHeartbeatActive: "heartbeat_set_active" (EmptyOperationArgs) => HeartbeatControlResult,
+    SetDormant: "set_dormant" (EmptyOperationArgs) => WakeControlResult,
+    SetActive: "set_active" (EmptyOperationArgs) => WakeControlResult,
     PingKeepalive: "keepalive_ping_now" (EmptyOperationArgs) => KeepalivePingResult,
     ActivateSession: "session_activate" (EmptyOperationArgs) => SessionActivated,
     DiscoverOperations: "discover_operations" (EmptyOperationArgs) => OperationCatalogue,

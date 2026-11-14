@@ -1,6 +1,6 @@
 import type { AutonomyService, AutonomyStatus } from "../autonomy/service.ts";
-import { HEARTBEAT_LOG_FILENAME } from "../autonomy/service.ts";
-import { HeartbeatLog, type HeartbeatEvent } from "../autonomy/heartbeat_log.ts";
+import { WAKE_LOG_FILENAME } from "../autonomy/service.ts";
+import { WakeLog, type WakeEvent } from "../autonomy/wake_log.ts";
 import type { HourClassification } from "../autonomy/activity.ts";
 import type { ShoreDirs } from "../config/dirs.ts";
 import type { Diagnostics } from "../diagnostics.ts";
@@ -191,19 +191,19 @@ export function errorLog(ctx: StatusContext, args: OperationInput<"error_log">):
   return ctx.diagnostics.toJson(countArg(args, 20));
 }
 
-async function heartbeatEvents(
+async function wakeEvents(
   ctx: StatusContext,
   limit: number,
-): Promise<readonly HeartbeatEvent[]> {
+): Promise<readonly WakeEvent[]> {
   if (ctx.autonomy.runnerFor(ctx.characterName) !== undefined) {
     return ctx.autonomy.log(ctx.characterName, limit);
   }
-  const path = `${ctx.config.dirs.data}/${ctx.characterName}/${HEARTBEAT_LOG_FILENAME}`;
-  return (await HeartbeatLog.load(path)).recent(limit);
+  const path = `${ctx.config.dirs.data}/${ctx.characterName}/${WAKE_LOG_FILENAME}`;
+  return (await WakeLog.load(path)).recent(limit);
 }
 
-export async function heartbeatLog(ctx: StatusContext, args: OperationInput<"heartbeat_log">): Promise<OperationResult<"heartbeat_log">> {
-  const events = await heartbeatEvents(ctx, countArg(args, 20));
+export async function wakeLog(ctx: StatusContext, args: OperationInput<"wake_log">): Promise<OperationResult<"wake_log">> {
+  const events = await wakeEvents(ctx, countArg(args, 20));
   return {
     events: events.map((e) => ({ timestamp: e.timestamp, kind: e.kind, detail: e.detail })),
   };
@@ -212,30 +212,30 @@ export async function heartbeatLog(ctx: StatusContext, args: OperationInput<"hea
 const noState = (character: string): Error =>
   invalidRequest(`No autonomy state for character '${character}'`);
 
-export function heartbeatTickNow(ctx: StatusContext): OperationResult<"heartbeat_tick_now"> {
+export function wakeNow(ctx: StatusContext): OperationResult<"wake_now"> {
   const dormant = ctx.autonomy.wakeNow(ctx.characterName);
   if (dormant === undefined) throw noState(ctx.characterName);
   return {
-    status: "scheduled",
+    status: "queued",
     character: ctx.characterName,
     ...(dormant
       ? {
           warning:
             `${ctx.characterName} is dormant, so nothing wakes them and this wake is dropped. ` +
-            "Run `shore debug heartbeat_status_active` first.",
+            "Run `shore debug set_active` first.",
         }
       : {}),
   };
 }
 
-export function heartbeatSetDormant(ctx: StatusContext): OperationResult<"heartbeat_set_dormant"> {
+export function setDormant(ctx: StatusContext): OperationResult<"set_dormant"> {
   if (!ctx.autonomy.forceDormancy(ctx.characterName, "dormant")) {
     throw noState(ctx.characterName);
   }
   return { status: "dormant", character: ctx.characterName };
 }
 
-export function heartbeatSetActive(ctx: StatusContext): OperationResult<"heartbeat_set_active"> {
+export function setActive(ctx: StatusContext): OperationResult<"set_active"> {
   if (!ctx.autonomy.forceDormancy(ctx.characterName, "active")) {
     throw noState(ctx.characterName);
   }

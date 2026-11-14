@@ -11,12 +11,11 @@ use shore_common::protocol::operations::{
     ListMarksArgs, ListModels, ListModelsArgs, ListProviderModels, ListProviders, MarkArgs,
     MarkKind, MarkReply, MessageReferences, ModelInfoArgs, ModelPreferenceScope, ModelSettings,
     ModelSettingsArgs, Operation, PingKeepalive, Presence, PresenceArgs, ProviderArgs,
-    ProviderModelsArgs, ReadDiary, ReadErrorLog, ReadHeartbeatLog, ReadStatus, ReadSubagentTraces,
-    ReadTranscript, RefreshAllProviderModels, RefreshProviderModels, ResetModel, ResetModelArgs,
-    RunToolArgs, ScheduleHeartbeat, SegmentAction, SegmentsArgs, SetHeartbeatActive,
-    SetHeartbeatDormant, SetModelSetting, SetModelSettingArgs, SubagentTraceArgs, SwitchModel,
-    SwitchModelArgs, ToolAccessListing, TranscriptArgs, TranscriptSource, UnmarkArgs, UnmarkReply,
-    WatchCompaction,
+    ProviderModelsArgs, ReadDiary, ReadErrorLog, ReadStatus, ReadSubagentTraces, ReadTranscript,
+    ReadWakeLog, RefreshAllProviderModels, RefreshProviderModels, ResetModel, ResetModelArgs,
+    RunToolArgs, SegmentAction, SegmentsArgs, SetActive, SetDormant, SetModelSetting,
+    SetModelSettingArgs, StartWake, SubagentTraceArgs, SwitchModel, SwitchModelArgs,
+    ToolAccessListing, TranscriptArgs, TranscriptSource, UnmarkArgs, UnmarkReply, WatchCompaction,
 };
 use shore_common::protocol::types::Role;
 use std::collections::BTreeMap;
@@ -1220,7 +1219,7 @@ pub(crate) enum TraceCommand {
 
     /// The wake transcript: what each wake thought, the tools it called
     /// and their results, and the model that served it
-    Heartbeat {
+    Wakes {
         /// Number of entries to show
         #[arg(short = 'n', long = "count", default_value = "20")]
         count: u32,
@@ -2450,14 +2449,14 @@ pub(crate) enum ConfigCommand {
 #[command(rename_all = "snake_case")]
 pub(crate) enum DebugCommand {
     /// Start a wake in the character's home thread now
-    #[command(name = "heartbeat_tick_now")]
-    TickNow,
+    #[command(name = "wake_now")]
+    WakeNow,
     /// Make the character dormant, so that nothing wakes it until your next message
-    #[command(name = "heartbeat_status_dormant")]
-    StatusDormant,
+    #[command(name = "set_dormant")]
+    SetDormant,
     /// Make the character active again, so that its triggers wake it
-    #[command(name = "heartbeat_status_active")]
-    StatusActive,
+    #[command(name = "set_active")]
+    SetActive,
     /// Send a cache-keepalive ping now and report whether it read the cache
     #[command(name = "keepalive_ping_now")]
     KeepalivePingNow,
@@ -2883,13 +2882,9 @@ pub(crate) fn to_swp_command(
         CliCommand::Debug {
             subcommand: Some(subcommand),
         } => match subcommand {
-            DebugCommand::TickNow => operation_to_swp::<ScheduleHeartbeat>(EmptyOperationArgs {}),
-            DebugCommand::StatusDormant => {
-                operation_to_swp::<SetHeartbeatDormant>(EmptyOperationArgs {})
-            }
-            DebugCommand::StatusActive => {
-                operation_to_swp::<SetHeartbeatActive>(EmptyOperationArgs {})
-            }
+            DebugCommand::WakeNow => operation_to_swp::<StartWake>(EmptyOperationArgs {}),
+            DebugCommand::SetDormant => operation_to_swp::<SetDormant>(EmptyOperationArgs {}),
+            DebugCommand::SetActive => operation_to_swp::<SetActive>(EmptyOperationArgs {}),
             DebugCommand::KeepalivePingNow => {
                 operation_to_swp::<PingKeepalive>(EmptyOperationArgs {})
             }
@@ -3112,12 +3107,10 @@ fn trace_to_swp(cmd: &CliCommand) -> Option<(&'static str, serde_json::Value)> {
         return None;
     };
     match subcommand {
-        TraceCommand::Heartbeat { count, .. } => {
-            operation_to_swp::<ReadTranscript>(TranscriptArgs {
-                source: Some(TranscriptSource::Heartbeat),
-                count: Some(*count),
-            })
-        }
+        TraceCommand::Wakes { count, .. } => operation_to_swp::<ReadTranscript>(TranscriptArgs {
+            source: Some(TranscriptSource::Wake),
+            count: Some(*count),
+        }),
         TraceCommand::Dreams { count, .. } => operation_to_swp::<ReadTranscript>(TranscriptArgs {
             source: Some(TranscriptSource::Dreaming),
             count: Some(*count),
@@ -3128,7 +3121,7 @@ fn trace_to_swp(cmd: &CliCommand) -> Option<(&'static str, serde_json::Value)> {
             })
         }
         TraceCommand::Events { count, .. } => {
-            operation_to_swp::<ReadHeartbeatLog>(DiagnosticCountArgs {
+            operation_to_swp::<ReadWakeLog>(DiagnosticCountArgs {
                 count: Some(*count),
             })
         }
@@ -3827,18 +3820,9 @@ mod tests {
                 &["trace", "errors", "-n", "5"],
                 Some(("error_log", json!({"count": 5}))),
             ),
-            (
-                &["debug", "heartbeat_tick_now"],
-                Some(("heartbeat_tick_now", json!({}))),
-            ),
-            (
-                &["debug", "heartbeat_status_dormant"],
-                Some(("heartbeat_set_dormant", json!({}))),
-            ),
-            (
-                &["debug", "heartbeat_status_active"],
-                Some(("heartbeat_set_active", json!({}))),
-            ),
+            (&["debug", "wake_now"], Some(("wake_now", json!({})))),
+            (&["debug", "set_dormant"], Some(("set_dormant", json!({})))),
+            (&["debug", "set_active"], Some(("set_active", json!({})))),
             (&["model"], Some(("list_models", json!({})))),
             (
                 &["model", "use", "claude-haiku-4-5-20251001"],

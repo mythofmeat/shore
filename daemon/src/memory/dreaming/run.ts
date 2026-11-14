@@ -1,7 +1,7 @@
 import { join } from "node:path";
 
 import { shoreLog } from "../../log.ts";
-import type { HeartbeatEventKind } from "../../autonomy/heartbeat_log.ts";
+import type { WakeEventKind } from "../../autonomy/wake_log.ts";
 import { runBackgroundLoop, type LoopToolResult, type TranscriptRound } from "../../autonomy/background_loop.ts";
 import { backgroundModelRequest, backgroundTaskModel } from "../../autonomy/background_model.ts";
 import { spanPhrase } from "../../autonomy/wake_shape.ts";
@@ -59,7 +59,7 @@ const MAX_WRAP_UP_MS = 10 * 60_000;
 export type DreamPassOutcome = "finished" | "cut_off" | "failed" | "skipped" | "paused" | "interrupted";
 
 export interface DreamEvent {
-  kind: HeartbeatEventKind;
+  kind: WakeEventKind;
   detail: string;
   at: number;
 }
@@ -203,7 +203,7 @@ export async function runDreamPass(
 ): Promise<DreamPass> {
   const startedAt = Date.now();
   const events: DreamEvent[] = [];
-  const event = (kind: HeartbeatEventKind, detail: string): void => {
+  const event = (kind: WakeEventKind, detail: string): void => {
     events.push({ kind, detail, at: Date.now() });
   };
   const failed = (detail: string): DreamPass => {

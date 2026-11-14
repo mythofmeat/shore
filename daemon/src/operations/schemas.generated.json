@@ -4069,7 +4069,7 @@
             "recent_events": {
               "type": "array",
               "items": {
-                "$ref": "#/$defs/HeartbeatEvent"
+                "$ref": "#/$defs/WakeEvent"
               }
             }
           },
@@ -4088,14 +4088,14 @@
             "Dormant"
           ]
         },
-        "HeartbeatEvent": {
+        "WakeEvent": {
           "type": "object",
           "properties": {
             "timestamp": {
               "type": "string"
             },
             "kind": {
-              "$ref": "#/$defs/HeartbeatEventKind"
+              "$ref": "#/$defs/WakeEventKind"
             },
             "detail": {
               "type": "string"
@@ -4107,7 +4107,7 @@
             "detail"
           ]
         },
-        "HeartbeatEventKind": {
+        "WakeEventKind": {
           "type": "string",
           "enum": [
             "tick_fired",
@@ -5070,7 +5070,7 @@
     }
   },
   {
-    "name": "heartbeat_log",
+    "name": "wake_log",
     "input": {
       "$schema": "https://json-schema.org/draft/2020-12/schema",
       "title": "DiagnosticCountArgs",
@@ -5089,13 +5089,13 @@
     },
     "output": {
       "$schema": "https://json-schema.org/draft/2020-12/schema",
-      "title": "HeartbeatLogResult",
+      "title": "WakeLogResult",
       "type": "object",
       "properties": {
         "events": {
           "type": "array",
           "items": {
-            "$ref": "#/$defs/HeartbeatEvent"
+            "$ref": "#/$defs/WakeEvent"
           }
         }
       },
@@ -5103,14 +5103,14 @@
         "events"
       ],
       "$defs": {
-        "HeartbeatEvent": {
+        "WakeEvent": {
           "type": "object",
           "properties": {
             "timestamp": {
               "type": "string"
             },
             "kind": {
-              "$ref": "#/$defs/HeartbeatEventKind"
+              "$ref": "#/$defs/WakeEventKind"
             },
             "detail": {
               "type": "string"
@@ -5122,7 +5122,7 @@
             "detail"
           ]
         },
-        "HeartbeatEventKind": {
+        "WakeEventKind": {
           "type": "string",
           "enum": [
             "tick_fired",
@@ -5760,7 +5760,7 @@
         "TranscriptSource": {
           "type": "string",
           "enum": [
-            "heartbeat",
+            "wake",
             "dreaming"
           ]
         }
@@ -5799,7 +5799,7 @@
         "TranscriptSource": {
           "type": "string",
           "enum": [
-            "heartbeat",
+            "wake",
             "dreaming"
           ]
         },
@@ -6373,7 +6373,7 @@
     }
   },
   {
-    "name": "heartbeat_tick_now",
+    "name": "wake_now",
     "input": {
       "$schema": "https://json-schema.org/draft/2020-12/schema",
       "title": "EmptyOperationArgs",
@@ -6382,11 +6382,11 @@
     },
     "output": {
       "$schema": "https://json-schema.org/draft/2020-12/schema",
-      "title": "HeartbeatControlResult",
+      "title": "WakeControlResult",
       "type": "object",
       "properties": {
         "status": {
-          "$ref": "#/$defs/HeartbeatControlStatus"
+          "$ref": "#/$defs/WakeControlStatus"
         },
         "character": {
           "type": "string"
@@ -6403,10 +6403,10 @@
         "character"
       ],
       "$defs": {
-        "HeartbeatControlStatus": {
+        "WakeControlStatus": {
           "type": "string",
           "enum": [
-            "scheduled",
+            "queued",
             "dormant",
             "active"
           ]
@@ -6697,7 +6697,7 @@
     }
   },
   {
-    "name": "heartbeat_set_dormant",
+    "name": "set_dormant",
     "input": {
       "$schema": "https://json-schema.org/draft/2020-12/schema",
       "title": "EmptyOperationArgs",
@@ -6706,11 +6706,11 @@
     },
     "output": {
       "$schema": "https://json-schema.org/draft/2020-12/schema",
-      "title": "HeartbeatControlResult",
+      "title": "WakeControlResult",
       "type": "object",
       "properties": {
         "status": {
-          "$ref": "#/$defs/HeartbeatControlStatus"
+          "$ref": "#/$defs/WakeControlStatus"
         },
         "character": {
           "type": "string"
@@ -6727,10 +6727,10 @@
         "character"
       ],
       "$defs": {
-        "HeartbeatControlStatus": {
+        "WakeControlStatus": {
           "type": "string",
           "enum": [
-            "scheduled",
+            "queued",
             "dormant",
             "active"
           ]
@@ -6739,7 +6739,7 @@
     }
   },
   {
-    "name": "heartbeat_set_active",
+    "name": "set_active",
     "input": {
       "$schema": "https://json-schema.org/draft/2020-12/schema",
       "title": "EmptyOperationArgs",
@@ -6748,11 +6748,11 @@
     },
     "output": {
       "$schema": "https://json-schema.org/draft/2020-12/schema",
-      "title": "HeartbeatControlResult",
+      "title": "WakeControlResult",
       "type": "object",
       "properties": {
         "status": {
-          "$ref": "#/$defs/HeartbeatControlStatus"
+          "$ref": "#/$defs/WakeControlStatus"
         },
         "character": {
           "type": "string"
@@ -6769,10 +6769,10 @@
         "character"
       ],
       "$defs": {
-        "HeartbeatControlStatus": {
+        "WakeControlStatus": {
           "type": "string",
           "enum": [
-            "scheduled",
+            "queued",
             "dormant",
             "active"
           ]

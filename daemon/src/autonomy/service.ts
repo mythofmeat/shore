@@ -2,7 +2,7 @@ import { shoreLog } from "../log.ts";
 
 import type { ActivityStats } from "./activity.ts";
 import { Dormancy, type DormancyConfig } from "./dormancy.ts";
-import { HeartbeatLog, type HeartbeatEvent } from "./heartbeat_log.ts";
+import { WakeLog, type WakeEvent } from "./wake_log.ts";
 import {
   type KeepaliveHalt,
   type KeepaliveService,
@@ -26,7 +26,7 @@ import { required } from "../util/required.ts";
 
 const AUTONOMY_TICK_MS = 10_000;
 
-export const HEARTBEAT_LOG_FILENAME = "heartbeat.jsonl";
+export const WAKE_LOG_FILENAME = "wakes.jsonl";
 
 export interface RegisterCharacter {
   character: string;
@@ -44,7 +44,7 @@ export interface AutonomyStatus {
   last_user_at?: number;
   max_idle_wakes: number;
   max_silent_ms: number;
-  recent_events: HeartbeatEvent[];
+  recent_events: WakeEvent[];
 }
 
 const RECENT_EVENT_LIMIT = 5;
@@ -138,7 +138,7 @@ export class AutonomyService {
       executor: this.#executor,
       statePath,
       dormancy: new Dormancy(request.dormancy),
-      log: await HeartbeatLog.load(`${dataDir}/${HEARTBEAT_LOG_FILENAME}`),
+      log: await WakeLog.load(`${dataDir}/${WAKE_LOG_FILENAME}`),
       restored,
       idle,
       events: {
@@ -356,7 +356,7 @@ export class AutonomyService {
     return true;
   }
 
-  log(character: string, limit: number): HeartbeatEvent[] {
+  log(character: string, limit: number): WakeEvent[] {
     return this.#entries.get(character)?.runner.log.recent(limit) ?? [];
   }
 

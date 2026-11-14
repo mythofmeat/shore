@@ -1945,7 +1945,7 @@ fn dispatch_cli_command(app: &mut App, raw_input: &str) -> Action {
             }
         },
         CliCommand::Trace { subcommand: None } => {
-            app.set_status("usage: :trace [calls|heartbeat|dreams|events|errors|subagent]");
+            app.set_status("usage: :trace [calls|wakes|dreams|events|errors|subagent]");
             Action::Redraw
         }
         CliCommand::Debug { subcommand: None } => {

@@ -3834,7 +3834,7 @@ mod diary_pager_tests {
         let log = answered(
             &mut app,
             "trace events",
-            "heartbeat_log",
+            "wake_log",
             &json!({ "events": events }),
         );
         assert!(log.contains("wake events (30 events)"), "{log}");

@@ -82,7 +82,7 @@ export class InProcessAutonomyExecutor implements AutonomyExecutor {
           const ctx = { ...await toolCtx, ...(conversation.recordWorkspaceWrite === undefined ? {} : { recordWorkspaceWrite: conversation.recordWorkspaceWrite }) };
           return await runLoopTool(ctx, config, calls.imageLimits(), { id: toolUseId ?? `wk_${crypto.randomUUID()}`, name, input }, tools);
         },
-        ...this.#transcripts("heartbeat", character),
+        ...this.#transcripts("wake", character),
         engine: async (name, thread) => this.#deps.registry.listThreads(name).some((record) => record.id === thread)
           ? await this.#deps.registry.getOrCreate(name, thread)
           : await this.#deps.registry.sealedEngine(name, thread),
@@ -205,7 +205,7 @@ export class InProcessAutonomyExecutor implements AutonomyExecutor {
     };
   }
 
-  #transcripts(source: "heartbeat" | "dreaming", character: string): { recordTranscript?: (round: TranscriptRound) => void } {
+  #transcripts(source: "wake" | "dreaming", character: string): { recordTranscript?: (round: TranscriptRound) => void } {
     const store = this.#deps.callStore;
     if (store === undefined) return {};
     return {
