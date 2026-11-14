@@ -13,6 +13,7 @@ import { Ledger } from "../src/ledger/store.ts";
 import type { Message } from "../src/engine/types.ts";
 import { appendSubagentTrace, readSubagentTraces } from "../src/tools/subagent_trace.ts";
 import { exportUnifiedDatabase, importUnifiedDatabase, removeStoredCharacter } from "../src/storage/archive.ts";
+import { handlesUnder } from "./support/handles.ts";
 
 function dirs() {
   const root = mkdtempSync(join(tmpdir(), "shore-storage-"));
@@ -54,9 +55,9 @@ test("unified exports include a character's diagnostics and state, never another
 
 describe("one character's slice of the database", () => {
   const NOW = "2026-09-01T00:00:00.000Z";
-  const openHandles = (): number => {
+  const openHandles = (...roots: string[]): number => {
     closeStorageConnections();
-    return readdirSync("/proc/self/fd").length;
+    return roots.reduce((count, root) => count + handlesUnder(root), 0);
   };
   const message = (character: string): Message => ({
     msg_id: `m_${character}`,
@@ -118,9 +119,9 @@ describe("one character's slice of the database", () => {
   test("an export carries only that character, keeps attempts in flight pending, and leaves nothing open or behind", () => {
     const source = seeded();
     const archive = join(source.root, "only-ada.db");
-    const before = openHandles();
+    const before = openHandles(source.root);
     exportUnifiedDatabase(databasePath(source.data), "ada", archive);
-    expect(openHandles()).toBe(before);
+    expect([before, openHandles(source.root)]).toEqual([0, 0]);
     expect(readdirSync(source.root).filter((name) => name.includes(".draft"))).toEqual([]);
     expect(rows(archive, "SELECT DISTINCT character FROM history_messages")).toEqual(["ada"]);
     expect(rows(archive, "SELECT count(*) FROM history_alternatives")).toEqual([1]);
@@ -206,9 +207,9 @@ describe("one character's slice of the database", () => {
     const target = dirs();
     initializeDatabase(target.data);
     seed(target.data, "bea");
-    const before = openHandles();
+    const before = openHandles(target.root, source.root);
     importUnifiedDatabase(databasePath(target.data), archive, "ada", source.data);
-    expect(openHandles()).toBe(before);
+    expect([before, openHandles(target.root, source.root)]).toEqual([0, 0]);
     expect(readDurable(join(target.data, "ada", "log.jsonl"))).toBe('{"line":"ada"}');
     expect(rows(databasePath(target.data), "SELECT character, status FROM call_attempts ORDER BY character")).toEqual([["ada", "pending"], ["bea", "pending"]]);
     const moved = dirs();
@@ -228,9 +229,9 @@ describe("one character's slice of the database", () => {
     seed(shared.data, "ada");
     seed(shared.data, "bea");
     const path = databasePath(shared.data);
-    const before = openHandles();
+    const before = openHandles(shared.root);
     removeStoredCharacter(path, "ada");
-    expect(openHandles()).toBe(before);
+    expect([before, openHandles(shared.root)]).toEqual([0, 0]);
     expect(rows(path, "SELECT DISTINCT character FROM history_messages")).toEqual(["bea"]);
     expect(rows(path, "SELECT count(*) FROM history_alternatives")).toEqual([1]);
     expect(rows(path, "SELECT count(*) FROM history_blobs")).toEqual([2]);
