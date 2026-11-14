@@ -242,7 +242,7 @@ async function runGenerationCore(
   }
   const scope = { data: deps.dataDir, character: charName, thread: engine.thread };
   const plan = await planAttempt(engine, scope, regen ? params.body.regen ?? { kind: "reroll" } : undefined, {
-    tags: config.app.behavior.marks.tags,
+    tags: config.app.marks.tags,
     user: resolveDisplayName(config.app.defaults),
     now: now(),
   });
@@ -715,7 +715,7 @@ function callContext(
   call: { options?: ProviderOptions },
 ): CallContext {
   const usage = usageConfigView(config.app.usage);
-  const forensics = config.app.cache.forensics ? config.dirs.cache : undefined;
+  const forensics = config.app.daemon.cache_forensics ? config.dirs.cache : undefined;
   const effort = resolvedReasoningEffort(call.options);
   return {
     ...(deps.ledgerPath === undefined ? {} : { ledger: deps.ledgerPath }),

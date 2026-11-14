@@ -3,6 +3,8 @@ import { mkdtemp, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 
 import { loadConfig } from "../src/config/loader.ts";
+import { restartRequiredChanges } from "../src/config/restart.ts";
+import { resolveListenAddr } from "../src/daemon/startup.ts";
 import { testTmp } from "./support/tmp.ts";
 
 async function reading(): Promise<{ write: (toml: string) => Promise<void>; read: () => unknown[] }> {
@@ -62,7 +64,7 @@ test("[presence], [marks], [matrix] and [image] are read from the file, and a se
     "[image]", 'model = "openai:gpt-image"', "",
   ].join("\n"));
   const { app } = loadConfig(join(root, "config.toml"), { env: { SHORE_CONFIG_DIR: root }, onWarn: () => {} });
-  expect([app.behavior.presence.statuses, app.behavior.marks.tags, app.connections.matrix, app.defaults.image_generation]).toEqual([
+  expect([app.presence.statuses, app.marks.tags, app.connections.matrix, app.defaults.image_generation]).toEqual([
     ["asleep", "at sea"],
     ["funny"],
     { enabled: true, homeserver: "https://matrix.example", user_id: "@ada:example", room_id: "!room:example", mirror_all: false },
@@ -71,7 +73,7 @@ test("[presence], [marks], [matrix] and [image] are read from the file, and a se
 
   await writeFile(join(root, "config.toml"), "[triggers]\n[compaction]\n[dreaming]\n[presence]\n[marks]\n[matrix]\n[image]\n");
   const bare = loadConfig(join(root, "config.toml"), { env: { SHORE_CONFIG_DIR: root }, onWarn: () => {} }).app;
-  expect([bare.triggers.enabled, bare.compaction.enabled, bare.dreaming.enabled, bare.behavior.presence.statuses, bare.behavior.marks.tags, bare.connections.matrix, bare.defaults.image_generation]).toEqual([
+  expect([bare.triggers.enabled, bare.compaction.enabled, bare.dreaming.enabled, bare.presence.statuses, bare.marks.tags, bare.connections.matrix, bare.defaults.image_generation]).toEqual([
     false, true, false, ["asleep", "busy", "away"], ["didn't look hard enough", "out of character", "too long", "repetitive"],
     { enabled: false, homeserver: "", user_id: "", room_id: "", mirror_all: true }, undefined,
   ]);
@@ -87,4 +89,27 @@ test("a model named in [triggers], [compaction] or [dreaming] that can't be foun
     [["field", "compaction.model"], ["name", "nope-b"]],
     [["field", "dreaming.model"], ["name", "ghost:nope-c"], ["provider", "ghost"]],
   ]);
+});
+
+test("[daemon] holds the address Shore listens on and the cache forensics switch, and a change to it, to [matrix] or to [notifications] needs a restart", async () => {
+  const root = await mkdtemp(testTmp("shore-config-sections-"));
+  const loaded = async (toml: string) => {
+    await writeFile(join(root, "config.toml"), toml);
+    return loadConfig(join(root, "config.toml"), { env: { SHORE_CONFIG_DIR: root }, onWarn: () => {} });
+  };
+  const plain = await loaded('[chat]\ndisplay_name = "eve"\n');
+  expect([plain.app.daemon.listen_addr, plain.app.daemon.cache_forensics]).toEqual(["127.0.0.1:7320", false]);
+  const set = await loaded('[daemon]\nlisten_addr = "0.0.0.0:7000"\ncache_forensics = true\n');
+  expect([set.app.daemon.listen_addr, set.app.daemon.cache_forensics]).toEqual(["0.0.0.0:7000", true]);
+
+  expect(resolveListenAddr(undefined, undefined, set)).toEqual(["0.0.0.0:7000", "config"]);
+  expect(resolveListenAddr(undefined, "  ", set)).toEqual(["0.0.0.0:7000", "config"]);
+  expect(resolveListenAddr(undefined, "10.0.0.1:1", set)).toEqual(["10.0.0.1:1", "env"]);
+  expect(resolveListenAddr("10.0.0.2:2", "10.0.0.1:1", set)).toEqual(["10.0.0.2:2", "cli"]);
+
+  expect(restartRequiredChanges(plain, plain)).toEqual([]);
+  expect(restartRequiredChanges(plain, set)).toEqual(["[daemon]"]);
+  expect(restartRequiredChanges(plain, await loaded('[matrix]\nenabled = true\nhomeserver_url = "https://matrix.example"\n'))).toEqual(["[matrix]"]);
+  expect(restartRequiredChanges(plain, await loaded('[notifications]\ntopic = "shore"\n'))).toEqual(["[notifications]"]);
+  expect(restartRequiredChanges(plain, await loaded('[presence]\nstatuses = ["at sea"]\n[marks]\ntags = ["funny"]\n'))).toEqual([]);
 });

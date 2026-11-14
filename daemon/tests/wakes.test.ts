@@ -1746,7 +1746,7 @@ test("the presence command sets one of the user's own statuses, shows and clears
     expect(presence(data)).toEqual({ status: "", set_at: new Date(T0 + 8 * MINUTE).toISOString() });
   }, (app) => {
     withTriggers(app);
-    app.behavior.presence.statuses = choices;
+    app.presence.statuses = choices;
   });
 
   await withCharacter(async ({ say, command }) => {
@@ -1755,7 +1755,7 @@ test("the presence command sets one of the user's own statuses, shows and clears
     expect(refused.type).toBe("error");
     expect(JSON.stringify(refused)).toContain("isn't one of your statuses: presence.statuses in your config is empty. Add it to presence.statuses to use it.");
     expect((await command("presence", { status: "" }) as { data?: unknown }).data).toEqual({ choices: [] });
-  }, (app) => { app.behavior.presence.statuses = []; });
+  }, (app) => { app.presence.statuses = []; });
 });
 
 test("the diary command lists the newest twenty notes oldest first, as many as asked for, or all of them for zero, with which ones the character still sees and which a dream has read", async () => {
@@ -3142,6 +3142,21 @@ test("with compaction.git_push on, a compaction pushes the character's workspace
   };
   expect(await reached(true)).toEqual([true, true]);
   expect(await reached(false)).toEqual([false, false]);
+});
+
+test("with daemon.cache_forensics on a reply's request says where to keep what was sent, and with it off it says nothing", async () => {
+  const asked = async (forensics: boolean): Promise<unknown[]> => {
+    const seen: unknown[] = [];
+    await withCharacter(async ({ runtime, script, say }) => {
+      await say("hello");
+      seen.push(script.replies[0]?.context?.forensics_dir, runtime.config.dirs.cache);
+    }, (app) => { app.daemon.cache_forensics = forensics; });
+    return seen;
+  };
+  const [on, cacheDir] = await asked(true);
+  expect(on).toBe(cacheDir);
+  expect(typeof cacheDir).toBe("string");
+  expect((await asked(false))[0]).toBeUndefined();
 });
 
 test("a wake for a character left with no chat model at all is skipped, and the log says so", async () => {
