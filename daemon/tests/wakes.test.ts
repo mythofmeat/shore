@@ -3033,11 +3033,11 @@ test("a wake whose request can't be built, or that a budget holds back, leaves i
       ["budget_paused", 'Wake paused before round 0 — budget "beats" is over its month limit ($0.00/$0.00); resets 2026-11-01 12:00 AM'],
     ]);
   }, (app) => {
-    app.usage.budgets = [{
-      name: "beats", period: "month", cost_usd: 0, warn_at: [], limit: "block", character: undefined, provider: undefined,
-      api_key: undefined, model: undefined, call_type: "heartbeat", usage_kind: [], allow_compaction_over_budget: undefined,
+    app.budgets = [{
+      name: "beats", period: "month", cost_usd: 0, warn_fractions: [], limit_action: "block", character: undefined, provider: undefined,
+      api_key: undefined, model: undefined, call_type: "heartbeat", usage_kinds: [], allow_compaction: false,
       reset_hour: undefined, reset_day_of_week: undefined, reset_day_of_month: undefined, pace_period: undefined,
-      pace_action: undefined, pace_warn_at: undefined, warn_action: undefined, pace_warn_action: undefined,
+      pace_action: undefined, pace_warn_fractions: undefined, warn_action: undefined, pace_warn_action: undefined,
     }];
   });
 });

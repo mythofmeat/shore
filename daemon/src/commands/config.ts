@@ -205,7 +205,7 @@ function catalogSections(ctx: ConfigContext): Record<string, unknown> {
 
 function reportedConfig(ctx: ConfigContext): Record<string, unknown> {
   const app = ctx.config.app;
-  const written = { ...app, usage: { ...app.usage, budgets: app.usage.budgets.filter((budget) => !isCredentialBudget(budget)) } };
+  const written = { ...app, budgets: app.budgets.filter((budget) => !isCredentialBudget(budget)) };
   const settings = serializeAppConfig(written);
   const catalog = catalogSections(ctx);
   return redactSecrets(publicConfig({

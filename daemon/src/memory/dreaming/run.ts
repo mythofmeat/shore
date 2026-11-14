@@ -291,7 +291,7 @@ export async function runDreamPass(
   request.context = {
     ...request.context,
     ledger: join(dataDir, "shore.db"),
-    usage: usageConfigView(config.app.usage),
+    usage: usageConfigView(config.app),
     character,
     call_type: DREAM_CALL_TYPE,
     thinking_enabled: request.context?.thinking_enabled ?? false,

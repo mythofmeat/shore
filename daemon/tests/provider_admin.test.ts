@@ -8,10 +8,13 @@ import {
   selectCredential, setCredentialLimit, testCredential, updateCredential, type ProviderAdminContext,
 } from "../src/commands/provider_admin.ts";
 import { loadConfig } from "../src/config/loader.ts";
+import { closeLedgers } from "../src/ledger/record.ts";
+import { Ledger } from "../src/ledger/store.ts";
 import { toCredentialsEntry } from "../src/config/providers.ts";
 import { readCandidateEnv, resolveKeyCandidates } from "../src/llm/credentials.ts";
 import { configureSecretStore } from "../src/llm/secret_store.ts";
 import { configureCredentialStanding } from "../src/llm/credential_standing.ts";
+import { openLedger } from "./support/ledger_fixture.ts";
 import { outcomeOf } from "./support/outcome.ts";
 import { restoreTestEnv, setTestEnv } from "./support/env.ts";
 import { testTmp } from "./support/tmp.ts";
@@ -177,12 +180,39 @@ describe("keys", () => {
     await addCredential(w.ctx, { provider: "openrouter", name: "work", secret: SECRET, no_check: true });
     const limited = setCredentialLimit(w.ctx, { provider: "openrouter", credential: "work", cost_usd: 20, period: "week" });
     expect(limited.provider.credentials[0]?.limit).toMatchObject({ cost_usd: 20, period: "week" });
-    expect(w.session.config.app.usage.budgets.map((b) => ({ provider: b.provider, api_key: b.api_key, cost_usd: b.cost_usd, period: b.period, limit: b.limit })))
-      .toEqual([{ provider: "openrouter", api_key: "work", cost_usd: 20, period: "week", limit: "block" }]);
+    expect(w.session.config.app.budgets.map((b) => ({ provider: b.provider, api_key: b.api_key, cost_usd: b.cost_usd, period: b.period, limit_action: b.limit_action })))
+      .toEqual([{ provider: "openrouter", api_key: "work", cost_usd: 20, period: "week", limit_action: "block" }]);
     expect((config(w.session, { key: "budgets" }) as { config: unknown }).config).toEqual([]);
     expect(await readFile(w.configPath, "utf8")).toContain("spend_limit_usd = 20.0\nspend_period = \"week\"");
     setCredentialLimit(w.ctx, { provider: "openrouter", credential: "work", cost_usd: null });
-    expect(w.session.config.app.usage.budgets).toEqual([]);
+    expect(w.session.config.app.budgets).toEqual([]);
+  });
+
+  test("each key's spending limit reports that key's own spend, whatever other budgets and other providers' keys there are", async () => {
+    const w = await world([
+      "[providers.openrouter]", "[[providers.openrouter.keys]]", 'name = "work"', 'api_key_env = "SHORE_TEST_OR_WORK"', "spend_limit_usd = 20",
+      "[[providers.openrouter.keys]]", 'name = "home"', 'api_key_env = "SHORE_TEST_OR_HOME"', "spend_limit_usd = 20",
+      "[providers.deepseek]", "[[providers.deepseek.keys]]", 'name = "work"', 'api_key_env = "SHORE_TEST_DS_WORK"', "spend_limit_usd = 5",
+      "[[budgets]]", 'name = "nobody"', "cost_usd = 1", 'period = "month"', 'provider = "openrouter"', 'api_key = "work"', 'character = "nobody"', "",
+    ].join("\n"));
+    const ledgerPath = join(w.session.config.dirs.data, "ledger.db");
+    Ledger.create(ledgerPath).close();
+    const db = openLedger(ledgerPath);
+    for (const [spender, key, cost] of [["openrouter", "work", 3], ["openrouter", "home", 1], ["deepseek", "work", 7]] as const) {
+      db.query(
+        `INSERT INTO calls (ts, character, provider, api_key_name, model, call_type, input_tokens, output_tokens, cache_read_tokens, cache_write_tokens,
+           total_ms, ttft_ms, finish_reason, thinking_enabled, cost_source, total_cost)
+         VALUES (?1, 'ada', ?2, ?3, 'm', 'message', 10, 5, 0, 0, 100, 10, 'end_turn', 0, 'pricing_catalog', ?4)`,
+      ).run(new Date().toISOString(), spender, key, cost);
+    }
+    db.close();
+    try {
+      const spent = listProviderStatuses({ ...w.ctx, ledgerPath }).providers.flatMap((status) =>
+        status.credentials.map((credential) => [status.name, credential.name, credential.limit?.spent_usd, credential.limit?.at_limit]));
+      expect(spent).toEqual([["deepseek", "work", 7, true], ["openrouter", "work", 3, false], ["openrouter", "home", 1, false]]);
+    } finally {
+      closeLedgers();
+    }
   });
 
   test("testing a key records what the provider said", async () => {

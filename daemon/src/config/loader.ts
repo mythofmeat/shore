@@ -21,7 +21,6 @@ import {
   validateAppConfigLayer,
   type AppConfig,
   type UsageBudgetConfig,
-  type UsageConfig,
   newUsageBudget,
 } from "./app.ts";
 import {
@@ -362,7 +361,7 @@ export function parseConfigTable(
     throw new ConfigError("provider_registry", e.message);
   }
   for (const limit of credentialBudgets(providers)) {
-    app.usage.budgets.push(markCredentialBudget({ ...newUsageBudget(), ...limit, limit: "block" }));
+    app.budgets.push(markCredentialBudget({ ...newUsageBudget(), ...limit, limit_action: "block" }));
   }
 
   let models: ModelCatalog;
@@ -412,22 +411,17 @@ export function loadCharacterConfig(
   const merged = structuredClone(global.rawTable ?? {});
   deepMerge(merged, overlay);
   const loaded = parseConfigTable(merged, global.dirs, onWarn, [...(global.files ?? []), path], true);
-  scopeOverlayBudgetsToCharacter(loaded.app.usage, overlay, characterName);
+  scopeOverlayBudgetsToCharacter(loaded.app.budgets, overlay, characterName);
   return loaded;
 }
 
-function overlayDeclaresBudgets(overlay: TomlTable): boolean {
-  const usage = overlay["usage"];
-  return isTable(usage) && Array.isArray(usage["budgets"]);
-}
-
 function scopeOverlayBudgetsToCharacter(
-  usage: UsageConfig,
+  budgets: UsageBudgetConfig[],
   overlay: TomlTable,
   characterName: string,
 ): void {
-  if (!overlayDeclaresBudgets(overlay)) return;
-  for (const budget of usage.budgets) {
+  if (overlay["budgets"] === undefined) return;
+  for (const budget of budgets) {
     if (isCredentialBudget(budget)) continue;
     budget.character ??= characterName;
   }
@@ -502,7 +496,7 @@ function validateConfig(
 
   validateMcpServers(app, onWarn);
   validateDefaultImageGeneration(providers, app.image.model, onWarn);
-  validateUsageConfig(app.usage);
+  validateUsageConfig(app);
   if (app.daemon.web.enabled) {
     try { webBinding(app.daemon.web); }
     catch (error) { throw validationError(error instanceof Error ? error.message : String(error)); }
@@ -581,22 +575,22 @@ function validateMcpServers(app: AppConfig, onWarn: ConfigWarn): void {
   }
 }
 
-function validateUsageConfig(config: UsageConfig): void {
-  if (config.timezone !== "local" && config.timezone !== "utc") {
+function validateUsageConfig(config: Pick<AppConfig, "usage" | "budgets" | "plan_limits">): void {
+  if (config.usage.timezone !== "local" && config.usage.timezone !== "utc") {
     throw validationError(
-      `usage.timezone must be "local" or "utc", got "${config.timezone}"`,
+      `usage.timezone must be "local" or "utc", got "${config.usage.timezone}"`,
     );
   }
 
   const names = new Set<string>();
   for (const [idx, budget] of config.budgets.entries()) {
     if (budget.cost_usd <= 0.0) {
-      throw validationError(`usage.budgets[${idx}].cost_usd must be greater than 0`);
+      throw validationError(`budgets.${idx}.cost_usd must be greater than 0`);
     }
-    for (const threshold of budget.warn_at) {
+    for (const threshold of budget.warn_fractions) {
       if (threshold <= 0.0) {
         throw validationError(
-          `usage.budgets[${idx}].warn_at values must be greater than 0`,
+          `budgets.${idx}.warn_fractions values must be greater than 0`,
         );
       }
     }
@@ -626,19 +620,19 @@ function validateBudgetAnchors(idx: number, budget: UsageBudgetConfig): void {
   if (budget.reset_hour !== undefined) {
     if (budget.reset_hour > 23) {
       throw validationError(
-        `usage.budgets[${idx}].reset_hour must be 0-23, got ${budget.reset_hour}`,
+        `budgets.${idx}.reset_hour must be 0-23, got ${budget.reset_hour}`,
       );
     }
     if (budget.period === "hour") {
       throw validationError(
-        `usage.budgets[${idx}].reset_hour is not valid for period = "hour"`,
+        `budgets.${idx}.reset_hour is not valid for period = "hour"`,
       );
     }
   }
 
   if (budget.reset_day_of_week !== undefined && budget.period !== "week") {
     throw validationError(
-      `usage.budgets[${idx}].reset_day_of_week is only valid for period = "week"`,
+      `budgets.${idx}.reset_day_of_week is only valid for period = "week"`,
     );
   }
 
@@ -646,12 +640,12 @@ function validateBudgetAnchors(idx: number, budget: UsageBudgetConfig): void {
     const day = budget.reset_day_of_month;
     if (day < 1 || day > 31) {
       throw validationError(
-        `usage.budgets[${idx}].reset_day_of_month must be 1-31, got ${day}`,
+        `budgets.${idx}.reset_day_of_month must be 1-31, got ${day}`,
       );
     }
     if (budget.period !== "month") {
       throw validationError(
-        `usage.budgets[${idx}].reset_day_of_month is only valid for period = "month"`,
+        `budgets.${idx}.reset_day_of_month is only valid for period = "month"`,
       );
     }
   }
@@ -661,28 +655,28 @@ function validateBudgetPace(idx: number, budget: UsageBudgetConfig): void {
   const pace = budget.pace_period;
   if (pace === undefined) {
     if (budget.pace_action !== undefined) {
-      throw validationError(`usage.budgets[${idx}].pace_action requires pace_period`);
+      throw validationError(`budgets.${idx}.pace_action requires pace_period`);
     }
-    if (budget.pace_warn_at !== undefined) {
-      throw validationError(`usage.budgets[${idx}].pace_warn_at requires pace_period`);
+    if (budget.pace_warn_fractions !== undefined) {
+      throw validationError(`budgets.${idx}.pace_warn_fractions requires pace_period`);
     }
     if (budget.pace_warn_action !== undefined) {
-      throw validationError(`usage.budgets[${idx}].pace_warn_action requires pace_period`);
+      throw validationError(`budgets.${idx}.pace_warn_action requires pace_period`);
     }
     return;
   }
 
   if (budgetPeriodRank(pace) >= budgetPeriodRank(budget.period)) {
     throw validationError(
-      `usage.budgets[${idx}].pace_period = "${pace}" must be shorter than ` +
+      `budgets.${idx}.pace_period = "${pace}" must be shorter than ` +
         `period = "${budget.period}"`,
     );
   }
 
-  for (const threshold of budget.pace_warn_at ?? []) {
+  for (const threshold of budget.pace_warn_fractions ?? []) {
     if (threshold <= 0.0) {
       throw validationError(
-        `usage.budgets[${idx}].pace_warn_at values must be greater than 0`,
+        `budgets.${idx}.pace_warn_fractions values must be greater than 0`,
       );
     }
   }

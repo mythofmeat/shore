@@ -14,17 +14,10 @@ const field = (internal: string, canonical: string): ConfigField => ({
 });
 
 const CONFIG_FIELDS: readonly ConfigField[] = [
-  field("usage.budgets", "budgets"),
-  field("usage.plan_limits", "plan_limits"),
   field("providers.*.discovery.enabled", "providers.*.discover"),
   field("providers.*.discovery.ignore", "providers.*.ignore_models"),
   field("providers.*.keys.*.env", "providers.*.keys.*.api_key_env"),
 ];
-
-export const BUDGET_FIELDS: readonly ConfigField[] = Object.entries({
-  warn_at: "warn_fractions", limit: "limit_action", pace_warn_at: "pace_warn_fractions",
-  usage_kind: "usage_kinds", allow_compaction_over_budget: "allow_compaction",
-}).map(([old, key]) => field(old, key));
 
 const SETTING_FIELDS: readonly ConfigField[] = Object.entries({
   budget_tokens: "reasoning_budget_tokens",
@@ -164,8 +157,6 @@ export function normalizeConfigSource(input: ConfigTable, source = "config"): Co
       if (isConfigTable(entry)) entries[name] = normalizeSettings(entry, source);
     }
   }
-  const budgets = valueAt(table, ["usage", "budgets"]);
-  if (Array.isArray(budgets)) for (const budget of budgets) if (isConfigTable(budget)) toInternal(budget, BUDGET_FIELDS);
   return table;
 }
 
@@ -178,7 +169,6 @@ export function canonicalConfigPath(path: ConfigPath): string[] {
   if (result[0] === "providers" && result[2] === "defaults") result.splice(2, 1);
   const settingIndex = result[0] === "providers" ? 2 : result[0] === "chat" && result[1]?.includes(":") ? 2 : undefined;
   if (settingIndex !== undefined && result[settingIndex] !== undefined) result[settingIndex] = canonicalSettingKey(result[settingIndex]);
-  if (result[0] === "budgets" && result[2] !== undefined) result[2] = BUDGET_FIELDS.find((rule) => rule.internal[0] === result[2])?.canonical[0] ?? result[2];
   return result;
 }
 
@@ -192,15 +182,6 @@ export function publicConfig(input: ConfigTable): ConfigTable {
     const value = structuredClone(original);
     const existing = valueAt(out, target);
     putAt(out, target, isConfigTable(value) && isConfigTable(existing) ? { ...value, ...existing } : value);
-  }
-  const budgets = out.budgets;
-  if (Array.isArray(budgets)) for (const budget of budgets) if (isConfigTable(budget)) {
-    for (const rule of BUDGET_FIELDS) {
-      const old = rule.internal[0] as string;
-      const key = rule.canonical[0] as string;
-      if (budget[old] !== undefined) { budget[key] = budget[old]; delete budget[old]; }
-    }
-    budget.allow_compaction ??= false;
   }
   const providers = isConfigTable(out.providers) ? out.providers : {};
   for (const [name, provider] of Object.entries(providers)) {

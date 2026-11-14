@@ -35,9 +35,9 @@ const budget = (
   name,
   period,
   cost_usd,
-  warn_at: [0.5, 0.805, 1.0],
-  limit: "warn",
-  usage_kind: [],
+  warn_fractions: [0.5, 0.805, 1.0],
+  limit_action: "warn",
+  usage_kinds: [],
 });
 
 const pacedWeekly: UsageBudgetConfig = {
@@ -49,7 +49,7 @@ const pacedWeekly: UsageBudgetConfig = {
 
 const blockingDay: UsageBudgetConfig = {
   ...budget("daily-block", "day", 2.0),
-  limit: "block",
+  limit_action: "block",
   reset_hour: 6,
   pace_period: "hour",
   pace_action: "pause_background",
@@ -58,26 +58,26 @@ const blockingDay: UsageBudgetConfig = {
 const filtered: UsageBudgetConfig = {
   ...budget("aria-tools", "month", 5.0),
   character: "aria",
-  usage_kind: ["message_with_tools"],
-  limit: "warn",
+  usage_kinds: ["message_with_tools"],
+  limit_action: "warn",
 };
 
 const backgroundPause: UsageBudgetConfig = {
   ...budget("aria-background", "month", 2.0),
   character: "aria",
-  limit: "pause_background",
+  limit_action: "pause_background",
 };
 
 const exactLimit: UsageBudgetConfig = {
   ...budget("kai-exact", "month", 0.4),
   character: "kai",
-  limit: "block",
+  limit_action: "block",
 };
 
 const unknownKey: UsageBudgetConfig = {
   ...budget("unknown-key", "month", 0.5),
   api_key: "unknown",
-  limit: "block",
+  limit_action: "block",
 };
 
 const clampedMonth: UsageBudgetConfig = {
@@ -91,22 +91,22 @@ const CONFIGS: Record<string, UsageConfig> = {
   local_paced_weekly: {
     timezone: "local",
 
-    budgets: [pacedWeekly].map(limit => ({ ...limit, allow_compaction_over_budget: true })),
+    budgets: [pacedWeekly].map(limit => ({ ...limit, allow_compaction: true })),
   },
   utc_paced_weekly: {
     timezone: "utc",
 
-    budgets: [pacedWeekly].map(limit => ({ ...limit, allow_compaction_over_budget: true })),
+    budgets: [pacedWeekly].map(limit => ({ ...limit, allow_compaction: true })),
   },
   local_mixed: {
     timezone: "local",
 
-    budgets: [blockingDay, filtered, clampedMonth].map(limit => ({ ...limit, allow_compaction_over_budget: true })),
+    budgets: [blockingDay, filtered, clampedMonth].map(limit => ({ ...limit, allow_compaction: true })),
   },
   local_edges: {
     timezone: "local",
 
-    budgets: [backgroundPause, exactLimit, unknownKey].map(limit => ({ ...limit, allow_compaction_over_budget: true })),
+    budgets: [backgroundPause, exactLimit, unknownKey].map(limit => ({ ...limit, allow_compaction: true })),
   },
 };
 
@@ -326,7 +326,7 @@ describe("enforcing a budget on a call", () => {
     const config: UsageConfig = {
       timezone: "local",
 
-      budgets: [filtered].map(limit => ({ ...limit, allow_compaction_over_budget: true })),
+      budgets: [filtered].map(limit => ({ ...limit, allow_compaction: true })),
     };
     const now = Date.parse(required(NOW_MOMENTS["ordinary_midweek"]));
     const db = caseLedger(index++);
@@ -349,7 +349,7 @@ describe("which calls a budget covers and stops", () => {
   let index = 6000;
   const blocking = (filter: Partial<UsageBudgetConfig>, allowCompaction = false): UsageConfig => ({
     timezone: "utc",
-    budgets: [{ ...budget("filtered", "month", 0.1), limit: "block", allow_compaction_over_budget: allowCompaction, ...filter }],
+    budgets: [{ ...budget("filtered", "month", 0.1), limit_action: "block", allow_compaction: allowCompaction, ...filter }],
   });
   const call = (over: Partial<BudgetCallContext>): BudgetCallContext => ({
     provider: "anthropic", api_key_name: "default", model: "claude-opus-4-6", call_type: "message", character: "aria", ...over,
@@ -369,7 +369,7 @@ describe("which calls a budget covers and stops", () => {
     ["model", { model: "claude-opus-4-6" }, {}, { model: "claude-haiku-4-5" }],
     ["call type", { call_type: "message" }, {}, { call_type: "heartbeat" }],
     ["api key", { api_key: "default" }, {}, { api_key_name: "spare" }],
-    ["usage kind", { usage_kind: ["heartbeat"] }, { call_type: "heartbeat", character: "kai" }, { call_type: "message" }],
+    ["usage kind", { usage_kinds: ["heartbeat"] }, { call_type: "heartbeat", character: "kai" }, { call_type: "message" }],
   ])("a budget filtered by %s stops only the calls it names", (_name, filter, matching, other) => {
     expect(blocks(blocking(filter), call(matching))).toBe(true);
     expect(blocks(blocking(filter), call(other))).toBe(false);
@@ -383,6 +383,8 @@ describe("which calls a budget covers and stops", () => {
   test("compaction is let through only when the budget allows it", () => {
     expect(blocks(blocking({}), call({ call_type: "compaction" }))).toBe(true);
     expect(blocks(blocking({}, true), call({ call_type: "compaction" }))).toBe(false);
+    const silent: UsageConfig = { timezone: "utc", budgets: [{ ...budget("filtered", "month", 0.1), limit_action: "block" }] };
+    expect(blocks(silent, call({ call_type: "compaction" }))).toBe(true);
   });
 
   test("each action stops the calls it names and nothing else", () => {

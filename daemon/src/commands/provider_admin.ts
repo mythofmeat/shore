@@ -163,13 +163,12 @@ function usageByKey(ctx: ProviderAdminContext, provider: string): Map<string, { 
 
 function limitOf(ctx: ProviderAdminContext, provider: string, key: ProviderKeyEntry): CredentialStatus["limit"] {
   if (key.spendLimit === undefined) return null;
-  const budget = ctx.config.config.app.usage.budgets.find((b) => isCredentialBudget(b) && b.provider === provider && b.api_key === key.name);
+  const budget = ctx.config.config.app.budgets.find((b) => isCredentialBudget(b) && b.provider === provider && b.api_key === key.name);
   const ledger = ctx.ledgerPath === undefined ? null : ledgerFor(ctx.ledgerPath);
   if (budget === undefined || ledger === null) {
     return { cost_usd: key.spendLimit.costUsd, period: key.spendLimit.period, spent_usd: 0, at_limit: false, resets_at: toRfc3339(now(ctx)) };
   }
-  const usage = ctx.config.config.app.usage;
-  const [status] = budgetStatuses(ledger.database, usageConfigView({ ...usage, budgets: [budget] }), now(ctx));
+  const [status] = budgetStatuses(ledger.database, usageConfigView({ ...ctx.config.config.app, budgets: [budget] }), now(ctx));
   return {
     cost_usd: key.spendLimit.costUsd,
     period: key.spendLimit.period,

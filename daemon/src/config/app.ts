@@ -984,21 +984,21 @@ export interface UsageBudgetConfig {
   name: string;
   period: UsageBudgetPeriod;
   cost_usd: number;
-  warn_at: number[];
-  limit: UsageBudgetAction;
+  warn_fractions: number[];
+  limit_action: UsageBudgetAction;
   character: string | undefined;
   provider: string | undefined;
   api_key: string | undefined;
   model: string | undefined;
   call_type: string | undefined;
-  usage_kind: string[];
-  allow_compaction_over_budget: boolean | undefined;
+  usage_kinds: string[];
+  allow_compaction: boolean;
   reset_hour: number | undefined;
   reset_day_of_week: BudgetWeekday | undefined;
   reset_day_of_month: number | undefined;
   pace_period: UsageBudgetPeriod | undefined;
   pace_action: UsageBudgetAction | undefined;
-  pace_warn_at: number[] | undefined;
+  pace_warn_fractions: number[] | undefined;
   warn_action: UsageBudgetAction | undefined;
   pace_warn_action: UsageBudgetAction | undefined;
 }
@@ -1010,21 +1010,21 @@ const BUDGET: StructSpec<UsageBudgetConfig> = {
     name: "",
     period: "day",
     cost_usd: 0,
-    warn_at: [0.8, 1.0],
-    limit: "warn",
+    warn_fractions: [0.8, 1.0],
+    limit_action: "warn",
     character: undefined,
     provider: undefined,
     api_key: undefined,
     model: undefined,
     call_type: undefined,
-    usage_kind: [],
-    allow_compaction_over_budget: undefined,
+    usage_kinds: [],
+    allow_compaction: false,
     reset_hour: undefined,
     reset_day_of_week: undefined,
     reset_day_of_month: undefined,
     pace_period: undefined,
     pace_action: undefined,
-    pace_warn_at: undefined,
+    pace_warn_fractions: undefined,
     warn_action: undefined,
     pace_warn_action: undefined,
   }),
@@ -1032,35 +1032,27 @@ const BUDGET: StructSpec<UsageBudgetConfig> = {
     name: readString,
     period: readEnum(BUDGET_PERIODS),
     cost_usd: readF64,
-    warn_at: readF64Seq,
-    limit: readEnum(BUDGET_ACTIONS),
+    warn_fractions: readF64Seq,
+    limit_action: readEnum(BUDGET_ACTIONS),
     character: optional(suggests(readString, "characters")),
     provider: optional(suggests(readString, "providers")),
     api_key: optional(readString),
     model: optional(readChatModelName),
     call_type: optional(readString),
-    usage_kind: readStringSeq,
-    allow_compaction_over_budget: optional(readBool),
+    usage_kinds: readStringSeq,
+    allow_compaction: readBool,
     reset_hour: optional(readU32),
     reset_day_of_week: optional(readEnum(BUDGET_WEEKDAYS)),
     reset_day_of_month: optional(readU32),
     pace_period: optional(readEnum(BUDGET_PERIODS)),
     pace_action: optional(readEnum(BUDGET_ACTIONS)),
-    pace_warn_at: optional(readF64Seq),
+    pace_warn_fractions: optional(readF64Seq),
     warn_action: optional(readEnum(BUDGET_ACTIONS)),
     pace_warn_action: optional(readEnum(BUDGET_ACTIONS)),
   },
 };
 
 export const newUsageBudget = (): UsageBudgetConfig => BUDGET.make();
-
-export function budgetPaceAction(budget: UsageBudgetConfig): UsageBudgetAction {
-  return budget.pace_action ?? "warn";
-}
-
-export function budgetPaceWarnAt(budget: UsageBudgetConfig): readonly number[] {
-  return budget.pace_warn_at ?? budget.warn_at;
-}
 
 export interface PlanLimitPolicyConfig {
   warn_fractions: number[];
@@ -1105,24 +1097,14 @@ const PLAN_LIMITS: StructSpec<PlanLimitsConfig> = {
 
 export interface UsageConfig {
   timezone: string;
-  budgets: UsageBudgetConfig[];
-  plan_limits: PlanLimitsConfig;
 }
 
-const defaultUsageConfig = (): UsageConfig => ({
-  timezone: "local",
-  budgets: [],
-  plan_limits: defaultPlanLimitsConfig(),
-});
+const defaultUsageConfig = (): UsageConfig => ({ timezone: "local" });
 
 const USAGE: StructSpec<UsageConfig> = {
   name: "UsageConfig",
   make: defaultUsageConfig,
-  fields: {
-    timezone: readString,
-    budgets: readSeq(struct(BUDGET)),
-    plan_limits: struct(PLAN_LIMITS),
-  },
+  fields: { timezone: readString },
 };
 
 export interface SubagentConfig {
@@ -1232,6 +1214,8 @@ export interface AppConfig {
   dreaming: DreamingConfig;
   tools: ToolsConfig;
   subagents: SubagentsConfig;
+  budgets: UsageBudgetConfig[];
+  plan_limits: PlanLimitsConfig;
   notifications: NotificationsConfig;
   mcp: Map<string, McpServerConfig>;
   matrix: MatrixConfig | undefined;
@@ -1250,6 +1234,8 @@ export const defaultAppConfig = (): AppConfig => ({
   dreaming: defaultDreamingConfig(),
   tools: defaultToolsConfig(),
   subagents: defaultSubagentsConfig(),
+  budgets: [],
+  plan_limits: defaultPlanLimitsConfig(),
   notifications: defaultNotificationsConfig(),
   mcp: new Map(),
   matrix: undefined,
@@ -1272,6 +1258,8 @@ const APP: StructSpec<AppConfig> = {
     dreaming: struct(DREAMING),
     tools: struct(TOOLS),
     subagents: struct(SUBAGENTS),
+    budgets: readSeq(struct(BUDGET)),
+    plan_limits: struct(PLAN_LIMITS),
     notifications: struct(NOTIFICATIONS),
     mcp: readMap(struct(MCP_SERVER)),
     matrix: struct(MATRIX),

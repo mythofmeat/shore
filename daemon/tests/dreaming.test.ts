@@ -507,11 +507,11 @@ test("a dream a budget pauses before it starts is no failure, makes no call and 
   const seen: SidecarRequest[] = [];
   await afterOneChat(seen, () => [{ type: "text", text: "never" }], (app) => {
     app.dreaming.enabled = true;
-    app.usage.budgets = [{
-      name: "dreams", period: "month", cost_usd: 0, warn_at: [], limit: "block", character: undefined, provider: undefined,
-      api_key: undefined, model: undefined, call_type: "dreaming", usage_kind: [], allow_compaction_over_budget: undefined,
+    app.budgets = [{
+      name: "dreams", period: "month", cost_usd: 0, warn_fractions: [], limit_action: "block", character: undefined, provider: undefined,
+      api_key: undefined, model: undefined, call_type: "dreaming", usage_kinds: [], allow_compaction: false,
       reset_hour: undefined, reset_day_of_week: undefined, reset_day_of_month: undefined, pace_period: undefined,
-      pace_action: undefined, pace_warn_at: undefined, warn_action: undefined, pace_warn_action: undefined,
+      pace_action: undefined, pace_warn_fractions: undefined, warn_action: undefined, pace_warn_action: undefined,
     }];
   }, async ({ config, characterDir, runtime }) => {
     putSegment(config.dirs.data, "ada", 0, Date.now() - HOUR);

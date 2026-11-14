@@ -366,6 +366,6 @@ function labelAccountedCall(
     ...(options?.reasoning_effort === undefined
       ? {}
       : { reasoning_effort: options.reasoning_effort }),
-    usage: usageConfigView(config.app.usage),
+    usage: usageConfigView(config.app),
   };
 }

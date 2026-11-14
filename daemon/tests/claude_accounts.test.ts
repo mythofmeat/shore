@@ -4,10 +4,15 @@ import { mkdir, mkdtemp, readFile, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
+import { TurnAutonomyBridge } from "../src/autonomy/registration.ts";
 import { KeepaliveService, type KeepaliveEvent } from "../src/cache/keepalive.ts";
 import { defaultAppConfig } from "../src/config/app.ts";
 import { emptyCatalog } from "../src/config/models.ts";
+import { loadConfig } from "../src/config/loader.ts";
 import { ProviderRegistry } from "../src/config/providers.ts";
+import { Diagnostics } from "../src/diagnostics.ts";
+import { dispatchCommand } from "../src/handler/commands.ts";
+import { buildCommandPathDeps } from "../src/handler/deps.ts";
 import {
   claudeAccountInUsePath,
   claudeAccountOrder,
@@ -21,6 +26,9 @@ import { claudeAccountsRoot } from "../src/llm/claude_accounts.ts";
 import { resetAtIn } from "../src/llm/errors.ts";
 import { runGeneration } from "../src/llm/generate.ts";
 import { ClaudeAgentProvider } from "../src/llm/providers/claude_agent.ts";
+import { createRuntime } from "../src/runtime.ts";
+import { DEFAULT_HANDSHAKE } from "../src/swp/connection.ts";
+import { SessionRouter } from "../src/swp/session.ts";
 import type { SidecarRequest, WireMessage } from "../src/llm/types.ts";
 import { startMockAnthropic, type AnthropicRequestRecord, type MockAnthropic } from "../src/testing/mock_anthropic.ts";
 import { required } from "../src/util/required.ts";
@@ -399,3 +407,48 @@ test("a reply that crosses its login's own limit partway finishes on that login,
     await mock.stop();
   }
 }, 60_000);
+
+test("the budget report carries the Claude plan's limits when the conversation's model runs on the Claude subscription, and leaves them out for any other model", async () => {
+  const root = await mkdtemp(join(tmpdir(), "shore-plan-report-"));
+  const now = Date.now();
+  const reading = (used: number, resetsIn: number) => ({ percent_used: used, resets_at: new Date(now + resetsIn).toISOString() });
+  await signIn(root, "main", "ada");
+  const reported: unknown[] = [];
+  for (const model of ["claude_agent:claude-x", "openai:gpt-x"]) {
+    const home = join(root, model.replace(":", "-"));
+    await mkdir(join(home, "config", "characters", "ada", "workspace"), { recursive: true });
+    await writeFile(join(home, "config", "characters", "ada", "workspace", "SOUL.md"), "Ada");
+    await writeFile(join(home, "config", "config.toml"), [
+      "[providers.claude_agent]", "[providers.openai]", 'api_key_env = "SHORE_TEST_PLAN_REPORT_KEY"',
+      "[chat]", `model = "${model}"`, '[chat."claude_agent:claude-x"]', "max_output_tokens = 100", '[chat."openai:gpt-x"]', "max_output_tokens = 100", "",
+    ].join("\n"));
+    const config = loadConfig(join(home, "config", "config.toml"), {
+      env: { SHORE_CONFIG_DIR: join(home, "config"), XDG_DATA_HOME: join(home, "data"), XDG_CACHE_HOME: join(home, "cache"), XDG_RUNTIME_DIR: join(home, "run") },
+      onWarn: () => {},
+    });
+    const runtime = await createRuntime({ config, providers: {}, env: {} });
+    const commands = buildCommandPathDeps({
+      runtime, autonomy: new TurnAutonomyBridge(runtime.autonomy), diagnostics: new Diagnostics(),
+      router: new SessionRouter(), handshake: DEFAULT_HANDSHAKE, providers: runtime.providers, env: {},
+    });
+    try {
+      configureClaudePlanLimits({
+        home: root, cacheDir: root,
+        fetch: () => Promise.resolve({ status: "ok", poll: { subscription_type: "pro", five_hour: reading(0.5, HOUR), seven_day: reading(0.6, 5 * DAY) } }),
+      });
+      await refreshClaudePlanLimits(0, now);
+      const reply = await dispatchCommand(commands, { name: "usage", args: { budget: true } }, {
+        session: { sessionId: 1, clientId: 1, clientType: "test", clientName: "test", capabilities: [], selectedCharacter: "ada", selectedThread: null },
+        rid: "usage",
+        kind: "command",
+      });
+      if (reply.type !== "command_output") throw new Error(`usage answered ${reply.type}`);
+      const report = reply.data as { mode: string; claude_plan_limits?: { windows: { window: string; percent_used: number }[] } };
+      reported.push([report.mode, report.claude_plan_limits?.windows.map((limit) => [limit.window, limit.percent_used])]);
+    } finally {
+      await runtime.autonomy.shutdown();
+      await runtime.shutdown();
+    }
+  }
+  expect(reported).toEqual([["budget", [["five_hour", 0.5], ["seven_day", 0.6]]], ["budget", undefined]]);
+});

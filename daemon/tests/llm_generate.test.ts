@@ -4,7 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 
 import { BudgetBlocked, generate, runGeneration, type GenerateDeps } from "../src/llm/generate.ts";
-import { defaultAppConfig } from "../src/config/app.ts";
+import { defaultAppConfig, newUsageBudget } from "../src/config/app.ts";
 import { emptyCatalog } from "../src/config/models.ts";
 import { ProviderRegistry } from "../src/config/providers.ts";
 import type { LoadedConfig } from "../src/config/loader.ts";
@@ -164,9 +164,8 @@ function freshLedger(): string {
 
 describe("the budget gate", () => {
 
-  test("a budget that is already blown refuses the call before the provider", async () => {
+  function overspentLedger(): string {
     const path = freshLedger();
-    const keys: string[] = [];
     const db = openLedger(path);
     db.query(
       `INSERT INTO calls (ts, character, provider, api_key_name, model, call_type,
@@ -176,6 +175,23 @@ describe("the budget gate", () => {
          10, 5, 0, 0, 100, 10, 'end_turn', 0, 'pricing_catalog', 5.0)`,
     ).run(new Date().toISOString());
     db.close();
+    return path;
+  }
+
+  test("a call that carries no budgets of its own is held to the config's, and one that is already blown is refused before the provider", async () => {
+    const path = overspentLedger();
+    const keys: string[] = [];
+    const req = request({ context: { ledger: path, character: "ada", call_type: "message", thinking_enabled: false } });
+    const budgeted = { ...config(), app: { ...defaultAppConfig(), budgets: [{ ...newUsageBudget(), name: "tiny", period: "month" as const, cost_usd: 1, limit_action: "block" as const }] } };
+
+    expect(await rejectionOf(generate(req, deps(recordingProvider(keys), { config: budgeted })))).toBeInstanceOf(BudgetBlocked);
+    expect(keys).toEqual([]);
+    expect(rowsIn(path).length).toBe(1);
+  });
+
+  test("a budget that is already blown refuses the call before the provider", async () => {
+    const path = overspentLedger();
+    const keys: string[] = [];
 
     const req = request({
       context: {
@@ -184,7 +200,7 @@ describe("the budget gate", () => {
         call_type: "message",
         thinking_enabled: false,
         usage: {
-          budgets: [{ name: "tiny", period: "month", cost_usd: 1.0, limit: "block" }],
+          budgets: [{ name: "tiny", period: "month", cost_usd: 1.0, limit_action: "block" }],
         },
       },
     } as never);

@@ -350,7 +350,7 @@ export async function runWake(character: string, config: LoadedConfig, wake: Wak
     request.context = {
       ...request.context,
       ledger: `${config.dirs.data}/shore.db`,
-      usage: usageConfigView(config.app.usage),
+      usage: usageConfigView(config.app),
       character,
       thread,
       call_type: "heartbeat",
