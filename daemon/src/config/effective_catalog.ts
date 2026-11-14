@@ -44,7 +44,7 @@ export class EffectiveCatalogError extends Error {
   static hidden(name: string, provider: string): EffectiveCatalogError {
     return new EffectiveCatalogError(
       "hidden",
-      `model ${JSON.stringify(name)} is hidden by [providers.${provider}.discovery.ignore]; ` +
+      `model ${JSON.stringify(name)} is hidden by providers.${provider}.ignore_models; ` +
         `pass include_hidden=true or update the ignore rules to allow it`,
     );
   }
@@ -98,14 +98,14 @@ export function findEffectiveModel(
       hits.push({ provider: providerKey, resolved: staticMatch, hidden: false });
       continue;
     }
-    if (!entry.discovery.enabled) continue;
+    if (!entry.discover) continue;
 
     const disc = readProviderDiscovery(cacheDir, providerKey, name);
     if (disc === undefined) continue;
     hits.push({
       provider: providerKey,
       resolved: buildResolvedFromProvider(providerKey, entry, disc.model_id, disc),
-      hidden: !isVisible(entry.discovery, disc.model_id),
+      hidden: !isVisible(entry.ignoreModels, disc.model_id),
     });
   }
 
@@ -136,14 +136,14 @@ export function listEffectiveModels(
   }));
 
   for (const [providerKey, entry] of config.providers.entries()) {
-    if (!entry.enabled || !entry.discovery.enabled) continue;
+    if (!entry.enabled || !entry.discover) continue;
     const cache = readCacheSync(cachePath(cacheDir, providerKey));
     if (cache === undefined) continue;
 
     const discovered = [...cache.models].sort((a, b) => compareBytes(a.model_id, b.model_id));
     for (const disc of discovered) {
       if (findStaticByUpstream(config.models, providerKey, disc.model_id) !== undefined) continue;
-      const hidden = !isVisible(entry.discovery, disc.model_id);
+      const hidden = !isVisible(entry.ignoreModels, disc.model_id);
       if (hidden && !includeHidden) continue;
       out.push({
         source: "discovered",
@@ -196,15 +196,15 @@ function resolveProviderPrefixed(
   const staticMatch = findStaticByUpstream(config.models, provider, modelId);
   if (staticMatch !== undefined) return staticMatch;
 
-  if (entry.discovery.enabled) {
+  if (entry.discover) {
     const disc = readProviderDiscovery(cacheDir, provider, modelId);
     if (disc !== undefined) {
-      if (!isVisible(entry.discovery, disc.model_id) && !includeHidden) {
+      if (!isVisible(entry.ignoreModels, disc.model_id) && !includeHidden) {
         return EffectiveCatalogError.hidden(name, provider);
       }
       return buildResolvedFromProvider(provider, entry, disc.model_id, disc);
     }
-    if (!isVisible(entry.discovery, modelId) && !includeHidden) {
+    if (!isVisible(entry.ignoreModels, modelId) && !includeHidden) {
       return EffectiveCatalogError.hidden(name, provider);
     }
   }
@@ -250,8 +250,8 @@ function buildResolvedFromProvider(
   if (maxContextTokens !== undefined) fields.maxContextTokens = maxContextTokens;
   if (maxOutputTokens !== undefined) fields.maxOutputTokens = maxOutputTokens;
   if (providerDefaults.temperature !== undefined) fields.temperature = providerDefaults.temperature;
-  if (providerDefaults.zaiClearThinking !== undefined) {
-    fields.zaiClearThinking = providerDefaults.zaiClearThinking;
+  if (providerDefaults.zaiClearReasoning !== undefined) {
+    fields.zaiClearReasoning = providerDefaults.zaiClearReasoning;
   }
 
   mergeFrom(fields, entry.defaults);

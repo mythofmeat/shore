@@ -27,7 +27,7 @@ function req(over: Partial<SidecarRequest>): SidecarRequest {
     api_key: "k",
     messages: [],
     max_tokens: 8192,
-    replay_prior_thinking: "all",
+    reasoning_replay: "all",
     ...over,
   };
 }
@@ -205,13 +205,13 @@ describe("thinking params per model", () => {
     }
   });
   test("an explicit budget is the only way to get enabled thinking", () => {
-    const r = buildThinkingParams({ budget_tokens: 8192 }, "anthropic/claude-haiku-4.5", 32000);
+    const r = buildThinkingParams({ reasoning_budget_tokens: 8192 }, "anthropic/claude-haiku-4.5", 32000);
     expect(r.thinking).toEqual({ type: "enabled", budget_tokens: 8192 });
     expect(r.outputConfig).toBeUndefined();
   });
   test("an explicit budget wins over an effort", () => {
     const r = buildThinkingParams(
-      { reasoning_effort: "high", budget_tokens: 4096 },
+      { reasoning_effort: "high", reasoning_budget_tokens: 4096 },
       "anthropic/claude-opus-4.8",
       32000,
     );
@@ -222,7 +222,7 @@ describe("thinking params per model", () => {
   });
 
   test("a budget with max_tokens too small drops thinking rather than sending a 400", () => {
-    const r = buildThinkingParams({ budget_tokens: 8192 }, "anthropic/claude-sonnet-4.5", 512);
+    const r = buildThinkingParams({ reasoning_budget_tokens: 8192 }, "anthropic/claude-sonnet-4.5", 512);
     expect(r.thinking).toBeUndefined();
   });
 });
@@ -417,7 +417,7 @@ describe("thinking replayed to Anthropic", () => {
 
 describe("a thinking budget", () => {
   test("is raised to the 1,024-token minimum, kept under max_tokens, and dropped when it can't fit", () => {
-    const budget = (budget_tokens: number, maxTokens: number): unknown => buildThinkingParams({ budget_tokens, reasoning_effort: "high" }, "anthropic/claude-opus-4.8", maxTokens);
+    const budget = (reasoning_budget_tokens: number, maxTokens: number): unknown => buildThinkingParams({ reasoning_budget_tokens, reasoning_effort: "high" }, "anthropic/claude-opus-4.8", maxTokens);
     expect(budget(500, 4096)).toEqual({ thinking: { type: "enabled", budget_tokens: 1024 } });
     expect(budget(1024, 1100)).toEqual({ thinking: { type: "enabled", budget_tokens: 1024 } });
     expect(budget(5000, 3000)).toEqual({ thinking: { type: "enabled", budget_tokens: 2999 } });

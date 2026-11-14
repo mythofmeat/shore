@@ -146,20 +146,20 @@ test("a wake in home stopped at its 30-minute limit says so in that thread, the 
 });
 
 interface RingOptions {
-  maxToolIterations?: number;
+  maxToolRounds?: number;
   wrapUpRounds?: number;
   started?: (world: ChatWorld) => void;
 }
 
 async function wokenInRing(script: Script, seen: SidecarRequest[], limitMs: number | undefined, after: (world: ChatWorld) => Promise<void>, options: RingOptions = {}): Promise<void> {
-  const { maxToolIterations, wrapUpRounds } = options;
+  const { maxToolRounds, wrapUpRounds } = options;
   await afterFirstChat({
     name: "wake-time-limit",
     keyEnv: KEY_ENV,
     provider: slowProvider(script, seen),
     tools: ["read"],
     autonomy: true,
-    ...(maxToolIterations === undefined ? {} : { model: { maxToolIterations } }),
+    ...(maxToolRounds === undefined ? {} : { model: { maxToolRounds } }),
     ...(wrapUpRounds === undefined ? {} : { tune: (app) => { app.triggers.max_wrap_up_rounds = wrapUpRounds; } }),
   }, async (world) => {
     await world.runtime.registry.createThread("ada", "ring");
@@ -194,6 +194,7 @@ test("a wake in a thread runs to the limit its trigger set, is warned a quarter 
     120 * MINUTE,
     async (world) => {
       expect(seen).toHaveLength(6);
+      expect(seen.map((request) => request.max_tool_rounds)).toEqual([undefined, undefined, undefined, undefined, undefined, undefined]);
       expect(textOf(required(seen[0]))).toContain("A wake here can run for up to 2 hours. After 105 minutes, you will get a nudge to wrap up");
       expect(seen.map(nudged)).toEqual([false, false, false, false, false, true]);
       expect(textOf(required(seen[5]))).toEndWith(
@@ -248,7 +249,7 @@ test("a wake in a thread that keeps using tools past its rounds is stopped, and 
         'Wake in "ring" used up its rounds and was stopped',
       ]);
     },
-    { maxToolIterations: 2 },
+    { maxToolRounds: 2 },
   );
 });
 
@@ -267,6 +268,7 @@ test("a trigger handed to a wake as it runs out of rounds isn't lost with the wa
       undefined,
       async (world) => {
         expect(seen).toHaveLength(lastCall);
+        expect(seen.map((request) => request.max_tool_rounds)).toEqual(seen.map(() => lastCall));
         expect(seen.map(textOf).join("\n")).not.toContain("encore");
         const kept = (await world.runtime.registry.getOrCreate("ada", "ring")).messages();
         expect(kept.filter((message) => message.content.includes("encore"))).toEqual([]);
@@ -280,7 +282,7 @@ test("a trigger handed to a wake as it runs out of rounds isn't lost with the wa
           'Woken in "ring" by trigger "encore"',
         ]);
       },
-      { maxToolIterations: 2, wrapUpRounds, started: (world) => { ring = world; } },
+      { maxToolRounds: 2, wrapUpRounds, started: (world) => { ring = world; } },
     );
   }
 });
@@ -382,6 +384,6 @@ test("a trigger that fires once a wake has been told to wrap up isn't handed to 
         'Woken in "ring" by trigger "encore", "curtain"',
       ]);
     },
-    { maxToolIterations: 2, started: (world) => { ring = world; } },
+    { maxToolRounds: 2, started: (world) => { ring = world; } },
   );
 });

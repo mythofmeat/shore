@@ -315,7 +315,7 @@ const paidRequest = (
   api_key: "sk-test",
   messages: [],
   max_tokens: 128,
-  replay_prior_thinking: "all",
+  reasoning_replay: "all",
   context: {
     ledger,
     character: "ada",

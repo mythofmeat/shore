@@ -181,6 +181,20 @@ describe("the recursion cap", () => {
   });
 });
 
+describe("a sub-agent's rounds of tool use", () => {
+  test("are held to its own max_tool_rounds, else to its model's, and to nothing when neither is set", async () => {
+    const asked = async (own: number | undefined, models: number | undefined): Promise<number | undefined> => {
+      const { config, root } = await configWith({ researcher: spec({ max_tool_rounds: own }) });
+      const cheap = config.models.chat.get("cheap");
+      if (cheap !== undefined && models !== undefined) cheap.maxToolRounds = models;
+      const seen: SidecarRequest[] = [];
+      await run(config, root, "researcher", scriptedProvider("done", seen));
+      return seen[0]?.max_tool_rounds;
+    };
+    expect([await asked(3, 7), await asked(undefined, 7), await asked(3, undefined), await asked(undefined, undefined)]).toEqual([3, 7, 3, undefined]);
+  });
+});
+
 describe("a sub-agent's tool calls", () => {
   test("are held to the limits in [tools], and to a tool's own where it has them", async () => {
     const { config, root } = await configWith({ researcher: spec({ tools: ["read", "bash"] }) }, (app) => {

@@ -402,7 +402,7 @@ async function runCompactionToolLoop(
   request: SidecarRequest,
   tools: CompactionTools,
   workspaceDir: string,
-  maxToolIterations: number | undefined,
+  maxToolRounds: number | undefined,
   dryRun: boolean,
   restored: ToolLoopState | undefined,
   persist: (state: ToolLoopState, request: SidecarRequest) => Promise<void>,
@@ -415,15 +415,11 @@ async function runCompactionToolLoop(
   if (pending !== undefined) {
     const uses = driver.toolUses(pending);
     if (uses.length === 0 || pending.finish_reason !== "tool_use") return driver.state;
-    if (maxToolIterations === 0) {
-      driver.state.maxRoundsHit = true;
-      return driver.state;
-    }
     for (const use of uses) await driver.runTool(use);
     await driver.finishTools();
   }
   const spent = driver.state.toolRounds - startedRounds;
-  if (maxToolIterations !== undefined && spent > 0 && spent >= maxToolIterations) {
+  if (maxToolRounds !== undefined && spent >= maxToolRounds) {
     driver.state.maxRoundsHit = true;
     return driver.state;
   }
@@ -443,7 +439,7 @@ async function runCompactionToolLoop(
     response = await llm.run({
       ...request,
       messages: [...request.messages],
-      ...(maxToolIterations === undefined ? {} : { max_tool_iterations: maxToolIterations - spent }),
+      ...(maxToolRounds === undefined ? {} : { max_tool_rounds: maxToolRounds - spent }),
     }, phase, { capBehavior: "stop_after_dispatch" });
   } catch (e) {
     if (driver.refused) throw refusedIn(driver.state, e);
@@ -454,7 +450,7 @@ async function runCompactionToolLoop(
     throw CompactionError.llm(`Model run ended with ${response.finish_reason}`);
   }
   driver.state.maxRoundsHit = response.finish_reason === "tool_use" &&
-    maxToolIterations !== undefined && driver.state.toolRounds - startedRounds >= maxToolIterations;
+    maxToolRounds !== undefined && driver.state.toolRounds - startedRounds >= maxToolRounds;
   return driver.state;
 }
 
@@ -577,7 +573,7 @@ export interface CompactOptions {
   chatRequest: SidecarRequest;
   dataDir: string;
   tools: CompactionTools;
-  maxToolIterations?: number;
+  maxToolRounds?: number;
   foreground?: boolean;
   coverage?: CompactionCoverage;
   emit?: FrameSink;
@@ -699,7 +695,7 @@ export async function compact(opts: CompactOptions, settings: CompactionSettings
       request,
       tools,
       workspaceDir,
-      opts.maxToolIterations,
+      opts.maxToolRounds,
       opts.dryRun,
       checkpoint.loop,
       async (nextState, nextRequest) => {
@@ -819,7 +815,7 @@ export interface SegmentCompactOptions {
   markdownStore?: MarkdownMemoryStore;
   chatRequest: SidecarRequest;
   tools: CompactionTools;
-  maxToolIterations?: number;
+  maxToolRounds?: number;
   emit?: FrameSink;
   signal?: AbortSignal;
 }
@@ -832,7 +828,7 @@ export async function compactSegment(opts: SegmentCompactOptions): Promise<Compa
   const workspaceDir = await preparePassWorkspace(opts.markdownStore, opts.tools, opts.charName, false);
   opts.signal?.throwIfAborted();
   const state = await runCompactionToolLoop(
-    opts.llm, request, opts.tools, workspaceDir, opts.maxToolIterations, false, undefined, async () => {}, opts.emit,
+    opts.llm, request, opts.tools, workspaceDir, opts.maxToolRounds, false, undefined, async () => {}, opts.emit,
   );
   opts.signal?.throwIfAborted();
   const written = changedFilePaths(state.writesApplied);

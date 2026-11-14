@@ -40,8 +40,8 @@ function ModelDetails({ info }: { info: ModelInfoResult }) {
   const rows: [string, unknown][] = [
     ["Provider", info.provider_key], ["Model ID", info.model_id], ["SDK", info.sdk], ["Context window", info.max_context_tokens?.toLocaleString()],
     ["Max output", info.max_output_tokens?.toLocaleString()], ["Temperature", info.temperature], ["Top P", info.top_p], ["Reasoning effort", info.reasoning_effort],
-    ["Thinking budget", info.budget_tokens], ["Images", info.supports_images === null ? null : info.supports_images ? "Supported" : "Not supported"],
-    ["Prompt cache TTL", info.cache_ttl], ["Cache keepalive", info.cache_keepalive], ["Tool iterations", info.max_tool_iterations], ["API key variable", info.api_key_env], ["Base URL", info.base_url],
+    ["Thinking budget", info.reasoning_budget_tokens], ["Images", info.supports_images === null ? null : info.supports_images ? "Supported" : "Not supported"],
+    ["Prompt cache TTL", info.cache_ttl], ["Cache keepalive", info.cache_keepalive], ["Tool iterations", info.max_tool_rounds], ["API key variable", info.api_key_env], ["Base URL", info.base_url],
   ];
   return <dl className="kv">{rows.filter(([, value]) => value !== null && value !== undefined).map(([label, value]) => <div key={label} className="kv-row"><dt>{label}</dt><dd className={label === "Model ID" || label === "Base URL" || label === "API key variable" ? "mono" : ""}>{display(value)}</dd></div>)}</dl>;
 }

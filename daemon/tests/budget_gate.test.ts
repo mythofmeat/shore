@@ -114,7 +114,7 @@ function req(ledger: string, usage?: unknown): SidecarRequest {
     provider_key: "openai",
     messages: [{ role: "user", content: [{ type: "text", text: "hi" }] }],
     max_tokens: 128,
-    replay_prior_thinking: "all",
+    reasoning_replay: "all",
     context: {
       ledger,
       character: "aria",
@@ -177,7 +177,7 @@ function ledgerWithHistory(count: number, each: number): string {
 function loopReq(ledger: string, usage: unknown, iterations: number): SidecarRequest {
   return {
     ...req(ledger, usage),
-    max_tool_iterations: iterations,
+    max_tool_rounds: iterations,
     tools: [{ name: "read", description: "", input_schema: {} }],
   };
 }
@@ -239,10 +239,10 @@ async function chatConfig(root: string, spareKey: boolean): Promise<LoadedConfig
     openai: {
       keys: spareKey
         ? [
-            { name: "default", env: CHAT_KEY_ENV },
-            { name: "spare", env: SPARE_KEY_ENV },
+            { name: "default", api_key_env: CHAT_KEY_ENV },
+            { name: "spare", api_key_env: SPARE_KEY_ENV },
           ]
-        : [{ name: "default", env: CHAT_KEY_ENV }],
+        : [{ name: "default", api_key_env: CHAT_KEY_ENV }],
     },
   });
 
@@ -392,7 +392,7 @@ describe("projecting a tool loop's cost", () => {
     };
     expect(costBlock(loopReq(ledger, TEN_DOLLAR_BUDGET, 2))?.projected_cost).toBeCloseTo(1.0, 5);
     unprojected(loopReq(ledger, TEN_DOLLAR_BUDGET, 1), "a single call");
-    const { max_tool_iterations: _cap, ...uncapped } = loopReq(ledger, TEN_DOLLAR_BUDGET, 10);
+    const { max_tool_rounds: _cap, ...uncapped } = loopReq(ledger, TEN_DOLLAR_BUDGET, 10);
     unprojected(uncapped, "no tool budget");
     unprojected({ ...loopReq(ledger, TEN_DOLLAR_BUDGET, 10), tools: [] }, "no tools");
     const { tools: _tools, ...toolless } = loopReq(ledger, TEN_DOLLAR_BUDGET, 10);

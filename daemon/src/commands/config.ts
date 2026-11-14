@@ -33,7 +33,7 @@ import { internalError, invalidRequest, notFound } from "./errors.ts";
 import { credentialEntry } from "../handler/tool_context.ts";
 import { isCredentialBudget } from "../config/providers.ts";
 import { describeCandidateSource, isKeylessSdk, readCandidateEnv, resolveKeyCandidates } from "../llm/credentials.ts";
-import { formatConfigPath, parseConfigPath, publicConfig } from "../config/surface.ts";
+import { formatConfigPath, parseConfigPath } from "../config/surface.ts";
 import type { OperationInput, OperationResult } from "../operations/types.ts";
 import type { ConfigSources } from "../protocol/ConfigSources.ts";
 import type { ConfigSetResult } from "../protocol/ConfigSetResult.ts";
@@ -208,18 +208,18 @@ function reportedConfig(ctx: ConfigContext): Record<string, unknown> {
   const written = { ...app, budgets: app.budgets.filter((budget) => !isCredentialBudget(budget)) };
   const settings = serializeAppConfig(written);
   const catalog = catalogSections(ctx);
-  return redactSecrets(publicConfig({
+  return redactSecrets({
     ...settings,
     ...catalog,
     chat: { ...(catalog.chat as Record<string, unknown> | undefined), ...(settings.chat as Record<string, unknown>) },
     image: { ...(catalog.image as Record<string, unknown> | undefined), ...(settings.image as Record<string, unknown>) },
-  })) as Record<string, unknown>;
+  }) as Record<string, unknown>;
 }
 
 export function reportedDefaults(): Record<string, unknown> {
   const out = serializeAppConfig(defaultAppConfig());
   out.providers = {};
-  return publicConfig(out);
+  return out;
 }
 
 export function reportedSections(ctx: ConfigContext): string[] {

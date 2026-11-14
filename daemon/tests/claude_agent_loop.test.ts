@@ -55,7 +55,7 @@ function request(overrides: Partial<SidecarRequest> = {}): SidecarRequest {
     api_key: "",
     messages: [{ role: "user", content: [{ type: "text", text: "read SOUL.md" }] }],
     max_tokens: 4096,
-    replay_prior_thinking: "all",
+    reasoning_replay: "all",
     tools: [def("read"), def("ask_internet")],
     ...overrides,
   };
@@ -96,7 +96,7 @@ describe("the tool budget", () => {
         ],
       },
       tools,
-      request({ max_tool_iterations: 1 }),
+      request({ max_tool_rounds: 1 }),
     );
     expect(tools.dispatched).toHaveLength(1);
     expect(agent.toolOutcomes[1]?.allowed).toBe(false);
@@ -126,7 +126,7 @@ describe("the options a tool turn runs with", () => {
     const open = (await drive(script, phase())).agent.calls[0]?.options;
     expect(open?.env?.MAX_MCP_OUTPUT_TOKENS).toBe("1000000");
     expect(open).not.toHaveProperty("maxTurns");
-    const capped = (await drive(script, phase(), request({ max_tool_iterations: 3 }))).agent.calls[0]?.options;
+    const capped = (await drive(script, phase(), request({ max_tool_rounds: 3 }))).agent.calls[0]?.options;
     expect(capped?.maxTurns).toBe(5);
   });
 });

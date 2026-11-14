@@ -4,7 +4,7 @@ import { resolveBackgroundModelName } from "../config/app.ts";
 import type { LoadedConfig } from "../config/loader.ts";
 import { applyBackgroundSettings, configView } from "../config/preferences.ts";
 import { findEffectiveModel } from "../config/effective_catalog.ts";
-import { resolvedReplayPriorThinking, toRequestModel, type ResolvedModel } from "../config/models.ts";
+import { resolvedReasoningReplay, toRequestModel, type ResolvedModel } from "../config/models.ts";
 import { credentialEntry } from "../handler/tool_context.ts";
 import { buildRequestWithProviderKeys } from "../llm/request.ts";
 import type { SidecarRequest } from "../llm/types.ts";
@@ -48,7 +48,7 @@ export function backgroundModelRequest(
         messages: request.messages,
         ...(request.system === undefined ? {} : { system: request.system }),
         ...(request.tools === undefined ? {} : { tools: request.tools }),
-        replay: resolvedReplayPriorThinking(resolved, config.app.chat.reasoning_replay),
+        replay: resolvedReasoningReplay(resolved, config.app.chat.reasoning_replay),
       },
       env,
     );

@@ -8,7 +8,7 @@ import {
   resolveSubagentBaseModel,
   resolveSubagentModelSettings,
 } from "../config/preferences.ts";
-import { resolvedReplayPriorThinking, toRequestModel } from "../config/models.ts";
+import { resolvedReasoningReplay, toRequestModel } from "../config/models.ts";
 import { renderTemplate } from "../engine/prompt.ts";
 import type { Message } from "../engine/types.ts";
 import { credentialEntry } from "../handler/tool_context.ts";
@@ -154,15 +154,15 @@ export async function runSubagent(
       messages: [{ role: "user", content: [{ type: "text", text: query }] }],
       system: [{ text: systemText, label: "system" }],
       tools,
-      replay: resolvedReplayPriorThinking(resolved, config.app.chat.reasoning_replay),
+      replay: resolvedReasoningReplay(resolved, config.app.chat.reasoning_replay),
     },
     deps.env ?? process.env,
   );
 
-  const maxIterations = spec.max_tool_rounds ?? resolved.maxToolIterations;
+  const maxIterations = spec.max_tool_rounds ?? resolved.maxToolRounds;
   const request: SidecarRequest = {
     ...built.request,
-    ...(maxIterations === undefined ? {} : { max_tool_iterations: maxIterations }),
+    ...(maxIterations === undefined ? {} : { max_tool_rounds: maxIterations }),
     context: {
       ledger: rustJoin(config.dirs.data, "shore.db"),
       character: charName,

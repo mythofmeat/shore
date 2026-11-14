@@ -4,7 +4,8 @@ import {
   type ConfigValueSource,
 } from "./app.ts";
 import { requiresRestart } from "./restart.ts";
-import { canonicalConfigPath, canonicalSettingKey, formatConfigPath, isConfigTable, MODEL_FIELDS, parseConfigPath } from "./surface.ts";
+import { formatConfigPath, isConfigTable, MODEL_FIELDS, parseConfigPath } from "./surface.ts";
+import { GEMINI_THINKING_MODES } from "../llm/types.ts";
 
 import { isSecretConfigPath } from "./serialize.ts";
 import type { ConfigSchemaEntry } from "../protocol/ConfigSchemaEntry.ts";
@@ -139,7 +140,7 @@ export function configSchema(live: LiveInstances): SchemaEntry[] {
   const out: SchemaEntry[] = [];
   for (const old of internal) {
     if (old.kind === "table" || old.kind === "map") continue;
-    const path = canonicalConfigPath(parseConfigPath(old.key));
+    const path = parseConfigPath(old.key);
     const key = formatConfigPath(path);
     out.push({ ...old, key, secret: isSecretConfigPath(path), settable: old.settable && !path.includes("<index>"), description: describeOption(path), scope: "global or character", ...(unitsOf(path) === undefined ? {} : { units: unitsOf(path) as string }) });
   }
@@ -161,11 +162,11 @@ export function configSchema(live: LiveInstances): SchemaEntry[] {
     add([...prefix, "keys", "<index>", "spend_period"], { kind: "enum", variants: ["hour", "day", "week", "month"], optional: true });
     add([...prefix, "keys", "<index>", "dir"], { kind: "string", optional: true });
     for (const field of ["session_limit", "weekly_limit"]) add([...prefix, "keys", "<index>", field], { kind: "float", optional: true });
-    for (const field of MODEL_FIELDS) add([...prefix, canonicalSettingKey(field)], modelInfo(field));
+    for (const field of MODEL_FIELDS) add([...prefix, field], modelInfo(field));
   }
   for (const section of ["chat", "image"]) {
     for (const identity of new Set(["<provider:model_id>", ...live.instancesAt(section).filter((name) => name.includes(":"))])) {
-      if (section === "chat") for (const field of [...MODEL_FIELDS, "sdk"]) add([section, identity, canonicalSettingKey(field)], modelInfo(field));
+      if (section === "chat") for (const field of [...MODEL_FIELDS, "sdk"]) add([section, identity, field], modelInfo(field));
       if (section === "image") for (const field of ["size", "quality", "aspect_ratio", "image_size"]) add([section, identity, field], { kind: "string", optional: true });
     }
   }
@@ -180,12 +181,12 @@ export function configSchema(live: LiveInstances): SchemaEntry[] {
 }
 
 function modelInfo(field: string): ConfigTypeInfo {
-  if (field === "gemini_generation") return { kind: "enum", variants: ["auto", "budget", "level"], optional: true };
-  if (field === "replay_prior_thinking") return { kind: "enum", variants: ["all", "none"], optional: true };
-  if (field === "supports_images" || field === "zai_clear_thinking") return { kind: "boolean", optional: true };
+  if (field === "gemini_thinking_mode") return { kind: "enum", variants: GEMINI_THINKING_MODES, optional: true };
+  if (field === "reasoning_replay") return { kind: "enum", variants: ["all", "none"], optional: true };
+  if (field === "supports_images" || field === "zai_clear_reasoning") return { kind: "boolean", optional: true };
   if (field === "temperature" || field === "top_p") return { kind: "float", optional: true };
-  if (["max_context_tokens", "max_output_tokens", "budget_tokens", "max_tool_iterations"].includes(field)) return { kind: "integer", width: "u32", optional: true };
-  if (field === "openrouter_provider") return { kind: "table", optional: true };
+  if (["max_context_tokens", "max_output_tokens", "reasoning_budget_tokens", "max_tool_rounds"].includes(field)) return { kind: "integer", width: "u32", optional: true };
+  if (field === "openrouter_routing") return { kind: "table", optional: true };
   if (field === "cache_ttl") return { kind: "duration", optional: true };
   return { kind: "string", optional: true };
 }

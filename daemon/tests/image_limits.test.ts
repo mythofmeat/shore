@@ -26,7 +26,7 @@ describe("reducing one image", () => {
 
 describe("what a request may carry", () => {
   const request = (sdk: SidecarRequest["sdk"], images: ImageBlock[]): SidecarRequest => ({
-    sdk, model: "claude-opus-5-5", api_key: "test", max_tokens: 64, replay_prior_thinking: "all",
+    sdk, model: "claude-opus-5-5", api_key: "test", max_tokens: 64, reasoning_replay: "all",
     messages: [{ role: "user", content: [...images, { type: "text", text: "look" }] }],
   });
   const sentImages = (sent: SidecarRequest): ImageBlock[] =>

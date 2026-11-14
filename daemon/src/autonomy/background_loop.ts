@@ -47,7 +47,7 @@ export interface BackgroundLoopDeps {
   note: (text: string) => void;
   recordTranscript?: (round: TranscriptRound) => void;
   wrapUpGrace: number;
-  maxToolIterations: number | undefined;
+  maxToolRounds: number | undefined;
   checkPictures?: (text: string) => Promise<string[]>;
   news?: (wrappingUp: boolean) => string | undefined;
   newsHeard?: () => void;
@@ -158,7 +158,7 @@ export async function runBackgroundLoop(
   const deadline = performance.now() + deps.timeLimitMs;
   const wrapUpMs = deps.wrapUpMs;
   const [firstCall, loopCall] = deps.callTypes;
-  const normalCap = deps.maxToolIterations ?? Number.POSITIVE_INFINITY;
+  const normalCap = deps.maxToolRounds ?? Number.POSITIVE_INFINITY;
   const name = deps.name;
   let wrapUpEnd: number | undefined;
   let wrapUpFor: "time" | "rounds" = "time";
@@ -243,7 +243,7 @@ export async function runBackgroundLoop(
   const timer = setTimeout(() => abort.abort(), deadline - performance.now());
   const run = async () => await deps.generate({
     ...request,
-    ...(deps.maxToolIterations === undefined ? {} : { max_tool_iterations: deps.maxToolIterations + deps.wrapUpGrace }),
+    ...(deps.maxToolRounds === undefined ? {} : { max_tool_rounds: deps.maxToolRounds + deps.wrapUpGrace }),
   }, phase, abort.signal);
   try {
     const response = await run();

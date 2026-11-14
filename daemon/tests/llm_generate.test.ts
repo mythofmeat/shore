@@ -45,8 +45,8 @@ function config(twoKeys = true): LoadedConfig {
     ? ProviderRegistry.fromSection({
         anthropic: {
           keys: [
-            { name: "primary", env: PRIMARY, warn_on_fallback: true },
-            { name: "spare", env: SPARE },
+            { name: "primary", api_key_env: PRIMARY, warn_on_fallback: true },
+            { name: "spare", api_key_env: SPARE },
           ],
         },
       })
@@ -74,7 +74,7 @@ function request(over: Partial<SidecarRequest> = {}): SidecarRequest {
     provider_key: "anthropic",
     messages: [{ role: "user", content: [{ type: "text", text: "hi" }] }],
     max_tokens: 1024,
-    replay_prior_thinking: "off",
+    reasoning_replay: "off",
     ...over,
   } as SidecarRequest;
 }

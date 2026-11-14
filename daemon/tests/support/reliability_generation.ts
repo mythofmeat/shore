@@ -24,7 +24,7 @@ export async function reliabilityGeneration(provider: SidecarProvider, thread = 
   config.models.chat.set("chat.fixture", {
     name: "fixture", qualifiedName: "chat.fixture", category: "chat", providerKey: "anthropic",
     sdk: "anthropic", modelId: "claude-fixture", apiKeyEnv: "SHORE_RELIABILITY_KEY",
-    maxContextTokens: 200_000, maxOutputTokens: 4096, maxToolIterations: 4,
+    maxContextTokens: 200_000, maxOutputTokens: 4096, maxToolRounds: 4,
   });
   const engine = await ConversationEngine.load("ada", config.dirs.data, undefined, thread);
   const frames: ServerMessage[] = [];

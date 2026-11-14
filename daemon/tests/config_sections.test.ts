@@ -1,12 +1,15 @@
-import { expect, test } from "bun:test";
+import { expect, spyOn, test } from "bun:test";
 import { mkdir, mkdtemp, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 
 import { resultCharsFor, subagentEnabled, timeoutFor, toolGrants } from "../src/config/app.ts";
 import { loadCharacterConfig, loadConfig } from "../src/config/loader.ts";
+import { resolvedReasoningReplay } from "../src/config/models.ts";
+import { ProviderRegistry } from "../src/config/providers.ts";
 import { restartRequiredChanges } from "../src/config/restart.ts";
 import { attemptMatrixBridge, unusableReason } from "../src/connections/matrix/start.ts";
 import { resolveListenAddr } from "../src/daemon/startup.ts";
+import { shoreLog } from "../src/log.ts";
 import { buildToolContext } from "../src/handler/tool_context.ts";
 import { mcpConfigView } from "../src/runtime.ts";
 import { buildSessionHistorySnapshot, type HandshakeRegistry } from "../src/swp/handshake.ts";
@@ -429,4 +432,114 @@ test("a budget in a character's own config counts only that character's spend un
     [["everyone", undefined, undefined, undefined, 9, "day", "warn"], keyLimit],
     undefined,
   ]);
+});
+
+test("[providers.<name>] is read under the names in the file: whether to look for models, which to leave out, each key's variable, and the settings its models start from", async () => {
+  const { write, read } = await budgetsIn();
+  await write([
+    "[providers.bare]",
+    "[providers.full]", "discover = true", 'ignore_models = ["old-*", "!old-gold"]', "temperature = 0.3", "max_output_tokens = 9000",
+    "[[providers.full.keys]]", 'name = "work"', 'api_key_env = "SHORE_TEST_FULL_KEY"', "warn_on_fallback = true",
+    "[[providers.full.keys]]", 'name = "saved"', "enabled = false",
+    "[providers.short]", 'api_key_env = "SHORE_TEST_SHORT_KEY"', "discover = false",
+    "[providers.tuned]", "reasoning_budget_tokens = 2048", "max_tool_rounds = 9", 'reasoning_replay = "none"', 'openrouter_routing = { order = ["a"] }',
+    'gemini_thinking_mode = "level"', "zai_clear_reasoning = true", "",
+  ].join("\n"));
+  const { providers } = read();
+  const shown = (name: string): unknown[] => {
+    const entry = providers.get(name);
+    return [entry?.discover, entry?.ignoreModels, entry?.keys, entry?.defaults];
+  };
+  expect(shown("bare")).toEqual([false, [], [], {}]);
+  expect(shown("full")).toEqual([true, ["old-*", "!old-gold"], [
+    { name: "work", apiKeyEnv: "SHORE_TEST_FULL_KEY", stored: false, enabled: true, warnOnFallback: true },
+    { name: "saved", apiKeyEnv: "", stored: true, enabled: false, warnOnFallback: false },
+  ], { temperature: 0.3, maxOutputTokens: 9000 }]);
+  expect(shown("short")).toEqual([false, [], [{ name: "default", apiKeyEnv: "SHORE_TEST_SHORT_KEY", stored: false, enabled: true, warnOnFallback: false }], {}]);
+  expect(shown("tuned")).toEqual([false, [], [], {
+    reasoningBudgetTokens: 2048, maxToolRounds: 9, reasoningReplay: "none", openrouterRouting: { order: ["a"] }, geminiThinkingMode: "level", zaiClearReasoning: true,
+  }]);
+
+  for (const [toml, refusal] of [
+    ['[providers.x]\ndiscover = "yes"\n', "failed to parse [providers.x]: invalid type: expected a boolean"],
+    ['[providers.x]\nignore_models = "old-*"\n', "failed to parse [providers.x]: invalid type: expected a sequence"],
+    ["[providers.x]\nignore_models = [5]\n", "failed to parse [providers.x]: invalid type: expected a string"],
+    ['[providers.x]\ntemperature = "hot"\n', 'failed to parse [providers.x]: invalid type: string "hot", expected a float'],
+    ["[providers.x.discovery]\nenabled = true\n", "unknown field `providers.x.discovery`"],
+    ["[providers.x.defaults]\ntemperature = 0.3\n", "unknown field `providers.x.defaults`"],
+    ['[[providers.x.keys]]\nname = "work"\nenv = "SHORE_TEST_FULL_KEY"\n', "unknown field `providers.x.keys.0.env`"],
+  ] as const) {
+    await write(toml);
+    expect(read).toThrow(refusal);
+  }
+  expect(() => ProviderRegistry.fromSection({ x: { discovery: { enabled: true } } })).toThrow(
+    "failed to parse [providers.x]: unknown field `discovery`, expected one of `enabled`, `subscription`, `no_auth`, `pin`, `sdk`, `base_url`, `api_key_env`, `keys`, `discover`, `ignore_models`, " +
+      "`max_context_tokens`, `max_output_tokens`, `temperature`, `top_p`, `reasoning_effort`, `reasoning_budget_tokens`, `cache_ttl`, `reasoning_replay`, `max_tool_rounds`, `openrouter_routing`, " +
+      "`gemini_thinking_mode`, `zai_clear_reasoning`, `supports_images`, `system_prompt`",
+  );
+  expect(() => ProviderRegistry.fromSection({ x: { gemini_thinking_mode: "fast" } })).toThrow("failed to parse [providers.x]: gemini_thinking_mode must be auto, budget, or level");
+  expect(() => ProviderRegistry.fromSection({ x: { keys: [{ name: "work", env: "K" }] } })).toThrow(
+    "failed to parse [providers.x]: unknown field `env`, expected one of `name`, `api_key_env`, `enabled`",
+  );
+});
+
+test("a model's settings in its own table and in its provider's reach the model the daemon runs, its own winning, and a setting its SDK ignores is said once", async () => {
+  const { write, read } = await budgetsIn();
+  const warned = spyOn(shoreLog, "warn").mockImplementation(() => {});
+  try {
+    await write([
+      "[providers.anthropic]", 'api_key_env = "K"', "reasoning_budget_tokens = 2048", "max_tool_rounds = 9", 'reasoning_replay = "all"',
+      "[providers.openrouter]", 'api_key_env = "K"', 'openrouter_routing = { order = ["a"] }',
+      "[providers.gemini]", 'api_key_env = "K"', 'gemini_thinking_mode = "level"',
+      "[providers.zai-api]", 'api_key_env = "K"', "zai_clear_reasoning = true",
+      "[providers.nanogpt]", 'api_key_env = "K"', 'openrouter_routing = { order = ["b"] }', 'gemini_thinking_mode = "auto"', "zai_clear_reasoning = false",
+      '[chat."anthropic:claude-x"]', "reasoning_budget_tokens = 1024",
+      '[chat."anthropic:claude-y"]', "max_output_tokens = 100",
+      '[chat."openrouter:x/y"]', "max_output_tokens = 100",
+      '[chat."gemini:gemini-3-pro"]', 'gemini_thinking_mode = "budget"',
+      '[chat."zai-api:glm-9"]', "max_tool_rounds = 1", 'reasoning_replay = "none"',
+      '[chat."nanogpt:m-1"]', "max_output_tokens = 100", "",
+    ].join("\n"));
+    const { models } = read();
+    const settings = (name: string): unknown[] => {
+      const model = [...models.chat.values()].find((each) => each.qualifiedName === name);
+      return [model?.reasoningBudgetTokens, model?.maxToolRounds, model?.reasoningReplay, model?.openrouterRouting, model?.geminiThinkingMode, model?.zaiClearReasoning];
+    };
+    expect(settings("anthropic:claude-x")).toEqual([1024, 9, "all", undefined, undefined, undefined]);
+    expect(settings("anthropic:claude-y")).toEqual([2048, 9, "all", undefined, undefined, undefined]);
+    expect(settings("openrouter:x/y")).toEqual([undefined, undefined, undefined, { order: ["a"] }, undefined, undefined]);
+    expect(settings("gemini:gemini-3-pro")).toEqual([undefined, undefined, undefined, undefined, "budget", undefined]);
+    expect(settings("zai-api:glm-9")).toEqual([undefined, 1, "none", undefined, undefined, true]);
+    expect(warned.mock.calls.map((call) => String(call[0]))).toEqual([
+      "shore: ignoring `openrouter_routing` for model m-1: the `nanogpt` sdk does not honor it",
+      "shore: ignoring `gemini_thinking_mode` for model m-1: the `nanogpt` sdk does not honor it",
+      "shore: ignoring `zai_clear_reasoning` for model m-1: the `nanogpt` sdk does not honor it",
+    ]);
+
+    const chat = (name: string) => [...models.chat.values()].find((each) => each.qualifiedName === name) as NonNullable<ReturnType<typeof models.chat.get>>;
+    expect([
+      resolvedReasoningReplay(chat("zai-api:glm-9"), "all"), resolvedReasoningReplay(chat("anthropic:claude-x"), "none"),
+      resolvedReasoningReplay(chat("openrouter:x/y"), "none"), resolvedReasoningReplay(chat("openrouter:x/y"), "all"),
+    ]).toEqual(["none", "all", "none", "all"]);
+
+    await write("[providers.anthropic]\nmax_tool_rounds = 0\n");
+    expect(read).toThrow("failed to parse [providers.anthropic]: max_tool_rounds must be positive");
+    await write('[chat."anthropic:claude-x"]\nmax_tool_rounds = 0\n');
+    expect(read).toThrow('chat."anthropic:claude-x": max_tool_rounds must be positive');
+  } finally {
+    warned.mockRestore();
+  }
+});
+
+test("a config's include list brings in the settings of the files it names, skipping any that aren't there", async () => {
+  const { root, write, read } = await budgetsIn();
+  await writeFile(join(root, "extra.toml"), '[chat]\ndisplay_name = "Mara"\n');
+  await write('include = ["extra.toml", "missing.toml"]\n[chat]\nreasoning_replay = "none"\n');
+  const loaded = read();
+  expect([loaded.app.chat.display_name, loaded.app.chat.reasoning_replay, loaded.files]).toEqual(["Mara", "none", [join(root, "config.toml"), join(root, "extra.toml")]]);
+  await write('include = "extra.toml"\n');
+  expect(read).toThrow("config.toml: include must be a list of file paths");
+  await writeFile(join(root, "extra.toml"), "[chat]\nbogus = 1\n");
+  await write('include = ["extra.toml"]\n');
+  expect(read).toThrow("extra.toml: unknown field `chat.bogus`");
 });

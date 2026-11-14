@@ -12,7 +12,6 @@ import {
   type ImageFormat,
   type ImageSettings,
 } from "../llm/image_settings.ts";
-import { canonicalConfigPath, CONFIG_SECTIONS, formatConfigPath } from "./surface.ts";
 
 type TomlValue = unknown;
 
@@ -724,36 +723,8 @@ export function validateCompaction(compaction: CompactionConfig): string | undef
 
 export type ThinkingReplay = "all" | "none";
 
-export function parseThinkingReplay(s: string): ThinkingReplay | undefined {
-  switch (s) {
-    case "all":
-      return "all";
-    case "none":
-      return "none";
-    default:
-      return undefined;
-  }
-}
-
 const THINKING_REPLAY_MODES: readonly ThinkingReplay[] = ["all", "none"];
 
-const readThinkingReplay: Reader<ThinkingReplay> = typed(
-  (v) => {
-    if (typeof v !== "string") {
-      return { err: "data did not match any variant of untagged enum BoolOrStr" };
-    }
-    const parsed = parseThinkingReplay(v);
-    if (parsed === undefined) {
-      return {
-        err:
-          `invalid replay_prior_thinking ${JSON.stringify(v)}; ` +
-          'expected "all", "none"',
-      };
-    }
-    return { ok: parsed };
-  },
-  { kind: "enum", variants: THINKING_REPLAY_MODES },
-);
 
 export interface ChatConfig {
   model: string | undefined;
@@ -784,7 +755,7 @@ const CHAT: StructSpec<ChatConfig> = {
     display_name: optional(readString),
     system_prompt: optional(readString),
     user_timestamps: readEnum(USER_TIMESTAMP_MODES),
-    reasoning_replay: readThinkingReplay,
+    reasoning_replay: readEnum(THINKING_REPLAY_MODES),
     max_retries: optional(readU32),
     retry_backoff: optional(readDuration),
   },
@@ -1272,8 +1243,6 @@ export function parseAppConfig(table: TomlValue): ParseResult<AppConfig> {
 }
 
 export function validateAppConfigLayer(table: Table): ParseResult<AppConfig> {
-  const problem = layerShapeProblem(table, { kind: "table", table: appConfigShape }, []);
-  if (problem !== undefined) return { err: problem };
   const complete = structuredClone(table);
   if (isTable(complete.subagents)) for (const value of Object.values(complete.subagents)) {
     if (isTable(value)) { value.description ??= ""; value.prompt ??= ""; }
@@ -1281,32 +1250,8 @@ export function validateAppConfigLayer(table: Table): ParseResult<AppConfig> {
   return parseAppConfig(complete);
 }
 
-function layerShapeProblem(value: unknown, info: ConfigTypeInfo, path: string[]): string | undefined {
-  if (info.kind === "table") {
-    if (Array.isArray(value)) return `${formatConfigPath(canonicalConfigPath(path))}: must be a table`;
-    if (!isTable(value)) return undefined;
-    const fields = info.table?.().fields ?? {};
-    for (const [key, child] of Object.entries(value)) {
-      const type = fields[key];
-      if (type === undefined) continue;
-      const problem = layerShapeProblem(child, type, [...path, key]);
-      if (problem !== undefined) return problem;
-    }
-  } else if (info.item !== undefined && (info.kind === "map" && isTable(value) || info.kind === "list" && Array.isArray(value))) {
-    for (const [key, child] of Object.entries(value)) {
-      const problem = layerShapeProblem(child, info.item, [...path, key]);
-      if (problem !== undefined) return problem;
-    }
-  }
-  return undefined;
-}
-
 export function appConfigShape(): TableShape {
   return shapeOf(APP);
-}
-
-export function acceptedTopLevelSections(): string[] {
-  return [...CONFIG_SECTIONS];
 }
 
 export function mapKeysInOrder(map: ReadonlyMap<string, unknown>): string[] {

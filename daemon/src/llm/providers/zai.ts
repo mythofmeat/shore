@@ -81,7 +81,7 @@ export function buildZaiParams(
     ? { type: "disabled" }
     : { type: "enabled" };
   if (!thinkingDisabled) {
-    const clearThinking = req.provider_options?.zai_clear_thinking;
+    const clearThinking = req.provider_options?.zai_clear_reasoning;
     if (typeof clearThinking === "boolean") thinking.clear_thinking = clearThinking;
   }
 
@@ -114,7 +114,7 @@ export function buildZaiMessages(req: SidecarRequest): ChatCompletionMessagePara
   if (systemText) messages.push({ role: "system", content: systemText });
   const preserveThinking =
     req.provider_options?.thinking_enabled !== false &&
-    req.provider_options?.zai_clear_thinking === false;
+    req.provider_options?.zai_clear_reasoning === false;
   const toolNames = new Map<string, string>();
   for (const turn of coalesceToolResults(replayableMessages(req))) {
     for (const block of turn.content) if (block.type === "tool_use") toolNames.set(block.id, block.name);

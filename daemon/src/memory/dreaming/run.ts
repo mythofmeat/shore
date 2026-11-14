@@ -325,7 +325,7 @@ export async function runDreamPass(
       summary = round.blocks.some((block) => block.type === "tool_use") ? "" : textOf(round.blocks);
     },
     wrapUpGrace: DREAM_WRAP_UP_ROUNDS,
-    maxToolIterations: (override ?? resolved).maxToolIterations,
+    maxToolRounds: (override ?? resolved).maxToolRounds,
     timeLimitMs: limitMs,
     wrapUpMs,
     wrapUpText: dreamWrapUpText,

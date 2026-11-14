@@ -130,18 +130,17 @@ function sdkOf(name: string, entry: ProviderEntry) {
 
 interface KeyView {
   key: ProviderKeyEntry;
-  explicit: boolean;
 }
 
 function keysOf(name: string, entry: ProviderEntry): KeyView[] {
-  if (entry.keys.length > 0) return entry.keys.map((key) => ({ key, explicit: true }));
-  const env = hardcodedProviderDefaults(name).fields.apiKeyEnv ?? defaultApiKeyEnv(name);
-  return [{ key: { name: "default", env, stored: false, enabled: true, warnOnFallback: false }, explicit: false }];
+  if (entry.keys.length > 0) return entry.keys.map((key) => ({ key }));
+  const apiKeyEnv = hardcodedProviderDefaults(name).fields.apiKeyEnv ?? defaultApiKeyEnv(name);
+  return [{ key: { name: "default", apiKeyEnv, stored: false, enabled: true, warnOnFallback: false } }];
 }
 
 function secretOf(ctx: ProviderAdminContext, provider: string, key: ProviderKeyEntry): string | undefined {
   if (key.stored) return secretStoreFor(ctx.config.config.dirs.data).get(provider, key.name);
-  const value = process.env[key.env];
+  const value = process.env[key.apiKeyEnv];
   return value === undefined || value.trim() === "" ? undefined : value;
 }
 
@@ -221,9 +220,9 @@ function credentialsOf(ctx: ProviderAdminContext, name: string, entry: ProviderE
       kind,
       enabled: key.enabled,
       standing: secret === undefined ? "missing" : recorded?.standing ?? "not_checked",
-      detail: secret === undefined ? (key.stored ? "no key saved on the daemon" : `${key.env} is not set on the daemon`) : recorded?.detail ?? null,
+      detail: secret === undefined ? (key.stored ? "no key saved on the daemon" : `${key.apiKeyEnv} is not set on the daemon`) : recorded?.detail ?? null,
       hint: lastFour(secret),
-      env: key.stored ? null : key.env,
+      env: key.stored ? null : key.apiKeyEnv,
       checked_at: secret === undefined ? null : recorded?.checked_at ?? null,
       pinned: entry.pin === key.name,
       in_use: key.enabled && inUse === key.name,
@@ -237,7 +236,7 @@ function credentialsOf(ctx: ProviderAdminContext, name: string, entry: ProviderE
 
 export function providerStatus(ctx: ProviderAdminContext, name: string, entry: ProviderEntry): ProviderStatus {
   const cache = readCacheSync(cachePath(ctx.config.config.dirs.cache, name));
-  const hidden = cache === undefined ? 0 : cache.models.filter((m) => !isVisible(entry.discovery, m.model_id)).length;
+  const hidden = (cache?.models ?? []).filter((m) => !isVisible(entry.ignoreModels, m.model_id)).length;
   const credentials = credentialsOf(ctx, name, entry);
   const sdk = sdkOf(name, entry);
   return {
@@ -245,11 +244,11 @@ export function providerStatus(ctx: ProviderAdminContext, name: string, entry: P
     enabled: entry.enabled,
     sdk,
     base_url: entry.baseUrl ?? defaultBaseUrl(name) ?? null,
-    discovery_enabled: entry.discovery.enabled,
+    discovery_enabled: entry.discover,
     keys: credentials.filter((c) => c.kind === "api_key" || c.kind === "env").map((c) => ({
       name: c.name, enabled: c.enabled, warn_on_fallback: c.warn_on_fallback, env_set: c.standing !== "missing",
     })),
-    ignore_models: [...entry.discovery.ignore],
+    ignore_models: [...entry.ignoreModels],
     subscription: entry.subscription,
     no_auth: entry.noAuth,
     selection: isKeylessSdk(sdk) ? "room" : "order",
@@ -356,9 +355,9 @@ export function updateProvider(ctx: ProviderAdminContext, args: OperationInput<"
     edits.push((text) => setTomlValue(text, [...base, field], literal).text);
     said.push(label);
   };
-  const unset = (field: readonly string[], label: string | undefined) => {
+  const unset = (field: readonly string[], label: string) => {
     edits.push((text) => unsetTomlValue(text, [...base, ...field]).text);
-    if (label !== undefined) said.push(label);
+    said.push(label);
   };
   if (args.enabled !== undefined) set("enabled", String(args.enabled), args.enabled ? "enabled" : "disabled");
   if (args.sdk !== undefined) {
@@ -373,11 +372,9 @@ export function updateProvider(ctx: ProviderAdminContext, args: OperationInput<"
     }
   }
   if (args.discover !== undefined) {
-    unset(["discovery", "enabled"], undefined);
     set("discover", String(args.discover), args.discover ? "model discovery on" : "model discovery off");
   }
   if (args.ignore_models !== undefined) {
-    unset(["discovery", "ignore"], undefined);
     const patterns = args.ignore_models.map((p) => p.trim()).filter((p) => p !== "");
     set("ignore_models", `[${patterns.map(toml).join(", ")}]`, patterns.length === 0 ? "no models ignored" : `ignoring ${patterns.join(", ")}`);
   }
@@ -517,7 +514,7 @@ function keyIndex(name: string, entry: ProviderEntry, raw: string): number {
   const folded = entry.keys.findIndex((k) => k.name.toLowerCase() === raw.toLowerCase());
   if (folded >= 0) return folded;
   if (entry.keys.length === 0) {
-    throw notFound(`${name} has no keys of its own yet; it reads ${keysOf(name, entry)[0]?.key.env ?? "an environment variable"} from the daemon's environment. Add one with \`shore provider ${name} auth --add\``);
+    throw notFound(`${name} has no keys of its own yet; it reads ${keysOf(name, entry)[0]?.key.apiKeyEnv ?? "an environment variable"} from the daemon's environment. Add one with \`shore provider ${name} auth --add\``);
   }
   throw notFound(`${name} has no key named ${JSON.stringify(raw)}; its keys are ${entry.keys.map((k) => k.name).join(", ")}`);
 }
@@ -525,7 +522,7 @@ function keyIndex(name: string, entry: ProviderEntry, raw: string): number {
 function explicitKeyForm(name: string, entry: ProviderEntry): (text: string) => string {
   return (text) => {
     if (!tomlKeyDefined(text, [...providerPath(name), "api_key_env"])) return text;
-    const env = entry.keys[0]?.env ?? "";
+    const env = entry.keys[0]?.apiKeyEnv ?? "";
     const without = unsetTomlValue(text, [...providerPath(name), "api_key_env"]).text;
     return appendTomlArrayTable(without, keysPath(name), [["name", toml("default")], ["api_key_env", toml(env)]], providerPath(name));
   };
@@ -624,7 +621,7 @@ export async function addCredential(ctx: ProviderAdminContext, args: OperationIn
   const requested = args.name?.trim() ?? "";
   const keyName = requested === "" ? nextKeyName(entry, keepImplicit ? ["default"] : []) : requested;
   if (!KEY_NAME.test(keyName)) throw invalidRequest(`key names use letters, digits, ., _, @ and -: ${JSON.stringify(keyName)}`);
-  if (keepImplicit && keyName.toLowerCase() === "default") throw invalidRequest(`"default" is the key ${name} reads from ${implicit.env}; give the new one another name`);
+  if (keepImplicit && keyName.toLowerCase() === "default") throw invalidRequest(`"default" is the key ${name} reads from ${implicit.apiKeyEnv}; give the new one another name`);
   if (entry.keys.some((k) => k.name.toLowerCase() === keyName.toLowerCase())) throw invalidRequest(`${name} already has a key named ${JSON.stringify(keyName)}; pick another name or replace it with \`auth ${keyName} --replace\``);
   let secret: string | undefined;
   let env: string | undefined;
@@ -651,7 +648,7 @@ export async function addCredential(ctx: ProviderAdminContext, args: OperationIn
       file,
       edit: (before) => {
         let text = explicitKeyForm(name, entry)(before);
-        if (keepImplicit) text = appendTomlArrayTable(text, keysPath(name), [["name", toml("default")], ["api_key_env", toml(implicit.env)]], providerPath(name));
+        if (keepImplicit) text = appendTomlArrayTable(text, keysPath(name), [["name", toml("default")], ["api_key_env", toml(implicit.apiKeyEnv)]], providerPath(name));
         return appendTomlArrayTable(text, keysPath(name), fields, providerPath(name));
       },
     }], `adding key ${keyName} to ${name}`);
@@ -661,7 +658,7 @@ export async function addCredential(ctx: ProviderAdminContext, args: OperationIn
   }
   if (check !== undefined && check.conclusive) noteCredentialStanding(name, keyName, check.standing, check.detail, now(ctx));
   const where = secret !== undefined ? `saved on the daemon (${String(lastFour(secret))})` : `read from ${String(env)}${value === undefined || value === "" ? ", which isn't set on the daemon yet" : ""}`;
-  const kept = keepImplicit ? `; ${implicit.env} stays first as "default"` : "";
+  const kept = keepImplicit ? `; ${implicit.apiKeyEnv} stays first as "default"` : "";
   return changed(ctx, name, file, `Added key "${keyName}" to ${name}, ${where} · ${described(check)}${kept}`);
 }
 
@@ -701,7 +698,7 @@ export async function updateCredential(ctx: ProviderAdminContext, args: Operatio
   let replacement: string | undefined;
   let check: Check | undefined;
   if (args.secret !== undefined) {
-    if (!key.stored) throw invalidRequest(`"${key.name}" reads ${key.env} from the daemon's environment; change it there, or remove it and add the key itself`);
+    if (!key.stored) throw invalidRequest(`"${key.name}" reads ${key.apiKeyEnv} from the daemon's environment; change it there, or remove it and add the key itself`);
     requireConfidential(ctx, args.allow_unencrypted);
     replacement = cleanSecret(args.secret);
     if (args.no_check !== true) {
@@ -750,7 +747,7 @@ export function removeCredential(ctx: ProviderAdminContext, args: OperationInput
   if (key.stored) secretStoreFor(ctx.config.config.dirs.data).remove(name, key.name);
   forgetCredentialStanding(name, key.name);
   const left = entry.keys.length - 1;
-  const fallback = left === 0 ? `; ${name} now reads ${keysOf(name, { ...entry, keys: [] })[0]?.key.env ?? "its default variable"} from the daemon's environment` : "";
+  const fallback = left === 0 ? `; ${name} now reads ${keysOf(name, { ...entry, keys: [] })[0]?.key.apiKeyEnv ?? "its default variable"} from the daemon's environment` : "";
   return changed(ctx, name, file, `Removed key "${key.name}" from ${name}${entry.pin === key.name ? " and its pin" : ""}${fallback}`);
 }
 
@@ -762,7 +759,7 @@ export async function testCredential(ctx: ProviderAdminContext, args: OperationI
   const key = implicit !== undefined && implicit.name === args.credential ? implicit : entry.keys[keyIndex(name, entry, args.credential)] as ProviderKeyEntry;
   const secret = secretOf(ctx, name, key);
   if (secret === undefined) {
-    return { provider: name, credential: key.name, ok: false, standing: "missing", detail: key.stored ? "no key saved on the daemon" : `${key.env} is not set on the daemon`, model_count: null };
+    return { provider: name, credential: key.name, ok: false, standing: "missing", detail: key.stored ? "no key saved on the daemon" : `${key.apiKeyEnv} is not set on the daemon`, model_count: null };
   }
   const check = await checkKey(name, entry, secret, ctx.fetchImpl);
   if (check.conclusive) noteCredentialStanding(name, key.name, check.standing, check.detail, now(ctx));

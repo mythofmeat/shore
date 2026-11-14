@@ -84,7 +84,7 @@ export function buildGeminiParams(
   const config = buildGeminiConfig(req, signal);
   return {
     model: req.model,
-    contents: translateMessages(replayableMessages(req), req.provider_options?.gemini_generation ?? Number(/gemini-([0-9]+)/.exec(req.model)?.[1] ?? "2")),
+    contents: translateMessages(replayableMessages(req), isThirdGeneration(req)),
     config,
   };
 }
@@ -227,7 +227,7 @@ export function geminiGenerateResponse(
   };
 }
 
-export function translateMessages(messages: WireMessage[], generation = 2): Content[] {
+export function translateMessages(messages: WireMessage[], thirdGeneration = false): Content[] {
   const toolIdToName = new Map<string, string>();
   const contents: Content[] = [];
   for (const msg of messages) {
@@ -239,7 +239,7 @@ export function translateMessages(messages: WireMessage[], generation = 2): Cont
 
     for (const block of msg.content) if (block.type === "tool_use") toolIdToName.set(block.id, block.name);
     const role = msg.role === "assistant" ? "model" : "user";
-    const parts = translateParts(msg.content, toolIdToName, generation);
+    const parts = translateParts(msg.content, toolIdToName, thirdGeneration);
     if (parts.length > 0) contents.push({ role, parts });
   }
 
@@ -247,7 +247,7 @@ export function translateMessages(messages: WireMessage[], generation = 2): Cont
   return contents;
 }
 
-function translateParts(content: WireMessage["content"], toolIdToName: Map<string, string>, generation: number): Part[] {
+function translateParts(content: WireMessage["content"], toolIdToName: Map<string, string>, thirdGeneration: boolean): Part[] {
   const parts: Part[] = [];
   for (const block of content) {
     switch (block.type) {
@@ -271,7 +271,7 @@ function translateParts(content: WireMessage["content"], toolIdToName: Map<strin
             response.response = { error: `${toolResultText(block.content)}\n${omissionNotice("a tool result image", resolution.omitted)}` };
           } else {
             const inlineData = { mimeType: resolution.image.mediaType, data: resolution.image.base64 };
-            if (generation >= 3) (response.parts ??= []).push({ inlineData });
+            if (thirdGeneration) (response.parts ??= []).push({ inlineData });
             else parts.push({ text: `Image from tool ${name} (tool_call_id: ${block.tool_use_id}):` }, { inlineData });
           }
         }
@@ -353,22 +353,22 @@ function buildThinkingConfig(req: SidecarRequest): ThinkingConfig | undefined {
   const opts = req.provider_options;
   if (opts === undefined) return undefined;
 
-  const manualGeneration = opts.gemini_generation;
-  const generation = manualGeneration !== undefined && manualGeneration > 0
-    ? manualGeneration
-    : detectGeminiGeneration(req.model);
-
-  const budget = opts.budget_tokens;
+  const budget = opts.reasoning_budget_tokens;
   if (budget !== undefined) return { thinkingBudget: budget };
 
   const effort = opts.reasoning_effort;
   if (effort === undefined || effort.length === 0) return undefined;
 
-  if (generation >= 3) {
+  if (isThirdGeneration(req)) {
     const level = geminiLevelName(effort);
     return level !== undefined ? { thinkingLevel: level } : { thinkingBudget: -1 };
   }
   return { thinkingBudget: -1 };
+}
+
+function isThirdGeneration(req: SidecarRequest): boolean {
+  const mode = req.provider_options?.gemini_thinking_mode;
+  return mode === "level" || (mode !== "budget" && detectGeminiGeneration(req.model) >= 3);
 }
 
 export function detectGeminiGeneration(model: string): number {

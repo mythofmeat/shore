@@ -1,11 +1,11 @@
 import { type GenerateContentResponse } from "@google/genai";
 import { describe, expect, test } from "bun:test";
 
-import { geminiStreamEvents, mergeConsecutiveRoles, translateMessages } from "../src/llm/providers/gemini.ts";
+import { buildGeminiParams, geminiStreamEvents, mergeConsecutiveRoles, translateMessages } from "../src/llm/providers/gemini.ts";
 import { collect, tickingClock } from "./support/stream.ts";
 import { ONE_PIXEL_GIF } from "./support/test_images.ts";
 import type { ContentBlock } from "../src/engine/types.ts";
-import type { WireMessage } from "../src/llm/types.ts";
+import type { ProviderOptions, SidecarRequest, WireMessage } from "../src/llm/types.ts";
 
 function asGeminiResponse(raw: unknown): GenerateContentResponse {
   return raw as GenerateContentResponse;
@@ -188,14 +188,14 @@ describe("messages", () => {
       { text: "Image from tool look (tool_call_id: call_1):" },
       { inlineData: { mimeType: "image/gif", data: ONE_PIXEL_GIF } },
     ]);
-    expect(translateMessages(messages, 3)[1]?.parts).toStrictEqual([
+    expect(translateMessages(messages, true)[1]?.parts).toStrictEqual([
       { functionResponse: { id: "call_1", name: "look", response: { result: "here" }, parts: [{ inlineData: { mimeType: "image/gif", data: ONE_PIXEL_GIF } }] } },
     ]);
   });
 
   test("a picture that can't be sent leaves a notice, as the error of a tool result", () => {
     const tiff = { type: "base64" as const, media_type: "image/tiff", data: ONE_PIXEL_GIF };
-    expect(translateMessages(looked([{ type: "text", text: "here" }, { type: "image", source: tiff }]), 3)[1]?.parts).toStrictEqual([
+    expect(translateMessages(looked([{ type: "text", text: "here" }, { type: "image", source: tiff }]), true)[1]?.parts).toStrictEqual([
       { functionResponse: { id: "call_1", name: "look", response: { error: "here\n[image omitted: a tool result image — image/tiff is not a supported format]" } } },
     ]);
     expect(translateMessages([{ role: "user", content: [{ type: "image", source: tiff }] }])).toStrictEqual([
@@ -236,5 +236,43 @@ describe("messages", () => {
     ];
     mergeConsecutiveRoles(contents);
     expect(contents).toStrictEqual([{ role: "user", parts: [{ text: "a\n\nb" }, picture, { text: "c" }, { text: "t", thought: true }, { text: "d" }] }]);
+  });
+});
+
+describe("how a Gemini request thinks and carries a tool's picture", () => {
+  const request = (model: string, options?: ProviderOptions): SidecarRequest => ({
+    sdk: "gemini", model, api_key: "k", max_tokens: 100, reasoning_replay: "all",
+    messages: [
+      { role: "assistant", content: [{ type: "tool_use", id: "call_1", name: "look", input: {} }] },
+      { role: "user", content: [{ type: "tool_result", tool_use_id: "call_1", content: [{ type: "text", text: "here" }, { type: "image", source: { type: "base64", media_type: "image/gif", data: ONE_PIXEL_GIF } }] }] },
+    ],
+    ...(options === undefined ? {} : { provider_options: options }),
+  });
+  const built = (model: string, options?: ProviderOptions): unknown[] => {
+    const params = buildGeminiParams(request(model, options));
+    const sent = (params.contents as { parts?: { functionResponse?: { parts?: unknown[] } }[] }[])[1]?.parts ?? [];
+    return [params.config?.thinkingConfig, sent[0]?.functionResponse?.parts === undefined ? "beside" : "inside"];
+  };
+
+  test("with no gemini_thinking_mode, or auto, the model's own generation decides: levels and pictures inside from Gemini 3 on", () => {
+    expect(built("gemini-3-pro", { reasoning_effort: "high" })).toEqual([{ thinkingLevel: "HIGH" }, "inside"]);
+    expect(built("gemini-2.5-flash", { reasoning_effort: "high" })).toEqual([{ thinkingBudget: -1 }, "beside"]);
+    expect(built("gemini-3-pro", { reasoning_effort: "high", gemini_thinking_mode: "auto" })).toEqual([{ thinkingLevel: "HIGH" }, "inside"]);
+    expect(built("gemini-2.5-flash", { reasoning_effort: "high", gemini_thinking_mode: "auto" })).toEqual([{ thinkingBudget: -1 }, "beside"]);
+    expect(built("tuned-model", { reasoning_effort: "high" })).toEqual([{ thinkingBudget: -1 }, "beside"]);
+    expect(built("gemini-4-pro", { reasoning_effort: "high" })).toEqual([{ thinkingLevel: "HIGH" }, "inside"]);
+    expect([built("gemini-3-pro"), built("gemini-2.5-flash")]).toEqual([[undefined, "inside"], [undefined, "beside"]]);
+  });
+
+  test("level and budget say which way to think whatever the model is called", () => {
+    expect(built("gemini-2.5-flash", { reasoning_effort: "low", gemini_thinking_mode: "level" })).toEqual([{ thinkingLevel: "LOW" }, "inside"]);
+    expect(built("gemini-3-pro", { reasoning_effort: "low", gemini_thinking_mode: "budget" })).toEqual([{ thinkingBudget: -1 }, "beside"]);
+  });
+
+  test("a reasoning budget is sent as it is, an effort that isn't a level leaves the amount to the model, and no effort sends nothing", () => {
+    expect(built("gemini-3-pro", { reasoning_effort: "high", reasoning_budget_tokens: 2048 })).toEqual([{ thinkingBudget: 2048 }, "inside"]);
+    expect(built("gemini-3-pro", { reasoning_effort: "enormous" })).toEqual([{ thinkingBudget: -1 }, "inside"]);
+    expect(built("gemini-3-pro", { reasoning_effort: "" })).toEqual([undefined, "inside"]);
+    expect(built("gemini-3-pro", { gemini_thinking_mode: "level" })).toEqual([undefined, "inside"]);
   });
 });

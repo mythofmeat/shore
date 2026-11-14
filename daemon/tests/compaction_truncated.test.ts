@@ -120,6 +120,82 @@ test("an archive that fails puts every memory file the pass touched back as it w
   expect(await outcomeOf(readFile(join(workspace, "memory", "new.md"), "utf8"))).toThrow();
 });
 
+test("a compaction that uses up its tool rounds pauses with what it wrote and its conversation untouched, and carries on from there when run again", async () => {
+  const root = await mkdtemp(join(tmpdir(), "shore-compact-rounds-"));
+  const dataDir = join(root, "data");
+  const characterDir = join(dataDir, "ada");
+  const workspace = join(root, "workspace");
+  await mkdir(join(workspace, "memory"), { recursive: true });
+  await mkdir(join(characterDir, "threads", "main"), { recursive: true });
+  const memoryStore = await MarkdownMemoryStore.open(join(workspace, "memory"));
+  const activeContent = conversation().map(activeLine).join("\n") + "\n";
+  writeDurable(join(characterDir, "threads", "main", "active.jsonl"), activeContent);
+
+  const edit = (id: string, path: string, content: string) => response("tool_use", [{ type: "tool_use", id, name: "edit", input: { path, content } }]);
+  const model = scripted([
+    edit("w1", "MEMORY.md", "one\n"), edit("w2", "memory/two.md", "two\n"),
+    edit("w3", "memory/three.md", "three\n"), response("tool_use", [{ type: "text", text: "nothing more to write" }]),
+  ]);
+  const pass = async () => compact(
+    { ...options(dataDir, workspace, memoryStore, await planFor(dataDir, "ada", "main", { keepRecentTurns: 1 }), tools(workspace), model), maxToolRounds: 2 },
+    { keepRecentTurns: 1 },
+  );
+  const written = async (path: string): Promise<string | undefined> => readFile(join(workspace, path), "utf8").catch(() => undefined);
+
+  expect(await pass()).toMatchObject({ kind: "paused", reason: "iteration_limit", toolRounds: 2, toolsCalled: ["edit", "edit"] });
+  expect([await written("MEMORY.md"), await written("memory/two.md"), await written("memory/three.md")]).toEqual(["one\n", "two\n", undefined]);
+  expect(await readFile(join(characterDir, "threads", "main", "active.jsonl"), "utf8")).toBe(activeContent);
+
+  expect(await pass()).toMatchObject({ kind: "compacted" });
+  expect(await written("memory/three.md")).toBe("three\n");
+  expect(await readFile(join(characterDir, "threads", "main", "active.jsonl"), "utf8")).not.toBe(activeContent);
+});
+
+test("a pass stopped before a turn's tools ran runs them when it is run again, and they count toward its tool rounds", async () => {
+  const resumed = async (maxToolRounds: number): Promise<{ first: unknown; outcome: unknown; asked: number; files: (string | undefined)[] }> => {
+    const root = await mkdtemp(join(tmpdir(), "shore-compact-pending-"));
+    const dataDir = join(root, "data");
+    const workspace = join(root, "workspace");
+    await mkdir(join(workspace, "memory"), { recursive: true });
+    await mkdir(join(dataDir, "ada", "threads", "main"), { recursive: true });
+    const memoryStore = await MarkdownMemoryStore.open(join(workspace, "memory"));
+    writeDurable(join(dataDir, "ada", "threads", "main", "active.jsonl"), conversation().map(activeLine).join("\n") + "\n");
+
+    const edit = (id: string, path: string) => response("tool_use", [{ type: "tool_use", id, name: "edit", input: { path, content: `${id}\n` } }]);
+    const turns = [edit("w1", "memory/one.md"), edit("w2", "memory/two.md"), response("end_turn", [{ type: "text", text: "done" }])];
+    let asked = 0;
+    const model: CompactionLlm = { ...scripted(turns), async generate() { asked += 1; return turns[asked - 1] as GenerateResponse; } };
+    const working = tools(workspace);
+    let broken = true;
+    const flaky: CompactionTools = { ...working, dispatch: async (name, input, track) => {
+      if (broken) throw new Error("the workspace went away");
+      return await working.dispatch(name, input, track);
+    } };
+    const pass = async () => compact(
+      { ...options(dataDir, workspace, memoryStore, await planFor(dataDir, "ada", "main", { keepRecentTurns: 1 }), flaky, model), maxToolRounds },
+      { keepRecentTurns: 1 },
+    );
+    const first = await pass();
+    broken = false;
+    const outcome = await pass();
+    const written = async (path: string): Promise<string | undefined> => readFile(join(workspace, path), "utf8").catch(() => undefined);
+    return { first, outcome, asked, files: [await written("memory/one.md"), await written("memory/two.md")] };
+  };
+
+  const one = await resumed(1);
+  expect(one.first).toMatchObject({ kind: "paused", reason: "provider", detail: "the workspace went away", toolRounds: 0 });
+  expect(one.outcome).toMatchObject({ kind: "paused", reason: "iteration_limit", toolRounds: 1 });
+  expect([one.asked, one.files]).toEqual([1, ["w1\n", undefined]]);
+
+  const two = await resumed(2);
+  expect(two.outcome).toMatchObject({ kind: "paused", reason: "iteration_limit", toolRounds: 2 });
+  expect([two.asked, two.files]).toEqual([2, ["w1\n", "w2\n"]]);
+
+  const three = await resumed(3);
+  expect(three.outcome).toMatchObject({ kind: "compacted" });
+  expect([three.asked, three.files]).toEqual([3, ["w1\n", "w2\n"]]);
+});
+
 function tools(workspace: string, deferred?: string[]): CompactionTools {
   return {
     workspaceDir: workspace,
@@ -206,7 +282,7 @@ function request(): SidecarRequest {
     api_key: "k",
     messages: [],
     max_tokens: 100,
-    replay_prior_thinking: "all",
+    reasoning_replay: "all",
   };
 }
 

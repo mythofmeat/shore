@@ -1,5 +1,4 @@
 import { shoreLog } from "../log.ts";
-import { geminiMode, normalizeSettings } from "./surface.ts";
 
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
@@ -22,7 +21,7 @@ import {
 import { invalidType } from "./models.ts";
 import { parseKeepalivePings } from "./keepalive.ts";
 import { compareByCodePoint, sortedKeys } from "../util/sort.ts";
-import type { ThinkingReplay } from "../llm/types.ts";
+import { isGeminiThinkingMode, type GeminiThinkingMode, type ThinkingReplay } from "../llm/types.ts";
 import type { ProviderRegistry } from "./providers.ts";
 import { resolveBackgroundModelName, type AppConfig } from "./app.ts";
 import {
@@ -63,17 +62,17 @@ export interface SamplerSettings {
   temperature?: number;
   topP?: number;
   reasoningEffort?: string;
-  budgetTokens?: number;
+  reasoningBudgetTokens?: number;
   maxOutputTokens?: number;
   cacheTtl?: string;
   cacheKeepalive?: CacheKeepaliveSetting;
   cacheKeepalivePings?: number;
   sdk?: string;
-  replayPriorThinking?: ThinkingReplay;
-  maxToolIterations?: number;
-  openrouterProvider?: unknown;
-  geminiGeneration?: number;
-  zaiClearThinking?: boolean;
+  reasoningReplay?: ThinkingReplay;
+  maxToolRounds?: number;
+  openrouterRouting?: unknown;
+  geminiThinkingMode?: GeminiThinkingMode;
+  zaiClearReasoning?: boolean;
   supportsImages?: boolean;
 }
 
@@ -487,16 +486,16 @@ function backgroundLayers(
 
 function sanitizePersistedOverlay(layer: SamplerSettings): SamplerSettings {
   const badSdk = layer.sdk !== undefined && sdkFromWire(layer.sdk) === undefined;
-  const zeroCap = layer.maxToolIterations === 0;
+  const zeroCap = layer.maxToolRounds === 0;
   if (!badSdk && !zeroCap) return layer;
 
   const cleaned: SamplerSettings = { ...layer };
   if (badSdk) delete cleaned.sdk;
   if (zeroCap) {
     shoreLog.warn(
-      "shore: preferences carry max_tool_iterations = 0; treating as unset (unlimited)",
+      "shore: preferences carry max_tool_rounds = 0; treating as unset (unlimited)",
     );
-    delete cleaned.maxToolIterations;
+    delete cleaned.maxToolRounds;
   }
   return cleaned;
 }
@@ -721,16 +720,16 @@ export function applySamplerOverlay(
     ["temperature", "temperature"],
     ["topP", "topP"],
     ["reasoningEffort", "reasoningEffort"],
-    ["budgetTokens", "budgetTokens"],
+    ["reasoningBudgetTokens", "reasoningBudgetTokens"],
     ["maxOutputTokens", "maxOutputTokens"],
     ["cacheTtl", "cacheTtl"],
     ["cacheKeepalive", "cacheKeepalive"],
     ["cacheKeepalivePings", "cacheKeepalivePings"],
-    ["replayPriorThinking", "replayPriorThinking"],
-    ["maxToolIterations", "maxToolIterations"],
-    ["openrouterProvider", "openrouterProvider"],
-    ["geminiGeneration", "geminiGeneration"],
-    ["zaiClearThinking", "zaiClearThinking"],
+    ["reasoningReplay", "reasoningReplay"],
+    ["maxToolRounds", "maxToolRounds"],
+    ["openrouterRouting", "openrouterRouting"],
+    ["geminiThinkingMode", "geminiThinkingMode"],
+    ["zaiClearReasoning", "zaiClearReasoning"],
     ["supportsImages", "supportsImages"],
   ] as const satisfies readonly (readonly [keyof SamplerSettings, keyof ResolvedModel])[];
 
@@ -994,10 +993,10 @@ function unknownField(table: Record<string, unknown>, known: readonly string[]):
 function readSampler(table: Record<string, unknown>): ReadResult<SamplerSettings> {
   const unknown = unknownField(table, SAMPLER_KEYS);
   if (unknown !== undefined) return { err: unknown };
-  try { table = normalizeSettings(table, "preferences"); }
-  catch (error) { return { err: error instanceof Error ? error.message : String(error) }; }
+  const mode = table["gemini_thinking_mode"];
+  if (mode !== undefined && !isGeminiThinkingMode(mode)) return { err: "preferences: gemini_thinking_mode must be auto, budget, or level" };
 
-  const out: SamplerSettings = {};
+  const out: SamplerSettings = mode === undefined ? {} : { geminiThinkingMode: mode };
   const numbers = [
     ["temperature", "temperature"],
     ["topP", "top_p"],
@@ -1010,10 +1009,9 @@ function readSampler(table: Record<string, unknown>): ReadResult<SamplerSettings
   }
 
   const integers = [
-    ["budgetTokens", "budget_tokens"],
+    ["reasoningBudgetTokens", "reasoning_budget_tokens"],
     ["maxOutputTokens", "max_output_tokens"],
-    ["maxToolIterations", "max_tool_iterations"],
-    ["geminiGeneration", "gemini_generation"],
+    ["maxToolRounds", "max_tool_rounds"],
   ] as const;
   for (const [field, key] of integers) {
     const raw = table[key];
@@ -1038,7 +1036,7 @@ function readSampler(table: Record<string, unknown>): ReadResult<SamplerSettings
   }
 
   const booleans = [
-    ["zaiClearThinking", "zai_clear_thinking"],
+    ["zaiClearReasoning", "zai_clear_reasoning"],
     ["supportsImages", "supports_images"],
   ] as const;
   for (const [field, key] of booleans) {
@@ -1064,15 +1062,15 @@ function readSampler(table: Record<string, unknown>): ReadResult<SamplerSettings
     out.cacheKeepalivePings = parsed.ok;
   }
 
-  const replay = table["replay_prior_thinking"];
+  const replay = table["reasoning_replay"];
   if (replay !== undefined) {
     const parsed = readThinkingReplay(replay);
     if ("err" in parsed) return parsed;
-    out.replayPriorThinking = parsed.ok;
+    out.reasoningReplay = parsed.ok;
   }
 
-  if (table["openrouter_provider"] !== undefined) {
-    out.openrouterProvider = table["openrouter_provider"];
+  if (table["openrouter_routing"] !== undefined) {
+    out.openrouterRouting = table["openrouter_routing"];
   }
 
   return { ok: out };
@@ -1081,7 +1079,7 @@ function readSampler(table: Record<string, unknown>): ReadResult<SamplerSettings
 function readThinkingReplay(value: unknown): ReadResult<ThinkingReplay> {
   if (value === "all" || value === "none") return { ok: value };
   return {
-    err: `invalid replay_prior_thinking ${JSON.stringify(value)}; ` +
+    err: `invalid reasoning_replay ${JSON.stringify(value)}; ` +
       `expected "all", "none"`,
   };
 }
@@ -1229,7 +1227,7 @@ export function serializePreferences(prefs: ModelPreferences): string {
 function samplerLines(sampler: SamplerSettings): string[] {
   const out: string[] = [];
   for (const [field, key] of SAMPLER_FIELDS) {
-    const value = field === "geminiGeneration" ? geminiMode(sampler[field]) : sampler[field];
+    const value = sampler[field];
     if (value === undefined) continue;
     if (field === "cacheKeepalive") {
       out.push(`${key} = ${tomlString(keepaliveToString(value as CacheKeepaliveSetting))}`);
