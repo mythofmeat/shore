@@ -4,6 +4,7 @@ import { useImageCacheFor } from "./storage/image_blobs.ts";
 import { evictCachedImages, setImageCacheLimit } from "./storage/image_cache.ts";
 import { repointArchivedImages } from "./storage/archived_images.ts";
 import { markOldClaudeAgentCallsAsSubscription } from "./storage/claude_agent_calls_migration.ts";
+import { renameRecordedHeartbeatCalls } from "./storage/wake_names_migration.ts";
 import { useWorkspacesFor } from "./storage/image_locations.ts";
 import { moveImagesOutOfDatabase } from "./storage/image_db_migration.ts";
 import { moveImagesToCache } from "./storage/image_migration.ts";
@@ -158,6 +159,7 @@ export async function createRuntime(options: RuntimeOptions): Promise<ShoreRunti
 
   applySubscriptionProviders(registry);
   markOldClaudeAgentCallsAsSubscription(config.dirs.data);
+  renameRecordedHeartbeatCalls(config.dirs.data);
   for (const character of registry.availableCharacters()) removeWorkspaceIndex(config.dirs.cache, character);
   configureClaudePlanLimits({
     cacheDir: config.dirs.cache,

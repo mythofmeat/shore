@@ -19,7 +19,7 @@ afterEach(() => setSystemTime());
 function recordingProvider(seen: SidecarRequest[], wakeRead: number): SidecarProvider {
   const reply = (request: SidecarRequest): GenerateResponse => {
     seen.push(structuredClone(request));
-    const waking = request.context?.call_type.startsWith("heartbeat") === true;
+    const waking = request.context?.call_type.startsWith("wake") === true;
     const tail = request.messages.at(-1)?.content;
     const calledTool = Array.isArray(tail) && tail.some((block) => block.type === "tool_result");
     const blocks: GenerateResponse["content_blocks"] = waking && !calledTool
@@ -95,7 +95,7 @@ test("a wake starts from a fresh context: none of the last wake's exchange is on
   await afterOneChat(CHAT_PREFIX_TOKENS, async ({ seen, wakeAt }) => {
     await wakeAt(20);
     await wakeAt(50);
-    const opening = seen.filter((request) => request.context?.call_type === "heartbeat");
+    const opening = seen.filter((request) => request.context?.call_type === "wake");
     expect(opening).toHaveLength(2);
     const chat = wireOf(seen, "message");
     const first = buildAnthropicPlan(structuredClone(required(opening[0]))).params;

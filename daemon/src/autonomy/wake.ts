@@ -309,6 +309,7 @@ export async function runWake(character: string, config: LoadedConfig, wake: Wak
     const recent = recentDiary(characterDir, nowMs);
     const status = presence(config.dirs.data);
     const fired = wake.fired.map((firing) => triggerFiredNote(firing, timeZone));
+    const setOffBy = [...new Set(wake.fired.map((firing) => firing.name).filter((name) => name !== ""))].join(", ");
     const setOff = [...fired, ...(seal === undefined ? [] : [sealedWakeNote(seal.sealed, seal.filesDir, userName, timeZone)]), rendered];
     const id = (deps.newId ?? (() => `m_${crypto.randomUUID()}`))();
     const opener = (text: string): Message => ({
@@ -353,7 +354,8 @@ export async function runWake(character: string, config: LoadedConfig, wake: Wak
       usage: usageConfigView(config.app),
       character,
       thread,
-      call_type: "heartbeat",
+      call_type: "wake",
+      ...(setOffBy === "" ? {} : { trigger: setOffBy }),
       thinking_enabled: thinkingEnabled(request.provider_options),
       ...(seal === undefined ? {} : { sealed: true }),
     };
@@ -375,7 +377,7 @@ export async function runWake(character: string, config: LoadedConfig, wake: Wak
       ...(deps.newsHeard === undefined ? {} : { newsHeard: deps.newsHeard }),
       ...(deps.interrupted === undefined ? {} : { interrupted: deps.interrupted }),
       name: "Wake",
-      callTypes: ["heartbeat", "heartbeat_tool_loop"],
+      callTypes: ["wake", "wake_tool_loop"],
       dispatch: (name, input, toolUseId, tools) => deps.dispatch(name, input, toolUseId, tools, { ...conversation, recordWorkspaceWrite: recorder.track }),
       generate: (call, phase, loopSignal) => deps.generate(call, phase, AbortSignal.any([signal, loopSignal])),
       persist: async (round) => {

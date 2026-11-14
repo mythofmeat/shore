@@ -23,7 +23,7 @@ const START_AND_EDIT: GenerateResponse["content_blocks"] = [
 
 function threadToolsProvider(toolResults: string[], calls: GenerateResponse["content_blocks"] = START_AND_EDIT): SidecarProvider {
   const reply = (request: SidecarRequest): GenerateResponse => {
-    const waking = request.context?.call_type.startsWith("heartbeat") === true;
+    const waking = request.context?.call_type.startsWith("wake") === true;
     const tail = request.messages.at(-1)?.content;
     const results = Array.isArray(tail) ? tail.filter((block) => block.type === "tool_result") : [];
     for (const result of results) toolResults.push(JSON.stringify(result));

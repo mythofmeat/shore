@@ -116,9 +116,9 @@ export function continuationOf(callType: string): string {
     case "tool_loop":
     case "subagent":
       return "tool_loop";
-    case "heartbeat":
-    case "heartbeat_tool_loop":
-      return "heartbeat_tool_loop";
+    case "wake":
+    case "wake_tool_loop":
+      return "wake_tool_loop";
     case "dreaming":
     case "dreaming_tool_loop":
       return "dreaming_tool_loop";
@@ -210,6 +210,7 @@ function record(
     ...(call.output_tokens_estimated === true ? { output_tokens_estimated: true } : {}),
     ...(ctx.thinking_dropped === undefined ? {} : { thinking_dropped: ctx.thinking_dropped }),
     ...(ctx.attempt === undefined ? {} : { attempt: ctx.attempt }),
+    ...(ctx.trigger === undefined ? {} : { trigger: ctx.trigger }),
     ...(call.error === undefined ? {} : { error: call.error }),
   };
   const row = ledger.record(entry, () => new Date(), attempt?.id);

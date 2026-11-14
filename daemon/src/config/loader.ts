@@ -575,6 +575,12 @@ function validateUsageConfig(config: Pick<AppConfig, "usage" | "budgets" | "plan
     }
     validateBudgetAnchors(idx, budget);
     validateBudgetPace(idx, budget);
+    if (budget.call_type !== undefined && OLD_WAKE_CALL_TYPES.includes(budget.call_type)) {
+      throw validationError(`budgets.${idx}.call_type is "${budget.call_type}"; a wake's calls are recorded as "${budget.call_type.replace("heartbeat", "wake")}" now`);
+    }
+    if (budget.usage_kinds.includes("heartbeat")) {
+      throw validationError(`budgets.${idx}.usage_kinds has "heartbeat"; a wake's calls are counted as "wake" now`);
+    }
 
     const trimmed = rustTrim(budget.name);
     const name = trimmed === "" ? `budget ${idx + 1}` : trimmed;
@@ -594,6 +600,8 @@ function validateUsageConfig(config: Pick<AppConfig, "usage" | "budgets" | "plan
     }
   }
 }
+
+const OLD_WAKE_CALL_TYPES: readonly string[] = ["heartbeat", "heartbeat_tool_loop"];
 
 function validateBudgetAnchors(idx: number, budget: UsageBudgetConfig): void {
   if (budget.reset_hour !== undefined) {

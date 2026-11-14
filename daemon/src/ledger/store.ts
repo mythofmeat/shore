@@ -54,7 +54,8 @@ CREATE TABLE IF NOT EXISTS calls (
     output_tokens_estimated INTEGER NOT NULL DEFAULT 0,
     thinking_dropped    INTEGER NOT NULL DEFAULT 0,
     cache_state_reason  TEXT,
-    attempt             TEXT
+    attempt             TEXT,
+    wake_trigger        TEXT
 );
 
 CREATE TABLE IF NOT EXISTS call_attempts (
@@ -101,9 +102,10 @@ CREATE INDEX IF NOT EXISTS idx_usage_budget_warnings_window
     ON usage_budget_warnings (budget_name, period_start);
 `;
 
-function addAttemptColumn(db: Database): void {
+function addLaterColumns(db: Database): void {
   const columns = db.query("PRAGMA table_info(calls)").all() as { name: string }[];
   if (!columns.some((column) => column.name === "attempt")) db.run("ALTER TABLE calls ADD COLUMN attempt TEXT");
+  if (!columns.some((column) => column.name === "wake_trigger")) db.run("ALTER TABLE calls ADD COLUMN wake_trigger TEXT");
   db.run("CREATE INDEX IF NOT EXISTS idx_calls_attempt ON calls (attempt) WHERE attempt IS NOT NULL");
 }
 
@@ -180,6 +182,7 @@ export interface RecordCall {
   output_tokens_estimated?: boolean | undefined;
   thinking_dropped?: number | undefined;
   attempt?: string | undefined;
+  trigger?: string | undefined;
   error?: string | undefined;
 }
 
@@ -236,6 +239,7 @@ export interface CallRow {
   thinking_dropped: number;
   cache_state_reason: string | null;
   attempt: string | null;
+  wake_trigger: string | null;
 }
 
 const INSERT_SQL = `INSERT INTO calls (
@@ -244,14 +248,14 @@ const INSERT_SQL = `INSERT INTO calls (
   cache_ttl, reasoning_effort, tool_surface, total_ms, ttft_ms, finish_reason,
   thinking_enabled, cache_state, cache_anomaly,
   input_cost, output_cost, cache_read_cost, cache_write_cost,
-  cost_source, total_cost, output_tokens_estimated, thinking_dropped, cache_state_reason, attempt
+  cost_source, total_cost, output_tokens_estimated, thinking_dropped, cache_state_reason, attempt, wake_trigger
 ) VALUES (
   $ts, $character, $provider, $api_key_name, $model, $call_type,
   $input_tokens, $output_tokens, $cache_read_tokens, $cache_write_tokens,
   $cache_ttl, $reasoning_effort, $tool_surface, $total_ms, $ttft_ms, $finish_reason,
   $thinking_enabled, $cache_state, $cache_anomaly,
   $input_cost, $output_cost, $cache_read_cost, $cache_write_cost,
-  $cost_source, $total_cost, $output_tokens_estimated, $thinking_dropped, $cache_state_reason, $attempt
+  $cost_source, $total_cost, $output_tokens_estimated, $thinking_dropped, $cache_state_reason, $attempt, $wake_trigger
 )`;
 
 const LAST_ANTHROPIC_CALL_SQL = `SELECT ts, provider, model, thinking_enabled, cache_read_tokens, tool_surface
@@ -288,7 +292,7 @@ export class Ledger {
     db.run("PRAGMA auto_vacuum = INCREMENTAL;");
     db.run("PRAGMA journal_mode = WAL;");
     db.run(SCHEMA);
-    addAttemptColumn(db);
+    addLaterColumns(db);
     if (recoverPending) db.query("UPDATE call_attempts SET status = 'unresolved' WHERE status = 'pending'").run();
     return new Ledger(db, pricing);
   }
@@ -303,7 +307,7 @@ export class Ledger {
       db.close();
       throw new Error(`${path} has no 'calls' table — the daemon owns the schema and creates it`);
     }
-    addAttemptColumn(db);
+    addLaterColumns(db);
     return new Ledger(db, pricing);
   }
 
@@ -385,6 +389,7 @@ export class Ledger {
       $thinking_dropped: row.thinking_dropped,
       $cache_state_reason: row.cache_state_reason,
       $attempt: row.attempt,
+      $wake_trigger: row.wake_trigger,
     });
     if (attemptId === undefined) {
       const result = insert();
@@ -551,6 +556,7 @@ export class Ledger {
       thinking_dropped: record.thinking_dropped ?? 0,
       cache_state_reason: classified.reason,
       attempt: record.attempt ?? null,
+      wake_trigger: record.trigger ?? null,
     };
   }
 }

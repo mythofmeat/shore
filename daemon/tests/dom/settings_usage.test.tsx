@@ -118,7 +118,7 @@ describe("the usage page", () => {
     await click(button(view.host, "Breakdown"));
     expect(checked()).toEqual(["false", "true", "false", "false"]);
     expect([...view.host.querySelectorAll("select[aria-label='Group by'] option")].map((option) => [option.getAttribute("value"), option.textContent])).toEqual([
-      ["model", "By model"], ["provider", "By provider"], ["call_type", "By call type"], ["kind", "By kind"], ["api_key", "By api key"], ["cost_source", "By cost source"],
+      ["model", "By model"], ["provider", "By provider"], ["call_type", "By call type"], ["kind", "By kind"], ["api_key", "By api key"], ["cost_source", "By cost source"], ["trigger", "By trigger"],
     ]);
     await type(view.host.querySelector("select[aria-label='Group by']"), "call_type");
     await click(button(view.host, "Budgets"));
@@ -147,7 +147,7 @@ describe("the usage page", () => {
     const format = await formats();
     const answers: unknown[] = [
       { mode: "summary_by", dimension: "call_type", period: "day", summary: [{ group: "chat", ...totals }] },
-      { mode: "anomalies", anomalies: [{ ts: DAY, character: "ada", model: "opus", call_type: "chat", anomaly: null, cache_read_tokens: 1000, cache_write_tokens: 2 }, { ts: DAY, character: "bo", model: "haiku", call_type: "heartbeat", anomaly: "cache miss", cache_read_tokens: 0, cache_write_tokens: 5 }] },
+      { mode: "anomalies", anomalies: [{ ts: DAY, character: "ada", model: "opus", call_type: "chat", anomaly: null, cache_read_tokens: 1000, cache_write_tokens: 2 }, { ts: DAY, character: "bo", model: "haiku", call_type: "wake", anomaly: "cache miss", cache_read_tokens: 0, cache_write_tokens: 5 }] },
       { mode: "budget", timezone: "UTC", budgets: [], call_attempts: attempts(0, 0) },
       { mode: "budget", timezone: "UTC", budgets: [], call_attempts: attempts(0, 0), claude_plan_limits: plans([limit("seven_day")]) },
       { mode: "budget", timezone: "UTC", budgets: [budget("daily")], call_attempts: attempts(0, 0) },
@@ -164,7 +164,7 @@ describe("the usage page", () => {
       head: [["Time", ""], ["Character", ""], ["Model", ""], ["Call type", ""], ["Issue", ""], ["Cache read", "number"], ["Cache write", "number"]],
       rows: [
         [[format.time(DAY), ""], ["ada", ""], ["opus", ""], ["chat", ""], ["—", ""], [(1000).toLocaleString(), "number"], ["2", "number"]],
-        [[format.time(DAY), ""], ["bo", ""], ["haiku", ""], ["heartbeat", ""], ["cache miss", ""], ["0", "number"], ["5", "number"]],
+        [[format.time(DAY), ""], ["bo", ""], ["haiku", ""], ["wake", ""], ["cache miss", ""], ["0", "number"], ["5", "number"]],
       ],
       empty: null,
     });

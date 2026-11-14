@@ -654,8 +654,8 @@ function pendingAttemptCost(
     const accepted = [
       "message",
       "tool_loop",
-      "heartbeat",
-      "heartbeat_tool_loop",
+      "wake",
+      "wake_tool_loop",
       "keepalive",
       "compaction",
       "label",
@@ -1056,9 +1056,9 @@ function callTypeMatchesUsageKind(callType: string, usageKind: string): boolean 
       );
     case "tool_loop":
       return usageKind === "message_with_tools" || usageKind === "tool_loop";
-    case "heartbeat_tool_loop":
-    case "heartbeat":
-      return usageKind === "heartbeat";
+    case "wake_tool_loop":
+    case "wake":
+      return usageKind === "wake";
     case "keepalive":
       return usageKind === "keepalive";
     case "compaction":
@@ -1096,7 +1096,7 @@ export function actionBlocks(action: UsageBudgetAction, call: GatedCall): boolea
     case "pause_background":
       return call.foreground !== true && isBackgroundCall(call.call_type);
     case "pause_wakes":
-      return isHeartbeatCall(call.call_type);
+      return isWakeCall(call.call_type);
   }
 }
 
@@ -1108,7 +1108,7 @@ function compactionAllowed(
 
 export function isBackgroundCall(callType: string): boolean {
   return (
-    isHeartbeatCall(callType) ||
+    isWakeCall(callType) ||
     callType === "keepalive" ||
     callType === "compaction" ||
     callType === "label" ||
@@ -1118,8 +1118,8 @@ export function isBackgroundCall(callType: string): boolean {
   );
 }
 
-function isHeartbeatCall(callType: string): boolean {
-  return callType === "heartbeat" || callType === "heartbeat_tool_loop";
+function isWakeCall(callType: string): boolean {
+  return callType === "wake" || callType === "wake_tool_loop";
 }
 
 export function newlyCrossedBudgetWarnings(

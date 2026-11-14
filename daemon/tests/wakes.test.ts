@@ -1,3 +1,4 @@
+import { Database } from "bun:sqlite";
 import { afterAll, afterEach, expect, jest, setSystemTime, spyOn, test } from "bun:test";
 import { existsSync } from "node:fs";
 import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
@@ -88,7 +89,7 @@ function scriptedProvider(script: Script): SidecarProvider {
     },
     stream: async function* (request) {
       script.calls.push(request.context?.call_type ?? "");
-      if (request.context?.call_type.startsWith("heartbeat") !== true) {
+      if (request.context?.call_type.startsWith("wake") !== true) {
         if (request.context?.call_type === "message") script.replies.push(structuredClone(request));
         if (request.context?.call_type === "compaction") script.compactionRounds?.push(request.max_tool_rounds);
         const held = script.held;
@@ -1875,8 +1876,8 @@ test("a trigger that names a thread wakes the character there, fresh, with what 
 
     const opener = wakeText("12:11 PM", [FIRED]);
     expect(script.wakes.map((request) => [request.model, request.context?.call_type, request.context?.thread])).toEqual([
-      ["claude-pinned", "heartbeat", "ring"],
-      ["claude-pinned", "heartbeat_tool_loop", "ring"],
+      ["claude-pinned", "wake", "ring"],
+      ["claude-pinned", "wake_tool_loop", "ring"],
     ]);
     expect(turnsOf(script.wakes[0])).toEqual([["user", wakeShown("12:11 PM", [
       `The last of what was said in this thread:\n\n${said("User", "12:01 PM", "tell me a story in parts")}\n\n${said("you", "12:01 PM", "reply to: tell me a story in parts")}`,
@@ -2890,8 +2891,8 @@ test("a wake whose trigger names no thread runs in home, is shown what was said 
     const tide = '[Your trigger "tide" fired at Friday 2026-10-30 · 12:11 PM: Look at the tide.]';
     const long = '[Your trigger "long" fired at Friday 2026-10-30 · 12:11 PM: Stay a while.]';
     expect(script.wakes.map((request) => [request.model, request.context?.call_type, request.context?.thread])).toEqual([
-      ["claude-fixture", "heartbeat", "main"],
-      ["claude-fixture", "heartbeat_tool_loop", "main"],
+      ["claude-fixture", "wake", "main"],
+      ["claude-fixture", "wake_tool_loop", "main"],
     ]);
     expect(turnsOf(script.wakes[0])).toEqual([["user", homeWakeShown("12:11 PM", [
       `The last of what was said in this thread:\n\n${said("User", "12:00 PM", "hello")}\n\n${said("you", "12:00 PM", "reply to: hello")}`,
@@ -3037,7 +3038,7 @@ test("a wake whose request can't be built, or that a budget holds back, leaves i
   }, (app) => {
     app.budgets = [{
       name: "beats", period: "month", cost_usd: 0, warn_fractions: [], limit_action: "block", character: undefined, provider: undefined,
-      api_key: undefined, model: undefined, call_type: "heartbeat", usage_kinds: [], allow_compaction: false,
+      api_key: undefined, model: undefined, call_type: "wake", usage_kinds: [], allow_compaction: false,
       reset_hour: undefined, reset_day_of_week: undefined, reset_day_of_month: undefined, pace_period: undefined,
       pace_action: undefined, pace_warn_fractions: undefined, warn_action: undefined, pace_warn_action: undefined,
     }];
@@ -3179,6 +3180,34 @@ test("a wake for a character left with no chat model at all is skipped, and the 
   });
 });
 
+test("the ledger records which triggers set off each of a wake's calls, a wake started by hand has none, and usage can be grouped by trigger", async () => {
+  await withCharacter(async ({ runtime, data, say, wakeNow, command }) => {
+    await say("hello");
+    at(20);
+    runtime.autonomy.wakeFor("ada", { name: "tide-table", reason: "the tide is out", at: T0 + 19 * MINUTE });
+    runtime.autonomy.wakeFor("ada", { name: "lamp", reason: "the lamp is low", at: T0 + 20 * MINUTE });
+    runtime.autonomy.wakeFor("ada", { name: "lamp", reason: "the lamp is lower", at: T0 + 20 * MINUTE });
+    await runtime.autonomy.tick();
+    at(200);
+    await wakeNow();
+
+    const ledger = new Database(join(data, "shore.db"), { readonly: true });
+    try {
+      expect(ledger.query("SELECT call_type, wake_trigger FROM calls ORDER BY id").values()).toEqual([
+        ["message", null],
+        ["wake", "tide-table, lamp"], ["wake_tool_loop", "tide-table, lamp"],
+        ["wake", null], ["wake_tool_loop", null],
+      ]);
+    } finally {
+      ledger.close();
+    }
+    const grouped = await command("usage", { group_by: "trigger" });
+    if (grouped.type !== "command_output") throw new Error(`usage answered ${grouped.type}`);
+    const report = grouped.data as { mode: string; dimension: string; summary: { group: string; call_count: number }[] };
+    expect([report.mode, report.dimension, Object.fromEntries(report.summary.map((row) => [row.group, row.call_count]))]).toEqual(["summary_by", "trigger", { none: 3, "tide-table, lamp": 2 }]);
+  });
+});
+
 test("each round of a wake is kept for the trace of what wakes thought and did", async () => {
   await withCharacter(async ({ runtime, say, wakeNow }) => {
     await say("hello");
@@ -3186,8 +3215,8 @@ test("each round of a wake is kept for the trace of what wakes thought and did",
     await wakeNow();
     const kept = runtime.callStore?.queryTranscripts("heartbeat", "ada", 100).map((row) => [row.call_type, row.iteration, row.finish_reason]);
     expect(kept?.reverse()).toEqual([
-      ["heartbeat", 0, "tool_use"],
-      ["heartbeat_tool_loop", 1, "end_turn"],
+      ["wake", 0, "tool_use"],
+      ["wake_tool_loop", 1, "end_turn"],
     ]);
   });
 });
