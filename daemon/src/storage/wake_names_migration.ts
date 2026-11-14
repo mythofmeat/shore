@@ -1,3 +1,5 @@
+import type { Database } from "bun:sqlite";
+
 import { bookPathIn, readBook, SESSION_KEY_SEPARATOR, writeBook } from "../llm/providers/agent_sessions.ts";
 import { shoreLog } from "../log.ts";
 import { pack, withStorage } from "./store.ts";
@@ -11,15 +13,19 @@ function ranOldWakes(sessionKey: string): boolean {
   return parts.length === 4 && parts[3] === "heartbeat";
 }
 
+export function renameHeartbeatCallTypes(db: Database): number {
+  return TABLES_WITH_A_CALL_TYPE.reduce((total, table) => total + db.query(
+    `UPDATE ${table} SET call_type = 'wake' || substr(call_type, 10) WHERE call_type IN ('heartbeat', 'heartbeat_tool_loop')`,
+  ).run().changes, 0);
+}
+
 export function renameRecordedHeartbeatCalls(data: string): void {
   try {
     if (withStorage(data, (db) => db.query("SELECT 1 FROM state_files WHERE path = ?1").get(DONE)) !== null) return;
     const sessions = bookPathIn(data);
     writeBook(sessions, Object.fromEntries(Object.entries(readBook(sessions)).filter(([key]) => !ranOldWakes(key))));
     const renamed = withStorage(data, (db) => db.transaction(() => {
-      const changed = TABLES_WITH_A_CALL_TYPE.reduce((total, table) => total + db.query(
-        `UPDATE ${table} SET call_type = 'wake' || substr(call_type, 10) WHERE call_type IN ('heartbeat', 'heartbeat_tool_loop')`,
-      ).run().changes, 0);
+      const changed = renameHeartbeatCallTypes(db);
       db.query("INSERT INTO state_files(path, character, content) VALUES (?1, '', ?2) ON CONFLICT(path) DO NOTHING").run(DONE, pack("done"));
       return changed;
     })());
