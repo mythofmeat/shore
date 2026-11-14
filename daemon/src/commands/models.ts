@@ -139,9 +139,9 @@ function resolveActiveModel(ctx: ModelsContext): ResolvedModel {
 }
 
 function backgroundTask(selector: string): BackgroundTask {
-  if (selector === "heartbeat" || selector === "compaction" || selector === "dreaming") return selector;
+  if (selector === "wake" || selector === "compaction" || selector === "dreaming") return selector;
   throw invalidRequest(
-    `unknown background task: ${selector}; expected all, heartbeat, compaction, or dreaming`,
+    `unknown background task: ${selector}; expected all, wake, compaction, or dreaming`,
   );
 }
 
@@ -300,7 +300,7 @@ function chatRole(ctx: ModelsContext): ModelRole {
 
 interface ChatInheritance { thread: ModelRole; home: ModelRole }
 
-const backgroundModelKey = (task: BackgroundTask): string => `${task === "heartbeat" ? "triggers" : task}.model`;
+const backgroundModelKey = (task: BackgroundTask): string => `${task === "wake" ? "triggers" : task}.model`;
 
 function backgroundRole(ctx: ModelsContext, task: BackgroundTask, inherits?: ChatInheritance): ModelRole {
   const perTask = resolveBackgroundModelName(ctx.config.app, task);

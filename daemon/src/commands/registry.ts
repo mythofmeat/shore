@@ -102,7 +102,7 @@ const heartbeatPresentation = { ...diagnosticPresentation, prerequisites: ["auto
 const modelPresentation = { category: "Models", scope: "optional_character", prerequisites: [], effects: ["read"], confirmation: "none" } as const;
 const modelTargetFields = {
   name: { label: "Model", choices: "models", hint: "Omit for the active model; do not combine with role selectors" },
-  background_task: { label: "Background task", hint: "all, heartbeat for wakes, compaction or dreaming" },
+  background_task: { label: "Background task", hint: "all, wake, compaction or dreaming" },
   subagent: { label: "Subagent", choices: "subagents", hint: "A configured name, or all for the shared subagent model" },
 } as const;
 const modelHiddenField = { label: "Include hidden models", hint: "Allow a model excluded by discovery filters" } as const;

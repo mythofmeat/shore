@@ -1627,7 +1627,7 @@ wire_types! {
     }
 
     #[serde(rename_all = "snake_case")]
-    pub enum BackgroundModelTarget { All, Heartbeat, Compaction, Dreaming }
+    pub enum BackgroundModelTarget { All, Wake, Compaction, Dreaming }
 
     #[serde(rename_all = "snake_case")]
     pub enum ModelPreferenceScope { Character, Global }

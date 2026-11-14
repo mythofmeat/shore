@@ -6154,7 +6154,7 @@
     {
       "path": "shore model use",
       "about": "Switch the model something runs on",
-      "long_about": "Switch the model something runs on\n\nSpell out `use` when a model's name would otherwise read as one of these subcommands. An unknown name is an error, never a fallback.\n\nBare, this sets the character's chat model, which every thread without a model of its own uses. With --thread (or SHORE_THREAD) it gives just that thread its own model. Every other target writes the config file, which is global: `--background=compaction` and `=dreaming` write `<task>.model`, `--background=heartbeat` writes `triggers.model`, the model wakes run on, bare `--background` writes `triggers.model` and `compaction.model` but never `dreaming.model`; `--subagent=<name>` writes `subagents.<name>.model`, and bare `--subagent` writes `subagents.model`.",
+      "long_about": "Switch the model something runs on\n\nSpell out `use` when a model's name would otherwise read as one of these subcommands. An unknown name is an error, never a fallback.\n\nBare, this sets the character's chat model, which every thread without a model of its own uses. With --thread (or SHORE_THREAD) it gives just that thread its own model. Every other target writes the config file, which is global: `--background=compaction` and `=dreaming` write `<task>.model`, `--background=wake` writes `triggers.model`, the model wakes run on, bare `--background` writes `triggers.model` and `compaction.model` but never `dreaming.model`; `--subagent=<name>` writes `subagents.<name>.model`, and bare `--subagent` writes `subagents.model`.",
       "hidden": false,
       "aliases": [],
       "subcommand_required": false,
@@ -6207,7 +6207,7 @@
           "long": "background",
           "aliases": [],
           "short_aliases": [],
-          "help": "Background tasks: bare means wakes and compaction; naming one requires =compaction, =heartbeat (wakes) or =dreaming",
+          "help": "Background tasks: bare means wakes and compaction; naming one requires =compaction, =wake or =dreaming",
           "long_help": null,
           "action": "Set",
           "required": false,
@@ -6219,7 +6219,7 @@
           "defaults": [],
           "choices": [
             "all",
-            "heartbeat",
+            "wake",
             "compaction",
             "dreaming"
           ],
@@ -6329,7 +6329,7 @@
           "long": "background",
           "aliases": [],
           "short_aliases": [],
-          "help": "Background tasks: bare means wakes and compaction; naming one requires =compaction, =heartbeat (wakes) or =dreaming",
+          "help": "Background tasks: bare means wakes and compaction; naming one requires =compaction, =wake or =dreaming",
           "long_help": null,
           "action": "Set",
           "required": false,
@@ -6341,7 +6341,7 @@
           "defaults": [],
           "choices": [
             "all",
-            "heartbeat",
+            "wake",
             "compaction",
             "dreaming"
           ],
@@ -6515,7 +6515,7 @@
           "long": "background",
           "aliases": [],
           "short_aliases": [],
-          "help": "Background tasks: bare means wakes and compaction; naming one requires =compaction, =heartbeat (wakes) or =dreaming",
+          "help": "Background tasks: bare means wakes and compaction; naming one requires =compaction, =wake or =dreaming",
           "long_help": null,
           "action": "Set",
           "required": false,
@@ -6527,7 +6527,7 @@
           "defaults": [],
           "choices": [
             "all",
-            "heartbeat",
+            "wake",
             "compaction",
             "dreaming"
           ],
@@ -6763,7 +6763,7 @@
           "long": "background",
           "aliases": [],
           "short_aliases": [],
-          "help": "Background tasks: bare means wakes and compaction; naming one requires =compaction, =heartbeat (wakes) or =dreaming",
+          "help": "Background tasks: bare means wakes and compaction; naming one requires =compaction, =wake or =dreaming",
           "long_help": null,
           "action": "Set",
           "required": false,
@@ -6775,7 +6775,7 @@
           "defaults": [],
           "choices": [
             "all",
-            "heartbeat",
+            "wake",
             "compaction",
             "dreaming"
           ],
@@ -10844,13 +10844,13 @@
         "model",
         "use",
         "fixture:model",
-        "--background=heartbeat"
+        "--background=wake"
       ],
       "mapping": {
         "name": "switch_model",
         "args": {
           "name": "fixture:model",
-          "background_task": "heartbeat"
+          "background_task": "wake"
         }
       }
     },

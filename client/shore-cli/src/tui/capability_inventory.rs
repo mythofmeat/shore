@@ -128,7 +128,7 @@ const WIRE_EXAMPLES: &[&[&str]] = &[
     &["model", "--favorites"],
     &["model", "use", "fixture:model"],
     &["model", "use", "fixture:model", "--background"],
-    &["model", "use", "fixture:model", "--background=heartbeat"],
+    &["model", "use", "fixture:model", "--background=wake"],
     &["model", "use", "fixture:model", "--background=dreaming"],
     &["model", "use", "fixture:model", "--background=compaction"],
     &["model", "use", "fixture:model", "--subagent"],

@@ -8059,7 +8059,7 @@
         "type": "string",
         "enum": [
           "all",
-          "heartbeat",
+          "wake",
           "compaction",
           "dreaming"
         ]
@@ -18176,7 +18176,7 @@
         "type": "string",
         "enum": [
           "all",
-          "heartbeat",
+          "wake",
           "compaction",
           "dreaming"
         ]

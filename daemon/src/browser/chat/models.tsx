@@ -83,7 +83,7 @@ export function targetLabel(target: ModelTarget, character: string | null): stri
   switch (target.kind) {
     case "thread": return target.id === undefined ? "This thread" : `Thread ${target.id}`;
     case "character": return `${character ?? "Character"}’s default`;
-    case "background": return target.task === "all" ? "All background tasks" : target.task === "heartbeat" ? "Wakes" : `${target.task[0]?.toUpperCase() ?? ""}${target.task.slice(1)}`;
+    case "background": return target.task === "all" ? "All background tasks" : target.task === "wake" ? "Wakes" : `${target.task[0]?.toUpperCase() ?? ""}${target.task.slice(1)}`;
     case "subagent": return `Subagent ${target.name}`;
   }
 }

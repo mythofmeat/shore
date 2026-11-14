@@ -314,7 +314,7 @@ fn model_settings_are_asked_for_the_target_named_on_the_line() {
         if named(frame) != Some("model_settings") {
             return Vec::new();
         }
-        let key = if frame["args"] == json!({ "background_task": "heartbeat" }) {
+        let key = if frame["args"] == json!({ "background_task": "wake" }) {
             "temperature"
         } else {
             "asked-for-something-else"
@@ -330,7 +330,7 @@ fn model_settings_are_asked_for_the_target_named_on_the_line() {
             &daemon.addr,
             "model",
             "setting",
-            "--background=heartbeat",
+            "--background=wake",
             ""
         ]),
         ["temperature\tunset"]
