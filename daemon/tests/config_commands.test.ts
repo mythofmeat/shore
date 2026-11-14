@@ -198,6 +198,52 @@ describe("[tools], [subagents] and [notifications] in config output", () => {
   });
 });
 
+describe("[[budgets]] and [plan_limits] in config output", () => {
+  const TOML = [
+    "[providers.openrouter]", "[[providers.openrouter.keys]]", 'name = "work"', 'api_key_env = "K"', "spend_limit_usd = 20",
+    "[usage]", 'timezone = "utc"',
+    "[[budgets]]", 'name = "daily"', "cost_usd = 5", 'limit_action = "block"', "allow_compaction = true", 'usage_kinds = ["background"]',
+    "[[budgets]]", "cost_usd = 7", 'period = "week"', 'pace_period = "day"', "pace_warn_fractions = [0.7]",
+    "[plan_limits.five_hour]", "warn_fractions = [0.5]", "",
+  ].join("\n");
+
+  test("the budgets the user wrote are shown under the file's names, each with whether compaction may pass it, and a key's spending limit is left with the key", async () => {
+    const w = await build(undefined, TOML);
+    const shown = (config(w.ctx, {}) as { config: Record<string, unknown> }).config;
+    const unset = {
+      character: null, provider: null, api_key: null, model: null, call_type: null, reset_hour: null, reset_day_of_week: null, reset_day_of_month: null,
+      pace_period: null, pace_action: null, pace_warn_fractions: null, warn_action: null, pace_warn_action: null,
+    };
+    expect(shown.budgets).toEqual([
+      { ...unset, name: "daily", period: "day", cost_usd: 5, warn_fractions: [0.8, 1], limit_action: "block", usage_kinds: ["background"], allow_compaction: true },
+      { ...unset, name: "", period: "week", cost_usd: 7, warn_fractions: [0.8, 1], limit_action: "warn", usage_kinds: [], allow_compaction: false, pace_period: "day", pace_warn_fractions: [0.7] },
+    ]);
+    expect([shown.usage, shown.plan_limits]).toEqual([{ timezone: "utc" }, {
+      five_hour: { warn_fractions: [0.5], limit_fraction: 1, limit_action: "pause_background" },
+      seven_day: { warn_fractions: [0.8, 0.95], limit_fraction: 1, limit_action: "pause_background" },
+    }]);
+    expect(config(w.ctx, { key: "budgets" })).toMatchObject({ key: "budgets", config: shown.budgets, defaults: [] });
+    expect(config(w.ctx, { key: "plan_limits.five_hour.warn_fractions" })).toMatchObject({ config: [0.5], defaults: [0.8, 0.95] });
+    expect(() => config(w.ctx, { key: "usage.budgets" })).toThrow("Config section not found: usage.budgets");
+  });
+
+  test("the list of settings names a budget's settings as the file does", async () => {
+    const w = await build(undefined, TOML);
+    const rows = schemaOf(w.ctx).filter((row) => row.key.startsWith("budgets.") || row.key.startsWith("plan_limits.five_hour.") || row.key.startsWith("usage."));
+    expect(rows.map((row) => `${row.key}: ${row.type}${row.optional ? "?" : ""}`)).toEqual([
+      'budgets."<index>": table', 'budgets."<index>".allow_compaction: boolean', 'budgets."<index>".api_key: string?', 'budgets."<index>".call_type: string?',
+      'budgets."<index>".character: string?', 'budgets."<index>".cost_usd: number', 'budgets."<index>".limit_action: warn | block | pause_background | pause_wakes',
+      'budgets."<index>".model: string?', 'budgets."<index>".name: string', 'budgets."<index>".pace_action: warn | block | pause_background | pause_wakes?',
+      'budgets."<index>".pace_period: hour | day | week | month?', 'budgets."<index>".pace_warn_action: warn | block | pause_background | pause_wakes?',
+      'budgets."<index>".pace_warn_fractions: list of number?', 'budgets."<index>".period: hour | day | week | month', 'budgets."<index>".provider: string?',
+      'budgets."<index>".reset_day_of_month: u32?', 'budgets."<index>".reset_day_of_week: monday | tuesday | wednesday | thursday | friday | saturday | sunday?',
+      'budgets."<index>".reset_hour: u32?', 'budgets."<index>".usage_kinds: list of string', 'budgets."<index>".warn_action: warn | block | pause_background | pause_wakes?',
+      'budgets."<index>".warn_fractions: list of number', "plan_limits.five_hour.limit_action: warn | block | pause_background | pause_wakes",
+      "plan_limits.five_hour.limit_fraction: number", "plan_limits.five_hour.warn_fractions: list of number", "usage.timezone: string",
+    ]);
+  });
+});
+
 describe("sub-agents in the model and tool commands", () => {
   const TOML = [
     "[chat]", 'model = "anthropic:claude-x"',

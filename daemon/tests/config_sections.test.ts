@@ -1,9 +1,9 @@
 import { expect, test } from "bun:test";
-import { mkdtemp, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 
 import { resultCharsFor, subagentEnabled, timeoutFor, toolGrants } from "../src/config/app.ts";
-import { loadConfig } from "../src/config/loader.ts";
+import { loadCharacterConfig, loadConfig } from "../src/config/loader.ts";
 import { restartRequiredChanges } from "../src/config/restart.ts";
 import { attemptMatrixBridge, unusableReason } from "../src/connections/matrix/start.ts";
 import { resolveListenAddr } from "../src/daemon/startup.ts";
@@ -312,4 +312,121 @@ test("the Matrix bridge says which of [matrix]'s settings it still needs", () =>
   expect(unusableReason({ ...matrix, homeserver_url: " ", user_id: "" }, { accessToken: "t", password: undefined, deviceId: undefined })).toBe("[matrix] is missing homeserver_url and user_id");
   expect(unusableReason({ ...matrix, user_id: "" }, { accessToken: "t", password: undefined, deviceId: undefined })).toBe("[matrix] is missing user_id");
   expect(unusableReason(matrix, { accessToken: "t", password: undefined, deviceId: undefined })).toBeUndefined();
+});
+
+async function budgetsIn(): Promise<{ root: string; write: (toml: string) => Promise<void>; read: () => ReturnType<typeof loadConfig> }> {
+  const root = await mkdtemp(testTmp("shore-budgets-config-"));
+  return {
+    root,
+    write: async (toml) => { await writeFile(join(root, "config.toml"), toml); },
+    read: () => loadConfig(join(root, "config.toml"), { env: { SHORE_CONFIG_DIR: root }, onWarn: () => {} }),
+  };
+}
+
+test("[[budgets]], [plan_limits] and [usage] are read under the names in the file, and a budget given only a cost warns at 80% and 100% of a day's spend and holds compaction to it", async () => {
+  const { write, read } = await budgetsIn();
+  await write("[[budgets]]\ncost_usd = 5\n");
+  const fresh = read().app;
+  expect(fresh.budgets).toEqual([{
+    name: "", period: "day", cost_usd: 5, warn_fractions: [0.8, 1], limit_action: "warn", character: undefined, provider: undefined, api_key: undefined,
+    model: undefined, call_type: undefined, usage_kinds: [], allow_compaction: false, reset_hour: undefined, reset_day_of_week: undefined,
+    reset_day_of_month: undefined, pace_period: undefined, pace_action: undefined, pace_warn_fractions: undefined, warn_action: undefined, pace_warn_action: undefined,
+  }]);
+  expect([fresh.usage, fresh.plan_limits]).toEqual([{ timezone: "local" }, {
+    five_hour: { warn_fractions: [0.8, 0.95], limit_fraction: 1, limit_action: "pause_background" },
+    seven_day: { warn_fractions: [0.8, 0.95], limit_fraction: 1, limit_action: "pause_background" },
+  }]);
+
+  await write([
+    "[usage]", 'timezone = "utc"',
+    "[[budgets]]", 'name = "week"', 'period = "week"', "cost_usd = 20.5", "warn_fractions = [0.5]", 'limit_action = "block"', 'warn_action = "pause_wakes"', 'character = "ada"',
+    'provider = "anthropic"', 'api_key = "default"', 'call_type = "wake"', 'usage_kinds = ["background"]', "allow_compaction = true", "reset_hour = 4", 'reset_day_of_week = "sunday"',
+    'pace_period = "day"', 'pace_action = "pause_background"', "pace_warn_fractions = [0.7]", 'pace_warn_action = "warn"',
+    "[[budgets]]", 'name = "month"', 'period = "month"', "cost_usd = 90", "reset_day_of_month = 3",
+    "[plan_limits.five_hour]", "warn_fractions = [0.5]", "limit_fraction = 0.9", 'limit_action = "block"',
+    "[plan_limits.seven_day]", 'limit_action = "warn"', "",
+  ].join("\n"));
+  const written = read().app;
+  expect(written.budgets).toEqual([{
+    name: "week", period: "week", cost_usd: 20.5, warn_fractions: [0.5], limit_action: "block", character: "ada", provider: "anthropic", api_key: "default",
+    model: undefined, call_type: "wake", usage_kinds: ["background"], allow_compaction: true, reset_hour: 4, reset_day_of_week: "sunday",
+    reset_day_of_month: undefined, pace_period: "day", pace_action: "pause_background", pace_warn_fractions: [0.7], warn_action: "pause_wakes", pace_warn_action: "warn",
+  }, {
+    name: "month", period: "month", cost_usd: 90, warn_fractions: [0.8, 1], limit_action: "warn", character: undefined, provider: undefined, api_key: undefined,
+    model: undefined, call_type: undefined, usage_kinds: [], allow_compaction: false, reset_hour: undefined, reset_day_of_week: undefined,
+    reset_day_of_month: 3, pace_period: undefined, pace_action: undefined, pace_warn_fractions: undefined, warn_action: undefined, pace_warn_action: undefined,
+  }]);
+  expect([written.usage, written.plan_limits]).toEqual([{ timezone: "utc" }, {
+    five_hour: { warn_fractions: [0.5], limit_fraction: 0.9, limit_action: "block" },
+    seven_day: { warn_fractions: [0.8, 0.95], limit_fraction: 1, limit_action: "warn" },
+  }]);
+
+  for (const [toml, refusal] of [
+    ["[[budgets]]\ncost_usd = 5\nwarn_at = [0.5]\n", "unknown field `budgets.0.warn_at`"],
+    ["[[budgets]]\ncost_usd = 5\nlimit = \"block\"\n", "unknown field `budgets.0.limit`"],
+    ["[[budgets]]\ncost_usd = 5\nusage_kind = [\"background\"]\n", "unknown field `budgets.0.usage_kind`"],
+    ["[[budgets]]\ncost_usd = 5\nallow_compaction_over_budget = true\n", "unknown field `budgets.0.allow_compaction_over_budget`"],
+    ["[[budgets]]\ncost_usd = 5\npace_period = \"hour\"\npace_warn_at = [0.5]\n", "unknown field `budgets.0.pace_warn_at`"],
+    ["[[usage.budgets]]\ncost_usd = 5\n", "unknown field `usage.budgets`"],
+    ["[usage.plan_limits.five_hour]\nlimit_fraction = 0.5\n", "unknown field `usage.plan_limits`"],
+  ] as const) {
+    await write(toml);
+    expect(read).toThrow(refusal);
+  }
+});
+
+test("a budget, a plan limit or a timezone that can't work is refused, naming the key as the file has it", async () => {
+  const { write, read } = await budgetsIn();
+  for (const [second, refusal] of [
+    ["cost_usd = 0", "budgets.1.cost_usd must be greater than 0"],
+    ["cost_usd = 1\nwarn_fractions = [0.5, 0.0]", "budgets.1.warn_fractions values must be greater than 0"],
+    ["cost_usd = 1\nreset_hour = 24", "budgets.1.reset_hour must be 0-23, got 24"],
+    ['cost_usd = 1\nperiod = "hour"\nreset_hour = 3', 'budgets.1.reset_hour is not valid for period = "hour"'],
+    ['cost_usd = 1\nreset_day_of_week = "sunday"', 'budgets.1.reset_day_of_week is only valid for period = "week"'],
+    ['cost_usd = 1\nperiod = "month"\nreset_day_of_month = 32', "budgets.1.reset_day_of_month must be 1-31, got 32"],
+    ['cost_usd = 1\nperiod = "week"\nreset_day_of_month = 3', 'budgets.1.reset_day_of_month is only valid for period = "month"'],
+    ['cost_usd = 1\npace_action = "block"', "budgets.1.pace_action requires pace_period"],
+    ["cost_usd = 1\npace_warn_fractions = [0.5]", "budgets.1.pace_warn_fractions requires pace_period"],
+    ['cost_usd = 1\npace_warn_action = "warn"', "budgets.1.pace_warn_action requires pace_period"],
+    ['cost_usd = 1\npace_period = "day"', 'budgets.1.pace_period = "day" must be shorter than period = "day"'],
+    ['cost_usd = 1\nperiod = "week"\npace_period = "day"\npace_warn_fractions = [0.0]', "budgets.1.pace_warn_fractions values must be greater than 0"],
+    ['cost_usd = 1\nname = " first "', 'usage budget name "first" is duplicated'],
+  ] as const) {
+    await write(`[[budgets]]\ncost_usd = 1\nname = "first"\n[[budgets]]\n${second}\n`);
+    expect(read).toThrow(refusal);
+  }
+  await write("[plan_limits.five_hour]\nlimit_fraction = 0.0\n");
+  expect(read).toThrow("plan_limits.five_hour.limit_fraction must be greater than 0");
+  await write("[plan_limits.seven_day]\nwarn_fractions = [0.5, 0.0]\n");
+  expect(read).toThrow("plan_limits.seven_day.warn_fractions values must be greater than 0");
+
+  await write('[usage]\ntimezone = "mars"\n');
+  expect(read).toThrow('usage.timezone must be "local" or "utc", got "mars"');
+  const zones: string[] = [];
+  for (const zone of ["local", "utc"]) {
+    await write(`[usage]\ntimezone = "${zone}"\n`);
+    zones.push(read().app.usage.timezone);
+  }
+  expect(zones).toEqual(["local", "utc"]);
+});
+
+test("a budget in a character's own config counts only that character's spend unless it names another, and a key's spending limit is a budget that blocks", async () => {
+  const { root, write, read } = await budgetsIn();
+  await mkdir(join(root, "characters", "ada"), { recursive: true });
+  await mkdir(join(root, "characters", "bea"), { recursive: true });
+  await write([
+    "[providers.openrouter]", "[[providers.openrouter.keys]]", 'name = "work"', 'api_key_env = "SHORE_TEST_OPENROUTER_KEY"', "spend_limit_usd = 20", 'spend_period = "week"',
+    "[[budgets]]", 'name = "everyone"', "cost_usd = 9", "",
+  ].join("\n"));
+  await writeFile(join(root, "characters", "ada", "config.toml"), '[[budgets]]\nname = "mine"\ncost_usd = 2\n[[budgets]]\nname = "hers"\ncost_usd = 3\ncharacter = "bea"\n');
+  await writeFile(join(root, "characters", "bea", "config.toml"), '[chat]\ndisplay_name = "Bea"\n');
+  const global = read();
+  const scopes = (name: string): unknown[] => (loadCharacterConfig(global, name, () => {}) as typeof global).app.budgets.map((budget) =>
+    [budget.name, budget.character, budget.provider, budget.api_key, budget.cost_usd, budget.period, budget.limit_action]);
+  const keyLimit = ["openrouter key work", undefined, "openrouter", "work", 20, "week", "block"];
+  expect([scopes("ada"), scopes("bea"), loadCharacterConfig(global, "cy", () => {})]).toEqual([
+    [["mine", "ada", undefined, undefined, 2, "day", "warn"], ["hers", "bea", undefined, undefined, 3, "day", "warn"], keyLimit],
+    [["everyone", undefined, undefined, undefined, 9, "day", "warn"], keyLimit],
+    undefined,
+  ]);
 });

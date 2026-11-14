@@ -115,10 +115,10 @@ function ensureCallContext(request: SidecarRequest, deps: GenerateDeps): void {
     character: "unknown",
     call_type: "message",
     thinking_enabled: request.provider_options?.thinking_enabled === true,
-    usage: usageConfigView(deps.config.app.usage),
+    usage: usageConfigView(deps.config.app),
   };
   request.context.ledger ??= rustJoin(deps.config.dirs.data, "shore.db");
-  request.context.usage ??= usageConfigView(deps.config.app.usage);
+  request.context.usage ??= usageConfigView(deps.config.app);
   if (request.sdk === "claude_agent" && character !== undefined) {
     request.context.workspace_dir ??= characterWorkspaceDir(deps.config.dirs.config, character, deps.config.dirs.workspace);
   }

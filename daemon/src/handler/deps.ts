@@ -92,7 +92,7 @@ export function buildGenerationDeps(a: GenerationAssembly): GenerationDeps {
   const dataDir = runtime.config.dirs.data;
   const ledgerPath = rustJoin(dataDir, "shore.db");
   const usage = (character: string) =>
-    usageConfigView(runtime.registry.effectiveConfig(character).app.usage);
+    usageConfigView(runtime.registry.effectiveConfig(character).app);
 
   return {
     registry: generationRegistry(runtime.registry),

@@ -251,7 +251,7 @@ describe("a ping a budget would stop", () => {
       context: {
         ...required(base.context),
         ledger: ledger.path,
-        usage: { timezone: "utc", budgets: [{ name: "tiny", period: "month", cost_usd: 1, limit: "block", warn_at: [], usage_kind: [] }] },
+        usage: { timezone: "utc", budgets: [{ name: "tiny", period: "month", cost_usd: 1, limit_action: "block", warn_fractions: [], usage_kinds: [] }] },
       },
     }));
     h.service.observe(CHARACTER, MODEL, "message");
@@ -279,7 +279,7 @@ describe("a ping a budget would stop", () => {
       context: {
         ...required(base.context),
         ledger: ledger.path,
-        usage: { timezone: "utc", budgets: [{ name: "b".repeat(200), period: "month", cost_usd: 1, limit: "block", warn_at: [], usage_kind: [] }] },
+        usage: { timezone: "utc", budgets: [{ name: "b".repeat(200), period: "month", cost_usd: 1, limit_action: "block", warn_fractions: [], usage_kinds: [] }] },
       },
     }));
     h.service.observe(CHARACTER, MODEL, "message");

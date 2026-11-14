@@ -2,7 +2,7 @@ import { shoreLog } from "../log.ts";
 
 import type { Database } from "bun:sqlite";
 
-import type { UsageConfig as AppUsageConfig, PlanLimitsConfig } from "../config/app.ts";
+import type { AppConfig, PlanLimitsConfig } from "../config/app.ts";
 
 import { isSubscriptionCall } from "./store.ts";
 import { usageCostEntries, usageTotals, type QueryFilter } from "./query.ts";
@@ -39,22 +39,22 @@ export interface UsageBudgetConfig {
   name?: string;
   period?: UsageBudgetPeriod;
   cost_usd: number;
-  warn_at?: number[];
+  warn_fractions?: number[];
   warn_action?: UsageBudgetAction | null;
-  limit?: UsageBudgetAction;
+  limit_action?: UsageBudgetAction;
   character?: string | null;
   provider?: string | null;
   api_key?: string | null;
   model?: string | null;
   call_type?: string | null;
-  usage_kind?: string[];
-  allow_compaction_over_budget?: boolean | null;
+  usage_kinds?: string[];
+  allow_compaction?: boolean;
   reset_hour?: number | null;
   reset_day_of_week?: BudgetWeekday | null;
   reset_day_of_month?: number | null;
   pace_period?: UsageBudgetPeriod | null;
   pace_action?: UsageBudgetAction | null;
-  pace_warn_at?: number[] | null;
+  pace_warn_fractions?: number[] | null;
   pace_warn_action?: UsageBudgetAction | null;
 }
 
@@ -64,13 +64,13 @@ export interface UsageConfig {
   plan_limits?: PlanLimitsConfig;
 }
 
-export function usageConfigView(cfg: AppUsageConfig): UsageConfig {
+export function usageConfigView(app: Pick<AppConfig, "usage" | "budgets" | "plan_limits">): UsageConfig {
   return {
-    timezone: cfg.timezone,
-    budgets: cfg.budgets.map(
+    timezone: app.usage.timezone,
+    budgets: app.budgets.map(
       (b) => defined(b as unknown as Record<string, unknown>) as unknown as UsageBudgetConfig,
     ),
-    plan_limits: cfg.plan_limits,
+    plan_limits: app.plan_limits,
   };
 }
 
@@ -84,15 +84,15 @@ const DEFAULT_TIMEZONE = "local";
 const budgetPeriod = (b: UsageBudgetConfig): UsageBudgetPeriod =>
   b.period ?? "day";
 const budgetWarnAt = (b: UsageBudgetConfig): readonly number[] =>
-  b.warn_at ?? DEFAULT_WARN_AT;
+  b.warn_fractions ?? DEFAULT_WARN_AT;
 const budgetLimit = (b: UsageBudgetConfig): UsageBudgetAction =>
-  b.limit ?? "warn";
+  b.limit_action ?? "warn";
 const budgetUsageKind = (b: UsageBudgetConfig): readonly string[] =>
-  b.usage_kind ?? [];
+  b.usage_kinds ?? [];
 const paceAction = (b: UsageBudgetConfig): UsageBudgetAction =>
   b.pace_action ?? "warn";
 const paceWarnAt = (b: UsageBudgetConfig): readonly number[] =>
-  b.pace_warn_at ?? budgetWarnAt(b);
+  b.pace_warn_fractions ?? budgetWarnAt(b);
 const budgetWarnAction = (b: UsageBudgetConfig): UsageBudgetAction =>
   b.warn_action ?? "warn";
 const paceWarnAction = (b: UsageBudgetConfig): UsageBudgetAction =>
@@ -1103,7 +1103,7 @@ export function actionBlocks(action: UsageBudgetAction, call: GatedCall): boolea
 function compactionAllowed(
   budget: UsageBudgetConfig,
 ): boolean {
-  return budget.allow_compaction_over_budget ?? false;
+  return budget.allow_compaction ?? false;
 }
 
 export function isBackgroundCall(callType: string): boolean {

@@ -170,7 +170,7 @@ export async function runSubagent(
       call_type: "subagent",
       ...(built.api_key_name === undefined ? {} : { api_key_name: built.api_key_name }),
       thinking_enabled: built.request.provider_options?.thinking_enabled === true,
-      usage: usageConfigView(config.app.usage),
+      usage: usageConfigView(config.app),
       ...(deps.rid === undefined ? {} : { rid: deps.rid }),
     },
   };

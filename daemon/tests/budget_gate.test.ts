@@ -16,7 +16,7 @@ import type {
 } from "../src/llm/types.ts";
 import type { BudgetBlock, UsageConfig } from "../src/ledger/budget.ts";
 import { freshLedger, openLedger } from "./support/ledger_fixture.ts";
-import { defaultAppConfig } from "../src/config/app.ts";
+import { defaultAppConfig, newUsageBudget, type UsageBudgetConfig } from "../src/config/app.ts";
 import { emptyCatalog, type ResolvedModel } from "../src/config/models.ts";
 import { ProviderRegistry } from "../src/config/providers.ts";
 import type { LoadedConfig } from "../src/config/loader.ts";
@@ -100,8 +100,8 @@ const BLOCKING_BUDGET = {
       name: "tiny",
       period: "month",
       cost_usd: 1.0,
-      warn_at: [1.0],
-      limit: "block",
+      warn_fractions: [1.0],
+      limit_action: "block",
     },
   ],
 } as unknown as UsageConfig;
@@ -185,7 +185,7 @@ function loopReq(ledger: string, usage: unknown, iterations: number): SidecarReq
 const TEN_DOLLAR_BUDGET = {
   timezone: "utc",
   budgets: [
-    { name: "ten", period: "month", cost_usd: 10.0, warn_at: [1.0], limit: "block" },
+    { name: "ten", period: "month", cost_usd: 10.0, warn_fractions: [1.0], limit_action: "block" },
   ],
 } as unknown as UsageConfig;
 
@@ -261,7 +261,8 @@ async function chatTurn(
   const root = await mkdtemp(join(tmpdir(), "shore-budget-chat-"));
   const config = await chatConfig(root, spareKey);
   if (usage !== undefined) {
-    config.app.usage = usage as unknown as typeof config.app.usage;
+    config.app.usage = { timezone: usage.timezone ?? "local" };
+    config.app.budgets = (usage.budgets ?? []).map((budget) => ({ ...newUsageBudget(), ...budget }) as UsageBudgetConfig);
   }
   const ledger = spentLedger();
   const counting = countingProvider();
@@ -355,7 +356,7 @@ describe("the chat turn", () => {
           name: "keyed",
           period: "month",
           cost_usd: 1.0,
-          limit: "block",
+          limit_action: "block",
           api_key: "default",
         },
       ],
@@ -369,7 +370,7 @@ describe("the chat turn", () => {
   test("a key at its own budget hands the call to the provider's next key", async () => {
     const scoped = {
       timezone: "utc",
-      budgets: [{ name: "keyed", period: "month", cost_usd: 1.0, limit: "block", provider: "openai", api_key: "default" }],
+      budgets: [{ name: "keyed", period: "month", cost_usd: 1.0, limit_action: "block", provider: "openai", api_key: "default" }],
     } as unknown as UsageConfig;
     const { calls, error, fallbacks } = await chatTurn(scoped, true);
 

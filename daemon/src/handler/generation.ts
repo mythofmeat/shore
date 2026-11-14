@@ -711,7 +711,7 @@ function callContext(
   keepaliveWindow: number,
   call: { options?: ProviderOptions },
 ): CallContext {
-  const usage = usageConfigView(config.app.usage);
+  const usage = usageConfigView(config.app);
   const forensics = config.app.daemon.cache_forensics ? config.dirs.cache : undefined;
   const effort = resolvedReasoningEffort(call.options);
   return {

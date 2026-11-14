@@ -417,7 +417,7 @@ describe("a paid call", () => {
     catalogCarries(OPUS_5_5_CATALOG_ENTRY);
     const usage = {
       timezone: "utc",
-      budgets: [{ name: "tiny", period: "month", cost_usd: 1, warn_at: [1], limit: "block" }],
+      budgets: [{ name: "tiny", period: "month", cost_usd: 1, warn_fractions: [1], limit_action: "block" }],
     } as unknown as UsageConfig;
     expect(budgetBlockFor(paidRequest(path, { usage }))).toBeUndefined();
     await landCall(ledger, path, { usage });
