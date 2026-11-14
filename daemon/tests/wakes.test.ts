@@ -433,7 +433,7 @@ test("wakes and compaction keep the reasoning effort set for each on chat's mode
       [...new Set(requests.map((request) => request.provider_options?.reasoning_effort))];
 
     await effort({ value: "high" });
-    await effort({ value: "low", background_task: "heartbeat" });
+    await effort({ value: "low", background_task: "wake" });
     await effort({ value: "medium", background_task: "compaction", scope: "global" });
     await say("hello");
     await wakeNow();
@@ -453,7 +453,7 @@ test("wakes and compaction keep the reasoning effort set for each on chat's mode
     expect(await compactionEffort()).toBe("max");
     expect(effortOf(script.replies)).toEqual(["high"]);
 
-    await effort({ value: null, background_task: "heartbeat" });
+    await effort({ value: null, background_task: "wake" });
     script.wakes.length = 0;
     at(20);
     await wakeNow();
@@ -715,8 +715,8 @@ test("bare --background tunes wakes and compaction on their pinned model while d
     expect(await command("model_settings", { background_task: "dreaming" })).toMatchObject({ type: "command_output", data: { model: "chat.fixture", saved_character: null } });
     const listed = await command("list_models", {});
     const roles = listed.type === "command_output" ? (listed.data as { roles: { role: string; model: string | null; source: string | null }[] }).roles : [];
-    expect(roles.filter((role) => ["heartbeat", "compaction", "dreaming"].includes(role.role))).toEqual([
-      { role: "heartbeat", model: "chat.pinned", source: "triggers.model" },
+    expect(roles.filter((role) => ["wake", "compaction", "dreaming"].includes(role.role))).toEqual([
+      { role: "wake", model: "chat.pinned", source: "triggers.model" },
       { role: "compaction", model: "chat.pinned", source: "compaction.model" },
       { role: "dreaming", model: "chat.fixture", source: "inherits chat" },
     ]);
@@ -2921,7 +2921,7 @@ test("a wake whose trigger names no thread runs in home, is shown what was said 
 test("the model and settings the user chose for wakes hold in whichever thread a wake runs", async () => {
   await withCharacter(async ({ runtime, script, say, wakeNow, command }) => {
     await runtime.registry.createThread("ada", "ring");
-    expect((await command("set_model_setting", { key: "reasoning_effort", value: "low", background_task: "heartbeat" })).type).toBe("command_output");
+    expect((await command("set_model_setting", { key: "reasoning_effort", value: "low", background_task: "wake" })).type).toBe("command_output");
     await say("hello");
     await wakeNow();
     runtime.autonomy.wakeFor("ada", { name: "show", reason: "r", at: T0, thread: "ring" });

@@ -1,13 +1,14 @@
-import { describe, expect, test } from "bun:test";
+import { describe, expect, spyOn, test } from "bun:test";
 import { mkdir, mkdtemp, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 
-import { readFileSync } from "node:fs";
+import { chmodSync, readFileSync } from "node:fs";
 
 import { config, schemaOf, tools, type ConfigContext, type ConfigRuntime } from "../src/commands/config.ts";
 import { modelInfo, modelSettings, setModelSetting, switchModel } from "../src/commands/models.ts";
 import { describeTool, resolveTool, type RunToolContext } from "../src/commands/run_tool.ts";
 import { loadConfig } from "../src/config/loader.ts";
+import { shoreLog } from "../src/log.ts";
 import { characterPreferencesPath, globalPreferencesPath } from "../src/config/preferences.ts";
 import type { ModelSettingsDetail } from "../src/protocol/ModelSettingsDetail.ts";
 import { testTmp } from "./support/tmp.ts";
@@ -424,6 +425,63 @@ describe("a model's settings in the model commands", () => {
       ['zai_clear_reasoning = "yes"', 'invalid type: string "yes", expected a boolean'],
     ] as const) {
       expect(await having(`[models."gemini:gemini-3-pro"]\n${line}\n`)).toThrow(refusal);
+    }
+  });
+});
+
+describe("the settings wakes run with", () => {
+  const TOML = ["[chat]", 'model = "anthropic:claude-x"', "[providers.anthropic]", 'api_key_env = "K"', '[chat."anthropic:claude-x"]', "max_output_tokens = 4000", ""].join("\n");
+  const wakes = (models: Parameters<typeof modelSettings>[0]): ModelSettingsDetail => modelSettings(models, { background_task: "wake" }) as ModelSettingsDetail;
+
+  test("are kept under [background.wake], and the task is named wake wherever it is asked for", async () => {
+    const w = await build("ada", TOML);
+    const models = { ...w.ctx, dataDir: w.ctx.config.dirs.data };
+    expect(setModelSetting(models, { key: "max_tool_rounds", value: 6, scope: "character", background_task: "wake" })).toMatchObject({ changed: true, key: "max_tool_rounds" });
+    expect(readFileSync(characterPreferencesPath(models.dataDir, "ada"), "utf8")).toContain("[background.wake]\nmax_tool_rounds = 6\n");
+    expect(wakes(models).saved_character).toMatchObject({ max_tool_rounds: 6 });
+    expect(() => setModelSetting(models, { key: "max_tool_rounds", value: 6, scope: "character", background_task: "heartbeat" as never }))
+      .toThrow("unknown background task: heartbeat; expected all, wake, compaction, or dreaming");
+  });
+
+  test("a preferences file from when the task was called heartbeat is read as it stands and rewritten under the new name, once", async () => {
+    const w = await build("ada", TOML);
+    const models = { ...w.ctx, dataDir: w.ctx.config.dirs.data };
+    const path = characterPreferencesPath(models.dataDir, "ada");
+    await mkdir(dirname(path), { recursive: true });
+    await writeFile(path, '[background.heartbeat]\nmax_tool_rounds = 4\nreasoning_effort = "low"\n\n[background.compaction]\nmax_tool_rounds = 2\n');
+    expect(wakes(models).saved_character).toMatchObject({ max_tool_rounds: 4, reasoning_effort: "low" });
+    const rewritten = readFileSync(path, "utf8");
+    expect([rewritten.includes("[background.wake]\nreasoning_effort = \"low\"\nmax_tool_rounds = 4\n"), rewritten.includes("[background.compaction]\nmax_tool_rounds = 2\n"), rewritten.includes("heartbeat")]).toEqual([true, true, false]);
+    expect(wakes(models).saved_character).toMatchObject({ max_tool_rounds: 4, reasoning_effort: "low" });
+    expect(readFileSync(path, "utf8")).toBe(rewritten);
+
+    const byHand = "# tuned by hand\n[background.wake]\nmax_tool_rounds = 7\n";
+    await writeFile(path, byHand);
+    expect(wakes(models).saved_character).toMatchObject({ max_tool_rounds: 7 });
+    expect(readFileSync(path, "utf8")).toBe(byHand);
+
+    await writeFile(path, "[background.heartbeat]\nmax_tool_rounds = 4\n\n[background.wake]\nmax_tool_rounds = 9\n");
+    expect(wakes(models).saved_character).toMatchObject({ max_tool_rounds: 9 });
+    expect(readFileSync(path, "utf8")).not.toContain("heartbeat");
+  });
+
+  test("an old preferences file that can't be rewritten is still read, and the daemon says it couldn't", async () => {
+    const w = await build("ada", TOML);
+    const models = { ...w.ctx, dataDir: w.ctx.config.dirs.data };
+    const path = characterPreferencesPath(models.dataDir, "ada");
+    await mkdir(dirname(path), { recursive: true });
+    await writeFile(path, "[background.heartbeat]\nmax_tool_rounds = 4\n");
+    chmodSync(path, 0o444);
+    const warned = spyOn(shoreLog, "warn").mockImplementation(() => {});
+    try {
+      expect(wakes(models).saved_character).toMatchObject({ max_tool_rounds: 4 });
+      expect(warned.mock.calls.map((call) => String(call[0]).split(":").slice(0, 2).join(":"))).toEqual([
+        `shore: could not rewrite ${path} with [background.heartbeat] as [background.wake]; it is read that way until it can be`,
+      ]);
+      expect(readFileSync(path, "utf8")).toBe("[background.heartbeat]\nmax_tool_rounds = 4\n");
+    } finally {
+      warned.mockRestore();
+      chmodSync(path, 0o644);
     }
   });
 });

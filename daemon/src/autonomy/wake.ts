@@ -279,8 +279,8 @@ export async function runWake(character: string, config: LoadedConfig, wake: Wak
       note("call_failed", "Wake skipped: no chat model resolves");
       return { events };
     }
-    const resolved = applyBackgroundSettings(config.dirs.data, character, "heartbeat", chat);
-    const configured = backgroundTaskModel(config, character, "heartbeat");
+    const resolved = applyBackgroundSettings(config.dirs.data, character, "wake", chat);
+    const configured = backgroundTaskModel(config, character, "wake");
     const maxToolRounds = (configured ?? resolved).maxToolRounds;
     const nowMs = deps.now?.() ?? Date.now();
     const timeZone = deps.timeZone ?? hostZone();
