@@ -47,7 +47,7 @@ export function backgroundModelRequest(
         messages: request.messages,
         ...(request.system === undefined ? {} : { system: request.system }),
         ...(request.tools === undefined ? {} : { tools: request.tools }),
-        replay: resolvedReplayPriorThinking(resolved, config.app.memory.thinking.replay_prior_thinking),
+        replay: resolvedReplayPriorThinking(resolved, config.app.chat.reasoning_replay),
       },
       env,
     );

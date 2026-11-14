@@ -206,7 +206,7 @@ export async function runDreamPass(
   const dataDir = config.dirs.data;
   const characterDir = characterDataDir(dataDir, character);
   const timeZone = hostZone();
-  const userName = resolveDisplayName(config.app.defaults, deps.env);
+  const userName = resolveDisplayName(config.app.chat, deps.env);
   const workspace = characterWorkspace(config, character);
   const dreaming = config.app.dreaming;
 

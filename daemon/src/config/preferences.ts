@@ -615,7 +615,7 @@ export function configView(config: {
   models: ModelCatalog;
   providers: ProviderRegistry;
   dirs: { data: string; cache: string };
-  app: Pick<AppConfig, "defaults" | "triggers" | "compaction" | "dreaming">;
+  app: Pick<AppConfig, "chat" | "defaults" | "triggers" | "compaction" | "dreaming">;
 }): LoadedConfigView {
   return {
     models: config.models,
@@ -623,7 +623,7 @@ export function configView(config: {
     dirs: config.dirs,
     app: {
       defaults: {
-        ...(config.app.defaults.model === undefined ? {} : { model: config.app.defaults.model }),
+        ...(config.app.chat.model === undefined ? {} : { model: config.app.chat.model }),
         ...(config.app.defaults.subagent_model === undefined
           ? {}
           : { subagent_model: config.app.defaults.subagent_model }),

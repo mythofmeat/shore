@@ -51,7 +51,7 @@ async function setup(files: Record<string, string>) {
   for (const dir of Object.values(dirs)) await mkdir(dir, { recursive: true });
   initializeDatabase(dirs.data);
   const app = defaultAppConfig();
-  app.defaults.display_name = "Sam";
+  app.chat.display_name = "Sam";
   const config: LoadedConfig = { app, models: emptyCatalog(), providers: ProviderRegistry.empty(), dirs, rawTable: undefined };
   const workspace = characterWorkspace(config, "frank").dir;
   for (const [path, content] of Object.entries({ "SOUL.md": "Frank", ...files })) {

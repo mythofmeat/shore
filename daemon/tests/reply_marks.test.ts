@@ -81,9 +81,9 @@ async function world(rounds: Round[], options: { tools?: string[]; history?: Mes
   for (const dir of Object.values(dirs)) await mkdir(dir, { recursive: true });
   const app = defaultAppConfig();
   app.tools.enabled_tools = options.tools ?? [];
-  app.advanced.max_retries = 0;
-  app.defaults.model = "fixture";
-  app.defaults.display_name = "Sam";
+  app.chat.max_retries = 0;
+  app.chat.model = "fixture";
+  app.chat.display_name = "Sam";
   if (options.tags !== undefined) app.marks.tags = options.tags;
   const models = emptyCatalog();
   models.chat.set("chat.fixture", {

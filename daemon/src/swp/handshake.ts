@@ -127,7 +127,7 @@ async function engineIfCharacterExists(
 function historyConfigSnapshot(config: LoadedConfig, activeModel: string | undefined): unknown {
   return {
     active_model:
-      activeModel ?? config.app.defaults.model ?? firstChatModel(config.models)?.qualifiedName ?? null,
+      activeModel ?? config.app.chat.model ?? firstChatModel(config.models)?.qualifiedName ?? null,
   };
 }
 

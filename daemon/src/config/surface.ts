@@ -14,14 +14,8 @@ const field = (internal: string, canonical: string): ConfigField => ({
 });
 
 const CONFIG_FIELDS: readonly ConfigField[] = [
-  field("defaults.model", "chat.model"),
-  field("defaults.display_name", "chat.display_name"),
-  field("defaults.system_prompt", "chat.system_prompt"),
   field("defaults.image_generation", "image.model"),
   field("defaults.subagent_model", "subagents.model"),
-  field("behavior.user_message_timestamps", "chat.user_timestamps"),
-  field("memory.thinking.replay_prior_thinking", "chat.reasoning_replay"),
-  ...["max_retries", "retry_backoff"].map((key) => field(`advanced.${key}`, `chat.${key}`)),
   field("tools.enabled_tools", "tools.enabled"),
   field("tools.enabled_subagents", "subagents.enabled"),
   field("tools.enabled_mcp", "tools.mcp"),
@@ -213,8 +207,7 @@ export function normalizeConfigSource(input: ConfigTable, source = "config"): Co
     if (entries === undefined) continue;
     if (!isConfigTable(entries)) throw new Error(`${source}: ${section} must be a table`);
     for (const [name, entry] of Object.entries(entries)) {
-      if (!isConfigTable(entry)) throw new Error(`${source}: ${formatConfigPath([section, name])} must be a table`);
-      entries[name] = normalizeSettings(entry, source);
+      if (isConfigTable(entry)) entries[name] = normalizeSettings(entry, source);
     }
   }
   const budgets = valueAt(table, ["usage", "budgets"]);
@@ -278,7 +271,7 @@ export function publicConfig(input: ConfigTable): ConfigTable {
     for (const [name, value] of Object.entries(profiles)) if (isConfigTable(value) && name.includes(":")) profiles[name] = publicSettings(value);
   }
   for (const path of [
-    ["behavior"], ["defaults"],
+    ["defaults"],
     ["notifications", "enabled"], ["notifications", "backend"], ["tools", "config"],
   ]) removeAt(out, path);
   return out;

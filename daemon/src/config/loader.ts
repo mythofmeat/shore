@@ -8,6 +8,7 @@ import { compareByCodePoint } from "../util/sort.ts";
 import { webBinding } from "../web/policy.ts";
 import {
   budgetPeriodRank,
+  chatModelProfiles,
   parseAppConfig,
   toolGrants,
   validateCompaction,
@@ -344,7 +345,7 @@ export function parseConfigTable(
   const rawTable = structuredClone(table);
 
   const remainder = { ...table };
-  const chatSection = sectionTable(remainder.chat);
+  const chatSection = chatModelProfiles(sectionTable(remainder.chat));
   const imageGenerationSection = sectionTable(remainder.image_generation);
   const providersSection = sectionTable(remainder.providers);
   const parsed = parseAppConfig(remainder);
@@ -441,7 +442,7 @@ function validateConfig(
   providers: ProviderRegistry,
   onWarn: ConfigWarn = consoleConfigWarn,
 ): void {
-  warnOnUnresolvableModelRef(catalog, providers, "chat.model", app.defaults.model, onWarn);
+  warnOnUnresolvableModelRef(catalog, providers, "chat.model", app.chat.model, onWarn);
   warnOnUnresolvableModelRef(
     catalog,
     providers,
@@ -473,7 +474,7 @@ function validateConfig(
 
   for (const [name, sub] of app.subagents) {
     if (app.tools.enabled_subagents.includes(name)) {
-      const resolved = sub.model ?? app.defaults.subagent_model ?? app.defaults.model;
+      const resolved = sub.model ?? app.defaults.subagent_model ?? app.chat.model;
       if (resolved === undefined) {
         throw validationError(
           `subagents.${name} is enabled but resolves to no model; set ` +

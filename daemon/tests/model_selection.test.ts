@@ -31,7 +31,7 @@ async function withAda(check: (runtime: ShoreRuntime, run: Run) => Promise<void>
   setTestEnv(KEY_ENV, "fixture-key");
   const root = await mkdtemp(testTmp("shore-model-selection-"));
   const app = defaultAppConfig();
-  app.defaults.model = "fixture";
+  app.chat.model = "fixture";
   const models = emptyCatalog();
   for (const name of ["fixture", "pinned"]) {
     models.chat.set(`chat.${name}`, {

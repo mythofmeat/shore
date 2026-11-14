@@ -19,7 +19,7 @@ export function statusContext(
     characterName: engine.characterName,
     turnCount: engine.turnCount(),
     activeModel: model?.qualifiedName,
-    config: { app: { defaults: { model: session.config.app.defaults.model } }, dirs: session.config.dirs },
+    config: { app: { defaults: { model: session.config.app.chat.model } }, dirs: session.config.dirs },
     conversationTokens: conversationTokens(
       deps.ledgerPath,
       engine.characterName,

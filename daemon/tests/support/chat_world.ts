@@ -43,8 +43,8 @@ export async function afterFirstChat(options: ChatWorldOptions, run: (world: Cha
   setTestEnv(options.keyEnv, "fixture-key");
   const root = await mkdtemp(testTmp(`shore-${options.name}-`));
   const app = defaultAppConfig();
-  app.defaults.model = "fixture";
-  app.advanced.max_retries = 0;
+  app.chat.model = "fixture";
+  app.chat.max_retries = 0;
   app.compaction.enabled = false;
   app.tools.enabled_tools = [...options.tools];
   if (options.autonomy === true) app.triggers.enabled = true;

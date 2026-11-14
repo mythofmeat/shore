@@ -183,7 +183,7 @@ function coerceValue(key: string, value: string, type: string | undefined): unkn
 export function describeTool(character: string, ctx: RunToolContext, args: OperationInput<"run_tool">): ToolDescription {
   const { tool } = parseRunToolArgs(args);
   const cfg = ctx.config.app.tools;
-  const vars = toolTemplateVars(cfg, character, resolveDisplayName(ctx.config.app.defaults));
+  const vars = toolTemplateVars(cfg, character, resolveDisplayName(ctx.config.app.chat));
   const seen = (kind: ToolKind, enabled: boolean, description: string, schema: Record<string, unknown>): ToolDescription => ({
     mode: "tool_definition",
     tool,
