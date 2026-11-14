@@ -250,8 +250,8 @@ function buildResolvedFromProvider(
   if (maxContextTokens !== undefined) fields.maxContextTokens = maxContextTokens;
   if (maxOutputTokens !== undefined) fields.maxOutputTokens = maxOutputTokens;
   if (providerDefaults.temperature !== undefined) fields.temperature = providerDefaults.temperature;
-  if (providerDefaults.zaiClearThinking !== undefined) {
-    fields.zaiClearThinking = providerDefaults.zaiClearThinking;
+  if (providerDefaults.zaiClearReasoning !== undefined) {
+    fields.zaiClearReasoning = providerDefaults.zaiClearReasoning;
   }
 
   mergeFrom(fields, entry.defaults);

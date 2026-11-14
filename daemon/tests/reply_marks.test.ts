@@ -88,7 +88,7 @@ async function world(rounds: Round[], options: { tools?: string[]; history?: Mes
   const models = emptyCatalog();
   models.chat.set("chat.fixture", {
     name: "fixture", qualifiedName: "chat.fixture", category: "chat", providerKey: "anthropic", sdk: "anthropic",
-    modelId: "claude-fixture", apiKeyEnv: KEY_ENV, maxContextTokens: 200_000, maxOutputTokens: 4096, maxToolIterations: 4, reasoningEffort: "high",
+    modelId: "claude-fixture", apiKeyEnv: KEY_ENV, maxContextTokens: 200_000, maxOutputTokens: 4096, maxToolRounds: 4, reasoningEffort: "high",
   });
   const config: LoadedConfig = { app, models, providers: ProviderRegistry.empty(), dirs, rawTable: undefined };
   setTestEnv(KEY_ENV, "fixture-key");

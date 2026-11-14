@@ -52,7 +52,7 @@ test("a thread started and edited on a wake opens with her message, takes the ed
     provider: threadToolsProvider(toolResults),
     tools: ["start_thread", "edit_thread"],
     autonomy: true,
-    model: { maxToolIterations: 3 },
+    model: { maxToolRounds: 3 },
     emitEvent: (event) => events.push(event),
   }, async ({ config, runtime }) => {
     expect(runtime.autonomy.wakeNow("ada")).toBeDefined();
@@ -93,7 +93,7 @@ test("a thread started with a folder goes in that folder of the user's thread li
     ]),
     tools: ["start_thread"],
     autonomy: true,
-    model: { maxToolIterations: 5 },
+    model: { maxToolRounds: 5 },
   }, async ({ config, runtime }) => {
     expect(runtime.autonomy.wakeNow("ada")).toBeDefined();
     await runtime.autonomy.tick();

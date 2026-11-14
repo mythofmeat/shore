@@ -14,8 +14,8 @@ const LISTING = {
 };
 const info = (qualified: string, extra: Record<string, unknown> = {}) => ({
   name: qualified, qualified_name: qualified, category: "chat", provider_key: "anthropic", sdk: "anthropic", model_id: "claude-opus", api_key_env: "ANTHROPIC_API_KEY", base_url: null,
-  max_context_tokens: 200000, max_output_tokens: 32000, temperature: 0.7, top_p: null, budget_tokens: 1024, gemini_generation: null, max_tool_iterations: 50, reasoning_effort: "high",
-  cache_ttl: "1h", cache_keepalive: null, cache_keepalive_pings: null, replay_prior_thinking: null, zai_clear_thinking: null, supports_images: true, openrouter_provider: null, ...extra,
+  max_context_tokens: 200000, max_output_tokens: 32000, temperature: 0.7, top_p: null, reasoning_budget_tokens: 1024, gemini_thinking_mode: null, max_tool_rounds: 50, reasoning_effort: "high",
+  cache_ttl: "1h", cache_keepalive: null, cache_keepalive_pings: null, reasoning_replay: null, zai_clear_reasoning: null, supports_images: true, openrouter_routing: null, ...extra,
 });
 const setting = (key: string, kind: string, applicability: string, extra: Record<string, unknown> = {}) => ({ key, kind, applicability, suggestions: [], allow_custom: true, ...extra });
 const detail = (extra: Record<string, unknown> = {}) => ({

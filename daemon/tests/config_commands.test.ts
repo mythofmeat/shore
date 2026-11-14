@@ -5,9 +5,11 @@ import { dirname, join } from "node:path";
 import { readFileSync } from "node:fs";
 
 import { config, schemaOf, tools, type ConfigContext, type ConfigRuntime } from "../src/commands/config.ts";
-import { modelSettings, switchModel } from "../src/commands/models.ts";
+import { modelInfo, modelSettings, setModelSetting, switchModel } from "../src/commands/models.ts";
 import { describeTool, resolveTool, type RunToolContext } from "../src/commands/run_tool.ts";
 import { loadConfig } from "../src/config/loader.ts";
+import { characterPreferencesPath, globalPreferencesPath } from "../src/config/preferences.ts";
+import type { ModelSettingsDetail } from "../src/protocol/ModelSettingsDetail.ts";
 import { testTmp } from "./support/tmp.ts";
 
 interface World {
@@ -281,6 +283,148 @@ describe("sub-agents in the model and tool commands", () => {
     expect(Object.keys(described.input_schema["properties"] ?? {})).toEqual(["query"]);
     expect(describeTool("Ada", run, { tool: "ask_idle" })).toMatchObject({ enabled: false, description: "rests" });
     expect(() => describeTool("Ada", run, { tool: "ask_ghost" })).toThrow("There is no sub-agent named 'ghost'. Configured: idle, scout");
+  });
+});
+
+describe("a model's settings in the model commands", () => {
+  const TOML = [
+    "[chat]", 'model = "anthropic:claude-x"',
+    "[providers.anthropic]", 'api_key_env = "K"', "max_tool_rounds = 9",
+    "[providers.openrouter]", 'api_key_env = "K"',
+    "[providers.gemini]", 'api_key_env = "K"',
+    "[providers.zai-api]", 'api_key_env = "K"',
+    '[chat."anthropic:claude-x"]', "max_output_tokens = 4000",
+    '[chat."openrouter:x/y"]', "max_output_tokens = 4000",
+    '[chat."gemini:gemini-3-pro"]', 'gemini_thinking_mode = "level"',
+    '[chat."zai-api:glm-9"]', "max_output_tokens = 4000", "",
+  ].join("\n");
+  const settingsOf = (models: Parameters<typeof modelSettings>[0], args: Parameters<typeof modelSettings>[1] = {}): ModelSettingsDetail =>
+    modelSettings(models, args) as ModelSettingsDetail;
+  const THREE = { reasoning_budget_tokens: 2048, reasoning_replay: "none", max_tool_rounds: 8 };
+  const ROUTING = { openrouter_routing: { order: ["a"] } };
+
+  test("each is saved, shown and written to the preferences file under the name config.toml uses", async () => {
+    const w = await build("ada", TOML);
+    const models = { ...w.ctx, dataDir: w.ctx.config.dirs.data };
+    expect(settingsOf(models).effective_sampler).toMatchObject({ max_tool_rounds: 9, reasoning_budget_tokens: null, reasoning_replay: null, openrouter_routing: null });
+    for (const [key, value] of Object.entries(THREE)) {
+      expect(setModelSetting(models, { key, value, scope: "character" })).toMatchObject({ changed: true, key, value, model: "anthropic:claude-x", scope: "character" });
+    }
+    expect(setModelSetting(models, { key: "openrouter_routing", value: ROUTING.openrouter_routing, scope: "character", name: "openrouter:x/y" })).toMatchObject({ key: "openrouter_routing", value: ROUTING.openrouter_routing });
+    expect(setModelSetting(models, { key: "gemini_thinking_mode", value: "budget", scope: "global", name: "gemini:gemini-3-pro" })).toMatchObject({ key: "gemini_thinking_mode", value: "budget" });
+    expect(setModelSetting(models, { key: "zai_clear_reasoning", value: true, scope: "global", name: "zai-api:glm-9" })).toMatchObject({ key: "zai_clear_reasoning", value: true });
+
+    expect(modelSettings(models, {})).toMatchObject({ effective_sampler: THREE, saved_character: THREE, saved_global: null });
+    expect(modelSettings(models, { key: "max_tool_rounds" })).toMatchObject({ key: "max_tool_rounds" });
+    expect(modelInfo(models, {})).toMatchObject({ ...THREE, openrouter_routing: null, gemini_thinking_mode: null, zai_clear_reasoning: null });
+    expect(modelInfo(models, { name: "openrouter:x/y" })).toMatchObject({ ...ROUTING, reasoning_budget_tokens: null, max_tool_rounds: null });
+    expect(modelInfo(models, { name: "gemini:gemini-3-pro" })).toMatchObject({ gemini_thinking_mode: "budget", reasoning_budget_tokens: null, max_tool_rounds: null });
+    expect(settingsOf(models, { name: "gemini:gemini-3-pro" }).setting_schema.find((row) => row.key === "gemini_thinking_mode"))
+      .toEqual({ key: "gemini_thinking_mode", kind: "string", applicability: "honored", suggestions: ["auto", "budget", "level"], allow_custom: false });
+    expect(modelInfo(models, { name: "zai-api:glm-9" })).toMatchObject({ zai_clear_reasoning: true });
+
+    const saved = (path: string): unknown => (Bun.TOML.parse(readFileSync(path, "utf8")) as { models: unknown }).models;
+    expect(saved(characterPreferencesPath(models.dataDir, "ada"))).toEqual({ "anthropic:claude-x": THREE, "openrouter:x/y": ROUTING });
+    expect(saved(globalPreferencesPath(models.dataDir))).toEqual({ "gemini:gemini-3-pro": { gemini_thinking_mode: "budget" }, "zai-api:glm-9": { zai_clear_reasoning: true } });
+
+    expect(setModelSetting(models, { key: "openrouter_routing", value: '{"only":["z"]}', scope: "character", name: "openrouter:x/y" })).toMatchObject({ changed: true });
+    expect(modelInfo(models, { name: "openrouter:x/y" })).toMatchObject({ openrouter_routing: { only: ["z"] } });
+    expect(setModelSetting(models, { key: "gemini_thinking_mode", value: null, scope: "global", name: "gemini:gemini-3-pro" })).toMatchObject({ value: null });
+    expect(modelInfo(models, { name: "gemini:gemini-3-pro" })).toMatchObject({ gemini_thinking_mode: "level" });
+  });
+
+  test("the list of a model's settings says what kind each is and whether a value outside its suggestions is taken, and the overview shows only what is saved", async () => {
+    const w = await build("ada", TOML);
+    const models = { ...w.ctx, dataDir: w.ctx.config.dirs.data };
+    expect(settingsOf(models).setting_schema.map((row) => [row.key, row.kind, row.allow_custom, row.suggestions])).toEqual([
+      ["temperature", "number", true, []], ["top_p", "number", true, []],
+      ["reasoning_effort", "string", true, ["adaptive", "low", "medium", "high", "xhigh", "max", "off"]],
+      ["reasoning_budget_tokens", "u32", true, ["1024", "2048", "4096", "8192", "16384", "32768"]],
+      ["max_output_tokens", "u32", true, ["16384", "32768", "65536"]], ["cache_ttl", "duration", true, ["5m", "1h"]],
+      ["cache_keepalive", "duration_or_off", true, ["off", "4m", "55m"]], ["cache_keepalive_pings", "u32", true, ["1", "2", "3"]],
+      ["sdk", "string", false, ["anthropic", "openai", "openrouter", "gemini", "zai", "deepseek", "moonshot", "claude_agent", "nanogpt"]],
+      ["reasoning_replay", "string", false, ["all", "none"]], ["max_tool_rounds", "u32", true, ["8", "16", "32", "64"]],
+      ["openrouter_routing", "json_object", true, []], ["gemini_thinking_mode", "string", false, ["auto", "budget", "level"]],
+      ["zai_clear_reasoning", "boolean", false, ["true", "false"]], ["supports_images", "boolean", false, ["true", "false"]],
+    ]);
+
+    setModelSetting(models, { key: "max_tool_rounds", value: 8, scope: "character" });
+    setModelSetting(models, { key: "reasoning_replay", value: "none", scope: "global" });
+    expect(modelSettings(models, { overview: true })).toMatchObject({
+      overview: true,
+      roles: [{ role: "chat", model: "anthropic:claude-x", settings: [{ key: "max_tool_rounds", value: 8, scope: "character" }, { key: "reasoning_replay", value: "none", scope: "global" }] }, { role: "sub-agents", settings: [] }],
+    });
+  });
+
+  test("shore config keys gives each model setting its type, under a provider and under a model", async () => {
+    const w = await build("ada", TOML);
+    const rows = (prefix: string): string[] => schemaOf(w.ctx).filter((row) => row.key.startsWith(prefix) && !row.key.includes("keys")).map((row) => `${row.key.slice(prefix.length)}: ${row.type}${row.optional ? "?" : ""}`);
+    const settings = [
+      "cache_ttl: duration?", "gemini_thinking_mode: auto | budget | level?", "max_context_tokens: u32?", "max_output_tokens: u32?", "max_tool_rounds: u32?", "openrouter_routing: table?",
+      "reasoning_budget_tokens: u32?", "reasoning_effort: string?", "reasoning_replay: all | none?", "sdk: string?", "supports_images: boolean?", "system_prompt: string?", "temperature: number?",
+      "top_p: number?", "zai_clear_reasoning: boolean?",
+    ];
+    expect(rows('chat."openrouter:x/y".')).toEqual(settings);
+    expect(rows("providers.anthropic.")).toEqual([
+      "api_key_env: string?", "base_url: string?", "cache_ttl: duration?", "discover: boolean", "enabled: boolean", "gemini_thinking_mode: auto | budget | level?", "ignore_models: list of string",
+      "max_context_tokens: u32?", "max_output_tokens: u32?", "max_tool_rounds: u32?", "no_auth: boolean", "openrouter_routing: table?", "pin: string?", "reasoning_budget_tokens: u32?",
+      "reasoning_effort: string?", "reasoning_replay: all | none?", "sdk: string?", "subscription: boolean", "supports_images: boolean?", "system_prompt: string?", "temperature: number?",
+      "top_p: number?", "zai_clear_reasoning: boolean?",
+    ]);
+  });
+
+  test("the names from before are refused, and a value that can't be used is refused naming the setting", async () => {
+    const w = await build("ada", TOML);
+    const models = { ...w.ctx, dataDir: w.ctx.config.dirs.data };
+    const supported = "supported: temperature, top_p, reasoning_effort, reasoning_budget_tokens, max_output_tokens, cache_ttl, cache_keepalive, cache_keepalive_pings, sdk, reasoning_replay, max_tool_rounds, openrouter_routing, gemini_thinking_mode, zai_clear_reasoning, supports_images";
+    for (const [old, value] of [["budget_tokens", 1024], ["replay_prior_thinking", "all"], ["max_tool_iterations", 4], ["openrouter_provider", { a: 1 }], ["gemini_generation", 3], ["zai_clear_thinking", true]] as const) {
+      expect(() => setModelSetting(models, { key: old, value, scope: "character" })).toThrow(`unknown setting key: ${old}; ${supported}`);
+      expect(() => modelSettings(models, { key: old })).toThrow(`unknown setting key: ${old}; ${supported}`);
+    }
+    for (const [key, value, name, refusal] of [
+      ["reasoning_budget_tokens", "lots", "anthropic:claude-x", 'reasoning_budget_tokens must be a non-negative integer fitting in u32, got "lots"'],
+      ["reasoning_replay", "some", "openrouter:x/y", 'reasoning_replay must be "all" or "none"; got "some"'],
+      ["max_tool_rounds", 0, "openrouter:x/y", "max_tool_rounds must be >= 1; unset it (null) for unlimited"],
+      ["max_tool_rounds", "x", "openrouter:x/y", 'max_tool_rounds must be a non-negative integer fitting in u32, got "x"'],
+      ["openrouter_routing", "nope", "openrouter:x/y", 'openrouter_routing must be a routing object, got "nope"'],
+      ["openrouter_routing", [1], "openrouter:x/y", "openrouter_routing must be a routing object, got [1]"],
+      ["openrouter_routing", { a: null }, "openrouter:x/y", "openrouter_routing must be a TOML-compatible object: unsupported unit type"],
+      ["gemini_thinking_mode", "fast", "gemini:gemini-3-pro", "gemini_thinking_mode must be auto, budget, or level"],
+      ["gemini_thinking_mode", 3, "gemini:gemini-3-pro", "gemini_thinking_mode must be auto, budget, or level"],
+      ["zai_clear_reasoning", "maybe", "zai-api:glm-9", 'zai_clear_reasoning must be a boolean, got "maybe"'],
+      ["gemini_thinking_mode", "level", "openrouter:x/y", "`gemini_thinking_mode` is not applicable to the `openrouter` sdk for this model"],
+    ] as const) {
+      expect(() => setModelSetting(models, { key, value, scope: "character", name })).toThrow(refusal);
+    }
+    expect(setModelSetting(models, { key: "reasoning_replay", value: true, scope: "character" })).toMatchObject({ key: "reasoning_replay", value: true });
+    expect(settingsOf(models).effective_sampler).toMatchObject({ reasoning_replay: "all" });
+  });
+
+  test("a preferences file is read under the same names, and one that uses an old name or a value that can't be used is refused", async () => {
+    const w = await build("ada", TOML);
+    const models = { ...w.ctx, dataDir: w.ctx.config.dirs.data };
+    const path = characterPreferencesPath(models.dataDir, "ada");
+    await mkdir(dirname(path), { recursive: true });
+    const having = async (text: string): Promise<() => unknown> => {
+      await writeFile(path, text);
+      return () => settingsOf(models, { name: "gemini:gemini-3-pro" }).saved_character;
+    };
+    expect((await having('[models."gemini:gemini-3-pro"]\nreasoning_budget_tokens = 5\nreasoning_replay = "all"\nmax_tool_rounds = 3\nopenrouter_routing = { a = 1 }\ngemini_thinking_mode = "auto"\nzai_clear_reasoning = false\n'))())
+      .toMatchObject({ reasoning_budget_tokens: 5, reasoning_replay: "all", max_tool_rounds: 3, openrouter_routing: { a: 1 }, gemini_thinking_mode: "auto", zai_clear_reasoning: false });
+    await writeFile(path, '[models."anthropic:claude-x"]\nmax_tool_rounds = 0\n');
+    expect(modelSettings(models, {})).toMatchObject({ effective_sampler: { max_tool_rounds: 9 }, saved_character: { max_tool_rounds: 0 } });
+    for (const [line, refusal] of [
+      ["budget_tokens = 5", "unknown field `budget_tokens`, expected one of `temperature`"],
+      ["gemini_generation = 3", "unknown field `gemini_generation`, expected one of `temperature`"],
+      ['gemini_thinking_mode = "fast"', "preferences: gemini_thinking_mode must be auto, budget, or level"],
+      ["gemini_thinking_mode = 3", "preferences: gemini_thinking_mode must be auto, budget, or level"],
+      ['reasoning_replay = "some"', 'invalid reasoning_replay "some"; expected "all", "none"'],
+      ['reasoning_budget_tokens = "5"', 'invalid type: string "5", expected u32'],
+      ["max_tool_rounds = 1.5", "invalid type: floating point `1.5`, expected u32"],
+      ['zai_clear_reasoning = "yes"', 'invalid type: string "yes", expected a boolean'],
+    ] as const) {
+      expect(await having(`[models."gemini:gemini-3-pro"]\n${line}\n`)).toThrow(refusal);
+    }
   });
 });
 

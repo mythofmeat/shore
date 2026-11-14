@@ -14,7 +14,7 @@ function req(over: Partial<SidecarRequest> = {}): SidecarRequest {
     provider_key: "zai-api",
     messages: [],
     max_tokens: 4096,
-    replay_prior_thinking: "all",
+    reasoning_replay: "all",
     ...over,
   };
 }
@@ -32,7 +32,7 @@ describe("request construction", () => {
   test("never replays a foreign provider's carrier as Z.ai reasoning", () => {
     const messages = buildZaiMessages(
       req({
-        provider_options: { zai_clear_thinking: false },
+        provider_options: { zai_clear_reasoning: false },
         messages: [
           {
             role: "assistant",
@@ -223,7 +223,7 @@ describe("replayed history", () => {
   ];
 
   test("reasoning goes back only when thinking is on and Z.ai is told not to clear it, after the system prompt", () => {
-    expect(buildZaiMessages(req({ system: [{ text: "sys", label: "soul" }], messages: history(), provider_options: { zai_clear_thinking: false } }))).toEqual([
+    expect(buildZaiMessages(req({ system: [{ text: "sys", label: "soul" }], messages: history(), provider_options: { zai_clear_reasoning: false } }))).toEqual([
       { role: "system", content: "sys" },
       { role: "user", content: [{ type: "text", text: "q" }] },
       { role: "assistant", content: "a", reasoning_content: "why" },
@@ -231,7 +231,7 @@ describe("replayed history", () => {
       { role: "assistant", reasoning_content: "x", tool_calls: [{ id: "c1", type: "function", function: { name: "look", arguments: "{}" } }] },
       { role: "tool", tool_call_id: "c1", content: "seen" },
     ] as never);
-    for (const provider_options of [{}, { zai_clear_thinking: true }, { zai_clear_thinking: false, thinking_enabled: false }]) {
+    for (const provider_options of [{}, { zai_clear_reasoning: true }, { zai_clear_reasoning: false, thinking_enabled: false }]) {
       const messages = buildZaiMessages(req({ messages: history(), provider_options })) as unknown as Array<Record<string, unknown>>;
       expect(messages.filter((m) => "reasoning_content" in m)).toEqual([]);
       expect(messages[0]).toEqual({ role: "user", content: [{ type: "text", text: "q" }] });

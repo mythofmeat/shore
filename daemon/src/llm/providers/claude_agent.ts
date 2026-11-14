@@ -1271,7 +1271,7 @@ export async function* claudeAgentToolLoopEvents(
   const names = new ToolNames(defs);
   const notes: SystemNote[] = [];
   const round = new RoundLog(tools, req, notes);
-  const cap = req.max_tool_iterations;
+  const cap = req.max_tool_rounds;
 
   let toolFailure: unknown;
   const instance = shoreToolServer(defs, names, async (bare, input) => {

@@ -36,7 +36,7 @@ describe("buildCall against the ai SDK's own prompt validation", () => {
       { role: "user", content: [{ type: "text", text: "how are you" }] },
     ],
     max_tokens: 1024,
-    replay_prior_thinking: "all",
+    reasoning_replay: "all",
   } as unknown as SidecarRequest;
 
   async function promptSeenByProvider(sidecarRequest: SidecarRequest): Promise<unknown> {
@@ -146,7 +146,7 @@ describe("turns as the ai SDK takes them", () => {
   });
 
   test("a result finds the name of the call an earlier turn made", () => {
-    const call = buildCall({ sdk: "moonshot", model: "kimi-k2-thinking", api_key: "sk-test", max_tokens: 1024, replay_prior_thinking: "all", messages: [
+    const call = buildCall({ sdk: "moonshot", model: "kimi-k2-thinking", api_key: "sk-test", max_tokens: 1024, reasoning_replay: "all", messages: [
       { role: "user", content: [{ type: "text", text: "find it" }] },
       { role: "assistant", content: [{ type: "tool_use", id: "tc_9", name: "search", input: {} }] },
       { role: "user", content: [{ type: "tool_result", tool_use_id: "tc_9", content: "found" }] },

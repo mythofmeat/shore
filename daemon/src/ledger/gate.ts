@@ -55,7 +55,7 @@ function projectedLoopCost(
   request: SidecarRequest,
   provider: string,
 ): number | undefined {
-  const cap = request.max_tool_iterations;
+  const cap = request.max_tool_rounds;
   if (cap === undefined || cap <= 1) return undefined;
   if (request.tools === undefined || request.tools.length === 0) return undefined;
 

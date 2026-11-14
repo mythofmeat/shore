@@ -35,7 +35,7 @@ import { rustTrim } from "./duration.ts";
 import { catalogFromSections, findModel, readModelConfigFields, CatalogError, type ModelCatalog } from "./models.ts";
 import { credentialBudgets, isCredentialBudget, markCredentialBudget, ProviderRegistry, ProviderRegistryError } from "./providers.ts";
 import { renderStarterConfig } from "./starter.ts";
-import { formatConfigPath, normalizeConfigSource } from "./surface.ts";
+import { formatConfigPath } from "./surface.ts";
 
 export type TomlTable = Record<string, unknown>;
 
@@ -201,9 +201,9 @@ export function loadRawConfigTable(
     const parsed = parseToml(content, kind, path);
     const includes = parsed.include;
     delete parsed.include;
-    const normalized = normalizeSource(parsed, path);
-    if (includes !== undefined) normalized.include = includes;
-    return normalized;
+    checkSource(parsed, path);
+    if (includes !== undefined) parsed.include = includes;
+    return parsed;
   };
   if (exists(configFile)) {
     table = read(readFileOrThrow(configFile), "parse_app", configFile);
@@ -249,19 +249,6 @@ export function parentOf(path: string): string {
   return trimmed.slice(0, slash);
 }
 
-export function loadCharacterConfigTable(
-  global: RawConfigTable,
-  characterName: string,
-): TomlTable | undefined {
-  const path = rustJoin(global.dirs.config, "characters", characterName, "config.toml");
-  if (!exists(path)) return undefined;
-
-  const overlay = normalizeSource(parseToml(readFileOrThrow(path), "parse_include", path), path);
-  const merged = structuredClone(global.table);
-  deepMerge(merged, overlay);
-  return merged;
-}
-
 export const DEFAULT_CONFIG_TOML = renderStarterConfig();
 
 export function createDefaultConfig(
@@ -305,17 +292,11 @@ export interface LoadedConfig {
   adoptEnvironment?: () => void;
 }
 
-function normalizeSource(
-  input: TomlTable,
-  source: string,
-): TomlTable {
+function checkSource(table: TomlTable, source: string): void {
   try {
-    validateConfigSource(input, source);
-    const normalized = normalizeConfigSource(input, source);
-    const valid = validateAppConfigLayer(normalized);
+    validateConfigSource(table, source);
+    const valid = validateAppConfigLayer(table);
     if ("err" in valid) throw new Error(`${source}: ${valid.err}`);
-    const table = normalized;
-    if (table.providers !== undefined && !isTable(table.providers)) throw new Error(`${source}: providers must be a table`);
     ProviderRegistry.fromSection(sectionTable(table.providers));
     catalogFromSections(undefined, imageModelProfiles(sectionTable(table.image)));
     for (const [name, entries] of Object.entries(sectionTable(table.chat) ?? {})) {
@@ -323,7 +304,6 @@ function normalizeSource(
       const parsed = readModelConfigFields(entries);
       if ("err" in parsed) throw new Error(`${source}: ${formatConfigPath(["chat", name])}: ${parsed.err}`);
     }
-    return normalized;
   } catch (e) {
     const message = e instanceof Error ? e.message : String(e);
     throw new ConfigError("parse_app", message.startsWith(`${source}:`) ? message : `${source}: ${message}`, source);
@@ -339,9 +319,7 @@ export function parseConfigTable(
   dirs: ShoreDirs,
   onWarn: ConfigWarn = consoleConfigWarn,
   files: string[] = [],
-  normalized = false,
 ): LoadedConfig {
-  if (!normalized) table = normalizeSource(table, files[0] ?? "config");
   const rawTable = structuredClone(table);
 
   const remainder = { ...table };
@@ -392,7 +370,7 @@ export function loadConfig(
   } = {},
 ): LoadedConfig {
   const raw = loadRawConfigTable(configPath, { ...options, deferEnvironment: true });
-  const config = parseConfigTable(raw.table, raw.dirs, options.onWarn, raw.files, true);
+  const config = parseConfigTable(raw.table, raw.dirs, options.onWarn, raw.files);
   if (options.deferEnvironment === true) {
     if (raw.adoptEnvironment !== undefined) config.adoptEnvironment = raw.adoptEnvironment;
   } else raw.adoptEnvironment?.();
@@ -407,10 +385,11 @@ export function loadCharacterConfig(
   const path = rustJoin(global.dirs.config, "characters", characterName, "config.toml");
   if (!exists(path)) return undefined;
 
-  const overlay = normalizeSource(parseToml(readFileOrThrow(path), "parse_include", path), path);
+  const overlay = parseToml(readFileOrThrow(path), "parse_include", path);
+  checkSource(overlay, path);
   const merged = structuredClone(global.rawTable ?? {});
   deepMerge(merged, overlay);
-  const loaded = parseConfigTable(merged, global.dirs, onWarn, [...(global.files ?? []), path], true);
+  const loaded = parseConfigTable(merged, global.dirs, onWarn, [...(global.files ?? []), path]);
   scopeOverlayBudgetsToCharacter(loaded.app.budgets, overlay, characterName);
   return loaded;
 }

@@ -86,7 +86,7 @@ function conversation(home: string, mock: MockAnthropic): (text: string) => Prom
     history.push({ role: "user", content: [{ type: "text", text }] });
     const { result } = await runGeneration({
       sdk: "claude_agent", api_key: "", base_url: mock.url, model: "claude-opus-5-5",
-      messages: [...history], max_tokens: 256, replay_prior_thinking: "all",
+      messages: [...history], max_tokens: 256, reasoning_replay: "all",
       context: { character: "ada", workspace_dir: home, thinking_enabled: false, call_type: "message" },
     }, { providerKey: "claude_agent" }, deps, { signal: AbortSignal.timeout(30_000), sink: () => {} });
     history.push({ role: "assistant", content: [{ type: "text", text: result.content }] });
@@ -135,7 +135,7 @@ test("a tool-using reply whose account hits its limit partway through carries on
     const { result } = await runGeneration({
       sdk: "claude_agent", api_key: "", base_url: mock.url, model: "claude-opus-5-5",
       messages: [{ role: "user", content: [{ type: "text", text: "Note groceries, then tell me." }] }],
-      max_tokens: 256, replay_prior_thinking: "all",
+      max_tokens: 256, reasoning_replay: "all",
       tools: [{ name: "note", description: "Write a note.", input_schema: { type: "object", properties: { text: { type: "string" } } } }],
       context: { character: "ada", workspace_dir: home, thinking_enabled: false, call_type: "message" },
     }, { providerKey: "claude_agent" }, {
@@ -317,7 +317,7 @@ test("a keepalive ping on a login checks that login's usage first, and is skippe
     const events: KeepaliveEvent[] = [];
     keepalive.onEvent((event) => events.push(event));
     keepalive.arm({
-      sdk: "claude_agent", model: "claude-opus-5-5", api_key: "", max_tokens: 1, replay_prior_thinking: "all",
+      sdk: "claude_agent", model: "claude-opus-5-5", api_key: "", max_tokens: 1, reasoning_replay: "all",
       messages: [{ role: "user", content: [{ type: "text", text: "hello" }] }, { role: "assistant", content: [{ type: "text", text: "hi" }] }],
       keepalive_interval_ms: 55 * 60_000, keepalive_pings: 3,
       context: { character: "ada", call_type: "message", thinking_enabled: false, api_key_name: "first@example.com" },
@@ -375,7 +375,7 @@ test("a reply that crosses its login's own limit partway finishes on that login,
     const { result } = await runGeneration({
       sdk: "claude_agent", api_key: "", base_url: mock.url, model: "claude-opus-5-5",
       messages: [{ role: "user", content: [{ type: "text", text: "Note twice." }] }],
-      max_tokens: 256, replay_prior_thinking: "all",
+      max_tokens: 256, reasoning_replay: "all",
       tools: [{ name: "note", description: "Write a note.", input_schema: { type: "object", properties: { text: { type: "string" } } } }],
       context: { character: "ada", workspace_dir: home, thinking_enabled: false, call_type: "message" },
     }, { providerKey: "claude_agent" }, {

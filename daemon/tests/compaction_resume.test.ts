@@ -307,7 +307,7 @@ function compactionRequest(): SidecarRequest {
     api_key: "secret-that-must-not-land-on-disk",
     messages: [],
     max_tokens: 100,
-    replay_prior_thinking: "all",
+    reasoning_replay: "all",
   };
 }
 

@@ -12,9 +12,9 @@ import { testTmp } from "./support/tmp.ts";
 
 const AT = "2026-10-30T12:00:00.000Z";
 
-const ASKED: SidecarRequest = { sdk: "anthropic", model: "claude-lamp", api_key: "k", messages: [], max_tokens: 1024, replay_prior_thinking: "all", provider_key: "anthropic" };
+const ASKED: SidecarRequest = { sdk: "anthropic", model: "claude-lamp", api_key: "k", messages: [], max_tokens: 1024, reasoning_replay: "all", provider_key: "anthropic" };
 
-const UNNAMED: SidecarRequest = { sdk: "anthropic", model: "", api_key: "k", messages: [], max_tokens: 1024, replay_prior_thinking: "all" };
+const UNNAMED: SidecarRequest = { sdk: "anthropic", model: "", api_key: "k", messages: [], max_tokens: 1024, reasoning_replay: "all" };
 
 async function sender() {
   const root = testTmp(`wake-messages-${crypto.randomUUID()}`);

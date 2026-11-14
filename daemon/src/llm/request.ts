@@ -11,6 +11,7 @@ import {
 import type { ProviderEntry } from "./credentials";
 import { sanitizeToolPairs } from "./sanitize";
 import type {
+  GeminiThinkingMode,
   GenerateResponse,
   ProviderOptions,
   Sdk,
@@ -39,14 +40,14 @@ export interface ResolvedModel {
   temperature?: number;
   top_p?: number;
   reasoning_effort?: string;
-  budget_tokens?: number;
+  reasoning_budget_tokens?: number;
   cache_ttl?: string;
   cache_keepalive?: string;
   cache_keepalive_pings?: number;
-  openrouter_provider?: unknown;
-  gemini_generation?: number;
-  zai_clear_thinking?: boolean;
-  max_tool_iterations?: number;
+  openrouter_routing?: unknown;
+  gemini_thinking_mode?: GeminiThinkingMode;
+  zai_clear_reasoning?: boolean;
+  max_tool_rounds?: number;
   supports_images?: boolean;
 }
 
@@ -113,16 +114,16 @@ export function providerOptionsFor(model: ResolvedModel): ProviderOptions | unde
       ? { reasoning_effort: model.reasoning_effort }
       : {}),
     ...(disabled ? { thinking_enabled: false } : {}),
-    ...(model.budget_tokens !== undefined ? { budget_tokens: model.budget_tokens } : {}),
+    ...(model.reasoning_budget_tokens !== undefined ? { reasoning_budget_tokens: model.reasoning_budget_tokens } : {}),
     ...(model.cache_ttl !== undefined ? { cache_ttl: model.cache_ttl } : {}),
-    ...(model.openrouter_provider !== undefined && model.openrouter_provider !== null
-      ? { openrouter_provider: model.openrouter_provider }
+    ...(model.openrouter_routing !== undefined && model.openrouter_routing !== null
+      ? { openrouter_routing: model.openrouter_routing }
       : {}),
-    ...(model.gemini_generation !== undefined
-      ? { gemini_generation: model.gemini_generation }
+    ...(model.gemini_thinking_mode !== undefined
+      ? { gemini_thinking_mode: model.gemini_thinking_mode }
       : {}),
-    ...(model.zai_clear_thinking !== undefined
-      ? { zai_clear_thinking: model.zai_clear_thinking }
+    ...(model.zai_clear_reasoning !== undefined
+      ? { zai_clear_reasoning: model.zai_clear_reasoning }
       : {}),
   };
 
@@ -161,7 +162,7 @@ export function buildRequestWithResolvedKey(
       return options === undefined ? {} : { provider_options: options };
     })(),
     provider_key: model.provider_key,
-    replay_prior_thinking: inputs.replay,
+    reasoning_replay: inputs.replay,
   };
 
   const intervalMs = keepaliveIntervalMs(model.cache_keepalive);

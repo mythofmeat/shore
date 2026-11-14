@@ -7207,21 +7207,20 @@
             ],
             "format": "double"
           },
-          "budget_tokens": {
+          "reasoning_budget_tokens": {
             "type": [
               "number",
               "null"
             ],
             "format": "double"
           },
-          "gemini_generation": {
+          "gemini_thinking_mode": {
             "type": [
-              "number",
+              "string",
               "null"
-            ],
-            "format": "double"
+            ]
           },
-          "max_tool_iterations": {
+          "max_tool_rounds": {
             "type": [
               "number",
               "null"
@@ -7253,13 +7252,13 @@
             ],
             "format": "double"
           },
-          "replay_prior_thinking": {
+          "reasoning_replay": {
             "type": [
               "string",
               "null"
             ]
           },
-          "zai_clear_thinking": {
+          "zai_clear_reasoning": {
             "type": [
               "boolean",
               "null"
@@ -7271,7 +7270,7 @@
               "null"
             ]
           },
-          "openrouter_provider": true,
+          "openrouter_routing": true,
           "effective_sampler": {
             "type": [
               "object",
@@ -7305,17 +7304,17 @@
           "max_output_tokens",
           "temperature",
           "top_p",
-          "budget_tokens",
-          "gemini_generation",
-          "max_tool_iterations",
+          "reasoning_budget_tokens",
+          "gemini_thinking_mode",
+          "max_tool_rounds",
           "reasoning_effort",
           "cache_ttl",
           "cache_keepalive",
           "cache_keepalive_pings",
-          "replay_prior_thinking",
-          "zai_clear_thinking",
+          "reasoning_replay",
+          "zai_clear_reasoning",
           "supports_images",
-          "openrouter_provider"
+          "openrouter_routing"
         ]
       },
       "ModelSwitchResult": {
@@ -17324,21 +17323,20 @@
             ],
             "format": "double"
           },
-          "budget_tokens": {
+          "reasoning_budget_tokens": {
             "type": [
               "number",
               "null"
             ],
             "format": "double"
           },
-          "gemini_generation": {
+          "gemini_thinking_mode": {
             "type": [
-              "number",
+              "string",
               "null"
-            ],
-            "format": "double"
+            ]
           },
-          "max_tool_iterations": {
+          "max_tool_rounds": {
             "type": [
               "number",
               "null"
@@ -17370,13 +17368,13 @@
             ],
             "format": "double"
           },
-          "replay_prior_thinking": {
+          "reasoning_replay": {
             "type": [
               "string",
               "null"
             ]
           },
-          "zai_clear_thinking": {
+          "zai_clear_reasoning": {
             "type": [
               "boolean",
               "null"
@@ -17388,7 +17386,7 @@
               "null"
             ]
           },
-          "openrouter_provider": true,
+          "openrouter_routing": true,
           "effective_sampler": {
             "type": [
               "object",
@@ -17422,17 +17420,17 @@
           "max_output_tokens",
           "temperature",
           "top_p",
-          "budget_tokens",
-          "gemini_generation",
-          "max_tool_iterations",
+          "reasoning_budget_tokens",
+          "gemini_thinking_mode",
+          "max_tool_rounds",
           "reasoning_effort",
           "cache_ttl",
           "cache_keepalive",
           "cache_keepalive_pings",
-          "replay_prior_thinking",
-          "zai_clear_thinking",
+          "reasoning_replay",
+          "zai_clear_reasoning",
           "supports_images",
-          "openrouter_provider"
+          "openrouter_routing"
         ]
       },
       "ModelSwitchResult": {

@@ -385,7 +385,7 @@ export async function* genericToolLoopEvents(
   let failure: unknown;
   const running = (async () => {
     try {
-      await runToolLoop(driver, undefined, req.max_tool_iterations, options.capBehavior ?? "close_with_final_turn");
+      await runToolLoop(driver, undefined, req.max_tool_rounds, options.capBehavior ?? "close_with_final_turn");
     } catch (error) {
       if (!(error instanceof ToolLoopStop)) failure = error;
     } finally {

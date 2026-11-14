@@ -6,11 +6,10 @@ import type { ReasoningEffort as OpenAiReasoningEffort } from "openai/resources/
 import type { ZhipuReasoningEffort } from "zhipu-ai-provider";
 
 import type { SamplerSettings } from "../config/preferences.ts";
-import { canonicalSettingKey, geminiMode, internalSettingKey } from "../config/surface.ts";
 import { parseCacheKeepalive, parseKeepalivePings, parsePositiveDuration } from "../config/keepalive.ts";
 import { acceptsCacheTtl } from "./cache_capability.ts";
 import type { DiscoveredModelSupport } from "./discovery.ts";
-import { REASONING_OFF, SDK_VARIANTS, sdkFromWire, type Sdk } from "./types.ts";
+import { GEMINI_THINKING_MODES, isGeminiThinkingMode, REASONING_OFF, SDK_VARIANTS, sdkFromWire, type Sdk } from "./types.ts";
 
 import type { ModelSettingKind as SettingKind } from "../protocol/ModelSettingKind.ts";
 import type { ModelSettingApplicability as SettingApplicability } from "../protocol/ModelSettingApplicability.ts";
@@ -111,8 +110,11 @@ const parseReplay = (value: unknown): Parsed => {
         return { value: "none" };
     }
   }
-  return { error: `replay_prior_thinking must be "all" or "none"; got ${show(value)}` };
+  return { error: `reasoning_replay must be "all" or "none"; got ${show(value)}` };
 };
+
+const parseGeminiMode = (value: unknown): Parsed =>
+  isGeminiThinkingMode(value) ? { value } : { error: "gemini_thinking_mode must be auto, budget, or level" };
 
 const parseKeepalive = (value: unknown): Parsed => {
   const raw = parseString("cache_keepalive")(value);
@@ -156,19 +158,15 @@ function tomlUnrepresentable(value: unknown): string | undefined {
 const parseJsonObject = (value: unknown): Parsed => {
   let parsed = value;
   if (typeof value === "string") {
-    try {
-      parsed = JSON.parse(value);
-    } catch {
-      return { error: `openrouter_provider must be a routing object, got ${show(value)}` };
-    }
+    try { parsed = JSON.parse(value); } catch {}
   }
   if (typeof parsed !== "object" || parsed === null || Array.isArray(parsed)) {
-    return { error: `openrouter_provider must be a routing object, got ${show(value)}` };
+    return { error: `openrouter_routing must be a routing object, got ${show(value)}` };
   }
   const bad = tomlUnrepresentable(parsed);
   return bad === undefined
     ? { value: parsed }
-    : { error: `openrouter_provider must be a TOML-compatible object: ${bad}` };
+    : { error: `openrouter_routing must be a TOML-compatible object: ${bad}` };
 };
 
 type AnthropicEffort = NonNullable<OutputConfig["effort"]>;
@@ -263,47 +261,32 @@ const serializeKeepalive = (value: unknown): unknown => {
   return keepalive.kind === "off" ? "off" : keepalive.interval?.toString();
 };
 
-const INTERNAL_SETTING_DEFINITIONS: readonly SettingDefinition[] = [
+export const SETTING_DEFINITIONS: readonly SettingDefinition[] = [
   { key: "temperature", field: "temperature", kind: "number", suggestions: [], allowCustom: true, editor: { kind: "slider", min: 0, max: 2, step: 0.1 }, applicability: (sdk, support) => wireParameter(sdk, support, "temperature"), parse: parseNumber("temperature") },
   { key: "top_p", field: "topP", kind: "number", suggestions: [], allowCustom: true, editor: { kind: "slider", min: 0, max: 1, step: 0.05 }, applicability: (sdk, support) => wireParameter(sdk, support, "top_p"), parse: parseNumber("top_p") },
   { key: "reasoning_effort", field: "reasoningEffort", kind: "string", suggestions: reasoningSuggestions, allowCustom: reasoningAllowsCustom, applicability: reasoningApplicability, parse: parseReasoning },
-  { key: "budget_tokens", field: "budgetTokens", kind: "u32", suggestions: ["1024", "2048", "4096", "8192", "16384", "32768"], allowCustom: true, applicability: budgetApplicability, parse: parseU32("budget_tokens") },
+  { key: "reasoning_budget_tokens", field: "reasoningBudgetTokens", kind: "u32", suggestions: ["1024", "2048", "4096", "8192", "16384", "32768"], allowCustom: true, applicability: budgetApplicability, parse: parseU32("reasoning_budget_tokens") },
   { key: "max_output_tokens", field: "maxOutputTokens", kind: "u32", suggestions: ["16384", "32768", "65536"], allowCustom: true, applicability: always, parse: parseU32("max_output_tokens") },
   { key: "cache_ttl", field: "cacheTtl", kind: "duration", suggestions: ["5m", "1h"], allowCustom: true, applicability: cacheTtlApplicability, parse: parseCacheTtl },
   { key: "cache_keepalive", field: "cacheKeepalive", kind: "duration_or_off", suggestions: ["off", "4m", "55m"], allowCustom: true, applicability: always, parse: parseKeepalive, serialize: serializeKeepalive },
   { key: "cache_keepalive_pings", field: "cacheKeepalivePings", kind: "u32", suggestions: ["1", "2", "3"], allowCustom: true, applicability: always, parse: parsePings },
   { key: "sdk", field: "sdk", kind: "string", suggestions: SDK_VARIANTS, allowCustom: false, applicability: always, parse: (value) => { const raw = parseString("sdk")(value); if ("error" in raw) return raw; const sdk = sdkFromWire(raw.value as string); return sdk === undefined ? { error: `sdk must be one of ${SDK_VARIANTS.map(show).join(", ")}; got ${show(raw.value)}` } : { value: raw.value }; } },
-  { key: "replay_prior_thinking", field: "replayPriorThinking", kind: "string", suggestions: ["all", "none"], allowCustom: false, applicability: always, parse: parseReplay },
-  { key: "max_tool_iterations", field: "maxToolIterations", kind: "u32", suggestions: ["8", "16", "32", "64"], allowCustom: true, applicability: always, parse: (value) => { const parsed = parseU32("max_tool_iterations")(value); return "error" in parsed || parsed.value !== 0 ? parsed : { error: "max_tool_iterations must be >= 1; unset it (null) for unlimited" }; } },
-  { key: "openrouter_provider", field: "openrouterProvider", kind: "json_object", suggestions: [], allowCustom: true, applicability: vendor("openrouter"), parse: parseJsonObject },
-  { key: "gemini_generation", field: "geminiGeneration", kind: "u32", suggestions: ["1", "2", "3"], allowCustom: true, applicability: vendor("gemini"), parse: parseU32("gemini_generation") },
-  { key: "zai_clear_thinking", field: "zaiClearThinking", kind: "boolean", suggestions: ["true", "false"], allowCustom: false, applicability: vendor("zai"), parse: parseBoolean("zai_clear_thinking") },
+  { key: "reasoning_replay", field: "reasoningReplay", kind: "string", suggestions: ["all", "none"], allowCustom: false, applicability: always, parse: parseReplay },
+  { key: "max_tool_rounds", field: "maxToolRounds", kind: "u32", suggestions: ["8", "16", "32", "64"], allowCustom: true, applicability: always, parse: (value) => { const parsed = parseU32("max_tool_rounds")(value); return "error" in parsed || parsed.value !== 0 ? parsed : { error: "max_tool_rounds must be >= 1; unset it (null) for unlimited" }; } },
+  { key: "openrouter_routing", field: "openrouterRouting", kind: "json_object", suggestions: [], allowCustom: true, applicability: vendor("openrouter"), parse: parseJsonObject },
+  { key: "gemini_thinking_mode", field: "geminiThinkingMode", kind: "string", suggestions: GEMINI_THINKING_MODES, allowCustom: false, applicability: vendor("gemini"), parse: parseGeminiMode },
+  { key: "zai_clear_reasoning", field: "zaiClearReasoning", kind: "boolean", suggestions: ["true", "false"], allowCustom: false, applicability: vendor("zai"), parse: parseBoolean("zai_clear_reasoning") },
   { key: "supports_images", field: "supportsImages", kind: "boolean", suggestions: ["true", "false"], allowCustom: false, applicability: always, parse: parseBoolean("supports_images") },
 ];
 
-export const SETTING_DEFINITIONS: readonly SettingDefinition[] = INTERNAL_SETTING_DEFINITIONS.map((definition) => ({
-  ...definition,
-  key: canonicalSettingKey(definition.key),
-  ...(definition.key === "gemini_generation" ? {
-    kind: "string" as const,
-    suggestions: ["auto", "budget", "level"],
-    allowCustom: false,
-    serialize: geminiMode,
-  } : {}),
-}));
+const BY_KEY = new Map(SETTING_DEFINITIONS.map((definition) => [definition.key, definition]));
 
-const BY_KEY = new Map([...INTERNAL_SETTING_DEFINITIONS, ...SETTING_DEFINITIONS].map((definition) => [definition.key, definition]));
-
-export const SAMPLER_KEYS: readonly string[] = SETTING_DEFINITIONS.map(({ key }) => canonicalSettingKey(key));
+export const SAMPLER_KEYS: readonly string[] = SETTING_DEFINITIONS.map(({ key }) => key);
 export const SETTING_STORAGE_FIELDS: readonly (readonly [SamplerField, string])[] =
-  SETTING_DEFINITIONS.map(({ field, key }) => [field, canonicalSettingKey(key)]);
-
-export function settingDefinition(key: string): SettingDefinition | undefined {
-  return BY_KEY.get(internalSettingKey(key));
-}
+  SETTING_DEFINITIONS.map(({ field, key }) => [field, key]);
 
 export function applySamplerValue(sampler: SamplerSettings, key: string, value: unknown): void {
-  const definition = BY_KEY.get(internalSettingKey(key));
+  const definition = BY_KEY.get(key);
   if (definition === undefined) throw new Error(`unknown setting key: ${key}`);
   const target = sampler as Record<string, unknown>;
   if (value === null || value === undefined) {
@@ -316,22 +299,18 @@ export function applySamplerValue(sampler: SamplerSettings, key: string, value: 
 }
 
 export function parsedSettingValue(key: string, value: unknown): Parsed {
-  if (key === "gemini_thinking_mode") {
-    return value === "auto" ? { value: 0 } : value === "budget" ? { value: 2 } : value === "level" ? { value: 3 } : { error: "gemini_thinking_mode must be auto, budget, or level" };
-  }
-  const definition = BY_KEY.get(internalSettingKey(key));
+  const definition = BY_KEY.get(key);
   return definition === undefined ? { error: `unknown setting key: ${key}` } : definition.parse(value);
 }
 
 export function settingApplicability(sdk: Sdk, key: string, support?: DiscoveredModelSupport, modelId?: string): SettingApplicability {
-  key = internalSettingKey(key);
   if (key === "cache_ttl") return acceptsCacheTtl(sdk, modelId) ? "honored" : "ignored";
   return BY_KEY.get(key)?.applicability(sdk, support) ?? "always";
 }
 
 export function validateSetting(sdk: Sdk, key: string, value: unknown, support?: DiscoveredModelSupport, modelId?: string): string | undefined {
   if (value === null || value === undefined) return undefined;
-  const definition = BY_KEY.get(internalSettingKey(key));
+  const definition = BY_KEY.get(key);
   if (definition === undefined) return undefined;
   if (key === "cache_keepalive" && typeof value === "string") {
     const keepalive = parseCacheKeepalive(value);
@@ -356,11 +335,11 @@ export function validateSetting(sdk: Sdk, key: string, value: unknown, support?:
 
 export function settingSchema(sdk: Sdk, support?: DiscoveredModelSupport, modelId?: string): SettingSchemaEntry[] {
   return SETTING_DEFINITIONS.map((definition) => ({
-    key: canonicalSettingKey(definition.key),
-    kind: definition.key === "gemini_generation" ? "string" : definition.kind,
+    key: definition.key,
+    kind: definition.kind,
     applicability: settingApplicability(sdk, definition.key, support, modelId),
-    suggestions: [...(definition.key === "gemini_generation" ? ["auto", "budget", "level"] : typeof definition.suggestions === "function" ? definition.suggestions(sdk, support) : definition.suggestions)],
-    allow_custom: definition.key === "gemini_generation" ? false : typeof definition.allowCustom === "function" ? definition.allowCustom(sdk, support) : definition.allowCustom,
+    suggestions: [...(typeof definition.suggestions === "function" ? definition.suggestions(sdk, support) : definition.suggestions)],
+    allow_custom: typeof definition.allowCustom === "function" ? definition.allowCustom(sdk, support) : definition.allowCustom,
     ...(definition.editor === undefined ? {} : { editor: definition.editor }),
   }));
 }
@@ -369,8 +348,8 @@ export function samplerToWire(sampler: SamplerSettings, nulls = false): Record<s
   const out: Record<string, unknown> = {};
   for (const definition of SETTING_DEFINITIONS) {
     const value = sampler[definition.field];
-    const wire = value === undefined ? undefined : definition.key === "gemini_generation" ? geminiMode(value) : (definition.serialize?.(value) ?? value);
-    if (wire !== undefined || nulls) out[canonicalSettingKey(definition.key)] = wire ?? null;
+    const wire = value === undefined ? undefined : (definition.serialize?.(value) ?? value);
+    if (wire !== undefined || nulls) out[definition.key] = wire ?? null;
   }
   return out;
 }

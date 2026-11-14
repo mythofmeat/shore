@@ -78,7 +78,7 @@ test("the model sees only what Shore sent, plus the SDK identity line subscripti
       } }],
       context: { character: "heidi", workspace_dir: workspace, thinking_enabled: false, call_type: "message" },
       provider_options: { reasoning_effort: "max" },
-      max_tokens: 1024, replay_prior_thinking: "all", messages: [...history],
+      max_tokens: 1024, reasoning_replay: "all", messages: [...history],
     }, { providerKey: "claude-code" }, deps, {
       signal: AbortSignal.timeout(30_000), sink: () => {},
       tools: { messages: [], recordTurn: () => {}, runTool: (use: { id: string }) =>
@@ -166,7 +166,7 @@ test("a long tool result reaches the model as Shore made it, whole or cut once, 
         type: "object", properties: { command: { type: "string" } }, required: ["command"],
       } }],
       context: { character: "heidi", workspace_dir: workspace, thinking_enabled: false, call_type: "message" },
-      max_tokens: 1024, replay_prior_thinking: "all",
+      max_tokens: 1024, reasoning_replay: "all",
       messages: [{ role: "user", content: [{ type: "text", text: "Count for me." }] }],
     }, { providerKey: "claude-code" }, deps, { signal: AbortSignal.timeout(60_000), sink: () => {}, tools: phase });
 
@@ -269,7 +269,7 @@ test("a refused reply ends the turn with the refusal instead of a hidden retry, 
       system: [{ label: "soul", text: SOUL }],
       messages: [{ role: "user", content: [{ type: "text", text: "hello" }] }],
       context: { character: "heidi", workspace_dir: dir, thinking_enabled: false, call_type: "message" },
-      max_tokens: 1024, replay_prior_thinking: "all",
+      max_tokens: 1024, reasoning_replay: "all",
     }, { providerKey: "claude-code" }, {
       config: {
         app: defaultAppConfig(), models: emptyCatalog(), providers: ProviderRegistry.empty(), rawTable: undefined,
@@ -348,7 +348,7 @@ test("a regenerate's note reaches the model with the new attempt and is gone fro
       sdk: "claude_agent", api_key: "", base_url: mock.url, model: "opus",
       system: [{ label: "soul", text: SOUL }],
       context: { character: "heidi", workspace_dir: workspace, thread, thinking_enabled: false, call_type: "message" },
-      max_tokens: 1024, replay_prior_thinking: "all", messages,
+      max_tokens: 1024, reasoning_replay: "all", messages,
     }, { providerKey: "claude-code" }, deps, { signal: AbortSignal.timeout(30_000), sink: () => {} });
     return result.content;
   };

@@ -482,7 +482,7 @@ test("a dream stopped at its round limit is cut off, keeps no half-written summa
     { type: "text", text: "Let me look." },
     { type: "tool_use", id: `dream-bash-${String(round)}`, name: "bash", input: { command: "true" } },
   ], (_app, models) => {
-    models.chat.set("chat.fixture", { ...required(models.chat.get("chat.fixture")), maxToolIterations: 1 });
+    models.chat.set("chat.fixture", { ...required(models.chat.get("chat.fixture")), maxToolRounds: 1 });
   }, async ({ config, characterDir, runtime }) => {
     putSegment(config.dirs.data, "ada", 0, Date.now() - HOUR);
     runtime.autonomy.forceDreamNow("ada");
@@ -628,7 +628,7 @@ test("a dream that is cut off is shown the same diary notes again next time", as
     { type: "text", text: "Let me look." },
     { type: "tool_use", id: `dream-bash-${String(round)}`, name: "bash", input: { command: "true" } },
   ], (_app, models) => {
-    models.chat.set("chat.fixture", { ...required(models.chat.get("chat.fixture")), maxToolIterations: 1 });
+    models.chat.set("chat.fixture", { ...required(models.chat.get("chat.fixture")), maxToolRounds: 1 });
   }, async ({ characterDir, runtime }) => {
     const march = leaveNote(characterDir, "d1", Date.now() - HOUR, "The log is read up to March.");
     const block = diaryText([march], DIARY_FOR_DREAM, hostZone());

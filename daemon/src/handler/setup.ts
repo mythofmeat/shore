@@ -15,7 +15,7 @@ import {
 } from "../config/preferences.ts";
 import { toolGrants } from "../config/app.ts";
 import { characterDataDir } from "../config/dirs.ts";
-import { resolvedReplayPriorThinking } from "../config/models.ts";
+import { resolvedReasoningReplay } from "../config/models.ts";
 import type { PriorContext } from "../engine/segments.ts";
 import type { Message } from "../engine/types.ts";
 import { buildRequestWithResolvedKey, type BuiltRequest } from "../llm/request.ts";
@@ -125,7 +125,7 @@ export async function buildGenerationRequest(
       messages: prepared.llmMessages,
       system: prepared.system,
       ...(prepared.toolDefs === undefined ? {} : { tools: prepared.toolDefs }),
-      replay: resolvedReplayPriorThinking(resolved, config.app.chat.reasoning_replay),
+      replay: resolvedReasoningReplay(resolved, config.app.chat.reasoning_replay),
     }),
     messageBudget: prepared.prompt.messageBudget,
   };

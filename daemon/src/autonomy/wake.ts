@@ -281,7 +281,7 @@ export async function runWake(character: string, config: LoadedConfig, wake: Wak
     }
     const resolved = applyBackgroundSettings(config.dirs.data, character, "heartbeat", chat);
     const configured = backgroundTaskModel(config, character, "heartbeat");
-    const maxToolIterations = (configured ?? resolved).maxToolIterations;
+    const maxToolRounds = (configured ?? resolved).maxToolRounds;
     const nowMs = deps.now?.() ?? Date.now();
     const timeZone = deps.timeZone ?? hostZone();
     const userName = resolveDisplayName(config.app.chat, deps.env);
@@ -302,7 +302,7 @@ export async function runWake(character: string, config: LoadedConfig, wake: Wak
       ["home", home],
       ["time_limit", spanPhrase(wake.limitMs)],
       ["wrap_up_after", spanPhrase(wake.limitMs - wrapUpMs)],
-      ["max_rounds", maxToolIterations === undefined ? "" : String(maxToolIterations)],
+      ["max_rounds", maxToolRounds === undefined ? "" : String(maxToolRounds)],
       ["resume_after", spanPhrase(WAKE_QUIET_MS)],
     ]));
     const record = wakeRecord(characterDir, thread);
@@ -385,7 +385,7 @@ export async function runWake(character: string, config: LoadedConfig, wake: Wak
       },
       character,
       wrapUpGrace: config.app.triggers.max_wrap_up_rounds,
-      maxToolIterations,
+      maxToolRounds,
       timeLimitMs: wake.limitMs,
       wrapUpMs,
       wrapUpText: (msLeft, rounds) => wakeWrapUpText(msLeft, rounds, userName),

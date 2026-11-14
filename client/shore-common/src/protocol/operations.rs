@@ -1796,11 +1796,11 @@ wire_types! {
         #[serde(deserialize_with = "deserialize_nullable")]
         pub top_p: Option<f64>,
         #[serde(deserialize_with = "deserialize_nullable")]
-        pub budget_tokens: Option<f64>,
+        pub reasoning_budget_tokens: Option<f64>,
         #[serde(deserialize_with = "deserialize_nullable")]
-        pub gemini_generation: Option<f64>,
+        pub gemini_thinking_mode: Option<String>,
         #[serde(deserialize_with = "deserialize_nullable")]
-        pub max_tool_iterations: Option<f64>,
+        pub max_tool_rounds: Option<f64>,
         #[serde(deserialize_with = "deserialize_nullable")]
         pub reasoning_effort: Option<String>,
         #[serde(deserialize_with = "deserialize_nullable")]
@@ -1810,13 +1810,13 @@ wire_types! {
         #[serde(deserialize_with = "deserialize_nullable")]
         pub cache_keepalive_pings: Option<f64>,
         #[serde(deserialize_with = "deserialize_nullable")]
-        pub replay_prior_thinking: Option<String>,
+        pub reasoning_replay: Option<String>,
         #[serde(deserialize_with = "deserialize_nullable")]
-        pub zai_clear_thinking: Option<bool>,
+        pub zai_clear_reasoning: Option<bool>,
         #[serde(deserialize_with = "deserialize_nullable")]
         pub supports_images: Option<bool>,
         #[ts(type = "unknown")]
-        pub openrouter_provider: serde_json::Value,
+        pub openrouter_routing: serde_json::Value,
         #[serde(default, skip_serializing_if = "Option::is_none")]
         #[ts(optional)]
         #[ts(type = "Record<string, unknown>")]

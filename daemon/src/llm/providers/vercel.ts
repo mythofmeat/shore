@@ -217,7 +217,7 @@ export function buildProviderOptions(req: SidecarRequest): ProviderOptionsValue 
   } else {
     const effort = opts.reasoning_effort;
     if (typeof effort === "string" && effort !== REASONING_OFF) inner["reasoningEffort"] = effort;
-    const budget = opts.budget_tokens;
+    const budget = opts.reasoning_budget_tokens;
     if (req.sdk !== "deepseek" && typeof budget === "number" && budget > 0) {
       inner["thinking"] = { type: "enabled", budgetTokens: budget };
     }
@@ -232,7 +232,7 @@ export function buildOpenRouterSettings(req: SidecarRequest): OpenRouterChatSett
   const settings: OpenRouterChatSettings = {};
   const opts = req.provider_options ?? {};
   const effort = opts.reasoning_effort;
-  const budget = opts.budget_tokens;
+  const budget = opts.reasoning_budget_tokens;
 
   if (opts.thinking_enabled === false || effort === REASONING_OFF) {
     settings.reasoning = { effort: "none" };
@@ -242,7 +242,7 @@ export function buildOpenRouterSettings(req: SidecarRequest): OpenRouterChatSett
     settings.reasoning = { max_tokens: budget };
   }
 
-  const routing = opts.openrouter_provider;
+  const routing = opts.openrouter_routing;
   if (routing !== null && typeof routing === "object" && !Array.isArray(routing)) {
     settings.provider = snakeCaseKeys(routing) as NonNullable<OpenRouterChatSettings["provider"]>;
   }

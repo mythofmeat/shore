@@ -74,7 +74,7 @@ function request(over: Partial<SidecarRequest> = {}): SidecarRequest {
     provider_key: "anthropic",
     messages: [{ role: "user", content: [{ type: "text", text: "hi" }] }],
     max_tokens: 1024,
-    replay_prior_thinking: "off",
+    reasoning_replay: "off",
     ...over,
   } as SidecarRequest;
 }

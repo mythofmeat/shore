@@ -71,7 +71,7 @@ export class RealCompactionLlm implements CompactionLlm {
           messages: [...chatRequest.messages],
           ...(chatRequest.system === undefined ? {} : { system: chatRequest.system }),
           ...(chatRequest.tools === undefined ? {} : { tools: chatRequest.tools }),
-          replay: chatRequest.replay_prior_thinking,
+          replay: chatRequest.reasoning_replay,
         },
         this.#opts.env,
       );
