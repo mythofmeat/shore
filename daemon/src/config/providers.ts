@@ -1,12 +1,12 @@
 import {
   defaultSdk,
-  mergeFrom,
   readModelConfigFields,
   sdkFromWire,
   type ModelConfigFields,
   type ProviderRegistryEntry,
   type Sdk,
 } from "./models.ts";
+import { MODEL_FIELDS } from "./surface.ts";
 import { compareByCodePoint, sortedKeys } from "../util/sort.ts";
 import { isKeylessSdk, type ProviderEntry as CredentialsProviderEntry } from "../llm/credentials.ts";
 import type { ClaudeLoginSettings } from "../llm/claude_accounts.ts";
@@ -17,7 +17,6 @@ export type ProviderRegistryErrorKind =
   | "conflicting_key_forms"
   | "missing_key_field"
   | "duplicate_key_name"
-  | "transport_in_defaults"
   | "unknown_pin"
   | "keys_without_auth"
   | "login_field_on_key";
@@ -83,28 +82,11 @@ export class ProviderRegistryError extends Error {
       `[providers.${provider}] key ${JSON.stringify(key)} sets \`${field}\`, which only a login of a provider that signs in (claude_agent) has`,
     );
   }
-
-  static transportInDefaults(provider: string, field: string): ProviderRegistryError {
-    return new ProviderRegistryError(
-      "transport_in_defaults",
-      `[providers.${provider}.defaults] may not set transport key \`${field}\`; ` +
-        `set it on [providers.${provider}] directly`,
-    );
-  }
 }
 
-export interface ProviderDiscovery {
-  enabled: boolean;
-  ignore: string[];
-}
-
-export function defaultDiscovery(): ProviderDiscovery {
-  return { enabled: false, ignore: [] };
-}
-
-export function isVisible(discovery: ProviderDiscovery, modelId: string): boolean {
+export function isVisible(ignoreModels: readonly string[], modelId: string): boolean {
   let visible = true;
-  for (const pat of discovery.ignore) {
+  for (const pat of ignoreModels) {
     const negate = pat.startsWith("!");
     const body = negate ? pat.slice(1) : pat;
     if (globMatches(body, modelId)) {
@@ -147,7 +129,7 @@ export const WINDOW_LIMIT_FIELDS = { session: "session_limit", weekly: "weekly_l
 
 export interface ProviderKeyEntry {
   name: string;
-  env: string;
+  apiKeyEnv: string;
   stored: boolean;
   enabled: boolean;
   warnOnFallback: boolean;
@@ -173,7 +155,8 @@ export interface ProviderEntry extends ProviderRegistryEntry {
   baseUrl?: string;
   apiKeyEnv?: string;
   keys: ProviderKeyEntry[];
-  discovery: ProviderDiscovery;
+  discover: boolean;
+  ignoreModels: string[];
   defaults: ModelConfigFields;
 }
 
@@ -191,7 +174,8 @@ function defaultProviderEntry(name?: string): ProviderEntry {
     subscription: name !== undefined && DEFAULT_SUBSCRIPTION_SET.has(name),
     noAuth: false,
     keys: [],
-    discovery: defaultDiscovery(),
+    discover: false,
+    ignoreModels: [],
     defaults: {},
   };
 }
@@ -207,7 +191,7 @@ export function toCredentialsEntry(entry: ProviderEntry): CredentialsProviderEnt
     ...(entry.pin === undefined ? {} : { pin: entry.pin }),
     keys: entry.keys.map((k) => ({
       name: k.name,
-      env: k.env,
+      env: k.apiKeyEnv,
       stored: k.stored,
       enabled: k.enabled,
       warn_on_fallback: k.warnOnFallback,
@@ -322,11 +306,6 @@ function parseEntry(provider: string, value: unknown): ProviderEntry {
   if ("err" in entry) throw ProviderRegistryError.parseEntry(provider, entry.err);
   const parsed = entry.ok;
 
-  const transport = transportFieldInDefaults(parsed.defaults);
-  if (transport !== undefined) {
-    throw ProviderRegistryError.transportInDefaults(provider, transport);
-  }
-
   if (parsed.apiKeyEnv !== undefined && parsed.keys.length > 0) {
     throw ProviderRegistryError.conflictingKeyForms(provider);
   }
@@ -341,7 +320,7 @@ function parseEntry(provider: string, value: unknown): ProviderEntry {
   if (parsed.apiKeyEnv !== undefined) {
     parsed.keys.push({
       name: "default",
-      env: parsed.apiKeyEnv,
+      apiKeyEnv: parsed.apiKeyEnv,
       stored: false,
       enabled: true,
       warnOnFallback: false,
@@ -373,13 +352,6 @@ function parseEntry(provider: string, value: unknown): ProviderEntry {
   return parsed;
 }
 
-function transportFieldInDefaults(defaults: ModelConfigFields): string | undefined {
-  if (defaults.sdk !== undefined) return "sdk";
-  if (defaults.baseUrl !== undefined) return "base_url";
-  if (defaults.apiKeyEnv !== undefined) return "api_key_env";
-  return undefined;
-}
-
 type ReadResult<T> = { ok: T } | { err: string };
 
 const ENTRY_KEYS = [
@@ -391,11 +363,11 @@ const ENTRY_KEYS = [
   "base_url",
   "api_key_env",
   "keys",
-  "discovery",
-  "defaults",
+  "discover",
+  "ignore_models",
+  ...MODEL_FIELDS,
 ];
-const DISCOVERY_KEYS = ["enabled", "ignore"];
-const KEY_KEYS = ["name", "env", "enabled", "warn_on_fallback", "spend_limit_usd", "spend_period", "dir", WINDOW_LIMIT_FIELDS.session, WINDOW_LIMIT_FIELDS.weekly];
+const KEY_KEYS = ["name", "api_key_env", "enabled", "warn_on_fallback", "spend_limit_usd", "spend_period", "dir", WINDOW_LIMIT_FIELDS.session, WINDOW_LIMIT_FIELDS.weekly];
 
 function unknownField(table: Record<string, unknown>, known: readonly string[]): string | undefined {
   for (const key of sortedKeys(table)) {
@@ -443,11 +415,17 @@ function readEntry(value: unknown, name?: string): ReadResult<ProviderEntry> {
     out[field] = raw;
   }
 
-  const discovery = value["discovery"];
-  if (discovery !== undefined) {
-    const read = readDiscovery(discovery);
-    if ("err" in read) return read;
-    out.discovery = read.ok;
+  if (value["discover"] !== undefined) {
+    if (typeof value["discover"] !== "boolean") return { err: "invalid type: expected a boolean" };
+    out.discover = value["discover"];
+  }
+  const ignore = value["ignore_models"];
+  if (ignore !== undefined) {
+    if (!Array.isArray(ignore)) return { err: "invalid type: expected a sequence" };
+    for (const pat of ignore) {
+      if (typeof pat !== "string") return { err: "invalid type: expected a string" };
+      out.ignoreModels.push(pat);
+    }
   }
 
   const keys = value["keys"];
@@ -460,35 +438,10 @@ function readEntry(value: unknown, name?: string): ReadResult<ProviderEntry> {
     }
   }
 
-  const defaults = value["defaults"];
-  if (defaults !== undefined) {
-    if (!isTable(defaults)) return { err: "invalid type: expected a table" };
-    const read = readDefaults(defaults);
-    if ("err" in read) return read;
-    mergeFrom(out.defaults, read.ok);
-  }
+  const settings = readModelConfigFields(Object.fromEntries(Object.entries(value).filter(([key]) => (MODEL_FIELDS as readonly string[]).includes(key))));
+  if ("err" in settings) return settings;
+  out.defaults = settings.ok;
 
-  return { ok: out };
-}
-
-function readDiscovery(value: unknown): ReadResult<ProviderDiscovery> {
-  if (!isTable(value)) return { err: "invalid type: expected a table" };
-  const unknown = unknownField(value, DISCOVERY_KEYS);
-  if (unknown !== undefined) return { err: unknown };
-
-  const out = defaultDiscovery();
-  if (value["enabled"] !== undefined) {
-    if (typeof value["enabled"] !== "boolean") return { err: "invalid type: expected a boolean" };
-    out.enabled = value["enabled"];
-  }
-  const ignore = value["ignore"];
-  if (ignore !== undefined) {
-    if (!Array.isArray(ignore)) return { err: "invalid type: expected a sequence" };
-    for (const pat of ignore) {
-      if (typeof pat !== "string") return { err: "invalid type: expected a string" };
-      out.ignore.push(pat);
-    }
-  }
   return { ok: out };
 }
 
@@ -498,11 +451,11 @@ function readKey(value: unknown): ReadResult<ProviderKeyEntry> {
   if (unknown !== undefined) return { err: unknown };
 
   const name = value["name"];
-  const env = value["env"];
+  const env = value["api_key_env"];
   if (typeof name !== "string") return { err: "missing field `name`" };
   if (env !== undefined && (typeof env !== "string" || env.trim() === "")) return { err: "`api_key_env` must name an environment variable" };
 
-  const out: ProviderKeyEntry = { name, env: env ?? "", stored: env === undefined, enabled: true, warnOnFallback: false };
+  const out: ProviderKeyEntry = { name, apiKeyEnv: env ?? "", stored: env === undefined, enabled: true, warnOnFallback: false };
   const limit = value["spend_limit_usd"];
   const period = value["spend_period"];
   if (limit !== undefined) {
@@ -540,10 +493,6 @@ function readKey(value: unknown): ReadResult<ProviderKeyEntry> {
     out.windowLimits = { ...out.windowLimits, [window]: fraction };
   }
   return { ok: out };
-}
-
-function readDefaults(table: Record<string, unknown>): ReadResult<ModelConfigFields> {
-  return readModelConfigFields(table);
 }
 
 function expectedList(known: readonly string[]): string {

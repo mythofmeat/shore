@@ -4,7 +4,7 @@ import {
   type ConfigValueSource,
 } from "./app.ts";
 import { requiresRestart } from "./restart.ts";
-import { canonicalConfigPath, canonicalSettingKey, formatConfigPath, isConfigTable, MODEL_FIELDS, parseConfigPath } from "./surface.ts";
+import { canonicalSettingKey, formatConfigPath, isConfigTable, MODEL_FIELDS, parseConfigPath } from "./surface.ts";
 
 import { isSecretConfigPath } from "./serialize.ts";
 import type { ConfigSchemaEntry } from "../protocol/ConfigSchemaEntry.ts";
@@ -139,7 +139,7 @@ export function configSchema(live: LiveInstances): SchemaEntry[] {
   const out: SchemaEntry[] = [];
   for (const old of internal) {
     if (old.kind === "table" || old.kind === "map") continue;
-    const path = canonicalConfigPath(parseConfigPath(old.key));
+    const path = parseConfigPath(old.key);
     const key = formatConfigPath(path);
     out.push({ ...old, key, secret: isSecretConfigPath(path), settable: old.settable && !path.includes("<index>"), description: describeOption(path), scope: "global or character", ...(unitsOf(path) === undefined ? {} : { units: unitsOf(path) as string }) });
   }

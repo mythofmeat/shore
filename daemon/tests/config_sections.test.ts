@@ -4,6 +4,7 @@ import { join } from "node:path";
 
 import { resultCharsFor, subagentEnabled, timeoutFor, toolGrants } from "../src/config/app.ts";
 import { loadCharacterConfig, loadConfig } from "../src/config/loader.ts";
+import { ProviderRegistry } from "../src/config/providers.ts";
 import { restartRequiredChanges } from "../src/config/restart.ts";
 import { attemptMatrixBridge, unusableReason } from "../src/connections/matrix/start.ts";
 import { resolveListenAddr } from "../src/daemon/startup.ts";
@@ -429,4 +430,47 @@ test("a budget in a character's own config counts only that character's spend un
     [["everyone", undefined, undefined, undefined, 9, "day", "warn"], keyLimit],
     undefined,
   ]);
+});
+
+test("[providers.<name>] is read under the names in the file: whether to look for models, which to leave out, each key's variable, and the settings its models start from", async () => {
+  const { write, read } = await budgetsIn();
+  await write([
+    "[providers.bare]",
+    "[providers.full]", "discover = true", 'ignore_models = ["old-*", "!old-gold"]', "temperature = 0.3", "max_output_tokens = 9000",
+    "[[providers.full.keys]]", 'name = "work"', 'api_key_env = "SHORE_TEST_FULL_KEY"', "warn_on_fallback = true",
+    "[[providers.full.keys]]", 'name = "saved"', "enabled = false",
+    "[providers.short]", 'api_key_env = "SHORE_TEST_SHORT_KEY"', "discover = false",
+    "[providers.tuned]", "reasoning_budget_tokens = 2048", "max_tool_rounds = 9", 'reasoning_replay = "none"', "",
+  ].join("\n"));
+  const { providers } = read();
+  const shown = (name: string): unknown[] => {
+    const entry = providers.get(name);
+    return [entry?.discover, entry?.ignoreModels, entry?.keys, entry?.defaults];
+  };
+  expect(shown("bare")).toEqual([false, [], [], {}]);
+  expect(shown("full")).toEqual([true, ["old-*", "!old-gold"], [
+    { name: "work", apiKeyEnv: "SHORE_TEST_FULL_KEY", stored: false, enabled: true, warnOnFallback: true },
+    { name: "saved", apiKeyEnv: "", stored: true, enabled: false, warnOnFallback: false },
+  ], { temperature: 0.3, maxOutputTokens: 9000 }]);
+  expect(shown("short")).toEqual([false, [], [{ name: "default", apiKeyEnv: "SHORE_TEST_SHORT_KEY", stored: false, enabled: true, warnOnFallback: false }], {}]);
+  expect(shown("tuned")).toEqual([false, [], [], { budgetTokens: 2048, maxToolIterations: 9, replayPriorThinking: "none" }]);
+
+  for (const [toml, refusal] of [
+    ['[providers.x]\ndiscover = "yes"\n', "failed to parse [providers.x]: invalid type: expected a boolean"],
+    ['[providers.x]\nignore_models = "old-*"\n', "failed to parse [providers.x]: invalid type: expected a sequence"],
+    ["[providers.x]\nignore_models = [5]\n", "failed to parse [providers.x]: invalid type: expected a string"],
+    ['[providers.x]\ntemperature = "hot"\n', 'failed to parse [providers.x]: invalid type: string "hot", expected a float'],
+    ["[providers.x.discovery]\nenabled = true\n", "unknown field `providers.x.discovery`"],
+    ["[providers.x.defaults]\ntemperature = 0.3\n", "unknown field `providers.x.defaults`"],
+    ['[[providers.x.keys]]\nname = "work"\nenv = "SHORE_TEST_FULL_KEY"\n', "unknown field `providers.x.keys.0.env`"],
+  ] as const) {
+    await write(toml);
+    expect(read).toThrow(refusal);
+  }
+  expect(() => ProviderRegistry.fromSection({ x: { discovery: { enabled: true } } })).toThrow(
+    "failed to parse [providers.x]: unknown field `discovery`, expected one of `enabled`, `subscription`, `no_auth`, `pin`, `sdk`, `base_url`, `api_key_env`, `keys`, `discover`, `ignore_models`, `max_context_tokens`",
+  );
+  expect(() => ProviderRegistry.fromSection({ x: { keys: [{ name: "work", env: "K" }] } })).toThrow(
+    "failed to parse [providers.x]: unknown field `env`, expected one of `name`, `api_key_env`, `enabled`",
+  );
 });

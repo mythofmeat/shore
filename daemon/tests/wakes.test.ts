@@ -2959,7 +2959,7 @@ test("a model chosen for wakes is used even when its provider's list keeps it ou
     await say("hello");
     runtime.registry.setRuntimeEffectiveConfig("ada", {
       ...runtime.registry.effectiveConfig("ada"),
-      providers: ProviderRegistry.fromSection({ anthropic: { sdk: "anthropic", api_key_env: KEY_ENV, discovery: { enabled: true, ignore: ["claude-tucked-*"] } } }),
+      providers: ProviderRegistry.fromSection({ anthropic: { sdk: "anthropic", api_key_env: KEY_ENV, discover: true, ignore_models: ["claude-tucked-*"] } }),
     });
     await wakeNow();
     expect(script.wakes.map((request) => request.model)).toEqual(["claude-tucked-away", "claude-tucked-away"]);

@@ -239,10 +239,10 @@ async function chatConfig(root: string, spareKey: boolean): Promise<LoadedConfig
     openai: {
       keys: spareKey
         ? [
-            { name: "default", env: CHAT_KEY_ENV },
-            { name: "spare", env: SPARE_KEY_ENV },
+            { name: "default", api_key_env: CHAT_KEY_ENV },
+            { name: "spare", api_key_env: SPARE_KEY_ENV },
           ]
-        : [{ name: "default", env: CHAT_KEY_ENV }],
+        : [{ name: "default", api_key_env: CHAT_KEY_ENV }],
     },
   });
 
