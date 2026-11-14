@@ -39,13 +39,17 @@ export function renameRecordedHeartbeatCalls(data: string): void {
 
 const EVENTS_DONE = "shore/wake-events-and-transcripts-from-when-they-were-filed-under-heartbeat";
 
+export function refileHeartbeatEvents(db: Database): number {
+  return db.query("UPDATE events SET kind = 'wake' WHERE kind = 'heartbeat'").run().changes +
+    db.query("UPDATE capture_transcripts SET source = 'wake' WHERE source = 'heartbeat'").run().changes;
+}
+
 export function refileRecordedHeartbeatEvents(data: string): void {
   try {
     const refiled = withStorage(data, (db) => {
       if (db.query("SELECT 1 FROM state_files WHERE path = ?1").get(EVENTS_DONE) !== null) return 0;
       return db.transaction(() => {
-        const changed = db.query("UPDATE events SET kind = 'wake' WHERE kind = 'heartbeat'").run().changes +
-          db.query("UPDATE capture_transcripts SET source = 'wake' WHERE source = 'heartbeat'").run().changes;
+        const changed = refileHeartbeatEvents(db);
         db.query("INSERT INTO state_files(path, character, content) VALUES (?1, '', ?2) ON CONFLICT(path) DO NOTHING").run(EVENTS_DONE, pack("done"));
         return changed;
       })();

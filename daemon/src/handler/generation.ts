@@ -326,7 +326,7 @@ async function runGenerationCore(
     const regenAlt = await appendUserTurn(turnCtx, engine, config.dirs.cache, charName, body, regen, params.rid, imageSettingsFor(config.app.images, "upload"), {
       ...arrival.annotations,
       ...(diary.length === 0 ? {} : { diary }),
-      ...(running === undefined ? {} : { heartbeat_running: running }),
+      ...(running === undefined ? {} : { wake_running: running }),
       ...(status === undefined ? {} : { presence: status }),
     });
     if (arrival.cold) {
@@ -465,10 +465,10 @@ async function runGenerationCore(
   );
 }
 
-function wakeNotTold(running: RunningWake | undefined, active: readonly Message[]): Message["heartbeat_running"] {
+function wakeNotTold(running: RunningWake | undefined, active: readonly Message[]): Message["wake_running"] {
   if (running === undefined) return undefined;
   const startedAt = new Date(running.startedAt).toISOString();
-  if (active.some((message) => message.heartbeat_running?.started_at === startedAt)) return undefined;
+  if (active.some((message) => message.wake_running?.started_at === startedAt)) return undefined;
   return { started_at: startedAt, thread: running.thread };
 }
 

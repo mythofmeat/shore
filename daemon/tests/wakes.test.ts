@@ -908,7 +908,7 @@ test("a message sent while a wake runs tells that turn a wake is running, where 
     held.release.resolve();
     await ticking;
     expect(runtime.autonomy.runningWakes()).toEqual([]);
-    expect((await thread("garden")).flatMap((message) => message.heartbeat_running === undefined ? [] : [[message.content, message.heartbeat_running]])).toEqual([
+    expect((await thread("garden")).flatMap((message) => message.wake_running === undefined ? [] : [[message.content, message.wake_running]])).toEqual([
       ["is the lamp lit?", { started_at: started, thread: "main" }],
     ]);
   });

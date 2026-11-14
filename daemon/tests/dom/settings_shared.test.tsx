@@ -238,6 +238,6 @@ describe("pages and banners", () => {
     await acting(() => Bun.sleep(5));
     await click(button(view.host, "Dream"));
     await acting(() => Bun.sleep(5));
-    expect(shown.mock.calls.map(([text]) => text)).toEqual(["Wake scheduled", "ada is dormant", "ada is active", "Already dreaming", "Keepalive skipped", "Session activated", "Nothing to do", "Dream queued"]);
+    expect(shown.mock.calls.map(([text]) => text)).toEqual(["Wake queued", "ada is dormant", "ada is active", "Already dreaming", "Keepalive skipped", "Session activated", "Nothing to do", "Dream queued"]);
   });
 });

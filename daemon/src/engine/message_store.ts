@@ -92,11 +92,13 @@ export function deriveContentFromBlocks(
   return parts.join("\n");
 }
 
-export function normalizeMessage(msg: Message): Message {
+export function normalizeMessage(msg: Message & { heartbeat_running?: Message["wake_running"] }): Message {
+  const { heartbeat_running: runningUnderItsOldName, ...current } = msg;
   const m: Message = {
-    ...msg,
+    ...current,
     content: deriveContentFromBlocks(msg.content_blocks, true),
   };
+  if (runningUnderItsOldName !== undefined) m.wake_running = runningUnderItsOldName;
 
   if (m.alternatives !== undefined && m.alternatives.length > 0) {
     m.alternatives = m.alternatives.map(normalizeAlternative);
@@ -153,7 +155,7 @@ function serializeForStorage(msg: Message): string {
   if (msg.origin !== undefined) ordered.push(["origin", msg.origin]);
   if (msg.last_elsewhere !== undefined) ordered.push(["last_elsewhere", msg.last_elsewhere]);
   if (msg.diary !== undefined) ordered.push(["diary", msg.diary]);
-  if (msg.heartbeat_running !== undefined) ordered.push(["heartbeat_running", msg.heartbeat_running]);
+  if (msg.wake_running !== undefined) ordered.push(["wake_running", msg.wake_running]);
   if (msg.presence !== undefined) ordered.push(["presence", msg.presence]);
   if (msg.shown_later !== undefined) ordered.push(["shown_later", msg.shown_later]);
 

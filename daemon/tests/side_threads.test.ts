@@ -1,3 +1,4 @@
+import { Database } from "bun:sqlite";
 import { describe, expect, test } from "bun:test";
 import { mkdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
@@ -598,6 +599,24 @@ describe("chat logs across threads", () => {
     const read = await handleReadChatLogs({ around: "h1", before: 5, after: 5 }, threadDataDir(data, "frank", "story"), options);
     expect(read).toContain("▶ ");
     expect(listed(read)).toEqual(["u1", "a1", "h1", "u3", "u4"]);
+  });
+
+  test("an index built when the column marking a wake's messages had its old name is built again, and marks them as before", async () => {
+    const config = await setup();
+    const data = config.dirs.data;
+    await createThread(data, "frank", "story", NOW);
+    const at = (time: string) => `2026-11-01T${time}:00Z`;
+    await archive(data, "main", [message("u1", "where is Mara?", at("09:00")), message("h1", "Mara came back", at("12:00"), { origin: "autonomous" })]);
+    const options = { character: "frank", dbPath: join(data, HISTORY_DB_FILE), dataDir: data, thread: "story", indexPath: join(config.dirs.cache, "chat_logs.db"), timeZone: "UTC", userName: "sam" };
+    const search = async () => await handleSearchChatLogs({ query: "Mara", all_time: true, sort: "oldest" }, threadDataDir(data, "frank", "story"), options);
+
+    const fresh = await search();
+    expect(fresh.split("\n").at(-1)).toBe("2026-11-01 Sun 12:00  frank  (wake) [Mara] came back  h1");
+    const index = new Database(options.indexPath);
+    index.run("ALTER TABLE messages RENAME COLUMN wake TO heartbeat");
+    index.run("UPDATE metadata SET value = '5' || substr(value, 2) WHERE key = 'fingerprint'");
+    index.close();
+    expect(await search()).toBe(fresh);
   });
 
   test("a message still in another thread's conversation is marked as from the character's own time only when it was", async () => {

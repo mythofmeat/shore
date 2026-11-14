@@ -233,17 +233,17 @@ test("diary notes on a message count towards the room the conversation takes", (
 
 test("a message that arrived while a wake ran says so, and where the wake is, between the diary notes and what the user wrote", () => {
   const left = [note("d1", T0, "The lamp is lit.")];
-  const heartbeat = { started_at: new Date(T0 + HOUR).toISOString() };
+  const started = { started_at: new Date(T0 + HOUR).toISOString() };
   const diary = diaryText(left, DIARY_FOR_CHAT, "UTC");
-  const running = wakeRunningText(heartbeat, "UTC");
+  const running = wakeRunningText(started, "UTC");
   expect(running).toBe("[A wake of yours in your own-time thread has been running since Friday 2026-10-30 · 1:00 PM. It can't see this conversation. It is only told that a message arrived.]");
-  expect(wakeRunningText({ ...heartbeat, thread: "ring" }, "UTC")).toBe('[A wake of yours in "ring" has been running since Friday 2026-10-30 · 1:00 PM. It can\'t see this conversation. It is only told that a message arrived.]');
+  expect(wakeRunningText({ ...started, thread: "ring" }, "UTC")).toBe('[A wake of yours in "ring" has been running since Friday 2026-10-30 · 1:00 PM. It can\'t see this conversation. It is only told that a message arrived.]');
   const prompt = assemblePrompt({
     character_name: "ada", display_name: "eve", has_prior_context: false, user_timestamp_mode: "never",
     messages: [
-      { ...said("m1", "user", "good morning", T0 + HOUR), heartbeat_running: heartbeat },
+      { ...said("m1", "user", "good morning", T0 + HOUR), wake_running: started },
       said("m2", "assistant", "morning!", T0 + HOUR),
-      { ...said("m3", "user", "is the lamp lit?", T0 + HOUR, left), heartbeat_running: heartbeat },
+      { ...said("m3", "user", "is the lamp lit?", T0 + HOUR, left), wake_running: started },
     ],
   }, "UTC");
 

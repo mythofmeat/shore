@@ -4,7 +4,7 @@ import { Database } from "bun:sqlite";
 import { basename, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 import { fileScope } from "../../src/storage/files.ts";
-import { collectionText, characterScope, databasePath, readEvents, unpack } from "../../src/storage/store.ts";
+import { collectionText, databasePath, unpack } from "../../src/storage/store.ts";
 
 function stored(path: fs.PathLike): Buffer | undefined {
   const name = path instanceof URL ? fileURLToPath(path) : path.toString();
@@ -12,10 +12,6 @@ function stored(path: fs.PathLike): Buffer | undefined {
   if (basename(dirname(name)) === "active_prompt") {
     const owner = fileScope(dirname(name));
     scope = { ...owner, key: `${owner.key}/${basename(name)}` };
-  }
-  if (basename(name) === "heartbeat.jsonl") {
-    const { data, character } = characterScope(dirname(name));
-    return Buffer.from(readEvents(data, character, "wake").join("\n") + "\n");
   }
   const candidates = [scope, { data: dirname(name), key: basename(name), character: "" }];
   for (const candidate of candidates) {

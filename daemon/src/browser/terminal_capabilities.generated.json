@@ -2391,7 +2391,7 @@
       ]
     },
     {
-      "path": "shore trace heartbeat",
+      "path": "shore trace wakes",
       "about": "The wake transcript: what each wake thought, the tools it called and their results, and the model that served it",
       "long_about": null,
       "hidden": false,
@@ -5590,7 +5590,7 @@
       ]
     },
     {
-      "path": "shore debug heartbeat_tick_now",
+      "path": "shore debug wake_now",
       "about": "Start a wake in the character's home thread now",
       "long_about": null,
       "hidden": false,
@@ -5620,7 +5620,7 @@
       ]
     },
     {
-      "path": "shore debug heartbeat_status_dormant",
+      "path": "shore debug set_dormant",
       "about": "Make the character dormant, so that nothing wakes it until your next message",
       "long_about": null,
       "hidden": false,
@@ -5650,7 +5650,7 @@
       ]
     },
     {
-      "path": "shore debug heartbeat_status_active",
+      "path": "shore debug set_active",
       "about": "Make the character active again, so that its triggers wake it",
       "long_about": null,
       "hidden": false,
@@ -11450,14 +11450,14 @@
     {
       "argv": [
         "trace",
-        "heartbeat",
+        "wakes",
         "--count",
         "3"
       ],
       "mapping": {
         "name": "transcript",
         "args": {
-          "source": "heartbeat",
+          "source": "wake",
           "count": 3
         }
       }
@@ -11485,7 +11485,7 @@
         "3"
       ],
       "mapping": {
-        "name": "heartbeat_log",
+        "name": "wake_log",
         "args": {
           "count": 3
         }
@@ -11621,30 +11621,30 @@
     {
       "argv": [
         "debug",
-        "heartbeat_tick_now"
+        "wake_now"
       ],
       "mapping": {
-        "name": "heartbeat_tick_now",
+        "name": "wake_now",
         "args": {}
       }
     },
     {
       "argv": [
         "debug",
-        "heartbeat_status_dormant"
+        "set_dormant"
       ],
       "mapping": {
-        "name": "heartbeat_set_dormant",
+        "name": "set_dormant",
         "args": {}
       }
     },
     {
       "argv": [
         "debug",
-        "heartbeat_status_active"
+        "set_active"
       ],
       "mapping": {
-        "name": "heartbeat_set_active",
+        "name": "set_active",
         "args": {}
       }
     },

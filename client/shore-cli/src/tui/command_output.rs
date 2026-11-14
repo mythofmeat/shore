@@ -648,7 +648,7 @@ mod tests {
 
     #[test]
     fn a_wake_started_or_a_change_of_dormancy_from_the_palette_says_what_happened() {
-        let data = json!({ "status": "scheduled", "character": "ada" });
+        let data = json!({ "status": "queued", "character": "ada" });
         assert_eq!(
             super::render("debug wake_now", "wake_now", &data, "eve").as_deref(),
             Some("Started a wake for ada.")

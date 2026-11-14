@@ -68,7 +68,7 @@ export interface Message {
   attempt?: string;
   last_elsewhere?: { thread: string; at: string };
   diary?: DiaryNote[];
-  heartbeat_running?: { started_at: string; thread?: string | undefined };
+  wake_running?: { started_at: string; thread?: string | undefined };
   presence?: { status: string; set_at: string };
   shown_later?: string;
 }

@@ -23,7 +23,7 @@ const clock = new Date(AT).toLocaleTimeString(undefined, { hour: "numeric", minu
 
 test("a wake's opening note, and one from when Shore called it a heartbeat, are folded away under what they are and when, without the marker they start with", async () => {
   const wake = await row(message({ origin: "autonomous", content: '[wake]\n\n[Your trigger "show" fired.]' }));
-  expect(wake.querySelector("details.system-note.heartbeat-note summary")?.textContent).toBe(`Wake · ${clock}`);
+  expect(wake.querySelector("details.system-note.wake-note summary")?.textContent).toBe(`Wake · ${clock}`);
   expect(wake.querySelector("details")?.textContent).toBe(`Wake · ${clock}[Your trigger "show" fired.]`);
   expect(wake.querySelector("article")).toBeNull();
 

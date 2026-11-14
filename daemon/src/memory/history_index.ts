@@ -14,7 +14,7 @@ import { versionOf } from "../engine/versions.ts";
 
 export const HISTORY_INDEX_FILE = "chat_logs.db";
 const LEGACY_INDEX_FILE = "history_search.db";
-const SCHEMA_VERSION = "5";
+const SCHEMA_VERSION = "6";
 
 const SCHEMA = `
 CREATE TABLE metadata (
@@ -29,7 +29,7 @@ CREATE TABLE messages (
   run       INTEGER NOT NULL,
   ts        INTEGER NOT NULL,
   speaker   TEXT    NOT NULL,
-  heartbeat INTEGER NOT NULL,
+  wake      INTEGER NOT NULL,
   model     TEXT,
   also_in   TEXT,
   copy_of   INTEGER,
@@ -56,7 +56,7 @@ export interface ChatLogMessage {
   run: number;
   ts: number;
   speaker: Speaker;
-  heartbeat: number;
+  wake: number;
   model: string | null;
   also_in: string | null;
   copy_of: number | null;
@@ -108,7 +108,7 @@ interface Item {
   run: number;
   ts: number;
   speaker: Speaker;
-  heartbeat: boolean;
+  wake: boolean;
   model: string | null;
   pictures: string | null;
   text: string;
@@ -217,7 +217,7 @@ async function readCorpus(ref: CharacterHistoryRef): Promise<Item[]> {
           run: cursor.run,
           ts: cursor.ts,
           speaker: speakerOf(message.role),
-          heartbeat: message.origin === "autonomous",
+          wake: message.origin === "autonomous",
           model: message.model ?? null,
           pictures,
           text,
@@ -280,14 +280,14 @@ function writeIndex(path: string, items: Item[], fingerprint: string): void {
     try {
       db.run(SCHEMA);
       const put = db.query(
-        `INSERT INTO messages (id, msg_id, thread, seq, run, ts, speaker, heartbeat, model, also_in, copy_of, key, pictures, text)
+        `INSERT INTO messages (id, msg_id, thread, seq, run, ts, speaker, wake, model, also_in, copy_of, key, pictures, text)
          VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14)`,
       );
       const meta = db.query("INSERT INTO metadata (key, value) VALUES (?1, ?2)");
       db.transaction(() => {
         for (const item of items) {
           put.run(
-            item.id, item.msgId, item.thread, item.seq, item.run, item.ts, item.speaker, item.heartbeat ? 1 : 0,
+            item.id, item.msgId, item.thread, item.seq, item.run, item.ts, item.speaker, item.wake ? 1 : 0,
             item.model, item.alsoIn.length === 0 ? null : JSON.stringify(item.alsoIn), item.copyOf?.id ?? null, item.key, item.pictures, item.text,
           );
         }
@@ -350,7 +350,7 @@ export function refreshLiveRows(path: string, caller: string, threads: readonly 
         .map((row) => [row.thread, { seq: row.seq, run: row.run, ts: row.ts }]));
       let id = (db.query("SELECT COALESCE(MAX(id), 0) AS id FROM messages").get() as { id: number }).id;
       const put = db.query(
-        `INSERT INTO messages (id, msg_id, thread, seq, run, ts, speaker, heartbeat, model, also_in, copy_of, key, live, pictures, text)
+        `INSERT INTO messages (id, msg_id, thread, seq, run, ts, speaker, wake, model, also_in, copy_of, key, live, pictures, text)
          VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, NULL, ?10, ?11, 1, ?12, ?13)`,
       );
       for (const live of threads) {

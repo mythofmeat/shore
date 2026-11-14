@@ -20,14 +20,14 @@ fn lines(output: &Output) -> Vec<String> {
 #[test]
 fn starting_a_wake_by_hand_says_so_and_passes_on_the_daemons_warning() {
     let (started, frames) = asked(
-        json!({ "status": "scheduled", "character": "ada" }),
+        json!({ "status": "queued", "character": "ada" }),
         &["debug", "wake_now"],
     );
     assert_eq!(lines(&started), ["Started a wake for ada."]);
     assert_eq!(sent(&frames), [(Some("wake_now"), Some(&json!({})))]);
 
     let (warned, _warned_frames) = asked(
-        json!({ "status": "scheduled", "character": "ada", "warning": "ada is dormant, so the wake waits." }),
+        json!({ "status": "queued", "character": "ada", "warning": "ada is dormant, so the wake waits." }),
         &["debug", "wake_now"],
     );
     assert_eq!(

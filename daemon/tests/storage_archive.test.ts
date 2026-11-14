@@ -223,11 +223,13 @@ describe("one character's slice of the database", () => {
     expect(readDurable(join(moved.data, "ada", "notes.json"))).toBe(JSON.stringify({ picture: `${source.data}/media/ada/a.png` }));
   });
 
-  test("an archive from when a wake's calls were recorded as heartbeats is imported with them recorded as wakes", () => {
+  test("an archive from when wakes were called heartbeats is imported with its calls, events and transcript entries under wake", () => {
     const source = seeded();
     const old = new Database(databasePath(source.data));
     old.run("UPDATE calls SET call_type = 'heartbeat_tool_loop' WHERE character = 'ada'");
     old.run("UPDATE call_attempts SET call_type = 'heartbeat' WHERE character = 'ada'");
+    old.run("UPDATE events SET kind = 'heartbeat' WHERE character = 'ada'");
+    old.run("INSERT INTO capture_transcripts (ts, ts_unix, source, character, call_type, entry_zstd) VALUES ('2026-11-01T00:00:00.000Z', 1, 'heartbeat', 'ada', 'heartbeat', x'00')");
     old.close();
     const archive = join(source.root, "old-ada.db");
     exportUnifiedDatabase(databasePath(source.data), "ada", archive);
@@ -237,6 +239,8 @@ describe("one character's slice of the database", () => {
     importUnifiedDatabase(databasePath(target.data), archive, "ada", source.data, target.data);
     expect(rows(databasePath(target.data), "SELECT character, call_type FROM calls ORDER BY character")).toEqual([["ada", "wake_tool_loop"], ["bea", "chat"]]);
     expect(rows(databasePath(target.data), "SELECT character, call_type FROM call_attempts ORDER BY character")).toEqual([["ada", "wake"], ["bea", "chat"]]);
+    expect(rows(databasePath(target.data), "SELECT character, kind FROM events ORDER BY character")).toEqual([["ada", "wake"], ["bea", "test"]]);
+    expect(rows(databasePath(target.data), "SELECT character, source, call_type FROM capture_transcripts")).toEqual([["ada", "wake", "wake"]]);
   });
 
   test("removing a character takes its rows, alternatives, blobs and attempts, keeps the others', leaves nothing open, and works on a database the history store made alone", () => {

@@ -197,10 +197,10 @@ describe("the traces page", () => {
   test("wake and dream transcripts show each round, or say they are off or empty", async () => {
     const time = await formats();
     const answers: Record<string, unknown[]> = {
-      heartbeat: [transcript("wake", [row(1), row(2, { model: null, finish_reason: null })]), transcript("wake", [], false), transcript("wake", [row(3)])],
+      wake: [transcript("wake", [row(1), row(2, { model: null, finish_reason: null })]), transcript("wake", [], false), transcript("wake", [row(3)])],
       dreaming: [transcript("dreaming", [row(4, { source: "dreaming", iteration: 1 })]), transcript("dreaming", [], false)],
     };
-    app.answer((request) => request["name"] === "transcript" ? answers[(request["args"] as { source?: string }).source ?? "heartbeat"]?.shift() : undefined);
+    app.answer((request) => request["name"] === "transcript" ? answers[(request["args"] as { source?: string }).source ?? "wake"]?.shift() : undefined);
     const view = await traces();
     const before = app.socket().sent.length;
     const rounds = () => [...view.host.querySelectorAll(".settings-section details.payload")].map((item) => [item.querySelector("summary")?.textContent, item.querySelector("dd")?.textContent]);
@@ -228,7 +228,7 @@ describe("the traces page", () => {
     const error = (text: string) => ({ timestamp: DAY, error_type: "provider", message: text, context: "turn 4" });
     const fallback = (extra: Record<string, unknown> = {}) => ({ timestamp: DAY, provider: "anthropic", model: "opus", character: "ada", from_key: "main", kind: "rate_limit", reason: "429", ...extra });
     const answers: Record<string, unknown[]> = {
-      heartbeat_log: [{ events: [{ timestamp: DAY, kind: "message_sent", detail: "said hi" }] }, { events: [] }],
+      wake_log: [{ events: [{ timestamp: DAY, kind: "message_sent", detail: "said hi" }] }, { events: [] }],
       error_log: [
         { errors: { count: 1, recent: [error("boom")] }, key_fallbacks: { count: 2, recent: [fallback({ to_key: "spare" }), fallback()] } },
         { errors: { count: 0, recent: [] }, key_fallbacks: { count: 0, recent: [] } },
@@ -306,6 +306,6 @@ describe("the traces page", () => {
       await tab(view.host, name);
       alerts.push(view.host.querySelector("[role=alert]")?.textContent);
     }
-    expect(alerts).toEqual(["no call_log", "no log", "no transcript", "no transcript", "no heartbeat_log", "no error_log", "no subagent_trace"]);
+    expect(alerts).toEqual(["no call_log", "no log", "no transcript", "no transcript", "no wake_log", "no error_log", "no subagent_trace"]);
   });
 });

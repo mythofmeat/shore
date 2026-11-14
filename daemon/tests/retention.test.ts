@@ -22,7 +22,7 @@ function dataDir() {
   return root;
 }
 
-test("only old heartbeat events expire; history, state, ledger and malformed records remain", () => {
+test("only old wake events expire; history, state, ledger and malformed records remain", () => {
   const data = dataDir();
   const history = HistoryStore.open(databasePath(data));
   history.putSegment("ada", 0, { file: "history.db", compacted_at: old.toISOString() }, []);
@@ -30,16 +30,16 @@ test("only old heartbeat events expire; history, state, ledger and malformed rec
   writeState(data, "ada/autonomy_state.json", "keep state", "ada");
   withStorage(data, (db) => {
     for (const [kind, timestamp, content] of [
-      ["wake", old.toISOString(), "old heartbeat"],
-      ["wake", new Date(cutoff).toISOString(), "boundary heartbeat"],
-      ["wake", "invalid", "undated heartbeat"],
+      ["wake", old.toISOString(), "old wake"],
+      ["wake", new Date(cutoff).toISOString(), "boundary wake"],
+      ["wake", "invalid", "undated wake"],
       ["subagent", old.toISOString(), "malformed trace"],
       ["legacy_invalid", old.toISOString(), "legacy record"],
     ]) insertEvent(db, { character: "ada", kind: kind ?? "", timestamp: timestamp ?? "", content: content ?? "" });
     db.run("INSERT INTO call_attempts(id,started_at,status,character,provider,model,call_type) VALUES ('old','2020','failed','ada','test','test','message')");
   });
   expect(pruneDiagnostics(data, NOW)).toEqual({ captures: 0, wakeEvents: 1, subagentTraces: 0, unreadableTraces: 1 });
-  expect(readEvents(data, "ada", "wake")).toEqual(["boundary heartbeat", "undated heartbeat"]);
+  expect(readEvents(data, "ada", "wake")).toEqual(["boundary wake", "undated wake"]);
   expect(readEvents(data, "ada", "subagent")).toEqual(["malformed trace"]);
   expect(readEvents(data, "ada", "legacy_invalid")).toEqual(["legacy record"]);
   expect(readState(data, "ada/autonomy_state.json")).toBe("keep state");

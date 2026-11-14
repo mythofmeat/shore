@@ -292,7 +292,7 @@ export const MessageRow = memo(function MessageRow({ message, character, avatar,
     const opener = message.role === "user" ? OPENERS.find((prefix) => message.content.startsWith(prefix)) : undefined;
     const when = timeLabel(message.timestamp);
     const summary = opener === undefined ? truncatedLine(message.content) : when === "" ? "Wake" : `Wake · ${when}`;
-    return <details className="system-note heartbeat-note">
+    return <details className="system-note wake-note">
       <summary>{summary}</summary>
       <Markdown text={opener === undefined ? message.content : message.content.slice(opener.length).trim()} />
     </details>;

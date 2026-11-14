@@ -2,7 +2,7 @@ export const DAEMON_FLOORS: Readonly<Record<string, number>> = {
   "src/autonomy/activity.ts": 0,
   "src/autonomy/background_loop.ts": 0.35,
   "src/autonomy/deep_archive.ts": 0,
-  "src/autonomy/heartbeat_log.ts": 0.35,
+  "src/autonomy/wake_log.ts": 0.35,
   "src/autonomy/idle_compaction.ts": 0.2,
   "src/autonomy/in_process.ts": 0.5,
   "src/autonomy/post_archive.ts": 0.1,
