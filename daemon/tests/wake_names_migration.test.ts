@@ -130,6 +130,13 @@ test("an install with no heartbeat calls says nothing, and one whose database ca
     renameRecordedHeartbeatCalls(quiet.data);
     expect([said.mock.calls, warned.mock.calls]).toEqual([[], []]);
 
+    const single = await install();
+    const one = new Database(single.path);
+    one.run("INSERT INTO capture_calls (call_id, ts, ts_unix, call_type) VALUES ('one', '2026-11-01T00:00:00.000Z', 1, 'heartbeat')");
+    one.close();
+    renameRecordedHeartbeatCalls(single.data);
+    expect(said.mock.calls.map((call) => String(call[0]))).toEqual(["shore: 1 recorded wake calls had the call type heartbeat and now have wake; this happens once"]);
+
     const broken = await install();
     record(broken.path, ["heartbeat"]);
     const db = new Database(broken.path);
