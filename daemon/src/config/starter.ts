@@ -1,5 +1,5 @@
 import { defaultAppConfig } from "./app.ts";
-import { serializeConfigValue } from "./serialize.ts";
+import { serializeAppConfig } from "./serialize.ts";
 import { formatConfigPath, publicConfig } from "./surface.ts";
 
 export const UNSET = "<unset>";
@@ -39,7 +39,7 @@ function renderTable(
 }
 
 export function renderDefaultsToml(includeUnset = false): string {
-  const tree = publicConfig(serializeConfigValue(defaultAppConfig()) as Record<string, unknown>);
+  const tree = publicConfig(serializeAppConfig(defaultAppConfig()));
   if (!isTable(tree)) throw new Error("defaultAppConfig did not serialize to a table");
 
   const lines: string[] = [];

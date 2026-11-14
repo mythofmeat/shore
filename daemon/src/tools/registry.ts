@@ -29,8 +29,7 @@ export interface ToolDef {
 }
 
 export interface ToolsConfigView {
-  enabled_tools: string[];
-  enabled_subagents: string[];
+  enabled: string[];
 }
 
 export interface SubagentConfigView {
@@ -319,7 +318,7 @@ export const ALL_TOOLS: readonly ToolDef[] = Object.freeze([
 export { toolPatternMatches };
 
 export function toolEnabled(cfg: ToolsConfigView, name: string): boolean {
-  return cfg.enabled_tools.some((t) => toolPatternMatches(t, name));
+  return cfg.enabled.some((t) => toolPatternMatches(t, name));
 }
 
 export function availableTools(cfg: ToolsConfigView): ToolDef[] {

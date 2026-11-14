@@ -7,7 +7,7 @@ import { backgroundModelRequest, backgroundTaskModel } from "../../autonomy/back
 import { spanPhrase } from "../../autonomy/wake_shape.ts";
 import { foldDiary, unfoldedDiary } from "../../autonomy/diary.ts";
 import type { DreamWindow } from "../../autonomy/runner.ts";
-import { resolveDisplayName, toolPatternMatches, type ToolsConfig } from "../../config/app.ts";
+import { resolveDisplayName, toolPatternMatches, type AppConfig } from "../../config/app.ts";
 import { activeJsonlIn, characterDataDir, resolvePromptTemplate, threadDataDir } from "../../config/dirs.ts";
 import { findEffectiveModel } from "../../config/effective_catalog.ts";
 import type { LoadedConfig } from "../../config/loader.ts";
@@ -86,23 +86,30 @@ export interface DreamPassDeps {
   env?: NodeJS.ProcessEnv;
 }
 
-export function dreamToolsConfig(tools: ToolsConfig, chosen: readonly string[] | undefined): ToolsConfig {
-  const asked = chosen ?? tools.enabled_tools;
+type Grants = Pick<AppConfig, "tools" | "subagents">;
+
+export function dreamGrants(app: Grants, chosen: readonly string[] | undefined): Grants {
+  const asked = chosen ?? app.tools.enabled;
   return {
-    ...tools,
-    enabled_tools: ALL_TOOLS.map((tool) => tool.name)
-      .filter((name) => !LEFT_OUT_TOOLS.has(name) && asked.some((pattern) => toolPatternMatches(pattern, name))),
-    enabled_mcp: [],
-    enabled_subagents: chosen === undefined
-      ? tools.enabled_subagents
-      : chosen.flatMap((name) => name.startsWith("ask_") ? [name.slice("ask_".length)] : []),
+    tools: {
+      ...app.tools,
+      enabled: ALL_TOOLS.map((tool) => tool.name)
+        .filter((name) => !LEFT_OUT_TOOLS.has(name) && asked.some((pattern) => toolPatternMatches(pattern, name))),
+      mcp: [],
+    },
+    subagents: {
+      ...app.subagents,
+      enabled: chosen === undefined
+        ? app.subagents.enabled
+        : chosen.flatMap((name) => name.startsWith("ask_") ? [name.slice("ask_".length)] : []),
+    },
   };
 }
 
 export function dreamConfig(config: LoadedConfig): LoadedConfig {
   return {
     ...config,
-    app: { ...config.app, tools: dreamToolsConfig(config.app.tools, config.app.dreaming.tools) },
+    app: { ...config.app, ...dreamGrants(config.app, config.app.dreaming.tools) },
   };
 }
 

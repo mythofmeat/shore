@@ -76,7 +76,7 @@ function providerFor(input: ReturnType<typeof parseToolArgs>, completedBlocks = 
 
 test("cancelling generation reaches an in-flight MCP tool", async () => {
   const h = await reliabilityGeneration(providerFor({ input: {} }));
-  h.config.app.tools.enabled_tools = [TOOL];
+  h.config.app.tools.enabled = [TOOL];
   const parent = new AbortController();
   let observed: AbortSignal | undefined;
   const mcp = { call: async (_name: string, _input: unknown, signal?: AbortSignal) => {

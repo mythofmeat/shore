@@ -194,9 +194,9 @@ type SettingTarget =
 const ALL_SUBAGENTS = "all";
 
 function requireSubagent(ctx: ModelsContext, subagent: string): SubagentConfig {
-  const spec = ctx.config.app.subagents.get(subagent);
+  const spec = ctx.config.app.subagents.agents.get(subagent);
   if (spec !== undefined) return spec;
-  const known = [...ctx.config.app.subagents.keys()].sort();
+  const known = [...ctx.config.app.subagents.agents.keys()].sort();
   const suffix = known.length === 0 ? "none are configured" : `known: ${known.join(", ")}`;
   throw notFound(`unknown sub-agent: ${subagent}; ${suffix}`);
 }
@@ -222,9 +222,9 @@ function subagentTargetModel(ctx: ModelsContext, subagent: string): ResolvedMode
 }
 
 function targetableSubagents(ctx: ModelsContext): string[] {
-  const configured = [...ctx.config.app.subagents.keys()].sort();
+  const configured = [...ctx.config.app.subagents.agents.keys()].sort();
   const enabled = configured.filter((name) =>
-    ctx.config.app.tools.enabled_subagents.includes(name),
+    ctx.config.app.subagents.enabled.includes(name),
   );
   return enabled.length === 0 ? configured : enabled;
 }
@@ -324,8 +324,8 @@ function homeChatRole(ctx: ModelsContext, character?: ModelRole): ModelRole {
 }
 
 function subagentRole(ctx: ModelsContext, chat: ModelRole): ModelRole {
-  const subagentModel = ctx.config.app.defaults.subagent_model;
-  const overrides = [...ctx.config.app.subagents.values()].filter(
+  const subagentModel = ctx.config.app.subagents.model;
+  const overrides = [...ctx.config.app.subagents.agents.values()].filter(
     (sub) => sub.model !== undefined,
   ).length;
   const suffix = overrides === 0 ? "" : ` · ${overrides} override`;
@@ -344,7 +344,7 @@ function subagentRole(ctx: ModelsContext, chat: ModelRole): ModelRole {
 }
 
 function imagesRole(ctx: ModelsContext): ModelRole {
-  const name = ctx.config.app.defaults.image_generation;
+  const name = ctx.config.app.image.model;
   if (name === undefined || name === "") return { role: "images", model: null, source: null };
   return { role: "images", model: qualify(ctx, name), source: "image.model" };
 }
@@ -614,7 +614,7 @@ const SUBAGENT_MODEL_KEY = "subagents.model";
 const subagentModelKey = (name: string): string => `subagents.${name}.model`;
 
 function subagentsWithOwnModel(ctx: ModelsContext): string[] {
-  return [...ctx.config.app.subagents.entries()]
+  return [...ctx.config.app.subagents.agents.entries()]
     .filter(([, spec]) => spec.model !== undefined)
     .map(([name]) => name)
     .sort();
@@ -996,8 +996,8 @@ function overviewSlots(ctx: ModelsContext): OverviewSlot[] {
     resolve: () => ({ kind: "subagent_model", model: sharedSubagentModel(ctx) }),
   });
 
-  for (const name of [...ctx.config.app.subagents.keys()].sort()) {
-    const own = ctx.config.app.subagents.get(name)?.model;
+  for (const name of [...ctx.config.app.subagents.agents.keys()].sort()) {
+    const own = ctx.config.app.subagents.agents.get(name)?.model;
     slots.push({
       role: `sub-agent: ${name}`,
       flag: `--subagent=${name}`,
@@ -1055,7 +1055,7 @@ function requestedKey(ctx: ModelsContext, args: OperationInput<"model_settings">
   if (raw === undefined) return undefined;
   const key = canonicalSettingKey(raw.trim());
   if (SAMPLER_KEYS.includes(key)) return key;
-  if (ctx.config.app.subagents.has(key)) {
+  if (ctx.config.app.subagents.agents.has(key)) {
     throw invalidRequest(
       `${key} is a sub-agent, not a setting; write --subagent=${key} to target it`,
     );

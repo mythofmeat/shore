@@ -121,7 +121,7 @@ export async function handleGenerateImage(
     throw new ToolIoError("image generation not available: no LLM client");
   }
   if (config === undefined) {
-    throw new ToolIoError("no [image_generation] profile configured");
+    throw new ToolIoError("no image model is configured; set image.model");
   }
 
   const rawSize = input["size"];

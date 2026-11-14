@@ -418,15 +418,14 @@ function modelProvider(config: LoadedConfig, ref: string | undefined | null): st
 }
 
 function modelRefs(config: LoadedConfig): [string, string | undefined][] {
-  const d = config.app.defaults;
   return [
     ["chat.model", config.app.chat.model],
     ["triggers.model", config.app.triggers.model],
     ["compaction.model", config.app.compaction.model],
     ["dreaming.model", config.app.dreaming.model],
-    ["subagents.model", d.subagent_model],
-    ["image.model", d.image_generation],
-    ...[...config.app.subagents].map(([sub, def]): [string, string | undefined] => [`subagents.${sub}.model`, def.model]),
+    ["subagents.model", config.app.subagents.model],
+    ["image.model", config.app.image.model],
+    ...[...config.app.subagents.agents].map(([sub, def]): [string, string | undefined] => [`subagents.${sub}.model`, def.model]),
   ];
 }
 

@@ -84,7 +84,7 @@ test("the tool takes a topic and nothing else, and its description names every t
   expect(schema?.validate({ topic: 3 })).toBe(false);
   expect(schema?.validate({ topic: "wakes", depth: "full" })).toBe(false);
 
-  const described = renderToolDefs({ enabled_tools: ["guide"], enabled_subagents: [] }, "Ada", "eve").find((def) => def.name === "guide")?.description ?? "";
+  const described = renderToolDefs({ enabled: ["guide"] }, "Ada", "eve").find((def) => def.name === "guide")?.description ?? "";
   expect(described).not.toContain("\n");
   expect([...described.matchAll(/`([a-z]+)`/g)].map((match) => match[1])).toEqual(["topic", ...TOPICS]);
 });
@@ -417,7 +417,7 @@ test("the guide says how far back the count of messages goes, that the user isn'
   const messages = await guide("messages");
   expect(messages).toContain("`send_push` sends a notification to eve's phone, so it reaches them when they don't have Shore open. When something is worth a push is between you and eve. Shore only limits how often.");
   expect(messages).not.toContain("for nothing else");
-  const push = renderToolDefs({ enabled_tools: ["send_push"], enabled_subagents: [] }, "Ada", "eve").find((def) => def.name === "send_push")?.description;
+  const push = renderToolDefs({ enabled: ["send_push"] }, "Ada", "eve").find((def) => def.name === "send_push")?.description;
   expect(push).toBe("Send eve a push notification on their phone, which reaches them when they don't have Shore open. eve decides how often you may use it, and a push sent too soon is refused with the time the next one is allowed.");
 });
 
@@ -492,7 +492,7 @@ test("a page ends by naming the tools on it that the user hasn't turned on, and 
 
 test("the tools are described in fewer characters than before there was a guide, and each tool the guide covers points to its page only while the character has the guide", () => {
   const offered = (names: readonly string[]): { name: string; description: string }[] =>
-    renderToolDefs({ enabled_tools: [...names], enabled_subagents: [] }, "Ada", "User");
+    renderToolDefs({ enabled: [...names] }, "Ada", "User");
   const withGuide = offered(EVERY_TOOL);
   expect(withGuide.reduce((total, def) => total + def.description.length, 0)).toBeLessThan(19_223);
 

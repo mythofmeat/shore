@@ -1,5 +1,17 @@
 import { compareByCodePoint } from "../util/sort.ts";
+import { appConfigShape, type AppConfig } from "./app.ts";
 import { ConfigDuration } from "./duration.ts";
+
+export function serializeAppConfig(app: AppConfig): Record<string, unknown> {
+  const out = serializeConfigValue(app) as Record<string, Record<string, unknown>>;
+  for (const [section, info] of Object.entries(appConfigShape().fields)) {
+    const others = info.table?.().others;
+    if (others === undefined) continue;
+    const { [others.into]: named, ...settings } = out[section] as Record<string, unknown>;
+    out[section] = { ...settings, ...(named as Record<string, unknown>) };
+  }
+  return out;
+}
 
 export function serializeConfigValue(value: unknown): unknown {
   if (value === undefined || value === null) return null;
@@ -25,7 +37,6 @@ export function serializeConfigValue(value: unknown): unknown {
 }
 
 const SECRET_CONFIG_PATHS: readonly string[] = [
-  "notifications.ntfy.topic",
   "notifications.topic",
   "mcp.*.env.*",
   "mcp.*.headers.*",

@@ -34,7 +34,7 @@ import type {
 } from "../llm/types.ts";
 import { usageConfigView } from "../ledger/budget.ts";
 import { runsOnClaudePlan } from "../ledger/plan_limits.ts";
-import { anyToolEnabled, imageSettingsFor, resolveDisplayName } from "../config/app.ts";
+import { imageSettingsFor, resolveDisplayName } from "../config/app.ts";
 import { imageLimitsFor } from "../llm/prepare_images.ts";
 import { imageTierForModel } from "../llm/image_tokens.ts";
 import { nearMessageBudget } from "../engine/prompt.ts";
@@ -357,10 +357,7 @@ async function runGenerationCore(
           : { options: built.request.provider_options })), attempt: plan.attempt },
     };
 
-    const subagentHistory: Message[] =
-      config.app.subagents.size === 0
-        ? []
-        : [...engine.messages()].slice(-MAX_HISTORY_MESSAGES);
+    const subagentHistory: Message[] = [...engine.messages()].slice(-MAX_HISTORY_MESSAGES);
 
     let intermediatePersisted = false;
     const persistIntermediate = async (message: Message): Promise<void> => {
@@ -592,7 +589,7 @@ async function streamTurn(
   params: StreamTurnParams,
 ): Promise<{ result: StreamResult; intermediate: Message[] }> {
   const { config, charName, resolved, request } = params;
-  const toolsOn = anyToolEnabled(config.app.tools) && (request.tools?.length ?? 0) > 0;
+  const toolsOn = (request.tools ?? []).length > 0;
   let send: (message: ServerMessage) => void = params.send;
   const toolCtx = toolsOn
     ? await buildToolContext(
@@ -733,7 +730,7 @@ function callContext(
 }
 
 function toolLimits(config: LoadedConfig): ToolLimitsView {
-  return toolLimitsFrom(config.app.tools, config.app.subagents);
+  return toolLimitsFrom(config.app.tools, config.app.subagents.agents);
 }
 
 export function thinkingEnabled(opts: ProviderOptions | undefined): boolean {

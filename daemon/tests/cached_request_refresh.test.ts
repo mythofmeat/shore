@@ -215,7 +215,7 @@ test("changing the model answers before the rebuild runs, and the rebuild then r
 test("a rebuild that starts the moment a turn arms its keepalive finds the turn's reply already written, so the keepalive stays armed", async () => {
   await withAda(async (config, env) => {
     config.app.compaction.enabled = false;
-    config.app.tools.enabled_tools = [];
+    config.app.tools.enabled = [];
     const reply = (request: SidecarRequest): GenerateResponse => ({ model: request.model, content: "hi", content_blocks: [{ type: "text", text: "hi" }], finish_reason: "end_turn", usage: { input_tokens: 1, output_tokens: 1, cache_read_tokens: 0, cache_creation_tokens: 0 }, timing: { total_ms: 1, time_to_first_token_ms: 1 } });
     const runtime = await createRuntime({ config, providers: { anthropic: { generate: async (request) => reply(request), stream: (request) => eventsForResponse(reply(request)) } }, env });
     try {
@@ -258,7 +258,7 @@ test("a message sent right after a model change uses the new model, with the reb
       maxContextTokens: 200_000, maxOutputTokens: 4096,
     });
     config.app.compaction.enabled = false;
-    config.app.tools.enabled_tools = [];
+    config.app.tools.enabled = [];
     const seen: SidecarRequest[] = [];
     const reply = (request: SidecarRequest): GenerateResponse => {
       seen.push(request);

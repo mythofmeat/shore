@@ -227,7 +227,7 @@ async function chatConfig(root: string, spareKey: boolean): Promise<LoadedConfig
   for (const d of Object.values(dirs)) await mkdir(d, { recursive: true });
 
   const app = defaultAppConfig();
-  app.tools.enabled_tools = [];
+  app.tools.enabled = [];
   app.chat.model = "gpt-test";
 
   const models = emptyCatalog();

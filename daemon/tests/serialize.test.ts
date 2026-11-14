@@ -5,11 +5,11 @@ import { REDACTED, redactSecrets } from "../src/config/serialize.ts";
 describe("redacting secrets from a config dump", () => {
   test("a secret of any kind is hidden wherever it sits unless it is empty or unset, and everything else is kept", () => {
     expect(redactSecrets({
-      notifications: { topic: "private-topic", ntfy: { topic: "" } },
+      notifications: { topic: "private-topic", push_topic: "" },
       mcp: { search: { env: { KEY: "abc", PORT: 8080, LIST: ["a"], NONE: null }, headers: { Authorization: { bearer: "x" } }, command: "search" } },
       chat: { model: "anthropic:claude" },
     })).toEqual({
-      notifications: { topic: REDACTED, ntfy: { topic: "" } },
+      notifications: { topic: REDACTED, push_topic: "" },
       mcp: { search: { env: { KEY: REDACTED, PORT: REDACTED, LIST: REDACTED, NONE: null }, headers: { Authorization: REDACTED }, command: "search" } },
       chat: { model: "anthropic:claude" },
     });

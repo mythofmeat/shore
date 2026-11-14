@@ -66,9 +66,9 @@ export async function buildToolContext(
   const providers = providerRecord(config);
 
   const imageGen = resolveImageGenConfig({
-    ...(config.app.defaults.image_generation === undefined
+    ...(config.app.image.model === undefined
       ? {}
-      : { defaultRef: config.app.defaults.image_generation }),
+      : { defaultRef: config.app.image.model }),
     imageGen: Object.fromEntries([...config.models.imageGeneration].map(([name, settings]) => {
       const { aspectRatio, imageSize, ...rest } = settings;
       return [name, {
@@ -92,7 +92,7 @@ export async function buildToolContext(
   const startThread = deps.startThread;
   const sealThread = deps.sealThread;
   const editThread = deps.editThread;
-  const subagentsConfigured = config.app.subagents.size > 0;
+  const subagentsConfigured = config.app.subagents.agents.size > 0;
   const userName = resolveDisplayName(config.app.chat);
 
   const ctx: ToolContext = {

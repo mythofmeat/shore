@@ -135,5 +135,5 @@ test("tools enforce availability, dry run and host permissions", async () => {
     } finally { await chmod(path, 0o600); }
   }
   expect(await readFile(path, "utf8")).toBe("old");
-  expect(renderToolDefs({ enabled_tools: ["edit", "apply_patch"], enabled_subagents: [] }, "Ada", "User").map((d) => d.name).sort()).toEqual(["apply_patch", "edit"]);
+  expect(renderToolDefs({ enabled: ["edit", "apply_patch"] }, "Ada", "User").map((d) => d.name).sort()).toEqual(["apply_patch", "edit"]);
 });

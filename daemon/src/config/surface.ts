@@ -14,24 +14,8 @@ const field = (internal: string, canonical: string): ConfigField => ({
 });
 
 const CONFIG_FIELDS: readonly ConfigField[] = [
-  field("defaults.image_generation", "image.model"),
-  field("defaults.subagent_model", "subagents.model"),
-  field("tools.enabled_tools", "tools.enabled"),
-  field("tools.enabled_subagents", "subagents.enabled"),
-  field("tools.enabled_mcp", "tools.mcp"),
-  field("tools.config.*", "tools.*"),
-  field("subagents.*.max_iterations", "subagents.*.max_tool_rounds"),
-  ...Object.entries({
-    enabled: "enabled", user_id: "user_id", room_id: "room_id", homeserver: "homeserver_url", mirror_all: "mirror_user_messages",
-  }).map(([old, key]) => field(`connections.matrix.${old}`, `matrix.${key}`)),
-    field("connections.matrix", "matrix"),
-  field("notifications.generation_threshold", "notifications.min_generation_duration"),
-  field("notifications.ntfy.url", "notifications.url"),
-  field("notifications.ntfy.topic", "notifications.topic"),
-  field("mcp.*.cwd", "mcp.*.working_dir"),
   field("usage.budgets", "budgets"),
   field("usage.plan_limits", "plan_limits"),
-  field("image_generation", "image"),
   field("providers.*.discovery.enabled", "providers.*.discover"),
   field("providers.*.discovery.ignore", "providers.*.ignore_models"),
   field("providers.*.keys.*.env", "providers.*.keys.*.api_key_env"),
@@ -55,10 +39,6 @@ export const MODEL_FIELDS = [
   "max_tool_iterations", "openrouter_provider", "gemini_generation", "zai_clear_thinking", "supports_images",
   "system_prompt",
 ] as const;
-
-export const TOOLS_SCALAR_KEYS: readonly string[] = ["enabled", "mcp", "timeout", "max_result_chars", "max_inline_image_bytes", "user", "pass_env", "no_new_privs"];
-
-export const NOTIFICATION_EVENTS = ["autonomous_message", "cache_warning", "compaction_complete", "error", "message_complete", "usage_warning"] as const;
 
 export function isConfigTable(value: unknown): value is ConfigTable {
   return typeof value === "object" && value !== null && !Array.isArray(value);
@@ -165,33 +145,7 @@ export function normalizeSettings(input: ConfigTable, source = "model settings")
 
 export function normalizeConfigSource(input: ConfigTable, source = "config"): ConfigTable {
   const table = structuredClone(input);
-  const notifications = table.notifications;
-  if (isConfigTable(notifications)) {
-    if (notifications.via !== undefined) {
-      const via = notifications.via;
-      if (typeof via !== "string" || !["off", "notify_send", "ntfy", "command"].includes(via)) throw new Error(`${source}: notifications.via must be off, notify_send, ntfy, or command`);
-      notifications.enabled = via !== "off";
-      if (via !== "off") notifications.backend = via;
-      delete notifications.via;
-    }
-    if (Array.isArray(notifications.events)) {
-      const selected = notifications.events;
-      if (selected.some((event) => typeof event !== "string" || !(NOTIFICATION_EVENTS as readonly string[]).includes(event))) throw new Error(`${source}: notifications.events contains an unknown event`);
-      notifications.events = Object.fromEntries(NOTIFICATION_EVENTS.map((key) => [key, selected.includes(key)]));
-    }
-  }
-  const sourceTools = table.tools;
-  if (isConfigTable(sourceTools)) {
-    for (const [name, value] of Object.entries(sourceTools)) {
-      if (TOOLS_SCALAR_KEYS.includes(name)) continue;
-      delete sourceTools[name];
-      putAt(table, ["tools", "config", name], value);
-    }
-  }
-  const regular = CONFIG_FIELDS.filter((rule) => rule.internal.join(".") !== "tools.config.*");
-  for (const rule of regular) {
-    toInternal(table, [rule]);
-  }
+  toInternal(table, CONFIG_FIELDS);
   const providers = isConfigTable(table.providers) ? table.providers : {};
   for (const [name, provider] of Object.entries(providers)) {
     if (!isConfigTable(provider)) continue;
@@ -202,7 +156,7 @@ export function normalizeConfigSource(input: ConfigTable, source = "config"): Co
       delete normalized[key];
     }
   }
-  for (const section of ["chat", "image_generation"]) {
+  for (const section of ["chat", "image"]) {
     const entries = table[section];
     if (entries === undefined) continue;
     if (!isConfigTable(entries)) throw new Error(`${source}: ${section} must be a table`);
@@ -216,12 +170,6 @@ export function normalizeConfigSource(input: ConfigTable, source = "config"): Co
 }
 
 export function canonicalConfigPath(path: ConfigPath): string[] {
-  const sections: Record<string, string[]> = {
-    "connections.matrix": ["matrix"],
-    "tools.config": ["tools"],
-  };
-  const section = sections[path.join(".")];
-  if (section !== undefined) return section;
   let result = [...path];
   for (const rule of CONFIG_FIELDS) {
     const mapped = translatePath(path, rule.internal, rule.canonical);
@@ -240,16 +188,11 @@ export function publicConfig(input: ConfigTable): ConfigTable {
     const original = valueAt(out, path);
     if (original === undefined) continue;
     const target = translatePath(path, rule.internal, rule.canonical) as string[];
-    if (path[0] === "tools" && path[1] === "config" && TOOLS_SCALAR_KEYS.includes(path[2] ?? "")) continue;
     removeAt(out, path);
     const value = structuredClone(original);
     const existing = valueAt(out, target);
     putAt(out, target, isConfigTable(value) && isConfigTable(existing) ? { ...value, ...existing } : value);
   }
-  const enabled = valueAt(input, ["notifications", "enabled"]);
-  putAt(out, ["notifications", "via"], enabled === true ? valueAt(input, ["notifications", "backend"]) ?? "notify_send" : "off");
-  const events = valueAt(input, ["notifications", "events"]);
-  if (isConfigTable(events)) putAt(out, ["notifications", "events"], NOTIFICATION_EVENTS.filter((key) => events[key] === true));
   const budgets = out.budgets;
   if (Array.isArray(budgets)) for (const budget of budgets) if (isConfigTable(budget)) {
     for (const rule of BUDGET_FIELDS) {
@@ -270,10 +213,6 @@ export function publicConfig(input: ConfigTable): ConfigTable {
     if (!isConfigTable(profiles)) continue;
     for (const [name, value] of Object.entries(profiles)) if (isConfigTable(value) && name.includes(":")) profiles[name] = publicSettings(value);
   }
-  for (const path of [
-    ["defaults"],
-    ["notifications", "enabled"], ["notifications", "backend"], ["tools", "config"],
-  ]) removeAt(out, path);
   return out;
 }
 

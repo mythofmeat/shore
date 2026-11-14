@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 
-import { anyToolEnabled, defaultAppConfig, defaultToolsConfig, parseAppConfig } from "../src/config/app.ts";
+import { anyToolEnabled, defaultAppConfig, parseAppConfig } from "../src/config/app.ts";
 import { ConfigDuration } from "../src/config/duration.ts";
 
 function parseToml(src: string): unknown {
@@ -42,7 +42,7 @@ describe("the shipped defaults", () => {
   });
 
   test("enable no tools, so a fresh install cannot touch the filesystem", () => {
-    expect(anyToolEnabled(defaultToolsConfig())).toBe(false);
+    expect(anyToolEnabled(defaultAppConfig())).toBe(false);
   });
 
   test("round-trip: re-parsing a serialized default config gives the same config", () => {
@@ -60,4 +60,34 @@ describe("a config.toml that cannot be honoured is refused, and says what is wro
     expect(rejected("[triggers]\nenabled = true\nbogus_key = 42\n")).toContain("bogus_key");
   });
 
+});
+
+describe("a section that holds named tables beside its settings", () => {
+  test("a table under [tools] that isn't one of its settings holds that tool's own limits, and a mistake inside one is refused", () => {
+    const { tools } = parsed('[tools]\nenabled = ["bash"]\n[tools.read]\nmax_result_chars = 9\n[tools.bash]\ntimeout = "1m"\n') as { tools: Record<string, unknown> };
+    expect(tools["enabled"]).toEqual(["bash"]);
+    expect(tools["per_tool"]).toEqual({ bash: { max_result_chars: null, timeout: "1m" }, read: { max_result_chars: 9, timeout: null } });
+    expect(Object.keys(tools["per_tool"] as object)).toEqual(["bash", "read"]);
+    expect(rejected("[tools.bash]\nbogus = 1\n")).toBe("unknown field `bogus`, expected one of `max_result_chars`, `max_inline_image_bytes`, `timeout`");
+    expect(rejected("[tools]\nbash = 5\n")).toBe("invalid type: integer `5`, expected struct ToolOverride");
+  });
+
+  test("a table under [subagents] that isn't one of its settings defines a sub-agent", () => {
+    const { subagents } = parsed('[subagents]\nenabled = ["scout"]\n[subagents.scout]\ndescription = "looks"\nprompt = "look"\nmax_tool_rounds = 2\n') as { subagents: Record<string, unknown> };
+    expect(subagents).toEqual({
+      model: null,
+      enabled: ["scout"],
+      agents: { scout: { description: "looks", prompt: "look", tools: [], model: null, max_tool_rounds: 2, timeout: null } },
+    });
+    expect(rejected('[subagents.scout]\ndescription = "looks"\n')).toBe("missing field `prompt`");
+  });
+
+  test("a tool, an MCP server or a sub-agent that is on each counts as tools being on", () => {
+    const on = (toml: string): boolean => {
+      const result = parseAppConfig(parseToml(toml));
+      if ("err" in result) throw new Error(result.err);
+      return anyToolEnabled(result.ok);
+    };
+    expect([on('[tools]\nenabled = ["bash"]\n'), on('[tools]\nmcp = ["search"]\n'), on('[subagents]\nenabled = ["scout"]\n'), on('[tools]\ntimeout = "1m"\n')]).toEqual([true, true, true, false]);
+  });
 });

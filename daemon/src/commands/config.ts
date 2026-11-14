@@ -15,8 +15,8 @@ import {
 import { NO_CHAT_MODELS_MESSAGE } from "../config/models.ts";
 import { findEffectiveModel } from "../config/effective_catalog.ts";
 import { configView } from "../config/preferences.ts";
-import { isSecretConfigPath, REDACTED, redactSecrets, serializeConfigValue } from "../config/serialize.ts";
-import { CATALOG_SECTIONS, chatModelProfiles, defaultAppConfig, mcpBearerToken } from "../config/app.ts";
+import { isSecretConfigPath, REDACTED, redactSecrets, serializeAppConfig, serializeConfigValue } from "../config/serialize.ts";
+import { chatModelProfiles, defaultAppConfig, imageModelProfiles, mcpBearerToken } from "../config/app.ts";
 import { configSchema, findSchemaEntry, type LiveInstances, type SchemaEntry } from "../config/schema.ts";
 import { schemaValueLiteral, SchemaValueError } from "../config/schema_value.ts";
 import {
@@ -77,13 +77,13 @@ function toolResolver(ctx: ConfigContext): (tool: string) => boolean {
 
 export function tools(ctx: ConfigContext, mcpTools: readonly string[] = []): OperationResult<"tools"> {
   const cfg = ctx.config.app.tools;
-  const subagents = ctx.config.app.subagents;
+  const { agents: subagents, enabled: enabledSubagents } = ctx.config.app.subagents;
   const known = { has: toolResolver(ctx) };
 
   const toolRows = ALL_TOOLS.map((def) => ({
     tool: def.name,
     main: toolEnabled(cfg, def.name),
-    subagents: cfg.enabled_subagents.filter((s) =>
+    subagents: enabledSubagents.filter((s) =>
       (subagents.get(s)?.tools ?? []).some((t) => t === def.name),
     ),
   }));
@@ -92,22 +92,22 @@ export function tools(ctx: ConfigContext, mcpTools: readonly string[] = []): Ope
     const sa = required(subagents.get(name));
     return {
       name,
-      enabled: cfg.enabled_subagents.includes(name),
+      enabled: enabledSubagents.includes(name),
       tools: [...sa.tools],
       model: sa.model ?? null,
     };
   });
 
   const warnings: string[] = [];
-  for (const t of cfg.enabled_tools) {
-    if (!known.has(t)) warnings.push(`enabled_tools references unknown tool '${t}'`);
+  for (const t of cfg.enabled) {
+    if (!known.has(t)) warnings.push(`tools.enabled references unknown tool '${t}'`);
   }
-  for (const server of cfg.enabled_mcp) {
+  for (const server of cfg.mcp) {
     if (!ctx.config.app.mcp.has(server)) warnings.push(`tools.mcp references MCP server '${server}' with no [mcp.${server}] definition`);
   }
-  for (const s of cfg.enabled_subagents) {
+  for (const s of enabledSubagents) {
     if (!subagents.has(s)) {
-      warnings.push(`enabled_subagents references undefined subagent '${s}'`);
+      warnings.push(`subagents.enabled references undefined subagent '${s}'`);
     }
   }
   for (const name of [...subagents.keys()].sort()) {
@@ -194,11 +194,11 @@ export function config(ctx: ConfigContext, args: OperationInput<"config">): Oper
 }
 
 function catalogSections(ctx: ConfigContext): Record<string, unknown> {
-  const raw = ctx.config.rawTable;
+  const raw = (ctx.config.rawTable ?? {}) as Record<string, Record<string, unknown> | undefined>;
   const out: Record<string, unknown> = { providers: {} };
-  for (const section of CATALOG_SECTIONS) {
-    const written = section === "chat" ? chatModelProfiles(raw?.chat as Record<string, unknown> | undefined) : raw?.[section];
-    if (written !== undefined) out[section] = serializeConfigValue(written);
+  const written = { chat: chatModelProfiles(raw.chat), image: imageModelProfiles(raw.image), providers: raw.providers };
+  for (const [section, value] of Object.entries(written)) {
+    if (value !== undefined) out[section] = serializeConfigValue(value);
   }
   return out;
 }
@@ -206,17 +206,18 @@ function catalogSections(ctx: ConfigContext): Record<string, unknown> {
 function reportedConfig(ctx: ConfigContext): Record<string, unknown> {
   const app = ctx.config.app;
   const written = { ...app, usage: { ...app.usage, budgets: app.usage.budgets.filter((budget) => !isCredentialBudget(budget)) } };
-  const settings = serializeConfigValue(written) as Record<string, unknown>;
+  const settings = serializeAppConfig(written);
   const catalog = catalogSections(ctx);
   return redactSecrets(publicConfig({
     ...settings,
     ...catalog,
     chat: { ...(catalog.chat as Record<string, unknown> | undefined), ...(settings.chat as Record<string, unknown>) },
+    image: { ...(catalog.image as Record<string, unknown> | undefined), ...(settings.image as Record<string, unknown>) },
   })) as Record<string, unknown>;
 }
 
 export function reportedDefaults(): Record<string, unknown> {
-  const out = serializeConfigValue(defaultAppConfig()) as Record<string, unknown>;
+  const out = serializeAppConfig(defaultAppConfig());
   out.providers = {};
   return publicConfig(out);
 }
@@ -263,7 +264,7 @@ function valueSources(ctx: ConfigContext): ConfigSources {
     chat_models: sorted(ctx.config.models.chat.keys()),
     image_models: sorted(ctx.config.models.imageGeneration.keys()),
     tools: sorted(ALL_TOOLS.map((t) => t.name)),
-    subagents: sorted(ctx.config.app.subagents.keys()),
+    subagents: sorted(ctx.config.app.subagents.agents.keys()),
     characters: sorted(discoverCharacters(ctx.config.dirs.config, ctx.config.dirs.workspace)),
     providers: sorted(ctx.config.providers.entries().map(([name]) => name)),
   };

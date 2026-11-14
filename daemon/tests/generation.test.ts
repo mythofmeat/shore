@@ -13,7 +13,7 @@ import { defaultAppConfig } from "../src/config/app.ts";
 import { emptyCatalog, NO_CHAT_MODELS_MESSAGE } from "../src/config/models.ts";
 import { ProviderRegistry } from "../src/config/providers.ts";
 import type { LoadedConfig } from "../src/config/loader.ts";
-import type { SidecarProvider, StreamEvent } from "../src/llm/types.ts";
+import type { SidecarProvider, SidecarRequest, StreamEvent } from "../src/llm/types.ts";
 import { generationEngine, runGeneration, type GenerationDeps } from "../src/handler/generation.ts";
 import { testTmp } from "./support/tmp.ts";
 import { recordedTurns, WorkspaceRecorder, workspaceTurnsFor, type WorkspaceTurns } from "../src/tools/workspace_turns.ts";
@@ -29,7 +29,7 @@ async function loadedConfig(withModel: boolean, tools: string[] = []): Promise<L
   const dirs = { config: join(root, "config"), data: join(root, "data"), cache: join(root, "cache"), runtime: join(root, "run") };
   for (const d of Object.values(dirs)) await mkdir(d, { recursive: true });
   const app = defaultAppConfig();
-  app.tools.enabled_tools = tools;
+  app.tools.enabled = tools;
   app.chat.max_retries = 0;
   const models = emptyCatalog();
   if (withModel) {
@@ -304,4 +304,47 @@ test("a reply finishes without waiting for the compaction it starts", async () =
   expect(started).toEqual(["main"]);
   expect((await readBack(run.dataDir)).map((message) => message.role)).toEqual(["user", "assistant"]);
   pass.resolve();
+});
+
+test("a reply is offered Shore's tools that are on and the MCP tools the registry hands over, and with neither the request carries no tools and nothing is set up for them", async () => {
+  const offered = async (tools: string[], mcp: { name: string; description: string; input_schema: Record<string, unknown> }[]): Promise<{ tools: string[] | undefined; setUps: number }> => {
+    const config = await loadedConfig(true, tools);
+    setTestEnv(MODEL_KEY_ENV, "fixture-key");
+    const workspace = join(config.dirs.config, "characters", "ada", "workspace");
+    await mkdir(workspace, { recursive: true });
+    await writeFile(join(workspace, "SOUL.md"), "ada system prompt");
+    await mkdir(join(config.dirs.data, "ada", "threads", "main"), { recursive: true });
+    const events: StreamEvent[] = [
+      { type: "start", model: "claude-fixture" },
+      { type: "text", text: "Hello." },
+      { type: "done", content: "Hello.", finish_reason: "end_turn", usage, timing },
+    ];
+    const seen: SidecarRequest[] = [];
+    const provider: SidecarProvider = {
+      async *stream(request) { seen.push(request); yield* events; },
+      async *streamWithTools(request) { seen.push(request); yield* events; },
+      generate: () => { throw new Error("no turn here generates"); },
+    };
+    const engine = generationEngine(await ConversationEngine.load("ada", config.dirs.data, undefined));
+    let setUps = 0;
+    await runGeneration({
+      ...deps(config, engine, provider, []),
+      mcpRegistry: { toolDefsFiltered: () => mcp, call: async () => undefined },
+      tools: () => { setUps += 1; return {}; },
+    }, {
+      meta: { session: { clientId: 1, sessionId: 1, clientType: "test-client", clientName: "test-1", capabilities: ["streaming"], selectedCharacter: "ada" }, rid: null, kind: "message" } as never,
+      body: { rid: null, text: "hello", stream: true, images: [], image_data: [] },
+      regen: false,
+      charName: "ada",
+      rid: null,
+      send: async () => {},
+      signal: new AbortController().signal,
+    });
+    return { tools: seen[0]?.tools?.map((tool) => tool.name), setUps };
+  };
+  const find = { name: "mcp__search__find", description: "finds", input_schema: { type: "object", properties: {} } };
+  expect(await offered([], [])).toEqual({ tools: undefined, setUps: 0 });
+  expect(await offered([], [find])).toEqual({ tools: ["mcp__search__find"], setUps: 1 });
+  expect(await offered(["read"], [])).toEqual({ tools: ["read"], setUps: 1 });
+  expect(await offered(["read"], [find])).toEqual({ tools: ["read", "mcp__search__find"], setUps: 1 });
 });

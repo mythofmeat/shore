@@ -290,7 +290,7 @@ export function toolLimitsFrom(
   subagents?: ReadonlyMap<string, SubagentConfig>,
 ): ToolLimitsView {
   const overrides: NonNullable<ToolLimitsView["config"]> = {};
-  for (const [name, override] of cfg.config) {
+  for (const [name, override] of cfg.per_tool) {
     overrides[name] = {
       ...(override.max_result_chars === undefined
         ? {}

@@ -83,7 +83,7 @@ export async function runSubagent(
   toolUseId?: string,
 ): Promise<string> {
   const { config } = deps;
-  const spec = config.app.subagents.get(name);
+  const spec = config.app.subagents.agents.get(name);
   if (spec === undefined) throw new NotImplemented(`ask_${name}`);
 
   const charName = deps.ctx.characterName;
@@ -159,7 +159,7 @@ export async function runSubagent(
     deps.env ?? process.env,
   );
 
-  const maxIterations = spec.max_iterations ?? resolved.maxToolIterations;
+  const maxIterations = spec.max_tool_rounds ?? resolved.maxToolIterations;
   const request: SidecarRequest = {
     ...built.request,
     ...(maxIterations === undefined ? {} : { max_tool_iterations: maxIterations }),
@@ -255,5 +255,5 @@ export function taggedSink(
 }
 
 function toolLimits(config: LoadedConfig): ToolLimitsView {
-  return toolLimitsFrom(config.app.tools, config.app.subagents);
+  return toolLimitsFrom(config.app.tools, config.app.subagents.agents);
 }

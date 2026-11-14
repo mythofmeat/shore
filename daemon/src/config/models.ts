@@ -398,7 +398,7 @@ export function catalogFromSections(
   const imageGenProfiles =
     imageGeneration === undefined
       ? new Map<string, ImageGenSettings>()
-      : parseAuxSection("image_generation", imageGeneration, "dall-e-3", readImageGenSettings);
+      : parseAuxSection("image", imageGeneration, "dall-e-3", readImageGenSettings);
 
   return { chat: chatModels, imageGeneration: imageGenProfiles };
 }
