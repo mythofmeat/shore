@@ -1,10 +1,11 @@
 import { describe, expect, test, afterEach, jest, spyOn } from "bun:test";
 import * as fs from "node:fs";
-import { chmodSync, existsSync, mkdirSync, readdirSync, readFileSync, realpathSync, renameSync, rmdirSync, statSync, symlinkSync, unlinkSync, utimesSync, writeFileSync } from "node:fs";
+import { chmodSync, existsSync, mkdirSync, readFileSync, realpathSync, renameSync, rmdirSync, statSync, symlinkSync, unlinkSync, utimesSync, writeFileSync } from "node:fs";
 import { mkdtemp, rm, mkdir, readFile, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, relative } from "node:path";
 import { acquireDataDirectoryLease, DATA_DIRECTORY_LEASE_FILE, DATA_DIRECTORY_LOCK_FILE, DataDirectoryOwned, type DataDirectoryLease, type DataDirectoryOwner } from "../src/daemon/data_directory_lease.ts";
+import { handlesUnder } from "./support/handles.ts";
 
 const STARTED_AT = "2026-08-28T12:00:00+10:00";
 const DEAD_PID = 0x7fff_fffe;
@@ -282,7 +283,6 @@ describe("data-directory ownership", () => {
 });
 
 describe("data-directory ownership edges", () => {
-  const openHandles = (): number => readdirSync("/proc/self/fd").length;
   const take = (data: string, instanceId: string): DataDirectoryLease => acquireDataDirectoryLease(data, { instanceId, startedAt: STARTED_AT });
   const failureOf = (attempt: () => unknown): unknown => {
     try {
@@ -305,23 +305,23 @@ describe("data-directory ownership edges", () => {
 
   test("the record is two-space JSON with a newline, and taking it leaves no acquisition lock or handle behind", async () => {
     await inData("format", (data) => {
-      const before = openHandles();
+      const before = handlesUnder(data);
       const lease = take(data, "formatted");
       expect(readFileSync(lease.path, "utf8")).toBe(`${JSON.stringify(lease.owner, null, 2)}\n`);
       expect(existsSync(`${lease.path}.acquire`)).toBe(false);
       lease.release();
-      expect(openHandles()).toBe(before);
+      expect([before, handlesUnder(data)]).toEqual([0, 0]);
     });
   });
 
   test("a refused daemon leaves no handle open once the owner lets go", async () => {
     await inData("refused-handles", (data) => {
-      const before = openHandles();
+      const before = handlesUnder(data);
       const lease = take(data, "holder");
       expect(failureOf(() => take(data, "refused"))).toBeInstanceOf(DataDirectoryOwned);
       expect(failureOf(() => take(data, "refused again"))).toBeInstanceOf(DataDirectoryOwned);
       lease.release();
-      expect(openHandles()).toBe(before);
+      expect([before, handlesUnder(data)]).toEqual([0, 0]);
     });
   });
 
