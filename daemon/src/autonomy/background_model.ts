@@ -1,5 +1,6 @@
 import { shoreLog } from "../log.ts";
 
+import { resolveBackgroundModelName } from "../config/app.ts";
 import type { LoadedConfig } from "../config/loader.ts";
 import { applyBackgroundSettings, configView } from "../config/preferences.ts";
 import { findEffectiveModel } from "../config/effective_catalog.ts";
@@ -19,7 +20,7 @@ export function backgroundTaskModel(
   task: "heartbeat" | "dreaming",
 ): ResolvedModel | undefined {
   const view = configView(config);
-  const name = view.app.defaults.backgroundModelName(task);
+  const name = resolveBackgroundModelName(config.app, task);
   try {
     return name === undefined ? undefined : applyBackgroundSettings(config.dirs.data, character, task, findEffectiveModel(view, config.dirs.cache, name, true));
   } catch (e) {

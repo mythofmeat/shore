@@ -9,6 +9,7 @@ import { webBinding } from "../web/policy.ts";
 import {
   budgetPeriodRank,
   chatModelProfiles,
+  imageModelProfiles,
   parseAppConfig,
   toolGrants,
   validateCompaction,
@@ -317,7 +318,7 @@ function normalizeSource(
     const table = normalized;
     if (table.providers !== undefined && !isTable(table.providers)) throw new Error(`${source}: providers must be a table`);
     ProviderRegistry.fromSection(sectionTable(table.providers));
-    catalogFromSections(undefined, sectionTable(table.image_generation));
+    catalogFromSections(undefined, imageModelProfiles(sectionTable(table.image)));
     for (const [name, entries] of Object.entries(sectionTable(table.chat) ?? {})) {
       if (!isTable(entries)) continue;
       const parsed = readModelConfigFields(entries);
@@ -346,7 +347,7 @@ export function parseConfigTable(
 
   const remainder = { ...table };
   const chatSection = chatModelProfiles(sectionTable(remainder.chat));
-  const imageGenerationSection = sectionTable(remainder.image_generation);
+  const imageGenerationSection = imageModelProfiles(sectionTable(remainder.image));
   const providersSection = sectionTable(remainder.providers);
   const parsed = parseAppConfig(remainder);
   if ("err" in parsed) throw new ConfigError("parse_app", parsed.err);
@@ -468,13 +469,13 @@ function validateConfig(
     catalog,
     providers,
     "subagents.model",
-    app.defaults.subagent_model,
+    app.subagents.model,
     onWarn,
   );
 
-  for (const [name, sub] of app.subagents) {
-    if (app.tools.enabled_subagents.includes(name)) {
-      const resolved = sub.model ?? app.defaults.subagent_model ?? app.chat.model;
+  for (const [name, sub] of app.subagents.agents) {
+    if (app.subagents.enabled.includes(name)) {
+      const resolved = sub.model ?? app.subagents.model ?? app.chat.model;
       if (resolved === undefined) {
         throw validationError(
           `subagents.${name} is enabled but resolves to no model; set ` +
@@ -500,7 +501,7 @@ function validateConfig(
   }
 
   validateMcpServers(app, onWarn);
-  validateDefaultImageGeneration(providers, app.defaults.image_generation, onWarn);
+  validateDefaultImageGeneration(providers, app.image.model, onWarn);
   validateUsageConfig(app.usage);
   if (app.daemon.web.enabled) {
     try { webBinding(app.daemon.web); }
@@ -555,14 +556,14 @@ function validateMcpServers(app: AppConfig, onWarn: ConfigWarn): void {
     }
   }
 
-  for (const server of app.tools.enabled_mcp) {
+  for (const server of app.tools.mcp) {
     if (server === "" || server === "*") {
       onWarn("tools.mcp names MCP servers one at a time; an empty or `*` entry matches no tools", [["server", server]]);
     }
   }
   const referenced = [
     ...toolGrants(app.tools),
-    ...[...app.subagents.values()].flatMap((s) => s.tools),
+    ...[...app.subagents.agents.values()].flatMap((s) => s.tools),
   ];
   for (const pattern of referenced) {
     if (!pattern.startsWith("mcp__")) continue;

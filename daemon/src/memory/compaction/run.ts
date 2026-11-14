@@ -667,7 +667,7 @@ function compactionTools(
   const exec: ToolExecution = {
     sendDirect: () => {},
     ctx,
-    limits: toolLimitsFrom(config.app.tools, config.app.subagents),
+    limits: toolLimitsFrom(config.app.tools, config.app.subagents.agents),
     imageLimits,
     now: () => new Date().toISOString(),
     newMessageId: () => `m_${crypto.randomUUID()}`,

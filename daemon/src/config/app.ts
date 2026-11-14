@@ -59,6 +59,7 @@ export interface ConfigTypeInfo {
 export interface TableShape {
   name: string;
   fields: Record<string, ConfigTypeInfo>;
+  others?: { into: string; item: ConfigTypeInfo };
 }
 
 const READER_TYPES = new WeakMap<Reader<never>, ConfigTypeInfo>();
@@ -77,7 +78,8 @@ function shapeOf<T extends object>(spec: StructSpec<T>): TableShape {
   for (const [key, read] of Object.entries(spec.fields)) {
     fields[key] = typeOf(read as Reader<unknown>);
   }
-  return { name: spec.name, fields };
+  const others = typeof spec.others === "object" ? { into: spec.others.into, item: typeOf(spec.others.read) } : undefined;
+  return { name: spec.name, fields, ...(others === undefined ? {} : { others }) };
 }
 
 function struct<T extends object>(spec: StructSpec<T>): Reader<T> {
@@ -89,7 +91,7 @@ interface StructSpec<T> {
   fields: { [K in keyof T]?: Reader<T[K]> };
   required?: readonly (keyof T & string)[];
   alsoAccepted?: readonly string[];
-  others?: "read elsewhere";
+  others?: "read elsewhere" | { into: keyof T & string; read: Reader<unknown> };
   make: () => T;
 }
 
@@ -104,8 +106,12 @@ function readStruct<T extends object>(spec: StructSpec<T>, value: TomlValue): Pa
   for (const key of sortedKeys(value)) {
     const read = (spec.fields as Record<string, Reader<unknown> | undefined>)[key];
     if (read === undefined) {
-      if (elsewhere.has(key) || spec.others !== undefined) continue;
-      return { err: unknownField(key, known) };
+      if (elsewhere.has(key) || spec.others === "read elsewhere") continue;
+      if (spec.others === undefined) return { err: unknownField(key, known) };
+      const other = spec.others.read(value[key]);
+      if ("err" in other) return other;
+      (out[spec.others.into] as Map<string, unknown>).set(key, other.ok);
+      continue;
     }
     const parsed = read(value[key]);
     if ("err" in parsed) return parsed;
@@ -300,25 +306,6 @@ const DAEMON: StructSpec<DaemonConfig> = {
   },
 };
 
-export interface DefaultsConfig {
-  image_generation: string | undefined;
-  subagent_model: string | undefined;
-}
-
-const defaultDefaultsConfig = (): DefaultsConfig => ({
-  image_generation: undefined,
-  subagent_model: undefined,
-});
-
-const DEFAULTS: StructSpec<DefaultsConfig> = {
-  name: "DefaultsConfig",
-  make: defaultDefaultsConfig,
-  fields: {
-    image_generation: optional(readImageModelName),
-    subagent_model: optional(readChatModelName),
-  },
-};
-
 export type BackgroundTask = "heartbeat" | "compaction" | "dreaming";
 
 export function resolveBackgroundModelName(
@@ -447,45 +434,42 @@ const TOOL_OVERRIDE: StructSpec<ToolOverride> = {
 };
 
 export interface ToolsConfig {
-  enabled_tools: string[];
-  enabled_subagents: string[];
-  enabled_mcp: string[];
+  enabled: string[];
+  mcp: string[];
   max_result_chars: number;
   max_inline_image_bytes: number;
   timeout: ConfigDuration;
   user: string | undefined;
   pass_env: string[];
   no_new_privs: boolean;
-  config: Map<string, ToolOverride>;
+  per_tool: Map<string, ToolOverride>;
 }
 
 export const defaultToolsConfig = (): ToolsConfig => ({
-  enabled_tools: [],
-  enabled_subagents: [],
-  enabled_mcp: [],
+  enabled: [],
+  mcp: [],
   max_result_chars: 50_000,
   max_inline_image_bytes: DEFAULT_MAX_INLINE_IMAGE_BYTES,
   timeout: ConfigDuration.fromSecs(300),
   user: undefined,
   pass_env: [],
   no_new_privs: true,
-  config: new Map(),
+  per_tool: new Map(),
 });
 
 const TOOLS: StructSpec<ToolsConfig> = {
   name: "ToolsConfig",
   make: defaultToolsConfig,
+  others: { into: "per_tool", read: struct(TOOL_OVERRIDE) },
   fields: {
-    enabled_tools: readToolNameSeq,
-    enabled_subagents: readSubagentNameSeq,
-    enabled_mcp: readStringSeq,
+    enabled: readToolNameSeq,
+    mcp: readStringSeq,
     max_result_chars: readUsize,
     max_inline_image_bytes: readUsize,
     timeout: readDuration,
     user: optional(readToolsUser),
     pass_env: readEnvNameSeq,
     no_new_privs: readBool,
-    config: readMap(struct(TOOL_OVERRIDE)),
   },
 };
 
@@ -495,28 +479,28 @@ export function toolPatternMatches(pattern: string, name: string): boolean {
     : pattern === name;
 }
 
-export function toolGrants(tools: Pick<ToolsConfig, "enabled_tools" | "enabled_mcp">): string[] {
-  return [...tools.enabled_tools, ...tools.enabled_mcp.map((server) => `mcp__${server}__*`)];
+export function toolGrants(tools: Pick<ToolsConfig, "enabled" | "mcp">): string[] {
+  return [...tools.enabled, ...tools.mcp.map((server) => `mcp__${server}__*`)];
 }
 
 export function toolEnabled(tools: ToolsConfig, name: string): boolean {
   return toolGrants(tools).some((p) => toolPatternMatches(p, name));
 }
 
-export function subagentEnabled(tools: ToolsConfig, name: string): boolean {
-  return tools.enabled_subagents.includes(name);
+export function subagentEnabled(subagents: Pick<SubagentsConfig, "enabled">, name: string): boolean {
+  return subagents.enabled.includes(name);
 }
 
-export function anyToolEnabled(tools: ToolsConfig): boolean {
-  return tools.enabled_tools.length > 0 || tools.enabled_mcp.length > 0 || tools.enabled_subagents.length > 0;
+export function anyToolEnabled(app: Pick<AppConfig, "tools" | "subagents">): boolean {
+  return app.tools.enabled.length > 0 || app.tools.mcp.length > 0 || app.subagents.enabled.length > 0;
 }
 
 export function resultCharsFor(tools: ToolsConfig, name: string): number {
-  return tools.config.get(name)?.max_result_chars ?? tools.max_result_chars;
+  return tools.per_tool.get(name)?.max_result_chars ?? tools.max_result_chars;
 }
 
 export function timeoutFor(tools: ToolsConfig, name: string): ConfigDuration | undefined {
-  const resolved = tools.config.get(name)?.timeout ?? tools.timeout;
+  const resolved = tools.per_tool.get(name)?.timeout ?? tools.timeout;
   return resolved.asMillisExact() > 0n ? resolved : undefined;
 }
 
@@ -598,6 +582,22 @@ const IMAGES: StructSpec<ImagesConfig> = {
     mcp: struct(IMAGE_OVERRIDE),
   },
 };
+
+export interface ImageConfig {
+  model: string | undefined;
+}
+
+const IMAGE: StructSpec<ImageConfig> = {
+  name: "ImageConfig",
+  make: () => ({ model: undefined }),
+  others: "read elsewhere",
+  fields: { model: optional(readImageModelName) },
+};
+
+export function imageModelProfiles(image: Table | undefined): Table | undefined {
+  if (image === undefined) return undefined;
+  return Object.fromEntries(Object.entries(image).filter(([key]) => !(key in IMAGE.fields)));
+}
 
 export function imageSettingsFor(images: ImagesConfig, origin: ImageOrigin): ImageSettings {
   const override = images[origin];
@@ -862,18 +862,18 @@ export function validateDreaming(dreaming: DreamingConfig): string | undefined {
 
 export interface MatrixConfig {
   enabled: boolean;
-  homeserver: string;
+  homeserver_url: string;
   user_id: string;
   room_id: string;
-  mirror_all: boolean;
+  mirror_user_messages: boolean;
 }
 
 export const defaultMatrixConfig = (): MatrixConfig => ({
   enabled: false,
-  homeserver: "",
+  homeserver_url: "",
   user_id: "",
   room_id: "",
-  mirror_all: true,
+  mirror_user_messages: true,
 });
 
 const MATRIX: StructSpec<MatrixConfig> = {
@@ -881,103 +881,49 @@ const MATRIX: StructSpec<MatrixConfig> = {
   make: defaultMatrixConfig,
   fields: {
     enabled: readBool,
-    homeserver: readString,
+    homeserver_url: readString,
     user_id: readString,
     room_id: readString,
-    mirror_all: readBool,
+    mirror_user_messages: readBool,
   },
 };
 
-export interface ConnectionsConfig {
-  matrix: MatrixConfig | undefined;
-}
+export type NotificationVia = "off" | "notify_send" | "ntfy" | "command";
 
-const defaultConnectionsConfig = (): ConnectionsConfig => ({
-  matrix: undefined,
-});
+const NOTIFICATION_VIAS: readonly NotificationVia[] = ["off", "notify_send", "ntfy", "command"];
 
-const CONNECTIONS: StructSpec<ConnectionsConfig> = {
-  name: "ConnectionsConfig",
-  make: defaultConnectionsConfig,
-  fields: {
-    matrix: struct(MATRIX),
+export const NOTIFICATION_EVENTS = ["autonomous_message", "cache_warning", "compaction_complete", "error", "message_complete", "usage_warning"] as const;
+
+export type NotificationEvent = (typeof NOTIFICATION_EVENTS)[number];
+
+const readNotificationEvents: Reader<NotificationEvent[]> = typed(
+  (v) => {
+    if (!Array.isArray(v)) return { err: invalidType(v, "a sequence") };
+    if (v.some((event) => !(NOTIFICATION_EVENTS as readonly unknown[]).includes(event))) return { err: "notifications.events contains an unknown event" };
+    return { ok: NOTIFICATION_EVENTS.filter((event) => v.includes(event)) };
   },
-};
-
-type NotificationBackend = "notify_send" | "ntfy" | "command";
-
-const NOTIFICATION_BACKENDS: readonly NotificationBackend[] = [
-  "notify_send",
-  "ntfy",
-  "command",
-];
-
-export interface NtfyConfig {
-  url: string;
-  topic: string;
-}
-
-const defaultNtfyConfig = (): NtfyConfig => ({
-  url: "https://ntfy.sh",
-  topic: "",
-});
-
-const NTFY: StructSpec<NtfyConfig> = {
-  name: "NtfyConfig",
-  make: defaultNtfyConfig,
-  fields: { url: readString, topic: readString },
-};
-
-export interface NotificationEventsConfig {
-  autonomous_message: boolean;
-  cache_warning: boolean;
-  compaction_complete: boolean;
-  error: boolean;
-  message_complete: boolean;
-  usage_warning: boolean;
-}
-
-export const defaultNotificationEvents = (): NotificationEventsConfig => ({
-  autonomous_message: true,
-  cache_warning: false,
-  compaction_complete: false,
-  error: false,
-  message_complete: true,
-  usage_warning: false,
-});
-
-const NOTIFICATION_EVENTS: StructSpec<NotificationEventsConfig> = {
-  name: "NotificationEventsConfig",
-  make: defaultNotificationEvents,
-  fields: {
-    autonomous_message: readBool,
-    cache_warning: readBool,
-    compaction_complete: readBool,
-    error: readBool,
-    message_complete: readBool,
-    usage_warning: readBool,
-  },
-};
+  { kind: "list", item: { kind: "enum", variants: NOTIFICATION_EVENTS } },
+);
 
 export interface NotificationsConfig {
+  via: NotificationVia;
+  events: NotificationEvent[];
+  min_generation_duration: ConfigDuration;
+  url: string;
+  topic: string;
   token_env?: string;
-  enabled: boolean;
-  backend: NotificationBackend;
-  ntfy: NtfyConfig;
   command: string[];
-  generation_threshold: ConfigDuration;
-  events: NotificationEventsConfig;
   push_topic: string;
   push_every: ConfigDuration;
 }
 
 export const defaultNotificationsConfig = (): NotificationsConfig => ({
-  enabled: false,
-  backend: "notify_send",
-  ntfy: defaultNtfyConfig(),
+  via: "off",
+  events: ["autonomous_message", "message_complete"],
+  min_generation_duration: ConfigDuration.fromSecs(0),
+  url: "https://ntfy.sh",
+  topic: "",
   command: [],
-  generation_threshold: ConfigDuration.fromSecs(0),
-  events: defaultNotificationEvents(),
   push_topic: "",
   push_every: ConfigDuration.fromSecs(86_400),
 });
@@ -986,13 +932,13 @@ const NOTIFICATIONS: StructSpec<NotificationsConfig> = {
   name: "NotificationsConfig",
   make: defaultNotificationsConfig,
   fields: {
+    via: readEnum(NOTIFICATION_VIAS),
+    events: readNotificationEvents,
+    min_generation_duration: readDuration,
+    url: readString,
+    topic: readString,
     token_env: optional(readString),
-    enabled: readBool,
-    backend: readEnum(NOTIFICATION_BACKENDS),
-    ntfy: struct(NTFY),
     command: readStringSeq,
-    generation_threshold: readDuration,
-    events: struct(NOTIFICATION_EVENTS),
     push_topic: readString,
     push_every: readDuration,
   },
@@ -1184,7 +1130,7 @@ export interface SubagentConfig {
   prompt: string;
   tools: string[];
   model: string | undefined;
-  max_iterations: number | undefined;
+  max_tool_rounds: number | undefined;
   timeout: ConfigDuration | undefined;
 }
 
@@ -1196,7 +1142,7 @@ const SUBAGENT: StructSpec<SubagentConfig> = {
     prompt: "",
     tools: [],
     model: undefined,
-    max_iterations: undefined,
+    max_tool_rounds: undefined,
     timeout: undefined,
   }),
   fields: {
@@ -1204,8 +1150,30 @@ const SUBAGENT: StructSpec<SubagentConfig> = {
     prompt: readString,
     tools: readToolNameSeq,
     model: optional(readChatModelName),
-    max_iterations: optional(readU32),
+    max_tool_rounds: optional(readU32),
     timeout: optional(readDuration),
+  },
+};
+
+export interface SubagentsConfig {
+  model: string | undefined;
+  enabled: string[];
+  agents: Map<string, SubagentConfig>;
+}
+
+export const defaultSubagentsConfig = (): SubagentsConfig => ({
+  model: undefined,
+  enabled: [],
+  agents: new Map(),
+});
+
+const SUBAGENTS: StructSpec<SubagentsConfig> = {
+  name: "SubagentsConfig",
+  make: defaultSubagentsConfig,
+  others: { into: "agents", read: struct(SUBAGENT) },
+  fields: {
+    model: optional(readChatModelName),
+    enabled: readSubagentNameSeq,
   },
 };
 
@@ -1213,7 +1181,7 @@ export interface McpServerConfig {
   command: string | undefined;
   args: string[];
   env: Map<string, string>;
-  cwd: string | undefined;
+  working_dir: string | undefined;
   user?: string | undefined;
   url: string | undefined;
   headers: Map<string, string>;
@@ -1226,7 +1194,7 @@ const MCP_SERVER: StructSpec<McpServerConfig> = {
     command: undefined,
     args: [],
     env: new Map(),
-    cwd: undefined,
+    working_dir: undefined,
     user: undefined,
     url: undefined,
     headers: new Map(),
@@ -1236,7 +1204,7 @@ const MCP_SERVER: StructSpec<McpServerConfig> = {
     command: optional(readString),
     args: readStringSeq,
     env: readMap(readString),
-    cwd: optional(readString),
+    working_dir: optional(readString),
     user: optional(readToolsUser),
     url: optional(readString),
     headers: readMap(readString),
@@ -1255,61 +1223,59 @@ export function mcpBearerToken(
 export interface AppConfig {
   daemon: DaemonConfig;
   chat: ChatConfig;
-  defaults: DefaultsConfig;
+  image: ImageConfig;
+  images: ImagesConfig;
   triggers: TriggersConfig;
   presence: PresenceConfig;
   marks: MarksConfig;
   compaction: CompactionConfig;
   dreaming: DreamingConfig;
   tools: ToolsConfig;
-  images: ImagesConfig;
-  connections: ConnectionsConfig;
+  subagents: SubagentsConfig;
   notifications: NotificationsConfig;
-  usage: UsageConfig;
-  subagents: Map<string, SubagentConfig>;
   mcp: Map<string, McpServerConfig>;
+  matrix: MatrixConfig | undefined;
+  usage: UsageConfig;
 }
 
 export const defaultAppConfig = (): AppConfig => ({
   daemon: defaultDaemonConfig(),
   chat: defaultChatConfig(),
-  defaults: defaultDefaultsConfig(),
+  image: IMAGE.make(),
+  images: defaultImagesConfig(),
   triggers: defaultTriggersConfig(),
   presence: defaultPresenceConfig(),
   marks: defaultMarksConfig(),
   compaction: defaultCompactionConfig(),
   dreaming: defaultDreamingConfig(),
   tools: defaultToolsConfig(),
-  images: defaultImagesConfig(),
-  connections: defaultConnectionsConfig(),
+  subagents: defaultSubagentsConfig(),
   notifications: defaultNotificationsConfig(),
-  usage: defaultUsageConfig(),
-  subagents: new Map(),
   mcp: new Map(),
+  matrix: undefined,
+  usage: defaultUsageConfig(),
 });
-
-export const CATALOG_SECTIONS = ["chat", "image_generation", "providers"] as const;
 
 const APP: StructSpec<AppConfig> = {
   name: "AppConfig",
-  alsoAccepted: ["image_generation", "providers"],
+  alsoAccepted: ["providers"],
   make: defaultAppConfig,
   fields: {
     daemon: struct(DAEMON),
     chat: struct(CHAT),
-    defaults: struct(DEFAULTS),
+    image: struct(IMAGE),
+    images: struct(IMAGES),
     triggers: struct(TRIGGERS),
     presence: struct(PRESENCE),
     marks: struct(MARKS),
     compaction: struct(COMPACTION),
     dreaming: struct(DREAMING),
     tools: struct(TOOLS),
-    images: struct(IMAGES),
-    connections: struct(CONNECTIONS),
+    subagents: struct(SUBAGENTS),
     notifications: struct(NOTIFICATIONS),
-    usage: struct(USAGE),
-    subagents: readMap(struct(SUBAGENT)),
     mcp: readMap(struct(MCP_SERVER)),
+    matrix: struct(MATRIX),
+    usage: struct(USAGE),
   },
 };
 

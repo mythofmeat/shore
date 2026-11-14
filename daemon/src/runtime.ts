@@ -413,7 +413,7 @@ export function mcpConfigView(
       ...(server.command === undefined ? {} : { command: server.command }),
       args: server.args,
       env: Object.fromEntries(server.env),
-      ...(server.cwd === undefined ? {} : { cwd: server.cwd }),
+      ...(server.working_dir === undefined ? {} : { cwd: server.working_dir }),
       ...(server.user === undefined ? {} : { user: server.user }),
       ...(server.url === undefined ? {} : { url: server.url }),
       headers: mcpHeaders(name, server, env),
@@ -497,7 +497,7 @@ export function sharedToolDeps(
       const notifications = (subagent?.registry.effectiveConfig(character) ?? config).app.notifications;
       const env = subagent?.env ?? process.env;
       return await pushToUser(characterDataDir(config.dirs.data, character), `Shore - ${character}`, message, {
-        url: notifications.ntfy.url,
+        url: notifications.url,
         topic: notifications.push_topic,
         token: notifications.token_env === undefined ? "" : env[notifications.token_env] ?? "",
         everyMs: notifications.push_every.asMillis(),

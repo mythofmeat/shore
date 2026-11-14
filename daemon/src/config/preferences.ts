@@ -596,13 +596,7 @@ export interface LoadedConfigView {
   models: ModelCatalog;
   providers: ProviderRegistry;
   dirs: { data: string; cache: string };
-  app: {
-    defaults: {
-      model?: string;
-      subagent_model?: string;
-      backgroundModelName: (task: BackgroundTask) => string | undefined;
-    };
-  };
+  app: Pick<AppConfig, "chat" | "subagents" | "triggers" | "compaction" | "dreaming">;
 }
 
 export type BackgroundTask = Exclude<import("../protocol/BackgroundModelTarget.ts").BackgroundModelTarget, "all">;
@@ -611,26 +605,8 @@ export const BACKGROUND_TASKS: readonly BackgroundTask[] = ["heartbeat", "compac
 
 export const SHARED_BACKGROUND_TASKS: readonly BackgroundTask[] = ["heartbeat", "compaction"];
 
-export function configView(config: {
-  models: ModelCatalog;
-  providers: ProviderRegistry;
-  dirs: { data: string; cache: string };
-  app: Pick<AppConfig, "chat" | "defaults" | "triggers" | "compaction" | "dreaming">;
-}): LoadedConfigView {
-  return {
-    models: config.models,
-    providers: config.providers,
-    dirs: config.dirs,
-    app: {
-      defaults: {
-        ...(config.app.chat.model === undefined ? {} : { model: config.app.chat.model }),
-        ...(config.app.defaults.subagent_model === undefined
-          ? {}
-          : { subagent_model: config.app.defaults.subagent_model }),
-        backgroundModelName: (task) => resolveBackgroundModelName(config.app, task),
-      },
-    },
-  };
+export function configView(config: LoadedConfigView): LoadedConfigView {
+  return { models: config.models, providers: config.providers, dirs: config.dirs, app: config.app };
 }
 
 export type FindEffectiveModel = (
@@ -815,7 +791,7 @@ export function resolveSubagentBaseModel(
   findEffective: FindEffectiveModel,
   preferences?: readonly [ModelPreferences, ModelPreferences],
 ): ResolvedModel | undefined {
-  const configured = specModel ?? config.app.defaults.subagent_model;
+  const configured = specModel ?? config.app.subagents.model;
   if (configured !== undefined) {
     return findEffective(config, config.dirs.cache, configured, true);
   }
@@ -860,7 +836,7 @@ export function resolveBackgroundModel(
   findEffective: FindEffectiveModel,
   threadModel?: string,
 ): ResolvedModel | undefined {
-  const name = config.app.defaults.backgroundModelName(task);
+  const name = resolveBackgroundModelName(config.app, task);
   let base: ResolvedModel | undefined;
   try {
     base = name === undefined ? undefined : findEffective(config, config.dirs.cache, name, true);
@@ -994,7 +970,7 @@ function activeSelection(
       config,
       global,
       charPrefs,
-      config.app.defaults.model,
+      config.app.chat.model,
       findEffective,
     );
   return { global, charPrefs, resolved };

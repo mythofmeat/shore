@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { mkdtemp, mkdir } from "node:fs/promises";
+import { mkdtemp, mkdir, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
@@ -24,7 +24,7 @@ function spec(over: Partial<SubagentConfig> = {}): SubagentConfig {
     prompt: "You are {{char}}'s researcher.",
     tools: [],
     model: undefined,
-    max_iterations: undefined,
+    max_tool_rounds: undefined,
     timeout: undefined,
     ...over,
   };
@@ -54,7 +54,7 @@ async function configWith(
   const app = defaultAppConfig();
   app.chat.model = "cheap";
   app.chat.max_retries = 0;
-  for (const [name, s] of Object.entries(subagents)) app.subagents.set(name, s);
+  for (const [name, s] of Object.entries(subagents)) app.subagents.agents.set(name, s);
   over(app);
   return {
     root,
@@ -178,5 +178,33 @@ describe("the recursion cap", () => {
     const nested = nestedContext(parent);
     expect(nested.mcpCall).toBe(parent.mcpCall);
     expect(nested.configDir).toBe(parent.configDir);
+  });
+});
+
+describe("a sub-agent's tool calls", () => {
+  test("are held to the limits in [tools], and to a tool's own where it has them", async () => {
+    const { config, root } = await configWith({ researcher: spec({ tools: ["read", "bash"] }) }, (app) => {
+      app.tools.max_result_chars = 60;
+      app.tools.per_tool.set("bash", { max_result_chars: 20, timeout: undefined });
+    });
+    const workspace = join(root, "config", "characters", "ada", "workspace");
+    await mkdir(workspace, { recursive: true });
+    await writeFile(join(workspace, "long.md"), `${"a".repeat(400)}\n`);
+    const results: string[] = [];
+    const provider: SidecarProvider = {
+      ...scriptedProvider("done"),
+      async *streamWithTools(req, phase) {
+        for (const [id, name, input] of [["t1", "read", { file_path: "long.md" }], ["t2", "bash", { command: "printf '%0200d' 7" }]] as const) {
+          results.push(JSON.stringify(await phase.runTool({ id, name, input })));
+        }
+        yield* scriptedProvider("done").stream(req);
+      },
+    };
+    await run(config, root, "researcher", provider);
+    const kept = results.map((result) => {
+      const cut = /the first (\d+) characters are above this note and the last (\d+) are below it/.exec(result);
+      return cut === null ? result : Number(cut[1]) + Number(cut[2]);
+    });
+    expect(kept).toEqual([60, 20]);
   });
 });

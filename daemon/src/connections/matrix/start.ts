@@ -48,10 +48,10 @@ export function unusableReason(
   credentials: MatrixCredentials,
 ): string | undefined {
   const missing: string[] = [];
-  if (matrix.homeserver.trim() === "") missing.push("homeserver");
+  if (matrix.homeserver_url.trim() === "") missing.push("homeserver_url");
   if (matrix.user_id.trim() === "") missing.push("user_id");
   if (missing.length > 0) {
-    return `[connections.matrix] is missing ${missing.join(" and ")}`;
+    return `[matrix] is missing ${missing.join(" and ")}`;
   }
   if (credentials.accessToken === undefined && credentials.password === undefined) {
     return `no Matrix credential: set $${ACCESS_TOKEN_ENV} or $${PASSWORD_ENV}`;
@@ -71,7 +71,7 @@ export async function attemptMatrixBridge(
   options: StartOptions,
   stopSignal?: AbortSignal,
 ): Promise<StartOutcome> {
-  const matrix = options.config.app.connections.matrix;
+  const matrix = options.config.app.matrix;
   if (matrix === undefined || !matrix.enabled) return { kind: "off", reason: undefined };
 
   const credentials = readCredentials(options.env);
@@ -93,7 +93,7 @@ export async function attemptMatrixBridge(
   let bot: MatrixBot;
   try {
     bot = await login({
-      homeserver: matrix.homeserver,
+      homeserver: matrix.homeserver_url,
       userId: matrix.user_id,
       ...(credentials.accessToken === undefined ? {} : { accessToken: credentials.accessToken }),
       ...(credentials.password === undefined ? {} : { password: credentials.password }),
@@ -125,15 +125,15 @@ export async function attemptMatrixBridge(
     rooms: new RoomBindings(rustJoin(stateDir, "rooms.json")),
     events: new EventMap(rustJoin(stateDir, "events.json")),
     prefs: new ViewPrefs(rustJoin(stateDir, "prefs.json")),
-    mirrorAll: matrix.mirror_all,
+    mirrorAll: matrix.mirror_user_messages,
     ...(initialRoomId === undefined ? {} : { initialRoomId }),
     ...(options.log === undefined ? {} : { log: options.log }),
   });
 
   options.log?.info?.("Matrix bridge started", {
-    homeserver: matrix.homeserver,
+    homeserver_url: matrix.homeserver_url,
     user_id: matrix.user_id,
-    mirror_all: matrix.mirror_all,
+    mirror_user_messages: matrix.mirror_user_messages,
   });
 
   const done = bridge.run();

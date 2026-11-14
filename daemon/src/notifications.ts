@@ -1,14 +1,8 @@
 import { shoreLog } from "./log.ts";
 
-import type { NotificationsConfig, NtfyConfig } from "./config/app.ts";
+import type { NotificationEvent, NotificationVia, NotificationsConfig } from "./config/app.ts";
 
-export type NotificationEvent =
-  | "autonomous_message"
-  | "cache_warning"
-  | "compaction_complete"
-  | "error"
-  | "message_complete"
-  | "usage_warning";
+export type { NotificationEvent };
 
 const ENCODER = new TextEncoder();
 const DECODER = new TextDecoder();
@@ -29,7 +23,9 @@ export function expandArgv(argv: readonly string[], title: string, body: string)
   return argv.map((arg, i) => (i === 0 ? arg : fill(arg)));
 }
 
-export interface NtfyDelivery extends NtfyConfig {
+export interface NtfyDelivery {
+  url: string;
+  topic: string;
   token: string;
 }
 
@@ -109,6 +105,8 @@ export const realSink: NotificationSink = {
   },
 };
 
+type Delivery = Exclude<NotificationVia, "off">;
+
 export class NotificationService {
   readonly #config: NotificationsConfig;
   readonly #sink: NotificationSink;
@@ -118,18 +116,11 @@ export class NotificationService {
     this.#sink = sink;
   }
 
-  isEventEnabled(event: NotificationEvent): boolean {
-    return this.#config.events[event];
-  }
-
-  shouldNotify(event: NotificationEvent): boolean {
-    return this.#config.enabled && this.isEventEnabled(event);
-  }
-
   notify(event: NotificationEvent, title: string, body: string, picture?: NotificationPicture): void {
-    if (!this.shouldNotify(event)) return;
+    const via = this.#config.via;
+    if (via === "off" || !this.#config.events.includes(event)) return;
     const summary = truncateSummary(body, SUMMARY_MAX_BYTES);
-    void this.#dispatch(title, summary, picture).catch((e: unknown) => {
+    void this.#dispatch(via, title, summary, picture).catch((e: unknown) => {
       shoreLog.warn(`shore: notification dispatch failed: ${String(e)}`);
     });
   }
@@ -140,17 +131,18 @@ export class NotificationService {
   }
 
   meetsGenerationThreshold(totalMs: number): boolean {
-    const thresholdMs = this.#config.generation_threshold.asMillisExact();
+    const thresholdMs = this.#config.min_generation_duration.asMillisExact();
     return thresholdMs === 0n || BigInt(totalMs) >= thresholdMs;
   }
 
-  async #dispatch(title: string, body: string, picture: NotificationPicture | undefined): Promise<void> {
-    switch (this.#config.backend) {
+  async #dispatch(via: Delivery, title: string, body: string, picture: NotificationPicture | undefined): Promise<void> {
+    switch (via) {
       case "notify_send":
         return this.#sink.notifySend(title, body, picture);
       case "ntfy":
         return this.#sink.ntfy({
-          ...this.#config.ntfy,
+          url: this.#config.url,
+          topic: this.#config.topic,
           token: this.#config.token_env === undefined ? "" : process.env[this.#config.token_env] ?? "",
         }, title, body, picture);
       case "command":

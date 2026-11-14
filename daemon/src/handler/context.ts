@@ -173,7 +173,7 @@ export async function prepareChatContext(
       ? assemblePrompt(promptParams)
       : assemblePrompt(promptParams, params.timeZone);
 
-  const toolsAvailable = anyToolEnabled(config.app.tools) || mcpToolDefs.length > 0;
+  const toolsAvailable = anyToolEnabled(config.app) || mcpToolDefs.length > 0;
 
   const { messages: llmMessages, system } = await buildLlmMessages(
     prompt,
@@ -184,8 +184,8 @@ export async function prepareChatContext(
     ? assembleToolSurface(
         renderToolDefs(config.app.tools, character, displayName),
         subagentToolDefs(
-          config.app.subagents,
-          config.app.tools.enabled_subagents,
+          config.app.subagents.agents,
+          config.app.subagents.enabled,
           character,
           displayName,
         ),

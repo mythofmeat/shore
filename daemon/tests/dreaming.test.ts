@@ -25,7 +25,7 @@ import { conversationLines, conversationsSince } from "../src/memory/dreaming/ma
 import { renderDreamPrompt } from "../src/memory/dreaming/prompt.ts";
 import { readWorkspacePath, workspaceReadCounts } from "../src/memory/dreaming/reads.ts";
 import { appendDreamRecord, lastDream, lastFinishedDream } from "../src/memory/dreaming/records.ts";
-import { dreamToolsConfig } from "../src/memory/dreaming/run.ts";
+import { dreamGrants } from "../src/memory/dreaming/run.ts";
 import { required } from "../src/util/required.ts";
 import { afterFirstChat, type ChatWorld } from "./support/chat_world.ts";
 import { restoreTestEnv } from "./support/env.ts";
@@ -529,18 +529,19 @@ test("a dream a budget pauses before it starts is no failure, makes no call and 
 });
 
 test("a wildcard grant never gives a dream a left-out tool, and a list of its own picks its sub-agents", () => {
-  const tools = { ...defaultAppConfig().tools, enabled_tools: ["*"], enabled_mcp: ["discord"], enabled_subagents: ["memory", "music"] };
-  const open = dreamToolsConfig(tools, undefined);
-  expect(open.enabled_tools).toContain("read");
-  expect(open.enabled_tools).toContain("bash");
+  const app = defaultAppConfig();
+  const granted = { tools: { ...app.tools, enabled: ["*"], mcp: ["discord"] }, subagents: { ...app.subagents, enabled: ["memory", "music"] } };
+  const open = dreamGrants(granted, undefined);
+  expect(open.tools.enabled).toContain("read");
+  expect(open.tools.enabled).toContain("bash");
   for (const name of ["wake_in_thread", "list_triggers", "write_diary", "start_thread", "edit_thread", "list_threads", "generate_image", "guide"]) {
-    expect(open.enabled_tools).not.toContain(name);
+    expect(open.tools.enabled).not.toContain(name);
   }
-  expect(open.enabled_mcp).toEqual([]);
-  expect(open.enabled_subagents).toEqual(["memory", "music"]);
-  const chosen = dreamToolsConfig(tools, ["read", "ask_memory", "start_thread", "mcp__discord__send"]);
-  expect(chosen.enabled_tools).toEqual(["read"]);
-  expect(chosen.enabled_subagents).toEqual(["memory"]);
+  expect(open.tools.mcp).toEqual([]);
+  expect(open.subagents.enabled).toEqual(["memory", "music"]);
+  const chosen = dreamGrants(granted, ["read", "ask_memory", "start_thread", "mcp__discord__send"]);
+  expect(chosen.tools.enabled).toEqual(["read"]);
+  expect(chosen.subagents.enabled).toEqual(["memory"]);
 });
 
 test("only a read from the first line counts as opening a workspace file, however the workspace path is written", () => {

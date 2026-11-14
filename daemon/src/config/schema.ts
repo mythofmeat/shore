@@ -4,7 +4,7 @@ import {
   type ConfigValueSource,
 } from "./app.ts";
 import { requiresRestart } from "./restart.ts";
-import { BUDGET_FIELDS, canonicalConfigPath, canonicalSettingKey, formatConfigPath, isConfigTable, MODEL_FIELDS, NOTIFICATION_EVENTS, parseConfigPath, TOOLS_SCALAR_KEYS } from "./surface.ts";
+import { BUDGET_FIELDS, canonicalConfigPath, canonicalSettingKey, formatConfigPath, isConfigTable, MODEL_FIELDS, parseConfigPath } from "./surface.ts";
 
 import { isSecretConfigPath } from "./serialize.ts";
 import type { ConfigSchemaEntry } from "../protocol/ConfigSchemaEntry.ts";
@@ -115,6 +115,10 @@ function walk(prefix: string, info: ConfigTypeInfo, live: LiveInstances, out: Sc
     for (const [field, child] of Object.entries(shape.fields)) {
       walk(`${key}.${field}`, child, live, out);
     }
+    if (shape.others === undefined) return;
+    for (const instance of new Set(["<name>", ...live.instancesAt(key).filter((name) => !(name in shape.fields))])) {
+      walk(`${key}.${formatConfigPath([instance])}`, shape.others.item, live, out);
+    }
     return;
   }
 
@@ -129,20 +133,12 @@ function walk(prefix: string, info: ConfigTypeInfo, live: LiveInstances, out: Sc
 export function configSchema(live: LiveInstances): SchemaEntry[] {
   const shape = appConfigShape();
   const internal: SchemaEntry[] = [];
-  const internalLive: LiveInstances = {
-    instancesAt(key) {
-      if (key === "tools.config") return live.instancesAt("tools").filter((name) => !TOOLS_SCALAR_KEYS.includes(name));
-      if (key === "subagents") return live.instancesAt(key).filter((name) => !["enabled", "model"].includes(name));
-      return live.instancesAt(key);
-    },
-  };
   for (const [field, info] of Object.entries(shape.fields)) {
-    walk(field, info, internalLive, internal);
+    walk(field, info, live, internal);
   }
   const out: SchemaEntry[] = [];
   for (const old of internal) {
     if (old.kind === "table" || old.kind === "map") continue;
-    if (["notifications.enabled", "notifications.backend"].includes(old.key) || old.key.startsWith("notifications.events.")) continue;
     const path = canonicalConfigPath(parseConfigPath(old.key));
     if (path[0] === "budgets" && path.length === 3) {
       path[2] = BUDGET_FIELDS.find((rule) => rule.internal[0] === path[2])?.canonical[0] ?? path[2] as string;
@@ -155,8 +151,6 @@ export function configSchema(live: LiveInstances): SchemaEntry[] {
     const row = entry(key, info);
     out.push({ ...row, description: describeOption(path), scope: "global or character", settable: row.settable && !path.includes("<index>") });
   };
-  add(["notifications", "via"], { kind: "enum", variants: ["off", "notify_send", "ntfy", "command"] });
-  add(["notifications", "events"], { kind: "list", item: { kind: "enum", variants: NOTIFICATION_EVENTS } });
   for (const name of new Set(["<name>", ...live.instancesAt("providers")])) {
     const prefix = ["providers", name];
     for (const field of ["enabled", "subscription", "discover", "no_auth"]) add([...prefix, field], { kind: "boolean" });

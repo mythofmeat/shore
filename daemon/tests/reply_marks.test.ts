@@ -80,7 +80,7 @@ async function world(rounds: Round[], options: { tools?: string[]; history?: Mes
   const dirs = { config: join(root, "config"), data: join(root, "data"), cache: join(root, "cache"), runtime: join(root, "run") };
   for (const dir of Object.values(dirs)) await mkdir(dir, { recursive: true });
   const app = defaultAppConfig();
-  app.tools.enabled_tools = options.tools ?? [];
+  app.tools.enabled = options.tools ?? [];
   app.chat.max_retries = 0;
   app.chat.model = "fixture";
   app.chat.display_name = "Sam";

@@ -172,7 +172,7 @@ async function withCharacter(run: (h: Harness) => Promise<void>, configure?: (ap
   app.chat.model = "fixture";
   app.chat.max_retries = 0;
   app.compaction.enabled = false;
-  app.tools.enabled_tools = ["read"];
+  app.tools.enabled = ["read"];
   app.triggers.enabled = true;
   configure?.(app);
   const models = emptyCatalog();
@@ -370,7 +370,7 @@ test("a wake's chat logs hold what is still in its own thread's conversation, si
     const found = lastToolResult(await thread("main"));
     expect(found?.failed).toBe(false);
     expect(found?.text).toContain("the keeper's name is [Mara]");
-  }, (app) => { app.tools.enabled_tools.push("search_chat_logs"); });
+  }, (app) => { app.tools.enabled.push("search_chat_logs"); });
 });
 
 test("what a wake wraps in sendMessage tags alongside a tool call stays in its working as written and sends nothing, and only its final response is sent", async () => {
@@ -1125,7 +1125,7 @@ test("what set a wake off is told in these words, and nothing new means no note"
 });
 
 function withTriggers(app: AppConfig): void {
-  app.tools.enabled_tools.push("bash");
+  app.tools.enabled.push("bash");
 }
 
 function diaryOf(data: string): [from: string, text: string][] {
@@ -1459,7 +1459,7 @@ function lastToolResult(messages: readonly Message[]): { text: unknown; failed: 
 function withTools(...names: string[]): (app: AppConfig) => void {
   return (app) => {
     withTriggers(app);
-    app.tools.enabled_tools = [...app.tools.enabled_tools, ...names];
+    app.tools.enabled = [...app.tools.enabled, ...names];
   };
 }
 
@@ -1547,7 +1547,7 @@ test("the character can list its triggers from a conversation, and is told when 
       failed: false,
     });
   }, (app) => {
-    app.tools.enabled_tools = [...app.tools.enabled_tools, "list_triggers"];
+    app.tools.enabled = [...app.tools.enabled, "list_triggers"];
     app.triggers.enabled = false;
   });
 });
@@ -1594,9 +1594,9 @@ test("the character's push reaches the user's topic once, at normal priority, an
       expect((await result()).text).toContain("message must be a non-empty string");
       expect(pushed).toHaveLength(1);
     }, (app) => {
-      app.tools.enabled_tools = [...app.tools.enabled_tools, "send_push"];
+      app.tools.enabled = [...app.tools.enabled, "send_push"];
       app.notifications.push_topic = "phone";
-      app.notifications.ntfy.url = `http://127.0.0.1:${String(ntfy.port)}`;
+      app.notifications.url = `http://127.0.0.1:${String(ntfy.port)}`;
       app.notifications.token_env = KEY_ENV;
     });
 
@@ -1608,7 +1608,7 @@ test("the character's push reaches the user's topic once, at normal priority, an
       expect(last?.failed).toBe(true);
       expect(String(last?.text)).toContain("push notifications aren't set up: peggy hasn't given Shore a topic to send them to");
       expect(pushed).toHaveLength(1);
-    }, (app) => { app.tools.enabled_tools = [...app.tools.enabled_tools, "send_push"]; });
+    }, (app) => { app.tools.enabled = [...app.tools.enabled, "send_push"]; });
 
     await withCharacter(async ({ script, say, thread }) => {
       await say("hello");
@@ -1621,9 +1621,9 @@ test("the character's push reaches the user's topic once, at normal priority, an
       expect(lastToolResult(await thread("main"))?.failed).toBe(false);
       expect(pushed.map((each) => each.body)).toEqual(["I miss you.", "!"]);
     }, (app) => {
-      app.tools.enabled_tools = [...app.tools.enabled_tools, "send_push"];
+      app.tools.enabled = [...app.tools.enabled, "send_push"];
       app.notifications.push_topic = "phone";
-      app.notifications.ntfy.url = `http://127.0.0.1:${String(ntfy.port)}`;
+      app.notifications.url = `http://127.0.0.1:${String(ntfy.port)}`;
     });
   } finally {
     await ntfy.stop(true);
@@ -2196,7 +2196,7 @@ test("a wake waits for the user to have been quiet in its thread for ten minutes
 
 function handOff(...names: string[]): (app: AppConfig) => void {
   return (app) => {
-    app.tools.enabled_tools = [...app.tools.enabled_tools, "wake_in_thread", ...names];
+    app.tools.enabled = [...app.tools.enabled, "wake_in_thread", ...names];
     app.triggers.max_wake_limit = ConfigDuration.fromSecs(2 * 3600);
     app.triggers.max_idle_wakes = 10;
   };
@@ -2671,7 +2671,7 @@ test("what Shore keeps to undo a wake's file changes goes once that wake is no l
   await wakesIn("log", true, (app) => {
     app.compaction.keep_recent_turns = 0;
     app.compaction.max_turns = 2;
-    app.tools.enabled_tools = [...app.tools.enabled_tools, "bash"];
+    app.tools.enabled = [...app.tools.enabled, "bash"];
   }, async ({ runtime, script, thread }, { wake, openers }) => {
     const turns = workspaceTurnsFor(runtime.config.dirs, "ada", characterWorkspace(runtime.config, "ada"));
     const wrote = async (minute: number): Promise<string> => {
@@ -2839,7 +2839,7 @@ test("the message a wake sends in a side thread is announced, and deleting it pu
     expect(sent?.content).toBe("Part one is written.");
     await command("delete", { refs: sent?.msg_id }, "ring");
     expect(existsSync(join(workspace, "story.md"))).toBe(false);
-  }, (app) => { app.tools.enabled_tools = [...app.tools.enabled_tools, "bash"]; });
+  }, (app) => { app.tools.enabled = [...app.tools.enabled, "bash"]; });
 });
 
 test("a wake in any thread opens with the diary of the last day and the user's status while one is set, and is made with the keys Shore was started with", async () => {
@@ -3094,7 +3094,7 @@ test("writing memory again from an archived segment changes the character's file
     app.compaction.enabled = true;
     app.compaction.keep_recent_turns = 0;
     app.compaction.min_turns = 1;
-    app.tools.enabled_tools = [...app.tools.enabled_tools, "edit"];
+    app.tools.enabled = [...app.tools.enabled, "edit"];
   });
 });
 
@@ -3323,7 +3323,7 @@ test("a wake whose thread the user edits while it runs writes nothing more there
 });
 
 function sealing(app: AppConfig): void {
-  app.tools.enabled_tools = [...app.tools.enabled_tools, "start_sealed_thread", "wake_in_thread", "list_threads", "search_chat_logs"];
+  app.tools.enabled = [...app.tools.enabled, "start_sealed_thread", "wake_in_thread", "list_threads", "search_chat_logs"];
 }
 
 const SEALED_LIST = "[Your sealed threads. Only a wake inside one can see what is in it, and `wake_in_thread` takes you there.\n- `gift` \"Something for you\", opens Saturday 2026-10-31 · 8:00 AM]";
@@ -3595,7 +3595,7 @@ test("the activity heatmap tells the character how many messages the user has se
     expect(runtime.autonomy.activityStats("ada", T0)?.messageCount).toBe(3);
     expect(String(lastToolResult(await thread("main"))?.text).split("\n")[0]).toBe("Activity over 7 days: 3 messages (3 total)");
   }, (app) => {
-    app.tools.enabled_tools = [...app.tools.enabled_tools, "activity_heatmap"];
+    app.tools.enabled = [...app.tools.enabled, "activity_heatmap"];
   });
 });
 

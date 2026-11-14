@@ -99,13 +99,13 @@ export function resolveTool(
 
   if (name.startsWith("ask_")) {
     const agent = name.slice("ask_".length);
-    if (!config.app.subagents.has(agent)) {
+    if (!config.app.subagents.agents.has(agent)) {
       throw invalidRequest(unknownSubagent(agent, config));
     }
     return {
       kind: "subagent",
       schema: compileToolSchema(name, SUBAGENT_INPUT_SCHEMA),
-      enabled: subagentEnabled(cfg, agent),
+      enabled: subagentEnabled(config.app.subagents, agent),
     };
   }
 
@@ -195,11 +195,11 @@ export function describeTool(character: string, ctx: RunToolContext, args: Opera
 
   if (tool.startsWith("ask_")) {
     const agent = tool.slice("ask_".length);
-    const sub = ctx.config.app.subagents.get(agent);
+    const sub = ctx.config.app.subagents.agents.get(agent);
     if (sub === undefined) throw invalidRequest(unknownSubagent(agent, ctx.config));
     return seen(
       "subagent",
-      subagentEnabled(cfg, agent),
+      subagentEnabled(ctx.config.app.subagents, agent),
       renderTemplate(sub.description, vars),
       compileToolSchema(tool, SUBAGENT_INPUT_SCHEMA).schema,
     );
@@ -268,7 +268,7 @@ export async function runTool(
   const exec: ToolExecution = {
     sendDirect: send,
     ctx: { ...toolContext, signal },
-    limits: toolLimitsFrom(ctx.config.app.tools, ctx.config.app.subagents),
+    limits: toolLimitsFrom(ctx.config.app.tools, ctx.config.app.subagents.agents),
     now,
     newMessageId,
     ...(resolved.schema === undefined
@@ -358,7 +358,7 @@ function unknownBuiltin(name: string): string {
 }
 
 function unknownSubagent(agent: string, config: LoadedConfig): string {
-  const configured = [...config.app.subagents.keys()].sort();
+  const configured = [...config.app.subagents.agents.keys()].sort();
   return configured.length === 0
     ? `No sub-agents are configured, so ask_${agent} does not exist`
     : `There is no sub-agent named '${agent}'. Configured: ${configured.join(", ")}`;
