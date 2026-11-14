@@ -45,8 +45,8 @@ function config(twoKeys = true): LoadedConfig {
     ? ProviderRegistry.fromSection({
         anthropic: {
           keys: [
-            { name: "primary", env: PRIMARY, warn_on_fallback: true },
-            { name: "spare", env: SPARE },
+            { name: "primary", api_key_env: PRIMARY, warn_on_fallback: true },
+            { name: "spare", api_key_env: SPARE },
           ],
         },
       })

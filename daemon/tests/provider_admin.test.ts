@@ -5,18 +5,19 @@ import { join } from "node:path";
 import { config, type ConfigContext } from "../src/commands/config.ts";
 import {
   addCredential, addProvider, listProviderStatuses, orderCredentials, providerDetail, removeCredential, removeProvider,
-  selectCredential, setCredentialLimit, testCredential, updateCredential, type ProviderAdminContext,
+  selectCredential, setCredentialLimit, testCredential, updateCredential, updateProvider, type ProviderAdminContext,
 } from "../src/commands/provider_admin.ts";
 import { loadConfig } from "../src/config/loader.ts";
 import { closeLedgers } from "../src/ledger/record.ts";
 import { Ledger } from "../src/ledger/store.ts";
 import { toCredentialsEntry } from "../src/config/providers.ts";
 import { readCandidateEnv, resolveKeyCandidates } from "../src/llm/credentials.ts";
+import { CACHE_VERSION, cachePath, writeCache } from "../src/llm/discovery.ts";
 import { configureSecretStore } from "../src/llm/secret_store.ts";
 import { configureCredentialStanding } from "../src/llm/credential_standing.ts";
 import { openLedger } from "./support/ledger_fixture.ts";
 import { outcomeOf } from "./support/outcome.ts";
-import { restoreTestEnv, setTestEnv } from "./support/env.ts";
+import { restoreTestEnv, setTestEnv, unsetTestEnv } from "./support/env.ts";
 import { testTmp } from "./support/tmp.ts";
 
 afterAll(() => {
@@ -220,6 +221,81 @@ describe("keys", () => {
     await addCredential(w.ctx, { provider: "openrouter", name: "work", secret: SECRET, no_check: true });
     expect(await testCredential(w.ctx, { provider: "openrouter", credential: "work" })).toMatchObject({ ok: false, standing: "invalid" });
     expect(providerDetail(w.ctx, { provider: "openrouter" }).credentials[0]?.standing).toBe("invalid");
+  });
+});
+
+describe("keys read from the daemon's environment", () => {
+  const TOML = [
+    "[providers.deepseek]", "[providers.openrouter]", "[[providers.openrouter.keys]]", 'name = "ci"', 'api_key_env = "SHORE_TEST_UNSET_OPENROUTER_KEY"',
+    "[[providers.openrouter.keys]]", 'name = "saved"', "",
+  ].join("\n");
+
+  test("a provider with no keys of its own says which variable it reads, and a key that reads a variable says to change it there", async () => {
+    const w = await world(TOML);
+    expect(await outcomeOf(updateCredential(w.ctx, { provider: "deepseek", credential: "work", enabled: false }))).toThrow(
+      "deepseek has no keys of its own yet; it reads DEEPSEEK_API_KEY from the daemon's environment. Add one with `shore provider deepseek auth --add`",
+    );
+    expect(await outcomeOf(updateCredential(w.ctx, { provider: "openrouter", credential: "work", enabled: false }))).toThrow(
+      'openrouter has no key named "work"; its keys are ci, saved',
+    );
+    expect(await outcomeOf(updateCredential(w.ctx, { provider: "openrouter", credential: "ci", secret: SECRET, no_check: true }))).toThrow(
+      '"ci" reads SHORE_TEST_UNSET_OPENROUTER_KEY from the daemon\'s environment; change it there, or remove it and add the key itself',
+    );
+    const replaced = await updateCredential(w.ctx, { provider: "openrouter", credential: "saved", secret: SECRET, no_check: true });
+    expect(replaced.provider.credentials.map((credential) => [credential.name, credential.kind, credential.env])).toEqual([["ci", "env", "SHORE_TEST_UNSET_OPENROUTER_KEY"], ["saved", "api_key", null]]);
+  });
+
+  test("testing a key that has nothing behind it says what is missing without asking the provider", async () => {
+    const w = await world(TOML);
+    expect(await testCredential(w.ctx, { provider: "openrouter", credential: "ci" })).toEqual({
+      provider: "openrouter", credential: "ci", ok: false, standing: "missing", detail: "SHORE_TEST_UNSET_OPENROUTER_KEY is not set on the daemon", model_count: null,
+    });
+    expect(await testCredential(w.ctx, { provider: "openrouter", credential: "saved" })).toEqual({
+      provider: "openrouter", credential: "saved", ok: false, standing: "missing", detail: "no key saved on the daemon", model_count: null,
+    });
+    expect(w.seen).toEqual([]);
+  });
+
+  test("a provider's status shows the variable it reads when it has no keys of its own, and what each key is missing", async () => {
+    const w = await world(TOML);
+    const shown = (name: string): unknown[] => providerDetail(w.ctx, { provider: name }).credentials.map((credential) =>
+      [credential.name, credential.kind, credential.enabled, credential.standing, credential.detail, credential.env, credential.in_use, credential.warn_on_fallback]);
+    unsetTestEnv("DEEPSEEK_API_KEY");
+    expect(shown("deepseek")).toEqual([["default", "env", true, "missing", "DEEPSEEK_API_KEY is not set on the daemon", "DEEPSEEK_API_KEY", false, false]]);
+    setTestEnv("DEEPSEEK_API_KEY", "sk-ds-env-0000000000003");
+    expect(shown("deepseek")).toEqual([["default", "env", true, "not_checked", null, "DEEPSEEK_API_KEY", true, false]]);
+    expect(shown("openrouter")).toEqual([
+      ["ci", "env", true, "missing", "SHORE_TEST_UNSET_OPENROUTER_KEY is not set on the daemon", "SHORE_TEST_UNSET_OPENROUTER_KEY", false, false],
+      ["saved", "api_key", true, "missing", "no key saved on the daemon", null, false, false],
+    ]);
+  });
+
+  test("removing a provider's last key says which variable it reads from then on", async () => {
+    const w = await world('[providers.openrouter]\n[[providers.openrouter.keys]]\nname = "a"\napi_key_env = "SHORE_TEST_KEY_A"\n[[providers.openrouter.keys]]\nname = "b"\napi_key_env = "SHORE_TEST_KEY_B"\n');
+    expect(removeCredential(w.ctx, { provider: "openrouter", credential: "a" }).message).toBe('Removed key "a" from openrouter');
+    expect(removeCredential(w.ctx, { provider: "openrouter", credential: "b" }).message)
+      .toBe('Removed key "b" from openrouter; openrouter now reads OPENROUTER_API_KEY from the daemon\'s environment');
+  });
+
+  test("a provider's status counts the models it has found and how many of them ignore_models hides", async () => {
+    const w = await world('[providers.openrouter]\ndiscover = true\nignore_models = ["tucked-*"]\n[providers.deepseek]\n');
+    await writeCache(cachePath(w.session.config.dirs.cache, "openrouter"), {
+      version: CACHE_VERSION, provider_key: "openrouter", fetched_at: "2026-11-12T10:00:00Z",
+      models: ["open-a", "open-b", "tucked-away"].map((id) => ({ provider_key: "openrouter", model_id: id, sdk: "openai", discovered_at: "2026-11-12T10:00:00Z" })),
+    });
+    expect(providerDetail(w.ctx, { provider: "openrouter" })).toMatchObject({
+      discovery_enabled: true, ignore_models: ["tucked-*"], cache: { present: true, models: 3, visible: 2, hidden: 1, fetched_at: "2026-11-12T10:00:00Z" },
+    });
+    expect(providerDetail(w.ctx, { provider: "deepseek" })).toMatchObject({
+      discovery_enabled: false, ignore_models: [], cache: { present: false, models: 0, visible: 0, hidden: 0, fetched_at: null },
+    });
+  });
+
+  test("turning no_auth off says keys are needed again and takes the line out of the file", async () => {
+    const w = await world('[providers.local]\nsdk = "openai"\nbase_url = "http://127.0.0.1:9/v1"\nno_auth = true\n');
+    expect(updateProvider(w.ctx, { provider: "local", base_url: "http://127.0.0.1:8/v1" }).message).toBe("local: base url http://127.0.0.1:8/v1");
+    expect(updateProvider(w.ctx, { provider: "local", no_auth: false }).message).toBe("local: keys needed again");
+    expect(await readFile(w.configPath, "utf8")).toBe('[providers.local]\nsdk = "openai"\nbase_url = "http://127.0.0.1:8/v1"\n');
   });
 });
 

@@ -2,8 +2,6 @@
 export type ConfigTable = Record<string, unknown>;
 export type ConfigPath = readonly string[];
 
-export const CONFIG_SECTIONS = ["daemon", "chat", "image", "images", "providers", "triggers", "presence", "marks", "compaction", "dreaming", "tools", "subagents", "budgets", "plan_limits", "notifications", "mcp", "matrix", "usage"] as const;
-
 export interface ConfigField {
   internal: ConfigPath;
   canonical: ConfigPath;
@@ -12,12 +10,6 @@ export interface ConfigField {
 const field = (internal: string, canonical: string): ConfigField => ({
   internal: internal.split("."), canonical: canonical.split("."),
 });
-
-const CONFIG_FIELDS: readonly ConfigField[] = [
-  field("providers.*.discovery.enabled", "providers.*.discover"),
-  field("providers.*.discovery.ignore", "providers.*.ignore_models"),
-  field("providers.*.keys.*.env", "providers.*.keys.*.api_key_env"),
-];
 
 const SETTING_FIELDS: readonly ConfigField[] = Object.entries({
   budget_tokens: "reasoning_budget_tokens",
@@ -138,16 +130,10 @@ export function normalizeSettings(input: ConfigTable, source = "model settings")
 
 export function normalizeConfigSource(input: ConfigTable, source = "config"): ConfigTable {
   const table = structuredClone(input);
-  toInternal(table, CONFIG_FIELDS);
   const providers = isConfigTable(table.providers) ? table.providers : {};
   for (const [name, provider] of Object.entries(providers)) {
     if (!isConfigTable(provider)) continue;
-    const normalized = normalizeSettings(provider, `${source}: providers.${name}`);
-    providers[name] = normalized;
-    for (const key of MODEL_FIELDS) if (normalized[key] !== undefined) {
-      putAt(normalized, ["defaults", key], normalized[key]);
-      delete normalized[key];
-    }
+    providers[name] = normalizeSettings(provider, `${source}: providers.${name}`);
   }
   for (const section of ["chat", "image"]) {
     const entries = table[section];
@@ -160,33 +146,11 @@ export function normalizeConfigSource(input: ConfigTable, source = "config"): Co
   return table;
 }
 
-export function canonicalConfigPath(path: ConfigPath): string[] {
-  let result = [...path];
-  for (const rule of CONFIG_FIELDS) {
-    const mapped = translatePath(path, rule.internal, rule.canonical);
-    if (mapped !== undefined) { result = mapped; break; }
-  }
-  if (result[0] === "providers" && result[2] === "defaults") result.splice(2, 1);
-  const settingIndex = result[0] === "providers" ? 2 : result[0] === "chat" && result[1]?.includes(":") ? 2 : undefined;
-  if (settingIndex !== undefined && result[settingIndex] !== undefined) result[settingIndex] = canonicalSettingKey(result[settingIndex]);
-  return result;
-}
-
 export function publicConfig(input: ConfigTable): ConfigTable {
   const out = structuredClone(input);
-  for (const rule of CONFIG_FIELDS) for (const path of matchingPaths(input, rule.internal)) {
-    const original = valueAt(out, path);
-    if (original === undefined) continue;
-    const target = translatePath(path, rule.internal, rule.canonical) as string[];
-    removeAt(out, path);
-    const value = structuredClone(original);
-    const existing = valueAt(out, target);
-    putAt(out, target, isConfigTable(value) && isConfigTable(existing) ? { ...value, ...existing } : value);
-  }
   const providers = isConfigTable(out.providers) ? out.providers : {};
   for (const [name, provider] of Object.entries(providers)) {
     if (!isConfigTable(provider)) continue;
-    if (isConfigTable(provider.defaults)) { Object.assign(provider, provider.defaults); delete provider.defaults; }
     providers[name] = publicSettings(provider);
   }
   for (const section of ["chat", "image"]) {

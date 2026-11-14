@@ -62,7 +62,7 @@ export async function refreshOne(
   const entry = config.providers.get(provider);
   if (entry === undefined) throw notFound(`provider ${JSON.stringify(provider)} is not configured`);
   if (!entry.enabled) throw invalidRequest(`provider ${JSON.stringify(provider)} is disabled`);
-  if (!entry.discovery.enabled) {
+  if (!entry.discover) {
     throw invalidRequest(`provider ${JSON.stringify(provider)} has discovery disabled`);
   }
 
@@ -164,7 +164,7 @@ export async function refreshAllProviderModels(ctx: ProvidersContext): Promise<O
       skipped.push({ provider: name, reason: "disabled" });
       continue;
     }
-    if (!entry.discovery.enabled) {
+    if (!entry.discover) {
       skipped.push({ provider: name, reason: "discovery disabled" });
       continue;
     }
@@ -226,7 +226,7 @@ export function listProviderModels(ctx: ProvidersContext, args: OperationInput<"
   const discovered: ProviderDiscoveredModel[] = [];
   const hidden: ProviderDiscoveredModel[] = [];
   for (const m of cache?.models ?? []) {
-    const visible = entry === undefined || isVisible(entry.discovery, m.model_id);
+    const visible = entry === undefined || isVisible(entry.ignoreModels, m.model_id);
     if (visible || includeHidden) discovered.push(discoveredToJson(m, learned));
     else hidden.push(discoveredToJson(m, learned));
   }
