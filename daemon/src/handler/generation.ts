@@ -633,8 +633,8 @@ async function streamTurn(
     tools: (call, sink) => {
       send = sink;
       intermediate = [];
-      if (toolCtx !== undefined && resolved.maxToolIterations !== undefined) {
-        call.max_tool_iterations = resolved.maxToolIterations;
+      if (toolCtx !== undefined && resolved.maxToolRounds !== undefined) {
+        call.max_tool_rounds = resolved.maxToolRounds;
       }
       const phase = toolCtx === undefined ? undefined : toolPhase({
         sendDirect: sink,
@@ -736,7 +736,7 @@ function toolLimits(config: LoadedConfig): ToolLimitsView {
 export function thinkingEnabled(opts: ProviderOptions | undefined): boolean {
   if (opts === undefined) return false;
   if (opts.thinking_enabled === false) return false;
-  return (opts.budget_tokens !== undefined && opts.budget_tokens > 0) ||
+  return (opts.reasoning_budget_tokens !== undefined && opts.reasoning_budget_tokens > 0) ||
     opts.reasoning_effort !== undefined;
 }
 

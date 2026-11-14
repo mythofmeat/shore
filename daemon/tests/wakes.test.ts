@@ -69,6 +69,7 @@ interface Script {
   endHeld?: { started: PromiseWithResolvers<void>; release: PromiseWithResolvers<void> } | undefined;
   beatTool?: { name: string; input: Record<string, unknown> } | undefined;
   replyTool?: { name: string; input: Record<string, unknown> } | undefined;
+  compactionRounds?: (number | undefined)[];
 }
 
 function scriptedProvider(script: Script): SidecarProvider {
@@ -89,6 +90,7 @@ function scriptedProvider(script: Script): SidecarProvider {
       script.calls.push(request.context?.call_type ?? "");
       if (request.context?.call_type.startsWith("heartbeat") !== true) {
         if (request.context?.call_type === "message") script.replies.push(structuredClone(request));
+        if (request.context?.call_type === "compaction") script.compactionRounds?.push(request.max_tool_rounds);
         const held = script.held;
         if (held !== undefined) {
           script.held = undefined;
@@ -3071,12 +3073,14 @@ test("a wake started by hand runs at the next look, one for a dormant character 
   });
 });
 
-test("writing memory again from an archived segment changes the character's files for real, and leaves the conversation as it is", async () => {
+test("writing memory again from an archived segment changes the character's files for real, leaves the conversation as it is, and like any compaction is held to the model's max_tool_rounds", async () => {
   await withCharacter(async ({ script, workspace, data, say, thread, command }) => {
     await writeFile(join(workspace, "MEMORY.md"), "nothing yet\n");
     await say("hello");
     at(1);
     await say("the keeper is called Mara");
+    script.compactionRounds = [];
+    expect(await command("set_model_setting", { key: "max_tool_rounds", value: 6, scope: "global" })).toMatchObject({ type: "command_output", data: { changed: true } });
     expect(await command("compact", {})).toMatchObject({ type: "command_output", data: { status: "compacted", compacted_turns: 2 } });
     await queuedCompactionsEnded(data, "ada");
     at(2);
@@ -3090,6 +3094,7 @@ test("writing memory again from an archived segment changes the character's file
     });
     expect(await Bun.file(join(workspace, "MEMORY.md")).text()).toBe("The keeper is Mara.\n");
     expect(await thread("main")).toEqual(before);
+    expect(script.compactionRounds).toEqual([6, 6, 6]);
   }, (app) => {
     app.compaction.enabled = true;
     app.compaction.keep_recent_turns = 0;

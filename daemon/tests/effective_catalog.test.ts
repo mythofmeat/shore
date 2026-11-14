@@ -1,10 +1,11 @@
-import { expect, test } from "bun:test";
+import { expect, spyOn, test } from "bun:test";
 import { mkdtemp, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 
 import { findEffectiveModel, listEffectiveModels } from "../src/config/effective_catalog.ts";
 import { loadConfig } from "../src/config/loader.ts";
 import { CACHE_VERSION, cachePath, writeCache } from "../src/llm/discovery.ts";
+import { shoreLog } from "../src/log.ts";
 import { testTmp } from "./support/tmp.ts";
 
 async function catalog(toml: string[], discovered: Record<string, string[]>): Promise<{
@@ -75,4 +76,42 @@ test("a model asked for by id alone is looked for among what each enabled provid
   expect(() => find("tucked-away")).toThrow('model "tucked-away" is hidden by providers.openrouter.ignore_models');
   expect(find("tucked-away", true)).toBe("openrouter:tucked-away");
   for (const unseen of ["nano-a", "moon-a", "nowhere"]) expect(() => find(unseen)).toThrow(`model ${JSON.stringify(unseen)} not found in static catalog or discovered models`);
+});
+
+test("a model found on a Z.ai provider keeps its reasoning between turns unless the provider's table says to clear it", async () => {
+  const zai = async (setting: string[]): Promise<unknown> => {
+    const root = await mkdtemp(testTmp("shore-effective-zai-"));
+    await writeFile(join(root, "config.toml"), ["[providers.zai-api]", 'api_key_env = "K"', "discover = true", ...setting, ""].join("\n"));
+    const config = loadConfig(join(root, "config.toml"), {
+      env: { SHORE_CONFIG_DIR: root, XDG_DATA_HOME: join(root, "data"), XDG_CACHE_HOME: join(root, "cache"), XDG_RUNTIME_DIR: join(root, "run") },
+      onWarn: () => {},
+    });
+    return findEffectiveModel(config, config.dirs.cache, "zai-api:glm-found", false).zaiClearReasoning;
+  };
+  expect([await zai([]), await zai(["zai_clear_reasoning = true"])]).toEqual([false, true]);
+});
+
+test("a reasoning budget from a provider's table is left off a found model that the provider says does not think, and said so", async () => {
+  const root = await mkdtemp(testTmp("shore-effective-budget-"));
+  await writeFile(join(root, "config.toml"), ["[providers.anthropic]", 'api_key_env = "K"', "discover = true", "reasoning_budget_tokens = 2048", ""].join("\n"));
+  const config = loadConfig(join(root, "config.toml"), {
+    env: { SHORE_CONFIG_DIR: root, XDG_DATA_HOME: join(root, "data"), XDG_CACHE_HOME: join(root, "cache"), XDG_RUNTIME_DIR: join(root, "run") },
+    onWarn: () => {},
+  });
+  const found = (id: string, thinks?: boolean) => ({
+    provider_key: "anthropic", model_id: id, sdk: "anthropic", discovered_at: "2026-11-12T10:00:00Z", ...(thinks === undefined ? {} : { support: { thinking: { enabled: thinks } } }),
+  });
+  await writeCache(cachePath(config.dirs.cache, "anthropic"), {
+    version: CACHE_VERSION, provider_key: "anthropic", fetched_at: "2026-11-12T10:00:00Z", models: [found("thinks", true), found("plain", false), found("unsaid")],
+  });
+  const warned = spyOn(shoreLog, "warn").mockImplementation(() => {});
+  try {
+    const budget = (id: string): number | undefined => findEffectiveModel(config, config.dirs.cache, `anthropic:${id}`, false).reasoningBudgetTokens;
+    expect([budget("thinks"), budget("plain"), budget("unsaid")]).toEqual([2048, undefined, 2048]);
+    expect(warned.mock.calls.map((call) => String(call[0]))).toEqual([
+      "shore: dropping `reasoning_budget_tokens` for model plain (sdk anthropic): the provider reports that this model does not accept it",
+    ]);
+  } finally {
+    warned.mockRestore();
+  }
 });

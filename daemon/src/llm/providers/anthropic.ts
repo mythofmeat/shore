@@ -276,7 +276,7 @@ export function buildAnthropicPlan(req: SidecarRequest): {
   if (thinking) params.thinking = thinking;
   if (outputConfig) params.output_config = outputConfig;
 
-  const orProvider = opts.openrouter_provider;
+  const orProvider = opts.openrouter_routing;
   if (orProvider && typeof orProvider === "object") {
     const provider: Record<string, unknown> = { ...(orProvider as Record<string, unknown>) };
     if ("order" in provider && !("allow_fallbacks" in provider)) {
@@ -619,7 +619,7 @@ export function buildThinkingParams(
     : undefined;
   const wantsAdaptive = effort === "adaptive" || namedEffort !== undefined;
 
-  const budget = opts.budget_tokens;
+  const budget = opts.reasoning_budget_tokens;
 
   if (budget !== undefined) {
     const b = clampEnabledBudget(budget, maxTokens);

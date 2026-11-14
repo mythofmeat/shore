@@ -11,7 +11,7 @@ function req(over: Partial<SidecarRequest> = {}): SidecarRequest {
     api_key: "k",
     messages: [],
     max_tokens: 64,
-    replay_prior_thinking: "all",
+    reasoning_replay: "all",
     ...over,
   };
 }
@@ -125,7 +125,7 @@ describe("prior-thinking replay setting", () => {
 
   test("the same history always projects to the same bytes", () => {
     for (const mode of ["all", "none"] as const) {
-      const r = req({ messages: history, replay_prior_thinking: mode });
+      const r = req({ messages: history, reasoning_replay: mode });
       expect(JSON.stringify(replayableMessages(r))).toEqual(
         JSON.stringify(replayableMessages(r)),
       );
@@ -134,11 +134,11 @@ describe("prior-thinking replay setting", () => {
 
   test("a request's prefix is stable as turns are appended", () => {
     for (const mode of ["all", "none"] as const) {
-      const prev = replayableMessages(req({ messages: history, replay_prior_thinking: mode }));
+      const prev = replayableMessages(req({ messages: history, reasoning_replay: mode }));
       const next = replayableMessages(
         req({
           messages: [...history, { role: "assistant", content: [{ type: "text", text: "a2" }] }],
-          replay_prior_thinking: mode,
+          reasoning_replay: mode,
         }),
       );
       expect(next.slice(0, prev.length)).toEqual(prev);
@@ -195,7 +195,7 @@ describe("what replay keeps and counts", () => {
     const foreign = thinkingTurn(thinking({ signature: "sig" }), { provider_key: "zai", model: "glm" });
     const own = thinkingTurn(thinking({ signature: "sig" }), { provider_key: "anthropic", model: "claude-opus-4-8" });
     expect(replayableMessagesWithDrops(req({ messages: [foreign, foreign] })).drops).toEqual({ strippedByPolicy: 0, unportable: 2 });
-    expect(replayableMessagesWithDrops(req({ replay_prior_thinking: "none", messages: [own] })).drops).toEqual({ strippedByPolicy: 1, unportable: 0 });
+    expect(replayableMessagesWithDrops(req({ reasoning_replay: "none", messages: [own] })).drops).toEqual({ strippedByPolicy: 1, unportable: 0 });
     expect(replayableMessagesWithDrops(req({ messages: [own] })).drops).toEqual({ strippedByPolicy: 0, unportable: 0 });
   });
 
@@ -203,7 +203,7 @@ describe("what replay keeps and counts", () => {
     const plain = thinkingTurn(thinking({ signature: "sig" }), { provider_key: "anthropic", model: "claude-opus-4-8" });
     const calling: WireMessage = { role: "assistant", content: [thinking({ signature: "sig" }) as never, { type: "tool_use", id: "t1", name: "read", input: {} }], provider_key: "anthropic", model: "claude-opus-4-8" };
     const user: WireMessage = { role: "user", content: [{ type: "text", text: "hi" }] };
-    expect(types(replayableMessages(req({ replay_prior_thinking: "none", messages: [user, plain, calling] })))).toEqual([["text"], ["text"], ["thinking", "tool_use"]]);
+    expect(types(replayableMessages(req({ reasoning_replay: "none", messages: [user, plain, calling] })))).toEqual([["text"], ["text"], ["thinking", "tool_use"]]);
   });
 
   test("a turn's transient tail counts only the tail blocks that are kept, and a turn without one gets none", () => {

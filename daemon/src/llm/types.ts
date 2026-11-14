@@ -43,6 +43,12 @@ export interface WireMessage {
 }
 
 export type ThinkingReplay = "all" | "none";
+export const GEMINI_THINKING_MODES = ["auto", "budget", "level"] as const;
+export type GeminiThinkingMode = (typeof GEMINI_THINKING_MODES)[number];
+
+export function isGeminiThinkingMode(value: unknown): value is GeminiThinkingMode {
+  return (GEMINI_THINKING_MODES as readonly unknown[]).includes(value);
+}
 
 export function toolResultText(content: string | ContentBlock[]): string {
   if (typeof content === "string") return content;
@@ -81,11 +87,11 @@ export interface ToolDefinition {
 export interface ProviderOptions {
   reasoning_effort?: string;
   thinking_enabled?: boolean;
-  budget_tokens?: number;
+  reasoning_budget_tokens?: number;
   cache_ttl?: string;
-  openrouter_provider?: unknown;
-  gemini_generation?: number;
-  zai_clear_thinking?: boolean;
+  openrouter_routing?: unknown;
+  gemini_thinking_mode?: GeminiThinkingMode;
+  zai_clear_reasoning?: boolean;
   thinking_display?: "summarized" | "omitted";
 }
 
@@ -123,9 +129,9 @@ export interface SidecarRequest {
   top_p?: number;
   provider_options?: ProviderOptions;
   provider_key?: string;
-  replay_prior_thinking: ThinkingReplay;
+  reasoning_replay: ThinkingReplay;
   context?: CallContext;
-  max_tool_iterations?: number;
+  max_tool_rounds?: number;
 }
 
 export interface Usage {

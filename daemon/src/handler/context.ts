@@ -8,7 +8,7 @@ import { resolveDisplayName } from "../config/app.ts";
 import { anyToolEnabled } from "../config/app.ts";
 import { SOUL_FILE, TOOLS_FILE, USER_FILE } from "../config/dirs.ts";
 import {
-  resolvedReplayPriorThinking,
+  resolvedReasoningReplay,
   toRequestModel,
   type ResolvedModel,
 } from "../config/models.ts";
@@ -237,7 +237,7 @@ export async function buildChatShapeRequestFromDisk(
         messages: prepared.llmMessages,
         system: prepared.system,
         ...(prepared.toolDefs === undefined ? {} : { tools: prepared.toolDefs }),
-        replay: resolvedReplayPriorThinking(
+        replay: resolvedReasoningReplay(
           resolved,
           config.app.chat.reasoning_replay,
         ),

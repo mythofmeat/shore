@@ -3,7 +3,7 @@ import { MODEL_FIELDS } from "./surface.ts";
 
 import { settingApplicability, validateSetting } from "../llm/settings.ts";
 import type { DiscoveredModelSupport } from "../llm/discovery.ts";
-import { SDK_VARIANTS, sdkFromWire, type Sdk } from "../llm/types.ts";
+import { isGeminiThinkingMode, SDK_VARIANTS, sdkFromWire, type GeminiThinkingMode, type Sdk } from "../llm/types.ts";
 import type { ParseResult } from "./duration.ts";
 import type { CacheKeepaliveSetting } from "./keepalive.ts";
 import { DEFAULT_MAX_CONTEXT_TOKENS, DEFAULT_MAX_OUTPUT_TOKENS } from "./model_defaults.ts";
@@ -50,8 +50,8 @@ export function sdkUsesAnthropicPromptCache(sdk: Sdk): boolean {
 }
 
 export interface ModelConfigFields {
-  replayPriorThinking?: ThinkingReplay;
-  maxToolIterations?: number;
+  reasoningReplay?: ThinkingReplay;
+  maxToolRounds?: number;
   sdk?: Sdk;
   apiKeyEnv?: string;
   baseUrl?: string;
@@ -60,18 +60,18 @@ export interface ModelConfigFields {
   temperature?: number;
   topP?: number;
   reasoningEffort?: string;
-  budgetTokens?: number;
+  reasoningBudgetTokens?: number;
   cacheTtl?: string;
-  openrouterProvider?: unknown;
-  geminiGeneration?: number;
-  zaiClearThinking?: boolean;
+  openrouterRouting?: unknown;
+  geminiThinkingMode?: GeminiThinkingMode;
+  zaiClearReasoning?: boolean;
   supportsImages?: boolean;
   systemPrompt?: string;
 }
 
 const FIELD_KEYS = [
-  "replayPriorThinking",
-  "maxToolIterations",
+  "reasoningReplay",
+  "maxToolRounds",
   "sdk",
   "apiKeyEnv",
   "baseUrl",
@@ -80,11 +80,11 @@ const FIELD_KEYS = [
   "temperature",
   "topP",
   "reasoningEffort",
-  "budgetTokens",
+  "reasoningBudgetTokens",
   "cacheTtl",
-  "openrouterProvider",
-  "geminiGeneration",
-  "zaiClearThinking",
+  "openrouterRouting",
+  "geminiThinkingMode",
+  "zaiClearReasoning",
   "supportsImages",
   "systemPrompt",
 ] as const satisfies readonly (keyof ModelConfigFields)[];
@@ -130,26 +130,26 @@ export interface ResolvedModel {
   temperature?: number;
   topP?: number;
   reasoningEffort?: string;
-  budgetTokens?: number;
+  reasoningBudgetTokens?: number;
   cacheTtl?: string;
   cacheKeepalive?: CacheKeepaliveSetting;
   cacheKeepalivePings?: number;
-  openrouterProvider?: unknown;
-  geminiGeneration?: number;
-  zaiClearThinking?: boolean;
-  replayPriorThinking?: ThinkingReplay;
-  maxToolIterations?: number;
+  openrouterRouting?: unknown;
+  geminiThinkingMode?: GeminiThinkingMode;
+  zaiClearReasoning?: boolean;
+  reasoningReplay?: ThinkingReplay;
+  maxToolRounds?: number;
   support?: DiscoveredModelSupport;
   discoveredSupportsImages?: boolean;
   supportsImages?: boolean;
   systemPrompt?: string;
 }
 
-export function resolvedReplayPriorThinking(
+export function resolvedReasoningReplay(
   model: ResolvedModel,
   globalDefault: ThinkingReplay,
 ): ThinkingReplay {
-  return model.replayPriorThinking ?? globalDefault;
+  return model.reasoningReplay ?? globalDefault;
 }
 
 export function toRequestModel(model: ResolvedModel): RequestResolvedModel {
@@ -167,14 +167,14 @@ export function toRequestModel(model: ResolvedModel): RequestResolvedModel {
     ...opt("temperature", model.temperature),
     ...opt("top_p", model.topP),
     ...opt("reasoning_effort", model.reasoningEffort),
-    ...opt("budget_tokens", model.budgetTokens),
+    ...opt("reasoning_budget_tokens", model.reasoningBudgetTokens),
     ...opt("cache_ttl", model.cacheTtl),
     ...opt("cache_keepalive", keepaliveString(model.cacheKeepalive)),
     ...opt("cache_keepalive_pings", model.cacheKeepalivePings),
-    ...opt("openrouter_provider", model.openrouterProvider),
-    ...opt("gemini_generation", model.geminiGeneration),
-    ...opt("zai_clear_thinking", model.zaiClearThinking),
-    ...opt("max_tool_iterations", model.maxToolIterations),
+    ...opt("openrouter_routing", model.openrouterRouting),
+    ...opt("gemini_thinking_mode", model.geminiThinkingMode),
+    ...opt("zai_clear_reasoning", model.zaiClearReasoning),
+    ...opt("max_tool_rounds", model.maxToolRounds),
     ...opt("supports_images", effectiveSupportsImages(model)),
   };
 }
@@ -216,7 +216,7 @@ export function resolvedModelFromParts(
 
   stripRejectedSampler(sdk, modelId, "temperature", merged, "temperature", undefined, support);
   stripRejectedSampler(sdk, modelId, "top_p", merged, "topP", undefined, support);
-  stripRejectedSampler(sdk, modelId, "budget_tokens", merged, "budgetTokens", undefined, support);
+  stripRejectedSampler(sdk, modelId, "reasoning_budget_tokens", merged, "reasoningBudgetTokens", undefined, support);
   stripRejectedSampler(sdk, modelId, "reasoning_effort", merged, "reasoningEffort", undefined, support);
 
   warnIgnoredFields(sdk, modelId, merged, support);
@@ -236,16 +236,16 @@ export function resolvedModelFromParts(
   assignIfPresent(resolved, "temperature", merged.temperature);
   assignIfPresent(resolved, "topP", merged.topP);
   assignIfPresent(resolved, "reasoningEffort", merged.reasoningEffort);
-  assignIfPresent(resolved, "budgetTokens", merged.budgetTokens);
+  assignIfPresent(resolved, "reasoningBudgetTokens", merged.reasoningBudgetTokens);
   assignIfPresent(resolved, "cacheTtl", merged.cacheTtl);
   assignIfPresent(resolved, "support", support);
   assignIfPresent(resolved, "discoveredSupportsImages", discoveredSupportsImages);
-  assignIfPresent(resolved, "openrouterProvider", merged.openrouterProvider);
-  assignIfPresent(resolved, "geminiGeneration", merged.geminiGeneration);
-  assignIfPresent(resolved, "zaiClearThinking", merged.zaiClearThinking);
+  assignIfPresent(resolved, "openrouterRouting", merged.openrouterRouting);
+  assignIfPresent(resolved, "geminiThinkingMode", merged.geminiThinkingMode);
+  assignIfPresent(resolved, "zaiClearReasoning", merged.zaiClearReasoning);
   assignIfPresent(resolved, "supportsImages", merged.supportsImages);
-  assignIfPresent(resolved, "replayPriorThinking", merged.replayPriorThinking);
-  assignIfPresent(resolved, "maxToolIterations", merged.maxToolIterations);
+  assignIfPresent(resolved, "reasoningReplay", merged.reasoningReplay);
+  assignIfPresent(resolved, "maxToolRounds", merged.maxToolRounds);
   assignIfPresent(resolved, "systemPrompt", merged.systemPrompt);
   return resolved;
 }
@@ -263,7 +263,7 @@ function stripRejectedSampler(
   modelId: string,
   settingKey: string,
   fields: ModelConfigFields,
-  key: "temperature" | "topP" | "budgetTokens" | "reasoningEffort",
+  key: "temperature" | "topP" | "reasoningBudgetTokens" | "reasoningEffort",
   silentDefault: number | string | undefined,
   support: DiscoveredModelSupport | undefined,
 ): void {
@@ -290,9 +290,9 @@ function warnIgnoredFields(
 ): void {
   const checks: readonly [string, boolean][] = [
     ["cache_ttl", fields.cacheTtl !== undefined],
-    ["openrouter_provider", fields.openrouterProvider !== undefined],
-    ["gemini_generation", fields.geminiGeneration !== undefined],
-    ["zai_clear_thinking", fields.zaiClearThinking !== undefined],
+    ["openrouter_routing", fields.openrouterRouting !== undefined],
+    ["gemini_thinking_mode", fields.geminiThinkingMode !== undefined],
+    ["zai_clear_reasoning", fields.zaiClearReasoning !== undefined],
   ];
   for (const [field, present] of checks) {
     if (present && settingApplicability(sdk, field, support, modelId) === "ignored") {
@@ -581,7 +581,7 @@ export function hardcodedProviderDefaults(providerKey: string): ProviderConfig {
           sdk: "zai",
           apiKeyEnv: "ZAI_API_KEY",
           baseUrl: zaiBaseUrl(providerKey),
-          zaiClearThinking: false,
+          zaiClearReasoning: false,
         },
       };
     case NANOGPT_PROVIDER:
@@ -714,9 +714,8 @@ export function readModelConfigFields(table: Record<string, unknown>): ParseResu
   const u32s: [keyof ModelConfigFields, string][] = [
     ["maxContextTokens", "max_context_tokens"],
     ["maxOutputTokens", "max_output_tokens"],
-    ["budgetTokens", "budget_tokens"],
-    ["geminiGeneration", "gemini_generation"],
-    ["maxToolIterations", "max_tool_iterations"],
+    ["reasoningBudgetTokens", "reasoning_budget_tokens"],
+    ["maxToolRounds", "max_tool_rounds"],
   ];
   for (const [field, key] of u32s) {
     const read = readU32(table, key);
@@ -735,7 +734,7 @@ export function readModelConfigFields(table: Record<string, unknown>): ParseResu
   }
 
   const bools: [keyof ModelConfigFields, string][] = [
-    ["zaiClearThinking", "zai_clear_thinking"],
+    ["zaiClearReasoning", "zai_clear_reasoning"],
     ["supportsImages", "supports_images"],
   ];
   for (const [field, key] of bools) {
@@ -744,15 +743,20 @@ export function readModelConfigFields(table: Record<string, unknown>): ParseResu
     if (read.ok !== undefined) (out as Record<string, unknown>)[field] = read.ok;
   }
 
-  if (table["openrouter_provider"] !== undefined) {
-    out.openrouterProvider = table["openrouter_provider"];
+  if (table["openrouter_routing"] !== undefined) {
+    out.openrouterRouting = table["openrouter_routing"];
   }
-  if (out.maxToolIterations === 0) return { err: "max_tool_rounds must be positive" };
-  if (table.replay_prior_thinking !== undefined) {
-    const replay = table.replay_prior_thinking;
-    if (replay === "all") out.replayPriorThinking = "all";
-    else if (replay === "none") out.replayPriorThinking = "none";
+  if (out.maxToolRounds === 0) return { err: "max_tool_rounds must be positive" };
+  if (table.reasoning_replay !== undefined) {
+    const replay = table.reasoning_replay;
+    if (replay === "all") out.reasoningReplay = "all";
+    else if (replay === "none") out.reasoningReplay = "none";
     else return { err: "reasoning_replay must be all or none" };
+  }
+  const mode = table["gemini_thinking_mode"];
+  if (mode !== undefined) {
+    if (!isGeminiThinkingMode(mode)) return { err: "gemini_thinking_mode must be auto, budget, or level" };
+    out.geminiThinkingMode = mode;
   }
 
   return { ok: out };
@@ -810,15 +814,15 @@ export function resolvedModelToWire(model: ResolvedModel): import("../protocol/M
     temperature: or(model.temperature),
     top_p: or(model.topP),
     reasoning_effort: or(model.reasoningEffort),
-    budget_tokens: or(model.budgetTokens),
+    reasoning_budget_tokens: or(model.reasoningBudgetTokens),
     cache_ttl: or(model.cacheTtl),
     cache_keepalive: or(keepaliveString(model.cacheKeepalive)),
     cache_keepalive_pings: or(model.cacheKeepalivePings),
-    openrouter_provider: or(model.openrouterProvider),
-    gemini_generation: or(model.geminiGeneration),
-    zai_clear_thinking: or(model.zaiClearThinking),
-    replay_prior_thinking: or(model.replayPriorThinking),
-    max_tool_iterations: or(model.maxToolIterations),
+    openrouter_routing: or(model.openrouterRouting),
+    gemini_thinking_mode: or(model.geminiThinkingMode),
+    zai_clear_reasoning: or(model.zaiClearReasoning),
+    reasoning_replay: or(model.reasoningReplay),
+    max_tool_rounds: or(model.maxToolRounds),
     supports_images: or(effectiveSupportsImages(model)),
   };
 }

@@ -43,7 +43,7 @@ async function loadedConfig(withModel: boolean, tools: string[] = []): Promise<L
       apiKeyEnv: MODEL_KEY_ENV,
       maxContextTokens: 200_000,
       maxOutputTokens: 4096,
-      maxToolIterations: 4,
+      maxToolRounds: 4,
     });
     app.chat.model = "fixture";
   }
@@ -306,9 +306,11 @@ test("a reply finishes without waiting for the compaction it starts", async () =
   pass.resolve();
 });
 
-test("a reply is offered Shore's tools that are on and the MCP tools the registry hands over, and with neither the request carries no tools and nothing is set up for them", async () => {
-  const offered = async (tools: string[], mcp: { name: string; description: string; input_schema: Record<string, unknown> }[]): Promise<{ tools: string[] | undefined; setUps: number }> => {
+test("a reply is offered Shore's tools that are on and the MCP tools the registry hands over, held to the model's max_tool_rounds, and with neither the request carries no tools and nothing is set up for them", async () => {
+  const offered = async (tools: string[], mcp: { name: string; description: string; input_schema: Record<string, unknown> }[], capped = true): Promise<{ tools: string[] | undefined; setUps: number; rounds: number | undefined }> => {
     const config = await loadedConfig(true, tools);
+    const model = config.models.chat.get("chat.fixture");
+    if (model !== undefined && !capped) delete model.maxToolRounds;
     setTestEnv(MODEL_KEY_ENV, "fixture-key");
     const workspace = join(config.dirs.config, "characters", "ada", "workspace");
     await mkdir(workspace, { recursive: true });
@@ -340,11 +342,12 @@ test("a reply is offered Shore's tools that are on and the MCP tools the registr
       send: async () => {},
       signal: new AbortController().signal,
     });
-    return { tools: seen[0]?.tools?.map((tool) => tool.name), setUps };
+    return { tools: seen[0]?.tools?.map((tool) => tool.name), setUps, rounds: seen[0]?.max_tool_rounds };
   };
   const find = { name: "mcp__search__find", description: "finds", input_schema: { type: "object", properties: {} } };
-  expect(await offered([], [])).toEqual({ tools: undefined, setUps: 0 });
-  expect(await offered([], [find])).toEqual({ tools: ["mcp__search__find"], setUps: 1 });
-  expect(await offered(["read"], [])).toEqual({ tools: ["read"], setUps: 1 });
-  expect(await offered(["read"], [find])).toEqual({ tools: ["read", "mcp__search__find"], setUps: 1 });
+  expect(await offered([], [])).toEqual({ tools: undefined, setUps: 0, rounds: undefined });
+  expect(await offered([], [find])).toEqual({ tools: ["mcp__search__find"], setUps: 1, rounds: 4 });
+  expect(await offered(["read"], [])).toEqual({ tools: ["read"], setUps: 1, rounds: 4 });
+  expect(await offered(["read"], [find])).toEqual({ tools: ["read", "mcp__search__find"], setUps: 1, rounds: 4 });
+  expect(await offered(["read"], [], false)).toEqual({ tools: ["read"], setUps: 1, rounds: undefined });
 });

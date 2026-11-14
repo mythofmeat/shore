@@ -1,8 +1,9 @@
 import { describe, expect, test } from "bun:test";
 
-import { buildRequest, buildRequestWithProviderKeys, MissingApiKey, type ResolvedModel } from "../src/llm/request";
+import { thinkingEnabled } from "../src/handler/generation.ts";
+import { buildRequest, buildRequestWithProviderKeys, MissingApiKey, providerOptionsFor, type ResolvedModel } from "../src/llm/request";
 import { type ProviderEntry } from "../src/llm/credentials";
-import type { ThinkingReplay } from "../src/llm/types";
+import type { ProviderOptions, ThinkingReplay } from "../src/llm/types";
 
 function model(over: Partial<ResolvedModel> = {}): ResolvedModel {
   return {
@@ -83,5 +84,36 @@ describe("choosing among a provider's configured keys", () => {
     );
     expect(built.request.api_key).toBe("");
     expect(built.api_key_name).toBe("subscription");
+  });
+});
+
+describe("the settings a provider is handed with a request", () => {
+  const withSettings = (settings: Partial<ResolvedModel>): ResolvedModel => ({
+    name: "m", qualified_name: "p:m", category: "chat", provider_key: "p", sdk: "openai", model_id: "m", ...settings,
+  });
+
+  test("each of a model's reasoning and vendor settings is handed over when it is set and left out when it is not", () => {
+    expect(providerOptionsFor(withSettings({}))).toBeUndefined();
+    expect(providerOptionsFor(withSettings({ openrouter_routing: null }))).toBeUndefined();
+    const each: [Partial<ResolvedModel>, ProviderOptions][] = [
+      [{ reasoning_effort: "high" }, { reasoning_effort: "high" }],
+      [{ reasoning_effort: "off" }, { thinking_enabled: false }],
+      [{ reasoning_budget_tokens: 2048 }, { reasoning_budget_tokens: 2048 }],
+      [{ reasoning_budget_tokens: 0 }, { reasoning_budget_tokens: 0 }],
+      [{ cache_ttl: "1h" }, { cache_ttl: "1h" }],
+      [{ openrouter_routing: { order: ["a"] } }, { openrouter_routing: { order: ["a"] } }],
+      [{ gemini_thinking_mode: "auto" }, { gemini_thinking_mode: "auto" }],
+      [{ zai_clear_reasoning: false }, { zai_clear_reasoning: false }],
+    ];
+    for (const [setting, handed] of each) expect(providerOptionsFor(withSettings(setting))).toStrictEqual(handed);
+    const all = { reasoning_effort: "low", reasoning_budget_tokens: 1024, cache_ttl: "5m", openrouter_routing: { only: ["z"] }, gemini_thinking_mode: "level" as const, zai_clear_reasoning: true };
+    expect(providerOptionsFor(withSettings(all))).toStrictEqual(all);
+  });
+
+  test("a call counts as thinking when it has a reasoning budget above zero or an effort, and never once thinking is turned off", () => {
+    expect([
+      thinkingEnabled(undefined), thinkingEnabled({}), thinkingEnabled({ reasoning_budget_tokens: 0 }), thinkingEnabled({ reasoning_budget_tokens: 1 }),
+      thinkingEnabled({ reasoning_effort: "low" }), thinkingEnabled({ reasoning_budget_tokens: 2048, thinking_enabled: false }), thinkingEnabled({ reasoning_effort: "high", thinking_enabled: false }),
+    ]).toEqual([false, false, false, true, true, false, false]);
   });
 });

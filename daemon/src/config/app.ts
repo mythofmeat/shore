@@ -723,36 +723,8 @@ export function validateCompaction(compaction: CompactionConfig): string | undef
 
 export type ThinkingReplay = "all" | "none";
 
-export function parseThinkingReplay(s: string): ThinkingReplay | undefined {
-  switch (s) {
-    case "all":
-      return "all";
-    case "none":
-      return "none";
-    default:
-      return undefined;
-  }
-}
-
 const THINKING_REPLAY_MODES: readonly ThinkingReplay[] = ["all", "none"];
 
-const readThinkingReplay: Reader<ThinkingReplay> = typed(
-  (v) => {
-    if (typeof v !== "string") {
-      return { err: "data did not match any variant of untagged enum BoolOrStr" };
-    }
-    const parsed = parseThinkingReplay(v);
-    if (parsed === undefined) {
-      return {
-        err:
-          `invalid replay_prior_thinking ${JSON.stringify(v)}; ` +
-          'expected "all", "none"',
-      };
-    }
-    return { ok: parsed };
-  },
-  { kind: "enum", variants: THINKING_REPLAY_MODES },
-);
 
 export interface ChatConfig {
   model: string | undefined;
@@ -783,7 +755,7 @@ const CHAT: StructSpec<ChatConfig> = {
     display_name: optional(readString),
     system_prompt: optional(readString),
     user_timestamps: readEnum(USER_TIMESTAMP_MODES),
-    reasoning_replay: readThinkingReplay,
+    reasoning_replay: readEnum(THINKING_REPLAY_MODES),
     max_retries: optional(readU32),
     retry_backoff: optional(readDuration),
   },

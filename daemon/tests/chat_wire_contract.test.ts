@@ -47,7 +47,7 @@ function model(baseUrl: string): ResolvedModel {
     reasoningEffort: "high",
     maxContextTokens: 200_000,
     maxOutputTokens: 4096,
-    maxToolIterations: 4,
+    maxToolRounds: 4,
   } as unknown as ResolvedModel;
 }
 

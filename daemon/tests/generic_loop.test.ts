@@ -76,7 +76,7 @@ function request(overrides: Partial<SidecarRequest> = {}): SidecarRequest {
     system: [{ text: "you are a character", label: "character" }],
     tools: [{ name: "read", description: "Read a file.", input_schema: { type: "object" } }],
     max_tokens: 1024,
-    replay_prior_thinking: "all",
+    reasoning_replay: "all",
     ...overrides,
   };
 }

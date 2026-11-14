@@ -73,7 +73,7 @@ function prefix(overrides: Partial<KeepalivePrefix> = {}): KeepalivePrefix {
     tools: [{ name: "read", description: "read a file", input_schema: { type: "object" } }],
     max_tokens: 4096,
     provider_options: { cache_ttl: "1h" },
-    replay_prior_thinking: "all",
+    reasoning_replay: "all",
     keepalive_interval_ms: INTERVAL_MS,
     keepalive_pings: PINGS,
     context: {
@@ -122,7 +122,7 @@ describe("the ping body", () => {
     expect(ping.tools).toEqual(cached.tools);
     expect(ping.messages.slice(0, 2)).toEqual(cached.messages);
     expect(ping.sdk).toBe(cached.sdk);
-    expect(ping.replay_prior_thinking).toBe(cached.replay_prior_thinking);
+    expect(ping.reasoning_replay).toBe(cached.reasoning_replay);
 
     expect(ping.max_tokens).toBe(1);
     expect(ping.messages).toHaveLength(3);

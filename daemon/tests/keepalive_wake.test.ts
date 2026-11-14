@@ -57,7 +57,7 @@ async function afterOneChat(wakeRead: number, idle: (chat: IdleChat) => Promise<
     tools: [],
     autonomy: true,
     model: {
-      maxToolIterations: 3,
+      maxToolRounds: 3,
       cacheTtl: "1h",
       cacheKeepalive: { kind: "every", interval: ConfigDuration.fromSecs(55 * 60) },
       cacheKeepalivePings: 1,

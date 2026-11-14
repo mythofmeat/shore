@@ -192,7 +192,7 @@ test("from inside a sealed thread the list of threads says where the character i
 
 function request(sealed: boolean): SidecarRequest {
   return {
-    sdk: "anthropic", model: "claude-fixture", provider_key: "anthropic", api_key: "key", max_tokens: 64, replay_prior_thinking: "all",
+    sdk: "anthropic", model: "claude-fixture", provider_key: "anthropic", api_key: "key", max_tokens: 64, reasoning_replay: "all",
     messages: [{ role: "user", content: [{ type: "text", text: "the card" }] }],
     context: { character: "ada", call_type: "heartbeat", thinking_enabled: false, ...(sealed ? { sealed: true } : {}) },
   };

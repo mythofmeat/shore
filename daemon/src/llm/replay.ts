@@ -58,7 +58,7 @@ export function replayableMessagesWithDrops(req: SidecarRequest): {
 } {
   const activeProvider = req.provider_key ?? "";
   const activeModel = req.model;
-  const stripPrior = req.replay_prior_thinking === "none";
+  const stripPrior = req.reasoning_replay === "none";
 
   const drops: ThinkingDrops = { strippedByPolicy: 0, unportable: 0 };
 

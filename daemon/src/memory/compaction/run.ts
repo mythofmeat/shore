@@ -360,9 +360,9 @@ async function passUnderGuard(
         foreground: options.trigger === "manual",
         tools: resolved.tools,
         ...(planned.coverage === undefined ? {} : { coverage: planned.coverage }),
-        ...(resolved.maxToolIterations === undefined
+        ...(resolved.maxToolRounds === undefined
           ? {}
-          : { maxToolIterations: resolved.maxToolIterations }),
+          : { maxToolRounds: resolved.maxToolRounds }),
         ...(deps.emit === undefined ? {} : { emit: tagCompactionFrames(deps.emit) }),
         ...(deps.signal === undefined ? {} : { signal: deps.signal }),
         commitUnder: underThread(deps, character, thread),
@@ -463,7 +463,7 @@ async function segmentPass(
     ...(resolved.markdownStore === undefined ? {} : { markdownStore: resolved.markdownStore }),
     chatRequest,
     tools: resolved.tools,
-    ...(resolved.maxToolIterations === undefined ? {} : { maxToolIterations: resolved.maxToolIterations }),
+    ...(resolved.maxToolRounds === undefined ? {} : { maxToolRounds: resolved.maxToolRounds }),
     ...(deps.emit === undefined ? {} : { emit: tagCompactionFrames(deps.emit) }),
     ...(deps.signal === undefined ? {} : { signal: deps.signal }),
   });
@@ -480,7 +480,7 @@ interface ResolvedDeps {
   llm: RealCompactionLlm;
   markdownStore: MarkdownMemoryStore | undefined;
   tools: CompactionTools;
-  maxToolIterations: number | undefined;
+  maxToolRounds: number | undefined;
 }
 
 interface PlannedCoverage {
@@ -654,7 +654,7 @@ async function resolveDeps(
     }),
     markdownStore,
     tools: compactionTools(toolCtx, effective, tools, imageLimitsFor(model.sdk, model.modelId)),
-    maxToolIterations: model.maxToolIterations,
+    maxToolRounds: model.maxToolRounds,
   };
 }
 

@@ -173,7 +173,7 @@ function call(url: string, overrides: Partial<SidecarRequest> = {}): SidecarRequ
     api_key: "k",
     base_url: url,
     max_tokens: 100,
-    replay_prior_thinking: "all",
+    reasoning_replay: "all",
     messages: [{ role: "user", content: [{ type: "text", text: "hi" }] }],
     ...overrides,
   };
@@ -357,7 +357,7 @@ describe("how conversation turns are written for OpenAI", () => {
 
   test("a request becomes a system message followed by its turns, naming tools by the call that made them", () => {
     expect(buildOpenAIMessages({
-      sdk: "openai", model: "gpt-test", api_key: "k", max_tokens: 10, replay_prior_thinking: "all",
+      sdk: "openai", model: "gpt-test", api_key: "k", max_tokens: 10, reasoning_replay: "all",
       system: [{ text: "be kind", label: "soul" }],
       messages: [
         { role: "assistant", content: [{ type: "tool_use", id: "t1", name: "screenshot", input: {} }] },

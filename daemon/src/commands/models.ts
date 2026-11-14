@@ -1,4 +1,3 @@
-import { canonicalSettingKey, geminiMode } from "../config/surface.ts";
 import { required } from "../util/required.ts";
 import { nanogptTransportError } from "../llm/providers/nanogpt_config.ts";
 import { keepaliveTtlWarning } from "../llm/cache_capability.ts";
@@ -483,14 +482,14 @@ const INFO_SCOPE_FIELDS = [
   ["temperature", "temperature"],
   ["top_p", "topP"],
   ["reasoning_effort", "reasoningEffort"],
-  ["reasoning_budget_tokens", "budgetTokens"],
+  ["reasoning_budget_tokens", "reasoningBudgetTokens"],
   ["max_output_tokens", "maxOutputTokens"],
   ["cache_ttl", "cacheTtl"],
   ["cache_keepalive", "cacheKeepalive"],
   ["cache_keepalive_pings", "cacheKeepalivePings"],
   ["sdk", "sdk"],
-  ["reasoning_replay", "replayPriorThinking"],
-  ["max_tool_rounds", "maxToolIterations"],
+  ["reasoning_replay", "reasoningReplay"],
+  ["max_tool_rounds", "maxToolRounds"],
 ] as const satisfies readonly (readonly [string, keyof SamplerSettings])[];
 
 function scopesJson(
@@ -764,13 +763,12 @@ function saveCharacter(ctx: ModelsContext, character: string, prefs: ModelPrefer
 export function setModelSetting(ctx: ModelsContext, args: OperationInput<"set_model_setting">): OperationResult<"set_model_setting"> {
   const rawKey = asStr(args["key"]);
   if (rawKey === undefined) throw invalidRequest("missing key");
-  const key = canonicalSettingKey(rawKey.trim());
+  const key = rawKey.trim();
   if (!SAMPLER_KEYS.includes(key)) {
     throw invalidRequest(`unknown setting key: ${key}; supported: ${SAMPLER_KEYS.join(", ")}`);
   }
 
-  const rawValue = args.value ?? null;
-  const value = rawKey.trim() === "gemini_generation" ? geminiMode(typeof rawValue === "string" && /^\d+$/.test(rawValue) ? Number(rawValue) : rawValue) : rawValue;
+  const value = args.value ?? null;
   const scope = asStr(args["scope"]) ?? "character";
   if (scope !== "character" && scope !== "global") {
     throw invalidRequest(`scope must be "character" or "global", got ${JSON.stringify(scope)}`);
@@ -1053,7 +1051,7 @@ function modelSettingsOverview(ctx: ModelsContext): ModelSettingsOverview {
 function requestedKey(ctx: ModelsContext, args: OperationInput<"model_settings">): string | undefined {
   const raw = asName(args["key"]);
   if (raw === undefined) return undefined;
-  const key = canonicalSettingKey(raw.trim());
+  const key = raw.trim();
   if (SAMPLER_KEYS.includes(key)) return key;
   if (ctx.config.app.subagents.agents.has(key)) {
     throw invalidRequest(

@@ -72,7 +72,7 @@ test("the model is offered Shore's tools under their own names, and a call it ma
         { name: "mcp__notes__find", description: "Find a note", input_schema: SCHEMA },
       ],
       context: { character: "heidi", workspace_dir: dir, thinking_enabled: false, call_type: "message" },
-      max_tokens: 1024, replay_prior_thinking: "all",
+      max_tokens: 1024, reasoning_replay: "all",
       messages: [{ role: "user", content: [{ type: "text", text: "What do I need to buy?" }] }],
     }, { providerKey: "claude-code" }, {
       config: {
