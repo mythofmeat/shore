@@ -68,7 +68,7 @@ function Calls({ state }: { state: ChromeSnapshot }) {
   const listing = calls.data !== undefined && "entries" in calls.data ? calls.data : undefined;
   return <>
     <div className="usage-controls"><Count value={count} change={setCount} />
-      <select className="select" aria-label="Call type" value={callType} onChange={(event) => setCallType(event.target.value)}>{["", "message", "heartbeat", "compaction", "dreaming", "subagent", "keepalive"].map((type) => <option key={type} value={type}>{type === "" ? "All call types" : type}</option>)}</select>
+      <select className="select" aria-label="Call type" value={callType} onChange={(event) => setCallType(event.target.value)}>{["", "message", "wake", "compaction", "dreaming", "subagent", "keepalive"].map((type) => <option key={type} value={type}>{type === "" ? "All call types" : type}</option>)}</select>
     </div>
     <Loading error={calls.error} ready={listing !== undefined}>
       {listing?.enabled === false ? <p className="settings-empty">Call logging is off. Enable <code>diagnostics.call_log</code> in the configuration.</p> : null}

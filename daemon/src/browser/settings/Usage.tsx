@@ -15,7 +15,7 @@ import { SettingRow, SettingsSection } from "./layout.tsx";
 import { downloadText, formatCost, formatNumber, formatTime, Loading, useAction, useOperation } from "./shared.tsx";
 
 const PERIODS = [["", "Current budget window"], ["today", "Today"], ["week", "This week"], ["month", "This month"], ["7d", "Last 7 days"], ["30d", "Last 30 days"], ["all", "All time"]] as const;
-const DIMENSIONS: readonly [UsageDimension, string][] = [["model", "Model"], ["provider", "Provider"], ["call_type", "Call type"], ["kind", "Kind"], ["api_key", "API key"], ["cost_source", "Cost source"]];
+const DIMENSIONS: readonly [UsageDimension, string][] = [["model", "Model"], ["provider", "Provider"], ["call_type", "Call type"], ["kind", "Kind"], ["api_key", "API key"], ["cost_source", "Cost source"], ["trigger", "Trigger"]];
 type View = "summary" | "grouped" | "budget" | "anomalies";
 
 function BudgetBar({ budget }: { budget: UsageBudget }) {

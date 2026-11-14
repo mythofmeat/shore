@@ -3266,7 +3266,8 @@
           "call_type",
           "kind",
           "api_key",
-          "cost_source"
+          "cost_source",
+          "trigger"
         ]
       },
       "GroupedUsageRow": {
@@ -13382,7 +13383,8 @@
           "call_type",
           "kind",
           "api_key",
-          "cost_source"
+          "cost_source",
+          "trigger"
         ]
       },
       "GroupedUsageRow": {

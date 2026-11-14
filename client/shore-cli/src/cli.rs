@@ -635,7 +635,7 @@ pub(crate) enum CliCommand {
         #[arg(long, global = true, add = values(Completes::UsageModels))]
         model: Option<String>,
 
-        /// Filter by ledger call type, e.g. message, heartbeat (wakes), or subagent
+        /// Filter by ledger call type, e.g. message, wake, or subagent
         #[arg(long, global = true, add = values(Completes::CallTypes))]
         call_type: Option<String>,
 
@@ -1140,6 +1140,7 @@ pub(crate) enum UsageDimension {
     Kind,
     ApiKey,
     CostSource,
+    Trigger,
 }
 
 impl UsageDimension {
@@ -1152,6 +1153,7 @@ impl UsageDimension {
             Self::Kind => CanonicalDimension::Kind,
             Self::ApiKey => CanonicalDimension::ApiKey,
             Self::CostSource => CanonicalDimension::CostSource,
+            Self::Trigger => CanonicalDimension::Trigger,
         }
     }
 }
@@ -4205,6 +4207,20 @@ mod tests {
                 Some((
                     "usage",
                     json!({"last": null, "character": null, "provider": null, "api_key": null, "model": null, "call_type": null, "group_by": "model", "budget": false, "anomalies": false, "export_csv": false, "export_tsv": false}),
+                )),
+            ),
+            (
+                &["usage", "by", "trigger"],
+                Some((
+                    "usage",
+                    json!({"last": null, "character": null, "provider": null, "api_key": null, "model": null, "call_type": null, "group_by": "trigger", "budget": false, "anomalies": false, "export_csv": false, "export_tsv": false}),
+                )),
+            ),
+            (
+                &["usage", "by", "cost-source"],
+                Some((
+                    "usage",
+                    json!({"last": null, "character": null, "provider": null, "api_key": null, "model": null, "call_type": null, "group_by": "cost_source", "budget": false, "anomalies": false, "export_csv": false, "export_tsv": false}),
                 )),
             ),
         ];

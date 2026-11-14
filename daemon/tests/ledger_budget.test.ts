@@ -22,7 +22,7 @@ function spend(ts: string, character: string, call_type: string, total_cost: num
 const SEED = [
   spend("2026-03-18T12:00:00+00:00", "aria", "message", 2.5),
   spend("2026-03-18T12:30:00+00:00", "aria", "tool_loop", 3),
-  spend("2026-03-18T13:00:00+00:00", "kai", "heartbeat", 0.5),
+  spend("2026-03-18T13:00:00+00:00", "kai", "wake", 0.5),
 ];
 
 const opts = { localZone: ZONE };
@@ -125,11 +125,11 @@ const CALLS: Record<string, BudgetCallContext> = {
     call_type: "tool_loop",
     character: "aria",
   },
-  heartbeat_kai: {
+  wake_kai: {
     provider: "anthropic",
     api_key_name: "default",
     model: "claude-opus-4-6",
-    call_type: "heartbeat",
+    call_type: "wake",
     character: "kai",
   },
   keepalive_aria: {
@@ -367,9 +367,9 @@ describe("which calls a budget covers and stops", () => {
     ["character", { character: "aria" }, {}, { character: "kai" }],
     ["provider", { provider: "anthropic" }, {}, { provider: "openai" }],
     ["model", { model: "claude-opus-4-6" }, {}, { model: "claude-haiku-4-5" }],
-    ["call type", { call_type: "message" }, {}, { call_type: "heartbeat" }],
+    ["call type", { call_type: "message" }, {}, { call_type: "wake" }],
     ["api key", { api_key: "default" }, {}, { api_key_name: "spare" }],
-    ["usage kind", { usage_kinds: ["heartbeat"] }, { call_type: "heartbeat", character: "kai" }, { call_type: "message" }],
+    ["usage kind", { usage_kinds: ["wake"] }, { call_type: "wake", character: "kai" }, { call_type: "message" }],
   ])("a budget filtered by %s stops only the calls it names", (_name, filter, matching, other) => {
     expect(blocks(blocking(filter), call(matching))).toBe(true);
     expect(blocks(blocking(filter), call(other))).toBe(false);
@@ -388,12 +388,12 @@ describe("which calls a budget covers and stops", () => {
   });
 
   test("each action stops the calls it names and nothing else", () => {
-    const background = ["heartbeat", "heartbeat_tool_loop", "keepalive", "compaction", "dreaming", "memory_query"];
+    const background = ["wake", "wake_tool_loop", "keepalive", "compaction", "dreaming", "memory_query"];
     for (const callType of [...background, "message", "tool_loop", "subagent"]) {
       expect(actionBlocks("warn", { call_type: callType })).toBe(false);
       expect(actionBlocks("block", { call_type: callType })).toBe(true);
       expect(actionBlocks("pause_background", { call_type: callType }), callType).toBe(background.includes(callType));
-      expect(actionBlocks("pause_wakes", { call_type: callType }), callType).toBe(callType.startsWith("heartbeat"));
+      expect(actionBlocks("pause_wakes", { call_type: callType }), callType).toBe(callType.startsWith("wake"));
     }
     expect(actionBlocks("pause_background", { call_type: "compaction", foreground: true })).toBe(false);
   });

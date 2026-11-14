@@ -22,8 +22,8 @@ export function kindFor(callType: string): string {
     case "message":
     case "tool_loop":
       return "interactive";
-    case "heartbeat":
-    case "heartbeat_tool_loop":
+    case "wake":
+    case "wake_tool_loop":
       return "autonomous";
     default:
       return "background";
