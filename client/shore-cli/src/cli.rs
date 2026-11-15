@@ -86,10 +86,7 @@ pub(crate) enum FlagProblem {
 }
 
 const TARGET_TAKES_EQUALS: [(&str, &[&str]); 2] = [
-    (
-        "--background",
-        &["all", "heartbeat", "compaction", "dreaming"],
-    ),
+    ("--background", &["all", "wake", "compaction", "dreaming"]),
     ("--subagent", &["all"]),
 ];
 
@@ -1088,13 +1085,13 @@ pub(crate) enum PaletteScope {
 }
 
 /// Background task to retarget `shore model setting` at. `all` targets wakes
-/// (`heartbeat`) and compaction together and errors if they resolve to different models, or,
+/// and compaction together and errors if they resolve to different models, or,
 /// when only showing settings, if their own settings differ. Dreaming is only
 /// ever targeted by name.
 #[derive(ValueEnum, Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) enum BackgroundTarget {
     All,
-    Heartbeat,
+    Wake,
     Compaction,
     Dreaming,
 }
@@ -1103,7 +1100,7 @@ impl BackgroundTarget {
     pub(crate) fn as_protocol_target(self) -> BackgroundModelTarget {
         match self {
             Self::All => BackgroundModelTarget::All,
-            Self::Heartbeat => BackgroundModelTarget::Heartbeat,
+            Self::Wake => BackgroundModelTarget::Wake,
             Self::Compaction => BackgroundModelTarget::Compaction,
             Self::Dreaming => BackgroundModelTarget::Dreaming,
         }
@@ -1291,7 +1288,7 @@ pub(crate) struct ModelTarget {
     #[arg(long)]
     pub(crate) chat: bool,
 
-    /// Background tasks: bare means wakes and compaction; naming one requires =compaction, =heartbeat (wakes) or =dreaming
+    /// Background tasks: bare means wakes and compaction; naming one requires =compaction, =wake or =dreaming
     #[arg(
         long,
         value_enum,
@@ -1338,7 +1335,7 @@ pub(crate) enum ModelCommand {
     /// Bare, this sets the character's chat model, which every thread without a model of its
     /// own uses. With --thread (or SHORE_THREAD) it gives just that thread its own model.
     /// Every other target writes the config file,
-    /// which is global: `--background=compaction` and `=dreaming` write `<task>.model`, `--background=heartbeat` writes `triggers.model`, the model wakes run on,
+    /// which is global: `--background=compaction` and `=dreaming` write `<task>.model`, `--background=wake` writes `triggers.model`, the model wakes run on,
     /// bare `--background` writes `triggers.model` and `compaction.model` but never `dreaming.model`; `--subagent=<name>` writes `subagents.<name>.model`,
     /// and bare `--subagent` writes `subagents.model`.
     Use {

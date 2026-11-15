@@ -3826,7 +3826,7 @@
     "AttemptMarks": "{ position: number, shown: boolean, attempt: string | null, asked: AttemptAsked | null, marks: Array<MarkView>, }",
     "AutonomyState": "\"Active\" | \"Dormant\"",
     "AutonomyStatusReport": "{ state: AutonomyState, wakes_without_user: number, dormant_after_wakes: number, last_user_at?: string, seconds_since_user?: number, dormant_after_idle_time_secs: number, recent_events: Array<HeartbeatEvent>, }",
-    "BackgroundModelTarget": "\"all\" | \"heartbeat\" | \"compaction\" | \"dreaming\"",
+    "BackgroundModelTarget": "\"all\" | \"wake\" | \"compaction\" | \"dreaming\"",
     "BackupExported": "{ characters: Array<string>, archive: string, bytes: number, transfer: string, files: number, files_sent: number, blocks: number, blocks_sent: number, secrets_left_out?: boolean, }",
     "CacheInvalidation": "{ cached_request: boolean, }",
     "CacheWarning": "{ expected_tokens: number, message: string, }",

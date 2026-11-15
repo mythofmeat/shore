@@ -278,9 +278,25 @@ export function loadPreferences(path: string): ModelPreferences {
     throw PreferenceError.parse(path, (e as Error).message);
   }
 
+  const carriedOver = carryOverWakeSettings(table);
   const parsed = readPreferences(table);
   if ("err" in parsed) throw PreferenceError.parse(path, parsed.err);
+  if (carriedOver) {
+    try {
+      savePreferences(path, parsed.ok);
+    } catch (e) {
+      shoreLog.warn(`shore: could not rewrite ${path} with [background.heartbeat] as [background.wake]; it is read that way until it can be: ${String(e)}`);
+    }
+  }
   return parsed.ok;
+}
+
+function carryOverWakeSettings(table: Record<string, unknown>): boolean {
+  const background = table["background"];
+  if (!isTable(background) || background["heartbeat"] === undefined) return false;
+  background["wake"] ??= background["heartbeat"];
+  delete background["heartbeat"];
+  return true;
 }
 
 export function savePreferences(path: string, prefs: ModelPreferences): void {
@@ -600,9 +616,9 @@ export interface LoadedConfigView {
 
 export type BackgroundTask = Exclude<import("../protocol/BackgroundModelTarget.ts").BackgroundModelTarget, "all">;
 
-export const BACKGROUND_TASKS: readonly BackgroundTask[] = ["heartbeat", "compaction", "dreaming"];
+export const BACKGROUND_TASKS: readonly BackgroundTask[] = ["wake", "compaction", "dreaming"];
 
-export const SHARED_BACKGROUND_TASKS: readonly BackgroundTask[] = ["heartbeat", "compaction"];
+export const SHARED_BACKGROUND_TASKS: readonly BackgroundTask[] = ["wake", "compaction"];
 
 export function configView(config: LoadedConfigView): LoadedConfigView {
   return { models: config.models, providers: config.providers, dirs: config.dirs, app: config.app };

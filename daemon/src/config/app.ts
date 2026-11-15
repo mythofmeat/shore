@@ -305,13 +305,13 @@ const DAEMON: StructSpec<DaemonConfig> = {
   },
 };
 
-export type BackgroundTask = "heartbeat" | "compaction" | "dreaming";
+export type BackgroundTask = "wake" | "compaction" | "dreaming";
 
 export function resolveBackgroundModelName(
   app: Pick<AppConfig, "triggers" | "compaction" | "dreaming">,
   task: BackgroundTask,
 ): string | undefined {
-  return { heartbeat: app.triggers, compaction: app.compaction, dreaming: app.dreaming }[task].model;
+  return { wake: app.triggers, compaction: app.compaction, dreaming: app.dreaming }[task].model;
 }
 
 export function resolveDisplayName(

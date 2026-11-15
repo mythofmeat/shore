@@ -1496,7 +1496,7 @@ mod tests {
         );
         catalog.absorb(
             Source::UsageCallTypes,
-            &json!({ "summary": [{ "group": "message" }, { "group": "heartbeat" }] }),
+            &json!({ "summary": [{ "group": "message" }, { "group": "wake" }] }),
         );
         catalog.absorb(
             Source::UsageModels,
@@ -1596,8 +1596,8 @@ mod tests {
             ("segments show ", &["2", "1"]),
             ("log --segment ", &["2", "1"]),
             ("compact --segment ", &["2", "1"]),
-            ("usage --call-type ", &["message", "heartbeat"]),
-            ("trace calls --call-type ", &["message", "heartbeat"]),
+            ("usage --call-type ", &["message", "wake"]),
+            ("trace calls --call-type ", &["message", "wake"]),
             ("usage --model ", &["opus"]),
             ("usage --last ", &["today", "week", "month", "all"]),
             ("status --section ", &["tokens"]),
@@ -1623,9 +1623,7 @@ mod tests {
             .map(|candidate| candidate.replacement)
             .collect::<Vec<_>>();
         assert!(
-            forms
-                .iter()
-                .any(|form| form.contains("--background=heartbeat")),
+            forms.iter().any(|form| form.contains("--background=wake")),
             "the spelled-out form is offered with the flag: {forms:?}"
         );
     }

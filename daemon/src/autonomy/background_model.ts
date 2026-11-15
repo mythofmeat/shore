@@ -17,7 +17,7 @@ export interface BackgroundModelChoice {
 export function backgroundTaskModel(
   config: LoadedConfig,
   character: string,
-  task: "heartbeat" | "dreaming",
+  task: "wake" | "dreaming",
 ): ResolvedModel | undefined {
   const view = configView(config);
   const name = resolveBackgroundModelName(config.app, task);

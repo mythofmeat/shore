@@ -9,7 +9,7 @@ const settle = async () => { await acting(() => Bun.sleep(5)); };
 const model = (qualified: string, extra: Record<string, unknown> = {}) => ({ name: qualified.slice(qualified.indexOf(":") + 1), qualified_name: qualified, sdk: "anthropic", model_id: qualified.slice(qualified.indexOf(":") + 1), source: "static", hidden: false, favorite: false, ...extra });
 const LISTING = {
   models: { anthropic: [model("anthropic:opus"), model("anthropic:haiku")] }, active: "anthropic:opus",
-  roles: [{ role: "chat", model: "anthropic:opus", source: "character" }, { role: "heartbeat", model: "anthropic:haiku", source: "triggers.model" }, { role: "compaction", model: null, source: "inherits chat" }, { role: "sub-agents", model: "anthropic:haiku", source: null }],
+  roles: [{ role: "chat", model: "anthropic:opus", source: "character" }, { role: "wake", model: "anthropic:haiku", source: "triggers.model" }, { role: "compaction", model: null, source: "inherits chat" }, { role: "sub-agents", model: "anthropic:haiku", source: null }],
   include_hidden: false, favorites_only: false, favorite_count: 0, hidden_count: 0,
 };
 const info = (qualified: string, extra: Record<string, unknown> = {}) => ({
@@ -95,7 +95,7 @@ describe("the models page", () => {
     expect(details?.querySelector(".setting-label")?.className).toBe("setting-label mono");
     const select = view.host.querySelector<HTMLSelectElement>("select[aria-label='Show details for']");
     expect([...select?.querySelectorAll("option") ?? []].map((option) => [option.getAttribute("value"), option.textContent, option.parentElement?.tagName])).toEqual([
-      ["character", "Chat", "SELECT"], ["background:heartbeat", "Wakes", "SELECT"], ["background:compaction", "Compaction", "SELECT"], ["background:dreaming", "Dreaming", "SELECT"],
+      ["character", "Chat", "SELECT"], ["background:wake", "Wakes", "SELECT"], ["background:compaction", "Compaction", "SELECT"], ["background:dreaming", "Dreaming", "SELECT"],
       ["subagent:helper", "Subagent helper", "SELECT"], ["subagent:scout", "Subagent scout", "SELECT"], ["model:anthropic:haiku", "anthropic:haiku", "OPTGROUP"], ["model:anthropic:opus", "anthropic:opus", "OPTGROUP"],
     ]);
     expect(select?.querySelector("optgroup")?.getAttribute("label")).toBe("Any model");
