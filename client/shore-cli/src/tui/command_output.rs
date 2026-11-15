@@ -647,6 +647,30 @@ mod tests {
     }
 
     #[test]
+    fn the_error_log_from_the_palette_lists_errors_and_key_fallbacks() {
+        crate::output::set_color_enabled(false);
+        let data = json!({
+            "errors": { "count": 3, "recent": [
+                { "timestamp": "2026-11-01T09:30:05Z", "error_type": "provider", "message": "overloaded", "context": "turn 4" },
+            ] },
+            "key_fallbacks": { "count": 0, "recent": [] },
+        });
+        let shown = super::render("trace errors", "error_log", &data, "eve").unwrap_or_default();
+        let lines: Vec<String> = shown
+            .lines()
+            .map(|line| line.split_whitespace().collect::<Vec<_>>().join(" "))
+            .filter(|line| !line.is_empty())
+            .collect();
+        let [errors, error, fallbacks, none] = lines.as_slice() else {
+            panic!("{lines:?}")
+        };
+        assert!(errors.contains("Errors (3 total)"), "{errors}");
+        assert!(error.ends_with(" provider overloaded turn 4"), "{error}");
+        assert!(fallbacks.contains("Key fallbacks (0 total)"), "{fallbacks}");
+        assert_eq!(none, "(none)");
+    }
+
+    #[test]
     fn a_wake_started_or_a_change_of_dormancy_from_the_palette_says_what_happened() {
         let data = json!({ "status": "queued", "character": "ada" });
         assert_eq!(
