@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { createFolder, deleteFolder, moveFolder, moveThread, placedThreads, renameFolder, setFolderSort } from "../src/engine/thread_layout.ts";
-import { MAX_THREAD_ID_LENGTH, archiveThread, assertThreadId, isValidThreadId, createThread, ensureThreads, firstUnreadReply, markThreadRead, readThreadsIndex, setHomeThread, setThreadCompaction, threadActivityNow, threadFilePaths, writeThreadsIndex, type ThreadsIndex } from "../src/engine/threads.ts";
+import { MAX_THREAD_ID_LENGTH, archiveThread, assertThreadId, isValidThreadId, createThread, ensureThreads, ensureWakesThread, wakesThread, firstUnreadReply, markThreadRead, readThreadsIndex, setHomeThread, setThreadCompaction, threadActivityNow, threadFilePaths, writeThreadsIndex, type ThreadsIndex } from "../src/engine/threads.ts";
 import { readFileSync, readFile } from "./support/stored_files.ts";
 import { mkdirSync, mkdtempSync, writeFileSync, existsSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -522,5 +522,51 @@ describe("thread order and folders", () => {
     expect(archived.folders).toEqual([{ name: "Stories", threads: [] }]);
     const remade = await createThread(data, "ada", "side", now);
     expect(shown(remade)).toEqual(["main", "side"]);
+  });
+});
+
+describe("the wakes thread", () => {
+  const index = (wakes: string | undefined, ids: readonly string[], home = "main"): ThreadsIndex => ({
+    version: 1, home, ...(wakes === undefined ? {} : { wakes }), threads: ids.map((id) => ({ id, created_at: "2026-11-15T00:00:00.000Z", compaction: false })),
+  });
+
+  test("is the thread the index names for it, while that thread is there and isn't home", () => {
+    expect(wakesThread(undefined)).toBeUndefined();
+    expect(wakesThread(index(undefined, ["main", "wakes"]))).toBeUndefined();
+    expect(wakesThread(index("wakes", ["main", "wakes"]))).toBe("wakes");
+    expect(wakesThread(index("wakes", ["main"]))).toBeUndefined();
+    expect(wakesThread(index("wakes", ["main", "wakes"], "wakes"))).toBeUndefined();
+  });
+
+  test("is made once, next to threads of the same name, and stays when another thread is archived but not when it is", async () => {
+    const data = mkdtempSync(testTmp("shore-wakes-thread-"));
+    const now = "2026-11-15T00:00:00.000Z";
+    await createThread(data, "ada", "wakes", now);
+    await createThread(data, "ada", "wakes-2", now);
+    const made = await ensureWakesThread(data, "ada", now);
+    expect([made.created, made.index.wakes, made.index.threads.at(-1)]).toEqual([true, "wakes-3", { id: "wakes-3", label: "Wakes", created_at: now, compaction: false }]);
+    expect(await readThreadsIndex(data, "ada")).toEqual(made.index);
+    expect(await ensureWakesThread(data, "ada", now)).toEqual({ index: made.index, created: false });
+
+    await archiveThread(data, "ada", "wakes");
+    expect(wakesThread(await readThreadsIndex(data, "ada"))).toBe("wakes-3");
+    await archiveThread(data, "ada", "wakes-3");
+    expect((await readThreadsIndex(data, "ada"))?.wakes).toBeUndefined();
+    await createThread(data, "ada", "wakes-3", now);
+    expect(wakesThread(await readThreadsIndex(data, "ada"))).toBeUndefined();
+    expect((await ensureWakesThread(data, "ada", now)).index.wakes).toBe("wakes");
+  });
+
+  test("can't be made home, nor set to compact", async () => {
+    const data = mkdtempSync(testTmp("shore-wakes-thread-"));
+    const now = "2026-11-15T00:00:00.000Z";
+    await ensureWakesThread(data, "ada", now);
+    expect(await outcomeOf(setHomeThread(data, "ada", "wakes", now))).toThrow('thread "wakes" is where Shore keeps ada\'s working from wakes, so it can\'t be home');
+    expect(await outcomeOf(setThreadCompaction(data, "ada", "wakes", true, now))).toThrow('thread "wakes" is where Shore keeps ada\'s working from wakes, and it is never compacted');
+    await setThreadCompaction(data, "ada", "wakes", false, now);
+    await createThread(data, "ada", "side", now);
+    await setThreadCompaction(data, "ada", "side", true, now);
+    await setHomeThread(data, "ada", "side", now);
+    expect((await readThreadsIndex(data, "ada"))?.threads.map((thread) => [thread.id, thread.compaction])).toEqual([["main", true], ["wakes", false], ["side", true]]);
   });
 });

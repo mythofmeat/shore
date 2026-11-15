@@ -23,7 +23,8 @@ export type WakeHandOff =
   | { kind: "queued"; limitMs: number | undefined; replaced?: WaitingWake | undefined }
   | { kind: "waiting"; waiting: WaitingWake }
   | { kind: "off" }
-  | { kind: "no_thread" };
+  | { kind: "no_thread" }
+  | { kind: "wakes_thread" };
 
 const MINUTE_MS = 60_000;
 
@@ -58,6 +59,7 @@ export function handleWakeInThread(
   const outcome = handOff(request);
   if (outcome.kind === "off") throw new ToolIoError(`${userName} has your own time switched off, so nothing would wake you`);
   if (outcome.kind === "no_thread") throw new ToolIoError(`you have no thread "${request.thread}" to be woken in; \`list_threads\` shows the ones you have`);
+  if (outcome.kind === "wakes_thread") throw new ToolIoError(`"${request.thread}" is where Shore keeps the working from your wakes, so no wake runs there`);
   if (outcome.kind === "waiting") {
     throw new ToolIoError(
       `you already have a wake waiting in "${request.thread}", ${askedFor(outcome.waiting, timeZone)}\nNothing was changed. To put this one in its place, call again with \`overwrite\` set to true.`,

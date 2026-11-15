@@ -71,6 +71,7 @@ test("a thread started and edited on a wake opens with her message, takes the ed
     ]);
     expect(events.filter((event) => event.type === "new_message" && event.thread === "lighthouse")).toHaveLength(1);
     expect(events.filter((event) => event.type === "threads_changed")).toEqual([
+      { type: "threads_changed", character: "ada", thread: "wakes" },
       { type: "threads_changed", character: "ada", thread: "lighthouse" },
       { type: "threads_changed", character: "ada", thread: "lighthouse" },
     ]);
@@ -106,7 +107,7 @@ test("a thread started with a folder goes in that folder of the user's thread li
     ]);
     const index = await readThreadsIndex(config.dirs.data, "ada");
     expect(index?.folders).toEqual([{ name: "Projects", threads: ["lighthouse", "harbor"] }, { name: "Stories", threads: ["pier"] }]);
-    expect(index?.threads.map((thread) => thread.id)).toEqual(["main", "lighthouse", "harbor", "pier"]);
+    expect(index?.threads.map((thread) => thread.id)).toEqual(["main", "wakes", "lighthouse", "harbor", "pier"]);
     const listed = await handleListThreads({ dataDir: config.dirs.data, character: "ada", userName: "peggy", timeZone: "UTC" });
     expect(listed).toContain('harbor "harbor" (in the folder "Projects") · compaction on');
     expect(listed).toContain('pier "pier" (in the folder "Stories") · compaction on');

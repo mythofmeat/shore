@@ -179,9 +179,13 @@ function ringNotes(world: ChatWorld): [source: string, text: string][] {
   return unfoldedDiary(join(world.config.dirs.data, "ada")).map((note) => [note.source, note.text]);
 }
 
+async function endOf(world: ChatWorld, thread: string): Promise<[role: string, origin: string, content: string][]> {
+  const kept = await world.runtime.registry.getOrCreate("ada", thread);
+  return kept.messages().slice(-2).map((message) => [message.role, message.origin ?? "", message.content.startsWith("[") ? message.content : "…"]);
+}
+
 async function ringEnd(world: ChatWorld): Promise<[role: string, origin: string, content: string][]> {
-  const ring = await world.runtime.registry.getOrCreate("ada", "ring");
-  return ring.messages().slice(-2).map((message) => [message.role, message.origin ?? "", message.content.startsWith("[") ? message.content : "…"]);
+  return await endOf(world, "ring");
 }
 
 test("a wake in a thread runs to the limit its trigger set, is warned a quarter of an hour before, and can finish inside it", async () => {
@@ -203,7 +207,11 @@ test("a wake in a thread runs to the limit its trigger set, is warned a quarter 
         "Only what you put in <sendMessage> tags is sent to User.]",
       );
       expect(ringNotes(world)).toEqual([["wake", "Stopped at the second act."]]);
-      expect(await ringEnd(world)).toEqual([["assistant", "", "…"], ["assistant", "autonomous", "…"]]);
+      expect(await ringEnd(world)).toEqual([["system", "autonomous", "…"], ["assistant", "autonomous", "…"]]);
+      expect((await endOf(world, "wakes")).map(([role, origin, content]) => [role, origin, content.slice(0, 20)])).toEqual([
+        ["system", "autonomous", "[System nudge: this "],
+        ["assistant", "", "…"],
+      ]);
       expect(world.runtime.autonomy.log("ada", 100).map((event) => event.kind)).not.toContain("timeout");
     },
   );
@@ -217,11 +225,14 @@ test("a wake in a thread still busy at its limit is stopped there, and the threa
     120 * MINUTE,
     async (world) => {
       expect(seen.map(nudged)).toEqual([false, false, false, false, true]);
-      expect((await ringEnd(world)).map(([role, origin, content]) => [role, origin, content.slice(0, 20)])).toEqual([
+      expect(await ringEnd(world)).toEqual([
+        ["system", "autonomous", "…"],
+        ["system", "autonomous", "[This wake reached its limit of 2 hours, and Shore stopped it here.]"],
+      ]);
+      expect((await endOf(world, "wakes")).map(([role, origin, content]) => [role, origin, content.slice(0, 20)])).toEqual([
         ["system", "autonomous", "[System nudge: this "],
         ["system", "autonomous", "[This wake reached i"],
       ]);
-      expect((await ringEnd(world)).at(-1)?.[2]).toBe("[This wake reached its limit of 2 hours, and Shore stopped it here.]");
       expect(ringNotes(world)).toEqual([["shore", 'Your wake in "ring" reached its limit of 2 hours before you finished. Where it stopped is in that thread.']]);
       expect(world.runtime.autonomy.log("ada", 100).filter((event) => event.kind !== "tool_use").map((event) => [event.kind, event.detail]).slice(-2)).toEqual([
         ["tick_fired", 'Woken in "ring" by trigger "show"'],
@@ -241,6 +252,10 @@ test("a wake in a thread that keeps using tools past its rounds is stopped, and 
       expect(textOf(required(seen[0]))).toContain("A wake here can run for up to 30 minutes. After 25 minutes, or after 2 rounds of tool use if that comes first, you will get a nudge to wrap up");
       expect(seen.map(nudged)).toEqual([false, false, true, false, false]);
       expect(await ringEnd(world)).toEqual([
+        ["system", "autonomous", "…"],
+        ["system", "autonomous", "[This wake used up its rounds of tool use, and Shore stopped it here.]"],
+      ]);
+      expect(await endOf(world, "wakes")).toEqual([
         ["user", "", "…"],
         ["system", "autonomous", "[This wake used up its rounds of tool use, and Shore stopped it here.]"],
       ]);
