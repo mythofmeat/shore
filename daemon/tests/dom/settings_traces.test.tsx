@@ -84,7 +84,7 @@ describe("the traces page", () => {
     const count = view.host.querySelector("select[aria-label='Entries to show']");
     const kind = view.host.querySelector("select[aria-label='Call type']");
     expect([options(count), (count as HTMLSelectElement | null)?.value]).toEqual([[["10", "Last 10"], ["25", "Last 25"], ["50", "Last 50"], ["100", "Last 100"]], "25"]);
-    expect(options(kind)).toEqual([["", "All call types"], ...["message", "heartbeat", "compaction", "dreaming", "subagent", "keepalive"].map((name) => [name, name])]);
+    expect(options(kind)).toEqual([["", "All call types"], ...["message", "wake", "compaction", "dreaming", "subagent", "keepalive"].map((name) => [name, name])]);
     expect([...view.host.querySelectorAll("thead th")].map((cell) => [cell.textContent, cell.className])).toEqual([["#", "number"], ["When", ""], ["Type", ""], ["Model", ""], ["In", "number"], ["Out", "number"], ["ms", "number"], ["Result", ""]]);
     const n = (value: number) => [value.toLocaleString(), "number"];
     expect(cells(view.host)).toEqual([
@@ -96,10 +96,10 @@ describe("the traces page", () => {
     await type(count, "50");
     await settle();
     expect(empty(view.host)).toEqual(["Call logging is off. Enable diagnostics.call_log in the configuration."]);
-    await type(kind, "heartbeat");
+    await type(kind, "wake");
     await settle();
     expect([view.host.querySelector(".settings-empty [role=status]") !== null, view.host.querySelector("tbody")], "an answer that is not a listing shows nothing yet").toEqual([true, null]);
-    expect(asked(before)).toEqual([["call_log", { count: 25 }], ["call_log", { count: 50 }], ["call_log", { count: 50, call_type: "heartbeat" }]]);
+    expect(asked(before)).toEqual([["call_log", { count: 25 }], ["call_log", { count: 50 }], ["call_log", { count: 50, call_type: "wake" }]]);
   });
 
   test("a call opens from its row, by click or Enter, with what it sent, got back and cost", async () => {

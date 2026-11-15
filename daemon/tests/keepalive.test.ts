@@ -857,15 +857,34 @@ describe("keepalive edges", () => {
     }
   });
 
-  test("a heartbeat that refreshed the prefix moves the next ping without counting as activity", async () => {
+  test("a wake that refreshed the prefix moves the next ping without counting as activity", async () => {
     const h = harness();
     h.service.arm({ ...rhia(), keepalive_interval_ms: 60_000, keepalive_cached_tokens: 1000 }, true);
     h.service.observe("Rhia", OPUS, "message");
     const armedAt = h.clock.now();
     h.clock.advance(30_000);
-    h.service.observe("Rhia", OPUS, "heartbeat", undefined, usage(1000, 0), { sdk: "anthropic", model: OPUS, provider_key: "anthropic" });
+    h.service.observe("Rhia", OPUS, "wake", undefined, usage(1000, 0), { sdk: "anthropic", model: OPUS, provider_key: "anthropic" });
     expect(h.service.nextPingAt("Rhia")).toBe(h.clock.now() + 60_000);
     expect(h.service.scheduleFor("Rhia")?.last_active_at).toBe(armedAt);
+  });
+
+  test("a wake that read something else leaves the next ping where it was: another model, another thread, the Claude subscription, or less than the prefix", () => {
+    const context = { character: "Rhia", call_type: "wake", thinking_enabled: false };
+    const elsewhere: [number, Parameters<KeepaliveService["observe"]>[5]][] = [
+      [1000, { sdk: "anthropic", model: "claude-haiku-5", provider_key: "anthropic" }],
+      [1000, { sdk: "anthropic", model: OPUS, provider_key: "anthropic", context: { ...context, thread: "ring" } }],
+      [1000, { sdk: "claude_agent", model: OPUS, provider_key: "anthropic" }],
+      [999, { sdk: "anthropic", model: OPUS, provider_key: "anthropic" }],
+    ];
+    for (const [read, identity] of elsewhere) {
+      const h = harness();
+      h.service.arm({ ...rhia(), keepalive_interval_ms: 60_000, keepalive_cached_tokens: 1000 }, true);
+      h.service.observe("Rhia", OPUS, "message");
+      const due = h.service.nextPingAt("Rhia");
+      h.clock.advance(30_000);
+      h.service.observe("Rhia", OPUS, "wake", undefined, usage(read, 0), identity);
+      expect([due, h.service.nextPingAt("Rhia")], JSON.stringify(identity)).toEqual([h.clock.now() + 30_000, due]);
+    }
   });
 
   test("a restored schedule with no cached request yet skips its ping and backs off", async () => {

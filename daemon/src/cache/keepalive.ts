@@ -122,13 +122,13 @@ export function cachedPrefixTokens(usage: Pick<Usage, "cache_read_tokens" | "cac
   return usage.cache_read_tokens + usage.cache_creation_tokens;
 }
 
-function heartbeatRefreshedPrefix(
+function wakeRefreshedPrefix(
   armed: KeepalivePrefix,
-  heartbeat: Pick<SidecarRequest, "sdk" | "model" | "provider_key" | "context">,
+  wake: Pick<SidecarRequest, "sdk" | "model" | "provider_key" | "context">,
   usage: Pick<Usage, "cache_read_tokens">,
 ): boolean {
-  if (heartbeat.sdk === "claude_agent" || haltKey(heartbeat) !== haltKey(armed)) return false;
-  if ((heartbeat.context?.thread ?? MAIN_THREAD) !== (armed.context?.thread ?? MAIN_THREAD)) return false;
+  if (wake.sdk === "claude_agent" || haltKey(wake) !== haltKey(armed)) return false;
+  if ((wake.context?.thread ?? MAIN_THREAD) !== (armed.context?.thread ?? MAIN_THREAD)) return false;
   const cached = armed.keepalive_cached_tokens ?? 0;
   return cached > 0 && usage.cache_read_tokens >= cached;
 }
@@ -275,11 +275,11 @@ export class KeepaliveService {
     usage?: Pick<Usage, "cache_read_tokens">,
     identity?: Pick<SidecarRequest, "sdk" | "model" | "provider_key" | "context">,
   ): void {
-    if (callType === "heartbeat") {
-      this.#observeHeartbeat(character, usage, identity);
+    if (callType === "wake") {
+      this.#observeWake(character, usage, identity);
       return;
     }
-    if (callType === "keepalive" || callType === "heartbeat_tool_loop" || callType === "dreaming" || callType === "dreaming_tool_loop") return;
+    if (callType === "keepalive" || callType === "wake_tool_loop" || callType === "dreaming" || callType === "dreaming_tool_loop") return;
     const entry = this.#entryFor(character);
     const armed = entry.prefix;
     const elsewhere = identity !== undefined && armed !== undefined && haltKey(identity) !== haltKey(armed);
@@ -293,7 +293,7 @@ export class KeepaliveService {
     entry.keepalive.onCacheWarmed(model, this.#now(), callType === "message" || callType === "tool_loop");
   }
 
-  #observeHeartbeat(
+  #observeWake(
     character: string,
     usage: Pick<Usage, "cache_read_tokens"> | undefined,
     identity: Pick<SidecarRequest, "sdk" | "model" | "provider_key" | "context"> | undefined,
@@ -301,7 +301,7 @@ export class KeepaliveService {
     const entry = this.#entries.get(character);
     const armed = entry?.prefix;
     if (entry === undefined || armed === undefined || usage === undefined || identity === undefined) return;
-    if (entry.keepalive.nextPingAt === undefined || !heartbeatRefreshedPrefix(armed, identity, usage)) return;
+    if (entry.keepalive.nextPingAt === undefined || !wakeRefreshedPrefix(armed, identity, usage)) return;
     entry.keepalive.onPrefixWarmed(this.#now());
   }
 

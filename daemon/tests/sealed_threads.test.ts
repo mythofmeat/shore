@@ -194,7 +194,7 @@ function request(sealed: boolean): SidecarRequest {
   return {
     sdk: "anthropic", model: "claude-fixture", provider_key: "anthropic", api_key: "key", max_tokens: 64, reasoning_replay: "all",
     messages: [{ role: "user", content: [{ type: "text", text: "the card" }] }],
-    context: { character: "ada", call_type: "heartbeat", thinking_enabled: false, ...(sealed ? { sealed: true } : {}) },
+    context: { character: "ada", call_type: "wake", thinking_enabled: false, ...(sealed ? { sealed: true } : {}) },
   };
 }
 

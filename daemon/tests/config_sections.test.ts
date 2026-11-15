@@ -398,6 +398,16 @@ test("a budget, a plan limit or a timezone that can't work is refused, naming th
     await write(`[[budgets]]\ncost_usd = 1\nname = "first"\n[[budgets]]\n${second}\n`);
     expect(read).toThrow(refusal);
   }
+  for (const [second, refusal] of [
+    ['cost_usd = 1\ncall_type = "heartbeat"', 'budgets.1.call_type is "heartbeat"; a wake\'s calls are recorded as "wake" now'],
+    ['cost_usd = 1\ncall_type = "heartbeat_tool_loop"', 'budgets.1.call_type is "heartbeat_tool_loop"; a wake\'s calls are recorded as "wake_tool_loop" now'],
+    ['cost_usd = 1\nusage_kinds = ["message", "heartbeat"]', 'budgets.1.usage_kinds has "heartbeat"; a wake\'s calls are counted as "wake" now'],
+  ] as const) {
+    await write(`[[budgets]]\ncost_usd = 1\nname = "first"\n[[budgets]]\n${second}\n`);
+    expect(read).toThrow(refusal);
+  }
+  await write('[[budgets]]\ncost_usd = 1\ncall_type = "wake"\nusage_kinds = ["wake"]\n[[budgets]]\ncost_usd = 1\nname = "loops"\ncall_type = "wake_tool_loop"\n');
+  expect(read().app.budgets.map((budget) => [budget.call_type, budget.usage_kinds])).toEqual([["wake", ["wake"]], ["wake_tool_loop", []]]);
   await write("[plan_limits.five_hour]\nlimit_fraction = 0.0\n");
   expect(read).toThrow("plan_limits.five_hour.limit_fraction must be greater than 0");
   await write("[plan_limits.seven_day]\nwarn_fractions = [0.5, 0.0]\n");

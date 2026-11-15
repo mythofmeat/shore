@@ -15,7 +15,7 @@ export interface QueryFilter {
 }
 
 const USAGE_KIND_EXPR = `CASE
-    WHEN call_type = 'heartbeat_tool_loop' THEN 'heartbeat'
+    WHEN call_type = 'wake_tool_loop' THEN 'wake'
     WHEN call_type = 'dreaming_tool_loop' THEN 'dreaming'
     WHEN call_type = 'message' AND finish_reason = 'tool_use' THEN 'message_with_tools'
     WHEN call_type = 'tool_loop' THEN 'message_with_tools'
@@ -119,6 +119,7 @@ function rowFromSqlite(r: Record<string, unknown>): CallRow {
     thinking_dropped: count(r["thinking_dropped"]),
     cache_state_reason: optText(r["cache_state_reason"]),
     attempt: optText(r["attempt"]),
+    wake_trigger: optText(r["wake_trigger"]),
   };
 }
 
@@ -278,6 +279,7 @@ const DIMENSION_EXPR: Record<UsageDimension, string> = {
   kind: USAGE_KIND_EXPR,
   api_key: "provider || ' ' || COALESCE(api_key_name, 'unknown')",
   cost_source: "COALESCE(cost_source, 'unknown')",
+  trigger: "COALESCE(wake_trigger, 'none')",
 };
 
 export function isUsageDimension(value: string): value is UsageDimension {

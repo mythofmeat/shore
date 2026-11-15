@@ -31,6 +31,13 @@ export function withoutHeartbeatSection(source: string): string {
 
 const PAUSED_HEARTBEAT = /\b(pace_warn_action|limit_action|warn_action|pace_action)(\s*=\s*)(["'])pause_heartbeat\3/g;
 
+const HEARTBEAT_CALL_TYPE = /\b(call_type\s*=\s*)(["'])heartbeat(_tool_loop)?\2/g;
+const USAGE_KINDS = /\busage_kinds\s*=\s*\[[^\]]*\]/g;
+const HEARTBEAT_KIND = /(["'])heartbeat\1/g;
+
 export function withCurrentNames(source: string): string {
-  return withoutHeartbeatSection(source).replace(PAUSED_HEARTBEAT, "$1$2$3pause_wakes$3");
+  return withoutHeartbeatSection(source)
+    .replace(PAUSED_HEARTBEAT, "$1$2$3pause_wakes$3")
+    .replace(HEARTBEAT_CALL_TYPE, "$1$2wake$3$2")
+    .replace(USAGE_KINDS, (kinds) => kinds.replace(HEARTBEAT_KIND, "$1wake$1"));
 }

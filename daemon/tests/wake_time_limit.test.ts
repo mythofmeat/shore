@@ -45,11 +45,11 @@ function slowProvider(script: Script, seen: SidecarRequest[]): SidecarProvider {
   return {
     generate: async (request) => response(request, [{ type: "text", text: "hello" }]),
     stream: async function* (request, signal) {
-      if (request.context?.call_type.startsWith("heartbeat") !== true) {
+      if (request.context?.call_type.startsWith("wake") !== true) {
         yield* eventsForResponse(response(request, [{ type: "text", text: "hello" }]));
         return;
       }
-      if (request.context.call_type === "heartbeat") wakes += 1;
+      if (request.context.call_type === "wake") wakes += 1;
       seen.push(structuredClone(request));
       const round = script(request, wakes);
       jest.advanceTimersByTime(round.minutes * MINUTE);
@@ -133,7 +133,7 @@ test("a wake in home stopped at its 30-minute limit says so in that thread, the 
 
       await run();
       await run();
-      const opening = seen.filter((request) => request.context?.call_type === "heartbeat").map(textOf);
+      const opening = seen.filter((request) => request.context?.call_type === "wake").map(textOf);
       expect(opening).toHaveLength(3);
       const shownOfHome = (text: string | undefined): string => (text ?? "").slice(0, (text ?? "").indexOf("\n\n["));
       expect(shownOfHome(opening[0])).toStartWith("[wake]\n\nThe last of what was said in this thread:\n\n");

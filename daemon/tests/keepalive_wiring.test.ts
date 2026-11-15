@@ -184,7 +184,7 @@ describe("the ping count bounds the schedule", () => {
     clock.advance(55 * MINUTE);
     await service.tick();
     clock.advance(5 * MINUTE);
-    service.observe(CHARACTER, "claude-opus-4-6", "heartbeat");
+    service.observe(CHARACTER, "claude-opus-4-6", "wake");
     clock.advance(55 * MINUTE);
     await service.tick();
     expect(sent).toHaveLength(1);

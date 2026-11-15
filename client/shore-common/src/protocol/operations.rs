@@ -316,7 +316,7 @@ wire_types! {
     }
 
     #[serde(rename_all = "snake_case")]
-    pub enum UsageDimension { Model, Provider, CallType, Kind, ApiKey, CostSource }
+    pub enum UsageDimension { Model, Provider, CallType, Kind, ApiKey, CostSource, Trigger }
 
     #[serde(rename_all = "snake_case")]
     pub enum UsageBudgetPeriod { Hour, Day, Week, Month }

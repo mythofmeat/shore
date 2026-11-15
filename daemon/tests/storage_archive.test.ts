@@ -223,6 +223,22 @@ describe("one character's slice of the database", () => {
     expect(readDurable(join(moved.data, "ada", "notes.json"))).toBe(JSON.stringify({ picture: `${source.data}/media/ada/a.png` }));
   });
 
+  test("an archive from when a wake's calls were recorded as heartbeats is imported with them recorded as wakes", () => {
+    const source = seeded();
+    const old = new Database(databasePath(source.data));
+    old.run("UPDATE calls SET call_type = 'heartbeat_tool_loop' WHERE character = 'ada'");
+    old.run("UPDATE call_attempts SET call_type = 'heartbeat' WHERE character = 'ada'");
+    old.close();
+    const archive = join(source.root, "old-ada.db");
+    exportUnifiedDatabase(databasePath(source.data), "ada", archive);
+    const target = dirs();
+    initializeDatabase(target.data);
+    seed(target.data, "bea");
+    importUnifiedDatabase(databasePath(target.data), archive, "ada", source.data, target.data);
+    expect(rows(databasePath(target.data), "SELECT character, call_type FROM calls ORDER BY character")).toEqual([["ada", "wake_tool_loop"], ["bea", "chat"]]);
+    expect(rows(databasePath(target.data), "SELECT character, call_type FROM call_attempts ORDER BY character")).toEqual([["ada", "wake"], ["bea", "chat"]]);
+  });
+
   test("removing a character takes its rows, alternatives, blobs and attempts, keeps the others', leaves nothing open, and works on a database the history store made alone", () => {
     const shared = dirs();
     initializeDatabase(shared.data);

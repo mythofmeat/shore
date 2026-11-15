@@ -61,3 +61,16 @@ test("a budget or plan limit that paused the heartbeat pauses wakes, under which
   const untouched = '[[budgets]]\nname = "beats"\nlimit_action = "pause_wakes"\nnote = "pause_heartbeat"\n';
   expect(withCurrentNames(untouched)).toBe(untouched);
 });
+
+test("a budget that counted the heartbeat's calls counts a wake's, by call type or by kind, and a budget's other settings are left as written", () => {
+  const written = [
+    "[[budgets]]", 'name = "beats"', "cost_usd = 1", 'call_type = "heartbeat"', "",
+    "[[budgets]]", 'name = "loops"', "cost_usd = 1", "call_type='heartbeat_tool_loop'", 'usage_kinds = ["message", "heartbeat", \'heartbeat\']', "",
+    "[[budgets]]", 'name = "heartbeat"', "cost_usd = 1", 'call_type = "message"', 'usage_kinds = []', 'character = "heartbeat"', "",
+  ].join("\n");
+  expect(withCurrentNames(written).split("\n")).toEqual([
+    "[[budgets]]", 'name = "beats"', "cost_usd = 1", 'call_type = "wake"', "",
+    "[[budgets]]", 'name = "loops"', "cost_usd = 1", "call_type='wake_tool_loop'", 'usage_kinds = ["message", "wake", \'wake\']', "",
+    "[[budgets]]", 'name = "heartbeat"', "cost_usd = 1", 'call_type = "message"', 'usage_kinds = []', 'character = "heartbeat"', "",
+  ]);
+});

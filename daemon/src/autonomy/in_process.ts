@@ -65,7 +65,7 @@ export class InProcessAutonomyExecutor implements AutonomyExecutor {
   async runWake(character: string, wake: WakeRun, hooks: WakeHooks): Promise<WakeResult> {
     return await this.#withForeground(async () => {
       const config = this.#deps.registry.effectiveConfig(character);
-      const calls = this.#loopCalls(config, character, "wake", ["heartbeat", "heartbeat_tool_loop"]);
+      const calls = this.#loopCalls(config, character, "wake", ["wake", "wake_tool_loop"]);
       const { wakeInThread, ...rest } = this.#deps.tools ?? {};
       const handsOn = wakeInThread === undefined || wake.fired.some((firing) => firing.from !== undefined) ? {} : { wakeInThread };
       let toolCtx: ReturnType<typeof buildToolContext> | undefined;

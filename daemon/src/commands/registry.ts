@@ -164,7 +164,7 @@ export const commandOperations: OperationRegistry<CommandOperationContext> = {
     last: { label: "Period", hint: "today, week, month, all, or a count such as 4h, 7d, 2w, 1M; omit for the current budget window or today" },
     character: { label: "Character filter", choices: "characters", hint: "Omit for all characters, including when a conversation is selected" },
     provider: { label: "Provider filter", choices: "providers" }, api_key: { label: "API key name", hint: "Configured name, not a credential; unknown matches older records" },
-    model: { label: "Model filter", hint: "Ledger model ID" }, call_type: { label: "Call type", hint: "For example message, tool_loop, heartbeat for wakes, or subagent" },
+    model: { label: "Model filter", hint: "Ledger model ID" }, call_type: { label: "Call type", hint: "For example message, tool_loop, wake, or subagent" },
     group_by: { label: "Group by" }, budget: { label: "Budgets only", hint: "Reports configured budget scopes independently of the report filters; takes precedence over other modes" },
     anomalies: { label: "Cache anomalies", hint: "today uses a seven-day lookback; exports and grouping take precedence" },
     export_csv: { label: "Export CSV", hint: "Full filtered ledger; takes precedence over grouping and anomalies" }, export_tsv: { label: "Export TSV", hint: "Full filtered ledger; takes precedence over CSV" },
