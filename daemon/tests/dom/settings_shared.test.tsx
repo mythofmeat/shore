@@ -222,7 +222,7 @@ describe("pages and banners", () => {
     const dream = { character: "ada", enabled: true, queued: true, running: true };
     const results: Record<string, unknown> = {
       wake_now: { status: "queued", character: "ada" }, set_dormant: { status: "dormant", character: "ada" }, set_active: { status: "active", character: "ada" },
-      dream, keepalive_ping_now: { status: "skipped", character: "ada", reason: "cold" }, session_activate: { character: "ada", registered: true, keepalive: { status: "off" }, own_time: null },
+      dream, keepalive_ping_now: { status: "skipped", character: "ada", reason: "cold" }, session_activate: { character: "ada", registered: true, keepalive: { status: "off" }, triggers: null },
     };
     app.answer((request) => results[request["name"] as string]);
     await view.update(<DebugPage state={{ ...snapshot, character: "ada" }} />);

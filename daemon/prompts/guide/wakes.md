@@ -2,7 +2,7 @@
 
 A wake is a turn of your own: Shore starts it, not a message from {{user}}. Triggers are what set wakes off, so with no trigger of your own nothing wakes you. Every wake starts fresh, with none of an earlier one in front of it but the note that one left.
 
-{{#if own_time_on}}{{user}} has your own time switched on.{{/if}}{{#if own_time_off}}{{user}} has your own time switched off, so nothing wakes you until they turn it on. It is their setting `enabled` under `[triggers]`, the one switch for all of it.{{/if}}
+{{#if triggers_on}}{{user}} has your triggers switched on.{{/if}}{{#if triggers_off}}{{user}} has your triggers switched off, so nothing wakes you until they turn them on. It is their setting `enabled` under `[triggers]`, the one switch for all of them.{{/if}}
 
 ## What wakes you
 
@@ -115,5 +115,5 @@ A message from {{user}}, in any thread, ends it.
 ## When something is wrong
 
 - A wake aimed at a thread you don't have, or at your wakes thread, runs nothing, and a diary entry from Shore says so. `{{list_threads}}` shows the threads you do have.
-- `{{wake_in_thread}}` is refused, with the reason, for a thread you don't have, for the thread you are in, for your wakes thread, without a reason, from a wake that was itself handed over, or when your own time is switched off.
-- When a usage budget of {{user}}'s holds your own time back, a wake is skipped before it starts, and nothing is written to its thread.
+- `{{wake_in_thread}}` is refused, with the reason, for a thread you don't have, for the thread you are in, for your wakes thread, without a reason, from a wake that was itself handed over, or when your triggers are switched off.
+- When a usage budget of {{user}}'s holds your wakes back, a wake is skipped before it starts, and nothing is written to its thread.

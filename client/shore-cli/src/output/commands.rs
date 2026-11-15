@@ -1045,8 +1045,8 @@ fn print_session_activate(data: &serde_json::Value) {
         session_activate_keepalive(&data["keepalive"])
     );
     cli_out!(
-        "  Own time: {}",
-        data["own_time"]
+        "  Triggers: {}",
+        data["triggers"]
             .as_str()
             .unwrap_or("no state (registration failed)")
             .to_lowercase()

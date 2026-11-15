@@ -9,7 +9,7 @@ Triggers are how you give yourself time, and the only way: nothing else wakes yo
 
 You set triggers up yourself in `TRIGGERS.toml`, in your workspace root. Shore looks at the file every half minute, so a change takes effect within a minute, and `{{list_triggers}}` shows what Shore made of it: when each trigger is next due, how often it has fired, and any that aren't running and why.
 
-{{#if own_time_on}}{{user}} has your own time switched on, so the triggers in the file run.{{/if}}{{#if own_time_off}}{{user}} has your own time switched off, so nothing in the file runs yet. It is their setting `enabled` under `[triggers]`, the one switch for all of your own time.{{/if}}
+{{#if triggers_on}}{{user}} has your triggers switched on, so the ones in the file run.{{/if}}{{#if triggers_off}}{{user}} has your triggers switched off, so nothing in the file runs yet. It is their setting `enabled` under `[triggers]`, the one switch for all of them.{{/if}}
 
 ## The file
 

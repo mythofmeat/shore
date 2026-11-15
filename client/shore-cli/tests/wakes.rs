@@ -63,10 +63,10 @@ fn making_a_character_dormant_or_active_says_which_it_now_is() {
 }
 
 #[test]
-fn activating_a_session_shows_the_keepalive_and_the_state_of_own_time() {
+fn activating_a_session_shows_the_keepalive_and_the_state_of_its_triggers() {
     let (first, _first_frames) = asked(
         json!({
-            "character": "ada", "registered": true, "own_time": "Active",
+            "character": "ada", "registered": true, "triggers": "Active",
             "keepalive": { "status": "resumed", "interval_secs": 270, "next_ping_at": "2026-11-12T00:04:00Z", "seconds_until_ping": 240 },
         }),
         &["debug", "session_activate"],
@@ -76,13 +76,13 @@ fn activating_a_session_shows_the_keepalive_and_the_state_of_own_time() {
         [
             "Activated ada.",
             "Keepalive: already warm; next ping in 4m",
-            "Own time: active"
+            "Triggers: active"
         ]
     );
 
     let (again, _again_frames) = asked(
         json!({
-            "character": "ada", "registered": false, "own_time": "Dormant",
+            "character": "ada", "registered": false, "triggers": "Dormant",
             "keepalive": { "status": "off" },
         }),
         &["debug", "session_activate"],
@@ -92,17 +92,17 @@ fn activating_a_session_shows_the_keepalive_and_the_state_of_own_time() {
         [
             "ada was already active.",
             "Keepalive: off \u{2014} this character's model sets cache_keepalive = off",
-            "Own time: dormant"
+            "Triggers: dormant"
         ]
     );
 
     let (unregistered, _unregistered_frames) = asked(
-        json!({ "character": "ada", "registered": false, "own_time": null, "keepalive": { "status": "off" } }),
+        json!({ "character": "ada", "registered": false, "triggers": null, "keepalive": { "status": "off" } }),
         &["debug", "session_activate"],
     );
     assert_eq!(
         lines(&unregistered).last().map(String::as_str),
-        Some("Own time: no state (registration failed)")
+        Some("Triggers: no state (registration failed)")
     );
 }
 

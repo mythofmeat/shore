@@ -67,7 +67,7 @@ async function build(
   };
 }
 
-describe("the switch for a character's own time", () => {
+describe("the switch for a character's triggers", () => {
   test("is shown under [triggers], on or off, beside what else the user set there", async () => {
     const on = await build(undefined, "[triggers]\nenabled = true\nmax_idle_wakes = 9\n");
     expect(config(on.ctx, { key: "triggers.enabled" })).toMatchObject({ key: "triggers.enabled", config: true });

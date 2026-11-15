@@ -619,7 +619,7 @@ describe("chat logs across threads", () => {
     expect(await search()).toBe(fresh);
   });
 
-  test("a message still in another thread's conversation is marked as from the character's own time only when it was", async () => {
+  test("a message still in another thread's conversation is marked as from a wake only when it was", async () => {
     const config = await setup();
     const data = config.dirs.data;
     await createThread(data, "frank", "story", NOW);

@@ -68,7 +68,7 @@ test("a wake is shown what was said in its thread since the last one, not that w
   ]);
   expect(await threadDigest(ring, THREAD_WORDS, T0 + 10 * MINUTE, "eve", "UTC")).toBe([
     "What was said in this thread since your last wake here:",
-    `you, on your own time · ${at("12:11 PM")}\nPart one: the fox came to the gate.`,
+    `you, in a wake · ${at("12:11 PM")}\nPart one: the fox came to the gate.`,
     `eve · ${at("12:12 PM")}\nand then?`,
     `you · ${at("12:12 PM")}\nChecking the tide.`,
     `you · ${at("12:12 PM")}\nIt came in at noon.`,

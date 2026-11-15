@@ -21,7 +21,7 @@ function file(fields: Record<string, unknown>): string {
   return JSON.stringify({ version: 4, ticks_without_user: 0, ...fields });
 }
 
-test("what a character's own time keeps comes back from its state file as it was written", () => {
+test("what a character's triggers and wakes keep comes back from its state file as it was written", () => {
   const awake = state();
   expect(decodeState(encodeState(awake))).toEqual(awake);
   const asleep = state({ forcedDormant: true, lastUserAt: undefined });

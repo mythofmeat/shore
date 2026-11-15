@@ -6917,7 +6917,7 @@
         "keepalive": {
           "$ref": "#/$defs/KeepaliveActivation"
         },
-        "own_time": {
+        "triggers": {
           "anyOf": [
             {
               "$ref": "#/$defs/AutonomyState"
@@ -6932,7 +6932,7 @@
         "character",
         "registered",
         "keepalive",
-        "own_time"
+        "triggers"
       ],
       "$defs": {
         "KeepaliveActivation": {

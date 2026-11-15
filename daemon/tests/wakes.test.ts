@@ -1107,7 +1107,7 @@ test("every wake counts towards going dormant, in a thread or not: after the use
   }, twoWakes, root);
 });
 
-test("the user's limits on a character's own time take hold as soon as they change them", async () => {
+test("the user's limits on a character's wakes take hold as soon as they change them", async () => {
   await withCharacter(async ({ runtime, say, reload }) => {
     await say("hello");
     runtime.autonomy.wakeFor("ada", { name: "show", reason: "r", at: T0 });
@@ -1128,7 +1128,7 @@ test("the user's limits on a character's own time take hold as soon as they chan
   }, (app) => { app.triggers.max_idle_wakes = 1; });
 });
 
-test("a trigger that fires while the character is dormant, or with its own time switched off, wakes nothing then or later", async () => {
+test("a trigger that fires while the character is dormant, or with its triggers switched off, wakes nothing then or later", async () => {
   const lamp = { name: "lamp", reason: "the lamp is low", at: T0 + 10 * MINUTE };
   await withCharacter(async ({ runtime, script, say }) => {
     await say("hello");
@@ -1366,7 +1366,7 @@ async function looks(runtime: ShoreRuntime): Promise<void> {
   await runtime.triggers.tick();
 }
 
-test("the character's triggers run whenever its own time is switched on, a check only when it has the bash tool, and nothing while it is dormant", async () => {
+test("the character's triggers run whenever they are switched on, a check only when it has the bash tool, and nothing while it is dormant", async () => {
   const noBash = "`touch` isn't running: its `check` is a command, and you don't have the `bash` tool to run commands with";
   await withCharacter(async ({ runtime, workspace, data, say }) => {
     await writeFile(join(workspace, "TRIGGERS.toml"), `${TOUCH}\n[lamp]\nevery = "10m"\nreason = "Trim the lamp."\nwake = false\n`);
@@ -1590,7 +1590,7 @@ test("a note the character writes in its diary from a conversation reaches its w
   }, withTools("write_diary"));
 });
 
-test("the character can list its triggers from a conversation, and is told when it has none or its own time is off", async () => {
+test("the character can list its triggers from a conversation, and is told when it has none or its triggers are off", async () => {
   const file = '[lamp]\nevery = "1h"\nreason = "Trim the lamp."\n';
   await withCharacter(async ({ runtime, script, workspace, say, thread }) => {
     script.replyTool = { name: "list_triggers", input: {} };
@@ -1619,7 +1619,7 @@ test("the character can list its triggers from a conversation, and is told when 
     script.replyTool = { name: "list_triggers", input: {} };
     await say("what have you set up?");
     expect(lastToolResult(await thread("main"))).toEqual({
-      text: "Your triggers, from TRIGGERS.toml in your workspace root. peggy has your own time switched off, so nothing fires.\n\nYou have none there yet, so nothing wakes you on its own.",
+      text: "Your triggers, from TRIGGERS.toml in your workspace root. peggy has your triggers switched off, so nothing fires.\n\nYou have none there yet, so nothing wakes you on its own.",
       failed: false,
     });
   }, (app) => {
@@ -2000,7 +2000,7 @@ test("a trigger that names a thread wakes the character there, fresh, with what 
     await fires(runtime, 71);
     expect(script.wakes.map((request) => request.context?.thread)).toEqual(["ring", "ring"]);
     expect(turnsOf(script.wakes[0])).toEqual([["user", wakeShown("1:11 PM", [
-      `What was said in this thread since your last wake here:\n\n${said("you, on your own time", "12:11 PM", "Part one: the fox came to the gate.")}\n\n${said("User", "12:12 PM", "and then?")}\n\n${said("you", "12:12 PM", "reply to: and then?")}`,
+      `What was said in this thread since your last wake here:\n\n${said("you, in a wake", "12:11 PM", "Part one: the fox came to the gate.")}\n\n${said("User", "12:12 PM", "and then?")}\n\n${said("you", "12:12 PM", "reply to: and then?")}`,
       wroteLast("58 minutes ago", 'your home thread "main"'),
       diaryOfDay(['your note at the end of a wake in "ring"', "12:11 PM", "Told part one; the fox is at the gate."]),
     ], ['[Your trigger "show" fired at Friday 2026-10-30 · 1:11 PM: Tell the next part.]'])]]);
@@ -2483,13 +2483,13 @@ test("a wake the character asked for and the user interrupted is not a request s
   }, handOff());
 });
 
-test("a hand-off is refused when the character's own time is switched off", async () => {
+test("a hand-off is refused when the character's triggers are switched off", async () => {
   await withCharacter(async ({ script, say, thread, runtime }) => {
     await runtime.registry.createThread("ada", "ring");
     await say("hello");
     script.replyTool = { name: "wake_in_thread", input: { thread: "ring", reason: "r" } };
     await say("go on");
-    expect(lastToolResult(await thread("main"))).toEqual({ text: "io: peggy has your own time switched off, so nothing would wake you", failed: true });
+    expect(lastToolResult(await thread("main"))).toEqual({ text: "io: peggy has your triggers switched off, so nothing would wake you", failed: true });
   }, (app) => {
     handOff()(app);
     app.triggers.enabled = false;
@@ -3159,7 +3159,7 @@ test("a wake started by hand runs at the next look, one for a dormant character 
       const reply = await command(name, {});
       return reply.type === "command_output" ? reply.data : reply;
     };
-    expect(await answered("session_activate")).toEqual({ character: "ada", registered: true, keepalive: { status: "off" }, own_time: "Active" });
+    expect(await answered("session_activate")).toEqual({ character: "ada", registered: true, keepalive: { status: "off" }, triggers: "Active" });
     await say("hello");
     at(1);
     expect(await answered("wake_now")).toEqual({ status: "queued", character: "ada" });
@@ -3167,7 +3167,7 @@ test("a wake started by hand runs at the next look, one for a dormant character 
     expect(script.wakes).toHaveLength(2);
 
     expect(await answered("set_dormant")).toEqual({ status: "dormant", character: "ada" });
-    expect(await answered("session_activate")).toEqual({ character: "ada", registered: false, keepalive: { status: "off" }, own_time: "Dormant" });
+    expect(await answered("session_activate")).toEqual({ character: "ada", registered: false, keepalive: { status: "off" }, triggers: "Dormant" });
     expect(await answered("wake_now")).toEqual({
       status: "queued", character: "ada",
       warning: "ada is dormant, so nothing wakes them and this wake is dropped. Run `shore debug set_active` first.",
@@ -3794,7 +3794,7 @@ test("at its time the seal comes off: the thread joins the user's list with what
   }, sealing, root);
 });
 
-test("with the character's own time switched off a seal still comes off at its time, and nothing wakes", async () => {
+test("with the character's triggers switched off a seal still comes off at its time, and nothing wakes", async () => {
   let root = "";
   await withCharacter(async (h) => {
     root = dirname(h.data);
