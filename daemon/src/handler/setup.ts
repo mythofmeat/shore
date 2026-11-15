@@ -51,6 +51,15 @@ export class ImagesUnsupportedError extends Error {
   }
 }
 
+export class WakesThreadError extends Error {
+  readonly code: ErrorCode = "invalid_request";
+
+  constructor(character: string, thread: string) {
+    super(`"${thread}" is where Shore keeps the working from ${character}'s wakes, so you can read it but not write there. Write to ${character} in another thread.`);
+    this.name = "WakesThreadError";
+  }
+}
+
 export class WakeTurnError extends Error {
   readonly code: ErrorCode = "invalid_request";
 

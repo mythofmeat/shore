@@ -26,7 +26,7 @@ export const MAX_THREAD_FILES = 20;
 
 const THREAD_ID = /^[A-Za-z0-9][A-Za-z0-9._-]*$/;
 
-export type ThreadErrorKind = "invalid_id" | "invalid_files" | "invalid_folder" | "invalid_seal" | "exists" | "not_found" | "is_home" | "is_pinned" | "locked";
+export type ThreadErrorKind = "invalid_id" | "invalid_files" | "invalid_folder" | "invalid_seal" | "exists" | "not_found" | "is_home" | "is_wakes" | "is_pinned" | "locked";
 
 export class ThreadError extends Error {
   constructor(
@@ -81,10 +81,15 @@ export interface ThreadFolder {
 export interface ThreadsIndex {
   version: 1;
   home: string;
+  wakes?: string;
   threads: ThreadRecord[];
   order?: string[];
   folders?: ThreadFolder[];
 }
+
+const WAKES_THREAD = "wakes";
+
+const WAKES_THREAD_LABEL = "Wakes";
 
 export function defaultThreadsIndex(now: string): ThreadsIndex {
   return {
@@ -328,6 +333,11 @@ export function homeThread(index: ThreadsIndex | undefined): string {
   return threadRecord(index, index.home) === undefined ? MAIN_THREAD : index.home;
 }
 
+export function wakesThread(index: ThreadsIndex | undefined): string | undefined {
+  if (index?.wakes === undefined || threadRecord(index, index.wakes) === undefined) return undefined;
+  return index.wakes === homeThread(index) ? undefined : index.wakes;
+}
+
 function isThreadRecord(raw: unknown): raw is ThreadRecord {
   if (typeof raw !== "object" || raw === null) return false;
   return typeof (raw as Record<string, unknown>)["id"] === "string";
@@ -487,6 +497,25 @@ export async function createThread(
   return next;
 }
 
+export async function ensureWakesThread(
+  data: string,
+  character: string,
+  now: string,
+): Promise<{ index: ThreadsIndex; created: boolean }> {
+  const index = await ensureThreads(data, character, now);
+  if (wakesThread(index) !== undefined) return { index, created: false };
+  let id = WAKES_THREAD;
+  for (let n = 2; threadRecord(index, id) !== undefined; n += 1) id = `${WAKES_THREAD}-${String(n)}`;
+  await mkdir(threadDataDir(data, character, id), { recursive: true });
+  const next: ThreadsIndex = {
+    ...index,
+    wakes: id,
+    threads: [...index.threads, { id, label: WAKES_THREAD_LABEL, created_at: now, compaction: false }],
+  };
+  await writeThreadsIndex(data, character, next);
+  return { index: next, created: true };
+}
+
 function requireThread(index: ThreadsIndex, character: string, id: string): ThreadRecord {
   const found = threadRecord(index, id);
   if (found === undefined) {
@@ -507,6 +536,9 @@ export async function setHomeThread(
 ): Promise<ThreadsIndex> {
   const index = await ensureThreads(data, character, now);
   requireThread(index, character, id);
+  if (id === wakesThread(index)) {
+    throw new ThreadError("is_wakes", `thread ${JSON.stringify(id)} is where Shore keeps ${character}'s working from wakes, so it can't be home`);
+  }
   const next: ThreadsIndex = { ...index, home: id };
   await writeThreadsIndex(data, character, next);
   return next;
@@ -593,6 +625,9 @@ export async function setThreadCompaction(
 ): Promise<ThreadsIndex> {
   const index = await ensureThreads(data, character, now);
   const record = requireThread(index, character, id);
+  if (compaction && id === wakesThread(index)) {
+    throw new ThreadError("is_wakes", `thread ${JSON.stringify(id)} is where Shore keeps ${character}'s working from wakes, and it is never compacted`);
+  }
   const next = replaceThread(index, { ...record, compaction });
   await writeThreadsIndex(data, character, next);
   return next;
@@ -703,8 +738,10 @@ export async function archiveThread(
     await rm(dir, { recursive: true, force: true });
     deleteThreadState(data, character, id);
     forgetThreadSessions(data, character, id);
+    const { wakes, ...rest } = withoutThread(index, id);
     const next: ThreadsIndex = {
-      ...withoutThread(index, id),
+      ...rest,
+      ...(wakes === id ? {} : { wakes }),
       threads: index.threads.filter((t) => t.id !== id),
     };
     await writeThreadsIndex(data, character, next);

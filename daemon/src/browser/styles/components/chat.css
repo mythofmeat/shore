@@ -743,6 +743,11 @@ button.chip:hover {
   font-size: var(--text-md);
 }
 
+.composer-note {
+  color: var(--text-2);
+  font-size: var(--text-md);
+}
+
 .heartbeat-note summary {
   cursor: pointer;
   font-size: var(--text-sm);

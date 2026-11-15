@@ -48,6 +48,7 @@ import {
   buildGenerationRequest,
   ImagesUnsupportedError,
   resolveGenerationModel,
+  WakesThreadError,
   WakeTurnError,
   type SetupEngine,
 } from "./setup.ts";
@@ -108,6 +109,7 @@ export interface GenerationRegistry {
   getOrCreate(name: string, thread?: string): Promise<GenerationEngine>;
   effectiveConfig(name: string): LoadedConfig;
   listThreads(name: string): readonly ThreadRecord[];
+  wakesThread?(name: string): string | undefined;
 }
 
 interface GenerationDiagnostics {
@@ -197,6 +199,7 @@ export async function runGeneration(
   const engine = await deps.registry.getOrCreate(
     params.charName, liveThread(deps.registry, params.charName, params.meta.session.selectedThread),
   );
+  if (engine.thread === deps.registry.wakesThread?.(params.charName)) throw new WakesThreadError(params.charName, engine.thread);
   deps.userActiveIn?.(params.charName, engine.thread);
   return await withConversation(threadDataDir(deps.dataDir, params.charName, engine.thread), "turn", async (signal) => {
   params = { ...params, signal };

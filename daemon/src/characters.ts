@@ -25,7 +25,9 @@ import {
   createThread,
   editThreadAsCharacter,
   ensureThreads,
+  ensureWakesThread,
   homeThread,
+  wakesThread,
   requireEditableByCharacter,
   resolveThreadFiles,
   setHomeThread,
@@ -49,6 +51,7 @@ import {
   resetActivePromptSnapshotIfEmpty,
 } from "./memory/deferred_edits.ts";
 import { characterWorkspace } from "./tools/character_workspace.ts";
+import { required } from "./util/required.ts";
 
 export interface RuntimeReloadSummary {
   availableBefore: number;
@@ -196,6 +199,17 @@ export class CharacterRegistry {
 
   listThreads(name: string): readonly ThreadRecord[] {
     return this.#threads.get(name)?.threads ?? [];
+  }
+
+  wakesThread(name: string): string | undefined {
+    return wakesThread(this.#threads.get(name));
+  }
+
+  async ensureWakesThread(name: string): Promise<{ thread: string; created: boolean }> {
+    return await this.#withThreadIndex(name, async () => {
+      const { index, created } = await ensureWakesThread(this.#dataDir, name, new Date().toISOString());
+      return { thread: required(wakesThread(this.#remember(name, index))), created };
+    });
   }
 
   async getOrCreate(name: string, thread?: string): Promise<ConversationEngine> {

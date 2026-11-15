@@ -107,7 +107,7 @@ function SegmentBanner({ view, state }: { view: SegmentView; state: WorkspaceSna
   </div>;
 }
 
-export function Transcript({ character, mobile }: { character: string; mobile: boolean }) {
+export function Transcript({ character, mobile, readOnly = false }: { character: string; mobile: boolean; readOnly?: boolean }) {
   const state = useWorkspace();
   const display = useDisplay();
   const active = useActiveRequests();
@@ -195,7 +195,7 @@ export function Transcript({ character, mobile }: { character: string; mobile: b
           switch (item.kind) {
             case "day": return <div key={item.key} className="divider" role="separator">{item.label}</div>;
             case "message": return <MessageRow key={item.key} message={item.message} character={character} avatar={info?.avatar} last={live && item.last && streams.length === 0 && waiting === undefined} lastUser={item.message.msg_id === lastUser}
-              metadata={state.metadata[item.message.msg_id]} display={display} busy={busy} mobile={mobile} openImage={openImage} readOnly={!live} />;
+              metadata={state.metadata[item.message.msg_id]} display={display} busy={busy} mobile={mobile} openImage={openImage} readOnly={!live || readOnly} />;
           }
         })}
         {streams.map((stream, index) => <StreamingMessage key={stream.key} stream={stream} saved={savedParts[index]} character={character} state={state} openImage={openImage} mobile={mobile} />)}

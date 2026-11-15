@@ -116,7 +116,8 @@ export type CompactionErrorKind =
   | "conversation"
   | "markdown_store"
   | "not_found"
-  | "busy";
+  | "busy"
+  | "wakes_thread";
 
 export class CompactionError extends Error {
   readonly kind: CompactionErrorKind;
@@ -145,6 +146,10 @@ export class CompactionError extends Error {
 
   static busy(character: string): CompactionError {
     return new CompactionError("busy", `Compaction already running for ${character}`);
+  }
+
+  static wakesThread(character: string, thread: string): CompactionError {
+    return new CompactionError("wakes_thread", `"${thread}" is where Shore keeps the working from ${character}'s wakes. It is only a log, so it is never compacted`);
   }
 }
 
