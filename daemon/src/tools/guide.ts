@@ -57,7 +57,7 @@ export function guideValues(config: LoadedConfig, userName: string): Map<string,
   const statuses = presence.statuses.map((status) => `\`${status}\``).join(", ");
   return new Map([
     ["user", userName],
-    either(triggers.enabled, "own_time_on", "own_time_off"),
+    either(triggers.enabled, "triggers_on", "triggers_off"),
     either(triggers.checks, "checks_on", "checks_off"),
     ["wake_cooldown", span(triggers.wakeCooldownMs)],
     ["check_time_limit", span(triggers.checkLimitMs)],

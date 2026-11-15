@@ -351,11 +351,11 @@ function sortText(sort: ChatLogSort, match: ChatLogMatch): string {
 
 function hitLine(hit: ChatLogHit, view: View, query: string): string {
   const thread = hit.thread === "main" ? "" : `[${hit.thread}] `;
-  const onOwnTime = hit.wake === 1 ? "(wake) " : "";
+  const fromWake = hit.wake === 1 ? "(wake) " : "";
   const snippet = oneLine(hit.snippet ?? substringSnippet(hit.text, query));
   const copies = alsoIn(hit);
   const also = copies.length === 0 ? "" : ` · also in ${copies.join(", ")}`;
-  return `${stamp(hit.ts, view.zone)}  ${labelOf(hit.speaker, view).padEnd(view.width)}  ${thread}${onOwnTime}${snippet}  ${hit.msg_id}${also}`;
+  return `${stamp(hit.ts, view.zone)}  ${labelOf(hit.speaker, view).padEnd(view.width)}  ${thread}${fromWake}${snippet}  ${hit.msg_id}${also}`;
 }
 
 export async function handleSearchChatLogs(
@@ -429,8 +429,8 @@ export async function handleSearchChatLogs(
 }
 
 function entryHead(row: ChatLogMessage, view: View, marked: boolean): string {
-  const onOwnTime = row.wake === 1 ? "  (wake)" : "";
-  return `${marked ? "▶ " : ""}${stamp(row.ts, view.zone)}  ${labelOf(row.speaker, view)}${onOwnTime}  ${row.msg_id}`;
+  const fromWake = row.wake === 1 ? "  (wake)" : "";
+  return `${marked ? "▶ " : ""}${stamp(row.ts, view.zone)}  ${labelOf(row.speaker, view)}${fromWake}  ${row.msg_id}`;
 }
 
 function entrySize(row: ChatLogMessage, view: View): number {

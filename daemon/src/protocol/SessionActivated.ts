@@ -2,4 +2,4 @@
 import type { AutonomyState } from "./AutonomyState";
 import type { KeepaliveActivation } from "./KeepaliveActivation";
 
-export type SessionActivated = { character: string, registered: boolean, keepalive: KeepaliveActivation, own_time: AutonomyState | null, };
+export type SessionActivated = { character: string, registered: boolean, keepalive: KeepaliveActivation, triggers: AutonomyState | null, };

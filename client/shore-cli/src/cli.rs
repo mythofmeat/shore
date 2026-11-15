@@ -2460,7 +2460,7 @@ pub(crate) enum DebugCommand {
     /// Send a cache-keepalive ping now and report whether it read the cache
     #[command(name = "keepalive_ping_now")]
     KeepalivePingNow,
-    /// Start this character's own time and keepalive without sending a
+    /// Start this character's triggers and keepalive without sending a
     /// message. If the prefix is cold this pays one cache write to recreate
     /// it, which is what starts the keepalive cadence.
     #[command(name = "session_activate")]

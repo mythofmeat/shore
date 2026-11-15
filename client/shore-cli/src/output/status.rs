@@ -156,7 +156,7 @@ fn all_zero(map: &serde_json::Map<String, Value>) -> bool {
 
 fn not_started(name: &str) -> &'static str {
     match name {
-        "autonomy" => "not started \u{00b7} own time starts with your first message",
+        "autonomy" => "not started \u{00b7} triggers start with your first message",
         "activity" => "nothing recorded yet \u{00b7} activity is learned from your messages",
         "history_index" => "no history index for this character",
         "mcp" => "no MCP servers configured",
@@ -304,7 +304,7 @@ mod tests {
     fn a_section_that_has_not_started_says_what_it_waits_on() {
         assert_eq!(
             section_shown("autonomy"),
-            ["(not started \u{00b7} own time starts with your first message)"]
+            ["(not started \u{00b7} triggers start with your first message)"]
         );
         assert_eq!(
             section_shown("activity"),

@@ -1623,7 +1623,7 @@ wire_types! {
         pub registered: bool,
         pub keepalive: KeepaliveActivation,
         #[serde(deserialize_with = "deserialize_nullable")]
-        pub own_time: Option<AutonomyState>,
+        pub triggers: Option<AutonomyState>,
     }
 
     #[serde(rename_all = "snake_case")]

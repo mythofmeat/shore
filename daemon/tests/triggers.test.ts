@@ -308,7 +308,7 @@ test("triggers that follow each other in a ring are all refused, and so is anyth
   });
 });
 
-test("[triggers] holds every setting of a character's own time, the switch among them, and [heartbeat] is no section any more", async () => {
+test("[triggers] holds every setting of a character's triggers and wakes, the switch among them, and [heartbeat] is no section any more", async () => {
   const root = await mkdtemp(testTmp("shore-triggers-config-"));
   const read = (): unknown[] => {
     const { app } = loadConfig(join(root, "config.toml"), { env: { SHORE_CONFIG_DIR: root }, onWarn: () => {} });
@@ -436,7 +436,7 @@ test("the list says of a check when it last ran and whether it printed nothing o
   expect(shown(body, { failing: true })).toBe(`${head}never fired · its check is failing`);
 });
 
-test("the list covers every trigger and those that aren't running, and says so when there are none or the character's own time is off", () => {
+test("the list covers every trigger and those that aren't running, and says so when there are none or the character's triggers are off", () => {
   const parsed = parse('[show]\nat = "Sat 20:00"\nreason = "The show."\n\n[recap]\nfollows = "show"\nreason = "Write it up."\nwake = false\n\n[lamp]\nreason = "r"\n');
   const view: TriggersView = { enabled: true, problems: parsed.problems, triggers: parsed.triggers.map((trigger) => ({ trigger, off: false, failing: false, fired: 0, lastFiredAt: undefined, checkedAt: undefined, nextAt: undefined })) };
   expect(handleListTriggers(view, "eve", "UTC")).toBe([
@@ -447,7 +447,7 @@ test("the list covers every trigger and those that aren't running, and says so w
   ].join("\n\n"));
   expect(handleListTriggers({ enabled: true, triggers: [], problems: [] }, "eve", "UTC")).toBe("Your triggers, from TRIGGERS.toml in your workspace root.\n\nYou have none there yet, so nothing wakes you on its own.");
   expect(handleListTriggers({ enabled: false, triggers: [], problems: ["`lamp` isn't running: why"] }, "eve", "UTC")).toBe(
-    "Your triggers, from TRIGGERS.toml in your workspace root. eve has your own time switched off, so nothing fires.\n\nNot running:\n- `lamp` isn't running: why",
+    "Your triggers, from TRIGGERS.toml in your workspace root. eve has your triggers switched off, so nothing fires.\n\nNot running:\n- `lamp` isn't running: why",
   );
   expect(() => handleListTriggers(undefined, "eve", "UTC")).toThrow("triggers are not available in this context");
 });

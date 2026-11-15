@@ -83,5 +83,5 @@ export async function sessionActivateCommand(
 ): Promise<OperationResult<"session_activate">> {
   const registered = await ctx.register(character, ctx.config);
   const keepalive = await activateKeepalive(character, ctx);
-  return { character, registered, keepalive, own_time: ctx.autonomy.status(character)?.state ?? null };
+  return { character, registered, keepalive, triggers: ctx.autonomy.status(character)?.state ?? null };
 }

@@ -57,7 +57,7 @@ export function handleWakeInThread(
   const request = wakeInThreadRequest(input);
   if (request.thread === here) throw new ToolIoError(`you are in "${request.thread}" now, so there is nothing to hand over`);
   const outcome = handOff(request);
-  if (outcome.kind === "off") throw new ToolIoError(`${userName} has your own time switched off, so nothing would wake you`);
+  if (outcome.kind === "off") throw new ToolIoError(`${userName} has your triggers switched off, so nothing would wake you`);
   if (outcome.kind === "no_thread") throw new ToolIoError(`you have no thread "${request.thread}" to be woken in; \`list_threads\` shows the ones you have`);
   if (outcome.kind === "wakes_thread") throw new ToolIoError(`"${request.thread}" is where Shore keeps the working from your wakes, so no wake runs there`);
   if (outcome.kind === "waiting") {

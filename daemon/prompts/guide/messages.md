@@ -2,7 +2,7 @@
 
 ## Messages
 
-In a conversation your reply is the message. From your own time nothing reaches {{user}} unless you send it:
+In a conversation your reply is the message. From a wake nothing reaches {{user}} unless you send it:
 
 - In the final response of a wake, wrap what you want to say in `<sendMessage>...</sendMessage>` tags. Nothing outside the tags is sent.
 - It is posted in the thread the wake ran in, which is your home thread when its trigger names no thread.

@@ -83,7 +83,7 @@ function cut(text: string): string {
 }
 
 function entry(message: Message, userName: string, timeZone: string): string {
-  const speaker = message.role === "user" ? userName : message.origin === "autonomous" ? "you, on your own time" : "you";
+  const speaker = message.role === "user" ? userName : message.origin === "autonomous" ? "you, in a wake" : "you";
   const at = timeOf(message);
   const when = Number.isNaN(at) ? "" : ` · ${formatWallClock(at, timeZone)}`;
   return `${speaker}${when}\n${cut(spoken(message) ?? "")}`;

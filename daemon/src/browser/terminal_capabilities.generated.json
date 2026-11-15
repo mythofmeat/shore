@@ -5711,7 +5711,7 @@
     },
     {
       "path": "shore debug session_activate",
-      "about": "Start this character's own time and keepalive without sending a message. If the prefix is cold this pays one cache write to recreate it, which is what starts the keepalive cadence",
+      "about": "Start this character's triggers and keepalive without sending a message. If the prefix is cold this pays one cache write to recreate it, which is what starts the keepalive cadence",
       "long_about": null,
       "hidden": false,
       "aliases": [],

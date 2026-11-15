@@ -23,7 +23,7 @@ export function DebugPage({ state }: { state: ChromeSnapshot }) {
       action("Dream", () => workspace.actions.run("dream", { now: true }), (value) => value.running ? "Already dreaming" : "Dream queued")],
     ["Send a cache keepalive", "Pings the provider now to keep the prompt cache warm.",
       action("Ping", () => workspace.actions.run("keepalive_ping_now", {}), (value) => `Keepalive ${value.status}`)],
-    ["Activate the session", "Registers the session and starts keepalive and the character's own time as a client connection would.",
+    ["Activate the session", "Registers the session and starts keepalive and the character's triggers as a client connection would.",
       action("Activate", () => workspace.actions.run("session_activate", {}), () => "Session activated")],
   ];
   return <>
