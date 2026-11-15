@@ -14,6 +14,7 @@ import { ProviderRegistry } from "../src/config/providers.ts";
 import { Diagnostics } from "../src/diagnostics.ts";
 import type { History } from "../src/engine/conversation.ts";
 import { addDiaryNote, foldDiary, unfoldedDiary } from "../src/autonomy/diary.ts";
+import { encodeEvent } from "../src/autonomy/wake_log.ts";
 import { triggerFiredNote, userWroteNote, wakeNewsNote } from "../src/autonomy/wake_shape.ts";
 import { lastSeen, noteSeen, presence, setPresence } from "../src/autonomy/presence.ts";
 import { checkFacts, startTriggerTimer, type TriggerService } from "../src/autonomy/trigger_service.ts";
@@ -30,6 +31,8 @@ import { runCompactionPass } from "../src/memory/compaction/run.ts";
 import type { ServerMessage } from "../src/protocol/ServerMessage.ts";
 import { hostZone } from "../src/ledger/zoned.ts";
 import { createRuntime, startRuntimeClocks, type ShoreRuntime } from "../src/runtime.ts";
+import { initializeDatabase } from "../src/storage/database.ts";
+import { insertEvent, withStorage } from "../src/storage/store.ts";
 import { characterWorkspace } from "../src/tools/character_workspace.ts";
 import * as execute from "../src/tools/execute.ts";
 import { recordedTurns, replyVersions, workspaceTurnsFor } from "../src/tools/workspace_turns.ts";
@@ -883,6 +886,7 @@ test("a message sent while a wake runs tells that turn a wake is running, where 
     at(11);
     await say("nothing is running now");
     expect(textOf(script.replies.at(-1) as SidecarRequest)).not.toContain("A wake of yours");
+    await say("the study is quiet", "study");
 
     const held = hold();
     script.beatHeld = held;
@@ -920,6 +924,59 @@ test("a message sent while a wake runs tells that turn a wake is running, where 
     expect(resumed).toContain(`${running}\nis the lamp lit?`);
     expect(times(resumed, "A wake of yours")).toBe(1);
   }, undefined, root);
+});
+
+test("what a character's wakes did is listed oldest first, the newest twenty unless a count is given, whether or not anything is waking the character yet", async () => {
+  at(0);
+  const root = await mkdtemp(testTmp("shore-wakes-"));
+  const when = new Date(T0).toISOString();
+  initializeDatabase(join(root, "data"));
+  withStorage(join(root, "data"), (db) => {
+    for (let n = 1; n <= 25; n += 1) {
+      insertEvent(db, { character: "ada", kind: "wake", timestamp: when, content: encodeEvent({ timestamp: when, kind: "message_sent", detail: `event ${String(n)}` }) });
+    }
+  });
+  const numbered = (from: number) => Array.from({ length: 26 - from }, (_, index) => ({ timestamp: when, kind: "message_sent", detail: `event ${String(from + index)}` }));
+
+  await withCharacter(async ({ runtime, say, command }) => {
+    const listed = async (args: Record<string, unknown>) => (await command("wake_log", args) as unknown as { data: { events: unknown[] } }).data.events;
+    expect(runtime.autonomy.runnerFor("ada")).toBeUndefined();
+    expect(await listed({ count: 2 })).toEqual(numbered(24));
+    expect(await listed({})).toEqual(numbered(6));
+
+    await say("hello");
+    expect(runtime.autonomy.runnerFor("ada")).toBeDefined();
+    expect(await listed({})).toEqual(numbered(6));
+    expect(await listed({ count: 3 })).toEqual(numbered(23));
+    expect(await listed({ count: 25 })).toEqual(numbered(1));
+  }, undefined, root);
+});
+
+test("starting a wake by hand answers that it is queued, and making a character dormant or active says which, with a warning when a wake is asked of a dormant one", async () => {
+  await withCharacter(async ({ runtime, script, say, command }) => {
+    const answered = async (name: string) => (await command(name, {}) as unknown as { type: string; data?: unknown; message?: string });
+    expect(await answered("wake_now")).toMatchObject({ type: "error", message: "No autonomy state for character 'ada'" });
+    await say("hello");
+    at(10);
+    expect((await answered("wake_now")).data).toEqual({ status: "queued", character: "ada" });
+    await runtime.autonomy.tick();
+    expect(script.wakes).toHaveLength(2);
+
+    expect((await answered("set_dormant")).data).toEqual({ status: "dormant", character: "ada" });
+    at(20);
+    expect((await answered("wake_now")).data).toEqual({
+      status: "queued", character: "ada",
+      warning: "ada is dormant, so nothing wakes them and this wake is dropped. Run `shore debug set_active` first.",
+    });
+    await runtime.autonomy.tick();
+    expect(script.wakes).toHaveLength(2);
+
+    expect((await answered("set_active")).data).toEqual({ status: "active", character: "ada" });
+    at(30);
+    expect((await answered("wake_now")).data).toEqual({ status: "queued", character: "ada" });
+    await runtime.autonomy.tick();
+    expect(script.wakes).toHaveLength(4);
+  });
 });
 
 test("each side is told about the other in these words, with the thread the wake is in, and a note kept from when there was an own-time thread still reads as it did", () => {

@@ -1,11 +1,13 @@
-import { expect, test } from "bun:test";
+import { expect, spyOn, test } from "bun:test";
 import { mkdtempSync, existsSync, mkdirSync, readdirSync, readlinkSync, realpathSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { CallStore, ZERO_USAGE } from "../src/call_store.ts";
 import { HistoryStore } from "../src/engine/history_store.ts";
 import { initializeDatabase } from "../src/storage/database.ts";
-import { DIAGNOSTIC_RETENTION_MS, pruneDiagnostics } from "../src/storage/retention.ts";
+import { shoreLog } from "../src/log.ts";
+import { SnapshotGate } from "../src/snapshot_gate.ts";
+import { DIAGNOSTIC_RETENTION_MS, pruneDiagnostics, startDiagnosticRetention } from "../src/storage/retention.ts";
 import { databasePath, insertEvent, readEvents, unpack, withStorage, writeState, readState, pack } from "../src/storage/store.ts";
 import { appendSubagentTrace } from "../src/tools/subagent_trace.ts";
 import { randomUUID } from "node:crypto";
@@ -100,6 +102,32 @@ test("a write failure rolls back the entire cleanup", async () => {
     expect(event.kind).toBe("subagent");
     expect(unpack(event.content)).not.toContain("messages_expired");
   });
+});
+
+test("the sweep the daemon starts says what it removed, whichever kind that was, and says nothing when there was nothing to remove", async () => {
+  const long = "2020-01-01T00:00:00.000Z";
+  const said = spyOn(shoreLog, "info").mockImplementation(() => {});
+  try {
+    const swept = async (seed: (data: string) => Promise<void>): Promise<string[]> => {
+      const data = dataDir();
+      await seed(data);
+      said.mockClear();
+      const gate = new SnapshotGate();
+      const sweeping = startDiagnosticRetention(data, gate, 3_600_000);
+      await gate.withSnapshot(async () => {});
+      sweeping.stop();
+      return said.mock.calls.map((call) => String(call[0]));
+    };
+    expect(await swept(async () => {})).toEqual([]);
+    expect(await swept(async (data) => {
+      withStorage(data, (db) => { insertEvent(db, { character: "ada", kind: "wake", timestamp: long, content: "an old wake" }); });
+    })).toEqual(["shore: diagnostic retention removed 0 captures and 1 wake events; retained results for 0 expired subagent traces"]);
+    expect(await swept(async (data) => {
+      await appendSubagentTrace(join(data, "ada"), { ts: long, subagent: "helper", parent_tool_use_id: "id", model: "test", messages: [], result: "keep" });
+    })).toEqual(["shore: diagnostic retention removed 0 captures and 0 wake events; retained results for 1 expired subagent traces"]);
+  } finally {
+    said.mockRestore();
+  }
 });
 
 const start = Date.parse("2026-09-10T12:00:00Z");
