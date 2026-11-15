@@ -105,7 +105,7 @@ export function callLog(ctx: CallLogContext, args: Args): OperationResult<"call_
   return { enabled: true, entries: [...newestFirst].reverse() };
 }
 
-const TRANSCRIPT_SOURCE = "heartbeat";
+const TRANSCRIPT_SOURCE = "wake";
 const TRANSCRIPT_SOURCES: readonly string[] = [TRANSCRIPT_SOURCE, "dreaming"];
 
 export function transcript(ctx: CallLogContext, args: OperationInput<"transcript">): OperationResult<"transcript"> {

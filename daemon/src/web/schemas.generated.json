@@ -826,10 +826,10 @@
             "properties": {
               "name": {
                 "type": "string",
-                "const": "heartbeat_log"
+                "const": "wake_log"
               },
               "data": {
-                "$ref": "#/$defs/HeartbeatLogResult"
+                "$ref": "#/$defs/WakeLogResult"
               }
             },
             "required": [
@@ -890,10 +890,10 @@
             "properties": {
               "name": {
                 "type": "string",
-                "const": "heartbeat_tick_now"
+                "const": "wake_now"
               },
               "data": {
-                "$ref": "#/$defs/HeartbeatControlResult"
+                "$ref": "#/$defs/WakeControlResult"
               }
             },
             "required": [
@@ -954,10 +954,10 @@
             "properties": {
               "name": {
                 "type": "string",
-                "const": "heartbeat_set_dormant"
+                "const": "set_dormant"
               },
               "data": {
-                "$ref": "#/$defs/HeartbeatControlResult"
+                "$ref": "#/$defs/WakeControlResult"
               }
             },
             "required": [
@@ -970,10 +970,10 @@
             "properties": {
               "name": {
                 "type": "string",
-                "const": "heartbeat_set_active"
+                "const": "set_active"
               },
               "data": {
-                "$ref": "#/$defs/HeartbeatControlResult"
+                "$ref": "#/$defs/WakeControlResult"
               }
             },
             "required": [
@@ -4846,7 +4846,7 @@
           "recent_events": {
             "type": "array",
             "items": {
-              "$ref": "#/$defs/HeartbeatEvent"
+              "$ref": "#/$defs/WakeEvent"
             }
           }
         },
@@ -4865,14 +4865,14 @@
           "Dormant"
         ]
       },
-      "HeartbeatEvent": {
+      "WakeEvent": {
         "type": "object",
         "properties": {
           "timestamp": {
             "type": "string"
           },
           "kind": {
-            "$ref": "#/$defs/HeartbeatEventKind"
+            "$ref": "#/$defs/WakeEventKind"
           },
           "detail": {
             "type": "string"
@@ -4884,7 +4884,7 @@
           "detail"
         ]
       },
-      "HeartbeatEventKind": {
+      "WakeEventKind": {
         "type": "string",
         "enum": [
           "tick_fired",
@@ -5453,13 +5453,13 @@
           "reason"
         ]
       },
-      "HeartbeatLogResult": {
+      "WakeLogResult": {
         "type": "object",
         "properties": {
           "events": {
             "type": "array",
             "items": {
-              "$ref": "#/$defs/HeartbeatEvent"
+              "$ref": "#/$defs/WakeEvent"
             }
           }
         },
@@ -6017,7 +6017,7 @@
       "TranscriptSource": {
         "type": "string",
         "enum": [
-          "heartbeat",
+          "wake",
           "dreaming"
         ]
       },
@@ -6169,11 +6169,11 @@
           "messages"
         ]
       },
-      "HeartbeatControlResult": {
+      "WakeControlResult": {
         "type": "object",
         "properties": {
           "status": {
-            "$ref": "#/$defs/HeartbeatControlStatus"
+            "$ref": "#/$defs/WakeControlStatus"
           },
           "character": {
             "type": "string"
@@ -6190,10 +6190,10 @@
           "character"
         ]
       },
-      "HeartbeatControlStatus": {
+      "WakeControlStatus": {
         "type": "string",
         "enum": [
-          "scheduled",
+          "queued",
           "dormant",
           "active"
         ]
@@ -10949,10 +10949,10 @@
             "properties": {
               "name": {
                 "type": "string",
-                "const": "heartbeat_log"
+                "const": "wake_log"
               },
               "data": {
-                "$ref": "#/$defs/HeartbeatLogResult"
+                "$ref": "#/$defs/WakeLogResult"
               }
             },
             "required": [
@@ -11013,10 +11013,10 @@
             "properties": {
               "name": {
                 "type": "string",
-                "const": "heartbeat_tick_now"
+                "const": "wake_now"
               },
               "data": {
-                "$ref": "#/$defs/HeartbeatControlResult"
+                "$ref": "#/$defs/WakeControlResult"
               }
             },
             "required": [
@@ -11077,10 +11077,10 @@
             "properties": {
               "name": {
                 "type": "string",
-                "const": "heartbeat_set_dormant"
+                "const": "set_dormant"
               },
               "data": {
-                "$ref": "#/$defs/HeartbeatControlResult"
+                "$ref": "#/$defs/WakeControlResult"
               }
             },
             "required": [
@@ -11093,10 +11093,10 @@
             "properties": {
               "name": {
                 "type": "string",
-                "const": "heartbeat_set_active"
+                "const": "set_active"
               },
               "data": {
-                "$ref": "#/$defs/HeartbeatControlResult"
+                "$ref": "#/$defs/WakeControlResult"
               }
             },
             "required": [
@@ -14969,7 +14969,7 @@
           "recent_events": {
             "type": "array",
             "items": {
-              "$ref": "#/$defs/HeartbeatEvent"
+              "$ref": "#/$defs/WakeEvent"
             }
           }
         },
@@ -14988,14 +14988,14 @@
           "Dormant"
         ]
       },
-      "HeartbeatEvent": {
+      "WakeEvent": {
         "type": "object",
         "properties": {
           "timestamp": {
             "type": "string"
           },
           "kind": {
-            "$ref": "#/$defs/HeartbeatEventKind"
+            "$ref": "#/$defs/WakeEventKind"
           },
           "detail": {
             "type": "string"
@@ -15007,7 +15007,7 @@
           "detail"
         ]
       },
-      "HeartbeatEventKind": {
+      "WakeEventKind": {
         "type": "string",
         "enum": [
           "tick_fired",
@@ -15576,13 +15576,13 @@
           "reason"
         ]
       },
-      "HeartbeatLogResult": {
+      "WakeLogResult": {
         "type": "object",
         "properties": {
           "events": {
             "type": "array",
             "items": {
-              "$ref": "#/$defs/HeartbeatEvent"
+              "$ref": "#/$defs/WakeEvent"
             }
           }
         },
@@ -16140,7 +16140,7 @@
       "TranscriptSource": {
         "type": "string",
         "enum": [
-          "heartbeat",
+          "wake",
           "dreaming"
         ]
       },
@@ -16292,11 +16292,11 @@
           "messages"
         ]
       },
-      "HeartbeatControlResult": {
+      "WakeControlResult": {
         "type": "object",
         "properties": {
           "status": {
-            "$ref": "#/$defs/HeartbeatControlStatus"
+            "$ref": "#/$defs/WakeControlStatus"
           },
           "character": {
             "type": "string"
@@ -16313,10 +16313,10 @@
           "character"
         ]
       },
-      "HeartbeatControlStatus": {
+      "WakeControlStatus": {
         "type": "string",
         "enum": [
-          "scheduled",
+          "queued",
           "dormant",
           "active"
         ]

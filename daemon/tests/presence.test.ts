@@ -99,19 +99,19 @@ function said(id: string, text: string, at: number, extra: Partial<Message> = {}
 test("a message that arrived with a new status says so right above what the user wrote, after the diary and a running wake", () => {
   const asleep = { status: "asleep", set_at: AT };
   const left = [{ id: "d1", at: AT, thread: "own-time", source: "wake" as const, text: "The lamp is lit." }];
-  const heartbeat = { started_at: new Date(T0 + HOUR).toISOString() };
+  const running = { started_at: new Date(T0 + HOUR).toISOString() };
   const prompt = assemblePrompt({
     character_name: "ada", display_name: "eve", has_prior_context: false, user_timestamp_mode: "never",
     messages: [
       said("m1", "good morning", T0 + HOUR, { presence: asleep }),
-      said("m2", "still there?", T0 + 2 * HOUR, { presence: { status: "", set_at: new Date(T0 + 90 * MINUTE).toISOString() }, diary: left, heartbeat_running: heartbeat }),
+      said("m2", "still there?", T0 + 2 * HOUR, { presence: { status: "", set_at: new Date(T0 + 90 * MINUTE).toISOString() }, diary: left, wake_running: running }),
       { ...said("m3", "and now", T0 + 2 * HOUR, { presence: asleep }), timestamp: "sometime" },
     ],
   }, "UTC");
 
   expect(prompt.messages.map((message) => message.content_blocks.map((block) => block.type === "text" ? block.text : ""))).toEqual([
     ['[Their status, set about an hour ago: "asleep"]', "good morning"],
-    [diaryText(left, DIARY_FOR_CHAT, "UTC"), wakeRunningText(heartbeat, "UTC"), "[Their status was cleared 30 minutes ago.]", "still there?"],
+    [diaryText(left, DIARY_FOR_CHAT, "UTC"), wakeRunningText(running, "UTC"), "[Their status was cleared 30 minutes ago.]", "still there?"],
     ["and now"],
   ]);
   expect(prompt.messages[0]?.content).toBe('[Their status, set about an hour ago: "asleep"]\n\ngood morning');

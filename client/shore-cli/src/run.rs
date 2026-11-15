@@ -235,7 +235,7 @@ pub(crate) async fn execute(
                 "what the daemon did behind the conversation",
                 &[
                     ("trace calls", "raw model call payloads"),
-                    ("trace heartbeat", "what each wake thought and did"),
+                    ("trace wakes", "what each wake thought and did"),
                     ("trace dreams", "what each dream read and changed"),
                     ("trace events", "the wake timeline: fired, dormant, woke"),
                     ("trace errors", "errors hit since start, and key fallbacks"),
@@ -349,7 +349,7 @@ pub(crate) fn wants_json(other: &CliCommand) -> bool {
         CliCommand::Trace { subcommand } => match subcommand {
             Some(
                 crate::cli::TraceCommand::Calls { json, .. }
-                | crate::cli::TraceCommand::Heartbeat { json, .. }
+                | crate::cli::TraceCommand::Wakes { json, .. }
                 | crate::cli::TraceCommand::Dreams { json, .. }
                 | crate::cli::TraceCommand::Errors { json, .. }
                 | crate::cli::TraceCommand::Events { json, .. }

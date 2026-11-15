@@ -30,7 +30,7 @@ export function historyIsBetweenTurns(messages: readonly Message[]): boolean {
   return messages.at(-1)?.role === "assistant";
 }
 
-export function heartbeatRebuildMessages(
+export function wakeRebuildMessages(
   character: string,
   messages: readonly Message[],
   anchor: () => Message = () => idleAnchorMessage(),
@@ -103,7 +103,7 @@ export async function rebuildRequestFromDisk(
     return undefined;
   }
 
-  const selected = heartbeatRebuildMessages(character, store.messages(), () =>
+  const selected = wakeRebuildMessages(character, store.messages(), () =>
     idleAnchorMessage(
       deps.newId ?? (() => `m_${randomUUID()}`),
       deps.now ?? (() => new Date().toISOString()),

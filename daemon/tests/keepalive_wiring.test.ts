@@ -177,7 +177,7 @@ describe("the ping count bounds the schedule", () => {
     expect(await pingsOver(THREE_PINGS, 6)).toBe(3);
   });
 
-  test("a heartbeat is not a real turn, and gives nothing back", async () => {
+  test("a wake is not a real turn, and gives nothing back", async () => {
     const clock = fakeClock();
     const { service, sent } = await turnPersisted(CONFIGURED, clock);
 

@@ -7,10 +7,10 @@ export function writePromptSnapshotFile(path: string, content: string): void {
   writeDurable(join(dirname(path), ".snapshot"), "1");
 }
 
-export function seedHeartbeatEvents(characterDir: string, lines: string): void {
+export function seedWakeEvents(characterDir: string, lines: string): void {
   withStorage(dirname(characterDir), db => db.transaction(() => {
     for (const content of lines.split("\n").filter(line => line !== "")) {
-      insertEvent(db, { character: basename(characterDir), kind: "heartbeat", timestamp: "", content });
+      insertEvent(db, { character: basename(characterDir), kind: "wake", timestamp: "", content });
     }
   })());
 }

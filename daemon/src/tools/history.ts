@@ -351,7 +351,7 @@ function sortText(sort: ChatLogSort, match: ChatLogMatch): string {
 
 function hitLine(hit: ChatLogHit, view: View, query: string): string {
   const thread = hit.thread === "main" ? "" : `[${hit.thread}] `;
-  const onOwnTime = hit.heartbeat === 1 ? "(wake) " : "";
+  const onOwnTime = hit.wake === 1 ? "(wake) " : "";
   const snippet = oneLine(hit.snippet ?? substringSnippet(hit.text, query));
   const copies = alsoIn(hit);
   const also = copies.length === 0 ? "" : ` · also in ${copies.join(", ")}`;
@@ -429,7 +429,7 @@ export async function handleSearchChatLogs(
 }
 
 function entryHead(row: ChatLogMessage, view: View, marked: boolean): string {
-  const onOwnTime = row.heartbeat === 1 ? "  (wake)" : "";
+  const onOwnTime = row.wake === 1 ? "  (wake)" : "";
   return `${marked ? "▶ " : ""}${stamp(row.ts, view.zone)}  ${labelOf(row.speaker, view)}${onOwnTime}  ${row.msg_id}`;
 }
 
@@ -570,7 +570,7 @@ function dayOverview(index: HistoryIndex, view: View, date: string): string {
     const last = required(c[c.length - 1]);
     const at = (row: ChatLogMessage) => dayOf(row.ts, view.zone) === date ? clockOf(row.ts, view.zone) : `${weekdayOf(row.ts, view.zone)} ${clockOf(row.ts, view.zone)}`;
     const opener = c.find((row) => row.speaker === "user");
-    const fromWakes = c.filter((row) => row.heartbeat === 1).length;
+    const fromWakes = c.filter((row) => row.wake === 1).length;
     const rest = opener !== undefined
       ? `first: ${truncate(oneLine(opener.text), FIRST_LINE_CHARS)}`
       : fromWakes === c.length

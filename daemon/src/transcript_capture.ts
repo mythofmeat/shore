@@ -10,7 +10,7 @@ export interface CapturedTool {
   isError: boolean;
 }
 
-export type TranscriptEntry = import("./protocol/HeartbeatTranscriptEntry.ts").HeartbeatTranscriptEntry;
+export type TranscriptEntry = import("./protocol/TranscriptEntry.ts").TranscriptEntry;
 
 export function buildEntry(
   resp: Pick<GenerateResponse, "content_blocks">,

@@ -405,8 +405,8 @@ pub(crate) fn render(
         "error_log" => Some(written(|out| {
             crate::output::commands::write_error_log(out, data);
         })),
-        "heartbeat_log" => Some(written(|out| {
-            crate::output::transcript::write_heartbeat_log(out, data, TUI_OUTPUT_WIDTH);
+        "wake_log" => Some(written(|out| {
+            crate::output::transcript::write_wake_log(out, data, TUI_OUTPUT_WIDTH);
         })),
         "run_tool" => Some(written(|out| {
             crate::output::commands::write_run_tool(out, data, TUI_OUTPUT_WIDTH);
@@ -514,18 +514,18 @@ pub(crate) fn render(
         })),
         "presence" => Some(crate::output::commands::presence_text(data)),
         "mark" | "unmark" | "marks" => Some(crate::output::commands::marks_text(wire_name, data)),
-        "heartbeat_tick_now" => Some(format!(
+        "wake_now" => Some(format!(
             "Started a wake for {}.",
             data.get("character")
                 .and_then(serde_json::Value::as_str)
                 .unwrap_or("?")
         )),
-        "heartbeat_set_dormant" | "heartbeat_set_active" => Some(format!(
+        "set_dormant" | "set_active" => Some(format!(
             "{} is now {}.",
             data.get("character")
                 .and_then(serde_json::Value::as_str)
                 .unwrap_or("?"),
-            if wire_name == "heartbeat_set_active" {
+            if wire_name == "set_active" {
                 "active"
             } else {
                 "dormant"
@@ -647,36 +647,42 @@ mod tests {
     }
 
     #[test]
+    fn the_error_log_from_the_palette_lists_errors_and_key_fallbacks() {
+        crate::output::set_color_enabled(false);
+        let data = json!({
+            "errors": { "count": 3, "recent": [
+                { "timestamp": "2026-11-01T09:30:05Z", "error_type": "provider", "message": "overloaded", "context": "turn 4" },
+            ] },
+            "key_fallbacks": { "count": 0, "recent": [] },
+        });
+        let shown = super::render("trace errors", "error_log", &data, "eve").unwrap_or_default();
+        let lines: Vec<String> = shown
+            .lines()
+            .map(|line| line.split_whitespace().collect::<Vec<_>>().join(" "))
+            .filter(|line| !line.is_empty())
+            .collect();
+        let [errors, error, fallbacks, none] = lines.as_slice() else {
+            panic!("{lines:?}")
+        };
+        assert!(errors.contains("Errors (3 total)"), "{errors}");
+        assert!(error.ends_with(" provider overloaded turn 4"), "{error}");
+        assert!(fallbacks.contains("Key fallbacks (0 total)"), "{fallbacks}");
+        assert_eq!(none, "(none)");
+    }
+
+    #[test]
     fn a_wake_started_or_a_change_of_dormancy_from_the_palette_says_what_happened() {
-        let data = json!({ "status": "scheduled", "character": "ada" });
+        let data = json!({ "status": "queued", "character": "ada" });
         assert_eq!(
-            super::render(
-                "debug heartbeat_tick_now",
-                "heartbeat_tick_now",
-                &data,
-                "eve"
-            )
-            .as_deref(),
+            super::render("debug wake_now", "wake_now", &data, "eve").as_deref(),
             Some("Started a wake for ada.")
         );
         assert_eq!(
-            super::render(
-                "debug heartbeat_status_dormant",
-                "heartbeat_set_dormant",
-                &data,
-                "eve"
-            )
-            .as_deref(),
+            super::render("debug set_dormant", "set_dormant", &data, "eve").as_deref(),
             Some("ada is now dormant.")
         );
         assert_eq!(
-            super::render(
-                "debug heartbeat_status_active",
-                "heartbeat_set_active",
-                &data,
-                "eve"
-            )
-            .as_deref(),
+            super::render("debug set_active", "set_active", &data, "eve").as_deref(),
             Some("ada is now active.")
         );
     }

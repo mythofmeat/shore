@@ -221,7 +221,7 @@ describe("pages and banners", () => {
     expect(view.host.textContent).toContain("Choose a character");
     const dream = { character: "ada", enabled: true, queued: true, running: true };
     const results: Record<string, unknown> = {
-      heartbeat_tick_now: { status: "scheduled", character: "ada" }, heartbeat_set_dormant: { status: "dormant", character: "ada" }, heartbeat_set_active: { status: "active", character: "ada" },
+      wake_now: { status: "queued", character: "ada" }, set_dormant: { status: "dormant", character: "ada" }, set_active: { status: "active", character: "ada" },
       dream, keepalive_ping_now: { status: "skipped", character: "ada", reason: "cold" }, session_activate: { character: "ada", registered: true, keepalive: { status: "off" }, own_time: null },
     };
     app.answer((request) => results[request["name"] as string]);
@@ -232,12 +232,12 @@ describe("pages and banners", () => {
       await acting(() => Bun.sleep(5));
     }
     expect(view.host.querySelector(".settings-section:last-child h2")?.textContent).toBe("Last result: Activate");
-    results["heartbeat_tick_now"] = { status: "scheduled", character: "ada", warning: "Nothing to do" };
+    results["wake_now"] = { status: "queued", character: "ada", warning: "Nothing to do" };
     results["dream"] = { ...dream, running: false };
     await click(button(view.host, "Start a wake"));
     await acting(() => Bun.sleep(5));
     await click(button(view.host, "Dream"));
     await acting(() => Bun.sleep(5));
-    expect(shown.mock.calls.map(([text]) => text)).toEqual(["Wake scheduled", "ada is dormant", "ada is active", "Already dreaming", "Keepalive skipped", "Session activated", "Nothing to do", "Dream queued"]);
+    expect(shown.mock.calls.map(([text]) => text)).toEqual(["Wake queued", "ada is dormant", "ada is active", "Already dreaming", "Keepalive skipped", "Session activated", "Nothing to do", "Dream queued"]);
   });
 });

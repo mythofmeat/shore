@@ -7,7 +7,7 @@ import { CHARACTER_ARCHIVES_SQL, HistoryStore } from "../engine/history_store.ts
 import { Ledger } from "../ledger/store.ts";
 import { copyArchiveTables, HISTORY_TABLES } from "./archive_rows.ts";
 import { openStorage, pack, unpack, STORAGE_SCHEMA } from "./store.ts";
-import { renameHeartbeatCallTypes } from "./wake_names_migration.ts";
+import { refileHeartbeatEvents, renameHeartbeatCallTypes } from "./wake_names_migration.ts";
 
 export function exportUnifiedDatabase(path: string, character: string, output: string, maxBytes?: number): void {
   if (!existsSync(path)) openStorage(dirname(path)).close();
@@ -97,6 +97,7 @@ export function importUnifiedDatabase(path: string, sourcePath: string, characte
         relocateMediaReferences(destination, character, sourceData, destinationData);
       }
       renameHeartbeatCallTypes(destination);
+      refileHeartbeatEvents(destination);
     })();
   } finally { source.close(); destination.close(); }
 }

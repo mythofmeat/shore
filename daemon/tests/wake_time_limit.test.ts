@@ -1,7 +1,7 @@
 import { afterAll, afterEach, expect, jest, test } from "bun:test";
 import { join } from "node:path";
 import { unfoldedDiary } from "../src/autonomy/diary.ts";
-import type { HeartbeatEvent } from "../src/autonomy/heartbeat_log.ts";
+import type { WakeEvent } from "../src/autonomy/wake_log.ts";
 import type { Message } from "../src/engine/types.ts";
 import type { GenerateResponse, SidecarProvider, SidecarRequest } from "../src/llm/types.ts";
 import { required } from "../src/util/required.ts";
@@ -61,7 +61,7 @@ function slowProvider(script: Script, seen: SidecarRequest[]): SidecarProvider {
 
 interface OwnTime {
   run: () => Promise<void>;
-  log: () => HeartbeatEvent[];
+  log: () => WakeEvent[];
   messages: (thread?: string) => Promise<readonly Message[]>;
   diary: () => [source: string, text: string][];
 }

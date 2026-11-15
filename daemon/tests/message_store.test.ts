@@ -129,6 +129,16 @@ describe("loading a conversation file", () => {
     expect(readDurable(path).split("\n").map((line) => (line === "" ? "" : (JSON.parse(line) as Message).msg_id))).toEqual(["a", "b", "c", ""]);
   });
 
+  test("a note that a wake was running, saved when it was kept under its old name, is read and saved again under the new one", async () => {
+    const running = { started_at: "2026-08-27T00:00:00.000Z", thread: "ring" };
+    const path = await storePath();
+    seed(path, `${JSON.stringify({ ...message("a", "user", [text("a")]), heartbeat_running: running })}\n${lines([message("b", "user", [text("b")], { wake_running: running })])}`);
+    const store = await MessageStore.load(path);
+    expect(store.messages().map((m) => [m.wake_running, "heartbeat_running" in m])).toEqual([[running, false], [running, false]]);
+    await store.edit("a", "a, again");
+    expect(readDurable(path).split("\n").filter((line) => line !== "").map((line) => Object.keys(JSON.parse(line) as object).filter((key) => key.endsWith("_running")))).toEqual([["wake_running"], ["wake_running"]]);
+  });
+
   test("a sound file says nothing and sets nothing aside", async () => {
     const path = await storePath();
     seed(path, lines([message("a", "user", [text("a")])]));

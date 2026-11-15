@@ -6,7 +6,7 @@ import { usage } from "./usage.ts";
 import { usageConfigView } from "../ledger/budget.ts";
 import { describeTool, runTool } from "./run_tool.ts";
 import { clear, segments } from "./segments.ts";
-import { status, errorLog, heartbeatLog, heartbeatTickNow, heartbeatSetDormant, heartbeatSetActive } from "./status.ts";
+import { status, errorLog, wakeLog, wakeNow, setDormant, setActive } from "./status.ts";
 import { dream } from "./dream.ts";
 import { diary } from "./diary.ts";
 import { statusContext } from "./status_context.ts";
@@ -98,7 +98,7 @@ const characterPresentation = {
 const diagnosticPresentation = { category: "Diagnostics", scope: "character", prerequisites: [], effects: ["read"], confirmation: "none" } as const;
 const diagnosticCount = { label: "Recent entries", hint: "Zero returns an empty list; omit for the command's default" } as const;
 const storedDiagnosticCount = { ...diagnosticCount, hint: "Zero returns all stored entries; omit for the command's default" } as const;
-const heartbeatPresentation = { ...diagnosticPresentation, prerequisites: ["autonomy"], effects: ["runtime_write"] } as const;
+const wakePresentation = { ...diagnosticPresentation, prerequisites: ["autonomy"], effects: ["runtime_write"] } as const;
 const modelPresentation = { category: "Models", scope: "optional_character", prerequisites: [], effects: ["read"], confirmation: "none" } as const;
 const modelTargetFields = {
   name: { label: "Model", choices: "models", hint: "Omit for the active model; do not combine with role selectors" },
@@ -230,8 +230,8 @@ export const commandOperations: OperationRegistry<CommandOperationContext> = {
     (context) => status(statusContext(engineOf(context), context.session, context.deps))),
   error_log: register("error_log", { ...diagnosticPresentation, label: "Errors and key fallbacks", fields: { count: diagnosticCount } },
     (context, args) => errorLog(statusContext(engineOf(context), context.session, context.deps), args)),
-  heartbeat_log: register("heartbeat_log", { ...diagnosticPresentation, label: "Wake events", fields: { count: diagnosticCount } },
-    (context, args) => heartbeatLog(statusContext(engineOf(context), context.session, context.deps), args)),
+  wake_log: register("wake_log", { ...diagnosticPresentation, label: "Wake events", fields: { count: diagnosticCount } },
+    (context, args) => wakeLog(statusContext(engineOf(context), context.session, context.deps), args)),
   call_log: register("call_log", { ...diagnosticPresentation, label: "Inspect model calls", fields: {
     id: { label: "Call ID", hint: "Omit to list recent calls" }, count: storedDiagnosticCount,
     call_type: { label: "Call type", hint: "Filter the listing by its ledger call type" },
@@ -239,12 +239,12 @@ export const commandOperations: OperationRegistry<CommandOperationContext> = {
     diff: { label: "Compare calls", hint: "Compare the chosen call with its previous call or an explicit comparison ID" },
     against: { label: "Compare against call ID" }, wire: { label: "Include full HTTP bodies", hint: "Inspect captured request/response bodies and redacted headers" },
   } }, (context, args) => callLog({ characterName: engineOf(context).characterName, callStore: context.deps.callStore }, args)),
-  transcript: register("transcript", { ...diagnosticPresentation, label: "Read transcripts", fields: { source: { label: "Transcript source", hint: "heartbeat for wakes, dreaming for dreams" }, count: storedDiagnosticCount } },
+  transcript: register("transcript", { ...diagnosticPresentation, label: "Read transcripts", fields: { source: { label: "Transcript source", hint: "wake or dreaming" }, count: storedDiagnosticCount } },
     (context, args) => transcript({ characterName: engineOf(context).characterName, callStore: context.deps.callStore }, args)),
   subagent_trace: register("subagent_trace", { ...diagnosticPresentation, label: "Stored subagent runs", fields: { ids: { label: "Parent tool-use IDs", hint: "Omit to list recent runs" }, count: storedDiagnosticCount } },
     (context, args) => subagentTrace({ characterName: engineOf(context).characterName, dataDir: context.session.dataDir }, args)),
-  heartbeat_tick_now: register("heartbeat_tick_now", { ...heartbeatPresentation, label: "Start a wake now", effects: ["runtime_write", "provider_call"], fields: {} },
-    (context) => heartbeatTickNow(statusContext(engineOf(context), context.session, context.deps))),
+  wake_now: register("wake_now", { ...wakePresentation, label: "Start a wake now", effects: ["runtime_write", "provider_call"], fields: {} },
+    (context) => wakeNow(statusContext(engineOf(context), context.session, context.deps))),
   dream: register("dream", { category: "Memory", scope: "character", prerequisites: [], effects: ["runtime_write", "provider_call"], confirmation: "none", label: "Dream", fields: {
     now: { label: "Dream now", hint: "Start a dream at the next autonomy tick instead of waiting for its schedule" },
   } }, (context, args) => dream({ characterName: engineOf(context).characterName, config: context.session.config, autonomy: context.deps.autonomy }, args)),
@@ -254,10 +254,10 @@ export const commandOperations: OperationRegistry<CommandOperationContext> = {
   diary: register("diary", { category: "Memory", scope: "character", prerequisites: [], effects: ["read"], confirmation: "none", label: "Diary", fields: {
     count: { label: "Newest notes", hint: "Zero returns every note the diary keeps; omit for the newest 20" },
   } }, (context, args) => diary({ characterName: engineOf(context).characterName, dataDir: context.session.dataDir, now: (context.deps.now ?? Date.now)() }, args)),
-  heartbeat_set_dormant: register("heartbeat_set_dormant", { ...heartbeatPresentation, label: "Make dormant", fields: {} },
-    (context) => heartbeatSetDormant(statusContext(engineOf(context), context.session, context.deps))),
-  heartbeat_set_active: register("heartbeat_set_active", { ...heartbeatPresentation, label: "Make active", fields: {} },
-    (context) => heartbeatSetActive(statusContext(engineOf(context), context.session, context.deps))),
+  set_dormant: register("set_dormant", { ...wakePresentation, label: "Make dormant", fields: {} },
+    (context) => setDormant(statusContext(engineOf(context), context.session, context.deps))),
+  set_active: register("set_active", { ...wakePresentation, label: "Make active", fields: {} },
+    (context) => setActive(statusContext(engineOf(context), context.session, context.deps))),
   keepalive_ping_now: register("keepalive_ping_now", { ...diagnosticPresentation, prerequisites: ["keepalive"], label: "Send cache keepalive ping", effects: ["runtime_write", "provider_call"], fields: {} },
     (context) => {
       if (context.deps.keepalive === undefined) throw internalError("keepalive_ping_now is not available in this build");

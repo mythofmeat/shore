@@ -748,12 +748,12 @@ button.chip:hover {
   font-size: var(--text-md);
 }
 
-.heartbeat-note summary {
+.wake-note summary {
   cursor: pointer;
   font-size: var(--text-sm);
 }
 
-.heartbeat-note[open] summary {
+.wake-note[open] summary {
   margin-bottom: 6px;
 }
 

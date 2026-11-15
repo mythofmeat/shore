@@ -10,7 +10,7 @@ const SWEEP_INTERVAL_MS = 24 * 3_600_000;
 
 export interface RetentionStats {
   captures: number;
-  heartbeats: number;
+  wakeEvents: number;
   subagentTraces: number;
   unreadableTraces: number;
 }
@@ -25,7 +25,7 @@ export function pruneDiagnostics(data: string, nowMs = Date.now()): RetentionSta
     return db.transaction(() => {
       const stats: RetentionStats = {
         captures: store.expireBefore(cutoff),
-        heartbeats: db.query("DELETE FROM events WHERE kind = 'heartbeat' AND julianday(timestamp) < julianday(?1)").run(cutoffIso).changes,
+        wakeEvents: db.query("DELETE FROM events WHERE kind = 'wake' AND julianday(timestamp) < julianday(?1)").run(cutoffIso).changes,
         subagentTraces: 0,
         unreadableTraces: 0,
       };
@@ -70,8 +70,8 @@ export function startDiagnosticRetention(data: string, gate: SnapshotGate, inter
         const stats = pruneDiagnostics(data);
         const sdkSessions = pruneSdkSessions(data, Date.now(), claudeConfigDirs());
         if (sdkSessions > 0) shoreLog.info(`shore: diagnostic retention removed ${sdkSessions} retired SDK sessions and their transcript copies`);
-        if (stats.captures + stats.heartbeats + stats.subagentTraces > 0) {
-          shoreLog.info(`shore: diagnostic retention removed ${stats.captures} captures and ${stats.heartbeats} heartbeat events; retained results for ${stats.subagentTraces} expired subagent traces`);
+        if (stats.captures + stats.wakeEvents + stats.subagentTraces > 0) {
+          shoreLog.info(`shore: diagnostic retention removed ${stats.captures} captures and ${stats.wakeEvents} wake events; retained results for ${stats.subagentTraces} expired subagent traces`);
         }
         if (stats.unreadableTraces > 0) shoreLog.warn(`shore: diagnostic retention preserved ${stats.unreadableTraces} unreadable subagent traces`);
       });

@@ -15,8 +15,9 @@ import { conversationKey } from "../src/llm/providers/claude_agent.ts";
 import { shoreLog } from "../src/log.ts";
 import { createRuntime } from "../src/runtime.ts";
 import { initializeDatabase } from "../src/storage/database.ts";
-import { closeStorageConnections, databasePath } from "../src/storage/store.ts";
-import { renameRecordedHeartbeatCalls } from "../src/storage/wake_names_migration.ts";
+import { closeStorageConnections, databasePath, insertEvent, withStorage } from "../src/storage/store.ts";
+import { refileRecordedHeartbeatEvents, renameRecordedHeartbeatCalls } from "../src/storage/wake_names_migration.ts";
+import { encodeEvent, WakeLog } from "../src/autonomy/wake_log.ts";
 import { testTmp } from "./support/tmp.ts";
 
 afterEach(() => {
@@ -49,6 +50,31 @@ function recorded(path: string): Record<string, unknown[]> {
   const db = new Database(path, { readonly: true });
   try {
     return Object.fromEntries(TABLES.map((table) => [table, db.query(`SELECT call_type FROM ${table} ORDER BY rowid`).values().flat()]));
+  } finally {
+    db.close();
+  }
+}
+
+const WHEN = "2026-11-01T00:00:00.000Z";
+
+function file(data: string, events: readonly string[], transcripts: readonly string[]): void {
+  withStorage(data, (db) => {
+    for (const [index, kind] of events.entries()) {
+      insertEvent(db, { character: "ada", kind, timestamp: WHEN, content: encodeEvent({ timestamp: WHEN, kind: "message_sent", detail: `${kind} ${String(index)}` }) });
+    }
+    for (const source of transcripts) {
+      db.query("INSERT INTO capture_transcripts (ts, ts_unix, source, call_type, entry_zstd) VALUES (?1, 1, ?2, 'wake', x'00')").run(WHEN, source);
+    }
+  });
+}
+
+function filed(path: string): { events: unknown[]; transcripts: unknown[] } {
+  const db = new Database(path, { readonly: true });
+  try {
+    return {
+      events: db.query("SELECT kind FROM events ORDER BY id").values().flat(),
+      transcripts: db.query("SELECT source FROM capture_transcripts ORDER BY rowid").values().flat(),
+    };
   } finally {
     db.close();
   }
@@ -105,6 +131,8 @@ test("the Claude sessions that old wakes ran in are let go of, so their transcri
 test("the rewrite runs when the daemon starts", async () => {
   const { data, path } = await install();
   record(path, ["heartbeat", "heartbeat_tool_loop"]);
+  file(data, ["heartbeat"], []);
+  closeStorageConnections();
   const root = join(data, "..");
   const config: LoadedConfig = {
     app: defaultAppConfig(), models: emptyCatalog(), providers: ProviderRegistry.empty(), rawTable: undefined,
@@ -116,6 +144,7 @@ test("the rewrite runs when the daemon starts", async () => {
     await runtime.autonomy.shutdown();
     await runtime.shutdown();
     expect(recorded(path)["calls"]).toEqual(["wake", "wake_tool_loop"]);
+    expect(filed(path)).toEqual({ events: ["wake"], transcripts: ["wake", "wake"] });
   } finally {
     said.mockRestore();
   }
@@ -154,6 +183,62 @@ test("an install with no heartbeat calls says nothing, and one whose database ca
     closeStorageConnections();
     renameRecordedHeartbeatCalls(broken.data);
     expect(recorded(broken.path)["calls"]).toEqual(["wake"]);
+  } finally {
+    said.mockRestore();
+    warned.mockRestore();
+  }
+});
+
+test("a wake's events and transcript entries filed under heartbeat are filed under wake after the daemon's next start, once, and the wake log shows them again", async () => {
+  const { data, path } = await install();
+  const said = spyOn(shoreLog, "info").mockImplementation(() => {});
+  try {
+    file(data, ["heartbeat", "subagent", "wake", "heartbeat"], ["heartbeat", "dreaming", "heartbeat", "heartbeat"]);
+    refileRecordedHeartbeatEvents(data);
+    expect(filed(path)).toEqual({ events: ["wake", "subagent", "wake", "wake"], transcripts: ["wake", "dreaming", "wake", "wake"] });
+    expect(said.mock.calls.map((call) => String(call[0]))).toEqual(["shore: 5 stored wake events and transcript entries were filed under heartbeat and are now under wake; this happens once"]);
+    expect((await WakeLog.load(join(data, "ada", "wakes.jsonl"))).recent(5).map((event) => event.detail)).toEqual(["heartbeat 0", "wake 2", "heartbeat 3"]);
+
+    file(data, ["heartbeat"], ["heartbeat"]);
+    refileRecordedHeartbeatEvents(data);
+    expect(filed(path)).toEqual({ events: ["wake", "subagent", "wake", "wake", "heartbeat"], transcripts: ["wake", "dreaming", "wake", "wake", "heartbeat"] });
+    expect(said.mock.calls).toHaveLength(1);
+  } finally {
+    said.mockRestore();
+  }
+});
+
+test("an install with nothing filed under heartbeat says nothing, and one whose events can't be refiled is told and tried again at the next start", async () => {
+  const quiet = await install();
+  const said = spyOn(shoreLog, "info").mockImplementation(() => {});
+  const warned = spyOn(shoreLog, "warn").mockImplementation(() => {});
+  try {
+    file(quiet.data, ["wake", "subagent"], ["dreaming"]);
+    refileRecordedHeartbeatEvents(quiet.data);
+    expect([said.mock.calls, warned.mock.calls]).toEqual([[], []]);
+
+    const single = await install();
+    file(single.data, ["heartbeat"], []);
+    refileRecordedHeartbeatEvents(single.data);
+    expect(said.mock.calls.map((call) => String(call[0]))).toEqual(["shore: 1 stored wake events and transcript entries were filed under heartbeat and are now under wake; this happens once"]);
+
+    const broken = await install();
+    file(broken.data, ["heartbeat"], ["heartbeat"]);
+    closeStorageConnections();
+    const db = new Database(broken.path);
+    db.run("ALTER TABLE capture_transcripts RENAME TO capture_transcripts_elsewhere");
+    db.close();
+    refileRecordedHeartbeatEvents(broken.data);
+    expect(warned.mock.calls.map((call) => String(call[0]).split(":").slice(0, 2).join(":"))).toEqual([
+      "shore: could not refile stored wake events and transcript entries, so the traces of earlier wakes stay hidden until a later start succeeds",
+    ]);
+    closeStorageConnections();
+    const mended = new Database(broken.path);
+    expect(mended.query("SELECT kind FROM events").values()).toEqual([["heartbeat"]]);
+    mended.run("ALTER TABLE capture_transcripts_elsewhere RENAME TO capture_transcripts");
+    mended.close();
+    refileRecordedHeartbeatEvents(broken.data);
+    expect(filed(broken.path)).toEqual({ events: ["wake"], transcripts: ["wake"] });
   } finally {
     said.mockRestore();
     warned.mockRestore();

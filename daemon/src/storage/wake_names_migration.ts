@@ -36,3 +36,28 @@ export function renameRecordedHeartbeatCalls(data: string): void {
     shoreLog.warn(`shore: could not rename the call type of recorded wake calls, so they stay heartbeat until a later start succeeds: ${String(error)}`);
   }
 }
+
+const EVENTS_DONE = "shore/wake-events-and-transcripts-from-when-they-were-filed-under-heartbeat";
+
+export function refileHeartbeatEvents(db: Database): number {
+  return db.query("UPDATE events SET kind = 'wake' WHERE kind = 'heartbeat'").run().changes +
+    db.query("UPDATE capture_transcripts SET source = 'wake' WHERE source = 'heartbeat'").run().changes;
+}
+
+export function refileRecordedHeartbeatEvents(data: string): void {
+  try {
+    const refiled = withStorage(data, (db) => {
+      if (db.query("SELECT 1 FROM state_files WHERE path = ?1").get(EVENTS_DONE) !== null) return 0;
+      return db.transaction(() => {
+        const changed = refileHeartbeatEvents(db);
+        db.query("INSERT INTO state_files(path, character, content) VALUES (?1, '', ?2) ON CONFLICT(path) DO NOTHING").run(EVENTS_DONE, pack("done"));
+        return changed;
+      })();
+    });
+    if (refiled > 0) {
+      shoreLog.info(`shore: ${String(refiled)} stored wake events and transcript entries were filed under heartbeat and are now under wake; this happens once`);
+    }
+  } catch (error) {
+    shoreLog.warn(`shore: could not refile stored wake events and transcript entries, so the traces of earlier wakes stay hidden until a later start succeeds: ${String(error)}`);
+  }
+}

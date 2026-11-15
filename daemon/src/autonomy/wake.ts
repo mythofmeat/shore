@@ -35,7 +35,7 @@ import { characterWorkspace } from "../tools/character_workspace.ts";
 import { pruneTurns, replyVersions, WorkspaceRecorder, workspaceTurnsFor } from "../tools/workspace_turns.ts";
 import { backgroundModelRequest, backgroundTaskModel } from "./background_model.ts";
 import { addDiaryNote, closingNote, recentDiary } from "./diary.ts";
-import type { HeartbeatEventKind } from "./heartbeat_log.ts";
+import type { WakeEventKind } from "./wake_log.ts";
 import { runBackgroundLoop, type BackgroundLoopDeps, type BackgroundLoopResult, type LoopRound } from "./background_loop.ts";
 import { presence } from "./presence.ts";
 import { firedBy, WAKE_QUIET_MS, type TriggerFiring, type WakeNews, type WakeResult } from "./runner.ts";
@@ -100,7 +100,7 @@ export interface WakeDeps extends Pick<BackgroundLoopDeps, "recordTranscript" | 
   nowIso?: () => string;
 }
 
-type Note = (kind: HeartbeatEventKind, detail: string) => void;
+type Note = (kind: WakeEventKind, detail: string) => void;
 
 export function wrapUpMsFor(limitMs: number): number {
   return Math.min(LONGEST_WRAP_UP_MS, Math.floor(limitMs / 6));
@@ -272,7 +272,7 @@ function noteShownLater(closing: string, userName: string): string | undefined {
 }
 
 export async function runWake(character: string, config: LoadedConfig, wake: Wake, deps: WakeDeps): Promise<WakeResult> {
-  const events: { kind: HeartbeatEventKind; detail: string }[] = [];
+  const events: { kind: WakeEventKind; detail: string }[] = [];
   const characterDir = characterDataDir(config.dirs.data, character);
   const engine = await deps.engine(character, wake.thread);
   if (engine === undefined) {

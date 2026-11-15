@@ -20,18 +20,15 @@ fn lines(output: &Output) -> Vec<String> {
 #[test]
 fn starting_a_wake_by_hand_says_so_and_passes_on_the_daemons_warning() {
     let (started, frames) = asked(
-        json!({ "status": "scheduled", "character": "ada" }),
-        &["debug", "heartbeat_tick_now"],
+        json!({ "status": "queued", "character": "ada" }),
+        &["debug", "wake_now"],
     );
     assert_eq!(lines(&started), ["Started a wake for ada."]);
-    assert_eq!(
-        sent(&frames),
-        [(Some("heartbeat_tick_now"), Some(&json!({})))]
-    );
+    assert_eq!(sent(&frames), [(Some("wake_now"), Some(&json!({})))]);
 
     let (warned, _warned_frames) = asked(
-        json!({ "status": "scheduled", "character": "ada", "warning": "ada is dormant, so the wake waits." }),
-        &["debug", "heartbeat_tick_now"],
+        json!({ "status": "queued", "character": "ada", "warning": "ada is dormant, so the wake waits." }),
+        &["debug", "wake_now"],
     );
     assert_eq!(
         lines(&warned),
@@ -46,22 +43,22 @@ fn starting_a_wake_by_hand_says_so_and_passes_on_the_daemons_warning() {
 fn making_a_character_dormant_or_active_says_which_it_now_is() {
     let (dormant, dormant_frames) = asked(
         json!({ "status": "dormant", "character": "ada" }),
-        &["debug", "heartbeat_status_dormant"],
+        &["debug", "set_dormant"],
     );
     assert_eq!(lines(&dormant), ["ada is now dormant."]);
     assert_eq!(
         sent(&dormant_frames),
-        [(Some("heartbeat_set_dormant"), Some(&json!({})))]
+        [(Some("set_dormant"), Some(&json!({})))]
     );
 
     let (active, active_frames) = asked(
         json!({ "status": "active", "character": "ada" }),
-        &["debug", "heartbeat_status_active"],
+        &["debug", "set_active"],
     );
     assert_eq!(lines(&active), ["ada is now active."]);
     assert_eq!(
         sent(&active_frames),
-        [(Some("heartbeat_set_active"), Some(&json!({})))]
+        [(Some("set_active"), Some(&json!({})))]
     );
 }
 

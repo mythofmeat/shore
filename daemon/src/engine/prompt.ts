@@ -352,7 +352,7 @@ export function presenceText(presence: NonNullable<Message["presence"]>, at: num
   return presence.status === "" ? `[${whose} status was cleared ${ago}.]` : `[${whose} status, set ${ago}: "${presence.status}"]`;
 }
 
-export function wakeRunningText(running: NonNullable<Message["heartbeat_running"]>, timeZone: string): string {
+export function wakeRunningText(running: NonNullable<Message["wake_running"]>, timeZone: string): string {
   const since = formatWallClock(Date.parse(running.started_at), timeZone);
   const where = running.thread === undefined ? "your own-time thread" : `"${running.thread}"`;
   return `[A wake of yours in ${where} has been running since ${since}. It can't see this conversation. It is only told that a message arrived.]`;
@@ -425,7 +425,7 @@ function trimMessages(
   timeZone: string,
   imageTier: ImageTier,
 ): PromptMessage[] {
-  const selected: { pm: PromptMessage; ts: string; heartbeat: boolean; elsewhere: Message["last_elsewhere"]; diary: Message["diary"]; running: Message["heartbeat_running"]; presence: Message["presence"] }[] = [];
+  const selected: { pm: PromptMessage; ts: string; wake: boolean; elsewhere: Message["last_elsewhere"]; diary: Message["diary"]; running: Message["wake_running"]; presence: Message["presence"] }[] = [];
   let usedTokens = 0;
 
   for (let i = messages.length - 1; i >= 0; i--) {
@@ -443,10 +443,10 @@ function trimMessages(
         ...(msg.model !== undefined ? { model: msg.model } : {}),
       },
       ts: msg.timestamp,
-      heartbeat: msg.role === "assistant" && msg.origin === "autonomous",
+      wake: msg.role === "assistant" && msg.origin === "autonomous",
       elsewhere: msg.last_elsewhere,
       diary: msg.diary,
-      running: msg.heartbeat_running,
+      running: msg.wake_running,
       presence: msg.presence,
     });
   }
@@ -474,10 +474,10 @@ function trimMessages(
     return pm;
   };
 
-  for (const { pm, ts, heartbeat, elsewhere, diary, running, presence } of selected) {
+  for (const { pm, ts, wake, elsewhere, diary, running, presence } of selected) {
     const currentMs = parseRfc3339(ts);
 
-    if (heartbeat) result.push(noticed(syntheticUserTurn(wakeMarker(currentMs, mode, timeZone))));
+    if (wake) result.push(noticed(syntheticUserTurn(wakeMarker(currentMs, mode, timeZone))));
     if (pm.role === "user" && !isToolLoopMessage(pm.role, pm.content_blocks)) noticed(pm);
 
     if (pm.role === "user" && currentMs !== undefined) {

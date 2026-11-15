@@ -1,11 +1,13 @@
-import { expect, test } from "bun:test";
+import { expect, spyOn, test } from "bun:test";
 import { mkdtempSync, existsSync, mkdirSync, readdirSync, readlinkSync, realpathSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { CallStore, ZERO_USAGE } from "../src/call_store.ts";
 import { HistoryStore } from "../src/engine/history_store.ts";
 import { initializeDatabase } from "../src/storage/database.ts";
-import { DIAGNOSTIC_RETENTION_MS, pruneDiagnostics } from "../src/storage/retention.ts";
+import { shoreLog } from "../src/log.ts";
+import { SnapshotGate } from "../src/snapshot_gate.ts";
+import { DIAGNOSTIC_RETENTION_MS, pruneDiagnostics, startDiagnosticRetention } from "../src/storage/retention.ts";
 import { databasePath, insertEvent, readEvents, unpack, withStorage, writeState, readState, pack } from "../src/storage/store.ts";
 import { appendSubagentTrace } from "../src/tools/subagent_trace.ts";
 import { randomUUID } from "node:crypto";
@@ -22,7 +24,7 @@ function dataDir() {
   return root;
 }
 
-test("only old heartbeat events expire; history, state, ledger and malformed records remain", () => {
+test("only old wake events expire; history, state, ledger and malformed records remain", () => {
   const data = dataDir();
   const history = HistoryStore.open(databasePath(data));
   history.putSegment("ada", 0, { file: "history.db", compacted_at: old.toISOString() }, []);
@@ -30,16 +32,16 @@ test("only old heartbeat events expire; history, state, ledger and malformed rec
   writeState(data, "ada/autonomy_state.json", "keep state", "ada");
   withStorage(data, (db) => {
     for (const [kind, timestamp, content] of [
-      ["heartbeat", old.toISOString(), "old heartbeat"],
-      ["heartbeat", new Date(cutoff).toISOString(), "boundary heartbeat"],
-      ["heartbeat", "invalid", "undated heartbeat"],
+      ["wake", old.toISOString(), "old wake"],
+      ["wake", new Date(cutoff).toISOString(), "boundary wake"],
+      ["wake", "invalid", "undated wake"],
       ["subagent", old.toISOString(), "malformed trace"],
       ["legacy_invalid", old.toISOString(), "legacy record"],
     ]) insertEvent(db, { character: "ada", kind: kind ?? "", timestamp: timestamp ?? "", content: content ?? "" });
     db.run("INSERT INTO call_attempts(id,started_at,status,character,provider,model,call_type) VALUES ('old','2020','failed','ada','test','test','message')");
   });
-  expect(pruneDiagnostics(data, NOW)).toEqual({ captures: 0, heartbeats: 1, subagentTraces: 0, unreadableTraces: 1 });
-  expect(readEvents(data, "ada", "heartbeat")).toEqual(["boundary heartbeat", "undated heartbeat"]);
+  expect(pruneDiagnostics(data, NOW)).toEqual({ captures: 0, wakeEvents: 1, subagentTraces: 0, unreadableTraces: 1 });
+  expect(readEvents(data, "ada", "wake")).toEqual(["boundary wake", "undated wake"]);
   expect(readEvents(data, "ada", "subagent")).toEqual(["malformed trace"]);
   expect(readEvents(data, "ada", "legacy_invalid")).toEqual(["legacy record"]);
   expect(readState(data, "ada/autonomy_state.json")).toBe("keep state");
@@ -59,7 +61,7 @@ test("an old subagent trace keeps its result and loses its messages, and one mis
       insertEvent(db, { character: "ada", kind: "subagent", timestamp: old.toISOString(), content });
     }
   });
-  expect(pruneDiagnostics(data, NOW)).toEqual({ captures: 0, heartbeats: 0, subagentTraces: 2, unreadableTraces: kept.length });
+  expect(pruneDiagnostics(data, NOW)).toEqual({ captures: 0, wakeEvents: 0, subagentTraces: 2, unreadableTraces: kept.length });
   expect(readEvents(data, "ada", "subagent_result").map((content) => JSON.parse(content) as unknown)).toEqual([
     { ...trace, messages: [], messages_expired: true },
     { ...trace, parent_tool_use_id: "tu_2", messages: [], messages_expired: true },
@@ -81,7 +83,7 @@ function filesOpenIn(folder: string) {
 
 test("a data folder without a database yet is pruned without error, and no file is left open", () => {
   const data = mkdtempSync(join(tmpdir(), "shore-retention-fresh-"));
-  expect(pruneDiagnostics(data, NOW)).toEqual({ captures: 0, heartbeats: 0, subagentTraces: 0, unreadableTraces: 0 });
+  expect(pruneDiagnostics(data, NOW)).toEqual({ captures: 0, wakeEvents: 0, subagentTraces: 0, unreadableTraces: 0 });
   expect(existsSync(databasePath(data))).toBe(true);
   expect(filesOpenIn(data)).toEqual([]);
 });
@@ -100,6 +102,32 @@ test("a write failure rolls back the entire cleanup", async () => {
     expect(event.kind).toBe("subagent");
     expect(unpack(event.content)).not.toContain("messages_expired");
   });
+});
+
+test("the sweep the daemon starts says what it removed, whichever kind that was, and says nothing when there was nothing to remove", async () => {
+  const long = "2020-01-01T00:00:00.000Z";
+  const said = spyOn(shoreLog, "info").mockImplementation(() => {});
+  try {
+    const swept = async (seed: (data: string) => Promise<void>): Promise<string[]> => {
+      const data = dataDir();
+      await seed(data);
+      said.mockClear();
+      const gate = new SnapshotGate();
+      const sweeping = startDiagnosticRetention(data, gate, 3_600_000);
+      await gate.withSnapshot(async () => {});
+      sweeping.stop();
+      return said.mock.calls.map((call) => String(call[0]));
+    };
+    expect(await swept(async () => {})).toEqual([]);
+    expect(await swept(async (data) => {
+      withStorage(data, (db) => { insertEvent(db, { character: "ada", kind: "wake", timestamp: long, content: "an old wake" }); });
+    })).toEqual(["shore: diagnostic retention removed 0 captures and 1 wake events; retained results for 0 expired subagent traces"]);
+    expect(await swept(async (data) => {
+      await appendSubagentTrace(join(data, "ada"), { ts: long, subagent: "helper", parent_tool_use_id: "id", model: "test", messages: [], result: "keep" });
+    })).toEqual(["shore: diagnostic retention removed 0 captures and 0 wake events; retained results for 1 expired subagent traces"]);
+  } finally {
+    said.mockRestore();
+  }
 });
 
 const start = Date.parse("2026-09-10T12:00:00Z");

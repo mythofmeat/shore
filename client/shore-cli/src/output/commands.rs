@@ -58,17 +58,17 @@ pub(crate) fn format_command(name: &str, data: &serde_json::Value) {
         "list_alternatives" => print_alt_list(data),
         "inject_system" => cli_out!("System instruction injected."),
         "error_log" => print_error_log(data),
-        "heartbeat_log" => super::transcript::print_heartbeat_log(data),
+        "wake_log" => super::transcript::print_wake_log(data),
         "call_log" => print_call_log(data),
         "transcript" => print_transcript(data),
         "subagent_trace" => print_subagent_trace(data),
-        "heartbeat_tick_now" => print_heartbeat_tick_now(data),
+        "wake_now" => print_wake_now(data),
         "dream" => cli_out!("{}", dream_report_text(data)),
         "diary" => super::diary::print_diary(data),
         "presence" => cli_out!("{}", presence_text(data)),
         "mark" | "unmark" | "marks" => cli_out!("{}", marks_text(name, data)),
-        "heartbeat_set_dormant" => print_heartbeat_status_change(data, "dormant"),
-        "heartbeat_set_active" => print_heartbeat_status_change(data, "active"),
+        "set_dormant" => print_status_change(data, "dormant"),
+        "set_active" => print_status_change(data, "active"),
         "session_activate" => print_session_activate(data),
         "keepalive_ping_now" => print_keepalive_ping(data),
         "run_tool" => print_run_tool(data),
@@ -561,7 +561,7 @@ pub(crate) fn write_trace_transcript<W: Write>(
     data: &serde_json::Value,
     width: usize,
 ) {
-    let source = data["source"].as_str().unwrap_or("heartbeat");
+    let source = data["source"].as_str().unwrap_or("wake");
     let char_name = data["character"].as_str().unwrap_or("?");
     write_section_header(out, &format!("{source} transcript"), char_name, width);
 
@@ -1017,7 +1017,7 @@ pub(crate) fn dream_report_text(data: &serde_json::Value) -> String {
     lines.join("\n")
 }
 
-fn print_heartbeat_tick_now(data: &serde_json::Value) {
+fn print_wake_now(data: &serde_json::Value) {
     let character = data["character"].as_str().unwrap_or("?");
     cli_out!("Started a wake for {character}.");
     if let Some(warning) = data["warning"].as_str() {
@@ -1028,7 +1028,7 @@ fn print_heartbeat_tick_now(data: &serde_json::Value) {
     }
 }
 
-fn print_heartbeat_status_change(data: &serde_json::Value, status: &str) {
+fn print_status_change(data: &serde_json::Value, status: &str) {
     let character = data["character"].as_str().unwrap_or("?");
     cli_out!("{character} is now {status}.");
 }
