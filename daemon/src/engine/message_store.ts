@@ -158,6 +158,7 @@ function serializeForStorage(msg: Message): string {
   if (msg.wake_running !== undefined) ordered.push(["wake_running", msg.wake_running]);
   if (msg.presence !== undefined) ordered.push(["presence", msg.presence]);
   if (msg.shown_later !== undefined) ordered.push(["shown_later", msg.shown_later]);
+  if (msg.wake_note !== undefined) ordered.push(["wake_note", msg.wake_note]);
 
   const contentAt = 2;
   const last = required(ordered.pop());

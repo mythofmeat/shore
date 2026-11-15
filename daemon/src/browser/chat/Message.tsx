@@ -21,7 +21,7 @@ import { shownAttempt } from "./reply_marks.ts";
 import { activityHeadline, blockViews, bodyItems, chatLogMessageId, formatToolInput, isChatLogTool, messageCopyLabel, swipeState, timeLabel, toolSummary, type BlockView, type StepView } from "./transcript.ts";
 import { showWorkspaceNote, swipe as swipeTo } from "./actions.ts";
 
-const OPENERS: readonly string[] = ["[wake]", "[heartbeat]"];
+const OPENER = /^\[(?:wake|heartbeat)(?: in "([^"\n]+)")?\]/;
 
 function truncatedLine(text: string): string {
   const line = Array.from(text.trim().split("\n")[0] ?? "");
@@ -289,12 +289,14 @@ export const MessageRow = memo(function MessageRow({ message, character, avatar,
     { label: "Regenerate with a reason…", icon: "regenerate", onSelect: () => openConversationDialog("reason"), disabled: busy },
   ] : [];
   if (message.origin === "autonomous" && !assistant) {
-    const opener = message.role === "user" ? OPENERS.find((prefix) => message.content.startsWith(prefix)) : undefined;
+    const opener = message.role === "user" ? OPENER.exec(message.content) ?? undefined : undefined;
+    if (opener === undefined && truncatedLine(message.content) === message.content.trim()) return <div className="system-note"><Markdown text={message.content} /></div>;
     const when = timeLabel(message.timestamp);
-    const summary = opener === undefined ? truncatedLine(message.content) : when === "" ? "Wake" : `Wake · ${when}`;
+    const wake = opener?.[1] === undefined ? "Wake" : `Wake in ${opener[1]}`;
+    const summary = opener === undefined ? truncatedLine(message.content) : when === "" ? wake : `${wake} · ${when}`;
     return <details className="system-note wake-note">
       <summary>{summary}</summary>
-      <Markdown text={opener === undefined ? message.content : message.content.slice(opener.length).trim()} />
+      <Markdown text={opener === undefined ? message.content : message.content.slice(opener[0].length).trim()} />
     </details>;
   }
   if (message.role === "system") return <div className="system-note"><Markdown text={message.content} /></div>;

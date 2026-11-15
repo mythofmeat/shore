@@ -71,4 +71,5 @@ export interface Message {
   wake_running?: { started_at: string; thread?: string | undefined };
   presence?: { status: string; set_at: string };
   shown_later?: string;
+  wake_note?: string;
 }

@@ -90,6 +90,12 @@ export class InProcessAutonomyExecutor implements AutonomyExecutor {
           const sealed = this.#deps.registry.sealedThreads(name).find((each) => each.id === thread);
           return sealed === undefined ? undefined : { sealed, filesDir: await sealedFilesDir(config, name, thread) };
         },
+        workingLog: async (name) => {
+          const { thread, created } = await this.#deps.registry.ensureWakesThread(name);
+          if (created) this.#deps.emitEvent?.({ type: "threads_changed", character: name, thread });
+          const label = this.#deps.registry.listThreads(name).find((record) => record.id === thread)?.label ?? thread;
+          return { engine: await this.#deps.registry.getOrCreate(name, thread), label };
+        },
         threadModel: (name, thread) => this.#deps.registry.listThreads(name).find((record) => record.id === thread)?.chat_model,
         ...(this.#deps.emit === undefined ? {} : { emit: this.#deps.emit }),
         ...(this.#deps.notifyAutonomousMessage === undefined ? {} : { notify: this.#deps.notifyAutonomousMessage }),

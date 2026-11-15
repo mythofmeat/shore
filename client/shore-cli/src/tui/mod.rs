@@ -37,7 +37,7 @@ use shore_common::protocol::operations::{
     MessageCopy, Operation, ReloadConfiguration, ThreadUnread, UsageArgs, UsageReport,
 };
 use shore_common::protocol::server_msg::ServerMessage;
-use shore_common::protocol::types::{ContentBlock, Message, Role, StreamMetadata};
+use shore_common::protocol::types::{ContentBlock, Message, MessageOrigin, Role, StreamMetadata};
 use tracing::{info, instrument, warn};
 use tracing_subscriber::EnvFilter;
 
@@ -2062,7 +2062,9 @@ fn restore_unpersisted_user_draft(app: &mut App) -> bool {
 
 fn expand_msg(msg: Message, entries: &mut Vec<ConversationEntry>) {
     let images = msg.display_images();
-    if msg.role == Role::System {
+    if msg.role == Role::System
+        || (msg.role == Role::User && msg.origin == Some(MessageOrigin::Autonomous))
+    {
         entries.push(ConversationEntry::System {
             msg_id: Some(msg.msg_id),
             content: msg.content,
@@ -4224,6 +4226,51 @@ mod draft_lifecycle_tests {
                 .any(|n| n.content.contains("restored the draft")),
             "the restore should say so: {:?}",
             arriving.notifications
+        );
+    }
+}
+
+#[cfg(test)]
+mod wake_history_tests {
+    use super::*;
+    use serde_json::json;
+
+    #[test]
+    fn a_wakes_opener_and_the_line_on_its_working_are_notes_and_what_it_sent_is_its_reply() {
+        let mut app = App::default();
+        let frame: ServerMessage = serde_json::from_value(json!({
+            "type": "history", "selected_character": "ada", "selected_thread": "main", "config": {}, "revision": 1,
+            "messages": [
+                {"msg_id": "a", "role": "user", "origin": "autonomous", "content": "[wake]\n\n[Your trigger \"house\" fired]", "content_blocks": [{"type": "text", "text": "[wake]\n\n[Your trigger \"house\" fired]"}], "timestamp": "2026-11-15T05:45:00Z"},
+                {"msg_id": "b", "role": "system", "origin": "autonomous", "content": "This wake's working is in \"Wakes\": 4 tool calls.", "content_blocks": [{"type": "text", "text": "This wake's working is in \"Wakes\": 4 tool calls."}], "timestamp": "2026-11-15T05:52:00Z"},
+                {"msg_id": "c", "role": "assistant", "origin": "autonomous", "content": "The bins are out.", "content_blocks": [{"type": "text", "text": "The bins are out."}], "timestamp": "2026-11-15T05:52:00Z"},
+                {"msg_id": "d", "role": "user", "content": "thanks", "content_blocks": [{"type": "text", "text": "thanks"}], "timestamp": "2026-11-15T09:00:00Z"},
+            ],
+        }))
+        .unwrap();
+        let _effect = handle_server_message(&mut app, frame);
+        let shown: Vec<(String, String)> = app
+            .entries
+            .iter()
+            .map(|entry| match entry {
+                ConversationEntry::System { content, .. } => ("system".to_owned(), content.clone()),
+                ConversationEntry::Turn(turn) => (format!("{:?}", turn.role), turn.joined_text()),
+            })
+            .collect();
+        assert_eq!(
+            shown,
+            [
+                (
+                    "system".to_owned(),
+                    "[wake]\n\n[Your trigger \"house\" fired]".to_owned()
+                ),
+                (
+                    "system".to_owned(),
+                    "This wake's working is in \"Wakes\": 4 tool calls.".to_owned()
+                ),
+                ("Assistant".to_owned(), "The bins are out.".to_owned()),
+                ("User".to_owned(), "thanks".to_owned()),
+            ]
         );
     }
 }
