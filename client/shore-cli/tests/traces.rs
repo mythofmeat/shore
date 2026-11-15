@@ -49,7 +49,7 @@ fn what_a_characters_wakes_did_is_listed_with_how_many_events_there_are() {
         [(Some("wake_log"), Some(&json!({ "count": 2 })))]
     );
 
-    let (none, _frames) = asked(json!({ "events": [] }), &["trace", "events"]);
+    let (none, _none_frames) = asked(json!({ "events": [] }), &["trace", "events"]);
     assert_eq!(under("wake events", &lines(&none)), ["(no wake events)"]);
 }
 
@@ -83,7 +83,7 @@ fn a_wakes_transcript_shows_each_round_or_says_there_is_none_or_that_capture_is_
         )]
     );
 
-    let (empty, _frames) = asked(
+    let (empty, _empty_frames) = asked(
         json!({ "source": "dreaming", "character": "ada", "enabled": true, "entries": [] }),
         &["trace", "dreams"],
     );
@@ -92,7 +92,7 @@ fn a_wakes_transcript_shows_each_round_or_says_there_is_none_or_that_capture_is_
         ["(no transcript entries yet)"]
     );
 
-    let (off, _frames) = asked(
+    let (off, _off_frames) = asked(
         json!({ "source": "wake", "character": "ada", "enabled": false, "entries": [] }),
         &["trace", "wakes"],
     );
@@ -117,7 +117,7 @@ fn stored_sub_agent_runs_are_listed_or_said_to_be_missing() {
         [(Some("subagent_trace"), Some(&json!({ "count": 20 })))]
     );
 
-    let (missing, _frames) = asked(
+    let (missing, _missing_frames) = asked(
         json!({ "character": "ada", "entries": [], "requested_ids": ["tu_9"] }),
         &["trace", "subagent", "tu_9"],
     );
