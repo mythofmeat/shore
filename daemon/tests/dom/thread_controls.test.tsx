@@ -134,3 +134,52 @@ test("the palette offers to make the open thread home unless it already is, and 
   expect(opened).toBe(1);
   await away.unmount();
 });
+
+test("the wakes thread is for reading: a note stands in for the composer, its messages offer only copying, and nothing offers a reply, another take, making it home or compacting it", async () => {
+  app.answer(answered("thread_compaction"));
+  const turns = [
+    { msg_id: "m_open", role: "user", origin: "autonomous", content: '[wake in "main"]\n\n[Your trigger "show" fired.]', images: [], content_blocks: [{ type: "text", text: '[wake in "main"]' }], timestamp: "2026-11-15T05:45:00.000Z" },
+    { msg_id: "m_round", role: "assistant", content: "Done.", images: [], content_blocks: [{ type: "text", text: "Done." }], timestamp: "2026-11-15T05:52:00.000Z" },
+  ];
+  await acting(async () => { app.socket().receive({ type: "history", messages: turns, config: {}, revision: 2, selected_character: "ada", selected_thread: "story" }); await Bun.sleep(5); });
+  const { Chat } = await import("../../src/browser/chat/Chat.tsx");
+  const { Palette } = await import("../../src/browser/app/Palette.tsx");
+  const { ThreadDialogs } = await import("../../src/browser/chat/thread_dialogs.tsx");
+  const { chromeOf } = await import("../../src/browser/chrome.ts");
+  const chrome = chromeOf(undefined, app.state().workspace.getSnapshot());
+  const kept = { ...chrome, threads: chrome.threads.map((thread) => ({ ...thread, home: false, wakes: true })) };
+
+  const chat = async (state: typeof chrome) => {
+    const view = await mount(<Chat state={state} sidebarOpen toggleSidebar={() => {}} mobile={false} />);
+    await settle();
+    await click(button(view.host, "Thread options"));
+    const offered = [...view.host.querySelectorAll(".topbar [role=menuitem]")].map((item) => item.textContent ?? "");
+    const actions = [...view.host.querySelectorAll("[data-msg-id=m_round] .message-actions button")].map((item) => item.getAttribute("aria-label"));
+    return { view, offered, actions };
+  };
+  const reading = await chat(kept);
+  expect(reading.view.host.querySelector(".composer-note")?.textContent).toBe("Shore keeps the working from ada's wakes here, to read. Write to ada in another thread.");
+  expect(reading.view.host.querySelector("textarea, .cm-editor")).toBeNull();
+  expect(reading.actions).toEqual(["Copy"]);
+  expect(reading.offered.filter((label) => ["Another take", "Regenerate with a reason…", "Make home"].includes(label))).toEqual([]);
+  await reading.view.unmount();
+
+  const talking = await chat({ ...kept, threads: chrome.threads.map((thread) => ({ ...thread, home: false })) });
+  expect(talking.view.host.querySelector(".composer-note")).toBeNull();
+  expect(talking.actions).toContain("Delete");
+  expect(talking.offered.filter((label) => ["Another take", "Regenerate with a reason…", "Make home"].includes(label))).toEqual(["Another take", "Regenerate with a reason…", "Make home"]);
+  await talking.view.unmount();
+
+  const palette = await mount(<Palette state={kept} close={() => {}} newThread={() => {}} newCharacter={() => {}} />);
+  const options = [...palette.host.querySelectorAll("[role=option]")].map((item) => item.textContent ?? "");
+  expect(options.filter((label) => label.startsWith("Make home") || label.startsWith("Another take"))).toEqual([]);
+  expect(options.some((label) => label.startsWith("Thread settings"))).toBe(true);
+  await palette.unmount();
+
+  const choice = () => [...document.body.querySelectorAll("select")].find((select) => (select.closest("label")?.textContent ?? "").startsWith("When it gets long"));
+  const settings = await mount(<ThreadDialogs state={kept} request={{ kind: "settings", thread: "story" }} close={() => {}} />);
+  expect(choice()).toBeUndefined();
+  expect(document.body.querySelector("dialog, [role=dialog]")).not.toBeNull();
+  await settings.unmount();
+  await quiet();
+});

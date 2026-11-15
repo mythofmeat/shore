@@ -2,7 +2,7 @@ import { sealedListNote } from "../autonomy/sealed_notes.ts";
 import { characterDataDir } from "../config/dirs.ts";
 import { sealedThreads } from "../engine/sealed_list.ts";
 import { folderOf } from "../engine/thread_layout.ts";
-import { defaultThreadsIndex, homeThread, readThreadsIndex, threadActivities, type ThreadActivity, type ThreadRecord } from "../engine/threads.ts";
+import { defaultThreadsIndex, homeThread, readThreadsIndex, threadActivities, wakesThread, type ThreadActivity, type ThreadRecord } from "../engine/threads.ts";
 import { agoPhrase, formatWallClock } from "../engine/prompt.ts";
 import { hostZone } from "../ledger/zoned.ts";
 
@@ -49,6 +49,7 @@ export async function handleListThreads(options: ListThreadsOptions): Promise<st
   const zone = options.timeZone ?? hostZone();
   const index = await readThreadsIndex(options.dataDir, options.character) ?? defaultThreadsIndex(new Date(nowMs).toISOString());
   const home = homeThread(index);
+  const wakes = wakesThread(index);
   const sealed = sealedThreads(characterDataDir(options.dataDir, options.character));
   const sealedHere = sealed.find((thread) => thread.id === options.thread)?.id;
   const current = sealedHere ?? (index.threads.some((thread) => thread.id === options.thread) ? options.thread ?? home : home);
@@ -57,6 +58,7 @@ export async function handleListThreads(options: ListThreadsOptions): Promise<st
   const shown = threads.map((record) => described(record, activity.get(record.id), [
     ...(record.id === home ? ["home"] : []),
     ...(record.id === current ? ["you're here"] : []),
+    ...(record.id === wakes ? ["where Shore keeps the working from your wakes"] : []),
     ...(record.locked === true ? ["locked"] : []),
     ...[folderOf(index, record.id)].flatMap((folder) => folder === undefined ? [] : [`in the folder "${folder}"`]),
   ], options, zone, nowMs));

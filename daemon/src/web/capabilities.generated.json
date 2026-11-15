@@ -4131,7 +4131,7 @@
     "ThreadSelection": "{ character: string, thread: string, changed: boolean, selected_thread?: string, invalidated?: CacheInvalidation, }",
     "ThreadSortArgs": "{ by_activity: boolean, }",
     "ThreadUnread": "{ character: string, thread: string, unread: number, last_active?: string, }",
-    "ThreadView": "{ id: string, label?: string, purpose?: string, files?: Array<string>, created_at: string, created_by?: string, last_active?: string, chat_model?: string, compaction: boolean, locked?: boolean, folder?: string, position?: number, home: boolean, current: boolean, turns?: number, unread?: number, warm?: boolean, forked_from?: ThreadForkOrigin, }",
+    "ThreadView": "{ id: string, label?: string, purpose?: string, files?: Array<string>, created_at: string, created_by?: string, last_active?: string, chat_model?: string, compaction: boolean, locked?: boolean, folder?: string, position?: number, home: boolean, wakes?: boolean, current: boolean, turns?: number, unread?: number, warm?: boolean, forked_from?: ThreadForkOrigin, }",
     "TimingInfo": "{ total_ms: number, ttft_ms: number, }",
     "TokenCounts": "{ input: number, output: number, cache_read: number, cache_write: number, }",
     "ToolAccess": "{ tool: string, main: boolean, subagents: Array<string>, }",

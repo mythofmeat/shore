@@ -33,14 +33,33 @@ test("a wake's opening note, and one from when Shore called it a heartbeat, are 
   expect(undated.querySelector("summary")?.textContent).toBe("Wake");
 });
 
-test("any other note Shore left in a thread is folded under its first line, cut at eighty characters", async () => {
+test("in the wakes thread a wake's opening note says which thread it ran in", async () => {
+  const kept = await row(message({ origin: "autonomous", content: '[wake in "main"]\n\n[Your trigger "show" fired.]' }));
+  expect(kept.querySelector("details.heartbeat-note summary")?.textContent).toBe(`Wake in main · ${clock}`);
+  expect(kept.querySelector("details")?.textContent).toBe(`Wake in main · ${clock}[Your trigger "show" fired.]`);
+  const undated = await row(message({ origin: "autonomous", content: '[wake in "side.2"]\n\nNo clock.', timestamp: "never" }));
+  expect(undated.querySelector("summary")?.textContent).toBe("Wake in side.2");
+  const unnamed = await row(message({ origin: "autonomous", content: '[wake in ""]\n\nNo name.' }));
+  expect(unnamed.querySelector("summary")?.textContent).toBe('[wake in ""]');
+});
+
+test("the line saying where a wake's working went is shown as it is, with nothing folded under it", async () => {
+  const line = await row(message({ role: "system", origin: "autonomous", content: 'This wake\'s working is in "Wakes": 4 tool calls.' }));
+  expect(line.querySelector("details")).toBeNull();
+  expect(line.querySelector("div.system-note")?.textContent).toBe('This wake\'s working is in "Wakes": 4 tool calls.');
+  expect(line.querySelector("article")).toBeNull();
+});
+
+test("any other note Shore left in a thread is folded under its first line, cut at eighty characters, unless that line is all of it", async () => {
   const stopped = await row(message({ role: "system", origin: "autonomous", content: "[wake] was the word.\nSecond line." }));
   expect(stopped.querySelector("summary")?.textContent).toBe("[wake] was the word.");
   expect(stopped.querySelector("details")?.textContent).toBe("[wake] was the word.[wake] was the word.\nSecond line.");
   const long = await row(message({ origin: "autonomous", content: `Told: ${"a".repeat(80)}` }));
   expect(long.querySelector("summary")?.textContent).toBe(`Told: ${"a".repeat(73)}…`);
   const exact = await row(message({ origin: "autonomous", content: "b".repeat(80) }));
-  expect(exact.querySelector("summary")?.textContent).toBe("b".repeat(80));
+  expect([exact.querySelector("details"), exact.querySelector("div.system-note")?.textContent]).toEqual([null, "b".repeat(80)]);
+  const spaced = await row(message({ role: "system", origin: "autonomous", content: `  ${"c".repeat(78)}  ` }));
+  expect(spaced.querySelector("details")).toBeNull();
 });
 
 test("a message the character sent on its own is marked unprompted, and what the user and Shore say is shown as theirs", async () => {
