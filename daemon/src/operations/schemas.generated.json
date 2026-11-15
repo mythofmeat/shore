@@ -17723,6 +17723,12 @@
             "home": {
               "type": "boolean"
             },
+            "wakes": {
+              "type": [
+                "boolean",
+                "null"
+              ]
+            },
             "current": {
               "type": "boolean"
             },
@@ -18155,6 +18161,12 @@
             "home": {
               "type": "boolean"
             },
+            "wakes": {
+              "type": [
+                "boolean",
+                "null"
+              ]
+            },
             "current": {
               "type": "boolean"
             },
@@ -18455,6 +18467,12 @@
             },
             "home": {
               "type": "boolean"
+            },
+            "wakes": {
+              "type": [
+                "boolean",
+                "null"
+              ]
             },
             "current": {
               "type": "boolean"
@@ -18775,6 +18793,12 @@
             },
             "home": {
               "type": "boolean"
+            },
+            "wakes": {
+              "type": [
+                "boolean",
+                "null"
+              ]
             },
             "current": {
               "type": "boolean"
@@ -19125,6 +19149,12 @@
             "home": {
               "type": "boolean"
             },
+            "wakes": {
+              "type": [
+                "boolean",
+                "null"
+              ]
+            },
             "current": {
               "type": "boolean"
             },
@@ -19432,6 +19462,12 @@
             "home": {
               "type": "boolean"
             },
+            "wakes": {
+              "type": [
+                "boolean",
+                "null"
+              ]
+            },
             "current": {
               "type": "boolean"
             },
@@ -19738,6 +19774,12 @@
             },
             "home": {
               "type": "boolean"
+            },
+            "wakes": {
+              "type": [
+                "boolean",
+                "null"
+              ]
             },
             "current": {
               "type": "boolean"
@@ -20049,6 +20091,12 @@
             "home": {
               "type": "boolean"
             },
+            "wakes": {
+              "type": [
+                "boolean",
+                "null"
+              ]
+            },
             "current": {
               "type": "boolean"
             },
@@ -20354,6 +20402,12 @@
             "home": {
               "type": "boolean"
             },
+            "wakes": {
+              "type": [
+                "boolean",
+                "null"
+              ]
+            },
             "current": {
               "type": "boolean"
             },
@@ -20658,6 +20712,12 @@
             },
             "home": {
               "type": "boolean"
+            },
+            "wakes": {
+              "type": [
+                "boolean",
+                "null"
+              ]
             },
             "current": {
               "type": "boolean"
@@ -20972,6 +21032,12 @@
             "home": {
               "type": "boolean"
             },
+            "wakes": {
+              "type": [
+                "boolean",
+                "null"
+              ]
+            },
             "current": {
               "type": "boolean"
             },
@@ -21273,6 +21339,12 @@
             "home": {
               "type": "boolean"
             },
+            "wakes": {
+              "type": [
+                "boolean",
+                "null"
+              ]
+            },
             "current": {
               "type": "boolean"
             },
@@ -21573,6 +21645,12 @@
             },
             "home": {
               "type": "boolean"
+            },
+            "wakes": {
+              "type": [
+                "boolean",
+                "null"
+              ]
             },
             "current": {
               "type": "boolean"
@@ -21879,6 +21957,12 @@
             "home": {
               "type": "boolean"
             },
+            "wakes": {
+              "type": [
+                "boolean",
+                "null"
+              ]
+            },
             "current": {
               "type": "boolean"
             },
@@ -22179,6 +22263,12 @@
             },
             "home": {
               "type": "boolean"
+            },
+            "wakes": {
+              "type": [
+                "boolean",
+                "null"
+              ]
             },
             "current": {
               "type": "boolean"
@@ -22487,6 +22577,12 @@
             "home": {
               "type": "boolean"
             },
+            "wakes": {
+              "type": [
+                "boolean",
+                "null"
+              ]
+            },
             "current": {
               "type": "boolean"
             },
@@ -22791,6 +22887,12 @@
             },
             "home": {
               "type": "boolean"
+            },
+            "wakes": {
+              "type": [
+                "boolean",
+                "null"
+              ]
             },
             "current": {
               "type": "boolean"
@@ -23098,6 +23200,12 @@
             },
             "home": {
               "type": "boolean"
+            },
+            "wakes": {
+              "type": [
+                "boolean",
+                "null"
+              ]
             },
             "current": {
               "type": "boolean"

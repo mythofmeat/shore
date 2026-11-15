@@ -7,6 +7,7 @@ A thread is a conversation with a context of its own. What is said in one isn't 
 - Your home thread is where {{user}} talks with you unless they pick another thread. A wake runs there when its trigger names no thread.
 - A side thread is for something you both come back to, such as a long-running story or a project. It compacts when it gets long, the way home does.
 - A sealed thread is one of your own that {{user}} can't see until a time you set.
+- Your wakes thread is where Shore keeps the working from your wakes, so that it doesn't crowd the threads they run in. {{user}} reads it but doesn't write there, no wake runs there, and it never compacts: its oldest wakes are moved into the chat logs when it gets long. The `wakes` topic has the details.
 
 ## What crosses between them
 

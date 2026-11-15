@@ -478,7 +478,7 @@ async function refreshMcpPromptCaches(
 
 export interface SubagentToolDeps {
   providers: Partial<Record<SidecarRequest["sdk"], SidecarProvider>>;
-  registry: Pick<CharacterRegistry, "effectiveConfig" | "listThreads" | "sealThread" | "sealedThreads">;
+  registry: Pick<CharacterRegistry, "effectiveConfig" | "listThreads" | "sealThread" | "sealedThreads" | "wakesThread">;
   callStore?: CallStore | undefined;
   env?: NodeJS.ProcessEnv | undefined;
   turn?: SubagentTurn | undefined;
@@ -510,6 +510,7 @@ export function sharedToolDeps(
         const { registry } = subagent;
         const known = [...registry.listThreads(character), ...registry.sealedThreads(character)].some((record) => record.id === request.thread);
         if (!known) return { kind: "no_thread" };
+        if (request.thread === registry.wakesThread(character)) return { kind: "wakes_thread" };
         const most = registry.effectiveConfig(character).app.triggers.max_wake_limit.asMillis();
         const limitMs = request.limitMs === undefined ? undefined : Math.min(request.limitMs, most);
         const asked = autonomy.requestWake(character, { name: "", from, reason: request.reason, at: Date.now(), thread: request.thread, limitMs }, request.overwrite);

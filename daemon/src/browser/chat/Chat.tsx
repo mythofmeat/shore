@@ -53,11 +53,13 @@ function ChatTopbar({ state, sidebarOpen, toggleSidebar, mobile }: { state: Chro
       : { label: "Show the compaction…", icon: "compact", onSelect: openCompactionView },
     { label: "Fork…", icon: "branch", onSelect: () => openThreadDialog("fork", threadId), disabled: !ready },
     "separator",
-    { label: "Another take", icon: "shuffle", onSelect: () => { void conversation.regenerate({ anotherTake: true }, streamReplies()).catch((error: unknown) => toasts.show(errorText(error), "error")); }, disabled: !ready || busy || !hasTurns },
-    { label: "Regenerate with a reason…", icon: "regenerate", onSelect: () => setDialog("reason"), disabled: !ready || busy || !hasTurns },
+    ...(thread?.wakes === true ? [] : [
+      { label: "Another take", icon: "shuffle" as const, onSelect: () => { void conversation.regenerate({ anotherTake: true }, streamReplies()).catch((error: unknown) => toasts.show(errorText(error), "error")); }, disabled: !ready || busy || !hasTurns },
+      { label: "Regenerate with a reason…", icon: "regenerate" as const, onSelect: () => setDialog("reason"), disabled: !ready || busy || !hasTurns },
+    ]),
     { label: "Clear context…", icon: "refresh", onSelect: () => setDialog("clear"), disabled: !ready || busy },
     "separator",
-    ...(thread === undefined || thread.home ? [] : [{ label: "Make home", icon: "home" as const, onSelect: () => { void makeHome(thread); }, disabled: !ready }]),
+    ...(thread === undefined || thread.home || thread.wakes === true ? [] : [{ label: "Make home", icon: "home" as const, onSelect: () => { void makeHome(thread); }, disabled: !ready }]),
     { label: "Archive…", icon: "archive", onSelect: () => openThreadDialog("archive", threadId), disabled: !ready || thread?.home === true, danger: true },
   ];
   return <header className="topbar">
@@ -95,12 +97,15 @@ export function Chat({ state, sidebarOpen, toggleSidebar, mobile }: { state: Chr
       document.removeEventListener("visibilitychange", readMarks.check);
     };
   }, []);
+  const kept = state.threads.find((thread) => thread.id === state.thread)?.wakes === true;
   return <>
     <ChatTopbar state={state} sidebarOpen={sidebarOpen} toggleSidebar={toggleSidebar} mobile={mobile} />
     <ConnectionBanner state={state} />
     {state.character === null ? <NoCharacter state={state} /> : <>
-      <Transcript key={`${state.character}/${state.thread ?? ""}/${String(state.segmentView?.segment.index ?? "current")}`} character={state.character} mobile={mobile} />
-      <Composer key={JSON.stringify([state.character, state.thread])} state={state} character={state.character} mobile={mobile} />
+      <Transcript key={`${state.character}/${state.thread ?? ""}/${String(state.segmentView?.segment.index ?? "current")}`} character={state.character} mobile={mobile} readOnly={kept} />
+      {kept
+        ? <div className="composer-wrap"><p className="composer composer-note" role="note">{`Shore keeps the working from ${state.character}'s wakes here, to read. Write to ${state.character} in another thread.`}</p></div>
+        : <Composer key={JSON.stringify([state.character, state.thread])} state={state} character={state.character} mobile={mobile} />}
       <QuoteButton />
     </>}
   </>;
