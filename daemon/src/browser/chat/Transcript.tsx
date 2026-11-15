@@ -107,7 +107,7 @@ function SegmentBanner({ view, state }: { view: SegmentView; state: WorkspaceSna
   </div>;
 }
 
-export function Transcript({ character, mobile, readOnly = false }: { character: string; mobile: boolean; readOnly?: boolean }) {
+export function Transcript({ character, mobile, readOnly }: { character: string; mobile: boolean; readOnly: boolean }) {
   const state = useWorkspace();
   const display = useDisplay();
   const active = useActiveRequests();

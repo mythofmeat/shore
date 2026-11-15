@@ -506,7 +506,6 @@ export async function ensureWakesThread(
   if (wakesThread(index) !== undefined) return { index, created: false };
   let id = WAKES_THREAD;
   for (let n = 2; threadRecord(index, id) !== undefined; n += 1) id = `${WAKES_THREAD}-${String(n)}`;
-  await mkdir(threadDataDir(data, character, id), { recursive: true });
   const next: ThreadsIndex = {
     ...index,
     wakes: id,

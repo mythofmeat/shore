@@ -538,12 +538,11 @@ describe("the wakes thread", () => {
     expect(wakesThread(index("wakes", ["main", "wakes"], "wakes"))).toBeUndefined();
   });
 
-  test("is made once, next to a thread of the same name or a leftover folder, and stays when another thread is archived but not when it is", async () => {
+  test("is made once, next to threads of the same name, and stays when another thread is archived but not when it is", async () => {
     const data = mkdtempSync(testTmp("shore-wakes-thread-"));
     const now = "2026-11-15T00:00:00.000Z";
     await createThread(data, "ada", "wakes", now);
     await createThread(data, "ada", "wakes-2", now);
-    await mkdir(threadDataDir(data, "ada", "wakes-3"), { recursive: true });
     const made = await ensureWakesThread(data, "ada", now);
     expect([made.created, made.index.wakes, made.index.threads.at(-1)]).toEqual([true, "wakes-3", { id: "wakes-3", label: "Wakes", created_at: now, compaction: false }]);
     expect(await readThreadsIndex(data, "ada")).toEqual(made.index);
