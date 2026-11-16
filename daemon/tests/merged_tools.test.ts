@@ -5,6 +5,7 @@ import { join } from "node:path";
 
 import { loadConfig } from "../src/config/loader.ts";
 import { HISTORY_DB_FILE } from "../src/engine/history_store.ts";
+import { createThread } from "../src/engine/threads.ts";
 import type { NewSealedThread } from "../src/engine/sealed.ts";
 import { initializeDatabase } from "../src/storage/database.ts";
 import { closeStorageConnections } from "../src/storage/store.ts";
@@ -84,6 +85,13 @@ test("the threads tool lists, starts, seals and edits, each under its action", a
   ]);
 });
 
+test("the list says which thread the call was made from", async () => {
+  const { ctx } = threadTools();
+  await createThread(join(ctx.historyDbPath, ".."), "ada", "ring", "2026-11-01T00:00:00Z");
+  expect(String(await dispatchTool("threads", { action: "list" }, { ...ctx, thread: "ring" }))).toStartWith('Your home thread is "main". You\'re in "ring".\n\nmain (home) · compaction on');
+  expect(String(await dispatchTool("threads", { action: "list" }, ctx))).toStartWith('Your home thread is "main". You\'re in it.\n\nmain (home, you\'re here) · compaction on');
+});
+
 test("a sealed thread is refused anything that would say what it is for, a field is refused under the wrong action, and neither starts or changes a thread", async () => {
   const { ctx, asked } = threadTools();
   expect(await refused(dispatchTool("threads", { action: "start", name: "gift", label: "G", sealed_until: "2099-12-24 08:00", opening: "Surprise!" }, ctx))).toBe(
@@ -123,6 +131,8 @@ test("a call under one of the six old names isn't run, and is told which tool it
   expect(rejected("search_chat_logs", offered("threads"))).toBe(unavailable("search_chat_logs"));
   expect(rejected("frobnicate", both)).toBe(unavailable("frobnicate"));
   expect(rejected("threads", both)).toStartWith("The call to threads was not run because the required argument `action` was missing.");
+  expect(argumentRejection({ id: "t1", name: "chat_logs", input: { action: "search", query: "Mara", colour: "red" } }, both)).toStartWith("The call to chat_logs was not run because argument `colour` is not allowed.");
+  expect(argumentRejection({ id: "t1", name: "chat_logs", input: { action: "search", query: "Mara" } }, both)).toBeUndefined();
   expect(argumentRejection({ id: "t1", name: "threads", input: { action: "list" } }, both)).toBeUndefined();
   expect(rejected("list_threads", undefined)).toBeUndefined();
 });
