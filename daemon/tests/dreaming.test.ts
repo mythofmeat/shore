@@ -534,7 +534,7 @@ test("a wildcard grant never gives a dream a left-out tool, and a list of its ow
   const open = dreamGrants(granted, undefined);
   expect(open.tools.enabled).toContain("read");
   expect(open.tools.enabled).toContain("bash");
-  for (const name of ["wake_in_thread", "list_triggers", "write_diary", "threads", "generate_image", "guide"]) {
+  for (const name of ["wake_in_thread", "list_triggers", "write_diary", "send_message", "threads", "generate_image", "guide"]) {
     expect(open.tools.enabled).not.toContain(name);
   }
   expect(open.tools.mcp).toEqual([]);

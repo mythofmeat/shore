@@ -426,15 +426,90 @@ test("a call under a tool's old name is answered with the tool it became, stays 
   }, (app) => { app.tools.enabled.push("chat_logs"); });
 });
 
-test("what a wake wraps in sendMessage tags alongside a tool call stays in its working as written and sends nothing, and only its final response is sent", async () => {
-  await withCharacter(async ({ script, say, wakeNow, thread }) => {
+test("tags a wake still wraps a message in send nothing: its working and its note keep them as written, and its diary is told so when they were in its final response", async () => {
+  await withCharacter(async ({ runtime, script, data, say, wakeNow, thread }) => {
     await say("hello");
     script.aside = "<sendMessage>Not yet.</sendMessage> Let me look first.";
+    script.sends = undefined; script.closing = "Told part one.\n<sendMessage>Part one: the fox came to the gate.</sendMessage>";
     at(10);
     await wakeNow();
     const working = await thread("wakes");
     expect(working[1]?.content_blocks.flatMap((block) => block.type === "text" ? [block.text] : [])).toEqual(["<sendMessage>Not yet.</sendMessage> Let me look first."]);
-    expect((await thread("main")).filter((message) => message.role === "assistant").map((message) => [message.origin, message.content])).toEqual([[undefined, "reply to: hello"], ["autonomous", "I found the keeper's log."]]);
+    expect(working.at(-1)?.content).toBe("Told part one.\n<sendMessage>Part one: the fox came to the gate.</sendMessage>");
+    expect((await thread("main")).filter((message) => message.role === "assistant").map((message) => [message.origin, message.content])).toEqual([[undefined, "reply to: hello"]]);
+    expect(runtime.autonomy.log("ada", 100).map((event) => [event.kind, event.detail]).at(-1)).toEqual(["message_skipped", "Wake completed — no message sent"]);
+    const diary = () => unfoldedDiary(join(data, "ada")).map((note) => [note.source, note.thread, note.text]);
+    expect(diary()).toEqual([
+      ["shore", "", 'Your wake in "main" wrapped a message in <sendMessage> tags. The tags no longer send anything, so User was not sent it. A message is sent with the `send_message` tool.'],
+      ["wake", "main", "Told part one.\n<sendMessage>Part one: the fox came to the gate.</sendMessage>"],
+    ]);
+
+    script.closing = "NO_NOTE";
+    at(20);
+    await wakeNow();
+    expect((await thread("wakes")).at(-3)?.content_blocks.flatMap((block) => block.type === "text" ? [block.text] : [])).toEqual(["<sendMessage>Not yet.</sendMessage> Let me look first."]);
+    expect(diary()).toHaveLength(2);
+  });
+});
+
+test("a wake sends as many messages as it calls for, each in the thread it names, and one for another thread lands there unread once the wake is over", async () => {
+  await withCharacter(async ({ runtime, script, data, emitted, say, wakeNow, thread }) => {
+    await runtime.registry.createThread("ada", "garden");
+    markThreadRead(data, "ada", "garden", 0);
+    await say("hello");
+    script.sends = "The lamp is lit.";
+    script.beatTool = { name: "send_message", input: { text: "The beans are up.", thread: "garden" } };
+    script.closing = "Lit the lamp, looked at the beans.";
+    emitted.length = 0;
+    at(10);
+    await wakeNow();
+
+    expect((await thread("wakes")).flatMap((message) => message.content_blocks).flatMap((block) => block.type === "tool_result" ? [[block.content, block.is_error]] : [])).toEqual([
+      ["It will be posted in this thread when this wake ends.", false],
+      ['It will be posted in "garden" when this wake ends.', false],
+    ]);
+    expect(stored((await thread("main")).slice(3))).toEqual([
+      ["system", "autonomous", 'This wake\'s working is in "Wakes": 2 tool calls.'],
+      ["assistant", "autonomous", "The lamp is lit."],
+    ]);
+    expect(stored(await thread("garden"))).toEqual([["assistant", "autonomous", "The beans are up."]]);
+    expect(emitted.map((each) => [each.thread, each.msg.content])).toEqual([["main", "The lamp is lit."], ["garden", "The beans are up."]]);
+    expect(threadActivityNow(data, "ada", "garden")).toMatchObject({ unread: 1 });
+    expect(runtime.autonomy.log("ada", 100).filter((event) => event.kind === "message_sent").map((event) => event.detail)).toEqual([
+      "Autonomous message sent: The lamp is lit.",
+      "Autonomous message sent: The beans are up.",
+    ]);
+
+    at(12);
+    await say("oh, are they?", "garden");
+    expect(turnsOf(script.replies.at(-1))).toEqual([
+      ["user", "[wake · Friday 2026-10-30 · 12:10 PM]"],
+      ["assistant", "The beans are up."],
+      ["user", '[New in your diary. Each entry says where it came from.]\n\nyour note at the end of a wake in "main" · Friday 2026-10-30 · 12:10 PM\nLit the lamp, looked at the beans.\n\n[End of your diary.]|oh, are they?'],
+    ]);
+  });
+});
+
+test("a wake's message for a thread that is archived before the wake ends isn't sent, and the diary says so", async () => {
+  await withCharacter(async ({ runtime, script, data, say, command }) => {
+    await runtime.registry.createThread("ada", "garden");
+    await say("hello");
+    script.sends = undefined; script.closing = "NO_NOTE";
+    script.beatTool = { name: "send_message", input: { text: "The beans are up.", thread: "garden" } };
+    const end = hold();
+    script.endHeld = end;
+    at(10);
+    const waking = runtime.autonomy.wakeNow("ada") === undefined ? Promise.resolve() : runtime.autonomy.tick();
+    await end.started.promise;
+    expect(await command("archive_thread", { name: "garden" })).toMatchObject({ type: "command_output" });
+    end.release.resolve();
+    await waking;
+
+    expect(runtime.registry.listThreads("ada").map((record) => record.id)).toEqual(["main", "wakes"]);
+    expect(unfoldedDiary(join(data, "ada")).map((note) => [note.source, note.text])).toEqual([
+      ["shore", 'Your message for the thread "garden" was not sent: that thread was gone by the time your wake in "main" ended.'],
+    ]);
+    expect(runtime.autonomy.log("ada", 100).map((event) => event.kind)).not.toContain("message_sent");
   });
 });
 
@@ -3602,6 +3677,29 @@ async function sealsGift(h: Pick<Harness, "script" | "say" | "wakeNow">): Promis
   at(10);
   await h.wakeNow();
 }
+
+test("a wake in a sealed thread is refused a message for another thread, and what it sends there stays inside", async () => {
+  await withCharacter(async (h) => {
+    const { runtime, script, emitted, wakeNow, thread } = h;
+    await sealsGift(h);
+    script.beatTool = { name: "wake_in_thread", input: { thread: "gift", reason: "Start on it." } };
+    at(20);
+    await wakeNow();
+    script.sends = "Happy birthday!"; script.closing = "Made a card.";
+    script.beatTool = { name: "send_message", input: { text: "It's nearly ready.", thread: "main" } };
+    emitted.length = 0;
+    at(21);
+    await runtime.autonomy.tick();
+    const gift = (await runtime.registry.sealedEngine("ada", "gift"))?.messages() ?? [];
+    expect(gift.flatMap((message) => message.content_blocks).flatMap((block) => block.type === "tool_result" ? [[block.content, block.is_error === true]] : [])).toEqual([
+      ["It will be posted in this thread when this wake ends.", false],
+      ["io: a wake in a sealed thread sends nothing outside it: leave `thread` out, and the message waits here until the thread opens", true],
+    ]);
+    expect(gift.at(-1)).toMatchObject({ role: "assistant", origin: "autonomous", content: "Happy birthday!" });
+    expect((await thread("main")).map((message) => message.content)).not.toContain("It's nearly ready.");
+    expect(emitted).toEqual([]);
+  }, sealing);
+});
 
 test("a sealed thread is kept out of the user's thread list and the character's other turns, which are shown only its label and when it opens", async () => {
   await withCharacter(async (h) => {

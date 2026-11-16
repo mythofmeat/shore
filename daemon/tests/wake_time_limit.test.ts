@@ -153,6 +153,29 @@ test("a wake in home stopped at its 30-minute limit says so in that thread, the 
   );
 });
 
+test("a wake stopped at its limit still delivers what it had sent by then, and the next wake there is told it went", async () => {
+  const seen: SidecarRequest[] = [];
+  await afterOneChat(
+    (request, wake) => wake !== 1
+      ? { minutes: 0, blocks: [{ type: "text", text: "NO_NOTE" }] }
+      : sent(request) ? { minutes: 7, blocks: READ_SOUL } : { minutes: 7, blocks: sending("Halfway through the log.") },
+    seen,
+    async ({ run, log, messages }) => {
+      await run();
+      expect(log().filter((event) => event.kind === "timeout")).toHaveLength(1);
+      expect((await messages()).slice(-2).map((message) => [message.role, message.origin, message.content])).toEqual([
+        ["system", "autonomous", "[This wake reached its limit of 30 minutes, and Shore stopped it here.]"],
+        ["assistant", "autonomous", "Halfway through the log."],
+      ]);
+      expect(log().filter((event) => event.kind === "message_sent").map((event) => event.detail)).toEqual(["Autonomous message sent: Halfway through the log."]);
+
+      await run();
+      const opening = seen.filter((request) => request.context?.call_type === "wake").map(textOf);
+      expect(opening[1]).toContain(", before it had finished. The message it had already written was still sent to User. ");
+    },
+  );
+});
+
 interface RingOptions {
   maxToolRounds?: number;
   wrapUpRounds?: number;

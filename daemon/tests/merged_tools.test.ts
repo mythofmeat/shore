@@ -126,6 +126,9 @@ test("a call under one of the six old names isn't run, and is told which tool it
       `The call to ${was} was not run because it is part of the \`${now}\` tool now, which takes an \`action\`. Nothing was executed and no state changed. Issue the call again with complete, well-formed arguments.`,
     );
   }
+  expect(rejected("send_push", offered("send_message"))).toBe(
+    "The call to send_push was not run because it is part of the `send_message` tool now, as its `push`. Nothing was executed and no state changed. Issue the call again with complete, well-formed arguments.",
+  );
   const unavailable = (name: string) => `The call to ${name} was not run because this tool is not available in the current tool set. Nothing was executed and no state changed. Issue the call again with complete, well-formed arguments.`;
   expect(rejected("list_threads", offered("chat_logs", "read"))).toBe(unavailable("list_threads"));
   expect(rejected("search_chat_logs", offered("threads"))).toBe(unavailable("search_chat_logs"));
@@ -135,6 +138,23 @@ test("a call under one of the six old names isn't run, and is told which tool it
   expect(argumentRejection({ id: "t1", name: "chat_logs", input: { action: "search", query: "Mara" } }, both)).toBeUndefined();
   expect(argumentRejection({ id: "t1", name: "threads", input: { action: "list" } }, both)).toBeUndefined();
   expect(rejected("list_threads", undefined)).toBeUndefined();
+});
+
+test("send_message takes what to say, a thread's id and whether to push, and can't be used where no turn is there to send it", async () => {
+  const { ctx } = threadTools();
+  const asked: unknown[] = [];
+  const sending: ToolContext = { ...ctx, sendMessage: async (request) => { asked.push(request); return "queued"; } };
+  expect(await dispatchTool("send_message", { text: "  The lamp is lit.  " }, sending)).toBe("queued");
+  expect(await dispatchTool("send_message", { text: "Hello.", thread: " garden ", push: true }, sending)).toBe("queued");
+  expect(await dispatchTool("send_message", { text: "Hello.", push: "yes" }, sending)).toBe("queued");
+  expect(asked).toEqual([{ text: "The lamp is lit.", push: false }, { text: "Hello.", thread: "garden", push: true }, { text: "Hello.", push: false }]);
+  expect(await refused(dispatchTool("send_message", { text: "   " }, sending))).toBe("invalid args: text must be a non-empty string");
+  expect(await refused(dispatchTool("send_message", { text: 5 }, sending))).toBe("invalid args: text must be a non-empty string");
+  const thread = "invalid args: thread must be a thread's id, as `threads` lists it";
+  expect(await refused(dispatchTool("send_message", { text: "Hello.", thread: "the garden" }, sending))).toBe(thread);
+  expect(await refused(dispatchTool("send_message", { text: "Hello.", thread: 5 }, sending))).toBe(thread);
+  expect(await refused(dispatchTool("send_message", { text: "Hello." }, ctx))).toBe("io: messages can't be sent from here");
+  expect(asked).toHaveLength(3);
 });
 
 test("a config that still names one of those tools is told which tool it is part of now, for the character's tools and a sub-agent's", () => {
@@ -152,5 +172,6 @@ test("a config that still names one of those tools is told which tool it is part
     [message, [["tool", "start_sealed_thread"], ["now", "threads"]]],
     [message, [["tool", "read_chat_logs"], ["now", "chat_logs"]]],
   ]);
+  expect(warned('["send_push", "send_message"]', "[]")).toEqual([[message, [["tool", "send_push"], ["now", "send_message"]]]]);
   expect(warned('["read", "threads", "chat_logs"]', '["chat_logs"]')).toEqual([]);
 });
