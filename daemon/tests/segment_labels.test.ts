@@ -235,14 +235,14 @@ test("a conversation compacted for being idle is labelled, and one archived afte
     await say("and the door?");
     const start = Date.now();
     setSystemTime(new Date(start + HOUR));
-    await runtime.autonomy.tick();
+    await runtime.autonomy.runDue();
     await settled();
     expect(of("compaction")).toHaveLength(1);
     expect(segments()).toEqual([{ idx: 0, label: "Lighting the lamp" }]);
     expect(of("label")).toHaveLength(1);
 
     setSystemTime(new Date(start + 30 * HOUR));
-    await runtime.autonomy.tick();
+    await runtime.autonomy.runDue();
     await settled();
     expect(segments()).toEqual([{ idx: 0, label: "Lighting the lamp" }, { idx: 1, label: undefined }]);
     expect(of("label")).toHaveLength(1);

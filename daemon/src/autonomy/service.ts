@@ -96,7 +96,7 @@ export class AutonomyService {
   #keepalive: KeepaliveService | undefined;
   #listener: ((character: string) => AutonomyEvents) | undefined;
   #closed = false;
-  readonly #ticks = new Set<Promise<void>>();
+  readonly #ticks = new Set<Promise<string[]>>();
 
   constructor(executor: AutonomyExecutor, now: () => number = () => Date.now()) {
     this.#executor = executor;
@@ -205,11 +205,20 @@ export class AutonomyService {
   }
 
   async tick(): Promise<void> {
-    if (this.#closed) return;
+    for (const failure of await this.#due()) shoreLog.error(`shore: ${failure}`);
+  }
+
+  async runDue(): Promise<void> {
+    const failed = await this.#due();
+    if (failed.length > 0) throw new Error(failed.join("; "));
+  }
+
+  async #due(): Promise<string[]> {
+    if (this.#closed) return [];
     const work = this.#tickDue();
     this.#ticks.add(work);
     try {
-      await work;
+      return await work;
     } finally {
       this.#ticks.delete(work);
     }
@@ -247,7 +256,7 @@ export class AutonomyService {
     return this.#entries.get(character)?.runner.runningWake;
   }
 
-  async #tickDue(): Promise<void> {
+  async #tickDue(): Promise<string[]> {
     const due: [string, Entry][] = [];
     for (const pair of this.#entries) {
       pair[1].runner.setKeepaliveSchedule(toPersisted(this.#keepalive?.scheduleFor(pair[0])));
@@ -255,17 +264,19 @@ export class AutonomyService {
       pair[1].inFlight = true;
       due.push(pair);
     }
+    const failed: string[] = [];
     await Promise.all(
       due.map(async ([character, entry]) => {
         try {
           await entry.runner.tick(this.#foreground.has(character));
         } catch (err) {
-          shoreLog.error(`shore: autonomy tick failed for ${character}: ${String(err)}`);
+          failed.push(`autonomy tick failed for ${character}: ${String(err)}`);
         } finally {
           entry.inFlight = false;
         }
       }),
     );
+    return failed;
   }
 
   onUserMessage(character: string, turnCount: number, localAt: number): void {

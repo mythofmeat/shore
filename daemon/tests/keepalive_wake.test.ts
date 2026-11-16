@@ -72,7 +72,7 @@ async function afterOneChat(wakeRead: number, idle: (chat: IdleChat) => Promise<
       wakeAt: async (minutes) => {
         setSystemTime(new Date(T0 + minutes * MINUTE));
         expect(runtime.autonomy.wakeNow("ada")).toBeDefined();
-        await runtime.autonomy.tick();
+        await runtime.autonomy.runDue();
       },
     });
   });

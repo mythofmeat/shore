@@ -269,7 +269,7 @@ test("a dream asked for works on the current files, not the home thread's frozen
     expect([...workspaceReadCounts(characterDir)]).toEqual([["SOUL.md", 1]]);
 
     expect(runtime.autonomy.forceDreamNow("ada")).toBe("queued");
-    await runtime.autonomy.tick();
+    await runtime.autonomy.runDue();
     await runtime.autonomy.dreamsEnded();
 
     const opening = required(seen[0]);
@@ -312,7 +312,7 @@ test("a dream's own reads aren't counted, and a failed dream leaves the count fo
   }, (app) => { app.dreaming.enabled = true; }, async ({ config, characterDir, runtime }) => {
     putSegment(config.dirs.data, "ada", 0, Date.now() - HOUR);
     runtime.autonomy.forceDreamNow("ada");
-    await runtime.autonomy.tick();
+    await runtime.autonomy.runDue();
     await runtime.autonomy.dreamsEnded();
 
     expect(seen).toHaveLength(2);
@@ -332,7 +332,7 @@ test("a scheduled dream with nothing archived since the last one makes no model 
     app.dreaming.min_turns = 0;
     app.dreaming.idle_after = ConfigDuration.fromSecs(0);
   }, async ({ characterDir, runtime }) => {
-    await runtime.autonomy.tick();
+    await runtime.autonomy.runDue();
     expect(seen).toEqual([]);
     expect(lastDream(characterDir)).toBeUndefined();
   });
@@ -346,7 +346,7 @@ test("a scheduled dream runs once something has been archived since the last one
     app.dreaming.idle_after = ConfigDuration.fromSecs(0);
   }, async ({ config, characterDir, runtime }) => {
     putSegment(config.dirs.data, "ada", 0, Date.now() - HOUR);
-    await runtime.autonomy.tick();
+    await runtime.autonomy.runDue();
     await runtime.autonomy.dreamsEnded();
     expect(seen).toHaveLength(1);
     expect(required(lastDream(characterDir)).outcome).toBe("finished");
@@ -368,7 +368,7 @@ test("with compaction.git_push on, a dream pushes the workspace when it committe
       git(workspace, "push", "--quiet", "--set-upstream", "origin", "HEAD");
       putSegment(config.dirs.data, "ada", 0, Date.now() - HOUR);
       expect(runtime.autonomy.forceDreamNow("ada")).toBe("queued");
-      await runtime.autonomy.tick();
+      await runtime.autonomy.runDue();
       if (shutDownOnceCommitted === undefined) await runtime.autonomy.dreamsEnded();
       else {
         await shutDownOnceCommitted;
@@ -404,7 +404,7 @@ test("shore dream says whether dreaming is on, what is queued or running and how
     const before = dreamCommand(asked, {});
     expect([before.character, before.enabled, before.queued, before.running, before.last]).toEqual(["ada", true, false, false, undefined]);
     expect(dreamCommand(asked, { now: true })).toMatchObject({ character: "ada", enabled: true, queued: true, running: false });
-    await runtime.autonomy.tick();
+    await runtime.autonomy.runDue();
     await runtime.autonomy.dreamsEnded();
     expect(dreamCommand(asked, {})).toMatchObject({ queued: false, running: false, last: { outcome: "finished", commits: 1, files: ["MEMORY.md"] } });
 
@@ -426,7 +426,7 @@ test("a running dream lets a snapshot through between calls, can't be queued twi
   }, (app) => { app.dreaming.enabled = true; }, async ({ config, characterDir, runtime }) => {
     putSegment(config.dirs.data, "ada", 0, Date.now() - HOUR);
     expect(runtime.autonomy.forceDreamNow("ada")).toBe("queued");
-    await runtime.autonomy.tick();
+    await runtime.autonomy.runDue();
     await called;
 
     const report = runningReport({ dataDir: config.dirs.data, generations: () => [], wakes: () => [], dreams: () => runtime.autonomy.runningDreams(), shutdown: () => undefined });
@@ -463,7 +463,7 @@ test("a dream runs on the chat model whatever wakes use, and counts only the com
     expect([...workspaceReadCounts(characterDir)]).toEqual([]);
     putSegment(config.dirs.data, "ada", 0, Date.now() - HOUR);
     runtime.autonomy.forceDreamNow("ada");
-    await runtime.autonomy.tick();
+    await runtime.autonomy.runDue();
     await runtime.autonomy.dreamsEnded();
 
     expect(seen.map((request) => request.model)).toEqual(["claude-fixture", "claude-fixture", "claude-fixture"]);
@@ -486,7 +486,7 @@ test("a dream stopped at its round limit is cut off, keeps no half-written summa
   }, async ({ config, characterDir, runtime }) => {
     putSegment(config.dirs.data, "ada", 0, Date.now() - HOUR);
     runtime.autonomy.forceDreamNow("ada");
-    await runtime.autonomy.tick();
+    await runtime.autonomy.runDue();
     await runtime.autonomy.dreamsEnded();
     const record = required(lastDream(characterDir));
     expect(record.outcome).toBe("cut_off");
@@ -495,7 +495,7 @@ test("a dream stopped at its round limit is cut off, keeps no half-written summa
     const first = seen.length;
 
     runtime.autonomy.forceDreamNow("ada");
-    await runtime.autonomy.tick();
+    await runtime.autonomy.runDue();
     await runtime.autonomy.dreamsEnded();
     const next = instructionsOf(required(seen[first]));
     expect(next).toContain("used up its rounds of tool calls");
@@ -516,7 +516,7 @@ test("a dream a budget pauses before it starts is no failure, makes no call and 
   }, async ({ config, characterDir, runtime }) => {
     putSegment(config.dirs.data, "ada", 0, Date.now() - HOUR);
     runtime.autonomy.forceDreamNow("ada");
-    await runtime.autonomy.tick();
+    await runtime.autonomy.runDue();
     await runtime.autonomy.dreamsEnded();
     expect(seen).toEqual([]);
     expect(lastDream(characterDir)).toBeUndefined();
@@ -598,7 +598,7 @@ test("a dream ends its instructions with the diary notes no finished dream has b
     const dream = async (): Promise<string> => {
       const first = seen.length;
       runtime.autonomy.forceDreamNow("ada");
-      await runtime.autonomy.tick();
+      await runtime.autonomy.runDue();
       await runtime.autonomy.dreamsEnded();
       expect(lastDream(characterDir)?.outcome).toBe("finished");
       return instructionsOf(required(seen[first]));
@@ -633,14 +633,14 @@ test("a dream that is cut off is shown the same diary notes again next time", as
     const march = leaveNote(characterDir, "d1", Date.now() - HOUR, "The log is read up to March.");
     const block = diaryText([march], DIARY_FOR_DREAM, hostZone());
     runtime.autonomy.forceDreamNow("ada");
-    await runtime.autonomy.tick();
+    await runtime.autonomy.runDue();
     await runtime.autonomy.dreamsEnded();
     expect(lastDream(characterDir)?.outcome).toBe("cut_off");
     expect(instructionsOf(required(seen[0]))).toContain(block);
     const first = seen.length;
 
     runtime.autonomy.forceDreamNow("ada");
-    await runtime.autonomy.tick();
+    await runtime.autonomy.runDue();
     await runtime.autonomy.dreamsEnded();
     expect(instructionsOf(required(seen[first]))).toEndWith(block);
   });
