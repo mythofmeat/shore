@@ -472,7 +472,7 @@ async function runGenerationCore(
           engine: async (thread) => deps.registry.listThreads(charName).some((record) => record.id === thread) ? await deps.registry.getOrCreate(charName, thread) : undefined,
         }, { provider_key: resolved.providerKey, model: request.model }, {
           emit: (character, revision, msg, thread) => { emitNewMessageEvent(deps.emitEvent, character, "autonomous", revision, msg, thread); },
-          notify: (title, body, picture) => { deps.notifier.notify("autonomous_message", title, body, picture); },
+          notify: (title, shown, picture) => { deps.notifier.notify("autonomous_message", title, shown, picture); },
           ...(push === undefined ? {} : { push: async (message) => await push(charName, message) }),
           newId: newMessageId,
           nowIso: now,

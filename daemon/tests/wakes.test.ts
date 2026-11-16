@@ -535,7 +535,7 @@ test("a wake whose trigger names no thread runs on home's model, and its ending 
 
   await withCharacter(async ({ script, data, say, wakeNow, thread }) => {
     await say("hello");
-    script.closing = `<sendMessage>${"The keeper's log runs on. ".repeat(400)}</sendMessage>`;
+    script.sends = "The keeper's log runs on. ".repeat(400).trim(); script.closing = "NO_NOTE";
     at(10);
     await wakeNow();
     await queuedCompactionsEnded(data, "ada");
@@ -2960,7 +2960,7 @@ test("wakes from before the user first wrote in a thread are put away the same w
     at(15);
     await say("how is it going?", "log");
     expect(await openers()).toEqual(["10", "12"]);
-    await wake(30, `<sendMessage>${"The keeper's log runs on. ".repeat(400)}</sendMessage>`);
+    await wake(30, "NO_NOTE", "The keeper's log runs on. ".repeat(400).trim());
     expect(await openers()).toEqual(["30"]);
     expect((await thread("log")).slice(0, 2).map((message) => message.content)).toEqual(["how is it going?", "reply to: how is it going?"]);
     expect((await thread("log")).at(-1)?.content).toStartWith("The keeper's log runs on.");
@@ -3522,7 +3522,7 @@ test("a wake's message with a picture Shore can't find is refused as it is sent,
     await wakeNow();
 
     expect(script.wakes).toHaveLength(2);
-    const refused = (await thread("wakes")).flatMap((message) => message.content_blocks).flatMap((block) => block.type === "tool_result" && block.is_error === true ? [String(block.content)] : []);
+    const refused = (await thread("wakes")).flatMap((message) => message.content_blocks).flatMap((block) => block.type === "tool_result" && block.is_error === true && typeof block.content === "string" ? [block.content] : []);
     expect(refused).toHaveLength(1);
     expect(refused[0]).toStartWith("io: not sent: these pictures in it could not be sent:\n- ![[missing.png]]: ");
     expect(refused[0]).toEndWith("\nSend it again with the names fixed.");
