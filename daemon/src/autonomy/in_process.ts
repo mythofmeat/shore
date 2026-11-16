@@ -77,7 +77,6 @@ export class InProcessAutonomyExecutor implements AutonomyExecutor {
         news: (wrappingUp) => hooks.news(wrappingUp),
         newsHeard: () => { hooks.newsHeard(); },
         ...(rest.push === undefined ? {} : { push: async (message) => await rest.push?.(character, message) ?? { kind: "not_set_up" } }),
-        ...(rest.pushRefusal === undefined ? {} : { pushRefusal: () => rest.pushRefusal?.(character) }),
         generate: calls.generate,
         dispatch: async (name, input, toolUseId, tools, conversation) => {
           toolCtx ??= buildToolContext(config, config.dirs.data, character, { ...rest, ...handsOn, thread: conversation.thread, conversation: conversation.conversation, fresh: true });

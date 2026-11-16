@@ -1,4 +1,4 @@
-import type { PushOutcome, PushRefusal } from "../autonomy/push.ts";
+import type { PushOutcome } from "../autonomy/push.ts";
 import type { TriggersView } from "../autonomy/trigger_loop.ts";
 import { characterMediaDir } from "../storage/media.ts";
 import { shoreLog } from "../log.ts";
@@ -52,7 +52,6 @@ export interface ToolContextDeps extends Partial<ToolConversation> {
   activityStats?: (character: string, days: number) => ReturnType<ActivityStatsLookup>;
   triggersView?: (character: string) => TriggersView;
   push?: (character: string, message: string) => Promise<PushOutcome>;
-  pushRefusal?: (character: string) => PushRefusal | undefined;
   wakeInThread?: (character: string, from: string, request: WakeInThreadRequest) => WakeHandOff;
   startThread?: (character: string, request: StartThreadRequest) => Promise<void>;
   sealThread?: (character: string, request: NewSealedThread) => Promise<StartedSealedThread>;

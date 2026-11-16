@@ -85,6 +85,7 @@ import { characterWorkspace } from "../tools/character_workspace.ts";
 import { shoreLog } from "../log.ts";
 import { sentPicturesDir } from "../storage/sent_pictures.ts";
 import { Outbox, postElsewhere, reachableThreads } from "../autonomy/outbox.ts";
+import { pushRefusal } from "../autonomy/push.ts";
 import { hostZone } from "../ledger/zoned.ts";
 import { pictureProblems } from "./pictures.ts";
 
@@ -153,7 +154,6 @@ export interface GenerationDeps {
   ledgerPath?: string;
   tools?: (charName: string, turn: SubagentTurn) => ToolContextDeps;
   push?: ToolContextDeps["push"];
-  pushRefusal?: ToolContextDeps["pushRefusal"];
   now?: () => string;
   newMessageId?: () => string;
   monotonicMs?: () => number;
@@ -380,7 +380,7 @@ async function runGenerationCore(
       timeZone: hostZone(),
       threads: async () => await reachableThreads(deps.dataDir, charName),
       pictureProblems: async (text) => await pictureProblems([text], workspace, params.signal),
-      pushRefusal: () => deps.pushRefusal === undefined ? { kind: "not_set_up" } : deps.pushRefusal(charName),
+      pushRefusal: () => pushRefusal(characterDataDir(deps.dataDir, charName), { topic: config.app.notifications.push_topic, everyMs: config.app.notifications.push_every.asMillis() }, Date.now()),
     });
 
     let intermediatePersisted = false;

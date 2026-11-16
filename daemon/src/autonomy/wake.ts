@@ -40,7 +40,7 @@ import { firedBy, WAKE_QUIET_MS, type TriggerFiring, type WakeNews, type WakeRes
 import { sealedListNote, sealedWakeNote } from "./sealed_notes.ts";
 import { digestWords, threadDigest, type ThreadReader } from "./thread_digest.ts";
 import { Outbox, postElsewhere, postMessage, reachableThreads, sendingsHere } from "./outbox.ts";
-import type { PushOutcome, PushRefusal } from "./push.ts";
+import { pushRefusal, type PushOutcome } from "./push.ts";
 import { spanPhrase, timeLeftPhrase, triggerFiredNote, wakeNewsNote } from "./wake_shape.ts";
 import { keptNote, recordWakeEnd, stopOf, wakeRecord, wakeStopNote, WakeWords, type WakeStopReason } from "./wake_record.ts";
 import { keptWorkingSummary, withoutWakeWorking } from "./wake_working.ts";
@@ -92,7 +92,6 @@ export interface WakeDeps extends Pick<BackgroundLoopDeps, "recordTranscript" | 
   emit?: (character: string, revision: number, msg: Message, thread: string) => void;
   notify?: (title: string, body: string, picture?: NotificationPicture) => void;
   push?: (message: string) => Promise<PushOutcome>;
-  pushRefusal?: () => PushRefusal | undefined;
   budgetBlockFor?: (request: SidecarRequest) => CallBlock | undefined;
   compaction?: CompactionRunner;
   env?: NodeJS.ProcessEnv;
@@ -364,7 +363,7 @@ export async function runWake(character: string, config: LoadedConfig, wake: Wak
       timeZone,
       threads: async () => await reachableThreads(config.dirs.data, character),
       pictureProblems: async (text) => await pictureProblems([text], workspace, signal),
-      pushRefusal: () => deps.pushRefusal === undefined ? { kind: "not_set_up" } : deps.pushRefusal(),
+      pushRefusal: () => pushRefusal(characterDir, { topic: config.app.notifications.push_topic, everyMs: config.app.notifications.push_every.asMillis() }, deps.now?.() ?? Date.now()),
     });
     const loop = await runBackgroundLoop(request, {
       ...(heard.recordTranscript === undefined ? {} : { recordTranscript: heard.recordTranscript }),

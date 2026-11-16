@@ -97,7 +97,6 @@ export function buildGenerationDeps(a: GenerationAssembly): GenerationDeps {
 
   return {
     ...(shared.push === undefined ? {} : { push: shared.push }),
-    ...(shared.pushRefusal === undefined ? {} : { pushRefusal: shared.pushRefusal }),
     registry: generationRegistry(runtime.registry),
     dataDir,
     providers: a.providers,
