@@ -5,6 +5,7 @@ import { appendWrapUpNudge, generatedImageRef, timeLeftPhrase, type ImageRef, ty
 import type { GenerateResponse, SidecarRequest, ToolDefinition, Usage } from "../llm/types.ts";
 import type { ContentBlock } from "../engine/types.ts";
 import { truncateSummary } from "../notifications.ts";
+import { required } from "../util/required.ts";
 import type { CapturedTool } from "../transcript_capture.ts";
 export type { CapturedTool };
 
@@ -163,9 +164,7 @@ export async function runBackgroundLoop(
       const round = await dispatchLoopTools([[use.id, use.name, use.input]], deps, request.tools);
       captured.push(...round.captured);
       result.images.push(...round.images);
-      const block = round.results[0];
-      if (block === undefined) throw new Error(`${name} tool returned no result`);
-      return block;
+      return required(round.results[0]);
     },
     recordTurn: async (role, blocks) => {
       if (role === "assistant") persisted = true;

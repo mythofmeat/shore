@@ -352,7 +352,7 @@ describe("config set on disk", () => {
 });
 
 test("a setting is described by what its section says of it, a user by the section it runs things for, and one nothing describes by its name and section", () => {
-  const entries = configSchema({ instancesAt: (path) => String(path) === "mcp" ? ["weather"] : [] });
+  const entries = configSchema({ instancesAt: (path) => path === "mcp" ? ["weather"] : [] });
   const described = (key: string): string | undefined => entries.find((entry) => entry.key === key)?.description;
   expect(described("plan_limits.five_hour.limit_fraction")).toBe("Claude plan utilization fraction at which limit_action applies; 1.0 is the whole window.");
   expect(described("dreaming.every")).toBe("Time from the start of the last dream that finished or reached its limit until the next one is due. Defaults to 3d.");
