@@ -96,7 +96,7 @@ export class AutonomyService {
   #keepalive: KeepaliveService | undefined;
   #listener: ((character: string) => AutonomyEvents) | undefined;
   #closed = false;
-  readonly #ticks = new Set<Promise<string[]>>();
+  #ticking: Promise<void> = Promise.resolve();
 
   constructor(executor: AutonomyExecutor, now: () => number = () => Date.now()) {
     this.#executor = executor;
@@ -216,12 +216,8 @@ export class AutonomyService {
   async #due(): Promise<string[]> {
     if (this.#closed) return [];
     const work = this.#tickDue();
-    this.#ticks.add(work);
-    try {
-      return await work;
-    } finally {
-      this.#ticks.delete(work);
-    }
+    this.#ticking = Promise.allSettled([this.#ticking, work]).then(() => {});
+    return await work;
   }
 
   async quiesce(): Promise<void> {
@@ -229,7 +225,7 @@ export class AutonomyService {
     const stopDreams = async () => {
       await Promise.allSettled([...this.#entries.values()].map(async ({ runner }) => { await runner.stopDream(); }));
     };
-    await Promise.allSettled([...this.#ticks, stopDreams()]);
+    await Promise.allSettled([this.#ticking, stopDreams()]);
     await stopDreams();
   }
 
