@@ -1,7 +1,9 @@
-import { expect, test } from "bun:test";
+import { expect, spyOn, test } from "bun:test";
 import { mkdtemp, mkdir, writeFile, readFile } from "node:fs/promises";
 import { join } from "node:path";
 import { testTmp } from "./support/tmp.ts";
+import { untilAsync } from "./support/until.ts";
+import { shoreLog } from "../src/log.ts";
 import { writeState, readState } from "../src/storage/store.ts";
 import { loadConfig } from "../src/config/loader.ts";
 import { setTestEnv, restoreTestEnv } from "./support/env.ts";
@@ -93,25 +95,91 @@ test("cancelling generation reaches an in-flight MCP tool", async () => {
   expect(observed?.aborted).toBe(true);
 });
 
+const CANCEL_GUARD_MS = 15_000;
+
+function alive(pid: number): boolean {
+  try {
+    process.kill(pid, 0);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+function loopLag(): { worstMs: () => number; stop: () => void } {
+  let worst = 0;
+  let last = performance.now();
+  const timer = setInterval(() => {
+    const now = performance.now();
+    worst = Math.max(worst, now - last - 20);
+    last = now;
+  }, 20);
+  return { worstMs: () => Math.round(worst), stop: () => { clearInterval(timer); } };
+}
+
 test("process cancellation kills and reaps a child that ignores SIGTERM", async () => {
   const h = await reliabilityGeneration(providerFor({ input: {} }));
   const ready = join(h.root, "ready");
   const parent = new AbortController();
-  const work = runProcess(process.execPath, ["-e", `
-    process.on("SIGTERM", () => {});
-    await Bun.write(process.argv[1], String(process.pid));
-    setInterval(() => {}, 1000);
-  `, ready], { signal: parent.signal });
-  const outcome = work.catch((error: unknown) => error);
-  let pid: number | undefined;
-  for (let attempt = 0; attempt < 100; attempt += 1) {
-    try { pid = Number(await readFile(ready, "utf8")); break; } catch {}
-    await new Promise((resolve) => { setTimeout(resolve, 10); });
+  const warned = spyOn(shoreLog, "warn").mockImplementation(() => {});
+  const lag = loopLag();
+  try {
+    const work = runProcess(process.execPath, ["-e", `
+      process.on("SIGTERM", () => {});
+      await Bun.write(process.argv[1], String(process.pid));
+      setInterval(() => {}, 1000);
+    `, ready], { signal: parent.signal });
+    const outcome = work.catch((error: unknown) => error);
+    let pid = 0;
+    await untilAsync(async () => {
+      pid = Number(await readFile(ready, "utf8").catch(() => ""));
+      return pid > 0;
+    }, "the child writing its pid");
+
+    const cancelled = performance.now();
+    parent.abort();
+    const guard = Promise.withResolvers<"still running">();
+    const guarding = setTimeout(() => { guard.resolve("still running"); }, CANCEL_GUARD_MS);
+    const reaped = await Promise.race([outcome, guard.promise]);
+    clearTimeout(guarding);
+    if (reaped === "still running") {
+      const state = alive(pid) ? "it is still alive" : "it is gone but its output never closed";
+      if (alive(pid)) process.kill(-pid, "SIGKILL");
+      throw new Error(
+        `the child was not reaped ${String(Math.round(performance.now() - cancelled))} ms after it was cancelled: ${state}; ` +
+        `the event loop ran up to ${String(lag.worstMs())} ms late; signals that could not be sent: ${JSON.stringify(warned.mock.calls.map((call) => String(call[0])))}`,
+      );
+    }
+    expect(reaped).toBe(parent.signal.reason);
+    expect(alive(pid)).toBe(false);
+    expect(warned.mock.calls).toEqual([]);
+  } finally {
+    lag.stop();
+    warned.mockRestore();
   }
-  parent.abort();
-  expect(await outcome).toBe(parent.signal.reason);
-  expect(pid).toBeDefined();
-  expect(() => process.kill(pid ?? 0, 0)).toThrow();
+}, 2 * CANCEL_GUARD_MS);
+
+test("a signal that can't be sent to a cancelled process is logged, and the process is reaped once one gets through", async () => {
+  const warned = spyOn(shoreLog, "warn").mockImplementation(() => {});
+  const send = process.kill.bind(process);
+  let refused = 0;
+  const kills = spyOn(process, "kill").mockImplementation((pid, signal) => {
+    if (signal === "SIGTERM" && refused === 0) {
+      refused += 1;
+      throw Object.assign(new Error("kill EPERM"), { code: "EPERM" });
+    }
+    return send(pid, signal);
+  });
+  try {
+    const parent = new AbortController();
+    const outcome = runProcess(process.execPath, ["-e", "setInterval(() => {}, 1000);"], { signal: parent.signal }).catch((error: unknown) => error);
+    parent.abort();
+    expect(await outcome).toBe(parent.signal.reason);
+    expect(warned.mock.calls.map((call) => String(call[0]).replace(/process \d+/, "process N"))).toEqual(["shore: could not send SIGTERM to process N: Error: kill EPERM"]);
+  } finally {
+    kills.mockRestore();
+    warned.mockRestore();
+  }
 });
 
 function gate() {
