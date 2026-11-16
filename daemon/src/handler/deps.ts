@@ -93,8 +93,11 @@ export function buildGenerationDeps(a: GenerationAssembly): GenerationDeps {
   const ledgerPath = rustJoin(dataDir, "shore.db");
   const usage = (character: string) =>
     usageConfigView(runtime.registry.effectiveConfig(character).app);
+  const shared = runtimeToolDeps(a);
 
   return {
+    ...(shared.push === undefined ? {} : { push: shared.push }),
+    ...(shared.pushRefusal === undefined ? {} : { pushRefusal: shared.pushRefusal }),
     registry: generationRegistry(runtime.registry),
     dataDir,
     providers: a.providers,

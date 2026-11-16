@@ -6,18 +6,16 @@ import { characterDataDir, resolvePromptTemplate, threadDataDir } from "../confi
 import { findEffectiveModel } from "../config/effective_catalog.ts";
 import type { LoadedConfig } from "../config/loader.ts";
 import { applyBackgroundSettings, configView, resolveChatModelForCharacter } from "../config/preferences.ts";
-import { pictureText } from "../engine/embeds.ts";
 import { withConversation } from "../engine/lifecycle.ts";
 import { deriveContentFromBlocks, isToolResultOnly } from "../engine/message_store.ts";
 import { agoPhrase, diaryText, DIARY_FOR_WAKE, estimateHistoryTokens, formatWallClock, nearMessageBudget, presenceText, renderTemplate } from "../engine/prompt.ts";
 import { sealedThreads, type SealedThread } from "../engine/sealed_list.ts";
 import { NO_PRIOR_CONTEXT } from "../engine/segments.ts";
-import { homeThread, isWakeOpener, readThreadsIndex, threadActivities, threadActivityNow, wakesThread, type ThreadsIndex } from "../engine/threads.ts";
+import { homeThread, isWakeOpener, readThreadsIndex, threadActivities, threadActivityNow, type ThreadsIndex } from "../engine/threads.ts";
 import type { Message } from "../engine/types.ts";
-import { newMessageVersion } from "../engine/versions.ts";
 import { buildChatShapeRequestFromDisk } from "../handler/context.ts";
 import { cacheTtlSecs, thinkingEnabled } from "../handler/generation.ts";
-import { firstSentPicture, pictureProblems, sendPictures, type PictureSender } from "../handler/pictures.ts";
+import { pictureProblems, type PictureSender } from "../handler/pictures.ts";
 import type { ToolConversation } from "../handler/tool_context.ts";
 import { archiveTrimmedTurns, maybeCompact, threadShouldCompact, type CompactionRunner } from "../handler/turn.ts";
 import { usageConfigView, type CallBlock } from "../ledger/budget.ts";
@@ -41,9 +39,9 @@ import { presence } from "./presence.ts";
 import { firedBy, WAKE_QUIET_MS, type TriggerFiring, type WakeNews, type WakeResult } from "./runner.ts";
 import { sealedListNote, sealedWakeNote } from "./sealed_notes.ts";
 import { digestWords, threadDigest, type ThreadReader } from "./thread_digest.ts";
-import { Outbox, type Outgoing } from "./outbox.ts";
+import { Outbox, postElsewhere, postMessage, reachableThreads, type Sending } from "./outbox.ts";
 import type { PushOutcome, PushRefusal } from "./push.ts";
-import { buildAutonomousMessage, spanPhrase, timeLeftPhrase, triggerFiredNote, wakeNewsNote, type ImageRef } from "./wake_shape.ts";
+import { spanPhrase, timeLeftPhrase, triggerFiredNote, wakeNewsNote } from "./wake_shape.ts";
 import { keptNote, recordWakeEnd, stopOf, wakeRecord, wakeStopNote, WakeWords, type WakeStopReason } from "./wake_record.ts";
 import { keptWorkingSummary, withoutWakeWorking } from "./wake_working.ts";
 
@@ -168,10 +166,6 @@ export async function lastWroteNote(
   return `[${userName} last wrote to you ${ago}, in the side thread ${name}, which isn't shown here.]`;
 }
 
-function shortPreview(text: string): string {
-  return Array.from(text).slice(0, 80).join("");
-}
-
 function noteFailure(character: string, round: number, failure: unknown, note: Note): void {
   const stop = budgetStopIn(failure);
   if (stop !== undefined) {
@@ -182,71 +176,6 @@ function noteFailure(character: string, round: number, failure: unknown, note: N
   const reason = truncateSummary(describeError(failure), 200);
   shoreLog.error(`shore: wake call for ${character} failed on round ${round}: ${reason}`);
   note("call_failed", `Model call failed on round ${round} — ${reason}`);
-}
-
-export interface WakePost {
-  thread: string;
-  engine: Pick<WakeEngine, "appendMessage" | "currentRevision">;
-}
-
-export interface Sending {
-  text: string;
-  images: ImageRef[];
-  push: boolean;
-}
-
-export type Poster = Pick<WakeDeps, "emit" | "notify" | "push" | "newId" | "nowIso">;
-
-export async function postMessage(
-  character: string,
-  from: Pick<SidecarRequest, "provider_key" | "model">,
-  sending: Sending,
-  deps: Poster,
-  note: Note,
-  to: WakePost,
-  pictures: PictureSender,
-): Promise<Message | undefined> {
-  const shape = buildAutonomousMessage(sending.text, sending.images, from.provider_key, from.model === "" ? undefined : from.model);
-  const msg: Message = {
-    msg_id: (deps.newId ?? (() => `m_${crypto.randomUUID()}`))(),
-    origin: "autonomous",
-    role: "assistant",
-    content: shape.content,
-    images: shape.images.map((img) => ({
-      path: img.path,
-      ...(img.caption === undefined ? {} : { caption: img.caption }),
-      ...(img.data === undefined ? {} : { data: img.data }),
-    })),
-    content_blocks: shape.contentBlocks,
-    alternatives: [],
-    ...(shape.providerKey === undefined ? {} : { provider_key: shape.providerKey }),
-    ...(shape.model === undefined ? {} : { model: shape.model }),
-    timestamp: (deps.nowIso ?? (() => new Date().toISOString()))(),
-    version: newMessageVersion(),
-  };
-  msg.images.push(...await sendPictures([sending.text], pictures));
-
-  let persisted: Message | undefined;
-  try {
-    await to.engine.appendMessage(msg);
-    persisted = msg;
-    deps.emit?.(character, to.engine.currentRevision(), msg, to.thread);
-  } catch (e) {
-    shoreLog.error(`shore: a message for ${character} could not be delivered to ${to.thread}: ${String(e)}`);
-  }
-
-  const shown = pictureText(msg.content, msg.images);
-  deps.notify?.(`Shore - ${character}`, shown, firstSentPicture(msg.images));
-  note("message_sent", `Autonomous message sent: ${shortPreview(shown)}`);
-  if (sending.push) {
-    try {
-      const outcome = await deps.push?.(shown);
-      if (outcome?.kind !== "sent") note("call_failed", "The push that went with a message was not sent: by then a push was no longer allowed");
-    } catch (error) {
-      note("call_failed", `The push that went with a message failed: ${truncateSummary(String(error), 120)}`);
-    }
-  }
-  return persisted;
 }
 
 export function roundMessage(round: LoopRound, request: SidecarRequest, deps: Pick<WakeDeps, "newId" | "nowIso">): Message {
@@ -266,26 +195,6 @@ export function roundMessage(round: LoopRound, request: SidecarRequest, deps: Pi
         }
       : round.blocks.every((block) => block.type === "tool_result") ? {} : { origin: "autonomous" as const }),
   };
-}
-
-async function postElsewhere(
-  character: string,
-  from: string,
-  away: readonly Outgoing[],
-  request: SidecarRequest,
-  deps: WakeDeps,
-  note: Note,
-  characterDir: string,
-  pictures: PictureSender,
-): Promise<void> {
-  for (const each of away) {
-    const engine = await deps.engine(character, each.thread);
-    if (engine === undefined) {
-      addDiaryNote(characterDir, { at: deps.now?.() ?? Date.now(), thread: "", source: "shore", text: `Your message for the thread "${each.thread}" was not sent: that thread was gone by the time your wake in "${from}" ended.` });
-      continue;
-    }
-    await postMessage(character, request, { text: each.text, images: [], push: each.push }, deps, note, { thread: each.thread, engine }, pictures);
-  }
 }
 
 async function keepWorking(log: WorkingLog, message: Message): Promise<void> {
@@ -447,10 +356,7 @@ export async function runWake(character: string, config: LoadedConfig, wake: Wak
       sealed: seal !== undefined,
       userName,
       timeZone,
-      threads: async () => {
-        const now = await readThreadsIndex(config.dirs.data, character);
-        return { open: now?.threads.map((each) => each.id) ?? [home], wakes: wakesThread(now), sealed: sealedThreads(characterDir).map((each) => each.id) };
-      },
+      threads: async () => await reachableThreads(config.dirs.data, character),
       pictureProblems: async (text) => await pictureProblems([text], workspace, signal),
       pushRefusal: () => deps.pushRefusal === undefined ? { kind: "not_set_up" } : deps.pushRefusal(),
     });
@@ -511,7 +417,11 @@ export async function runWake(character: string, config: LoadedConfig, wake: Wak
     else if (sendings.length === 0 && away.length === 0 && loop.failedRound === undefined) note("message_skipped", "Wake completed — no message sent");
     let sent: Message | undefined;
     for (const sending of sendings) sent = await postMessage(character, request, sending, heard, note, { thread, engine }, pictures) ?? sent;
-    if (away.length > 0) afterwards = async () => { await postElsewhere(character, thread, away, request, heard, note, characterDir, pictures); };
+    if (away.length > 0) {
+      afterwards = async () => {
+        await postElsewhere(away, { character, from: thread, turn: "wake", characterDir, engine: async (name) => await deps.engine(character, name), now: deps.now }, request, heard, note, pictures);
+      };
+    }
     const keptIn = sent === undefined && log !== undefined ? log.engine : engine;
     const newest = replyVersions(keptIn.messages()).filter((version) => !known.has(version)).at(-1);
     if (newest !== undefined) {
