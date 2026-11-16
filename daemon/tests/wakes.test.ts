@@ -380,19 +380,39 @@ test("a wake in home leaves there how it opened, a line saying where its working
 test("a wake's chat logs hold what is still in its own thread's conversation, since a wake isn't shown it, while a reply there searches only the other threads", async () => {
   await withCharacter(async ({ script, say, wakeNow, thread }) => {
     await say("the keeper's name is Mara");
-    script.replyTool = { name: "search_chat_logs", input: { query: "Mara" } };
+    script.replyTool = { name: "chat_logs", input: { action: "search", query: "Mara" } };
     at(1);
     await say("what did I call the keeper?");
     expect(lastToolResult(await thread("main"))?.text).toStartWith("Mara: 0 matches.\nThere is nothing to search yet; this thread's messages in your context aren't searched.");
 
-    script.beatTool = { name: "search_chat_logs", input: { query: "Mara" } };
+    script.beatTool = { name: "chat_logs", input: { action: "search", query: "Mara" } };
     at(20);
     await wakeNow();
     expect(lastToolResult(await thread("main"))?.text).toStartWith("Mara: 0 matches.");
     const found = lastToolResult(await thread("wakes"));
     expect(found?.failed).toBe(false);
     expect(found?.text).toContain("the keeper's name is [Mara]");
-  }, (app) => { app.tools.enabled.push("search_chat_logs"); });
+  }, (app) => { app.tools.enabled.push("chat_logs"); });
+});
+
+test("a call under a tool's old name is answered with the tool it became, stays in the thread as it was made, and the conversation goes on with it", async () => {
+  await withCharacter(async ({ script, say, thread }) => {
+    await say("hello");
+    script.replyTool = { name: "search_chat_logs", input: { query: "Mara" } };
+    at(1);
+    await say("what did I call the keeper?");
+    expect(lastToolResult(await thread("main"))).toEqual({
+      text: "The call to search_chat_logs was not run because it is part of the `chat_logs` tool now, which takes an `action`. Nothing was executed and no state changed. Issue the call again with complete, well-formed arguments.",
+      failed: true,
+    });
+
+    at(2);
+    await say("and now?");
+    const sent = script.replies.at(-1) as SidecarRequest;
+    expect(sent.messages.flatMap((message) => message.content).flatMap((block) => block.type === "tool_use" ? [block.name] : [])).toEqual(["search_chat_logs"]);
+    expect(sent.tools?.map((tool) => tool.name)).toEqual(["read", "chat_logs"]);
+    expect((await thread("main")).at(-1)?.content).toBe("reply to: and now?");
+  }, (app) => { app.tools.enabled.push("chat_logs"); });
 });
 
 test("what a wake wraps in sendMessage tags alongside a tool call stays in its working as written and sends nothing, and only its final response is sent", async () => {
@@ -2027,7 +2047,7 @@ test("a trigger that names a thread the character doesn't have wakes nothing and
     await fires(runtime, 12);
     expect(script.wakes).toEqual([]);
     expect(diaryOf(data)).toEqual([
-      ["shore", 'You were to be woken in the thread "nowhere" by trigger "lost", but you have no such thread, so nothing ran. `list_threads` shows the threads you do have.'],
+      ["shore", 'You were to be woken in the thread "nowhere" by trigger "lost", but you have no such thread, so nothing ran. `threads` lists the threads you do have.'],
     ]);
     expect(runtime.autonomy.log("ada", 100).map((event) => [event.kind, event.detail]).slice(-2)).toEqual([
       ["tick_fired", 'Woken in "nowhere" by trigger "lost"'],
@@ -2357,15 +2377,15 @@ test("a hand-off is refused for a thread the character doesn't have, the one it 
       expect(result?.failed).toBe(true);
       return result?.text;
     };
-    expect(await refused({ thread: "nowhere", reason: "r" })).toBe('io: you have no thread "nowhere" to be woken in; `list_threads` shows the ones you have');
+    expect(await refused({ thread: "nowhere", reason: "r" })).toBe('io: you have no thread "nowhere" to be woken in; `threads` lists the ones you have');
     expect(await refused({ thread: "main", reason: "r" })).toBe('io: you are in "main" now, so there is nothing to hand over');
-    expect(await refused({ thread: "the ring", reason: "r" })).toContain("thread must be a thread's id, as `list_threads` shows it");
-    expect(await refused({ thread: "  ", reason: "r" })).toContain("thread must be a thread's id, as `list_threads` shows it");
+    expect(await refused({ thread: "the ring", reason: "r" })).toContain("thread must be a thread's id, as `threads` lists it");
+    expect(await refused({ thread: "  ", reason: "r" })).toContain("thread must be a thread's id, as `threads` lists it");
     expect(await refused({ thread: "ring", reason: "  " })).toContain("reason must be a non-empty string");
     expect(await refused({ thread: "ring", reason: "r", limit: "soon" })).toContain('limit must be a length of time, like "45m" or "2h"');
     expect(await refused({ thread: "ring", reason: "r", limit: "59s" })).toContain("limit can't be shorter than a minute");
-    expect(await refused({ thread: "r", reason: "r" })).toBe('io: you have no thread "r" to be woken in; `list_threads` shows the ones you have');
-    expect(await refused({ thread: "t".repeat(64), reason: "r" })).toBe(`io: you have no thread "${"t".repeat(64)}" to be woken in; \`list_threads\` shows the ones you have`);
+    expect(await refused({ thread: "r", reason: "r" })).toBe('io: you have no thread "r" to be woken in; `threads` lists the ones you have');
+    expect(await refused({ thread: "t".repeat(64), reason: "r" })).toBe(`io: you have no thread "${"t".repeat(64)}" to be woken in; \`threads\` lists the ones you have`);
     expect(await refused({ thread: "t".repeat(65), reason: "r" })).toStartWith("The call to wake_in_thread was not run because argument `thread` must NOT have more than 64 characters.");
     expect(await refused({ thread: "ring", reason: "r", urgent: true })).toStartWith("The call to wake_in_thread was not run because argument `urgent` is not allowed.");
     script.closing = "NO_NOTE";
@@ -3497,7 +3517,7 @@ test("the wakes thread is for reading: nothing is sent or regenerated there, it 
     at(11);
     await say("go on");
     expect(lastToolResult(await thread("main"))).toEqual({ text: 'io: "wakes" is where Shore keeps the working from your wakes, so no wake runs there', failed: true });
-    script.replyTool = { name: "list_threads", input: {} };
+    script.replyTool = { name: "threads", input: { action: "list" } };
     await say("which threads do you have?");
     expect(String(lastToolResult(await thread("main"))?.text)).toContain('\n\nwakes "Wakes" (where Shore keeps the working from your wakes) · compaction off\n');
 
@@ -3516,7 +3536,7 @@ test("the wakes thread is for reading: nothing is sent or regenerated there, it 
     await wakeNow();
     expect(runtime.registry.listThreads("ada").map((record) => record.id)).toEqual(["main", "wakes"]);
     expect((await thread("wakes")).filter(isWakeOpener).map((message) => message.content.split("\n")[0])).toEqual(['[wake in "main"]']);
-  }, handOff("list_threads"));
+  }, handOff("threads"));
 });
 
 test("a character's own thread called wakes is left alone, and Shore keeps the working in one named after it", async () => {
@@ -3582,7 +3602,7 @@ test("a wake whose working can't be kept still runs to its end and posts what it
 });
 
 function sealing(app: AppConfig): void {
-  app.tools.enabled = [...app.tools.enabled, "start_sealed_thread", "wake_in_thread", "list_threads", "search_chat_logs"];
+  app.tools.enabled = [...app.tools.enabled, "threads", "wake_in_thread", "chat_logs"];
 }
 
 const SEALED_LIST = "[Your sealed threads. Only a wake inside one can see what is in it, and `wake_in_thread` takes you there.\n- `gift` \"Something for you\", opens Saturday 2026-10-31 · 8:00 AM]";
@@ -3593,7 +3613,7 @@ function giftWake(now: string, lines: readonly string[], shown: readonly string[
 
 async function sealsGift(h: Pick<Harness, "script" | "say" | "wakeNow">): Promise<void> {
   await h.say("hello");
-  h.script.beatTool = { name: "start_sealed_thread", input: { name: " gift ", label: " Something for you ", opens: "2026-10-31 08:00" } };
+  h.script.beatTool = { name: "threads", input: { action: "start", name: " gift ", label: " Something for you ", sealed_until: "2026-10-31 08:00" } };
   h.script.closing = "NO_NOTE";
   at(10);
   await h.wakeNow();
@@ -3616,7 +3636,7 @@ test("a sealed thread is kept out of the user's thread list and the character's 
     ]);
     expect(JSON.stringify(await command("list_threads", {}))).not.toContain("gift");
 
-    script.replyTool = { name: "list_threads", input: {} };
+    script.replyTool = { name: "threads", input: { action: "list" } };
     at(11);
     await say("what threads do you have?");
     expect(String(lastToolResult(await thread("main"))?.text)).toEndWith(`\n\n${SEALED_LIST}`);
@@ -3630,30 +3650,30 @@ test("a sealed thread is kept out of the user's thread list and the character's 
     expect(await outcomeOf(runtime.registry.forkThread("ada", "main", "gift"))).toThrow('thread "gift" already exists for ada');
     expect(await outcomeOf(runtime.registry.getOrCreate("ada", "gift"))).toThrow('no thread "gift" for ada');
     expect(await runtime.registry.sealedEngine("ada", "main")).toBeUndefined();
-    script.replyTool = { name: "start_sealed_thread", input: { name: "gift", label: "Another", opens: "2026-11-02 08:00" } };
+    script.replyTool = { name: "threads", input: { action: "start", name: "gift", label: "Another", sealed_until: "2026-11-02 08:00" } };
     await say("go on");
     expect(lastToolResult(await thread("main"))).toEqual({ text: 'io: thread "gift" already exists for ada', failed: true });
-    script.replyTool = { name: "start_sealed_thread", input: { name: "main", label: "Another", opens: "2026-11-02 08:00" } };
+    script.replyTool = { name: "threads", input: { action: "start", name: "main", label: "Another", sealed_until: "2026-11-02 08:00" } };
     await say("go on");
     expect(lastToolResult(await thread("main"))).toEqual({ text: 'io: thread "main" already exists for ada', failed: true });
-    script.replyTool = { name: "start_sealed_thread", input: { name: "late", label: "Too late", opens: "2026-10-30 12:20" } };
+    script.replyTool = { name: "threads", input: { action: "start", name: "late", label: "Too late", sealed_until: "2026-10-30 12:20" } };
     await say("go on");
     expect(lastToolResult(await thread("main"))).toEqual({ text: "io: a sealed thread has to open at a time that is still to come", failed: true });
     expect(runtime.registry.sealedThreads("ada").map((sealed) => sealed.id)).toEqual(["gift"]);
 
     const answered = async (input: Record<string, unknown>): Promise<string> => {
-      script.replyTool = { name: "start_sealed_thread", input };
+      script.replyTool = { name: "threads", input: { action: "start", ...input } };
       await say("go on");
       return String(lastToolResult(await thread("main"))?.text);
     };
-    expect(await answered({ name: "t".repeat(65), label: "A", opens: "2026-11-02 08:00" })).toStartWith("The call to start_sealed_thread was not run because argument `name` must NOT have more than 64 characters.");
-    expect(await answered({ name: "box", label: "A", opens: "2026-11-02 08:00", purpose: "a secret" })).toStartWith("The call to start_sealed_thread was not run because argument `purpose` is not allowed.");
-    expect(await answered({ name: "b", label: "A", opens: "2026-11-02 08:00" })).toStartWith('Sealed the thread "b" (A) until Monday 2026-11-02 · 8:00 AM.');
+    expect(await answered({ name: "t".repeat(65), label: "A", sealed_until: "2026-11-02 08:00" })).toStartWith("The call to threads was not run because argument `name` must NOT have more than 64 characters.");
+    expect(await answered({ name: "box", label: "A", sealed_until: "2026-11-02 08:00", purpose: "a secret", folder: "Gifts" })).toBe("invalid args: a sealed thread takes only name, label and sealed_until, not purpose or folder: this call stays where peggy can read it, so say what the thread is for inside it, in your first wake there");
+    expect(await answered({ name: "b", label: "A", sealed_until: "2026-11-02 08:00" })).toStartWith('Sealed the thread "b" (A) until Monday 2026-11-02 · 8:00 AM.');
     expect(runtime.registry.sealedThreads("ada").map((sealed) => sealed.id)).toEqual(["gift", "b"]);
 
     await rm(join(data, "ada", "sealed"), { recursive: true });
     await writeFile(join(data, "ada", "sealed"), "in the way");
-    expect(await answered({ name: "box", label: "A", opens: "2026-11-02 08:00" })).toStartWith(`io: nothing was sealed, because the folder for its files, ${join(data, "ada", "sealed", "box")}, could not be made: mkdir:`);
+    expect(await answered({ name: "box", label: "A", sealed_until: "2026-11-02 08:00" })).toStartWith(`io: nothing was sealed, because the folder for its files, ${join(data, "ada", "sealed", "box")}, could not be made: mkdir:`);
     expect(runtime.registry.sealedThreads("ada").map((sealed) => sealed.id)).toEqual(["gift", "b"]);
   }, sealing);
 });
@@ -3705,7 +3725,7 @@ test("a wake inside a sealed thread sends, announces and logs nothing outside it
     expect(asked).toEndWith("\nanything new?");
     expect(asked).not.toContain("Made a card.");
     expect(asked).not.toContain("Happy birthday!");
-    script.replyTool = { name: "search_chat_logs", input: { query: "birthday" } };
+    script.replyTool = { name: "chat_logs", input: { action: "search", query: "birthday" } };
     await say("did you say something about a birthday?");
     expect(String(lastToolResult(await thread("main"))?.text)).toStartWith("birthday: 0 matches.\nSearched 2 messages from every thread,");
     script.closing = "NO_NOTE";
@@ -3785,7 +3805,7 @@ test("at its time the seal comes off: the thread joins the user's list with what
     ]);
     expect((await thread("gift")).at(-1)?.content).toBe("Open the card.");
     await shown("gift", (message) => message.content === "Open the card.");
-    script.replyTool = { name: "search_chat_logs", input: { query: "birthday" } };
+    script.replyTool = { name: "chat_logs", input: { action: "search", query: "birthday" } };
     await say("did you say something about a birthday?");
     expect(String(lastToolResult(await thread("main"))?.text)).toContain("ada    [gift] (wake) Happy [birthday]!");
     at(20 * 60 + 1);

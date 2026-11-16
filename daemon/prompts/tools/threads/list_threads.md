@@ -1,1 +1,0 @@
-List your threads with {{user}}: each one's id, label, purpose and files, who started it and when, when {{user}} last wrote there, whether it compacts, and whether {{user}} has locked it. It also says which thread is home and which one you're in.{{#if guide}} What each kind of thread sees is in `guide` under `threads`.{{/if}}

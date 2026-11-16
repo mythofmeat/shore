@@ -16,7 +16,7 @@ import { NO_CHAT_MODELS_MESSAGE } from "../config/models.ts";
 import { findEffectiveModel } from "../config/effective_catalog.ts";
 import { configView } from "../config/preferences.ts";
 import { isSecretConfigPath, REDACTED, redactSecrets, serializeAppConfig, serializeConfigValue } from "../config/serialize.ts";
-import { chatModelProfiles, defaultAppConfig, imageModelProfiles, mcpBearerToken } from "../config/app.ts";
+import { chatModelProfiles, defaultAppConfig, imageModelProfiles, mcpBearerToken, TOOLS_NOW_PART_OF } from "../config/app.ts";
 import { configSchema, findSchemaEntry, type LiveInstances, type SchemaEntry } from "../config/schema.ts";
 import { schemaValueLiteral, SchemaValueError } from "../config/schema_value.ts";
 import {
@@ -65,6 +65,11 @@ function mcpServerOf(tool: string): string | undefined {
   return parts[1];
 }
 
+function unknownTool(tool: string): string {
+  const now = TOOLS_NOW_PART_OF.get(tool);
+  return now === undefined ? `unknown tool '${tool}'` : `'${tool}', which is now part of '${now}'`;
+}
+
 function toolResolver(ctx: ConfigContext): (tool: string) => boolean {
   const builtin = new Set(ALL_TOOLS.map((t) => t.name));
   const servers = ctx.config.app.mcp;
@@ -100,7 +105,7 @@ export function tools(ctx: ConfigContext, mcpTools: readonly string[] = []): Ope
 
   const warnings: string[] = [];
   for (const t of cfg.enabled) {
-    if (!known.has(t)) warnings.push(`tools.enabled references unknown tool '${t}'`);
+    if (!known.has(t)) warnings.push(`tools.enabled references ${unknownTool(t)}`);
   }
   for (const server of cfg.mcp) {
     if (!ctx.config.app.mcp.has(server)) warnings.push(`tools.mcp references MCP server '${server}' with no [mcp.${server}] definition`);
@@ -112,7 +117,7 @@ export function tools(ctx: ConfigContext, mcpTools: readonly string[] = []): Ope
   }
   for (const name of [...subagents.keys()].sort()) {
     for (const t of required(subagents.get(name)).tools) {
-      if (!known.has(t)) warnings.push(`subagent '${name}' references unknown tool '${t}'`);
+      if (!known.has(t)) warnings.push(`subagent '${name}' references ${unknownTool(t)}`);
     }
   }
 

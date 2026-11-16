@@ -128,7 +128,7 @@ function trigger(name: string, raw: unknown, defaultCooldownMs: number, checks: 
   const cooldownMs = settings["cooldown"] === undefined ? (wakesAgain ? defaultCooldownMs : 0) : duration(settings["cooldown"], "cooldown");
   const thread = settings["thread"] === undefined ? undefined : text(settings["thread"], "thread");
   if (thread !== undefined && !wakes) throw new Error("`thread` is where a wake runs, and this trigger doesn't wake you");
-  if (thread !== undefined && !isValidThreadId(thread)) throw new Error(`\`thread\` must be a thread's id, as \`list_threads\` shows it, and ${JSON.stringify(thread)} can't be one`);
+  if (thread !== undefined && !isValidThreadId(thread)) throw new Error(`\`thread\` must be a thread's id, as \`threads\` lists it, and ${JSON.stringify(thread)} can't be one`);
   if (settings["limit"] !== undefined && !wakes) throw new Error("`limit` is how long a wake may run, and this trigger doesn't wake you");
   const limitMs = settings["limit"] === undefined ? undefined : duration(settings["limit"], "limit");
   if (limitMs !== undefined && limitMs < MINUTE_MS) throw new Error("`limit` can't be shorter than a minute");

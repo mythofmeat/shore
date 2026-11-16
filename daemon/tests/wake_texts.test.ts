@@ -86,7 +86,7 @@ test("a hand-off needs a thread's id and a reason, and takes a limit of a minute
   expect(wakeInThreadRequest({ thread: "ring", reason: "r", limit: "2h", overwrite: true })).toEqual({ thread: "ring", reason: "r", limitMs: 120 * MINUTE, overwrite: true });
   expect(wakeInThreadRequest({ thread: "ring", reason: "r", overwrite: true }).overwrite).toBe(true);
   expect(wakeInThreadRequest({ thread: "ring", reason: "r", overwrite: "yes" }).overwrite).toBe(false);
-  const thread = "invalid args: thread must be a thread's id, as `list_threads` shows it";
+  const thread = "invalid args: thread must be a thread's id, as `threads` lists it";
   expect(refusal(() => wakeInThreadRequest({ reason: "r" }))).toContain(thread);
   expect(refusal(() => wakeInThreadRequest({ thread: 5, reason: "r" }))).toContain(thread);
   expect(refusal(() => wakeInThreadRequest({ thread: "the ring", reason: "r" }))).toContain(thread);
@@ -155,7 +155,8 @@ test("a dry run doesn't hand a wake over, start a thread or call an outside tool
     return "";
   };
   expect(await blocked("wake_in_thread", { thread: "ring", reason: "r" })).toContain("wake_in_thread blocked: dry-run tools cannot change files or external state");
-  expect(await blocked("start_thread", { name: "ring", label: "Ring" })).toContain("start_thread blocked: dry-run tools cannot change files or external state");
+  expect(await blocked("threads", { action: "start", name: "ring", label: "Ring" })).toContain("threads start blocked: dry-run tools cannot change files or external state");
+  expect(await blocked("threads", { action: "edit", name: "ring", label: "Ring" })).toContain("threads edit blocked: dry-run tools cannot change files or external state");
   expect(await blocked("mcp__weather__look", {})).toContain("mcp__weather__look blocked: dry-run tools cannot change files or external state");
   expect(asked).toEqual([]);
   expect(String(await dispatchTool("list_triggers", {}, ctx))).toContain("You have none there yet, so nothing wakes you on its own.");

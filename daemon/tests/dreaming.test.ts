@@ -225,7 +225,7 @@ async function afterOneChat(seen: SidecarRequest[], dream: DreamScript, tune: (a
     name: "dreaming",
     keyEnv: KEY_ENV,
     provider: provider(seen, dream),
-    tools: ["read", "bash", "wake_in_thread", "start_thread"],
+    tools: ["read", "bash", "wake_in_thread", "threads"],
     models: ["fixture", "small"],
     tune: (app, models) => {
       app.chat.display_name = "eve";
@@ -278,7 +278,7 @@ test("a dream asked for works on the current files, not the home thread's frozen
     const offered = (opening.tools ?? []).map((tool) => tool.name);
     expect(offered).toContain("bash");
     expect(offered).not.toContain("wake_in_thread");
-    expect(offered).not.toContain("start_thread");
+    expect(offered).not.toContain("threads");
     const instructions = instructionsOf(opening);
     expect(instructions).toContain("thread `main`");
     expect(instructions).toContain(`..${head.slice(0, 7)}.`);
@@ -534,12 +534,12 @@ test("a wildcard grant never gives a dream a left-out tool, and a list of its ow
   const open = dreamGrants(granted, undefined);
   expect(open.tools.enabled).toContain("read");
   expect(open.tools.enabled).toContain("bash");
-  for (const name of ["wake_in_thread", "list_triggers", "write_diary", "start_thread", "edit_thread", "list_threads", "generate_image", "guide"]) {
+  for (const name of ["wake_in_thread", "list_triggers", "write_diary", "threads", "generate_image", "guide"]) {
     expect(open.tools.enabled).not.toContain(name);
   }
   expect(open.tools.mcp).toEqual([]);
   expect(open.subagents.enabled).toEqual(["memory", "music"]);
-  const chosen = dreamGrants(granted, ["read", "ask_memory", "start_thread", "mcp__discord__send"]);
+  const chosen = dreamGrants(granted, ["read", "ask_memory", "threads", "mcp__discord__send"]);
   expect(chosen.tools.enabled).toEqual(["read"]);
   expect(chosen.subagents.enabled).toEqual(["memory"]);
 });

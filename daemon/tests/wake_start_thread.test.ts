@@ -15,10 +15,10 @@ const START_AND_EDIT: GenerateResponse["content_blocks"] = [
   {
     type: "tool_use",
     id: "start",
-    name: "start_thread",
-    input: { name: "lighthouse", label: "The lighthouse story", opening: "The lamp was already lit when we got there." },
+    name: "threads",
+    input: { action: "start", name: "lighthouse", label: "The lighthouse story", opening: "The lamp was already lit when we got there." },
   },
-  { type: "tool_use", id: "edit", name: "edit_thread", input: { name: "lighthouse", purpose: "The keeper's winter, a chapter at a time." } },
+  { type: "tool_use", id: "edit", name: "threads", input: { action: "edit", name: "lighthouse", purpose: "The keeper's winter, a chapter at a time." } },
 ];
 
 function threadToolsProvider(toolResults: string[], calls: GenerateResponse["content_blocks"] = START_AND_EDIT): SidecarProvider {
@@ -50,7 +50,7 @@ test("a thread started and edited on a wake opens with her message, takes the ed
     name: "wake-start-thread",
     keyEnv: KEY_ENV,
     provider: threadToolsProvider(toolResults),
-    tools: ["start_thread", "edit_thread"],
+    tools: ["threads"],
     autonomy: true,
     model: { maxToolRounds: 3 },
     emitEvent: (event) => events.push(event),
@@ -81,7 +81,7 @@ test("a thread started and edited on a wake opens with her message, takes the ed
 test("a thread started with a folder goes in that folder of the user's thread list, which is made if it isn't there, and a folder name that can't be used starts nothing", async () => {
   const toolResults: string[] = [];
   const start = (id: string, name: string, folder: string): GenerateResponse["content_blocks"][number] => ({
-    type: "tool_use", id, name: "start_thread", input: { name, label: name, folder },
+    type: "tool_use", id, name: "threads", input: { action: "start", name, label: name, folder },
   });
   await afterFirstChat({
     name: "start-thread-folder",
@@ -92,7 +92,7 @@ test("a thread started with a folder goes in that folder of the user's thread li
       start("c", "quay", "p".repeat(65)),
       start("d", "pier", "Stories"),
     ]),
-    tools: ["start_thread"],
+    tools: ["threads"],
     autonomy: true,
     model: { maxToolRounds: 5 },
   }, async ({ config, runtime }) => {

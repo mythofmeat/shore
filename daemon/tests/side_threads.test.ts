@@ -26,7 +26,7 @@ import { applyDeferredEdits } from "../src/memory/deferred_edits.ts";
 import { initializeDatabase } from "../src/storage/database.ts";
 import { readDurable, threadFile, writeDurable } from "../src/storage/files.ts";
 import { characterWorkspace } from "../src/tools/character_workspace.ts";
-import { handleReadChatLogs, handleSearchChatLogs } from "../src/tools/history.ts";
+import { handleChatLogs, handleReadChatLogs, handleSearchChatLogs } from "../src/tools/history.ts";
 import { handleListThreads } from "../src/tools/list_threads.ts";
 import type { SidecarRequest } from "../src/llm/types.ts";
 import { outcomeOf } from "./support/outcome.ts";
@@ -599,6 +599,32 @@ describe("chat logs across threads", () => {
     const read = await handleReadChatLogs({ around: "h1", before: 5, after: 5 }, threadDataDir(data, "frank", "story"), options);
     expect(read).toContain("▶ ");
     expect(listed(read)).toEqual(["u1", "a1", "h1", "u3", "u4"]);
+  });
+
+  test("the chat_logs tool searches or reads by its action, and refuses a field that goes with the other one", async () => {
+    const config = await setup();
+    const data = config.dirs.data;
+    const at = (time: string) => `2026-11-01T${time}:00Z`;
+    await archive(data, "main", [message("u1", "the keeper's name is Mara", at("09:00")), message("a1", "Mara it is", at("09:01"))]);
+    const options = { character: "frank", dbPath: join(data, HISTORY_DB_FILE), dataDir: data, thread: "story", indexPath: join(config.dirs.cache, "chat_logs.db"), timeZone: "UTC", userName: "sam" };
+    const dir = threadDataDir(data, "frank", "story");
+
+    const found = await handleChatLogs({ action: "search", query: "Mara", all_time: true, sort: "oldest" }, dir, options);
+    expect(found.split("\n").slice(2)).toEqual([
+      "2026-11-01 Sun 09:00  sam    the keeper's name is [Mara]  u1",
+      "2026-11-01 Sun 09:01  frank  [Mara] it is  a1",
+    ]);
+    expect(found).toBe(await handleSearchChatLogs({ query: "Mara", all_time: true, sort: "oldest" }, dir, options));
+    const read = await handleChatLogs({ action: "read", around: "a1", before: 1, after: 0 }, dir, options);
+    expect(read.split("\n").filter((line) => line.endsWith("  u1") || line.endsWith("  a1"))).toEqual([
+      "2026-11-01 Sun 09:00  sam  u1",
+      "▶ 2026-11-01 Sun 09:01  frank  a1",
+    ]);
+    expect(read).toBe(await handleReadChatLogs({ around: "a1", before: 1, after: 0 }, dir, options));
+
+    expect(await outcomeOf(handleChatLogs({ action: "read", query: "Mara" }, dir, options))).toThrow("invalid args: `query` goes with `search`, not `read`");
+    expect(await outcomeOf(handleChatLogs({ action: "search", query: "Mara", around: "a1" }, dir, options))).toThrow("invalid args: `around` goes with `read`, not `search`");
+    expect(await outcomeOf(handleChatLogs({ query: "Mara" }, dir, options))).toThrow("invalid args: action must be one of search, read");
   });
 
   test("an index built when the column marking a wake's messages had its old name is built again, and marks them as before", async () => {

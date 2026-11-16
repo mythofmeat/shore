@@ -492,7 +492,7 @@ test("a chat log search shows the segment each message it found is in, and the s
   await send(page, "chat log fixture");
   const reply = page.locator("article.message.assistant").last();
   await reply.getByRole("button", { name: /used 1 tool/ }).click();
-  await reply.locator(".tool-head", { hasText: "search_chat_logs" }).click();
+  await reply.locator(".tool-head", { hasText: "chat_logs" }).click();
   const copy = reply.locator(".message-copy");
   await expect(copy).toHaveText("main segment 0Exclude");
   await copy.getByRole("button", { name: "Exclude main segment 0 from history search" }).click();

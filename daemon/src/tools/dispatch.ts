@@ -11,20 +11,20 @@ import { DEFAULT_MAX_INLINE_IMAGE_BYTES } from "./media.ts";
 import type { ProcessStreams } from "./process.ts";
 import { decodeToolValue } from "./workspace_ops.ts";
 import { InvalidArgs, NotImplemented, ToolIoError, ToolTimedOut } from "./errors.ts";
-import { handleReadChatLogs, handleSearchChatLogs, type ChatLogOptions } from "./history.ts";
+import { handleChatLogs, type ChatLogOptions } from "./history.ts";
 import { handleGenerateImage, type ImageGenConfigView, type ImageGenerator } from "./images.ts";
 import { handleModelHistory, type ModelHistoryQuery } from "./model_history.ts";
-import { handleListThreads } from "./list_threads.ts";
 import { handleListTriggers } from "./list_triggers.ts";
 import { addDiaryNote } from "../autonomy/diary.ts";
 import type { PushOutcome } from "../autonomy/push.ts";
 import type { TriggersView } from "../autonomy/trigger_loop.ts";
 import { formatWallClock } from "../engine/prompt.ts";
 import { hostZone } from "../ledger/zoned.ts";
-import { handleStartSealedThread, type StartedSealedThread } from "./start_sealed_thread.ts";
-import { handleStartThread, type StartThreadRequest } from "./start_thread.ts";
+import type { StartedSealedThread } from "./start_sealed_thread.ts";
+import type { StartThreadRequest } from "./start_thread.ts";
+import { handleThreads } from "./threads.ts";
 import { handleWakeInThread, type WakeHandOff, type WakeInThreadRequest } from "./wake_in_thread.ts";
-import { handleEditThread, type EditThreadRequest } from "./edit_thread.ts";
+import type { EditThreadRequest } from "./edit_thread.ts";
 import type { FetchLike } from "./web.ts";
 import type { ToolInput } from "./workspace.ts";
 import { normalizeProtectedPath, normalizePromptVisiblePath } from "./workspace_path.ts";
@@ -154,7 +154,7 @@ export async function dispatchTool(
   input: unknown,
   ctx: ToolContext,
 ): Promise<unknown> {
-  if (ctx.dryRun && (["bash", "edit", "apply_patch", "generate_image", "wake_in_thread", "start_thread", "start_sealed_thread", "edit_thread"].includes(name) || name.startsWith("mcp__"))) {
+  if (ctx.dryRun && (["bash", "edit", "apply_patch", "generate_image", "wake_in_thread"].includes(name) || name.startsWith("mcp__"))) {
     throw new ToolIoError(`${name} blocked: dry-run tools cannot change files or external state`);
   }
   const args = (input ?? {}) as ToolInput;
@@ -179,11 +179,8 @@ export async function dispatchTool(
         () => name === "edit" ? workspace.call("edit", { input: args, workspaceDir: ctx.workspaceDir }, ctx.signal) : handleApplyPatch(args, workspace, ctx.signal), ctx.deferEdit);
       return await (ctx.trackWorkspaceWrite?.(name, input, write) ?? write());
     }
-    case "search_chat_logs":
-      return await handleSearchChatLogs(args, ctx.conversationDir, chatLogOptions(ctx));
-
-    case "read_chat_logs":
-      return await handleReadChatLogs(args, ctx.conversationDir, chatLogOptions(ctx));
+    case "chat_logs":
+      return await handleChatLogs(args, ctx.conversationDir, chatLogOptions(ctx));
 
     case "model_history":
       return await handleModelHistory(args, ctx.characterName, ctx.modelHistoryQuery);
@@ -210,22 +207,20 @@ export async function dispatchTool(
         : await ctx.trackWorkspaceWrite(name, input, write);
     }
 
-    case "list_threads":
-      return await handleListThreads({
-        dataDir: dirname(ctx.historyDbPath),
-        character: ctx.characterName,
-        userName: ctx.userName ?? "the user",
-        ...(ctx.thread === undefined ? {} : { thread: ctx.thread }),
+    case "threads":
+      return await handleThreads(args, {
+        list: {
+          dataDir: dirname(ctx.historyDbPath),
+          character: ctx.characterName,
+          userName: ctx.userName ?? "the user",
+          ...(ctx.thread === undefined ? {} : { thread: ctx.thread }),
+        },
+        timeZone: hostZone(),
+        dryRun: ctx.dryRun,
+        start: ctx.startThread,
+        seal: ctx.sealThread,
+        edit: ctx.editThread,
       });
-
-    case "start_thread":
-      return await handleStartThread(args, ctx.startThread, ctx.userName ?? "the user");
-
-    case "start_sealed_thread":
-      return await handleStartSealedThread(args, ctx.sealThread, ctx.userName ?? "the user", hostZone());
-
-    case "edit_thread":
-      return await handleEditThread(args, ctx.editThread, ctx.userName ?? "the user");
 
     case "list_triggers":
       return handleListTriggers(ctx.triggers?.(), ctx.userName ?? "the user");

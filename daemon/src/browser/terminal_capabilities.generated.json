@@ -3812,7 +3812,7 @@
     },
     {
       "path": "shore thread unlock",
-      "about": "Unlock a thread, so the character can change its label, purpose and files again with edit_thread",
+      "about": "Unlock a thread, so the character can change its label, purpose and files again",
       "long_about": null,
       "hidden": false,
       "aliases": [],

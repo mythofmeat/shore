@@ -12,6 +12,7 @@ import {
   imageModelProfiles,
   parseAppConfig,
   toolGrants,
+  TOOLS_NOW_PART_OF,
   validateCompaction,
   validateDreaming,
   validatePresence,
@@ -539,6 +540,10 @@ function validateMcpServers(app: AppConfig, onWarn: ConfigWarn): void {
     ...[...app.subagents.agents.values()].flatMap((s) => s.tools),
   ];
   for (const pattern of referenced) {
+    const now = TOOLS_NOW_PART_OF.get(pattern);
+    if (now !== undefined) {
+      onWarn("the config names a tool that is now part of another; it grants nothing until the config names that one", [["tool", pattern], ["now", now]]);
+    }
     if (!pattern.startsWith("mcp__")) continue;
     const server = pattern.slice("mcp__".length).split("__")[0] ?? "";
     if (server !== "" && server !== "*" && !app.mcp.has(server)) {

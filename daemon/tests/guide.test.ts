@@ -348,7 +348,7 @@ test("the guide says where each thing a character might keep in a tracker file l
   expect(wakes).toContain("## Where things live\n\nNothing here needs a tracker file of your own to carry it from one wake to the next:");
   expect(wakes).toContain("- What a wake did and where it stopped: the note it ends with. Your diary shows it to every turn for 1d, and the next wake in the same thread starts with it however much later that is.");
   expect(wakes).toContain("- Chores, and anything that repeats: triggers. `list_triggers` shows when each is next due.");
-  expect(wakes).toContain("- Projects: a thread each. `list_threads` shows them, a thread's purpose and files are in front of every turn there, and a wake there picks up from the last one's note.");
+  expect(wakes).toContain("- Projects: a thread each. `threads` lists them, a thread's purpose and files are in front of every turn there, and a wake there picks up from the last one's note.");
   expect(wakes).toContain("- Something you are waiting on for longer than a day: a trigger with `on` and `wake = false`, for the day to look at it again.");
   expect(wakes).toContain("- Something to come back to on a later day: a trigger with `on` and `wake = false`. It puts its `reason` in your diary at that time, and costs nothing until then.");
   expect(wakes).not.toContain("HEARTBEAT.md");
@@ -369,11 +369,11 @@ test("the guide says a wake starts fresh in whichever thread it runs, and what i
   expect(wakes).toContain("- Where and how long ago eve last wrote to you.\n- eve's status, while one is set.\n- The label and opening time of each sealed thread you have.");
   expect(wakes).toContain("- Your diary from the last day, and the note your last wake in that thread ended with if that note is older.");
   expect(wakes).toContain("- A line for each thing that set it off: the trigger and its reason, or the thread you handed over from and the reason you gave.");
-  expect(wakes).toContain("- The thread's own conversation, or what earlier wakes did there. The thread keeps its conversation, your wakes thread keeps what earlier wakes did, and `search_chat_logs` and `read_chat_logs` find both.");
+  expect(wakes).toContain("- The thread's own conversation, or what earlier wakes did there. The thread keeps its conversation, your wakes thread keeps what earlier wakes did, and `chat_logs` finds both.");
   expect(wakes).toContain("- A wake's own working, in what it is shown of a thread.");
   expect(wakes).toContain("A final response of just `NO_NOTE` leaves no note, and the note before it stays the one the next wake starts with.");
   expect(wakes).toContain("- Text you wrap in `<sendMessage>...</sendMessage>` in that final response is sent to eve. It is posted in the thread the wake ran in.\n");
-  expect(wakes).toContain("- Everything else is your working: how the wake opened, each round of tool use, and the final response with the note. It goes to your wakes thread, a thread Shore makes the first time it is needed and marks in `list_threads`. eve can read it there but doesn't write there, and no wake runs there.\n- The thread the wake ran in keeps how it opened, a line saying where its working went, and the message you sent.\n- A wake in a sealed thread is the exception: its working stays in the sealed thread, which is hidden anyway.\n");
+  expect(wakes).toContain("- Everything else is your working: how the wake opened, each round of tool use, and the final response with the note. It goes to your wakes thread, a thread Shore makes the first time it is needed and marks in the list `threads` gives. eve can read it there but doesn't write there, and no wake runs there.\n- The thread the wake ran in keeps how it opened, a line saying where its working went, and the message you sent.\n- A wake in a sealed thread is the exception: its working stays in the sealed thread, which is hidden anyway.\n");
   expect(await guide("threads")).toContain("- Your wakes thread is where Shore keeps the working from your wakes, so that it doesn't crowd the threads they run in. eve reads it but doesn't write there, no wake runs there, and it never compacts: its oldest wakes are moved into the chat logs when it gets long.");
   expect(wakes).toContain("A side thread's purpose and files are in the prompt of a wake there. The files are read afresh as the wake starts, unless eve has just been writing in that thread.");
   expect(wakes).toContain("- The next wake in that thread is told that the last one was stopped, why, after how many rounds, whether its message was sent, and the last thing it wrote. It is shown again what the stopped one was shown of the thread, since that one left no note about it.");
@@ -487,9 +487,9 @@ test("a page ends by naming the tools on it that the user hasn't turned on, and 
   expect(await few("triggers")).toEndWith("\n\neve hasn't turned on every tool this page names, so you don't have: `activity_heatmap`.");
   expect(await few("diary")).toEndWith("\n\neve hasn't turned on every tool this page names, so you don't have: `write_diary`.");
   expect(await few("threads")).toEndWith(
-    "\n\neve hasn't turned on every tool this page names, so you don't have: `search_chat_logs`, `list_threads`, `start_thread`, `start_sealed_thread`, `edit_thread`, `wake_in_thread`.",
+    "\n\neve hasn't turned on every tool this page names, so you don't have: `chat_logs`, `threads`, `wake_in_thread`.",
   );
-  expect(await few("messages")).toEndWith("so you don't have: `list_threads`, `send_push`.");
+  expect(await few("messages")).toEndWith("so you don't have: `threads`, `send_push`.");
   expect(await few()).not.toContain("hasn't turned on every tool");
 });
 
@@ -504,7 +504,7 @@ test("the tools are described in fewer characters than before there was a guide,
     return page === undefined ? [] : [[def.name, page]];
   });
   expect(pointers).toEqual([
-    ["list_threads", "threads"], ["start_thread", "threads"], ["start_sealed_thread", "threads"], ["edit_thread", "threads"],
+    ["threads", "threads"],
     ["list_triggers", "triggers"], ["write_diary", "diary"], ["wake_in_thread", "wakes"], ["send_push", "messages"],
   ]);
 

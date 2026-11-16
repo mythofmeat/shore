@@ -12,13 +12,9 @@ import wakeInThreadDesc from "../../prompts/tools/autonomy/wake_in_thread.md" wi
 import writeDiaryDesc from "../../prompts/tools/autonomy/write_diary.md" with { type: "text" };
 import sendPushDesc from "../../prompts/tools/autonomy/send_push.md" with { type: "text" };
 import guideDesc from "../../prompts/tools/guide.md" with { type: "text" };
-import listThreadsDesc from "../../prompts/tools/threads/list_threads.md" with { type: "text" };
-import startSealedThreadDesc from "../../prompts/tools/threads/start_sealed_thread.md" with { type: "text" };
-import startThreadDesc from "../../prompts/tools/threads/start_thread.md" with { type: "text" };
-import editThreadDesc from "../../prompts/tools/threads/edit_thread.md" with { type: "text" };
+import threadsDesc from "../../prompts/tools/threads/threads.md" with { type: "text" };
 import modelHistoryDesc from "../../prompts/tools/history/model_history.md" with { type: "text" };
-import readChatLogsDesc from "../../prompts/tools/history/read_chat_logs.md" with { type: "text" };
-import searchChatLogsDesc from "../../prompts/tools/history/search_chat_logs.md" with { type: "text" };
+import chatLogsDesc from "../../prompts/tools/history/chat_logs.md" with { type: "text" };
 import generateImageDesc from "../../prompts/tools/images/generate_image.md" with { type: "text" };
 import readDesc from "../../prompts/tools/workspace/read.md" with { type: "text" };
 
@@ -140,45 +136,33 @@ export const ALL_TOOLS: readonly ToolDef[] = Object.freeze([
     },
   },
   {
-    name: "search_chat_logs",
-    description: stripOneTrailingNewline(searchChatLogsDesc),
+    name: "chat_logs",
+    description: stripOneTrailingNewline(chatLogsDesc),
     parameters: {
       type: "object",
       properties: {
-        query: { type: "string", description: "An FTS5 query, or the text to find when `match` is `substring`." },
+        action: { type: "string", enum: ["search", "read"], description: "`search` finds messages by their words. `read` reads conversations in order." },
+        query: { type: "string", description: "For `search`: an FTS5 query, or the text to find when `match` is `substring`." },
         match: {
           type: "string",
           enum: ["words", "substring"],
-          description: "`words` (default) reads `query` as FTS5. `substring` finds it anywhere, inside words too.",
+          description: "For `search`: `words` (default) reads `query` as FTS5. `substring` finds it anywhere, inside words too.",
         },
-        sort: { type: "string", enum: ["best", "oldest", "newest"], description: "Order of hits. Default `best`." },
-        speaker: { type: "string", description: "Only this speaker: `user`, `character`, or either name." },
-        thread: { type: "string", description: "Only this thread, such as `main`." },
-        start: { type: "string", description: `Inclusive start. ${CHAT_LOG_TIME}` },
-        end: { type: "string", description: `Inclusive end. ${CHAT_LOG_TIME}` },
-        all_time: { type: "boolean", description: "Search the whole archive, not just the last 6 months. Ignored with `start` or `end`." },
-        limit: { type: "integer", description: "Hits per page. Default 10, at most 50." },
-        offset: { type: "integer", description: "Hits to skip, to get the next page." },
+        sort: { type: "string", enum: ["best", "oldest", "newest"], description: "For `search`: order of hits. Default `best`." },
+        speaker: { type: "string", description: "For `search`: only this speaker: `user`, `character`, or either name." },
+        all_time: { type: "boolean", description: "For `search`: search the whole archive, not just the last 6 months. Ignored with `start` or `end`." },
+        limit: { type: "integer", description: "For `search`: hits per page. Default 10, at most 50." },
+        around: { type: "string", description: "For `read`: a message id from `search`." },
+        before: { type: "integer", description: "For `read`: messages to show before `around`. Default 3." },
+        after: { type: "integer", description: "For `read`: messages to show after `around`. Default 3." },
+        overview: { type: "string", description: "For `read`: a local date such as 2026-03-01, to list that day's conversations." },
+        thread: { type: "string", description: "A thread's id, such as `main`. `search` looks only there. A `start`/`end` read is of that thread, `main` by default; with `around` it picks the copy in that thread." },
+        start: { type: "string", description: `Inclusive start of what to search, or where to read from. ${CHAT_LOG_TIME}` },
+        end: { type: "string", description: `Inclusive end of what to search or read. ${CHAT_LOG_TIME}` },
+        offset: { type: "integer", description: "Hits to skip in a `search`, or messages to skip in a `start`/`end` read, to get the next page." },
       },
-      required: ["query"],
-    },
-  },
-  {
-    name: "read_chat_logs",
-    description: stripOneTrailingNewline(readChatLogsDesc),
-    parameters: {
-      type: "object",
-      properties: {
-        around: { type: "string", description: "A message id from `search_chat_logs`." },
-        before: { type: "integer", description: "Messages to show before `around`. Default 3." },
-        after: { type: "integer", description: "Messages to show after `around`. Default 3." },
-        start: { type: "string", description: `Read from here. ${CHAT_LOG_TIME}` },
-        end: { type: "string", description: `Read up to here, inclusive. ${CHAT_LOG_TIME}` },
-        offset: { type: "integer", description: "Messages to skip in a `start`/`end` read, to get the next page." },
-        thread: { type: "string", description: "The thread to read. `start`/`end` reads default to `main`; with `around` it picks the copy in that thread." },
-        overview: { type: "string", description: "A local date such as 2026-03-01, to list that day's conversations." },
-      },
-      required: [],
+      required: ["action"],
+      additionalProperties: false,
     },
   },
   {
@@ -200,57 +184,21 @@ export const ALL_TOOLS: readonly ToolDef[] = Object.freeze([
     },
   },
   {
-    name: "list_threads",
-    description: stripOneTrailingNewline(listThreadsDesc),
-    parameters: {
-      type: "object",
-      properties: {},
-      additionalProperties: false,
-    },
-  },
-  {
-    name: "start_thread",
-    description: stripOneTrailingNewline(startThreadDesc),
+    name: "threads",
+    description: stripOneTrailingNewline(threadsDesc),
     parameters: {
       type: "object",
       properties: {
-        name: { type: "string", minLength: 1, maxLength: 64, description: "Thread id: letters, digits, dot, dash or underscore, starting with a letter or digit, such as `lighthouse`." },
-        label: { type: "string", minLength: 1, description: "Name shown in the thread list, such as `The lighthouse story`." },
-        purpose: { type: "string", description: "A line or two on what the thread is for." },
-        files: { type: "array", items: { type: "string" }, description: "Files to keep in the thread's prompt: paths relative to the workspace root, or links like `[[notes]]` and `[[lighthouse/]]`." },
-        opening: { type: "string", description: "Your first message in the new thread." },
-        folder: { type: "string", description: "Folder in the thread list to put the thread in, such as `Projects`. It is made if there isn't one by that name." },
+        action: { type: "string", enum: ["list", "start", "edit"], description: "`list` your threads, `start` a new one, or `edit` a side thread." },
+        name: { type: "string", minLength: 1, maxLength: 64, description: "For `start`, the new thread's id: letters, digits, dot, dash or underscore, starting with a letter or digit, such as `lighthouse`. For `edit`, the id of the side thread to change, as `list` shows it." },
+        label: { type: "string", description: "The name shown in the thread list, such as `The lighthouse story`. `start` needs one; for a sealed thread it is all your other turns see of it. In an `edit`, an empty string clears it." },
+        purpose: { type: "string", description: "A line or two on what the thread is for. In an `edit`, an empty string clears it." },
+        files: { type: "array", items: { type: "string" }, description: "Files to keep in the thread's prompt: paths relative to the workspace root, or links like `[[notes]]` and `[[lighthouse/]]`. In an `edit` this is the thread's whole new list, and an empty list clears it." },
+        opening: { type: "string", description: "For `start`: your first message in the new thread." },
+        folder: { type: "string", description: "For `start`: folder in the thread list to put the thread in, such as `Projects`. It is made if there isn't one by that name." },
+        sealed_until: { type: "string", description: 'For `start`: makes the thread a sealed one. The local date and 24-hour time the seal comes off, like "2026-12-24 08:00".' },
       },
-      required: ["name", "label"],
-      additionalProperties: false,
-    },
-  },
-  {
-    name: "start_sealed_thread",
-    description: stripOneTrailingNewline(startSealedThreadDesc),
-    parameters: {
-      type: "object",
-      properties: {
-        name: { type: "string", minLength: 1, maxLength: 64, description: "Thread id: letters, digits, dot, dash or underscore, starting with a letter or digit." },
-        label: { type: "string", minLength: 1, description: "The name the thread is known by. It is all your other turns see of it, and what the thread list shows once it opens." },
-        opens: { type: "string", description: 'Local date and 24-hour time the seal comes off, like "2026-12-24 08:00".' },
-      },
-      required: ["name", "label", "opens"],
-      additionalProperties: false,
-    },
-  },
-  {
-    name: "edit_thread",
-    description: stripOneTrailingNewline(editThreadDesc),
-    parameters: {
-      type: "object",
-      properties: {
-        name: { type: "string", minLength: 1, maxLength: 64, description: "Id of the side thread to change, as `list_threads` shows it." },
-        label: { type: "string", description: "New name for the thread list, or an empty string to clear it." },
-        purpose: { type: "string", description: "New line or two on what the thread is for, or an empty string to clear it." },
-        files: { type: "array", items: { type: "string" }, description: "The thread's whole new list of files to keep in its prompt: paths relative to the workspace root, or links like `[[notes]]` and `[[lighthouse/]]`. An empty list clears it." },
-      },
-      required: ["name"],
+      required: ["action"],
       additionalProperties: false,
     },
   },
@@ -281,7 +229,7 @@ export const ALL_TOOLS: readonly ToolDef[] = Object.freeze([
     parameters: {
       type: "object",
       properties: {
-        thread: { type: "string", minLength: 1, maxLength: 64, description: "Id of the thread to be woken in, as `list_threads` shows it." },
+        thread: { type: "string", minLength: 1, maxLength: 64, description: "Id of the thread to be woken in, as `threads` lists it." },
         reason: { type: "string", minLength: 1, description: "What the wake is for. Shown to you when it starts." },
         limit: { type: "string", description: 'How long the wake may run, like "45m" or "2h". Defaults to 30 minutes.' },
         overwrite: { type: "boolean", description: "Put this wake in the place of one you already asked for in that thread and that hasn't started. Without it, a second request is refused." },

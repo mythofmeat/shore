@@ -20,6 +20,7 @@ import {
   type Speaker,
 } from "../memory/history_index.ts";
 import { required } from "../util/required.ts";
+import { actionOf } from "./actions.ts";
 import { InvalidArgs, ToolIoError } from "./errors";
 
 const GAP_MS = 90 * 60_000;
@@ -356,6 +357,21 @@ function hitLine(hit: ChatLogHit, view: View, query: string): string {
   const copies = alsoIn(hit);
   const also = copies.length === 0 ? "" : ` · also in ${copies.join(", ")}`;
   return `${stamp(hit.ts, view.zone)}  ${labelOf(hit.speaker, view).padEnd(view.width)}  ${thread}${fromWake}${snippet}  ${hit.msg_id}${also}`;
+}
+
+const CHAT_LOG_TAKES = {
+  search: ["query", "match", "sort", "speaker", "thread", "start", "end", "all_time", "limit", "offset"],
+  read: ["around", "before", "after", "start", "end", "offset", "thread", "overview"],
+} as const;
+
+export async function handleChatLogs(
+  input: Record<string, unknown>,
+  conversationDir: string,
+  options: ChatLogOptions,
+): Promise<string> {
+  return actionOf(input, CHAT_LOG_TAKES) === "search"
+    ? await handleSearchChatLogs(input, conversationDir, options)
+    : await handleReadChatLogs(input, conversationDir, options);
 }
 
 export async function handleSearchChatLogs(

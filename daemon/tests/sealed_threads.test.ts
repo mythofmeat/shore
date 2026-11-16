@@ -124,23 +124,23 @@ test("the character's other turns are told of a sealed thread only its name, its
 });
 
 test("the tool that seals a thread needs a name, a label and a local time to open at, and says where its files go", async () => {
-  expect(sealedThreadRequest({ name: " gift ", label: " Something for you ", opens: " 2026-12-24 08:00 " }, "UTC")).toEqual({ id: "gift", label: "Something for you", unsealAt: Date.UTC(2026, 11, 24, 8) });
-  expect(sealedThreadRequest({ name: "gift", label: "A", opens: "2026-12-24T08:00" }, "America/New_York").unsealAt).toBe(Date.UTC(2026, 11, 24, 13));
+  expect(sealedThreadRequest({ name: " gift ", label: " Something for you ", sealed_until: " 2026-12-24 08:00 " }, "UTC")).toEqual({ id: "gift", label: "Something for you", unsealAt: Date.UTC(2026, 11, 24, 8) });
+  expect(sealedThreadRequest({ name: "gift", label: "A", sealed_until: "2026-12-24T08:00" }, "America/New_York").unsealAt).toBe(Date.UTC(2026, 11, 24, 13));
   const wrong = async (input: Record<string, unknown>): Promise<string> => await refusal(() => sealedThreadRequest(input, "UTC"));
   const name = "name must be letters, digits, dot, dash or underscore, starting with a letter or digit, at most 64 characters";
-  expect(await wrong({ label: "A", opens: "2026-12-24 08:00" })).toContain(name);
-  expect(await wrong({ name: 5, label: "A", opens: "2026-12-24 08:00" })).toContain(name);
-  expect(await wrong({ name: "the gift", label: "A", opens: "2026-12-24 08:00" })).toContain(name);
-  expect(await wrong({ name: "gift", opens: "2026-12-24 08:00" })).toContain("label is required");
-  expect(await wrong({ name: "gift", label: 5, opens: "2026-12-24 08:00" })).toContain("label is required");
-  expect(await wrong({ name: "gift", label: " ", opens: "2026-12-24 08:00" })).toContain("label is required");
-  const opens = 'opens must be a local date and 24-hour time, like "2026-12-24 08:00"';
+  expect(await wrong({ label: "A", sealed_until: "2026-12-24 08:00" })).toContain(name);
+  expect(await wrong({ name: 5, label: "A", sealed_until: "2026-12-24 08:00" })).toContain(name);
+  expect(await wrong({ name: "the gift", label: "A", sealed_until: "2026-12-24 08:00" })).toContain(name);
+  expect(await wrong({ name: "gift", sealed_until: "2026-12-24 08:00" })).toContain("label is required");
+  expect(await wrong({ name: "gift", label: 5, sealed_until: "2026-12-24 08:00" })).toContain("label is required");
+  expect(await wrong({ name: "gift", label: " ", sealed_until: "2026-12-24 08:00" })).toContain("label is required");
+  const opens = 'sealed_until must be a local date and 24-hour time, like "2026-12-24 08:00"';
   for (const value of [undefined, 5, "tomorrow", "2026-02-30 08:00", "2026-12-24 8:00", "2026-12-24 25:00"]) {
-    expect(await wrong({ name: "gift", label: "A", opens: value })).toContain(opens);
+    expect(await wrong({ name: "gift", label: "A", sealed_until: value })).toContain(opens);
   }
 
   const asked: unknown[] = [];
-  const input = { name: "gift", label: "Something for you", opens: "2026-12-24 08:00" };
+  const input = { name: "gift", label: "Something for you", sealed_until: "2026-12-24 08:00" };
   expect(await handleStartSealedThread(input, async (wanted) => {
     asked.push(wanted);
     return { unsealAt: new Date(wanted.unsealAt).toISOString(), filesDir: "/home/ada/sealed/gift" };

@@ -472,6 +472,15 @@ const TOOLS: StructSpec<ToolsConfig> = {
   },
 };
 
+export const TOOLS_NOW_PART_OF: ReadonlyMap<string, string> = new Map([
+  ["list_threads", "threads"],
+  ["start_thread", "threads"],
+  ["start_sealed_thread", "threads"],
+  ["edit_thread", "threads"],
+  ["search_chat_logs", "chat_logs"],
+  ["read_chat_logs", "chat_logs"],
+]);
+
 export function toolPatternMatches(pattern: string, name: string): boolean {
   return pattern.endsWith("*")
     ? name.startsWith(pattern.slice(0, -1))

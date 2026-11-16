@@ -10,7 +10,7 @@ import {
   type ReducedImage,
 } from "../llm/prepare_images.ts";
 import { resolveImageBlock } from "../llm/images.ts";
-import { defaultImagesConfig, imageSettingsFor } from "../config/app.ts";
+import { defaultImagesConfig, imageSettingsFor, TOOLS_NOW_PART_OF } from "../config/app.ts";
 import { keepCachedImage, noteCachedImages, toolImageCacheDir } from "../storage/image_cache.ts";
 import { insideWorkspace } from "../storage/image_locations.ts";
 
@@ -335,13 +335,20 @@ async function saveToolMedia(
   }
 }
 
+function notOffered(name: string, schemas: ToolSchemas): string {
+  const now = TOOLS_NOW_PART_OF.get(name);
+  return now !== undefined && schemas.has(now)
+    ? `it is part of the \`${now}\` tool now, which takes an \`action\``
+    : "this tool is not available in the current tool set";
+}
+
 export function argumentRejection(
   toolUse: ToolUseEvent,
   schemas: ToolSchemas | undefined,
 ): string | undefined {
   const reason =
     toolUse.input_error ?? (schemas !== undefined && !schemas.has(toolUse.name)
-      ? "this tool is not available in the current tool set"
+      ? notOffered(toolUse.name, schemas)
       : schemaViolation(schemas?.get(toolUse.name), toolUse.input));
   if (reason === undefined) return undefined;
   return (

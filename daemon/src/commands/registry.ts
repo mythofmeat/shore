@@ -493,7 +493,7 @@ export const commandOperations: OperationRegistry<CommandOperationContext> = {
   }, async (context, args) => threadFiles(await threadListingContext(context.deps, engineOf(context), context.session), args)),
   thread_lock: register("thread_lock", {
     ...threadPresentation, label: "Lock thread", effects: ["history_write"],
-    fields: { name: threadName, locked: { label: "Locked", hint: "Only you change a locked thread's label, purpose and files; the character's edit_thread can't" } },
+    fields: { name: threadName, locked: { label: "Locked", hint: "Only you change a locked thread's label, purpose and files; the character can't" } },
   }, async (context, args) => threadLock(await threadListingContext(context.deps, engineOf(context), context.session), args)),
   thread_compaction: register("thread_compaction", {
     ...threadPresentation, label: "Set whether a thread compacts", effects: ["history_write"],
