@@ -657,9 +657,11 @@ test("a picture in the opening of a thread the character starts is on that messa
     expect(String(refused?.text)).toEndWith("\nStart it again with the names fixed.");
     expect(runtime.registry.listThreads("ada").map((each) => each.id)).toEqual(["main"]);
 
-    script.replyTool = { name: "threads", input: { action: "start", name: "nights", label: "Nights", opening: "The lamp tonight\n![[lamp.png]]" } };
+    await writeFile(join(workspace, "lamp.md"), "Trim the wick at dusk.\n");
+    script.replyTool = { name: "threads", input: { action: "start", name: "nights", label: "Nights", purpose: "Notes on the lamp.", files: ["lamp.md"], opening: "The lamp tonight\n![[lamp.png]]" } };
     await say("start it again");
     expect(lastToolResult(await thread("main"))?.failed).toBe(false);
+    expect(runtime.registry.listThreads("ada").find((each) => each.id === "nights")).toMatchObject({ label: "Nights", purpose: "Notes on the lamp.", files: ["lamp.md"] });
     expect((await thread("nights")).map((message) => [message.content, message.images])).toEqual([
       ["The lamp tonight\n![[lamp.png]]", [{ path: expect.stringContaining("/sent/") as string, embed: "![[lamp.png]]", name: "lamp.png" }]],
     ]);
