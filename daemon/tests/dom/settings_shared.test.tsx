@@ -151,7 +151,7 @@ describe("small settings pieces", () => {
 });
 
 describe("a value tree", () => {
-  test("reads plain values in words, lists inline or as a list, and groups by labelled keys up to a depth", async () => {
+  test("reads plain values in words, lists inline or as a list, and groups by labelled keys up to a depth, which lists count towards too", async () => {
     const { Tree } = await import("../../src/browser/settings/tree.tsx");
     const when = "2026-11-10T05:00:00Z";
     const view = await mount(<Tree value={{ nothing: null, missing: undefined, empty: "", path: "/a/b", plain: "x", stamp: when, odd: "2026-99-99T99:99", count: 1234, yes: true, no: false, none: [], words: ["a", 2, null], rows: [{ a: 1 }, [2]], hollow: {} }} />);
@@ -170,6 +170,19 @@ describe("a value tree", () => {
     const nested = await mount(<Tree value={deep} />);
     expect(nested.host.querySelector("span.mono")?.textContent).toBe('{"leaf":1}');
     expect(nested.host.querySelectorAll("dl")).toHaveLength(6);
+
+    const inLists = async (levels: number): Promise<HTMLElement> => {
+      let listed: unknown = { leaf: 1 };
+      for (let level = 0; level < levels; level += 1) listed = [listed];
+      return (await mount(<Tree value={listed} />)).host;
+    };
+    const five = await inLists(5);
+    expect(five.querySelectorAll("ol")).toHaveLength(5);
+    expect(five.querySelector("dl dt")?.textContent).toBe("Leaf");
+    const six = await inLists(6);
+    expect(six.querySelectorAll("ol")).toHaveLength(6);
+    expect(six.querySelector("dl")).toBeNull();
+    expect(six.querySelector("span.mono")?.textContent).toBe('{"leaf":1}');
   });
 });
 

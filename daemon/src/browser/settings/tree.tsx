@@ -19,7 +19,7 @@ export function Tree({ value, depth = 0 }: { value: unknown; depth?: number }): 
   if (Array.isArray(value)) {
     if (value.length === 0) return <span className="muted">None</span>;
     if (value.every((item) => scalarText(item) !== undefined)) return <span>{value.map((item) => scalarText(item)).join(", ")}</span>;
-    return <ol className="tree-list">{value.map((item, index) => <li key={index}><Tree value={item} depth={depth + 1} /></li>)}</ol>;
+    return <ol className="tree-list">{value.map((item: unknown, index) => <li key={index}><Tree value={item} depth={depth + 1} /></li>)}</ol>;
   }
   const entries = Object.entries(value as Record<string, unknown>);
   if (entries.length === 0) return <span className="muted">None</span>;
