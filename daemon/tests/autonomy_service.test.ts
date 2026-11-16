@@ -31,7 +31,7 @@ interface World {
   dream: PromiseWithResolvers<DreamActionResult>;
   seals: OpenedSeal[];
   clock: { now: number };
-  during: { run?: (wake: WakeRun, hooks: WakeHooks) => Promise<WakeResult> | WakeResult };
+  during: { run?: (wake: WakeRun, hooks: WakeHooks) => Promise<WakeResult> | WakeResult; look?: () => Promise<void> };
   woken: () => string[];
 }
 
@@ -57,8 +57,14 @@ async function world({ idleCompactionSecs = 0, archiveAfterSecs = 0, compaction 
       archives.push(character);
       return { events: [] };
     },
-    runDream: async () => await dream.promise,
-    openSeals: async () => seals.splice(0),
+    runDream: async (_character, window) => await Promise.race([
+      dream.promise,
+      new Promise<never>((_resolve, reject) => { window.signal.addEventListener("abort", () => { reject(window.signal.reason as Error); }); }),
+    ]),
+    openSeals: async () => {
+      await during.look?.();
+      return seals.splice(0);
+    },
   };
   const service = new AutonomyService(executor, () => clock.now);
   const dataDir = join(await mkdtemp(testTmp("shore-autonomy-service-")), "ada");
@@ -218,6 +224,27 @@ test("shutting down waits for a tick that is still running, and no tick runs aft
   service.wakeFor("ada", fired("song", { thread: "ring" }));
   await service.runDue();
   expect(ran).toHaveLength(1);
+});
+
+test("a dream that starts in a tick shutdown is waiting on is stopped before shutdown ends", async () => {
+  const { service, during } = await world();
+  const look = Promise.withResolvers<void>();
+  let looking = false;
+  during.look = async () => {
+    looking = true;
+    await look.promise;
+  };
+  expect(service.forceDreamNow("ada")).toBe("queued");
+  const ticking = service.runDue();
+  await until(() => looking, "the tick starting its look");
+
+  const closing = service.quiesce();
+  look.resolve();
+  await ticking;
+  await closing;
+
+  expect(service.runningDreams()).toEqual([]);
+  expect(service.log("ada", 20).filter((event) => event.kind === "dream_finished").map((event) => event.detail)).toEqual(["Dream stopped when Shore shut down"]);
 });
 
 test("each tick puts the character's keepalive schedule in its saved state", async () => {
