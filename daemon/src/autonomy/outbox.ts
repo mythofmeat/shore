@@ -6,7 +6,6 @@ import { homeThread, readThreadsIndex, wakesThread } from "../engine/threads.ts"
 import type { Message } from "../engine/types.ts";
 import { newMessageVersion } from "../engine/versions.ts";
 import { firstSentPicture, sendPictures, type PictureSender } from "../handler/pictures.ts";
-import type { SidecarRequest } from "../llm/types.ts";
 import { shoreLog } from "../log.ts";
 import { truncateSummary, type NotificationPicture } from "../notifications.ts";
 import { ToolIoError } from "../tools/errors.ts";
@@ -131,9 +130,14 @@ export interface Poster {
 
 export type PostNote = (kind: "message_sent" | "call_failed", detail: string) => void;
 
+export interface Sender {
+  provider_key?: string | undefined;
+  model?: string | undefined;
+}
+
 export async function postMessage(
   character: string,
-  from: Pick<SidecarRequest, "provider_key" | "model">,
+  from: Sender,
   sending: Sending,
   deps: Poster,
   note: PostNote,
@@ -195,7 +199,7 @@ export interface Elsewhere {
 export async function postElsewhere(
   away: readonly Outgoing[],
   where: Elsewhere,
-  request: Pick<SidecarRequest, "provider_key" | "model">,
+  request: Sender,
   deps: Poster,
   note: PostNote,
   pictures: PictureSender,

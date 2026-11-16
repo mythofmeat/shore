@@ -299,16 +299,17 @@ test("the tools a reply runs are given the image model [image] names and a way t
   const withAgent = await context('[subagents.scout]\ndescription = "looks"\nprompt = "look"\n');
   expect(await withAgent.runSubagent?.("scout", "find it")).toBe("asked");
 
-  const offered = ["dryRun", "imageGenerator", "modelHistoryQuery", "deferEdit"] as const;
+  const offered = ["dryRun", "imageGenerator", "modelHistoryQuery", "deferEdit", "sendMessage"] as const;
   expect(offered.filter((key) => key in chosen)).toEqual([]);
   const generator: NonNullable<ToolContext["imageGenerator"]> = async () => { throw new Error("no call expected"); };
   const history: NonNullable<ToolContext["modelHistoryQuery"]> = async () => { throw new Error("no call expected"); };
   const defer = async (): Promise<void> => {};
+  const send: NonNullable<ToolContext["sendMessage"]> = async () => "queued";
   const loaded = await load("");
   const given = await buildToolContext({ ...loaded, dirs: { ...loaded.dirs, data: join(root, "data"), cache: join(root, "cache") } }, join(root, "data"), "ada", {
-    dryRun: true, imageGenerator: generator, modelHistoryQuery: history, deferEdit: defer,
+    dryRun: true, imageGenerator: generator, modelHistoryQuery: history, deferEdit: defer, sendMessage: send,
   });
-  expect(offered.map((key) => given[key])).toEqual([true, generator, history, defer]);
+  expect(offered.map((key) => given[key])).toEqual([true, generator, history, defer, send]);
 });
 
 test("the Matrix bridge signs in to [matrix]'s homeserver_url as its user_id", async () => {

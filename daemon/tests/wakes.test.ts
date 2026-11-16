@@ -22,8 +22,7 @@ import { DIARY_FOR_CHAT, DIARY_FOR_WAKE, diaryText, wakeRunningText } from "../s
 import { isWakeOpener, markThreadRead, threadActivityNow } from "../src/engine/threads.ts";
 import type { DiaryNote, Message } from "../src/engine/types.ts";
 import { dispatchCommand } from "../src/handler/commands.ts";
-import { buildCommandPathDeps, buildGenerationDeps } from "../src/handler/deps.ts";
-import { runGeneration } from "../src/handler/generation.ts";
+import { buildCommandPathDeps, buildRunGeneration } from "../src/handler/deps.ts";
 import { ThreadUnreadTracker } from "../src/handler/thread_unread.ts";
 import type { GenerateResponse, SidecarProvider, SidecarRequest } from "../src/llm/types.ts";
 import { queuedCompactionsEnded } from "../src/memory/compaction/background.ts";
@@ -224,7 +223,7 @@ async function withCharacter(run: (h: Harness) => Promise<void>, configure?: (ap
   });
   try {
     const autonomy = new TurnAutonomyBridge(runtime.autonomy);
-    const deps = buildGenerationDeps({
+    const reply = buildRunGeneration({
       runtime, providers: runtime.providers, autonomy, diagnostics: new Diagnostics(), env, emitEvent: (event) => { fromReplies.push(event); },
     });
     await run({
@@ -245,7 +244,7 @@ async function withCharacter(run: (h: Harness) => Promise<void>, configure?: (ap
       say: async (text, thread = "main") => {
         const end = runtime.autonomy.beginForeground("ada");
         try {
-          await runGeneration(deps, {
+          await reply({
             meta: {
               session: { sessionId: 1, clientId: 1, clientType: "test", clientName: "test", capabilities: [], selectedCharacter: "ada", selectedThread: thread },
               rid: text, kind: "message",
@@ -259,7 +258,7 @@ async function withCharacter(run: (h: Harness) => Promise<void>, configure?: (ap
         await autonomy.settled("ada");
       },
       regenerate: async (thread) => {
-        await runGeneration(deps, {
+        await reply({
           meta: {
             session: { sessionId: 1, clientId: 1, clientType: "test", clientName: "test", capabilities: [], selectedCharacter: "ada", selectedThread: thread },
             rid: "again", kind: "message",

@@ -53,7 +53,6 @@ import {
   type SetupEngine,
 } from "./setup.ts";
 import {
-  emitNewMessageEvent,
   persistAndNotify,
   type PersistContext,
   type PersistEngine,
@@ -82,12 +81,7 @@ import type { McpRegistry } from "../tools/mcp_registry.ts";
 import { schemasFrom } from "../tools/validate.ts";
 import { pruneTurns, redoTurns, replyVersions, undoTurns, WorkspaceRecorder, workspaceTurnsFor } from "../tools/workspace_turns.ts";
 import { characterWorkspace } from "../tools/character_workspace.ts";
-import { shoreLog } from "../log.ts";
 import { sentPicturesDir } from "../storage/sent_pictures.ts";
-import { Outbox, postElsewhere, reachableThreads } from "../autonomy/outbox.ts";
-import { pushRefusal } from "../autonomy/push.ts";
-import { hostZone } from "../ledger/zoned.ts";
-import { pictureProblems } from "./pictures.ts";
 
 export interface GenerationEngine extends TurnEngine, PersistEngine, SetupEngine, AttemptEngine {
   readonly thread: string;
@@ -153,7 +147,6 @@ export interface GenerationDeps {
   newlyCrossedPlanLimitWarnings: PersistContext["newlyCrossedPlanLimitWarnings"];
   ledgerPath?: string;
   tools?: (charName: string, turn: SubagentTurn) => ToolContextDeps;
-  push?: ToolContextDeps["push"];
   now?: () => string;
   newMessageId?: () => string;
   monotonicMs?: () => number;
@@ -208,14 +201,13 @@ export async function runGeneration(
   );
   if (engine.thread === deps.registry.wakesThread?.(params.charName)) throw new WakesThreadError(params.charName, engine.thread);
   deps.userActiveIn?.(params.charName, engine.thread);
-  const afterwards: { run?: () => Promise<void> } = {};
-  await withConversation(threadDataDir(deps.dataDir, params.charName, engine.thread), "turn", async (signal) => {
+  return await withConversation(threadDataDir(deps.dataDir, params.charName, engine.thread), "turn", async (signal) => {
   params = { ...params, signal };
   const delivery = new OrderedDelivery(params.send);
   let generationFailure: unknown;
   let generationFailed = false;
   try {
-    await runGenerationCore(deps, engine, { ...params, send: delivery.send }, () => delivery.flush(), afterwards);
+    await runGenerationCore(deps, engine, { ...params, send: delivery.send }, () => delivery.flush());
   } catch (error) {
     generationFailure = error;
     generationFailed = true;
@@ -231,7 +223,6 @@ export async function runGeneration(
   }
   if (generationFailed) throw generationFailure;
   }, params.signal);
-  await afterwards.run?.();
 }
 
 async function runGenerationCore(
@@ -239,7 +230,6 @@ async function runGenerationCore(
   engine: GenerationEngine,
   params: GenerationParams,
   flushFrames: () => Promise<void>,
-  afterwards: { run?: () => Promise<void> },
 ): Promise<void> {
   const now = deps.now ?? defaultNow;
   const newMessageId = deps.newMessageId ?? defaultMessageId;
@@ -372,17 +362,6 @@ async function runGenerationCore(
 
     const subagentHistory: Message[] = [...engine.messages()].slice(-MAX_HISTORY_MESSAGES);
 
-    const outbox = new Outbox({
-      turn: "reply",
-      here: engine.thread,
-      sealed: false,
-      userName: resolveDisplayName(config.app.chat),
-      timeZone: hostZone(),
-      threads: async () => await reachableThreads(deps.dataDir, charName),
-      pictureProblems: async (text) => await pictureProblems([text], workspace, params.signal),
-      pushRefusal: () => pushRefusal(characterDataDir(deps.dataDir, charName), { topic: config.app.notifications.push_topic, everyMs: config.app.notifications.push_every.asMillis() }, Date.now()),
-    });
-
     let intermediatePersisted = false;
     const persistIntermediate = async (message: Message): Promise<void> => {
       params.signal.throwIfAborted();
@@ -417,7 +396,6 @@ async function runGenerationCore(
       newMessageId,
       persistIntermediate,
       recordWorkspaceWrite: recorder.track,
-      sendMessage: outbox.send,
     }).catch((e: unknown) => {
       if (imageSupport !== false && isImageRejection(e)) {
         recordImageRejection(config.dirs.cache, resolved.providerKey, resolved.modelId);
@@ -461,23 +439,6 @@ async function runGenerationCore(
       attempt: plan.attempt,
     });
     noteAttempt();
-    const away = [...outbox.waiting];
-    const push = deps.push;
-    afterwards.run = async () => {
-      await postElsewhere(away, {
-        character: charName,
-        from: engine.thread,
-        turn: "turn",
-        characterDir: characterDataDir(deps.dataDir, charName),
-        engine: async (thread) => deps.registry.listThreads(charName).some((record) => record.id === thread) ? await deps.registry.getOrCreate(charName, thread) : undefined,
-      }, { provider_key: resolved.providerKey, model: request.model }, {
-        emit: (character, revision, msg, thread) => { emitNewMessageEvent(deps.emitEvent, character, "autonomous", revision, msg, thread); },
-        notify: (title, shown, picture) => { deps.notifier.notify("autonomous_message", title, shown, picture); },
-        ...(push === undefined ? {} : { push: async (message) => await push(charName, message) }),
-        newId: newMessageId,
-        nowIso: now,
-      }, (kind, detail) => { if (kind === "call_failed") shoreLog.warn(`shore: ${detail}`); }, { workspace, dir: sentPicturesDir(deps.dataDir, charName) });
-    };
 
     emitPostPersistStreamEnd(turnCtx, engine, params.rid ?? undefined, result);
     await flushFrames();
@@ -624,7 +585,6 @@ interface StreamTurnParams {
   newMessageId: () => string;
   persistIntermediate: (message: Message) => Promise<void>;
   recordWorkspaceWrite: NonNullable<ToolContext["recordWorkspaceWrite"]>;
-  sendMessage: NonNullable<ToolContext["sendMessage"]>;
 }
 
 async function streamTurn(
@@ -650,10 +610,7 @@ async function streamTurn(
         }), signal: params.signal, countReads: true, ...(request.context?.thread === undefined ? {} : { thread: request.context.thread }) },
       )
     : undefined;
-  if (toolCtx !== undefined) {
-    toolCtx.recordWorkspaceWrite = params.recordWorkspaceWrite;
-    toolCtx.sendMessage = params.sendMessage;
-  }
+  if (toolCtx !== undefined) toolCtx.recordWorkspaceWrite = params.recordWorkspaceWrite;
 
   let intermediate: Message[] = [];
 

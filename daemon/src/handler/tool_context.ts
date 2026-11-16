@@ -119,6 +119,7 @@ export async function buildToolContext(
     ...(deps.modelHistoryQuery === undefined ? {} : { modelHistoryQuery: deps.modelHistoryQuery }),
     ...(activityStats === undefined ? {} : { activityStats: (days: number) => activityStats(charName, days) }),
     ...(triggersView === undefined ? {} : { triggers: () => triggersView(charName) }),
+    ...(deps.sendMessage === undefined ? {} : { sendMessage: deps.sendMessage }),
     ...(wakeInThread === undefined ? {} : { wakeInThread: (request: WakeInThreadRequest) => wakeInThread(charName, deps.thread ?? MAIN_THREAD, request) }),
     ...(deps.deferEdit === undefined ? {} : { deferEdit: deps.deferEdit }),
     ...(deps.countReads === true && config.app.dreaming.enabled ? { recordRead: (path: string) => { recordReadBestEffort(charDataDir, path); } } : {}),
