@@ -4,13 +4,20 @@ import { act, createElement, type ReactElement } from "react";
 
 const mounted = new Set<() => Promise<void>>();
 
-export function useDom(url = "http://shore.test:7340/"): void {
+export interface InsideDom {
+  start?: () => unknown;
+  stop?: () => unknown;
+}
+
+export function useDom(url = "http://shore.test:7340/", inside: InsideDom = {}): void {
   afterEach(async () => { for (const unmount of Array.from(mounted)) await unmount(); });
-  beforeAll(() => {
+  beforeAll(async () => {
     GlobalRegistrator.register({ url });
     Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true });
+    await inside.start?.();
   });
   afterAll(async () => {
+    await inside.stop?.();
     Reflect.deleteProperty(globalThis, "IS_REACT_ACT_ENVIRONMENT");
     await GlobalRegistrator.unregister();
   });
