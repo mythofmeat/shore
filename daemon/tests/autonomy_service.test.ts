@@ -7,7 +7,9 @@ import { AutonomyService } from "../src/autonomy/service.ts";
 import { decodeState, STATE_FILENAME } from "../src/autonomy/state_file.ts";
 import { shoreLog } from "../src/log.ts";
 import { readCharacterState } from "../src/storage/store.ts";
+import type { KeepaliveService } from "../src/cache/keepalive.ts";
 import { outcomeOf } from "./support/outcome.ts";
+import { until } from "./support/until.ts";
 import { testTmp } from "./support/tmp.ts";
 
 const MINUTE = 60_000;
@@ -175,6 +177,62 @@ test("a tick in the background logs a failure and ends as usual", async () => {
   } finally {
     logged.mockRestore();
   }
+});
+
+test("a tick while a wake is still running leaves that character alone, and the next one after it picks up what waited", async () => {
+  const { service, ran, during } = await world();
+  const held = Promise.withResolvers<WakeResult>();
+  let wakes = 0;
+  during.run = async () => {
+    wakes += 1;
+    return wakes === 1 ? await held.promise : { events: [] };
+  };
+  service.wakeFor("ada", fired("lamp"));
+  const first = service.runDue();
+  await until(() => ran.length === 1, "the first wake starting");
+
+  service.wakeFor("ada", fired("song", { thread: "ring" }));
+  await service.runDue();
+  expect(ran).toHaveLength(1);
+
+  held.resolve({ events: [] });
+  await first;
+  await service.runDue();
+  expect(ran.map((wake) => wake.fired)).toEqual([["lamp"], ["song"]]);
+});
+
+test("shutting down waits for a tick that is still running, and no tick runs after it", async () => {
+  const { service, ran, during } = await world();
+  const held = Promise.withResolvers<WakeResult>();
+  during.run = async () => await held.promise;
+  service.wakeFor("ada", fired("lamp"));
+  const running = service.runDue();
+  await until(() => ran.length === 1, "the wake starting");
+
+  const closing = service.quiesce().then(() => "closed");
+  expect(await Promise.race([closing, Bun.sleep(100).then(() => "waiting")])).toBe("waiting");
+  held.resolve({ events: [] });
+  await running;
+  expect(await closing).toBe("closed");
+
+  service.wakeFor("ada", fired("song", { thread: "ring" }));
+  await service.runDue();
+  expect(ran).toHaveLength(1);
+});
+
+test("each tick puts the character's keepalive schedule in its saved state", async () => {
+  const { service, dataDir } = await world();
+  const schedule = { model: "claude-fixture", interval: 4 * MINUTE, last_warm_at: T0, last_active_at: T0 - MINUTE };
+  service.attachKeepalive({
+    onEvent: () => {},
+    scheduleFor: (character: string) => character === "ada" ? schedule : undefined,
+    restore: () => {},
+    haltsFor: () => [],
+  } as unknown as KeepaliveService);
+
+  await service.runDue();
+
+  expect(decodeState(readCharacterState(dataDir, STATE_FILENAME) ?? "")?.keepalive).toEqual({ model: "claude-fixture", intervalMs: 4 * MINUTE, lastWarmAt: T0, lastActiveAt: T0 - MINUTE });
 });
 
 test("a running wake can be asked whether the user has written in its thread since it started", async () => {
