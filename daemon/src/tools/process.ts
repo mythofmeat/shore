@@ -1,5 +1,7 @@
 import { spawn } from "node:child_process";
 
+import { shoreLog } from "../log.ts";
+
 const INHERITED_GIT_LOCATION_VARS: readonly string[] = [
   "GIT_DIR",
   "GIT_WORK_TREE",
@@ -55,7 +57,9 @@ export function runProcess(
     const kill = (signal: NodeJS.Signals): void => {
       try {
         if (child.pid !== undefined) process.kill(grouped ? -child.pid : child.pid, signal);
-      } catch {}
+      } catch (error) {
+        if ((error as NodeJS.ErrnoException).code !== "ESRCH") shoreLog.warn(`shore: could not send ${signal} to process ${String(child.pid)}: ${String(error)}`);
+      }
     };
     const cancel = (): void => {
       kill("SIGTERM");
