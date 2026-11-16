@@ -10,6 +10,7 @@ import { restartRequiredChanges } from "../src/config/restart.ts";
 import { attemptMatrixBridge, unusableReason } from "../src/connections/matrix/start.ts";
 import { resolveListenAddr } from "../src/daemon/startup.ts";
 import { shoreLog } from "../src/log.ts";
+import type { ToolContext } from "../src/tools/dispatch.ts";
 import { buildToolContext } from "../src/handler/tool_context.ts";
 import { mcpConfigView } from "../src/runtime.ts";
 import { buildSessionHistorySnapshot, type HandshakeRegistry } from "../src/swp/handshake.ts";
@@ -289,11 +290,25 @@ test("the tools a reply runs are given the image model [image] names and a way t
   const profiles = '[image."openai:first"]\nsize = "512x512"\n[image."openai:second"]\nsize = "1024x1024"\n';
   const chosen = await context(`[image]\nmodel = "openai:second"\n${profiles}`);
   expect(chosen.imageGenConfig).toMatchObject({ provider: "openai", model_id: "second", size: "1024x1024", api_key: "k" });
+  expect(Object.keys(chosen.imageGenConfig ?? {}).filter((key) => key === "aspect_ratio" || key === "image_size")).toEqual([]);
+  const shaped = await context('[image]\nmodel = "openai:wide"\n[image."openai:wide"]\nsize = "1024x1024"\naspect_ratio = "16:9"\nimage_size = "2K"\n');
+  expect(shaped.imageGenConfig).toMatchObject({ model_id: "wide", aspect_ratio: "16:9", image_size: "2K" });
   expect((await context(profiles)).imageGenConfig).toBeUndefined();
   expect(chosen.runSubagent).toBeUndefined();
 
   const withAgent = await context('[subagents.scout]\ndescription = "looks"\nprompt = "look"\n');
   expect(await withAgent.runSubagent?.("scout", "find it")).toBe("asked");
+
+  const offered = ["dryRun", "imageGenerator", "modelHistoryQuery", "deferEdit"] as const;
+  expect(offered.filter((key) => key in chosen)).toEqual([]);
+  const generator: NonNullable<ToolContext["imageGenerator"]> = async () => { throw new Error("no call expected"); };
+  const history: NonNullable<ToolContext["modelHistoryQuery"]> = async () => { throw new Error("no call expected"); };
+  const defer = async (): Promise<void> => {};
+  const loaded = await load("");
+  const given = await buildToolContext({ ...loaded, dirs: { ...loaded.dirs, data: join(root, "data"), cache: join(root, "cache") } }, join(root, "data"), "ada", {
+    dryRun: true, imageGenerator: generator, modelHistoryQuery: history, deferEdit: defer,
+  });
+  expect(offered.map((key) => given[key])).toEqual([true, generator, history, defer]);
 });
 
 test("the Matrix bridge signs in to [matrix]'s homeserver_url as its user_id", async () => {

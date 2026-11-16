@@ -5,6 +5,7 @@ import { dirname, join } from "node:path";
 import { setTomlValue, TomlEditError } from "../src/config/toml_edit.ts";
 import { clearConfigKey, commitConfigEdits, config, type ConfigContext, type ConfigRuntime } from "../src/commands/config.ts";
 import { loadConfig, type LoadedConfig } from "../src/config/loader.ts";
+import { configSchema } from "../src/config/schema.ts";
 import { setTestEnv } from "./support/env.ts";
 import { testTmp } from "./support/tmp.ts";
 
@@ -348,4 +349,22 @@ describe("config set on disk", () => {
     expect(result.file).toBe(ctx.configPath);
     expect(await readFile(ctx.configPath, "utf8")).toContain('idle_after = "6h"');
   });
+});
+
+test("a setting is described by what its section says of it, a user by the section it runs things for, and one nothing describes by its name and section", () => {
+  const entries = configSchema({ instancesAt: (path) => String(path) === "mcp" ? ["weather"] : [] });
+  const described = (key: string): string | undefined => entries.find((entry) => entry.key === key)?.description;
+  expect(described("plan_limits.five_hour.limit_fraction")).toBe("Claude plan utilization fraction at which limit_action applies; 1.0 is the whole window.");
+  expect(described("dreaming.every")).toBe("Time from the start of the last dream that finished or reached its limit until the next one is due. Defaults to 3d.");
+  expect(described("tools.user")).toStartWith("Unix user the character's tools run as: a name, uid or uid:gid. ");
+  expect(described("mcp.weather.user")).toBe("Unix user this stdio server runs as: a name, uid or uid:gid. Unset runs it as the daemon's user. The daemon needs CAP_SETUID and CAP_SETGID.");
+  expect(described("images.read.tell_model")).toBe("Tell the model when a workspace image it reads was reduced, with the original and sent size, format and token cost.");
+  expect(described("chat.model")).toBe("Fallback model as provider:model_id; stored chat selection and thread pins retain precedence.");
+  expect(described("notifications.push_every")).toBe("Least time between two pushes from the character. Defaults to 1d.");
+  expect(described("notifications.push_topic")).toBe(
+    "ntfy topic a message the character sends with `push` goes to, on the server in notifications.url. Give it a topic of its own, apart from notifications.topic. Unset means the character can't push.",
+  );
+  expect(described("mcp.weather.command")).toBe("command for mcp.");
+  expect(described("usage.timezone")).toBe("timezone for usage.");
+  expect(described("notifications.push_every_sound")).toBeUndefined();
 });
