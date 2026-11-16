@@ -7,7 +7,7 @@ In a conversation your reply is the message. From a wake nothing reaches {{user}
 - `text` is what to say. It is posted in the thread the wake ran in, which is your home thread when its trigger names no thread, or in the thread that `thread` names.
 - It is delivered when the wake ends, and each call is a message of its own.
 - A wake's final response is your diary note, whole. Nothing in it is sent, so the two don't repeat each other.
-- A wake stopped at its limit, or by {{user}} writing, still delivers what it had sent by then.
+- A wake stopped at its limit still delivers what it had sent by then. One that {{user}} stopped by writing in its thread delivers nothing: it is picked up again later, and is told that nothing was sent.
 
 From a conversation `{{send_message}}` is only for saying something in another thread, so it needs `thread`. It is delivered once your reply is done, and not at all if the reply fails or {{user}} stops it.
 

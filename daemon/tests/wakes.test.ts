@@ -1998,14 +1998,14 @@ test("a trigger that names a thread wakes the character there, fresh, with what 
       ["user", "", "tell me a story in parts"],
       ["assistant", "", "reply to: tell me a story in parts"],
       ["user", "autonomous", wakeSeenLater(FIRED)],
-      ["system", "autonomous", 'This wake\'s working is in "Wakes": 1 tool call.'],
+      ["system", "autonomous", 'This wake\'s working is in "Wakes": 2 tool calls.'],
       ["assistant", "autonomous", "Part one: the fox came to the gate."],
     ]);
     expect(stored(await thread("wakes"))).toEqual([
       ["user", "autonomous", opener.replace("[wake]", '[wake in "ring"]')],
       ["assistant", "", ""],
       ["user", "", "<SOUL.md>"],
-      ["assistant", "", 'Told part one; the fox is at the gate.\n[sent to User in "ring"]'],
+      ["assistant", "", 'Told part one; the fox is at the gate.'],
     ]);
     expect(emitted.map((each) => [each.thread, each.msg.content])).toEqual([["ring", "Part one: the fox came to the gate."]]);
     expect(runtime.registry.listThreads("ada").map((record) => record.id)).toEqual(["main", "ring", "wakes"]);
@@ -2019,8 +2019,8 @@ test("a trigger that names a thread wakes the character there, fresh, with what 
     await say("and then?", "ring");
     expect(turnsOf(script.replies.at(-1)).slice(2)).toEqual([
       ["user", wakeSeenLater(FIRED)],
-      ["system", '[Your working in this wake is in your thread "wakes", not here: 1 tool call. Your note from the end of it follows.]'],
-      ["assistant", "Told part one; the fox is at the gate.\n[sent to User as the next message here]"],
+      ["system", '[Your working in this wake is in your thread "wakes", not here: 2 tool calls. Your note from the end of it follows.]'],
+      ["assistant", "Told part one; the fox is at the gate."],
       ["user", "[wake · Friday 2026-10-30 · 12:11 PM]"],
       ["assistant", "Part one: the fox came to the gate."],
       ["user", "and then?"],
@@ -2102,7 +2102,7 @@ test("the user's message stops a wake in that thread at the end of its step and 
     expect(script.wakes).toHaveLength(1);
     expect(stored(await thread("ring")).slice(2)).toEqual([
       ["user", "autonomous", wakeSeenLater(FIRED)],
-      ["system", "autonomous", 'This wake\'s working is in "Wakes": 1 tool call.'],
+      ["system", "autonomous", 'This wake\'s working is in "Wakes": 2 tool calls.'],
       ["system", "autonomous", stopped],
       ["user", "", "wait, what is the fox called?"],
       ["assistant", "", "reply to: wait, what is the fox called?"],
@@ -2115,7 +2115,7 @@ test("the user's message stops a wake in that thread at the end of its step and 
     ]);
     const cutShort: [role: string, text: string][] = [
       ["user", wakeSeenLater(FIRED)],
-      ["system", "[Your working in this wake is in your thread \"wakes\", not here: 1 tool call, ending with `read`. It ended without a note from you. The last thing you wrote in it: \"Let me look.\"]"],
+      ["system", "[Your working in this wake is in your thread \"wakes\", not here: 2 tool calls, ending with `read`. It ended without a note from you. The last thing you wrote in it: \"Let me look.\"]"],
       ["system", stopped],
       ["user", "wait, what is the fox called?"],
     ];
@@ -2177,7 +2177,7 @@ test("a wake's working goes to the wakes thread for the user, and a reply in the
     const first = wakeText("12:11 PM", [RING_FIRED("12:11 PM")]);
     expect(stored(await thread("ring")).slice(2)).toEqual([
       ["user", "autonomous", wakeSeenLater(RING_FIRED("12:11 PM"))],
-      ["system", "autonomous", 'This wake\'s working is in "Wakes": 2 tool calls.'],
+      ["system", "autonomous", 'This wake\'s working is in "Wakes": 3 tool calls.'],
       ["assistant", "autonomous", "Part one: the fox came to the gate."],
     ]);
     expect(stored(await thread("wakes"))).toEqual([
@@ -2186,15 +2186,15 @@ test("a wake's working goes to the wakes thread for the user, and a reply in the
       ["user", "", "<SOUL.md>"],
       ["assistant", "", ""],
       ["user", "", "<SOUL.md>"],
-      ["assistant", "", 'Told part one.\n[sent to User in "ring"]'],
+      ["assistant", "", 'Told part one.'],
     ]);
     expect((await thread("wakes")).at(-1)?.content_blocks.map((block) => block.type)).toEqual(["thinking", "text"]);
     const firstSeen: [role: string, text: string][] = [
       ["user", "tell me a story in parts"],
       ["assistant", "reply to: tell me a story in parts"],
       ["user", wakeSeenLater(RING_FIRED("12:11 PM"))],
-      ["system", '[Your working in this wake is in your thread "wakes", not here: 2 tool calls. Your note from the end of it follows.]'],
-      ["assistant", "Told part one.\n[sent to User as the next message here]"],
+      ["system", '[Your working in this wake is in your thread "wakes", not here: 3 tool calls. Your note from the end of it follows.]'],
+      ["assistant", "Told part one."],
       ["user", "[wake · Friday 2026-10-30 · 12:11 PM]"],
       ["assistant", "Part one: the fox came to the gate."],
     ];
@@ -3077,7 +3077,7 @@ test("the model and settings the user chose for wakes hold in whichever thread a
     expect(script.replies.map((request) => request.model)).toEqual(["claude-fixture"]);
     const asked = script.wakes[0];
     expect((asked?.system ?? []).map((block) => block.text).join("\n")).toContain("Ada");
-    expect((asked?.tools ?? []).map((tool) => tool.name)).toEqual(["read"]);
+    expect((asked?.tools ?? []).map((tool) => tool.name)).toEqual(["read", "send_message"]);
   }, (app) => {
     app.triggers.model = "pinned";
     app.triggers.max_idle_wakes = 10;
@@ -3370,6 +3370,7 @@ test("the log shows each tool a wake called with the start of what came back", a
   await withCharacter(async ({ runtime, script, workspace, say, wakeNow }) => {
     await writeFile(join(workspace, "tides.md"), "high water ".repeat(40));
     await say("hello");
+    script.sends = undefined;
     script.beatTool = { name: "read", input: { file_path: "tides.md" } };
     at(1);
     await wakeNow();
@@ -3395,61 +3396,27 @@ test("a wake whose model call ends in an error is logged as failed on that round
   });
 });
 
-test("a wake that sends a picture Shore can't find is asked once to fix it, and the log says so when that second try ends in an error", async () => {
-  const retryNotes = (runtime: ShoreRuntime): string[] => runtime.autonomy.log("ada", 100).map((event) => event.detail).filter((detail) => detail.includes("ictures"));
+test("a wake's message with a picture Shore can't find is refused as it is sent, with the picture's name, and nothing is posted or asked for again", async () => {
   await withCharacter(async ({ runtime, script, say, wakeNow, thread }) => {
     script.sends = "The lamp tonight\n![[missing.png]]"; script.closing = "NO_NOTE";
     await say("hello");
     at(1);
     await wakeNow();
-
-    expect(script.wakes).toHaveLength(4);
-    expect(retryNotes(runtime)).toEqual([expect.stringMatching(/^Pictures not found, asked to fix them before sending: .*missing\.png/) as string]);
-    expect((await thread("main")).at(-1)?.content).toBe("The lamp tonight\n![[missing.png]]");
-  });
-  await withCharacter(async ({ runtime, script, say, wakeNow, thread }) => {
-    script.sends = "The lamp tonight\n![[missing.png]]"; script.closing = "NO_NOTE";
-    script.finishes = [undefined, "error"];
-    await say("hello");
-    at(1);
-    await wakeNow();
-
-    expect(retryNotes(runtime)).toEqual([
-      expect.stringMatching(/^Pictures not found, asked to fix them before sending: .*missing\.png/) as string,
-      "The retry to fix pictures failed; sending the message as it was",
-    ]);
-    expect((await thread("main")).at(-1)?.content).toBe("The lamp tonight\n![[missing.png]]");
-  });
-});
-
-test("a wake that has used up its time isn't asked to fix a picture Shore can't find, and its message goes as it is", async () => {
-  await withCharacter(async ({ runtime, script, say, thread }) => {
-    script.sends = "The lamp tonight\n![[missing.png]]"; script.closing = "NO_NOTE";
-    await say("hello");
-    at(1);
-    let clock = 5_000;
-    const now = spyOn(performance, "now").mockImplementation(() => clock);
-    try {
-      const end = hold();
-      script.endHeld = end;
-      const ticking = runtime.autonomy.wakeNow("ada") === undefined ? Promise.resolve() : runtime.autonomy.tick();
-      await end.started.promise;
-      clock = 5_000 + 30 * MINUTE;
-      end.release.resolve();
-      await ticking;
-    } finally {
-      now.mockRestore();
-    }
 
     expect(script.wakes).toHaveLength(2);
-    expect(runtime.autonomy.log("ada", 100).map((event) => event.detail).filter((detail) => detail.includes("ictures"))).toEqual([]);
-    expect((await thread("main")).at(-1)?.content).toBe("The lamp tonight\n![[missing.png]]");
+    const refused = (await thread("wakes")).flatMap((message) => message.content_blocks).flatMap((block) => block.type === "tool_result" && block.is_error === true ? [String(block.content)] : []);
+    expect(refused).toHaveLength(1);
+    expect(refused[0]).toStartWith("io: not sent: these pictures in it could not be sent:\n- ![[missing.png]]: ");
+    expect(refused[0]).toEndWith("\nSend it again with the names fixed.");
+    expect((await thread("main")).filter((message) => message.role === "assistant" && message.origin === "autonomous")).toEqual([]);
+    expect(runtime.autonomy.log("ada", 100).map((event) => [event.kind, event.detail]).at(-1)).toEqual(["message_skipped", "Wake completed — no message sent"]);
   });
 });
 
 test("a wake whose tool call breaks off leaves its thread with an answer to that call, and the log says what went wrong", async () => {
   await withCharacter(async ({ runtime, script, say, thread, wakeNow }) => {
     await say("hello");
+    script.sends = undefined;
     const broken = spyOn(execute, "runToolUse").mockRejectedValueOnce(new Error("the tool runner broke"));
     try {
       at(1);
@@ -3566,7 +3533,7 @@ test("a character's own thread called wakes is left alone, and Shore keeps the w
     expect(runtime.registry.wakesThread("ada")).toBe("wakes-2");
     expect(await thread("wakes")).toEqual([]);
     expect((await thread("wakes-2")).map((message) => message.role)).toEqual(["user", "assistant", "user", "assistant"]);
-    expect((await thread("main")).at(-2)?.content).toBe('This wake\'s working is in "Wakes": 1 tool call.');
+    expect((await thread("main")).at(-2)?.content).toBe('This wake\'s working is in "Wakes": 2 tool calls.');
     expect((await thread("main")).at(-2)?.shown_later).toStartWith('[Your working in this wake is in your thread "wakes-2", not here:');
     await say("hi", "wakes");
     expect((await thread("wakes")).map((message) => message.content)).toEqual(["hi", "reply to: hi"]);
@@ -3611,7 +3578,7 @@ test("a wake whose working can't be kept still runs to its end and posts what it
     expect(kept.messages()).toHaveLength(before);
     expect(stored((await thread("main")).slice(-3))).toEqual([
       ["user", "autonomous", wakeSeenLater(byHand("12:20 PM"))],
-      ["system", "autonomous", 'This wake\'s working is in "Wakes": 1 tool call.'],
+      ["system", "autonomous", 'This wake\'s working is in "Wakes": 2 tool calls.'],
       ["assistant", "autonomous", "I found the keeper's log."],
     ]);
     expect(warnings).toEqual(Array.from({ length: 4 }, () => 'shore: could not keep a wake\'s working in "wakes": Error: the disk is full'));
@@ -3729,7 +3696,7 @@ test("a wake inside a sealed thread sends, announces and logs nothing outside it
     ]);
     const sealedEngine = await runtime.registry.sealedEngine("ada", "gift");
     expect(stored(sealedEngine?.messages() ?? []).slice(-2)).toEqual([
-      ["assistant", "", "Made a card.\n[sent to User as the next message here]"],
+      ["assistant", "", "Made a card."],
       ["assistant", "autonomous", "Happy birthday!"],
     ]);
     expect(await runtime.registry.sealedEngine("ada", "gift")).toBe(sealedEngine);

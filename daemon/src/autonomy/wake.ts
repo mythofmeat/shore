@@ -409,8 +409,9 @@ export async function runWake(character: string, config: LoadedConfig, wake: Wak
       await engine.appendMessage(why);
       if (log !== undefined) await keepWorking(log, { ...why, msg_id: newId() });
     }
-    const here = outbox.waiting.filter((each) => each.thread === thread);
-    const away = outbox.waiting.filter((each) => each.thread !== thread);
+    const waiting = stopped === "interrupted" ? [] : outbox.waiting;
+    const here = waiting.filter((each) => each.thread === thread);
+    const away = waiting.filter((each) => each.thread !== thread);
     const sendings: Sending[] = here.length === 0 && loop.images.length > 0
       ? [{ text: "", images: loop.images, push: false }]
       : here.map((each, at) => ({ text: each.text, images: at === 0 ? loop.images : [], push: each.push }));
