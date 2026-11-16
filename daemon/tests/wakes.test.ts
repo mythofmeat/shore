@@ -1769,9 +1769,13 @@ test("from a conversation the character sends to another thread once its reply i
     },
   });
   const without = "Send it again without `push` to post it all the same.";
+  const warned = spyOn(shoreLog, "warn").mockImplementation(() => {});
+  const pushLines = (): string[] => warned.mock.calls.map((call) => String(call[0])).filter((line) => !line.startsWith("shore: rejected a "));
   try {
     await withCharacter(async ({ runtime, script, fromReplies, say, thread }) => {
       await runtime.registry.createThread("ada", "garden");
+      const announced: unknown[][] = [];
+      runtime.notifier.notify = (...told) => { announced.push(told); };
       const result = async (): Promise<{ text: string; failed: boolean }> => {
         const last = lastToolResult(await thread("main"));
         return { text: String(last?.text), failed: last?.failed === true };
@@ -1786,6 +1790,8 @@ test("from a conversation the character sends to another thread once its reply i
       expect((await thread("main")).at(-1)?.content).toBe("reply to: you can reach my phone now");
       expect(fromReplies.flatMap((event) => event.type === "new_message" && event.thread === "garden" ? [[event.role, event.origin, event.content]] : [])).toEqual([["assistant", "autonomous", "I miss you."]]);
       expect(pushed).toEqual([{ path: "/phone", method: "POST", title: "Shore - ada", auth: "Bearer fixture-key", priority: null, body: "I miss you." }]);
+      expect(announced.filter(([kind]) => kind === "autonomous_message")).toEqual([["autonomous_message", "Shore - ada", "I miss you.", undefined]]);
+      expect(pushLines()).toEqual([]);
 
       script.replyTool = { name: "send_message", input: { text: "Still here.", thread: "garden", push: true } };
       at(65);
@@ -1833,6 +1839,82 @@ test("from a conversation the character sends to another thread once its reply i
       });
       expect(await thread("garden")).toEqual([]);
       expect(pushed).toHaveLength(1);
+    });
+
+    const gone = Bun.serve({ port: 0, fetch: () => new Response("ok") });
+    const unreachable = `http://127.0.0.1:${String(gone.port)}`;
+    await gone.stop(true);
+    warned.mockClear();
+    await withCharacter(async ({ runtime, script, say, thread }) => {
+      await runtime.registry.createThread("ada", "garden");
+      await say("hello");
+      script.replyTool = { name: "send_message", input: { text: "I miss you.", thread: "garden", push: true } };
+      await say("can you reach my phone?");
+      expect((await thread("garden")).map((message) => message.content)).toEqual(["I miss you."]);
+      expect(pushLines()).toHaveLength(1);
+      expect(pushLines()[0]).toStartWith("shore: The push that went with a message failed: ");
+    }, (app) => {
+      app.notifications.push_topic = "phone";
+      app.notifications.url = unreachable;
+    });
+  } finally {
+    warned.mockRestore();
+    await ntfy.stop(true);
+  }
+});
+
+test("a reply's message for a thread that is archived before the reply is done isn't sent, and the diary says so", async () => {
+  await withCharacter(async ({ runtime, script, data, say, thread, command }) => {
+    await runtime.registry.createThread("ada", "garden");
+    await runtime.registry.createThread("ada", "attic");
+    await say("hello");
+    const called = hold();
+    script.held = called;
+    script.replyTool = { name: "send_message", input: { text: "The beans are up.", thread: "garden" } };
+    const saying = say("tell the garden");
+    await called.started.promise;
+    const answered = hold();
+    called.release.resolve();
+    script.held = answered;
+    await answered.started.promise;
+    expect(await command("archive_thread", { name: "garden" })).toMatchObject({ type: "command_output" });
+    answered.release.resolve();
+    await saying;
+
+    expect((await thread("main")).at(-1)?.content).toBe("reply to: tell the garden");
+    expect(runtime.registry.listThreads("ada").map((record) => record.id)).toEqual(["main", "attic"]);
+    expect(unfoldedDiary(join(data, "ada")).map((note) => [note.source, note.text])).toEqual([
+      ["shore", 'Your message for the thread "garden" was not sent: that thread was gone by the time your turn in "main" ended.'],
+    ]);
+  });
+});
+
+test("a wake's message with a push reaches the user's phone when the wake ends, and a push asked for too soon after is refused as it is sent", async () => {
+  const pushed: string[] = [];
+  const ntfy = Bun.serve({ port: 0, fetch: async (request) => { pushed.push(await request.text()); return new Response("ok"); } });
+  try {
+    await withCharacter(async ({ script, say, wakeNow, thread }) => {
+      await say("hello");
+      script.sends = undefined; script.closing = "NO_NOTE";
+      script.beatTool = { name: "send_message", input: { text: "The lamp is lit.", push: true } };
+      at(10);
+      await wakeNow();
+      expect(lastToolResult(await thread("wakes"))).toEqual({ text: "It will be posted in this thread when this wake ends. It goes to User's phone then too.", failed: false });
+      expect((await thread("main")).at(-1)?.content).toBe("The lamp is lit.");
+      expect(pushed).toEqual(["The lamp is lit."]);
+
+      script.beatTool = { name: "send_message", input: { text: "Still lit.", push: true } };
+      at(40);
+      await wakeNow();
+      expect(lastToolResult(await thread("wakes"))).toEqual({
+        text: "io: not sent: your last push was Friday 2026-10-30 · 12:10 PM, and the next one is allowed from Saturday 2026-10-31 · 12:10 PM. Send it again without `push` to post it all the same.",
+        failed: true,
+      });
+      expect((await thread("main")).filter((message) => message.role === "assistant" && message.origin === "autonomous").map((message) => message.content)).toEqual(["The lamp is lit."]);
+      expect(pushed).toHaveLength(1);
+    }, (app) => {
+      app.notifications.push_topic = "phone";
+      app.notifications.url = `http://127.0.0.1:${String(ntfy.port)}`;
     });
   } finally {
     await ntfy.stop(true);

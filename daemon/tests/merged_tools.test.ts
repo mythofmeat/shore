@@ -147,14 +147,25 @@ test("send_message takes what to say, a thread's id and whether to push, and can
   expect(await dispatchTool("send_message", { text: "  The lamp is lit.  " }, sending)).toBe("queued");
   expect(await dispatchTool("send_message", { text: "Hello.", thread: " garden ", push: true }, sending)).toBe("queued");
   expect(await dispatchTool("send_message", { text: "Hello.", push: "yes" }, sending)).toBe("queued");
-  expect(asked).toEqual([{ text: "The lamp is lit.", push: false }, { text: "Hello.", thread: "garden", push: true }, { text: "Hello.", push: false }]);
+  expect(await dispatchTool("send_message", { text: "Hello.", push: true }, sending)).toBe("queued");
+  expect(asked).toEqual([{ text: "The lamp is lit.", push: false }, { text: "Hello.", thread: "garden", push: true }, { text: "Hello.", push: false }, { text: "Hello.", push: true }]);
+  asked.length = 1;
+
+  const schemas = schemasFrom(renderToolDefs({ enabled: ["send_message"] }, "ada", "eve"));
+  const rejected = (input: Record<string, unknown>) => argumentRejection({ id: "t1", name: "send_message", input }, schemas);
+  expect(rejected({ text: "!" })).toBeUndefined();
+  expect(rejected({ text: "Hello.", thread: "g" })).toBeUndefined();
+  expect(rejected({ text: "Hello.", thread: "g".repeat(64) })).toBeUndefined();
+  expect(rejected({ text: "" })).toStartWith("The call to send_message was not run because argument `text` must NOT have fewer than 1 characters.");
+  expect(rejected({ text: "Hello.", thread: "" })).toStartWith("The call to send_message was not run because argument `thread` must NOT have fewer than 1 characters.");
+  expect(rejected({ text: "Hello.", thread: "g".repeat(65) })).toStartWith("The call to send_message was not run because argument `thread` must NOT have more than 64 characters.");
   expect(await refused(dispatchTool("send_message", { text: "   " }, sending))).toBe("invalid args: text must be a non-empty string");
   expect(await refused(dispatchTool("send_message", { text: 5 }, sending))).toBe("invalid args: text must be a non-empty string");
   const thread = "invalid args: thread must be a thread's id, as `threads` lists it";
   expect(await refused(dispatchTool("send_message", { text: "Hello.", thread: "the garden" }, sending))).toBe(thread);
   expect(await refused(dispatchTool("send_message", { text: "Hello.", thread: 5 }, sending))).toBe(thread);
   expect(await refused(dispatchTool("send_message", { text: "Hello." }, ctx))).toBe("io: messages can't be sent from here");
-  expect(asked).toHaveLength(3);
+  expect(asked).toHaveLength(1);
 });
 
 test("a config that still names one of those tools is told which tool it is part of now, for the character's tools and a sub-agent's", () => {

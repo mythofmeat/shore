@@ -115,6 +115,12 @@ export interface Sending {
   push: boolean;
 }
 
+export function sendingsHere(here: readonly Outgoing[], images: ImageRef[]): Sending[] {
+  return here.length === 0 && images.length > 0
+    ? [{ text: "", images, push: false }]
+    : here.map((each, at) => ({ text: each.text, images: at === 0 ? images : [], push: each.push }));
+}
+
 export interface Poster {
   emit?: (character: string, revision: number, msg: Message, thread: string) => void;
   notify?: (title: string, body: string, picture?: NotificationPicture) => void;

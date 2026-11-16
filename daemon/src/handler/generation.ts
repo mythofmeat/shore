@@ -82,6 +82,7 @@ import type { McpRegistry } from "../tools/mcp_registry.ts";
 import { schemasFrom } from "../tools/validate.ts";
 import { pruneTurns, redoTurns, replyVersions, undoTurns, WorkspaceRecorder, workspaceTurnsFor } from "../tools/workspace_turns.ts";
 import { characterWorkspace } from "../tools/character_workspace.ts";
+import { shoreLog } from "../log.ts";
 import { sentPicturesDir } from "../storage/sent_pictures.ts";
 import { Outbox, postElsewhere, reachableThreads } from "../autonomy/outbox.ts";
 import { hostZone } from "../ledger/zoned.ts";
@@ -461,24 +462,22 @@ async function runGenerationCore(
     });
     noteAttempt();
     const away = [...outbox.waiting];
-    if (away.length > 0) {
-      const push = deps.push;
-      afterwards.run = async () => {
-        await postElsewhere(away, {
-          character: charName,
-          from: engine.thread,
-          turn: "turn",
-          characterDir: characterDataDir(deps.dataDir, charName),
-          engine: async (thread) => deps.registry.listThreads(charName).some((record) => record.id === thread) ? await deps.registry.getOrCreate(charName, thread) : undefined,
-        }, { provider_key: resolved.providerKey, model: request.model }, {
-          emit: (character, revision, msg, thread) => { emitNewMessageEvent(deps.emitEvent, character, "autonomous", revision, msg, thread); },
-          notify: (title, shown, picture) => { deps.notifier.notify("autonomous_message", title, shown, picture); },
-          ...(push === undefined ? {} : { push: async (message) => await push(charName, message) }),
-          newId: newMessageId,
-          nowIso: now,
-        }, (kind, detail) => { if (kind === "call_failed") deps.log?.warn?.(detail); }, { workspace, dir: sentPicturesDir(deps.dataDir, charName) });
-      };
-    }
+    const push = deps.push;
+    afterwards.run = async () => {
+      await postElsewhere(away, {
+        character: charName,
+        from: engine.thread,
+        turn: "turn",
+        characterDir: characterDataDir(deps.dataDir, charName),
+        engine: async (thread) => deps.registry.listThreads(charName).some((record) => record.id === thread) ? await deps.registry.getOrCreate(charName, thread) : undefined,
+      }, { provider_key: resolved.providerKey, model: request.model }, {
+        emit: (character, revision, msg, thread) => { emitNewMessageEvent(deps.emitEvent, character, "autonomous", revision, msg, thread); },
+        notify: (title, shown, picture) => { deps.notifier.notify("autonomous_message", title, shown, picture); },
+        ...(push === undefined ? {} : { push: async (message) => await push(charName, message) }),
+        newId: newMessageId,
+        nowIso: now,
+      }, (kind, detail) => { if (kind === "call_failed") shoreLog.warn(`shore: ${detail}`); }, { workspace, dir: sentPicturesDir(deps.dataDir, charName) });
+    };
 
     emitPostPersistStreamEnd(turnCtx, engine, params.rid ?? undefined, result);
     await flushFrames();

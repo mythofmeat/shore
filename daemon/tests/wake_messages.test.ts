@@ -2,7 +2,7 @@ import { expect, spyOn, test } from "bun:test";
 import { mkdir } from "node:fs/promises";
 import { join } from "node:path";
 
-import type { BackgroundLoopResult } from "../src/autonomy/background_loop.ts";
+import { dispatchLoopTools, type BackgroundLoopResult, type LoopToolResult } from "../src/autonomy/background_loop.ts";
 import { postMessage, type Poster, type Sending } from "../src/autonomy/outbox.ts";
 import { noteOutcome, roundMessage } from "../src/autonomy/wake.ts";
 import type { Message } from "../src/engine/types.ts";
@@ -135,6 +135,35 @@ test("a message sent with a push pushes what the user is shown, once it is store
   expect((await post({ text: "Again.", push: true })).noted.at(-1)).toEqual(["call_failed", late]);
   const broke = await post({ text: "Again.", push: true }, { push: async () => { throw new Error(`ntfy said no ${"x".repeat(200)}`); } });
   expect(broke.noted.at(-1)).toEqual(["call_failed", `The push that went with a message failed: Error: ntfy said no ${"x".repeat(100)}…`]);
+});
+
+test("a picture a wake's tool made is kept to go with what it sends, and a tool that failed, made none or isn't the picture tool adds nothing", async () => {
+  const made = { path: "/media/lamp.png", caption: "the lamp" };
+  const answers: Record<string, LoopToolResult> = {
+    made: { output: "made the lamp", isError: false, value: made },
+    failed: { output: "no credit", isError: true, value: made },
+    read: { output: "Ada", isError: false, value: made },
+    odd: { output: "done", isError: false, value: "not a picture" },
+    block: { output: "kept", isError: false, block: { type: "tool_result", tool_use_id: "block", content: [{ type: "text", text: "as given" }] } },
+  };
+  const noted: string[] = [];
+  const run = await dispatchLoopTools(
+    [["made", "generate_image", { prompt: "a lamp" }], ["failed", "generate_image", {}], ["read", "read", {}], ["odd", "generate_image", {}], ["block", "read", {}]],
+    { dispatch: async (_name, _input, id) => answers[id ?? ""] ?? { output: "", isError: true }, note: (detail) => { noted.push(detail); } },
+  );
+  expect(run.images).toEqual([{ path: "/media/lamp.png", caption: "the lamp", data: undefined }]);
+  expect(run.results).toEqual([
+    { type: "tool_result", tool_use_id: "made", content: "made the lamp", is_error: false },
+    { type: "tool_result", tool_use_id: "failed", content: "no credit", is_error: true },
+    { type: "tool_result", tool_use_id: "read", content: "Ada", is_error: false },
+    { type: "tool_result", tool_use_id: "odd", content: "done", is_error: false },
+    { type: "tool_result", tool_use_id: "block", content: [{ type: "text", text: "as given" }] },
+  ]);
+  expect(run.captured.map((tool) => [tool.name, tool.input, tool.output, tool.isError]).slice(0, 2)).toEqual([
+    ["generate_image", { prompt: "a lamp" }, "made the lamp", false],
+    ["generate_image", {}, "no credit", true],
+  ]);
+  expect(noted).toEqual(["Tool: generate_image → made the lamp", "Tool: generate_image → no credit", "Tool: read → Ada", "Tool: generate_image → done", "Tool: read → kept"]);
 });
 
 function outcome(loop: Partial<BackgroundLoopResult>, nothingSent = true): [kind: string, detail: string][] {

@@ -1,6 +1,7 @@
 import { afterAll, afterEach, expect, jest, test } from "bun:test";
 import { join } from "node:path";
 import { unfoldedDiary } from "../src/autonomy/diary.ts";
+import { wakeRecord } from "../src/autonomy/wake_record.ts";
 import type { WakeEvent } from "../src/autonomy/wake_log.ts";
 import type { Message } from "../src/engine/types.ts";
 import type { GenerateResponse, SidecarProvider, SidecarRequest } from "../src/llm/types.ts";
@@ -24,8 +25,8 @@ type Script = (request: SidecarRequest, wake: number) => Round;
 
 const READ_SOUL: Round["blocks"] = [{ type: "tool_use", id: "read", name: "read", input: { file_path: "SOUL.md" } }];
 
-function sending(text: string): Round["blocks"] {
-  return [{ type: "tool_use", id: "send", name: "send_message", input: { text } }];
+function sending(text: string, thread?: string): Round["blocks"] {
+  return [{ type: "tool_use", id: "send", name: "send_message", input: { text, ...(thread === undefined ? {} : { thread }) } }];
 }
 
 function sent(request: SidecarRequest): boolean {
@@ -249,6 +250,20 @@ test("a wake in a thread runs to the limit its trigger set, is warned a quarter 
   );
 });
 
+test("a wake stopped at its limit that had sent to another thread delivers it there, and is kept as a wake that sent something", async () => {
+  const seen: SidecarRequest[] = [];
+  await wokenInRing(
+    (request) => sent(request) ? { minutes: 27, blocks: READ_SOUL } : { minutes: 1, blocks: sending("Still at the second act.", "main") },
+    seen,
+    120 * MINUTE,
+    async (world) => {
+      expect((await world.runtime.registry.getOrCreate("ada", "main")).messages().at(-1)).toMatchObject({ role: "assistant", origin: "autonomous", content: "Still at the second act." });
+      expect((await ringEnd(world)).at(-1)).toEqual(["system", "autonomous", "[This wake reached its limit of 2 hours, and Shore stopped it here.]"]);
+      expect(wakeRecord(join(world.config.dirs.data, "ada"), "ring").stopped).toMatchObject({ why: "time", sent: true });
+    },
+  );
+});
+
 test("a wake in a thread still busy at its limit is stopped there, and the thread and the diary say so", async () => {
   const seen: SidecarRequest[] = [];
   await wokenInRing(
@@ -270,6 +285,7 @@ test("a wake in a thread still busy at its limit is stopped there, and the threa
         ["tick_fired", 'Woken in "ring" by trigger "show"'],
         ["timeout", 'Wake in "ring" reached its limit of 2 hours and was stopped'],
       ]);
+      expect(wakeRecord(join(world.config.dirs.data, "ada"), "ring").stopped).toMatchObject({ why: "time", sent: false });
     },
   );
 });

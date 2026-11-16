@@ -39,7 +39,7 @@ import { presence } from "./presence.ts";
 import { firedBy, WAKE_QUIET_MS, type TriggerFiring, type WakeNews, type WakeResult } from "./runner.ts";
 import { sealedListNote, sealedWakeNote } from "./sealed_notes.ts";
 import { digestWords, threadDigest, type ThreadReader } from "./thread_digest.ts";
-import { Outbox, postElsewhere, postMessage, reachableThreads, type Sending } from "./outbox.ts";
+import { Outbox, postElsewhere, postMessage, reachableThreads, sendingsHere } from "./outbox.ts";
 import type { PushOutcome, PushRefusal } from "./push.ts";
 import { spanPhrase, timeLeftPhrase, triggerFiredNote, wakeNewsNote } from "./wake_shape.ts";
 import { keptNote, recordWakeEnd, stopOf, wakeRecord, wakeStopNote, WakeWords, type WakeStopReason } from "./wake_record.ts";
@@ -417,17 +417,13 @@ export async function runWake(character: string, config: LoadedConfig, wake: Wak
     const waiting = stopped === "interrupted" ? [] : outbox.waiting;
     const here = waiting.filter((each) => each.thread === thread);
     const away = waiting.filter((each) => each.thread !== thread);
-    const sendings: Sending[] = here.length === 0 && loop.images.length > 0
-      ? [{ text: "", images: loop.images, push: false }]
-      : here.map((each, at) => ({ text: each.text, images: at === 0 ? loop.images : [], push: each.push }));
+    const sendings = sendingsHere(here, loop.images);
     noteOutcome(character, loop, sendings.length === 0 && away.length === 0, note);
     let sent: Message | undefined;
     for (const sending of sendings) sent = await postMessage(character, request, sending, heard, note, { thread, engine }, pictures) ?? sent;
-    if (away.length > 0) {
-      afterwards = async () => {
-        await postElsewhere(away, { character, from: thread, turn: "wake", characterDir, engine: async (name) => await deps.engine(character, name), now: deps.now }, request, heard, note, pictures);
-      };
-    }
+    afterwards = async () => {
+      await postElsewhere(away, { character, from: thread, turn: "wake", characterDir, engine: async (name) => await deps.engine(character, name), now: deps.now }, request, heard, note, pictures);
+    };
     const keptIn = sent === undefined && log !== undefined ? log.engine : engine;
     const newest = replyVersions(keptIn.messages()).filter((version) => !known.has(version)).at(-1);
     if (newest !== undefined) {
