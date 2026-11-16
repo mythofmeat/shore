@@ -42,7 +42,8 @@ test("a read is held to the result size, the inline picture budget and the pictu
 
   const original = async (extra: Partial<ToolContext>) => await refused(dispatchTool("read", { file_path: "lamp.png", original: true }, { ...ctx, ...extra }));
   expect(await original({})).toBe("");
-  expect(await original({ images: { ...defaultImagesConfig(), read: { tell_model: true, allow_original: false } } })).toBe(
+  const images = defaultImagesConfig();
+  expect(await original({ images: { ...images, read: { ...images.read, allow_original: false } } })).toBe(
     "invalid args: original is turned off by images.read.allow_original; images are sent at the configured size",
   );
 });
