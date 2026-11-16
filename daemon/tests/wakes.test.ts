@@ -630,6 +630,27 @@ test("a wake's own turn in home notifies nobody and isn't counted as unread ther
   });
 });
 
+test("a picture in the opening of a thread the character starts is on that message, and one that can't be found starts no thread and is named", async () => {
+  await withCharacter(async ({ runtime, script, workspace, say, thread }) => {
+    await writeFile(join(workspace, "lamp.png"), await sizedImage(8, 8));
+    await say("hello");
+    script.replyTool = { name: "threads", input: { action: "start", name: "nights", label: "Nights", opening: "The lamp tonight\n![[missing.png]]" } };
+    await say("start it");
+    const refused = lastToolResult(await thread("main"));
+    expect(refused?.failed).toBe(true);
+    expect(String(refused?.text)).toStartWith("io: not started: these pictures in the opening could not be sent:\n- ![[missing.png]]: ");
+    expect(String(refused?.text)).toEndWith("\nStart it again with the names fixed.");
+    expect(runtime.registry.listThreads("ada").map((each) => each.id)).toEqual(["main"]);
+
+    script.replyTool = { name: "threads", input: { action: "start", name: "nights", label: "Nights", opening: "The lamp tonight\n![[lamp.png]]" } };
+    await say("start it again");
+    expect(lastToolResult(await thread("main"))?.failed).toBe(false);
+    expect((await thread("nights")).map((message) => [message.content, message.images])).toEqual([
+      ["The lamp tonight\n![[lamp.png]]", [{ path: expect.stringContaining("/sent/") as string, embed: "![[lamp.png]]", name: "lamp.png" }]],
+    ]);
+  }, (app) => { app.tools.enabled.push("threads"); });
+});
+
 test("a picture a wake sends is on the message it posts in home, and one it only mentions is nowhere", async () => {
   await withCharacter(async ({ script, workspace, say, wakeNow, thread }) => {
     await writeFile(join(workspace, "lamp.png"), await sizedImage(8, 8));

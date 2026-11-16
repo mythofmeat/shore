@@ -4,8 +4,12 @@ import { withConversation } from "../engine/lifecycle.ts";
 import { placeInFolder } from "../engine/thread_layout.ts";
 import type { Message } from "../engine/types.ts";
 import type { ServerMessage } from "../protocol/ServerMessage.ts";
+import { sentPicturesDir } from "../storage/sent_pictures.ts";
+import { characterWorkspace } from "../tools/character_workspace.ts";
+import { ToolIoError } from "../tools/errors.ts";
 import type { StartThreadRequest } from "../tools/start_thread.ts";
 import { emitNewMessageEvent } from "./persistence.ts";
+import { pictureProblems, sendPictures, type PictureSender } from "./pictures.ts";
 
 export interface ThreadStarter {
   registry: CharacterRegistry;
@@ -15,6 +19,13 @@ export interface ThreadStarter {
 
 export async function startCharacterThread(starter: ThreadStarter, character: string, request: StartThreadRequest): Promise<void> {
   const { registry, emitEvent } = starter;
+  const pictures: PictureSender = { workspace: characterWorkspace(registry.effectiveConfig(character), character), dir: sentPicturesDir(starter.dataDir, character) };
+  if (request.opening !== undefined) {
+    const problems = await pictureProblems([request.opening], pictures.workspace);
+    if (problems.length > 0) {
+      throw new ToolIoError(`not started: these pictures in the opening could not be sent:\n${problems.map((problem) => `- ${problem}`).join("\n")}\nStart it again with the names fixed.`);
+    }
+  }
   await registry.createThread(character, request.name, {
     label: request.label,
     compaction: true,
@@ -33,7 +44,7 @@ export async function startCharacterThread(starter: ThreadStarter, character: st
       msg_id: `m_${crypto.randomUUID()}`,
       role: "assistant",
       content: opening,
-      images: [],
+      images: await sendPictures([opening], pictures),
       content_blocks: [{ type: "text", text: opening }],
       alternatives: [],
       timestamp: new Date().toISOString(),
