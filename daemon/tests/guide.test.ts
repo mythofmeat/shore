@@ -276,7 +276,7 @@ test("the guide states each thing a character could otherwise only learn by tryi
   expect(diary).toContain("- Shore keeps your newest 100 entries in all.");
 
   expect(await guide("threads")).toContain("Each must be text of at most 32 KB, and they may come to 128 KB together.");
-  expect(await guide("messages")).toContain("- The message is cut at 300 characters.");
+  expect(await guide("messages")).toContain("- The notification is cut at 300 characters.");
 });
 
 test("the guide says which way to get time for what, and what each way costs", async () => {
@@ -372,7 +372,7 @@ test("the guide says a wake starts fresh in whichever thread it runs, and what i
   expect(wakes).toContain("- The thread's own conversation, or what earlier wakes did there. The thread keeps its conversation, your wakes thread keeps what earlier wakes did, and `chat_logs` finds both.");
   expect(wakes).toContain("- A wake's own working, in what it is shown of a thread.");
   expect(wakes).toContain("A final response of just `NO_NOTE` leaves no note, and the note before it stays the one the next wake starts with.");
-  expect(wakes).toContain("- Text you wrap in `<sendMessage>...</sendMessage>` in that final response is sent to eve. It is posted in the thread the wake ran in.\n");
+  expect(wakes).toContain("- Nothing in that final response is sent to eve. `send_message` sends them a message, posted in the thread the wake ran in when the wake ends; the `messages` topic has the details.\n");
   expect(wakes).toContain("- Everything else is your working: how the wake opened, each round of tool use, and the final response with the note. It goes to your wakes thread, a thread Shore makes the first time it is needed and marks in the list `threads` gives. eve can read it there but doesn't write there, and no wake runs there.\n- The thread the wake ran in keeps how it opened, a line saying where its working went, and the message you sent.\n- A wake in a sealed thread is the exception: its working stays in the sealed thread, which is hidden anyway.\n");
   expect(await guide("threads")).toContain("- Your wakes thread is where Shore keeps the working from your wakes, so that it doesn't crowd the threads they run in. eve reads it but doesn't write there, no wake runs there, and it never compacts: its oldest wakes are moved into the chat logs when it gets long.");
   expect(wakes).toContain("A side thread's purpose and files are in the prompt of a wake there. The files are read afresh as the wake starts, unless eve has just been writing in that thread.");
@@ -418,10 +418,15 @@ test("the guide says how far back the count of messages goes, that the user isn'
   expect(await guide("triggers")).toContain("`messages` is how many of eve's messages are on record, the same figure `activity_heatmap` gives as its total: those from the 90 days before Shore last started, and every one since.");
   expect(await guide("diary")).toContain("- eve isn't shown those entries. Shore keeps them beside the message and puts them only in what you are sent, so in eve's view the message is just what they wrote. Don't answer as if they had read an entry.");
   const messages = await guide("messages");
-  expect(messages).toContain("`send_push` sends a notification to eve's phone, so it reaches them when they don't have Shore open. When something is worth a push is between you and eve. Shore only limits how often.");
+  expect(messages).toContain("`push` on `send_message` also sends the message to eve's phone as a notification, so it reaches them when they don't have Shore open. When something is worth a push is between you and eve. Shore only limits how often.");
   expect(messages).not.toContain("for nothing else");
-  const push = renderToolDefs({ enabled: ["send_push"] }, "Ada", "eve").find((def) => def.name === "send_push")?.description;
-  expect(push).toBe("Send eve a push notification on their phone, which reaches them when they don't have Shore open. eve decides how often you may use it, and a push sent too soon is refused with the time the next one is allowed.");
+  const send = renderToolDefs({ enabled: ["send_message"] }, "Ada", "eve").find((def) => def.name === "send_message")?.description;
+  expect(send).toBe(
+    "Send eve a message. From a wake, where nothing you write reaches them otherwise, it is posted in the thread the wake runs in, or in the one `thread` names. " +
+    "In a conversation your reply is already the message, so there it is only for saying something in another thread. It is delivered when the turn ends, and each call in a turn is its own message. " +
+    "A picture or a video from your workspace goes in it the way notes embed one, as `![[name]]` or `![](path)`; if one can't be found, nothing is sent and the result says which. " +
+    "`push` also sends it to eve's phone, so it reaches them when they don't have Shore open.",
+  );
 });
 
 test("a limit the user changed in their config is the limit the guide shows", async () => {
@@ -443,7 +448,7 @@ test("a limit the user changed in their config is the limit the guide shows", as
   expect(wakes).toContain("after 5 wakes in a row with no message from them, or once 3d have passed since their last message.");
 
   const messages = await guide("messages");
-  expect(messages).toContain("- eve allows one push every 12h. One sent sooner is refused, and the refusal says when the next is allowed.");
+  expect(messages).toContain("- eve allows one push every 12h. A message that asks for one sooner is refused whole, and the refusal says when the next is allowed. Sent again without `push`, it is posted all the same.");
   expect(messages).not.toContain("hasn't given Shore a topic");
   expect(messages).toContain("They pick it from their own list, which is now: `out sailing`.");
 });
@@ -472,7 +477,7 @@ test("the guide says that a check needs the bash tool when the character lacks i
 test("without a push topic or any statuses the guide says pushes are refused and no status can be set", async () => {
   const guide = await guideWith("[presence]\nstatuses = []\n");
   const messages = await guide("messages");
-  expect(messages).toContain("- eve hasn't given Shore a topic to send pushes to, so every push is refused for now. It is their setting `push_topic` under `[notifications]`.");
+  expect(messages).toContain("- eve hasn't given Shore a topic to send pushes to, so a message that asks for one is refused for now. It is their setting `push_topic` under `[notifications]`.");
   expect(messages).not.toContain("allows one push every");
   expect(messages).toContain("Their list of statuses is empty now, so they can't set one.");
   expect(messages).not.toContain("which is now:");
@@ -489,7 +494,7 @@ test("a page ends by naming the tools on it that the user hasn't turned on, and 
   expect(await few("threads")).toEndWith(
     "\n\neve hasn't turned on every tool this page names, so you don't have: `chat_logs`, `threads`, `wake_in_thread`.",
   );
-  expect(await few("messages")).toEndWith("so you don't have: `threads`, `send_push`.");
+  expect(await few("messages")).toEndWith("so you don't have: `threads`, `send_message`.");
   expect(await few()).not.toContain("hasn't turned on every tool");
 });
 
@@ -505,7 +510,7 @@ test("the tools are described in fewer characters than before there was a guide,
   });
   expect(pointers).toEqual([
     ["threads", "threads"],
-    ["list_triggers", "triggers"], ["write_diary", "diary"], ["wake_in_thread", "wakes"], ["send_push", "messages"],
+    ["list_triggers", "triggers"], ["write_diary", "diary"], ["wake_in_thread", "wakes"], ["send_message", "messages"],
   ]);
 
   const withoutGuide = offered(EVERY_TOOL.filter((name) => name !== "guide"));
