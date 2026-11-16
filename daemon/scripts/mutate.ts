@@ -29,17 +29,19 @@ export interface Mutant {
   readonly line: number;
   readonly lastLine: number;
   readonly scopeLines: readonly [number, number] | undefined;
+  readonly functionLines: readonly [number, number] | undefined;
   readonly start: number;
   readonly end: number;
   readonly replacement: string;
 }
 
-type Outcome = "killed" | "survived" | "timeout" | "uncovered";
+type Outcome = "killed" | "survived" | "timeout" | "uncovered" | "leaked";
 
 interface Scope {
   readonly name: string;
   readonly owner: string | undefined;
   readonly lines: readonly [number, number] | undefined;
+  readonly outermost: readonly [number, number] | undefined;
 }
 
 const BINARY: ReadonlyMap<ts.SyntaxKind, string> = new Map([
@@ -94,17 +96,21 @@ function skipped(n: ts.Node): boolean {
 
 function scopeOf(n: ts.Node, outer: Scope, source: ts.SourceFile, starts: readonly number[]): Scope {
   const lines = (): readonly [number, number] => [lineAt(starts, n.getStart(source)), lineAt(starts, n.end)];
+  const inner = (name: string): Scope => {
+    const own = lines();
+    return { name, owner: outer.owner, lines: own, outermost: outer.outermost ?? own };
+  };
   const member = (name: string): string => (outer.owner === undefined ? name : `${outer.owner}.${name}`);
   if (ts.isClassDeclaration(n) || ts.isClassExpression(n)) return { ...outer, owner: n.name?.text ?? outer.owner };
-  if (ts.isFunctionDeclaration(n)) return { name: n.name?.text ?? outer.name, owner: outer.owner, lines: lines() };
-  if (ts.isMethodDeclaration(n) || ts.isGetAccessorDeclaration(n) || ts.isSetAccessorDeclaration(n) || ts.isPropertyDeclaration(n)) return { name: member(n.name.getText(source)), owner: outer.owner, lines: lines() };
-  if (ts.isConstructorDeclaration(n)) return { name: member("constructor"), owner: outer.owner, lines: lines() };
-  if (ts.isClassStaticBlockDeclaration(n)) return { name: member("static"), owner: outer.owner, lines: lines() };
+  if (ts.isFunctionDeclaration(n)) return inner(n.name?.text ?? outer.name);
+  if (ts.isMethodDeclaration(n) || ts.isGetAccessorDeclaration(n) || ts.isSetAccessorDeclaration(n) || ts.isPropertyDeclaration(n)) return inner(member(n.name.getText(source)));
+  if (ts.isConstructorDeclaration(n)) return inner(member("constructor"));
+  if (ts.isClassStaticBlockDeclaration(n)) return inner(member("static"));
   if (ts.isArrowFunction(n) || ts.isFunctionExpression(n)) {
     const { parent } = n;
-    if (ts.isVariableDeclaration(parent) && ts.isIdentifier(parent.name)) return { name: parent.name.text, owner: outer.owner, lines: lines() };
-    if (ts.isPropertyAssignment(parent)) return { name: parent.name.getText(source), owner: outer.owner, lines: lines() };
-    return { ...outer, lines: lines() };
+    if (ts.isVariableDeclaration(parent) && ts.isIdentifier(parent.name)) return inner(parent.name.text);
+    if (ts.isPropertyAssignment(parent)) return inner(parent.name.getText(source));
+    return inner(outer.name);
   }
   return outer;
 }
@@ -173,7 +179,7 @@ export function mutantsOf(file: string, text: string, source: ts.SourceFile): Mu
       visit(child, inner);
     });
   };
-  const top: Scope = { name: "<module>", owner: undefined, lines: undefined };
+  const top: Scope = { name: "<module>", owner: undefined, lines: undefined, outermost: undefined };
   source.forEachChild((child) => {
     visit(child, top);
   });
@@ -195,6 +201,7 @@ export function mutantsOf(file: string, text: string, source: ts.SourceFile): Mu
         line: lineAt(starts, m.start),
         lastLine: lineAt(starts, m.end),
         scopeLines: m.scope.lines,
+        functionLines: m.scope.outermost,
         start: m.start,
         end: m.end,
         replacement: m.replacement,
@@ -223,35 +230,46 @@ export async function allMutants(files: readonly string[]): Promise<Map<string, 
   return result;
 }
 
-export function changedLines(rev: string): Map<string, Set<number>> {
+export interface Changes {
+  readonly lines: Set<number>;
+  readonly deletedAfter: Set<number>;
+}
+
+export function changedLines(rev: string): Map<string, Changes> {
   const diff = Bun.spawnSync(["git", "diff", "--no-color", "--no-ext-diff", "--relative", "--src-prefix=a/", "--dst-prefix=b/", "-U0", "-M", rev, "--", "src"], { cwd: ROOT, stderr: "pipe" });
   if (!diff.success) throw new Error(`git diff ${rev} failed: ${diff.stderr.toString().trim()}`);
-  const changed = new Map<string, Set<number>>();
-  let lines: Set<number> | undefined;
+  const changed = new Map<string, Changes>();
+  let file: Changes | undefined;
   for (const line of diff.stdout.toString().split("\n")) {
     if (line.startsWith("+++ ")) {
       const path = line.slice(4);
-      lines = undefined;
+      file = undefined;
       if (path.startsWith("b/")) {
-        lines = changed.get(path.slice(2)) ?? new Set();
-        changed.set(path.slice(2), lines);
+        file = changed.get(path.slice(2)) ?? { lines: new Set(), deletedAfter: new Set() };
+        changed.set(path.slice(2), file);
       }
       continue;
     }
     const hunk = /^@@ -\d+(?:,\d+)? \+(\d+)(?:,(\d+))? @@/.exec(line);
-    if (hunk === null || lines === undefined) continue;
+    if (hunk === null || file === undefined) continue;
     const first = Number(hunk[1]);
     const count = hunk[2] === undefined ? 1 : Number(hunk[2]);
-    for (let i = 0; i < count; i++) lines.add(first + i);
+    if (count === 0) file.deletedAfter.add(first);
+    for (let i = 0; i < count; i++) file.lines.add(first + i);
   }
   return changed;
 }
 
-export function inDiff(mutant: Mutant, changed: ReadonlyMap<string, ReadonlySet<number>>): boolean {
-  const lines = changed.get(mutant.file);
-  if (lines === undefined) return false;
-  for (let line = mutant.line; line <= mutant.lastLine; line++) if (lines.has(line)) return true;
-  return false;
+export function inDiff(mutant: Mutant, changed: ReadonlyMap<string, Changes>): boolean {
+  const file = changed.get(mutant.file);
+  if (file === undefined) return false;
+  const touched = (from: number, to: number): boolean => {
+    for (let line = from; line <= to; line++) if (file.lines.has(line)) return true;
+    for (const after of file.deletedAfter) if (from <= after && after < to) return true;
+    return false;
+  };
+  if (touched(mutant.line, mutant.lastLine)) return true;
+  return mutant.functionLines !== undefined && touched(mutant.functionLines[0], mutant.functionLines[1]);
 }
 
 export interface Coverage {
@@ -457,33 +475,67 @@ export function likeliestFirst(mutant: Mutant, tests: readonly number[], coverag
   return [...tests].sort((a, b) => rank(a) - rank(b) || (coverage.ms[a] ?? 0) - (coverage.ms[b] ?? 0) || a - b);
 }
 
-async function runMutants(mutants: readonly Mutant[], coverage: Coverage, workers: number): Promise<Result[]> {
+export function failingFile(log: string): string | undefined {
+  let current: string | undefined;
+  for (const line of log.split("\n")) {
+    const header = /^(?:\.\/)?(tests\/\S+\.test\.tsx?):$/.exec(line);
+    if (header !== null) current = header[1];
+    else if (line.startsWith("(fail)")) return current;
+  }
+  return undefined;
+}
+
+async function runMutants(mutants: readonly Mutant[], coverage: Coverage, workers: number): Promise<{ results: Result[]; problems: string[] }> {
   const planned = mutants.map((mutant) => {
     const tests = testsFor(mutant, coverage);
     return { mutant, tests: tests === undefined ? undefined : likeliestFirst(mutant, tests, coverage) };
   });
   const covered = planned.filter((p) => p.tests !== undefined);
   const cost = (tests: readonly number[] | undefined): number => (tests ?? []).reduce((sum, t) => sum + (coverage.ms[t] ?? 0), 0);
+  const timeoutFor = (tests: readonly number[]): number => Math.max(MIN_TIMEOUT_MS, Math.ceil(cost(tests) * TIMEOUT_FACTOR));
+  const paths = (tests: readonly number[]): string[] => tests.map((t) => `./tests/${coverage.tests[t] ?? ""}`);
   covered.sort((a, b) => cost(b.tests) - cost(a.tests));
   const files = covered.reduce((sum, p) => sum + (p.tests?.length ?? 0), 0);
   console.error(`${String(mutants.length)} mutants, ${String(mutants.length - covered.length)} on lines no test runs, ${covered.length === 0 ? "0" : (files / covered.length).toFixed(1)} test files each on average, ${String(workers)} workers`);
-  const ran = await pool(covered, workers, "mutants", async (dir, { mutant, tests }) => {
+  const problems: string[] = [];
+  const together = new Map<string, Promise<boolean>>();
+  const passTogether = (dir: string, tests: readonly number[]): Promise<boolean> => {
+    const key = tests.join(" ");
+    const known = together.get(key);
+    if (known !== undefined) return known;
+    const check = (async () => {
+      const log = join(dir, "together.log");
+      const run = await bunTest(dir, [TEST_TIMEOUT, "--bail", ...paths(tests)], timeoutFor(tests), log);
+      if (run.code === 0) return true;
+      problems.push(`${paths(tests).join(" ")} fail together with nothing mutated (${run.code === undefined ? "timed out" : `exit ${String(run.code)}`}), though each passes on its own: an earlier file leaves something behind that a later one trips on\n${failures(log)}`);
+      return false;
+    })();
+    together.set(key, check);
+    return check;
+  };
+  const ran = await pool(covered, workers, "mutants", async (dir, { mutant, tests }): Promise<Result> => {
+    const chosen = tests ?? [];
     const path = join(dir, mutant.file);
+    const log = join(dir, "mutant.log");
     const pristine = readFileSync(path, "utf8");
     writeFileSync(path, pristine.slice(0, mutant.start) + mutant.replacement + pristine.slice(mutant.end));
+    let run: Awaited<ReturnType<typeof bunTest>>;
     try {
-      const chosen = tests ?? [];
-      const timeout = Math.max(MIN_TIMEOUT_MS, Math.ceil(cost(chosen) * TIMEOUT_FACTOR));
-      const run = await bunTest(dir, [TEST_TIMEOUT, "--bail", ...chosen.map((t) => `./tests/${coverage.tests[t] ?? ""}`)], timeout);
-      const outcome: Outcome = run.code === undefined ? "timeout" : run.code === 0 ? "survived" : "killed";
-      return { mutant, outcome };
+      run = await bunTest(dir, [TEST_TIMEOUT, "--bail", ...paths(chosen)], timeoutFor(chosen), log);
     } finally {
       writeFileSync(path, pristine);
     }
+    if (run.code === 0) return { mutant, outcome: "survived" };
+    const caught: Outcome = run.code === undefined ? "timeout" : "killed";
+    if (chosen.length === 1) return { mutant, outcome: caught };
+    const failed = run.code === undefined ? undefined : failingFile(readFileSync(log, "utf8"));
+    const at = chosen.findIndex((t) => `tests/${coverage.tests[t] ?? ""}` === failed);
+    if (at === 0) return { mutant, outcome: caught };
+    return { mutant, outcome: await passTogether(dir, at === -1 ? chosen : chosen.slice(0, at + 1)) ? caught : "leaked" };
   });
   const uncovered = planned.filter((p) => p.tests === undefined).map(({ mutant }): Result => ({ mutant, outcome: "uncovered" }));
   const order = new Map(mutants.map((m, i) => [m, i]));
-  return [...ran, ...uncovered].sort((a, b) => (order.get(a.mutant) ?? 0) - (order.get(b.mutant) ?? 0));
+  return { results: [...ran, ...uncovered].sort((a, b) => (order.get(a.mutant) ?? 0) - (order.get(b.mutant) ?? 0)), problems };
 }
 
 export function floorFor(file: string): number {
@@ -519,7 +571,8 @@ function shardOf(files: readonly string[], mutants: ReadonlyMap<string, readonly
 }
 
 function describe(result: Result): string {
-  return `${result.outcome === "uncovered" ? "no test runs" : result.outcome}: ${result.mutant.file}:${String(result.mutant.line)}  ${result.mutant.id}`;
+  const shown = result.outcome === "uncovered" ? "no test runs" : result.outcome === "leaked" ? "failed only from another test file's leftovers" : result.outcome;
+  return `${shown}: ${result.mutant.file}:${String(result.mutant.line)}  ${result.mutant.id}`;
 }
 
 async function main(args: readonly string[]): Promise<number> {
@@ -563,7 +616,7 @@ async function main(args: readonly string[]): Promise<number> {
     const rev = diffArg.slice("--diff=".length);
     const changed = changedLines(rev);
     const chosen = [...mutants.values()].flat().filter((m) => inDiff(m, changed));
-    console.log(`${String(chosen.length)} mutants on lines changed since ${rev}`);
+    console.log(`${String(chosen.length)} mutants in functions or on lines changed since ${rev}`);
     if (chosen.length === 0) {
       for (const p of problems) console.log(`problem: ${p}`);
       return problems.length > 0 ? 1 : 0;
@@ -574,7 +627,8 @@ async function main(args: readonly string[]): Promise<number> {
       for (const p of problems) console.log(`problem: ${p}`);
       return 1;
     }
-    const results = await runMutants(chosen, coverage, workers);
+    const { results, problems: leaks } = await runMutants(chosen, coverage, workers);
+    problems.push(...leaks);
     let missed = 0;
     for (const r of results) {
       const caught = r.outcome === "killed" || r.outcome === "timeout";
@@ -583,11 +637,12 @@ async function main(args: readonly string[]): Promise<number> {
         continue;
       }
       if (caught) continue;
-      missed++;
       console.log(describe(r));
+      if (r.outcome !== "leaked") missed++;
     }
-    console.log(`${String(results.length - missed)}/${String(results.length)} mutants on changed lines caught`);
-    if (missed > 0) console.log("Every mutant on a changed line must fail a test. Add a test for each one above, or, when no input can tell a mutant apart from the original, add its id to DAEMON_EQUIVALENTS in scripts/mutation_guards.ts and say why in the pull request.");
+    const leaked = results.filter((r) => r.outcome === "leaked" && !equivalent.has(r.mutant.id)).length;
+    console.log(`${String(results.length - missed - leaked)}/${String(results.length)} mutants in changed functions and on changed lines caught${leaked > 0 ? `, ${String(leaked)} failed only from another test file's leftovers` : ""}`);
+    if (missed > 0) console.log("Every mutant in a changed function, and on any other changed line, must fail a test. Add a test for each one above, or, when no input can tell a mutant apart from the original, add its id to DAEMON_EQUIVALENTS in scripts/mutation_guards.ts and say why in the pull request.");
     for (const p of problems) console.log(`problem: ${p}`);
     return missed > 0 || problems.length > 0 ? 1 : 0;
   }
@@ -606,7 +661,8 @@ async function main(args: readonly string[]): Promise<number> {
     for (const p of problems) console.log(`problem: ${p}`);
     return problems.length > 0 ? 1 : 0;
   }
-  const results = await runMutants(chosen, coverage, workers);
+  const { results, problems: leaks } = await runMutants(chosen, coverage, workers);
+  problems.push(...leaks);
   const showSurvivors = args.includes("--survivors");
   let below = 0;
   let caughtAll = 0;
@@ -614,7 +670,7 @@ async function main(args: readonly string[]): Promise<number> {
   for (const file of targets) {
     const mine = results.filter((r) => r.mutant.file === file);
     const counted = mine.filter((r) => !equivalent.has(r.mutant.id));
-    for (const r of mine) if (equivalent.has(r.mutant.id) && r.outcome !== "survived" && r.outcome !== "uncovered") problems.push(`listed as equivalent, but a test catches it: ${r.mutant.id}`);
+    for (const r of mine) if (equivalent.has(r.mutant.id) && (r.outcome === "killed" || r.outcome === "timeout")) problems.push(`listed as equivalent, but a test catches it: ${r.mutant.id}`);
     const caught = counted.filter((r) => r.outcome === "killed" || r.outcome === "timeout").length;
     caughtAll += caught;
     countedAll += counted.length;
@@ -624,10 +680,11 @@ async function main(args: readonly string[]): Promise<number> {
     if (failing) below++;
     const uncovered = counted.filter((r) => r.outcome === "uncovered").length;
     const timedOut = counted.filter((r) => r.outcome === "timeout").length;
-    const notes = [uncovered > 0 ? `${String(uncovered)} on lines no test runs` : "", timedOut > 0 ? `${String(timedOut)} timed out` : ""].filter((n) => n !== "").join(", ");
+    const leaked = counted.filter((r) => r.outcome === "leaked").length;
+    const notes = [uncovered > 0 ? `${String(uncovered)} on lines no test runs` : "", timedOut > 0 ? `${String(timedOut)} timed out` : "", leaked > 0 ? `${String(leaked)} failed only from another test file's leftovers` : ""].filter((n) => n !== "").join(", ");
     console.log(`${failing ? "BELOW" : "ok   "} ${(rate * 100).toFixed(1).padStart(5)}% (floor ${String(Math.round(floor * 100))}%) ${String(caught)}/${String(counted.length)}${notes === "" ? "" : ` (${notes})`}  ${file}`);
     if (!showSurvivors && !failing) continue;
-    for (const r of counted) if (r.outcome === "survived" || r.outcome === "uncovered") console.log(`    ${describe(r)}`);
+    for (const r of counted) if (r.outcome === "survived" || r.outcome === "uncovered" || r.outcome === "leaked") console.log(`    ${describe(r)}`);
   }
   console.log(`${String(caughtAll)}/${String(countedAll)} mutants caught`);
   for (const p of problems) console.log(`problem: ${p}`);

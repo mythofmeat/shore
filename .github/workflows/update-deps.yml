@@ -43,19 +43,13 @@ jobs:
           body: |
             Bun, every daemon package and every client crate at their latest versions, majors included,
             with the generated files they change. The weekly workflow merges this once every check
-            and the mutation pass succeed on it, then cuts a patch release.
-
-  mutation:
-    needs: update
-    uses: ./.github/workflows/mutation.yml
-    with:
-      ref: ${{ (needs.update.outputs.operation == 'created' || needs.update.outputs.operation == 'updated') && needs.update.outputs.sha || '' }}
+            on it passes, then cuts a patch release. The nightly mutation pass covers it once it is on main.
 
   merge:
-    needs: [update, mutation]
+    needs: update
     if: needs.update.outputs.operation == 'created' || needs.update.outputs.operation == 'updated'
     runs-on: ubuntu-24.04
-    timeout-minutes: 60
+    timeout-minutes: 120
     permissions:
       actions: write
       contents: write
@@ -67,9 +61,14 @@ jobs:
           PR: ${{ needs.update.outputs.number }}
           SHA: ${{ needs.update.outputs.sha }}
         run: |
-          gh pr checks "$PR" --watch --interval 30 >/dev/null || true
-          failed=$(gh pr checks "$PR" --json name,bucket \
-            --jq '[.[] | select(.bucket != "pass" and .bucket != "skipping") | .name] | join(", ")')
+          rollup() { gh pr view "$PR" --json statusCheckRollup --jq "$1"; }
+          for _ in $(seq 200); do
+            if [ "$(rollup '.statusCheckRollup | length')" -gt 0 ] && [ "$(rollup '[.statusCheckRollup[] | select(.status != "COMPLETED")] | length')" -eq 0 ]; then
+              break
+            fi
+            sleep 30
+          done
+          failed=$(rollup '[.statusCheckRollup[] | select(.status != "COMPLETED" or (.conclusion != "SUCCESS" and .conclusion != "SKIPPED" and .conclusion != "NEUTRAL")) | .name] | join(", ")')
           if [ -n "$failed" ]; then
             echo "::error::#$PR stays open and nothing is released: $failed did not pass."
             exit 1
