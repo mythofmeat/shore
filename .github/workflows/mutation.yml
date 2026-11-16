@@ -1,11 +1,8 @@
 name: mutation
 
 on:
-  workflow_call:
-    inputs:
-      ref:
-        type: string
-        default: ""
+  schedule:
+    - cron: "0 14 * * *"
   workflow_dispatch:
     inputs:
       files:
@@ -17,7 +14,24 @@ permissions:
   contents: read
 
 jobs:
+  changed:
+    if: github.event_name == 'schedule'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    outputs:
+      commits: ${{ steps.main.outputs.commits }}
+    steps:
+      - id: main
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          since=$(date -u -d '25 hours ago' +%Y-%m-%dT%H:%M:%SZ)
+          echo "commits=$(gh api "repos/$GH_REPO/commits?sha=main&since=$since&per_page=1" --jq length)" >> "$GITHUB_OUTPUT"
+
   mutate-daemon:
+    needs: changed
+    if: ${{ !cancelled() && (github.event_name != 'schedule' || needs.changed.outputs.commits != '0') }}
     runs-on: ubuntu-24.04
     timeout-minutes: 240
     strategy:
@@ -29,8 +43,6 @@ jobs:
         working-directory: daemon
     steps:
       - uses: actions/checkout@v7
-        with:
-          ref: ${{ inputs.ref }}
       - uses: oven-sh/setup-bun@v2
         with:
           bun-version-file: daemon/.bun-version
@@ -49,10 +61,19 @@ jobs:
       - env:
           FILES: ${{ inputs.files }}
         run: |
+          set -o pipefail
           read -ra files <<< "$FILES"
-          bun run mutate --shard=${{ matrix.shard }}/16 --workers=4 --survivors "${files[@]}"
+          bun run mutate --shard=${{ matrix.shard }}/16 --workers=4 --survivors "${files[@]}" | tee "$RUNNER_TEMP/mutation.txt"
+      - if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@v7
+        with:
+          name: mutation-daemon-${{ matrix.shard }}
+          path: ${{ runner.temp }}/mutation.txt
+          if-no-files-found: ignore
 
   mutate-client:
+    needs: changed
+    if: ${{ !cancelled() && (github.event_name != 'schedule' || needs.changed.outputs.commits != '0') }}
     runs-on: ubuntu-24.04
     timeout-minutes: 360
     strategy:
@@ -64,8 +85,6 @@ jobs:
         working-directory: client
     steps:
       - uses: actions/checkout@v7
-        with:
-          ref: ${{ inputs.ref }}
       - uses: oven-sh/setup-bun@v2
         with:
           bun-version-file: daemon/.bun-version
@@ -79,5 +98,59 @@ jobs:
       - env:
           FILES: ${{ inputs.files }}
         run: |
+          set -o pipefail
           read -ra files <<< "$FILES"
-          bun ../daemon/scripts/mutate_client.ts --shard=${{ matrix.shard }}/12 --workers=2 --survivors "${files[@]}"
+          bun ../daemon/scripts/mutate_client.ts --shard=${{ matrix.shard }}/12 --workers=2 --survivors "${files[@]}" | tee "$RUNNER_TEMP/mutation.txt"
+      - if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@v7
+        with:
+          name: mutation-client-${{ matrix.shard }}
+          path: ${{ runner.temp }}/mutation.txt
+          if-no-files-found: ignore
+
+  report:
+    needs: [changed, mutate-daemon, mutate-client]
+    if: ${{ !cancelled() && github.event_name == 'schedule' && needs.changed.outputs.commits != '0' }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      issues: write
+    steps:
+      - uses: actions/download-artifact@v8
+        with:
+          pattern: mutation-*
+          path: reports
+      - env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          DAEMON: ${{ needs.mutate-daemon.result }}
+          CLIENT: ${{ needs.mutate-client.result }}
+          RUN: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          title="The nightly mutation pass fails on main"
+          open=$(gh issue list --state open --limit 200 --json number,title --jq "[.[] | select(.title == \"$title\")][0].number // empty")
+          if [ "$DAEMON" = success ] && [ "$CLIENT" = success ]; then
+            if [ -n "$open" ]; then
+              gh issue close "$open" --comment "The mutation pass on $GITHUB_SHA passes: $RUN"
+            fi
+            exit 0
+          fi
+          {
+            echo "The mutation pass on $GITHUB_SHA failed (daemon shards: $DAEMON, client shards: $CLIENT): $RUN"
+            echo
+            echo "Every file below its floor with what survived in it, then every problem:"
+            echo
+            echo '```'
+            cat reports/*/mutation.txt 2>/dev/null | awk '
+              /^BELOW / { keep = 1; print; next }
+              /^problem: / { keep = 1; print; next }
+              /^(ok |[0-9]+\/[0-9]+ mutants caught)/ { keep = 0; next }
+              keep && /^    / { print }
+            ' | head -c 60000
+            echo '```'
+          } > body.md
+          if [ -n "$open" ]; then
+            gh issue comment "$open" --body-file body.md
+          else
+            gh issue create --title "$title" --body-file body.md
+          fi
