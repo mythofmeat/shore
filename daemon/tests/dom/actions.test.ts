@@ -1,26 +1,25 @@
-import { afterAll, afterEach, beforeAll, describe, expect, spyOn, test } from "bun:test";
+import { afterEach, describe, expect, spyOn, test } from "bun:test";
 
 import type { Message } from "../../src/protocol/Message.ts";
 import { catalogue, connect, LISTING, type FakeSocket } from "./daemon.ts";
 import { useDom } from "./dom.ts";
 
-useDom("http://shore.test:7340/workspace/ada/story");
-
 const lasting: (() => void)[] = [];
 let socket: FakeSocket;
 let answer: (request: Record<string, unknown>) => unknown = catalogue;
 
-beforeAll(async () => {
-  Object.assign(globalThis, { SHORE_WEB_CONTRACT: "c1", SHORE_WEB_PROTOCOL: 2 });
-  const state = await import("../../src/browser/app/state.ts");
-  socket = await connect(state.workspace.connection, lasting, (request) => answer(request));
-});
-
-afterAll(async () => {
-  const state = await import("../../src/browser/app/state.ts");
-  state.workspace.connection.stop();
-  for (const restore of lasting.splice(0).reverse()) restore();
-  for (const key of ["SHORE_WEB_CONTRACT", "SHORE_WEB_PROTOCOL"]) Reflect.deleteProperty(globalThis, key);
+useDom("http://shore.test:7340/workspace/ada/story", {
+  start: async () => {
+    Object.assign(globalThis, { SHORE_WEB_CONTRACT: "c1", SHORE_WEB_PROTOCOL: 2 });
+    const state = await import("../../src/browser/app/state.ts");
+    socket = await connect(state.workspace.connection, lasting, (request) => answer(request));
+  },
+  stop: async () => {
+    const state = await import("../../src/browser/app/state.ts");
+    state.workspace.connection.stop();
+    for (const restore of lasting.splice(0).reverse()) restore();
+    for (const key of ["SHORE_WEB_CONTRACT", "SHORE_WEB_PROTOCOL"]) Reflect.deleteProperty(globalThis, key);
+  },
 });
 
 const restores: (() => void)[] = [];

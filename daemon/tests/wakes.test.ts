@@ -407,7 +407,7 @@ test("what a wake wraps in sendMessage tags alongside a tool call stays in its w
   });
 });
 
-test("a wake whose trigger names no thread runs on home's model, and its ending never compacts home, however many wakes home holds", async () => {
+test("a wake whose trigger names no thread runs on home's model, and its ending never compacts home, however many wakes home holds or however long its message makes home", async () => {
   await withCharacter(async ({ runtime, script, say, wakeNow, thread, command }) => {
     await runtime.registry.setThreadModel("ada", "main", "pinned");
     await say("hello");
@@ -425,6 +425,28 @@ test("a wake whose trigger names no thread runs on home's model, and its ending 
     app.compaction.keep_recent_turns = 0;
     app.compaction.min_turns = 1;
     app.compaction.max_turns = 2;
+  });
+
+  await withCharacter(async ({ script, data, say, wakeNow, thread }) => {
+    await say("hello");
+    script.closing = `<sendMessage>${"The keeper's log runs on. ".repeat(400)}</sendMessage>`;
+    at(10);
+    await wakeNow();
+    await queuedCompactionsEnded(data, "ada");
+
+    expect(script.calls).not.toContain("compaction");
+    const home = await thread("main");
+    expect(home).toHaveLength(5);
+    expect(home.slice(0, 2).map((message) => message.content)).toEqual(["hello", "reply to: hello"]);
+    expect(home[2]?.content).toStartWith("[wake]");
+    expect(home.at(-1)?.content).toStartWith("The keeper's log runs on.");
+    expect(home.at(-1)?.content.length).toBeGreaterThan(10_000);
+  }, (app) => {
+    app.compaction.enabled = true;
+    app.compaction.keep_recent_turns = 0;
+    app.compaction.min_turns = 1;
+    app.compaction.max_turns = 0;
+    app.compaction.max_context_tokens = 200;
   });
 });
 
@@ -2713,6 +2735,10 @@ test("a wake doesn't bring a thread nearer its compaction, which counts the turn
     await queuedCompactionsEnded(data, "ada");
     expect(compactions(script), "by the size of the thread, which the wake itself was never sent").toBe(1);
     expect(await thread("ring")).toEqual([]);
+    expect(runtime.autonomy.log("ada", 100).filter((event) => event.kind !== "tool_use").map((event) => [event.kind, event.detail]).slice(-2)).toEqual([
+      ["tick_fired", 'Woken in "ring" by trigger "show"'],
+      ["message_skipped", "Wake completed — no message sent"],
+    ]);
   }, (app) => {
     long(app);
     app.compaction.max_turns = 0;
@@ -2810,6 +2836,23 @@ test("wakes from before the user first wrote in a thread are put away the same w
     expect(await openers()).toEqual(["30"]);
     expect((await thread("log")).slice(0, 2).map((message) => message.content)).toEqual(["how is it going?", "reply to: how is it going?"]);
     expect(compactions()).toBe(0);
+  });
+
+  await wakesIn("log", true, (app) => {
+    app.compaction.keep_recent_turns = 0;
+    app.compaction.max_turns = 0;
+    app.compaction.max_context_tokens = 1_000;
+  }, async ({ thread, say }, { wake, openers, compactions }) => {
+    await wake(10, "One.");
+    await wake(12, "Two.");
+    at(15);
+    await say("how is it going?", "log");
+    expect(await openers()).toEqual(["10", "12"]);
+    await wake(30, `<sendMessage>${"The keeper's log runs on. ".repeat(400)}</sendMessage>`);
+    expect(await openers()).toEqual(["30"]);
+    expect((await thread("log")).slice(0, 2).map((message) => message.content)).toEqual(["how is it going?", "reply to: how is it going?"]);
+    expect((await thread("log")).at(-1)?.content).toStartWith("The keeper's log runs on.");
+    expect(compactions(), "however far past its size what was said there now is").toBe(0);
   });
 });
 
