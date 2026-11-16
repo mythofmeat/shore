@@ -1,11 +1,13 @@
-import { expect, test } from "bun:test";
+import { expect, spyOn, test } from "bun:test";
 import { mkdir } from "node:fs/promises";
 import { join } from "node:path";
 
 import type { BackgroundLoopResult } from "../src/autonomy/background_loop.ts";
-import { postWakeMessage, roundMessage } from "../src/autonomy/wake.ts";
+import { postMessage, type Poster, type Sending } from "../src/autonomy/outbox.ts";
+import { noteOutcome, roundMessage } from "../src/autonomy/wake.ts";
 import type { Message } from "../src/engine/types.ts";
 import type { SidecarRequest } from "../src/llm/types.ts";
+import { shoreLog } from "../src/log.ts";
 import { CharacterWorkspace } from "../src/tools/character_workspace.ts";
 import { transparentPng } from "./support/test_images.ts";
 import { testTmp } from "./support/tmp.ts";
@@ -33,29 +35,38 @@ interface Posted {
   noted: [kind: string, detail: string][];
 }
 
-async function post(loop: Partial<BackgroundLoopResult>, asked = ASKED, append?: (message: Message) => Promise<void>): Promise<Posted> {
-  const { pictures } = await sender();
+interface Posting {
+  asked?: SidecarRequest;
+  append?: (message: Message) => Promise<void>;
+  push?: Poster["push"];
+  dir?: (dir: string) => Promise<void>;
+}
+
+async function post(sending: Partial<Sending>, posting: Posting = {}): Promise<Posted> {
+  const { dir, pictures } = await sender();
+  await posting.dir?.(dir);
   const posted: Posted = { kept: undefined, stored: [], emitted: [], notified: [], noted: [] };
-  posted.kept = await postWakeMessage(
+  posted.kept = await postMessage(
     "ada",
-    asked,
-    { sendMessageText: undefined, images: [], rounds: 1, ...loop },
+    posting.asked ?? ASKED,
+    { text: "", images: [], push: false, ...sending },
     {
       newId: () => "m_sent",
       nowIso: () => AT,
       emit: (character, revision, msg, thread) => { posted.emitted.push([character, revision, msg.msg_id, thread]); },
       notify: (title, body) => { posted.notified.push([title, body]); },
+      ...(posting.push === undefined ? {} : { push: posting.push }),
     },
     (kind, detail) => { posted.noted.push([kind, detail]); },
-    { thread: "main", engine: { appendMessage: append ?? (async (message) => { posted.stored.push(message); }), currentRevision: () => 7 } },
+    { thread: "main", engine: { appendMessage: posting.append ?? (async (message) => { posted.stored.push(message); }), currentRevision: () => 7 } },
     pictures,
   );
   return posted;
 }
 
-test("what a wake sends is stored as the character's own message, with the model that wrote it and any pictures it made", async () => {
+test("a message is stored as the character's own, unprompted, with the model that wrote it and any pictures it made", async () => {
   const posted = await post({
-    sendMessageText: "The lamp is lit.",
+    text: "The lamp is lit.",
     images: [{ path: "/sent/lamp.png", caption: "the lamp", data: "QUJD" }, { path: "/sent/bare.png" }],
   });
   const { version, ...message } = posted.stored[0] ?? {};
@@ -79,60 +90,92 @@ test("what a wake sends is stored as the character's own message, with the model
   expect(posted.noted).toEqual([["message_sent", "Autonomous message sent: The lamp is lit."]]);
 });
 
+test("a picture embedded in a message goes with it", async () => {
+  const posted = await post({ text: "Look: ![[lamp.png]]" }, { dir: async (dir) => { await Bun.write(join(dir, "lamp.png"), transparentPng(16, 16)); } });
+  expect(posted.stored[0]?.images.map((image) => [image.name, image.embed])).toEqual([["lamp.png", "![[lamp.png]]"]]);
+});
+
 test("a message from a model with no name or provider key is stored without them", async () => {
-  const posted = await post({ sendMessageText: "Hello." }, UNNAMED);
+  const posted = await post({ text: "Hello." }, { asked: UNNAMED });
   const stored = posted.stored[0] ?? {};
   expect(Object.keys(stored).sort()).toEqual(["alternatives", "content", "content_blocks", "images", "msg_id", "origin", "role", "timestamp", "version"]);
 });
 
-test("the log shows the first eighty characters of what a wake sent", async () => {
+test("the log shows the first eighty characters of what was sent", async () => {
   const long = `${"a".repeat(79)}bcd and the rest of a long message`;
-  const posted = await post({ sendMessageText: long });
+  const posted = await post({ text: long });
   expect(posted.noted).toEqual([["message_sent", `Autonomous message sent: ${"a".repeat(79)}b`]]);
   expect(posted.notified).toEqual([["Shore - ada", long]]);
 });
 
-test("a message that can't be stored isn't shown to clients, and the wake is told nothing was kept", async () => {
-  const posted = await post({ sendMessageText: "The lamp is lit." }, ASKED, async () => { throw new Error("disk full"); });
-  expect(posted.kept).toBeUndefined();
-  expect(posted.emitted).toEqual([]);
+test("a message that can't be stored isn't shown to clients, and the log says why", async () => {
+  const said = spyOn(shoreLog, "error").mockImplementation(() => {});
+  try {
+    const posted = await post({ text: "The lamp is lit." }, { append: async () => { throw new Error("disk full"); } });
+    expect(posted.kept).toBeUndefined();
+    expect(posted.emitted).toEqual([]);
+    expect(said.mock.calls.map((call) => String(call[0]))).toEqual(["shore: a message for ada could not be delivered to main: Error: disk full"]);
+  } finally {
+    said.mockRestore();
+  }
 });
 
-test("a wake that sent nothing says so in the log, and one whose model call failed says why instead", async () => {
-  expect((await post({})).noted).toEqual([["message_skipped", "Wake completed — no message sent"]]);
-  const failed = await post({ failedRound: 2, failure: new Error("the provider hung up") });
-  expect(failed.noted).toEqual([["call_failed", "Model call failed on round 2 — the provider hung up"]]);
-  expect(failed.stored).toEqual([]);
-  expect(failed.kept).toBeUndefined();
-  const long = await post({ failedRound: 0, failure: new Error("x".repeat(300)) });
-  expect(long.noted).toEqual([["call_failed", `Model call failed on round 0 — ${"x".repeat(200)}…`]]);
-  const timedOut = await post({ failedRound: 3, failure: new Error("aborted"), timedOut: true });
-  expect(timedOut.noted).toEqual([]);
+test("a message sent with a push pushes what the user is shown, once it is stored, and the log says when the push didn't go", async () => {
+  const pushed: string[] = [];
+  const sent = await post({ text: "The lamp is lit.", push: true }, { push: async (message) => { pushed.push(message); return { kind: "sent", nextAt: 0 }; } });
+  expect(pushed).toEqual(["The lamp is lit."]);
+  expect(sent.noted).toEqual([["message_sent", "Autonomous message sent: The lamp is lit."]]);
+  expect((await post({ text: "No push asked." }, { push: async (message) => { pushed.push(message); return { kind: "sent", nextAt: 0 }; } })).noted).toHaveLength(1);
+  expect(pushed).toHaveLength(1);
+
+  const late = "The push that went with a message was not sent: by then a push was no longer allowed";
+  const tooSoon = await post({ text: "Again.", push: true }, { push: async () => ({ kind: "too_soon", lastAt: 0, nextAt: 1 }) });
+  expect(tooSoon.noted).toEqual([["message_sent", "Autonomous message sent: Again."], ["call_failed", late]]);
+  expect(tooSoon.stored.map((message) => message.content)).toEqual(["Again."]);
+  expect((await post({ text: "Again.", push: true })).noted.at(-1)).toEqual(["call_failed", late]);
+  const broke = await post({ text: "Again.", push: true }, { push: async () => { throw new Error(`ntfy said no ${"x".repeat(200)}`); } });
+  expect(broke.noted.at(-1)).toEqual(["call_failed", `The push that went with a message failed: Error: ntfy said no ${"x".repeat(100)}…`]);
 });
 
-test("a wake that a budget stops partway says which budget, and still sends what it had written", async () => {
-  const blocked = Object.assign(new Error("budget \"beats\" is over its month limit"), { name: "BudgetBlocked", summary: "budget \"beats\" is over its month limit ($4.00/$4.00)" });
-  const paused = await post({ failedRound: 1, failure: new Error("generation failed", { cause: blocked }), sendMessageText: "Half done." });
-  expect(paused.noted).toEqual([
-    ["budget_paused", 'Wake paused on round 1 — budget "beats" is over its month limit ($4.00/$4.00)'],
-    ["message_sent", "Autonomous message sent: Half done."],
-  ]);
-  expect(paused.stored.map((message) => message.content)).toEqual(["Half done."]);
-  const bare = await post({ failedRound: 1, failure: Object.assign(new Error("over the limit"), { name: "BudgetBlocked" }) });
-  expect(bare.noted).toEqual([["budget_paused", "Wake paused on round 1 — over the limit"]]);
-});
-
-async function round(given: Parameters<typeof roundMessage>[0], asked = ASKED): Promise<Message> {
-  const { pictures } = await sender();
-  return await roundMessage(given, asked, { newId: () => "m_round", nowIso: () => AT }, pictures);
+function outcome(loop: Partial<BackgroundLoopResult>, nothingSent = true): [kind: string, detail: string][] {
+  const noted: [kind: string, detail: string][] = [];
+  const said = spyOn(shoreLog, "error").mockImplementation(() => {});
+  const told = spyOn(shoreLog, "info").mockImplementation(() => {});
+  try {
+    noteOutcome("ada", { ...loop }, nothingSent, (kind, detail) => { noted.push([kind, detail]); });
+  } finally {
+    said.mockRestore();
+    told.mockRestore();
+  }
+  return noted;
 }
 
-test("each round of a wake is stored with the model that answered it, falling back to the model that was asked", async () => {
-  const blocks = [{ type: "text" as const, text: "Reading the log." }];
-  expect(await round({ role: "assistant", blocks, model: "claude-lamp-20261030" })).toStrictEqual({
+test("a wake that sent nothing says so in the log, and one whose model call failed says why instead", () => {
+  expect(outcome({})).toEqual([["message_skipped", "Wake completed — no message sent"]]);
+  expect(outcome({}, false)).toEqual([]);
+  expect(outcome({ failedRound: 2, failure: new Error("the provider hung up") })).toEqual([["call_failed", "Model call failed on round 2 — the provider hung up"]]);
+  expect(outcome({ failedRound: 0, failure: new Error("x".repeat(300)) })).toEqual([["call_failed", `Model call failed on round 0 — ${"x".repeat(200)}…`]]);
+  expect(outcome({ failedRound: 3, failure: new Error("aborted"), timedOut: true })).toEqual([]);
+});
+
+test("a wake that a budget stops partway says which budget", () => {
+  const blocked = Object.assign(new Error("budget \"beats\" is over its month limit"), { name: "BudgetBlocked", summary: "budget \"beats\" is over its month limit ($4.00/$4.00)" });
+  expect(outcome({ failedRound: 1, failure: new Error("generation failed", { cause: blocked }) }, false)).toEqual([
+    ["budget_paused", 'Wake paused on round 1 — budget "beats" is over its month limit ($4.00/$4.00)'],
+  ]);
+  expect(outcome({ failedRound: 1, failure: Object.assign(new Error("over the limit"), { name: "BudgetBlocked" }) })).toEqual([["budget_paused", "Wake paused on round 1 — over the limit"]]);
+});
+
+function round(given: Parameters<typeof roundMessage>[0], asked = ASKED): Message {
+  return roundMessage(given, asked, { newId: () => "m_round", nowIso: () => AT });
+}
+
+test("each round of a wake is stored with the model that answered it, falling back to the model that was asked", () => {
+  const blocks = [{ type: "text" as const, text: "Reading the log. ![[lamp.png]]" }];
+  expect(round({ role: "assistant", blocks, model: "claude-lamp-20261030" })).toStrictEqual({
     msg_id: "m_round",
     role: "assistant",
-    content: "Reading the log.",
+    content: "Reading the log. ![[lamp.png]]",
     images: [],
     content_blocks: blocks,
     alternatives: [],
@@ -140,31 +183,19 @@ test("each round of a wake is stored with the model that answered it, falling ba
     provider_key: "anthropic",
     model: "claude-lamp-20261030",
   });
-  expect((await round({ role: "assistant", blocks, model: "" })).model).toBe("claude-lamp");
-  expect((await round({ role: "assistant", blocks })).model).toBe("claude-lamp");
-  const unnamed = await round({ role: "assistant", blocks }, UNNAMED);
+  expect(round({ role: "assistant", blocks, model: "" }).model).toBe("claude-lamp");
+  expect(round({ role: "assistant", blocks }).model).toBe("claude-lamp");
+  const unnamed = round({ role: "assistant", blocks }, UNNAMED);
   expect(Object.keys(unnamed).sort()).toEqual(["alternatives", "content", "content_blocks", "images", "msg_id", "role", "timestamp"]);
 });
 
-test("what Shore adds to a wake is marked as not written by the user, and tool results are left as they are", async () => {
-  const nudge = await round({ role: "system", blocks: [{ type: "text", text: "[System nudge]" }], model: "claude-other" });
+test("what Shore adds to a wake is marked as not written by the user, and tool results are left as they are", () => {
+  const nudge = round({ role: "system", blocks: [{ type: "text", text: "[System nudge]" }], model: "claude-other" });
   expect(nudge).toStrictEqual({
     msg_id: "m_round", role: "system", content: "[System nudge]", images: [], content_blocks: [{ type: "text", text: "[System nudge]" }],
     alternatives: [], timestamp: AT, origin: "autonomous",
   });
-  expect((await round({ role: "user", blocks: [{ type: "text", text: "[Your message has not been sent yet.]" }] })).origin).toBe("autonomous");
-  const results = await round({ role: "user", blocks: [{ type: "tool_result", tool_use_id: "t1", content: "Ada", is_error: false }] });
+  expect(round({ role: "user", blocks: [{ type: "text", text: "[Something fired.]" }] }).origin).toBe("autonomous");
+  const results = round({ role: "user", blocks: [{ type: "tool_result", tool_use_id: "t1", content: "Ada", is_error: false }] });
   expect(Object.keys(results).sort()).toEqual(["alternatives", "content", "content_blocks", "images", "msg_id", "role", "timestamp"]);
-});
-
-test("a round that sends a picture keeps it with the round, and a round that only mentions one does not", async () => {
-  const { dir, pictures } = await sender();
-  await Bun.write(join(dir, "lamp.png"), transparentPng(16, 16));
-  const deps = { newId: () => "m_round", nowIso: () => AT };
-  const sent = await roundMessage({ role: "assistant", blocks: [{ type: "text", text: "Done.\n<sendMessage>Look: ![[lamp.png]]</sendMessage>" }] }, ASKED, deps, pictures);
-  expect(sent.images.map((image) => [image.name, image.embed])).toEqual([["lamp.png", "![[lamp.png]]"]]);
-  const mentioned = await roundMessage({ role: "assistant", blocks: [{ type: "text", text: "I could send ![[lamp.png]] later." }] }, ASKED, deps, pictures);
-  expect(mentioned.images).toEqual([]);
-  const quoted = await roundMessage({ role: "user", blocks: [{ type: "text", text: "<sendMessage>![[lamp.png]]</sendMessage>" }] }, ASKED, deps, pictures);
-  expect(quoted.images).toEqual([]);
 });

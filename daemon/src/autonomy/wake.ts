@@ -34,7 +34,7 @@ import { pruneTurns, replyVersions, WorkspaceRecorder, workspaceTurnsFor } from 
 import { backgroundModelRequest, backgroundTaskModel } from "./background_model.ts";
 import { addDiaryNote, closingNote, recentDiary } from "./diary.ts";
 import type { WakeEventKind } from "./wake_log.ts";
-import { runBackgroundLoop, type BackgroundLoopDeps, type LoopRound } from "./background_loop.ts";
+import { runBackgroundLoop, type BackgroundLoopDeps, type BackgroundLoopResult, type LoopRound } from "./background_loop.ts";
 import { presence } from "./presence.ts";
 import { firedBy, WAKE_QUIET_MS, type TriggerFiring, type WakeNews, type WakeResult } from "./runner.ts";
 import { sealedListNote, sealedWakeNote } from "./sealed_notes.ts";
@@ -176,6 +176,11 @@ function noteFailure(character: string, round: number, failure: unknown, note: N
   const reason = truncateSummary(describeError(failure), 200);
   shoreLog.error(`shore: wake call for ${character} failed on round ${round}: ${reason}`);
   note("call_failed", `Model call failed on round ${round} — ${reason}`);
+}
+
+export function noteOutcome(character: string, loop: Pick<BackgroundLoopResult, "failedRound" | "failure" | "timedOut">, nothingSent: boolean, note: Note): void {
+  if (loop.failedRound !== undefined && loop.timedOut !== true) noteFailure(character, loop.failedRound, loop.failure, note);
+  else if (nothingSent && loop.failedRound === undefined) note("message_skipped", "Wake completed — no message sent");
 }
 
 export function roundMessage(round: LoopRound, request: SidecarRequest, deps: Pick<WakeDeps, "newId" | "nowIso">): Message {
@@ -415,8 +420,7 @@ export async function runWake(character: string, config: LoadedConfig, wake: Wak
     const sendings: Sending[] = here.length === 0 && loop.images.length > 0
       ? [{ text: "", images: loop.images, push: false }]
       : here.map((each, at) => ({ text: each.text, images: at === 0 ? loop.images : [], push: each.push }));
-    if (loop.failedRound !== undefined && loop.timedOut !== true) noteFailure(character, loop.failedRound, loop.failure, note);
-    else if (sendings.length === 0 && away.length === 0 && loop.failedRound === undefined) note("message_skipped", "Wake completed — no message sent");
+    noteOutcome(character, loop, sendings.length === 0 && away.length === 0, note);
     let sent: Message | undefined;
     for (const sending of sendings) sent = await postMessage(character, request, sending, heard, note, { thread, engine }, pictures) ?? sent;
     if (away.length > 0) {

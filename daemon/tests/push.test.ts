@@ -83,5 +83,5 @@ test("the push topic and wait are read from [notifications], and described in th
   expect(await read('[notifications]\npush_topic = "phone"\npush_every = "12h"\n')).toEqual(["phone", 43_200]);
 
   const described = configSchema({ instancesAt: () => [] }).filter((entry) => entry.key.startsWith("notifications.push_")).map((entry) => [entry.key, (entry.description ?? "").split(" ").slice(0, 3).join(" ")]);
-  expect(described).toEqual([["notifications.push_every", "Least time between"], ["notifications.push_topic", "ntfy topic the"]]);
+  expect(described).toEqual([["notifications.push_every", "Least time between"], ["notifications.push_topic", "ntfy topic a"]]);
 });
