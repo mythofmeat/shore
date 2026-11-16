@@ -68,6 +68,7 @@ interface Script {
   calls: string[];
   held: { started: PromiseWithResolvers<void>; release: PromiseWithResolvers<void> } | undefined;
   closing: string;
+  sends?: string | undefined;
   finishes?: (string | undefined)[];
   aside?: string | undefined;
   again?: number;
@@ -135,10 +136,11 @@ function scriptedProvider(script: Script): SidecarProvider {
         end.started.resolve();
         await end.release.promise;
       }
+      const sending: GenerateResponse["content_blocks"] = script.sends === undefined ? [] : [{ type: "tool_use", id: `send-${String(script.wakes.length)}`, name: "send_message", input: { text: script.sends } }];
       const beatTool = resultsIn ? undefined : script.beatTool;
       if (beatTool !== undefined) {
         script.beatTool = undefined;
-        yield* eventsForResponse(respond(request, [{ type: "tool_use", id: `tool-${String(script.wakes.length)}`, name: beatTool.name, input: beatTool.input }]));
+        yield* eventsForResponse(respond(request, [...sending, { type: "tool_use", id: `tool-${String(script.wakes.length)}`, name: beatTool.name, input: beatTool.input }]));
         return;
       }
       yield* eventsForResponse(respond(request, resultsIn
@@ -148,6 +150,7 @@ function scriptedProvider(script: Script): SidecarProvider {
           ]
         : [
             ...(script.aside === undefined ? [] : [{ type: "text" as const, text: script.aside }]),
+            ...sending,
             { type: "tool_use", id: `read-${String(script.wakes.length)}`, name: "read", input: { file_path: "SOUL.md" } },
           ], resultsIn ? script.finishes?.shift() : undefined));
     },
@@ -173,6 +176,7 @@ interface Harness {
   shown: (thread: string, match: (message: Message) => boolean) => Promise<void>;
   heard: (thread: string) => boolean;
   events: ServerMessage[];
+  fromReplies: ServerMessage[];
   command: (name: string, args: Record<string, unknown>, thread?: string) => Promise<ServerMessage>;
 }
 
@@ -184,7 +188,7 @@ async function withCharacter(run: (h: Harness) => Promise<void>, configure?: (ap
   app.chat.model = "fixture";
   app.chat.max_retries = 0;
   app.compaction.enabled = false;
-  app.tools.enabled = ["read"];
+  app.tools.enabled = ["read", "send_message"];
   app.triggers.enabled = true;
   configure?.(app);
   const models = emptyCatalog();
@@ -202,10 +206,11 @@ async function withCharacter(run: (h: Harness) => Promise<void>, configure?: (ap
   const workspace = join(config.dirs.config, "characters", "ada", "workspace");
   await mkdir(workspace, { recursive: true });
   await writeFile(join(workspace, "SOUL.md"), "Ada");
-  const script: Script = { wakes: [], replies: [], calls: [], held: undefined, closing: "<sendMessage>I found the keeper's log.</sendMessage>" };
+  const script: Script = { wakes: [], replies: [], calls: [], held: undefined, closing: "NO_NOTE", sends: "I found the keeper's log." };
   const emitted: Emitted[] = [];
   const histories: History[] = [];
   const events: ServerMessage[] = [];
+  const fromReplies: ServerMessage[] = [];
   const waiting: { thread: string; match: (message: Message) => boolean; resolve: () => void }[] = [];
   const env = { [KEY_ENV]: "fixture-key" };
   const runtime = await createRuntime({
@@ -220,7 +225,7 @@ async function withCharacter(run: (h: Harness) => Promise<void>, configure?: (ap
   try {
     const autonomy = new TurnAutonomyBridge(runtime.autonomy);
     const deps = buildGenerationDeps({
-      runtime, providers: runtime.providers, autonomy, diagnostics: new Diagnostics(), env, emitEvent: () => {},
+      runtime, providers: runtime.providers, autonomy, diagnostics: new Diagnostics(), env, emitEvent: (event) => { fromReplies.push(event); },
     });
     await run({
       runtime,
@@ -230,6 +235,7 @@ async function withCharacter(run: (h: Harness) => Promise<void>, configure?: (ap
       emitted,
       heard: (thread) => histories.some((history) => history.selected_thread === thread),
       events,
+      fromReplies,
       shown: async (thread, match) => {
         if (histories.some((history) => history.selected_thread === thread && history.messages.some(match))) return;
         const { promise, resolve } = Promise.withResolvers<void>();
@@ -334,12 +340,12 @@ test("a wake in home leaves there how it opened, a line saying where its working
     const kept = (await thread("main")).slice(2);
     expect(stored(kept)).toEqual([
       ["user", "autonomous", `[wake]\n\n${started}`],
-      ["system", "autonomous", 'This wake\'s working is in "Wakes": 1 tool call.'],
+      ["system", "autonomous", 'This wake\'s working is in "Wakes": 2 tool calls.'],
       ["assistant", "autonomous", "I found the keeper's log."],
     ]);
     expect(kept.map((message) => [message.shown_later, message.wake_note])).toEqual([
       [undefined, undefined],
-      ['[Your working in this wake is in your thread "wakes", not here: 1 tool call. Your note from the end of it follows.]', "[sent to User as the next message here]"],
+      ['[Your working in this wake is in your thread "wakes", not here: 2 tool calls. Your note from the end of it follows.]', "NO_NOTE"],
       [undefined, undefined],
     ]);
     const working = await thread("wakes");
@@ -353,8 +359,13 @@ test("a wake in home leaves there how it opened, a line saying where its working
     expect(working[0]?.content).not.toContain("the keeper's name is Mara");
     expect(working[3]?.content_blocks).toEqual([
       { type: "thinking", thinking: "She asked about the lamp, so I'll tell her.", signature: "sig-1" },
-      { type: "text", text: '[sent to User in "main"]' },
+      { type: "text", text: "NO_NOTE" },
     ]);
+    expect(working[1]?.content_blocks.flatMap((block) => block.type === "tool_use" ? [[block.name, block.input]] : [])).toEqual([
+      ["send_message", { text: "I found the keeper's log." }],
+      ["read", { file_path: "SOUL.md" }],
+    ]);
+    expect(working[2]?.content_blocks.flatMap((block) => block.type === "tool_result" ? [block.content] : []).at(0)).toBe("It will be posted in this thread when this wake ends.");
     const first = script.wakes[0] as SidecarRequest;
     expect(first.messages).toHaveLength(1);
     expect(textOf(first)).toStartWith("[wake]\n\nThe last of what was said in this thread:\n\n");
@@ -410,7 +421,7 @@ test("a call under a tool's old name is answered with the tool it became, stays 
     await say("and now?");
     const sent = script.replies.at(-1) as SidecarRequest;
     expect(sent.messages.flatMap((message) => message.content).flatMap((block) => block.type === "tool_use" ? [block.name] : [])).toEqual(["search_chat_logs"]);
-    expect(sent.tools?.map((tool) => tool.name)).toEqual(["read", "chat_logs"]);
+    expect(sent.tools?.map((tool) => tool.name)).toEqual(["read", "chat_logs", "send_message"]);
     expect((await thread("main")).at(-1)?.content).toBe("reply to: and now?");
   }, (app) => { app.tools.enabled.push("chat_logs"); });
 });
@@ -527,7 +538,7 @@ test("a picture a wake sends is on the message it posts in home, and one it only
   await withCharacter(async ({ script, workspace, say, wakeNow, thread }) => {
     await writeFile(join(workspace, "lamp.png"), await sizedImage(8, 8));
     await writeFile(join(workspace, "sketch.png"), await sizedImage(16, 16));
-    script.closing = "I kept ![[sketch.png]] to myself.\n\n<sendMessage>\nThe lamp tonight\n![[lamp.png]]\n</sendMessage>";
+    script.sends = "The lamp tonight\n![[lamp.png]]"; script.closing = "I kept ![[sketch.png]] to myself.";
     await say("hello");
     at(10);
     await wakeNow();
@@ -638,7 +649,7 @@ test("with triggers off an idle conversation is still compacted and later archiv
 test("home is compacted for the turns the user wrote, however many wakes ran there, and a reply after a wake is sent what set the wake off without the wake's prompt", async () => {
   await withCharacter(async ({ script, data, say, wakeNow }) => {
     const compactions = (): number => script.calls.filter((call) => call === "compaction").length;
-    script.closing = "NO_NOTE";
+    script.sends = undefined; script.closing = "NO_NOTE";
     let minute = 0;
     for (const [turn, wakes] of [["one", 2], ["two", 2], ["three", 1]] as const) {
       at(minute += 1);
@@ -691,7 +702,7 @@ test("an idle conversation is compacted once the user has written min_turns turn
   let root = "";
   await withCharacter(async ({ runtime, script, data, say, wakeNow }) => {
     root = dirname(data);
-    script.closing = "NO_NOTE";
+    script.sends = undefined; script.closing = "NO_NOTE";
     await say("one");
     for (const minute of [1, 2, 3]) {
       at(minute);
@@ -780,7 +791,7 @@ function times(text: string, part: string): number {
 test("what a wake says at the end, apart from the message it sends, is the note its later wakes in that thread start with: in the diary for a day, and after that kept for the next one", async () => {
   await withCharacter(async ({ script, say, wakeNow, thread }) => {
     await say("hello");
-    script.closing = "Read the keeper's log up to March.\n<sendMessage>I found the keeper's log.</sendMessage>";
+    script.sends = "I found the keeper's log."; script.closing = "Read the keeper's log up to March.";
     at(10);
     await wakeNow();
     expect(textOf(script.wakes[0] as SidecarRequest)).not.toContain("[Your diary");
@@ -789,7 +800,7 @@ test("what a wake says at the end, apart from the message it sends, is the note 
     const diary = diaryText([left(10, "Read the keeper's log up to March.")], DIARY_FOR_WAKE, hostZone());
     script.wakes.length = 0;
     script.aside = "March is done, so April is next.";
-    script.closing = "NO_NOTE";
+    script.sends = undefined; script.closing = "NO_NOTE";
     at(70);
     await wakeNow();
     expect(textOf(script.wakes[0] as SidecarRequest)).toContain(`in this thread.]\n\n${diary}\n\n${byHand("1:10 PM")}\n\n[Current time: `);
@@ -799,7 +810,7 @@ test("what a wake says at the end, apart from the message it sends, is the note 
 
     script.wakes.length = 0;
     script.aside = undefined;
-    script.closing = "<sendMessage>Goodnight.</sendMessage>";
+    script.sends = "Goodnight."; script.closing = "NO_NOTE";
     at(130);
     await wakeNow();
     const third = textOf(script.wakes[0] as SidecarRequest);
@@ -809,7 +820,7 @@ test("what a wake says at the end, apart from the message it sends, is the note 
     at(24 * 60 + 8);
     await say("good morning");
     script.wakes.length = 0;
-    script.closing = "NO_NOTE";
+    script.sends = undefined; script.closing = "NO_NOTE";
     at(24 * 60 + 9);
     await wakeNow();
     expect(textOf(script.wakes[0] as SidecarRequest)).toContain(diary);
@@ -835,7 +846,7 @@ test("the user's next message in each thread arrives with the notes left since t
     await runtime.registry.createThread("ada", "study");
     await say("hello");
     expect(textOf(script.replies[0] as SidecarRequest)).not.toContain("diary");
-    script.closing = "The log is read up to March.";
+    script.sends = undefined; script.closing = "The log is read up to March.";
     at(10);
     runtime.autonomy.wakeFor("ada", { name: "log", reason: "the log", at: T0 + 10 * MINUTE, thread: "study" });
     await runtime.autonomy.tick();
@@ -1083,7 +1094,7 @@ test("every wake counts towards going dormant, in a thread or not: after the use
     await say("hello");
     await say("psst", "garden");
     expect(log()).toEqual([]);
-    script.closing = "NO_NOTE";
+    script.sends = undefined; script.closing = "NO_NOTE";
     await wakeIn(10, "ring");
     at(11);
     await say("thanks");
@@ -1117,7 +1128,7 @@ test("every wake counts towards going dormant, in a thread or not: after the use
     await say("I'm back");
     expect(dormant(runtime).at(-1)).toBe("User returned — idle counter reset");
     expect(runtime.autonomy.status("ada")).toMatchObject({ state: "Active", wakes_without_user: 0 });
-    script.closing = "NO_NOTE";
+    script.sends = undefined; script.closing = "NO_NOTE";
     at(271);
     await runtime.autonomy.tick();
     expect(script.wakes, "what fired while it was dormant is not made up").toHaveLength(0);
@@ -1579,7 +1590,7 @@ test("a note the character writes in its diary from a conversation reaches its w
     expect(textOf(script.replies.at(-1) as SidecarRequest)).toEndWith(
       '[New in your diary. Each entry says where it came from.]\n\nyour note, written in "main" · Friday 2026-10-30 · 12:05 PM\nWater the fern on Friday.\n\n[End of your diary.]\nthe beans are up',
     );
-    script.closing = "NO_NOTE";
+    script.sends = undefined; script.closing = "NO_NOTE";
     at(10);
     await wakeNow();
     expect(textOf(script.wakes[0] as SidecarRequest)).toContain('your note, written in "main" · Friday 2026-10-30 · 12:05 PM\nWater the fern on Friday.');
@@ -1648,7 +1659,7 @@ test("the character can list its triggers from a conversation, and is told when 
   });
 });
 
-test("the character's push reaches the user's topic once, at normal priority, and a second one the same day is refused", async () => {
+test("from a conversation the character sends to another thread once its reply is done, and with a push the message reaches the user's topic once, at normal priority", async () => {
   const pushed: { path: string; method: string; title: string | null; auth: string | null; priority: string | null; body: string }[] = [];
   const ntfy = Bun.serve({
     port: 0,
@@ -1660,66 +1671,71 @@ test("the character's push reaches the user's topic once, at normal priority, an
       return new Response("ok");
     },
   });
+  const without = "Send it again without `push` to post it all the same.";
   try {
-    await withCharacter(async ({ script, say, thread }) => {
+    await withCharacter(async ({ runtime, script, fromReplies, say, thread }) => {
+      await runtime.registry.createThread("ada", "garden");
       const result = async (): Promise<{ text: string; failed: boolean }> => {
         const last = lastToolResult(await thread("main"));
         return { text: String(last?.text), failed: last?.failed === true };
       };
+      const garden = async () => (await thread("garden")).map((message) => [message.role, message.origin, message.content]);
       await say("hello");
-      script.replyTool = { name: "send_push", input: { message: "  I miss you.  " } };
+      script.replyTool = { name: "send_message", input: { text: "  I miss you.  ", thread: "garden", push: true } };
       at(5);
       await say("you can reach my phone now");
-      expect(await result()).toEqual({ text: "Sent to peggy's phone. The next push is allowed from Saturday 2026-10-31 · 12:05 PM.", failed: false });
+      expect(await result()).toEqual({ text: 'It will be posted in "garden" when this turn ends. It goes to peggy\'s phone then too.', failed: false });
+      expect(await garden()).toEqual([["assistant", "autonomous", "I miss you."]]);
+      expect((await thread("main")).at(-1)?.content).toBe("reply to: you can reach my phone now");
+      expect(fromReplies.flatMap((event) => event.type === "new_message" && event.thread === "garden" ? [[event.role, event.origin, event.content]] : [])).toEqual([["assistant", "autonomous", "I miss you."]]);
       expect(pushed).toEqual([{ path: "/phone", method: "POST", title: "Shore - ada", auth: "Bearer fixture-key", priority: null, body: "I miss you." }]);
 
-      script.replyTool = { name: "send_push", input: { message: "Still here." } };
+      script.replyTool = { name: "send_message", input: { text: "Still here.", thread: "garden", push: true } };
       at(65);
       await say("try again");
-      expect(await result()).toMatchObject({ failed: true });
-      expect((await result()).text).toContain("not sent: your last push was Friday 2026-10-30 · 12:05 PM, and the next one is allowed from Saturday 2026-10-31 · 12:05 PM");
+      expect(await result()).toEqual({
+        text: `io: not sent: your last push was Friday 2026-10-30 · 12:05 PM, and the next one is allowed from Saturday 2026-10-31 · 12:05 PM. ${without}`,
+        failed: true,
+      });
+      script.replyTool = { name: "send_message", input: { text: "Still here.", thread: "garden" } };
+      await say("without the push, then");
+      expect(await result()).toEqual({ text: 'It will be posted in "garden" when this turn ends.', failed: false });
+      expect(await garden()).toEqual([["assistant", "autonomous", "I miss you."], ["assistant", "autonomous", "Still here."]]);
       expect(pushed).toHaveLength(1);
 
-      for (const input of [{ message: "   " }, { message: "" }, { message: "Hello.", loud: true }]) {
-        script.replyTool = { name: "send_push", input };
+      const refused = async (input: Record<string, unknown>): Promise<string> => {
+        script.replyTool = { name: "send_message", input };
         await say("and again");
-        expect(await result(), JSON.stringify(input)).toMatchObject({ failed: true });
-      }
-      script.replyTool = { name: "send_push", input: { message: "   " } };
-      await say("once more");
-      expect((await result()).text).toContain("message must be a non-empty string");
-      expect(pushed).toHaveLength(1);
+        const answer = await result();
+        expect(answer.failed, JSON.stringify(input)).toBe(true);
+        return answer.text;
+      };
+      const here = "io: your reply here is already a message to peggy; `send_message` is for saying something in another thread, so name one with `thread`";
+      expect(await refused({ text: "Hello." })).toBe(here);
+      expect(await refused({ text: "Hello.", thread: "main" })).toBe(here);
+      expect(await refused({ text: "Hello.", thread: "nowhere" })).toBe('io: you have no thread "nowhere" to send it in; `threads` lists the ones you have');
+      expect(await refused({ text: "Hello.", thread: "the garden" })).toBe("invalid args: thread must be a thread's id, as `threads` lists it");
+      expect(await refused({ text: "   ", thread: "garden" })).toBe("invalid args: text must be a non-empty string");
+      expect(await refused({ text: "Hello.", thread: "garden", loud: true })).toStartWith("The call to send_message was not run because argument `loud` is not allowed.");
+      expect(await refused({ text: "Look: ![[missing.png]]", thread: "garden" })).toStartWith("io: not sent: these pictures in it could not be sent:\n- ![[missing.png]]: ");
+      expect(await garden()).toHaveLength(2);
     }, (app) => {
-      app.tools.enabled = [...app.tools.enabled, "send_push"];
       app.notifications.push_topic = "phone";
       app.notifications.url = `http://127.0.0.1:${String(ntfy.port)}`;
       app.notifications.token_env = KEY_ENV;
     });
 
-    await withCharacter(async ({ script, say, thread }) => {
+    await withCharacter(async ({ runtime, script, say, thread }) => {
+      await runtime.registry.createThread("ada", "garden");
       await say("hello");
-      script.replyTool = { name: "send_push", input: { message: "I miss you." } };
+      script.replyTool = { name: "send_message", input: { text: "I miss you.", thread: "garden", push: true } };
       await say("can you reach my phone?");
-      const last = lastToolResult(await thread("main"));
-      expect(last?.failed).toBe(true);
-      expect(String(last?.text)).toContain("push notifications aren't set up: peggy hasn't given Shore a topic to send them to");
+      expect(lastToolResult(await thread("main"))).toEqual({
+        text: `io: not sent: push notifications aren't set up, because peggy hasn't given Shore a topic to send them to. ${without}`,
+        failed: true,
+      });
+      expect(await thread("garden")).toEqual([]);
       expect(pushed).toHaveLength(1);
-    }, (app) => { app.tools.enabled = [...app.tools.enabled, "send_push"]; });
-
-    await withCharacter(async ({ script, say, thread }) => {
-      await say("hello");
-      script.replyTool = { name: "send_push", input: { message: "Hello.", loud: true } };
-      await say("loudly");
-      expect(lastToolResult(await thread("main"))?.failed).toBe(true);
-      expect(pushed).toHaveLength(1);
-      script.replyTool = { name: "send_push", input: { message: "!" } };
-      await say("briefly");
-      expect(lastToolResult(await thread("main"))?.failed).toBe(false);
-      expect(pushed.map((each) => each.body)).toEqual(["I miss you.", "!"]);
-    }, (app) => {
-      app.tools.enabled = [...app.tools.enabled, "send_push"];
-      app.notifications.push_topic = "phone";
-      app.notifications.url = `http://127.0.0.1:${String(ntfy.port)}`;
     });
   } finally {
     await ntfy.stop(true);
@@ -1767,7 +1783,7 @@ test("a wake starts with the user's status and its age while one is set, and a s
   await withCharacter(async ({ runtime, script, workspace, data, say, wakeNow }) => {
     await writeFile(join(workspace, "TRIGGERS.toml"), `[status]\nwhen = "status_changed"\ncheck = 'echo "now: $SHORE_USER_STATUS"'\nwake = false\n`);
     await say("hello");
-    script.closing = "NO_NOTE";
+    script.sends = undefined; script.closing = "NO_NOTE";
     at(1);
     await runtime.triggers.tick();
     await wakeNow();
@@ -1898,9 +1914,9 @@ function wakeShown(now: string, shown: readonly string[], lines: readonly string
     ...lines,
     `[Current time: Friday 2026-10-30 · ${now}]`,
     `[This is a wake in your thread "${thread}": time of your own, without User having written. A wake starts fresh. Nothing that happened in this thread before is in front of you, only what is above: what was said here since your last wake here, the note that wake left you, and your diary. Any files this thread keeps are in your prompt, and the rest of what was said here is in your chat logs. You are free to use your tools as you wish.`,
-    "What you write in your final response is your note to yourself. It goes in your diary, where your other turns see it for the next day, and your next wake here starts with it however much later that is. So end with where you stopped and what comes next. Keep it short, because a long note is cut, and put anything longer in a file that the note points to. To say something to User, wrap it in `<sendMessage>...</sendMessage>` tags in your final response. That text is posted in this thread as a message to them. " + (working === null
-      ? "The rest of what you do in a wake stays in this thread as your working: they can read it if they look, but nothing tells them it is there. Your later turns here aren't shown it either, only a line saying how much of it there was."
-      : `The rest of what you do in a wake, this note included, goes to "${working}", the thread Shore keeps for the working from your wakes, and they can read it there. This thread gets a line saying where it went. Your later turns here are shown that line, how much working there was and your note, not the working itself.`),
+    "What you write in your final response is your note to yourself. It goes in your diary, where your other turns see it for the next day, and your next wake here starts with it however much later that is. So end with where you stopped and what comes next. Keep it short, because a long note is cut, and put anything longer in a file that the note points to. Nothing in it is sent to User. To say something to them, call `send_message`: the message is posted in this thread when the wake ends. " + (working === null
+      ? "What you do in a wake stays in this thread as your working: they can read it if they look, but nothing tells them it is there. Your later turns here aren't shown it either, only a line saying how much of it there was."
+      : `What you do in a wake, this note included, goes to "${working}", the thread Shore keeps for the working from your wakes, and they can read it there. This thread gets a line saying where it went. Your later turns here are shown that line, how much working there was and your note, not the working itself.`),
     `A wake here can run for up to ${limit}. After ${nudgeAfter}, you will get a nudge to wrap up, with a few more rounds to finish. If User writes in this thread while you are working, the wake stops at the end of the step it is on so that you can answer them, and you are woken here again to pick it up once they have been quiet here for 10 minutes. If they write in another thread, the wake goes on, and another turn of you answers them there. That turn can change your workspace too, so when you commit, stage only the files you changed.]`,
   ].join("\n\n");
 }
@@ -1959,7 +1975,7 @@ test("a trigger that names a thread wakes the character there, fresh, with what 
     await say("tell me a story in parts", "ring");
     await runtime.triggers.tick();
     markThreadRead(data, "ada", "ring", 2);
-    script.closing = "Told part one; the fox is at the gate.\n<sendMessage>Part one: the fox came to the gate.</sendMessage>";
+    script.sends = "Part one: the fox came to the gate."; script.closing = "Told part one; the fox is at the gate.";
     emitted.length = 0;
     const held = hold();
     script.beatHeld = held;
@@ -2016,7 +2032,7 @@ test("a trigger that names a thread wakes the character there, fresh, with what 
     );
 
     script.wakes.length = 0;
-    script.closing = "NO_NOTE";
+    script.sends = undefined; script.closing = "NO_NOTE";
     await fires(runtime, 71);
     expect(script.wakes.map((request) => request.context?.thread)).toEqual(["ring", "ring"]);
     expect(turnsOf(script.wakes[0])).toEqual([["user", wakeShown("1:11 PM", [
@@ -2121,7 +2137,7 @@ test("the user's message stops a wake in that thread at the end of its step and 
     at(21);
     await runtime.autonomy.tick();
     expect(script.wakes).toHaveLength(1);
-    script.closing = "Told part one.\n<sendMessage>Part one: Rue came to the gate.</sendMessage>";
+    script.sends = "Part one: Rue came to the gate."; script.closing = "Told part one.";
     at(22);
     await runtime.autonomy.tick();
     expect(script.wakes).toHaveLength(3);
@@ -2155,7 +2171,7 @@ test("a wake's working goes to the wakes thread for the user, and a reply in the
     await say("tell me a story in parts", "ring");
     script.aside = "Let me find my place.";
     script.again = 1;
-    script.closing = "Told part one.\n<sendMessage>Part one: the fox came to the gate.</sendMessage>";
+    script.sends = "Part one: the fox came to the gate."; script.closing = "Told part one.";
     await wakesInRing(runtime, 11);
 
     const first = wakeText("12:11 PM", [RING_FIRED("12:11 PM")]);
@@ -2185,7 +2201,7 @@ test("a wake's working goes to the wakes thread for the user, and a reply in the
 
     script.wakes.length = 0;
     script.aside = undefined;
-    script.closing = "Nothing to add yet.";
+    script.sends = undefined; script.closing = "Nothing to add yet.";
     await wakesInRing(runtime, 12);
     const second = wakeText("12:12 PM", [RING_FIRED("12:12 PM")]);
     const shownSecond = wakeShown("12:12 PM", [
@@ -2241,7 +2257,7 @@ test("a wake's working doesn't count towards its thread's size, which it isn't k
     at(1);
     await say("tell me a story in parts", "ring");
     script.aside = aLot;
-    script.closing = "Told part one.";
+    script.sends = undefined; script.closing = "Told part one.";
     await wakesInRing(runtime, 11);
     at(12);
     await say("and then?", "ring");
@@ -2276,7 +2292,7 @@ test("a wake's working doesn't count towards its thread's size, which it isn't k
     at(1);
     await say("tell me a story in parts", "ring");
     script.aside = aLot;
-    script.closing = "Told part one.";
+    script.sends = undefined; script.closing = "Told part one.";
     await wakesInRing(runtime, 11);
     await queuedCompactionsEnded(data, "ada");
     expect(compactions(script)).toBe(0);
@@ -2300,7 +2316,7 @@ test("a wake waits for the user to have been quiet in its thread for ten minutes
     await say("hello");
     at(5);
     await say("one more thing", "ring");
-    script.closing = "NO_NOTE";
+    script.sends = undefined; script.closing = "NO_NOTE";
     expect(runtime.autonomy.wakeFor("ada", { name: "show", reason: "Tell the next part.", at: T0 + 6 * MINUTE, thread: "ring" })).toBe("queued");
     at(14);
     await say("is the lamp lit?");
@@ -2331,7 +2347,7 @@ test("from a wake in home the character hands off into another thread, and is wo
     await runtime.registry.createThread("ada", "ring");
     await say("hello");
     script.beatTool = { name: "wake_in_thread", input: { thread: " ring ", reason: " Tell part two. ", limit: "6h" } };
-    script.closing = "NO_NOTE";
+    script.sends = undefined; script.closing = "NO_NOTE";
     at(10);
     await wakeNow();
     expect(lastToolResult(await thread("wakes"))).toEqual({
@@ -2339,7 +2355,7 @@ test("from a wake in home the character hands off into another thread, and is wo
     });
     expect(script.wakes.map((request) => request.context?.thread)).toEqual(["main", "main"]);
 
-    script.closing = "Told part two.\n<sendMessage>Part two: the gate opened.</sendMessage>";
+    script.sends = "Part two: the gate opened."; script.closing = "Told part two.";
     at(11);
     await runtime.autonomy.tick();
     expect(script.wakes.map((request) => request.context?.thread)).toEqual(["main", "main", "ring", "ring"]);
@@ -2350,7 +2366,7 @@ test("from a wake in home the character hands off into another thread, and is wo
     expect(runtime.autonomy.log("ada", 100).filter((event) => event.kind === "tick_fired").at(-1)?.detail).toBe('Woken in "ring" by a hand-off from "main"');
 
     script.beatTool = { name: "wake_in_thread", input: { thread: "ring", reason: "Tell part three." } };
-    script.closing = "NO_NOTE";
+    script.sends = undefined; script.closing = "NO_NOTE";
     at(30);
     await wakeNow();
     expect(lastToolResult(await thread("wakes"))?.text).toBe('Shore will wake you in "ring" for up to 30 minutes, once this turn is over and peggy has been quiet there for 10 minutes.');
@@ -2388,7 +2404,7 @@ test("a hand-off is refused for a thread the character doesn't have, the one it 
     expect(await refused({ thread: "t".repeat(64), reason: "r" })).toBe(`io: you have no thread "${"t".repeat(64)}" to be woken in; \`threads\` lists the ones you have`);
     expect(await refused({ thread: "t".repeat(65), reason: "r" })).toStartWith("The call to wake_in_thread was not run because argument `thread` must NOT have more than 64 characters.");
     expect(await refused({ thread: "ring", reason: "r", urgent: true })).toStartWith("The call to wake_in_thread was not run because argument `urgent` is not allowed.");
-    script.closing = "NO_NOTE";
+    script.sends = undefined; script.closing = "NO_NOTE";
     at(20);
     await runtime.autonomy.tick();
     expect(script.wakes).toEqual([]);
@@ -2433,7 +2449,7 @@ test("a second wake asked for in a thread is refused while the first is still wa
       text: `${granted("ring", "1 hour")}\nThis takes the place of the wake you had waiting there, ${waiting}`, failed: false,
     });
 
-    script.closing = "NO_NOTE";
+    script.sends = undefined; script.closing = "NO_NOTE";
     at(40);
     await runtime.autonomy.tick();
     expect(script.wakes.map((request) => request.context?.thread)).toEqual(["ring", "ring", "garden", "garden"]);
@@ -2490,7 +2506,7 @@ test("a wake the character asked for and the user interrupted is not a request s
     });
 
     script.wakes.length = 0;
-    script.closing = "NO_NOTE";
+    script.sends = undefined; script.closing = "NO_NOTE";
     at(30);
     await runtime.autonomy.tick();
     expect(script.wakes.map((request) => request.context?.thread)).toEqual(["ring", "ring"]);
@@ -2522,7 +2538,7 @@ test("a wake's turn can't be regenerated, and a wake in the home thread isn't ta
     await say("hello");
     at(2);
     await say("the beans are up", "garden");
-    script.closing = "Looked in.\n<sendMessage>The lamp is lit.</sendMessage>";
+    script.sends = "The lamp is lit."; script.closing = "Looked in.";
     runtime.autonomy.wakeFor("ada", { name: "lamp", reason: "Look in.", at: T0 + 60 * MINUTE, thread: "main" });
     at(60);
     await runtime.autonomy.tick();
@@ -2551,7 +2567,7 @@ test("a wake in a thread takes in what fires for that thread while it runs, leav
     await runtime.registry.createThread("ada", "garden");
     await runtime.registry.createThread("ada", "study");
     await say("hello");
-    script.closing = "NO_NOTE";
+    script.sends = undefined; script.closing = "NO_NOTE";
 
     let held = hold();
     script.beatHeld = held;
@@ -2629,7 +2645,7 @@ test("what is waiting for a thread where a wake is running starts together once 
     const show = (reason: string, minutes: number) => ({ name: "show", reason, at: T0 + minutes * MINUTE, thread: "ring" });
     await runtime.registry.createThread("ada", "ring");
     await say("hello");
-    script.closing = "NO_NOTE";
+    script.sends = undefined; script.closing = "NO_NOTE";
     const held = hold();
     script.beatHeld = held;
     at(9);
@@ -2676,7 +2692,7 @@ test("a wake doesn't bring a thread nearer its compaction, which counts the turn
     await say("hello");
     at(1);
     await say("tell me a story in parts", "ring");
-    script.closing = "Told part one.";
+    script.sends = undefined; script.closing = "Told part one.";
     for (const minute of [20, 21]) {
       runtime.autonomy.wakeFor("ada", { name: "show", reason: "r", at: T0 + minute * MINUTE, thread: "ring" });
       at(minute);
@@ -2714,7 +2730,7 @@ test("a wake doesn't bring a thread nearer its compaction, which counts the turn
 
   await withCharacter(async ({ runtime, script, data, say, thread }) => {
     await say("hello");
-    script.closing = "Looked in.";
+    script.sends = undefined; script.closing = "Looked in.";
     runtime.autonomy.wakeFor("ada", { name: "lamp", reason: "r", at: T0 + 20 * MINUTE, thread: "main" });
     at(20);
     await runtime.autonomy.tick();
@@ -2726,7 +2742,7 @@ test("a wake doesn't bring a thread nearer its compaction, which counts the turn
   await withCharacter(async ({ runtime, script, data, say, thread }) => {
     await runtime.registry.createThread("ada", "ring", { compaction: true });
     await say("tell me a story in parts", "ring");
-    script.closing = "Told part one.";
+    script.sends = undefined; script.closing = "Told part one.";
     runtime.autonomy.wakeFor("ada", { name: "show", reason: "r", at: T0 + 20 * MINUTE, thread: "ring" });
     at(20);
     await runtime.autonomy.tick();
@@ -2741,7 +2757,7 @@ test("a wake doesn't bring a thread nearer its compaction, which counts the turn
 });
 
 interface WakesIn {
-  wake: (minute: number, closing: string) => Promise<void>;
+  wake: (minute: number, closing: string, sends?: string) => Promise<void>;
   openers: () => Promise<string[]>;
   compactions: () => number;
 }
@@ -2751,8 +2767,9 @@ async function wakesIn(name: string, compaction: boolean, configure: (app: AppCo
     await h.runtime.registry.createThread("ada", name, { compaction });
     await h.say("hello");
     await run(h, {
-      wake: async (minute, closing) => {
+      wake: async (minute, closing, sends) => {
         h.script.closing = closing;
+        h.script.sends = sends;
         h.runtime.autonomy.wakeFor("ada", { name: "show", reason: `at ${String(minute)}`, at: T0 + minute * MINUTE, thread: name });
         at(minute);
         await h.runtime.autonomy.tick();
@@ -2798,19 +2815,19 @@ test("what Shore keeps to undo a wake's file changes is kept with the message it
     app.tools.enabled = [...app.tools.enabled, "bash"];
   }, async ({ runtime, script, thread }, { wake, openers }) => {
     const turns = workspaceTurnsFor(runtime.config.dirs, "ada", characterWorkspace(runtime.config, "ada"));
-    const wrote = async (minute: number, closing: string, keptIn: string): Promise<string> => {
+    const wrote = async (minute: number, closing: string, keptIn: string, sends?: string): Promise<string> => {
       script.beatTool = { name: "bash", input: { command: `printf 'page' > at-${String(minute)}.md` } };
-      await wake(minute, closing);
+      await wake(minute, closing, sends);
       return replyVersions(await thread(keptIn)).at(-1) ?? "";
     };
     const working = await wrote(10, "Wrote a page.", "wakes");
     expect(await recordedTurns(turns, "wakes", [working])).toEqual([working]);
     expect(await recordedTurns(turns, "log", replyVersions(await thread("log")))).toEqual([]);
-    const first = await wrote(20, "<sendMessage>A page.</sendMessage>", "log");
-    const second = await wrote(30, "<sendMessage>Another page.</sendMessage>", "log");
+    const first = await wrote(20, "NO_NOTE", "log", "A page.");
+    const second = await wrote(30, "NO_NOTE", "log", "Another page.");
     expect(await openers()).toEqual(["30"]);
     expect(await recordedTurns(turns, "log", [first, second])).toEqual([first, second]);
-    const third = await wrote(40, "<sendMessage>One more page.</sendMessage>", "log");
+    const third = await wrote(40, "NO_NOTE", "log", "One more page.");
     expect(await openers()).toEqual(["40"]);
     expect(await recordedTurns(turns, "log", [first, second, third])).toEqual([second, third]);
   });
@@ -2925,7 +2942,7 @@ test("a wake in a side thread reads that thread's files afresh, unless the user 
     await writeFile(join(workspace, "notes", "ring.md"), "the fox is at the gate");
     await runtime.registry.createThread("ada", "ring", { files: ["notes/ring.md"] });
     await say("hello");
-    script.closing = "NO_NOTE";
+    script.sends = undefined; script.closing = "NO_NOTE";
 
     expect(await wake(1, "ring")).toContain("the fox is at the gate");
     await writeFile(join(workspace, "notes", "ring.md"), "the fox is in the yard");
@@ -2955,7 +2972,7 @@ test("the message a wake sends in a side thread is announced, and deleting it pu
     const announced: unknown[][] = [];
     runtime.notifier.notify = (...told) => { announced.push(told); };
     script.beatTool = { name: "bash", input: { command: "printf 'part one' > story.md" } };
-    script.closing = "Wrote it down.\n<sendMessage>Part one is written.</sendMessage>";
+    script.sends = "Part one is written."; script.closing = "Wrote it down.";
     runtime.autonomy.wakeFor("ada", { name: "show", reason: "r", at: T0 + 20 * MINUTE, thread: "ring" });
     at(20);
     await runtime.autonomy.tick();
@@ -2973,13 +2990,13 @@ test("a wake in any thread opens with the diary of the last day and the user's s
   await withCharacter(async ({ runtime, script, data, say, wakeNow }) => {
     await runtime.registry.createThread("ada", "ring");
     await say("hello");
-    script.closing = "The log is read up to March.";
+    script.sends = undefined; script.closing = "The log is read up to March.";
     at(5);
     await wakeNow();
     setPresence(data, "asleep", T0 + 6 * MINUTE);
     unsetTestEnv(KEY_ENV);
     script.wakes.length = 0;
-    script.closing = "NO_NOTE";
+    script.sends = undefined; script.closing = "NO_NOTE";
     for (const minutes of [20, 40]) {
       runtime.autonomy.wakeFor("ada", { name: "show", reason: "r", at: T0 + minutes * MINUTE, thread: "ring" });
       at(minutes);
@@ -3009,7 +3026,7 @@ test("a wake whose trigger names no thread runs in home, is shown what was said 
     await say("hello");
     at(1);
     await runtime.triggers.tick();
-    script.closing = "The tide is out.";
+    script.sends = undefined; script.closing = "The tide is out.";
     await fires(runtime, 11);
 
     const tide = '[Your trigger "tide" fired at Friday 2026-10-30 · 12:11 PM: Look at the tide.]';
@@ -3102,7 +3119,7 @@ test("a wake set off by a trigger can hand on from whichever thread it runs in, 
     await runtime.registry.createThread("ada", "ring");
     await runtime.registry.createThread("ada", "garden");
     await say("hello");
-    script.closing = "NO_NOTE";
+    script.sends = undefined; script.closing = "NO_NOTE";
     const refused = { text: "io: a wake can't be handed on from here", failed: true };
 
     at(10);
@@ -3381,7 +3398,7 @@ test("a wake whose model call ends in an error is logged as failed on that round
 test("a wake that sends a picture Shore can't find is asked once to fix it, and the log says so when that second try ends in an error", async () => {
   const retryNotes = (runtime: ShoreRuntime): string[] => runtime.autonomy.log("ada", 100).map((event) => event.detail).filter((detail) => detail.includes("ictures"));
   await withCharacter(async ({ runtime, script, say, wakeNow, thread }) => {
-    script.closing = "<sendMessage>\nThe lamp tonight\n![[missing.png]]\n</sendMessage>";
+    script.sends = "The lamp tonight\n![[missing.png]]"; script.closing = "NO_NOTE";
     await say("hello");
     at(1);
     await wakeNow();
@@ -3391,7 +3408,7 @@ test("a wake that sends a picture Shore can't find is asked once to fix it, and 
     expect((await thread("main")).at(-1)?.content).toBe("The lamp tonight\n![[missing.png]]");
   });
   await withCharacter(async ({ runtime, script, say, wakeNow, thread }) => {
-    script.closing = "<sendMessage>\nThe lamp tonight\n![[missing.png]]\n</sendMessage>";
+    script.sends = "The lamp tonight\n![[missing.png]]"; script.closing = "NO_NOTE";
     script.finishes = [undefined, "error"];
     await say("hello");
     at(1);
@@ -3407,7 +3424,7 @@ test("a wake that sends a picture Shore can't find is asked once to fix it, and 
 
 test("a wake that has used up its time isn't asked to fix a picture Shore can't find, and its message goes as it is", async () => {
   await withCharacter(async ({ runtime, script, say, thread }) => {
-    script.closing = "<sendMessage>\nThe lamp tonight\n![[missing.png]]\n</sendMessage>";
+    script.sends = "The lamp tonight\n![[missing.png]]"; script.closing = "NO_NOTE";
     await say("hello");
     at(1);
     let clock = 5_000;
@@ -3469,7 +3486,7 @@ test("a wake whose thread the user edits while it runs writes nothing more there
     const asked = (await thread("ring"))[0];
     const held = hold();
     script.beatHeld = held;
-    script.closing = "Told part one.\n<sendMessage>Part one.</sendMessage>";
+    script.sends = "Part one."; script.closing = "Told part one.";
     runtime.autonomy.wakeFor("ada", { name: "show", reason: "r", at: T0 + 20 * MINUTE, thread: "ring" });
     at(20);
     const waking = runtime.autonomy.tick();
@@ -3494,7 +3511,7 @@ test("a wake whose thread the user edits while it runs writes nothing more there
 test("the wakes thread is for reading: nothing is sent or regenerated there, it is never home or compacted, no wake runs there, the character's list says what it is, and the next wake makes it again once it is archived", async () => {
   await withCharacter(async ({ runtime, script, data, say, regenerate, wakeNow, thread, command }) => {
     await say("hello");
-    script.closing = "NO_NOTE";
+    script.sends = undefined; script.closing = "NO_NOTE";
     at(10);
     await wakeNow();
     const listed = await command("list_threads", {});
@@ -3614,7 +3631,7 @@ function giftWake(now: string, lines: readonly string[], shown: readonly string[
 async function sealsGift(h: Pick<Harness, "script" | "say" | "wakeNow">): Promise<void> {
   await h.say("hello");
   h.script.beatTool = { name: "threads", input: { action: "start", name: " gift ", label: " Something for you ", sealed_until: "2026-10-31 08:00" } };
-  h.script.closing = "NO_NOTE";
+  h.script.sends = undefined; h.script.closing = "NO_NOTE";
   at(10);
   await h.wakeNow();
 }
@@ -3692,7 +3709,7 @@ test("a wake inside a sealed thread sends, announces and logs nothing outside it
     const transcripts = runtime.callStore?.queryTranscripts("wake", "ada", 100).length;
     script.wakes.length = 0;
     emitted.length = 0;
-    script.closing = "Made a card.\n<sendMessage>Happy birthday!</sendMessage>";
+    script.sends = "Happy birthday!"; script.closing = "Made a card.";
     at(21);
     await runtime.autonomy.tick();
 
@@ -3728,7 +3745,7 @@ test("a wake inside a sealed thread sends, announces and logs nothing outside it
     script.replyTool = { name: "chat_logs", input: { action: "search", query: "birthday" } };
     await say("did you say something about a birthday?");
     expect(String(lastToolResult(await thread("main"))?.text)).toStartWith("birthday: 0 matches.\nSearched 2 messages from every thread,");
-    script.closing = "NO_NOTE";
+    script.sends = undefined; script.closing = "NO_NOTE";
     at(30);
     await wakeNow();
     expect(textOf(script.wakes.at(-2) as SidecarRequest)).not.toContain("Made a card.");
@@ -3742,7 +3759,7 @@ test("a wake inside a sealed thread sends, announces and logs nothing outside it
     expect(again).not.toContain("[Your diary");
 
     runtime.autonomy.forceDormancy("ada", "dormant");
-    script.closing = "Gave it.\n<sendMessage>Open the card.</sendMessage>";
+    script.sends = "Open the card."; script.closing = "Gave it.";
     at(20 * 60);
     await runtime.autonomy.tick();
     await h.shown("gift", (message) => message.content === "Open the card.");
@@ -3760,7 +3777,7 @@ test("at its time the seal comes off: the thread joins the user's list with what
     script.beatTool = { name: "wake_in_thread", input: { thread: "gift", reason: "Start on it." } };
     at(20);
     await wakeNow();
-    script.closing = "Made a card.\n<sendMessage>Happy birthday!</sendMessage>";
+    script.sends = "Happy birthday!"; script.closing = "Made a card.";
     at(21);
     await runtime.autonomy.tick();
   }, sealing);
@@ -3775,7 +3792,7 @@ test("at its time the seal comes off: the thread joins the user's list with what
 
     const announced: unknown[][] = [];
     runtime.notifier.notify = (...told) => { announced.push(told); };
-    script.closing = "Gave it.\n<sendMessage>Open the card.</sendMessage>";
+    script.sends = "Open the card."; script.closing = "Gave it.";
     emitted.length = 0;
     at(20 * 60);
     await runtime.autonomy.tick();

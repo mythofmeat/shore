@@ -375,7 +375,7 @@ async function runGenerationCore(
       turn: "reply",
       here: engine.thread,
       sealed: false,
-      userName: resolveDisplayName(config.app.chat, deps.env),
+      userName: resolveDisplayName(config.app.chat),
       timeZone: hostZone(),
       threads: async () => await reachableThreads(deps.dataDir, charName),
       pictureProblems: async (text) => await pictureProblems([text], workspace, params.signal),

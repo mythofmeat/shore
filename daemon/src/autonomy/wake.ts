@@ -1,7 +1,7 @@
 import wakeTemplateRaw from "../../prompts/autonomy/wake.md" with { type: "text" };
 
 import type { RebuildDeps } from "../cache/rebuild.ts";
-import { resolveDisplayName, toolGrants } from "../config/app.ts";
+import { resolveDisplayName, toolEnabled, toolGrants } from "../config/app.ts";
 import { characterDataDir, resolvePromptTemplate, threadDataDir } from "../config/dirs.ts";
 import { findEffectiveModel } from "../config/effective_catalog.ts";
 import type { LoadedConfig } from "../config/loader.ts";
@@ -275,6 +275,7 @@ export async function runWake(character: string, config: LoadedConfig, wake: Wak
       ["resume_after", spanPhrase(WAKE_QUIET_MS)],
       ["working_thread", log?.engine.thread ?? ""],
       ["working_here", log === undefined ? "yes" : ""],
+      ["send_message", toolEnabled(config.app.tools, "send_message") ? "yes" : ""],
     ]));
     const record = wakeRecord(characterDir, thread);
     const recent = recentDiary(characterDir, nowMs);
