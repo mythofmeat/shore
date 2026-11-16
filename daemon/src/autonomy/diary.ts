@@ -13,8 +13,6 @@ export const DIARY_SHOWN = 20;
 
 export const DIARY_WINDOW_MS = 86_400_000;
 
-const SENT = /<sendMessage>[\s\S]*?<\/sendMessage>/g;
-
 const NOTHING_TO_NOTE = "NO_NOTE";
 
 const SOURCES = ["wake", "trigger", "shore", "note"] as const;
@@ -59,7 +57,7 @@ function open(characterDir: string): StoredNote[] {
 }
 
 export function closingNote(text: string): string | undefined {
-  const note = text.replace(SENT, "").trim();
+  const note = text.trim();
   return note === "" || note === NOTHING_TO_NOTE ? undefined : note;
 }
 

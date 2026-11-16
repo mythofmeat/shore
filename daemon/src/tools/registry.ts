@@ -10,7 +10,7 @@ import activityHeatmapDesc from "../../prompts/tools/activity/activity_heatmap.m
 import listTriggersDesc from "../../prompts/tools/autonomy/list_triggers.md" with { type: "text" };
 import wakeInThreadDesc from "../../prompts/tools/autonomy/wake_in_thread.md" with { type: "text" };
 import writeDiaryDesc from "../../prompts/tools/autonomy/write_diary.md" with { type: "text" };
-import sendPushDesc from "../../prompts/tools/autonomy/send_push.md" with { type: "text" };
+import sendMessageDesc from "../../prompts/tools/autonomy/send_message.md" with { type: "text" };
 import guideDesc from "../../prompts/tools/guide.md" with { type: "text" };
 import threadsDesc from "../../prompts/tools/threads/threads.md" with { type: "text" };
 import modelHistoryDesc from "../../prompts/tools/history/model_history.md" with { type: "text" };
@@ -239,14 +239,16 @@ export const ALL_TOOLS: readonly ToolDef[] = Object.freeze([
     },
   },
   {
-    name: "send_push",
-    description: stripOneTrailingNewline(sendPushDesc),
+    name: "send_message",
+    description: stripOneTrailingNewline(sendMessageDesc),
     parameters: {
       type: "object",
       properties: {
-        message: { type: "string", minLength: 1, description: "What the notification says. A line or two." },
+        text: { type: "string", minLength: 1, description: "What to say to {{user}}." },
+        thread: { type: "string", minLength: 1, maxLength: 64, description: "Id of the thread to post it in, as `threads` lists it. A wake's own thread when left out. From a conversation it has to name another thread." },
+        push: { type: "boolean", description: "Also send it to {{user}}'s phone as a notification. Default false." },
       },
-      required: ["message"],
+      required: ["text"],
       additionalProperties: false,
     },
   },

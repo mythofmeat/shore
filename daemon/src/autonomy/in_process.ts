@@ -76,10 +76,16 @@ export class InProcessAutonomyExecutor implements AutonomyExecutor {
         ...(this.#deps.env === undefined ? {} : { env: this.#deps.env }),
         news: (wrappingUp) => hooks.news(wrappingUp),
         newsHeard: () => { hooks.newsHeard(); },
+        ...(rest.push === undefined ? {} : { push: async (message) => await rest.push?.(character, message) ?? { kind: "not_set_up" } }),
+        ...(rest.pushRefusal === undefined ? {} : { pushRefusal: () => rest.pushRefusal?.(character) }),
         generate: calls.generate,
         dispatch: async (name, input, toolUseId, tools, conversation) => {
           toolCtx ??= buildToolContext(config, config.dirs.data, character, { ...rest, ...handsOn, thread: conversation.thread, conversation: conversation.conversation, fresh: true });
-          const ctx = { ...await toolCtx, ...(conversation.recordWorkspaceWrite === undefined ? {} : { recordWorkspaceWrite: conversation.recordWorkspaceWrite }) };
+          const ctx = {
+            ...await toolCtx,
+            ...(conversation.recordWorkspaceWrite === undefined ? {} : { recordWorkspaceWrite: conversation.recordWorkspaceWrite }),
+            ...(conversation.sendMessage === undefined ? {} : { sendMessage: conversation.sendMessage }),
+          };
           return await runLoopTool(ctx, config, calls.imageLimits(), { id: toolUseId ?? `wk_${crypto.randomUUID()}`, name, input }, tools);
         },
         ...this.#transcripts("wake", character),

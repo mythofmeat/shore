@@ -12,8 +12,8 @@ import { deriveContentFromBlocks, isToolResultOnly } from "../engine/message_sto
 import { agoPhrase, diaryText, DIARY_FOR_WAKE, estimateHistoryTokens, formatWallClock, nearMessageBudget, presenceText, renderTemplate } from "../engine/prompt.ts";
 import { sealedThreads, type SealedThread } from "../engine/sealed_list.ts";
 import { NO_PRIOR_CONTEXT } from "../engine/segments.ts";
-import { homeThread, isWakeOpener, readThreadsIndex, threadActivities, threadActivityNow, type ThreadsIndex } from "../engine/threads.ts";
-import type { ContentBlock, Message } from "../engine/types.ts";
+import { homeThread, isWakeOpener, readThreadsIndex, threadActivities, threadActivityNow, wakesThread, type ThreadsIndex } from "../engine/threads.ts";
+import type { Message } from "../engine/types.ts";
 import { newMessageVersion } from "../engine/versions.ts";
 import { buildChatShapeRequestFromDisk } from "../handler/context.ts";
 import { cacheTtlSecs, thinkingEnabled } from "../handler/generation.ts";
@@ -36,12 +36,14 @@ import { pruneTurns, replyVersions, WorkspaceRecorder, workspaceTurnsFor } from 
 import { backgroundModelRequest, backgroundTaskModel } from "./background_model.ts";
 import { addDiaryNote, closingNote, recentDiary } from "./diary.ts";
 import type { WakeEventKind } from "./wake_log.ts";
-import { runBackgroundLoop, type BackgroundLoopDeps, type BackgroundLoopResult, type LoopRound } from "./background_loop.ts";
+import { runBackgroundLoop, type BackgroundLoopDeps, type LoopRound } from "./background_loop.ts";
 import { presence } from "./presence.ts";
 import { firedBy, WAKE_QUIET_MS, type TriggerFiring, type WakeNews, type WakeResult } from "./runner.ts";
 import { sealedListNote, sealedWakeNote } from "./sealed_notes.ts";
 import { digestWords, threadDigest, type ThreadReader } from "./thread_digest.ts";
-import { buildAutonomousMessage, sendMessageIn, spanPhrase, timeLeftPhrase, triggerFiredNote, wakeNewsNote } from "./wake_shape.ts";
+import { Outbox, type Outgoing } from "./outbox.ts";
+import type { PushOutcome, PushRefusal } from "./push.ts";
+import { buildAutonomousMessage, spanPhrase, timeLeftPhrase, triggerFiredNote, wakeNewsNote, type ImageRef } from "./wake_shape.ts";
 import { keptNote, recordWakeEnd, stopOf, wakeRecord, wakeStopNote, WakeWords, type WakeStopReason } from "./wake_record.ts";
 import { keptWorkingSummary, withoutWakeWorking } from "./wake_working.ts";
 
@@ -51,7 +53,7 @@ const LONGEST_WRAP_UP_MS = 15 * 60_000;
 
 const DEFAULT_WAKE_TEMPLATE = wakeTemplateRaw.trimEnd();
 
-const SENT = /<sendMessage>[\s\S]*?<\/sendMessage>/g;
+const TAGGED = /<sendMessage>[\s\S]*?<\/sendMessage>/;
 
 export interface WakeEngine extends ThreadReader {
   readonly thread: string;
@@ -91,6 +93,8 @@ export interface WakeDeps extends Pick<BackgroundLoopDeps, "recordTranscript" | 
   news?: (wrappingUp: boolean) => WakeNews[];
   emit?: (character: string, revision: number, msg: Message, thread: string) => void;
   notify?: (title: string, body: string, picture?: NotificationPicture) => void;
+  push?: (message: string) => Promise<PushOutcome>;
+  pushRefusal?: () => PushRefusal | undefined;
   budgetBlockFor?: (request: SidecarRequest) => CallBlock | undefined;
   compaction?: CompactionRunner;
   env?: NodeJS.ProcessEnv;
@@ -110,15 +114,12 @@ export function wakeWrapUpText(msLeft: number, rounds: number, userName: string)
   const stop = rounds === 1 ? "after this round" : `after ${String(rounds)} more rounds, counting this one`;
   return `[System nudge: this wake stops in ${timeLeftPhrase(msLeft)} or ${stop}, whichever comes first. ` +
     "Wrap up now: finish with your note to yourself, saying where you stopped so you can pick it up here next time. " +
-    `Only what you put in <sendMessage> tags is sent to ${userName}.]`;
+    `Nothing in it is sent to ${userName}.]`;
 }
 
-function sentReplaced(text: string, userName: string, where = "as the next message here"): string {
-  return text.replace(SENT, `[sent to ${userName} ${where}]`);
-}
-
-export function withoutSent(blocks: readonly ContentBlock[], userName: string, where?: string): ContentBlock[] {
-  return blocks.map((block) => block.type === "text" ? { ...block, text: sentReplaced(block.text, userName, where) } : block);
+export function tagsSentNothingNote(thread: string, userName: string): string {
+  return `Your wake in "${thread}" wrapped a message in <sendMessage> tags. The tags no longer send anything, so ${userName} was not sent it. ` +
+    "A message is sent with the `send_message` tool.";
 }
 
 export function wakeStoppedNote(why: WakeStopReason, userName: string, limitMs: number): string {
@@ -188,22 +189,24 @@ export interface WakePost {
   engine: Pick<WakeEngine, "appendMessage" | "currentRevision">;
 }
 
-export async function postWakeMessage(
+export interface Sending {
+  text: string;
+  images: ImageRef[];
+  push: boolean;
+}
+
+export type Poster = Pick<WakeDeps, "emit" | "notify" | "push" | "newId" | "nowIso">;
+
+export async function postMessage(
   character: string,
-  request: SidecarRequest,
-  loop: BackgroundLoopResult,
-  deps: Pick<WakeDeps, "emit" | "notify" | "newId" | "nowIso">,
+  from: Pick<SidecarRequest, "provider_key" | "model">,
+  sending: Sending,
+  deps: Poster,
   note: Note,
   to: WakePost,
   pictures: PictureSender,
 ): Promise<Message | undefined> {
-  const nothing = loop.sendMessageText === undefined && loop.images.length === 0;
-  if (loop.failedRound !== undefined && loop.timedOut !== true) noteFailure(character, loop.failedRound, loop.failure, note);
-  else if (nothing && loop.failedRound === undefined) note("message_skipped", "Wake completed — no message sent");
-  if (nothing) return undefined;
-
-  const text = loop.sendMessageText ?? "";
-  const shape = buildAutonomousMessage(text, loop.images, request.provider_key, request.model === "" ? undefined : request.model);
+  const shape = buildAutonomousMessage(sending.text, sending.images, from.provider_key, from.model === "" ? undefined : from.model);
   const msg: Message = {
     msg_id: (deps.newId ?? (() => `m_${crypto.randomUUID()}`))(),
     origin: "autonomous",
@@ -221,7 +224,7 @@ export async function postWakeMessage(
     timestamp: (deps.nowIso ?? (() => new Date().toISOString()))(),
     version: newMessageVersion(),
   };
-  msg.images.push(...await sendPictures([text], pictures));
+  msg.images.push(...await sendPictures([sending.text], pictures));
 
   let persisted: Message | undefined;
   try {
@@ -229,23 +232,30 @@ export async function postWakeMessage(
     persisted = msg;
     deps.emit?.(character, to.engine.currentRevision(), msg, to.thread);
   } catch (e) {
-    shoreLog.error(`shore: a wake could not deliver its message for ${character} to ${to.thread}: ${String(e)}`);
+    shoreLog.error(`shore: a message for ${character} could not be delivered to ${to.thread}: ${String(e)}`);
   }
 
   const shown = pictureText(msg.content, msg.images);
   deps.notify?.(`Shore - ${character}`, shown, firstSentPicture(msg.images));
   note("message_sent", `Autonomous message sent: ${shortPreview(shown)}`);
+  if (sending.push) {
+    try {
+      const outcome = await deps.push?.(shown);
+      if (outcome?.kind !== "sent") note("call_failed", "The push that went with a message was not sent: by then a push was no longer allowed");
+    } catch (error) {
+      note("call_failed", `The push that went with a message failed: ${truncateSummary(String(error), 120)}`);
+    }
+  }
   return persisted;
 }
 
-export async function roundMessage(round: LoopRound, request: SidecarRequest, deps: Pick<WakeDeps, "newId" | "nowIso">, pictures: PictureSender): Promise<Message> {
+export function roundMessage(round: LoopRound, request: SidecarRequest, deps: Pick<WakeDeps, "newId" | "nowIso">): Message {
   const model = round.model === undefined || round.model === "" ? request.model : round.model;
-  const sent = round.role === "assistant" ? sendMessageIn(round.blocks) : undefined;
   return {
     msg_id: (deps.newId ?? (() => `m_${crypto.randomUUID()}`))(),
     role: round.role,
     content: deriveContentFromBlocks(round.blocks, true),
-    images: sent === undefined ? [] : await sendPictures([sent], pictures),
+    images: [],
     content_blocks: round.blocks,
     alternatives: [],
     timestamp: (deps.nowIso ?? (() => new Date().toISOString()))(),
@@ -258,6 +268,26 @@ export async function roundMessage(round: LoopRound, request: SidecarRequest, de
   };
 }
 
+async function postElsewhere(
+  character: string,
+  from: string,
+  away: readonly Outgoing[],
+  request: SidecarRequest,
+  deps: WakeDeps,
+  note: Note,
+  characterDir: string,
+  pictures: PictureSender,
+): Promise<void> {
+  for (const each of away) {
+    const engine = await deps.engine(character, each.thread);
+    if (engine === undefined) {
+      addDiaryNote(characterDir, { at: deps.now?.() ?? Date.now(), thread: "", source: "shore", text: `Your message for the thread "${each.thread}" was not sent: that thread was gone by the time your wake in "${from}" ended.` });
+      continue;
+    }
+    await postMessage(character, request, { text: each.text, images: [], push: each.push }, deps, note, { thread: each.thread, engine }, pictures);
+  }
+}
+
 async function keepWorking(log: WorkingLog, message: Message): Promise<void> {
   try {
     await log.engine.appendMessage(message);
@@ -266,8 +296,8 @@ async function keepWorking(log: WorkingLog, message: Message): Promise<void> {
   }
 }
 
-function noteShownLater(closing: string, userName: string): string | undefined {
-  const text = sentReplaced(closing, userName).trim();
+function noteShownLater(closing: string): string | undefined {
+  const text = closing.trim();
   return text === "" ? undefined : text;
 }
 
@@ -295,7 +325,8 @@ export async function runWake(character: string, config: LoadedConfig, wake: Wak
     else if (kind !== "tool_use") events.push({ kind, detail: kind === "message_sent" ? "A message was left in a sealed thread" : detail });
   };
 
-  return await withConversation(threadDataDir(config.dirs.data, character, thread), "turn", async (signal) => {
+  let afterwards: (() => Promise<void>) | undefined;
+  const result = await withConversation(threadDataDir(config.dirs.data, character, thread), "turn", async (signal): Promise<WakeResult> => {
     const index = await readThreadsIndex(config.dirs.data, character);
     const home = homeThread(index);
     const chat = resolveChatModelForCharacter(
@@ -410,23 +441,35 @@ export async function runWake(character: string, config: LoadedConfig, wake: Wak
     const recorder = new WorkspaceRecorder(workspaceTurns);
     const known = new Set([...replyVersions(engine.messages()), ...replyVersions(log?.engine.messages() ?? [])]);
     const words = new WakeWords();
+    const outbox = new Outbox({
+      turn: "wake",
+      here: thread,
+      sealed: seal !== undefined,
+      userName,
+      timeZone,
+      threads: async () => {
+        const now = await readThreadsIndex(config.dirs.data, character);
+        return { open: now?.threads.map((each) => each.id) ?? [home], wakes: wakesThread(now), sealed: sealedThreads(characterDir).map((each) => each.id) };
+      },
+      pictureProblems: async (text) => await pictureProblems([text], workspace, signal),
+      pushRefusal: () => deps.pushRefusal === undefined ? { kind: "not_set_up" } : deps.pushRefusal(),
+    });
     const loop = await runBackgroundLoop(request, {
       ...(heard.recordTranscript === undefined ? {} : { recordTranscript: heard.recordTranscript }),
       ...(deps.newsHeard === undefined ? {} : { newsHeard: deps.newsHeard }),
       ...(deps.interrupted === undefined ? {} : { interrupted: deps.interrupted }),
       name: "Wake",
       callTypes: ["wake", "wake_tool_loop"],
-      dispatch: (name, input, toolUseId, tools) => deps.dispatch(name, input, toolUseId, tools, { ...conversation, recordWorkspaceWrite: recorder.track }),
+      dispatch: (name, input, toolUseId, tools) => deps.dispatch(name, input, toolUseId, tools, { ...conversation, recordWorkspaceWrite: recorder.track, sendMessage: outbox.send }),
       generate: (call, phase, loopSignal) => deps.generate(call, phase, AbortSignal.any([signal, loopSignal])),
       persist: async (round) => {
         signal.throwIfAborted();
         words.heard(round);
-        const last = round.role === "assistant" && !round.blocks.some((block) => block.type === "tool_use");
+        const message = roundMessage(round, request, deps);
         if (log === undefined) {
-          await engine.appendMessage(await roundMessage(last ? { ...round, blocks: withoutSent(round.blocks, userName) } : round, request, deps, pictures));
+          await engine.appendMessage(message);
           return;
         }
-        const message = await roundMessage(last ? { ...round, blocks: withoutSent(round.blocks, userName, `in "${thread}"`) } : round, request, deps, pictures);
         working.push(message);
         await keepWorking(log, message);
       },
@@ -438,7 +481,6 @@ export async function runWake(character: string, config: LoadedConfig, wake: Wak
       wrapUpText: (msLeft, rounds) => wakeWrapUpText(msLeft, rounds, userName),
       note: (detail) => note("tool_use", detail),
       news: (wrappingUp) => wakeNewsNote(deps.news?.(wrappingUp) ?? [], userName, timeZone),
-      checkPictures: async (sent) => await pictureProblems([sent], workspace, signal),
     });
 
     if (signal.aborted) {
@@ -446,7 +488,7 @@ export async function runWake(character: string, config: LoadedConfig, wake: Wak
       return { events };
     }
     if (loop.failedRound !== undefined) await (log?.engine ?? engine).recoverInterruptedToolLoop("The wake ended before this tool returned a result.");
-    const kept = log === undefined ? undefined : keptWorkingSummary(working, { id: log.engine.thread, label: log.label }, noteShownLater(words.closing, userName), {
+    const kept = log === undefined ? undefined : keptWorkingSummary(working, { id: log.engine.thread, label: log.label }, noteShownLater(words.closing), {
       msg_id: newId(),
       timestamp: (deps.nowIso ?? (() => new Date().toISOString()))(),
     });
@@ -456,11 +498,20 @@ export async function runWake(character: string, config: LoadedConfig, wake: Wak
       note(stopped === "interrupted" ? "wake" : "timeout", stopped === "interrupted"
         ? `Wake in "${thread}" stopped for ${userName}'s message`
         : `Wake in "${thread}" ${stopped === "time" ? `reached its limit of ${spanPhrase(wake.limitMs)}` : "used up its rounds"} and was stopped`);
-      const why = await roundMessage({ role: "system", blocks: [{ type: "text", text: wakeStoppedNote(stopped, userName, wake.limitMs) }] }, request, deps, pictures);
+      const why = roundMessage({ role: "system", blocks: [{ type: "text", text: wakeStoppedNote(stopped, userName, wake.limitMs) }] }, request, deps);
       await engine.appendMessage(why);
       if (log !== undefined) await keepWorking(log, { ...why, msg_id: newId() });
     }
-    const sent = await postWakeMessage(character, request, loop, heard, note, { thread, engine }, pictures);
+    const here = outbox.waiting.filter((each) => each.thread === thread);
+    const away = outbox.waiting.filter((each) => each.thread !== thread);
+    const sendings: Sending[] = here.length === 0 && loop.images.length > 0
+      ? [{ text: "", images: loop.images, push: false }]
+      : here.map((each, at) => ({ text: each.text, images: at === 0 ? loop.images : [], push: each.push }));
+    if (loop.failedRound !== undefined && loop.timedOut !== true) noteFailure(character, loop.failedRound, loop.failure, note);
+    else if (sendings.length === 0 && away.length === 0 && loop.failedRound === undefined) note("message_skipped", "Wake completed — no message sent");
+    let sent: Message | undefined;
+    for (const sending of sendings) sent = await postMessage(character, request, sending, heard, note, { thread, engine }, pictures) ?? sent;
+    if (away.length > 0) afterwards = async () => { await postElsewhere(character, thread, away, request, heard, note, characterDir, pictures); };
     const keptIn = sent === undefined && log !== undefined ? log.engine : engine;
     const newest = replyVersions(keptIn.messages()).filter((version) => !known.has(version)).at(-1);
     if (newest !== undefined) {
@@ -469,9 +520,10 @@ export async function runWake(character: string, config: LoadedConfig, wake: Wak
     }
 
     const endedAt = deps.now?.() ?? Date.now();
+    if (TAGGED.test(words.closing)) addDiaryNote(characterDir, { at: endedAt, thread: "", source: "shore", text: tagsSentNothingNote(thread, userName) });
     const noted = closingNote(words.closing);
     const left = noted === undefined ? undefined : addDiaryNote(characterDir, { at: endedAt, thread, source: "wake", text: noted });
-    recordWakeEnd(characterDir, thread, record, { startedAt: nowMs, endedAt, limitMs: wake.limitMs, loop, words, sent: sent !== undefined, note: left });
+    recordWakeEnd(characterDir, thread, record, { startedAt: nowMs, endedAt, limitMs: wake.limitMs, loop, words, sent: sent !== undefined || away.length > 0, note: left });
     if (stopped === "interrupted") return { events, interrupted: true };
     if (stopped !== undefined) addDiaryNote(characterDir, { at: endedAt, thread: "", source: "shore", text: wakeCutShortNote(stopped, thread, wake.limitMs) });
 
@@ -513,4 +565,6 @@ export async function runWake(character: string, config: LoadedConfig, wake: Wak
     }, engine, character, config, config.dirs.data, tokens, runner, crowded);
     return { events };
   });
+  await afterwards?.();
+  return result;
 }

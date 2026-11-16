@@ -338,7 +338,7 @@ async function saveToolMedia(
 function notOffered(name: string, schemas: ToolSchemas): string {
   const now = TOOLS_NOW_PART_OF.get(name);
   return now !== undefined && schemas.has(now)
-    ? `it is part of the \`${now}\` tool now, which takes an \`action\``
+    ? `it is part of the \`${now}\` tool now, ${now === "send_message" ? "as its \`push\`" : "which takes an \`action\`"}`
     : "this tool is not available in the current tool set";
 }
 

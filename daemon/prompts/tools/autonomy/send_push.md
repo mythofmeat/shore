@@ -1,1 +1,0 @@
-Send {{user}} a push notification on their phone, which reaches them when they don't have Shore open. {{user}} decides how often you may use it, and a push sent too soon is refused with the time the next one is allowed.{{#if guide}} How often that is, and how a push arrives, are in `guide` under `messages`.{{/if}}

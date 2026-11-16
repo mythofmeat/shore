@@ -16,12 +16,11 @@ import { handleGenerateImage, type ImageGenConfigView, type ImageGenerator } fro
 import { handleModelHistory, type ModelHistoryQuery } from "./model_history.ts";
 import { handleListTriggers } from "./list_triggers.ts";
 import { addDiaryNote } from "../autonomy/diary.ts";
-import type { PushOutcome } from "../autonomy/push.ts";
 import type { TriggersView } from "../autonomy/trigger_loop.ts";
-import { formatWallClock } from "../engine/prompt.ts";
 import { hostZone } from "../ledger/zoned.ts";
 import type { StartedSealedThread } from "./start_sealed_thread.ts";
 import type { StartThreadRequest } from "./start_thread.ts";
+import { handleSendMessage, type SendMessage } from "./send_message.ts";
 import { handleThreads } from "./threads.ts";
 import { handleWakeInThread, type WakeHandOff, type WakeInThreadRequest } from "./wake_in_thread.ts";
 import type { EditThreadRequest } from "./edit_thread.ts";
@@ -82,7 +81,7 @@ export interface ToolContext {
 
   triggers?: () => TriggersView;
 
-  push?: (message: string) => Promise<PushOutcome>;
+  sendMessage?: SendMessage;
 
   guide?: (input: ToolInput) => string;
 
@@ -235,18 +234,8 @@ export async function dispatchTool(
     case "wake_in_thread":
       return handleWakeInThread(args, ctx.thread, ctx.wakeInThread, ctx.userName ?? "the user");
 
-    case "send_push": {
-      const message = typeof args["message"] === "string" ? args["message"].trim() : "";
-      if (message === "") throw new InvalidArgs("message must be a non-empty string");
-      const user = ctx.userName ?? "the user";
-      const outcome = await ctx.push?.(message);
-      if (outcome === undefined || outcome.kind === "not_set_up") throw new ToolIoError(`push notifications aren't set up: ${user} hasn't given Shore a topic to send them to`);
-      const next = formatWallClock(outcome.nextAt, hostZone());
-      if (outcome.kind === "too_soon") {
-        throw new ToolIoError(`not sent: your last push was ${formatWallClock(outcome.lastAt, hostZone())}, and the next one is allowed from ${next}`);
-      }
-      return `Sent to ${user}'s phone. The next push is allowed from ${next}.`;
-    }
+    case "send_message":
+      return await handleSendMessage(args, ctx.sendMessage);
 
     case "guide":
       if (ctx.guide === undefined) throw new ToolIoError("the guide is not available in this context");

@@ -1,4 +1,4 @@
-import type { PushOutcome } from "../autonomy/push.ts";
+import type { PushOutcome, PushRefusal } from "../autonomy/push.ts";
 import type { TriggersView } from "../autonomy/trigger_loop.ts";
 import { characterMediaDir } from "../storage/media.ts";
 import { shoreLog } from "../log.ts";
@@ -35,6 +35,7 @@ export interface ToolConversation {
   thread: string;
   conversation: readonly Message[];
   recordWorkspaceWrite?: ToolContext["recordWorkspaceWrite"];
+  sendMessage?: ToolContext["sendMessage"];
 }
 
 export interface ToolContextDeps extends Partial<ToolConversation> {
@@ -51,6 +52,7 @@ export interface ToolContextDeps extends Partial<ToolConversation> {
   activityStats?: (character: string, days: number) => ReturnType<ActivityStatsLookup>;
   triggersView?: (character: string) => TriggersView;
   push?: (character: string, message: string) => Promise<PushOutcome>;
+  pushRefusal?: (character: string) => PushRefusal | undefined;
   wakeInThread?: (character: string, from: string, request: WakeInThreadRequest) => WakeHandOff;
   startThread?: (character: string, request: StartThreadRequest) => Promise<void>;
   sealThread?: (character: string, request: NewSealedThread) => Promise<StartedSealedThread>;
@@ -87,7 +89,6 @@ export async function buildToolContext(
   const mcp = deps.mcpRegistry;
   const activityStats = deps.activityStats;
   const triggersView = deps.triggersView;
-  const push = deps.push;
   const wakeInThread = deps.wakeInThread;
   const startThread = deps.startThread;
   const sealThread = deps.sealThread;
@@ -119,7 +120,7 @@ export async function buildToolContext(
     ...(deps.modelHistoryQuery === undefined ? {} : { modelHistoryQuery: deps.modelHistoryQuery }),
     ...(activityStats === undefined ? {} : { activityStats: (days: number) => activityStats(charName, days) }),
     ...(triggersView === undefined ? {} : { triggers: () => triggersView(charName) }),
-    ...(push === undefined ? {} : { push: async (message: string) => await push(charName, message) }),
+    ...(deps.sendMessage === undefined ? {} : { sendMessage: deps.sendMessage }),
     ...(wakeInThread === undefined ? {} : { wakeInThread: (request: WakeInThreadRequest) => wakeInThread(charName, deps.thread ?? MAIN_THREAD, request) }),
     ...(deps.deferEdit === undefined ? {} : { deferEdit: deps.deferEdit }),
     ...(deps.countReads === true && config.app.dreaming.enabled ? { recordRead: (path: string) => { recordReadBestEffort(charDataDir, path); } } : {}),
