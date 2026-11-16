@@ -405,6 +405,21 @@ test("a wake's chat logs hold what is still in its own thread's conversation, si
   }, (app) => { app.tools.enabled.push("chat_logs"); });
 });
 
+test("a reply finds what a wake in its own thread wrote while working, since that working is kept in the wakes thread", async () => {
+  await withCharacter(async ({ script, say, wakeNow, thread }) => {
+    await say("hello");
+    script.closing = "The cellar key is under the heron stone.";
+    at(20);
+    await wakeNow();
+    script.replyTool = { name: "chat_logs", input: { action: "search", query: "heron" } };
+    at(40);
+    await say("where did you leave the cellar key?");
+    const found = lastToolResult(await thread("main"));
+    expect(found?.failed).toBe(false);
+    expect(found?.text).toContain("under the [heron] stone");
+  }, (app) => { app.tools.enabled.push("chat_logs"); });
+});
+
 test("a call under a tool's old name is answered with the tool it became, stays in the thread as it was made, and the conversation goes on with it", async () => {
   await withCharacter(async ({ script, say, thread }) => {
     await say("hello");
