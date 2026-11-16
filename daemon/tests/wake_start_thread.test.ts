@@ -56,7 +56,7 @@ test("a thread started and edited on a wake opens with her message, takes the ed
     emitEvent: (event) => events.push(event),
   }, async ({ config, runtime }) => {
     expect(runtime.autonomy.wakeNow("ada")).toBeDefined();
-    await runtime.autonomy.tick();
+    await runtime.autonomy.runDue();
 
     expect(toolResults).toHaveLength(2);
     expect(toolResults[0]).toContain('Started the thread \\"lighthouse\\"');
@@ -97,7 +97,7 @@ test("a thread started with a folder goes in that folder of the user's thread li
     model: { maxToolRounds: 5 },
   }, async ({ config, runtime }) => {
     expect(runtime.autonomy.wakeNow("ada")).toBeDefined();
-    await runtime.autonomy.tick();
+    await runtime.autonomy.runDue();
 
     expect(toolResults.map((result) => (JSON.parse(result) as { content: string }).content)).toEqual([
       'Started the thread "lighthouse" (lighthouse). It\'s in the "Projects" folder of peggy\'s thread list, and peggy decides when to switch to it; you\'re still in this thread.',

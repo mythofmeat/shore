@@ -88,7 +88,7 @@ async function afterOneChat(script: Script, seen: SidecarRequest[], ownTime: (h:
       await ownTime({
         run: async () => {
           expect(runtime.autonomy.wakeNow("ada")).toBeDefined();
-          await runtime.autonomy.tick();
+          await runtime.autonomy.runDue();
         },
         log: () => runtime.autonomy.log("ada", 100),
         messages: async (thread = "main") => (await runtime.registry.getOrCreate("ada", thread)).messages(),
@@ -199,7 +199,7 @@ async function wokenInRing(script: Script, seen: SidecarRequest[], limitMs: numb
     jest.useFakeTimers();
     try {
       world.runtime.autonomy.wakeFor("ada", { name: "show", reason: "The show.", at: Date.now(), thread: "ring", limitMs });
-      await world.runtime.autonomy.tick();
+      await world.runtime.autonomy.runDue();
       await after(world);
     } finally {
       jest.useRealTimers();
@@ -337,7 +337,7 @@ test("a trigger handed to a wake as it runs out of rounds isn't lost with the wa
         expect(kept.filter((message) => message.content.includes("encore"))).toEqual([]);
         expect(kept.at(-1)?.content).toBe("[This wake used up its rounds of tool use, and Shore stopped it here.]");
 
-        await world.runtime.autonomy.tick();
+        await world.runtime.autonomy.runDue();
         expect(seen.length).toBeGreaterThan(lastCall);
         expect(textOf(required(seen[lastCall]))).toContain('[Your trigger "encore" fired at ');
         expect(world.runtime.autonomy.log("ada", 100).filter((event) => event.kind === "tick_fired").map((event) => event.detail)).toEqual([
@@ -368,13 +368,13 @@ test("a trigger shown to a wake in a step that its time limit then cuts off wake
       expect(textOf(required(seen[1]))).toContain('[Your trigger "encore" fired at ');
       expect(world.runtime.autonomy.log("ada", 100).map((event) => event.kind)).toContain("timeout");
 
-      await world.runtime.autonomy.tick();
+      await world.runtime.autonomy.runDue();
       expect(seen).toHaveLength(3);
       expect(world.runtime.autonomy.log("ada", 100).filter((event) => event.kind === "tick_fired").map((event) => event.detail)).toEqual([
         'Woken in "ring" by trigger "show"',
         'Woken in "ring" by trigger "encore"',
       ]);
-      await world.runtime.autonomy.tick();
+      await world.runtime.autonomy.runDue();
       expect(seen).toHaveLength(3);
     },
     { started: (world) => { ring = world; } },
@@ -433,7 +433,7 @@ test("a trigger that fires once a wake has been told to wrap up isn't handed to 
       expect(lastTurn(seen[3])).not.toContain("has just written to you");
       expect(lastTurn(seen[4])).toContain("User has just written to you");
 
-      await world.runtime.autonomy.tick();
+      await world.runtime.autonomy.runDue();
       expect(seen.length).toBeGreaterThan(5);
       expect(required(seen[5]).messages).toHaveLength(1);
       const opener = lastTurn(seen[5]);

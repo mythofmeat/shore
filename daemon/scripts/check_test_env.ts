@@ -23,3 +23,18 @@ if (offenders.length > 0) {
   process.exit(1);
 }
 console.log("no direct process.env writes in tests");
+
+const LENIENT_TICK = /\bautonomy\.tick\(\)/;
+const lenient: string[] = [];
+for (const rel of new Glob("**/*.ts").scanSync(TESTS)) {
+  readFileSync(join(TESTS, rel), "utf8").split("\n").forEach((line, i) => {
+    if (LENIENT_TICK.test(line)) lenient.push(`${relative(ROOT, join(TESTS, rel))}:${i + 1}  ${line.trim().slice(0, 100)}`);
+  });
+}
+if (lenient.length > 0) {
+  console.error(`Tests drive a tick with autonomy.tick() in ${lenient.length} place(s):\n`);
+  for (const o of lenient) console.error(`  ${o}`);
+  console.error("\nUse autonomy.runDue(): tick() only logs a wake or compaction that throws, so the test would pass.");
+  process.exit(1);
+}
+console.log("no tests drive a tick that only logs its failures");

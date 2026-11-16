@@ -795,7 +795,7 @@ describe("a daemon that stays up", () => {
     client.close();
     await Bun.sleep(PAST_IDLE_MS);
 
-    await daemon.runtime.autonomy.tick();
+    await daemon.runtime.autonomy.runDue();
 
     await until(() => threadActivityNow(daemon.runtime.config.dirs.data, "ada", "main").turns === 0, "the idle conversation compacting");
     const index = daemon.runtime.historyIndex;
@@ -884,7 +884,7 @@ describe("coming back up", () => {
     await Bun.sleep(PAST_IDLE_MS);
     expect(passes).toBe(0);
 
-    await second.runtime.autonomy.tick();
+    await second.runtime.autonomy.runDue();
     expect(passes).toBeGreaterThan(0);
     expect(threadActivityNow(data, "ada", "main").turns).toBe(0);
   });
@@ -910,7 +910,7 @@ describe("coming back up", () => {
     let passes = 0;
     const second = await start(place, [], { anthropic: compacting(async () => { passes += 1; await resuming.promise; }) });
     await until(() => passes > 0, "the side thread's compaction resuming");
-    await second.runtime.autonomy.tick();
+    await second.runtime.autonomy.runDue();
     expect(passes).toBe(1);
     expect(threadActivityNow(data, "ada", "main").turns).toBe(3);
 
