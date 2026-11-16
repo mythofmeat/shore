@@ -1575,7 +1575,7 @@ pub(crate) enum ThreadCommand {
         name: String,
     },
 
-    /// Unlock a thread, so the character can change its label, purpose and files again with edit_thread
+    /// Unlock a thread, so the character can change its label, purpose and files again
     Unlock {
         /// Thread id
         #[arg(add = values(Completes::Threads))]

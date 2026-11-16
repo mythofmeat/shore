@@ -479,7 +479,7 @@ test("a trigger can name the thread its wake runs in, and how long its wake may 
   expect(where('limit = "2h"')).toEqual({ thread: undefined, limitMs: 2 * HOUR });
   expect(where('limit = "2h"\nwake = false')).toBe("`t` isn't running: `limit` is how long a wake may run, and this trigger doesn't wake you");
   expect(only('when = "user_back"\nafter = "8h"\nreason = "r"\nlimit = "2h"')).toBe("`t` isn't running: `limit` is how long a wake may run, and this trigger doesn't wake you");
-  expect(where('thread = "the garden"')).toBe('`t` isn\'t running: `thread` must be a thread\'s id, as `list_threads` shows it, and "the garden" can\'t be one');
+  expect(where('thread = "the garden"')).toBe('`t` isn\'t running: `thread` must be a thread\'s id, as `threads` lists it, and "the garden" can\'t be one');
   expect(where("thread = 5")).toBe("`t` isn't running: `thread` must be text in quotes");
   expect(where('thread = "garden"\nwake = false')).toBe("`t` isn't running: `thread` is where a wake runs, and this trigger doesn't wake you");
   expect(only('when = "user_back"\nafter = "8h"\nreason = "r"\nthread = "garden"')).toBe("`t` isn't running: `thread` is where a wake runs, and this trigger doesn't wake you");

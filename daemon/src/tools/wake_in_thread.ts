@@ -30,7 +30,7 @@ const MINUTE_MS = 60_000;
 
 export function wakeInThreadRequest(input: Record<string, unknown>): WakeInThreadRequest {
   const thread = typeof input["thread"] === "string" ? input["thread"].trim() : "";
-  if (!isValidThreadId(thread)) throw new InvalidArgs("thread must be a thread's id, as `list_threads` shows it");
+  if (!isValidThreadId(thread)) throw new InvalidArgs("thread must be a thread's id, as `threads` lists it");
   const reason = typeof input["reason"] === "string" ? input["reason"].trim() : "";
   if (reason === "") throw new InvalidArgs("reason must be a non-empty string");
   const overwrite = input["overwrite"] === true;
@@ -58,7 +58,7 @@ export function handleWakeInThread(
   if (request.thread === here) throw new ToolIoError(`you are in "${request.thread}" now, so there is nothing to hand over`);
   const outcome = handOff(request);
   if (outcome.kind === "off") throw new ToolIoError(`${userName} has your triggers switched off, so nothing would wake you`);
-  if (outcome.kind === "no_thread") throw new ToolIoError(`you have no thread "${request.thread}" to be woken in; \`list_threads\` shows the ones you have`);
+  if (outcome.kind === "no_thread") throw new ToolIoError(`you have no thread "${request.thread}" to be woken in; \`threads\` lists the ones you have`);
   if (outcome.kind === "wakes_thread") throw new ToolIoError(`"${request.thread}" is where Shore keeps the working from your wakes, so no wake runs there`);
   if (outcome.kind === "waiting") {
     throw new ToolIoError(

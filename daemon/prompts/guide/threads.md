@@ -1,6 +1,6 @@
 # Threads
 
-A thread is a conversation with a context of its own. What is said in one isn't shown in another, and {{user}} chooses which one to talk in. `{{list_threads}}` shows the threads you have, which one is home, which one you are in, and when {{user}} last wrote in each.
+A thread is a conversation with a context of its own. What is said in one isn't shown in another, and {{user}} chooses which one to talk in. `{{threads}}` is the tool for them: its action `list` shows the threads you have, which one is home, which one you are in, and when {{user}} last wrote in each.
 
 ## The kinds
 
@@ -13,12 +13,12 @@ A thread is a conversation with a context of its own. What is said in one isn't 
 
 - Your diary. An entry reaches every thread that wasn't the one it was written in; the `diary` topic has the details.
 - Your files. Every thread works in the same workspace.
-- The chat logs. `{{search_chat_logs}}` finds what was said in any thread.
+- The chat logs. `{{chat_logs}}` finds what was said in any thread.
 - Nothing else. A turn in one thread has none of another thread's conversation in front of it.
 
 ## Side threads
 
-`{{start_thread}}` makes one, and switching to it is {{user}}'s call: you stay where you are.
+The action `start` makes one, and switching to it is {{user}}'s call: you stay where you are.
 
 - `name` is its id: letters, digits, dot, dash or underscore, starting with a letter or digit, at most 64 characters. `label` is the name {{user}}'s thread list shows.
 - `purpose` is a line or two on what the thread is for. You are shown it whenever you are in that thread.
@@ -27,13 +27,13 @@ A thread is a conversation with a context of its own. What is said in one isn't 
 - `opening` is your first message there, so {{user}} finds something when they switch to it.
 - `folder` puts the thread in a folder of {{user}}'s thread list, which is made if there isn't one by that name.
 
-`{{edit_thread}}` changes a side thread's label, purpose or files, whoever started it. Give only what should change. An empty `label` or `purpose` clears it, and `files` replaces the whole list. If any file can't be found or doesn't fit, nothing changes, the label and purpose included. It is refused for your home thread and for a thread {{user}} has locked, which `{{list_threads}}` marks.
+The action `edit` changes a side thread's label, purpose or files, whoever started it. Give only what should change. An empty `label` or `purpose` clears it, and `files` replaces the whole list. If any file can't be found or doesn't fit, nothing changes, the label and purpose included. It is refused for your home thread and for a thread {{user}} has locked, which `list` marks.
 
 A side thread has no time of its own until you give it some: nothing wakes you in it unasked. A trigger with `thread` set to the thread's id gives it regular time, at the hours or the interval you choose, and `{{wake_in_thread}}` takes you there once. The `triggers` topic has an example.
 
 ## Sealed threads
 
-`{{start_sealed_thread}}` makes a thread that {{user}} can't see until the time you set, for something you want ready for them by then, such as a surprise. `opens` is a local date and 24-hour time that is still to come, like "2026-12-24 08:00".
+`start` with `sealed_until` makes a thread that {{user}} can't see until that time, for something you want ready for them by then, such as a surprise. `sealed_until` is a local date and 24-hour time that is still to come, like "2026-12-24 08:00". A sealed thread takes only that, a `name` and a `label`.
 
 Until it opens:
 

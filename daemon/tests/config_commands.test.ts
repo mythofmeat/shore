@@ -180,6 +180,20 @@ describe("[tools], [subagents] and [notifications] in config output", () => {
     }
   });
 
+  test("shore tools says which tool a name is part of now, for the character's tools and a sub-agent's", async () => {
+    const w = await build(undefined, [
+      "[tools]", 'enabled = ["read", "search_chat_logs", "threads", "nope"]',
+      "[subagents.scout]", 'description = "looks"', 'prompt = "look"', 'tools = ["edit_thread", "chat_logs"]',
+    ].join("\n"));
+    const listed = tools(w.ctx);
+    expect(listed.warnings).toEqual([
+      "tools.enabled references 'search_chat_logs', which is now part of 'chat_logs'",
+      "tools.enabled references unknown tool 'nope'",
+      "subagent 'scout' references 'edit_thread', which is now part of 'threads'",
+    ]);
+    expect(listed.tools.filter((row) => row.main).map((row) => row.tool)).toEqual(["read", "threads"]);
+  });
+
   test("shore tools lists each tool with who may use it and each sub-agent, and warns about names that lead nowhere", async () => {
     const w = await build(undefined, TOML);
     const listed = tools(w.ctx, ["mcp__search__find", "mcp__search__add"]);

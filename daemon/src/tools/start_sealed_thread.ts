@@ -17,8 +17,8 @@ export function sealedThreadRequest(input: Record<string, unknown>, timeZone: st
   }
   const label = typeof input["label"] === "string" ? input["label"].trim() : "";
   if (label === "") throw new InvalidArgs("label is required");
-  const local = localDateTime(input["opens"]);
-  if (local === undefined) throw new InvalidArgs('opens must be a local date and 24-hour time, like "2026-12-24 08:00"');
+  const local = localDateTime(input["sealed_until"]);
+  if (local === undefined) throw new InvalidArgs('sealed_until must be a local date and 24-hour time, like "2026-12-24 08:00"');
   return { id, label, unsealAt: resolveInZone(asNaive(local), timeZone) };
 }
 

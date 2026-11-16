@@ -27,7 +27,7 @@ Nothing here needs a tracker file of your own to carry it from one wake to the n
 
 - What a wake did and where it stopped: the note it ends with. Your diary shows it to every turn for {{diary_window}}, and the next wake in the same thread starts with it however much later that is.
 - Chores, and anything that repeats: triggers. `{{list_triggers}}` shows when each is next due.
-- Projects: a thread each. `{{list_threads}}` shows them, a thread's purpose and files are in front of every turn there, and a wake there picks up from the last one's note.
+- Projects: a thread each. `{{threads}}` lists them, a thread's purpose and files are in front of every turn there, and a wake there picks up from the last one's note.
 - Something you are waiting on for longer than a day: a trigger with `on` and `wake = false`, for the day to look at it again.
 - What should outlast all of these: your files.
 
@@ -67,7 +67,7 @@ From least to most:
 
 What it doesn't start with:
 
-- The thread's own conversation, or what earlier wakes did there. The thread keeps its conversation, your wakes thread keeps what earlier wakes did, and `{{search_chat_logs}}` and `{{read_chat_logs}}` find both.
+- The thread's own conversation, or what earlier wakes did there. The thread keeps its conversation, your wakes thread keeps what earlier wakes did, and `{{chat_logs}}` finds both.
 - A wake's own working, in what it is shown of a thread.
 
 A side thread's purpose and files are in the prompt of a wake there. The files are read afresh as the wake starts, unless {{user}} has just been writing in that thread.
@@ -76,7 +76,7 @@ A side thread's purpose and files are in the prompt of a wake there. The files a
 
 - Your final response is your note to yourself. It goes in your diary, cut at {{diary_note_chars}} characters, and the next wake in the same thread starts with it. A final response of just `NO_NOTE` leaves no note, and the note before it stays the one the next wake starts with.
 - Text you wrap in `<sendMessage>...</sendMessage>` in that final response is sent to {{user}}. It is posted in the thread the wake ran in.
-- Everything else is your working: how the wake opened, each round of tool use, and the final response with the note. It goes to your wakes thread, a thread Shore makes the first time it is needed and marks in `{{list_threads}}`. {{user}} can read it there but doesn't write there, and no wake runs there.
+- Everything else is your working: how the wake opened, each round of tool use, and the final response with the note. It goes to your wakes thread, a thread Shore makes the first time it is needed and marks in the list `{{threads}}` gives. {{user}} can read it there but doesn't write there, and no wake runs there.
 - The thread the wake ran in keeps how it opened, a line saying where its working went, and the message you sent.
 - A wake in a sealed thread is the exception: its working stays in the sealed thread, which is hidden anyway.
 - Your working isn't shown to you again. A later wake there starts fresh, and your replies there and that thread's compaction are shown the wake as how it opened, a line saying how many tool calls it made, your note without its thinking, and the message you sent. What you will need again belongs in the note or in a file.
@@ -114,6 +114,6 @@ A message from {{user}}, in any thread, ends it.
 
 ## When something is wrong
 
-- A wake aimed at a thread you don't have, or at your wakes thread, runs nothing, and a diary entry from Shore says so. `{{list_threads}}` shows the threads you do have.
+- A wake aimed at a thread you don't have, or at your wakes thread, runs nothing, and a diary entry from Shore says so. `{{threads}}` lists the threads you do have.
 - `{{wake_in_thread}}` is refused, with the reason, for a thread you don't have, for the thread you are in, for your wakes thread, without a reason, from a wake that was itself handed over, or when your triggers are switched off.
 - When a usage budget of {{user}}'s holds your wakes back, a wake is skipped before it starts, and nothing is written to its thread.

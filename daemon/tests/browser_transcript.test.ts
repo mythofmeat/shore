@@ -114,7 +114,7 @@ describe("segments and chat logs", () => {
   });
 
   test("a chat log line names its message at the end, with or without a marker, and other lines name none", () => {
-    expect(isChatLogTool("search_chat_logs") && isChatLogTool("read_chat_logs")).toBe(true);
+    expect(["chat_logs", "search_chat_logs", "read_chat_logs", "chat_log", "threads"].map(isChatLogTool)).toEqual([true, true, true, false, false]);
     expect(isChatLogTool("read")).toBe(false);
     expect(chatLogMessageId("2026-11-10 Tue 09:05  ada: hello there  m_42")).toBe("m_42");
     expect(chatLogMessageId("▶ 2026-11-10 Tue 09:05  ada: the match  m_7 (thread story)")).toBe("m_7");

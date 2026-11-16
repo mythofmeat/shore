@@ -28,7 +28,7 @@ const discovery = Bun.serve({ hostname: "127.0.0.1", port: 0, fetch(request) {
 await writeFile(configPath, `[chat]
 model = "anthropic:claude-opus-4-8"
 [tools]
-enabled = ${JSON.stringify(process.env["SHORE_BROWSER_MEDIA_FIXTURE"] === "true" ? ["bash", "read", "mcp__tool_fixture__three_images"] : ["bash", "search_chat_logs"])}
+enabled = ${JSON.stringify(process.env["SHORE_BROWSER_MEDIA_FIXTURE"] === "true" ? ["bash", "read", "mcp__tool_fixture__three_images"] : ["bash", "chat_logs"])}
 [tools.bash]
 max_result_chars = 1024
 [mcp.tool_fixture]
@@ -176,7 +176,7 @@ const provider: SidecarProvider = {
     if (question.includes("chat log fixture") || searched) {
       const usage = { input_tokens: 4, output_tokens: 2, cache_read_tokens: 0, cache_creation_tokens: 0 };
       if (!searched) {
-        yield { type: "tool_use", id: "chat-log-search", name: "search_chat_logs", input: { query: "earlier session", all_time: true } };
+        yield { type: "tool_use", id: "chat-log-search", name: "chat_logs", input: { action: "search", query: "earlier session", all_time: true } };
         yield { type: "done", content: "", finish_reason: "tool_use", usage, timing: { total_ms: 1, time_to_first_token_ms: 1 } };
         return;
       }

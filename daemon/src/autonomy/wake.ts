@@ -276,7 +276,7 @@ export async function runWake(character: string, config: LoadedConfig, wake: Wak
   const characterDir = characterDataDir(config.dirs.data, character);
   const engine = await deps.engine(character, wake.thread);
   if (engine === undefined) {
-    addDiaryNote(characterDir, { at: deps.now?.() ?? Date.now(), thread: "", source: "shore", text: `You were to be woken in the thread "${wake.thread}" by ${firedBy(wake.fired)}, but you have no such thread, so nothing ran. \`list_threads\` shows the threads you do have.` });
+    addDiaryNote(characterDir, { at: deps.now?.() ?? Date.now(), thread: "", source: "shore", text: `You were to be woken in the thread "${wake.thread}" by ${firedBy(wake.fired)}, but you have no such thread, so nothing ran. \`threads\` lists the threads you do have.` });
     events.push({ kind: "call_failed", detail: `Wake skipped: no thread "${wake.thread}"` });
     return { events };
   }

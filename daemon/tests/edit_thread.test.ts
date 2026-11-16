@@ -61,7 +61,7 @@ async function setup(files: Record<string, string>) {
   const registry = await CharacterRegistry.create(dirs.config, dirs.data, config);
   const events: ServerMessage[] = [];
   const edit = async (input: Record<string, unknown>): Promise<unknown> =>
-    await dispatchTool("edit_thread", input, await buildToolContext(config, dirs.data, "frank", {
+    await dispatchTool("threads", { action: "edit", ...input }, await buildToolContext(config, dirs.data, "frank", {
       editThread: (character, request) => editCharacterThread({ registry, emitEvent: (event) => events.push(event) }, character, request),
     }));
   const stored = async (id: string): Promise<ThreadRecord | undefined> =>

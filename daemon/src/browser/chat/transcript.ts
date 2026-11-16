@@ -53,7 +53,7 @@ export function segmentDetail(segment: SegmentSummary, now = new Date()): string
 const CHAT_LOG_ENTRY = /^(?:\u25B6 )?\d{4}-\d{2}-\d{2} [A-Za-z]{3} \d{2}:\d{2} {2}/;
 
 export function isChatLogTool(name: string): boolean {
-  return name === "search_chat_logs" || name === "read_chat_logs";
+  return name === "chat_logs" || name === "search_chat_logs" || name === "read_chat_logs";
 }
 
 export function chatLogMessageId(line: string): string | undefined {

@@ -22,7 +22,7 @@ How you do all this is up to you.
 
 {{conversations}}
 
-`read_chat_logs` reads a conversation and `search_chat_logs` finds older things. The commits listed with a conversation are what its compaction changed, and `git log -L` on any line says when it was written.{{#if reads}} These are the files you opened most since your last dream, which is what you lean on:
+`chat_logs` reads a conversation and finds older things. The commits listed with a conversation are what its compaction changed, and `git log -L` on any line says when it was written.{{#if reads}} These are the files you opened most since your last dream, which is what you lean on:
 
 {{reads}}{{/if}}
 {{#if notes}}

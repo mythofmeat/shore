@@ -4,7 +4,7 @@ const STAMP: &[u8] = b"0000-00-00 Aaa 00:00  ";
 const TARGET_MARK: &str = "\u{25b6} ";
 
 pub(crate) fn is_chat_log_tool(name: &str) -> bool {
-    matches!(name, "search_chat_logs" | "read_chat_logs")
+    matches!(name, "chat_logs" | "search_chat_logs" | "read_chat_logs")
 }
 
 pub(crate) fn line_message_id(line: &str) -> Option<&str> {
@@ -39,6 +39,21 @@ pub(crate) fn copies_note(copies: &[MessageCopy]) -> Option<String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_chat_log_call_is_known_by_the_tools_name_and_by_the_two_names_it_replaced() {
+        assert_eq!(
+            [
+                "chat_logs",
+                "search_chat_logs",
+                "read_chat_logs",
+                "chat_log",
+                "threads"
+            ]
+            .map(is_chat_log_tool),
+            [true, true, true, false, false]
+        );
+    }
 
     #[test]
     fn every_message_a_chat_log_result_lists_is_found_by_its_id_and_nothing_else() {
