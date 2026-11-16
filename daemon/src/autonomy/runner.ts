@@ -352,21 +352,8 @@ export class CharacterAutonomy {
     this.#state.dirty = true;
   }
 
-  setCompactionConfig(compaction: CompactionRunnerConfig): void {
-    this.#config = {
-      autonomyEnabled: this.#config.autonomyEnabled,
-      compactionEnabled: compaction.compactionEnabled,
-      minTurns: compaction.minTurns,
-      maxTurns: compaction.maxTurns,
-      idleTriggerSecs: compaction.idleTriggerSecs,
-      archiveAfterSecs: compaction.archiveAfterSecs,
-      maxContextTokens: compaction.maxContextTokens,
-      ...(this.#config.dream === undefined ? {} : { dream: this.#config.dream }),
-    };
-  }
-
-  setDreamConfig(dream: DreamRunnerConfig): void {
-    this.#config = { ...this.#config, dream };
+  setConfig(config: AutonomyRunnerConfig): void {
+    this.#config = config;
   }
 
   forceDream(): "queued" | "running" {

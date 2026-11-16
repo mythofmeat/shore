@@ -5,7 +5,7 @@ import { homeThreadOf, threadActivityNow } from "../engine/threads.ts";
 import { hostZone } from "../ledger/zoned.ts";
 import type { LoadedConfig } from "../config/loader.ts";
 import { loadCompactionCheckpoint } from "../memory/compaction/checkpoint.ts";
-import { dreamRunnerConfig, type AutonomyRunnerConfig, type CompactionRunnerConfig, type DreamRunnerConfig, type RestoredIdle } from "./runner.ts";
+import { dreamRunnerConfig, type AutonomyRunnerConfig, type CompactionRunnerConfig, type RestoredIdle } from "./runner.ts";
 import type { DormancyConfig } from "./dormancy.ts";
 import type { AutonomyService, RegisterCharacter } from "./service.ts";
 
@@ -13,12 +13,8 @@ export function runnerConfigFor(config: LoadedConfig): AutonomyRunnerConfig {
   return {
     autonomyEnabled: config.app.triggers.enabled,
     ...compactionConfigFor(config),
-    dream: dreamConfigFor(config),
+    dream: dreamRunnerConfig(config.app.dreaming),
   };
-}
-
-export function dreamConfigFor(config: LoadedConfig): DreamRunnerConfig {
-  return dreamRunnerConfig(config.app.dreaming);
 }
 
 function compactionConfigFor(config: LoadedConfig): CompactionRunnerConfig {
@@ -70,9 +66,8 @@ export function registrationFor(character: string, config: LoadedConfig): Regist
 type ServiceSlice = Pick<
   AutonomyService,
   | "register"
-  | "setCompactionConfig"
+  | "setRunnerConfig"
   | "setDormancyConfig"
-  | "setDreamConfig"
   | "backfillActivity"
   | "onUserMessage"
   | "onUserActivityElsewhere"
@@ -146,12 +141,8 @@ export class TurnAutonomyBridge {
     for (const character of Array.from(this.#registered.keys())) {
       this.#after(character, () => {
         const config = effectiveConfig(character);
-        this.#service.setCompactionConfig(
-          character,
-          compactionConfigFor(config),
-        );
+        this.#service.setRunnerConfig(character, runnerConfigFor(config));
         this.#service.setDormancyConfig(character, dormancyConfigFor(config));
-        this.#service.setDreamConfig(character, dreamConfigFor(config));
       });
     }
   }

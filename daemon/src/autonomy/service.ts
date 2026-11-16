@@ -12,8 +12,6 @@ import {
   type AutonomyEvents,
   type AutonomyExecutor,
   type AutonomyRunnerConfig,
-  type CompactionRunnerConfig,
-  type DreamRunnerConfig,
   type DreamStatus,
   type RestoredIdle,
   type RunningWake,
@@ -155,16 +153,12 @@ export class AutonomyService {
     }
   }
 
-  setCompactionConfig(character: string, compaction: CompactionRunnerConfig): void {
-    this.#entries.get(character)?.runner.setCompactionConfig(compaction);
+  setRunnerConfig(character: string, config: AutonomyRunnerConfig): void {
+    this.#entries.get(character)?.runner.setConfig(config);
   }
 
   setDormancyConfig(character: string, config: DormancyConfig): void {
     this.#entries.get(character)?.runner.setDormancyConfig(config);
-  }
-
-  setDreamConfig(character: string, dream: DreamRunnerConfig): void {
-    this.#entries.get(character)?.runner.setDreamConfig(dream);
   }
 
   forceDreamNow(character: string): "queued" | "running" | undefined {

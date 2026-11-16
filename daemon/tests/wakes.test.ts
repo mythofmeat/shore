@@ -1281,6 +1281,29 @@ test("a trigger that fires while the character is dormant, or with its triggers 
   }, (app) => { app.triggers.enabled = false; });
 });
 
+test("switching triggers on or off reaches wakes on the reload that carries it: a firing wakes the character once they are on, and nothing does once they are off, a wake started by hand included", async () => {
+  const lamp = { name: "lamp", reason: "the lamp is low", at: T0 + 10 * MINUTE };
+  await withCharacter(async ({ runtime, say, reload, thread }) => {
+    await say("hello");
+    at(10);
+    runtime.registry.effectiveConfig("ada").app.triggers.enabled = true;
+    await reload();
+    runtime.autonomy.wakeFor("ada", lamp);
+    await runtime.autonomy.tick();
+    expect((await thread("main")).at(-1)).toMatchObject({ role: "assistant", origin: "autonomous", content: "I found the keeper's log." });
+  }, (app) => { app.triggers.enabled = false; });
+
+  await withCharacter(async ({ runtime, script, say, reload, wakeNow }) => {
+    await say("hello");
+    at(10);
+    runtime.registry.effectiveConfig("ada").app.triggers.enabled = false;
+    await reload();
+    runtime.autonomy.wakeFor("ada", lamp);
+    await wakeNow();
+    expect(script.wakes).toHaveLength(0);
+  });
+});
+
 test("a trigger that fires during a wake in its thread is handed to that wake at its next step, along with word that the user wrote elsewhere", async () => {
   await withCharacter(async ({ runtime, script, say, wakeNow }) => {
     await runtime.registry.createThread("ada", "garden");
