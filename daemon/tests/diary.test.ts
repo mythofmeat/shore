@@ -30,10 +30,9 @@ function note(id: string, at: number, text: string): DiaryNote {
   return { id, at: new Date(at).toISOString(), thread: "own-time", source: "wake", text };
 }
 
-test("a note is the closing text without what was sent, and a wake with nothing to say leaves none", () => {
-  expect(closingNote("Read the keeper's log up to March.\n<sendMessage>I found the log.</sendMessage>")).toBe("Read the keeper's log up to March.");
-  expect(closingNote("<sendMessage>one</sendMessage>Half done.<sendMessage>two\nlines</sendMessage> Lamp next.")).toBe("Half done. Lamp next.");
-  expect(closingNote("<sendMessage>I found the log.</sendMessage>")).toBeUndefined();
+test("a note is the closing text whole, tags left in it included, and a wake with nothing to say leaves none", () => {
+  expect(closingNote("  Read the keeper's log up to March.\n")).toBe("Read the keeper's log up to March.");
+  expect(closingNote("Read the keeper's log up to March.\n<sendMessage>I found the log.</sendMessage>")).toBe("Read the keeper's log up to March.\n<sendMessage>I found the log.</sendMessage>");
   expect(closingNote("  \n")).toBeUndefined();
   expect(closingNote("NO_NOTE")).toBeUndefined();
   expect(closingNote(" NO_NOTE\n")).toBeUndefined();

@@ -479,6 +479,7 @@ export const TOOLS_NOW_PART_OF: ReadonlyMap<string, string> = new Map([
   ["edit_thread", "threads"],
   ["search_chat_logs", "chat_logs"],
   ["read_chat_logs", "chat_logs"],
+  ["send_push", "send_message"],
 ]);
 
 export function toolPatternMatches(pattern: string, name: string): boolean {

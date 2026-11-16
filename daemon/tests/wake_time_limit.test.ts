@@ -1,6 +1,7 @@
 import { afterAll, afterEach, expect, jest, test } from "bun:test";
 import { join } from "node:path";
 import { unfoldedDiary } from "../src/autonomy/diary.ts";
+import { wakeRecord } from "../src/autonomy/wake_record.ts";
 import type { WakeEvent } from "../src/autonomy/wake_log.ts";
 import type { Message } from "../src/engine/types.ts";
 import type { GenerateResponse, SidecarProvider, SidecarRequest } from "../src/llm/types.ts";
@@ -23,6 +24,14 @@ interface Round {
 type Script = (request: SidecarRequest, wake: number) => Round;
 
 const READ_SOUL: Round["blocks"] = [{ type: "tool_use", id: "read", name: "read", input: { file_path: "SOUL.md" } }];
+
+function sending(text: string, thread?: string): Round["blocks"] {
+  return [{ type: "tool_use", id: "send", name: "send_message", input: { text, ...(thread === undefined ? {} : { thread }) } }];
+}
+
+function sent(request: SidecarRequest): boolean {
+  return request.messages.some((message) => message.content.some((block) => block.type === "tool_use" && block.name === "send_message"));
+}
 
 function textOf(request: SidecarRequest): string {
   return request.messages.flatMap((message) => message.content.flatMap((block) => block.type === "text" ? [block.text] : [])).join("\n");
@@ -71,7 +80,7 @@ async function afterOneChat(script: Script, seen: SidecarRequest[], ownTime: (h:
     name: "wake-time-limit-own",
     keyEnv: KEY_ENV,
     provider: slowProvider(script, seen),
-    tools: ["read"],
+    tools: ["read", "send_message"],
     autonomy: true,
   }, async ({ runtime, config }) => {
     jest.useFakeTimers();
@@ -97,7 +106,7 @@ test("a wake in home still busy at 25 minutes is told how long it has left, and 
     (request) => {
       if (nudged(request)) return { minutes: 0.5, blocks: READ_SOUL };
       if (textOf(request).includes("[System nudge")) {
-        return { minutes: 0.5, blocks: [{ type: "text", text: "<sendMessage>I'll finish this next time.</sendMessage>" }] };
+        return sent(request) ? { minutes: 0.5, blocks: [{ type: "text", text: "NO_NOTE" }] } : { minutes: 0.5, blocks: sending("I'll finish this next time.") };
       }
       return { minutes: 7, blocks: READ_SOUL };
     },
@@ -145,6 +154,29 @@ test("a wake in home stopped at its 30-minute limit says so in that thread, the 
   );
 });
 
+test("a wake stopped at its limit still delivers what it had sent by then, and the next wake there is told it went", async () => {
+  const seen: SidecarRequest[] = [];
+  await afterOneChat(
+    (request, wake) => wake !== 1
+      ? { minutes: 0, blocks: [{ type: "text", text: "NO_NOTE" }] }
+      : sent(request) ? { minutes: 7, blocks: READ_SOUL } : { minutes: 7, blocks: sending("Halfway through the log.") },
+    seen,
+    async ({ run, log, messages }) => {
+      await run();
+      expect(log().filter((event) => event.kind === "timeout")).toHaveLength(1);
+      expect((await messages()).slice(-2).map((message) => [message.role, message.origin, message.content])).toEqual([
+        ["system", "autonomous", "[This wake reached its limit of 30 minutes, and Shore stopped it here.]"],
+        ["assistant", "autonomous", "Halfway through the log."],
+      ]);
+      expect(log().filter((event) => event.kind === "message_sent").map((event) => event.detail)).toEqual(["Autonomous message sent: Halfway through the log."]);
+
+      await run();
+      const opening = seen.filter((request) => request.context?.call_type === "wake").map(textOf);
+      expect(opening[1]).toContain(", before it had finished. The message it had already written was still sent to User. ");
+    },
+  );
+});
+
 interface RingOptions {
   maxToolRounds?: number;
   wrapUpRounds?: number;
@@ -157,7 +189,7 @@ async function wokenInRing(script: Script, seen: SidecarRequest[], limitMs: numb
     name: "wake-time-limit",
     keyEnv: KEY_ENV,
     provider: slowProvider(script, seen),
-    tools: ["read"],
+    tools: ["read", "send_message"],
     autonomy: true,
     ...(maxToolRounds === undefined ? {} : { model: { maxToolRounds } }),
     ...(wrapUpRounds === undefined ? {} : { tune: (app) => { app.triggers.max_wrap_up_rounds = wrapUpRounds; } }),
@@ -191,28 +223,43 @@ async function ringEnd(world: ChatWorld): Promise<[role: string, origin: string,
 test("a wake in a thread runs to the limit its trigger set, is warned a quarter of an hour before, and can finish inside it", async () => {
   const seen: SidecarRequest[] = [];
   await wokenInRing(
-    (request) => textOf(request).includes("[System nudge")
-      ? { minutes: 1, blocks: [{ type: "text", text: "Stopped at the second act.\n<sendMessage>More tomorrow.</sendMessage>" }] }
-      : { minutes: 22, blocks: READ_SOUL },
+    (request) => sent(request)
+      ? { minutes: 1, blocks: [{ type: "text", text: "Stopped at the second act." }] }
+      : textOf(request).includes("[System nudge") ? { minutes: 1, blocks: sending("More tomorrow.") } : { minutes: 22, blocks: READ_SOUL },
     seen,
     120 * MINUTE,
     async (world) => {
-      expect(seen).toHaveLength(6);
-      expect(seen.map((request) => request.max_tool_rounds)).toEqual([undefined, undefined, undefined, undefined, undefined, undefined]);
+      expect(seen).toHaveLength(7);
+      expect(seen.map((request) => request.max_tool_rounds)).toEqual([undefined, undefined, undefined, undefined, undefined, undefined, undefined]);
       expect(textOf(required(seen[0]))).toContain("A wake here can run for up to 2 hours. After 105 minutes, you will get a nudge to wrap up");
-      expect(seen.map(nudged)).toEqual([false, false, false, false, false, true]);
+      expect(seen.map(nudged)).toEqual([false, false, false, false, false, true, false]);
       expect(textOf(required(seen[5]))).toEndWith(
         "[System nudge: this wake stops in about 10 minutes or after 3 more rounds, counting this one, whichever comes first. " +
         "Wrap up now: finish with your note to yourself, saying where you stopped so you can pick it up here next time. " +
-        "Only what you put in <sendMessage> tags is sent to User.]",
+        "Nothing in it is sent to User.]",
       );
       expect(ringNotes(world)).toEqual([["wake", "Stopped at the second act."]]);
       expect(await ringEnd(world)).toEqual([["system", "autonomous", "…"], ["assistant", "autonomous", "…"]]);
       expect((await endOf(world, "wakes")).map(([role, origin, content]) => [role, origin, content.slice(0, 20)])).toEqual([
-        ["system", "autonomous", "[System nudge: this "],
+        ["user", "", "…"],
         ["assistant", "", "…"],
       ]);
+      expect((await world.runtime.registry.getOrCreate("ada", "ring")).messages().at(-1)?.content).toBe("More tomorrow.");
       expect(world.runtime.autonomy.log("ada", 100).map((event) => event.kind)).not.toContain("timeout");
+    },
+  );
+});
+
+test("a wake stopped at its limit that had sent to another thread delivers it there, and is kept as a wake that sent something", async () => {
+  const seen: SidecarRequest[] = [];
+  await wokenInRing(
+    (request) => sent(request) ? { minutes: 27, blocks: READ_SOUL } : { minutes: 1, blocks: sending("Still at the second act.", "main") },
+    seen,
+    120 * MINUTE,
+    async (world) => {
+      expect((await world.runtime.registry.getOrCreate("ada", "main")).messages().at(-1)).toMatchObject({ role: "assistant", origin: "autonomous", content: "Still at the second act." });
+      expect((await ringEnd(world)).at(-1)).toEqual(["system", "autonomous", "[This wake reached its limit of 2 hours, and Shore stopped it here.]"]);
+      expect(wakeRecord(join(world.config.dirs.data, "ada"), "ring").stopped).toMatchObject({ why: "time", sent: true });
     },
   );
 });
@@ -238,6 +285,7 @@ test("a wake in a thread still busy at its limit is stopped there, and the threa
         ["tick_fired", 'Woken in "ring" by trigger "show"'],
         ["timeout", 'Wake in "ring" reached its limit of 2 hours and was stopped'],
       ]);
+      expect(wakeRecord(join(world.config.dirs.data, "ada"), "ring").stopped).toMatchObject({ why: "time", sent: false });
     },
   );
 });

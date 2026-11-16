@@ -2,7 +2,7 @@ import { expect, test } from "bun:test";
 
 import { spanPhrase, triggerFiredNote } from "../src/autonomy/wake_shape.ts";
 import { firedBy } from "../src/autonomy/runner.ts";
-import { wakeCutShortNote, wakeStoppedNote, wakeWrapUpText, withoutSent, wrapUpMsFor } from "../src/autonomy/wake.ts";
+import { tagsSentNothingNote, wakeCutShortNote, wakeStoppedNote, wakeWrapUpText, wrapUpMsFor } from "../src/autonomy/wake.ts";
 import { dispatchTool, type ToolContext } from "../src/tools/dispatch.ts";
 import { handleWakeInThread, wakeInThreadRequest } from "../src/tools/wake_in_thread.ts";
 
@@ -34,21 +34,15 @@ test("a wake's wrap-up nudge says how long is left, how many rounds, and where t
   expect(wakeWrapUpText(4 * MINUTE, 3, "eve")).toBe(
     "[System nudge: this wake stops in about 4 minutes or after 3 more rounds, counting this one, whichever comes first. " +
     "Wrap up now: finish with your note to yourself, saying where you stopped so you can pick it up here next time. " +
-    "Only what you put in <sendMessage> tags is sent to eve.]",
+    "Nothing in it is sent to eve.]",
   );
   expect(wakeWrapUpText(30_000, 1, "eve")).toStartWith("[System nudge: this wake stops in less than a minute or after this round, whichever comes first. ");
 });
 
-test("what a wake sent is left out of the note it keeps in the thread, since the message follows it there", () => {
-  expect(withoutSent([
-    { type: "thinking", thinking: "<sendMessage>not this</sendMessage>", signature: "s" },
-    { type: "text", text: "Done.\n<sendMessage>Part one.\nIt rained.</sendMessage> And <sendMessage>two</sendMessage>" },
-    { type: "text", text: "nothing sent" },
-  ], "eve")).toEqual([
-    { type: "thinking", thinking: "<sendMessage>not this</sendMessage>", signature: "s" },
-    { type: "text", text: "Done.\n[sent to eve as the next message here] And [sent to eve as the next message here]" },
-    { type: "text", text: "nothing sent" },
-  ]);
+test("a wake that still wraps a message in tags is told in its diary that nothing was sent, and how to send one", () => {
+  expect(tagsSentNothingNote("ring", "eve")).toBe(
+    'Your wake in "ring" wrapped a message in <sendMessage> tags. The tags no longer send anything, so eve was not sent it. A message is sent with the `send_message` tool.',
+  );
 });
 
 test("a wake that is stopped is told why in its thread, and the diary says when one ran out before it finished", () => {

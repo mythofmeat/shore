@@ -17,7 +17,7 @@ async function character(): Promise<string> {
 }
 
 function loop(over: Partial<BackgroundLoopResult> = {}): BackgroundLoopResult {
-  return { sendMessageText: undefined, images: [], rounds: 3, ...over };
+  return { images: [], rounds: 3, ...over };
 }
 
 function wrote(...rounds: [text: string, tool: boolean][]): WakeWords {

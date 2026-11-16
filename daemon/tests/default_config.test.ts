@@ -38,7 +38,7 @@ describe("loadConfig", () => {
     expect(readFileSync(configPath, "utf8")).toStartWith("# Shore configuration. Set ANTHROPIC_API_KEY in the environment or .env.\n");
     expect(loaded.app.chat.model).toBe("anthropic:claude-opus-4-8");
     expect(loaded.app.tools.enabled).toEqual([
-      "bash", "read", "edit", "apply_patch", "chat_logs", "threads", "guide",
+      "bash", "read", "edit", "apply_patch", "chat_logs", "threads", "send_message", "guide",
     ]);
   });
 });

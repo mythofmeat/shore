@@ -60,6 +60,7 @@ import type { SessionRouter } from "../swp/session.ts";
 import { deferEditTo } from "../tools/dispatch.ts";
 import { makeDispatchCommand, type CommandPathDeps } from "./commands.ts";
 import type { DispatchRuntime, ReloadSummary } from "./command_dispatch.ts";
+import { replyMessages, type ReplyMessages } from "./reply_messages.ts";
 import {
   generationEngine,
   makeRunGeneration,
@@ -72,6 +73,7 @@ import type {
   HandlerNotifier,
   HandlerRegistry,
   MessageHandlerDeps,
+  RunGeneration,
 } from "./router.ts";
 import type { ToolContextDeps } from "./tool_context.ts";
 import { characterWorkspace } from "../tools/character_workspace.ts";
@@ -297,6 +299,23 @@ export interface HandlerAssembly
   log?: MessageHandlerDeps["log"];
 }
 
+export function buildRunGeneration(a: GenerationAssembly): RunGeneration {
+  const deps = buildGenerationDeps(a);
+  return async (params) => {
+    const sent: ReplyMessages[] = [];
+    await makeRunGeneration({
+      ...deps,
+      tools: (charName, turn) => {
+        const tools = chatToolDeps(a, charName, turn);
+        const messages = replyMessages(a, charName, turn, tools.push);
+        sent.push(messages);
+        return { ...tools, sendMessage: messages.send };
+      },
+    })(params);
+    for (const messages of sent) await messages.deliver();
+  };
+}
+
 const EXCLUSIVE_COMMANDS = new Set([
   "export_character",
   "export_backup",
@@ -320,7 +339,7 @@ export function buildMessageHandlerDeps(a: HandlerAssembly): MessageHandlerDeps 
     });
   }
 
-  const runGeneration = makeRunGeneration(buildGenerationDeps(a));
+  const runGeneration = buildRunGeneration(a);
   const dispatchCommand = makeDispatchCommand(buildCommandPathDeps(a));
   return {
     router: a.router,
