@@ -8,6 +8,13 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { exitIfStillRunning, startDaemon, type RunningDaemon } from "../src/daemon/run.ts";
 import { StartupError } from "../src/daemon/startup.ts";
+import { Database } from "bun:sqlite";
+import { TurnAutonomyBridge } from "../src/autonomy/registration.ts";
+import { Diagnostics } from "../src/diagnostics.ts";
+import { buildMessageHandlerDeps } from "../src/handler/deps.ts";
+import type { MessageHandlerDeps } from "../src/handler/router.ts";
+import { DEFAULT_HANDSHAKE } from "../src/swp/connection.ts";
+import { SessionRouter } from "../src/swp/session.ts";
 import { DATA_DIRECTORY_LEASE_FILE } from "../src/daemon/data_directory_lease.ts";
 import type { InstanceInfo } from "../src/daemon/instances.ts";
 import type { SidecarProvider, SidecarRequest } from "../src/llm/types.ts";
@@ -16,6 +23,7 @@ import { loadCompactionCheckpoint, saveCompactionCheckpoint } from "../src/memor
 import { shoreLog } from "../src/log.ts";
 import { CharacterWorkspace } from "../src/tools/character_workspace.ts";
 import { compactionFixture } from "./support/memory_fixture.ts";
+import { outcomeOf } from "./support/outcome.ts";
 import { until, untilAsync } from "./support/until.ts";
 
 const running: RunningDaemon[] = [];
@@ -732,45 +740,103 @@ describe("going down", () => {
   });
 });
 
-describe("coming back up", () => {
-  const IDLE_CONFIG = `${MODEL_CONFIG}[tools]\nenabled = ["bash"]\n[triggers]\nenabled = true\n[compaction]\nidle_after = "1s"\nmin_turns = 2\nkeep_recent_turns = 0\n`;
-  const PAST_IDLE_MS = 1_100;
+const IDLE_CONFIG = `${MODEL_CONFIG}[tools]\nenabled = ["bash"]\n[triggers]\nenabled = true\n[compaction]\nidle_after = "1s"\nmin_turns = 2\nkeep_recent_turns = 0\n`;
+const PAST_IDLE_MS = 1_100;
 
-  function compacting(onPass: (signal?: AbortSignal) => Promise<void> = () => Promise.resolve()): SidecarProvider {
-    const chat = scriptedProvider("noted");
-    const memory = compactionFixture();
-    return {
-      async *stream(req: SidecarRequest, signal?: AbortSignal) {
-        if (req.context?.call_type !== "compaction") { yield* chat.stream(req, signal); return; }
-        await onPass(signal);
-        yield* memory(req, signal);
-      },
-    } as unknown as SidecarProvider;
-  }
+function compacting(onPass: (signal?: AbortSignal) => Promise<void> = () => Promise.resolve()): SidecarProvider {
+  const chat = scriptedProvider("noted");
+  const memory = compactionFixture();
+  return {
+    async *stream(req: SidecarRequest, signal?: AbortSignal) {
+      if (req.context?.call_type !== "compaction") { yield* chat.stream(req, signal); return; }
+      await onPass(signal);
+      yield* memory(req, signal);
+    },
+  } as unknown as SidecarProvider;
+}
 
-  function stalling(reached: () => void): SidecarProvider {
-    return compacting(async (signal) => {
-      reached();
-      await new Promise<void>((resolve) => { if (signal?.aborted === true) resolve(); else signal?.addEventListener("abort", () => resolve(), { once: true }); });
-      throw new Error("stopped");
-    });
-  }
+function stalling(reached: () => void): SidecarProvider {
+  return compacting(async (signal) => {
+    reached();
+    await new Promise<void>((resolve) => { if (signal?.aborted === true) resolve(); else signal?.addEventListener("abort", () => resolve(), { once: true }); });
+    throw new Error("stopped");
+  });
+}
 
-  async function talk(client: Client, texts: readonly string[]): Promise<void> {
-    for (const text of texts) {
-      client.frames.length = 0;
-      client.send({ type: "message", text, stream: true, images: [] });
-      await client.awaitFrame("new_message");
-      await client.awaitFrame("stream_end");
-    }
-  }
-
-  async function command(client: Client, name: string, args: unknown): Promise<void> {
+async function talk(client: Client, texts: readonly string[]): Promise<void> {
+  for (const text of texts) {
     client.frames.length = 0;
-    client.send({ type: "command", name, args });
-    await client.awaitFrame("command_output");
+    client.send({ type: "message", text, stream: true, images: [] });
+    await client.awaitFrame("new_message");
+    await client.awaitFrame("stream_end");
   }
+}
 
+async function command(client: Client, name: string, args: unknown): Promise<void> {
+  client.frames.length = 0;
+  client.send({ type: "command", name, args });
+  await client.awaitFrame("command_output");
+}
+
+describe("a daemon that stays up", () => {
+  const session = { sessionId: 1, clientId: 1, clientType: "test", clientName: "test", capabilities: [], selectedCharacter: "ada", selectedThread: "main" };
+  const handlerFor = (daemon: RunningDaemon, log?: MessageHandlerDeps["log"]): MessageHandlerDeps => buildMessageHandlerDeps({
+    runtime: daemon.runtime, providers: daemon.runtime.providers, autonomy: new TurnAutonomyBridge(daemon.runtime.autonomy), diagnostics: new Diagnostics(),
+    router: new SessionRouter(), handshake: DEFAULT_HANDSHAKE, emitEvent: () => {}, ...(log === undefined ? {} : { log }),
+  });
+
+  test("a conversation left idle after a command and its last reply compacts without a restart, and the chat log index takes in what was archived", async () => {
+    const place = await layout(IDLE_CONFIG);
+    const daemon = await start(place, [], { anthropic: compacting() });
+    const client = await Client.open(daemon.port, "ada");
+    await client.awaitFrame("hello");
+    await command(client, "list_threads", {});
+    await talk(client, ["the lamp is lit", "two", "three"]);
+    client.close();
+    await Bun.sleep(PAST_IDLE_MS);
+
+    await daemon.runtime.autonomy.tick();
+
+    await until(() => threadActivityNow(daemon.runtime.config.dirs.data, "ada", "main").turns === 0, "the idle conversation compacting");
+    const index = daemon.runtime.historyIndex;
+    await untilAsync(async () => {
+      await index.runOnce();
+      const db = new Database(required(index.progress("ada")).indexPath, { readonly: true });
+      try {
+        return (db.query("SELECT count(*) AS n FROM messages WHERE text = 'the lamp is lit'").get() as { n: number }).n === 1;
+      } finally {
+        db.close();
+      }
+    }, "the archived turns being indexed");
+  });
+
+  test("a command waits for a snapshot being taken, one cancelled before its turn isn't run, and the handler logs where it is told to", async () => {
+    const daemon = await start(await layout(MODEL_CONFIG), [], { anthropic: scriptedProvider("noted") });
+    const handler = handlerFor(daemon);
+    const threads = (signal: AbortSignal) => handler.dispatchCommand({ name: "list_threads", args: {} }, { session, rid: "threads", kind: "command" }, signal);
+
+    const taking = Promise.withResolvers<void>();
+    const taken = Promise.withResolvers<void>();
+    const snapshot = daemon.runtime.snapshotGate.withSnapshot(async () => {
+      taking.resolve();
+      await taken.promise;
+    });
+    await taking.promise;
+    const answered = threads(new AbortController().signal).then((frame) => frame.type);
+    expect(await Promise.race([answered, Bun.sleep(200).then(() => "waiting")])).toBe("waiting");
+    taken.resolve();
+    await snapshot;
+    expect(await answered).toBe("command_output");
+
+    expect(await outcomeOf(threads(AbortSignal.abort()))).toThrow("The operation was aborted.");
+
+    const log = { error: () => {} };
+    expect(handlerFor(daemon, log).log).toBe(log);
+    expect("log" in handler).toBe(false);
+  });
+});
+
+describe("coming back up", () => {
   async function shutDown(daemon: RunningDaemon): Promise<void> {
     await daemon.shutdown();
     await daemon.done;

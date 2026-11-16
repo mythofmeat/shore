@@ -1786,7 +1786,10 @@ test("from a conversation the character sends to another thread once its reply i
       await say("you can reach my phone now");
       expect(await result()).toEqual({ text: 'It will be posted in "garden" when this turn ends. It goes to peggy\'s phone then too.', failed: false });
       expect(await garden()).toEqual([["assistant", "autonomous", "I miss you."]]);
-      expect((await thread("main")).at(-1)?.content).toBe("reply to: you can reach my phone now");
+      const reply = (await thread("main")).at(-1);
+      expect(reply?.content).toBe("reply to: you can reach my phone now");
+      expect(typeof reply?.model).toBe("string");
+      expect((await thread("garden")).map((message) => [message.provider_key, message.model])).toEqual([[reply?.provider_key, reply?.model]]);
       expect(fromReplies.flatMap((event) => event.type === "new_message" && event.thread === "garden" ? [[event.role, event.origin, event.content]] : [])).toEqual([["assistant", "autonomous", "I miss you."]]);
       expect(pushed).toEqual([{ path: "/phone", method: "POST", title: "Shore - ada", auth: "Bearer fixture-key", priority: null, body: "I miss you." }]);
       expect(announced.filter(([kind]) => kind === "autonomous_message")).toEqual([["autonomous_message", "Shore - ada", "I miss you.", undefined]]);

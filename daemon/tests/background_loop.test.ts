@@ -143,10 +143,11 @@ test("a wake out of rounds is told to wrap up, the log says when, and it stops o
 
 test("a wake still running at its time limit is cut off there, and one that ends in time leaves no timer behind", async () => {
   jest.useFakeTimers();
-  const late = loop(async (_call, _phase, signal) => {
-    const cut = new Promise<never>((_resolve, reject) => { signal.addEventListener("abort", () => { reject(new Error("aborted")); }); });
+  jest.advanceTimersByTime(5_000);
+  const late = loop(async (call, phase, signal) => {
     jest.advanceTimersByTime(60_000);
-    return await cut;
+    if (signal.aborted) throw new Error("aborted");
+    return await lastRound(phase, call, "Still going.");
   }, { timeLimitMs: 60_000, wrapUpMs: 10_000 });
   const stopped = await runBackgroundLoop(asked(), late.deps);
   expect([stopped.timedOut, stopped.failedRound, String(stopped.failure)]).toEqual([true, 0, "Error: aborted"]);
