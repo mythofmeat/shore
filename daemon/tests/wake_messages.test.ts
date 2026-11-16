@@ -141,8 +141,8 @@ test("a picture a wake's tool made is kept to go with what it sends, and a tool 
   const made = { path: "/media/lamp.png", caption: "the lamp" };
   const answers: Record<string, LoopToolResult> = {
     made: { output: "made the lamp", isError: false, value: made },
-    failed: { output: "no credit", isError: true, value: made },
-    read: { output: "Ada", isError: false, value: made },
+    failed: { output: "no credit", isError: true, value: { path: "/media/failed.png" } },
+    read: { output: "Ada", isError: false, value: { path: "/media/read.png" } },
     odd: { output: "done", isError: false, value: "not a picture" },
     block: { output: "kept", isError: false, block: { type: "tool_result", tool_use_id: "block", content: [{ type: "text", text: "as given" }] } },
   };
