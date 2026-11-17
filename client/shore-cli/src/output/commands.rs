@@ -50,7 +50,6 @@ pub(crate) fn format_command(name: &str, data: &serde_json::Value) {
         "compact" => print_compact_result(data),
         "compact_watch" | "compact_cancel" => print_compaction_watch(data),
         "segments" => print_segments(data),
-        "clear" => print_clear_result(data),
         "config_reload" => print_config_reload(data),
         "edit" => print_edit_confirmation(data),
         "delete" => print_delete_confirmation(data),
@@ -194,23 +193,6 @@ fn print_segment_row(segment: &serde_json::Value) {
         (None, Some(after)) => cli_out!("      memory: root..{after}"),
         _ => {}
     }
-}
-
-fn print_clear_result(data: &serde_json::Value) {
-    cli_out!("{}", cleared(data));
-}
-
-pub(crate) fn cleared(data: &serde_json::Value) -> String {
-    let count = |field: &str| {
-        data.pointer(&format!("/segment/{field}"))
-            .and_then(serde_json::Value::as_u64)
-            .unwrap_or(0)
-    };
-    format!(
-        "Cleared {} into segment #{}.",
-        turns(count("turn_count")),
-        count("index")
-    )
 }
 
 const CALL_BODY_PREVIEW: usize = 4000;

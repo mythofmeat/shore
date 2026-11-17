@@ -3,15 +3,14 @@ import { describe, expect, test } from "bun:test";
 import { mkdir, mkdtemp } from "node:fs/promises";
 import { join } from "node:path";
 
-import { clear, segments } from "../src/commands/segments.ts";
+import { segments } from "../src/commands/segments.ts";
 import { defaultAppConfig } from "../src/config/app.ts";
 import type { LoadedConfig } from "../src/config/loader.ts";
 import { emptyCatalog } from "../src/config/models.ts";
 import { ProviderRegistry } from "../src/config/providers.ts";
-import { ConversationEngine } from "../src/engine/conversation.ts";
 import { HISTORY_DB_FILE, HistoryStore } from "../src/engine/history_store.ts";
 import type { Message } from "../src/engine/types.ts";
-import { runCompaction } from "../src/memory/compaction/run.ts";
+import { runCompaction, runCompactionPass } from "../src/memory/compaction/run.ts";
 import type { SegmentsListing } from "../src/protocol/SegmentsListing.ts";
 import { threadFile, writeDurable } from "../src/storage/files.ts";
 import { testTmp } from "./support/tmp.ts";
@@ -48,11 +47,15 @@ async function listed(data: string): Promise<number[]> {
 }
 
 describe("a turn with five tool calls counts as one turn", () => {
-  test("in what clearing the context reports and in the segment it leaves", async () => {
+  test("in what archiving the whole conversation reports and in the segment it leaves", async () => {
     const data = await dataWith([...fiveToolCalls("a"), said("b-ask", "user", "thanks"), said("b-reply", "assistant", "any time")]);
-    const engine = await ConversationEngine.load("ada", data, undefined, "main");
-    const result = await clear(engine, { dataDir: data }, {});
-    expect([result.segment.index, result.segment.turn_count]).toEqual([0, 2]);
+    const root = join(data, "..");
+    const config: LoadedConfig = {
+      app: defaultAppConfig(), models: emptyCatalog(), providers: ProviderRegistry.empty(), rawTable: undefined,
+      dirs: { config: join(root, "config"), data, cache: join(root, "cache"), runtime: join(root, "runtime") },
+    };
+    const outcome = await runCompactionPass("ada", { config }, { keepTurnsOverride: 0 });
+    expect([outcome?.compactedTurns, outcome?.retainedTurns]).toEqual([2, 0]);
     expect(await listed(data)).toEqual([2]);
   });
 

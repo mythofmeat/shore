@@ -758,16 +758,6 @@ wire_types! {
         pub keep_turns: Option<u64>,
     }
 
-    #[serde(deny_unknown_fields)]
-    #[derive(Default)]
-    pub struct ClearArgs {
-        #[serde(default, skip_serializing_if = "Option::is_none")]
-        pub exclude: Option<bool>,
-        #[serde(default, deserialize_with = "deserialize_present", skip_serializing_if = "Option::is_none")]
-        #[ts(optional)]
-        pub note: Option<Option<String>>,
-    }
-
     #[serde(rename_all = "snake_case")]
     pub enum SegmentAction { List, Show, Find, Exclude, Include, Label, Note }
 
@@ -862,15 +852,6 @@ wire_types! {
 
     #[serde(untagged)]
     pub enum SegmentsResult { Listing(SegmentsListing), Inspection(Box<SegmentInspection>), Changed(Box<SegmentChanged>), Found(SegmentsFound) }
-
-    #[serde(tag = "status", rename_all = "snake_case")]
-    pub enum ClearResult {
-        Clear {
-            character: String,
-            thread: String,
-            segment: SegmentSummary,
-        },
-    }
 
     pub struct CompactionPreviewFile {
         pub path: String,
@@ -3069,7 +3050,6 @@ operations! {
     WatchCompaction: "compact_watch" (EmptyOperationArgs) => CompactionWatchResult,
     CancelCompaction: "compact_cancel" (EmptyOperationArgs) => CompactionWatchResult,
     InspectSegments: "segments" (SegmentsArgs) => SegmentsResult,
-    ClearConversation: "clear" (ClearArgs) => ClearResult,
     ReadStatus: "status" (EmptyOperationArgs) => StatusReport,
     ReadErrorLog: "error_log" (DiagnosticCountArgs) => ErrorLogResult,
     ReadWakeLog: "wake_log" (DiagnosticCountArgs) => WakeLogResult,

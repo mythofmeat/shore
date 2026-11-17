@@ -216,8 +216,8 @@ test("archiving the open thread takes every tab on it home, closes what was open
   await otherTab.goto("/workspace/wren/side");
   await expect(otherTab.locator("article.message.user")).toContainText("A message for the side thread");
   await otherTab.getByRole("button", { name: "Thread options" }).click();
-  await otherTab.getByRole("menuitem", { name: "Clear context…" }).click();
-  await expect(otherTab.getByRole("dialog", { name: "Clear context" })).toBeVisible();
+  await otherTab.getByRole("menuitem", { name: "Compact context…" }).click();
+  await expect(otherTab.getByRole("dialog", { name: "Compact context" })).toBeVisible();
 
   await page.bringToFront();
   await page.getByRole("button", { name: "Thread options" }).click();

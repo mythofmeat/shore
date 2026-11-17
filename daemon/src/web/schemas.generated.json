@@ -778,22 +778,6 @@
             "properties": {
               "name": {
                 "type": "string",
-                "const": "clear"
-              },
-              "data": {
-                "$ref": "#/$defs/ClearResult"
-              }
-            },
-            "required": [
-              "name",
-              "data"
-            ]
-          },
-          {
-            "type": "object",
-            "properties": {
-              "name": {
-                "type": "string",
                 "const": "status"
               },
               "data": {
@@ -4570,34 +4554,6 @@
           "thread",
           "segment",
           "excluded"
-        ]
-      },
-      "ClearResult": {
-        "oneOf": [
-          {
-            "type": "object",
-            "properties": {
-              "status": {
-                "type": "string",
-                "const": "clear"
-              },
-              "character": {
-                "type": "string"
-              },
-              "thread": {
-                "type": "string"
-              },
-              "segment": {
-                "$ref": "#/$defs/SegmentSummary"
-              }
-            },
-            "required": [
-              "status",
-              "character",
-              "thread",
-              "segment"
-            ]
-          }
         ]
       },
       "StatusReport": {
@@ -10751,22 +10707,6 @@
             "properties": {
               "name": {
                 "type": "string",
-                "const": "clear"
-              },
-              "data": {
-                "$ref": "#/$defs/ClearResult"
-              }
-            },
-            "required": [
-              "name",
-              "data"
-            ]
-          },
-          {
-            "type": "object",
-            "properties": {
-              "name": {
-                "type": "string",
                 "const": "status"
               },
               "data": {
@@ -14543,34 +14483,6 @@
           "thread",
           "segment",
           "excluded"
-        ]
-      },
-      "ClearResult": {
-        "oneOf": [
-          {
-            "type": "object",
-            "properties": {
-              "status": {
-                "type": "string",
-                "const": "clear"
-              },
-              "character": {
-                "type": "string"
-              },
-              "thread": {
-                "type": "string"
-              },
-              "segment": {
-                "$ref": "#/$defs/SegmentSummary"
-              }
-            },
-            "required": [
-              "status",
-              "character",
-              "thread",
-              "segment"
-            ]
-          }
         ]
       },
       "StatusReport": {

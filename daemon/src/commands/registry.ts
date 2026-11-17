@@ -5,7 +5,7 @@ import { deleteCharacter, exportBackup, exportCharacter, importArchive, importCh
 import { usage } from "./usage.ts";
 import { usageConfigView } from "../ledger/budget.ts";
 import { describeTool, runTool } from "./run_tool.ts";
-import { clear, segments } from "./segments.ts";
+import { segments } from "./segments.ts";
 import { status, errorLog, wakeLog, wakeNow, setDormant, setActive } from "./status.ts";
 import { diary } from "./diary.ts";
 import { statusContext } from "./status_context.ts";
@@ -28,7 +28,6 @@ import { alt, deleteMessages, edit, get, historyPage, injectSystem, listAlternat
 import { listMarks, mark, unmark, type MarkContext } from "./marks.ts";
 import { workspaceTurnsFor, type WorkspaceTurns } from "../tools/workspace_turns.ts";
 import { characterWorkspace } from "../tools/character_workspace.ts";
-import { effectiveConfig, saveWorkspaceAfterArchive } from "../memory/compaction/run.ts";
 import { config, configCheck, configSchemaCommand, configReload, tools } from "./config.ts";
 import { listProviderModels, refreshProviderModels, refreshAllProviderModels, reportedNanoGptSubscription, type ProvidersContext } from "./providers.ts";
 import {
@@ -216,14 +215,6 @@ export const commandOperations: OperationRegistry<CommandOperationContext> = {
     return segments(context.session.dataDir, engineOf(context).characterName, engineOf(context).thread, args, context.deps.historyIndex,
       compaction?.label === undefined ? undefined : { ...compaction.label, config: context.session.config });
   }),
-  clear: register("clear", { category: "Memory", scope: "character", prerequisites: [], effects: ["history_write"], confirmation: "archive", label: "Clear active context", fields: {
-    exclude: { label: "Exclude from history search", hint: "The archived segment stays inspectable and can be included again" },
-    note: { label: "Archive note", multiline: true },
-  } }, (context, args) => workspaceSaved(context, clear(engineOf(context), {
-    dataDir: context.session.dataDir,
-    ...(context.deps.compaction?.repoint === undefined ? {} : { repoint: async (name) => await context.deps.compaction?.repoint?.(name, context.session.config) }),
-    onComplete: (name) => context.deps.autonomy.onCompactionComplete(name, 0),
-  }, args))),
   status: register("status", { ...diagnosticPresentation, label: "System status", fields: {} },
     (context) => status(statusContext(engineOf(context), context.session, context.deps))),
   error_log: register("error_log", { ...diagnosticPresentation, label: "Errors and key fallbacks", fields: { count: diagnosticCount } },
@@ -574,12 +565,6 @@ async function announced<T>(context: CommandOperationContext, args: unknown, res
   const name = typeof args === "object" && args !== null && "name" in args && typeof args.name === "string" ? args.name : context.session.thread;
   if (name !== undefined && context.engine !== undefined) context.deps.threadsChanged?.(context.engine.characterName, name);
   return settled;
-}
-
-async function workspaceSaved<T extends { character: string }>(context: CommandOperationContext, archived: Promise<T>): Promise<T> {
-  const result = await archived;
-  await saveWorkspaceAfterArchive(context.session.config, effectiveConfig(result.character, context.session.config), result.character);
-  return result;
 }
 
 export function commandCatalogue(context?: CommandOperationContext) {

@@ -41,16 +41,6 @@ fn segments_are_listed_by_how_many_turns_they_hold() {
 }
 
 #[test]
-fn a_clear_says_how_many_turns_went_into_the_segment() {
-    let cleared = json!({ "status": "clear", "character": "ada", "thread": "main", "segment": segment(3, 30, &Value::Null) });
-    let (output, _frames) = asked(cleared, &["clear"]);
-    assert_eq!(
-        printed(succeeded(&output)),
-        "Cleared 30 turns into segment #3."
-    );
-}
-
-#[test]
 fn a_compaction_says_what_it_archived_and_kept_in_turns() {
     let rotated = |dry: bool| json!({ "status": "rotated", "character": "ada", "compacted_turns": 30, "retained_turns": 8, "dry_run": dry, "memory_files_written": [] });
     let (archived, _frames) = asked(rotated(false), &["compact"]);

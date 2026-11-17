@@ -39,9 +39,9 @@ export function Palette({ state, close, newThread, newCharacter, initialScope = 
       }))),
       ...(openThread === undefined || openThread.home || openThread.wakes === true ? [] : [{ id: "make-home", label: "Make home", icon: "home" as const, group: "Thread", run: run(() => { void makeHome(openThread); }) }]),
       ...(openThread?.wakes === true ? [] : [{ id: "another-take", label: "Another take", icon: "shuffle" as const, group: "Thread", run: run(() => { navigate({ view: "chat" }); void requests.regenerate({ anotherTake: true }, streamReplies()).catch((failure: unknown) => toasts.show(errorText(failure), "error")); }) }]),
-      ...(["reason", "system", "compact", "clear", "gallery", "model"] as const).map((name) => ({
+      ...(["reason", "system", "compact", "gallery", "model"] as const).map((name) => ({
         id: `dialog:${name}`, icon: "chat" as const, group: "Thread", run: run(() => { navigate({ view: "chat" }); requestAnimationFrame(() => openConversationDialog(name)); }),
-        label: { reason: "Regenerate with a reason", system: "Add system message", compact: "Compact context", clear: "Clear context", gallery: "Images", model: "Choose a model" }[name],
+        label: { reason: "Regenerate with a reason", system: "Add system message", compact: "Compact context", gallery: "Images", model: "Choose a model" }[name],
       })),
       { id: "effort", label: "Change reasoning effort", icon: "chat" as const, group: "Thread", run: run(() => { navigate({ view: "chat" }); requestAnimationFrame(openEffortMenu); }) },
       ...sortThreads(state.threads, state.folders).map((thread) => ({ id: `thread:${thread.id}`, label: `Open ${threadLabel(thread)}`, detail: state.character ?? "", icon: "chat" as const, group: "Threads", run: run(() => { navigate({ view: "chat" }); perform(() => workspace.openThread(thread.id)); }) })),

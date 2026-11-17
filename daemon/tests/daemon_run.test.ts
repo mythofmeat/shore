@@ -295,14 +295,14 @@ describe("archiving a conversation", () => {
     }
   });
 
-  test("a running daemon labels the segment a clear makes", async () => {
+  test("a running daemon labels the segment a compaction makes", async () => {
     const place = await layout(MODEL_CONFIG);
     const daemon = await start(place, [], { anthropic: scriptedProvider("Lamp talk") });
     const client = await Client.open(daemon.port, "ada", ["request-lifecycle"]);
     try {
       await client.awaitFrame("history");
       await finishTurn(client, "hi");
-      await runCommand(client, "clear", {});
+      await runCommand(client, "compact", { keep_turns: 0 });
       const label = async (): Promise<unknown> => {
         const listed = await runCommand(client, "segments", {}) as { data?: { segments?: { label: string | null }[] } };
         return listed.data?.segments?.[0]?.label;

@@ -3,14 +3,14 @@ use clap::{Args, CommandFactory, FromArgMatches, Parser, Subcommand, ValueEnum};
 use clap_complete::Shell;
 use shore_common::protocol::operations::{
     ActivateSession, BackgroundModelTarget, CallLogArgs, CancelCompaction, CheckConfiguration,
-    ClearArgs, ClearConversation, CompactArgs, CompactConversation, ConfigArgs, Configuration,
-    ConfigurationSchema, ConversationLog, ConversationLogArgs, DeleteMessages, DeleteMessagesArgs,
-    DiagnosticCountArgs, DiaryArgs, EditMessage, EditMessageArgs, EmptyOperationArgs, ExecuteTool,
-    FavoriteModel, FavoriteModelArgs, GetMessage, GetMessageArgs, InjectSystem, InjectSystemArgs,
-    InspectCalls, InspectModel, InspectSegments, ListMarks, ListMarksArgs, ListModels,
-    ListModelsArgs, ListProviderModels, ListProviders, MarkArgs, MarkKind, MarkReply,
-    MessageReferences, ModelInfoArgs, ModelPreferenceScope, ModelSettings, ModelSettingsArgs,
-    Operation, PingKeepalive, Presence, PresenceArgs, ProviderArgs, ProviderModelsArgs, ReadDiary,
+    CompactArgs, CompactConversation, ConfigArgs, Configuration, ConfigurationSchema,
+    ConversationLog, ConversationLogArgs, DeleteMessages, DeleteMessagesArgs, DiagnosticCountArgs,
+    DiaryArgs, EditMessage, EditMessageArgs, EmptyOperationArgs, ExecuteTool, FavoriteModel,
+    FavoriteModelArgs, GetMessage, GetMessageArgs, InjectSystem, InjectSystemArgs, InspectCalls,
+    InspectModel, InspectSegments, ListMarks, ListMarksArgs, ListModels, ListModelsArgs,
+    ListProviderModels, ListProviders, MarkArgs, MarkKind, MarkReply, MessageReferences,
+    ModelInfoArgs, ModelPreferenceScope, ModelSettings, ModelSettingsArgs, Operation,
+    PingKeepalive, Presence, PresenceArgs, ProviderArgs, ProviderModelsArgs, ReadDiary,
     ReadErrorLog, ReadStatus, ReadSubagentTraces, ReadTranscript, ReadWakeLog,
     RefreshAllProviderModels, RefreshProviderModels, ResetModel, ResetModelArgs, RunToolArgs,
     SegmentAction, SegmentsArgs, SetActive, SetDormant, SetModelSetting, SetModelSettingArgs,
@@ -364,22 +364,6 @@ pub(crate) enum CliCommand {
 
         /// Output raw JSON
         #[arg(long, global = true)]
-        json: bool,
-    },
-
-    /// Archive the active conversation without summarizing it into memory
-    #[command(display_order = 3)]
-    Clear {
-        /// Exclude the new segment from history search immediately
-        #[arg(long)]
-        exclude: bool,
-
-        /// Attach a note to the new segment
-        #[arg(long)]
-        note: Option<String>,
-
-        /// Output raw JSON
-        #[arg(long)]
         json: bool,
     },
 
@@ -2504,10 +2488,7 @@ fn parse_json_object(raw: &str) -> Result<BTreeMap<String, serde_json::Value>, S
 
 const COMMAND_GROUPS: [(&str, &[&str]); 6] = [
     ("Conversation", &["msg", "log"]),
-    (
-        "Maintenance",
-        &["compact", "clear", "segments", "export", "import"],
-    ),
+    ("Maintenance", &["compact", "segments", "export", "import"]),
     (
         "Configuration",
         &["character", "thread", "model", "provider", "config"],
@@ -2915,13 +2896,6 @@ pub(crate) fn to_swp_command(
                 Some(SegmentsCommand::Note { index, note }) => {
                     at(SegmentAction::Note, index, Some(note))
                 }
-            })
-        }
-
-        CliCommand::Clear { exclude, note, .. } => {
-            operation_to_swp::<ClearConversation>(ClearArgs {
-                exclude: Some(*exclude),
-                note: Some(note.clone()),
             })
         }
 
@@ -3964,10 +3938,6 @@ mod tests {
             (
                 &["segments", "show", "4"],
                 Some(("segments", json!({"action": "show", "index": 4}))),
-            ),
-            (
-                &["clear", "--exclude", "--note", "bad branch"],
-                Some(("clear", json!({"exclude": true, "note": "bad branch"}))),
             ),
             (&["config"], Some(("config", json!({})))),
             (

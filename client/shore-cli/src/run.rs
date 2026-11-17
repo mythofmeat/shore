@@ -313,7 +313,6 @@ pub(crate) async fn execute(
         | CliCommand::Provider { .. }
         | CliCommand::Compact { .. }
         | CliCommand::Segments { .. }
-        | CliCommand::Clear { .. }
         | CliCommand::Config { .. }
         | CliCommand::Usage { .. }
         | CliCommand::Diary { .. }
@@ -375,7 +374,6 @@ pub(crate) fn wants_json(other: &CliCommand) -> bool {
         | CliCommand::Diary { json, .. }
         | CliCommand::Presence { json, .. }
         | CliCommand::Segments { json, .. }
-        | CliCommand::Clear { json, .. }
         | CliCommand::Usage { json, .. } => *json,
         CliCommand::Debug { subcommand } => matches!(
             subcommand,
@@ -1243,7 +1241,6 @@ fn reads_the_selected_thread(command: &CliCommand) -> bool {
         CliCommand::Msg { .. }
         | CliCommand::Log { .. }
         | CliCommand::Compact { .. }
-        | CliCommand::Clear { .. }
         | CliCommand::Segments { .. } => true,
 
         CliCommand::Thread { .. }
@@ -2005,7 +2002,6 @@ mod tests {
             vec!["msg", "send", "hi"],
             vec!["log"],
             vec!["compact"],
-            vec!["clear"],
             vec!["segments"],
         ] {
             let mut full = vec!["shore"];

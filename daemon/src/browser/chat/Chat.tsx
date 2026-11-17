@@ -31,7 +31,7 @@ function SidebarToggle({ open, mobile, toggle, unread }: { open: boolean; mobile
 function ChatTopbar({ state, sidebarOpen, toggleSidebar, mobile }: { state: ChromeSnapshot; sidebarOpen: boolean; toggleSidebar: () => void; mobile: boolean }) {
   const [dialog, setDialog] = useState<ConversationDialog | "gallery" | null>(null);
   useEffect(() => {
-    const open = (event: Event) => { const name = (event as CustomEvent<string>).detail; if (["reason", "system", "compact", "clear", "gallery"].includes(name)) setDialog(name as ConversationDialog | "gallery"); };
+    const open = (event: Event) => { const name = (event as CustomEvent<string>).detail; if (["reason", "system", "compact", "gallery"].includes(name)) setDialog(name as ConversationDialog | "gallery"); };
     addEventListener(CONVERSATION_DIALOG_EVENT, open);
     return () => removeEventListener(CONVERSATION_DIALOG_EVENT, open);
   }, []);
@@ -54,7 +54,6 @@ function ChatTopbar({ state, sidebarOpen, toggleSidebar, mobile }: { state: Chro
       { label: "Another take", icon: "shuffle" as const, onSelect: () => { void conversation.regenerate({ anotherTake: true }, streamReplies()).catch((error: unknown) => toasts.show(errorText(error), "error")); }, disabled: !ready || busy || !hasTurns },
       { label: "Regenerate with a reason…", icon: "regenerate" as const, onSelect: () => setDialog("reason"), disabled: !ready || busy || !hasTurns },
     ]),
-    { label: "Clear context…", icon: "refresh", onSelect: () => setDialog("clear"), disabled: !ready || busy },
     "separator",
     ...(thread === undefined || thread.home || thread.wakes === true ? [] : [{ label: "Make home", icon: "home" as const, onSelect: () => { void makeHome(thread); }, disabled: !ready }]),
     { label: "Archive…", icon: "archive", onSelect: () => openThreadDialog("archive", threadId), disabled: !ready || thread?.home === true, danger: true },

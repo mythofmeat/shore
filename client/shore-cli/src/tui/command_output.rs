@@ -36,7 +36,6 @@ fn config_modes(command: &CliCommand) -> (bool, bool) {
         | CliCommand::Log { .. }
         | CliCommand::Compact { .. }
         | CliCommand::Segments { .. }
-        | CliCommand::Clear { .. }
         | CliCommand::Trace { .. }
         | CliCommand::Character { .. }
         | CliCommand::Thread { .. }
@@ -390,7 +389,6 @@ pub(crate) fn render(
             crate::output::compaction::write_watch_result(out, data, TUI_OUTPUT_WIDTH);
         })),
         "segments" => Some(render_segments(data)),
-        "clear" => Some(crate::output::commands::cleared(data)),
         "config_reload" => Some(render_config_reload(data)),
         "call_log" => Some(written(|out| {
             crate::output::commands::write_call_log(out, data, TUI_OUTPUT_WIDTH);
@@ -772,11 +770,6 @@ mod tests {
                 ]
                 .join("\n")
             )
-        );
-        let cleared = json!({ "status": "clear", "character": "ada", "thread": "main", "segment": segment(3, 30, &json!({})) });
-        assert_eq!(
-            super::render("clear", "clear", &cleared, "ada"),
-            Some("Cleared 30 turns into segment #3.".to_owned())
         );
     }
 

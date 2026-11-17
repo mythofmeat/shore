@@ -76,7 +76,6 @@ const WIRE_EXAMPLES: &[&[&str]] = &[
     ],
     &["compact", "--watch"],
     &["compact", "--cancel"],
-    &["clear", "--exclude", "--note", "archived"],
     &["segments"],
     &["segments", "show", "1"],
     &["segments", "find", "m_1", "m_2"],

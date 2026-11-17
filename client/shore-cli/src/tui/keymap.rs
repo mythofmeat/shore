@@ -53,7 +53,7 @@ pub(crate) const DEFAULT_NORMAL_KEYS: [(&str, &str); 24] = [
     ("O", "ui output"),
 ];
 
-pub(crate) const DEFAULT_SHORTCUTS: [(&str, &str); 8] = [
+pub(crate) const DEFAULT_SHORTCUTS: [(&str, &str); 7] = [
     ("regen", "msg regen"),
     ("edit", "msg edit"),
     ("alt", "msg alt"),
@@ -61,7 +61,6 @@ pub(crate) const DEFAULT_SHORTCUTS: [(&str, &str); 8] = [
     ("compact", "compact"),
     ("usage", "usage"),
     ("status", "status"),
-    ("clear", "clear"),
 ];
 
 const NAMED_KEYS: [&str; 15] = [

@@ -1,25 +1,15 @@
-import { homeThreadOf, isValidThreadId, readThreadsIndex } from "../engine/threads.ts";
-import { withConversation } from "../engine/lifecycle.ts";
+import { isValidThreadId, readThreadsIndex } from "../engine/threads.ts";
 import { readDurable, threadFile } from "../storage/files.ts";
 import { join } from "node:path";
 
-import {
-  MAIN_THREAD,
-  archiveKey,
-  characterDataDir,
-  threadDataDir,
-} from "../config/dirs.ts";
+import { MAIN_THREAD, archiveKey } from "../config/dirs.ts";
 
 import { HISTORY_DB_FILE, HistoryStore, type ArchivedCopy } from "../engine/history_store.ts";
 import { presentSegment } from "../engine/segments.ts";
-import { archiveAndRetain } from "../memory/compaction/archive.ts";
 import { labelIfUnlabelled, prepareLabelCall, type SegmentLabelDeps } from "../memory/compaction/label.ts";
 import { effectiveConfig, readArchivedSegment } from "../memory/compaction/run.ts";
-import { tryBeginCompaction } from "../memory/compaction/manager.ts";
-import { resetActivePromptSnapshot } from "../memory/deferred_edits.ts";
 import { withHistoryIndexLock } from "../memory/history_index.ts";
-import { required } from "../util/required.ts";
-import { CommandError, internalError, invalidRequest, notFound } from "./errors.ts";
+import { internalError, invalidRequest, notFound } from "./errors.ts";
 import type { OperationInput, OperationResult } from "../operations/types.ts";
 import type { MessageCopy } from "../protocol/MessageCopy.ts";
 import type { SegmentAction } from "../protocol/SegmentAction.ts";
@@ -36,14 +26,6 @@ export interface SegmentEngine {
 export interface SegmentIndexMutationSink {
   progressFor?(character: string): { indexPath: string } | undefined;
   noteMutation?(character: string): void;
-}
-
-export interface ClearContext {
-  dataDir: string;
-  repoint?: (character: string) => Promise<void>;
-  onComplete?: (character: string) => void;
-  now?: () => string;
-  newId?: () => string;
 }
 
 export async function segments(
@@ -168,75 +150,6 @@ function runSegments(
   }
 }
 
-export async function clear(
-  engine: SegmentEngine,
-  ctx: ClearContext,
-  args: OperationInput<"clear">,
-): Promise<OperationResult<"clear">> {
-  return await withConversation(threadDataDir(ctx.dataDir, engine.characterName, engine.thread), "rewrite", async () => {
-    const character = engine.characterName;
-    const guard = tryBeginCompaction(ctx.dataDir, character);
-    if (guard === undefined) {
-      throw new CommandError("busy", `Compaction already running for ${character}`);
-    }
-
-    try {
-      const characterDir = characterDataDir(ctx.dataDir, character);
-      const conversationDir = threadDataDir(ctx.dataDir, character, engine.thread);
-      let activeContent: string;
-      try {
-        activeContent = readDurable(threadFile(ctx.dataDir, character, engine.thread, "active.jsonl"));
-      } catch (error) {
-        if ((error as NodeJS.ErrnoException).code === "ENOENT") activeContent = "";
-        else throw error;
-      }
-      if (activeContent.trim() === "") throw invalidRequest("No messages to clear");
-
-      const excluded = args["exclude"] === true;
-      const note = nullableOptionalText(args["note"], "note");
-      await archiveAndRetain(
-        conversationDir,
-        {
-          dbPath: join(ctx.dataDir, HISTORY_DB_FILE),
-          archiveKey: archiveKey(character, engine.thread),
-        },
-        0,
-        activeContent,
-        ctx.now ?? (() => new Date().toISOString()),
-        ctx.newId ?? (() => crypto.randomUUID()),
-        `clear-${crypto.randomUUID()}`,
-        {
-          ...(excluded ? { excluded: true } : {}),
-          ...(note === undefined ? {} : { note }),
-        },
-      );
-
-      try {
-        await resetActivePromptSnapshot(characterDir, engine.thread);
-        await engine.reload();
-        if (engine.thread === await homeThreadOf(ctx.dataDir, character)) await ctx.repoint?.(character);
-      } catch (error) {
-        throw internalError(error instanceof Error ? error.message : String(error));
-      }
-      if (engine.thread === await homeThreadOf(ctx.dataDir, character)) ctx.onComplete?.(character);
-
-      const store = HistoryStore.open(join(ctx.dataDir, HISTORY_DB_FILE));
-      try {
-        return {
-          status: "clear",
-          character,
-          thread: engine.thread,
-          segment: presentSegment(required(store.latestEntry(archiveKey(character, engine.thread)))),
-        };
-      } finally {
-        store.close();
-      }
-    } finally {
-      guard.release();
-    }
-  });
-}
-
 async function findMessages(dataDir: string, character: string, value: unknown): Promise<SegmentsFound> {
   const ids = messageIds(value);
   const store = HistoryStore.open(join(dataDir, HISTORY_DB_FILE));
@@ -321,7 +234,3 @@ function nullableText(value: unknown, field: string): string | null {
   return trimmed === "" ? null : trimmed;
 }
 
-function nullableOptionalText(value: unknown, field: string): string | undefined {
-  if (value === undefined) return undefined;
-  return nullableText(value, field) ?? undefined;
-}

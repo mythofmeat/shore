@@ -280,10 +280,10 @@ function saidIn(request: SidecarRequest | undefined): string[] {
   return (request?.messages ?? []).map((message) => message.content.flatMap((block) => block.type === "text" ? [block.text] : []).join(""));
 }
 
-test("clearing a conversation commits and pushes the workspace too", async () => {
+test("compacting a conversation from a command commits and pushes the workspace, and the cached request starts over", async () => {
   let remote = "";
   await afterFirstChat({
-    name: "clear-saves", keyEnv: KEY_ENV, provider: provider(), tools: ["read"],
+    name: "compact-saves", keyEnv: KEY_ENV, provider: provider(), tools: ["read"],
     tune: (app) => { app.compaction.git_push = true; },
     prepare: (workspace) => {
       remote = join(workspace, "..", "remote.git");
@@ -299,15 +299,15 @@ test("clearing a conversation commits and pushes the workspace too", async () =>
     const result = await dispatchCommand(buildCommandPathDeps({
       runtime, autonomy, diagnostics: new Diagnostics(), router: new SessionRouter(),
       handshake: DEFAULT_HANDSHAKE, providers: runtime.providers, env,
-    }), { name: "clear", args: {} }, {
+    }), { name: "compact", args: { keep_turns: 0 } }, {
       session: { sessionId: 1, clientId: 1, clientType: "test", clientName: "test", capabilities: [], selectedCharacter: "ada", selectedThread: "main" },
-      rid: "clear",
+      rid: "compact",
       kind: "command",
     });
     await autonomy.settled("ada");
     await stopBackgroundCompactions(config.dirs.data);
     const git = gitAt(workspace);
-    expect(result).toMatchObject({ data: { status: "clear", character: "ada", thread: "main" } });
+    expect(result).toMatchObject({ data: { status: "rotated", character: "ada", compacted_turns: 1 } });
     expect(saidIn(runtime.cache.get("ada")).join("\n")).not.toContain("hello");
     expect(git("log", "-1", "--format=%an|%s")).toBe(`ada|${SAVED}`);
     expect(git("status", "--porcelain")).toBe("");
