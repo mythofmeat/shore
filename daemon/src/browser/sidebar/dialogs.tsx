@@ -8,6 +8,10 @@ export function threadFileList(text: string): string[] {
   return text.split("\n").map((line) => line.trim()).filter((line) => line !== "");
 }
 
+export function WhenLongField({ compaction, setCompaction }: { compaction: boolean; setCompaction: (compaction: boolean) => void }) {
+  return <label className="field"><span>Older turns are archived</span><select className="select" value={compaction ? "compact" : "trim"} onChange={(event) => setCompaction(event.target.value === "compact")}><option value="trim">Only when the context fills up</option><option value="compact">At the compaction limits</option></select></label>;
+}
+
 function errorText(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
 }
@@ -66,7 +70,7 @@ export function NewThreadDialog({ character, close }: { character: string; close
         <div className="form">
           <label className="field"><span>Model <span className="muted">(optional)</span></span><input className="input mono" placeholder={`${character}’s default`} value={model} onChange={(event) => setModel(event.target.value)} /></label>
           <label className="field"><span>Files in the prompt <span className="muted">(optional, one per line)</span></span><textarea className="input textarea mono" rows={3} placeholder={"stories/lighthouse.md\n[[lighthouse/]]"} value={files} onChange={(event) => setFiles(event.target.value)} /></label>
-          <label className="field"><span>When it gets long</span><select className="select" value={compaction ? "compact" : "trim"} onChange={(event) => setCompaction(event.target.value === "compact")}><option value="trim">Trim its oldest turns into the archive</option><option value="compact">Compact it into memory, as the home thread does</option></select></label>
+          <WhenLongField compaction={compaction} setCompaction={setCompaction} />
         </div>
       </details>
       {error === "" ? null : <p className="form-error" role="alert">{error}</p>}

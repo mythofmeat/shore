@@ -339,7 +339,7 @@ test("a thread's menu changes its settings without opening it, and archiving the
   await page.getByRole("menuitem", { name: "Thread settings…" }).click();
   const settings = page.getByRole("dialog", { name: "Thread settings" });
   await settings.getByLabel("Label", { exact: true }).fill("Everyday");
-  await settings.getByLabel("When it gets long").selectOption("trim");
+  await settings.getByLabel("Older turns are archived").selectOption("trim");
   await settings.getByRole("button", { name: "Save", exact: true }).click();
   await expect(settings).toBeHidden();
   await expect(threads.getByRole("button", { name: "Everyday", exact: true })).toBeVisible();
@@ -347,7 +347,7 @@ test("a thread's menu changes its settings without opening it, and archiving the
 
   await threads.getByRole("button", { name: "Everyday", exact: true }).click({ button: "right" });
   await page.getByRole("menuitem", { name: "Thread settings…" }).click();
-  await expect(settings.getByLabel("When it gets long")).toHaveValue("trim");
+  await expect(settings.getByLabel("Older turns are archived")).toHaveValue("trim");
   await settings.getByRole("button", { name: "Cancel", exact: true }).click();
   await expect(settings).toBeHidden();
 

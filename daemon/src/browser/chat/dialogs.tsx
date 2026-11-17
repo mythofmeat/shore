@@ -82,7 +82,7 @@ export function ConversationDialogs({ dialog, state, close }: { dialog: Conversa
         return compactionSummary(report);
       });
     }}>
-      <p className="form-text">Archives older turns so the thread fits the model’s context. Recent turns stay as they are, and the archived ones are kept as a segment you can open from the top of the thread.</p>
+      <p className="form-text">Archives the older turns of this thread as a segment you can open from the top of the thread. A reply you haven’t read stays, with everything after it.</p>
       <label className="field"><span>Turns to keep <span className="muted">(optional)</span></span><input className="input" inputMode="numeric" placeholder="Configured default" value={turns} onChange={(event) => setTurns(event.target.value.replace(/\D/g, ""))} /></label>
     </Form>;
     case "reason": return <ReasonForm close={close} busy={busy} error={error} />;

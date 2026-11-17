@@ -46,25 +46,22 @@ fn a_compaction_says_what_it_archived_and_kept_in_turns() {
     let (archived, _frames) = asked(rotated(false), &["compact"]);
     let told = words(succeeded(&archived));
     assert!(
-        told.contains("Turns 30 archived into history, 8 retained"),
+        told.starts_with("\u{2500}\u{2500} Compaction \u{2500}"),
         "{told}"
     );
-    assert!(!told.contains("Messages"), "{told}");
-    let (dry, _dry_frames) = asked(rotated(true), &["compact"]);
     assert!(
-        words(succeeded(&dry)).contains("Turns 30 would be archived into history, 8 retained"),
-        "{}",
-        words(&dry)
+        told.ends_with("\u{2500} Character ada Turns 30 archived, 8 kept"),
+        "{told}"
     );
-    let compacted = json!({
-        "status": "compacted", "character": "ada", "compacted_turns": 30, "retained_turns": 8,
-        "memory_files_written": ["memory/a.md"], "new_conversation_id": "c", "tool_rounds": 1, "tools_called": ["edit"],
-    });
-    let (summarized, _summarized_frames) = asked(compacted, &["compact"]);
+    let (dry, _dry_frames) = asked(rotated(true), &["compact"]);
+    let planned = words(succeeded(&dry));
     assert!(
-        words(succeeded(&summarized)).contains("Turns 30 compacted, 8 retained"),
-        "{}",
-        words(&summarized)
+        planned.starts_with("\u{2500}\u{2500} Compaction (dry run) \u{2500}"),
+        "{planned}"
+    );
+    assert!(
+        planned.ends_with("\u{2500} Character ada Turns 30 would be archived, 8 kept"),
+        "{planned}"
     );
 }
 

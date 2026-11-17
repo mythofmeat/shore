@@ -2060,7 +2060,7 @@ fn palette_confirmation_prompt(app: &App, command: &CliCommand) -> Option<String
             },
         } if !content.is_empty() => Some(format!("Replace the content of message {msg_ref:?}?")),
         CliCommand::Compact { .. } => {
-            Some("Summarize and archive older conversation turns?".to_owned())
+            Some("Archive the older turns of this conversation?".to_owned())
         }
         CliCommand::Character {
             subcommand: Some(CharacterCommand::New { name }),
@@ -2307,7 +2307,7 @@ mod tests {
             app.palette_confirmation
                 .as_ref()
                 .map(|confirmation| (confirmation.command.as_str(), confirmation.prompt.as_str())),
-            Some(("compact", "Summarize and archive older conversation turns?"))
+            Some(("compact", "Archive the older turns of this conversation?"))
         );
     }
 

@@ -101,7 +101,7 @@ const wakePresentation = { ...diagnosticPresentation, prerequisites: ["autonomy"
 const modelPresentation = { category: "Models", scope: "optional_character", prerequisites: [], effects: ["read"], confirmation: "none" } as const;
 const modelTargetFields = {
   name: { label: "Model", choices: "models", hint: "Omit for the active model; do not combine with role selectors" },
-  background_task: { label: "Background task", hint: "all, wake or compaction" },
+  background_task: { label: "Background task", hint: "all or wake" },
   subagent: { label: "Subagent", choices: "subagents", hint: "A configured name, or all for the shared subagent model" },
 } as const;
 const modelHiddenField = { label: "Include hidden models", hint: "Allow a model excluded by discovery filters" } as const;
@@ -483,7 +483,7 @@ export const commandOperations: OperationRegistry<CommandOperationContext> = {
   }, async (context, args) => threadLock(await threadListingContext(context.deps, engineOf(context), context.session), args)),
   thread_compaction: register("thread_compaction", {
     ...threadPresentation, label: "Set whether a thread compacts", effects: ["history_write"],
-    fields: { name: threadName, compaction: { label: "Compact", hint: "When the thread gets long, compact it into memory; off trims its oldest turns into the archive" } },
+    fields: { name: threadName, compaction: { label: "Compact", hint: "On: older turns are archived at the compaction limits. Off: only when the thread nearly fills the model's context" } },
   }, async (context, args) => threadCompaction(await threadListingContext(context.deps, engineOf(context), context.session), args)),
   thread_move: register("thread_move", {
     ...threadPresentation, label: "Move a thread in the list", effects: ["history_write"],

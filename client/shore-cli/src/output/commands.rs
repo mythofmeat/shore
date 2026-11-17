@@ -1560,10 +1560,6 @@ fn print_compaction_watch(data: &serde_json::Value) {
     super::compaction::write_watch_result(&mut out, data, term_width());
 }
 
-fn planned_turns(data: &serde_json::Value) -> u64 {
-    data["compacted_turns"].as_u64().unwrap_or(0)
-}
-
 fn string_list(data: &serde_json::Value, key: &str) -> Vec<String> {
     data[key]
         .as_array()
@@ -1604,150 +1600,14 @@ pub(crate) fn pause_reason_text(data: &serde_json::Value) -> String {
     }
 }
 
-fn write_resume_rows(out: &mut impl Write, rounds: u64) {
-    if rounds == 0 {
-        write_row(out, "Resume", "shore compact");
-        write_row(out, "Start over", "shore compact --restart");
-        return;
-    }
-    let plural = if rounds == 1 { "" } else { "s" };
-    write_row_colored(
-        out,
-        "Resume",
-        &format!("shore compact — continues from the {rounds} round{plural} already paid for"),
-        Tone::Good,
-    );
-    write_row_colored(
-        out,
-        "Start over",
-        &format!("shore compact --restart — discards {rounds} round{plural} and pays again"),
-        Tone::Warn,
-    );
-}
-
-fn kept_row(out: &mut impl Write, data: &serde_json::Value) {
-    let turns = planned_turns(data);
-    write_row(
-        out,
-        "Turns",
-        &format!("{turns} planned, all still in the conversation"),
-    );
-}
-
 pub(crate) fn write_compact_result<W: Write>(out: &mut W, data: &serde_json::Value, width: usize) {
-    let status = data["status"].as_str().unwrap_or("?");
-    let suffix = match status {
-        "dry_run" => "dry run",
-        "compacted" => "",
-        "rotated" => "archive-only",
-        "paused" => "paused",
-        "truncated" => "cut off",
-        "segment" => "segment",
-        other => other,
-    };
-    write_section_header(out, "Compaction", suffix, width);
-
-    let char_name = data["character"].as_str().unwrap_or("?");
-    write_row(out, "Character", char_name);
-
-    match status {
-        "dry_run" => {
-            let would = data["would_write_files"].as_u64().unwrap_or(0);
-            write_row(out, "Would write", &format!("{would} files"));
-            let retained_turns = data["retained_turns"].as_u64().unwrap_or(0);
-            write_row(
-                out,
-                "Turns",
-                &format!(
-                    "{} compacted, {retained_turns} retained",
-                    planned_turns(data)
-                ),
-            );
-        }
-        "compacted" => {
-            let files = data["memory_files_written"].as_array().map_or(0, Vec::len);
-            write_row(out, "Memory files", &format!("{files} written"));
-            let retained_turns = data["retained_turns"].as_u64().unwrap_or(0);
-            write_row(
-                out,
-                "Turns",
-                &format!(
-                    "{} compacted, {retained_turns} retained",
-                    planned_turns(data)
-                ),
-            );
-        }
-        "rotated" => {
-            let dry = data["dry_run"].as_bool().unwrap_or(false);
-            write_row(
-                out,
-                "Memory files",
-                "none written (memory.compaction.write_memory = false)",
-            );
-            let retained_turns = data["retained_turns"].as_u64().unwrap_or(0);
-            write_row(
-                out,
-                "Turns",
-                &format!(
-                    "{} {} into history, {retained_turns} retained",
-                    planned_turns(data),
-                    if dry { "would be archived" } else { "archived" }
-                ),
-            );
-        }
-        "segment" => {
-            let index = data["segment"].as_u64().unwrap_or(0);
-            let files = data["memory_files_written"].as_array().map_or(0, Vec::len);
-            write_row(
-                out,
-                "Segment",
-                &format!("{index}, {} turns read again", planned_turns(data)),
-            );
-            write_row(out, "Memory files", &format!("{files} written"));
-            write_row(out, "History", "unchanged: nothing archived or retained");
-        }
-        "paused" => {
-            write_row_colored(out, "Outcome", "nothing archived", Tone::Warn);
-            write_row(out, "Reason", &pause_reason_text(data));
-            if data["reason"].as_str() == Some("refusal") {
-                write_row_colored(
-                    out,
-                    "Hold",
-                    "automatic compaction waits until you retry",
-                    Tone::Warn,
-                );
-            }
-            let rounds = data["tool_rounds"].as_u64().unwrap_or(0);
-            let id = data["checkpoint_id"].as_str().unwrap_or("?");
-            write_row(out, "Checkpoint", &format!("{id} ({rounds} tool rounds)"));
-            if let Some(resume_at) = data["resume_at"].as_str() {
-                write_row(out, "Retry after", resume_at);
-            }
-            kept_row(out, data);
-            write_resume_rows(out, rounds);
-        }
-        "truncated" => {
-            write_row_colored(
-                out,
-                "Outcome",
-                "cut off at the token ceiling, so nothing was archived",
-                Tone::Warn,
-            );
-            let truncated = data["truncated_turns"].as_u64().unwrap_or(0);
-            let plural = if truncated == 1 { "" } else { "s" };
-            write_row(out, "Truncated", &format!("{truncated} model turn{plural}"));
-            let partial = string_list(data, "partial_writes");
-            if !partial.is_empty() {
-                write_row(out, "Partial", &partial.join(", "));
-            }
-            kept_row(out, data);
-        }
-        _ => {
-            write_row_colored(out, "Outcome", status, Tone::Warn);
-            kept_row(out, data);
-        }
-    }
-
+    let dry = data["dry_run"].as_bool().unwrap_or(false);
+    write_section_header(out, "Compaction", if dry { "dry run" } else { "" }, width);
+    write_row(out, "Character", data["character"].as_str().unwrap_or("?"));
+    let archived = data["compacted_turns"].as_u64().unwrap_or(0);
+    let kept = data["retained_turns"].as_u64().unwrap_or(0);
+    let verb = if dry { "would be archived" } else { "archived" };
+    write_row(out, "Turns", &format!("{archived} {verb}, {kept} kept"));
     _ = writeln!(out);
 }
 
