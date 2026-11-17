@@ -87,7 +87,7 @@ export function withSelectedCharacter(
     : { ...session, selectedCharacter, selectedThread: null };
 }
 
-export type DirectSender = (msg: ServerMessage) => Promise<void>;
+export type DirectSender = (msg: ServerMessage, catchUp?: boolean) => Promise<void>;
 
 export type RequestObserver = (sessionId: number, msg: ServerMessage) => void;
 
