@@ -72,8 +72,8 @@ describe("the models page", () => {
     const view = await page();
     expect(view.host.querySelector(":scope > .settings-description")?.textContent).toBe("Which models ada uses. Changes apply to the next response.");
     expect(choices(section(view.host, "Chat"))).toEqual([["ada’s default", "anthropic:opus", "Chosen for ada"], ["This thread", "anthropic:haiku", "Chosen for thread story"]]);
-    expect(section(view.host, "Background tasks")?.querySelector(".settings-section-head .settings-description")?.textContent).toBe("Wakes, compaction and dreaming can use a different model or settings from chat.");
-    expect(choices(section(view.host, "Background tasks"))).toEqual([["Wakes", "anthropic:haiku", "From the configuration (triggers.model)"], ["Compaction", "Not set", "Same as chat"], ["Dreaming", "Not set", null]]);
+    expect(section(view.host, "Background tasks")?.querySelector(".settings-section-head .settings-description")?.textContent).toBe("Wakes and compaction can use a different model or settings from chat.");
+    expect(choices(section(view.host, "Background tasks"))).toEqual([["Wakes", "anthropic:haiku", "From the configuration (triggers.model)"], ["Compaction", "Not set", "Same as chat"]]);
     expect(choices(section(view.host, "Subagents"))).toEqual([["Subagent helper", "anthropic:sonnet", null], ["Subagent scout", "anthropic:haiku", "inherits"]]);
     const plain = await page({ thread: "side" });
     expect(choices(section(plain.host, "Chat"))[1]).toEqual(["This thread", "Not set", "Uses ada’s default"]);
@@ -83,7 +83,7 @@ describe("the models page", () => {
   });
 
   test("model details follow the part chosen, or any model, and only a part has settings", async () => {
-    serve({ model_info: (args) => args["subagent"] === "helper" ? info("anthropic:sonnet", { supports_images: false, base_url: "https://proxy.example", top_p: 0.9 }) : args["background_task"] === "dreaming" ? info("anthropic:haiku", { supports_images: null }) : info(typeof args["name"] === "string" ? args["name"] : "anthropic:opus") });
+    serve({ model_info: (args) => args["subagent"] === "helper" ? info("anthropic:sonnet", { supports_images: false, base_url: "https://proxy.example", top_p: 0.9 }) : args["background_task"] === "compaction" ? info("anthropic:haiku", { supports_images: null }) : info(typeof args["name"] === "string" ? args["name"] : "anthropic:opus") });
     const before = app.socket().sent.length;
     const view = await page();
     const details = section(view.host, "Model details");
@@ -95,7 +95,7 @@ describe("the models page", () => {
     expect(details?.querySelector(".setting-label")?.className).toBe("setting-label mono");
     const select = view.host.querySelector<HTMLSelectElement>("select[aria-label='Show details for']");
     expect([...select?.querySelectorAll("option") ?? []].map((option) => [option.getAttribute("value"), option.textContent, option.parentElement?.tagName])).toEqual([
-      ["character", "Chat", "SELECT"], ["background:wake", "Wakes", "SELECT"], ["background:compaction", "Compaction", "SELECT"], ["background:dreaming", "Dreaming", "SELECT"],
+      ["character", "Chat", "SELECT"], ["background:wake", "Wakes", "SELECT"], ["background:compaction", "Compaction", "SELECT"],
       ["subagent:helper", "Subagent helper", "SELECT"], ["subagent:scout", "Subagent scout", "SELECT"], ["model:anthropic:haiku", "anthropic:haiku", "OPTGROUP"], ["model:anthropic:opus", "anthropic:opus", "OPTGROUP"],
     ]);
     expect(select?.querySelector("optgroup")?.getAttribute("label")).toBe("Any model");
@@ -104,7 +104,7 @@ describe("the models page", () => {
     await settle();
     values.push(select?.value);
     expect(facts().filter((fact) => fact?.startsWith("Images") === true || fact?.startsWith("Base URL") === true || fact?.startsWith("Top P") === true)).toEqual(["Top P|0.9|", "Images|Not supported|", "Base URL|https://proxy.example|mono"]);
-    await type(select, "background:dreaming");
+    await type(select, "background:compaction");
     await settle();
     values.push(select?.value);
     expect(facts().some((fact) => fact?.startsWith("Images") === true)).toBe(false);
@@ -115,9 +115,9 @@ describe("the models page", () => {
     await type(select, "character");
     await settle();
     values.push(select?.value);
-    expect(values).toEqual(["character", "subagent:helper", "background:dreaming", "model:anthropic:haiku", "character"]);
-    expect(named(before, "model_info"), "details are read again once the model list arrives").toEqual([{}, {}, { subagent: "helper" }, { background_task: "dreaming" }, { name: "anthropic:haiku" }, {}]);
-    expect(named(before, "model_settings")).toEqual([{}, { subagent: "helper" }, { background_task: "dreaming" }, {}]);
+    expect(values).toEqual(["character", "subagent:helper", "background:compaction", "model:anthropic:haiku", "character"]);
+    expect(named(before, "model_info"), "details are read again once the model list arrives").toEqual([{}, {}, { subagent: "helper" }, { background_task: "compaction" }, { name: "anthropic:haiku" }, {}]);
+    expect(named(before, "model_settings")).toEqual([{}, { subagent: "helper" }, { background_task: "compaction" }, {}]);
   });
 
   test("says while model details load or why they could not be read", async () => {

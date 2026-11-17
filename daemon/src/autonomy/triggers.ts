@@ -10,7 +10,7 @@ const TRIGGER_NAME = /^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$/;
 
 const SETTINGS = ["every", "at", "on", "when", "after", "follows", "check", "wake", "thread", "limit", "reason", "cooldown", "between"];
 
-const EVENTS = ["user_back", "user_quiet", "dream_done", "status_changed"] as const;
+const EVENTS = ["user_back", "user_quiet", "status_changed"] as const;
 
 const WEEKDAYS = ["sun", "mon", "tue", "wed", "thu", "fri", "sat"];
 

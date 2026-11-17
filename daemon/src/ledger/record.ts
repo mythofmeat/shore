@@ -119,9 +119,6 @@ export function continuationOf(callType: string): string {
     case "wake":
     case "wake_tool_loop":
       return "wake_tool_loop";
-    case "dreaming":
-    case "dreaming_tool_loop":
-      return "dreaming_tool_loop";
     default:
       return callType;
   }

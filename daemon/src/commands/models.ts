@@ -14,7 +14,6 @@ import type { LoadedConfig } from "../config/loader.ts";
 import {
   applySamplerOverlay,
   BACKGROUND_TASKS,
-  SHARED_BACKGROUND_TASKS,
   backgroundPreference,
   characterPreferencesPath,
   emptyPreferences,
@@ -139,10 +138,8 @@ function resolveActiveModel(ctx: ModelsContext): ResolvedModel {
 }
 
 function backgroundTask(selector: string): BackgroundTask {
-  if (selector === "wake" || selector === "compaction" || selector === "dreaming") return selector;
-  throw invalidRequest(
-    `unknown background task: ${selector}; expected all, wake, compaction, or dreaming`,
-  );
+  if (selector === "wake" || selector === "compaction") return selector;
+  throw invalidRequest(`unknown background task: ${selector}; expected all, wake or compaction`);
 }
 
 function backgroundTargetModel(ctx: ModelsContext, task: BackgroundTask): ResolvedModel {
@@ -169,14 +166,15 @@ function backgroundSettingTarget(ctx: ModelsContext, selector: string): SettingT
     return { kind: "background", tasks: [task], model: backgroundTargetModel(ctx, task) };
   }
 
-  const resolved = SHARED_BACKGROUND_TASKS.map(
+  const resolved = BACKGROUND_TASKS.map(
     (task) => [task, backgroundTargetModel(ctx, task)] as const,
   );
-  const first = required(resolved[0])[1];
+  const [head] = resolved;
+  const first = required(head)[1];
   const same = resolved.every(
     ([, m]) => m.providerKey === first.providerKey && m.modelId === first.modelId,
   );
-  if (same) return { kind: "background", tasks: SHARED_BACKGROUND_TASKS, model: first };
+  if (same) return { kind: "background", tasks: BACKGROUND_TASKS, model: first };
 
   const mapping = resolved.map(([task, m]) => `${task} → ${m.qualifiedName}`).join(", ");
   throw invalidRequest(
@@ -540,7 +538,7 @@ function loadPreferencesFor(
 
 const backgroundKeys = (selector: string): string[] =>
   selector === "all"
-    ? SHARED_BACKGROUND_TASKS.map(backgroundModelKey)
+    ? BACKGROUND_TASKS.map(backgroundModelKey)
     : [backgroundModelKey(backgroundTask(selector))];
 
 function configContext(ctx: ModelsContext): ConfigContext {
@@ -591,7 +589,7 @@ function unpinBackgroundModel(ctx: ModelsContext, selector: string): OperationRe
     if (removed.action === "removed") cleared.push(key);
   }
 
-  const tasks = selector === "all" ? SHARED_BACKGROUND_TASKS : [backgroundTask(selector)];
+  const tasks = selector === "all" ? BACKGROUND_TASKS : [backgroundTask(selector)];
   const roles = tasks.map((task) => backgroundRole(ctx, task));
   const [first] = roles as [ModelRole, ...ModelRole[]];
   const shared = roles.every((role) => role.model === first.model && role.source === first.source);

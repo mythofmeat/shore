@@ -68,7 +68,7 @@ export const SURFACES: Readonly<Record<string, Tier>> = {
     "status", "@status_section",
     "run_tool", "run_tool.tool", "run_tool.pairs", "run_tool.input", "run_tool.describe", "run_tool.raw", "@subagent_tool",
     "export_character", "export_character.character", "export_character.output", "import_character", "import_character.archive", "@archives",
-    "wake_now", "set_dormant", "set_active", "keepalive_ping_now", "session_activate", "dream", "dream.now",
+    "wake_now", "set_dormant", "set_active", "keepalive_ping_now", "session_activate",
     "renderer:request_phase", "renderer:archive_phase",
   ),
 };

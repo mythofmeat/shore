@@ -115,7 +115,7 @@ test("a trigger says when it fires in exactly one way", () => {
   const one = "`t` isn't running: it needs exactly one of `every`, `at`, `on`, `when` or `follows` to say when it fires";
   expect(whenOf("")).toBe(one);
   expect(whenOf('every = "1h"\nat = "20:00"')).toBe(one);
-  expect(whenOf('at = "20:00"\nwhen = "dream_done"')).toBe(one);
+  expect(whenOf('at = "20:00"\nwhen = "status_changed"')).toBe(one);
   expect(whenOf('every = "1h"\nfollows = "other"')).toBe(one);
   expect(whenOf('follows = "other"\nafter = "2h"')).toBe("`t` isn't running: `after` only goes with `when`");
   expect(whenOf('every = "1h"\nafter = "2h"')).toBe("`t` isn't running: `after` only goes with `when`");
@@ -146,16 +146,15 @@ test("`at` is a 24-hour time, on every day unless days are named, and the days c
 test("`when` names something that happens, and the two about the user being away need how long", () => {
   expect(whenOf('when = "user_back"\nafter = "8h"')).toEqual({ kind: "event", event: "user_back", afterMs: 8 * HOUR });
   expect(whenOf('when = "user_quiet"\nafter = "36h"')).toEqual({ kind: "event", event: "user_quiet", afterMs: 36 * HOUR });
-  expect(whenOf('when = "dream_done"')).toEqual({ kind: "event", event: "dream_done", afterMs: 0 });
   expect(whenOf('when = "status_changed"')).toEqual({ kind: "event", event: "status_changed", afterMs: 0 });
   expect(whenOf('when = "status_changed"\nafter = "1h"')).toBe('`t` isn\'t running: `when = "status_changed"` takes no `after`');
   expect(whenOf('when = "user_back"')).toBe('`t` isn\'t running: `when = "user_back"` needs `after`, the least time away that counts');
   expect(whenOf('when = "user_quiet"')).toBe('`t` isn\'t running: `when = "user_quiet"` needs `after`, the least time away that counts');
-  expect(whenOf('when = "dream_done"\nafter = "1h"')).toBe('`t` isn\'t running: `when = "dream_done"` takes no `after`');
   expect(whenOf('when = "user_back"\nafter = "later"')).toBe('`t` isn\'t running: `after` must be a length of time in quotes, like "90m" or "6h"');
-  expect(whenOf('when = "wake_done"')).toBe('`t` isn\'t running: `when` must be one of "user_back", "user_quiet", "dream_done", "status_changed"');
-  expect(whenOf('when = "full_moon"')).toBe('`t` isn\'t running: `when` must be one of "user_back", "user_quiet", "dream_done", "status_changed"');
-  expect(whenOf("when = 3")).toBe('`t` isn\'t running: `when` must be one of "user_back", "user_quiet", "dream_done", "status_changed"');
+  expect(whenOf('when = "wake_done"')).toBe('`t` isn\'t running: `when` must be one of "user_back", "user_quiet", "status_changed"');
+  expect(whenOf('when = "dream_done"')).toBe('`t` isn\'t running: `when` must be one of "user_back", "user_quiet", "status_changed"');
+  expect(whenOf('when = "full_moon"')).toBe('`t` isn\'t running: `when` must be one of "user_back", "user_quiet", "status_changed"');
+  expect(whenOf("when = 3")).toBe('`t` isn\'t running: `when` must be one of "user_back", "user_quiet", "status_changed"');
 });
 
 test("a trigger wakes the character unless told not to, and has a reason of its own or a check to give one", () => {
@@ -230,7 +229,7 @@ test("the time is the character's local one, and a time a clock change skips mov
 test("a schedule's next time counts from when it last ran, and something that happens has none", () => {
   expect(scheduledAt({ kind: "every", everyMs: 90 * MINUTE }, utc(30, 12), "UTC")).toBe(utc(30, 13, 30));
   expect(scheduledAt({ kind: "at", weekdays: [6], minute: 20 * 60 }, utc(30, 12), "UTC")).toBe(utc(31, 20));
-  expect(scheduledAt({ kind: "event", event: "dream_done", afterMs: 0 }, utc(30, 12), "UTC")).toBeUndefined();
+  expect(scheduledAt({ kind: "event", event: "status_changed", afterMs: 0 }, utc(30, 12), "UTC")).toBeUndefined();
   expect(scheduledAt({ kind: "follows", trigger: "show" }, utc(30, 12), "UTC")).toBeUndefined();
 });
 
@@ -260,7 +259,7 @@ test("a trigger that answers the user coming back never wakes the character, and
   expect(only(`${back}\nwake = true`)).toBe(never);
   expect(only(`${back}\nwake = false`)).toBe(never);
   expect(only('when = "user_quiet"\nafter = "8h"\nreason = "r"')).toMatchObject({ wakes: true, cooldownMs: DEFAULT_COOLDOWN });
-  expect(only('when = "dream_done"\nreason = "r"\nwake = false')).toMatchObject({ wakes: false, cooldownMs: 0 });
+  expect(only('when = "status_changed"\nreason = "r"\nwake = false')).toMatchObject({ wakes: false, cooldownMs: 0 });
 });
 
 test("a trigger can follow another by name, but not itself, one that isn't running, or one that answers the user coming back", () => {
@@ -271,7 +270,7 @@ test("a trigger can follow another by name, but not itself, one that isn't runni
     { kind: "follows", trigger: "show" },
   ]);
   expect(parse(follows('"show"') + show).problems).toEqual([]);
-  expect(parse('[show]\nwhen = "dream_done"\nreason = "r"\n' + follows('"show"'))).toMatchObject({ triggers: [{ name: "show" }, { name: "recap" }], problems: [] });
+  expect(parse('[show]\nwhen = "status_changed"\nreason = "r"\n' + follows('"show"'))).toMatchObject({ triggers: [{ name: "show" }, { name: "recap" }], problems: [] });
   expect(parse('[show]\nwhen = "user_quiet"\nafter = "8h"\nreason = "r"\n' + follows('"show"'))).toMatchObject({ triggers: [{ name: "show" }, { name: "recap" }], problems: [] });
   expect(parse(show + follows("7"))).toMatchObject({ problems: ["`recap` isn't running: `follows` must be text in quotes"] });
   expect(parse(show + follows('"recap"')).problems).toEqual(["`recap` isn't running: it can't follow itself"]);
@@ -410,7 +409,6 @@ test("the list says when each trigger fires, what it does, and what limits it", 
   expect(shown('on = "2026-11-12 00:00"\nreason = "It is time."')).toBe('t: once, Thursday 2026-11-12 · 12:00 AM, wakes you, "It is time."\n  never fired');
   expect(shown('when = "user_back"\nafter = "8h"\ncheck = "welcome.sh"\nreason = "They are back."')).toBe("t: when eve comes back after 8h away, if `welcome.sh` prints, arrives with eve's message, \"They are back.\"\n  never fired · its check hasn't run yet");
   expect(shown('when = "user_quiet"\nafter = "36h"\nreason = "r"')).toBe('t: when eve has been quiet for 36h, wakes you, "r", at most every 1h\n  never fired');
-  expect(shown('when = "dream_done"\nreason = "r"\nwake = false')).toBe('t: after a dream, leaves a diary entry, "r"\n  never fired');
   expect(shown('when = "status_changed"\nreason = "r"\nwake = false')).toBe('t: when eve changes their status, leaves a diary entry, "r"\n  never fired');
 });
 

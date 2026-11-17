@@ -6,14 +6,14 @@ import { chmod, mkdir, mkdtemp, readFile, stat, writeFile } from "node:fs/promis
 import { existsSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { exitIfStillRunning, startDaemon, type RunningDaemon } from "../src/daemon/run.ts";
+import { exitIfStillRunning, startDaemon, type DaemonOptions, type RunningDaemon } from "../src/daemon/run.ts";
 import { StartupError } from "../src/daemon/startup.ts";
 import { Database } from "bun:sqlite";
 import { TurnAutonomyBridge } from "../src/autonomy/registration.ts";
 import { Diagnostics } from "../src/diagnostics.ts";
 import { buildMessageHandlerDeps } from "../src/handler/deps.ts";
 import type { MessageHandlerDeps } from "../src/handler/router.ts";
-import { DEFAULT_HANDSHAKE } from "../src/swp/connection.ts";
+import { DEFAULT_HANDSHAKE, type Logger } from "../src/swp/connection.ts";
 import { SessionRouter } from "../src/swp/session.ts";
 import { DATA_DIRECTORY_LEASE_FILE } from "../src/daemon/data_directory_lease.ts";
 import type { InstanceInfo } from "../src/daemon/instances.ts";
@@ -23,6 +23,14 @@ import { loadCompactionCheckpoint, saveCompactionCheckpoint } from "../src/memor
 import { shoreLog } from "../src/log.ts";
 import { CharacterWorkspace } from "../src/tools/character_workspace.ts";
 import { compactionFixture } from "./support/memory_fixture.ts";
+import { decodeState, STATE_FILENAME } from "../src/autonomy/state_file.ts";
+import { characterDataDir } from "../src/config/dirs.ts";
+import { readCharacterState } from "../src/storage/store.ts";
+import * as matrixModule from "../src/connections/matrix/supervise.ts";
+import * as runtimeModule from "../src/runtime.ts";
+import * as depsModule from "../src/handler/deps.ts";
+import { loadForCharacter } from "../src/config/preferences.ts";
+import { threadChatModel } from "../src/engine/threads.ts";
 import { outcomeOf } from "./support/outcome.ts";
 import { until, untilAsync } from "./support/until.ts";
 
@@ -326,8 +334,9 @@ describe("archiving a conversation", () => {
 
       await runCommand(client, "create_thread", { name: "side" });
       await runCommand(client, "switch_thread", { name: "side" });
-      await finishTurn(client, "over here");
       await until(() => keepalive.warmThread("ada") === "side", "the side thread to get the cache slot");
+      await finishTurn(client, "over here");
+      expect(keepalive.warmThread("ada")).toBe("side");
       expect(keepalive.nextPingAt("ada")).toBeDefined();
 
       await runCommand(client, "archive_thread", { name: "side" });
@@ -980,5 +989,293 @@ describe("refusing to start", () => {
     expect((caught as StartupError).kind).toBe("server_run");
     expect((caught as StartupError).message).toContain(`127.0.0.1:${port}`);
     expect(existsSync(place.instancesPath)).toBe(false);
+  });
+});
+
+function recorder(): { log: Logger; lines: string[]; fields: Map<string, Record<string, unknown> | undefined> } {
+  const lines: string[] = [];
+  const fields = new Map<string, Record<string, unknown> | undefined>();
+  const noted = (line: string, given?: Record<string, unknown>): void => {
+    lines.push(line);
+    fields.set(line, given);
+  };
+  return { lines, fields, log: { info: (msg, given) => { noted(msg, given); }, warn: (msg, given) => { noted(`warn: ${msg}`, given); }, error: (msg, given) => { noted(`error: ${msg}`, given); } } };
+}
+
+async function listening(port = 0): Promise<{ port: number; close: () => Promise<void> }> {
+  const held = createServer();
+  await new Promise<void>((resolve, reject) => {
+    held.once("error", reject);
+    held.listen(port, "127.0.0.1", resolve);
+  });
+  const address = held.address();
+  return {
+    port: typeof address === "object" && address !== null ? address.port : 0,
+    close: async () => { await new Promise<void>((resolve) => { held.close(() => resolve()); }); },
+  };
+}
+
+async function freePort(): Promise<number> {
+  const probe = await listening();
+  await probe.close();
+  return probe.port;
+}
+
+async function portIsFree(port: number): Promise<boolean> {
+  try {
+    await (await listening(port)).close();
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+async function refused(options: DaemonOptions): Promise<StartupError> {
+  try {
+    running.push(await startDaemon(options));
+  } catch (e) {
+    return e as StartupError;
+  }
+  throw new Error("the daemon started");
+}
+
+describe("what a daemon tells its log", () => {
+  test("each part logs to it as the daemon comes up and as it goes down, and nothing that didn't happen is reported", async () => {
+    const place = await layout('[matrix]\nenabled = true\nhomeserver_url = "http://127.0.0.1:9"\nuser_id = "@ada:example"\nroom_id = "!room:example"\n');
+    const { log, lines } = recorder();
+    const daemon = await startDaemon({ argv: ["--config", place.configPath, "--addr", "127.0.0.1:0"], env: place.env, providers: {}, instancesPath: place.instancesPath, log });
+    running.push(daemon);
+    await until(() => lines.some((line) => line.startsWith("warn: Matrix bridge")), "the matrix bridge reporting it can't connect");
+    expect(["TCP listening", "message handler started", "Config hot reload watcher started", "Auto-discovery loop started"].filter((line) => !lines.includes(line))).toEqual([]);
+    await daemon.shutdown();
+    await daemon.done;
+    expect(["Config hot reload watcher stopped", "Auto-discovery loop stopped", "Unregistered daemon instance", "Daemon shut down cleanly"].filter((line) => !lines.includes(line))).toEqual([]);
+    expect(lines.filter((line) => /Browser transport|Wrote a new client token|Created default config|Could not release|Waiting for running work/.test(line))).toEqual([]);
+  });
+
+  test("a daemon that has to write its own config and client token says it did", async () => {
+    const root = await mkdtemp(join(tmpdir(), "shore-daemon-"));
+    const env = { XDG_CONFIG_HOME: join(root, "xdg-config"), XDG_DATA_HOME: join(root, "data"), XDG_CACHE_HOME: join(root, "cache"), XDG_RUNTIME_DIR: join(root, "runtime"), HOME: root };
+    const { log, lines } = recorder();
+    const daemon = await startDaemon({ argv: ["--addr", "127.0.0.1:0"], env, providers: {}, instancesPath: join(root, "instances.json"), log, autoDiscovery: false });
+    running.push(daemon);
+    expect(["Created default config.toml", "Wrote a new client token"].filter((line) => !lines.includes(line))).toEqual([]);
+  });
+
+  test("a shutdown waiting on a turn says so, and status says when it asked to stop and when it stops waiting", async () => {
+    const place = await layout(`${MODEL_CONFIG}[daemon]\nshutdown_grace = "30s"\n`);
+    const { promise: held, resolve: release } = Promise.withResolvers<void>();
+    const { log, lines } = recorder();
+    const daemon = await startDaemon({
+      argv: ["--config", place.configPath, "--addr", "127.0.0.1:0"], env: place.env,
+      providers: { anthropic: heldProvider(held, "late", () => {}) }, instancesPath: place.instancesPath, log,
+    });
+    running.push(daemon);
+    const client = await Client.open(daemon.port, "ada");
+    try {
+      await client.awaitFrame("hello");
+      client.send({ type: "message", text: "hi", stream: true, images: [] });
+      await client.awaitFrame("stream_start");
+      const asked = Date.now();
+      const stopping = daemon.shutdown();
+      await until(() => lines.includes("Waiting for running work to finish before stopping"), "the shutdown saying what it waits for");
+      client.frames.length = 0;
+      client.send({ type: "message", text: "one more", stream: true, images: [] });
+      expect((await client.awaitFrame("error"))["code"]).toBe("busy");
+      client.send({ type: "command", name: "status", args: {} });
+      const status = await client.awaitFrame("command_output");
+      const window = (status["data"] as { running: { shutdown: { requested_at: string; deadline: string } } }).running.shutdown;
+      expect(Date.parse(window.deadline) - Date.parse(window.requested_at)).toBe(30_000);
+      expect(Math.abs(Date.parse(window.requested_at) - asked)).toBeLessThan(5_000);
+      release();
+      await stopping;
+      await daemon.done;
+    } finally {
+      client.close();
+    }
+  });
+});
+
+describe("a daemon going down", () => {
+  test("saves what its characters' wakes keep, closes its stores, and lets go of its data directory", async () => {
+    const place = await layout(MODEL_CONFIG);
+    const daemon = await start(place, [], { anthropic: scriptedProvider("hello") });
+    const client = await Client.open(daemon.port, "ada");
+    try {
+      await client.awaitFrame("hello");
+      await talk(client, ["hi"]);
+      expect((await client.awaitFrame("thread_unread"))["character"]).toBe("ada");
+    } finally {
+      client.close();
+    }
+    const data = daemon.runtime.config.dirs.data;
+    daemon.stop();
+    await daemon.done;
+    running.length = 0;
+    expect(() => daemon.runtime.callStore?.callCount()).toThrow();
+    expect(decodeState(readCharacterState(characterDataDir(data, "ada"), STATE_FILENAME) ?? "")?.lastUserAt).toBeNumber();
+    expect((await start(place)).port).toBeGreaterThan(0);
+  });
+});
+
+describe("a daemon coming up", () => {
+  test("makes the workspace folder SHORE_WORKSPACE_DIR names, with the folders above it, and watches it", async () => {
+    const place = await layout("", []);
+    const workspace = join(place.root, "deep", "nested", "workspace");
+    const { log, lines, fields } = recorder();
+    const daemon = await startDaemon({
+      argv: ["--config", place.configPath, "--addr", "127.0.0.1:0"], env: { ...place.env, SHORE_WORKSPACE_DIR: workspace },
+      providers: {}, instancesPath: place.instancesPath, autoDiscovery: false, log,
+    });
+    running.push(daemon);
+    expect(existsSync(workspace)).toBe(true);
+    expect(fields.get("Config hot reload watcher started")?.["workspace_dir"]).toBe(workspace);
+    expect(lines).not.toContain("Auto-discovery loop started");
+  });
+});
+
+describe("a daemon that fails to start", () => {
+  test("on a port already in use leaves its data directory free for the next start", async () => {
+    const place = await layout();
+    const taken = await listening();
+    try {
+      expect((await refused({ argv: ["--config", place.configPath, "--addr", `127.0.0.1:${taken.port}`], env: place.env, providers: {}, instancesPath: place.instancesPath })).kind).toBe("server_run");
+    } finally {
+      await taken.close();
+    }
+    expect((await start(place)).port).toBeGreaterThan(0);
+  });
+
+  test("because its browser transport can't listen gives up its own port and its data directory", async () => {
+    const taken = await listening();
+    const place = await layout(`[daemon.web]\nenabled = true\nbind_addr = "127.0.0.1:${taken.port}"\n`);
+    const port = await freePort();
+    try {
+      const failure = await refused({ argv: ["--config", place.configPath, "--addr", `127.0.0.1:${port}`], env: place.env, providers: {}, instancesPath: place.instancesPath });
+      expect([failure.kind, failure.message]).toEqual(["server_run", expect.stringContaining("Failed to start browser transport") as string]);
+      expect(await portIsFree(port)).toBe(true);
+    } finally {
+      await taken.close();
+    }
+    expect((await start(place)).web).toBeDefined();
+  });
+
+  test("because it can't record itself as running gives up both of its ports and its data directory", async () => {
+    const webPort = await freePort();
+    const place = await layout(`[daemon.web]\nenabled = true\nbind_addr = "127.0.0.1:${webPort}"\n`);
+    await writeFile(join(place.root, "a-file"), "");
+    const port = await freePort();
+    const failure = await refused({ argv: ["--config", place.configPath, "--addr", `127.0.0.1:${port}`], env: place.env, providers: {}, instancesPath: join(place.root, "a-file", "instances.json") });
+    expect(failure.kind).toBe("register_instance");
+    expect([await portIsFree(port), await portIsFree(webPort)]).toEqual([true, true]);
+    expect((await start(place)).port).toBeGreaterThan(0);
+  });
+});
+
+describe("a daemon's teardown", () => {
+  test("going down also stops its browser transport, its clocks and its matrix bridge", async () => {
+    const webPort = await freePort();
+    const place = await layout(`[daemon.web]\nenabled = true\nbind_addr = "127.0.0.1:${webPort}"\n`);
+    const realClocks = runtimeModule.startRuntimeClocks;
+    const realBridge = matrixModule.superviseMatrixBridge;
+    const stopped: string[] = [];
+    const clocks = spyOn(runtimeModule, "startRuntimeClocks").mockImplementation((runtime, intervals) => {
+      const started = realClocks(runtime, intervals);
+      return { stop: () => { stopped.push("clocks"); started.stop(); } };
+    });
+    const bridge = spyOn(matrixModule, "superviseMatrixBridge").mockImplementation((options) => {
+      const started = realBridge(options);
+      return { done: started.done, stop: async () => { stopped.push("matrix bridge"); await started.stop(); } };
+    });
+    try {
+      const daemon = await start(place);
+      daemon.stop();
+      await daemon.done;
+      running.length = 0;
+    } finally {
+      clocks.mockRestore();
+      bridge.mockRestore();
+    }
+    expect([stopped, await portIsFree(webPort)]).toEqual([["matrix bridge", "clocks"], true]);
+  });
+
+  test("a failure late in startup takes down everything started before it, and frees its ports and data directory", async () => {
+    const webPort = await freePort();
+    const place = await layout(`[daemon.web]\nenabled = true\nbind_addr = "127.0.0.1:${webPort}"\n`);
+    const port = await freePort();
+    const { log, lines } = recorder();
+    const bridge = spyOn(matrixModule, "superviseMatrixBridge").mockImplementation(() => {
+      throw new Error("no bridge today");
+    });
+    let failure: StartupError | undefined;
+    try {
+      failure = await refused({ argv: ["--config", place.configPath, "--addr", `127.0.0.1:${port}`], env: place.env, providers: {}, instancesPath: place.instancesPath, log });
+    } finally {
+      bridge.mockRestore();
+    }
+    expect([failure.kind, failure.message]).toEqual(["server_run", expect.stringContaining("no bridge today") as string]);
+    expect([await portIsFree(port), await portIsFree(webPort)]).toEqual([true, true]);
+    expect(await instances(place)).toEqual([]);
+    expect(["Auto-discovery loop stopped", "Config hot reload watcher stopped", "Unregistered daemon instance"].filter((line) => !lines.includes(line))).toEqual([]);
+    expect((await start(place)).port).toBeGreaterThan(0);
+  });
+
+  test("a matrix bridge supervisor that fails is logged instead of left to crash the daemon", async () => {
+    const place = await layout();
+    const { log, lines } = recorder();
+    const bridge = spyOn(matrixModule, "superviseMatrixBridge").mockImplementation(() => ({ done: Promise.reject(new Error("bridge broke")), stop: async () => {} }));
+    try {
+      running.push(await startDaemon({ argv: ["--config", place.configPath, "--addr", "127.0.0.1:0"], env: place.env, providers: {}, instancesPath: place.instancesPath, log, autoDiscovery: false }));
+      await until(() => lines.includes("warn: Matrix bridge supervisor stopped"), "the supervisor's failure being logged");
+    } finally {
+      bridge.mockRestore();
+    }
+  });
+});
+
+describe("settling after startup", () => {
+  async function settling(stopFirst: boolean): Promise<number> {
+    const place = await layout();
+    const { promise: held, resolve: release } = Promise.withResolvers<void>();
+    const resume = spyOn(depsModule, "resumeStoppedCompactions").mockImplementation(async () => { await held; });
+    try {
+      const daemon = await start(place);
+      const looks = spyOn(daemon.runtime.autonomy, "tick");
+      if (stopFirst) daemon.stop();
+      release();
+      await daemon.settled;
+      return looks.mock.calls.length;
+    } finally {
+      resume.mockRestore();
+    }
+  }
+
+  test("a daemon looks for work once its startup has settled", async () => {
+    expect(await settling(false)).toBe(1);
+  });
+
+  test("a daemon stopped before its startup has settled doesn't look for work afterwards", async () => {
+    expect(await settling(true)).toBe(0);
+  });
+});
+
+describe("a daemon coming up with characters", () => {
+  test("starts each character's init script as its tools' user, and says when it can't", async () => {
+    const place = await layout('[tools]\nuser = "nobody"\n');
+    const { log, lines } = recorder();
+    running.push(await startDaemon({ argv: ["--config", place.configPath, "--addr", "127.0.0.1:0"], env: place.env, providers: {}, instancesPath: place.instancesPath, log, autoDiscovery: false }));
+    await until(() => lines.includes("warn: Could not start a character's init script"), "the init script failing to start");
+  });
+
+  test("hands a home thread's pinned model to the character", async () => {
+    const place = await layout(MODEL_CONFIG);
+    const first = await start(place);
+    await first.runtime.registry.setThreadModel("ada", "main", "anthropic:claude-opus-4-8");
+    first.stop();
+    await first.done;
+    running.length = 0;
+    const data = (await start(place)).runtime.config.dirs.data;
+    expect(await threadChatModel(data, "ada", "main")).toBeUndefined();
+    expect(loadForCharacter(data, "ada")[1].selected).toEqual({ provider: "anthropic", modelId: "claude-opus-4-8" });
   });
 });

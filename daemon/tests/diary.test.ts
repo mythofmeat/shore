@@ -2,7 +2,7 @@ import { expect, test } from "bun:test";
 import { mkdtemp } from "node:fs/promises";
 import { join } from "node:path";
 
-import { addDiaryNote, closingNote, foldDiary, keptDiary, recentDiary, unfoldedDiary, unseenDiary } from "../src/autonomy/diary.ts";
+import { addDiaryNote, closingNote, keptDiary, recentDiary, unseenDiary } from "../src/autonomy/diary.ts";
 import { assemblePrompt, DIARY_FOR_CHAT, diaryText, estimateMessageTokens, wakeRunningText } from "../src/engine/prompt.ts";
 import { estimateTokens } from "../src/engine/tokens.ts";
 import type { DiaryNote, Message } from "../src/engine/types.ts";
@@ -28,6 +28,10 @@ function leave(dir: string, at: number, text: string, newId: () => string): void
 
 function note(id: string, at: number, text: string): DiaryNote {
   return { id, at: new Date(at).toISOString(), thread: "own-time", source: "wake", text };
+}
+
+function kept(dir: string): DiaryNote[] {
+  return keptDiary(dir, T0).map(({ shown: _shown, ...each }) => each);
 }
 
 test("a note is the closing text whole, tags left in it included, and a wake with nothing to say leaves none", () => {
@@ -74,45 +78,27 @@ test("the diary keeps its newest hundred notes", async () => {
   const dir = await character();
   const newId = counter();
   for (let n = 1; n <= 100; n += 1) leave(dir, T0 + n, `note ${String(n)}`, newId);
-  expect(unfoldedDiary(dir)).toHaveLength(100);
-  expect(unfoldedDiary(dir)[0]?.id).toBe("d1");
+  expect(kept(dir)).toHaveLength(100);
+  expect(kept(dir)[0]?.id).toBe("d1");
 
   leave(dir, T0 + 101, "note 101", newId);
-  expect(unfoldedDiary(dir)).toHaveLength(100);
-  expect(unfoldedDiary(dir)[0]?.id).toBe("d2");
-  expect(unfoldedDiary(dir).at(-1)?.id).toBe("d101");
+  expect(kept(dir)).toHaveLength(100);
+  expect(kept(dir)[0]?.id).toBe("d2");
+  expect(kept(dir).at(-1)?.id).toBe("d101");
 });
 
-test("a dream is shown notes of any age until one has folded them, and folded notes still show at the start of turns for their day", async () => {
-  const dir = await character();
-  const newId = counter();
-  leave(dir, T0, "Old and never folded.", newId);
-  leave(dir, T0 + 3 * DAY, "Folded this morning.", newId);
-  leave(dir, T0 + 3 * DAY + HOUR, "Left after the dream.", newId);
-  expect(unfoldedDiary(dir).map((each) => each.id)).toEqual(["d1", "d2", "d3"]);
-
-  foldDiary(dir, ["d1", "d2"]);
-
-  expect(unfoldedDiary(dir)).toEqual([note("d3", T0 + 3 * DAY + HOUR, "Left after the dream.")]);
-  expect(recentDiary(dir, T0 + 3 * DAY + 2 * HOUR).notes).toEqual([
-    note("d2", T0 + 3 * DAY, "Folded this morning."),
-    note("d3", T0 + 3 * DAY + HOUR, "Left after the dream."),
-  ]);
-});
-
-test("every kept note can be listed with whether turns still start with it and whether a dream has read it", async () => {
+test("every kept note can be listed with whether turns still start with it", async () => {
   const dir = await character();
   const newId = counter();
   leave(dir, T0 - DAY, "A day old.", newId);
   for (let n = 1; n <= 21; n += 1) leave(dir, T0 + n, `note ${String(n)}`, newId);
-  foldDiary(dir, ["d1", "d3"]);
 
-  const kept = keptDiary(dir, T0 + HOUR);
-  expect(kept.map((each) => each.id)).toEqual(Array.from({ length: 22 }, (_unused, n) => `d${String(n + 1)}`));
-  expect(kept[0]).toEqual({ ...note("d1", T0 - DAY, "A day old."), shown: false, dreamed: true });
-  expect(kept[1]).toEqual({ ...note("d2", T0 + 1, "note 1"), shown: false, dreamed: false });
-  expect(kept[2]).toEqual({ ...note("d3", T0 + 2, "note 2"), shown: true, dreamed: true });
-  expect(kept.filter((each) => each.shown).map((each) => each.id)).toEqual(recentDiary(dir, T0 + HOUR).notes.map((each) => each.id));
+  const listed = keptDiary(dir, T0 + HOUR);
+  expect(listed.map((each) => each.id)).toEqual(Array.from({ length: 22 }, (_unused, n) => `d${String(n + 1)}`));
+  expect(listed[0]).toEqual({ ...note("d1", T0 - DAY, "A day old."), shown: false });
+  expect(listed[1]).toEqual({ ...note("d2", T0 + 1, "note 1"), shown: false });
+  expect(listed[2]).toEqual({ ...note("d3", T0 + 2, "note 2"), shown: true });
+  expect(listed.filter((each) => each.shown).map((each) => each.id)).toEqual(recentDiary(dir, T0 + HOUR).notes.map((each) => each.id));
   expect(keptDiary(dir, T0 + DAY + 20).filter((each) => each.shown).map((each) => each.id)).toEqual(["d22"]);
 });
 
@@ -133,11 +119,11 @@ test("a turn is given only the notes its conversation doesn't hold yet", async (
 test("a diary that can't be read is empty, and entries that aren't notes are passed over", async () => {
   const dir = await character();
   writeCharacterState(dir, "diary.json", "{not json");
-  expect(unfoldedDiary(dir)).toEqual([]);
+  expect(kept(dir)).toEqual([]);
   expect(recentDiary(dir, T0)).toEqual({ notes: [], omitted: 0 });
 
   writeCharacterState(dir, "diary.json", JSON.stringify({ notes: [] }));
-  expect(unfoldedDiary(dir)).toEqual([]);
+  expect(kept(dir)).toEqual([]);
 
   const good = note("d1", T0, "The lamp is lit.");
   writeCharacterState(dir, "diary.json", JSON.stringify([
@@ -151,13 +137,12 @@ test("a diary that can't be read is empty, and entries that aren't notes are pas
     { ...good, source: "someone else" },
     good,
     { ...good, id: "d2", folded: true },
-    { ...good, id: "d3", folded: "yes" },
   ]));
-  expect(unfoldedDiary(dir)).toEqual([good, { ...good, id: "d3" }]);
-  expect(recentDiary(dir, T0 + HOUR).notes.map((each) => each.id)).toEqual(["d1", "d2", "d3"]);
+  expect(kept(dir)).toEqual([good, { ...good, id: "d2" }]);
+  expect(recentDiary(dir, T0 + HOUR).notes.map((each) => each.id)).toEqual(["d1", "d2"]);
 
-  leave(dir, T0 + HOUR, "The log is read.", () => "d4");
-  expect(unfoldedDiary(dir).map((each) => each.id)).toEqual(["d1", "d3", "d4"]);
+  leave(dir, T0 + HOUR, "The log is read.", () => "d3");
+  expect(kept(dir).map((each) => each.id)).toEqual(["d1", "d2", "d3"]);
 });
 
 test("the diary is written out with a heading, each note under where and when it was left, and a line that ends it", () => {
@@ -264,15 +249,15 @@ test("an entry says whether it is the character's own note, from one of its trig
   addDiaryNote(dir, { at: T0, thread: "own-time", source: "wake", text: "The lamp is lit." }, newId);
   addDiaryNote(dir, { at: T0 + HOUR, thread: "own-time", source: "trigger", trigger: "tide-table", text: "The tide is out." }, newId);
   addDiaryNote(dir, { at: T0 + 2 * HOUR, thread: "own-time", source: "shore", text: "Your trigger `lamp` isn't running." }, newId);
-  const kept = unfoldedDiary(dir);
+  const notes = kept(dir);
 
-  expect(kept).toEqual([
+  expect(notes).toEqual([
     note("d1", T0, "The lamp is lit."),
     { ...note("d2", T0 + HOUR, "The tide is out."), source: "trigger", trigger: "tide-table" },
     { ...note("d3", T0 + 2 * HOUR, "Your trigger `lamp` isn't running."), source: "shore" },
   ]);
-  expect(Object.keys(kept[0] ?? {})).not.toContain("trigger");
-  expect(diaryText(kept, "Your diary.", "UTC")).toBe([
+  expect(Object.keys(notes[0] ?? {})).not.toContain("trigger");
+  expect(diaryText(notes, "Your diary.", "UTC")).toBe([
     "[Your diary.]",
     `your note at the end of a wake in "own-time" · Friday 2026-10-30 · 12:00 PM\nThe lamp is lit.`,
     'from your trigger "tide-table" · Friday 2026-10-30 · 1:00 PM\nThe tide is out.',
@@ -280,12 +265,12 @@ test("an entry says whether it is the character's own note, from one of its trig
     "[End of your diary.]",
   ].join("\n\n"));
 
-  writeCharacterState(dir, "diary.json", JSON.stringify([{ ...note("d5", T0, "From when Shore had heartbeats."), source: "heartbeat" }, { ...note("d6", T0, "From nowhere Shore knows."), source: "dream" }]));
-  expect(unfoldedDiary(dir)).toEqual([note("d5", T0, "From when Shore had heartbeats.")]);
+  writeCharacterState(dir, "diary.json", JSON.stringify([{ ...note("d5", T0, "From when Shore had heartbeats."), source: "heartbeat" }, { ...note("d6", T0, "From nowhere Shore knows."), source: "postcard" }]));
+  expect(kept(dir)).toEqual([note("d5", T0, "From when Shore had heartbeats.")]);
 
   writeCharacterState(dir, "diary.json", JSON.stringify([{ ...note("d4", T0, "A trigger with a name that isn't text."), source: "trigger", trigger: 7 }]));
-  expect(unfoldedDiary(dir)).toEqual([{ ...note("d4", T0, "A trigger with a name that isn't text."), source: "trigger" }]);
-  expect(diaryText(unfoldedDiary(dir), "Your diary.", "UTC")).toContain('from your trigger "" · ');
+  expect(kept(dir)).toEqual([{ ...note("d4", T0, "A trigger with a name that isn't text."), source: "trigger" }]);
+  expect(diaryText(kept(dir), "Your diary.", "UTC")).toContain('from your trigger "" · ');
 });
 
 test("the diary holds only the newest entry from each trigger, so one that fires often can't crowd the rest out", async () => {
@@ -298,7 +283,7 @@ test("the diary holds only the newest entry from each trigger, so one that fires
   leave(dir, T0 + 3, "The log is read.", newId);
   from("tide-table", T0 + 4, "The tide is in.");
 
-  expect(unfoldedDiary(dir).map((each) => [each.id, each.trigger ?? "", each.text])).toEqual([
+  expect(kept(dir).map((each) => [each.id, each.trigger ?? "", each.text])).toEqual([
     ["d2", "", "The lamp is lit."],
     ["d3", "ferry", "The ferry is late."],
     ["d4", "", "The log is read."],

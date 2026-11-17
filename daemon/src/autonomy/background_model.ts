@@ -14,17 +14,13 @@ export interface BackgroundModelChoice {
   override: ResolvedModel | undefined;
 }
 
-export function backgroundTaskModel(
-  config: LoadedConfig,
-  character: string,
-  task: "wake" | "dreaming",
-): ResolvedModel | undefined {
+export function backgroundTaskModel(config: LoadedConfig, character: string): ResolvedModel | undefined {
   const view = configView(config);
-  const name = resolveBackgroundModelName(config.app, task);
+  const name = resolveBackgroundModelName(config.app, "wake");
   try {
-    return name === undefined ? undefined : applyBackgroundSettings(config.dirs.data, character, task, findEffectiveModel(view, config.dirs.cache, name, true));
+    return name === undefined ? undefined : applyBackgroundSettings(config.dirs.data, character, "wake", findEffectiveModel(view, config.dirs.cache, name, true));
   } catch (e) {
-    shoreLog.warn(`shore: ${task} model "${String(name)}" not found in catalog for ${character}; keeping chat model: ${String(e)}`);
+    shoreLog.warn(`shore: wake model "${String(name)}" not found in catalog for ${character}; keeping chat model: ${String(e)}`);
     return undefined;
   }
 }
@@ -35,7 +31,6 @@ export function backgroundModelRequest(
   character: string,
   env: NodeJS.ProcessEnv | undefined,
   resolved: ResolvedModel | undefined,
-  task: "wake" | "dream",
 ): BackgroundModelChoice {
   if (resolved === undefined) return { request, override: undefined };
 
@@ -53,12 +48,12 @@ export function backgroundModelRequest(
       env,
     );
     shoreLog.info(
-      `shore: ${task} for ${character} using configured model ${resolved.name} (${built.request.model})`,
+      `shore: wake for ${character} using configured model ${resolved.name} (${built.request.model})`,
     );
     return { request: built.request, override: resolved };
   } catch (e) {
     shoreLog.warn(
-      `shore: ${task} could not build a request on ${resolved.name} for ${character}, ` +
+      `shore: wake could not build a request on ${resolved.name} for ${character}, ` +
         `falling back to the chat model: ${String(e)}`,
     );
     return { request, override: undefined };

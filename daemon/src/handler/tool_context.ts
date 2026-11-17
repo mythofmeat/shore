@@ -1,8 +1,6 @@
 import type { PushOutcome } from "../autonomy/push.ts";
 import type { TriggersView } from "../autonomy/trigger_loop.ts";
 import { characterMediaDir } from "../storage/media.ts";
-import { shoreLog } from "../log.ts";
-import { recordWorkspaceRead } from "../memory/dreaming/reads.ts";
 
 import type { LoadedConfig } from "../config/loader.ts";
 import { toCredentialsEntry, type ProviderEntry as RegistryEntry } from "../config/providers.ts";
@@ -41,7 +39,6 @@ export interface ToolConversation {
 export interface ToolContextDeps extends Partial<ToolConversation> {
   fresh?: boolean;
   dryRun?: boolean;
-  countReads?: boolean;
   signal?: AbortSignal;
   mcpRegistry?: Pick<McpRegistry, "call">;
   mcpToolDefs?: McpRegistry["toolDefsFiltered"];
@@ -122,7 +119,6 @@ export async function buildToolContext(
     ...(deps.sendMessage === undefined ? {} : { sendMessage: deps.sendMessage }),
     ...(wakeInThread === undefined ? {} : { wakeInThread: (request: WakeInThreadRequest) => wakeInThread(charName, deps.thread ?? MAIN_THREAD, request) }),
     ...(deps.deferEdit === undefined ? {} : { deferEdit: deps.deferEdit }),
-    ...(deps.countReads === true && config.app.dreaming.enabled ? { recordRead: (path: string) => { recordReadBestEffort(charDataDir, path); } } : {}),
     ...(startThread === undefined
       ? {}
       : { startThread: (request: StartThreadRequest) => startThread(charName, request) }),
@@ -142,14 +138,6 @@ export async function buildToolContext(
     ctx.runSubagent = deps.runSubagent(ctx);
   }
   return ctx;
-}
-
-function recordReadBestEffort(charDataDir: string, path: string): void {
-  try {
-    recordWorkspaceRead(charDataDir, path);
-  } catch (e) {
-    shoreLog.warn(`shore: could not count a read of ${path}: ${String(e)}`);
-  }
 }
 
 function providerRecord(

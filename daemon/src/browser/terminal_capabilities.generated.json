@@ -2465,80 +2465,6 @@
       ]
     },
     {
-      "path": "shore trace dreams",
-      "about": "The dream transcript: what each dream read and changed, round by round",
-      "long_about": null,
-      "hidden": false,
-      "aliases": [],
-      "subcommand_required": false,
-      "arguments": [
-        {
-          "id": "count",
-          "short": "n",
-          "long": "count",
-          "aliases": [],
-          "short_aliases": [],
-          "help": "Number of entries to show",
-          "long_help": null,
-          "action": "Set",
-          "required": false,
-          "global": false,
-          "hidden": false,
-          "require_equals": false,
-          "min_values": 1,
-          "max_values": 1,
-          "defaults": [
-            "20"
-          ],
-          "choices": [],
-          "conflicts": [],
-          "env": null
-        },
-        {
-          "id": "json",
-          "short": null,
-          "long": "json",
-          "aliases": [],
-          "short_aliases": [],
-          "help": "Output raw JSON",
-          "long_help": null,
-          "action": "SetTrue",
-          "required": false,
-          "global": false,
-          "hidden": false,
-          "require_equals": false,
-          "min_values": 0,
-          "max_values": 0,
-          "defaults": [
-            "false"
-          ],
-          "choices": [],
-          "conflicts": [],
-          "env": null
-        },
-        {
-          "id": "help",
-          "short": "h",
-          "long": "help",
-          "aliases": [],
-          "short_aliases": [],
-          "help": "Print help",
-          "long_help": null,
-          "action": "Help",
-          "required": false,
-          "global": false,
-          "hidden": false,
-          "require_equals": false,
-          "min_values": 0,
-          "max_values": 0,
-          "defaults": [],
-          "choices": [],
-          "conflicts": [],
-          "env": null
-        }
-      ]
-    },
-    {
       "path": "shore trace events",
       "about": "The wake timeline: woken, dormant, user back, timeout",
       "long_about": null,
@@ -5486,80 +5412,6 @@
       ]
     },
     {
-      "path": "shore dream",
-      "about": "Show the last dream and when the next one is due, or start one now",
-      "long_about": null,
-      "hidden": false,
-      "aliases": [],
-      "subcommand_required": false,
-      "arguments": [
-        {
-          "id": "now",
-          "short": null,
-          "long": "now",
-          "aliases": [],
-          "short_aliases": [],
-          "help": "Start a dream at the next autonomy tick instead of waiting for its schedule",
-          "long_help": null,
-          "action": "SetTrue",
-          "required": false,
-          "global": false,
-          "hidden": false,
-          "require_equals": false,
-          "min_values": 0,
-          "max_values": 0,
-          "defaults": [
-            "false"
-          ],
-          "choices": [],
-          "conflicts": [],
-          "env": null
-        },
-        {
-          "id": "json",
-          "short": null,
-          "long": "json",
-          "aliases": [],
-          "short_aliases": [],
-          "help": "Output raw JSON",
-          "long_help": null,
-          "action": "SetTrue",
-          "required": false,
-          "global": false,
-          "hidden": false,
-          "require_equals": false,
-          "min_values": 0,
-          "max_values": 0,
-          "defaults": [
-            "false"
-          ],
-          "choices": [],
-          "conflicts": [],
-          "env": null
-        },
-        {
-          "id": "help",
-          "short": "h",
-          "long": "help",
-          "aliases": [],
-          "short_aliases": [],
-          "help": "Print help",
-          "long_help": null,
-          "action": "Help",
-          "required": false,
-          "global": false,
-          "hidden": false,
-          "require_equals": false,
-          "min_values": 0,
-          "max_values": 0,
-          "defaults": [],
-          "choices": [],
-          "conflicts": [],
-          "env": null
-        }
-      ]
-    },
-    {
       "path": "shore debug",
       "about": "Advanced debugging utilities",
       "long_about": null,
@@ -6154,7 +6006,7 @@
     {
       "path": "shore model use",
       "about": "Switch the model something runs on",
-      "long_about": "Switch the model something runs on\n\nSpell out `use` when a model's name would otherwise read as one of these subcommands. An unknown name is an error, never a fallback.\n\nBare, this sets the character's chat model, which every thread without a model of its own uses. With --thread (or SHORE_THREAD) it gives just that thread its own model. Every other target writes the config file, which is global: `--background=compaction` and `=dreaming` write `<task>.model`, `--background=wake` writes `triggers.model`, the model wakes run on, bare `--background` writes `triggers.model` and `compaction.model` but never `dreaming.model`; `--subagent=<name>` writes `subagents.<name>.model`, and bare `--subagent` writes `subagents.model`.",
+      "long_about": "Switch the model something runs on\n\nSpell out `use` when a model's name would otherwise read as one of these subcommands. An unknown name is an error, never a fallback.\n\nBare, this sets the character's chat model, which every thread without a model of its own uses. With --thread (or SHORE_THREAD) it gives just that thread its own model. Every other target writes the config file, which is global: `--background=compaction` writes `compaction.model`, `--background=wake` writes `triggers.model`, the model wakes run on, bare `--background` writes both; `--subagent=<name>` writes `subagents.<name>.model`, and bare `--subagent` writes `subagents.model`.",
       "hidden": false,
       "aliases": [],
       "subcommand_required": false,
@@ -6207,7 +6059,7 @@
           "long": "background",
           "aliases": [],
           "short_aliases": [],
-          "help": "Background tasks: bare means wakes and compaction; naming one requires =compaction, =wake or =dreaming",
+          "help": "Background tasks: bare means wakes and compaction; naming one requires =compaction or =wake",
           "long_help": null,
           "action": "Set",
           "required": false,
@@ -6220,8 +6072,7 @@
           "choices": [
             "all",
             "wake",
-            "compaction",
-            "dreaming"
+            "compaction"
           ],
           "conflicts": [
             "chat"
@@ -6329,7 +6180,7 @@
           "long": "background",
           "aliases": [],
           "short_aliases": [],
-          "help": "Background tasks: bare means wakes and compaction; naming one requires =compaction, =wake or =dreaming",
+          "help": "Background tasks: bare means wakes and compaction; naming one requires =compaction or =wake",
           "long_help": null,
           "action": "Set",
           "required": false,
@@ -6342,8 +6193,7 @@
           "choices": [
             "all",
             "wake",
-            "compaction",
-            "dreaming"
+            "compaction"
           ],
           "conflicts": [
             "chat"
@@ -6398,7 +6248,7 @@
     {
       "path": "shore model setting",
       "about": "Show, set, or clear saved sampler settings",
-      "long_about": "Show, set, or clear saved sampler settings\n\nBare and with no key, this is the overview: every role whose model or settings are its own rather than inherited, in one place. Add a target flag to see just that one. With a key and a value it saves; with --reset and a key it clears. Clearing everything at once is not supported — name the key.\n\nA sub-agent's settings are its own: they start from its model's catalog entry and take nothing from the chat model's settings, so tuning chat never moves a sub-agent.\n\nBare --subagent writes once against the model your sub-agents share, covering all of them; it errors if they are not all on one model. A named sub-agent overrides that shared value. Because the shared value belongs to the model, changing subagents.model picks up that model's settings rather than carrying the old ones over.\n\nA background task's settings sit on top of its model's: wakes, compaction and dreaming take whatever their model has, chat's when they share it, and override only the keys set for them, so tuning a task never moves chat. Bare --background writes the same value for wakes and compaction; dreaming takes its own with --background=dreaming.\n\nThe keys are temperature, top_p, reasoning_effort, reasoning_budget_tokens, max_output_tokens, cache_ttl, cache_keepalive, cache_keepalive_pings, sdk, reasoning_replay and max_tool_rounds.\n\ncache_keepalive is the interval between cache keepalive pings, or off. Any model can have one. After each reply, the model gets cache_keepalive_pings pings (default 1) spaced by that interval; the next message starts the count over. Only the model you are chatting with is pinged.\n\nsdk takes anthropic, openai, openrouter, gemini, zai, deepseek or moonshot, which forces a wire shape on a discovered model whose provider catalog labelled it wrong.\n\nThe vendor knobs openrouter_routing, gemini_thinking_mode and zai_clear_reasoning are settable per model too. A model only lists the knobs its own sdk honors.",
+      "long_about": "Show, set, or clear saved sampler settings\n\nBare and with no key, this is the overview: every role whose model or settings are its own rather than inherited, in one place. Add a target flag to see just that one. With a key and a value it saves; with --reset and a key it clears. Clearing everything at once is not supported — name the key.\n\nA sub-agent's settings are its own: they start from its model's catalog entry and take nothing from the chat model's settings, so tuning chat never moves a sub-agent.\n\nBare --subagent writes once against the model your sub-agents share, covering all of them; it errors if they are not all on one model. A named sub-agent overrides that shared value. Because the shared value belongs to the model, changing subagents.model picks up that model's settings rather than carrying the old ones over.\n\nA background task's settings sit on top of its model's: wakes and compaction take whatever their model has, chat's when they share it, and override only the keys set for them, so tuning a task never moves chat. Bare --background writes the same value for both.\n\nThe keys are temperature, top_p, reasoning_effort, reasoning_budget_tokens, max_output_tokens, cache_ttl, cache_keepalive, cache_keepalive_pings, sdk, reasoning_replay and max_tool_rounds.\n\ncache_keepalive is the interval between cache keepalive pings, or off. Any model can have one. After each reply, the model gets cache_keepalive_pings pings (default 1) spaced by that interval; the next message starts the count over. Only the model you are chatting with is pinged.\n\nsdk takes anthropic, openai, openrouter, gemini, zai, deepseek or moonshot, which forces a wire shape on a discovered model whose provider catalog labelled it wrong.\n\nThe vendor knobs openrouter_routing, gemini_thinking_mode and zai_clear_reasoning are settable per model too. A model only lists the knobs its own sdk honors.",
       "hidden": false,
       "aliases": [],
       "subcommand_required": false,
@@ -6515,7 +6365,7 @@
           "long": "background",
           "aliases": [],
           "short_aliases": [],
-          "help": "Background tasks: bare means wakes and compaction; naming one requires =compaction, =wake or =dreaming",
+          "help": "Background tasks: bare means wakes and compaction; naming one requires =compaction or =wake",
           "long_help": null,
           "action": "Set",
           "required": false,
@@ -6528,8 +6378,7 @@
           "choices": [
             "all",
             "wake",
-            "compaction",
-            "dreaming"
+            "compaction"
           ],
           "conflicts": [
             "chat"
@@ -6763,7 +6612,7 @@
           "long": "background",
           "aliases": [],
           "short_aliases": [],
-          "help": "Background tasks: bare means wakes and compaction; naming one requires =compaction, =wake or =dreaming",
+          "help": "Background tasks: bare means wakes and compaction; naming one requires =compaction or =wake",
           "long_help": null,
           "action": "Set",
           "required": false,
@@ -6776,8 +6625,7 @@
           "choices": [
             "all",
             "wake",
-            "compaction",
-            "dreaming"
+            "compaction"
           ],
           "conflicts": [
             "chat"
@@ -10859,21 +10707,6 @@
         "model",
         "use",
         "fixture:model",
-        "--background=dreaming"
-      ],
-      "mapping": {
-        "name": "switch_model",
-        "args": {
-          "name": "fixture:model",
-          "background_task": "dreaming"
-        }
-      }
-    },
-    {
-      "argv": [
-        "model",
-        "use",
-        "fixture:model",
         "--background=compaction"
       ],
       "mapping": {
@@ -11465,21 +11298,6 @@
     {
       "argv": [
         "trace",
-        "dreams",
-        "--count",
-        "3"
-      ],
-      "mapping": {
-        "name": "transcript",
-        "args": {
-          "source": "dreaming",
-          "count": 3
-        }
-      }
-    },
-    {
-      "argv": [
-        "trace",
         "events",
         "--count",
         "3"
@@ -11539,27 +11357,6 @@
         "debug"
       ],
       "mapping": null
-    },
-    {
-      "argv": [
-        "dream"
-      ],
-      "mapping": {
-        "name": "dream",
-        "args": {}
-      }
-    },
-    {
-      "argv": [
-        "dream",
-        "--now"
-      ],
-      "mapping": {
-        "name": "dream",
-        "args": {
-          "now": true
-        }
-      }
     },
     {
       "argv": [

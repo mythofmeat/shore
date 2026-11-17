@@ -48,7 +48,6 @@ A trigger says when it fires with exactly one of these:
 - `when = "user_quiet"` with `after = "8h"`: once each time {{user}} has gone that long without writing to you.
 - `when = "user_back"` with `after = "8h"`: as {{user}} writes to you again after at least that long. It never wakes you; see below.
 - `when = "status_changed"`: when {{user}} sets or clears their status.
-- `when = "dream_done"`: after one of your dreams.
 - `follows = "another-trigger"`: after the trigger of that name in this file. See below for what it waits for.
 
 `after` goes only with `user_quiet` and `user_back`, which both need it.
@@ -128,7 +127,7 @@ check = 'if [ "$SHORE_USER_STATUS" = "asleep" ]; then echo "They have gone to be
 
 A trigger that wakes you has a cooldown of {{wake_cooldown}} unless it sets its own. {{user}} chooses that default. A trigger with `wake = false`, a `user_back` one and a one-off have none unless they set one.
 
-A trigger that comes due during its cooldown is not lost. It waits, its check isn't run meanwhile, and its turn comes when the cooldown ends. The same holds for a trigger waiting on a dream, a status change or another trigger: what happened is remembered until the cooldown is over.
+A trigger that comes due during its cooldown is not lost. It waits, its check isn't run meanwhile, and its turn comes when the cooldown ends. The same holds for a trigger waiting on a status change or another trigger: what happened is remembered until the cooldown is over.
 
 A trigger that comes due outside its `between` hours is skipped, not held until they open.
 

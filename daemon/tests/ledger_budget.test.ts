@@ -388,7 +388,7 @@ describe("which calls a budget covers and stops", () => {
   });
 
   test("each action stops the calls it names and nothing else", () => {
-    const background = ["wake", "wake_tool_loop", "keepalive", "compaction", "dreaming", "memory_query"];
+    const background = ["wake", "wake_tool_loop", "keepalive", "compaction", "memory_query"];
     for (const callType of [...background, "message", "tool_loop", "subagent"]) {
       expect(actionBlocks("warn", { call_type: callType })).toBe(false);
       expect(actionBlocks("block", { call_type: callType })).toBe(true);

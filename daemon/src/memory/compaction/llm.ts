@@ -42,13 +42,13 @@ type LedgerGenerate = (
 
 export interface RealCompactionLlmOptions {
   model: ResolvedModel;
-  providerEntry?: ProviderEntry;
+  providerEntry?: ProviderEntry | undefined;
   character: string;
   generate: LedgerGenerate;
   cacheDir: string;
-  env?: NodeJS.ProcessEnv;
-  emit?: FrameSink;
-  signal?: AbortSignal;
+  env?: NodeJS.ProcessEnv | undefined;
+  emit?: FrameSink | undefined;
+  signal?: AbortSignal | undefined;
 }
 
 export class RealCompactionLlm implements CompactionLlm {

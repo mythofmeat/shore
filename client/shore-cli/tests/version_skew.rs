@@ -27,11 +27,11 @@ fn an_answer_from_a_newer_daemon_that_cant_be_read_says_to_upgrade_the_client() 
         )
     );
 
-    let (dream, _dream_frames) = asked_of(Some("999.0.0"), json!({}), &["dream"]);
+    let (diary, _diary_frames) = asked_of(Some("999.0.0"), json!({}), &["diary"]);
     assert_eq!(
-        complaint(&dream),
+        complaint(&diary),
         format!(
-            "error: couldn't read the daemon's answer to `dream`: missing field `character`\n\
+            "error: couldn't read the daemon's answer to `diary`: missing field `character`\n\
              This client is {CLIENT} and the daemon is 999.0.0. Upgrade the client."
         )
     );

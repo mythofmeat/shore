@@ -9,8 +9,8 @@ import { SettingsSection } from "./layout.tsx";
 import { formatNumber, formatTime, Loading, NeedsCharacter, useAction, useOperation } from "./shared.tsx";
 import { Tree } from "./tree.tsx";
 
-type Tab = "calls" | "log" | "wakes" | "dreams" | "events" | "errors" | "subagents";
-const TABS: readonly [Tab, string][] = [["calls", "Model calls"], ["log", "Thread log"], ["wakes", "Wake transcript"], ["dreams", "Dream transcript"], ["events", "Wake events"], ["errors", "Errors"], ["subagents", "Subagents"]];
+type Tab = "calls" | "log" | "wakes" | "events" | "errors" | "subagents";
+const TABS: readonly [Tab, string][] = [["calls", "Model calls"], ["log", "Thread log"], ["wakes", "Wake transcript"], ["events", "Wake events"], ["errors", "Errors"], ["subagents", "Subagents"]];
 
 function Count({ value, change }: { value: number; change: (value: number) => void }) {
   return <select className="select" aria-label="Entries to show" value={value} onChange={(event) => change(Number(event.target.value))}>{[10, 25, 50, 100].map((count) => <option key={count} value={count}>Last {count}</option>)}</select>;
@@ -68,7 +68,7 @@ function Calls({ state }: { state: ChromeSnapshot }) {
   const listing = calls.data !== undefined && "entries" in calls.data ? calls.data : undefined;
   return <>
     <div className="usage-controls"><Count value={count} change={setCount} />
-      <select className="select" aria-label="Call type" value={callType} onChange={(event) => setCallType(event.target.value)}>{["", "message", "wake", "compaction", "dreaming", "subagent", "keepalive"].map((type) => <option key={type} value={type}>{type === "" ? "All call types" : type}</option>)}</select>
+      <select className="select" aria-label="Call type" value={callType} onChange={(event) => setCallType(event.target.value)}>{["", "message", "wake", "compaction", "subagent", "keepalive"].map((type) => <option key={type} value={type}>{type === "" ? "All call types" : type}</option>)}</select>
     </div>
     <Loading error={calls.error} ready={listing !== undefined}>
       {listing?.enabled === false ? <p className="settings-empty">Call logging is off. Enable <code>diagnostics.call_log</code> in the configuration.</p> : null}
@@ -101,11 +101,10 @@ function ConversationLog({ state }: { state: ChromeSnapshot }) {
   </>;
 }
 
-function Diagnostic({ state, tab }: { state: ChromeSnapshot; tab: "wakes" | "dreams" | "events" | "errors" | "subagents" }) {
+function Diagnostic({ state, tab }: { state: ChromeSnapshot; tab: "wakes" | "events" | "errors" | "subagents" }) {
   const [count, setCount] = useState(25);
   const [ids, setIds] = useState("");
   const wakes = useOperation(state, "transcript", { count }, [], tab === "wakes");
-  const dreams = useOperation(state, "transcript", { count, source: "dreaming" }, [], tab === "dreams");
   const events = useOperation(state, "wake_log", { count }, [], tab === "events");
   const errors = useOperation(state, "error_log", { count }, [], tab === "errors");
   const subagents = useOperation(state, "subagent_trace", { count, ...(ids.trim() === "" ? {} : { ids: ids.split(/[\s,]+/).filter(Boolean) }) }, [], tab === "subagents");
@@ -117,11 +116,6 @@ function Diagnostic({ state, tab }: { state: ChromeSnapshot; tab: "wakes" | "dre
       {wakes.data?.enabled === false ? <p className="settings-empty">Wake transcripts are off.</p> : null}
       {wakes.data?.entries.map((row) => <details key={row.id} className="disclosure payload"><summary>{formatTime(row.ts)} · round {row.iteration} · {row.model ?? "?"} · {row.finish_reason ?? ""}</summary><Tree value={row.entry} /></details>)}
       {wakes.data?.entries.length === 0 ? <p className="settings-empty">No wake calls yet.</p> : null}
-    </Loading> : null}
-    {tab === "dreams" ? <Loading error={dreams.error} ready={dreams.data !== undefined}>
-      {dreams.data?.enabled === false ? <p className="settings-empty">Dream transcripts are off.</p> : null}
-      {dreams.data?.entries.map((row) => <details key={row.id} className="disclosure payload"><summary>{formatTime(row.ts)} · round {row.iteration} · {row.model ?? "?"} · {row.finish_reason ?? ""}</summary><Tree value={row.entry} /></details>)}
-      {dreams.data?.entries.length === 0 ? <p className="settings-empty">No dream calls yet.</p> : null}
     </Loading> : null}
     {tab === "events" ? <Loading error={events.error} ready={events.data !== undefined}>
       <div className="table-wrap"><table className="data-table"><thead><tr><th>When</th><th>Event</th><th>Detail</th></tr></thead>

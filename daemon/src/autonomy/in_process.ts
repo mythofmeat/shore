@@ -4,12 +4,11 @@ import type { LoopToolResult, TranscriptRound } from "./background_loop.ts";
 import { runIdleCompaction } from "./idle_compaction.ts";
 import { runDeepIdleArchive } from "./deep_archive.ts";
 import type { LastRequestCache } from "../cache/last_request.ts";
-import { reloadAndApplyDeferred, repoint, type PostArchiveEngine } from "./post_archive.ts";
-import type { AutonomyActionResult, AutonomyExecutor, DreamActionResult, DreamWindow, OpenedSeal, WakeHooks, WakeResult, WakeRun } from "./runner.ts";
+import type { PostArchiveEngine } from "./post_archive.ts";
+import type { AutonomyActionResult, AutonomyExecutor, OpenedSeal, WakeHooks, WakeResult, WakeRun } from "./runner.ts";
 import { addDiaryNote } from "./diary.ts";
 import { runWake } from "./wake.ts";
 import { sealedFilesDir } from "../handler/sealed_thread.ts";
-import { DREAM_CALL_TYPE, DREAM_LOOP_CALL_TYPE, DREAM_TOOL_THREAD, runDreamPass } from "../memory/dreaming/run.ts";
 import type { ToolContext } from "../tools/dispatch.ts";
 import type { CompactionReason } from "./tick.ts";
 import type { CharacterRegistry } from "../characters.ts";
@@ -34,6 +33,7 @@ import type { RebuildDeps } from "../cache/rebuild.ts";
 import type { CompactionRunner } from "../handler/turn.ts";
 import { compactionRunner } from "../memory/compaction/run.ts";
 import type { ServerMessage } from "../protocol/ServerMessage.ts";
+import type { TranscriptSource } from "../protocol/TranscriptSource.ts";
 
 export interface InProcessExecutorDeps {
   registry: CharacterRegistry;
@@ -159,31 +159,6 @@ export class InProcessAutonomyExecutor implements AutonomyExecutor {
     });
   }
 
-  async runDream(character: string, start: DreamWindow): Promise<DreamActionResult> {
-    const config = this.#deps.registry.effectiveConfig(character);
-    const calls = this.#loopCalls(config, character, "dream", [DREAM_CALL_TYPE, DREAM_LOOP_CALL_TYPE]);
-    const activity = async <T>(run: () => Promise<T>): Promise<T> =>
-      await (this.#deps.runActivity?.(run, start.signal) ?? run());
-    let toolCtx: Promise<ToolContext> | undefined;
-    const pass = await runDreamPass(character, config, start, {
-      generate: calls.generate,
-      dispatch: async (scoped, name, input, toolUseId, tools, writes) => await activity(async () => {
-        start.signal.throwIfAborted();
-        toolCtx ??= this.#dreamToolContext(scoped, character, start.signal);
-        const ctx = { ...await toolCtx, recordWorkspaceWrite: writes };
-        return await runLoopTool(ctx, scoped, calls.imageLimits(), { id: toolUseId ?? `dr_${crypto.randomUUID()}`, name, input }, tools);
-      }),
-      ...this.#transcripts("dreaming", character),
-      refreshHome: async () => await activity(async () => {
-        const deps = { config, cache: this.#deps.cache, rebuild: this.#deps.rebuild, engine: this.#engineReloader() };
-        await reloadAndApplyDeferred(character, deps, "dream");
-        await repoint(character, deps, "prompt_reload");
-      }),
-      ...(this.#deps.env === undefined ? {} : { env: this.#deps.env }),
-    });
-    return { events: pass.events, dream: pass.outcome };
-  }
-
   #loopCalls(config: LoadedConfig, character: string, task: string, [first, loop]: readonly [string, string]): {
     generate: (request: SidecarRequest, phase: ToolPhase, signal: AbortSignal) => Promise<GenerateResponse>;
     imageLimits: () => ImageLimits | undefined;
@@ -216,10 +191,9 @@ export class InProcessAutonomyExecutor implements AutonomyExecutor {
     };
   }
 
-  #transcripts(source: "wake" | "dreaming", character: string): { recordTranscript?: (round: TranscriptRound) => void } {
+  #transcripts(source: TranscriptSource, character: string): { recordTranscript?: (round: TranscriptRound) => void } {
     const store = this.#deps.callStore;
-    if (store === undefined) return {};
-    return {
+    return store === undefined ? {} : {
       recordTranscript: (round) => {
         recordTranscript(store, {
           source,
@@ -231,24 +205,6 @@ export class InProcessAutonomyExecutor implements AutonomyExecutor {
         });
       },
     };
-  }
-
-  async #dreamToolContext(config: LoadedConfig, character: string, signal: AbortSignal): Promise<ToolContext> {
-    const {
-      wakeInThread: _handOff,
-      sealThread: _seal,
-      startThread: _start,
-      editThread: _edit,
-      deferEdit: _defer,
-      mcpRegistry: _mcp,
-      mcpToolDefs: _mcpDefs,
-      imageGenerator: _images,
-      ...tools
-    } = this.#deps.tools ?? {};
-    const ctx = await buildToolContext(config, config.dirs.data, character, { ...tools, conversation: [], signal });
-    delete ctx.imageGenConfig;
-    ctx.thread = DREAM_TOOL_THREAD;
-    return ctx;
   }
 
   async #withForeground<T>(run: () => Promise<T>): Promise<T> {

@@ -1,6 +1,6 @@
 import { afterAll, afterEach, expect, jest, test } from "bun:test";
 import { join } from "node:path";
-import { unfoldedDiary } from "../src/autonomy/diary.ts";
+import { keptDiary } from "../src/autonomy/diary.ts";
 import { wakeRecord } from "../src/autonomy/wake_record.ts";
 import type { WakeEvent } from "../src/autonomy/wake_log.ts";
 import type { Message } from "../src/engine/types.ts";
@@ -92,7 +92,7 @@ async function afterOneChat(script: Script, seen: SidecarRequest[], ownTime: (h:
         },
         log: () => runtime.autonomy.log("ada", 100),
         messages: async (thread = "main") => (await runtime.registry.getOrCreate("ada", thread)).messages(),
-        diary: () => unfoldedDiary(join(config.dirs.data, "ada")).map((note) => [note.source, note.text]),
+        diary: () => keptDiary(join(config.dirs.data, "ada"), Date.now()).map((note) => [note.source, note.text]),
       });
     } finally {
       jest.useRealTimers();
@@ -208,7 +208,7 @@ async function wokenInRing(script: Script, seen: SidecarRequest[], limitMs: numb
 }
 
 function ringNotes(world: ChatWorld): [source: string, text: string][] {
-  return unfoldedDiary(join(world.config.dirs.data, "ada")).map((note) => [note.source, note.text]);
+  return keptDiary(join(world.config.dirs.data, "ada"), Date.now()).map((note) => [note.source, note.text]);
 }
 
 async function endOf(world: ChatWorld, thread: string): Promise<[role: string, origin: string, content: string][]> {

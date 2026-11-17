@@ -19,8 +19,6 @@ export function DebugPage({ state }: { state: ChromeSnapshot }) {
       action("Make dormant", () => workspace.actions.run("set_dormant", {}), (value) => `${value.character} is ${value.status}`)],
     ["Make active", "Ends dormancy, so the character's triggers wake it again.",
       action("Make active", () => workspace.actions.run("set_active", {}), (value) => `${value.character} is ${value.status}`)],
-    ["Dream now", "Starts a dream at the next autonomy tick instead of waiting for its schedule.",
-      action("Dream", () => workspace.actions.run("dream", { now: true }), (value) => value.running ? "Already dreaming" : "Dream queued")],
     ["Send a cache keepalive", "Pings the provider now to keep the prompt cache warm.",
       action("Ping", () => workspace.actions.run("keepalive_ping_now", {}), (value) => `Keepalive ${value.status}`)],
     ["Activate the session", "Registers the session and starts keepalive and the character's triggers as a client connection would.",

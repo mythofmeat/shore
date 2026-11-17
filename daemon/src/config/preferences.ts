@@ -611,14 +611,12 @@ export interface LoadedConfigView {
   models: ModelCatalog;
   providers: ProviderRegistry;
   dirs: { data: string; cache: string };
-  app: Pick<AppConfig, "chat" | "subagents" | "triggers" | "compaction" | "dreaming">;
+  app: Pick<AppConfig, "chat" | "subagents" | "triggers" | "compaction">;
 }
 
 export type BackgroundTask = Exclude<import("../protocol/BackgroundModelTarget.ts").BackgroundModelTarget, "all">;
 
-export const BACKGROUND_TASKS: readonly BackgroundTask[] = ["wake", "compaction", "dreaming"];
-
-export const SHARED_BACKGROUND_TASKS: readonly BackgroundTask[] = ["wake", "compaction"];
+export const BACKGROUND_TASKS: readonly BackgroundTask[] = ["wake", "compaction"];
 
 export function configView(config: LoadedConfigView): LoadedConfigView {
   return { models: config.models, providers: config.providers, dirs: config.dirs, app: config.app };

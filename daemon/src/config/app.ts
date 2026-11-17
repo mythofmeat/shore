@@ -305,13 +305,13 @@ const DAEMON: StructSpec<DaemonConfig> = {
   },
 };
 
-export type BackgroundTask = "wake" | "compaction" | "dreaming";
+export type BackgroundTask = "wake" | "compaction";
 
 export function resolveBackgroundModelName(
-  app: Pick<AppConfig, "triggers" | "compaction" | "dreaming">,
+  app: Pick<AppConfig, "triggers" | "compaction">,
   task: BackgroundTask,
 ): string | undefined {
-  return { wake: app.triggers, compaction: app.compaction, dreaming: app.dreaming }[task].model;
+  return { wake: app.triggers, compaction: app.compaction }[task].model;
 }
 
 export function resolveDisplayName(
@@ -776,46 +776,6 @@ export function chatModelProfiles(chat: Table | undefined): Table | undefined {
   return Object.fromEntries(Object.entries(chat).filter(([key]) => !(key in CHAT.fields)));
 }
 
-export interface DreamingConfig {
-  enabled: boolean;
-  model: string | undefined;
-  every: ConfigDuration;
-  start_between: string | undefined;
-  idle_after: ConfigDuration;
-  min_turns: number;
-  time_limit: ConfigDuration;
-  system_prompt: string | undefined;
-  tools: string[] | undefined;
-}
-
-export const defaultDreamingConfig = (): DreamingConfig => ({
-  enabled: false,
-  model: undefined,
-  every: ConfigDuration.fromSecs(3 * 86_400),
-  start_between: undefined,
-  idle_after: ConfigDuration.fromSecs(7200),
-  min_turns: 20,
-  time_limit: ConfigDuration.fromSecs(90 * 60),
-  system_prompt: undefined,
-  tools: undefined,
-});
-
-const DREAMING: StructSpec<DreamingConfig> = {
-  name: "DreamingConfig",
-  make: defaultDreamingConfig,
-  fields: {
-    enabled: readBool,
-    model: optional(readChatModelName),
-    every: readDuration,
-    start_between: optional(readString),
-    idle_after: readDuration,
-    min_turns: readUsize,
-    time_limit: readDuration,
-    system_prompt: optional(readString),
-    tools: optional(readToolNameSeq),
-  },
-};
-
 const DAY_WINDOW = /^([01]\d|2[0-3]):([0-5]\d)-([01]\d|2[0-3]):([0-5]\d)$/;
 
 export function parseDayWindow(raw: string): { startMinute: number; endMinute: number } | undefined {
@@ -825,20 +785,6 @@ export function parseDayWindow(raw: string): { startMinute: number; endMinute: n
   const start = (startHour ?? 0) * 60 + (startMinute ?? 0);
   const end = (endHour ?? 0) * 60 + (endMinute ?? 0);
   return start === end ? undefined : { startMinute: start, endMinute: end };
-}
-
-const MAX_DREAM_TIME_LIMIT_SECS = 6n * 3600n;
-
-export function validateDreaming(dreaming: DreamingConfig): string | undefined {
-  if (dreaming.start_between !== undefined && parseDayWindow(dreaming.start_between) === undefined) {
-    return `dreaming.start_between is ${JSON.stringify(dreaming.start_between)}; expected a local time range like "02:00-07:00", with different start and end`;
-  }
-  if (dreaming.every.asSecs() <= 0n) return "dreaming.every must be greater than zero";
-  const limit = dreaming.time_limit.asSecs();
-  if (limit < 60n || limit > MAX_DREAM_TIME_LIMIT_SECS) {
-    return `dreaming.time_limit is ${dreaming.time_limit.toString()}; it must be between 1m and 6h`;
-  }
-  return undefined;
 }
 
 export interface MatrixConfig {
@@ -1192,7 +1138,6 @@ export interface AppConfig {
   presence: PresenceConfig;
   marks: MarksConfig;
   compaction: CompactionConfig;
-  dreaming: DreamingConfig;
   tools: ToolsConfig;
   subagents: SubagentsConfig;
   budgets: UsageBudgetConfig[];
@@ -1212,7 +1157,6 @@ export const defaultAppConfig = (): AppConfig => ({
   presence: defaultPresenceConfig(),
   marks: defaultMarksConfig(),
   compaction: defaultCompactionConfig(),
-  dreaming: defaultDreamingConfig(),
   tools: defaultToolsConfig(),
   subagents: defaultSubagentsConfig(),
   budgets: [],
@@ -1236,7 +1180,6 @@ const APP: StructSpec<AppConfig> = {
     presence: struct(PRESENCE),
     marks: struct(MARKS),
     compaction: struct(COMPACTION),
-    dreaming: struct(DREAMING),
     tools: struct(TOOLS),
     subagents: struct(SUBAGENTS),
     budgets: readSeq(struct(BUDGET)),

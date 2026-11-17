@@ -156,10 +156,6 @@ export class CharacterTriggers {
     await this.#happened((trigger) => trigger.when.kind === "follows" && names.includes(trigger.when.trigger));
   }
 
-  async dreamDone(): Promise<void> {
-    await this.#happened((trigger) => eventOf(trigger) === "dream_done");
-  }
-
   async statusChanged(): Promise<void> {
     await this.#happened((trigger) => eventOf(trigger) === "status_changed");
   }

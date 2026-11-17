@@ -236,7 +236,6 @@ pub(crate) async fn execute(
                 &[
                     ("trace calls", "raw model call payloads"),
                     ("trace wakes", "what each wake thought and did"),
-                    ("trace dreams", "what each dream read and changed"),
                     ("trace events", "the wake timeline: fired, dormant, woke"),
                     ("trace errors", "errors hit since start, and key fallbacks"),
                     ("trace subagent", "stored sub-agent runs and their tools"),
@@ -318,7 +317,6 @@ pub(crate) async fn execute(
         | CliCommand::Config { .. }
         | CliCommand::Usage { .. }
         | CliCommand::Diary { .. }
-        | CliCommand::Dream { .. }
         | CliCommand::Presence { .. }
         | CliCommand::Completions { .. }) => {
             handle_generic_swp_command(&mut conn, other, cli.character.as_deref()).await?;
@@ -350,7 +348,6 @@ pub(crate) fn wants_json(other: &CliCommand) -> bool {
             Some(
                 crate::cli::TraceCommand::Calls { json, .. }
                 | crate::cli::TraceCommand::Wakes { json, .. }
-                | crate::cli::TraceCommand::Dreams { json, .. }
                 | crate::cli::TraceCommand::Errors { json, .. }
                 | crate::cli::TraceCommand::Events { json, .. }
                 | crate::cli::TraceCommand::Subagent { json, .. },
@@ -376,7 +373,6 @@ pub(crate) fn wants_json(other: &CliCommand) -> bool {
         | CliCommand::Import { json, .. }
         | CliCommand::Compact { json, .. }
         | CliCommand::Diary { json, .. }
-        | CliCommand::Dream { json, .. }
         | CliCommand::Presence { json, .. }
         | CliCommand::Segments { json, .. }
         | CliCommand::Clear { json, .. }
@@ -1258,7 +1254,6 @@ fn reads_the_selected_thread(command: &CliCommand) -> bool {
         | CliCommand::Config { .. }
         | CliCommand::Usage { .. }
         | CliCommand::Diary { .. }
-        | CliCommand::Dream { .. }
         | CliCommand::Presence { .. }
         | CliCommand::Trace { .. }
         | CliCommand::Debug { .. }

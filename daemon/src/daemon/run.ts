@@ -223,7 +223,13 @@ export async function startDaemon(options: DaemonOptions): Promise<RunningDaemon
     data_dir: loaded.dirs.data,
   });
 
-  const rollback: (() => void | Promise<void>)[] = [() => { instances.unregister(instanceId); }];
+  const teardown: (readonly [step: string, stop: () => unknown])[] = [["instance record", () => {
+    instances.unregister(instanceId);
+    log?.info?.("Unregistered daemon instance", { instance_id: instanceId, registry_path: instances.path });
+  }]];
+  const tearDown = async (): Promise<void> => {
+    for (const [step, stop] of teardown.toReversed()) await bounded(Promise.resolve().then(stop), step, log);
+  };
   try {
     if (loaded.dirs.workspace !== undefined) {
       try {
@@ -261,8 +267,7 @@ export async function startDaemon(options: DaemonOptions): Promise<RunningDaemon
           thread,
         ),
     });
-    rollback.push(async () => { await runtime.shutdown(); });
-    rollback.push(async () => { await runtime.autonomy.shutdown(); });
+    teardown.push(["runtime", async () => await runtime.shutdown()], ["autonomy", async () => await runtime.autonomy.shutdown()]);
 
     const handshake = buildHandshakeProvider(runtime.registry);
     server.setHandshakeProvider(handshake);
@@ -273,7 +278,6 @@ export async function startDaemon(options: DaemonOptions): Promise<RunningDaemon
       dataDir: loaded.dirs.data,
       generations: () => handler?.activeGenerations() ?? [],
       wakes: () => runtime.autonomy.runningWakes(),
-      dreams: () => runtime.autonomy.runningDreams(),
       shutdown: () => shutdownWindow,
     });
 
@@ -298,16 +302,15 @@ export async function startDaemon(options: DaemonOptions): Promise<RunningDaemon
     await sharePictureFolders(runtime.config, runtime.registry.availableCharacters());
     startCharacterInits(runtime.config, runtime.registry.availableCharacters(), log);
     const clocks = startRuntimeClocks(runtime, options.clockIntervals ?? {});
-    rollback.push(() => { clocks.stop(); });
+    teardown.push(["clocks", () => clocks.stop()]);
 
     handler = new MessageHandler(buildMessageHandlerDeps(assembly));
-    rollback.push(labelNewSegments(assembly).stop);
+    teardown.push(["segment labels", labelNewSegments(assembly).stop]);
     const resumed = resumeStoppedCompactions(assembly).catch((e: unknown) => { shoreLog.warn(`shore: could not resume compactions paused by the last shutdown: ${String(e)}`); });
     const messages = handler;
-    server.setControlHandler((routed) => messages.handleControl(routed));
 
     const handlerDone = messages.run(server.routes());
-    rollback.push(async () => { await handlerDone; });
+    teardown.push(["message handler", async () => await handlerDone]);
     web?.activate();
     if (web !== undefined) log?.info?.("Browser transport listening", { origin: web.origin });
     const reloadConfig = configReloader(assembly);
@@ -325,7 +328,7 @@ export async function startDaemon(options: DaemonOptions): Promise<RunningDaemon
             : { workspaceDir: loaded.dirs.workspace }),
           ...(log === undefined ? {} : { log }),
         });
-    rollback.push(async () => { await watcher?.stop(); });
+    teardown.push(["config watcher", async () => await watcher?.stop()]);
 
     const discovery =
       options.autoDiscovery === false
@@ -334,7 +337,7 @@ export async function startDaemon(options: DaemonOptions): Promise<RunningDaemon
             config: () => runtime.registry.globalConfig(),
             ...(log === undefined ? {} : { log }),
           });
-    rollback.push(() => { discovery?.stop(); });
+    teardown.push(["auto-discovery", () => discovery?.stop()]);
 
     const matrixBridge = superviseMatrixBridge({
       config: loaded,
@@ -342,7 +345,7 @@ export async function startDaemon(options: DaemonOptions): Promise<RunningDaemon
       env,
       ...(log === undefined ? {} : { log }),
     });
-    rollback.push(async () => { await matrixBridge.stop(); });
+    teardown.push(["matrix bridge", async () => await matrixBridge.stop()]);
     matrixBridge.done.catch((e: unknown) => {
       log?.warn?.("Matrix bridge supervisor stopped", { error: String(e) });
     });
@@ -352,26 +355,7 @@ export async function startDaemon(options: DaemonOptions): Promise<RunningDaemon
     const done = (async () => {
       await served;
       if (web !== undefined) await bounded(web.stop(), "browser transport", log);
-      await watcher?.stop();
-      discovery?.stop();
-      await bounded(matrixBridge.stop(), "matrix bridge", log);
-      await bounded(handlerDone, "message handler", log);
-      clocks.stop();
-      await bounded(runtime.autonomy.shutdown(), "autonomy", log);
-      await bounded(runtime.shutdown(), "runtime", log);
-      try {
-        instances.unregister(instanceId);
-        log?.info?.("Unregistered daemon instance", {
-          instance_id: instanceId,
-          registry_path: instances.path,
-        });
-      } catch (e) {
-        log?.warn?.("Failed to unregister daemon instance", {
-          instance_id: instanceId,
-          registry_path: instances.path,
-          error: String(e),
-        });
-      }
+      await tearDown();
       if (!dataLease.release()) {
         log?.warn?.("Could not release Shore data-directory ownership", {
           instance_id: instanceId,
@@ -384,11 +368,7 @@ export async function startDaemon(options: DaemonOptions): Promise<RunningDaemon
 
     let stopped = false;
     const stop = () => {
-      if (stopped) return;
       stopped = true;
-      void web?.stop().catch((error: unknown) => {
-        log?.warn?.("Browser transport shutdown failed", { error: String(error) });
-      });
       server.stop();
     };
     const graceMs = loaded.app.daemon.shutdown_grace.asMillis();
@@ -433,10 +413,7 @@ export async function startDaemon(options: DaemonOptions): Promise<RunningDaemon
   } catch (error) {
     server.stop();
     await Promise.allSettled([web?.stop(), server.serve()]);
-    for (const cleanup of rollback.reverse()) {
-      try { await cleanup(); }
-      catch (failure) { log?.warn?.("Startup cleanup failed", { error: String(failure) }); }
-    }
+    await tearDown();
     dataLease.release();
     throw new StartupError("server_run", `Failed to initialize shore-daemon: ${String(error)}`);
   }

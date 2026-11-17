@@ -48,7 +48,6 @@ fn config_modes(command: &CliCommand) -> (bool, bool) {
         | CliCommand::Provider { .. }
         | CliCommand::Usage { .. }
         | CliCommand::Diary { .. }
-        | CliCommand::Dream { .. }
         | CliCommand::Presence { .. }
         | CliCommand::Completions { .. }
         | CliCommand::View { .. }
@@ -508,7 +507,6 @@ pub(crate) fn render(
                 .unwrap_or("?")
         )),
         "refresh_all_provider_models" => Some(render_provider_refresh_all(data)),
-        "dream" => Some(crate::output::commands::dream_report_text(data)),
         "diary" => Some(written(|out| {
             crate::output::diary::write_diary(out, data, pager_width(crate::output::term_width()));
         })),
@@ -621,6 +619,20 @@ mod tests {
     use serde_json::json;
 
     #[test]
+    fn a_provider_model_refresh_says_how_many_models_it_found_and_when() {
+        let data = json!({ "provider": "anthropic", "model_count": 12, "fetched_at": "2026-11-17T09:00:00Z", "cache_path": "/cache/anthropic.json" });
+        assert_eq!(
+            super::render(
+                "provider anthropic models refresh",
+                "refresh_provider_models",
+                &data,
+                "ada"
+            ),
+            Some("Refreshed anthropic: 12 models (fetched 2026-11-17T09:00:00Z).".to_owned())
+        );
+    }
+
+    #[test]
     fn config_asked_for_as_toml_is_shown_as_toml_with_defaults_left_out_unless_all_is_asked_for() {
         let data = json!({
             "config": { "chat": { "model": "anthropic:fixture", "display_name": "eve" } },
@@ -708,8 +720,8 @@ mod tests {
         crate::output::set_color_enabled(false);
         let long = ["lamps"; 13].join(" ");
         let data = json!({ "character": "ada", "kept": 2, "notes": [
-            { "at": "dawn", "thread": "main", "source": "note", "text": "Ferry times.", "shown": false, "dreamed": false },
-            { "at": "noon", "thread": "own-time", "source": "wake", "text": long, "shown": true, "dreamed": true },
+            { "at": "dawn", "thread": "main", "source": "note", "text": "Ferry times.", "shown": false },
+            { "at": "noon", "thread": "own-time", "source": "wake", "text": long, "shown": true },
         ] });
         assert_eq!(
             super::render("diary -n 5", "diary", &data, "ada"),
@@ -724,7 +736,7 @@ mod tests {
                     "  dawn            note in \"main\"  \u{00b7} no longer shown to ada",
                     "    Ferry times.",
                     "",
-                    "  noon            wake in \"own-time\"  \u{00b7} dreamed",
+                    "  noon            wake in \"own-time\"",
                     "    lamps lamps lamps lamps lamps lamps lamps lamps lamps lamps lamps",
                     "    lamps lamps",
                 ]

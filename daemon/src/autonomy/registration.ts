@@ -5,7 +5,7 @@ import { homeThreadOf, threadActivityNow } from "../engine/threads.ts";
 import { hostZone } from "../ledger/zoned.ts";
 import type { LoadedConfig } from "../config/loader.ts";
 import { loadCompactionCheckpoint } from "../memory/compaction/checkpoint.ts";
-import { dreamRunnerConfig, type AutonomyRunnerConfig, type CompactionRunnerConfig, type RestoredIdle } from "./runner.ts";
+import type { AutonomyRunnerConfig, CompactionRunnerConfig, RestoredIdle } from "./runner.ts";
 import type { DormancyConfig } from "./dormancy.ts";
 import type { AutonomyService, RegisterCharacter } from "./service.ts";
 
@@ -13,7 +13,6 @@ export function runnerConfigFor(config: LoadedConfig): AutonomyRunnerConfig {
   return {
     autonomyEnabled: config.app.triggers.enabled,
     ...compactionConfigFor(config),
-    dream: dreamRunnerConfig(config.app.dreaming),
   };
 }
 

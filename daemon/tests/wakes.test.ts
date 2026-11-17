@@ -13,7 +13,7 @@ import { emptyCatalog } from "../src/config/models.ts";
 import { ProviderRegistry } from "../src/config/providers.ts";
 import { Diagnostics } from "../src/diagnostics.ts";
 import type { History } from "../src/engine/conversation.ts";
-import { addDiaryNote, foldDiary, unfoldedDiary } from "../src/autonomy/diary.ts";
+import { addDiaryNote, keptDiary } from "../src/autonomy/diary.ts";
 import { encodeEvent } from "../src/autonomy/wake_log.ts";
 import { triggerFiredNote, userWroteNote, wakeNewsNote } from "../src/autonomy/wake_shape.ts";
 import { lastSeen, noteSeen, presence, setPresence } from "../src/autonomy/presence.ts";
@@ -25,6 +25,7 @@ import { dispatchCommand } from "../src/handler/commands.ts";
 import { buildCommandPathDeps, buildRunGeneration } from "../src/handler/deps.ts";
 import { ThreadUnreadTracker } from "../src/handler/thread_unread.ts";
 import type { GenerateResponse, SidecarProvider, SidecarRequest } from "../src/llm/types.ts";
+import { cancelPass, watchPass } from "../src/memory/compaction/activity.ts";
 import { queuedCompactionsEnded } from "../src/memory/compaction/background.ts";
 import { runCompactionPass } from "../src/memory/compaction/run.ts";
 import type { ServerMessage } from "../src/protocol/ServerMessage.ts";
@@ -45,6 +46,7 @@ import { restoreTestEnv, setTestEnv, unsetTestEnv } from "./support/env.ts";
 import { NO_MCP } from "./support/rebuild.ts";
 import { outcomeOf, rejectionOf } from "./support/outcome.ts";
 import { testTmp } from "./support/tmp.ts";
+import { until } from "./support/until.ts";
 
 const MINUTE = 60_000;
 const T0 = Date.UTC(2026, 9, 30, 12);
@@ -457,7 +459,7 @@ test("tags a wake still wraps a message in send nothing: its working and its not
     expect(working.at(-1)?.content).toBe("Told part one.\n<sendMessage>Part one: the fox came to the gate.</sendMessage>");
     expect((await thread("main")).filter((message) => message.role === "assistant").map((message) => [message.origin, message.content])).toEqual([[undefined, "reply to: hello"]]);
     expect(runtime.autonomy.log("ada", 100).map((event) => [event.kind, event.detail]).at(-1)).toEqual(["message_skipped", "Wake completed — no message sent"]);
-    const diary = () => unfoldedDiary(join(data, "ada")).map((note) => [note.source, note.thread, note.text]);
+    const diary = () => keptDiary(join(data, "ada"), Date.now()).map((note) => [note.source, note.thread, note.text]);
     expect(diary()).toEqual([
       ["shore", "", 'Your wake in "main" wrapped a message in <sendMessage> tags. The tags no longer send anything, so User was not sent it. A message is sent with the `send_message` tool.'],
       ["wake", "main", "Told part one.\n<sendMessage>Part one: the fox came to the gate.</sendMessage>"],
@@ -525,7 +527,7 @@ test("a wake's message for a thread that is archived before the wake ends isn't 
     await waking;
 
     expect(runtime.registry.listThreads("ada").map((record) => record.id)).toEqual(["main", "wakes"]);
-    expect(unfoldedDiary(join(data, "ada")).map((note) => [note.source, note.text])).toEqual([
+    expect(keptDiary(join(data, "ada"), Date.now()).map((note) => [note.source, note.text])).toEqual([
       ["shore", 'Your message for the thread "garden" was not sent: that thread was gone by the time your wake in "main" ended.'],
     ]);
     expect(runtime.autonomy.log("ada", 100).map((event) => event.kind)).not.toContain("message_sent");
@@ -896,18 +898,16 @@ test("a side thread trimmed for room without compaction keeps its newest reply w
   });
 });
 
-test("bare --background tunes wakes and compaction on their pinned model while dreams keep the chat model's settings", async () => {
+test("bare --background tunes wakes and compaction on their pinned model", async () => {
   await withCharacter(async ({ command }) => {
     const set = await command("set_model_setting", { key: "reasoning_effort", value: "low", background_task: "all" });
     expect(set).toMatchObject({ type: "command_output", data: { model: "chat.pinned", background_task: "all" } });
     expect(await command("model_settings", { background_task: "all" })).toMatchObject({ type: "command_output", data: { model: "chat.pinned" } });
-    expect(await command("model_settings", { background_task: "dreaming" })).toMatchObject({ type: "command_output", data: { model: "chat.fixture", saved_character: null } });
     const listed = await command("list_models", {});
     const roles = listed.type === "command_output" ? (listed.data as { roles: { role: string; model: string | null; source: string | null }[] }).roles : [];
-    expect(roles.filter((role) => ["wake", "compaction", "dreaming"].includes(role.role))).toEqual([
+    expect(roles.filter((role) => ["wake", "compaction"].includes(role.role))).toEqual([
       { role: "wake", model: "chat.pinned", source: "triggers.model" },
       { role: "compaction", model: "chat.pinned", source: "compaction.model" },
-      { role: "dreaming", model: "chat.fixture", source: "inherits chat" },
     ]);
   }, (app) => {
     app.triggers.model = "pinned";
@@ -1398,7 +1398,7 @@ function withTriggers(app: AppConfig): void {
 }
 
 function diaryOf(data: string): [from: string, text: string][] {
-  return unfoldedDiary(join(data, "ada")).map((note) => [note.source === "trigger" ? note.trigger ?? "" : note.source, note.text]);
+  return keptDiary(join(data, "ada"), Date.now()).map((note) => [note.source === "trigger" ? note.trigger ?? "" : note.source, note.text]);
 }
 
 test("a trigger in the character's file wakes it when its check prints, and the check is handed what Shore knows", async () => {
@@ -1457,10 +1457,10 @@ test("what a trigger for the user's return says arrives with their message, and 
     expect(times(next, 'from your trigger "welcome"')).toBe(1);
     expect(next).toEndWith('[New in your diary. Each entry says where it came from.]\n\nfrom your trigger "always" · Friday 2026-10-30 · 9:01 PM\nThey wrote.\n\n[End of your diary.]\nstill here');
 
-    const before = unfoldedDiary(join(data, "ada")).map((note) => note.at);
+    const before = keptDiary(join(data, "ada"), Date.now()).map((note) => note.at);
     at(18 * 60 + 1);
     await say("");
-    expect(unfoldedDiary(join(data, "ada")).map((note) => note.at)).toEqual(before);
+    expect(keptDiary(join(data, "ada"), Date.now()).map((note) => note.at)).toEqual(before);
   }, withTriggers);
 });
 
@@ -1532,21 +1532,6 @@ test("a trigger that fires while a wake is writing its last words isn't lost: it
     at(13);
     await runtime.autonomy.runDue();
     expect(script.wakes).toHaveLength(0);
-  }, withTriggers);
-});
-
-test("a trigger for a dream finishing gets its turn after a dream", async () => {
-  await withCharacter(async ({ runtime, workspace, data, say }) => {
-    await writeFile(join(workspace, "TRIGGERS.toml"), '[after-dream]\nwhen = "dream_done"\nreason = "Read what the dream changed."\nwake = false\n');
-    await say("hello");
-    at(1);
-    await runtime.triggers.tick();
-    expect(diaryOf(data)).toEqual([]);
-    expect(runtime.autonomy.forceDreamNow("ada")).toBe("queued");
-    await runtime.autonomy.runDue();
-    await runtime.autonomy.dreamsEnded();
-    await runtime.triggers.tick();
-    expect(diaryOf(data)).toEqual([["after-dream", "Read what the dream changed."]]);
   }, withTriggers);
 });
 
@@ -1740,7 +1725,7 @@ test("a note the character writes in its diary from a conversation reaches its w
     at(5);
     await say("please remember the fern");
     expect(lastToolResult(await thread("main"))).toEqual({ text: "Noted in your diary. Your other turns will see it for the next day.", failed: false });
-    expect(unfoldedDiary(join(data, "ada")).map((note) => [note.source, note.thread, note.at, note.text])).toEqual([
+    expect(keptDiary(join(data, "ada"), Date.now()).map((note) => [note.source, note.thread, note.at, note.text])).toEqual([
       ["note", "main", new Date(T0 + 5 * MINUTE).toISOString(), "Water the fern on Friday."],
     ]);
 
@@ -1762,7 +1747,7 @@ test("a note the character writes in its diary from a conversation reaches its w
     await say("and the lamp");
     expect(lastToolResult(await thread("main"))).toMatchObject({ failed: true });
     expect(String(lastToolResult(await thread("main"))?.text)).toContain("text must be a non-empty string");
-    expect(unfoldedDiary(join(data, "ada"))).toHaveLength(1);
+    expect(keptDiary(join(data, "ada"), Date.now())).toHaveLength(1);
 
     script.replyTool = { name: "write_diary", input: { text: "Lamp oil is low.", urgent: true } };
     at(12);
@@ -1773,13 +1758,13 @@ test("a note the character writes in its diary from a conversation reaches its w
     await say("and the wick");
     expect(lastToolResult(await thread("main"))).toMatchObject({ failed: true });
     expect(String(lastToolResult(await thread("main"))?.text)).not.toContain("text must be a non-empty string");
-    expect(unfoldedDiary(join(data, "ada"))).toHaveLength(1);
+    expect(keptDiary(join(data, "ada"), Date.now())).toHaveLength(1);
 
     script.replyTool = { name: "write_diary", input: { text: "!" } };
     at(14);
     await say("and the door");
     expect(lastToolResult(await thread("main"))).toMatchObject({ failed: false });
-    expect(unfoldedDiary(join(data, "ada")).map((note) => note.text)).toEqual(["Water the fern on Friday.", "!"]);
+    expect(keptDiary(join(data, "ada"), Date.now()).map((note) => note.text)).toEqual(["Water the fern on Friday.", "!"]);
   }, withTools("write_diary"));
 });
 
@@ -1951,7 +1936,7 @@ test("a reply's message for a thread that is archived before the reply is done i
 
     expect((await thread("main")).at(-1)?.content).toBe("reply to: tell the garden");
     expect(runtime.registry.listThreads("ada").map((record) => record.id)).toEqual(["main", "attic"]);
-    expect(unfoldedDiary(join(data, "ada")).map((note) => [note.source, note.text])).toEqual([
+    expect(keptDiary(join(data, "ada"), Date.now()).map((note) => [note.source, note.text])).toEqual([
       ["shore", 'Your message for the thread "garden" was not sent: that thread was gone by the time your turn in "main" ended.'],
     ]);
   });
@@ -2117,7 +2102,7 @@ test("the presence command sets one of the user's own statuses, shows and clears
   }, (app) => { app.presence.statuses = []; });
 });
 
-test("the diary command lists the newest twenty notes oldest first, as many as asked for, or all of them for zero, with which ones the character still sees and which a dream has read", async () => {
+test("the diary command lists the newest twenty notes oldest first, as many as asked for, or all of them for zero, with which ones the character still sees", async () => {
   await withCharacter(async ({ data, command }) => {
     const dir = join(data, "ada");
     const listed = async (args: Record<string, unknown>): Promise<{ character: string; kept: number; notes: Record<string, unknown>[] }> =>
@@ -2129,20 +2114,19 @@ test("the diary command lists the newest twenty notes oldest first, as many as a
     addDiaryNote(dir, { at: T0 - 25 * 60 * MINUTE, thread: "main", source: "note", text: "Promised the ferry times." }, newId);
     for (let n = 1; n <= 21; n += 1) addDiaryNote(dir, { at: T0 + n * MINUTE, thread: "own-time", source: "wake", text: `note ${String(n)}` }, newId);
     addDiaryNote(dir, { at: T0 + 22 * MINUTE, thread: "own-time", source: "trigger", trigger: "mail", text: "Two letters." }, newId);
-    foldDiary(dir, ["d1", "d22"]);
     at(30);
 
     const newest = await listed({});
     expect(newest.kept).toBe(23);
     expect(newest.notes.map((note) => note["text"])).toEqual([...Array.from({ length: 19 }, (_unused, n) => `note ${String(n + 3)}`), "Two letters."]);
-    expect(newest.notes.at(-1)).toEqual({ at: new Date(T0 + 22 * MINUTE).toISOString(), thread: "own-time", source: "trigger", trigger: "mail", text: "Two letters.", shown: true, dreamed: false });
-    expect(newest.notes.at(-2)).toEqual({ at: new Date(T0 + 21 * MINUTE).toISOString(), thread: "own-time", source: "wake", text: "note 21", shown: true, dreamed: true });
+    expect(newest.notes.at(-1)).toEqual({ at: new Date(T0 + 22 * MINUTE).toISOString(), thread: "own-time", source: "trigger", trigger: "mail", text: "Two letters.", shown: true });
+    expect(newest.notes.at(-2)).toEqual({ at: new Date(T0 + 21 * MINUTE).toISOString(), thread: "own-time", source: "wake", text: "note 21", shown: true });
 
     expect((await listed({ count: 2 })).notes.map((note) => note["text"])).toEqual(["note 21", "Two letters."]);
     const all = await listed({ count: 0 });
     expect(all.kept).toBe(23);
     expect(all.notes).toHaveLength(23);
-    expect(all.notes[0]).toEqual({ at: new Date(T0 - 25 * 60 * MINUTE).toISOString(), thread: "main", source: "note", text: "Promised the ferry times.", shown: false, dreamed: true });
+    expect(all.notes[0]).toEqual({ at: new Date(T0 - 25 * 60 * MINUTE).toISOString(), thread: "main", source: "note", text: "Promised the ferry times.", shown: false });
     expect(all.notes.filter((note) => note["shown"] === false).map((note) => note["text"])).toEqual(["Promised the ferry times.", "note 1", "note 2"]);
 
     expect((await command("diary", { count: -1 })).type).toBe("error");
@@ -2260,7 +2244,7 @@ test("a trigger that names a thread wakes the character there, fresh, with what 
     expect(threadActivityNow(data, "ada", "ring")).toEqual({
       turns: 2, user_turns: 1, last_active: new Date(T0 + 11.5 * MINUTE).toISOString(), last_user: new Date(T0 + MINUTE).toISOString(), unread: 1,
     });
-    expect(unfoldedDiary(join(data, "ada")).map((note) => [note.source, note.thread, note.text])).toEqual([["wake", "ring", "Told part one; the fox is at the gate."]]);
+    expect(keptDiary(join(data, "ada"), Date.now()).map((note) => [note.source, note.thread, note.text])).toEqual([["wake", "ring", "Told part one; the fox is at the gate."]]);
 
     at(12);
     await say("and then?", "ring");
@@ -3516,6 +3500,56 @@ test("writing memory again from an archived segment changes the character's file
     app.tools.enabled = [...app.tools.enabled, "edit"];
   });
 });
+
+const MEMORY_PASS = (app: AppConfig): void => {
+  app.compaction.enabled = true;
+  app.compaction.keep_recent_turns = 0;
+  app.compaction.min_turns = 1;
+};
+
+test("whoever watches a running memory pass sees what its model writes", async () => {
+  await withCharacter(async ({ script, data, say, command }) => {
+    await say("hello");
+    at(1);
+    await say("the keeper is called Mara");
+    const held = { started: Promise.withResolvers<void>(), release: Promise.withResolvers<void>() };
+    script.held = held;
+    const compacting = command("compact", {});
+    await held.started.promise;
+    const seen: ServerMessage[] = [];
+    const watched = watchPass(data, "ada", (frame) => { seen.push(frame); });
+    held.release.resolve();
+    await watched;
+    await compacting;
+    expect(seen.flatMap((frame) => frame.type === "stream_chunk" ? [[frame.subagent, frame.text]] : [])).toContainEqual(["compaction", expect.stringContaining("reply to:") as string]);
+  }, MEMORY_PASS);
+});
+
+test("whoever watches a running memory pass sees what its model does, and stopping the pass stops a tool it has running", async () => {
+  await withCharacter(async ({ script, data, say, command }) => {
+    await say("hello");
+    at(1);
+    await say("the keeper is called Mara");
+    const held = { started: Promise.withResolvers<void>(), release: Promise.withResolvers<void>() };
+    script.held = held;
+    script.replyTool = { name: "bash", input: { command: "sleep 30" } };
+    const compacting = command("compact", {});
+    await held.started.promise;
+    const seen: ServerMessage[] = [];
+    const watched = watchPass(data, "ada", (frame) => { seen.push(frame); });
+    held.release.resolve();
+    await until(() => seen.some((frame) => frame.type === "tool_call"), "the pass running bash");
+    const asked = performance.now();
+    await cancelPass(data, "ada", "stopped by the test");
+    expect(performance.now() - asked).toBeLessThan(10_000);
+    await watched;
+    await compacting;
+    expect(seen.flatMap((frame) => frame.type === "tool_call" ? [[frame.tool_name, frame.subagent]] : [])).toEqual([["bash", "compaction"]]);
+  }, (app) => {
+    MEMORY_PASS(app);
+    app.tools.enabled = [...app.tools.enabled, "bash"];
+  });
+}, 20_000);
 
 test("with compaction.git_push on, a compaction pushes the character's workspace, and so does writing memory again from a segment; with it off neither does", async () => {
   const git = (dir: string, ...args: string[]): string => {

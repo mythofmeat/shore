@@ -5,7 +5,7 @@ import { dirname, join } from "node:path";
 import { chmodSync, readFileSync } from "node:fs";
 
 import { config, schemaOf, tools, type ConfigContext, type ConfigRuntime } from "../src/commands/config.ts";
-import { modelInfo, modelSettings, setModelSetting, switchModel } from "../src/commands/models.ts";
+import { modelInfo, modelSettings, resetModel, setModelSetting, switchModel } from "../src/commands/models.ts";
 import { describeTool, resolveTool, type RunToolContext } from "../src/commands/run_tool.ts";
 import { loadConfig } from "../src/config/loader.ts";
 import { shoreLog } from "../src/log.ts";
@@ -443,6 +443,46 @@ describe("a model's settings in the model commands", () => {
   });
 });
 
+describe("the models wakes and compaction run on", () => {
+  const TOML = (pins: string[]): string => [
+    "[chat]", 'model = "anthropic:claude-x"', ...pins, "[providers.anthropic]", 'api_key_env = "K"',
+    '[chat."anthropic:claude-x"]', "max_output_tokens = 4000", '[chat."anthropic:claude-y"]', "max_output_tokens = 4000", "",
+  ].join("\n");
+  const PINNED = ["[triggers]", 'model = "anthropic:claude-y"', "[compaction]", 'model = "anthropic:claude-y"'];
+  const reading = async (pins: string[], character?: string) => {
+    const w = await build(character, TOML(pins));
+    return { w, models: { ...w.ctx, dataDir: w.ctx.config.dirs.data } };
+  };
+
+  test("unpinning one task clears only its key, and it goes back to the chat model", async () => {
+    const { w, models } = await reading(PINNED);
+    expect(resetModel(models, { background_task: "wake" })).toEqual({
+      target: "role", active: "anthropic:claude-x", role: "wake", cleared: ["triggers.model"], source: "inherits chat", file: w.ctx.configPath,
+      reset_to: "inherits chat", roles: [{ role: "wake", model: "anthropic:claude-x", source: "inherits chat" }],
+    });
+    expect(Bun.TOML.parse(readFileSync(w.ctx.configPath, "utf8"))).toMatchObject({ triggers: {}, compaction: { model: "anthropic:claude-y" } });
+  });
+
+  test("unpinning both clears whichever keys were set, and says what they share or that each goes its own way", async () => {
+    const both = await reading(PINNED);
+    expect(resetModel(both.models, { background_task: "all" })).toMatchObject({
+      active: "anthropic:claude-x", role: "background", cleared: ["triggers.model", "compaction.model"], source: "inherits chat", reset_to: "inherits chat",
+    });
+    const one = await reading(PINNED.slice(0, 2), "ada");
+    const apart = resetModel({ ...one.models, thread: "side", threadModel: "anthropic:claude-y" }, { background_task: "all" });
+    expect(apart).toEqual({
+      target: "role", active: null, role: "background", cleared: ["triggers.model"], source: null, file: one.w.ctx.configPath, reset_to: "per-task defaults",
+      roles: [{ role: "wake", model: "anthropic:claude-x", source: "inherits chat" }, { role: "compaction", model: "anthropic:claude-y", source: "inherits chat" }],
+    });
+  });
+
+  test("a setting for both is refused while they run on different models, naming each", async () => {
+    const { models } = await reading(["[triggers]", 'model = "anthropic:claude-y"']);
+    expect(() => setModelSetting(models, { key: "max_tool_rounds", value: 3, scope: "character", background_task: "all" }))
+      .toThrow("background tasks use different models (wake → anthropic:claude-y, compaction → anthropic:claude-x); target a specific task instead of `all`");
+  });
+});
+
 describe("the settings wakes run with", () => {
   const TOML = ["[chat]", 'model = "anthropic:claude-x"', "[providers.anthropic]", 'api_key_env = "K"', '[chat."anthropic:claude-x"]', "max_output_tokens = 4000", ""].join("\n");
   const wakes = (models: Parameters<typeof modelSettings>[0]): ModelSettingsDetail => modelSettings(models, { background_task: "wake" }) as ModelSettingsDetail;
@@ -454,7 +494,7 @@ describe("the settings wakes run with", () => {
     expect(readFileSync(characterPreferencesPath(models.dataDir, "ada"), "utf8")).toContain("[background.wake]\nmax_tool_rounds = 6\n");
     expect(wakes(models).saved_character).toMatchObject({ max_tool_rounds: 6 });
     expect(() => setModelSetting(models, { key: "max_tool_rounds", value: 6, scope: "character", background_task: "heartbeat" as never }))
-      .toThrow("unknown background task: heartbeat; expected all, wake, compaction, or dreaming");
+      .toThrow("unknown background task: heartbeat; expected all, wake or compaction");
   });
 
   test("a preferences file from when the task was called heartbeat is read as it stands and rewritten under the new name, once", async () => {
