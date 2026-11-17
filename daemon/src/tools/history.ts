@@ -2,7 +2,7 @@ import { join } from "node:path";
 
 import { asNaive, hostZone, naiveInZone, resolveInZone } from "../ledger/zoned.ts";
 import { MessageStore } from "../engine/message_store.ts";
-import { readThreadsIndex } from "../engine/threads.ts";
+import { readThreadsIndex, wakesThread } from "../engine/threads.ts";
 import { threadFile } from "../storage/files.ts";
 import {
   HISTORY_INDEX_FILE,
@@ -144,6 +144,10 @@ async function unseenThreads(options: ChatLogOptions): Promise<LiveThread[]> {
   return live;
 }
 
+async function wakesThreadOf(options: ChatLogOptions): Promise<string | undefined> {
+  return options.dataDir === undefined ? undefined : wakesThread(await readThreadsIndex(options.dataDir, options.character));
+}
+
 async function withIndex<T>(conversationDir: string, options: ChatLogOptions, run: (index: HistoryIndex) => T): Promise<T> {
   const path = options.indexPath ?? join(conversationDir, HISTORY_INDEX_FILE);
   const ref = { mainConversationDir: conversationDir, dbPath: options.dbPath, character: options.character };
@@ -152,7 +156,7 @@ async function withIndex<T>(conversationDir: string, options: ChatLogOptions, ru
       await refreshHistoryIndex(ref, path, force);
       refreshLiveRows(path, options.thread ?? "main", await unseenThreads(options));
     });
-    return HistoryIndex.open(path);
+    return HistoryIndex.open(path).keptApart(await wakesThreadOf(options));
   };
   let index: HistoryIndex;
   try {
@@ -374,6 +378,19 @@ export async function handleChatLogs(
     : await handleReadChatLogs(input, conversationDir, options);
 }
 
+function countMatches(index: HistoryIndex, match: ChatLogMatch, query: string, filter: ChatLogFilter): { expression: string; total: number; note?: string } {
+  try {
+    return { expression: query, total: index.count(match, query, filter) };
+  } catch (error) {
+    const expression = quoteWords(query);
+    return {
+      expression,
+      total: index.count(match, expression, filter),
+      note: `Not valid FTS5 syntax (${describe(error)}), so each word was searched as written: ${expression}`,
+    };
+  }
+}
+
 export async function handleSearchChatLogs(
   input: Record<string, unknown>,
   conversationDir: string,
@@ -405,21 +422,8 @@ export async function handleSearchChatLogs(
 
   return await withIndex(conversationDir, options, (index) => {
     checkThread(index, thread);
-    const lines: string[] = [];
-    let expression = query;
-    let total: number;
-    try {
-      total = index.count(match, expression, scoped);
-    } catch (error) {
-      if (match !== "words") throw new ToolIoError(describe(error));
-      expression = quoteWords(query);
-      lines.push(`Not valid FTS5 syntax (${describe(error)}), so each word was searched as written: ${expression}`);
-      try {
-        total = index.count(match, expression, scoped);
-      } catch {
-        throw new InvalidArgs(`query ${JSON.stringify(query)} has no words to search for; match="substring" searches for it as text`);
-      }
-    }
+    const { expression, total, note } = countMatches(index, match, query, scoped);
+    const lines = note === undefined ? [] : [note];
     const older = windowStart === undefined ? 0 : index.count(match, expression, { ...filter, end: windowStart - 1 });
     const label = match === "substring" ? `${query} (substring)` : query;
     const scope = scopeText(view, filter, optionalTrimmedString(input, "start"), optionalTrimmedString(input, "end"));
@@ -431,6 +435,8 @@ export async function handleSearchChatLogs(
         lines.push(span === undefined
           ? "There is nothing to search yet; this thread's messages in your context aren't searched."
           : `Searched ${count(span.messages)} messages from every thread, ${span.text}. This thread's messages in your context aren't searched.`);
+        const apart = thread === undefined ? index.apartThread() : undefined;
+        if (apart !== undefined) lines.push(`What you wrote while working in your wakes wasn't searched: for that, try thread=${JSON.stringify(apart)}.`);
         if (match === "words") lines.push(`For partial words, typos or CJK, try match="substring".`);
       }
       return lines.join("\n");

@@ -405,7 +405,7 @@ test("a wake's chat logs hold what is still in its own thread's conversation, si
   }, (app) => { app.tools.enabled.push("chat_logs"); });
 });
 
-test("a reply finds what a wake in its own thread wrote while working, since that working is kept in the wakes thread", async () => {
+test("a reply finds what a wake wrote while working only when its search names the wakes thread, where that working is kept", async () => {
   await withCharacter(async ({ script, say, wakeNow, thread }) => {
     await say("hello");
     script.closing = "The cellar key is under the heron stone.";
@@ -414,6 +414,11 @@ test("a reply finds what a wake in its own thread wrote while working, since tha
     script.replyTool = { name: "chat_logs", input: { action: "search", query: "heron" } };
     at(40);
     await say("where did you leave the cellar key?");
+    const unasked = lastToolResult(await thread("main"));
+    expect([unasked?.failed, String(unasked?.text).split("\n")[0]]).toEqual([false, "heron: 0 matches."]);
+    script.replyTool = { name: "chat_logs", input: { action: "search", query: "heron", thread: "wakes" } };
+    at(41);
+    await say("and while you were working?");
     const found = lastToolResult(await thread("main"));
     expect(found?.failed).toBe(false);
     expect(found?.text).toContain("under the [heron] stone");
@@ -3997,7 +4002,10 @@ test("a wake inside a sealed thread sends, announces and logs nothing outside it
     expect(asked).not.toContain("Happy birthday!");
     script.replyTool = { name: "chat_logs", input: { action: "search", query: "birthday" } };
     await say("did you say something about a birthday?");
-    expect(String(lastToolResult(await thread("main"))?.text)).toStartWith("birthday: 0 matches.\nSearched 2 messages from every thread,");
+    expect(String(lastToolResult(await thread("main"))?.text)).toStartWith("birthday: 0 matches.\n");
+    script.replyTool = { name: "chat_logs", input: { action: "search", query: "birthday", thread: "wakes" } };
+    await say("not even while you were working?");
+    expect(String(lastToolResult(await thread("main"))?.text)).toStartWith("birthday: 0 matches in thread wakes.\n");
     script.sends = undefined; script.closing = "NO_NOTE";
     at(30);
     await wakeNow();

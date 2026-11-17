@@ -67,7 +67,7 @@ From least to most:
 
 What it doesn't start with:
 
-- The thread's own conversation, or what earlier wakes did there. The thread keeps its conversation, your wakes thread keeps what earlier wakes did, and `{{chat_logs}}` finds both.
+- The thread's own conversation, or what earlier wakes did there. The thread keeps its conversation, and `{{chat_logs}}` finds it. Your wakes thread keeps what earlier wakes did, and `{{chat_logs}}` finds that only when `thread` names your wakes thread.
 - A wake's own working, in what it is shown of a thread.
 
 A side thread's purpose and files are in the prompt of a wake there. The files are read afresh as the wake starts, unless {{user}} has just been writing in that thread.

@@ -13,7 +13,7 @@ A thread is a conversation with a context of its own. What is said in one isn't 
 
 - Your diary. An entry reaches every thread that wasn't the one it was written in; the `diary` topic has the details.
 - Your files. Every thread works in the same workspace.
-- The chat logs. `{{chat_logs}}` finds what was said in any thread.
+- The chat logs. `{{chat_logs}}` finds what was said in any thread. The working in your wakes thread is found only when you name that thread.
 - Nothing else. A turn in one thread has none of another thread's conversation in front of it.
 
 ## Side threads
