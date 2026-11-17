@@ -334,8 +334,9 @@ describe("archiving a conversation", () => {
 
       await runCommand(client, "create_thread", { name: "side" });
       await runCommand(client, "switch_thread", { name: "side" });
-      await finishTurn(client, "over here");
       await until(() => keepalive.warmThread("ada") === "side", "the side thread to get the cache slot");
+      await finishTurn(client, "over here");
+      expect(keepalive.warmThread("ada")).toBe("side");
       expect(keepalive.nextPingAt("ada")).toBeDefined();
 
       await runCommand(client, "archive_thread", { name: "side" });
