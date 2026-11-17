@@ -71,9 +71,9 @@ const characterQueues = new Map<string, Promise<void>>();
 const backgroundPasses = new Set<Promise<void>>();
 const stopping = new Set<string>();
 
-export function compactLater(dataDir: string, character: string, thread: string, run: () => Promise<void>): boolean {
+export function compactLater(dataDir: string, character: string, thread: string, run: () => Promise<void>): void {
   const key = JSON.stringify([characterDataDir(dataDir, character), thread]);
-  if (stopping.has(dataDir) || queuedPasses.has(key)) return false;
+  if (stopping.has(dataDir) || queuedPasses.has(key)) return;
   queuedPasses.add(key);
   const queue = characterDataDir(dataDir, character);
   const previous = characterQueues.get(queue) ?? Promise.resolve();
@@ -88,12 +88,7 @@ export function compactLater(dataDir: string, character: string, thread: string,
     }
   });
   characterQueues.set(queue, work);
-  backgroundPasses.add(work);
-  void work.then(() => {
-    backgroundPasses.delete(work);
-    if (characterQueues.get(queue) === work) characterQueues.delete(queue);
-  });
-  return true;
+  alongsidePasses(work);
 }
 
 export function alongsidePasses(work: Promise<void>): void {

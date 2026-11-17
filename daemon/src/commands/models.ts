@@ -296,7 +296,7 @@ function chatRole(ctx: ModelsContext): ModelRole {
   return { role: "chat", model: null, source: null };
 }
 
-interface ChatInheritance { home: ModelRole }
+interface ChatInheritance { thread: ModelRole; home: ModelRole }
 
 const backgroundModelKey = (task: BackgroundTask): string => `${task === "wake" ? "triggers" : task}.model`;
 
@@ -349,7 +349,7 @@ function imagesRole(ctx: ModelsContext): ModelRole {
 export function modelRoles(ctx: ModelsContext): ModelRole[] {
   const chat = chatRole(ctx);
   const inherited = inheritedChatRole(ctx);
-  const inherits = { home: homeChatRole(ctx, inherited) };
+  const inherits = { thread: chat, home: homeChatRole(ctx, inherited) };
   return [
     chat,
     ...BACKGROUND_TASKS.map((task) => backgroundRole(ctx, task, inherits)),
@@ -966,7 +966,7 @@ function savedSettingsFor(
 function overviewSlots(ctx: ModelsContext): OverviewSlot[] {
   const chat = chatRole(ctx);
   const characterChat = inheritedChatRole(ctx);
-  const inherits = { home: homeChatRole(ctx, characterChat) };
+  const inherits = { thread: chat, home: homeChatRole(ctx, characterChat) };
   const slots: OverviewSlot[] = [
     {
       role: "chat",

@@ -4,7 +4,7 @@ import { onSegmentArchive } from "../memory/compaction/archive.ts";
 import { SegmentLabels } from "../memory/compaction/label.ts";
 import { shoreLog } from "../log.ts";
 
-import { labelGenerate } from "../autonomy/in_process.ts";
+import { compactionGenerate } from "../autonomy/in_process.ts";
 import type { InvalidationReason, LastRequestCache } from "../cache/last_request.ts";
 import type { TurnAutonomyBridge } from "../autonomy/registration.ts";
 import { CharacterError, type CharacterRegistry } from "../characters.ts";
@@ -202,8 +202,14 @@ export function chatCompactionRunner(a: GenerationAssembly): GenerationDeps["com
   const { runtime } = a;
   const runner = compactionRunner({
     ...(a.env === undefined ? {} : { env: a.env }),
+    generate: compactionGenerate({
+      providers: a.providers,
+      config: runtime.config,
+      ...(a.env === undefined ? {} : { env: a.env }),
+    }),
     cache: runtime.cache,
     rebuild: { mcpRegistry: runtime.mcp.current },
+    tools: runtimeToolDeps(a),
   });
   return {
     ...runner,
@@ -215,11 +221,11 @@ export function labelNewSegments(a: GenerationAssembly): { stop: () => void; set
   const { runtime } = a;
   const labels = new SegmentLabels(() => ({
     config: runtime.registry.globalConfig(),
-    generate: labelGenerate({
+    generate: compactionGenerate({
       providers: a.providers,
       config: runtime.config,
       ...(a.env === undefined ? {} : { env: a.env }),
-    }),
+    }, { callType: "label" }),
     tools: runtimeToolDeps(a),
     ...(a.env === undefined ? {} : { env: a.env }),
   }));
@@ -667,15 +673,20 @@ function commandDeps(a: CommandAssembly): CommandDeps {
       workspace: (character) => characterWorkspace(runtime.registry.globalConfig(), character, { fresh: true }),
     },
     compaction: {
-      label: {
+      run: {
         ...(a.env === undefined ? {} : { env: a.env }),
-        generate: labelGenerate({
+        generate: compactionGenerate({
           providers: a.providers,
           config: runtime.config,
           ...(a.env === undefined ? {} : { env: a.env }),
         }, { foreground: true }),
         tools: runtimeToolDeps(a),
       },
+      label: compactionGenerate({
+        providers: a.providers,
+        config: runtime.config,
+        ...(a.env === undefined ? {} : { env: a.env }),
+      }, { foreground: true, callType: "label" }),
       repoint: async (character, config) => {
         runtime.cache.invalidate(character, "compaction");
         await runtime.cache.reprimeFromDisk(character, config.dirs.data, config, {

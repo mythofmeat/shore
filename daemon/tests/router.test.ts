@@ -1048,6 +1048,27 @@ describe("commands", () => {
     await h.handler.drain();
   });
 
+  test("a session that moves to the thread a reply is running in joins it, until the handler closes", async () => {
+    const chunks = deferred();
+    const h = world({
+      sessions: [{ id: 1, thread: "side" }, { id: 2 }, { id: 3 }],
+      runGeneration: async (params) => { await params.send(chunk("so far")); await chunks.promise; },
+    });
+    await h.say(1, "r1");
+    await settle();
+    h.router.setSelectedThread(2, "side");
+    h.router.reportMove(2);
+    await settle();
+    expect(h.frames.get(2)).toEqual([chunk("so far")]);
+    h.handler.close();
+    h.router.setSelectedThread(3, "side");
+    h.router.reportMove(3);
+    await settle();
+    expect(h.frames.get(3)).toEqual([]);
+    chunks.resolve();
+    await h.handler.drain();
+  });
+
   test("disconnecting stops the session's read-only commands, lets its changes finish, and forgets it as a viewer", async () => {
     const { dispatch, gate, signals } = stoppableDispatch();
     const next = deferred();

@@ -733,8 +733,10 @@ test("a reply the user never saw stays in home through idle compaction and the d
   });
 });
 
-test("with triggers off an idle conversation is still compacted and later archived, and nothing wakes the character", async () => {
+test("with triggers off an idle conversation is still compacted and later archived, which is announced, and nothing wakes the character", async () => {
   await withCharacter(async ({ runtime, data, script, say, thread }) => {
+    const announced: unknown[][] = [];
+    runtime.notifier.notify = (...told) => { announced.push(told); };
     await say("is the lamp lit?");
     await say("and the door?");
     markThreadRead(data, "ada", "main", T0 + MINUTE);
@@ -757,6 +759,7 @@ test("with triggers off an idle conversation is still compacted and later archiv
     await runtime.autonomy.runDue();
     expect(await shownIn(thread)).toEqual([]);
     expect(archivedIn(data)).toBe(2);
+    expect(announced.filter(([kind]) => kind === "compaction_complete")).toEqual([["compaction_complete", "Shore - ada", "Idle conversation archived (2 messages)"]]);
     expect(script.wakes).toEqual([]);
   }, (app) => {
     compactsWhenIdle(app);
@@ -3318,8 +3321,8 @@ test("a model chosen for wakes that isn't in the catalog, or can't be called, le
   }, (app) => { app.triggers.model = "keyless"; });
 });
 
-test("a model chosen for wakes is used even when its provider's list keeps it out of the pickers", async () => {
-  await withCharacter(async ({ runtime, script, say, wakeNow }) => {
+test("a model chosen for wakes is used, and takes their settings, even when its provider's list keeps it out of the pickers", async () => {
+  await withCharacter(async ({ runtime, script, say, wakeNow, command }) => {
     await say("hello");
     runtime.registry.setRuntimeEffectiveConfig("ada", {
       ...runtime.registry.effectiveConfig("ada"),
@@ -3327,6 +3330,7 @@ test("a model chosen for wakes is used even when its provider's list keeps it ou
     });
     await wakeNow();
     expect(script.wakes.map((request) => request.model)).toEqual(["claude-tucked-away", "claude-tucked-away"]);
+    expect(await command("model_settings", { background_task: "wake" })).toMatchObject({ type: "command_output", data: { model: "anthropic:claude-tucked-away" } });
   }, (app) => { app.triggers.model = "anthropic:claude-tucked-away"; });
 });
 

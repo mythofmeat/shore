@@ -18,22 +18,16 @@ import { shoreLog } from "../../log.ts";
 import { required } from "../../util/required.ts";
 import { rustLines } from "../lines.ts";
 import type { SegmentArchiveHook } from "./archive.ts";
-import { RealCompactionLlm, type RealCompactionLlmOptions } from "./llm.ts";
+import { RealCompactionLlm } from "./llm.ts";
 import { buildFinalMessage } from "./manager.ts";
 import { stripOneTrailingNewline } from "../../engine/prompt.ts";
-import { effectiveConfig, resolveChatRequest } from "./run.ts";
-import type { ToolContextDeps } from "../../handler/tool_context.ts";
+import { effectiveConfig, resolveChatRequest, type CompactionRunDeps } from "./run.ts";
 
 export const DEFAULT_LABEL_PROMPT: string = stripOneTrailingNewline(labelPromptRaw);
 
 export const SEGMENT_LABEL_CHARS = 60;
 
-export interface SegmentLabelDeps {
-  config: LoadedConfig;
-  generate: RealCompactionLlmOptions["generate"];
-  tools?: ToolContextDeps;
-  env?: NodeJS.ProcessEnv;
-}
+export type SegmentLabelDeps = Pick<CompactionRunDeps, "config" | "generate" | "tools" | "env">;
 
 export function labelFromReply(reply: string): string | undefined {
   const line = reply.split("\n").map((each) => each.trim()).find((each) => each !== "");

@@ -1125,6 +1125,22 @@ describe("a daemon coming up with characters", () => {
     await until(() => lines.includes("warn: Could not start a character's init script"), "the init script failing to start");
   });
 
+  test("registers every character's wake runner, and says so, before their activity has been read from history", async () => {
+    const place = await layout("", ["ada", "bo"]);
+    const { log, fields } = recorder();
+    const { promise: held, resolve: release } = Promise.withResolvers<void>();
+    const seeding = spyOn(turnModule, "ensureAndBackfillAutonomy").mockImplementation(async () => { await held; });
+    try {
+      const daemon = await startDaemon({ argv: ["--config", place.configPath, "--addr", "127.0.0.1:0"], env: place.env, providers: {}, instancesPath: place.instancesPath, log, autoDiscovery: false });
+      running.push(daemon);
+      expect([daemon.runtime.autonomy.status("ada")?.character, daemon.runtime.autonomy.status("bo")?.character]).toEqual(["ada", "bo"]);
+      expect(fields.get("Autonomy started for known characters")).toEqual({ characters: "ada, bo" });
+    } finally {
+      release();
+      seeding.mockRestore();
+    }
+  });
+
   test("hands a home thread's pinned model to the character", async () => {
     const place = await layout(MODEL_CONFIG);
     const first = await start(place);

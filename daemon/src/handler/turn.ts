@@ -251,12 +251,12 @@ export async function maybeCompact(
   dataDir: string,
   contextTokens: number,
   runner: CompactionRunner,
-  crowded = false,
-): Promise<boolean> {
+  crowded: boolean,
+): Promise<void> {
   const turnCount = engine.userTurnCount();
   const thread = engine.thread ?? await homeThreadOf(dataDir, charName);
-  if (!ctx.autonomy.shouldCompactNow(charName, turnCount, contextTokens, crowded)) return false;
-  return compactLater(dataDir, charName, thread, async () => await compactAfterTurn(ctx, charName, config, thread, runner));
+  if (!ctx.autonomy.shouldCompactNow(charName, turnCount, contextTokens, crowded)) return;
+  compactLater(dataDir, charName, thread, async () => await compactAfterTurn(ctx, charName, config, thread, runner));
 }
 
 export async function compactAfterTurn(

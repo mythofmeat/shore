@@ -40,7 +40,7 @@ function ChatTopbar({ state, sidebarOpen, toggleSidebar, mobile }: { state: Chro
   const hasTurns = useWorkspaceValue((live) => live.messages.some((message) => message.role !== "system"));
   const character = state.characters.find((item) => item.name === state.character);
   const thread = state.threads.find((item) => item.id === state.thread);
-  const openingThread = state.opening?.thread === null || state.opening === null ? undefined : state.threads.find((item) => item.id === state.opening?.thread);
+  const openingThread = state.threads.find((item) => item.id === state.opening?.thread);
   const shownThread = openingThread ?? thread;
   const ready = state.status === "ready";
   const threadId = thread?.id ?? state.thread ?? "";

@@ -385,6 +385,7 @@ export const DAEMON_FLOORS: Readonly<Record<string, number>> = {
 };
 
 export const DAEMON_EQUIVALENTS: readonly string[] = [
+  "src/commands/registry.ts:<module>: if (compaction === undefined) 「throw internalError(\"compact is not ava… → {}」",
   "src/llm/image_dimensions.ts:webp: const head = read(0, 「16 → 17」);",
   "src/llm/image_dimensions.ts:jpeg: const soi = read(0, 「2 → 3」);",
   "src/llm/image_dimensions.ts:jpeg: const marker = read(offset, 「2 → 3」);",

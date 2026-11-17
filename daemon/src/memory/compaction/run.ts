@@ -22,21 +22,28 @@ import type { RebuildDeps } from "../../cache/rebuild.ts";
 import { buildChatShapeRequestFromDisk } from "../../handler/context.ts";
 import { saveWorkspaceAtArchive } from "../../tools/workspace.ts";
 import { characterWorkspace } from "../../tools/character_workspace.ts";
+import type { ToolContextDeps } from "../../handler/tool_context.ts";
 import { applyDeferredEdits } from "../deferred_edits.ts";
 import type { CompactionRunner } from "../../handler/turn.ts";
 import { conversationManager, priorContext } from "./archive.ts";
 import { type CompactionCompletion, alongsidePasses, handleCompactionOutcome, loadMessagesForCompaction } from "./background.ts";
+import type { RealCompactionLlmOptions } from "./llm.ts";
 import { tryBeginCompaction } from "./manager.ts";
 import { CompactionError, type CompactionOutcome } from "./types.ts";
 import { countTurns, openArchivalCommit, readLiveSource, resolveArchivalPlan, type ArchivalPlan } from "./plan.ts";
 
 export interface CompactionRunDeps {
+  env?: NodeJS.ProcessEnv;
   config: LoadedConfig;
+  generate: RealCompactionLlmOptions["generate"];
   notify?: (title: string, body: string) => void;
+  tools?: ToolContextDeps;
   now?: () => string;
   newId?: () => string;
   afterArchive?: (thread: string) => Promise<void>;
 }
+
+export type ArchiveDeps = Pick<CompactionRunDeps, "config" | "notify" | "now" | "newId" | "afterArchive">;
 
 export interface CompactionRunOptions {
   thread?: string;
@@ -47,7 +54,7 @@ export interface CompactionRunOptions {
 
 export async function runCompaction(
   character: string,
-  deps: CompactionRunDeps,
+  deps: ArchiveDeps,
   options: Omit<CompactionRunOptions, "dryRun"> = {},
 ): Promise<CompactionCompletion> {
   const outcome = await runCompactionPass(character, deps, options);
@@ -62,7 +69,7 @@ export async function saveWorkspaceAfterArchive(config: LoadedConfig, effective:
 async function rotate(
   character: string,
   thread: string,
-  deps: CompactionRunDeps,
+  deps: ArchiveDeps,
   effective: LoadedConfig,
   plan: ArchivalPlan,
   conversationDir: string,
@@ -105,7 +112,7 @@ async function rotate(
 
 export async function runCompactionPass(
   character: string,
-  deps: CompactionRunDeps,
+  deps: ArchiveDeps,
   options: CompactionRunOptions = {},
 ): Promise<CompactionOutcome | undefined> {
   const dataDir = deps.config.dirs.data;
@@ -145,11 +152,11 @@ export async function runCompactionPass(
   }
 }
 
-function underThread(deps: CompactionRunDeps, character: string, thread: string): <T>(run: () => Promise<T>) => Promise<T> {
+function underThread(deps: ArchiveDeps, character: string, thread: string): <T>(run: () => Promise<T>) => Promise<T> {
   return async (run) => await withConversation(threadDataDir(deps.config.dirs.data, character, thread), "update", async () => await run());
 }
 
-function settleArchive(deps: CompactionRunDeps, character: string, thread: string): () => Promise<void> {
+function settleArchive(deps: ArchiveDeps, character: string, thread: string): () => Promise<void> {
   return async () => {
     try {
       await applyDeferredEdits(characterDataDir(deps.config.dirs.data, character), characterWorkspace(deps.config, character), thread);
@@ -232,7 +239,6 @@ export async function resolveChatRequest(
 
 export function compactionRunner(
   deps: Omit<CompactionRunDeps, "config"> & {
-    env?: NodeJS.ProcessEnv;
     cache?: LastRequestCache;
     rebuild: RebuildDeps;
   },

@@ -2,11 +2,13 @@ import { homeThreadOf } from "../engine/threads.ts";
 import type { CompactionCompletion } from "../memory/compaction/background.ts";
 import { shoreLog } from "../log.ts";
 
-import { runCompaction } from "../memory/compaction/run.ts";
+import { runCompaction, type CompactionRunDeps } from "../memory/compaction/run.ts";
 import { repoint, type PostArchiveDeps } from "./post_archive.ts";
 import type { AutonomyActionResult } from "./runner.ts";
 
-export type IdleCompactionDeps = PostArchiveDeps;
+export interface IdleCompactionDeps extends PostArchiveDeps {
+  run?: Omit<CompactionRunDeps, "config">;
+}
 
 export async function runIdleCompaction(
   character: string,

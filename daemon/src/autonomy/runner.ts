@@ -266,13 +266,11 @@ export class CharacterAutonomy {
     this.#state.activeTurnCount = newTurnCount;
     this.#state.compactionTriggered = false;
     this.#state.lastActivityAt = now;
-    this.#state.dirty = true;
   }
 
   onCompactionFailed(now: number): void {
     this.#state.compactionTriggered = false;
     this.#state.lastActivityAt = now;
-    this.#state.dirty = true;
   }
 
   setConfig(config: AutonomyRunnerConfig): void {
@@ -457,11 +455,8 @@ export class CharacterAutonomy {
   #applyCompaction(result: AutonomyActionResult): void {
     this.#apply(result);
     const now = this.#now();
-    if (result.failed === undefined && result.turnCount !== undefined) {
-      this.onCompactionComplete(result.turnCount, now);
-      return;
-    }
-    this.onCompactionFailed(now);
+    if (result.failed === undefined && result.turnCount !== undefined) this.onCompactionComplete(result.turnCount, now);
+    else this.onCompactionFailed(now);
   }
 
   #stillIdleEnoughToArchive(): boolean {

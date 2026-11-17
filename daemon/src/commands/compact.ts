@@ -3,8 +3,7 @@ import { shoreLog } from "../log.ts";
 
 
 import type { LoadedConfig } from "../config/loader.ts";
-import { runCompactionPass } from "../memory/compaction/run.ts";
-import type { SegmentLabelDeps } from "../memory/compaction/label.ts";
+import { runCompactionPass, type CompactionRunDeps } from "../memory/compaction/run.ts";
 import { CompactionError, type CompactionOutcome } from "../memory/compaction/types.ts";
 import { CommandError, invalidRequest } from "./errors.ts";
 import type { FrameSink } from "../llm/stream.ts";
@@ -24,7 +23,8 @@ interface CompactAutonomy {
 export interface CompactContext {
   config: LoadedConfig;
   autonomy: CompactAutonomy;
-  label?: Omit<SegmentLabelDeps, "config">;
+  run: Omit<CompactionRunDeps, "config">;
+  label?: CompactionRunDeps["generate"];
   repoint?: (character: string, config: LoadedConfig) => Promise<void>;
 }
 

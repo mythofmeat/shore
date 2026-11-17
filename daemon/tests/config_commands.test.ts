@@ -463,6 +463,17 @@ describe("the models wakes run on", () => {
     expect(Bun.TOML.parse(readFileSync(w.ctx.configPath, "utf8"))).toMatchObject({ triggers: {} });
   });
 
+  test("a character's wakes with no model pinned for them take their settings to the character's own chat model", async () => {
+    const own = await reading([], "ada");
+    expect((modelSettings({ ...own.models, homeThreadModel: "anthropic:claude-y" }, { background_task: "wake" }) as ModelSettingsDetail).model).toBe("anthropic:claude-y");
+  });
+
+  test("wakes with no model of their own and none to inherit are refused, naming them", async () => {
+    const w = await build("ada", ["[providers.anthropic]", 'api_key_env = "K"', ""].join("\n"));
+    expect(() => modelSettings({ ...w.ctx, dataDir: w.ctx.config.dirs.data }, { background_task: "wake" }))
+      .toThrow("wake has no configured model and the catalog has no chat model to inherit");
+  });
+
   test("unpinning every background task clears the key that was set", async () => {
     const { models } = await reading(PINNED);
     expect(resetModel(models, { background_task: "all" })).toMatchObject({

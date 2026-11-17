@@ -16,7 +16,7 @@ import { dispatchCommand } from "../src/handler/commands.ts";
 import { buildCommandPathDeps } from "../src/handler/deps.ts";
 import type { GenerateResponse, SidecarProvider, SidecarRequest } from "../src/llm/types.ts";
 import { stopBackgroundCompactions } from "../src/memory/compaction/background.ts";
-import { runCompaction, runCompactionPass, type CompactionRunDeps } from "../src/memory/compaction/run.ts";
+import { runCompaction, runCompactionPass, type ArchiveDeps } from "../src/memory/compaction/run.ts";
 import { threadFile, writeDurable } from "../src/storage/files.ts";
 import { DEFAULT_HANDSHAKE } from "../src/swp/connection.ts";
 import { SessionRouter } from "../src/swp/session.ts";
@@ -54,7 +54,7 @@ interface Kept {
   data: string;
   workspace: string;
   start: string;
-  deps: CompactionRunDeps;
+  deps: ArchiveDeps;
   notices: string[];
   git: (...args: string[]) => string;
   head: () => string;
@@ -83,7 +83,7 @@ async function kept(push: boolean): Promise<Kept> {
     dirs: { config: join(root, "config"), data, cache: join(root, "cache"), runtime: join(root, "runtime") },
   };
   const notices: string[] = [];
-  const deps: CompactionRunDeps = {
+  const deps: ArchiveDeps = {
     config,
     notify: (_title, body) => notices.push(body),
   };

@@ -3,8 +3,13 @@ import { mkdtemp } from "node:fs/promises";
 import { join } from "node:path";
 
 import type { AutonomyActionResult, AutonomyExecutor, OpenedSeal, TriggerFiring, WakeHooks, WakeResult, WakeRun } from "../src/autonomy/runner.ts";
+import { TurnAutonomyBridge } from "../src/autonomy/registration.ts";
 import { AutonomyService } from "../src/autonomy/service.ts";
 import { decodeState, STATE_FILENAME } from "../src/autonomy/state_file.ts";
+import { defaultAppConfig } from "../src/config/app.ts";
+import type { LoadedConfig } from "../src/config/loader.ts";
+import { emptyCatalog } from "../src/config/models.ts";
+import { ProviderRegistry } from "../src/config/providers.ts";
 import { shoreLog } from "../src/log.ts";
 import { readCharacterState } from "../src/storage/store.ts";
 import type { KeepaliveService } from "../src/cache/keepalive.ts";
@@ -42,9 +47,10 @@ interface WorldOptions {
   maxIdleWakes?: number;
   enabled?: boolean;
   archived?: AutonomyActionResult;
+  compacted?: AutonomyActionResult;
 }
 
-async function world({ idleCompactionSecs = 0, archiveAfterSecs = 0, compaction = true, minTurns = 0, maxIdleWakes = 10, enabled = true, archived = { events: [] } }: WorldOptions = {}): Promise<World> {
+async function world({ idleCompactionSecs = 0, archiveAfterSecs = 0, compaction = true, minTurns = 0, maxIdleWakes = 10, enabled = true, archived = { events: [] }, compacted = { events: [] } }: WorldOptions = {}): Promise<World> {
   const clock = { now: T0 };
   const ran: Ran[] = [];
   const compactions: string[] = [];
@@ -59,7 +65,7 @@ async function world({ idleCompactionSecs = 0, archiveAfterSecs = 0, compaction 
     },
     runCompaction: async (_character, reason) => {
       compactions.push(reason);
-      return { events: [] };
+      return compacted;
     },
     runDeepArchive: async (character) => {
       archives.push(character);
@@ -83,6 +89,14 @@ async function world({ idleCompactionSecs = 0, archiveAfterSecs = 0, compaction 
 }
 
 const fired = (name: string, over: Partial<TriggerFiring> = {}): TriggerFiring => ({ name, reason: "the lamp is low", at: T0, ...over });
+
+async function loadedConfig(): Promise<LoadedConfig> {
+  const root = await mkdtemp(testTmp("shore-autonomy-bridge-"));
+  return {
+    app: defaultAppConfig(), models: emptyCatalog(), providers: ProviderRegistry.empty(), rawTable: undefined,
+    dirs: { config: join(root, "config"), data: join(root, "data"), cache: join(root, "cache"), runtime: join(root, "runtime") },
+  };
+}
 
 test("when the user last wrote is taken from the history where nothing is on record, and never over what is", async () => {
   const { service } = await world();
@@ -495,3 +509,61 @@ test("the user's new dormancy settings take effect at the next look", async () =
   expect(ran).toHaveLength(1);
 });
 
+test("an idle compaction that fails, even one that reports a turn count, is tried again once the conversation has been idle that long again", async () => {
+  const { service, compactions, clock } = await world({ idleCompactionSecs: 60, minTurns: 2, compacted: { events: [], failed: "busy", turnCount: 0 } });
+  service.onAssistantMessage("ada", 2);
+  clock.now = T0 + 60_000;
+  await service.runDue();
+  expect(compactions).toEqual(["idle"]);
+  clock.now = T0 + 119_000;
+  await service.runDue();
+  expect(compactions).toEqual(["idle"]);
+  clock.now = T0 + 120_000;
+  await service.runDue();
+  expect(compactions).toEqual(["idle", "idle"]);
+});
+
+test("a compaction a turn asked for holds the idle one back until it fails, and the idle one then waits from the failure", async () => {
+  const { service, compactions, clock } = await world({ idleCompactionSecs: 60, minTurns: 1 });
+  service.onAssistantMessage("ada", 1);
+  expect(service.shouldCompactNow("ada", 1, 0, true)).toBe(true);
+  clock.now = T0 + 60_000;
+  await service.runDue();
+  expect(compactions).toEqual([]);
+  service.onCompactionFailed("ada");
+  clock.now = T0 + 119_000;
+  await service.runDue();
+  expect(compactions).toEqual([]);
+  clock.now = T0 + 120_000;
+  await service.runDue();
+  expect(compactions).toEqual(["idle"]);
+});
+
+test("a turn's compaction failing is passed on to the wake runner once the character is registered", async () => {
+  const failed: string[] = [];
+  const registered = Promise.withResolvers<void>();
+  const service = {
+    register: async () => { await registered.promise; },
+    onCompactionFailed: (character: string) => { failed.push(character); },
+  } as unknown as AutonomyService;
+  const bridge = new TurnAutonomyBridge(service);
+  bridge.onCompactionFailed("ada");
+  await bridge.settled("ada");
+  expect(failed).toEqual([]);
+  expect(bridge.ensureState("ada", await loadedConfig())).toBe(true);
+  bridge.onCompactionFailed("ada");
+  expect(failed).toEqual([]);
+  registered.resolve();
+  await bridge.settled("ada");
+  expect(failed).toEqual(["ada"]);
+});
+
+test("an idle compaction that archives counts only the turns it kept toward the next one", async () => {
+  const { service, compactions, clock } = await world({ idleCompactionSecs: 60, minTurns: 1, compacted: { events: [], turnCount: 0 } });
+  service.onAssistantMessage("ada", 2);
+  clock.now = T0 + 60_000;
+  await service.runDue();
+  clock.now = T0 + 180_000;
+  await service.runDue();
+  expect(compactions).toEqual(["idle"]);
+});

@@ -213,7 +213,7 @@ export const commandOperations: OperationRegistry<CommandOperationContext> = {
   ] }, (context, args) => {
     const compaction = context.deps.compaction;
     return segments(context.session.dataDir, engineOf(context).characterName, engineOf(context).thread, args, context.deps.historyIndex,
-      compaction?.label === undefined ? undefined : { ...compaction.label, config: context.session.config });
+      compaction?.label === undefined ? undefined : { ...compaction.run, generate: compaction.label, config: context.session.config });
   }),
   status: register("status", { ...diagnosticPresentation, label: "System status", fields: {} },
     (context) => status(statusContext(engineOf(context), context.session, context.deps))),
