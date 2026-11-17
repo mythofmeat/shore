@@ -31,6 +31,7 @@ import { loadForCharacter } from "../src/config/preferences.ts";
 import { threadChatModel } from "../src/engine/threads.ts";
 import { outcomeOf } from "./support/outcome.ts";
 import { until, untilAsync } from "./support/until.ts";
+import { BrowserSocket } from "./support/browser.ts";
 
 const running: RunningDaemon[] = [];
 
@@ -1151,5 +1152,68 @@ describe("a daemon coming up with characters", () => {
     const data = (await start(place)).runtime.config.dirs.data;
     expect(await threadChatModel(data, "ada", "main")).toBeUndefined();
     expect(loadForCharacter(data, "ada")[1].selected).toEqual({ provider: "anthropic", modelId: "claude-opus-4-8" });
+  });
+});
+
+describe("the web UI while a long reply runs", () => {
+  test("a browser that opens the thread mid-reply, or switches into it, gets everything said so far and stays connected", async () => {
+    const place = await layout(`${MODEL_CONFIG}[daemon.web]\nenabled = true\nbind_addr = "127.0.0.1:0"\n`);
+    let parked = (): void => {};
+    const reachedPark = new Promise<void>((resolve) => { parked = resolve; });
+    let release = (): void => {};
+    const held = new Promise<void>((resolve) => { release = resolve; });
+    const rounds = 150;
+    const provider = {
+      async *stream(req: SidecarRequest) {
+        yield { type: "start", model: req.model };
+        for (let i = 0; i < rounds; i += 1) {
+          yield { type: "thinking", text: `t${String(i)} ` };
+          yield { type: "text", text: `x${String(i)} ` };
+        }
+        parked();
+        await held;
+        yield { type: "done", content: "done", finish_reason: "end_turn", usage: { input_tokens: 4, output_tokens: 2, cache_read_tokens: 0, cache_creation_tokens: 0 }, timing: { total_ms: 1, time_to_first_token_ms: 1 } };
+      },
+      generate: () => { throw new Error("this test never calls generate"); },
+    } as unknown as SidecarProvider;
+    const daemon = await start(place, [], { anthropic: provider });
+    const origin = required(daemon.web).origin;
+    const cookie = (await fetch(`${origin}/api/login`, { method: "POST", headers: { origin, "content-type": "application/json" }, body: JSON.stringify({ token: TEST_TOKEN }) }))
+      .headers.get("set-cookie")?.split(";", 1)[0] ?? "";
+    const client = await Client.open(daemon.port, "ada", ["request-lifecycle"]);
+    const browsers: BrowserSocket[] = [];
+    try {
+      await client.awaitFrame("history");
+      client.send({ type: "command", rid: "side", name: "create_thread", args: { name: "side" } });
+      await client.awaitFrame("command_output");
+      client.send({ type: "message", rid: "long", text: "play", stream: true, images: [] });
+      await reachedPark;
+      const said = (browser: BrowserSocket, kind: string): string => browser.messages
+        .flatMap((frame) => frame.type === "stream_chunk" && frame.content_type === kind ? [frame.text] : []).join("");
+      const expected = (prefix: string): string => Array.from({ length: rounds }, (_, i) => `${prefix}${String(i)} `).join("");
+
+      const opener = new BrowserSocket(origin, cookie);
+      browsers.push(opener);
+      await opener.attach("ada", "main");
+      const mover = new BrowserSocket(origin, cookie);
+      browsers.push(mover);
+      await mover.attach("ada", "side");
+      mover.send({ type: "command", rid: "move", name: "switch_thread", args: { name: "main" } });
+      for (const browser of browsers) {
+        await until(() => said(browser, "text") === expected("x"), `a browser to hear the reply so far; closed: ${browser.closeDetail}`);
+        expect(said(browser, "thinking")).toBe(expected("t"));
+      }
+
+      release();
+      for (const browser of browsers) {
+        const end = await browser.frame("stream_end", "long");
+        expect(end.type === "stream_end" && end.is_final).toBe(true);
+        expect(browser.socket.readyState).toBe(WebSocket.OPEN);
+      }
+    } finally {
+      release();
+      client.close();
+      for (const browser of browsers) await browser.close();
+    }
   });
 });

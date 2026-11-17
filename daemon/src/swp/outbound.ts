@@ -20,13 +20,18 @@ export interface QueueLimits {
 }
 
 export class OutboundQueue {
-  readonly #items: { message: ServerMessage; bytes: number; large: boolean }[] = [];
+  readonly #items: { message: ServerMessage; bytes: number; large: boolean; live: boolean }[] = [];
   #bytes = 0;
   #large = 0;
+  #live = 0;
   constructor(readonly limits?: QueueLimits) {}
   get length(): number { return this.#items.length; }
 
-  push(message: ServerMessage): boolean {
+  push(message: ServerMessage, catchUp?: boolean): boolean {
+    if (catchUp === true) {
+      this.#items.push({ message, bytes: 0, large: false, live: false });
+      return true;
+    }
     const limits = this.limits;
     const last = this.#items.at(-1);
     if (limits?.coalesceStreams === true && last?.message.type === "stream_chunk" && message.type === "stream_chunk" &&
@@ -42,9 +47,10 @@ export class OutboundQueue {
     const size = limits === undefined || limits.bytes === Infinity ? 0 : encodeServerMessage(message).bytes;
     const large = limits?.largeHistory === true && message.type === "history" && size > limits.bytes;
     const bytes = large ? 0 : size;
-    if (limits !== undefined && (this.length >= limits.messages || this.#bytes + bytes > limits.bytes || (large && this.#large > 0))) return false;
-    this.#items.push({ message, bytes, large });
+    if (limits !== undefined && (this.#live >= limits.messages || this.#bytes + bytes > limits.bytes || (large && this.#large > 0))) return false;
+    this.#items.push({ message, bytes, large, live: true });
     this.#bytes += bytes;
+    this.#live += 1;
     if (large) this.#large += 1;
     return true;
   }
@@ -54,8 +60,9 @@ export class OutboundQueue {
     if (next === undefined) return undefined;
     this.#bytes -= next.bytes;
     if (next.large) this.#large -= 1;
+    if (next.live) this.#live -= 1;
     return next.message;
   }
 
-  clear(): void { this.#items.length = 0; this.#bytes = 0; this.#large = 0; }
+  clear(): void { this.#items.length = 0; this.#bytes = 0; this.#large = 0; this.#live = 0; }
 }

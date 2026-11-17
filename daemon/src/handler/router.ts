@@ -185,6 +185,7 @@ interface ActiveGeneration extends GenerationView {
 }
 
 interface ActiveCommand {
+  readonly name: string;
   readonly controller: AbortController;
   readonly sessionId: number;
   readonly scope: string;
@@ -315,7 +316,8 @@ export class MessageHandler {
     const generation = this.#generations.get(scope);
     if (generation === undefined || generation.finished) return;
     generation.viewers.set(sessionId, this.#viewer(sessionId));
-    for (const frame of generation.replay) void this.#deliver(send, frame, sessionId);
+    const catchUp: DirectSender = (frame) => send(frame, true);
+    for (const frame of generation.replay) void this.#deliver(catchUp, frame, sessionId);
   }
 
   async #deliver(send: DirectSender, msg: ServerMessage, sessionId: number): Promise<void> {
@@ -332,6 +334,7 @@ export class MessageHandler {
 
   #registerCommand(cmd: Command, meta: RequestMeta): ActiveCommand {
     const command: ActiveCommand = {
+      name: cmd.name,
       controller: new AbortController(),
       sessionId: meta.session.sessionId,
       scope: this.#scope(meta.session.selectedCharacter, meta.session.selectedThread),
@@ -413,7 +416,7 @@ export class MessageHandler {
 
   #abortCommands(selected: (command: ActiveCommand) => boolean, reason: string): void {
     for (const command of [...this.#commands].filter(selected)) {
-      this.#deps.log?.info?.("cancelling command", { session: command.sessionId, reason });
+      this.#deps.log?.info?.("cancelling command", { command: command.name, session: command.sessionId, reason });
       command.controller.abort(new DOMException(reason, "AbortError"));
     }
   }
