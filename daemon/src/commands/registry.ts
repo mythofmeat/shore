@@ -7,7 +7,6 @@ import { usageConfigView } from "../ledger/budget.ts";
 import { describeTool, runTool } from "./run_tool.ts";
 import { clear, segments } from "./segments.ts";
 import { status, errorLog, wakeLog, wakeNow, setDormant, setActive } from "./status.ts";
-import { dream } from "./dream.ts";
 import { diary } from "./diary.ts";
 import { statusContext } from "./status_context.ts";
 import { callLog, transcript } from "./call_log.ts";
@@ -103,7 +102,7 @@ const wakePresentation = { ...diagnosticPresentation, prerequisites: ["autonomy"
 const modelPresentation = { category: "Models", scope: "optional_character", prerequisites: [], effects: ["read"], confirmation: "none" } as const;
 const modelTargetFields = {
   name: { label: "Model", choices: "models", hint: "Omit for the active model; do not combine with role selectors" },
-  background_task: { label: "Background task", hint: "all, wake, compaction or dreaming" },
+  background_task: { label: "Background task", hint: "all, wake or compaction" },
   subagent: { label: "Subagent", choices: "subagents", hint: "A configured name, or all for the shared subagent model" },
 } as const;
 const modelHiddenField = { label: "Include hidden models", hint: "Allow a model excluded by discovery filters" } as const;
@@ -240,15 +239,12 @@ export const commandOperations: OperationRegistry<CommandOperationContext> = {
     diff: { label: "Compare calls", hint: "Compare the chosen call with its previous call or an explicit comparison ID" },
     against: { label: "Compare against call ID" }, wire: { label: "Include full HTTP bodies", hint: "Inspect captured request/response bodies and redacted headers" },
   } }, (context, args) => callLog({ characterName: engineOf(context).characterName, callStore: context.deps.callStore }, args)),
-  transcript: register("transcript", { ...diagnosticPresentation, label: "Read transcripts", fields: { source: { label: "Transcript source", hint: "wake or dreaming" }, count: storedDiagnosticCount } },
+  transcript: register("transcript", { ...diagnosticPresentation, label: "Read transcripts", fields: { source: { label: "Transcript source", hint: "wake" }, count: storedDiagnosticCount } },
     (context, args) => transcript({ characterName: engineOf(context).characterName, callStore: context.deps.callStore }, args)),
   subagent_trace: register("subagent_trace", { ...diagnosticPresentation, label: "Stored subagent runs", fields: { ids: { label: "Parent tool-use IDs", hint: "Omit to list recent runs" }, count: storedDiagnosticCount } },
     (context, args) => subagentTrace({ characterName: engineOf(context).characterName, dataDir: context.session.dataDir }, args)),
   wake_now: register("wake_now", { ...wakePresentation, label: "Start a wake now", effects: ["runtime_write", "provider_call"], fields: {} },
     (context) => wakeNow(statusContext(engineOf(context), context.session, context.deps))),
-  dream: register("dream", { category: "Memory", scope: "character", prerequisites: [], effects: ["runtime_write", "provider_call"], confirmation: "none", label: "Dream", fields: {
-    now: { label: "Dream now", hint: "Start a dream at the next autonomy tick instead of waiting for its schedule" },
-  } }, (context, args) => dream({ characterName: engineOf(context).characterName, config: context.session.config, autonomy: context.deps.autonomy }, args)),
   presence: register("presence", { category: "Application", scope: "optional_character", prerequisites: [], effects: ["runtime_write"], confirmation: "none", label: "Your status", fields: {
     status: { label: "Status", hint: "One of the statuses in presence.statuses, which your characters then see for you. Empty clears it; omit it to only show the current one" },
   } }, (context, args) => presenceCommand({ dataDir: context.session.dataDir, choices: context.session.config.app.presence.statuses, ...(context.deps.presenceChanged === undefined ? {} : { changed: context.deps.presenceChanged }) }, args)),

@@ -1783,7 +1783,6 @@ fn dispatch_cli_command(app: &mut App, raw_input: &str) -> Action {
         | CliCommand::Config { .. }
         | CliCommand::Usage { .. }
         | CliCommand::Diary { .. }
-        | CliCommand::Dream { .. }
         | CliCommand::Presence { .. }
         | CliCommand::View { .. }
         | CliCommand::Ui { .. } => {}
@@ -1945,7 +1944,7 @@ fn dispatch_cli_command(app: &mut App, raw_input: &str) -> Action {
             }
         },
         CliCommand::Trace { subcommand: None } => {
-            app.set_status("usage: :trace [calls|wakes|dreams|events|errors|subagent]");
+            app.set_status("usage: :trace [calls|wakes|events|errors|subagent]");
             Action::Redraw
         }
         CliCommand::Debug { subcommand: None } => {
@@ -1983,7 +1982,6 @@ fn dispatch_cli_command(app: &mut App, raw_input: &str) -> Action {
         | CliCommand::Config { .. }
         | CliCommand::Usage { .. }
         | CliCommand::Diary { .. }
-        | CliCommand::Dream { .. }
         | CliCommand::Presence { .. }
         | CliCommand::Completions { .. }
         | CliCommand::View { .. }
@@ -2065,9 +2063,6 @@ fn palette_confirmation_prompt(app: &App, command: &CliCommand) -> Option<String
         } if !content.is_empty() => Some(format!("Replace the content of message {msg_ref:?}?")),
         CliCommand::Compact { .. } => {
             Some("Summarize and archive older conversation turns?".to_owned())
-        }
-        CliCommand::Dream { now: true, .. } => {
-            Some("Start a dream now? It spends tokens for up to its time limit.".to_owned())
         }
         CliCommand::Clear { .. } => Some("Archive and clear the active conversation?".to_owned()),
         CliCommand::Character {
@@ -2305,6 +2300,18 @@ mod tests {
         app.palette_confirmation
             .as_ref()
             .map(|confirmation| confirmation.command.as_str())
+    }
+
+    #[test]
+    fn compacting_from_the_palette_asks_first() {
+        let mut app = App::default();
+        let _ = parse_command(&mut app, "compact");
+        assert_eq!(
+            app.palette_confirmation
+                .as_ref()
+                .map(|confirmation| (confirmation.command.as_str(), confirmation.prompt.as_str())),
+            Some(("compact", "Summarize and archive older conversation turns?"))
+        );
     }
 
     #[test]

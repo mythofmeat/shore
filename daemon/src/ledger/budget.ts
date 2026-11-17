@@ -1112,8 +1112,6 @@ export function isBackgroundCall(callType: string): boolean {
     callType === "keepalive" ||
     callType === "compaction" ||
     callType === "label" ||
-    callType === "dreaming" ||
-    callType === "dreaming_tool_loop" ||
     callType === "memory_query"
   );
 }

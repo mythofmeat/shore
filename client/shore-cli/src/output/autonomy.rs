@@ -244,10 +244,10 @@ pub(crate) fn write_autonomy_events(out: &mut impl Write, autonomy: &serde_json:
             },
         );
         let kind_color = match kind {
-            "tick_fired" | "dream_started" => Tone::Active,
-            "message_sent" | "wake" | "dream_finished" => Tone::Good,
+            "tick_fired" => Tone::Active,
+            "message_sent" | "wake" => Tone::Good,
             "message_skipped" => Tone::Muted,
-            "dormant" | "call_failed" | "dream_failed" => COLOR_ERROR,
+            "dormant" | "call_failed" => COLOR_ERROR,
             "dormant_ping" => Tone::Thinking,
             "timeout" | "budget_paused" => Tone::Warn,
             _ => Tone::Heading,
@@ -281,6 +281,42 @@ mod tests {
         assert_eq!(rows(&active), ["wakes 2 of 3 left before going dormant"]);
         let spent = json!({ "state": "Active", "wakes_without_user": 5, "dormant_after_wakes": 3, "recent_events": [] });
         assert_eq!(rows(&spent), ["wakes 0 of 3 left before going dormant"]);
+    }
+
+    fn painted(tone: Tone, text: &str) -> String {
+        let mut out = Vec::new();
+        paint(&mut out, tone, text);
+        String::from_utf8(out).unwrap_or_default()
+    }
+
+    #[test]
+    fn recent_events_are_listed_with_each_kind_in_its_own_colour() {
+        crate::output::set_color_enabled(true);
+        let kinds = [
+            ("tick_fired", Tone::Active),
+            ("message_sent", Tone::Good),
+            ("wake", Tone::Good),
+            ("message_skipped", Tone::Muted),
+            ("dormant", COLOR_ERROR),
+            ("call_failed", COLOR_ERROR),
+            ("dormant_ping", Tone::Thinking),
+            ("timeout", Tone::Warn),
+            ("budget_paused", Tone::Warn),
+            ("recap_written", Tone::Heading),
+        ];
+        let events: Vec<_> = kinds
+            .iter()
+            .map(|(kind, _)| json!({ "timestamp": "2026-11-17T09:00:00Z", "kind": kind, "detail": "d" }))
+            .collect();
+        let mut out = Vec::new();
+        write_autonomy_events(&mut out, &json!({ "recent_events": events }));
+        let text = String::from_utf8(out).unwrap_or_default();
+        for (kind, tone) in kinds {
+            assert!(
+                text.contains(&painted(tone, &format!("{kind:<17}"))),
+                "{kind} in {text:?}"
+            );
+        }
     }
 
     #[test]

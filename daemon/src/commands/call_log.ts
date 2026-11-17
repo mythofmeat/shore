@@ -105,16 +105,8 @@ export function callLog(ctx: CallLogContext, args: Args): OperationResult<"call_
   return { enabled: true, entries: [...newestFirst].reverse() };
 }
 
-const TRANSCRIPT_SOURCE = "wake";
-const TRANSCRIPT_SOURCES: readonly string[] = [TRANSCRIPT_SOURCE, "dreaming"];
-
 export function transcript(ctx: CallLogContext, args: OperationInput<"transcript">): OperationResult<"transcript"> {
-  const source = args.source ?? TRANSCRIPT_SOURCE;
-  if (!TRANSCRIPT_SOURCES.includes(source)) {
-    throw invalidRequest(
-      `unknown transcript source '${source}' (expected one of ${TRANSCRIPT_SOURCES.join(", ")})`,
-    );
-  }
+  const source = args.source ?? "wake";
   const store = ctx.callStore;
   if (store === undefined) return { enabled: false, source, entries: [] };
 

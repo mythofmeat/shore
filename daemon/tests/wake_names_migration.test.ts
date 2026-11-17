@@ -266,14 +266,14 @@ test("a ledger from before calls recorded their trigger gains the column when it
   }
 });
 
-test("a wake's calls and its tool-loop calls share one Claude session of their own, as a dream's do, apart from the conversation's", () => {
+test("a wake's calls and its tool-loop calls share one Claude session of their own, apart from the conversation's", () => {
   const key = (callType: string | undefined, thread?: string): string => conversationKey({
     sdk: "claude_agent", model: "claude-x", api_key: "", messages: [], max_tokens: 1, reasoning_replay: "all",
     ...(callType === undefined ? {} : { context: { character: "ada", ledger: "/data/shore.db", call_type: callType, thinking_enabled: false, ...(thread === undefined ? {} : { thread }) } }),
   });
   const scope = (callType: string): string => key(callType).split("\u0000").slice(2).join("/");
-  expect(["message", "tool_loop", "keepalive", "wake", "wake_tool_loop", "dreaming", "dreaming_tool_loop", "compaction"].map(scope))
-    .toEqual(["", "", "", "main/wake", "main/wake", "main/dreaming", "main/dreaming", "main/compaction"]);
+  expect(["message", "tool_loop", "keepalive", "wake", "wake_tool_loop", "compaction"].map(scope))
+    .toEqual(["", "", "", "main/wake", "main/wake", "main/compaction"]);
   expect([key("wake", "ring") === key("wake_tool_loop", "ring"), key("wake", "ring") === key("wake"), key("wake") === key("message")]).toEqual([true, false, false]);
 });
 

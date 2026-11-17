@@ -100,7 +100,6 @@ export function buildGenerationDeps(a: GenerationAssembly): GenerationDeps {
     registry: generationRegistry(runtime.registry),
     dataDir,
     providers: a.providers,
-    ...(runtime.callStore === undefined ? {} : { callStore: runtime.callStore }),
     autonomy: turnAutonomy(a.autonomy, runtime.cache),
     runningWake: (character) => runtime.autonomy.runningWake(character),
     userActiveIn: (character, thread) => { runtime.autonomy.userActiveIn(character, thread); },

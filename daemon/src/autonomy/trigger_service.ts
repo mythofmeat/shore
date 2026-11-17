@@ -78,7 +78,6 @@ export class TriggerService {
     this.#deps = deps;
     deps.autonomy.onEvents((character) => ({
       wakeDone: (names) => { void this.#for(character).finished(names); },
-      dreamDone: () => { void this.#for(character).dreamDone(); },
     }));
   }
 

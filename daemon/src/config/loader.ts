@@ -14,7 +14,6 @@ import {
   toolGrants,
   TOOLS_NOW_PART_OF,
   validateCompaction,
-  validateDreaming,
   validatePresence,
   validateMarks,
   validateTriggers,
@@ -435,13 +434,6 @@ function validateConfig(
   warnOnUnresolvableModelRef(
     catalog,
     providers,
-    "dreaming.model",
-    app.dreaming.model,
-    onWarn,
-  );
-  warnOnUnresolvableModelRef(
-    catalog,
-    providers,
     "subagents.model",
     app.subagents.model,
     onWarn,
@@ -485,8 +477,6 @@ function validateConfig(
   const compaction = validateCompaction(app.compaction);
   if (compaction !== undefined) throw validationError(compaction);
 
-  const dreaming = validateDreaming(app.dreaming);
-  if (dreaming !== undefined) throw validationError(dreaming);
   const triggers = validateTriggers(app.triggers);
   if (triggers !== undefined) throw validationError(triggers);
   const presence = validatePresence(app.presence);

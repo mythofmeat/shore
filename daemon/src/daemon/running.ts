@@ -15,7 +15,6 @@ export interface RunningSources {
   readonly dataDir: string;
   readonly generations: () => readonly GenerationView[];
   readonly wakes: () => readonly RunningView[];
-  readonly dreams: () => readonly RunningView[];
   readonly shutdown: () => ShutdownWindowState | undefined;
   readonly now?: () => number;
 }
@@ -35,7 +34,6 @@ export function runningReport(sources: RunningSources): RunningStatusReport {
   const work = [
     ...sources.generations().map((g) => item("message", g.character, g.thread, g.startedAt)),
     ...sources.wakes().map((w) => item("wake", w.character, null, w.startedAt)),
-    ...sources.dreams().map((d) => item("dream", d.character, null, d.startedAt)),
     ...runningPasses(sources.dataDir).map((p) => item("compaction", p.character, p.thread, p.startedAt)),
   ]
     .toSorted((a, b) => a.startedAt - b.startedAt)

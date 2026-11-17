@@ -12,7 +12,6 @@ import {
   type AutonomyEvents,
   type AutonomyExecutor,
   type AutonomyRunnerConfig,
-  type DreamStatus,
   type RestoredIdle,
   type RunningWake,
   type TriggerFiring,
@@ -141,7 +140,6 @@ export class AutonomyService {
       idle,
       events: {
         wakeDone: (triggers) => { this.#listener?.(character).wakeDone(triggers); },
-        dreamDone: () => { this.#listener?.(character).dreamDone(); },
       },
       now: this.#now,
     });
@@ -159,25 +157,6 @@ export class AutonomyService {
 
   setDormancyConfig(character: string, config: DormancyConfig): void {
     this.#entries.get(character)?.runner.setDormancyConfig(config);
-  }
-
-  forceDreamNow(character: string): "queued" | "running" | undefined {
-    return this.#entries.get(character)?.runner.forceDream();
-  }
-
-  runningDreams(): RunningView[] {
-    return [...this.#entries].flatMap(([character, { runner }]) => {
-      const startedAt = runner.dreamStartedAt;
-      return startedAt === undefined ? [] : [{ character, startedAt }];
-    });
-  }
-
-  async dreamsEnded(): Promise<void> {
-    await Promise.all([...this.#entries.values()].map(async ({ runner }) => { await runner.dreamEnded(); }));
-  }
-
-  dreamStatus(character: string): DreamStatus | undefined {
-    return this.#entries.get(character)?.runner.dreamStatus();
   }
 
   async unregister(character: string): Promise<void> {
@@ -222,11 +201,7 @@ export class AutonomyService {
 
   async quiesce(): Promise<void> {
     this.#closed = true;
-    const stopDreams = async () => {
-      await Promise.allSettled([...this.#entries.values()].map(async ({ runner }) => { await runner.stopDream(); }));
-    };
-    await Promise.allSettled([this.#ticking, stopDreams()]);
-    await stopDreams();
+    await this.#ticking;
   }
 
   runningWakes(): RunningView[] {

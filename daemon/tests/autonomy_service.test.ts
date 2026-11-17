@@ -2,7 +2,7 @@ import { expect, spyOn, test } from "bun:test";
 import { mkdtemp } from "node:fs/promises";
 import { join } from "node:path";
 
-import type { AutonomyExecutor, DreamActionResult, OpenedSeal, TriggerFiring, WakeHooks, WakeResult, WakeRun } from "../src/autonomy/runner.ts";
+import type { AutonomyActionResult, AutonomyExecutor, OpenedSeal, TriggerFiring, WakeHooks, WakeResult, WakeRun } from "../src/autonomy/runner.ts";
 import { AutonomyService } from "../src/autonomy/service.ts";
 import { decodeState, STATE_FILENAME } from "../src/autonomy/state_file.ts";
 import { shoreLog } from "../src/log.ts";
@@ -28,21 +28,29 @@ interface World {
   ran: Ran[];
   compactions: string[];
   archives: string[];
-  dream: PromiseWithResolvers<DreamActionResult>;
   seals: OpenedSeal[];
   clock: { now: number };
   during: { run?: (wake: WakeRun, hooks: WakeHooks) => Promise<WakeResult> | WakeResult; look?: () => Promise<void> };
   woken: () => string[];
 }
 
-async function world({ idleCompactionSecs = 0, archiveAfterSecs = 0, compaction = true, minTurns = 0, maxIdleWakes = 10, enabled = true } = {}): Promise<World> {
+interface WorldOptions {
+  idleCompactionSecs?: number;
+  archiveAfterSecs?: number;
+  compaction?: boolean;
+  minTurns?: number;
+  maxIdleWakes?: number;
+  enabled?: boolean;
+  archived?: AutonomyActionResult;
+}
+
+async function world({ idleCompactionSecs = 0, archiveAfterSecs = 0, compaction = true, minTurns = 0, maxIdleWakes = 10, enabled = true, archived = { events: [] } }: WorldOptions = {}): Promise<World> {
   const clock = { now: T0 };
   const ran: Ran[] = [];
   const compactions: string[] = [];
   const archives: string[] = [];
   const seals: OpenedSeal[] = [];
   const during: World["during"] = {};
-  const dream = Promise.withResolvers<DreamActionResult>();
   const executor: AutonomyExecutor = {
     homeThread: () => "main",
     runWake: async (_character, wake, hooks) => {
@@ -55,12 +63,8 @@ async function world({ idleCompactionSecs = 0, archiveAfterSecs = 0, compaction 
     },
     runDeepArchive: async (character) => {
       archives.push(character);
-      return { events: [] };
+      return archived;
     },
-    runDream: async (_character, window) => await Promise.race([
-      dream.promise,
-      new Promise<never>((_resolve, reject) => { window.signal.addEventListener("abort", () => { reject(window.signal.reason as Error); }); }),
-    ]),
     openSeals: async () => {
       await during.look?.();
       return seals.splice(0);
@@ -75,7 +79,7 @@ async function world({ idleCompactionSecs = 0, archiveAfterSecs = 0, compaction 
     dormancy: { maxIdleWakes, maxSilentMs: 4 * HOUR },
   });
   const woken = (): string[] => service.log("ada", 20).filter((event) => event.kind === "tick_fired").map((event) => event.detail);
-  return { service, dataDir, ran, compactions, archives, dream, seals, clock, during, woken };
+  return { service, dataDir, ran, compactions, archives, seals, clock, during, woken };
 }
 
 const fired = (name: string, over: Partial<TriggerFiring> = {}): TriggerFiring => ({ name, reason: "the lamp is low", at: T0, ...over });
@@ -226,27 +230,6 @@ test("shutting down waits for a tick that is still running, and no tick runs aft
   expect(ran).toHaveLength(1);
 });
 
-test("a dream that starts in a tick shutdown is waiting on is stopped before shutdown ends", async () => {
-  const { service, during } = await world();
-  const look = Promise.withResolvers<void>();
-  let looking = false;
-  during.look = async () => {
-    looking = true;
-    await look.promise;
-  };
-  expect(service.forceDreamNow("ada")).toBe("queued");
-  const ticking = service.runDue();
-  await until(() => looking, "the tick starting its look");
-
-  const closing = service.quiesce();
-  look.resolve();
-  await ticking;
-  await closing;
-
-  expect(service.runningDreams()).toEqual([]);
-  expect(service.log("ada", 20).filter((event) => event.kind === "dream_finished").map((event) => event.detail)).toEqual(["Dream stopped when Shore shut down"]);
-});
-
 test("each tick puts the character's keepalive schedule in its saved state", async () => {
   const { service, dataDir } = await world();
   const schedule = { model: "claude-fixture", interval: 4 * MINUTE, last_warm_at: T0, last_active_at: T0 - MINUTE };
@@ -260,6 +243,104 @@ test("each tick puts the character's keepalive schedule in its saved state", asy
   await service.runDue();
 
   expect(decodeState(readCharacterState(dataDir, STATE_FILENAME) ?? "")?.keepalive).toEqual({ model: "claude-fixture", intervalMs: 4 * MINUTE, lastWarmAt: T0, lastActiveAt: T0 - MINUTE });
+});
+
+test("a character's state is saved once the user is heard from, here or in another thread, and not before, with no turns covered until compaction says so", async () => {
+  const { service, dataDir, clock } = await world();
+  const saved = () => decodeState(readCharacterState(dataDir, STATE_FILENAME) ?? "");
+  await service.runDue();
+  expect(readCharacterState(dataDir, STATE_FILENAME)).toBeUndefined();
+  clock.now = T0 + MINUTE;
+  service.onUserActivityElsewhere("ada", clock.now);
+  await service.runDue();
+  expect(saved()).toMatchObject({ lastUserAt: T0 + MINUTE, coveredTurnCount: 0 });
+  clock.now = T0 + 2 * MINUTE;
+  service.onUserMessage("ada", 1, clock.now);
+  await service.runDue();
+  expect(saved()?.lastUserAt).toBe(T0 + 2 * MINUTE);
+});
+
+test("an idle compaction waits for a turn to compact and counts the idle time from the user's last message", async () => {
+  const { service, compactions, clock } = await world({ idleCompactionSecs: 60, minTurns: 1 });
+  clock.now = T0 + 60_000;
+  await service.runDue();
+  expect(compactions).toEqual([]);
+  service.onUserMessage("ada", 1, clock.now);
+  clock.now = T0 + 119_000;
+  await service.runDue();
+  expect(compactions).toEqual([]);
+  clock.now = T0 + 120_000;
+  await service.runDue();
+  expect(compactions).toEqual(["idle"]);
+});
+
+test("a compaction asked for because the conversation was full stops holding back the idle one once the user writes again", async () => {
+  const { service, compactions, clock } = await world({ idleCompactionSecs: 60 });
+  expect(service.shouldCompactNow("ada", 0, 0, true)).toBe(true);
+  service.onUserMessage("ada", 1, T0);
+  clock.now = T0 + 60_000;
+  await service.runDue();
+  expect(compactions).toEqual(["idle"]);
+});
+
+test("a long-idle conversation is archived once, with what the archive reported, and again only after the user has written since", async () => {
+  const { service, archives, clock } = await world({ archiveAfterSecs: 3600, archived: { turnCount: 0, events: [{ kind: "wake", detail: "Archived after an idle hour" }] } });
+  clock.now = T0 + HOUR;
+  await service.runDue();
+  expect(archives).toEqual(["ada"]);
+  expect(service.log("ada", 20).map((event) => event.detail)).toContain("Archived after an idle hour");
+  clock.now = T0 + 3 * HOUR;
+  await service.runDue();
+  expect(archives).toEqual(["ada"]);
+  service.onUserMessage("ada", 1, clock.now);
+  clock.now = T0 + 4 * HOUR;
+  await service.runDue();
+  expect(archives).toEqual(["ada", "ada"]);
+});
+
+test("nothing is archived while a reply is being written, and the archive waits for it to finish", async () => {
+  const { service, archives, clock } = await world({ archiveAfterSecs: 3600 });
+  const done = service.beginForeground("ada");
+  clock.now = T0 + HOUR;
+  await service.runDue();
+  expect(archives).toEqual([]);
+  done();
+  await service.runDue();
+  expect(archives).toEqual(["ada"]);
+});
+
+test("a running wake hears when the user writes to the character", async () => {
+  const { service, during } = await world();
+  const heard: string[][] = [];
+  during.run = (_wake, hooks) => {
+    service.onUserMessage("ada", 1, T0);
+    heard.push(hooks.news(false).map((item) => item.kind));
+    return { events: [] };
+  };
+  service.wakeFor("ada", fired("lamp"));
+  await service.runDue();
+  expect(heard).toEqual([["user_wrote"]]);
+});
+
+test("registering a character again saves its keepalive schedule first and hands it back to keepalive", async () => {
+  const { service, dataDir } = await world();
+  const schedule = { model: "claude-fixture", interval: 4 * MINUTE, last_warm_at: T0, last_active_at: T0 - MINUTE };
+  const restored: unknown[][] = [];
+  service.attachKeepalive({
+    onEvent: () => {},
+    scheduleFor: (character: string) => character === "ada" ? schedule : undefined,
+    restore: (...told: unknown[]) => { restored.push(told); },
+    haltsFor: () => [],
+  } as unknown as KeepaliveService);
+
+  await service.register({
+    character: "ada",
+    data_dir: dataDir,
+    config: { autonomyEnabled: true, compactionEnabled: true, minTurns: 0, maxTurns: 0, idleTriggerSecs: 0, archiveAfterSecs: 0, maxContextTokens: 0 },
+    dormancy: { maxIdleWakes: 10, maxSilentMs: 4 * HOUR },
+  });
+
+  expect(restored).toEqual([["ada", schedule]]);
 });
 
 test("a running wake can be asked whether the user has written in its thread since it started", async () => {
@@ -414,53 +495,3 @@ test("the user's new dormancy settings take effect at the next look", async () =
   expect(ran).toHaveLength(1);
 });
 
-test("nothing wakes the character while it is dreaming, and what came due meanwhile wakes it once the dream is over", async () => {
-  const { service, ran, dream, clock } = await world();
-  expect(service.forceDreamNow("ada")).toBe("queued");
-  await service.runDue();
-  expect(service.runningDreams()).toEqual([{ character: "ada", startedAt: T0 }]);
-
-  clock.now = T0 + HOUR;
-  expect(service.wakeFor("ada", fired("lamp"))).toBe("queued");
-  await service.runDue();
-  expect(ran).toEqual([]);
-
-  dream.resolve({ events: [], dream: "finished" });
-  await service.dreamsEnded();
-  await service.runDue();
-  expect(ran.map((each) => each.fired)).toEqual([["lamp"]]);
-  await service.shutdown();
-});
-
-test("a dream that is due waits for the next look when this one woke the character, in any thread, or compacted its home thread", async () => {
-  for (const thread of [undefined, "ring"]) {
-    const woken = await world();
-    expect(woken.service.forceDreamNow("ada")).toBe("queued");
-    expect(woken.service.wakeFor("ada", fired("lamp", { thread }))).toBe("queued");
-    await woken.service.runDue();
-    expect([woken.ran.map((each) => each.thread), woken.service.runningDreams()]).toEqual([[thread ?? "main"], []]);
-    await woken.service.runDue();
-    expect(woken.service.runningDreams()).toEqual([{ character: "ada", startedAt: T0 }]);
-    woken.dream.resolve({ events: [], dream: "finished" });
-    await woken.service.shutdown();
-  }
-
-  const waiting = await world();
-  waiting.service.userActiveIn("ada", "ring");
-  expect(waiting.service.forceDreamNow("ada")).toBe("queued");
-  waiting.service.wakeFor("ada", fired("song", { thread: "ring" }));
-  await waiting.service.runDue();
-  expect([waiting.ran, waiting.service.runningDreams()]).toEqual([[], [{ character: "ada", startedAt: T0 }]]);
-  waiting.dream.resolve({ events: [], dream: "finished" });
-  await waiting.service.shutdown();
-
-  const compacted = await world({ idleCompactionSecs: 60 });
-  expect(compacted.service.forceDreamNow("ada")).toBe("queued");
-  compacted.clock.now = T0 + 60_000;
-  await compacted.service.runDue();
-  expect([compacted.compactions, compacted.service.runningDreams()]).toEqual([["idle"], []]);
-  await compacted.service.runDue();
-  expect([compacted.compactions, compacted.service.runningDreams()]).toEqual([["idle"], [{ character: "ada", startedAt: T0 + 60_000 }]]);
-  compacted.dream.resolve({ events: [], dream: "finished" });
-  await compacted.service.shutdown();
-});

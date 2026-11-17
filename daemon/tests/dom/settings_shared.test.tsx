@@ -232,25 +232,21 @@ describe("pages and banners", () => {
     const snapshot = app.state().workspace.getSnapshot();
     const view = await mount(<DebugPage state={{ ...snapshot, character: null }} />);
     expect(view.host.textContent).toContain("Choose a character");
-    const dream = { character: "ada", enabled: true, queued: true, running: true };
     const results: Record<string, unknown> = {
       wake_now: { status: "queued", character: "ada" }, set_dormant: { status: "dormant", character: "ada" }, set_active: { status: "active", character: "ada" },
-      dream, keepalive_ping_now: { status: "skipped", character: "ada", reason: "cold" }, session_activate: { character: "ada", registered: true, keepalive: { status: "off" }, triggers: null },
+      keepalive_ping_now: { status: "skipped", character: "ada", reason: "cold" }, session_activate: { character: "ada", registered: true, keepalive: { status: "off" }, triggers: null },
     };
     app.answer((request) => results[request["name"] as string]);
     await view.update(<DebugPage state={{ ...snapshot, character: "ada" }} />);
     expect(view.host.querySelector(".settings-description")?.textContent).toBe("Manual controls for ada’s background activity. These act immediately.");
-    for (const title of ["Start a wake", "Make dormant", "Make active", "Dream", "Ping", "Activate"]) {
+    for (const title of ["Start a wake", "Make dormant", "Make active", "Ping", "Activate"]) {
       await click(button(view.host, title));
       await acting(() => Bun.sleep(5));
     }
     expect(view.host.querySelector(".settings-section:last-child h2")?.textContent).toBe("Last result: Activate");
     results["wake_now"] = { status: "queued", character: "ada", warning: "Nothing to do" };
-    results["dream"] = { ...dream, running: false };
     await click(button(view.host, "Start a wake"));
     await acting(() => Bun.sleep(5));
-    await click(button(view.host, "Dream"));
-    await acting(() => Bun.sleep(5));
-    expect(shown.mock.calls.map(([text]) => text)).toEqual(["Wake queued", "ada is dormant", "ada is active", "Already dreaming", "Keepalive skipped", "Session activated", "Nothing to do", "Dream queued"]);
+    expect(shown.mock.calls.map(([text]) => text)).toEqual(["Wake queued", "ada is dormant", "ada is active", "Keepalive skipped", "Session activated", "Nothing to do"]);
   });
 });

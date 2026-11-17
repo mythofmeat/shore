@@ -15,6 +15,7 @@ import { ProviderRegistry } from "../src/config/providers.ts";
 import type { LoadedConfig } from "../src/config/loader.ts";
 import type { SidecarProvider, SidecarRequest, StreamEvent } from "../src/llm/types.ts";
 import { generationEngine, runGeneration, type GenerationDeps } from "../src/handler/generation.ts";
+import { keptDiary } from "../src/autonomy/diary.ts";
 import { testTmp } from "./support/tmp.ts";
 import { recordedTurns, WorkspaceRecorder, workspaceTurnsFor, type WorkspaceTurns } from "../src/tools/workspace_turns.ts";
 import { outcomeOf } from "./support/outcome.ts";
@@ -93,11 +94,25 @@ interface Turn {
   seed?: (turns: WorkspaceTurns) => Promise<void>;
   during?: (turns: WorkspaceTurns) => Promise<void>;
   compaction?: GenerationDeps["compaction"];
+  thread?: string;
+  rid?: string;
+  sent?: ServerMessage[];
+  provider?: SidecarProvider;
+  maxRetries?: number;
+  twoKeys?: boolean;
+  adjust?: (generation: GenerationDeps) => void;
 }
 
+const SPARE_KEY_ENV = "SHORE_FIXTURE_SPARE_API_KEY";
+
 async function runTurn(turn: Turn): Promise<{ error?: string; dataDir: string }> {
-  const config = await loadedConfig(true, turn.tools);
+  const loaded = await loadedConfig(true, turn.tools);
+  if (turn.maxRetries !== undefined) loaded.app.chat.max_retries = turn.maxRetries;
+  const config: LoadedConfig = turn.twoKeys === true
+    ? { ...loaded, providers: ProviderRegistry.fromSection({ anthropic: { keys: [{ name: "primary", api_key_env: MODEL_KEY_ENV }, { name: "spare", api_key_env: SPARE_KEY_ENV }] } }) }
+    : loaded;
   setTestEnv(MODEL_KEY_ENV, "fixture-key");
+  setTestEnv(SPARE_KEY_ENV, "spare-key");
   const workspace = join(config.dirs.config, "characters", "ada", "workspace");
   await mkdir(workspace, { recursive: true });
   await writeFile(join(workspace, "SOUL.md"), "ada system prompt");
@@ -129,20 +144,21 @@ async function runTurn(turn: Turn): Promise<{ error?: string; dataDir: string }>
     };
   }
 
-  const engine = generationEngine(await ConversationEngine.load("ada", config.dirs.data, undefined));
+  const engine = generationEngine(await ConversationEngine.load("ada", config.dirs.data, undefined, turn.thread ?? MAIN_THREAD));
   try {
-    const generation = deps(config, engine, provider, []);
+    const generation = deps(config, engine, turn.provider ?? provider, []);
+    turn.adjust?.(generation);
     if (turn.compaction !== undefined) {
       generation.compaction = turn.compaction;
       generation.autonomy = { ...generation.autonomy, shouldCompactNow: () => true };
     }
     await runGeneration(generation, {
-      meta: { session: { clientId: 1, sessionId: 1, clientType: "test-client", clientName: "test-1", capabilities: ["streaming"], selectedCharacter: "ada" }, rid: null, kind: "message" } as never,
-      body: { rid: null, text: turn.regen ? "" : "Leave me a note", stream: true, images: [], image_data: [] },
+      meta: { session: { clientId: 1, sessionId: 1, clientType: "test-client", clientName: "test-1", capabilities: ["streaming"], selectedCharacter: "ada" }, rid: turn.rid ?? null, kind: "message" } as never,
+      body: { rid: turn.rid ?? null, text: turn.regen ? "" : "Leave me a note", stream: true, images: [], image_data: [] },
       regen: turn.regen,
       charName: "ada",
-      rid: null,
-      send: async () => {},
+      rid: turn.rid ?? null,
+      send: async (frame) => { turn.sent?.push(frame); },
       signal: new AbortController().signal,
     });
     return { dataDir: config.dirs.data };
@@ -350,4 +366,89 @@ test("a reply is offered Shore's tools that are on and the MCP tools the registr
   expect(await offered(["read"], [])).toEqual({ tools: ["read"], setUps: 1, rounds: 4 });
   expect(await offered(["read"], [find])).toEqual({ tools: ["read", "mcp__search__find"], setUps: 1, rounds: 4 });
   expect(await offered(["read"], [], false)).toEqual({ tools: ["read"], setUps: 1, rounds: undefined });
+});
+
+describe("a reply's turn", () => {
+  const answered: StreamEvent[] = [
+    { type: "start", model: "claude-fixture" },
+    { type: "text", text: "Here you go." },
+    { type: "done", content: "Here you go.", finish_reason: "end_turn", usage, timing },
+  ];
+
+  test("its frames, its tools' frames and the turn its tools are handed carry the id of the request that asked for it", async () => {
+    const sent: ServerMessage[] = [];
+    const handed: (string | undefined)[] = [];
+    const run = await runTurn({
+      history: [], regen: false, rid: "r-1", sent, events: answered,
+      tools: ["read"],
+      toolRound: [{ type: "tool_use", id: "tool_read", name: "read", input: { file_path: "SOUL.md" } }],
+      adjust: (generation) => { generation.tools = (_character, turn) => { handed.push(turn.rid); return {}; }; },
+    });
+    expect(run.error).toBeUndefined();
+    const tagged = sent.flatMap((frame) => "rid" in frame ? [[frame.type, frame.rid]] : []);
+    expect(tagged).toContainEqual(["tool_call", "r-1"]);
+    expect(tagged).toContainEqual(["stream_chunk", "r-1"]);
+    expect(tagged.filter(([, rid]) => rid !== "r-1")).toEqual([]);
+    expect(handed).toEqual(["r-1"]);
+  });
+
+  test("one that fails in a way worth another try waits out the backoff before trying again", async () => {
+    let calls = 0;
+    const waits: number[] = [];
+    const run = await runTurn({
+      history: [], regen: false, events: [], maxRetries: 1,
+      provider: {
+        async *stream() {
+          calls += 1;
+          if (calls === 1) throw new Error("overloaded_error");
+          yield* answered;
+        },
+        generate: () => {
+          throw new Error("no turn here generates");
+        },
+      },
+      adjust: (generation) => { generation.sleep = async (ms) => { waits.push(ms); }; },
+    });
+    expect(run.error).toBeUndefined();
+    expect([calls, waits.length]).toEqual([2, 1]);
+  });
+
+  test("its tools work in the thread the reply is in", async () => {
+    const handed: (string | undefined)[] = [];
+    const run = await runTurn({
+      history: [], regen: false, thread: "ring", events: answered,
+      tools: ["write_diary"],
+      toolRound: [{ type: "tool_use", id: "tool_note", name: "write_diary", input: { text: "Told part one." } }],
+      adjust: (generation) => { generation.tools = (_character, turn) => { handed.push(turn.thread); return {}; }; },
+    });
+    expect(run.error).toBeUndefined();
+    expect(handed).toEqual(["ring"]);
+    expect(keptDiary(join(run.dataDir, "ada"), Date.now()).map((note) => [note.thread, note.text])).toEqual([["ring", "Told part one."]]);
+  });
+
+  test("a round its first key started before refusing the call is not kept when the spare key answers", async () => {
+    let calls = 0;
+    const run = await runTurn({
+      history: [], regen: false, events: [], tools: ["read"], twoKeys: true,
+      provider: {
+        async *stream() {
+          yield* [];
+          throw new Error("a tool reply streams with its tools");
+        },
+        generate: () => {
+          throw new Error("no turn here generates");
+        },
+        async *streamWithTools(_request, phase) {
+          calls += 1;
+          if (calls === 1) {
+            await phase.recordTurn("assistant", [{ type: "tool_use", id: "tool_lost", name: "read", input: { file_path: "SOUL.md" } }]);
+            throw { kind: "http_status", status: 401, body: "unauthorized" };
+          }
+          yield* answered;
+        },
+      },
+    });
+    expect([run.error, calls]).toEqual([undefined, 2]);
+    expect((await readBack(run.dataDir)).map((message) => [message.role, message.content])).toEqual([["user", "Leave me a note"], ["assistant", "Here you go."]]);
+  });
 });

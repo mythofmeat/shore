@@ -41,7 +41,7 @@ const materialWrite = (cacheReadTokens: number, cacheWriteTokens: number): boole
   cacheWriteTokens * 100 >= cacheReadTokens;
 
 function toolLoopKind(callType: string): string | undefined {
-  return callType === "tool_loop" || callType === "wake_tool_loop" || callType === "dreaming_tool_loop" ? callType : undefined;
+  return callType === "tool_loop" || callType === "wake_tool_loop" ? callType : undefined;
 }
 
 interface ModelIdentity {

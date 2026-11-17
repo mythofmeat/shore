@@ -19,21 +19,17 @@ const SOURCES = ["wake", "trigger", "shore", "note"] as const;
 
 const OLD_WAKE_SOURCE = "heartbeat";
 
-interface StoredNote extends DiaryNote {
-  folded?: true;
-}
-
-function storedNote(raw: unknown): StoredNote | undefined {
+function storedNote(raw: unknown): DiaryNote | undefined {
   if (typeof raw !== "object" || raw === null) return undefined;
-  const { id, at, thread, source, trigger, text, folded } = raw as Record<string, unknown>;
+  const { id, at, thread, source, trigger, text } = raw as Record<string, unknown>;
   if (typeof id !== "string" || typeof thread !== "string" || typeof text !== "string") return undefined;
   if (typeof at !== "string" || Number.isNaN(Date.parse(at))) return undefined;
   const known = SOURCES.find((each) => each === (source === OLD_WAKE_SOURCE ? "wake" : source));
   if (known === undefined) return undefined;
-  return { id, at, thread, source: known, ...(typeof trigger === "string" ? { trigger } : {}), text, ...(folded === true ? { folded } : {}) };
+  return { id, at, thread, source: known, ...(typeof trigger === "string" ? { trigger } : {}), text };
 }
 
-function stored(characterDir: string): StoredNote[] {
+function stored(characterDir: string): DiaryNote[] {
   try {
     const parsed: unknown = JSON.parse(readCharacterState(characterDir, DIARY_STATE) ?? "[]");
     if (Array.isArray(parsed)) return parsed.flatMap((raw) => storedNote(raw) ?? []);
@@ -43,15 +39,11 @@ function stored(characterDir: string): StoredNote[] {
   return [];
 }
 
-function keep(characterDir: string, notes: readonly StoredNote[]): void {
+function keep(characterDir: string, notes: readonly DiaryNote[]): void {
   writeCharacterState(characterDir, DIARY_STATE, JSON.stringify(notes.slice(-DIARY_KEPT)));
 }
 
-function shown({ folded: _folded, ...note }: StoredNote): DiaryNote {
-  return note;
-}
-
-function open(characterDir: string): StoredNote[] {
+function open(characterDir: string): DiaryNote[] {
   const sealed = new Set(sealedThreads(characterDir).map((thread) => thread.id));
   return stored(characterDir).filter((note) => !sealed.has(note.thread));
 }
@@ -89,37 +81,27 @@ export interface ShownDiary {
   omitted: number;
 }
 
-function lastDay(notes: readonly StoredNote[], now: number): StoredNote[] {
+function lastDay(notes: readonly DiaryNote[], now: number): DiaryNote[] {
   return notes.filter((note) => now - Date.parse(note.at) < DIARY_WINDOW_MS);
 }
 
 export function recentDiary(characterDir: string, now: number): ShownDiary {
-  const recent = lastDay(open(characterDir), now).map(shown);
+  const recent = lastDay(open(characterDir), now);
   const notes = recent.slice(-DIARY_SHOWN);
   return { notes, omitted: recent.length - notes.length };
 }
 
 export interface KeptNote extends DiaryNote {
   shown: boolean;
-  dreamed: boolean;
 }
 
 export function keptDiary(characterDir: string, now: number): KeptNote[] {
   const kept = open(characterDir);
   const current = new Set(lastDay(kept, now).slice(-DIARY_SHOWN));
-  return kept.map((note) => ({ ...shown(note), shown: current.has(note), dreamed: note.folded === true }));
+  return kept.map((note) => ({ ...note, shown: current.has(note) }));
 }
 
 export function unseenDiary(characterDir: string, active: readonly Pick<Message, "diary">[], now: number, thread?: string): DiaryNote[] {
   const seen = new Set(active.flatMap((message) => (message.diary ?? []).map((note) => note.id)));
   return recentDiary(characterDir, now).notes.filter((note) => !seen.has(note.id) && note.thread !== thread);
-}
-
-export function unfoldedDiary(characterDir: string): DiaryNote[] {
-  return open(characterDir).filter((note) => note.folded !== true).map(shown);
-}
-
-export function foldDiary(characterDir: string, ids: readonly string[]): void {
-  const folded = new Set(ids);
-  keep(characterDir, stored(characterDir).map((note): StoredNote => folded.has(note.id) ? { ...note, folded: true } : note));
 }

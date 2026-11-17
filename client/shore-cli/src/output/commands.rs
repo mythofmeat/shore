@@ -63,7 +63,6 @@ pub(crate) fn format_command(name: &str, data: &serde_json::Value) {
         "transcript" => print_transcript(data),
         "subagent_trace" => print_subagent_trace(data),
         "wake_now" => print_wake_now(data),
-        "dream" => cli_out!("{}", dream_report_text(data)),
         "diary" => super::diary::print_diary(data),
         "presence" => cli_out!("{}", presence_text(data)),
         "mark" | "unmark" | "marks" => cli_out!("{}", marks_text(name, data)),
@@ -941,80 +940,6 @@ pub(crate) fn marks_text(name: &str, data: &serde_json::Value) -> String {
     }
     let marks: Vec<String> = changed.marks.iter().map(mark_line).collect();
     format!("{at}: {}.", marks.join("; "))
-}
-
-pub(crate) fn dream_report_text(data: &serde_json::Value) -> String {
-    let character = data["character"].as_str().unwrap_or("?");
-    let mut lines = Vec::new();
-    let state = if data["running"].as_bool().unwrap_or(false) {
-        Some(format!("{character} is dreaming now."))
-    } else if data["queued"].as_bool().unwrap_or(false) {
-        Some(format!(
-            "A dream for {character} starts at the next autonomy tick."
-        ))
-    } else if data["enabled"].as_bool().unwrap_or(false) {
-        None
-    } else {
-        Some(format!(
-            "Dreaming is off for {character}; set dreaming.enabled to turn it on."
-        ))
-    };
-    lines.extend(state);
-    let last = &data["last"];
-    if last.is_object() {
-        let outcome = match (
-            last["outcome"].as_str().unwrap_or("?"),
-            last["stopped_by"].as_str(),
-        ) {
-            ("cut_off", Some("round_limit")) => "was stopped at its round limit",
-            ("cut_off", _) => "was stopped at its time limit",
-            ("interrupted", Some("budget")) => "was paused by a usage budget",
-            ("interrupted", _) => "was stopped when shore shut down",
-            (other, _) => other,
-        };
-        lines.push(format!(
-            "Last dream: {} to {}, {outcome}.",
-            super::autonomy::format_local_timestamp(last["started_at"].as_str().unwrap_or("?")),
-            super::autonomy::format_local_timestamp(last["ended_at"].as_str().unwrap_or("?")),
-        ));
-        let pushed = match last["pushed"].as_bool() {
-            Some(true) => ", pushed",
-            Some(false) => ", not pushed",
-            None => "",
-        };
-        lines.push(format!(
-            "{} read, {}, {} changed{pushed}.",
-            counted(last["conversations"].as_u64().unwrap_or(0), "conversation"),
-            counted(last["commits"].as_u64().unwrap_or(0), "commit"),
-            counted(
-                last["files"]
-                    .as_array()
-                    .map_or(0, |files| u64::try_from(files.len()).unwrap_or(u64::MAX)),
-                "file"
-            ),
-        ));
-        if let Some(error) = last["error"].as_str() {
-            let label = if last["outcome"].as_str() == Some("failed") {
-                "Error"
-            } else {
-                "Reason"
-            };
-            lines.push(format!("{label}: {error}"));
-        }
-        if let Some(summary) = last["summary"].as_str() {
-            lines.push(String::new());
-            lines.push(summary.to_owned());
-        }
-    } else {
-        lines.push(format!("{character} hasn't dreamt yet."));
-    }
-    if let Some(next) = data["next_due_at"].as_str() {
-        lines.push(format!(
-            "Next dream due {}.",
-            super::autonomy::format_local_timestamp(next)
-        ));
-    }
-    lines.join("\n")
 }
 
 fn print_wake_now(data: &serde_json::Value) {

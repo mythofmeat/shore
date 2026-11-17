@@ -21,7 +21,6 @@ import {
 import type { ConversationEngine } from "../engine/conversation.ts";
 import type { Message } from "../engine/types.ts";
 import type { FallbackEvent } from "../llm/fallback.ts";
-import type { CallRecorder } from "../llm/capture.ts";
 import { describeError } from "../llm/errors.ts";
 import { runGeneration as runModelGeneration } from "../llm/generate.ts";
 import type { RegenStart, StreamResult } from "../llm/stream.ts";
@@ -133,7 +132,6 @@ export interface GenerationDeps {
   registry: GenerationRegistry;
   dataDir: string;
   providers: Partial<Record<SidecarRequest["sdk"], SidecarProvider>>;
-  callStore?: CallRecorder | undefined;
   autonomy: TurnAutonomy & PersistContext["autonomy"];
   runningWake?: (character: string) => RunningWake | undefined;
   userActiveIn?: (character: string, thread: string) => void;
@@ -593,7 +591,6 @@ async function streamTurn(
 ): Promise<{ result: StreamResult; intermediate: Message[] }> {
   const { config, charName, resolved, request } = params;
   const toolsOn = (request.tools ?? []).length > 0;
-  let send: (message: ServerMessage) => void = params.send;
   const toolCtx = toolsOn
     ? await buildToolContext(
         config,
@@ -602,12 +599,12 @@ async function streamTurn(
         { ...deps.tools?.(charName, {
           ...(request.context?.thread === undefined ? {} : { thread: request.context.thread }),
           conversation: params.conversation,
-          send: (message) => send(message),
+          send: params.send,
           ...(params.rid === undefined ? {} : { rid: params.rid }),
           now: params.now,
           newMessageId: params.newMessageId,
           signal: params.signal,
-        }), signal: params.signal, countReads: true, ...(request.context?.thread === undefined ? {} : { thread: request.context.thread }) },
+        }), signal: params.signal, ...(request.context?.thread === undefined ? {} : { thread: request.context.thread }) },
       )
     : undefined;
   if (toolCtx !== undefined) toolCtx.recordWorkspaceWrite = params.recordWorkspaceWrite;
@@ -616,7 +613,6 @@ async function streamTurn(
 
   const { result } = await runModelGeneration(request, resolved, {
     providers: deps.providers,
-    ...(deps.callStore === undefined ? {} : { callStore: deps.callStore }),
     config,
     ...(deps.sleep === undefined ? {} : { sleep: deps.sleep }),
     ...(deps.env === undefined ? {} : { env: deps.env }),
@@ -634,7 +630,6 @@ async function streamTurn(
       });
     },
     tools: (call, sink) => {
-      send = sink;
       intermediate = [];
       if (toolCtx !== undefined && resolved.maxToolRounds !== undefined) {
         call.max_tool_rounds = resolved.maxToolRounds;

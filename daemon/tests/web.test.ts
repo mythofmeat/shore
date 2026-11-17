@@ -12,7 +12,7 @@ import { type ServerMessage } from "../src/protocol/ServerMessage.ts";
 import { type WebSessionInfo } from "../src/protocol/WebSessionInfo.ts";
 import { type HandshakeProvider } from "../src/swp/connection.ts";
 import { Server } from "../src/swp/server.ts";
-import { type ControlRoutedMessage, type RoutedMessage } from "../src/swp/session.ts";
+import { isControlRoutedMessage, type ControlRoutedMessage, type RoutedMessage } from "../src/swp/session.ts";
 import { WEB_CONTRACT, WEB_SUBPROTOCOL } from "../src/web/contract.ts";
 import { LoginCodes, WebSessions, type WebSession } from "../src/web/auth.ts";
 import { WEB_LIMITS } from "../src/web/policy.ts";
@@ -50,8 +50,12 @@ async function fixture(options: Partial<Omit<WebServerOptions, "server" | "authe
   const served = swp.serve();
   const routed: RoutedMessage[] = [];
   const controls: ControlRoutedMessage[] = [];
-  swp.setControlHandler(async (message) => { if (message.kind !== "session_connected") controls.push(message); });
-  const routing = (async () => { for await (const message of swp.routes()) routed.push(message); })();
+  const routing = (async () => {
+    for await (const message of swp.routes()) {
+      if (!isControlRoutedMessage(message)) routed.push(message);
+      else if (message.kind !== "session_connected") controls.push(message);
+    }
+  })();
   const web = startWebServer({
     server: swp, authenticate: (token) => tokenMatches(TOKEN, token),
     config: { ...defaultWebConfig(), enabled: true, bind_addr: "127.0.0.1:0" }, ...options,

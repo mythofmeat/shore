@@ -92,12 +92,6 @@ async function activePromptSnapshotExists(characterDir: string, thread: string):
   return readCharacterState(characterDir, stateFile(thread, "active_prompt/.snapshot")) !== undefined;
 }
 
-export const loadCanonicalMemoryIndex = (workspace: CharacterWorkspace) =>
-  effectiveContent(workspace, MEMORY_INDEX_FILE);
-
-export const loadCanonicalPromptFile = (workspace: CharacterWorkspace, name: string) =>
-  effectiveContent(workspace, name);
-
 export async function loadMemoryIndex(
   characterDataDir: string,
   workspace: CharacterWorkspace,

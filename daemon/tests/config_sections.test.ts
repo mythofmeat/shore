@@ -26,32 +26,33 @@ async function reading(): Promise<{ write: (toml: string) => Promise<void>; read
   return {
     write: async (toml) => { await writeFile(join(root, "config.toml"), toml); },
     read: () => {
-      const { compaction, dreaming } = loadConfig(join(root, "config.toml"), { env: { SHORE_CONFIG_DIR: root }, onWarn: () => {} }).app;
+      const { compaction } = loadConfig(join(root, "config.toml"), { env: { SHORE_CONFIG_DIR: root }, onWarn: () => {} }).app;
       return [
         compaction.enabled, compaction.model, compaction.write_memory, compaction.label_segments, Number(compaction.idle_after.asSecs()),
         Number(compaction.archive_after.asSecs()), compaction.min_turns, compaction.max_turns, compaction.max_context_tokens,
-        compaction.keep_recent_turns, compaction.git_push, dreaming.enabled, dreaming.model,
+        compaction.keep_recent_turns, compaction.git_push,
       ];
     },
   };
 }
 
-test("[compaction] and [dreaming] are read under the names in the file, a model for each among them, and a new install compacts after two idle hours and pushes nothing", async () => {
+test("[compaction] is read under the names in the file, a model among them, and a new install compacts after two idle hours and pushes nothing", async () => {
   const { write, read } = await reading();
   await write('[chat]\ndisplay_name = "eve"\n');
-  expect(read()).toEqual([true, undefined, true, true, 7200, 0, 12, 30, 200_000, 2, false, false, undefined]);
+  expect(read()).toEqual([true, undefined, true, true, 7200, 0, 12, 30, 200_000, 2, false]);
 
   await write([
     "[compaction]", "enabled = false", 'model = "anthropic:claude-haiku-5-5"', "write_memory = false", "label_segments = false", 'idle_after = "40m"',
-    'archive_after = "3d"', "min_turns = 4", "max_turns = 40", "max_context_tokens = 500000", "keep_recent_turns = 0", "git_push = true",
-    "[dreaming]", "enabled = true", 'model = "anthropic:claude-sonnet-5-5"', "",
+    'archive_after = "3d"', "min_turns = 4", "max_turns = 40", "max_context_tokens = 500000", "keep_recent_turns = 0", "git_push = true", "",
   ].join("\n"));
-  expect(read()).toEqual([false, "anthropic:claude-haiku-5-5", false, false, 2400, 259_200, 4, 40, 500_000, 0, true, true, "anthropic:claude-sonnet-5-5"]);
+  expect(read()).toEqual([false, "anthropic:claude-haiku-5-5", false, false, 2400, 259_200, 4, 40, 500_000, 0, true]);
 
   await write('[compaction]\nidle_trigger = "1h"\n');
   expect(read).toThrow("unknown field `compaction.idle_trigger`");
   await write("[memory.compaction]\nenabled = false\n");
   expect(read).toThrow("unknown field `memory`, expected one of ");
+  await write("[dreaming]\nenabled = false\n");
+  expect(read).toThrow("unknown field `dreaming`, expected one of ");
 });
 
 test("a compaction setting that can't work is refused, naming the key as the file has it", async () => {
@@ -85,18 +86,18 @@ test("[presence], [marks], [matrix] and [image] are read from the file, and a se
     "openai:gpt-image",
   ]);
 
-  await writeFile(join(root, "config.toml"), "[triggers]\n[compaction]\n[dreaming]\n[presence]\n[marks]\n[matrix]\n[image]\n");
+  await writeFile(join(root, "config.toml"), "[triggers]\n[compaction]\n[presence]\n[marks]\n[matrix]\n[image]\n");
   const bare = loadConfig(join(root, "config.toml"), { env: { SHORE_CONFIG_DIR: root }, onWarn: () => {} }).app;
-  expect([bare.triggers.enabled, bare.compaction.enabled, bare.dreaming.enabled, bare.presence.statuses, bare.marks.tags, bare.matrix, bare.image.model]).toEqual([
-    false, true, false, ["asleep", "busy", "away"], ["didn't look hard enough", "out of character", "too long", "repetitive"],
+  expect([bare.triggers.enabled, bare.compaction.enabled, bare.presence.statuses, bare.marks.tags, bare.matrix, bare.image.model]).toEqual([
+    false, true, ["asleep", "busy", "away"], ["didn't look hard enough", "out of character", "too long", "repetitive"],
     { enabled: false, homeserver_url: "", user_id: "", room_id: "", mirror_user_messages: true }, undefined,
   ]);
 });
 
-test("a model named in [chat], [triggers], [compaction] or [dreaming] that can't be found is warned about under that section's key", async () => {
+test("a model named in [chat], [triggers] or [compaction] that can't be found is warned about under that section's key", async () => {
   const root = await mkdtemp(testTmp("shore-config-sections-"));
   await writeFile(join(root, "config.toml"), [
-    '[chat]\nmodel = "nope"\n[triggers]\nmodel = "nope-a"\n[compaction]\nmodel = "nope-b"\n[dreaming]\nmodel = "ghost:nope-c"',
+    '[chat]\nmodel = "nope"\n[triggers]\nmodel = "nope-a"\n[compaction]\nmodel = "ghost:nope-b"',
     '[subagents]\nmodel = "nope-d"\n[subagents.scout]\ndescription = "looks"\nprompt = "look"\nmodel = "nope-e"\n',
   ].join("\n"));
   const warned: (readonly (readonly [string, string])[])[] = [];
@@ -104,11 +105,21 @@ test("a model named in [chat], [triggers], [compaction] or [dreaming] that can't
   expect(warned).toEqual([
     [["field", "chat.model"], ["name", "nope"]],
     [["field", "triggers.model"], ["name", "nope-a"]],
-    [["field", "compaction.model"], ["name", "nope-b"]],
-    [["field", "dreaming.model"], ["name", "ghost:nope-c"], ["provider", "ghost"]],
+    [["field", "compaction.model"], ["name", "ghost:nope-b"], ["provider", "ghost"]],
     [["field", "subagents.model"], ["name", "nope-d"]],
     [["field", "subagents.scout.model"], ["name", "nope-e"]],
   ]);
+});
+
+test("the browser listener's address is checked only while it is on, and image settings that can't work are refused, each naming its key", async () => {
+  const root = await mkdtemp(testTmp("shore-config-sections-"));
+  const load = async (toml: string): Promise<unknown> => {
+    await writeFile(join(root, "config.toml"), toml);
+    return loadConfig(join(root, "config.toml"), { env: { SHORE_CONFIG_DIR: root }, onWarn: () => {} }).app.daemon.web.bind_addr;
+  };
+  expect(await outcomeOf(load('[daemon.web]\nenabled = true\nbind_addr = "nowhere"\n'))).toThrow(/^daemon\.web\.bind_addr must be host:port$/);
+  expect(await load('[daemon.web]\nenabled = false\nbind_addr = "nowhere"\n')).toBe("nowhere");
+  expect(await outcomeOf(load("[images]\nquality = 0\n"))).toThrow(/^images\.quality is 0; it must be from 1 to 100$/);
 });
 
 test("[daemon] holds the address Shore listens on and the cache forensics switch, and a change to it, to [matrix] or to [notifications] needs a restart", async () => {

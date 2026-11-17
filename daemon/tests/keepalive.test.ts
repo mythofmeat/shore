@@ -306,13 +306,13 @@ describe("what counts as a warm", () => {
     expect(required(h.service.scheduleFor(CHARACTER)).last_active_at).toBe(before);
   });
 
-  test("a dream on the chat model is not a warm of the chat's prefix, so the ping still goes out", async () => {
+  test("a wake's later rounds on the chat model are not a warm of the chat's prefix, so the ping still goes out", async () => {
     const h = harness();
     armWarm(h);
     const before = required(h.service.scheduleFor(CHARACTER));
 
     h.clock.advance(minutes(50));
-    h.service.observe(CHARACTER, MODEL, "dreaming");
+    h.service.observe(CHARACTER, MODEL, "wake_tool_loop");
     const after = required(h.service.scheduleFor(CHARACTER));
     expect(after.last_warm_at).toBe(before.last_warm_at);
     expect(after.last_active_at).toBe(before.last_active_at);

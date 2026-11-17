@@ -3,7 +3,7 @@ import { mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
-import { unfoldedDiary } from "../src/autonomy/diary.ts";
+import { keptDiary } from "../src/autonomy/diary.ts";
 import { Outbox, postElsewhere, reachableThreads, sendingsHere, type OutboxSetup } from "../src/autonomy/outbox.ts";
 import type { PushRefusal } from "../src/autonomy/push.ts";
 import { createThread } from "../src/engine/threads.ts";
@@ -146,7 +146,7 @@ test("messages for other threads are posted in the order they were sent, and one
     { workspace: new CharacterWorkspace(workspace), dir: join(workspace, "sent") },
   );
   expect(posted).toEqual([["garden", "One."], ["garden", "Two."]]);
-  expect(unfoldedDiary(join(data, "ada")).map((note) => [note.source, note.thread, note.at, note.text])).toEqual([
+  expect(keptDiary(join(data, "ada"), Date.now()).map((note) => [note.source, note.thread, note.at, note.text])).toEqual([
     ["shore", "", new Date(T0).toISOString(), 'Your message for the thread "attic" was not sent: that thread was gone by the time your wake in "main" ended.'],
   ]);
 });

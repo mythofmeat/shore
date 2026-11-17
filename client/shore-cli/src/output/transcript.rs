@@ -718,11 +718,11 @@ pub(crate) fn write_wake_log<W: Write>(out: &mut W, data: &serde_json::Value, wi
         );
 
         let kind_color = match kind {
-            "tick_fired" | "dream_started" => Tone::Active,
-            "message_sent" | "wake" | "recap_written" | "dream_finished" => Tone::Good,
+            "tick_fired" => Tone::Active,
+            "message_sent" | "wake" | "recap_written" => Tone::Good,
             "message_skipped" => Tone::Muted,
             "tool_use" => Tone::Active,
-            "dormant" | "call_failed" | "dream_failed" => COLOR_ERROR,
+            "dormant" | "call_failed" => COLOR_ERROR,
             "recap_missing" | "budget_paused" => Tone::Warn,
             _ => Tone::Heading,
         };
@@ -732,4 +732,47 @@ pub(crate) fn write_wake_log<W: Write>(out: &mut W, data: &serde_json::Value, wi
         let _ignored = writeln!(out, "{detail}");
     }
     let _ignored = writeln!(out);
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use serde_json::json;
+
+    fn painted(tone: Tone, text: &str) -> String {
+        let mut out = Vec::new();
+        paint(&mut out, tone, text);
+        String::from_utf8(out).unwrap_or_default()
+    }
+
+    #[test]
+    fn each_kind_of_wake_event_is_shown_in_its_own_colour() {
+        crate::output::set_color_enabled(true);
+        let kinds = [
+            ("tick_fired", Tone::Active),
+            ("message_sent", Tone::Good),
+            ("wake", Tone::Good),
+            ("recap_written", Tone::Good),
+            ("message_skipped", Tone::Muted),
+            ("tool_use", Tone::Active),
+            ("dormant", COLOR_ERROR),
+            ("call_failed", COLOR_ERROR),
+            ("recap_missing", Tone::Warn),
+            ("budget_paused", Tone::Warn),
+            ("dormant_ping", Tone::Heading),
+        ];
+        let events: Vec<_> = kinds
+            .iter()
+            .map(|(kind, _)| json!({ "timestamp": "2026-11-17T09:00:00Z", "kind": kind, "detail": "d" }))
+            .collect();
+        let mut out = Vec::new();
+        write_wake_log(&mut out, &json!({ "events": events }), 60);
+        let text = String::from_utf8(out).unwrap_or_default();
+        for (kind, tone) in kinds {
+            assert!(
+                text.contains(&painted(tone, &format!("{kind:<18}"))),
+                "{kind} in {text:?}"
+            );
+        }
+    }
 }

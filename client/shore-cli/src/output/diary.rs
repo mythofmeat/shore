@@ -71,9 +71,6 @@ fn write_note<W: Write>(
             format!("\u{00b7} no longer shown to {character}"),
         ));
     }
-    if note["dreamed"].as_bool() == Some(true) {
-        heading.push((Tone::Muted, "\u{00b7} dreamed".to_owned()));
-    }
     let hanging = GUTTER.saturating_add(TIME_COLUMN);
     let beside_time = width.saturating_sub(hanging);
     let mut used = 0_usize;
@@ -165,7 +162,7 @@ mod tests {
     }
 
     fn note(at: &str, source: &str, thread: &str, text: &str) -> Value {
-        json!({ "at": at, "thread": thread, "source": source, "text": text, "shown": true, "dreamed": false })
+        json!({ "at": at, "thread": thread, "source": source, "text": text, "shown": true })
     }
 
     #[test]
@@ -178,7 +175,7 @@ mod tests {
 
     #[test]
     fn each_note_says_where_it_came_from_and_keeps_its_own_lines() {
-        let trigger = json!({ "at": "dusk", "thread": "own-time", "source": "trigger", "trigger": "mail check", "text": "Two letters.", "shown": true, "dreamed": false });
+        let trigger = json!({ "at": "dusk", "thread": "own-time", "source": "trigger", "trigger": "mail check", "text": "Two letters.", "shown": true });
         let data = json!({ "character": "ada", "kept": 6, "notes": [
             note("dawn", "wake", "own-time", "The lamp is lit."),
             note("noon", "note", "main", "Ferry times.\n\n- Friday\n  - back by ten"),
@@ -245,8 +242,8 @@ mod tests {
         );
     }
 
-    fn aged(shown: bool, dreamed: bool, thread: &str, width: usize) -> String {
-        let old = json!({ "at": "dawn", "thread": thread, "source": "wake", "text": "a", "shown": shown, "dreamed": dreamed });
+    fn aged(shown: bool, thread: &str, width: usize) -> String {
+        let old = json!({ "at": "dawn", "thread": thread, "source": "wake", "text": "a", "shown": shown });
         let all = written(
             &json!({ "character": "ada", "kept": 1, "notes": [old] }),
             width,
@@ -259,43 +256,36 @@ mod tests {
     }
 
     #[test]
-    fn a_note_the_character_no_longer_sees_or_has_dreamed_about_is_marked() {
+    fn a_note_the_character_no_longer_sees_is_marked() {
         assert_eq!(
-            aged(false, true, "ring", 69),
-            "  dawn            wake in \"ring\"  \u{00b7} no longer shown to ada  \u{00b7} dreamed"
-        );
-        assert_eq!(
-            aged(false, false, "ring", 69),
+            aged(false, "ring", 69),
             "  dawn            wake in \"ring\"  \u{00b7} no longer shown to ada"
         );
-        assert_eq!(
-            aged(true, true, "ring", 69),
-            "  dawn            wake in \"ring\"  \u{00b7} dreamed"
-        );
-        assert_eq!(
-            aged(true, false, "ring", 69),
-            "  dawn            wake in \"ring\""
-        );
+        assert_eq!(aged(true, "ring", 69), "  dawn            wake in \"ring\"");
     }
 
     #[test]
     fn a_heading_too_long_for_the_line_carries_on_under_itself() {
         assert_eq!(
-            aged(false, true, "ring", 68),
+            aged(false, "ring", 58),
+            "  dawn            wake in \"ring\"  \u{00b7} no longer shown to ada"
+        );
+        assert_eq!(
+            aged(false, "ring", 57),
             [
-                "  dawn            wake in \"ring\"  \u{00b7} no longer shown to ada",
-                "                  \u{00b7} dreamed",
+                "  dawn            wake in \"ring\"",
+                "                  \u{00b7} no longer shown to ada",
             ]
             .join("\n")
         );
         assert_eq!(
-            aged(false, true, "a-thread-with-a-long-name", 40),
+            aged(false, "a-thread-with-a-long-name", 40),
             [
                 "  dawn            wake in",
                 "                  \"a-thread-with-a-long-",
                 "                  name\"",
                 "                  \u{00b7} no longer shown to",
-                "                  ada  \u{00b7} dreamed",
+                "                  ada",
             ]
             .join("\n")
         );

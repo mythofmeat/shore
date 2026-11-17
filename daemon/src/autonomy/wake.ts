@@ -253,7 +253,7 @@ export async function runWake(character: string, config: LoadedConfig, wake: Wak
       return { events };
     }
     const resolved = applyBackgroundSettings(config.dirs.data, character, "wake", chat);
-    const configured = backgroundTaskModel(config, character, "wake");
+    const configured = backgroundTaskModel(config, character);
     const maxToolRounds = (configured ?? resolved).maxToolRounds;
     const nowMs = deps.now?.() ?? Date.now();
     const timeZone = deps.timeZone ?? hostZone();
@@ -324,7 +324,7 @@ export async function runWake(character: string, config: LoadedConfig, wake: Wak
       note("call_failed", `Wake could not build its request: ${String(error)}`);
       return { events };
     }
-    const { request, override } = backgroundModelRequest(built.request, config, character, deps.env, configured, "wake");
+    const { request, override } = backgroundModelRequest(built.request, config, character, deps.env, configured);
     request.context = {
       ...request.context,
       ledger: `${config.dirs.data}/shore.db`,

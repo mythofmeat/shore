@@ -20,9 +20,6 @@ const KNOWN_KINDS = new Set<string>([
   "budget_paused",
   "recap_written",
   "recap_missing",
-  "dream_started",
-  "dream_finished",
-  "dream_failed",
 ]);
 
 export type WakeEvent = import("../protocol/WakeEvent.ts").WakeEvent;

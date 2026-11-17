@@ -84,11 +84,11 @@ fn a_wakes_transcript_shows_each_round_or_says_there_is_none_or_that_capture_is_
     );
 
     let (empty, _empty_frames) = asked(
-        json!({ "source": "dreaming", "character": "ada", "enabled": true, "entries": [] }),
-        &["trace", "dreams"],
+        json!({ "source": "wake", "character": "ada", "enabled": true, "entries": [] }),
+        &["trace", "wakes"],
     );
     assert_eq!(
-        under("dreaming transcript (ada)", &lines(&empty)),
+        under("wake transcript (ada)", &lines(&empty)),
         ["(no transcript entries yet)"]
     );
 

@@ -41,10 +41,6 @@ export const DIARY_FOR_WAKE = "Your diary from the last day. Each entry says whe
 
 export const DIARY_FOR_CHAT = "New in your diary. Each entry says where it came from.";
 
-export const DIARY_FOR_DREAM =
-  "Your diary since your last dream. Each entry says where it came from. " +
-  "Fold what matters into your files, because once this dream finishes, later dreams aren't shown these entries.";
-
 const DIARY_END = "[End of your diary.]";
 
 export type UserTimestampMode = "never" | "always" | "auto";

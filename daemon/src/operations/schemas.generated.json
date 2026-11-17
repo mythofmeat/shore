@@ -4121,10 +4121,7 @@
             "dormant_ping",
             "budget_paused",
             "recap_written",
-            "recap_missing",
-            "dream_started",
-            "dream_finished",
-            "dream_failed"
+            "recap_missing"
           ]
         },
         "ActivityStatusReport": {
@@ -4891,8 +4888,7 @@
           "enum": [
             "message",
             "wake",
-            "compaction",
-            "dream"
+            "compaction"
           ]
         },
         "ShutdownWindow": {
@@ -5136,10 +5132,7 @@
             "dormant_ping",
             "budget_paused",
             "recap_written",
-            "recap_missing",
-            "dream_started",
-            "dream_finished",
-            "dream_failed"
+            "recap_missing"
           ]
         }
       }
@@ -5760,8 +5753,7 @@
         "TranscriptSource": {
           "type": "string",
           "enum": [
-            "wake",
-            "dreaming"
+            "wake"
           ]
         }
       }
@@ -5799,8 +5791,7 @@
         "TranscriptSource": {
           "type": "string",
           "enum": [
-            "wake",
-            "dreaming"
+            "wake"
           ]
         },
         "TranscriptRow": {
@@ -6415,150 +6406,6 @@
     }
   },
   {
-    "name": "dream",
-    "input": {
-      "$schema": "https://json-schema.org/draft/2020-12/schema",
-      "title": "DreamArgs",
-      "type": "object",
-      "properties": {
-        "now": {
-          "type": [
-            "boolean",
-            "null"
-          ]
-        }
-      },
-      "additionalProperties": false
-    },
-    "output": {
-      "$schema": "https://json-schema.org/draft/2020-12/schema",
-      "title": "DreamReport",
-      "type": "object",
-      "properties": {
-        "character": {
-          "type": "string"
-        },
-        "enabled": {
-          "type": "boolean"
-        },
-        "queued": {
-          "type": "boolean"
-        },
-        "running": {
-          "type": "boolean"
-        },
-        "next_due_at": {
-          "type": [
-            "string",
-            "null"
-          ]
-        },
-        "last": {
-          "anyOf": [
-            {
-              "$ref": "#/$defs/DreamRecord"
-            },
-            {
-              "type": "null"
-            }
-          ]
-        }
-      },
-      "required": [
-        "character",
-        "enabled",
-        "queued",
-        "running"
-      ],
-      "$defs": {
-        "DreamRecord": {
-          "type": "object",
-          "properties": {
-            "started_at": {
-              "type": "string"
-            },
-            "ended_at": {
-              "type": "string"
-            },
-            "outcome": {
-              "$ref": "#/$defs/DreamOutcome"
-            },
-            "conversations": {
-              "type": "integer",
-              "format": "uint32",
-              "minimum": 0
-            },
-            "commits": {
-              "type": "integer",
-              "format": "uint32",
-              "minimum": 0
-            },
-            "files": {
-              "type": "array",
-              "items": {
-                "type": "string"
-              }
-            },
-            "pushed": {
-              "type": [
-                "boolean",
-                "null"
-              ]
-            },
-            "summary": {
-              "type": [
-                "string",
-                "null"
-              ]
-            },
-            "error": {
-              "type": [
-                "string",
-                "null"
-              ]
-            },
-            "stopped_by": {
-              "anyOf": [
-                {
-                  "$ref": "#/$defs/DreamStop"
-                },
-                {
-                  "type": "null"
-                }
-              ]
-            }
-          },
-          "required": [
-            "started_at",
-            "ended_at",
-            "outcome",
-            "conversations",
-            "commits",
-            "files"
-          ]
-        },
-        "DreamOutcome": {
-          "type": "string",
-          "enum": [
-            "finished",
-            "cut_off",
-            "failed",
-            "interrupted"
-          ]
-        },
-        "DreamStop": {
-          "type": "string",
-          "enum": [
-            "time_limit",
-            "round_limit",
-            "shutdown",
-            "budget"
-          ]
-        }
-      }
-    }
-  },
-  {
     "name": "presence",
     "input": {
       "$schema": "https://json-schema.org/draft/2020-12/schema",
@@ -6670,9 +6517,6 @@
             },
             "shown": {
               "type": "boolean"
-            },
-            "dreamed": {
-              "type": "boolean"
             }
           },
           "required": [
@@ -6680,8 +6524,7 @@
             "thread",
             "source",
             "text",
-            "shown",
-            "dreamed"
+            "shown"
           ]
         },
         "DiarySource": {
@@ -7645,8 +7488,7 @@
           "enum": [
             "all",
             "wake",
-            "compaction",
-            "dreaming"
+            "compaction"
           ]
         }
       }
@@ -7868,8 +7710,7 @@
           "enum": [
             "all",
             "wake",
-            "compaction",
-            "dreaming"
+            "compaction"
           ]
         }
       }
@@ -8134,8 +7975,7 @@
           "enum": [
             "all",
             "wake",
-            "compaction",
-            "dreaming"
+            "compaction"
           ]
         }
       }
@@ -8393,8 +8233,7 @@
           "enum": [
             "all",
             "wake",
-            "compaction",
-            "dreaming"
+            "compaction"
           ]
         }
       }
@@ -8737,8 +8576,7 @@
           "enum": [
             "all",
             "wake",
-            "compaction",
-            "dreaming"
+            "compaction"
           ]
         },
         "ModelPreferenceScope": {
@@ -8835,8 +8673,7 @@
           "enum": [
             "all",
             "wake",
-            "compaction",
-            "dreaming"
+            "compaction"
           ]
         },
         "ModelInvalidated": {

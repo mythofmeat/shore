@@ -1,3 +1,4 @@
+import { required } from "../../util/required.ts";
 import { withConversation } from "../../engine/lifecycle.ts";
 import { threadDataDir } from "../../config/dirs.ts";
 
@@ -47,7 +48,7 @@ import { compact, compactSegment, countTurns, tryBeginCompaction, type Compactio
 import { startPass, type PassScope } from "./activity.ts";
 import { isRealUserTurn } from "../../engine/versions.ts";
 import type { CompactionTrigger } from "../../protocol/CompactionTrigger.ts";
-import { DEFAULT_COMPACT_PROMPT, withDreaming } from "./prompts.ts";
+import { DEFAULT_COMPACT_PROMPT } from "./prompts.ts";
 import { renderToolValue } from "../../tools/media.ts";
 import {
   CompactionError,
@@ -616,20 +617,14 @@ async function resolveDeps(
   dryRun: boolean,
 ): Promise<ResolvedDeps> {
   const configDir = effective.dirs.config;
-  const promptTemplate = withDreaming(
-    resolvePromptTemplate(configDir, character, "compact.md") ?? DEFAULT_COMPACT_PROMPT,
-    effective.app.dreaming.enabled,
-  );
+  const promptTemplate = resolvePromptTemplate(configDir, character, "compact.md") ?? DEFAULT_COMPACT_PROMPT;
 
   const threadModel = await threadChatModel(effective.dirs.data, character, thread);
-  const model = resolveBackgroundModel(
+  const model = required(resolveBackgroundModel(
     configView(effective), "compaction", character,
     (v, c, n, h) => findEffectiveModel(v, c, n, h),
     threadModel,
-  );
-  if (model === undefined) {
-    throw CompactionError.llm("No model configured for background compaction");
-  }
+  ));
 
   let markdownStore: MarkdownMemoryStore | undefined;
   try {
@@ -657,10 +652,10 @@ async function resolveDeps(
       character,
       generate: deps.generate,
       cacheDir: effective.dirs.cache,
-      ...(deps.env === undefined ? {} : { env: deps.env }),
-      ...(providerEntry === undefined ? {} : { providerEntry }),
-      ...(deps.emit === undefined ? {} : { emit: tagCompactionFrames(deps.emit) }),
-      ...(deps.signal === undefined ? {} : { signal: deps.signal }),
+      env: deps.env,
+      providerEntry,
+      emit: deps.emit === undefined ? undefined : tagCompactionFrames(deps.emit),
+      signal: deps.signal,
     }),
     markdownStore,
     tools: compactionTools(toolCtx, effective, tools, imageLimitsFor(model.sdk, model.modelId)),

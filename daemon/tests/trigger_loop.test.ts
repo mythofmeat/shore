@@ -2,7 +2,7 @@ import { expect, test } from "bun:test";
 import { mkdtemp } from "node:fs/promises";
 import { join } from "node:path";
 
-import { unfoldedDiary } from "../src/autonomy/diary.ts";
+import { keptDiary } from "../src/autonomy/diary.ts";
 import type { TriggerFiring } from "../src/autonomy/runner.ts";
 import type { CheckOutcome } from "../src/autonomy/trigger_check.ts";
 import { CharacterTriggers, type TriggerSettings } from "../src/autonomy/trigger_loop.ts";
@@ -69,7 +69,7 @@ async function world(file: string | undefined, dir?: string): Promise<World> {
     w.now = T0 + minutes * MINUTE;
     await w.triggers.tick();
   };
-  w.notes = () => unfoldedDiary(w.dir).map((note) => [note.source === "trigger" ? note.trigger ?? "" : note.source, note.text]);
+  w.notes = () => keptDiary(w.dir, Date.now()).map((note) => [note.source === "trigger" ? note.trigger ?? "" : note.source, note.text]);
   return w;
 }
 
@@ -293,7 +293,7 @@ test("a trigger that doesn't wake leaves a diary entry in its own name, with no 
   await w.at(20);
   expect(w.notes()).toEqual([["tide", "The tide is in."]]);
   expect(w.woke).toEqual([]);
-  expect(unfoldedDiary(w.dir)[0]).toMatchObject({ at: new Date(T0 + 20 * MINUTE).toISOString(), thread: "", source: "trigger", trigger: "tide" });
+  expect(keptDiary(w.dir, Date.now())[0]).toMatchObject({ at: new Date(T0 + 20 * MINUTE).toISOString(), thread: "", source: "trigger", trigger: "tide" });
 });
 
 test("a trigger that comes due outside its hours is skipped, not held until they open", async () => {
@@ -343,43 +343,35 @@ test("a trigger for the user going quiet fires once each time they have been qui
   expect(w.woke).toHaveLength(2);
 });
 
-test("a trigger for a dream finishing waits for one, and for its own cooldown, without losing the dream", async () => {
-  const w = await world('[after-dream]\nwhen = "dream_done"\nreason = "Read what the dream changed."\n');
+test("a trigger for a status change waits for one, and for its own cooldown, without losing the change", async () => {
+  const w = await world('[status]\nwhen = "status_changed"\nreason = "Their status changed."\n');
   await w.at(0);
   await w.at(600);
   expect(w.woke).toEqual([]);
-  await w.triggers.dreamDone();
+  await w.triggers.statusChanged();
   await w.at(601);
-  expect(w.woke).toEqual([{ name: "after-dream", reason: "Read what the dream changed.", at: T0 + 601 * MINUTE }]);
+  expect(w.woke).toEqual([{ name: "status", reason: "Their status changed.", at: T0 + 601 * MINUTE }]);
   await w.at(602);
   expect(w.woke).toHaveLength(1);
-  await w.triggers.dreamDone();
+  await w.triggers.statusChanged();
   await w.at(660);
   expect(w.woke).toHaveLength(1);
   await w.at(661);
   expect(w.woke).toHaveLength(2);
 
-  const early = await world('[after-dream]\nwhen = "dream_done"\nreason = "Read what the dream changed."\n\n[missed]\nwhen = "user_quiet"\nafter = "2h"\nreason = "Gone a while."\n');
+  const early = await world('[status]\nwhen = "status_changed"\nreason = "Their status changed."\n\n[missed]\nwhen = "user_quiet"\nafter = "2h"\nreason = "Gone a while."\n');
   await early.at(0);
   early.restart();
   writeCharacterState(early.dir, "triggers.json", "{}");
-  await early.triggers.dreamDone();
+  await early.triggers.statusChanged();
   expect(early.triggers.view().triggers.map((each) => each.fired)).toEqual([0, 0]);
   await early.at(1);
-  expect(early.woke.map((firing) => firing.name)).toEqual(["after-dream"]);
+  expect(early.woke.map((firing) => firing.name)).toEqual(["status"]);
   expect(early.triggers.view().triggers.map((each) => each.fired)).toEqual([1, 0]);
 
-  const status = await world('[status]\nwhen = "status_changed"\nreason = "Their status changed."\ncooldown = "1m"\n\n[after-dream]\nwhen = "dream_done"\nreason = "r"\n');
-  await status.at(0);
-  await status.triggers.statusChanged();
-  await status.at(1);
-  expect(status.woke).toEqual([{ name: "status", reason: "Their status changed.", at: T0 + MINUTE }]);
-  await status.at(2);
-  expect(status.woke).toHaveLength(1);
-
-  const off = await world('[after-dream]\nwhen = "dream_done"\nreason = "Read what the dream changed."\n');
+  const off = await world('[status]\nwhen = "status_changed"\nreason = "Their status changed."\n');
   off.settings = { ...off.settings, enabled: false };
-  await off.triggers.dreamDone();
+  await off.triggers.statusChanged();
   off.settings = { ...off.settings, enabled: true };
   await off.at(1);
   await off.at(2);

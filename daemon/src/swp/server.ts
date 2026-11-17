@@ -23,11 +23,9 @@ import {
   sessionReceives,
 } from "./routing";
 import {
-  isControlRoutedMessage,
   sessionMetaOf,
   SessionRouter,
   type ClientInfo,
-  type ControlRoutedMessage,
   type RoutedMessage,
   type SessionMeta,
 } from "./session";
@@ -170,7 +168,6 @@ export class Server {
   #serving = false;
   readonly #stopController = new AbortController();
   #handshake: HandshakeProvider | undefined;
-  #controlHandler: ((msg: ControlRoutedMessage) => Promise<void>) | undefined;
   #nextId = 1;
   #listener: NetServer | null = null;
   #shutdown!: () => void;
@@ -186,10 +183,6 @@ export class Server {
 
   setHandshakeProvider(handshake: HandshakeProvider): void {
     this.#handshake = handshake;
-  }
-
-  setControlHandler(handler: (msg: ControlRoutedMessage) => Promise<void>): void {
-    this.#controlHandler = handler;
   }
 
   get sessionRouter(): SessionRouter {
@@ -466,10 +459,6 @@ export class Server {
   }
 
   async #route(msg: RoutedMessage): Promise<void> {
-    if (isControlRoutedMessage(msg) && this.#controlHandler !== undefined) {
-      await this.#controlHandler(msg);
-      return;
-    }
     this.#routes.push(msg);
   }
 }
