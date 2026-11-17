@@ -116,6 +116,32 @@ export async function gitPushWorkspaceBestEffort(target: string | CharacterWorks
   }
 }
 
+const ARCHIVE_COMMIT_MESSAGE = "save: changes left uncommitted when a conversation was archived";
+
+const UNFINISHED_GIT_STEPS: readonly string[] = ["MERGE_HEAD", "CHERRY_PICK_HEAD", "REVERT_HEAD"];
+
+export async function saveWorkspaceAtArchive(
+  target: string | CharacterWorkspace,
+  character: string,
+  pushing: ((push: Promise<void>) => void) | undefined,
+): Promise<void> {
+  const workspace = asCharacterWorkspace(target);
+  try {
+    if (await midGitOperation(workspace)) return;
+    await gitCommitAll(workspace, character, ARCHIVE_COMMIT_MESSAGE);
+  } catch (e) {
+    shoreLog.warn(`shore: could not commit the workspace at ${workspace.dir} after an archive: ${String(e)}`);
+  }
+  pushing?.(gitPushWorkspaceBestEffort(workspace));
+}
+
+async function midGitOperation(workspace: CharacterWorkspace): Promise<boolean> {
+  const branch = await runGit(workspace, ["symbolic-ref", "--quiet", "HEAD"]);
+  const unfinished = await Promise.all(UNFINISHED_GIT_STEPS.map(async (ref) =>
+    (await runGit(workspace, ["rev-parse", "--verify", "--quiet", ref])).code === 0));
+  return branch.code !== 0 || unfinished.includes(true);
+}
+
 async function pushLfsObjects(workspace: CharacterWorkspace): Promise<void> {
   const lfs = await runGit(workspace, ["lfs", "version"]);
   if (lfs.code !== 0) return;
