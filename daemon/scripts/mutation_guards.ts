@@ -446,6 +446,11 @@ export const DAEMON_EQUIVALENTS: readonly string[] = [
   "src/engine/threads.ts:writeThreadsIndex: …`${JSON.stringify(index, null, 「2 → 3」)}\\n`);",
   "src/engine/threads.ts:scanInto: if (time 「> → >=」 scan.latestUser && !scan.wakeT…",
   "src/browser/chat/QuoteButton.tsx:QuoteButton: const half = (width ?? 「0 → 1」) / 2;",
+  "src/swp/outbound.ts:OutboundQueue.push: …|| limits.bytes === Infinity ? 「0 → 1」 : encodeServerMessage(message)…",
+  "src/swp/server.ts:Server.attachLocal: this.#nextId += 「1 → 2」;",
+  "src/swp/server.ts:detach: 「signal.removeEventListener(\"abort\", abo… → {}」",
+  "src/swp/server.ts:detach: 「this.#localPeers.delete(detach); → {}」",
+  "src/swp/server.ts:Server.attachLocal: 「this.#localPeers.add(detach); → {}」",
 ];
 
 export const CLIENT_FLOORS: Readonly<Record<string, number>> = {

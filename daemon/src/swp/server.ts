@@ -120,15 +120,10 @@ class Inbox {
     this.#queue = new OutboundQueue(limits);
   }
 
-  push(msg: ServerMessage): boolean {
+  push(msg: ServerMessage, catchUp?: boolean): boolean {
     if (this.#closed) return true;
-    if (!this.#queue.push(msg)) {
-      this.close(true);
-      return false;
-    }
-    const wake = this.#wake;
-    this.#wake = null;
-    wake?.();
+    if (!this.#queue.push(msg, catchUp)) return false;
+    this.#wake?.();
     return true;
   }
 
@@ -203,18 +198,12 @@ export class Server {
   }
 
   async attachLocal(options: LocalClientOptions): Promise<LocalPeer> {
-    options.signal?.throwIfAborted();
-    if (this.#stopped) throw new Error("Server is stopping");
     const limits = options.outboundLimits;
     if (limits !== undefined && (!Number.isSafeInteger(limits.messages) || limits.messages < 1 ||
       !Number.isSafeInteger(limits.bytes) || limits.bytes < 1)) {
       throw new Error("Local outbound limits must be positive safe integers");
     }
-    const lifecycle = new AbortController();
-    const signal = AbortSignal.any([
-      this.#stopController.signal, lifecycle.signal,
-      ...(options.signal === undefined ? [] : [options.signal]),
-    ]);
+    const signal = AbortSignal.any([this.#stopController.signal, ...(options.signal === undefined ? [] : [options.signal])]);
     const provider = this.#handshake ?? DEFAULT_HANDSHAKE;
     const hello = await whileAttached(provider.hello(), signal);
     const requested = options.character ?? null;
@@ -223,7 +212,6 @@ export class Server {
       options.thread ?? null,
     ), signal);
     signal.throwIfAborted();
-    if (this.#stopped) throw new Error("Server is stopping");
 
     const clientId = this.#nextId;
     this.#nextId += 1;
@@ -244,12 +232,10 @@ export class Server {
     const subscription = this.#events.subscribe(limits, this.#queuedFor(clientId));
     let detached = false;
     let detachment: Promise<void> | undefined;
-    let relay: Promise<void> = Promise.resolve();
     const detach = (): Promise<void> => {
       if (detachment !== undefined) return detachment;
       detached = true;
       signal.removeEventListener("abort", aborted);
-      lifecycle.abort();
       inbox.close(true);
       subscription.unsubscribe();
       this.#router.unregisterSession(clientId);
@@ -257,7 +243,6 @@ export class Server {
       detachment = (async () => {
         try {
           await this.#route({ kind: "session_disconnected", sessionId: clientId });
-          await relay;
         } finally {
           this.#localPeers.delete(detach);
         }
@@ -269,26 +254,23 @@ export class Server {
         this.#config.log?.warn?.("Local client cleanup failed", { client_id: clientId, error: String(error) });
       });
     };
-    const deliver = (msg: ServerMessage): void => {
+    const deliver = (msg: ServerMessage, catchUp?: boolean): void => {
       if (detached) return;
       const prepared = options.prepareMessage?.(msg) ?? msg;
-      if (!inbox.push(media.prepare(contentForClient(prepared, capabilities)))) {
+      if (!inbox.push(media.prepare(contentForClient(prepared, capabilities)), catchUp)) {
         aborted();
         limits?.onOverflow();
       }
     };
-    this.#router.registerSession(client, (msg) => {
-      deliver(msg);
-      return Promise.resolve();
+    this.#router.registerSession(client, async (msg, catchUp) => {
+      deliver(msg, catchUp);
     });
     this.#localPeers.add(detach);
-    signal.addEventListener("abort", aborted, { once: true });
-    deliver(historyMessage(history));
+    signal.addEventListener("abort", aborted);
+    deliver(historyMessage(history), true);
 
-    relay = (async () => {
-      for (;;) {
-        const result = await subscription.recv();
-        if (detached || result.kind === "closed") break;
+    void (async () => {
+      for (let result = await subscription.recv(); result.kind !== "closed"; result = await subscription.recv()) {
         if (result.kind === "lagged") {
           options.onLag?.(result.skipped);
           this.#config.log?.warn?.("Local client lagged on broadcast", {
@@ -298,17 +280,14 @@ export class Server {
           if (limits !== undefined) {
             aborted();
             limits.onOverflow();
-            break;
           }
-          continue;
-        }
-        if (!sessionReceives(this.#router, clientId, result.msg)) continue;
-        const message = result.msg.type === "history" && (result.msg.delta !== undefined && result.msg.delta !== null) && !capabilities.includes("history-deltas")
+        } else if (sessionReceives(this.#router, clientId, result.msg)) {
+          const message = result.msg.type === "history" && (result.msg.delta !== undefined && result.msg.delta !== null) && !capabilities.includes("history-deltas")
             ? historyMessage(await whileAttached(provider.history(result.msg.selected_character ?? null, result.msg.selected_thread ?? null), signal))
             : result.msg;
-        if (sessionReceives(this.#router, clientId, message)) deliver(message);
+          if (sessionReceives(this.#router, clientId, message)) deliver(message);
+        }
       }
-      inbox.close();
     })().catch((error: unknown) => {
       if (!detached) this.#config.log?.warn?.("Local client event relay failed", { client_id: clientId, error: String(error) });
       aborted();
