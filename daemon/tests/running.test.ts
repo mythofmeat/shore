@@ -1,15 +1,11 @@
 import { expect, test } from "bun:test";
-import { mkdtemp } from "node:fs/promises";
 
 import { runningReport } from "../src/daemon/running.ts";
-import { testTmp } from "./support/tmp.ts";
 
 const NOW = Date.UTC(2026, 10, 17, 12);
 
 test("what is running is listed oldest first, each with how many whole seconds it has run, and a start the clock hasn't reached yet counts as none", async () => {
-  const dataDir = await mkdtemp(testTmp("shore-running-"));
   const report = runningReport({
-    dataDir,
     generations: () => [{ character: "ada", thread: "ring", startedAt: NOW - 1_000 }, { character: "bo", thread: null, startedAt: NOW + 5_000 }],
     wakes: () => [{ character: "ada", startedAt: NOW - 90_500 }],
     shutdown: () => undefined,
@@ -25,10 +21,8 @@ test("what is running is listed oldest first, each with how many whole seconds i
   });
 });
 
-test("a shutdown that is waiting on the work says when it was asked for and when it gives up", async () => {
-  const dataDir = await mkdtemp(testTmp("shore-running-"));
+test("a shutdown that is waiting on the work says when it was asked for and when it gives up", () => {
   const report = runningReport({
-    dataDir,
     generations: () => [],
     wakes: () => [],
     shutdown: () => ({ requestedAt: NOW, deadline: NOW + 30_000 }),

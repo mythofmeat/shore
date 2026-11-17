@@ -1329,7 +1329,7 @@
     },
     {
       "path": "shore compact",
-      "about": "Summarize the conversation into memory and shorten the active window. The pass runs on the daemon and is shown live: its reasoning, tool calls and results. Ctrl-C only stops watching; the pass carries on",
+      "about": "Archive the older part of the conversation and shorten the active window. A reply you haven't read yet stays, with everything after it. Archived turns can be opened from the top of the thread and searched in the chat logs",
       "long_about": null,
       "hidden": false,
       "aliases": [],
@@ -1341,7 +1341,7 @@
           "long": null,
           "aliases": [],
           "short_aliases": [],
-          "help": "How many recent user turns to leave in the conversation. Everything older is folded into markdown memory. 0 keeps none of it, leaving only the prompt files and the memory index",
+          "help": "How many recent user turns to leave in the conversation. Everything older is archived. 0 keeps none of it",
           "long_help": null,
           "action": "Set",
           "required": false,
@@ -1353,56 +1353,6 @@
           "defaults": [],
           "choices": [],
           "conflicts": [
-            "watch",
-            "cancel"
-          ],
-          "env": null
-        },
-        {
-          "id": "restart",
-          "short": null,
-          "long": "restart",
-          "aliases": [],
-          "short_aliases": [],
-          "help": "Throw away a paused checkpoint and summarize from scratch. Use this when a pass stopped partway — out of quota, provider down, memory files edited since — and `shore compact` keeps reporting paused. The memory it already wrote stays; those turns get summarized again",
-          "long_help": null,
-          "action": "SetTrue",
-          "required": false,
-          "global": false,
-          "hidden": false,
-          "require_equals": false,
-          "min_values": 0,
-          "max_values": 0,
-          "defaults": [
-            "false"
-          ],
-          "choices": [],
-          "conflicts": [
-            "watch",
-            "cancel"
-          ],
-          "env": null
-        },
-        {
-          "id": "segment",
-          "short": null,
-          "long": "segment",
-          "aliases": [],
-          "short_aliases": [],
-          "help": "Write memory from an archived segment (see `shore segments`) as if it were being compacted now. The archive and the conversation are left as they are. Use it to redo a segment whose pass wrote nothing",
-          "long_help": null,
-          "action": "Set",
-          "required": false,
-          "global": false,
-          "hidden": false,
-          "require_equals": false,
-          "min_values": 1,
-          "max_values": 1,
-          "defaults": [],
-          "choices": [],
-          "conflicts": [
-            "keep_turns",
-            "restart",
             "watch",
             "cancel"
           ],
@@ -1414,7 +1364,7 @@
           "long": "watch",
           "aliases": [],
           "short_aliases": [],
-          "help": "Follow the compaction already running, whoever started it, from what it has done so far to how it ends. With none running, show how the last pass ended",
+          "help": "Show the compaction running now, if any, until it ends",
           "long_help": null,
           "action": "SetTrue",
           "required": false,
@@ -1438,7 +1388,7 @@
           "long": "cancel",
           "aliases": [],
           "short_aliases": [],
-          "help": "Stop the running compaction. It pauses with its checkpoint kept, so `shore compact` resumes it later",
+          "help": "Stop the compaction running now, if any",
           "long_help": null,
           "action": "SetTrue",
           "required": false,
@@ -6071,8 +6021,7 @@
           "defaults": [],
           "choices": [
             "all",
-            "wake",
-            "compaction"
+            "wake"
           ],
           "conflicts": [
             "chat"
@@ -6192,8 +6141,7 @@
           "defaults": [],
           "choices": [
             "all",
-            "wake",
-            "compaction"
+            "wake"
           ],
           "conflicts": [
             "chat"
@@ -6377,8 +6325,7 @@
           "defaults": [],
           "choices": [
             "all",
-            "wake",
-            "compaction"
+            "wake"
           ],
           "conflicts": [
             "chat"
@@ -6624,8 +6571,7 @@
           "defaults": [],
           "choices": [
             "all",
-            "wake",
-            "compaction"
+            "wake"
           ],
           "conflicts": [
             "chat"
@@ -10107,20 +10053,6 @@
     {
       "argv": [
         "compact",
-        "0",
-        "--restart"
-      ],
-      "mapping": {
-        "name": "compact",
-        "args": {
-          "restart": true,
-          "keep_turns": 0
-        }
-      }
-    },
-    {
-      "argv": [
-        "compact",
         "--watch"
       ],
       "mapping": {
@@ -10699,21 +10631,6 @@
         "args": {
           "name": "fixture:model",
           "background_task": "wake"
-        }
-      }
-    },
-    {
-      "argv": [
-        "model",
-        "use",
-        "fixture:model",
-        "--background=compaction"
-      ],
-      "mapping": {
-        "name": "switch_model",
-        "args": {
-          "name": "fixture:model",
-          "background_task": "compaction"
         }
       }
     },

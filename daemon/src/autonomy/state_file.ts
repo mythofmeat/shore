@@ -20,7 +20,6 @@ export interface AutonomyStateFile {
   readonly wakesWithoutUser: number;
   readonly lastUserAt: number | undefined;
   readonly forcedDormant: boolean;
-  readonly coveredTurnCount: number;
   readonly keepalive: PersistedKeepalive | undefined;
 }
 
@@ -41,7 +40,6 @@ export function encodeState(state: AutonomyStateFile): string {
       ticks_without_user: state.wakesWithoutUser,
       last_user_at: state.lastUserAt === undefined ? null : toRfc3339(state.lastUserAt),
       forced_dormant: state.forcedDormant,
-      covered_turn_count: state.coveredTurnCount,
       keepalive_model: k?.model ?? null,
       keepalive_identity: k?.identity ?? null,
       keepalive_interval_ms: k?.intervalMs ?? null,
@@ -70,13 +68,10 @@ export function decodeState(raw: string): AutonomyStateFile | undefined {
   const wakesWithoutUser = o["ticks_without_user"];
   if (typeof wakesWithoutUser !== "number") return undefined;
 
-  const coveredTurnCount = o["covered_turn_count"];
-
   return {
     wakesWithoutUser,
     lastUserAt: timeField(o["last_user_at"]),
     forcedDormant: o["forced_dormant"] === true,
-    coveredTurnCount: typeof coveredTurnCount === "number" ? coveredTurnCount : 0,
     keepalive: keepaliveField(o),
   };
 }

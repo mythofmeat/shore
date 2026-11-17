@@ -86,13 +86,12 @@ test("pending compactions are hidden and recover from either side of the active-
   store.close();
 });
 
-test("a finished compaction turns its memory claim into coverage; an aborted one releases it and leaves no stored bodies behind; either is harmless twice", async () => {
-  const dataDir = testTmp(`history-coverage-${crypto.randomUUID()}`);
+test("a finished compaction is kept, an aborted one leaves no stored bodies behind, and either is harmless twice", async () => {
+  const dataDir = testTmp(`history-pending-${crypto.randomUUID()}`);
   await mkdir(dataDir, { recursive: true });
   const path = join(dataDir, HISTORY_DB_FILE);
   const store = HistoryStore.open(path);
   const entry = { file: HISTORY_DB_FILE, compacted_at: "2026-08-13T10:01:00+10:00" };
-  const now = Date.parse("2026-08-13T00:00:00Z");
   const blobs = (): unknown => {
     const db = new Database(path, { readonly: true });
     try {
@@ -102,19 +101,16 @@ test("a finished compaction turns its memory claim into coverage; an aborted one
     }
   };
 
-  expect(store.claimMemoryCoverage("ada", "compaction", ["v1"], "kept", "pass", now, 60_000)).toEqual(["v1"]);
-  const finished = store.beginCompaction("ada", entry, [message("u1", "hello")], "before\n", "after\n", "kept");
+  const finished = store.beginCompaction("ada", entry, [message("u1", "hello")], "before\n", "after\n");
   store.finishCompaction("ada", finished);
   store.finishCompaction("ada", finished);
-  expect([...store.coveredMemoryVersions("ada", "compaction", ["v1"])]).toEqual(["v1"]);
+  expect(store.readSegment("ada", finished).map((each) => each.msg_id)).toEqual(["u1"]);
 
   const stored = blobs();
-  expect(store.claimMemoryCoverage("ada", "compaction", ["v2"], "dropped", "pass", now, 60_000)).toEqual(["v2"]);
-  const aborted = store.beginCompaction("ada", entry, [message("u2", "a body only this pass stored")], "before\n", "after\n", "dropped");
+  const aborted = store.beginCompaction("ada", entry, [message("u2", "a body only this pass stored")], "before\n", "after\n");
   store.abortCompaction("ada", aborted);
   store.abortCompaction("ada", aborted);
-  expect(store.coveredMemoryVersions("ada", "compaction", ["v2"]).size).toBe(0);
-  expect(store.claimMemoryCoverage("ada", "compaction", ["v2"], "next", "pass", now, 60_000)).toEqual(["v2"]);
+  expect(store.entries("ada").map((each) => each.idx)).toEqual([finished]);
   expect(blobs()).toEqual(stored);
   store.close();
 });

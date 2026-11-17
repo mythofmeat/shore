@@ -16,9 +16,7 @@ export async function planFor(
   settings: ArchivalPlanSettings,
 ): Promise<ArchivalPlan> {
   const loaded = await loadMessagesForCompaction(dataDir, character, thread);
-  return required(
-    await resolveArchivalPlan(dataDir, character, thread, loaded, settings),
-  );
+  return required(resolveArchivalPlan(dataDir, character, thread, loaded, settings));
 }
 
 export function jsonlOf(messages: readonly Message[]): string {
@@ -29,11 +27,7 @@ export function maybePlanOf(
   messages: readonly Message[],
   settings: ArchivalPlanSettings,
 ): ArchivalPlan | undefined {
-  return buildArchivalPlan(
-    archivalPlanInput(jsonlOf(messages)),
-    settings,
-    undefined,
-  );
+  return buildArchivalPlan(archivalPlanInput(jsonlOf(messages)), settings);
 }
 
 export function planOf(

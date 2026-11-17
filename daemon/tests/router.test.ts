@@ -459,7 +459,6 @@ interface WorldOptions {
   readonly runGeneration?: (params: GenerationParams) => Promise<void>;
   readonly dispatchCommand?: MessageHandlerDeps["dispatchCommand"];
   readonly commandChangesState?: (cmd: Command) => boolean;
-  readonly compactions?: MessageHandlerDeps["compactions"];
   readonly now?: () => number;
   readonly resolveThread?: HandlerRegistry["resolveThread"];
 }
@@ -506,7 +505,6 @@ function world(options: WorldOptions) {
     log: { error: (msg) => { logged.push(msg); } },
     ...(options.now === undefined ? {} : { now: options.now }),
     ...(options.commandChangesState === undefined ? {} : { commandChangesState: options.commandChangesState }),
-    ...(options.compactions === undefined ? {} : { compactions: options.compactions }),
   });
   const metaOf = (sessionId: number, rid: string | null, kind: RequestMeta["kind"] = "message"): RequestMeta => {
     const client = required(router.client(sessionId));
@@ -927,38 +925,6 @@ describe("replies", () => {
   });
 });
 
-describe("compactions", () => {
-  test("a compaction's progress reaches the sessions on that conversation and one that arrives during it, until the handler closes", async () => {
-    let listener: ((character: string, thread: string, frame: ServerMessage) => void) | undefined;
-    const progress: ServerMessage = { type: "phase", phase: "compacting" };
-    const running = new Map<string, { thread: string; frame: ServerMessage }>([["ada", { thread: "side", frame: progress }]]);
-    const h = world({
-      sessions: [{ id: 1, thread: "side" }, { id: 2 }],
-      compactions: {
-        observe: (observer) => { listener = observer; return () => { listener = undefined; }; },
-        running: (character) => running.get(character),
-      },
-    });
-    listener?.("ada", "side", progress);
-    await settle();
-    expect(h.frames.get(1)).toEqual([progress]);
-    expect(h.frames.get(2)).toEqual([]);
-
-    h.join({ id: 3, thread: "side" });
-    h.join({ id: 4 });
-    await h.handler.handleControl({ kind: "session_connected", sessionId: 3 });
-    await h.handler.handleControl({ kind: "session_connected", sessionId: 4 });
-    expect(h.frames.get(3)).toEqual([progress]);
-    expect(h.frames.get(4)).toEqual([]);
-
-    h.handler.close();
-    expect(listener).toBeUndefined();
-    h.router.setSelectedThread(4, "side");
-    h.router.reportMove(4);
-    expect(h.frames.get(4)).toEqual([]);
-  });
-});
-
 function stoppableDispatch() {
   const gated = gatedDispatch();
   const dispatch = async (cmd: Command, requestMeta: RequestMeta, signal: AbortSignal): Promise<ServerMessage> => {
@@ -1037,19 +1003,15 @@ describe("commands", () => {
   });
 
   test("connections, disconnections and stops can be queued like anything else", async () => {
-    let listener: ((character: string, thread: string, frame: ServerMessage) => void) | undefined;
-    const progress: ServerMessage = { type: "phase", phase: "compacting" };
-    const h = world({
-      sessions: [{ id: 1, thread: "main" }],
-      compactions: { observe: (observer) => { listener = observer; return () => { listener = undefined; }; }, running: () => ({ thread: "main", frame: progress }) },
-    });
-    expect(listener).toBeDefined();
-    h.handler.enqueueRouted({ kind: "session_connected", sessionId: 1 });
+    const h = world({ sessions: [{ id: 1, thread: "main" }] });
     await h.say(1, "r1");
+    h.join({ id: 2, thread: "main" });
+    h.handler.enqueueRouted({ kind: "session_connected", sessionId: 2 });
     h.handler.enqueueRouted({ kind: "engine", msg: { type: "cancel" }, meta: h.metaOf(1, null, "cancel") });
     h.handler.enqueueRouted({ kind: "session_disconnected", sessionId: 1 });
     await h.handler.drain();
-    expect(h.frames.get(1)).toEqual([progress, cancelledEnd("r1")]);
+    expect(h.frames.get(1)).toEqual([cancelledEnd("r1")]);
+    expect(h.frames.get(2)).toEqual([cancelledEnd("r1")]);
   });
 
   test("a stopped command tells a client without request tracking that it was cancelled", async () => {

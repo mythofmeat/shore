@@ -70,8 +70,7 @@ CREATE TABLE IF NOT EXISTS history_pending (
     character  TEXT PRIMARY KEY,
     segment    INTEGER NOT NULL,
     before_hash TEXT NOT NULL,
-    after_hash  TEXT NOT NULL,
-    coverage_claim TEXT
+    after_hash  TEXT NOT NULL
 );
 
 CREATE TABLE IF NOT EXISTS history_messages (
@@ -125,20 +124,7 @@ CREATE TABLE IF NOT EXISTS history_thread_forks (
 CREATE INDEX IF NOT EXISTS idx_history_thread_forks_child
     ON history_thread_forks (character, child);
 
-CREATE TABLE IF NOT EXISTS memory_coverage (
-    character  TEXT    NOT NULL,
-    path       TEXT    NOT NULL,
-    version    TEXT    NOT NULL,
-    state      TEXT    NOT NULL,
-    unit       TEXT,
-    claim      TEXT,
-    claimed_at INTEGER NOT NULL DEFAULT 0,
-    updated_at TEXT    NOT NULL,
-    PRIMARY KEY (character, path, version)
-);
-
-CREATE INDEX IF NOT EXISTS idx_memory_coverage_claim
-    ON memory_coverage (character, path, state, claimed_at);
+DROP TABLE IF EXISTS memory_coverage;
 
 DROP TABLE IF EXISTS history_character_stats;
 
@@ -178,8 +164,6 @@ export interface ArchivedCopy {
   segment: number;
   excluded: boolean;
 }
-
-export type MemoryPath = "compaction";
 
 export interface ThreadForkRecord {
   fork_id: string;
@@ -281,7 +265,6 @@ export class HistoryStore {
     messages: Message[],
     activeBefore: string,
     activeAfter: string,
-    coverageClaim?: string,
   ): number {
     return this.#db.transaction(() => {
       const pending = this.#db
@@ -295,55 +278,31 @@ export class HistoryStore {
       this.#replaceSegment(character, idx, entry, messages, false);
       this.#db
         .query(
-          `INSERT INTO history_pending (character, segment, before_hash, after_hash, coverage_claim)
-           VALUES (?1, ?2, ?3, ?4, ?5)`,
+          `INSERT INTO history_pending (character, segment, before_hash, after_hash)
+           VALUES (?1, ?2, ?3, ?4)`,
         )
-        .run(character, idx, textHash(activeBefore), textHash(activeAfter), coverageClaim ?? null);
+        .run(character, idx, textHash(activeBefore), textHash(activeAfter));
       return idx;
     })();
   }
 
   finishCompaction(character: string, idx: number): void {
     this.#db.transaction(() => {
-      const pending = this.#db
-        .query(
-          "SELECT coverage_claim FROM history_pending WHERE character = ?1 AND segment = ?2",
-        )
-        .get(character, idx) as { coverage_claim: string | null } | null;
       this.#db
         .query("UPDATE history_segments SET committed = 1 WHERE character = ?1 AND idx = ?2")
         .run(character, idx);
       this.#db
         .query("DELETE FROM history_pending WHERE character = ?1 AND segment = ?2")
         .run(character, idx);
-      if (pending?.coverage_claim !== null && pending?.coverage_claim !== undefined) {
-        this.commitMemoryCoverage(
-          characterOfArchiveKey(character),
-          "compaction",
-          pending.coverage_claim,
-        );
-      }
     })();
   }
 
   abortCompaction(character: string, idx: number): void {
     this.#db.transaction(() => {
-      const pending = this.#db
-        .query(
-          "SELECT coverage_claim FROM history_pending WHERE character = ?1 AND segment = ?2",
-        )
-        .get(character, idx) as { coverage_claim: string | null } | null;
       this.#deleteSegment(character, idx);
       this.#db
         .query("DELETE FROM history_pending WHERE character = ?1 AND segment = ?2")
         .run(character, idx);
-      if (pending?.coverage_claim !== null && pending?.coverage_claim !== undefined) {
-        this.releaseMemoryCoverage(
-          characterOfArchiveKey(character),
-          "compaction",
-          pending.coverage_claim,
-        );
-      }
       this.#collectGarbage();
     })();
   }
@@ -564,93 +523,6 @@ export class HistoryStore {
     this.#db
       .query("DELETE FROM history_thread_forks WHERE character = ?1 AND fork_id = ?2")
       .run(character, forkId);
-  }
-
-  claimMemoryCoverage(
-    character: string,
-    path: MemoryPath,
-    versions: readonly string[],
-    claim: string,
-    unit: string,
-    nowMs: number,
-    leaseMs: number,
-    stamp = new Date(nowMs).toISOString(),
-  ): string[] {
-    if (versions.length === 0) return [];
-    return this.#db.transaction(() => {
-      this.expireMemoryClaims(character, path, nowMs - leaseMs);
-      const insert = this.#db.query(
-        `INSERT OR IGNORE INTO memory_coverage
-             (character, path, version, state, unit, claim, claimed_at, updated_at)
-         VALUES (?1, ?2, ?3, 'claimed', ?4, ?5, ?6, ?7)`,
-      );
-      const wanted = [...new Set(versions)];
-      for (const version of wanted) {
-        insert.run(character, path, version, unit, claim, nowMs, stamp);
-      }
-      const marks = wanted.map((_, index) => `?${String(index + 4)}`).join(", ");
-      const rows = this.#db
-        .query(
-          `SELECT version FROM memory_coverage
-           WHERE character = ?1 AND path = ?2 AND claim = ?3 AND state = 'claimed'
-             AND version IN (${marks})`,
-        )
-        .all(character, path, claim, ...wanted) as { version: string }[];
-      const held = new Set(rows.map((row) => row.version));
-      return wanted.filter((version) => held.has(version));
-    })();
-  }
-
-  coveredMemoryVersions(
-    character: string,
-    path: MemoryPath,
-    versions: readonly string[],
-  ): Set<string> {
-    const wanted = [...new Set(versions)];
-    if (wanted.length === 0) return new Set();
-    const marks = wanted.map((_, index) => `?${String(index + 3)}`).join(", ");
-    const rows = this.#db
-      .query(
-        `SELECT version FROM memory_coverage
-         WHERE character = ?1 AND path = ?2 AND state = 'covered' AND version IN (${marks})`,
-      )
-      .all(character, path, ...wanted) as { version: string }[];
-    return new Set(rows.map((row) => row.version));
-  }
-
-  commitMemoryCoverage(
-    character: string,
-    path: MemoryPath,
-    claim: string,
-    unit?: string,
-    stamp?: string,
-  ): number {
-    return this.#db
-      .query(
-        `UPDATE memory_coverage
-         SET state = 'covered', claim = NULL, claimed_at = 0, updated_at = ?4,
-             unit = CASE WHEN ?5 IS NULL THEN unit ELSE ?5 END
-         WHERE character = ?1 AND path = ?2 AND claim = ?3 AND state = 'claimed'`,
-      )
-      .run(character, path, claim, stamp ?? new Date().toISOString(), unit ?? null).changes;
-  }
-
-  releaseMemoryCoverage(character: string, path: MemoryPath, claim: string): number {
-    return this.#db
-      .query(
-        `DELETE FROM memory_coverage
-         WHERE character = ?1 AND path = ?2 AND claim = ?3 AND state = 'claimed'`,
-      )
-      .run(character, path, claim).changes;
-  }
-
-  expireMemoryClaims(character: string, path: MemoryPath, olderThanMs: number): number {
-    return this.#db
-      .query(
-        `DELETE FROM memory_coverage
-         WHERE character = ?1 AND path = ?2 AND state = 'claimed' AND claimed_at < ?3`,
-      )
-      .run(character, path, olderThanMs).changes;
   }
 
   archivedCopies(character: string, msgIds: readonly string[]): ArchivedCopy[] {
@@ -1078,11 +950,6 @@ export class HistoryStore {
                      UNION SELECT blocks_hash FROM history_alternatives
                    )`);
   }
-}
-
-export function characterOfArchiveKey(archiveKey: string): string {
-  const slash = archiveKey.indexOf("/");
-  return slash === -1 ? archiveKey : archiveKey.slice(0, slash);
 }
 
 function imagesColumn(images: StoredImageRef[] | undefined): string | null {

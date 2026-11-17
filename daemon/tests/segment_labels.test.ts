@@ -237,7 +237,6 @@ test("a conversation compacted for being idle is labelled, and one archived afte
     setSystemTime(new Date(start + HOUR));
     await runtime.autonomy.runDue();
     await settled();
-    expect(of("compaction")).toHaveLength(1);
     expect(segments()).toEqual([{ idx: 0, label: "Lighting the lamp" }]);
     expect(of("label")).toHaveLength(1);
 

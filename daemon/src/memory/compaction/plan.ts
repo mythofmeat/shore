@@ -5,13 +5,7 @@ import { required } from "../../util/required.ts";
 import { normalizeMessage } from "../../engine/message_store.ts";
 import { firstUnreadReply } from "../../engine/threads.ts";
 import type { Message } from "../../engine/types.ts";
-import { versionsIn } from "../coverage.ts";
 import { rustLines, rustTrim } from "../lines.ts";
-import {
-  hashCompactionSource,
-  loadCompactionCheckpoint,
-  type CompactionCheckpoint,
-} from "./checkpoint.ts";
 import type { ConversationMessage } from "./types.ts";
 
 const isRealUserTurn = (msg: ConversationMessage): boolean =>
@@ -73,7 +67,6 @@ export interface ArchivalPlanSettings {
   keepRecentTurns: number;
   keepTurnsOverride?: number;
   retainTrailingAutonomous?: boolean;
-  restart?: boolean;
 }
 
 declare const resolvedByPlanner: unique symbol;
@@ -81,15 +74,11 @@ declare const resolvedByPlanner: unique symbol;
 export interface ArchivalPlan {
   readonly [resolvedByPlanner]: true;
   sourceContent: string;
-  sourceHash: string;
   messages: readonly Message[];
   conversation: readonly ConversationMessage[];
   splitAt: number;
   archival: readonly Message[];
-  versions: readonly string[];
   keepTurns: number;
-  checkpoint?: CompactionCheckpoint;
-  resumed: boolean;
 }
 
 function messagesFromJsonl(content: string): Message[] {
@@ -119,23 +108,10 @@ export function conversationView(messages: readonly Message[]): ConversationMess
   }));
 }
 
-function resumesCheckpoint(
-  checkpoint: CompactionCheckpoint | undefined,
-  input: ArchivalPlanInput,
-  splitAt: number,
-  settings: ArchivalPlanSettings,
-): checkpoint is CompactionCheckpoint {
-  if (checkpoint === undefined || settings.restart === true) return false;
-  if (!archivedRangeIsCurrent(checkpoint, input.rawContent)) return false;
-  if (settings.keepTurnsOverride !== undefined && checkpoint.splitAt !== splitAt) return false;
-  return input.firstUnread === undefined || checkpoint.splitAt <= input.firstUnread;
-}
-
 export function archivedRangeIsCurrent(
-  source: { sourceContent: string; sourceHash: string; splitAt: number },
+  source: { sourceContent: string; splitAt: number },
   liveContent: string,
 ): boolean {
-  if (hashCompactionSource(source.sourceContent) !== source.sourceHash) return false;
   if (liveContent.startsWith(source.sourceContent)) return true;
   const planned = messagesFromJsonl(source.sourceContent).slice(0, source.splitAt);
   const live = messagesFromJsonl(liveContent);
@@ -151,18 +127,15 @@ function stableJson(value: unknown): string {
       : field);
 }
 
-export async function resolveArchivalPlan(
+export function resolveArchivalPlan(
   dataDir: string,
   character: string,
   thread: string,
   input: ArchivalPlanInput,
   settings: ArchivalPlanSettings,
-): Promise<ArchivalPlan | undefined> {
-  const checkpoint = await loadCompactionCheckpoint(dataDir, character, thread).catch(
-    () => undefined,
-  );
+): ArchivalPlan | undefined {
   const firstUnread = firstUnreadReply(dataDir, character, thread, input.store.messages());
-  return buildArchivalPlan(firstUnread === undefined ? input : { ...input, firstUnread }, settings, checkpoint);
+  return buildArchivalPlan(firstUnread === undefined ? input : { ...input, firstUnread }, settings);
 }
 
 export function archivalPlanInput(rawContent: string): ArchivalPlanInput {
@@ -177,35 +150,24 @@ export function archivalPlanInput(rawContent: string): ArchivalPlanInput {
 export function buildArchivalPlan(
   input: ArchivalPlanInput,
   settings: ArchivalPlanSettings,
-  checkpoint: CompactionCheckpoint | undefined,
 ): ArchivalPlan | undefined {
   const keepTurns = settings.keepTurnsOverride ?? settings.keepRecentTurns;
-  const liveSplitAt = archiveSplitIndex(
+  const messages = [...input.store.messages()];
+  const splitAt = Math.min(archiveSplitIndex(
     [...input.messages],
     keepTurns,
     settings.retainTrailingAutonomous ?? false,
     input.firstUnread,
-  );
-
-  const resumed = resumesCheckpoint(checkpoint, input, liveSplitAt, settings);
-
-  const sourceContent = resumed ? checkpoint.sourceContent : input.rawContent;
-  const messages = resumed ? messagesFromJsonl(sourceContent) : [...input.store.messages()];
-  const splitAt = Math.min(resumed ? checkpoint.splitAt : liveSplitAt, messages.length);
+  ), messages.length);
   if (splitAt === 0) return undefined;
 
-  const archival = messages.slice(0, splitAt);
   const plan: Omit<ArchivalPlan, typeof resolvedByPlanner> = {
-    sourceContent,
-    sourceHash: hashCompactionSource(sourceContent),
+    sourceContent: input.rawContent,
     messages,
     conversation: conversationView(messages),
     splitAt,
-    archival,
-    versions: versionsIn(archival),
+    archival: messages.slice(0, splitAt),
     keepTurns,
-    ...(checkpoint === undefined ? {} : { checkpoint }),
-    resumed,
   };
   return plan as ArchivalPlan;
 }

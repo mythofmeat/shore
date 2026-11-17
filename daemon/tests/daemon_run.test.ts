@@ -19,16 +19,14 @@ import { DATA_DIRECTORY_LEASE_FILE } from "../src/daemon/data_directory_lease.ts
 import type { InstanceInfo } from "../src/daemon/instances.ts";
 import type { SidecarProvider, SidecarRequest } from "../src/llm/types.ts";
 import { threadActivityNow } from "../src/engine/threads.ts";
-import { loadCompactionCheckpoint, saveCompactionCheckpoint } from "../src/memory/compaction/checkpoint.ts";
 import { shoreLog } from "../src/log.ts";
 import { CharacterWorkspace } from "../src/tools/character_workspace.ts";
-import { compactionFixture } from "./support/memory_fixture.ts";
 import { decodeState, STATE_FILENAME } from "../src/autonomy/state_file.ts";
 import { characterDataDir } from "../src/config/dirs.ts";
 import { readCharacterState } from "../src/storage/store.ts";
 import * as matrixModule from "../src/connections/matrix/supervise.ts";
 import * as runtimeModule from "../src/runtime.ts";
-import * as depsModule from "../src/handler/deps.ts";
+import * as turnModule from "../src/handler/turn.ts";
 import { loadForCharacter } from "../src/config/preferences.ts";
 import { threadChatModel } from "../src/engine/threads.ts";
 import { outcomeOf } from "./support/outcome.ts";
@@ -653,66 +651,6 @@ describe("going down", () => {
     }
   });
 
-  test("a compaction a shutdown paused carries on from its checkpoint when the daemon starts again", async () => {
-    const place = await layout(`${MODEL_CONFIG}[tools]\nenabled = ["bash"]\n`);
-    const compactions: string[] = [];
-    const chat = scriptedProvider("noted");
-    const stalled = {
-      async *stream(req: SidecarRequest, signal?: AbortSignal) {
-        if (req.context?.call_type !== "compaction") { yield* chat.stream(req, signal); return; }
-        compactions.push("stalled");
-        yield { type: "start", model: req.model };
-        await new Promise<void>((resolve) => { if (signal?.aborted === true) resolve(); else signal?.addEventListener("abort", () => resolve(), { once: true }); });
-        throw new Error("stopped");
-      },
-    } as unknown as SidecarProvider;
-    const memory = compactionFixture();
-    const finishing = {
-      async *stream(req: SidecarRequest, signal?: AbortSignal) {
-        if (req.context?.call_type !== "compaction") { yield* chat.stream(req, signal); return; }
-        compactions.push("resumed");
-        yield* memory(req, signal);
-      },
-    } as unknown as SidecarProvider;
-
-    const first = await start(place, [], { anthropic: stalled });
-    const client = await Client.open(first.port, "ada");
-    await client.awaitFrame("hello");
-    for (const text of ["one", "two", "three"]) {
-      client.frames.length = 0;
-      client.send({ type: "message", text, stream: true, images: [] });
-      await client.awaitFrame("new_message");
-      await client.awaitFrame("stream_end");
-    }
-    client.send({ type: "command", name: "compact", args: { keep_turns: 1 } });
-    for (let i = 0; compactions.length === 0; i += 1) {
-      if (i > 500) throw new Error("the compaction never reached the provider");
-      await Bun.sleep(10);
-    }
-    client.close();
-    await first.shutdown();
-    await first.done;
-    running.length = 0;
-
-    const second = await start(place, [], { anthropic: finishing });
-    const watcher = await Client.open(second.port, "ada");
-    try {
-      await watcher.awaitFrame("hello");
-      for (let i = 0; ; i += 1) {
-        watcher.frames.length = 0;
-        watcher.send({ type: "command", name: "compact_watch", args: {} });
-        const output = await watcher.awaitFrame("command_output");
-        const pass = (output["data"] as { pass: { report: { status: string } | null } | null }).pass;
-        if (pass?.report?.status === "compacted") break;
-        if (i > 200) throw new Error(`the paused compaction never finished: ${JSON.stringify(output)}`);
-        await Bun.sleep(25);
-      }
-      expect([...new Set(compactions)]).toEqual(["stalled", "resumed"]);
-    } finally {
-      watcher.close();
-    }
-  });
-
   test("web UI settings a browser saved are there when the daemon starts again", async () => {
     const place = await layout('[daemon.web]\nenabled = true\nbind_addr = "127.0.0.1:0"\n');
     const page = async (daemon: RunningDaemon, save?: Record<string, string>) => {
@@ -752,26 +690,6 @@ describe("going down", () => {
 const IDLE_CONFIG = `${MODEL_CONFIG}[tools]\nenabled = ["bash"]\n[triggers]\nenabled = true\n[compaction]\nidle_after = "1s"\nmin_turns = 2\nkeep_recent_turns = 0\n`;
 const PAST_IDLE_MS = 1_100;
 
-function compacting(onPass: (signal?: AbortSignal) => Promise<void> = () => Promise.resolve()): SidecarProvider {
-  const chat = scriptedProvider("noted");
-  const memory = compactionFixture();
-  return {
-    async *stream(req: SidecarRequest, signal?: AbortSignal) {
-      if (req.context?.call_type !== "compaction") { yield* chat.stream(req, signal); return; }
-      await onPass(signal);
-      yield* memory(req, signal);
-    },
-  } as unknown as SidecarProvider;
-}
-
-function stalling(reached: () => void): SidecarProvider {
-  return compacting(async (signal) => {
-    reached();
-    await new Promise<void>((resolve) => { if (signal?.aborted === true) resolve(); else signal?.addEventListener("abort", () => resolve(), { once: true }); });
-    throw new Error("stopped");
-  });
-}
-
 async function talk(client: Client, texts: readonly string[]): Promise<void> {
   for (const text of texts) {
     client.frames.length = 0;
@@ -796,7 +714,7 @@ describe("a daemon that stays up", () => {
 
   test("a conversation left idle after a command and its last reply compacts without a restart, and the chat log index takes in what was archived", async () => {
     const place = await layout(IDLE_CONFIG);
-    const daemon = await start(place, [], { anthropic: compacting() });
+    const daemon = await start(place, [], { anthropic: scriptedProvider("noted") });
     const client = await Client.open(daemon.port, "ada");
     await client.awaitFrame("hello");
     await command(client, "list_threads", {});
@@ -854,7 +772,7 @@ describe("coming back up", () => {
 
   test("a conversation left idle compacts once the daemon is back, without anyone saying anything", async () => {
     const place = await layout(IDLE_CONFIG);
-    const provider = compacting();
+    const provider = scriptedProvider("noted");
     const first = await start(place, [], { anthropic: provider });
     const client = await Client.open(first.port, "ada");
     await client.awaitFrame("hello");
@@ -867,66 +785,6 @@ describe("coming back up", () => {
     await start(place, [], { anthropic: provider });
 
     await until(() => threadActivityNow(data, "ada", "main").turns === 0, "the idle conversation compacting");
-  });
-
-  test("a daemon that died compacting waits out the idle time before trying again", async () => {
-    const place = await layout(IDLE_CONFIG);
-    let stalled = false;
-    const first = await start(place, [], { anthropic: stalling(() => { stalled = true; }) });
-    const client = await Client.open(first.port, "ada");
-    await client.awaitFrame("hello");
-    await talk(client, ["one", "two", "three"]);
-    client.send({ type: "command", name: "compact", args: { keep_turns: 0 } });
-    await until(() => stalled, "the compaction reaching the provider");
-    client.close();
-    const data = first.runtime.config.dirs.data;
-    await shutDown(first);
-    const checkpoint = required(await loadCompactionCheckpoint(data, "ada", "main"));
-    checkpoint.state = "running";
-    delete checkpoint.resumeOnStart;
-    await saveCompactionCheckpoint(data, checkpoint, "main");
-    await Bun.sleep(PAST_IDLE_MS);
-
-    let passes = 0;
-    const second = await start(place, [], { anthropic: compacting(() => { passes += 1; return Promise.resolve(); }) });
-    await second.settled;
-    await Bun.sleep(PAST_IDLE_MS);
-    expect(passes).toBe(0);
-
-    await second.runtime.autonomy.runDue();
-    expect(passes).toBeGreaterThan(0);
-    expect(threadActivityNow(data, "ada", "main").turns).toBe(0);
-  });
-
-  test("a side thread's compaction resumed at startup finishes first, then the idle home thread compacts", async () => {
-    const place = await layout(IDLE_CONFIG);
-    let stalled = false;
-    const first = await start(place, [], { anthropic: stalling(() => { stalled = true; }) });
-    const client = await Client.open(first.port, "ada");
-    await client.awaitFrame("hello");
-    await talk(client, ["one", "two", "three"]);
-    await command(client, "create_thread", { name: "side" });
-    await command(client, "switch_thread", { name: "side" });
-    await talk(client, ["four", "five", "six"]);
-    client.send({ type: "command", name: "compact", args: { keep_turns: 0 } });
-    await until(() => stalled, "the side thread's compaction reaching the provider");
-    client.close();
-    const data = first.runtime.config.dirs.data;
-    await shutDown(first);
-    await Bun.sleep(PAST_IDLE_MS);
-
-    const resuming = Promise.withResolvers<void>();
-    let passes = 0;
-    const second = await start(place, [], { anthropic: compacting(async () => { passes += 1; await resuming.promise; }) });
-    await until(() => passes > 0, "the side thread's compaction resuming");
-    await second.runtime.autonomy.runDue();
-    expect(passes).toBe(1);
-    expect(threadActivityNow(data, "ada", "main").turns).toBe(3);
-
-    resuming.resolve();
-    await second.settled;
-    await until(() => threadActivityNow(data, "ada", "side").turns === 0, "the side thread compacting");
-    await until(() => threadActivityNow(data, "ada", "main").turns === 0, "the idle home thread compacting");
   });
 });
 
@@ -1237,7 +1095,7 @@ describe("settling after startup", () => {
   async function settling(stopFirst: boolean): Promise<number> {
     const place = await layout();
     const { promise: held, resolve: release } = Promise.withResolvers<void>();
-    const resume = spyOn(depsModule, "resumeStoppedCompactions").mockImplementation(async () => { await held; });
+    const seeding = spyOn(turnModule, "ensureAndBackfillAutonomy").mockImplementation(async () => { await held; });
     try {
       const daemon = await start(place);
       const looks = spyOn(daemon.runtime.autonomy, "tick");
@@ -1246,7 +1104,7 @@ describe("settling after startup", () => {
       await daemon.settled;
       return looks.mock.calls.length;
     } finally {
-      resume.mockRestore();
+      seeding.mockRestore();
     }
   }
 

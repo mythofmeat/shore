@@ -2081,7 +2081,7 @@ mod tests {
                     "model",
                     "use",
                     "haiku",
-                    "--background=compaction"
+                    "--background=wake"
                 ],
                 None
             ),

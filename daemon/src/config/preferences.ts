@@ -616,7 +616,7 @@ export interface LoadedConfigView {
 
 export type BackgroundTask = Exclude<import("../protocol/BackgroundModelTarget.ts").BackgroundModelTarget, "all">;
 
-export const BACKGROUND_TASKS: readonly BackgroundTask[] = ["wake", "compaction"];
+export const BACKGROUND_TASKS: readonly BackgroundTask[] = ["wake"];
 
 export function configView(config: LoadedConfigView): LoadedConfigView {
   return { models: config.models, providers: config.providers, dirs: config.dirs, app: config.app };

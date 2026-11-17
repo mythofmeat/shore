@@ -187,15 +187,13 @@ export const commandOperations: OperationRegistry<CommandOperationContext> = {
     return args.describe === true ? describeTool(engine.characterName, toolContext, args) : runTool(engine.characterName, toolContext, args);
   }),
   compact: register("compact", { category: "Memory", scope: "character", prerequisites: ["compaction"], effects: ["history_write", "workspace_write", "provider_call"], confirmation: "archive", label: "Compact active context", fields: {
-    dry_run: { label: "Preview only", hint: "Uses the provider to preview memory writes without archiving the conversation" },
-    restart: { label: "Restart paused work", hint: "Discard the paused checkpoint and summarize again; already written memory files remain" },
+    dry_run: { label: "Preview only", hint: "Shows how many turns would be archived without archiving them" },
     keep_turns: { label: "Retain recent turns", hint: "Zero retains no recent user turns; omit for configured retention" },
-    segment: { label: "Archived segment", hint: "Write memory from this archived segment again; the archive and the conversation stay as they are" },
-  }, policies: [{ condition: { kind: "equals", field: "dry_run", value: true }, effects: ["read", "provider_call"], confirmation: "none" }] }, (context, args) => {
+  }, policies: [{ condition: { kind: "equals", field: "dry_run", value: true }, effects: ["read"], confirmation: "none" }] }, (context, args) => {
     const engine = engineOf(context);
     const compaction = context.deps.compaction;
     if (compaction === undefined) throw internalError("compact is not available in this build");
-    return compact(engine, { ...compaction, config: context.session.config, autonomy: context.deps.autonomy, run: { ...compaction.run, ...(context.session.signal === undefined ? {} : { signal: context.session.signal }), ...(context.session.emit === undefined ? {} : { emit: context.session.emit }) } }, args);
+    return compact(engine, { ...compaction, config: context.session.config, autonomy: context.deps.autonomy }, args);
   }),
   compact_watch: register("compact_watch", { category: "Memory", scope: "character", prerequisites: ["compaction"], effects: ["read"], confirmation: "none", label: "Watch the running compaction", fields: {} },
     (context) => watchCompaction(engineOf(context).characterName, { config: context.session.config, emit: context.session.emit, signal: context.session.signal })),
@@ -216,7 +214,7 @@ export const commandOperations: OperationRegistry<CommandOperationContext> = {
   ] }, (context, args) => {
     const compaction = context.deps.compaction;
     return segments(context.session.dataDir, engineOf(context).characterName, engineOf(context).thread, args, context.deps.historyIndex,
-      compaction?.label === undefined ? undefined : { ...compaction.run, generate: compaction.label, config: context.session.config });
+      compaction?.label === undefined ? undefined : { ...compaction.label, config: context.session.config });
   }),
   clear: register("clear", { category: "Memory", scope: "character", prerequisites: [], effects: ["history_write"], confirmation: "archive", label: "Clear active context", fields: {
     exclude: { label: "Exclude from history search", hint: "The archived segment stays inspectable and can be included again" },

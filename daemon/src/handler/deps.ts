@@ -4,7 +4,7 @@ import { onSegmentArchive } from "../memory/compaction/archive.ts";
 import { SegmentLabels } from "../memory/compaction/label.ts";
 import { shoreLog } from "../log.ts";
 
-import { compactionGenerate } from "../autonomy/in_process.ts";
+import { labelGenerate } from "../autonomy/in_process.ts";
 import type { InvalidationReason, LastRequestCache } from "../cache/last_request.ts";
 import type { TurnAutonomyBridge } from "../autonomy/registration.ts";
 import { CharacterError, type CharacterRegistry } from "../characters.ts";
@@ -37,12 +37,6 @@ import type { Command } from "../protocol/Command.ts";
 import type { OperationDescriptor } from "../protocol/OperationDescriptor.ts";
 import type { RunningStatusReport } from "../protocol/RunningStatusReport.ts";
 import type { ServerMessage } from "../protocol/ServerMessage.ts";
-import type { CompactionWatchResult } from "../protocol/CompactionWatchResult.ts";
-import { observePasses, runningPass } from "../memory/compaction/activity.ts";
-import { compactLater, queuedCompactionsEnded } from "../memory/compaction/background.ts";
-import { resumesOnStart } from "../memory/compaction/checkpoint.ts";
-import { compactAfterTurn } from "./turn.ts";
-import { passEnd } from "../commands/compact.ts";
 import { commandCatalogue } from "../commands/registry.ts";
 import { changesState, operationPolicy } from "../operations/policy.ts";
 import {
@@ -151,8 +145,8 @@ export function turnAutonomy(
     onCompactionComplete: (character, retained) => {
       bridge.onCompactionComplete(character, retained);
     },
-    onCompactionFailed: (character, retryAt) => {
-      bridge.onCompactionFailed(character, retryAt);
+    onCompactionFailed: (character) => {
+      bridge.onCompactionFailed(character);
     },
     notifyAssistantMessage: (character, turnCount) => {
       bridge.onAssistantMessage(character, turnCount);
@@ -208,14 +202,8 @@ export function chatCompactionRunner(a: GenerationAssembly): GenerationDeps["com
   const { runtime } = a;
   const runner = compactionRunner({
     ...(a.env === undefined ? {} : { env: a.env }),
-    generate: compactionGenerate({
-      providers: a.providers,
-      config: runtime.config,
-      ...(a.env === undefined ? {} : { env: a.env }),
-    }),
     cache: runtime.cache,
     rebuild: { mcpRegistry: runtime.mcp.current },
-    tools: runtimeToolDeps(a),
   });
   return {
     ...runner,
@@ -223,40 +211,19 @@ export function chatCompactionRunner(a: GenerationAssembly): GenerationDeps["com
   };
 }
 
-const SIDE_THREAD_COMPACTION = {
-  autonomy: { shouldCompactNow: () => false, onCompactionComplete: () => {}, onCompactionFailed: () => {} },
-};
-
 export function labelNewSegments(a: GenerationAssembly): { stop: () => void; settled: () => Promise<void> } {
   const { runtime } = a;
   const labels = new SegmentLabels(() => ({
     config: runtime.registry.globalConfig(),
-    generate: compactionGenerate({
+    generate: labelGenerate({
       providers: a.providers,
       config: runtime.config,
       ...(a.env === undefined ? {} : { env: a.env }),
-    }, { callType: "label" }),
+    }),
     tools: runtimeToolDeps(a),
     ...(a.env === undefined ? {} : { env: a.env }),
   }));
   return { stop: onSegmentArchive(join(runtime.config.dirs.data, HISTORY_DB_FILE), labels.hook), settled: () => labels.settled() };
-}
-
-export async function resumeStoppedCompactions(a: GenerationAssembly): Promise<void> {
-  const { runtime } = a;
-  const dataDir = runtime.config.dirs.data;
-  const runner = chatCompactionRunner(a);
-  const characters = runtime.registry.availableCharacters();
-  for (const character of characters) {
-    const home = runtime.registry.homeThread(character);
-    for (const { id: thread } of runtime.registry.listThreads(character)) {
-      if (!await resumesOnStart(dataDir, character, thread)) continue;
-      shoreLog.info(`shore: resuming the compaction of ${character}/${thread} that the last shutdown paused`);
-      const ctx = thread === home ? a : SIDE_THREAD_COMPACTION;
-      compactLater(dataDir, character, thread, async () => await compactAfterTurn(ctx, character, runtime.registry.effectiveConfig(character), thread, runner));
-    }
-  }
-  await Promise.all(characters.map(async (character) => { await queuedCompactionsEnded(dataDir, character); }));
 }
 
 export function usageBudgetWarnings(
@@ -345,7 +312,6 @@ export function buildMessageHandlerDeps(a: HandlerAssembly): MessageHandlerDeps 
     registry: handlerRegistry(a.runtime.registry),
     commandChangesState,
     commandOnlyReads,
-    compactions: compactionViewers(a.runtime.config.dirs.data, a.emitEvent),
     notifier: handlerNotifier(a.runtime.notifier),
     dispatchCommand: async (command, meta, signal) => {
       const run = async () => {
@@ -701,20 +667,15 @@ function commandDeps(a: CommandAssembly): CommandDeps {
       workspace: (character) => characterWorkspace(runtime.registry.globalConfig(), character, { fresh: true }),
     },
     compaction: {
-      run: {
+      label: {
         ...(a.env === undefined ? {} : { env: a.env }),
-        generate: compactionGenerate({
+        generate: labelGenerate({
           providers: a.providers,
           config: runtime.config,
           ...(a.env === undefined ? {} : { env: a.env }),
         }, { foreground: true }),
         tools: runtimeToolDeps(a),
       },
-      label: compactionGenerate({
-        providers: a.providers,
-        config: runtime.config,
-        ...(a.env === undefined ? {} : { env: a.env }),
-      }, { foreground: true, callType: "label" }),
       repoint: async (character, config) => {
         runtime.cache.invalidate(character, "compaction");
         await runtime.cache.reprimeFromDisk(character, config.dirs.data, config, {
@@ -751,30 +712,3 @@ function commandDeps(a: CommandAssembly): CommandDeps {
   };
 }
 
-function compactionPhase(phase: string | undefined): ServerMessage {
-  return { type: "phase", rid: null, phase: phase !== undefined && phase.startsWith("compacting") ? phase : "compacting", model: null };
-}
-
-function compactionViewers(dataDir: string, emitEvent: (message: ServerMessage) => void): NonNullable<MessageHandlerDeps["compactions"]> {
-  return {
-    observe: (listener) => observePasses((from, event) => {
-      if (from !== dataDir) return;
-      if (event.kind === "started" || event.kind === "described") {
-        emitEvent({ type: "threads_changed", character: event.pass.character, thread: event.pass.thread });
-        return;
-      }
-      if (event.kind === "phase") {
-        if (event.pass.phase?.startsWith("compacting") === true) listener(event.pass.character, event.pass.thread, compactionPhase(event.pass.phase));
-        return;
-      }
-      const { character, thread } = event.ended;
-      const data: CompactionWatchResult = { character, state: "finished", pass: passEnd(event.ended) };
-      listener(character, thread, { type: "command_output", rid: null, name: "compact_watch", data });
-      emitEvent({ type: "threads_changed", character, thread });
-    }),
-    running: (character) => {
-      const pass = runningPass(dataDir, character);
-      return pass === undefined ? undefined : { thread: pass.thread, frame: compactionPhase(pass.phase) };
-    },
-  };
-}

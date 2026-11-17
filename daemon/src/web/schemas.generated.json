@@ -7911,8 +7911,7 @@
         "type": "string",
         "enum": [
           "all",
-          "wake",
-          "compaction"
+          "wake"
         ]
       },
       "ConfigResult": {
@@ -17885,8 +17884,7 @@
         "type": "string",
         "enum": [
           "all",
-          "wake",
-          "compaction"
+          "wake"
         ]
       },
       "ConfigResult": {

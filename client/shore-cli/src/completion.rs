@@ -1595,7 +1595,6 @@ mod tests {
             ),
             ("segments show ", &["2", "1"]),
             ("log --segment ", &["2", "1"]),
-            ("compact --segment ", &["2", "1"]),
             ("usage --call-type ", &["message", "wake"]),
             ("trace calls --call-type ", &["message", "wake"]),
             ("usage --model ", &["opus"]),

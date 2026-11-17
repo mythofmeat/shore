@@ -245,7 +245,7 @@ test("each tick puts the character's keepalive schedule in its saved state", asy
   expect(decodeState(readCharacterState(dataDir, STATE_FILENAME) ?? "")?.keepalive).toEqual({ model: "claude-fixture", intervalMs: 4 * MINUTE, lastWarmAt: T0, lastActiveAt: T0 - MINUTE });
 });
 
-test("a character's state is saved once the user is heard from, here or in another thread, and not before, with no turns covered until compaction says so", async () => {
+test("a character's state is saved once the user is heard from, here or in another thread, and not before", async () => {
   const { service, dataDir, clock } = await world();
   const saved = () => decodeState(readCharacterState(dataDir, STATE_FILENAME) ?? "");
   await service.runDue();
@@ -253,7 +253,7 @@ test("a character's state is saved once the user is heard from, here or in anoth
   clock.now = T0 + MINUTE;
   service.onUserActivityElsewhere("ada", clock.now);
   await service.runDue();
-  expect(saved()).toMatchObject({ lastUserAt: T0 + MINUTE, coveredTurnCount: 0 });
+  expect(saved()).toMatchObject({ lastUserAt: T0 + MINUTE });
   clock.now = T0 + 2 * MINUTE;
   service.onUserMessage("ada", 1, clock.now);
   await service.runDue();

@@ -27,7 +27,7 @@ import { testTmp } from "./support/tmp.ts";
 
 const NOW = "2026-11-12T10:00:00.000Z";
 const SAVED = "save: changes left uncommitted when a conversation was archived";
-const ROTATED = "Conversation rotated into history (2 turns, no memory write)";
+const ROTATED = "Conversation archived (2 turns)";
 const KEY_ENV = "SHORE_TEST_ARCHIVE_SAVES_KEY";
 
 function said(id: string, role: Message["role"], text: string): Message {
@@ -76,7 +76,6 @@ async function kept(push: boolean): Promise<Kept> {
   writeDurable(threadFile(data, "ada", "main", "active.jsonl"), conversation.map((message) => `${JSON.stringify(message)}\n`).join(""));
   const start = startRepo(workspace, remote);
   const app = defaultAppConfig();
-  app.compaction.write_memory = false;
   app.compaction.keep_recent_turns = 0;
   app.compaction.git_push = push;
   const config: LoadedConfig = {
@@ -86,7 +85,6 @@ async function kept(push: boolean): Promise<Kept> {
   const notices: string[] = [];
   const deps: CompactionRunDeps = {
     config,
-    generate: () => Promise.reject(new Error("an archive that writes no memory asks no model")),
     notify: (_title, body) => notices.push(body),
   };
   const git = gitAt(workspace);
@@ -102,8 +100,8 @@ async function kept(push: boolean): Promise<Kept> {
       return git("rev-parse", "HEAD");
     },
     archive: async () => {
-      await runCompaction("ada", deps, "turn");
-      await stopBackgroundCompactions(data, "the test is over");
+      await runCompaction("ada", deps);
+      await stopBackgroundCompactions(data);
     },
     segments: () => {
       const store = HistoryStore.open(join(data, HISTORY_DB_FILE));
@@ -116,7 +114,7 @@ async function kept(push: boolean): Promise<Kept> {
   };
 }
 
-describe("an archive that writes no memory", () => {
+describe("an archive", () => {
   test("commits what was left uncommitted in the workspace, as the character", async () => {
     const world = await kept(false);
     world.write("SOUL.md", "soul, a little older\n");
@@ -184,8 +182,8 @@ describe("an archive that writes no memory", () => {
     const world = await kept(true);
     world.write("lamp.md", "lit\n");
     const outcome = await runCompactionPass("ada", world.deps, { dryRun: true });
-    await stopBackgroundCompactions(world.data, "the test is over");
-    expect([outcome?.kind, outcome?.kind === "rotated" && outcome.dryRun]).toEqual(["rotated", true]);
+    await stopBackgroundCompactions(world.data);
+    expect(outcome?.dryRun).toBe(true);
     expect(world.segments()).toBe(0);
     expect(world.head()).toBe(world.start);
     expect(world.git("status", "--porcelain")).toBe("?? lamp.md");
@@ -205,9 +203,9 @@ describe("an archive that writes no memory", () => {
       return await realRun(command, args, options);
     });
     try {
-      await runCompaction("ada", world.deps, "turn");
+      await runCompaction("ada", world.deps);
       let stopped = false;
-      const stopping = stopBackgroundCompactions(world.data, "the daemon is stopping").then(() => { stopped = true; });
+      const stopping = stopBackgroundCompactions(world.data).then(() => { stopped = true; });
       await reached.promise;
       expect(stopped).toBe(false);
       expect(world.remoteHead()).toBe(world.start);
@@ -307,10 +305,9 @@ test("clearing a conversation commits and pushes the workspace too", async () =>
       kind: "command",
     });
     await autonomy.settled("ada");
-    await stopBackgroundCompactions(config.dirs.data, "the test is over");
+    await stopBackgroundCompactions(config.dirs.data);
     const git = gitAt(workspace);
     expect(result).toMatchObject({ data: { status: "clear", character: "ada", thread: "main" } });
-    expect(runtime.autonomy.status("ada")?.covered_turn_count).toBe(0);
     expect(saidIn(runtime.cache.get("ada")).join("\n")).not.toContain("hello");
     expect(git("log", "-1", "--format=%an|%s")).toBe(`ada|${SAVED}`);
     expect(git("status", "--porcelain")).toBe("");

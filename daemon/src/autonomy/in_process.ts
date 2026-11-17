@@ -72,7 +72,7 @@ export class InProcessAutonomyExecutor implements AutonomyExecutor {
       return await runWake(character, config, { thread: wake.thread, fired: wake.fired, limitMs: wake.limitMs }, {
         rebuild: this.#deps.rebuild,
         interrupted: wake.interrupted,
-        compaction: this.#threadCompaction(config),
+        compaction: this.#threadCompaction(),
         ...(this.#deps.env === undefined ? {} : { env: this.#deps.env }),
         news: (wrappingUp) => hooks.news(wrappingUp),
         newsHeard: () => { hooks.newsHeard(); },
@@ -134,28 +134,23 @@ export class InProcessAutonomyExecutor implements AutonomyExecutor {
         config,
         cache: this.#deps.cache,
         rebuild: this.#deps.rebuild,
-        run: this.#compactionDeps(config),
         engine: this.#engineReloader(),
       });
     });
   }
 
-  async runDeepArchive(
-    character: string,
-    coveredTurnCount: number,
-  ): Promise<AutonomyActionResult> {
+  async runDeepArchive(character: string): Promise<AutonomyActionResult> {
     return await this.#withForeground(async () => {
       const config = this.#deps.registry.effectiveConfig(character);
       return await runDeepIdleArchive(character, {
         config,
         cache: this.#deps.cache,
         rebuild: this.#deps.rebuild,
-        run: this.#compactionDeps(config),
         engine: this.#engineReloader(),
         ...(this.#deps.notifyCompactionComplete === undefined
           ? {}
           : { notify: this.#deps.notifyCompactionComplete }),
-      }, coveredTurnCount);
+      });
     });
   }
 
@@ -219,8 +214,8 @@ export class InProcessAutonomyExecutor implements AutonomyExecutor {
     return await (this.#deps.runActivity?.(foreground) ?? foreground());
   }
 
-  #threadCompaction(config: LoadedConfig): CompactionRunner {
-    const runner = compactionRunner({ ...this.#compactionDeps(config), cache: this.#deps.cache, rebuild: this.#deps.rebuild });
+  #threadCompaction(): CompactionRunner {
+    const runner = compactionRunner({ ...(this.#deps.env === undefined ? {} : { env: this.#deps.env }), cache: this.#deps.cache, rebuild: this.#deps.rebuild });
     return {
       ...runner,
       run: async (character, effective, thread) => {
@@ -247,17 +242,6 @@ export class InProcessAutonomyExecutor implements AutonomyExecutor {
     };
   }
 
-  #compactionDeps(config: LoadedConfig): {
-    env?: NodeJS.ProcessEnv;
-    generate: CompactionGenerate;
-    tools?: ToolContextDeps;
-  } {
-    return {
-      generate: compactionGenerate(this.#generateDeps(config)),
-      ...(this.#deps.env === undefined ? {} : { env: this.#deps.env }),
-      ...(this.#deps.tools === undefined ? {} : { tools: this.#deps.tools }),
-    };
-  }
 }
 
 async function runLoopTool(
@@ -285,7 +269,7 @@ async function runLoopTool(
   };
 }
 
-export type CompactionGenerate = (
+export type LabelGenerate = (
   request: SidecarRequest,
   model: { provider_key: string; api_key_env?: string | undefined },
   character: string,
@@ -295,9 +279,9 @@ export type CompactionGenerate = (
   signal?: AbortSignal,
 ) => Promise<GenerateResponse>;
 
-export function compactionGenerate(deps: GenerateDeps, { foreground = false, callType = "compaction" }: { foreground?: boolean; callType?: "compaction" | "label" } = {}): CompactionGenerate {
+export function labelGenerate(deps: GenerateDeps, { foreground = false }: { foreground?: boolean } = {}): LabelGenerate {
   return async (request, model, character, sink, tools, options, signal) => {
-    labelAccountedCall(request, deps.config, character, callType, foreground);
+    labelAccountedCall(request, deps.config, character, "label", foreground);
     const { response, fallbacks } = await generateViaStream(
       request,
       { providerKey: model.provider_key, apiKeyEnv: model.api_key_env },
@@ -306,7 +290,7 @@ export function compactionGenerate(deps: GenerateDeps, { foreground = false, cal
     );
     for (const event of fallbacks) {
       shoreLog.warn(
-        `shore: compaction for ${character} rotated ${event.from.name} → ` +
+        `shore: a segment label call for ${character} rotated ${event.from.name} → ` +
           `${event.to?.name ?? "(none)"}: ${event.reason}`,
       );
     }

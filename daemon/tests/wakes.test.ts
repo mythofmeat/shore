@@ -25,8 +25,9 @@ import { dispatchCommand } from "../src/handler/commands.ts";
 import { buildCommandPathDeps, buildRunGeneration } from "../src/handler/deps.ts";
 import { ThreadUnreadTracker } from "../src/handler/thread_unread.ts";
 import type { GenerateResponse, SidecarProvider, SidecarRequest } from "../src/llm/types.ts";
-import { cancelPass, watchPass } from "../src/memory/compaction/activity.ts";
-import { queuedCompactionsEnded } from "../src/memory/compaction/background.ts";
+import { stopBackgroundCompactions } from "../src/memory/compaction/background.ts";
+import { HISTORY_DB_FILE, HistoryStore } from "../src/engine/history_store.ts";
+import { archiveKey } from "../src/config/dirs.ts";
 import { runCompactionPass } from "../src/memory/compaction/run.ts";
 import type { ServerMessage } from "../src/protocol/ServerMessage.ts";
 import type { ThreadListing } from "../src/protocol/ThreadListing.ts";
@@ -46,7 +47,6 @@ import { restoreTestEnv, setTestEnv, unsetTestEnv } from "./support/env.ts";
 import { NO_MCP } from "./support/rebuild.ts";
 import { outcomeOf, rejectionOf } from "./support/outcome.ts";
 import { testTmp } from "./support/tmp.ts";
-import { until } from "./support/until.ts";
 
 const MINUTE = 60_000;
 const T0 = Date.UTC(2026, 9, 30, 12);
@@ -77,7 +77,6 @@ interface Script {
   endHeld?: { started: PromiseWithResolvers<void>; release: PromiseWithResolvers<void> } | undefined;
   beatTool?: { name: string; input: Record<string, unknown> } | undefined;
   replyTool?: { name: string; input: Record<string, unknown> } | undefined;
-  compactionRounds?: (number | undefined)[];
   fails?: Error | undefined;
 }
 
@@ -99,7 +98,6 @@ function scriptedProvider(script: Script): SidecarProvider {
       script.calls.push(request.context?.call_type ?? "");
       if (request.context?.call_type.startsWith("wake") !== true) {
         if (request.context?.call_type === "message") script.replies.push(structuredClone(request));
-        if (request.context?.call_type === "compaction") script.compactionRounds?.push(request.max_tool_rounds);
         const held = script.held;
         if (held !== undefined) {
           script.held = undefined;
@@ -535,7 +533,7 @@ test("a wake's message for a thread that is archived before the wake ends isn't 
 });
 
 test("a wake whose trigger names no thread runs on home's model, and its ending never compacts home, however many wakes home holds or however long its message makes home", async () => {
-  await withCharacter(async ({ runtime, script, say, wakeNow, thread, command }) => {
+  await withCharacter(async ({ runtime, data, script, say, wakeNow, thread, command }) => {
     await runtime.registry.setThreadModel("ada", "main", "pinned");
     await say("hello");
     at(10);
@@ -544,7 +542,7 @@ test("a wake whose trigger names no thread runs on home's model, and its ending 
     await wakeNow();
 
     expect(script.wakes.map((request) => [request.model, request.context?.thread])).toEqual([["claude-pinned", "main"], ["claude-pinned", "main"], ["claude-pinned", "main"], ["claude-pinned", "main"]]);
-    expect(script.calls).not.toContain("compaction");
+    expect(archivedIn(data)).toBe(0);
     expect((await thread("main")).filter((message) => message.role === "user" && message.origin === "autonomous")).toHaveLength(2);
     expect(await command("compact", { keep_turns: 99 })).toMatchObject({ type: "error", code: "invalid_request", message: "insufficient messages" });
   }, (app) => {
@@ -559,9 +557,9 @@ test("a wake whose trigger names no thread runs on home's model, and its ending 
     script.sends = "The keeper's log runs on. ".repeat(400).trim(); script.closing = "NO_NOTE";
     at(10);
     await wakeNow();
-    await queuedCompactionsEnded(data, "ada");
+    await stopBackgroundCompactions(data);
 
-    expect(script.calls).not.toContain("compaction");
+    expect(archivedIn(data)).toBe(0);
     const home = await thread("main");
     expect(home).toHaveLength(5);
     expect(home.slice(0, 2).map((message) => message.content)).toEqual(["hello", "reply to: hello"]);
@@ -577,39 +575,22 @@ test("a wake whose trigger names no thread runs on home's model, and its ending 
   });
 });
 
-test("wakes and compaction keep the reasoning effort set for each on chat's model, and setting it for them never moves chat's", async () => {
-  await withCharacter(async ({ runtime, script, say, wakeNow, command }) => {
+test("wakes keep the reasoning effort set for them on chat's model, and setting it for them never moves chat's", async () => {
+  await withCharacter(async ({ script, say, wakeNow, command }) => {
     const effort = async (args: Record<string, unknown>): Promise<void> => {
       expect((await command("set_model_setting", { key: "reasoning_effort", ...args })).type).toBe("command_output");
-    };
-    const compactionEffort = async (): Promise<string | undefined> => {
-      const sent: SidecarRequest[] = [];
-      await runCompactionPass("ada", {
-        config: runtime.config,
-        generate: (request) => {
-          sent.push(request);
-          return Promise.resolve({
-            model: request.model, content: "noted", content_blocks: [{ type: "text", text: "noted" }], finish_reason: "end_turn",
-            usage: { input_tokens: 1, output_tokens: 1, cache_read_tokens: 0, cache_creation_tokens: 0 },
-            timing: { total_ms: 1, time_to_first_token_ms: 1 },
-          });
-        },
-      }, { thread: "main" });
-      return sent[0]?.provider_options?.reasoning_effort;
     };
     const effortOf = (requests: SidecarRequest[]): (string | undefined)[] =>
       [...new Set(requests.map((request) => request.provider_options?.reasoning_effort))];
 
     await effort({ value: "high" });
     await effort({ value: "low", background_task: "wake" });
-    await effort({ value: "medium", background_task: "compaction", scope: "global" });
     await say("hello");
     await wakeNow();
 
     expect(effortOf(script.replies)).toEqual(["high"]);
     expect(script.wakes.map((request) => request.model)).toContain("claude-fixture");
     expect(effortOf(script.wakes)).toEqual(["low"]);
-    expect(await compactionEffort()).toBe("medium");
 
     await effort({ value: "max", background_task: "all" });
     script.wakes.length = 0;
@@ -618,7 +599,6 @@ test("wakes and compaction keep the reasoning effort set for each on chat's mode
     await say("again");
 
     expect(effortOf(script.wakes)).toEqual(["max"]);
-    expect(await compactionEffort()).toBe("max");
     expect(effortOf(script.replies)).toEqual(["high"]);
 
     await effort({ value: null, background_task: "wake" });
@@ -719,7 +699,7 @@ test("a wake's message that lands in home just before idle compaction stays ther
     at(60);
     await wakeNow();
 
-    expect(script.calls).toContain("compaction");
+    expect(archivedIn(data)).toBe(1);
     expect(await shownIn(thread)).toEqual([["assistant", "autonomous", "I found the keeper's log."]]);
     expect(threadActivityNow(data, "ada", "main").unread).toBe(1);
 
@@ -740,7 +720,7 @@ test("a reply the user never saw stays in home through idle compaction and the d
 
     at(60);
     await runtime.autonomy.runDue();
-    expect(script.calls).toContain("compaction");
+    expect(archivedIn(data)).toBe(1);
     expect(await shownIn(thread)).toEqual(unseen);
 
     at(25 * 60);
@@ -762,11 +742,11 @@ test("with triggers off an idle conversation is still compacted and later archiv
 
     at(49);
     await runtime.autonomy.runDue();
-    expect(script.calls).not.toContain("compaction");
+    expect(archivedIn(data)).toBe(0);
 
     at(50);
     await runtime.autonomy.runDue();
-    expect(script.calls.filter((call) => call === "compaction")).toHaveLength(1);
+    expect(archivedIn(data)).toBe(1);
     expect(await shownIn(thread)).toEqual([["user", "", "and the door?"], ["assistant", "", "reply to: and the door?"]]);
 
     at(24 * 60 + 49);
@@ -776,7 +756,7 @@ test("with triggers off an idle conversation is still compacted and later archiv
     at(24 * 60 + 50);
     await runtime.autonomy.runDue();
     expect(await shownIn(thread)).toEqual([]);
-    expect(script.calls.filter((call) => call === "compaction")).toHaveLength(1);
+    expect(archivedIn(data)).toBe(2);
     expect(script.wakes).toEqual([]);
   }, (app) => {
     compactsWhenIdle(app);
@@ -789,7 +769,7 @@ test("with triggers off an idle conversation is still compacted and later archiv
 
 test("home is compacted for the turns the user wrote, however many wakes ran there, and a reply after a wake is sent what set the wake off without the wake's prompt", async () => {
   await withCharacter(async ({ script, data, say, wakeNow }) => {
-    const compactions = (): number => script.calls.filter((call) => call === "compaction").length;
+    const compactions = (): number => archivedIn(data);
     script.sends = undefined; script.closing = "NO_NOTE";
     let minute = 0;
     for (const [turn, wakes] of [["one", 2], ["two", 2], ["three", 1]] as const) {
@@ -799,7 +779,7 @@ test("home is compacted for the turns the user wrote, however many wakes ran the
         at(minute += 1);
         await wakeNow();
       }
-      await queuedCompactionsEnded(data, "ada");
+      await stopBackgroundCompactions(data);
     }
     expect(script.wakes).toHaveLength(10);
     expect(compactions()).toBe(0);
@@ -809,7 +789,7 @@ test("home is compacted for the turns the user wrote, however many wakes ran the
     const asked = textOf(script.replies.at(-1) as SidecarRequest);
     expect(asked).toContain("[wake]\n\n[This wake was started by hand at Friday 2026-10-30 · 12:08 PM, from Shore's command line or its settings.]\n[Your working in this wake is in your thread \"wakes\", not here: 1 tool call. Your note from the end of it follows.]\nNO_NOTE\nfour");
     expect(asked).not.toContain("This is a wake in your thread");
-    await queuedCompactionsEnded(data, "ada");
+    await stopBackgroundCompactions(data);
     expect(compactions()).toBe(1);
   }, (app) => {
     app.compaction.enabled = true;
@@ -821,8 +801,8 @@ test("home is compacted for the turns the user wrote, however many wakes ran the
 });
 
 test("the wait before an idle conversation is compacted runs from the end of the character's reply, not from the user's message", async () => {
-  await withCharacter(async ({ runtime, script, say }) => {
-    const compactions = (): number => script.calls.filter((call) => call === "compaction").length;
+  await withCharacter(async ({ runtime, data, script, say }) => {
+    const compactions = (): number => archivedIn(data);
     await repliedAt(20, script, () => say("is the lamp lit?"));
     at(69);
     await runtime.autonomy.runDue();
@@ -839,7 +819,7 @@ test("an idle conversation is compacted once the user has written min_turns turn
     app.compaction.min_turns = 3;
     app.triggers.max_idle_wakes = 10;
   };
-  const compactions = (script: Script): number => script.calls.filter((call) => call === "compaction").length;
+  const compactions = (data: string): number => archivedIn(data);
   let root = "";
   await withCharacter(async ({ runtime, script, data, say, wakeNow }) => {
     root = dirname(data);
@@ -853,20 +833,20 @@ test("an idle conversation is compacted once the user has written min_turns turn
     await say("two");
     at(60);
     await runtime.autonomy.runDue();
-    expect(compactions(script)).toBe(0);
+    expect(compactions(data)).toBe(0);
   }, fewTurns);
 
   at(120);
-  await withCharacter(async ({ runtime, script, say }) => {
+  await withCharacter(async ({ runtime, data, say }) => {
     await runtime.autonomy.register(registrationFor("ada", runtime.registry.effectiveConfig("ada")));
     await runtime.autonomy.runDue();
-    expect(compactions(script)).toBe(0);
+    expect(compactions(data)).toBe(0);
 
     at(121);
     await say("three");
     at(180);
     await runtime.autonomy.runDue();
-    expect(compactions(script)).toBe(1);
+    expect(compactions(data)).toBe(1);
   }, fewTurns, root);
 
   at(0);
@@ -878,10 +858,10 @@ test("an idle conversation is compacted once the user has written min_turns turn
     }
   }, fewTurns);
   at(120);
-  await withCharacter(async ({ runtime, script }) => {
+  await withCharacter(async ({ runtime, data }) => {
     await runtime.autonomy.register(registrationFor("ada", runtime.registry.effectiveConfig("ada")));
     await runtime.autonomy.runDue();
-    expect(compactions(script)).toBe(1);
+    expect(compactions(data)).toBe(1);
   }, fewTurns, root);
 });
 
@@ -898,22 +878,29 @@ test("a side thread trimmed for room without compaction keeps its newest reply w
   });
 });
 
-test("bare --background tunes wakes and compaction on their pinned model", async () => {
+test("bare --background tunes wakes on their pinned model", async () => {
   await withCharacter(async ({ command }) => {
     const set = await command("set_model_setting", { key: "reasoning_effort", value: "low", background_task: "all" });
-    expect(set).toMatchObject({ type: "command_output", data: { model: "chat.pinned", background_task: "all" } });
+    expect(set).toMatchObject({ type: "command_output", data: { model: "chat.pinned", background_task: "wake" } });
     expect(await command("model_settings", { background_task: "all" })).toMatchObject({ type: "command_output", data: { model: "chat.pinned" } });
     const listed = await command("list_models", {});
     const roles = listed.type === "command_output" ? (listed.data as { roles: { role: string; model: string | null; source: string | null }[] }).roles : [];
     expect(roles.filter((role) => ["wake", "compaction"].includes(role.role))).toEqual([
       { role: "wake", model: "chat.pinned", source: "triggers.model" },
-      { role: "compaction", model: "chat.pinned", source: "compaction.model" },
     ]);
   }, (app) => {
     app.triggers.model = "pinned";
-    app.compaction.model = "pinned";
   });
 });
+
+function archivedIn(data: string, thread = "main"): number {
+  const store = HistoryStore.open(join(data, HISTORY_DB_FILE));
+  try {
+    return store.entries(archiveKey("ada", thread)).length;
+  } finally {
+    store.close();
+  }
+}
 
 function byHand(time: string): string {
   return `[This wake was started by hand at Friday 2026-10-30 · ${time}, from Shore's command line or its settings.]`;
@@ -2394,7 +2381,7 @@ async function wakesInRing(runtime: ShoreRuntime, minutes: number): Promise<void
   await runtime.autonomy.runDue();
 }
 
-test("a wake's working goes to the wakes thread for the user, and a reply in the thread it ran in, the request rebuilt from disk and that thread's compaction are sent how it opened, the line, its note and its message, while a later wake there starts fresh", async () => {
+test("a wake's working goes to the wakes thread for the user, and a reply in the thread it ran in and the request rebuilt from disk are sent how it opened, the line, its note and its message, while a later wake there starts fresh", async () => {
   await withCharacter(async ({ runtime, script, data, say, thread }) => {
     await runtime.registry.createThread("ada", "ring");
     await say("hello");
@@ -2473,14 +2460,12 @@ test("a wake's working goes to the wakes thread for the user, and a reply in the
     expect(turnsOf(rebuilt?.request)).toEqual(answered);
 
     markThreadRead(data, "ada", "ring", T0 + 14 * MINUTE);
-    const compacting: SidecarRequest[] = [];
-    await compactByHand(runtime, "ring", compacting);
-    expect(turnsOf(compacting[0]).slice(0, -1)).toEqual(answered);
+    await compactByHand(runtime, "ring");
     expect(await thread("ring")).toEqual([]);
   }, keepNothing);
 });
 
-test("a wake's working doesn't count towards its thread's size, which it isn't kept in, but its note does, and the wakes thread is trimmed without a model call once its working fills it", async () => {
+test("a wake's working doesn't count towards its thread's size, which it isn't kept in, but its note does, and the wakes thread is trimmed once its working fills it", async () => {
   const aLot = "the lamp ".repeat(80_000);
   await withCharacter(async ({ runtime, script, say, thread, command }) => {
     await runtime.registry.createThread("ada", "ring");
@@ -2508,7 +2493,6 @@ test("a wake's working doesn't count towards its thread's size, which it isn't k
     expect((await thread("wakes")).map((message) => message.content.length > 100_000 ? "a lot" : message.role)).toEqual([
       "user", "assistant", "user", "a lot",
     ]);
-    expect(script.calls).not.toContain("compaction");
     at(24);
     await say("go on", "ring");
     expect((await thread("ring")).map((message) => message.content)).toEqual(["go on", "reply to: go on"]);
@@ -2516,7 +2500,7 @@ test("a wake's working doesn't count towards its thread's size, which it isn't k
     app.compaction.keep_recent_turns = 0;
   });
 
-  const compactions = (script: Script): number => script.calls.filter((call) => call === "compaction").length;
+  const compactions = (data: string): number => archivedIn(data, "ring");
   await withCharacter(async ({ runtime, script, data, say }) => {
     await runtime.registry.createThread("ada", "ring", { compaction: true });
     await say("hello");
@@ -2525,14 +2509,14 @@ test("a wake's working doesn't count towards its thread's size, which it isn't k
     script.aside = aLot;
     script.sends = undefined; script.closing = "Told part one.";
     await wakesInRing(runtime, 11);
-    await queuedCompactionsEnded(data, "ada");
-    expect(compactions(script)).toBe(0);
+    await stopBackgroundCompactions(data);
+    expect(compactions(data)).toBe(0);
 
     script.aside = undefined;
     script.closing = aLot;
     await wakesInRing(runtime, 12);
-    await queuedCompactionsEnded(data, "ada");
-    expect(compactions(script)).toBe(1);
+    await stopBackgroundCompactions(data);
+    expect(compactions(data)).toBe(1);
   }, (app) => {
     app.compaction.enabled = true;
     app.compaction.keep_recent_turns = 0;
@@ -2917,7 +2901,7 @@ test("a wake doesn't bring a thread nearer its compaction, which counts the turn
     app.compaction.min_turns = 1;
     app.compaction.max_turns = 2;
   };
-  const compactions = (script: Script): number => script.calls.filter((call) => call === "compaction").length;
+  const compactions = (data: string): number => archivedIn(data, "ring");
   await withCharacter(async ({ runtime, script, data, say, thread }) => {
     await runtime.registry.createThread("ada", "ring", { compaction: true });
     await say("hello");
@@ -2928,9 +2912,9 @@ test("a wake doesn't bring a thread nearer its compaction, which counts the turn
       runtime.autonomy.wakeFor("ada", { name: "show", reason: "r", at: T0 + minute * MINUTE, thread: "ring" });
       at(minute);
       await runtime.autonomy.runDue();
-      await queuedCompactionsEnded(data, "ada");
+      await stopBackgroundCompactions(data);
     }
-    expect(compactions(script)).toBe(0);
+    expect(compactions(data)).toBe(0);
     expect((await thread("ring")).filter(isWakeOpener)).toHaveLength(2);
     expect(runtime.autonomy.log("ada", 100).filter((event) => event.kind !== "tool_use").map((event) => [event.kind, event.detail]).slice(-2)).toEqual([
       ["tick_fired", 'Woken in "ring" by trigger "show"'],
@@ -2950,12 +2934,12 @@ test("a wake doesn't bring a thread nearer its compaction, which counts the turn
     held.release.resolve();
     await waking;
     await reply.started.promise;
-    expect(compactions(script)).toBe(0);
+    expect(compactions(data)).toBe(0);
     expect((await thread("ring")).at(-2)?.content).toStartWith("[User wrote here while this wake was running");
     reply.release.resolve();
     await asking;
-    await queuedCompactionsEnded(data, "ada");
-    expect(compactions(script), "the user's second turn there").toBe(1);
+    await stopBackgroundCompactions(data);
+    expect(compactions(data), "the user's second turn there").toBe(1);
     expect(await thread("ring")).toEqual([]);
   }, long);
 
@@ -2965,8 +2949,8 @@ test("a wake doesn't bring a thread nearer its compaction, which counts the turn
     runtime.autonomy.wakeFor("ada", { name: "lamp", reason: "r", at: T0 + 20 * MINUTE, thread: "main" });
     at(20);
     await runtime.autonomy.runDue();
-    await queuedCompactionsEnded(data, "ada");
-    expect(compactions(script)).toBe(0);
+    await stopBackgroundCompactions(data);
+    expect(compactions(data)).toBe(0);
     expect(await thread("main")).toHaveLength(4);
   }, long);
 
@@ -2977,8 +2961,8 @@ test("a wake doesn't bring a thread nearer its compaction, which counts the turn
     runtime.autonomy.wakeFor("ada", { name: "show", reason: "r", at: T0 + 20 * MINUTE, thread: "ring" });
     at(20);
     await runtime.autonomy.runDue();
-    await queuedCompactionsEnded(data, "ada");
-    expect(compactions(script), "by the size of the thread, which the wake itself was never sent").toBe(1);
+    await stopBackgroundCompactions(data);
+    expect(compactions(data), "by the size of the thread, which the wake itself was never sent").toBe(1);
     expect(await thread("ring")).toEqual([]);
     expect(runtime.autonomy.log("ada", 100).filter((event) => event.kind !== "tool_use").map((event) => [event.kind, event.detail]).slice(-2)).toEqual([
       ["tick_fired", 'Woken in "ring" by trigger "show"'],
@@ -2994,7 +2978,6 @@ test("a wake doesn't bring a thread nearer its compaction, which counts the turn
 interface WakesIn {
   wake: (minute: number, closing: string, sends?: string) => Promise<void>;
   openers: () => Promise<string[]>;
-  compactions: () => number;
 }
 
 async function wakesIn(name: string, compaction: boolean, configure: (app: AppConfig) => void, run: (h: Harness, wakes: WakesIn) => Promise<void>): Promise<void> {
@@ -3008,10 +2991,9 @@ async function wakesIn(name: string, compaction: boolean, configure: (app: AppCo
         h.runtime.autonomy.wakeFor("ada", { name: "show", reason: `at ${String(minute)}`, at: T0 + minute * MINUTE, thread: name });
         at(minute);
         await h.runtime.autonomy.runDue();
-        await queuedCompactionsEnded(h.data, "ada");
+        await stopBackgroundCompactions(h.data);
       },
       openers: async () => (await h.thread(name)).filter(isWakeOpener).map((message) => /fired at [^:]+:\d\d [AP]M: at (\d+)\]/.exec(message.content)?.[1] ?? ""),
-      compactions: () => h.script.calls.filter((call) => call === "compaction").length,
     });
   }, (app) => {
     app.compaction.enabled = true;
@@ -3021,11 +3003,11 @@ async function wakesIn(name: string, compaction: boolean, configure: (app: AppCo
   });
 }
 
-test("a thread holding nothing but the character's own wakes is put away without a model call once it would compact, down to the newest wake", async () => {
+test("a thread holding nothing but the character's own wakes is put away once it would compact, down to the newest wake", async () => {
   await wakesIn("log", true, (app) => {
     app.compaction.keep_recent_turns = 0;
     app.compaction.max_turns = 2;
-  }, async ({ thread, script }, { wake, openers, compactions }) => {
+  }, async ({ thread, script }, { wake, openers }) => {
     await wake(10, "One.");
     expect(await openers()).toEqual(["10"]);
     await wake(20, "Two.");
@@ -3034,7 +3016,6 @@ test("a thread holding nothing but the character's own wakes is put away without
     script.wakes.length = 0;
     await wake(30, "Three.");
     expect(await openers()).toEqual(["30"]);
-    expect(compactions()).toBe(0);
     expect(setOffBy(turnsOf(script.wakes[0]).at(-1)?.[1])).toEqual(['[Your trigger "show" fired at Friday 2026-10-30 · 12:30 PM: at 30]']);
     expect(turnsOf(script.wakes[0]).at(-1)?.[1]).toContain(diaryOfDay(
       ['your note at the end of a wake in "log"', "12:10 PM", "One."],
@@ -3072,7 +3053,7 @@ test("wakes from before the user first wrote in a thread are put away the same w
   await wakesIn("log", true, (app) => {
     app.compaction.keep_recent_turns = 0;
     app.compaction.max_turns = 4;
-  }, async ({ thread, say }, { wake, openers, compactions }) => {
+  }, async ({ thread, say }, { wake, openers }) => {
     await wake(10, "One.");
     await wake(12, "Two.");
     at(15);
@@ -3081,14 +3062,13 @@ test("wakes from before the user first wrote in a thread are put away the same w
     await wake(30, "Three.");
     expect(await openers()).toEqual(["30"]);
     expect((await thread("log")).slice(0, 2).map((message) => message.content)).toEqual(["how is it going?", "reply to: how is it going?"]);
-    expect(compactions()).toBe(0);
   });
 
   await wakesIn("log", true, (app) => {
     app.compaction.keep_recent_turns = 0;
     app.compaction.max_turns = 0;
     app.compaction.max_context_tokens = 1_000;
-  }, async ({ thread, say }, { wake, openers, compactions }) => {
+  }, async ({ thread, say }, { wake, openers }) => {
     await wake(10, "One.");
     await wake(12, "Two.");
     at(15);
@@ -3098,15 +3078,14 @@ test("wakes from before the user first wrote in a thread are put away the same w
     expect(await openers()).toEqual(["30"]);
     expect((await thread("log")).slice(0, 2).map((message) => message.content)).toEqual(["how is it going?", "reply to: how is it going?"]);
     expect((await thread("log")).at(-1)?.content).toStartWith("The keeper's log runs on.");
-    expect(compactions(), "however far past its size what was said there now is").toBe(0);
   });
 });
 
-test("in a thread whose compaction is off a wake's turns stay while there is room, and when it runs out the oldest turns are put away without a model call", async () => {
+test("in a thread whose compaction is off a wake's turns stay while there is room, and when it runs out the oldest turns are put away", async () => {
   await wakesIn("ring", false, (app) => {
     app.compaction.keep_recent_turns = 1;
     app.compaction.max_turns = 2;
-  }, async ({ thread, say }, { wake, openers, compactions }) => {
+  }, async ({ thread, say }, { wake, openers }) => {
     await wake(10, "One.");
     await wake(20, "Two.");
     await wake(30, "Three.");
@@ -3118,7 +3097,6 @@ test("in a thread whose compaction is off a wake's turns stay while there is roo
     await wake(50, "Four.");
     expect(await openers()).toEqual(["50"]);
     expect((await thread("ring")).map((message) => message.role)).toEqual(["user", "system"]);
-    expect(compactions()).toBe(0);
   });
 });
 
@@ -3127,21 +3105,11 @@ function keepNothing(app: AppConfig): void {
   app.compaction.min_turns = 1;
 }
 
-async function compactByHand(runtime: ShoreRuntime, thread: string, sent: SidecarRequest[] = []): Promise<void> {
-  await runCompactionPass("ada", {
-    config: runtime.config,
-    generate: (request) => {
-      sent.push(structuredClone(request));
-      return Promise.resolve({
-        model: request.model, content: "noted", content_blocks: [{ type: "text", text: "noted" }], finish_reason: "end_turn",
-        usage: { input_tokens: 1, output_tokens: 1, cache_read_tokens: 0, cache_creation_tokens: 0 },
-        timing: { total_ms: 1, time_to_first_token_ms: 1 },
-      });
-    },
-  }, { thread });
+async function compactByHand(runtime: ShoreRuntime, thread: string): Promise<void> {
+  await runCompactionPass("ada", { config: runtime.config }, { thread });
 }
 
-test("after a compaction that kept nothing, the next reply, the request rebuilt from disk and the next compaction all open with how long it had been", async () => {
+test("after a compaction that kept nothing, the next reply and the request rebuilt from disk open with how long it had been", async () => {
   await withCharacter(async ({ runtime, script, data, say, thread }) => {
     await say("goodnight");
     await compactByHand(runtime, "main");
@@ -3154,10 +3122,6 @@ test("after a compaction that kept nothing, the next reply, the request rebuilt 
 
     const rebuilt = await rebuildRequestFromDisk("ada", data, runtime.config, { ...NO_MCP, thread: "main" });
     expect(turnsOf(rebuilt?.request)[0]).toEqual(opening);
-
-    const compacting: SidecarRequest[] = [];
-    await compactByHand(runtime, "main", compacting);
-    expect(turnsOf(compacting[0])[0]).toEqual(opening);
   }, keepNothing);
 });
 
@@ -3469,132 +3433,6 @@ test("a wake started by hand runs at the next look, one for a dormant character 
     await runtime.autonomy.runDue();
     expect(script.wakes).toHaveLength(2);
   });
-});
-
-test("writing memory again from an archived segment changes the character's files for real, leaves the conversation as it is, and like any compaction is held to the model's max_tool_rounds", async () => {
-  await withCharacter(async ({ script, workspace, data, say, thread, command }) => {
-    await writeFile(join(workspace, "MEMORY.md"), "nothing yet\n");
-    await say("hello");
-    at(1);
-    await say("the keeper is called Mara");
-    script.compactionRounds = [];
-    expect(await command("set_model_setting", { key: "max_tool_rounds", value: 6, scope: "global" })).toMatchObject({ type: "command_output", data: { changed: true } });
-    expect(await command("compact", {})).toMatchObject({ type: "command_output", data: { status: "compacted", compacted_turns: 2 } });
-    await queuedCompactionsEnded(data, "ada");
-    at(2);
-    await say("and the lamp?");
-    const before = await thread("main");
-
-    script.replyTool = { name: "edit", input: { file_path: "MEMORY.md", old_string: "nothing yet", new_string: "The keeper is Mara." } };
-    expect(await command("compact", { segment: 0 })).toMatchObject({
-      type: "command_output",
-      data: { status: "segment", character: "ada", segment: 0, compacted_turns: 2, memory_files_written: ["MEMORY.md"], tool_rounds: 1, tools_called: ["edit"] },
-    });
-    expect(await Bun.file(join(workspace, "MEMORY.md")).text()).toBe("The keeper is Mara.\n");
-    expect(await thread("main")).toEqual(before);
-    expect(script.compactionRounds).toEqual([6, 6, 6]);
-  }, (app) => {
-    app.compaction.enabled = true;
-    app.compaction.keep_recent_turns = 0;
-    app.compaction.min_turns = 1;
-    app.tools.enabled = [...app.tools.enabled, "edit"];
-  });
-});
-
-const MEMORY_PASS = (app: AppConfig): void => {
-  app.compaction.enabled = true;
-  app.compaction.keep_recent_turns = 0;
-  app.compaction.min_turns = 1;
-};
-
-test("whoever watches a running memory pass sees what its model writes", async () => {
-  await withCharacter(async ({ script, data, say, command }) => {
-    await say("hello");
-    at(1);
-    await say("the keeper is called Mara");
-    const held = { started: Promise.withResolvers<void>(), release: Promise.withResolvers<void>() };
-    script.held = held;
-    const compacting = command("compact", {});
-    await held.started.promise;
-    const seen: ServerMessage[] = [];
-    const watched = watchPass(data, "ada", (frame) => { seen.push(frame); });
-    held.release.resolve();
-    await watched;
-    await compacting;
-    expect(seen.flatMap((frame) => frame.type === "stream_chunk" ? [[frame.subagent, frame.text]] : [])).toContainEqual(["compaction", expect.stringContaining("reply to:") as string]);
-  }, MEMORY_PASS);
-});
-
-test("whoever watches a running memory pass sees what its model does, and stopping the pass stops a tool it has running", async () => {
-  await withCharacter(async ({ script, data, say, command }) => {
-    await say("hello");
-    at(1);
-    await say("the keeper is called Mara");
-    const held = { started: Promise.withResolvers<void>(), release: Promise.withResolvers<void>() };
-    script.held = held;
-    script.replyTool = { name: "bash", input: { command: "sleep 30" } };
-    const compacting = command("compact", {});
-    await held.started.promise;
-    const seen: ServerMessage[] = [];
-    const watched = watchPass(data, "ada", (frame) => { seen.push(frame); });
-    held.release.resolve();
-    await until(() => seen.some((frame) => frame.type === "tool_call"), "the pass running bash");
-    const asked = performance.now();
-    await cancelPass(data, "ada", "stopped by the test");
-    expect(performance.now() - asked).toBeLessThan(10_000);
-    await watched;
-    await compacting;
-    expect(seen.flatMap((frame) => frame.type === "tool_call" ? [[frame.tool_name, frame.subagent]] : [])).toEqual([["bash", "compaction"]]);
-  }, (app) => {
-    MEMORY_PASS(app);
-    app.tools.enabled = [...app.tools.enabled, "bash"];
-  });
-}, 20_000);
-
-test("with compaction.git_push on, a compaction pushes the character's workspace, and so does writing memory again from a segment; with it off neither does", async () => {
-  const git = (dir: string, ...args: string[]): string => {
-    const run = Bun.spawnSync(["git", "-c", "user.name=t", "-c", "user.email=t@t", "-C", dir, ...args]);
-    if (run.exitCode !== 0) throw new Error(`git ${args.join(" ")} failed: ${run.stderr.toString()}`);
-    return run.stdout.toString().trim();
-  };
-  const reached = async (push: boolean): Promise<boolean[]> => {
-    const seen: boolean[] = [];
-    await withCharacter(async ({ workspace, data, say, command }) => {
-      const remote = join(workspace, "..", "remote.git");
-      git(workspace, "init", "--quiet");
-      git(workspace, "add", "--all");
-      git(workspace, "commit", "--quiet", "-m", "start");
-      git(workspace, "init", "--bare", "--quiet", remote);
-      git(workspace, "remote", "add", "origin", remote);
-      git(workspace, "push", "--quiet", "--set-upstream", "origin", "HEAD");
-      const noted = async (text: string): Promise<void> => {
-        await writeFile(join(workspace, "NOTES.md"), text);
-        git(workspace, "add", "--all");
-        git(workspace, "commit", "--quiet", "-m", text);
-      };
-      const atRemote = (subject: string): boolean => git(remote, "log", "--all", "--format=%s").split("\n").includes(subject);
-
-      await say("hello");
-      at(1);
-      await say("the keeper is called Mara");
-      await noted("first");
-      expect(await command("compact", {})).toMatchObject({ type: "command_output", data: { status: "compacted" } });
-      await queuedCompactionsEnded(data, "ada");
-      seen.push(atRemote("first"));
-
-      await noted("second");
-      expect(await command("compact", { segment: 0 })).toMatchObject({ type: "command_output", data: { status: "segment" } });
-      seen.push(atRemote("second"));
-    }, (app) => {
-      app.compaction.enabled = true;
-      app.compaction.keep_recent_turns = 0;
-      app.compaction.min_turns = 1;
-      app.compaction.git_push = push;
-    });
-    return seen;
-  };
-  expect(await reached(true)).toEqual([true, true]);
-  expect(await reached(false)).toEqual([false, false]);
 });
 
 test("with daemon.cache_forensics on a reply's request says where to keep what was sent, and with it off it says nothing", async () => {

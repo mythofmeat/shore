@@ -4,7 +4,6 @@ import { localWallClock } from "./activity.ts";
 import { homeThreadOf, threadActivityNow } from "../engine/threads.ts";
 import { hostZone } from "../ledger/zoned.ts";
 import type { LoadedConfig } from "../config/loader.ts";
-import { loadCompactionCheckpoint } from "../memory/compaction/checkpoint.ts";
 import type { AutonomyRunnerConfig, CompactionRunnerConfig, RestoredIdle } from "./runner.ts";
 import type { DormancyConfig } from "./dormancy.ts";
 import type { AutonomyService, RegisterCharacter } from "./service.ts";
@@ -40,11 +39,9 @@ async function restoredIdle(dataDir: string, character: string): Promise<Restore
   try {
     const thread = await homeThreadOf(dataDir, character);
     const { user_turns: turns, last_active: lastActive } = threadActivityNow(dataDir, character, thread);
-    const checkpoint = await loadCompactionCheckpoint(dataDir, character, thread).catch(() => undefined);
-    const diedCompacting = checkpoint?.state === "running";
     return {
       turnCount: turns,
-      ...(lastActive === undefined || diedCompacting ? {} : { lastActivityAt: Date.parse(lastActive) }),
+      ...(lastActive === undefined ? {} : { lastActivityAt: Date.parse(lastActive) }),
     };
   } catch (e) {
     shoreLog.warn(`shore: could not restore ${character}'s idle state: ${String(e)}`);
@@ -162,9 +159,9 @@ export class TurnAutonomyBridge {
     });
   }
 
-  onCompactionFailed(character: string, retryAt?: number): void {
+  onCompactionFailed(character: string): void {
     this.#after(character, () => {
-      this.#service.onCompactionFailed(character, retryAt);
+      this.#service.onCompactionFailed(character);
     });
   }
 

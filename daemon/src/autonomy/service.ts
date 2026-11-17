@@ -37,7 +37,6 @@ export interface AutonomyStatus {
   character: string;
   state: import("../protocol/AutonomyState.ts").AutonomyState;
   wakes_without_user: number;
-  covered_turn_count: number;
   last_user_at?: number;
   max_idle_wakes: number;
   max_silent_ms: number;
@@ -294,7 +293,6 @@ export class AutonomyService {
       character,
       state: runner.dormancy.isDormant(now) ? "Dormant" : "Active",
       wakes_without_user: snapshot.wakesWithoutUser,
-      covered_turn_count: snapshot.coveredTurnCount,
       max_idle_wakes: bounds.maxIdleWakes,
       max_silent_ms: bounds.maxSilentMs,
       recent_events: runner.log.recent(RECENT_EVENT_LIMIT),
@@ -307,8 +305,8 @@ export class AutonomyService {
     return this.#entries.get(character)?.runner.wakesMayRun ?? false;
   }
 
-  onCompactionFailed(character: string, retryAt?: number): void {
-    this.#entries.get(character)?.runner.onCompactionFailed(this.#now(), retryAt);
+  onCompactionFailed(character: string): void {
+    this.#entries.get(character)?.runner.onCompactionFailed(this.#now());
   }
 
   shouldCompactNow(

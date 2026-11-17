@@ -8,7 +8,7 @@ import { MAIN_THREAD, archiveKey } from "../../config/dirs.ts";
 
 import { HISTORY_DB_FILE, HistoryStore } from "../../engine/history_store.ts";
 import { normalizeMessage } from "../../engine/message_store.ts";
-import { NO_PRIOR_CONTEXT, priorContextOf, type ConversationRef, type PriorContext } from "../../engine/segments.ts";
+import { NO_PRIOR_CONTEXT, priorContextOf, type PriorContext } from "../../engine/segments.ts";
 import type { Message } from "../../engine/types.ts";
 import { rustLines, rustTrim } from "../lines.ts";
 import { CompactionError } from "./types.ts";
@@ -18,7 +18,6 @@ import type { ConversationManager } from "./types.ts";
 export interface DurableHistoryLocation {
   dbPath: string;
   archiveKey: string;
-  coverageClaim?: string;
   unlabelled?: boolean;
 }
 
@@ -43,15 +42,13 @@ export function conversationManager(
     archiveAndRetain: (_conversationId, params) =>
       archiveAndRetain(
         characterDir,
-        { ...history, ...(params.coverageClaim === undefined ? {} : { coverageClaim: params.coverageClaim }) },
+        history,
         params.keepLastN,
         params.activeContent,
         now,
         newId,
-        params.operationId,
+        undefined,
         {
-          ...(params.memoryBefore === undefined ? {} : { memory_before: params.memoryBefore }),
-          ...(params.memoryAfter === undefined ? {} : { memory_after: params.memoryAfter }),
           ...(params.excluded === true ? { excluded: true } : {}),
           ...(params.note === undefined ? {} : { note: params.note }),
         },
@@ -69,7 +66,7 @@ export async function archiveAndRetain(
   operationId?: string,
   segmentMetadata: Pick<
     import("../../engine/history_store.ts").SegmentEntry,
-    "memory_before" | "memory_after" | "excluded" | "note"
+    "excluded" | "note"
   > = {},
 ): Promise<string> {
   return await withConversation(characterDir, "rewrite", async () => {
@@ -115,7 +112,7 @@ async function archiveToDatabase(
   operationId: string | undefined,
   segmentMetadata: Pick<
     import("../../engine/history_store.ts").SegmentEntry,
-    "memory_before" | "memory_after" | "excluded" | "note"
+    "excluded" | "note"
   >,
 ): Promise<number | undefined> {
   const messages = archived.map((line) => normalizeMessage(JSON.parse(line) as Message));
@@ -135,7 +132,6 @@ async function archiveToDatabase(
         messages,
         activeContent,
         retainedContent,
-        history.coverageClaim,
       );
     }
     try {
@@ -170,10 +166,6 @@ function withHistoryStore<T>(
   } finally {
     store?.close();
   }
-}
-
-export async function hasCompactionOperation(ref: ConversationRef, operationId: string): Promise<boolean> {
-  return withHistoryStore(ref, (store, character) => store.hasCompactionOperation(character, operationId)) ?? false;
 }
 
 const message = (e: unknown): string => (e instanceof Error ? e.message : String(e));

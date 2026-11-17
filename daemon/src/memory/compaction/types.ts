@@ -1,28 +1,3 @@
-import type { CharacterWorkspace } from "../../tools/character_workspace.ts";
-import type { WorkspaceEntry } from "../../tools/workspace_snapshot.ts";
-import type { WorkspaceTurns } from "../../tools/workspace_turns.ts";
-import type { FrameSink } from "../../llm/stream";
-import type { GenerateResponse, SidecarRequest } from "../../llm/types";
-
-import { COMPACTION_SUBAGENT } from "./labels.ts";
-export { COMPACTION_SUBAGENT } from "./labels.ts";
-
-export function tagCompactionFrames(sink: FrameSink): FrameSink {
-  return (message) => {
-    switch (message.type) {
-      case "stream_start":
-      case "stream_chunk":
-      case "stream_end":
-      case "tool_call":
-      case "tool_result":
-        sink({ ...message, subagent: COMPACTION_SUBAGENT });
-        return;
-      default:
-        sink(message);
-    }
-  };
-}
-
 export interface ConversationMessage {
   role: string;
   content: string;
@@ -32,89 +7,17 @@ export interface ConversationMessage {
   version?: string;
 }
 
-export interface CompactionCoverage {
-  claim: string;
-  unit: string;
-  claimed: number;
-  background: number;
-  fresh: number;
-}
-
-export interface MemoryFileOp {
-  path: string;
-  content: string;
-}
-
-interface CompactionResult {
-  memoryFilesWritten: string[];
-  conversationId: string;
-  newConversationId: string;
-  compactedTurns: number;
-  retainedTurns: number;
-  markdownPaths: string[];
-  toolRounds: number;
-  toolsCalled: string[];
-}
-
-interface DryRunResult {
-  wouldWriteFiles: number;
-  fileOpsPreview: MemoryFileOp[];
-  compactedTurns: number;
-  retainedTurns: number;
-  markdownPreview: string[];
-  toolRounds: number;
-  toolsCalled: string[];
-}
-
-interface PausedCompactionResult {
-  conversationId: string;
-  checkpointId: string;
-  compactedTurns: number;
-  toolRounds: number;
-  toolsCalled: string[];
-  reason: string;
-  detail?: string;
-  resumeAt?: string;
-  held?: boolean;
-}
-
-interface RotatedResult {
+export interface CompactionOutcome {
   conversationId: string;
   dryRun: boolean;
   compactedTurns: number;
   retainedTurns: number;
 }
 
-interface SegmentCompactionResult {
-  segment: number;
-  compactedTurns: number;
-  memoryFilesWritten: string[];
-  toolRounds: number;
-  toolsCalled: string[];
-}
-
-interface TruncatedCompactionResult {
-  conversationId: string;
-  compactedTurns: number;
-  toolRounds: number;
-  toolsCalled: string[];
-  truncatedTurns: number;
-  partialWrites: string[];
-}
-
-export type CompactionOutcome =
-  | ({ kind: "compacted" } & CompactionResult)
-  | ({ kind: "dry_run" } & DryRunResult)
-  | ({ kind: "rotated" } & RotatedResult)
-  | ({ kind: "truncated" } & TruncatedCompactionResult)
-  | ({ kind: "paused" } & PausedCompactionResult)
-  | ({ kind: "segment" } & SegmentCompactionResult);
-
 export type CompactionErrorKind =
   | "llm"
   | "insufficient_messages"
   | "conversation"
-  | "markdown_store"
   | "not_found"
   | "busy"
   | "wakes_thread";
@@ -136,10 +39,6 @@ export class CompactionError extends Error {
     return new CompactionError("insufficient_messages", "insufficient messages");
   }
 
-  static markdownStore(detail: string): CompactionError {
-    return new CompactionError("markdown_store", `markdown store: ${detail}`);
-  }
-
   static conversationManager(detail: string): CompactionError {
     return new CompactionError("conversation", `conversation: ${detail}`);
   }
@@ -153,96 +52,14 @@ export class CompactionError extends Error {
   }
 }
 
-export class CompactionRefused extends Error {
-  constructor(message: string, options?: ErrorOptions) {
-    super(message, options);
-    this.name = "CompactionRefused";
-  }
-}
-
-export class CompactionPaused extends Error {
-  readonly checkpointId: string;
-  readonly reason: string;
-  readonly resumeAt: string | undefined;
-
-  constructor(checkpointId: string, reason: string, resumeAt?: string) {
-    super(`compaction paused (${reason}, checkpoint=${checkpointId})`);
-    this.name = "CompactionPaused";
-    this.checkpointId = checkpointId;
-    this.reason = reason;
-    this.resumeAt = resumeAt;
-  }
-}
-
-export interface CompactionLlm {
-  buildInitialRequest(
-    prompt: string,
-    chatRequest: SidecarRequest,
-  ): SidecarRequest;
-
-  generate(request: SidecarRequest): Promise<GenerateResponse>;
-  run(
-    request: SidecarRequest,
-    tools: import("../../tools/execute.ts").ToolPhase,
-    options?: import("../../llm/types.ts").ToolLoopOptions,
-  ): Promise<GenerateResponse>;
-}
-
 export interface ConversationManager {
   archiveAndRetain(
     conversationId: string,
     params: {
       keepLastN: number;
       activeContent: string;
-      operationId?: string;
-      memoryBefore?: string;
-      memoryAfter?: string;
       excluded?: boolean;
       note?: string;
-      coverageClaim?: string;
     },
   ): Promise<string>;
-}
-
-export interface ToolOutput {
-  content?: string | import("../../engine/types.ts").ContentBlock[];
-  output: string;
-  isError: boolean;
-}
-
-type CompactionWriteTracker = (
-  name: string, input: unknown, write: () => Promise<ToolOutput>,
-) => Promise<ToolOutput>;
-
-export interface CompactionTools {
-  readonly workspaceDir: string;
-
-  readonly workspace?: CharacterWorkspace;
-
-  readonly turns: WorkspaceTurns;
-
-  dispatch(name: string, input: unknown, trackNestedWrite?: CompactionWriteTracker): Promise<ToolOutput>;
-
-  deferEdit?(path: string): Promise<void>;
-
-  ensureWorkspaceGitRepo(workspaceDir: string, charName: string, reason: string): Promise<void>;
-
-  gitHead?(workspaceDir: string): Promise<string | undefined>;
-
-  gitCommitAll(workspaceDir: string, charName: string, message: string): Promise<boolean>;
-}
-
-export interface AppliedCompactionWrite {
-  displayPath: string;
-  resolvedPath: string;
-  previousTree?: string;
-  resultingTree?: string;
-  previousState?: WorkspaceEntry | null;
-  resultingState?: WorkspaceEntry | null;
-  previousContent?: string;
-  previousEncoding?: "base64";
-  previousSymlink?: string;
-  resultingContent?: string;
-  deleted?: boolean;
-  superseded?: boolean;
 }

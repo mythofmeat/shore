@@ -56,20 +56,18 @@ describe("a turn with five tool calls counts as one turn", () => {
     expect(await listed(data)).toEqual([2]);
   });
 
-  test("in the notice of an archive that writes no memory, and in the segment it leaves", async () => {
+  test("in the notice of an archive, and in the segment it leaves", async () => {
     const data = await dataWith([...fiveToolCalls("a"), said("b-ask", "user", "thanks"), said("b-reply", "assistant", "any time")]);
     const root = join(data, "..");
     const app = defaultAppConfig();
-    app.compaction.write_memory = false;
     app.compaction.keep_recent_turns = 1;
     const config: LoadedConfig = {
       app, models: emptyCatalog(), providers: ProviderRegistry.empty(), rawTable: undefined,
       dirs: { config: join(root, "config"), data, cache: join(root, "cache"), runtime: join(root, "runtime") },
     };
     const notices: string[] = [];
-    const generate = () => Promise.reject(new Error("an archive that writes no memory asks no model"));
-    await runCompaction("ada", { config, generate, notify: (_title, body) => notices.push(body) }, "turn");
-    expect(notices).toEqual(["Conversation rotated into history (1 turn, no memory write)"]);
+    await runCompaction("ada", { config, notify: (_title, body) => notices.push(body) });
+    expect(notices).toEqual(["Conversation archived (1 turn)"]);
     expect(await listed(data)).toEqual([1]);
   });
 });

@@ -332,38 +332,22 @@ pub(crate) enum CliCommand {
         subagent_tools: bool,
     },
 
-    /// Summarize the conversation into memory and shorten the active window.
-    /// The pass runs on the daemon and is shown live: its reasoning, tool
-    /// calls and results. Ctrl-C only stops watching; the pass carries on.
+    /// Archive the older part of the conversation and shorten the active window.
+    /// A reply you haven't read yet stays, with everything after it. Archived
+    /// turns can be opened from the top of the thread and searched in the chat
+    /// logs.
     #[command(display_order = 2)]
     Compact {
         /// How many recent user turns to leave in the conversation. Everything
-        /// older is folded into markdown memory. 0 keeps none of it, leaving
-        /// only the prompt files and the memory index.
+        /// older is archived. 0 keeps none of it.
         #[arg(conflicts_with_all = ["watch", "cancel"])]
         keep_turns: Option<u32>,
 
-        /// Throw away a paused checkpoint and summarize from scratch. Use this
-        /// when a pass stopped partway — out of quota, provider down, memory
-        /// files edited since — and `shore compact` keeps reporting paused. The
-        /// memory it already wrote stays; those turns get summarized again.
-        #[arg(long, conflicts_with_all = ["watch", "cancel"])]
-        restart: bool,
-
-        /// Write memory from an archived segment (see `shore segments`) as if it
-        /// were being compacted now. The archive and the conversation are left
-        /// as they are. Use it to redo a segment whose pass wrote nothing.
-        #[arg(long, value_name = "INDEX", conflicts_with_all = ["keep_turns", "restart", "watch", "cancel"], add = values(Completes::Segments))]
-        segment: Option<u64>,
-
-        /// Follow the compaction already running, whoever started it, from what
-        /// it has done so far to how it ends. With none running, show how the
-        /// last pass ended.
+        /// Show the compaction running now, if any, until it ends.
         #[arg(long, conflicts_with = "cancel")]
         watch: bool,
 
-        /// Stop the running compaction. It pauses with its checkpoint kept, so
-        /// `shore compact` resumes it later.
+        /// Stop the compaction running now, if any.
         #[arg(long)]
         cancel: bool,
 
@@ -1078,7 +1062,6 @@ pub(crate) enum PaletteScope {
 pub(crate) enum BackgroundTarget {
     All,
     Wake,
-    Compaction,
 }
 
 impl BackgroundTarget {
@@ -1086,7 +1069,6 @@ impl BackgroundTarget {
         match self {
             Self::All => BackgroundModelTarget::All,
             Self::Wake => BackgroundModelTarget::Wake,
-            Self::Compaction => BackgroundModelTarget::Compaction,
         }
     }
 }
@@ -3256,8 +3238,6 @@ fn provider_to_swp(cmd: &CliCommand) -> Option<(&'static str, serde_json::Value)
 fn compact_to_swp(cmd: &CliCommand) -> Option<(&'static str, serde_json::Value)> {
     let CliCommand::Compact {
         keep_turns,
-        restart,
-        segment,
         watch,
         cancel,
         ..
@@ -3274,8 +3254,6 @@ fn compact_to_swp(cmd: &CliCommand) -> Option<(&'static str, serde_json::Value)>
     operation_to_swp::<CompactConversation>(CompactArgs {
         dry_run: None,
         keep_turns: keep_turns.map(u64::from),
-        restart: restart.then_some(true),
-        segment: *segment,
     })
 }
 
@@ -4047,18 +4025,6 @@ mod tests {
             (
                 &["compact", "8"],
                 Some(("compact", json!({"keep_turns": 8}))),
-            ),
-            (
-                &["compact", "--restart"],
-                Some(("compact", json!({"restart": true}))),
-            ),
-            (
-                &["compact", "0", "--restart"],
-                Some(("compact", json!({"keep_turns": 0, "restart": true}))),
-            ),
-            (
-                &["compact", "--segment", "860"],
-                Some(("compact", json!({"segment": 860}))),
             ),
             (
                 &["-c", "ada", "usage"],

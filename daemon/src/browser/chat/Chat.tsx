@@ -1,5 +1,5 @@
 import { useEffect, useLayoutEffect, useState } from "react";
-import { CONVERSATION_DIALOG_EVENT, openCompactionView, openThreadDialog } from "../app/intents.ts";
+import { CONVERSATION_DIALOG_EVENT, openThreadDialog } from "../app/intents.ts";
 import type { ChromeSnapshot } from "../workspace.ts";
 import { Avatar } from "../ui/avatar.tsx";
 import { IconButton, Menu, type MenuItem } from "../ui/controls.tsx";
@@ -9,7 +9,6 @@ import { conversation, errorText, readMarks, streamReplies, useConversationActiv
 import { toasts } from "../ui/toast.tsx";
 import { makeHome } from "./actions.ts";
 import { BudgetChip } from "./budget.tsx";
-import { CompactionChip } from "./CompactionView.tsx";
 import { GalleryDialog } from "./gallery.tsx";
 import { Composer } from "./Composer.tsx";
 import { ConversationDialogs, type ConversationDialog } from "./dialogs.tsx";
@@ -48,9 +47,7 @@ function ChatTopbar({ state, sidebarOpen, toggleSidebar, mobile }: { state: Chro
   const items: MenuItem[] = [
     { label: "Thread settings…", icon: "settings", onSelect: () => openThreadDialog("settings", threadId), disabled: !ready },
     { label: "Images…", icon: "image", onSelect: () => setDialog("gallery") },
-    state.compaction === null
-      ? { label: "Compact context…", icon: "compact", onSelect: () => setDialog("compact"), disabled: !ready || busy }
-      : { label: "Show the compaction…", icon: "compact", onSelect: openCompactionView },
+    { label: "Compact context…", icon: "compact", onSelect: () => setDialog("compact"), disabled: !ready || busy },
     { label: "Fork…", icon: "branch", onSelect: () => openThreadDialog("fork", threadId), disabled: !ready },
     "separator",
     ...(thread?.wakes === true ? [] : [
@@ -70,7 +67,6 @@ function ChatTopbar({ state, sidebarOpen, toggleSidebar, mobile }: { state: Chro
         <span className="topbar-name">{state.opening?.character ?? state.character}</span>
         {state.thread === null || (state.opening !== null && state.opening.thread === null) ? null : <><span className="topbar-separator">/</span><button type="button" className="topbar-thread" title="Thread settings" aria-label={`${shownThread === undefined ? state.thread : threadLabel(shownThread)}. Thread settings`} disabled={!ready || state.opening !== null} onClick={() => openThreadDialog("settings", threadId)}>{shownThread === undefined ? state.thread : threadLabel(shownThread)}</button></>}
       </div>
-      <CompactionChip state={state} open={openCompactionView} />
       {mobile ? null : <BudgetChip state={state} />}
       <Menu label="Thread options" items={items} />
     </>}

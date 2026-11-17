@@ -443,43 +443,31 @@ describe("a model's settings in the model commands", () => {
   });
 });
 
-describe("the models wakes and compaction run on", () => {
+describe("the models wakes run on", () => {
   const TOML = (pins: string[]): string => [
     "[chat]", 'model = "anthropic:claude-x"', ...pins, "[providers.anthropic]", 'api_key_env = "K"',
     '[chat."anthropic:claude-x"]', "max_output_tokens = 4000", '[chat."anthropic:claude-y"]', "max_output_tokens = 4000", "",
   ].join("\n");
-  const PINNED = ["[triggers]", 'model = "anthropic:claude-y"', "[compaction]", 'model = "anthropic:claude-y"'];
+  const PINNED = ["[triggers]", 'model = "anthropic:claude-y"'];
   const reading = async (pins: string[], character?: string) => {
     const w = await build(character, TOML(pins));
     return { w, models: { ...w.ctx, dataDir: w.ctx.config.dirs.data } };
   };
 
-  test("unpinning one task clears only its key, and it goes back to the chat model", async () => {
+  test("unpinning wakes clears their key, and they go back to the chat model", async () => {
     const { w, models } = await reading(PINNED);
     expect(resetModel(models, { background_task: "wake" })).toEqual({
       target: "role", active: "anthropic:claude-x", role: "wake", cleared: ["triggers.model"], source: "inherits chat", file: w.ctx.configPath,
       reset_to: "inherits chat", roles: [{ role: "wake", model: "anthropic:claude-x", source: "inherits chat" }],
     });
-    expect(Bun.TOML.parse(readFileSync(w.ctx.configPath, "utf8"))).toMatchObject({ triggers: {}, compaction: { model: "anthropic:claude-y" } });
+    expect(Bun.TOML.parse(readFileSync(w.ctx.configPath, "utf8"))).toMatchObject({ triggers: {} });
   });
 
-  test("unpinning both clears whichever keys were set, and says what they share or that each goes its own way", async () => {
-    const both = await reading(PINNED);
-    expect(resetModel(both.models, { background_task: "all" })).toMatchObject({
-      active: "anthropic:claude-x", role: "background", cleared: ["triggers.model", "compaction.model"], source: "inherits chat", reset_to: "inherits chat",
+  test("unpinning every background task clears the key that was set", async () => {
+    const { models } = await reading(PINNED);
+    expect(resetModel(models, { background_task: "all" })).toMatchObject({
+      active: "anthropic:claude-x", role: "background", cleared: ["triggers.model"], source: "inherits chat", reset_to: "inherits chat",
     });
-    const one = await reading(PINNED.slice(0, 2), "ada");
-    const apart = resetModel({ ...one.models, thread: "side", threadModel: "anthropic:claude-y" }, { background_task: "all" });
-    expect(apart).toEqual({
-      target: "role", active: null, role: "background", cleared: ["triggers.model"], source: null, file: one.w.ctx.configPath, reset_to: "per-task defaults",
-      roles: [{ role: "wake", model: "anthropic:claude-x", source: "inherits chat" }, { role: "compaction", model: "anthropic:claude-y", source: "inherits chat" }],
-    });
-  });
-
-  test("a setting for both is refused while they run on different models, naming each", async () => {
-    const { models } = await reading(["[triggers]", 'model = "anthropic:claude-y"']);
-    expect(() => setModelSetting(models, { key: "max_tool_rounds", value: 3, scope: "character", background_task: "all" }))
-      .toThrow("background tasks use different models (wake → anthropic:claude-y, compaction → anthropic:claude-x); target a specific task instead of `all`");
   });
 });
 
@@ -494,7 +482,7 @@ describe("the settings wakes run with", () => {
     expect(readFileSync(characterPreferencesPath(models.dataDir, "ada"), "utf8")).toContain("[background.wake]\nmax_tool_rounds = 6\n");
     expect(wakes(models).saved_character).toMatchObject({ max_tool_rounds: 6 });
     expect(() => setModelSetting(models, { key: "max_tool_rounds", value: 6, scope: "character", background_task: "heartbeat" as never }))
-      .toThrow("unknown background task: heartbeat; expected all, wake or compaction");
+      .toThrow("unknown background task: heartbeat; expected all or wake");
   });
 
   test("a preferences file from when the task was called heartbeat is read as it stands and rewritten under the new name, once", async () => {
@@ -502,10 +490,10 @@ describe("the settings wakes run with", () => {
     const models = { ...w.ctx, dataDir: w.ctx.config.dirs.data };
     const path = characterPreferencesPath(models.dataDir, "ada");
     await mkdir(dirname(path), { recursive: true });
-    await writeFile(path, '[background.heartbeat]\nmax_tool_rounds = 4\nreasoning_effort = "low"\n\n[background.compaction]\nmax_tool_rounds = 2\n');
+    await writeFile(path, '[background.heartbeat]\nmax_tool_rounds = 4\nreasoning_effort = "low"\n');
     expect(wakes(models).saved_character).toMatchObject({ max_tool_rounds: 4, reasoning_effort: "low" });
     const rewritten = readFileSync(path, "utf8");
-    expect([rewritten.includes("[background.wake]\nreasoning_effort = \"low\"\nmax_tool_rounds = 4\n"), rewritten.includes("[background.compaction]\nmax_tool_rounds = 2\n"), rewritten.includes("heartbeat")]).toEqual([true, true, false]);
+    expect([rewritten.includes("[background.wake]\nreasoning_effort = \"low\"\nmax_tool_rounds = 4\n"), rewritten.includes("heartbeat")]).toEqual([true, false]);
     expect(wakes(models).saved_character).toMatchObject({ max_tool_rounds: 4, reasoning_effort: "low" });
     expect(readFileSync(path, "utf8")).toBe(rewritten);
 
@@ -517,6 +505,9 @@ describe("the settings wakes run with", () => {
     await writeFile(path, "[background.heartbeat]\nmax_tool_rounds = 4\n\n[background.wake]\nmax_tool_rounds = 9\n");
     expect(wakes(models).saved_character).toMatchObject({ max_tool_rounds: 9 });
     expect(readFileSync(path, "utf8")).not.toContain("heartbeat");
+
+    await writeFile(path, "[background.compaction]\nmax_tool_rounds = 2\n");
+    expect(() => wakes(models)).toThrow("unknown field `compaction`, expected `wake`");
   });
 
   test("an old preferences file that can't be rewritten is still read, and the daemon says it couldn't", async () => {

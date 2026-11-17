@@ -79,21 +79,15 @@ describe("what the archive writer records and refuses", () => {
     return { data, dir, active, dbPath: join(data, "shore.db") };
   }
 
-  test("the conversation manager passes on a pass's claim, exclusion and note, and keeps the location's claim when the pass has none", async () => {
+  test("the conversation manager passes on an exclusion and a note, and an archive without them has neither", async () => {
     const { dir, active, dbPath } = await conversation("manager");
-    const claims = HistoryStore.open(dbPath);
-    const now = Date.parse(stamp);
-    claims.claimMemoryCoverage("ada", "compaction", ["v1"], "pass-claim", "pass", now, 60_000);
-    claims.claimMemoryCoverage("ada", "compaction", ["v0"], "base-claim", "pass", now, 60_000);
-    claims.close();
-    const manager = conversationManager(dir, { dbPath, archiveKey: "ada", coverageClaim: "base-claim" }, () => stamp, () => "next");
-    await manager.archiveAndRetain("ada", { keepLastN: 2, activeContent: jsonl(messages), operationId: "first", coverageClaim: "pass-claim", excluded: true, note: "a note" });
+    const manager = conversationManager(dir, { dbPath, archiveKey: "ada" }, () => stamp, () => "next");
+    await manager.archiveAndRetain("ada", { keepLastN: 2, activeContent: jsonl(messages), excluded: true, note: "a note" });
     const after = readDurable(active);
     writeDurable(active, after + jsonl([{ ...messages[0] as Message, msg_id: "m4" }]));
-    await manager.archiveAndRetain("ada", { keepLastN: 1, activeContent: readDurable(active), operationId: "second" });
+    await manager.archiveAndRetain("ada", { keepLastN: 1, activeContent: readDurable(active) });
     const history = HistoryStore.open(dbPath);
     try {
-      expect([...history.coveredMemoryVersions("ada", "compaction", ["v0", "v1"])].sort()).toEqual(["v0", "v1"]);
       expect(history.entry("ada", 0)).toMatchObject({ excluded: true, note: "a note" });
       expect(history.entry("ada", 1)?.excluded).not.toBe(true);
       expect(history.entry("ada", 1)).not.toHaveProperty("note");

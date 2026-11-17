@@ -9,7 +9,7 @@ import { emitNewMessageEvent } from "../handler/persistence.ts";
 import { createDefaultConfig } from "../config/loader.ts";
 import { superviseMatrixBridge } from "../connections/matrix/supervise.ts";
 import { tokenMatches, TOKEN_ENV } from "../config/token.ts";
-import { buildMessageHandlerDeps, configReloader, labelNewSegments, resumeStoppedCompactions } from "../handler/deps.ts";
+import { buildMessageHandlerDeps, configReloader, labelNewSegments } from "../handler/deps.ts";
 import { MessageHandler } from "../handler/router.ts";
 import { ThreadUnreadTracker } from "../handler/thread_unread.ts";
 import { ensureAndBackfillAutonomy } from "../handler/turn.ts";
@@ -275,7 +275,6 @@ export async function startDaemon(options: DaemonOptions): Promise<RunningDaemon
     let handler: MessageHandler | undefined;
     let shutdownWindow: ShutdownWindowState | undefined;
     const running = () => runningReport({
-      dataDir: loaded.dirs.data,
       generations: () => handler?.activeGenerations() ?? [],
       wakes: () => runtime.autonomy.runningWakes(),
       shutdown: () => shutdownWindow,
@@ -306,7 +305,6 @@ export async function startDaemon(options: DaemonOptions): Promise<RunningDaemon
 
     handler = new MessageHandler(buildMessageHandlerDeps(assembly));
     teardown.push(["segment labels", labelNewSegments(assembly).stop]);
-    const resumed = resumeStoppedCompactions(assembly).catch((e: unknown) => { shoreLog.warn(`shore: could not resume compactions paused by the last shutdown: ${String(e)}`); });
     const messages = handler;
 
     const handlerDone = messages.run(server.routes());
@@ -378,7 +376,7 @@ export async function startDaemon(options: DaemonOptions): Promise<RunningDaemon
         const requestedAt = Date.now();
         shutdownWindow = { requestedAt, deadline: requestedAt + graceMs };
         messages.close();
-        const idle = Promise.all([messages.drain(), runtime.autonomy.quiesce(), stopBackgroundCompactions(loaded.dirs.data, "the daemon is shutting down; the compaction resumes after it restarts")]);
+        const idle = Promise.all([messages.drain(), runtime.autonomy.quiesce(), stopBackgroundCompactions(loaded.dirs.data)]);
         const work = running().work;
         if (work.length > 0) {
           log?.info?.("Waiting for running work to finish before stopping", {
@@ -392,7 +390,7 @@ export async function startDaemon(options: DaemonOptions): Promise<RunningDaemon
       return draining;
     };
 
-    const settled = Promise.allSettled([seeded, resumed]).then(() => {
+    const settled = Promise.allSettled([seeded]).then(() => {
       for (const release of compactionHolds) release();
       log?.info?.("Startup settled, automatic compaction may run", { took_ms: Math.round(performance.now() - settling) });
       if (!stopped) void runtime.autonomy.tick();

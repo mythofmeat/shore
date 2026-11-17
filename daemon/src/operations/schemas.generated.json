@@ -1849,22 +1849,7 @@
             "null"
           ]
         },
-        "restart": {
-          "type": [
-            "boolean",
-            "null"
-          ]
-        },
         "keep_turns": {
-          "type": [
-            "integer",
-            "null"
-          ],
-          "format": "uint64",
-          "minimum": 0,
-          "maximum": 9007199254740991
-        },
-        "segment": {
           "type": [
             "integer",
             "null"
@@ -7487,8 +7472,7 @@
           "type": "string",
           "enum": [
             "all",
-            "wake",
-            "compaction"
+            "wake"
           ]
         }
       }
@@ -7709,8 +7693,7 @@
           "type": "string",
           "enum": [
             "all",
-            "wake",
-            "compaction"
+            "wake"
           ]
         }
       }
@@ -7974,8 +7957,7 @@
           "type": "string",
           "enum": [
             "all",
-            "wake",
-            "compaction"
+            "wake"
           ]
         }
       }
@@ -8232,8 +8214,7 @@
           "type": "string",
           "enum": [
             "all",
-            "wake",
-            "compaction"
+            "wake"
           ]
         }
       }
@@ -8575,8 +8556,7 @@
           "type": "string",
           "enum": [
             "all",
-            "wake",
-            "compaction"
+            "wake"
           ]
         },
         "ModelPreferenceScope": {
@@ -8672,8 +8652,7 @@
           "type": "string",
           "enum": [
             "all",
-            "wake",
-            "compaction"
+            "wake"
           ]
         },
         "ModelInvalidated": {
