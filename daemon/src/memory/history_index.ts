@@ -406,8 +406,11 @@ function likePattern(text: string): string {
   return `%${text.replace(/[\\%_]/g, (c) => `\\${c}`)}%`;
 }
 
+const NOT_APART = "($apart = '' OR m.thread != $apart OR m.also_in IS NOT NULL)";
+
 export class HistoryIndex {
   readonly #db: Database;
+  #apart = "";
 
   private constructor(db: Database) {
     this.#db = db;
@@ -425,10 +428,20 @@ export class HistoryIndex {
     return (this.#db.query("SELECT value FROM metadata WHERE key = ?1").get(key) as { value: string } | null)?.value;
   }
 
+  keptApart(thread: string | undefined): this {
+    this.#apart = thread ?? "";
+    return this;
+  }
+
+  apartThread(): string | undefined {
+    const row = this.#db.query("SELECT thread FROM messages WHERE thread = ?1 LIMIT 1").get(this.#apart) as { thread: string } | null;
+    return row?.thread;
+  }
+
   span(): { messages: number; oldest: number; newest: number } | undefined {
-    const row = this.#db.query("SELECT COUNT(*) AS messages, MIN(ts) AS oldest, MAX(ts) AS newest FROM messages WHERE copy_of IS NULL")
-      .get() as { messages: number; oldest: number | null; newest: number | null };
-    return row.oldest === null || row.newest === null ? undefined : { messages: row.messages, oldest: row.oldest, newest: row.newest };
+    const row = this.#db.query(`SELECT COUNT(*) AS messages, MIN(m.ts) AS oldest, MAX(m.ts) AS newest FROM messages m WHERE m.copy_of IS NULL AND ${NOT_APART} HAVING COUNT(*) > 0`)
+      .get({ $apart: this.#apart }) as { messages: number; oldest: number; newest: number } | null;
+    return row ?? undefined;
   }
 
   threads(): string[] {
@@ -437,8 +450,8 @@ export class HistoryIndex {
   }
 
   #matching(match: ChatLogMatch, query: string, filter: ChatLogFilter): { from: string; params: Record<string, string | number> } {
-    const params: Record<string, string | number> = {};
-    const where = ["m.copy_of IS NULL", ...filterSql(filter, params)];
+    const params: Record<string, string | number> = { $apart: filter.thread === undefined ? this.#apart : "" };
+    const where = ["m.copy_of IS NULL", NOT_APART, ...filterSql(filter, params)];
     if (match === "words") {
       params["$query"] = query;
       return { from: `FROM messages_fts JOIN messages m ON m.id = messages_fts.rowid WHERE messages_fts MATCH $query AND ${where.join(" AND ")}`, params };
@@ -486,7 +499,7 @@ export class HistoryIndex {
   }
 
   between(start: number, end: number): ChatLogMessage[] {
-    return this.#db.query("SELECT * FROM messages WHERE copy_of IS NULL AND ts BETWEEN ?1 AND ?2 ORDER BY thread = 'main' DESC, thread, ts, seq")
-      .all(start, end) as ChatLogMessage[];
+    return this.#db.query(`SELECT m.* FROM messages m WHERE m.copy_of IS NULL AND m.ts BETWEEN $start AND $end AND ${NOT_APART} ORDER BY m.thread = 'main' DESC, m.thread, m.ts, m.seq`)
+      .all({ $start: start, $end: end, $apart: this.#apart }) as ChatLogMessage[];
   }
 }

@@ -369,7 +369,7 @@ test("the guide says a wake starts fresh in whichever thread it runs, and what i
   expect(wakes).toContain("- Where and how long ago eve last wrote to you.\n- eve's status, while one is set.\n- The label and opening time of each sealed thread you have.");
   expect(wakes).toContain("- Your diary from the last day, and the note your last wake in that thread ended with if that note is older.");
   expect(wakes).toContain("- A line for each thing that set it off: the trigger and its reason, or the thread you handed over from and the reason you gave.");
-  expect(wakes).toContain("- The thread's own conversation, or what earlier wakes did there. The thread keeps its conversation, your wakes thread keeps what earlier wakes did, and `chat_logs` finds both.");
+  expect(wakes).toContain("- The thread's own conversation, or what earlier wakes did there. The thread keeps its conversation, and `chat_logs` finds it. Your wakes thread keeps what earlier wakes did, and `chat_logs` finds that only when `thread` names your wakes thread.");
   expect(wakes).toContain("- A wake's own working, in what it is shown of a thread.");
   expect(wakes).toContain("A final response of just `NO_NOTE` leaves no note, and the note before it stays the one the next wake starts with.");
   expect(wakes).toContain("- Nothing in that final response is sent to eve. `send_message` sends them a message, posted in the thread the wake ran in when the wake ends; the `messages` topic has the details.\n");

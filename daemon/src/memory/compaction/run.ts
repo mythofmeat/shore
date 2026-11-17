@@ -33,6 +33,7 @@ import {
   gitCommitAll,
   gitHead,
   gitPushWorkspaceBestEffort,
+  saveWorkspaceAtArchive,
 } from "../../tools/workspace.ts";
 import { MarkdownMemoryStore } from "../markdown_store.ts";
 import { CharacterWorkspace, characterWorkspace } from "../../tools/character_workspace.ts";
@@ -40,7 +41,7 @@ import { workspaceTurnsFor } from "../../tools/workspace_turns.ts";
 import { applyDeferredEdits, queueDeferredEdit } from "../deferred_edits.ts";
 import type { CompactionRunner } from "../../handler/turn.ts";
 import { conversationManager, hasCompactionOperation, priorContext } from "./archive.ts";
-import { type CompactionCompletion, handleCompactionOutcome, loadMessagesForCompaction, pushAfterCompaction } from "./background.ts";
+import { type CompactionCompletion, alongsidePasses, handleCompactionOutcome, loadMessagesForCompaction, pushAfterCompaction } from "./background.ts";
 import { RealCompactionLlm, type RealCompactionLlmOptions } from "./llm.ts";
 import { compact, compactSegment, countTurns, tryBeginCompaction, type CompactionRunGuard } from "./manager.ts";
 import { startPass, type PassScope } from "./activity.ts";
@@ -132,12 +133,18 @@ export async function rotateWithoutMemoryWrite(
 ): Promise<CompactionOutcome | undefined> {
   const dryRun = options.dryRun ?? false;
   if (dryRun) return await rotate(character, thread, deps, effective, plan, conversationDir, dryRun, note, plan.sourceContent);
-  return await underThread(deps, character, thread)(async () => {
-    const outcome = await rotate(character, thread, deps, effective, plan, conversationDir, dryRun, note,
+  const outcome = await underThread(deps, character, thread)(async () => {
+    const rotated = await rotate(character, thread, deps, effective, plan, conversationDir, dryRun, note,
       await readLiveSource(effective.dirs.data, character, thread, plan.sourceContent));
-    if (outcome !== undefined) await settleArchive(deps, character, thread)();
-    return outcome;
+    if (rotated !== undefined) await settleArchive(deps, character, thread)();
+    return rotated;
   });
+  if (outcome !== undefined) await saveWorkspaceAfterArchive(deps.config, effective, character);
+  return outcome;
+}
+
+export async function saveWorkspaceAfterArchive(config: LoadedConfig, effective: LoadedConfig, character: string): Promise<void> {
+  await saveWorkspaceAtArchive(characterWorkspace(config, character), character, effective.app.compaction.git_push ? alongsidePasses : undefined);
 }
 
 async function rotate(

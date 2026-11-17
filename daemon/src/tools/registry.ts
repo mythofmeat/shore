@@ -141,7 +141,7 @@ export const ALL_TOOLS: readonly ToolDef[] = Object.freeze([
     parameters: {
       type: "object",
       properties: {
-        action: { type: "string", enum: ["search", "read"], description: "`search` finds messages by their words. `read` reads conversations in order." },
+        action: { type: "string", enum: ["search", "read", "list"], description: "`search` finds messages by their words. `read` reads conversations in order. `list` shows your archived conversations with their labels." },
         query: { type: "string", description: "For `search`: an FTS5 query, or the text to find when `match` is `substring`." },
         match: {
           type: "string",
@@ -151,15 +151,15 @@ export const ALL_TOOLS: readonly ToolDef[] = Object.freeze([
         sort: { type: "string", enum: ["best", "oldest", "newest"], description: "For `search`: order of hits. Default `best`." },
         speaker: { type: "string", description: "For `search`: only this speaker: `user`, `character`, or either name." },
         all_time: { type: "boolean", description: "For `search`: search the whole archive, not just the last 6 months. Ignored with `start` or `end`." },
-        limit: { type: "integer", description: "For `search`: hits per page. Default 10, at most 50." },
+        limit: { type: "integer", description: "For `search` and `list`: hits or conversations per page. Default 10, at most 50." },
         around: { type: "string", description: "For `read`: a message id from `search`." },
         before: { type: "integer", description: "For `read`: messages to show before `around`. Default 3." },
         after: { type: "integer", description: "For `read`: messages to show after `around`. Default 3." },
         overview: { type: "string", description: "For `read`: a local date such as 2026-03-01, to list that day's conversations." },
-        thread: { type: "string", description: "A thread's id, such as `main`. `search` looks only there. A `start`/`end` read is of that thread, `main` by default; with `around` it picks the copy in that thread." },
+        thread: { type: "string", description: "A thread's id, such as `main`. `search` looks only there, and `list` shows only its conversations. A `start`/`end` read is of that thread, `main` by default; with `around` it picks the copy in that thread." },
         start: { type: "string", description: `Inclusive start of what to search, or where to read from. ${CHAT_LOG_TIME}` },
         end: { type: "string", description: `Inclusive end of what to search or read. ${CHAT_LOG_TIME}` },
-        offset: { type: "integer", description: "Hits to skip in a `search`, or messages to skip in a `start`/`end` read, to get the next page." },
+        offset: { type: "integer", description: "Hits to skip in a `search`, messages to skip in a `start`/`end` read, or conversations to skip in a `list`, to get the next page." },
       },
       required: ["action"],
       additionalProperties: false,

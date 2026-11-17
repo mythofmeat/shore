@@ -149,6 +149,11 @@ export function compactLater(dataDir: string, character: string, thread: string,
   return true;
 }
 
+export function alongsidePasses(work: Promise<void>): void {
+  backgroundPasses.add(work);
+  void work.then(() => backgroundPasses.delete(work));
+}
+
 export async function queuedCompactionsEnded(dataDir: string, character: string): Promise<void> {
   await characterQueues.get(characterDataDir(dataDir, character));
 }
