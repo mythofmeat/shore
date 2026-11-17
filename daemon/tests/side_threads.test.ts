@@ -624,7 +624,8 @@ describe("chat logs across threads", () => {
 
     expect(await outcomeOf(handleChatLogs({ action: "read", query: "Mara" }, dir, options))).toThrow("invalid args: `query` goes with `search`, not `read`");
     expect(await outcomeOf(handleChatLogs({ action: "search", query: "Mara", around: "a1" }, dir, options))).toThrow("invalid args: `around` goes with `read`, not `search`");
-    expect(await outcomeOf(handleChatLogs({ query: "Mara" }, dir, options))).toThrow("invalid args: action must be one of search, read");
+    expect(await outcomeOf(handleChatLogs({ query: "Mara" }, dir, options))).toThrow("invalid args: action must be one of search, read, list");
+    expect(await outcomeOf(handleChatLogs({ action: "list", query: "Mara" }, dir, options))).toThrow("invalid args: `query` goes with `search`, not `list`");
   });
 
   test("an index built when the column marking a wake's messages had its old name is built again, and marks them as before", async () => {

@@ -1,6 +1,9 @@
+import { existsSync } from "node:fs";
 import { join } from "node:path";
 
+import { archiveKey } from "../config/dirs.ts";
 import { asNaive, hostZone, naiveInZone, resolveInZone } from "../ledger/zoned.ts";
+import { HistoryStore } from "../engine/history_store.ts";
 import { MessageStore } from "../engine/message_store.ts";
 import { readThreadsIndex, wakesThread } from "../engine/threads.ts";
 import { threadFile } from "../storage/files.ts";
@@ -366,6 +369,7 @@ function hitLine(hit: ChatLogHit, view: View, query: string): string {
 const CHAT_LOG_TAKES = {
   search: ["query", "match", "sort", "speaker", "thread", "start", "end", "all_time", "limit", "offset"],
   read: ["around", "before", "after", "start", "end", "offset", "thread", "overview"],
+  list: ["thread", "limit", "offset"],
 } as const;
 
 export async function handleChatLogs(
@@ -373,9 +377,72 @@ export async function handleChatLogs(
   conversationDir: string,
   options: ChatLogOptions,
 ): Promise<string> {
-  return actionOf(input, CHAT_LOG_TAKES) === "search"
+  const action = actionOf(input, CHAT_LOG_TAKES);
+  if (action === "list") return await handleListChatLogs(input, options);
+  return action === "search"
     ? await handleSearchChatLogs(input, conversationDir, options)
     : await handleReadChatLogs(input, conversationDir, options);
+}
+
+interface ArchivedConversation {
+  thread: string;
+  from: number;
+  to: number;
+  turns: number;
+  label: string | undefined;
+}
+
+async function archivedConversations(options: ChatLogOptions, only: string | undefined): Promise<ArchivedConversation[]> {
+  if (!existsSync(options.dbPath)) return [];
+  const index = options.dataDir === undefined ? undefined : await readThreadsIndex(options.dataDir, options.character);
+  const apart = wakesThread(index);
+  const threads = only === undefined ? (index?.threads.map((record) => record.id) ?? ["main"]).filter((id) => id !== apart) : [only];
+  const store = HistoryStore.open(options.dbPath);
+  try {
+    return threads.flatMap((thread) => store.entries(archiveKey(options.character, thread))
+      .filter((entry) => entry.excluded !== true && entry.turn_count > 0)
+      .map((entry) => ({
+        thread,
+        from: instantOr(entry.first_message_at, entry.compacted_at),
+        to: instantOr(entry.last_message_at, entry.compacted_at),
+        turns: entry.turn_count,
+        label: entry.label,
+      }))).sort((a, b) => b.to - a.to);
+  } finally {
+    store.close();
+  }
+}
+
+function instantOr(timestamp: string | null, otherwise: string): number {
+  const instant = Date.parse(timestamp ?? "");
+  return Number.isNaN(instant) ? Date.parse(otherwise) : instant;
+}
+
+function archivedSpan(conversation: ArchivedConversation, zone: string): string {
+  const day = dayOf(conversation.from, zone);
+  const lastDay = dayOf(conversation.to, zone);
+  return `${day} ${clockOf(conversation.from, zone)} → ${lastDay === day ? "" : `${lastDay} `}${clockOf(conversation.to, zone)}`;
+}
+
+export async function handleListChatLogs(input: Record<string, unknown>, options: ChatLogOptions): Promise<string> {
+  const view = viewOf(options);
+  const thread = optionalTrimmedString(input, "thread");
+  const limit = Math.max(1, countArg(input, "limit", DEFAULT_LIMIT, MAX_LIMIT));
+  const offset = countArg(input, "offset", 0, Number.MAX_SAFE_INTEGER);
+  const all = await archivedConversations(options, thread);
+  const scope = thread === undefined ? "" : ` in thread ${thread}`;
+  if (all.length === 0) return `No archived conversations${scope}.`;
+  if (offset >= all.length) return `${count(all.length)} archived ${all.length === 1 ? "conversation" : "conversations"}${scope}, so offset ${String(offset)} is past the end.`;
+  const page = all.slice(offset, offset + limit);
+  const lines = [
+    `Archived conversations${scope}: ${count(offset + 1)}–${count(offset + page.length)} of ${count(all.length)}, newest first (${view.zone})`,
+    "",
+    ...page.map((conversation) =>
+      `${archivedSpan(conversation, view.zone)}  ${conversation.turns === 1 ? "1 turn" : `${String(conversation.turns)} turns`}  ` +
+      `${conversation.thread === "main" ? "" : `[${conversation.thread}] `}${conversation.label ?? "(no label)"}`),
+  ];
+  if (offset + page.length < all.length) lines.push("", `Next page: offset=${String(offset + page.length)}`);
+  return lines.join("\n");
 }
 
 function countMatches(index: HistoryIndex, match: ChatLogMatch, query: string, filter: ChatLogFilter): { expression: string; total: number; note?: string } {

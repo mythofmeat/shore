@@ -1,10 +1,11 @@
 import { Database } from "bun:sqlite";
 import { describe, expect, test } from "bun:test";
+import { existsSync } from "node:fs";
 import { mkdir } from "node:fs/promises";
 import { join } from "node:path";
 
 import { archiveKey, threadDataDir } from "../src/config/dirs.ts";
-import { HISTORY_DB_FILE } from "../src/engine/history_store.ts";
+import { HISTORY_DB_FILE, HistoryStore } from "../src/engine/history_store.ts";
 import { serializeMessages } from "../src/engine/message_store.ts";
 import { createThread, ensureWakesThread } from "../src/engine/threads.ts";
 import type { Message } from "../src/engine/types.ts";
@@ -35,6 +36,7 @@ interface World {
   data: string;
   options: ChatLogOptions;
   archive: (thread: string, messages: Message[], extra?: { excluded?: boolean; at?: string }) => Promise<void>;
+  label: (thread: string, segment: number, label: string) => void;
   ask: (input: Record<string, unknown>, options?: Partial<ChatLogOptions>) => Promise<string>;
 }
 
@@ -65,11 +67,26 @@ async function world(...threads: string[]): Promise<World> {
         extra.excluded === true ? { excluded: true } : {},
       );
     },
+    label: (thread, segment, label) => {
+      const store = HistoryStore.open(dbPath);
+      try {
+        store.setLabel(archiveKey("frank", thread), segment, label);
+      } finally {
+        store.close();
+      }
+    },
     ask: async (input, over = {}) => await handleChatLogs(input, threadDataDir(data, "frank", "main"), { ...options, ...over }),
   };
 }
 
 const day = (date: string, time: string): string => `2026-11-${date}T${time}:00Z`;
+
+function talk(id: string, date: string, time: string, turns = 1): Message[] {
+  return Array.from({ length: turns }, (_, turn) => [
+    message(`u${id}${String(turn)}`, `question ${id}`, day(date, time)),
+    message(`a${id}${String(turn)}`, `answer ${id}`, day(date, time)),
+  ]).flat();
+}
 
 describe("the working from a character's wakes, kept in its wakes thread", () => {
   async function kept(): Promise<World> {
@@ -282,7 +299,7 @@ describe("the index the chat logs are searched through", () => {
     expect(await outcomeOf(w.ask({ action: "search", query: "Mara" }, from))).toThrow("io: ");
   });
 
-  test("is closed again after a search and a read", async () => {
+  test("and the archive are closed again after a search, a read and a list", async () => {
     const w = await kept();
     const root = join(w.data, "..");
     await w.ask({ action: "search", query: "Mara", all_time: true }, from);
@@ -290,7 +307,109 @@ describe("the index the chat logs are searched through", () => {
     for (let round = 0; round < 3; round += 1) {
       await w.ask({ action: "search", query: "Mara", all_time: true }, from);
       await w.ask({ action: "read", around: "u1" }, from);
+      await w.ask({ action: "list" }, from);
     }
     expect(handlesUnder(root)).toBe(open);
+  });
+});
+
+describe("listing a character's archived conversations", () => {
+  test("shows each one's span, turns, thread and label, newest first, and leaves out what isn't a conversation it may find", async () => {
+    const w = await world("story", "wakes");
+    await w.archive("main", talk("a", "01", "09:00", 3));
+    await w.archive("story", [...talk("b", "02", "23:50"), message("ab9", "and so to bed", day("03", "00:10"))]);
+    await w.archive("main", talk("c", "03", "08:00"));
+    await w.archive("main", talk("d", "03", "18:00"), { excluded: true });
+    await w.archive("main", [message("h1", "The lamp is lit", day("04", "06:00"), { origin: "autonomous" })]);
+    await w.archive("wakes", talk("e", "04", "07:00"));
+    w.label("main", 0, "Naming the keeper");
+    w.label("story", 0, "The night watch");
+    expect((await w.ask({ action: "list" })).split("\n")).toEqual([
+      "Archived conversations: 1–3 of 3, newest first (UTC)",
+      "",
+      "2026-11-03 08:00 → 08:00  1 turn  (no label)",
+      "2026-11-02 23:50 → 2026-11-03 00:10  1 turn  [story] The night watch",
+      "2026-11-01 09:00 → 09:00  3 turns  Naming the keeper",
+    ]);
+  });
+
+  test("shows one thread's when the thread is named, and says so when it has none", async () => {
+    const w = await world("story");
+    await w.archive("main", talk("a", "01", "09:00"));
+    await w.archive("story", talk("b", "02", "09:00"));
+    expect((await w.ask({ action: "list", thread: "story" })).split("\n")).toEqual([
+      "Archived conversations in thread story: 1–1 of 1, newest first (UTC)",
+      "",
+      "2026-11-02 09:00 → 09:00  1 turn  [story] (no label)",
+    ]);
+    expect(await w.ask({ action: "list", thread: "attic" })).toBe("No archived conversations in thread attic.");
+  });
+
+  test("comes a page at a time, and says where the next page starts and when there is none", async () => {
+    const w = await world();
+    for (const [id, date] of [["a", "01"], ["b", "02"], ["c", "03"]] as const) await w.archive("main", talk(id, date, "09:00"));
+    expect((await w.ask({ action: "list", limit: 2 })).split("\n")).toEqual([
+      "Archived conversations: 1–2 of 3, newest first (UTC)",
+      "",
+      "2026-11-03 09:00 → 09:00  1 turn  (no label)",
+      "2026-11-02 09:00 → 09:00  1 turn  (no label)",
+      "",
+      "Next page: offset=2",
+    ]);
+    expect((await w.ask({ action: "list", limit: 2, offset: 2 })).split("\n")).toEqual([
+      "Archived conversations: 3–3 of 3, newest first (UTC)",
+      "",
+      "2026-11-01 09:00 → 09:00  1 turn  (no label)",
+    ]);
+    expect((await w.ask({ action: "list", limit: 0, offset: 1 })).split("\n").slice(0, 3)).toEqual([
+      "Archived conversations: 2–2 of 3, newest first (UTC)",
+      "",
+      "2026-11-02 09:00 → 09:00  1 turn  (no label)",
+    ]);
+    expect(await w.ask({ action: "list", offset: 3 })).toBe("3 archived conversations, so offset 3 is past the end.");
+    expect((await w.ask({ action: "list", limit: 99 })).split("\n")).toHaveLength(5);
+  });
+
+  test("shows ten when no limit is given, and at most fifty", async () => {
+    const w = await world();
+    for (let n = 0; n < 52; n += 1) await w.archive("main", talk(String(n), "01", "09:00"));
+    expect((await w.ask({ action: "list" })).split("\n").filter((line) => line.startsWith("2026"))).toHaveLength(10);
+    expect((await w.ask({ action: "list", limit: 99 })).split("\n").filter((line) => line.startsWith("2026"))).toHaveLength(50);
+  });
+
+  test("says there are none before anything is archived, and counts one as one", async () => {
+    const root = testTmp(`chat-logs-list-${crypto.randomUUID()}`);
+    const options: ChatLogOptions = { character: "frank", dbPath: join(root, "data", HISTORY_DB_FILE), dataDir: join(root, "data"), timeZone: "UTC" };
+    expect(await handleChatLogs({ action: "list" }, join(root, "data", "frank"), options)).toBe("No archived conversations.");
+    expect(existsSync(options.dbPath)).toBe(false);
+    const w = await world();
+    expect(await w.ask({ action: "list" })).toBe("No archived conversations.");
+    await w.archive("main", talk("a", "01", "09:00"));
+    expect(await w.ask({ action: "list", offset: 1 })).toBe("1 archived conversation, so offset 1 is past the end.");
+  });
+
+  test("uses the time a conversation was archived when its messages carry no time", async () => {
+    const w = await world();
+    await w.archive("main", [message("u1", "is the lamp lit", ""), message("a1", "it is", "")], { at: day("04", "21:30") });
+    expect((await w.ask({ action: "list" })).split("\n").at(-1)).toBe("2026-11-04 21:30 → 21:30  1 turn  (no label)");
+  });
+
+  test("shows times in the user's time zone, and lists the main thread alone when the data folder isn't known", async () => {
+    const w = await world("story");
+    await w.archive("main", talk("a", "01", "09:00"));
+    await w.archive("story", talk("b", "02", "09:00"));
+    const { dataDir: _unknown, ...withoutData } = w.options;
+    expect((await handleChatLogs({ action: "list" }, threadDataDir(w.data, "frank", "main"), { ...withoutData, timeZone: "Australia/Canberra" })).split("\n")).toEqual([
+      "Archived conversations: 1–1 of 1, newest first (Australia/Canberra)",
+      "",
+      "2026-11-01 20:00 → 20:00  1 turn  (no label)",
+    ]);
+  });
+
+  test("refuses what belongs to a search or a read", async () => {
+    const w = await world();
+    expect(await outcomeOf(w.ask({ action: "list", overview: "2026-11-01" }))).toThrow("invalid args: `overview` goes with `read`, not `list`");
+    expect(await outcomeOf(w.ask({ action: "list", limit: -1 }))).toThrow("invalid args: limit must be a whole number, 0 or more");
+    expect(await outcomeOf(w.ask({ action: "list", thread: 3 }))).toThrow("invalid args: thread must be a string");
   });
 });
