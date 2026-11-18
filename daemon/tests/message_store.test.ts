@@ -4,7 +4,7 @@ import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 
 import { backupDirFor, resetBackupThrottle } from "../src/engine/backup.ts";
-import { MessageStore, normalizeMessage, withoutOrphanToolResults } from "../src/engine/message_store.ts";
+import { MessageStore, normalizeMessage, serializeMessages, withoutOrphanToolResults } from "../src/engine/message_store.ts";
 import type { ContentBlock, Message, Role } from "../src/engine/types.ts";
 import { appendDurableLine, listDurableFiles, readDurable } from "../src/storage/files.ts";
 import { databasePath } from "../src/storage/store.ts";
@@ -110,6 +110,43 @@ describe("recovering a tool loop a restart cut short", () => {
     await Promise.all([store.deleteAll(["a"]), store.deleteAll(["b"])]);
     expect(store.messages().map((m) => m.msg_id)).toEqual(["c"]);
     expect((await MessageStore.load(path)).messages().map((m) => m.msg_id)).toEqual(["c"]);
+  });
+});
+
+describe("writing a message to its file", () => {
+  const AT = "2026-10-30T12:00:00.000Z";
+  const said = [text("The lamp is lit.")];
+
+  test("a message is written with everything it carries, its last field where its text would go, since the text is in its blocks", () => {
+    const full: Message = {
+      msg_id: "m1", role: "assistant", content: "The lamp is lit.", images: [{ path: "/pictures/lamp.png", data: "aGVsbG8=" }], content_blocks: said,
+      alt_index: 0, alt_count: 1,
+      alternatives: [{ content: "The lamp is lit.", images: [{ path: "/pictures/lamp.png", data: "aGVsbG8=" }], content_blocks: said, timestamp: AT, provider_key: "anthropic", model: "claude-lamp", version: "v1", attempt: "a1" }],
+      version: "v1", attempt: "a1", timestamp: AT, provider_key: "anthropic", model: "claude-lamp", origin: "autonomous",
+      last_elsewhere: { thread: "garden", at: "2026-10-30T11:00:00.000Z" },
+      wake_running: { started_at: AT, thread: "ring" },
+      presence: { status: "asleep", set_at: AT },
+      shown_later: "[wake]",
+    };
+    expect(serializeMessages([full])).toBe(`${JSON.stringify({
+      msg_id: "m1", role: "assistant", shown_later: "[wake]", images: [{ path: "/pictures/lamp.png" }], content_blocks: said,
+      alt_index: 0, alt_count: 1,
+      alternatives: [{ content: "The lamp is lit.", images: [{ path: "/pictures/lamp.png" }], content_blocks: said, timestamp: AT, provider_key: "anthropic", model: "claude-lamp", version: "v1", attempt: "a1" }],
+      version: "v1", attempt: "a1", timestamp: AT, provider_key: "anthropic", model: "claude-lamp", origin: "autonomous",
+      last_elsewhere: { thread: "garden", at: "2026-10-30T11:00:00.000Z" }, wake_running: { started_at: AT, thread: "ring" }, presence: { status: "asleep", set_at: AT },
+    })}\n`);
+  });
+
+  test("a message is written without what it doesn't carry, and with no list of alternatives when it has none", () => {
+    const bare: Message = { msg_id: "m2", role: "user", content: "hello", images: [], content_blocks: [text("hello")], alternatives: [], timestamp: AT };
+    expect(serializeMessages([bare])).toBe(`${JSON.stringify({ msg_id: "m2", role: "user", timestamp: AT, images: [], content_blocks: [text("hello")] })}\n`);
+
+    const plain: Message = { ...bare, msg_id: "m3", role: "assistant", alternatives: [{ content: "hello", images: [], content_blocks: [text("hello")], timestamp: AT }] };
+    expect(serializeMessages([bare, plain])).toBe([
+      JSON.stringify({ msg_id: "m2", role: "user", timestamp: AT, images: [], content_blocks: [text("hello")] }),
+      JSON.stringify({ msg_id: "m3", role: "assistant", timestamp: AT, images: [], content_blocks: [text("hello")], alternatives: [{ content: "hello", images: [], content_blocks: [text("hello")], timestamp: AT }] }),
+      "",
+    ].join("\n"));
   });
 });
 

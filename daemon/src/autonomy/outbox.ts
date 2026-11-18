@@ -10,7 +10,6 @@ import { shoreLog } from "../log.ts";
 import { truncateSummary, type NotificationPicture } from "../notifications.ts";
 import { ToolIoError } from "../tools/errors.ts";
 import type { SendMessage, SendMessageRequest } from "../tools/send_message.ts";
-import { addDiaryNote } from "./diary.ts";
 import type { PushOutcome, PushRefusal } from "./push.ts";
 import { buildAutonomousMessage, type ImageRef } from "./wake_shape.ts";
 
@@ -191,9 +190,7 @@ export interface Elsewhere {
   character: string;
   from: string;
   turn: "wake" | "turn";
-  characterDir: string;
   engine: (thread: string) => Promise<PostTo["engine"] | undefined>;
-  now?: (() => number) | undefined;
 }
 
 export async function postElsewhere(
@@ -207,10 +204,7 @@ export async function postElsewhere(
   for (const each of away) {
     const engine = await where.engine(each.thread);
     if (engine === undefined) {
-      addDiaryNote(where.characterDir, {
-        at: (where.now ?? Date.now)(), thread: "", source: "shore",
-        text: `Your message for the thread "${each.thread}" was not sent: that thread was gone by the time your ${where.turn} in "${where.from}" ended.`,
-      });
+      note("call_failed", `A message for the thread "${each.thread}" was not sent: that thread was gone by the time the ${where.turn} in "${where.from}" ended`);
       continue;
     }
     await postMessage(where.character, request, { text: each.text, images: [], push: each.push }, deps, note, { thread: each.thread, engine }, pictures);

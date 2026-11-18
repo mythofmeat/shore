@@ -3,7 +3,6 @@ import { mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
-import { keptDiary } from "../src/autonomy/diary.ts";
 import { Outbox, postElsewhere, reachableThreads, sendingsHere, type OutboxSetup } from "../src/autonomy/outbox.ts";
 import type { PushRefusal } from "../src/autonomy/push.ts";
 import { createThread } from "../src/engine/threads.ts";
@@ -133,20 +132,23 @@ test("the threads a message can go to are the character's own, with its wakes th
   expect(await reachableThreads(data, "ada")).toEqual({ open: ["main", "garden"], wakes: undefined, sealed: [] });
 });
 
-test("messages for other threads are posted in the order they were sent, and one whose thread has gone is said so in the diary", async () => {
-  const { data, workspace } = scratch();
+test("messages for other threads are posted in the order they were sent, and one whose thread has gone is recorded as not sent", async () => {
+  const { workspace } = scratch();
   const posted: [thread: string, content: string][] = [];
+  const noted: [kind: string, detail: string][] = [];
   const engine = (thread: string) => ({ appendMessage: async (message: Message) => { posted.push([thread, message.content]); }, currentRevision: () => 1 });
   await postElsewhere(
     [{ text: "One.", thread: "garden", push: false }, { text: "Lost.", thread: "attic", push: false }, { text: "Two.", thread: "garden", push: false }],
-    { character: "ada", from: "main", turn: "wake", characterDir: join(data, "ada"), engine: async (thread) => thread === "attic" ? undefined : engine(thread), now: () => T0 },
+    { character: "ada", from: "main", turn: "wake", engine: async (thread) => thread === "attic" ? undefined : engine(thread) },
     { provider_key: "anthropic", model: "claude-lamp" },
     {},
-    () => {},
+    (kind, detail) => { noted.push([kind, detail]); },
     { workspace: new CharacterWorkspace(workspace), dir: join(workspace, "sent") },
   );
   expect(posted).toEqual([["garden", "One."], ["garden", "Two."]]);
-  expect(keptDiary(join(data, "ada"), Date.now()).map((note) => [note.source, note.thread, note.at, note.text])).toEqual([
-    ["shore", "", new Date(T0).toISOString(), 'Your message for the thread "attic" was not sent: that thread was gone by the time your wake in "main" ended.'],
+  expect(noted).toEqual([
+    ["message_sent", "Autonomous message sent: One."],
+    ["call_failed", 'A message for the thread "attic" was not sent: that thread was gone by the time the wake in "main" ended'],
+    ["message_sent", "Autonomous message sent: Two."],
   ]);
 });

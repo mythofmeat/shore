@@ -2,7 +2,7 @@ import { expect, test } from "bun:test";
 
 import { spanPhrase, triggerFiredNote } from "../src/autonomy/wake_shape.ts";
 import { firedBy } from "../src/autonomy/runner.ts";
-import { tagsSentNothingNote, wakeCutShortNote, wakeStoppedNote, wakeWrapUpText, wrapUpMsFor } from "../src/autonomy/wake.ts";
+import { wakeStoppedNote, wakeWrapUpText, wrapUpMsFor } from "../src/autonomy/wake.ts";
 import { dispatchTool, type ToolContext } from "../src/tools/dispatch.ts";
 import { handleWakeInThread, wakeInThreadRequest } from "../src/tools/wake_in_thread.ts";
 
@@ -30,29 +30,21 @@ test("a length of time is spelled in the largest unit that fits it evenly, down 
   expect(spanPhrase(59_999)).toBe("59 seconds");
 });
 
-test("a wake's wrap-up nudge says how long is left, how many rounds, and where to pick up", () => {
+test("a wake's wrap-up nudge says how long is left, how many rounds, and that the next wake starts fresh", () => {
   expect(wakeWrapUpText(4 * MINUTE, 3, "eve")).toBe(
     "[System nudge: this wake stops in about 4 minutes or after 3 more rounds, counting this one, whichever comes first. " +
-    "Wrap up now: finish with your note to yourself, saying where you stopped so you can pick it up here next time. " +
-    "Nothing in it is sent to eve.]",
+    "Wrap up now. Your next wake starts fresh, so whatever it will need has to be in a file before this one stops, " +
+    "and nothing reaches eve unless you send it.]",
   );
   expect(wakeWrapUpText(30_000, 1, "eve")).toStartWith("[System nudge: this wake stops in less than a minute or after this round, whichever comes first. ");
 });
 
-test("a wake that still wraps a message in tags is told in its diary that nothing was sent, and how to send one", () => {
-  expect(tagsSentNothingNote("ring", "eve")).toBe(
-    'Your wake in "ring" wrapped a message in <sendMessage> tags. The tags no longer send anything, so eve was not sent it. A message is sent with the `send_message` tool.',
-  );
-});
-
-test("a wake that is stopped is told why in its thread, and the diary says when one ran out before it finished", () => {
+test("a wake that is stopped is told why in its thread", () => {
   expect(wakeStoppedNote("interrupted", "eve", 30 * MINUTE)).toBe(
     "[eve wrote here while this wake was running, so Shore stopped it here for you to answer them. Once they have been quiet in this thread for 10 minutes, Shore wakes you here again to pick it up.]",
   );
   expect(wakeStoppedNote("time", "eve", 90 * MINUTE)).toBe("[This wake reached its limit of 90 minutes, and Shore stopped it here.]");
   expect(wakeStoppedNote("rounds", "eve", 90 * MINUTE)).toBe("[This wake used up its rounds of tool use, and Shore stopped it here.]");
-  expect(wakeCutShortNote("time", "ring", 2 * 60 * MINUTE)).toBe('Your wake in "ring" reached its limit of 2 hours before you finished. Where it stopped is in that thread.');
-  expect(wakeCutShortNote("rounds", "ring", 2 * 60 * MINUTE)).toBe('Your wake in "ring" used up its rounds of tool use before you finished. Where it stopped is in that thread.');
 });
 
 test("a wake says what set it off: its triggers, the turn that handed it over, a seal, or a start by hand", () => {

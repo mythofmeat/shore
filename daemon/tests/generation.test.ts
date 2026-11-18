@@ -1,9 +1,9 @@
 import { writeDurable } from "../src/storage/files.ts";
 import { readFile } from "./support/stored_files.ts";
-import { afterAll, describe, expect, test } from "bun:test";
+import { afterAll, describe, expect, spyOn, test } from "bun:test";
 import { restoreTestEnv, setTestEnv } from "./support/env.ts";
 import { mkdtemp, mkdir, writeFile } from "node:fs/promises";
-import { existsSync, readFileSync } from "node:fs";
+import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { ConversationEngine } from "../src/engine/conversation.ts";
 import { characterActiveJsonl, MAIN_THREAD } from "../src/config/dirs.ts";
@@ -15,7 +15,11 @@ import { ProviderRegistry } from "../src/config/providers.ts";
 import type { LoadedConfig } from "../src/config/loader.ts";
 import type { SidecarProvider, SidecarRequest, StreamEvent } from "../src/llm/types.ts";
 import { generationEngine, runGeneration, type GenerationDeps } from "../src/handler/generation.ts";
-import { keptDiary } from "../src/autonomy/diary.ts";
+import type { ImageUpload } from "../src/handler/images.ts";
+import { imageSupportFor } from "../src/llm/image_support.ts";
+import { sentPicturesDir } from "../src/storage/sent_pictures.ts";
+import { CharacterWorkspace } from "../src/tools/character_workspace.ts";
+import { sizedImage } from "./support/sized_image.ts";
 import { testTmp } from "./support/tmp.ts";
 import { recordedTurns, WorkspaceRecorder, workspaceTurnsFor, type WorkspaceTurns } from "../src/tools/workspace_turns.ts";
 import { outcomeOf } from "./support/outcome.ts";
@@ -25,8 +29,8 @@ afterAll(restoreTestEnv);
 
 const MODEL_KEY_ENV = "SHORE_FIXTURE_API_KEY";
 
-async function loadedConfig(withModel: boolean, tools: string[] = []): Promise<LoadedConfig> {
-  const root = await mkdtemp(testTmp("shore-gen-"));
+async function loadedConfig(withModel: boolean, tools: string[] = [], kept?: string): Promise<LoadedConfig> {
+  const root = kept ?? await mkdtemp(testTmp("shore-gen-"));
   const dirs = { config: join(root, "config"), data: join(root, "data"), cache: join(root, "cache"), runtime: join(root, "run") };
   for (const d of Object.values(dirs)) await mkdir(d, { recursive: true });
   const app = defaultAppConfig();
@@ -101,13 +105,23 @@ interface Turn {
   maxRetries?: number;
   twoKeys?: boolean;
   adjust?: (generation: GenerationDeps) => void;
+  text?: string;
+  pictures?: ImageUpload[];
+  takesPictures?: boolean;
+  accepted?: () => Promise<void>;
+  signal?: AbortSignal;
+  send?: (frame: ServerMessage) => Promise<void>;
+  seen?: SidecarRequest[];
+  root?: string;
 }
 
 const SPARE_KEY_ENV = "SHORE_FIXTURE_SPARE_API_KEY";
 
 async function runTurn(turn: Turn): Promise<{ error?: string; dataDir: string }> {
-  const loaded = await loadedConfig(true, turn.tools);
+  const loaded = await loadedConfig(true, turn.tools, turn.root);
   if (turn.maxRetries !== undefined) loaded.app.chat.max_retries = turn.maxRetries;
+  const fixture = loaded.models.chat.get("chat.fixture");
+  if (fixture !== undefined && turn.takesPictures !== undefined) fixture.supportsImages = turn.takesPictures;
   const config: LoadedConfig = turn.twoKeys === true
     ? { ...loaded, providers: ProviderRegistry.fromSection({ anthropic: { keys: [{ name: "primary", api_key_env: MODEL_KEY_ENV }, { name: "spare", api_key_env: SPARE_KEY_ENV }] } }) }
     : loaded;
@@ -120,11 +134,12 @@ async function runTurn(turn: Turn): Promise<{ error?: string; dataDir: string }>
   const turns = workspaceTurnsFor(config.dirs, "ada");
   await turn.seed?.(turns);
   if (turn.history.length > 0) {
-    writeDurable(characterActiveJsonl(config.dirs.data, "ada", MAIN_THREAD), turn.history.map((m) => `${JSON.stringify(m)}\n`).join(""));
+    writeDurable(characterActiveJsonl(config.dirs.data, "ada", turn.thread ?? MAIN_THREAD), turn.history.map((m) => `${JSON.stringify(m)}\n`).join(""));
   }
 
   const provider: SidecarProvider = {
-    async *stream() {
+    async *stream(request) {
+      turn.seen?.push(request);
       await turn.during?.(turns);
       yield* turn.events;
     },
@@ -154,12 +169,13 @@ async function runTurn(turn: Turn): Promise<{ error?: string; dataDir: string }>
     }
     await runGeneration(generation, {
       meta: { session: { clientId: 1, sessionId: 1, clientType: "test-client", clientName: "test-1", capabilities: ["streaming"], selectedCharacter: "ada" }, rid: turn.rid ?? null, kind: "message" } as never,
-      body: { rid: turn.rid ?? null, text: turn.regen ? "" : "Leave me a note", stream: true, images: [], image_data: [] },
+      body: { rid: turn.rid ?? null, text: turn.regen ? "" : turn.text ?? "Leave me a note", stream: true, images: [], image_data: turn.pictures ?? [] },
       regen: turn.regen,
       charName: "ada",
       rid: turn.rid ?? null,
-      send: async (frame) => { turn.sent?.push(frame); },
-      signal: new AbortController().signal,
+      send: turn.send ?? (async (frame) => { turn.sent?.push(frame); }),
+      signal: turn.signal ?? new AbortController().signal,
+      ...(turn.accepted === undefined ? {} : { accepted: turn.accepted }),
     });
     return { dataDir: config.dirs.data };
   } catch (e) {
@@ -415,15 +431,21 @@ describe("a reply's turn", () => {
 
   test("its tools work in the thread the reply is in", async () => {
     const handed: (string | undefined)[] = [];
+    const from: string[] = [];
     const run = await runTurn({
       history: [], regen: false, thread: "ring", events: answered,
-      tools: ["write_diary"],
-      toolRound: [{ type: "tool_use", id: "tool_note", name: "write_diary", input: { text: "Told part one." } }],
-      adjust: (generation) => { generation.tools = (_character, turn) => { handed.push(turn.thread); return {}; }; },
+      tools: ["wake_in_thread"],
+      toolRound: [{ type: "tool_use", id: "tool_hand", name: "wake_in_thread", input: { thread: "garden", reason: "Carry on." } }],
+      adjust: (generation) => {
+        generation.tools = (_character, turn) => {
+          handed.push(turn.thread);
+          return { wakeInThread: (_name, thread) => { from.push(thread); return { kind: "queued", limitMs: undefined }; } };
+        };
+      },
     });
     expect(run.error).toBeUndefined();
     expect(handed).toEqual(["ring"]);
-    expect(keptDiary(join(run.dataDir, "ada"), Date.now()).map((note) => [note.thread, note.text])).toEqual([["ring", "Told part one."]]);
+    expect(from).toEqual(["ring"]);
   });
 
   test("a round its first key started before refusing the call is not kept when the spare key answers", async () => {
@@ -450,5 +472,307 @@ describe("a reply's turn", () => {
     });
     expect([run.error, calls]).toEqual([undefined, 2]);
     expect((await readBack(run.dataDir)).map((message) => [message.role, message.content])).toEqual([["user", "Leave me a note"], ["assistant", "Here you go."]]);
+  });
+});
+
+describe("what a reply checks before it runs and leaves behind after", () => {
+  const answered: StreamEvent[] = [
+    { type: "start", model: "claude-fixture" },
+    { type: "text", text: "Here you go." },
+    { type: "done", content: "Here you go.", finish_reason: "end_turn", usage, timing },
+  ];
+  const question: Message = {
+    msg_id: "m_question", role: "user", content: "Leave me a note", images: [],
+    content_blocks: [{ type: "text", text: "Leave me a note" }], timestamp: "2025-12-31T10:00:00-05:00",
+  };
+  const answer: Message = {
+    msg_id: "m_answer", role: "assistant", content: "Done.", images: [],
+    content_blocks: [{ type: "text", text: "Done." }], timestamp: "2025-12-31T10:00:01-05:00", version: "mv_old",
+  };
+  const read: ContentBlock[] = [{ type: "tool_use", id: "tool_read", name: "read", input: { file_path: "SOUL.md" } }];
+  const NOT_SENT = "chat.fixture does not accept images, so the attachment was not sent. Switch to a vision-capable model and send again.";
+  const lamp = async (): Promise<ImageUpload> => ({ filename: "lamp.png", mime_type: "image/png", data: (await sizedImage(8, 8)).toString("base64") });
+
+  test("the one who sent a message is told once it is kept", async () => {
+    let told = 0;
+    const run = await runTurn({ history: [], regen: false, events: answered, accepted: async () => { told += 1; } });
+    expect(run.error).toBeUndefined();
+    expect(told).toBe(1);
+  });
+
+  test("a model said not to take pictures refuses a message with one before anything is kept, takes a message without, and one said to take them is sent them and told it may be", async () => {
+    const refused = await runTurn({ history: [], regen: false, events: answered, takesPictures: false, pictures: [await lamp()] });
+    expect(refused.error).toBe(NOT_SENT);
+    expect(await readBack(refused.dataDir)).toEqual([]);
+
+    const plain = await runTurn({ history: [], regen: false, events: answered, takesPictures: false });
+    expect(plain.error).toBeUndefined();
+
+    const seen: SidecarRequest[] = [];
+    const taken = await runTurn({ history: [], regen: false, events: answered, takesPictures: true, pictures: [await lamp()], seen });
+    expect(taken.error).toBeUndefined();
+    expect(seen.map((request) => request.supports_images)).toEqual([true]);
+    expect((await readBack(taken.dataDir)).map((message) => [message.role, message.images.length])).toEqual([["user", 1], ["assistant", 0]]);
+  });
+
+  test("a model that turns pictures down when sent one is remembered as taking none, whatever it was said to take, and the sender is told the picture wasn't sent", async () => {
+    const turnsDown = (): SidecarProvider => ({
+      async *stream() {
+        yield* [];
+        throw new Error("this model does not support image input");
+      },
+      generate: () => {
+        throw new Error("no turn here generates");
+      },
+    });
+    const learned = (dataDir: string): boolean | undefined => imageSupportFor({ providerKey: "anthropic", modelId: "claude-fixture" }, join(dataDir, "..", "cache"));
+    const unknown = await runTurn({ history: [], regen: false, events: [], provider: turnsDown(), pictures: [await lamp()] });
+    expect(unknown.error).toBe(NOT_SENT);
+    expect(learned(unknown.dataDir)).toBe(false);
+
+    const declared = await runTurn({ history: [], regen: false, events: [], provider: turnsDown(), takesPictures: true, pictures: [await lamp()] });
+    expect(declared.error).toBe(NOT_SENT);
+  });
+
+  test("a model that turns a picture down while it has its tools is remembered as taking none too", async () => {
+    const run = await runTurn({
+      history: [], regen: false, events: [], tools: ["read"], pictures: [await lamp()],
+      provider: {
+        async *stream() {
+          yield* [];
+          throw new Error("a tool reply streams with its tools");
+        },
+        generate: () => {
+          throw new Error("no turn here generates");
+        },
+        async *streamWithTools() {
+          yield* [];
+          throw new Error("this model does not support image input");
+        },
+      },
+    });
+    expect(run.error).toBe(NOT_SENT);
+    expect(imageSupportFor({ providerKey: "anthropic", modelId: "claude-fixture" }, join(run.dataDir, "..", "cache"))).toBe(false);
+  });
+
+  test("once a model is remembered as taking no pictures, its later requests say so", async () => {
+    const root = await mkdtemp(testTmp("shore-gen-"));
+    const refused = await runTurn({
+      root, history: [], regen: false, events: [], pictures: [await lamp()],
+      provider: {
+        async *stream() {
+          yield* [];
+          throw new Error("this model does not support image input");
+        },
+        generate: () => {
+          throw new Error("no turn here generates");
+        },
+      },
+    });
+    expect(refused.error).toBe(NOT_SENT);
+
+    const seen: SidecarRequest[] = [];
+    const later = await runTurn({ root, history: [], regen: false, events: answered, seen });
+    expect(later.error).toBeUndefined();
+    expect(seen.map((request) => request.supports_images)).toEqual([false]);
+
+    const fresh: SidecarRequest[] = [];
+    const never = await runTurn({ history: [], regen: false, events: answered, seen: fresh });
+    expect(never.error).toBeUndefined();
+    expect(fresh.map((request) => "supports_images" in request)).toEqual([false]);
+  });
+
+  test("a reply asked for again says which messages it takes the place of, and isn't taken for the user arriving after a pause", async () => {
+    const sent: ServerMessage[] = [];
+    let refreshed = 0;
+    const run = await runTurn({
+      history: [question, answer], regen: true, events: answered, sent,
+      adjust: (generation) => { generation.compaction = { ...generation.compaction, applyDeferredEdits: async () => { refreshed += 1; } }; },
+    });
+    expect(run.error).toBeUndefined();
+    expect(sent.flatMap((frame) => frame.type === "stream_start" ? [[frame.regen, frame.replaces]] : [])).toEqual([[true, ["m_answer"]]]);
+    expect(refreshed).toBe(0);
+  });
+
+  test("a side thread's files are read afresh for a message after a long pause there, and not for a reply asked for to what is already there", async () => {
+    const pause = async (history: Message[], text?: string): Promise<number> => {
+      let refreshed = 0;
+      const run = await runTurn({
+        history, regen: false, thread: "ring", events: answered, ...(text === undefined ? {} : { text }),
+        adjust: (generation) => { generation.compaction = { ...generation.compaction, applyDeferredEdits: async () => { refreshed += 1; } }; },
+      });
+      expect(run.error).toBeUndefined();
+      return refreshed;
+    };
+    expect(await pause([question, answer])).toBe(1);
+    expect(await pause([question], "")).toBe(0);
+  });
+
+  test("a reply stopped while it was using a tool keeps none of the round it was on", async () => {
+    const stop = new AbortController();
+    const provider: SidecarProvider = {
+      async *stream() {
+        yield* [];
+        throw new Error("a tool reply streams with its tools");
+      },
+      async *streamWithTools(_request, phase) {
+        stop.abort(new Error("stopped by the user"));
+        await phase.recordTurn("assistant", read);
+        yield* answered;
+      },
+      generate: () => {
+        throw new Error("no turn here generates");
+      },
+    };
+    const run = await runTurn({ history: [], regen: false, events: [], tools: ["read"], provider, signal: stop.signal });
+    expect(run.error).toBeDefined();
+    expect((await readBack(run.dataDir)).map((message) => message.role)).toEqual(["user"]);
+  });
+
+  test("a reply stopped before it was kept isn't kept, even when the model had already answered, and no picture in it is put with the ones sent", async () => {
+    const shows: StreamEvent[] = [
+      { type: "start", model: "claude-fixture" },
+      { type: "text", text: "The lamp: ![[lamp.png]]" },
+      { type: "done", content: "The lamp: ![[lamp.png]]", finish_reason: "end_turn", usage, timing },
+    ];
+    const sent = (dataDir: string): number => existsSync(sentPicturesDir(dataDir, "ada")) ? readdirSync(sentPicturesDir(dataDir, "ada")).length : 0;
+    const drawn = async (turns: WorkspaceTurns): Promise<void> => { await writeFile(join(turns.workspace, "lamp.png"), await sizedImage(8, 8)); };
+
+    const kept = await runTurn({ history: [], regen: false, events: shows, seed: drawn });
+    expect(kept.error).toBeUndefined();
+    expect(sent(kept.dataDir)).toBe(1);
+
+    const stop = new AbortController();
+    const run = await runTurn({ history: [], regen: false, events: shows, seed: drawn, signal: stop.signal, during: async () => { stop.abort(new Error("stopped by the user")); } });
+    expect(run.error).toBeDefined();
+    expect((await readBack(run.dataDir)).map((message) => message.role)).toEqual(["user"]);
+    expect(sent(run.dataDir)).toBe(0);
+  });
+
+  test("what a reply leaves for keeping its cache warm holds the round its tool was called in and the id of the request that asked for it, and the user is told how long the reply took", async () => {
+    const kept: Record<string, unknown>[] = [];
+    const told: unknown[][] = [];
+    let asked = 0;
+    const run = await runTurn({
+      history: [], regen: false, rid: "r-1", events: answered, tools: ["read"], toolRound: read,
+      adjust: (generation) => {
+        generation.autonomy = { ...generation.autonomy, notifyLastRequest: (_character, request) => { kept.push(request as unknown as Record<string, unknown>); } };
+        generation.notifier = { notifyMessageComplete: (...args: unknown[]) => { told.push(args); } } as unknown as GenerationDeps["notifier"];
+        generation.monotonicMs = () => {
+          asked += 1;
+          return asked === 1 ? 1_000 : 1_700;
+        };
+      },
+    });
+    expect(run.error).toBeUndefined();
+    expect(kept.map((request) => request["rid"])).toEqual(["r-1"]);
+    const sentOn = kept[0]?.["messages"] as { role: string; content: { type: string }[] }[];
+    expect(sentOn.map((message) => [message.role, message.content.map((block) => block.type)])).toEqual([
+      ["user", ["text"]],
+      ["assistant", ["tool_use"]],
+      ["assistant", ["text"]],
+    ]);
+    expect(told.map((args) => args[2])).toEqual([700]);
+  });
+
+  test("a reply whose last frame can't be delivered fails there, kept as it is, before Shore asks whether to compact the thread", async () => {
+    let asked = 0;
+    const run = await runTurn({
+      history: [], regen: false, events: answered,
+      send: async (frame) => {
+        if (frame.type === "stream_end") throw new Error("the client went away");
+      },
+      adjust: (generation) => {
+        generation.autonomy = { ...generation.autonomy, shouldCompactNow: () => {
+          asked += 1;
+          return false;
+        } };
+      },
+    });
+    expect(run.error).toBe("failed to deliver one or more generation frames");
+    expect(asked).toBe(0);
+    expect((await readBack(run.dataDir)).map((message) => message.role)).toEqual(["user", "assistant"]);
+  });
+
+  test("after a reply Shore asks whether to compact its thread, unless that thread's compaction is off", async () => {
+    const asks = async (compaction: boolean): Promise<number> => {
+      let asked = 0;
+      const run = await runTurn({
+        history: [], regen: false, events: answered,
+        adjust: (generation) => {
+          generation.autonomy = { ...generation.autonomy, shouldCompactNow: () => {
+            asked += 1;
+            return false;
+          } };
+          generation.registry = { ...generation.registry, listThreads: () => [{ id: "main", created_at: "2026-09-03T00:00:00.000Z", compaction }] };
+        },
+      });
+      expect(run.error).toBeUndefined();
+      return asked;
+    };
+    expect([await asks(true), await asks(false)]).toEqual([1, 0]);
+  });
+
+  test("a reply that fails with nothing of it kept, after a tool had already changed a file, is over only once Shore has finished looking at what the tool changed", async () => {
+    const root = await mkdtemp(testTmp("shore-gen-"));
+    const workspace = join(root, "config", "characters", "ada", "workspace");
+    const run = CharacterWorkspace.prototype.run.bind(new CharacterWorkspace(workspace));
+    const held = Promise.withResolvers<void>();
+    let holding = false;
+    let running = 0;
+    const watched = spyOn(CharacterWorkspace.prototype, "run").mockImplementation(async (command, args, options) => {
+      running += 1;
+      try {
+        if (command === "git" && !holding && existsSync(join(workspace, "note.md"))) {
+          holding = true;
+          await Promise.race([held.promise, new Promise<void>((resolve) => { setTimeout(resolve, 1_000); })]);
+        }
+        return await run(command, args, options);
+      } finally {
+        running -= 1;
+      }
+    });
+    try {
+      const failed = await runTurn({
+        root, history: [], regen: false, events: [], tools: ["bash"],
+        provider: {
+          async *stream() {
+            yield* [];
+            throw new Error("a tool reply streams with its tools");
+          },
+          generate: () => {
+            throw new Error("no turn here generates");
+          },
+          async *streamWithTools(_request, phase) {
+            yield* [];
+            await phase.runTool({ id: "tool_write", name: "bash", input: { command: "printf 'half done' > note.md" } });
+            throw new Error("provider down");
+          },
+        },
+      });
+      expect(failed.error).toContain("provider down");
+      expect([holding, running]).toEqual([true, 0]);
+      expect(readFileSync(join(workspace, "note.md"), "utf8")).toBe("half done");
+      expect((await readBack(failed.dataDir)).map((message) => message.role)).toEqual(["user"]);
+    } finally {
+      held.resolve();
+      await until(() => running === 0, "what Shore was still looking at to finish");
+      watched.mockRestore();
+    }
+  });
+
+  test("a reply that lands puts away what Shore kept to undo a reply that is no longer in the thread", async () => {
+    const run = await runTurn({
+      history: [question, answer], regen: false, events: answered,
+      seed: async (turns) => {
+        const recorder = new WorkspaceRecorder(turns);
+        await recorder.track(async () => await writeFile(join(turns.workspace, "gone.md"), "from a reply since deleted\n"));
+        await recorder.settle("main", "mv_gone");
+        expect(await recordedTurns(turns, "main", ["mv_gone"])).toEqual(["mv_gone"]);
+      },
+    });
+    expect(run.error).toBeUndefined();
+    const turns = workspaceTurnsFor({ config: join(run.dataDir, "..", "config"), cache: join(run.dataDir, "..", "cache") }, "ada");
+    expect(await recordedTurns(turns, "main", ["mv_gone"])).toEqual([]);
   });
 });

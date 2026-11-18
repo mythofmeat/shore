@@ -10,7 +10,7 @@ const TRIGGER_NAME = /^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$/;
 
 const SETTINGS = ["every", "at", "on", "when", "after", "follows", "check", "wake", "thread", "limit", "reason", "cooldown", "between"];
 
-const EVENTS = ["user_back", "user_quiet", "status_changed"] as const;
+const EVENTS = ["user_quiet", "status_changed"] as const;
 
 const WEEKDAYS = ["sun", "mon", "tue", "wed", "thu", "fri", "sat"];
 
@@ -96,7 +96,7 @@ function whenOf(raw: Record<string, unknown>): TriggerWhen {
   if (raw["follows"] !== undefined) return { kind: "follows", trigger: text(raw["follows"], "follows") };
   const event = EVENTS.find((each) => each === raw["when"]);
   if (event === undefined) throw new Error(`\`when\` must be one of ${EVENTS.map((each) => `"${each}"`).join(", ")}`);
-  const timed = event === "user_back" || event === "user_quiet";
+  const timed = event === "user_quiet";
   if (timed !== (raw["after"] !== undefined)) {
     throw new Error(timed ? `\`when = "${event}"\` needs \`after\`, the least time away that counts` : `\`when = "${event}"\` takes no \`after\``);
   }
@@ -112,15 +112,12 @@ function trigger(name: string, raw: unknown, defaultCooldownMs: number, checks: 
   if (nested !== undefined) throw new Error(`a trigger's name can't have a dot in it, so \`[${name}.${nested}]\` could be \`[${name}-${nested}]\``);
   if (unknown.length > 0) throw new Error(`${unknown.map((setting) => `\`${setting}\``).join(", ")} isn't a trigger setting; the settings are ${SETTINGS.join(", ")}`);
   const when = whenOf(settings);
-  const arrives = when.kind === "event" && when.event === "user_back";
-  if (arrives && settings["wake"] !== undefined) {
-    throw new Error('`when = "user_back"` never wakes you, because you are already answering them, and what it says arrives with their message; leave `wake` out');
-  }
-  const wakes = settings["wake"] ?? !arrives;
+  const wakes = settings["wake"] ?? true;
   if (typeof wakes !== "boolean") throw new Error("`wake` must be true or false, without quotes");
   const reason = settings["reason"] === undefined ? undefined : text(settings["reason"], "reason");
   const check = settings["check"] === undefined ? undefined : text(settings["check"], "check");
   if (reason === undefined && check === undefined) throw new Error("it needs a `reason` to show you when it fires, or a `check` whose output is the reason");
+  if (!wakes && check === undefined) throw new Error("`wake = false` runs a `check` and nothing else, and this trigger has no `check`");
   if (check !== undefined && !checks) throw new Error("its `check` is a command, and you don't have the `bash` tool to run commands with");
   const between = settings["between"] === undefined ? undefined : parseDayWindow(typeof settings["between"] === "string" ? settings["between"] : "");
   if (settings["between"] !== undefined && between === undefined) throw new Error('`between` must be a local time range like "08:00-23:00"');
@@ -174,7 +171,6 @@ function followProblem(follower: Trigger, all: readonly Trigger[]): string | und
   const leader = followed(follower, all);
   if (leader === follower) return "it can't follow itself";
   if (leader === undefined) return `it follows \`${follower.when.trigger}\`, which isn't a running trigger in this file`;
-  if (leader.when.kind === "event" && leader.when.event === "user_back") return `it follows \`${leader.name}\`, which fires as you start answering, so nothing can follow it`;
   const end = all.reduce<Trigger | undefined>((at) => (at === undefined || at === follower ? at : followed(at, all)), leader);
   return end === follower ? `it follows \`${leader.name}\`, which ends up following it, so each would set the other off forever` : undefined;
 }

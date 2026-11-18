@@ -97,7 +97,6 @@ export function buildGenerationDeps(a: GenerationAssembly): GenerationDeps {
     autonomy: turnAutonomy(a.autonomy, runtime.cache),
     runningWake: (character) => runtime.autonomy.runningWake(character),
     userActiveIn: (character, thread) => { runtime.autonomy.userActiveIn(character, thread); },
-    userBack: async (character) => { await runtime.triggers.userBack(character); },
     notifier: runtime.notifier,
     diagnostics: a.diagnostics,
     emitEvent: a.emitEvent,

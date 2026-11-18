@@ -1,10 +1,15 @@
 import { formatWallClock } from "../engine/prompt.ts";
-import type { DiaryNote } from "../engine/types.ts";
 import { shoreLog } from "../log.ts";
 import { readCharacterState, writeCharacterState } from "../storage/store.ts";
-import { cutNote } from "./diary.ts";
 import type { BackgroundLoopResult, LoopRound } from "./background_loop.ts";
 import { spanPhrase } from "./wake_shape.ts";
+
+export const LAST_WORDS_CHARS = 1500;
+
+export function cutLastWords(text: string): string {
+  const chars = Array.from(text);
+  return chars.length > LAST_WORDS_CHARS ? `${chars.slice(0, LAST_WORDS_CHARS).join("")}… [cut]` : text;
+}
 
 export type WakeStopReason = "time" | "rounds" | "interrupted";
 
@@ -19,7 +24,6 @@ export interface WakeStop {
 
 export interface WakeRecord {
   through?: number;
-  note?: Pick<DiaryNote, "id" | "at" | "text">;
   stopped?: WakeStop;
 }
 
@@ -45,14 +49,12 @@ export function wakeRecord(characterDir: string, thread: string): WakeRecord {
 }
 
 export class WakeWords {
-  closing = "";
   last = "";
 
   heard(round: LoopRound): void {
     if (round.role !== "assistant") return;
-    const text = round.blocks.flatMap((block) => block.type === "text" ? [block.text] : []).join("");
-    this.closing = round.blocks.some((block) => block.type === "tool_use") ? "" : text;
-    if (text.trim() !== "") this.last = text.trim();
+    const text = round.blocks.flatMap((block) => block.type === "text" ? [block.text] : []).join("").trim();
+    if (text !== "") this.last = text;
   }
 }
 
@@ -67,20 +69,17 @@ export interface WakeEnd {
   loop: Pick<BackgroundLoopResult, "timedOut" | "stoppedAt" | "failedRound" | "rounds">;
   words: WakeWords;
   sent: boolean;
-  note: DiaryNote | undefined;
 }
 
 export function recordWakeEnd(characterDir: string, thread: string, before: WakeRecord, end: WakeEnd): void {
   const why = stopOf(end.loop);
-  const note = end.note === undefined ? before.note : { id: end.note.id, at: end.note.at, text: end.note.text };
-  const kept = note === undefined ? {} : { note };
   if (why !== undefined) {
-    const stopped: WakeStop = { at: end.endedAt, why, limitMs: end.limitMs, rounds: end.loop.rounds, sent: end.sent, last: cutNote(end.words.last) };
-    keepWakeRecord(characterDir, thread, { ...(before.through === undefined ? {} : { through: before.through }), ...kept, stopped });
+    const stopped: WakeStop = { at: end.endedAt, why, limitMs: end.limitMs, rounds: end.loop.rounds, sent: end.sent, last: cutLastWords(end.words.last) };
+    keepWakeRecord(characterDir, thread, { ...(before.through === undefined ? {} : { through: before.through }), stopped });
     return;
   }
   if (end.loop.failedRound !== undefined) return;
-  keepWakeRecord(characterDir, thread, { through: end.startedAt, ...kept });
+  keepWakeRecord(characterDir, thread, { through: end.startedAt });
 }
 
 export function wakeStopNote(stop: WakeStop, userName: string, timeZone: string): string {
@@ -90,10 +89,4 @@ export function wakeStopNote(stop: WakeStop, userName: string, timeZone: string)
   const sent = stop.sent ? `The message it had already written was still sent to ${userName}.` : `Nothing from it was sent to ${userName}.`;
   const last = stop.last === "" ? "" : ` The last thing it wrote: "${stop.last}"`;
   return `[Your last wake here ${why} at ${formatWallClock(stop.at, timeZone)}, after ${rounds}, before it had finished. ${sent}${last} Whatever it had already changed with its tools is still in place.]`;
-}
-
-export function keptNote(record: WakeRecord, shown: readonly Pick<DiaryNote, "id">[], timeZone: string): string | undefined {
-  const note = record.note;
-  if (note === undefined || shown.some((each) => each.id === note.id)) return undefined;
-  return `[Your note from the end of your last wake here, ${formatWallClock(Date.parse(note.at), timeZone)}, kept for this one:]\n\n${note.text}`;
 }

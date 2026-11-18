@@ -24,28 +24,24 @@ function whenPhrase(when: TriggerWhen, userName: string, timeZone: string): stri
   if (when.kind === "once") return `once, ${formatWallClock(resolveInZone(asNaive(when.local), timeZone), timeZone)}`;
   if (when.kind === "follows") return `after \`${when.trigger}\``;
   if (when.event === "status_changed") return `when ${userName} changes their status`;
-  return when.event === "user_back"
-    ? `when ${userName} comes back after ${length(when.afterMs)} away`
-    : `when ${userName} has been quiet for ${length(when.afterMs)}`;
+  return `when ${userName} has been quiet for ${length(when.afterMs)}`;
 }
 
 function checkStatus(each: TriggerView, timeZone: string): string[] {
   if (each.trigger.check === undefined) return [];
   const at = each.checkedAt === undefined ? undefined : formatWallClock(each.checkedAt, timeZone);
-  if (each.failing) return [at === undefined ? "its check is failing" : `its check failed when last tried, ${at}`];
+  if (each.problem !== undefined) return [at === undefined ? `its check is failing: ${each.problem}` : `its check failed when last tried, ${at}: ${each.problem}`];
   if (at === undefined) return ["its check hasn't run yet"];
   return each.checkedAt === each.lastFiredAt ? [] : [`last checked ${at}, printed nothing`];
 }
 
 function described(each: TriggerView, userName: string, timeZone: string): string {
   const { trigger } = each;
-  const arrives = trigger.when.kind === "event" && trigger.when.event === "user_back";
   const where = trigger.thread === undefined ? "wakes you" : `wakes you in "${trigger.thread}"`;
-  const does = arrives ? `arrives with ${userName}'s message` : trigger.wakes ? where : "leaves a diary entry";
   const parts = [
     whenPhrase(trigger.when, userName, timeZone),
-    ...(trigger.check === undefined ? [] : [`if \`${trigger.check}\` prints`]),
-    does,
+    ...(trigger.check === undefined ? [] : [trigger.wakes ? `if \`${trigger.check}\` prints` : `runs \`${trigger.check}\``]),
+    trigger.wakes ? where : "never wakes you",
     ...(trigger.reason === undefined ? [] : [`"${trigger.reason}"`]),
     ...(trigger.between === undefined ? [] : [`only ${clock(trigger.between.startMinute)}-${clock(trigger.between.endMinute)}`]),
     ...(trigger.limitMs === undefined ? [] : [`for up to ${length(trigger.limitMs)}`]),

@@ -6,7 +6,7 @@ import { lastSeen, noteSeen, presence, setPresence, unshownPresence } from "../s
 import { loadConfig } from "../src/config/loader.ts";
 import { configSchema } from "../src/config/schema.ts";
 import { rejectionOf } from "./support/outcome.ts";
-import { assemblePrompt, DIARY_FOR_CHAT, diaryText, wakeRunningText, presenceText } from "../src/engine/prompt.ts";
+import { assemblePrompt, wakeRunningText, presenceText } from "../src/engine/prompt.ts";
 import type { Message } from "../src/engine/types.ts";
 import { writeState } from "../src/storage/store.ts";
 import { testTmp } from "./support/tmp.ts";
@@ -96,22 +96,21 @@ function said(id: string, text: string, at: number, extra: Partial<Message> = {}
   return { msg_id: id, role: "user", content: text, images: [], content_blocks: [{ type: "text", text }], alternatives: [], timestamp: new Date(at).toISOString(), ...extra };
 }
 
-test("a message that arrived with a new status says so right above what the user wrote, after the diary and a running wake", () => {
+test("a message that arrived with a new status says so right above what the user wrote, after a running wake", () => {
   const asleep = { status: "asleep", set_at: AT };
-  const left = [{ id: "d1", at: AT, thread: "own-time", source: "wake" as const, text: "The lamp is lit." }];
   const running = { started_at: new Date(T0 + HOUR).toISOString() };
   const prompt = assemblePrompt({
     character_name: "ada", display_name: "eve", has_prior_context: false, user_timestamp_mode: "never",
     messages: [
       said("m1", "good morning", T0 + HOUR, { presence: asleep }),
-      said("m2", "still there?", T0 + 2 * HOUR, { presence: { status: "", set_at: new Date(T0 + 90 * MINUTE).toISOString() }, diary: left, wake_running: running }),
+      said("m2", "still there?", T0 + 2 * HOUR, { presence: { status: "", set_at: new Date(T0 + 90 * MINUTE).toISOString() }, wake_running: running }),
       { ...said("m3", "and now", T0 + 2 * HOUR, { presence: asleep }), timestamp: "sometime" },
     ],
   }, "UTC");
 
   expect(prompt.messages.map((message) => message.content_blocks.map((block) => block.type === "text" ? block.text : ""))).toEqual([
     ['[Their status, set about an hour ago: "asleep"]', "good morning"],
-    [diaryText(left, DIARY_FOR_CHAT, "UTC"), wakeRunningText(running, "UTC"), "[Their status was cleared 30 minutes ago.]", "still there?"],
+    [wakeRunningText(running, "UTC"), "[Their status was cleared 30 minutes ago.]", "still there?"],
     ["and now"],
   ]);
   expect(prompt.messages[0]?.content).toBe('[Their status, set about an hour ago: "asleep"]\n\ngood morning');

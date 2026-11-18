@@ -7,7 +7,6 @@ import { usageConfigView } from "../ledger/budget.ts";
 import { describeTool, runTool } from "./run_tool.ts";
 import { segments } from "./segments.ts";
 import { status, errorLog, wakeLog, wakeNow, setDormant, setActive } from "./status.ts";
-import { diary } from "./diary.ts";
 import { statusContext } from "./status_context.ts";
 import { callLog, transcript } from "./call_log.ts";
 import { subagentTrace } from "./subagent_trace.ts";
@@ -237,9 +236,6 @@ export const commandOperations: OperationRegistry<CommandOperationContext> = {
   presence: register("presence", { category: "Application", scope: "optional_character", prerequisites: [], effects: ["runtime_write"], confirmation: "none", label: "Your status", fields: {
     status: { label: "Status", hint: "One of the statuses in presence.statuses, which your characters then see for you. Empty clears it; omit it to only show the current one" },
   } }, (context, args) => presenceCommand({ dataDir: context.session.dataDir, choices: context.session.config.app.presence.statuses, ...(context.deps.presenceChanged === undefined ? {} : { changed: context.deps.presenceChanged }) }, args)),
-  diary: register("diary", { category: "Memory", scope: "character", prerequisites: [], effects: ["read"], confirmation: "none", label: "Diary", fields: {
-    count: { label: "Newest notes", hint: "Zero returns every note the diary keeps; omit for the newest 20" },
-  } }, (context, args) => diary({ characterName: engineOf(context).characterName, dataDir: context.session.dataDir, now: (context.deps.now ?? Date.now)() }, args)),
   set_dormant: register("set_dormant", { ...wakePresentation, label: "Make dormant", fields: {} },
     (context) => setDormant(statusContext(engineOf(context), context.session, context.deps))),
   set_active: register("set_active", { ...wakePresentation, label: "Make active", fields: {} },

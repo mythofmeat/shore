@@ -1,4 +1,3 @@
-import diaryText from "../../prompts/guide/diary.md" with { type: "text" };
 import indexText from "../../prompts/guide/index.md" with { type: "text" };
 import messagesText from "../../prompts/guide/messages.md" with { type: "text" };
 import threadsText from "../../prompts/guide/threads.md" with { type: "text" };
@@ -6,11 +5,9 @@ import toolsOffText from "../../prompts/guide/tools_off.md" with { type: "text" 
 import triggersText from "../../prompts/guide/triggers.md" with { type: "text" };
 import wakesText from "../../prompts/guide/wakes.md" with { type: "text" };
 
-import { DIARY_KEPT, DIARY_NOTE_CHARS, DIARY_SHOWN, DIARY_WINDOW_MS } from "../autonomy/diary.ts";
 import { PUSH_CHARS } from "../autonomy/push.ts";
 import { DEFAULT_WAKE_LIMIT_MS, WAKE_QUIET_MS } from "../autonomy/runner.ts";
 import { CHECK_ERROR_CHARS, CHECK_OUTPUT_CHARS } from "../autonomy/trigger_check.ts";
-import { arrivalCheckLimitMs } from "../autonomy/trigger_loop.ts";
 import { triggerSettings } from "../autonomy/trigger_service.ts";
 import { ConfigDuration } from "../config/duration.ts";
 import type { LoadedConfig } from "../config/loader.ts";
@@ -18,14 +15,13 @@ import { renderTemplate } from "../engine/prompt.ts";
 import { InvalidArgs } from "./errors.ts";
 import { byteSize, MAX_THREAD_FILE_BYTES, MAX_THREAD_FILES_BYTES } from "./thread_file_text.ts";
 
-const GUIDE_TOPICS = ["triggers", "wakes", "diary", "threads", "messages"] as const;
+const GUIDE_TOPICS = ["triggers", "wakes", "threads", "messages"] as const;
 
 type GuideTopic = (typeof GUIDE_TOPICS)[number];
 
 const TOPIC_TEXT: Record<GuideTopic, string> = {
   triggers: triggersText.trimEnd(),
   wakes: wakesText.trimEnd(),
-  diary: diaryText.trimEnd(),
   threads: threadsText.trimEnd(),
   messages: messagesText.trimEnd(),
 };
@@ -61,7 +57,6 @@ export function guideValues(config: LoadedConfig, userName: string): Map<string,
     either(triggers.checks, "checks_on", "checks_off"),
     ["wake_cooldown", span(triggers.wakeCooldownMs)],
     ["check_time_limit", span(triggers.checkLimitMs)],
-    ["arrival_check_limit", span(arrivalCheckLimitMs(triggers.checkLimitMs))],
     ["max_wake_limit", span(triggers.maxWakeLimitMs)],
     ["default_wake_limit", span(DEFAULT_WAKE_LIMIT_MS)],
     ["check_output_chars", count(CHECK_OUTPUT_CHARS)],
@@ -70,10 +65,6 @@ export function guideValues(config: LoadedConfig, userName: string): Map<string,
     ["wake_quiet", span(WAKE_QUIET_MS)],
     ["dormant_after_wakes", String(limits.max_idle_wakes)],
     ["dormant_after_idle", limits.idle_timeout.toString()],
-    ["diary_note_chars", count(DIARY_NOTE_CHARS)],
-    ["diary_window", span(DIARY_WINDOW_MS)],
-    ["diary_shown", String(DIARY_SHOWN)],
-    ["diary_kept", String(DIARY_KEPT)],
     ["thread_file_size", byteSize(MAX_THREAD_FILE_BYTES)],
     ["thread_files_size", byteSize(MAX_THREAD_FILES_BYTES)],
     either(notifications.push_topic !== "", "push_on", "push_off"),

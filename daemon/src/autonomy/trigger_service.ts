@@ -85,11 +85,6 @@ export class TriggerService {
     await Promise.all(this.#deps.autonomy.characters().map(async (character) => { await this.#for(character).tick(); }));
   }
 
-  async userBack(character: string): Promise<void> {
-    const last = this.#deps.autonomy.status(character)?.last_user_at;
-    if (last !== undefined) await this.#for(character).userBack(this.#now() - last);
-  }
-
   async statusChanged(): Promise<void> {
     await Promise.all(this.#deps.autonomy.characters().map(async (character) => { await this.#for(character).statusChanged(); }));
   }

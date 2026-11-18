@@ -154,15 +154,12 @@ function serializeForStorage(msg: Message): string {
   if (msg.model !== undefined) ordered.push(["model", msg.model]);
   if (msg.origin !== undefined) ordered.push(["origin", msg.origin]);
   if (msg.last_elsewhere !== undefined) ordered.push(["last_elsewhere", msg.last_elsewhere]);
-  if (msg.diary !== undefined) ordered.push(["diary", msg.diary]);
   if (msg.wake_running !== undefined) ordered.push(["wake_running", msg.wake_running]);
   if (msg.presence !== undefined) ordered.push(["presence", msg.presence]);
   if (msg.shown_later !== undefined) ordered.push(["shown_later", msg.shown_later]);
-  if (msg.wake_note !== undefined) ordered.push(["wake_note", msg.wake_note]);
 
   const contentAt = 2;
-  const last = required(ordered.pop());
-  if (ordered.length > contentAt) ordered[contentAt] = last;
+  ordered[contentAt] = required(ordered.pop());
 
   const obj: Record<string, unknown> = {};
   for (const [k, v] of ordered) obj[k] = v;

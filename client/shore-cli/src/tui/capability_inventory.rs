@@ -204,8 +204,6 @@ const WIRE_EXAMPLES: &[&[&str]] = &[
     &["trace", "subagent", "--count", "3"],
     &["trace", "subagent", "tool_1"],
     &["debug"],
-    &["diary"],
-    &["diary", "-n", "0"],
     &["presence"],
     &["presence", "at work"],
     &["presence", "--clear"],

@@ -11,7 +11,6 @@ A thread is a conversation with a context of its own. What is said in one isn't 
 
 ## What crosses between them
 
-- Your diary. An entry reaches every thread that wasn't the one it was written in; the `diary` topic has the details.
 - Your files. Every thread works in the same workspace.
 - The chat logs. `{{chat_logs}}` finds what was said in any thread. The working in your wakes thread is found only when you name that thread.
 - Nothing else. A turn in one thread has none of another thread's conversation in front of it.
@@ -39,17 +38,17 @@ Until it opens:
 
 - It isn't in {{user}}'s thread list, and nothing in it is sent or announced to them.
 - Your other threads and your wakes elsewhere are shown only its label and when it opens. So the label shouldn't give away what is inside.
-- Its diary entries stay inside it, and what you do there is kept out of the record of your calls.
+- What you do there is kept out of the record of your calls.
 - The call that made it stays in the thread you made it from, where {{user}} can read it. Say what the thread is for inside it, in your first wake there.
 
 Working in it:
 
 - Only a wake inside the thread can see into it. `{{wake_in_thread}}` takes you there, and so does a trigger with `thread` set to its id.
 - You are told a folder outside your workspace to keep its files in, when you make the thread and at the start of each wake there. Files kept in your workspace would be in a commit {{user}} reviews.
+- A wake there starts fresh like any other, so what the next one will need belongs in that folder.
 - What you send from a wake there waits in the thread for {{user}}.
 
 When the seal comes off:
 
 - The thread joins {{user}}'s thread list, with what you sent waiting unread.
 - You are woken in it to give them what you made, even if you are dormant.
-- A diary entry from Shore tells your other turns, and the diary entries you wrote inside are shown from then on.

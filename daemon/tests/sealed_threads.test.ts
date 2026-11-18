@@ -3,7 +3,6 @@ import { existsSync } from "node:fs";
 import { mkdir, mkdtemp } from "node:fs/promises";
 import { join } from "node:path";
 
-import { addDiaryNote, keptDiary, recentDiary, unseenDiary } from "../src/autonomy/diary.ts";
 import { triggerFiredNote } from "../src/autonomy/wake_shape.ts";
 import { firedBy } from "../src/autonomy/runner.ts";
 import { sealedListNote, sealedWakeNote } from "../src/autonomy/sealed_notes.ts";
@@ -152,28 +151,6 @@ test("the tool that seals a thread needs a name, a label and a local time to ope
   expect(await refusal(handleStartSealedThread(input, undefined, "eve", "UTC"))).toContain("sealed threads can't be started from here");
   expect(await refusal(handleStartSealedThread(input, async () => { throw new ThreadError("exists", "thread \"gift\" already exists for ada"); }, "eve", "UTC"))).toBe('io: thread "gift" already exists for ada');
   expect(await refusal(handleStartSealedThread(input, async () => { throw new Error("the disk is full"); }, "eve", "UTC"))).toBe("the disk is full");
-});
-
-test("diary entries written in a sealed thread are shown nowhere until its seal comes off, and an entry about a thread isn't repeated inside it", async () => {
-  const { data, characterDir } = await world();
-  await sealThread(data, "ada", { id: "gift", label: "A", unsealAt: T0 + HOUR }, T0);
-  addDiaryNote(characterDir, { at: T0 + 1, thread: "gift", source: "wake", text: "Made a card." });
-  addDiaryNote(characterDir, { at: T0 + 2, thread: "gift", source: "note", text: "Buy ribbon." });
-  addDiaryNote(characterDir, { at: T0 + 3, thread: "ring", source: "wake", text: "Told part one." });
-  addDiaryNote(characterDir, { at: T0 + 4, thread: "ring", source: "shore", text: "About the ring." });
-  const texts = (notes: readonly { text: string }[]): string[] => notes.map((note) => note.text);
-  expect(texts(recentDiary(characterDir, T0 + 10).notes)).toEqual(["Told part one.", "About the ring."]);
-  expect(texts(keptDiary(characterDir, Date.now()))).toEqual(["Told part one.", "About the ring."]);
-  expect(texts(unseenDiary(characterDir, [], T0 + 10, "main"))).toEqual(["Told part one.", "About the ring."]);
-  expect(texts(unseenDiary(characterDir, [], T0 + 10, "gift"))).toEqual(["Told part one.", "About the ring."]);
-  expect(texts(unseenDiary(characterDir, [], T0 + 10, "ring"))).toEqual([]);
-  expect(texts(keptDiary(characterDir, T0 + 10))).toEqual(["Told part one.", "About the ring."]);
-
-  await openDueSeals(data, "ada", T0 + HOUR);
-  expect(texts(keptDiary(characterDir, T0 + HOUR))).toEqual(["Made a card.", "Buy ribbon.", "Told part one.", "About the ring."]);
-  expect(texts(keptDiary(characterDir, Date.now()))).toEqual(["Made a card.", "Buy ribbon.", "Told part one.", "About the ring."]);
-  expect(texts(unseenDiary(characterDir, [], T0 + HOUR, "main"))).toEqual(["Made a card.", "Buy ribbon.", "Told part one.", "About the ring."]);
-  expect(texts(unseenDiary(characterDir, [], T0 + HOUR, "gift"))).toEqual(["Told part one.", "About the ring."]);
 });
 
 test("from inside a sealed thread the list of threads says where the character is, and marks no other thread as that place", async () => {

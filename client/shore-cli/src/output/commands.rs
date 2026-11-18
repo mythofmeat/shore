@@ -62,7 +62,6 @@ pub(crate) fn format_command(name: &str, data: &serde_json::Value) {
         "transcript" => print_transcript(data),
         "subagent_trace" => print_subagent_trace(data),
         "wake_now" => print_wake_now(data),
-        "diary" => super::diary::print_diary(data),
         "presence" => cli_out!("{}", presence_text(data)),
         "mark" | "unmark" | "marks" => cli_out!("{}", marks_text(name, data)),
         "set_dormant" => print_status_change(data, "dormant"),
@@ -808,14 +807,6 @@ fn print_command_output_fallback(name: &str, data: &serde_json::Value) {
     _ = writeln!(out);
     if let Ok(pretty) = serde_json::to_string_pretty(data) {
         _ = writeln!(out, "{pretty}");
-    }
-}
-
-pub(super) fn counted(n: u64, noun: &str) -> String {
-    if n == 1 {
-        format!("1 {noun}")
-    } else {
-        format!("{n} {noun}s")
     }
 }
 
