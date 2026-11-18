@@ -1,6 +1,6 @@
 import { writeDurable } from "../src/storage/files.ts";
 import { readFile } from "./support/stored_files.ts";
-import { afterAll, describe, expect, test } from "bun:test";
+import { afterAll, describe, expect, spyOn, test } from "bun:test";
 import { restoreTestEnv, setTestEnv } from "./support/env.ts";
 import { mkdtemp, mkdir, writeFile } from "node:fs/promises";
 import { existsSync, readFileSync } from "node:fs";
@@ -17,6 +17,7 @@ import type { SidecarProvider, SidecarRequest, StreamEvent } from "../src/llm/ty
 import { generationEngine, runGeneration, type GenerationDeps } from "../src/handler/generation.ts";
 import type { ImageUpload } from "../src/handler/images.ts";
 import { imageSupportFor } from "../src/llm/image_support.ts";
+import { CharacterWorkspace } from "../src/tools/character_workspace.ts";
 import { sizedImage } from "./support/sized_image.ts";
 import { testTmp } from "./support/tmp.ts";
 import { recordedTurns, WorkspaceRecorder, workspaceTurnsFor, type WorkspaceTurns } from "../src/tools/workspace_turns.ts";
@@ -27,8 +28,8 @@ afterAll(restoreTestEnv);
 
 const MODEL_KEY_ENV = "SHORE_FIXTURE_API_KEY";
 
-async function loadedConfig(withModel: boolean, tools: string[] = []): Promise<LoadedConfig> {
-  const root = await mkdtemp(testTmp("shore-gen-"));
+async function loadedConfig(withModel: boolean, tools: string[] = [], kept?: string): Promise<LoadedConfig> {
+  const root = kept ?? await mkdtemp(testTmp("shore-gen-"));
   const dirs = { config: join(root, "config"), data: join(root, "data"), cache: join(root, "cache"), runtime: join(root, "run") };
   for (const d of Object.values(dirs)) await mkdir(d, { recursive: true });
   const app = defaultAppConfig();
@@ -110,12 +111,13 @@ interface Turn {
   signal?: AbortSignal;
   send?: (frame: ServerMessage) => Promise<void>;
   seen?: SidecarRequest[];
+  root?: string;
 }
 
 const SPARE_KEY_ENV = "SHORE_FIXTURE_SPARE_API_KEY";
 
 async function runTurn(turn: Turn): Promise<{ error?: string; dataDir: string }> {
-  const loaded = await loadedConfig(true, turn.tools);
+  const loaded = await loadedConfig(true, turn.tools, turn.root);
   if (turn.maxRetries !== undefined) loaded.app.chat.max_retries = turn.maxRetries;
   const fixture = loaded.models.chat.get("chat.fixture");
   if (fixture !== undefined && turn.takesPictures !== undefined) fixture.supportsImages = turn.takesPictures;
@@ -646,6 +648,54 @@ describe("what a reply checks before it runs and leaves behind after", () => {
       return asked;
     };
     expect([await asks(true), await asks(false)]).toEqual([1, 0]);
+  });
+
+  test("a reply that fails with nothing of it kept, after a tool had already changed a file, is over only once Shore has finished looking at what the tool changed", async () => {
+    const root = await mkdtemp(testTmp("shore-gen-"));
+    const workspace = join(root, "config", "characters", "ada", "workspace");
+    const run = CharacterWorkspace.prototype.run.bind(new CharacterWorkspace(workspace));
+    const held = Promise.withResolvers<void>();
+    let holding = false;
+    let running = 0;
+    const watched = spyOn(CharacterWorkspace.prototype, "run").mockImplementation(async (command, args, options) => {
+      running += 1;
+      try {
+        if (command === "git" && !holding && existsSync(join(workspace, "note.md"))) {
+          holding = true;
+          await Promise.race([held.promise, new Promise<void>((resolve) => { setTimeout(resolve, 1_000); })]);
+        }
+        return await run(command, args, options);
+      } finally {
+        running -= 1;
+      }
+    });
+    try {
+      const failed = await runTurn({
+        root, history: [], regen: false, events: [], tools: ["bash"],
+        provider: {
+          async *stream() {
+            yield* [];
+            throw new Error("a tool reply streams with its tools");
+          },
+          generate: () => {
+            throw new Error("no turn here generates");
+          },
+          async *streamWithTools(_request, phase) {
+            yield* [];
+            await phase.runTool({ id: "tool_write", name: "bash", input: { command: "printf 'half done' > note.md" } });
+            throw new Error("provider down");
+          },
+        },
+      });
+      expect(failed.error).toContain("provider down");
+      expect([holding, running]).toEqual([true, 0]);
+      expect(readFileSync(join(workspace, "note.md"), "utf8")).toBe("half done");
+      expect((await readBack(failed.dataDir)).map((message) => message.role)).toEqual(["user"]);
+    } finally {
+      held.resolve();
+      await until(() => running === 0, "what Shore was still looking at to finish");
+      watched.mockRestore();
+    }
   });
 
   test("a reply that lands puts away what Shore kept to undo a reply that is no longer in the thread", async () => {
