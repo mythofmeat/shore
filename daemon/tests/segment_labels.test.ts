@@ -25,7 +25,7 @@ import { eventsForResponse } from "./support/stream.ts";
 
 const KEY_ENV = "SHORE_TEST_SEGMENT_LABELS_KEY";
 const HOUR = 60 * 60_000;
-const PROMPT = "Give a short label for this conversation so Mara can find it later. Reply with only the label.";
+const PROMPT = "Give a short label for this conversation so Mara can find it later. Write it as a title, in the third person, with no \"I\", \"we\" or \"you\". Reply with only the label.";
 
 afterEach(() => {
   setSystemTime();
