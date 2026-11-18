@@ -459,20 +459,11 @@ function trimMessages(
     if (pm.role === "user" && currentMs !== undefined) {
       const gap = prevMs === undefined ? undefined : gapSeconds(prevMs, currentMs);
 
-      let inject: boolean;
-      if (mode === "never") {
-        inject = false;
-      } else if (mode === "always") {
-        inject = true;
-      } else {
-        const bigGap = gap !== undefined && gap >= TIME_GAP_THRESHOLD_SECS;
-        const hourlyTick =
-          lastMarkerMs !== undefined &&
-          gapSeconds(lastMarkerMs, currentMs) >= HOURLY_MARKER_INTERVAL_SECS;
-        inject = bigGap || hourlyTick || (firstUserPending && lostContext);
-      }
+      const bigGap = gap !== undefined && gap >= TIME_GAP_THRESHOLD_SECS;
+      const hourlyTick = lastMarkerMs !== undefined && gapSeconds(lastMarkerMs, currentMs) >= HOURLY_MARKER_INTERVAL_SECS;
+      const due = bigGap || hourlyTick || (firstUserPending && lostContext);
 
-      if (inject) {
+      if (mode === "always" || (mode === "auto" && due)) {
         const marker = formatTimeMarker(gap, currentMs, timeZone, elsewhere);
         pm.content = `${marker}\n\n${pm.content}`;
         const first = pm.content_blocks[0];

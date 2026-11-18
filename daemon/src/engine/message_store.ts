@@ -159,8 +159,7 @@ function serializeForStorage(msg: Message): string {
   if (msg.shown_later !== undefined) ordered.push(["shown_later", msg.shown_later]);
 
   const contentAt = 2;
-  const last = required(ordered.pop());
-  if (ordered.length > contentAt) ordered[contentAt] = last;
+  ordered[contentAt] = required(ordered.pop());
 
   const obj: Record<string, unknown> = {};
   for (const [k, v] of ordered) obj[k] = v;
