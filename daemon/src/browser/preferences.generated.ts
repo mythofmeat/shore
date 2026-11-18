@@ -76,10 +76,6 @@ export const TERMINAL_SHORTCUTS = [
   [
     "status",
     "status"
-  ],
-  [
-    "clear",
-    "clear"
   ]
 ] as const;
 export const TERMINAL_LOCAL_COMMANDS = {

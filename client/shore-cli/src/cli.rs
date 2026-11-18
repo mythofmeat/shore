@@ -3,14 +3,14 @@ use clap::{Args, CommandFactory, FromArgMatches, Parser, Subcommand, ValueEnum};
 use clap_complete::Shell;
 use shore_common::protocol::operations::{
     ActivateSession, BackgroundModelTarget, CallLogArgs, CancelCompaction, CheckConfiguration,
-    ClearArgs, ClearConversation, CompactArgs, CompactConversation, ConfigArgs, Configuration,
-    ConfigurationSchema, ConversationLog, ConversationLogArgs, DeleteMessages, DeleteMessagesArgs,
-    DiagnosticCountArgs, DiaryArgs, EditMessage, EditMessageArgs, EmptyOperationArgs, ExecuteTool,
-    FavoriteModel, FavoriteModelArgs, GetMessage, GetMessageArgs, InjectSystem, InjectSystemArgs,
-    InspectCalls, InspectModel, InspectSegments, ListMarks, ListMarksArgs, ListModels,
-    ListModelsArgs, ListProviderModels, ListProviders, MarkArgs, MarkKind, MarkReply,
-    MessageReferences, ModelInfoArgs, ModelPreferenceScope, ModelSettings, ModelSettingsArgs,
-    Operation, PingKeepalive, Presence, PresenceArgs, ProviderArgs, ProviderModelsArgs, ReadDiary,
+    CompactArgs, CompactConversation, ConfigArgs, Configuration, ConfigurationSchema,
+    ConversationLog, ConversationLogArgs, DeleteMessages, DeleteMessagesArgs, DiagnosticCountArgs,
+    DiaryArgs, EditMessage, EditMessageArgs, EmptyOperationArgs, ExecuteTool, FavoriteModel,
+    FavoriteModelArgs, GetMessage, GetMessageArgs, InjectSystem, InjectSystemArgs, InspectCalls,
+    InspectModel, InspectSegments, ListMarks, ListMarksArgs, ListModels, ListModelsArgs,
+    ListProviderModels, ListProviders, MarkArgs, MarkKind, MarkReply, MessageReferences,
+    ModelInfoArgs, ModelPreferenceScope, ModelSettings, ModelSettingsArgs, Operation,
+    PingKeepalive, Presence, PresenceArgs, ProviderArgs, ProviderModelsArgs, ReadDiary,
     ReadErrorLog, ReadStatus, ReadSubagentTraces, ReadTranscript, ReadWakeLog,
     RefreshAllProviderModels, RefreshProviderModels, ResetModel, ResetModelArgs, RunToolArgs,
     SegmentAction, SegmentsArgs, SetActive, SetDormant, SetModelSetting, SetModelSettingArgs,
@@ -332,38 +332,22 @@ pub(crate) enum CliCommand {
         subagent_tools: bool,
     },
 
-    /// Summarize the conversation into memory and shorten the active window.
-    /// The pass runs on the daemon and is shown live: its reasoning, tool
-    /// calls and results. Ctrl-C only stops watching; the pass carries on.
+    /// Archive the older part of the conversation and shorten the active window.
+    /// A reply you haven't read yet stays, with everything after it. Archived
+    /// turns can be opened from the top of the thread and searched in the chat
+    /// logs.
     #[command(display_order = 2)]
     Compact {
         /// How many recent user turns to leave in the conversation. Everything
-        /// older is folded into markdown memory. 0 keeps none of it, leaving
-        /// only the prompt files and the memory index.
+        /// older is archived. 0 keeps none of it.
         #[arg(conflicts_with_all = ["watch", "cancel"])]
         keep_turns: Option<u32>,
 
-        /// Throw away a paused checkpoint and summarize from scratch. Use this
-        /// when a pass stopped partway — out of quota, provider down, memory
-        /// files edited since — and `shore compact` keeps reporting paused. The
-        /// memory it already wrote stays; those turns get summarized again.
-        #[arg(long, conflicts_with_all = ["watch", "cancel"])]
-        restart: bool,
-
-        /// Write memory from an archived segment (see `shore segments`) as if it
-        /// were being compacted now. The archive and the conversation are left
-        /// as they are. Use it to redo a segment whose pass wrote nothing.
-        #[arg(long, value_name = "INDEX", conflicts_with_all = ["keep_turns", "restart", "watch", "cancel"], add = values(Completes::Segments))]
-        segment: Option<u64>,
-
-        /// Follow the compaction already running, whoever started it, from what
-        /// it has done so far to how it ends. With none running, show how the
-        /// last pass ended.
+        /// Show the compaction running now, if any, until it ends.
         #[arg(long, conflicts_with = "cancel")]
         watch: bool,
 
-        /// Stop the running compaction. It pauses with its checkpoint kept, so
-        /// `shore compact` resumes it later.
+        /// Stop the compaction running now, if any.
         #[arg(long)]
         cancel: bool,
 
@@ -380,22 +364,6 @@ pub(crate) enum CliCommand {
 
         /// Output raw JSON
         #[arg(long, global = true)]
-        json: bool,
-    },
-
-    /// Archive the active conversation without summarizing it into memory
-    #[command(display_order = 3)]
-    Clear {
-        /// Exclude the new segment from history search immediately
-        #[arg(long)]
-        exclude: bool,
-
-        /// Attach a note to the new segment
-        #[arg(long)]
-        note: Option<String>,
-
-        /// Output raw JSON
-        #[arg(long)]
         json: bool,
     },
 
@@ -1071,14 +1039,12 @@ pub(crate) enum PaletteScope {
     Config,
 }
 
-/// Background task to retarget `shore model setting` at. `all` targets wakes
-/// and compaction together and errors if they resolve to different models, or,
-/// when only showing settings, if their own settings differ.
+/// Background task to retarget `shore model setting` at. Wakes are the only
+/// one, so `all` and `wake` mean the same.
 #[derive(ValueEnum, Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) enum BackgroundTarget {
     All,
     Wake,
-    Compaction,
 }
 
 impl BackgroundTarget {
@@ -1086,7 +1052,6 @@ impl BackgroundTarget {
         match self {
             Self::All => BackgroundModelTarget::All,
             Self::Wake => BackgroundModelTarget::Wake,
-            Self::Compaction => BackgroundModelTarget::Compaction,
         }
     }
 }
@@ -1261,7 +1226,7 @@ pub(crate) struct ModelTarget {
     #[arg(long)]
     pub(crate) chat: bool,
 
-    /// Background tasks: bare means wakes and compaction; naming one requires =compaction or =wake
+    /// Wakes, the only background task: bare and =wake mean the same
     #[arg(
         long,
         value_enum,
@@ -1308,8 +1273,8 @@ pub(crate) enum ModelCommand {
     /// Bare, this sets the character's chat model, which every thread without a model of its
     /// own uses. With --thread (or SHORE_THREAD) it gives just that thread its own model.
     /// Every other target writes the config file,
-    /// which is global: `--background=compaction` writes `compaction.model`, `--background=wake` writes `triggers.model`, the model wakes run on,
-    /// bare `--background` writes both; `--subagent=<name>` writes `subagents.<name>.model`,
+    /// which is global: `--background` writes `triggers.model`, the model wakes run on;
+    /// `--subagent=<name>` writes `subagents.<name>.model`,
     /// and bare `--subagent` writes `subagents.model`.
     Use {
         /// Model name or provider:model_id
@@ -1324,7 +1289,7 @@ pub(crate) enum ModelCommand {
     ///
     /// Bare, describes the active chat model. A target flag describes whatever
     /// that role currently resolves to, which is the quick way to answer "what
-    /// is compaction actually running on".
+    /// are wakes actually running on".
     Info {
         /// Model to describe. Omit for the active one, or for the targeted role
         #[arg(add = values(Completes::Models))]
@@ -1352,10 +1317,9 @@ pub(crate) enum ModelCommand {
     /// belongs to the model, changing subagents.model picks up that model's
     /// settings rather than carrying the old ones over.
     ///
-    /// A background task's settings sit on top of its model's: wakes and
-    /// compaction take whatever their model has, chat's when they share it, and
-    /// override only the keys set for them, so tuning a task never moves chat.
-    /// Bare --background writes the same value for both.
+    /// Wakes' settings sit on top of their model's: wakes take whatever that
+    /// model has, chat's when they share it, and override only the keys set
+    /// with --background, so tuning wakes never moves chat.
     ///
     /// The keys are temperature, top_p, reasoning_effort, reasoning_budget_tokens,
     /// max_output_tokens, cache_ttl, cache_keepalive, cache_keepalive_pings, sdk,
@@ -1428,8 +1392,8 @@ pub(crate) enum ModelCommand {
     /// configured model. With --thread (or SHORE_THREAD) it clears just that thread's own
     /// model, so the thread uses the character's again. Other targets clear
     /// the config keys `use` would have written, so the role falls back the
-    /// way it did before anything was pinned. Bare --background clears
-    /// triggers.model and compaction.model; bare --subagent clears subagents.model
+    /// way it did before anything was pinned. --background clears
+    /// triggers.model; bare --subagent clears subagents.model
     /// and every per-sub-agent override.
     Reset {
         #[command(flatten)]
@@ -1505,7 +1469,7 @@ pub(crate) enum ThreadCommand {
         #[arg(long, add = values(Completes::Models))]
         model: Option<String>,
 
-        /// When this thread gets long, compact it into memory as the home thread does, instead of trimming its oldest turns into the archive. `shore compact` works either way
+        /// Archive this thread's older turns at the `[compaction]` limits, as the home thread's are, instead of only once it nearly fills the model's context. `shore compact` works either way
         #[arg(long)]
         compaction: bool,
     },
@@ -1555,13 +1519,17 @@ pub(crate) enum ThreadCommand {
         name: String,
     },
 
-    /// Choose what happens when a thread gets long: compact it into memory, or trim its oldest turns into the archive
+    /// Choose whether a thread compacts or trims when it gets long
+    ///
+    /// A thread that compacts has its older turns archived at the
+    /// `[compaction]` limits, as the home thread's are. One that trims has
+    /// them archived only once it nearly fills the model's context.
     Compaction {
         /// Thread id
         #[arg(add = values(Completes::Threads))]
         name: String,
 
-        /// `on` compacts into memory, as the home thread does; `off` trims into the archive
+        /// `on` compacts at the `[compaction]` limits, as the home thread does; `off` trims once the thread nearly fills the model's context
         #[arg(value_parser = ["on", "off"])]
         mode: String,
     },
@@ -1626,8 +1594,8 @@ pub(crate) enum ThreadCommand {
     /// The copy is independent from the moment it is made: later edits,
     /// regeneration, compaction or retirement on either side leave the other
     /// alone. Both threads keep the whole transcript, and a message copied by a
-    /// fork is one conversation event in two places, so recall shows it once and
-    /// memory processing runs over it once.
+    /// fork is one conversation event in two places, so the chat logs show it
+    /// once.
     Fork {
         /// Thread id for the new thread: letters, digits, dot, dash or underscore
         name: String,
@@ -2522,10 +2490,7 @@ fn parse_json_object(raw: &str) -> Result<BTreeMap<String, serde_json::Value>, S
 
 const COMMAND_GROUPS: [(&str, &[&str]); 6] = [
     ("Conversation", &["msg", "log"]),
-    (
-        "Maintenance",
-        &["compact", "clear", "segments", "export", "import"],
-    ),
+    ("Maintenance", &["compact", "segments", "export", "import"]),
     (
         "Configuration",
         &["character", "thread", "model", "provider", "config"],
@@ -2936,13 +2901,6 @@ pub(crate) fn to_swp_command(
             })
         }
 
-        CliCommand::Clear { exclude, note, .. } => {
-            operation_to_swp::<ClearConversation>(ClearArgs {
-                exclude: Some(*exclude),
-                note: Some(note.clone()),
-            })
-        }
-
         CliCommand::Config {
             subcommand: Some(ConfigCommand::Tools { .. }),
             ..
@@ -3256,8 +3214,6 @@ fn provider_to_swp(cmd: &CliCommand) -> Option<(&'static str, serde_json::Value)
 fn compact_to_swp(cmd: &CliCommand) -> Option<(&'static str, serde_json::Value)> {
     let CliCommand::Compact {
         keep_turns,
-        restart,
-        segment,
         watch,
         cancel,
         ..
@@ -3274,8 +3230,6 @@ fn compact_to_swp(cmd: &CliCommand) -> Option<(&'static str, serde_json::Value)>
     operation_to_swp::<CompactConversation>(CompactArgs {
         dry_run: None,
         keep_turns: keep_turns.map(u64::from),
-        restart: restart.then_some(true),
-        segment: *segment,
     })
 }
 
@@ -3987,10 +3941,6 @@ mod tests {
                 &["segments", "show", "4"],
                 Some(("segments", json!({"action": "show", "index": 4}))),
             ),
-            (
-                &["clear", "--exclude", "--note", "bad branch"],
-                Some(("clear", json!({"exclude": true, "note": "bad branch"}))),
-            ),
             (&["config"], Some(("config", json!({})))),
             (
                 &["config", "get", "chat.model"],
@@ -4047,18 +3997,6 @@ mod tests {
             (
                 &["compact", "8"],
                 Some(("compact", json!({"keep_turns": 8}))),
-            ),
-            (
-                &["compact", "--restart"],
-                Some(("compact", json!({"restart": true}))),
-            ),
-            (
-                &["compact", "0", "--restart"],
-                Some(("compact", json!({"keep_turns": 0, "restart": true}))),
-            ),
-            (
-                &["compact", "--segment", "860"],
-                Some(("compact", json!({"segment": 860}))),
             ),
             (
                 &["-c", "ada", "usage"],

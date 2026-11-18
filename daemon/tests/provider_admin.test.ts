@@ -305,9 +305,9 @@ describe("removing providers", () => {
     expect(() => removeProvider(w.ctx, { provider: "openrouter" })).toThrow("chat.model (openrouter:anthropic/claude)");
   });
 
-  test("a provider only compaction runs on is still in use", async () => {
-    const w = await world("[compaction]\nmodel = \"openrouter:anthropic/claude\"\n\n[providers.openrouter]\ndiscover = true\n");
-    expect(() => removeProvider(w.ctx, { provider: "openrouter" })).toThrow("compaction.model (openrouter:anthropic/claude)");
+  test("a provider only sub-agents run on is still in use", async () => {
+    const w = await world("[subagents]\nmodel = \"openrouter:anthropic/claude\"\n\n[providers.openrouter]\ndiscover = true\n");
+    expect(() => removeProvider(w.ctx, { provider: "openrouter" })).toThrow("subagents.model (openrouter:anthropic/claude)");
   });
 
   test("removing a provider takes its tables, keys and limits with it and leaves the rest of the file alone", async () => {

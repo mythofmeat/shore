@@ -15,7 +15,7 @@ import {
   textOnlyReason,
 } from "../../llm/image_support";
 import type { FrameSink } from "../../llm/stream";
-import { CompactionError, type CompactionLlm } from "./types";
+import { CompactionError } from "./types";
 
 export const COMPACTION_TAIL_ENTRY_COUNT = 1;
 
@@ -51,7 +51,7 @@ export interface RealCompactionLlmOptions {
   signal?: AbortSignal | undefined;
 }
 
-export class RealCompactionLlm implements CompactionLlm {
+export class RealCompactionLlm {
   readonly #opts: RealCompactionLlmOptions;
 
   constructor(opts: RealCompactionLlmOptions) {
@@ -82,10 +82,6 @@ export class RealCompactionLlm implements CompactionLlm {
     const request = built.request;
     appendCompactionTail(request, prompt);
     return request;
-  }
-
-  run(request: SidecarRequest, tools: ToolPhase, options?: ToolLoopOptions): Promise<GenerateResponse> {
-    return this.generate(request, tools, options);
   }
 
   async generate(request: SidecarRequest, tools?: ToolPhase, options?: ToolLoopOptions): Promise<GenerateResponse> {

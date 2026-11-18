@@ -1,6 +1,5 @@
 import { threadFile } from "../storage/files.ts";
 import { withConversation } from "../engine/lifecycle.ts";
-import type { CompactionCompletion } from "../memory/compaction/background.ts";
 import { shoreLog } from "../log.ts";
 
 import { join } from "node:path";
@@ -9,35 +8,26 @@ import { archiveKey, threadDataDir } from "../config/dirs.ts";
 import { firstUnreadReply, homeThreadOf } from "../engine/threads.ts";
 
 import { HISTORY_DB_FILE } from "../engine/history_store.ts";
-import { MessageStore, isToolResultOnly } from "../engine/message_store.ts";
+import { MessageStore } from "../engine/message_store.ts";
 import type { Message } from "../engine/types.ts";
 import { conversationManager } from "../memory/compaction/archive.ts";
 import { tryBeginCompaction } from "../memory/compaction/manager.ts";
 import { archiveSplitIndex, conversationView } from "../memory/compaction/plan.ts";
-import { effectiveConfig, runCompaction, type CompactionRunDeps } from "../memory/compaction/run.ts";
 import { reloadAndApplyDeferred, repoint, type PostArchiveDeps } from "./post_archive.ts";
 import type { AutonomyActionResult } from "./runner.ts";
-import { CompactionPaused } from "../memory/compaction/types.ts";
 
 
 export type DeepArchivePlan =
   | { arm: "quiesce"; tail: number }
-  | { arm: "pure"; tail: number; archivable: number }
-  | { arm: "compaction"; tail: number; archivable: number };
+  | { arm: "archive"; tail: number; archivable: number };
 
 export function deepArchivePlan(
   messages: readonly Message[],
-  coveredTurnCount: number,
   firstUnread?: number,
 ): DeepArchivePlan {
   const archivable = archiveSplitIndex(conversationView(messages), 0, true, firstUnread);
   const tail = messages.length - archivable;
-  if (archivable === 0) return { arm: "quiesce", tail };
-
-  const userTurns = messages.filter((m) => m.role === "user" && !isToolResultOnly(m)).length;
-  return userTurns === coveredTurnCount
-    ? { arm: "pure", tail, archivable }
-    : { arm: "compaction", tail, archivable };
+  return archivable === 0 ? { arm: "quiesce", tail } : { arm: "archive", tail, archivable };
 }
 
 export function deepArchiveNotification(
@@ -46,12 +36,11 @@ export function deepArchiveNotification(
 ): { title: string; body: string } {
   return {
     title: `Shore - ${character}`,
-    body: `Idle conversation archived (${archivable} messages, no LLM pass needed)`,
+    body: `Idle conversation archived (${archivable} messages)`,
   };
 }
 
 export interface DeepArchiveDeps extends PostArchiveDeps {
-  run?: Omit<CompactionRunDeps, "config">;
   notify?: (title: string, body: string) => void;
   now?: () => string;
   newId?: () => string;
@@ -60,7 +49,6 @@ export interface DeepArchiveDeps extends PostArchiveDeps {
 export async function runDeepIdleArchive(
   character: string,
   deps: DeepArchiveDeps,
-  coveredTurnCount: number,
 ): Promise<AutonomyActionResult> {
   const selected = await homeThreadOf(deps.config.dirs.data, character);
   return await withConversation(threadDataDir(deps.config.dirs.data, character, selected), "update", async () => {
@@ -82,7 +70,7 @@ export async function runDeepIdleArchive(
     }
 
     const messages = loaded.store.messages();
-    const plan = deepArchivePlan(messages, coveredTurnCount, firstUnreadReply(dataDir, character, thread, messages));
+    const plan = deepArchivePlan(messages, firstUnreadReply(dataDir, character, thread, messages));
 
     if (plan.arm === "quiesce") {
       shoreLog.debug(
@@ -91,15 +79,11 @@ export async function runDeepIdleArchive(
       return { events: [], deepArchiveDone: true };
     }
 
-    const writeMemory = effectiveConfig(character, deps.config).app.compaction.write_memory;
-    if (plan.arm === "pure" || !writeMemory) {
-      return await pureArchive(character, thread, deps, loaded.raw, plan.tail, plan.archivable);
-    }
-    return await compactionArchive(character, thread, deps);
+    return await archiveIdle(character, thread, deps, loaded.raw, plan.tail, plan.archivable);
   });
 }
 
-async function pureArchive(
+async function archiveIdle(
   character: string,
   thread: string,
   deps: DeepArchiveDeps,
@@ -139,9 +123,6 @@ async function pureArchive(
       events: [],
       failed: message(e),
       deepArchiveDone: false,
-      ...(e instanceof CompactionPaused && e.resumeAt !== undefined
-        ? { retryAt: Date.parse(e.resumeAt) }
-        : {}),
     };
   } finally {
     guard.release();
@@ -153,66 +134,11 @@ async function pureArchive(
   deps.notify?.(title, body);
 
   shoreLog.info(
-    `shore: deep-idle archive complete for ${character} (pure archive, ` +
-      `archivable=${archivable}, tail=${tail})`,
+    `shore: deep-idle archive complete for ${character} (archivable=${archivable}, tail=${tail})`,
   );
   await repoint(character, deps, "deep_idle_archive");
 
   return { turnCount: 0, events: [], deepArchiveDone: true };
-}
-
-async function compactionArchive(
-  character: string,
-  thread: string,
-  deps: DeepArchiveDeps,
-): Promise<AutonomyActionResult> {
-  if (deps.run === undefined) {
-    return {
-      events: [],
-      failed: "deep-idle archive has no compaction dependencies",
-      deepArchiveDone: false,
-    };
-  }
-
-  shoreLog.info(
-    `shore: deep-idle archive for ${character} — running a keep-0 compaction over uncovered turns`,
-  );
-
-  let completion: CompactionCompletion;
-  try {
-    completion = await runCompaction(
-      character,
-      {
-        ...deps.run,
-        config: deps.config,
-      },
-      "deep_archive",
-      { thread, keepTurnsOverride: 0, retainTrailingAutonomous: true },
-    );
-  } catch (e) {
-    shoreLog.warn(
-      `shore: deep-idle archive compaction for ${character} failed, will retry after the next ` +
-        `archive_after window: ${String(e)}`,
-    );
-    return {
-      events: [],
-      failed: message(e),
-      deepArchiveDone: false,
-      ...(e instanceof CompactionPaused && e.resumeAt !== undefined
-        ? { retryAt: Date.parse(e.resumeAt) }
-        : {}),
-    };
-  }
-
-  if (completion.kind !== "completed") return { events: [], failed: `Compaction skipped: ${completion.reason}`, deepArchiveDone: false, ...(completion.retryAt === undefined ? {} : { retryAt: completion.retryAt }) };
-  const retained = completion.retained;
-  await reloadAndApplyDeferred(character, deps, "Deep-idle archive");
-  shoreLog.info(
-    `shore: deep-idle archive complete for ${character} (compaction pass, retained=${retained})`,
-  );
-  await repoint(character, deps, "deep_idle_archive");
-
-  return { turnCount: retained, events: [], deepArchiveDone: false };
 }
 
 const message = (e: unknown): string => (e instanceof Error ? e.message : String(e));

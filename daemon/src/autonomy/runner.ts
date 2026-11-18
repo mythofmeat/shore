@@ -23,7 +23,6 @@ export interface AutonomyActionResult {
   readonly events: readonly { kind: WakeEventKind; detail: string; at?: number }[];
   readonly failed?: string | undefined;
   readonly deepArchiveDone?: boolean | undefined;
-  readonly retryAt?: number | undefined;
 }
 
 export interface TriggerFiring {
@@ -107,7 +106,7 @@ export interface AutonomyExecutor {
   homeThread(character: string): string;
   runWake(character: string, wake: WakeRun, hooks: WakeHooks): Promise<WakeResult>;
   runCompaction(character: string, reason: CompactionReason): Promise<AutonomyActionResult>;
-  runDeepArchive(character: string, coveredTurnCount: number): Promise<AutonomyActionResult>;
+  runDeepArchive(character: string): Promise<AutonomyActionResult>;
   openSeals?(character: string, now: number): Promise<OpenedSeal[]>;
 }
 
@@ -117,7 +116,6 @@ interface RunnerState {
   compactionTriggered: boolean;
   deepArchiveDone: boolean;
   activeTurnCount: number;
-  coveredTurnCount: number;
   keepalive: PersistedKeepalive | undefined;
 }
 
@@ -173,7 +171,6 @@ export class CharacterAutonomy {
       compactionTriggered: false,
       deepArchiveDone: false,
       activeTurnCount: opts.idle?.turnCount ?? 0,
-      coveredTurnCount: restored?.coveredTurnCount ?? 0,
       keepalive: restored?.keepalive,
     };
   }
@@ -267,18 +264,13 @@ export class CharacterAutonomy {
 
   onCompactionComplete(newTurnCount: number, now: number): void {
     this.#state.activeTurnCount = newTurnCount;
-    this.#state.coveredTurnCount = newTurnCount;
     this.#state.compactionTriggered = false;
     this.#state.lastActivityAt = now;
-    this.#state.dirty = true;
   }
 
-  onCompactionFailed(now: number, retryAt?: number): void {
+  onCompactionFailed(now: number): void {
     this.#state.compactionTriggered = false;
-    this.#state.lastActivityAt = retryAt === undefined
-      ? now
-      : retryAt - this.#config.idleTriggerSecs * 1000;
-    this.#state.dirty = true;
+    this.#state.lastActivityAt = now;
   }
 
   setConfig(config: AutonomyRunnerConfig): void {
@@ -413,10 +405,7 @@ export class CharacterAutonomy {
       }
 
       if (decision.deepArchive && this.#stillIdleEnoughToArchive()) {
-        const result = await this.#executor.runDeepArchive(
-          this.#character,
-          this.#state.coveredTurnCount,
-        );
+        const result = await this.#executor.runDeepArchive(this.#character);
         this.#applyCompaction(result);
         if (result.deepArchiveDone ?? result.failed === undefined) {
           this.#state.deepArchiveDone = true;
@@ -466,11 +455,8 @@ export class CharacterAutonomy {
   #applyCompaction(result: AutonomyActionResult): void {
     this.#apply(result);
     const now = this.#now();
-    if (result.failed === undefined && result.turnCount !== undefined) {
-      this.onCompactionComplete(result.turnCount, now);
-      return;
-    }
-    this.onCompactionFailed(now, result.retryAt);
+    if (result.failed === undefined && result.turnCount !== undefined) this.onCompactionComplete(result.turnCount, now);
+    else this.onCompactionFailed(now);
   }
 
   #stillIdleEnoughToArchive(): boolean {
@@ -481,7 +467,6 @@ export class CharacterAutonomy {
   snapshot(): AutonomyStateFile {
     return {
       ...this.#dormancy.snapshot(),
-      coveredTurnCount: this.#state.coveredTurnCount,
       keepalive: this.#state.keepalive,
     };
   }

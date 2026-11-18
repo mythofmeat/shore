@@ -216,8 +216,8 @@ test("archiving the open thread takes every tab on it home, closes what was open
   await otherTab.goto("/workspace/wren/side");
   await expect(otherTab.locator("article.message.user")).toContainText("A message for the side thread");
   await otherTab.getByRole("button", { name: "Thread options" }).click();
-  await otherTab.getByRole("menuitem", { name: "Clear context…" }).click();
-  await expect(otherTab.getByRole("dialog", { name: "Clear context" })).toBeVisible();
+  await otherTab.getByRole("menuitem", { name: "Compact context…" }).click();
+  await expect(otherTab.getByRole("dialog", { name: "Compact context" })).toBeVisible();
 
   await page.bringToFront();
   await page.getByRole("button", { name: "Thread options" }).click();
@@ -299,11 +299,11 @@ test("vim mode edits with vim keys, keeps the draft over a reload, attaches past
   await check();
 });
 
-test("compacting from the palette starts on Enter and leaves other threads usable while it runs", async ({ page }) => {
+test("compacting from the palette starts on Enter and archives all but the turns asked to be kept", async ({ page }) => {
   const check = await watchPage(page);
   await signIn(page);
   await createCharacter(page, "wren");
-  await send(page, "cancel memory once");
+  await send(page, "Archive this turn");
   await send(page, "Keep the recent turn");
 
   await page.keyboard.press("Control+k");
@@ -314,34 +314,8 @@ test("compacting from the palette starts on Enter and leaves other threads usabl
   await dialog.getByLabel("Turns to keep").fill("1");
   await dialog.getByLabel("Turns to keep").press("Enter");
   await expect(dialog).toBeHidden();
-  const compacting = page.getByRole("status").filter({ hasText: "Compacting context" });
-  await expect(compacting).toBeVisible();
-
-  await createThread(page, "wren", "side");
-  await expect(compacting).toBeHidden();
-  const threadList = page.getByRole("group", { name: "wren threads" });
-  await expect(threadList.getByRole("button", { name: "main (compacting)", exact: true })).toBeVisible();
-  await send(page, "Chatting while main compacts");
-
-  await threadList.getByRole("button", { name: "main (compacting)", exact: true }).click();
-  await expect(page.locator(".topbar-thread")).toHaveText("main");
-  await expect(compacting).toBeVisible();
-  await compacting.getByRole("button", { name: /Compacting context/ }).click();
-  const view = page.getByRole("dialog", { name: "Compaction" });
-  await expect(view.getByText("You started it")).toBeVisible();
-  await expect(view.getByText("Compacting", { exact: true })).toBeVisible();
-  await expect(view.getByLabel("What the compaction is doing")).toContainText("bash");
-  await view.getByRole("button", { name: "Stop", exact: true }).click();
-  await expect(view.getByText(/Compaction paused/)).toBeVisible();
-  await expect(view.getByRole("button", { name: "Stop", exact: true })).toHaveCount(0);
-  await expect(compacting).toBeHidden();
-  await view.getByRole("button", { name: "Close", exact: true }).last().click();
-  await expect(view).toBeHidden();
-  await page.getByRole("button", { name: "Compaction finished. Show the compaction" }).click();
-  await expect(view.getByText(/Compaction paused/)).toBeVisible();
-  await view.getByRole("button", { name: "Dismiss", exact: true }).click();
-  await expect(view).toBeHidden();
-  await expect(page.getByRole("button", { name: "Compaction finished. Show the compaction" })).toHaveCount(0);
+  await expect(page.locator("article.message.user")).toHaveCount(1);
+  await expect(page.locator("article.message.user")).toContainText("Keep the recent turn");
   await check();
 });
 
@@ -365,7 +339,7 @@ test("a thread's menu changes its settings without opening it, and archiving the
   await page.getByRole("menuitem", { name: "Thread settings…" }).click();
   const settings = page.getByRole("dialog", { name: "Thread settings" });
   await settings.getByLabel("Label", { exact: true }).fill("Everyday");
-  await settings.getByLabel("When it gets long").selectOption("trim");
+  await settings.getByLabel("Older turns are archived").selectOption("trim");
   await settings.getByRole("button", { name: "Save", exact: true }).click();
   await expect(settings).toBeHidden();
   await expect(threads.getByRole("button", { name: "Everyday", exact: true })).toBeVisible();
@@ -373,7 +347,7 @@ test("a thread's menu changes its settings without opening it, and archiving the
 
   await threads.getByRole("button", { name: "Everyday", exact: true }).click({ button: "right" });
   await page.getByRole("menuitem", { name: "Thread settings…" }).click();
-  await expect(settings.getByLabel("When it gets long")).toHaveValue("trim");
+  await expect(settings.getByLabel("Older turns are archived")).toHaveValue("trim");
   await settings.getByRole("button", { name: "Cancel", exact: true }).click();
   await expect(settings).toBeHidden();
 

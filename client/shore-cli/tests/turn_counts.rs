@@ -41,40 +41,27 @@ fn segments_are_listed_by_how_many_turns_they_hold() {
 }
 
 #[test]
-fn a_clear_says_how_many_turns_went_into_the_segment() {
-    let cleared = json!({ "status": "clear", "character": "ada", "thread": "main", "segment": segment(3, 30, &Value::Null) });
-    let (output, _frames) = asked(cleared, &["clear"]);
-    assert_eq!(
-        printed(succeeded(&output)),
-        "Cleared 30 turns into segment #3."
-    );
-}
-
-#[test]
 fn a_compaction_says_what_it_archived_and_kept_in_turns() {
     let rotated = |dry: bool| json!({ "status": "rotated", "character": "ada", "compacted_turns": 30, "retained_turns": 8, "dry_run": dry, "memory_files_written": [] });
     let (archived, _frames) = asked(rotated(false), &["compact"]);
     let told = words(succeeded(&archived));
     assert!(
-        told.contains("Turns 30 archived into history, 8 retained"),
+        told.starts_with("\u{2500}\u{2500} Compaction \u{2500}"),
         "{told}"
     );
-    assert!(!told.contains("Messages"), "{told}");
-    let (dry, _dry_frames) = asked(rotated(true), &["compact"]);
     assert!(
-        words(succeeded(&dry)).contains("Turns 30 would be archived into history, 8 retained"),
-        "{}",
-        words(&dry)
+        told.ends_with("\u{2500} Character ada Turns 30 archived, 8 kept"),
+        "{told}"
     );
-    let compacted = json!({
-        "status": "compacted", "character": "ada", "compacted_turns": 30, "retained_turns": 8,
-        "memory_files_written": ["memory/a.md"], "new_conversation_id": "c", "tool_rounds": 1, "tools_called": ["edit"],
-    });
-    let (summarized, _summarized_frames) = asked(compacted, &["compact"]);
+    let (dry, _dry_frames) = asked(rotated(true), &["compact"]);
+    let planned = words(succeeded(&dry));
     assert!(
-        words(succeeded(&summarized)).contains("Turns 30 compacted, 8 retained"),
-        "{}",
-        words(&summarized)
+        planned.starts_with("\u{2500}\u{2500} Compaction (dry run) \u{2500}"),
+        "{planned}"
+    );
+    assert!(
+        planned.ends_with("\u{2500} Character ada Turns 30 would be archived, 8 kept"),
+        "{planned}"
     );
 }
 

@@ -3391,12 +3391,17 @@ pub(crate) fn handle_server_message(app: &mut App, msg: ServerMessage) -> UiEffe
                     app.set_status(format!("alt {position}/{count}"));
                 }
                 "compact" => {
-                    let status = co
-                        .data
-                        .get("status")
-                        .and_then(|v| v.as_str())
-                        .unwrap_or("done");
-                    app.set_status(format!("{}: {status}", co.name));
+                    let count = |field: &str| {
+                        co.data
+                            .get(field)
+                            .and_then(serde_json::Value::as_u64)
+                            .unwrap_or(0)
+                    };
+                    app.set_status(format!(
+                        "compact: {} archived, {} kept",
+                        crate::output::turns(count("compacted_turns")),
+                        count("retained_turns")
+                    ));
                 }
                 "usage" => {
                     app.apply_usage_budgets(&co.data);
@@ -4290,6 +4295,22 @@ mod reliability_tests {
             json!({"type":"history","selected_character":"ada","selected_thread":thread,"messages":messages,"config":{},"revision":1}),
         )
     }
+    #[test]
+    fn a_compaction_puts_what_it_archived_and_kept_in_the_status_line() {
+        let mut app = App::default();
+        let _ = handle_server_message(
+            &mut app,
+            frame(json!({
+                "type": "command_output", "name": "compact",
+                "data": { "status": "rotated", "character": "ada", "compacted_turns": 1, "retained_turns": 8, "dry_run": false, "memory_files_written": [] },
+            })),
+        );
+        assert_eq!(
+            app.notifications.last().map(|shown| shown.content.as_str()),
+            Some("compact: 1 turn archived, 8 kept")
+        );
+    }
+
     #[test]
     fn unsolicited_history_page_cannot_enter_current_thread() {
         let mut app = App::default();

@@ -1,4 +1,3 @@
-import { required } from "../../util/required.ts";
 import { withConversation } from "../../engine/lifecycle.ts";
 import { threadDataDir } from "../../config/dirs.ts";
 
@@ -8,74 +7,30 @@ import { join } from "node:path";
 
 import type { LoadedConfig } from "../../config/loader.ts";
 import { HISTORY_DB_FILE, HistoryStore } from "../../engine/history_store.ts";
-import { conversationRef, type PriorContext } from "../../engine/segments.ts";
+import type { PriorContext } from "../../engine/segments.ts";
 import { loadCharacterConfig } from "../../config/loader.ts";
-import { resolvePromptTemplate } from "../../config/dirs.ts";
-import { MAIN_THREAD, archiveKey, characterDataDir, characterMemoryDir } from "../../config/dirs.ts";
-import { homeThread, readThreadsIndex, threadChatModel, threadRecord, homeThreadOf, wakesThread } from "../../engine/threads.ts";
-import { resolveDisplayName, toolGrants } from "../../config/app.ts";
-import { resolveBackgroundModel, resolveChatModelForCharacter } from "../../config/preferences.ts";
+import { MAIN_THREAD, archiveKey, characterDataDir } from "../../config/dirs.ts";
+import { readThreadsIndex, threadChatModel, homeThreadOf, wakesThread } from "../../engine/threads.ts";
+import { resolveChatModelForCharacter } from "../../config/preferences.ts";
 import { configView } from "../../config/preferences.ts";
 import { findEffectiveModel } from "../../config/effective_catalog.ts";
-import { toRequestModel, type ResolvedModel } from "../../config/models.ts";
-import type { FrameSink } from "../../llm/stream.ts";
+import type { ResolvedModel } from "../../config/models.ts";
 import type { SidecarRequest, ToolDefinition } from "../../llm/types.ts";
 import type { Message } from "../../engine/types.ts";
 import type { LastRequestCache } from "../../cache/last_request.ts";
 import type { RebuildDeps } from "../../cache/rebuild.ts";
 import { buildChatShapeRequestFromDisk } from "../../handler/context.ts";
-import { buildToolContext, credentialEntry, type ToolContextDeps } from "../../handler/tool_context.ts";
-import { toolLimitsFrom, type ToolContext } from "../../tools/dispatch.ts";
-import { runToolUse, type ToolExecution } from "../../tools/execute.ts";
-import { imageLimitsFor, type ImageLimits } from "../../llm/prepare_images.ts";
-import { schemasFrom } from "../../tools/validate.ts";
-import {
-  ensureWorkspaceGitRepoBestEffort,
-  gitCommitAll,
-  gitHead,
-  gitPushWorkspaceBestEffort,
-  saveWorkspaceAtArchive,
-} from "../../tools/workspace.ts";
-import { MarkdownMemoryStore } from "../markdown_store.ts";
-import { CharacterWorkspace, characterWorkspace } from "../../tools/character_workspace.ts";
-import { workspaceTurnsFor } from "../../tools/workspace_turns.ts";
-import { applyDeferredEdits, queueDeferredEdit } from "../deferred_edits.ts";
+import { saveWorkspaceAtArchive } from "../../tools/workspace.ts";
+import { characterWorkspace } from "../../tools/character_workspace.ts";
+import type { ToolContextDeps } from "../../handler/tool_context.ts";
+import { applyDeferredEdits } from "../deferred_edits.ts";
 import type { CompactionRunner } from "../../handler/turn.ts";
-import { conversationManager, hasCompactionOperation, priorContext } from "./archive.ts";
-import { type CompactionCompletion, alongsidePasses, handleCompactionOutcome, loadMessagesForCompaction, pushAfterCompaction } from "./background.ts";
-import { RealCompactionLlm, type RealCompactionLlmOptions } from "./llm.ts";
-import { compact, compactSegment, countTurns, tryBeginCompaction, type CompactionRunGuard } from "./manager.ts";
-import { startPass, type PassScope } from "./activity.ts";
-import { isRealUserTurn } from "../../engine/versions.ts";
-import type { CompactionTrigger } from "../../protocol/CompactionTrigger.ts";
-import { DEFAULT_COMPACT_PROMPT } from "./prompts.ts";
-import { renderToolValue } from "../../tools/media.ts";
-import {
-  CompactionError,
-  CompactionPaused,
-  tagCompactionFrames,
-  type CompactionCoverage,
-  type CompactionOutcome,
-  type CompactionTools,
-} from "./types.ts";
-import {
-  claimUncovered,
-  coverageIsPartial,
-  coverageIsRedundant,
-  withCoverageStore,
-} from "../coverage.ts";
-import {
-  compactionHeld,
-  loadCompactionCheckpoint,
-  removeCompactionCheckpoint,
-  type CompactionCheckpoint,
-} from "./checkpoint.ts";
-import {
-  openArchivalCommit,
-  readLiveSource,
-  resolveArchivalPlan,
-  type ArchivalPlan,
-} from "./plan.ts";
+import { conversationManager, priorContext } from "./archive.ts";
+import { type CompactionCompletion, alongsidePasses, handleCompactionOutcome, loadMessagesForCompaction } from "./background.ts";
+import type { RealCompactionLlmOptions } from "./llm.ts";
+import { tryBeginCompaction } from "./manager.ts";
+import { CompactionError, type CompactionOutcome } from "./types.ts";
+import { countTurns, openArchivalCommit, readLiveSource, resolveArchivalPlan, type ArchivalPlan } from "./plan.ts";
 
 export interface CompactionRunDeps {
   env?: NodeJS.ProcessEnv;
@@ -85,63 +40,26 @@ export interface CompactionRunDeps {
   tools?: ToolContextDeps;
   now?: () => string;
   newId?: () => string;
-  emit?: FrameSink;
-  describePass?: (scope: PassScope) => void;
-  signal?: AbortSignal;
   afterArchive?: (thread: string) => Promise<void>;
 }
+
+export type ArchiveDeps = Pick<CompactionRunDeps, "config" | "notify" | "now" | "newId" | "afterArchive">;
 
 export interface CompactionRunOptions {
   thread?: string;
   dryRun?: boolean;
   keepTurnsOverride?: number;
-  restart?: boolean;
   retainTrailingAutonomous?: boolean;
-  trigger?: CompactionTrigger;
 }
 
 export async function runCompaction(
   character: string,
-  deps: CompactionRunDeps,
-  trigger: Exclude<CompactionTrigger, "manual">,
-  options: Omit<CompactionRunOptions, "trigger"> = {},
+  deps: ArchiveDeps,
+  options: Omit<CompactionRunOptions, "dryRun"> = {},
 ): Promise<CompactionCompletion> {
-  const outcome = await runCompactionPass(character, deps, { ...options, trigger });
+  const outcome = await runCompactionPass(character, deps, options);
   if (outcome === undefined) return { kind: "skipped", reason: "empty_or_changed" };
-  if (outcome.kind === "paused") {
-    const why = outcome.detail ?? outcome.reason;
-    if (outcome.held !== true && outcome.reason !== "cancelled") deps.notify?.(`Shore - ${character}`, pauseNotice(outcome.toolRounds, outcome.reason, why));
-    throw new CompactionPaused(outcome.checkpointId, why, outcome.resumeAt);
-  }
   return handleCompactionOutcome(character, deps.notify ?? (() => {}), outcome);
-}
-
-function pauseNotice(rounds: number, reason: string, why: string): string {
-  if (reason !== "refusal") return `Compaction paused after ${rounds} rounds (${why}); conversation kept`;
-  return `The model refused to go on with compaction after ${rounds} rounds; conversation kept. ` +
-    "Automatic compaction is on hold: see why with `shore status`, retry with `shore compact`";
-}
-
-export async function rotateWithoutMemoryWrite(
-  character: string,
-  thread: string,
-  deps: CompactionRunDeps,
-  effective: LoadedConfig,
-  plan: ArchivalPlan,
-  conversationDir: string,
-  options: CompactionRunOptions,
-  note = "archive-only rotation; automatic memory writes disabled",
-): Promise<CompactionOutcome | undefined> {
-  const dryRun = options.dryRun ?? false;
-  if (dryRun) return await rotate(character, thread, deps, effective, plan, conversationDir, dryRun, note, plan.sourceContent);
-  const outcome = await underThread(deps, character, thread)(async () => {
-    const rotated = await rotate(character, thread, deps, effective, plan, conversationDir, dryRun, note,
-      await readLiveSource(effective.dirs.data, character, thread, plan.sourceContent));
-    if (rotated !== undefined) await settleArchive(deps, character, thread)();
-    return rotated;
-  });
-  if (outcome !== undefined) await saveWorkspaceAfterArchive(deps.config, effective, character);
-  return outcome;
 }
 
 export async function saveWorkspaceAfterArchive(config: LoadedConfig, effective: LoadedConfig, character: string): Promise<void> {
@@ -151,12 +69,11 @@ export async function saveWorkspaceAfterArchive(config: LoadedConfig, effective:
 async function rotate(
   character: string,
   thread: string,
-  deps: CompactionRunDeps,
+  deps: ArchiveDeps,
   effective: LoadedConfig,
   plan: ArchivalPlan,
   conversationDir: string,
   dryRun: boolean,
-  note: string,
   liveContent: string,
 ): Promise<CompactionOutcome | undefined> {
   const dataDir = effective.dirs.data;
@@ -181,12 +98,10 @@ async function rotate(
     ).archiveAndRetain("archive-only", {
       keepLastN: commit.retained,
       activeContent: commit.liveContent,
-      note,
     });
   }
 
   return {
-    kind: "rotated",
     conversationId: character,
     dryRun,
     compactedTurns: countTurns([...plan.conversation].slice(0, plan.splitAt)),
@@ -197,10 +112,9 @@ async function rotate(
 
 export async function runCompactionPass(
   character: string,
-  deps: CompactionRunDeps,
+  deps: ArchiveDeps,
   options: CompactionRunOptions = {},
 ): Promise<CompactionOutcome | undefined> {
-  deps.signal?.throwIfAborted();
   const dataDir = deps.config.dirs.data;
 
   const thread = options.thread ?? (await homeThreadOf(dataDir, character));
@@ -210,34 +124,39 @@ export async function runCompactionPass(
 
   const guard = tryBeginCompaction(dataDir, character);
   if (guard === undefined) throw CompactionError.busy(character);
-
-  const trigger = options.trigger ?? "manual";
-  if (trigger !== "manual") {
-    const held = await compactionHeld(dataDir, character, thread).catch((e: unknown) => {
-      guard.release();
-      throw e;
-    });
-    if (held !== undefined) {
-      guard.release();
-      return heldOutcome(character, held);
-    }
-  }
-  const pass = startPass(dataDir, { character, thread, trigger, startedAt: Date.now() }, deps.emit, deps.signal);
   try {
-    const outcome = await passUnderGuard(character, { ...deps, emit: pass.emit, signal: pass.signal, describePass: pass.describe }, { ...options, trigger }, thread, guard);
-    pass.finish(outcome);
+    const loaded = await underThread(deps, character, thread)(async () => await loadMessagesForCompaction(dataDir, character, thread));
+    if (loaded.messages.length === 0) return undefined;
+
+    const effective = effectiveConfig(character, deps.config);
+    const plan = resolveArchivalPlan(dataDir, character, thread, loaded, {
+      keepRecentTurns: effective.app.compaction.keep_recent_turns,
+      ...(options.keepTurnsOverride === undefined
+        ? {}
+        : { keepTurnsOverride: options.keepTurnsOverride }),
+      retainTrailingAutonomous: options.retainTrailingAutonomous ?? false,
+    });
+    if (plan === undefined) throw CompactionError.insufficientMessages();
+    if (options.dryRun === true) return await rotate(character, thread, deps, effective, plan, loaded.conversationDir, true, plan.sourceContent);
+
+    const outcome = await underThread(deps, character, thread)(async () => {
+      const rotated = await rotate(character, thread, deps, effective, plan, loaded.conversationDir, false,
+        await readLiveSource(dataDir, character, thread, plan.sourceContent));
+      if (rotated !== undefined) await settleArchive(deps, character, thread)();
+      return rotated;
+    });
+    if (outcome !== undefined) await saveWorkspaceAfterArchive(deps.config, effective, character);
     return outcome;
-  } catch (e) {
-    pass.fail(e);
-    throw e;
+  } finally {
+    guard.release();
   }
 }
 
-function underThread(deps: CompactionRunDeps, character: string, thread: string): <T>(run: () => Promise<T>) => Promise<T> {
+function underThread(deps: ArchiveDeps, character: string, thread: string): <T>(run: () => Promise<T>) => Promise<T> {
   return async (run) => await withConversation(threadDataDir(deps.config.dirs.data, character, thread), "update", async () => await run());
 }
 
-function settleArchive(deps: CompactionRunDeps, character: string, thread: string): () => Promise<void> {
+function settleArchive(deps: ArchiveDeps, character: string, thread: string): () => Promise<void> {
   return async () => {
     try {
       await applyDeferredEdits(characterDataDir(deps.config.dirs.data, character), characterWorkspace(deps.config, character), thread);
@@ -250,181 +169,6 @@ function settleArchive(deps: CompactionRunDeps, character: string, thread: strin
       shoreLog.warn(`shore: failed to repoint the cached request after compacting ${character}/${thread}: ${String(e)}`);
     }
   };
-}
-
-function heldOutcome(character: string, checkpoint: CompactionCheckpoint): CompactionOutcome {
-  return {
-    kind: "paused",
-    conversationId: character,
-    checkpointId: checkpoint.id,
-    compactedTurns: checkpoint.compactedTurns,
-    toolRounds: checkpoint.loop.toolRounds,
-    toolsCalled: checkpoint.loop.toolsCalled,
-    reason: "refusal",
-    ...(checkpoint.pauseDetail === undefined ? {} : { detail: checkpoint.pauseDetail }),
-    held: true,
-  };
-}
-
-async function passUnderGuard(
-  character: string,
-  deps: CompactionRunDeps,
-  options: CompactionRunOptions,
-  thread: string,
-  guard: CompactionRunGuard,
-): Promise<CompactionOutcome | undefined> {
-  const dataDir = deps.config.dirs.data;
-  let coverage: CompactionCoverage | undefined;
-  try {
-    const loaded = await underThread(deps, character, thread)(async () => await loadMessagesForCompaction(dataDir, character, thread));
-    if (loaded.messages.length === 0) return undefined;
-
-    const effective = effectiveConfig(character, deps.config);
-    const compaction = effective.app.compaction;
-    const plan = await resolveArchivalPlan(dataDir, character, thread, loaded, {
-      keepRecentTurns: compaction.keep_recent_turns,
-      ...(options.keepTurnsOverride === undefined
-        ? {}
-        : { keepTurnsOverride: options.keepTurnsOverride }),
-      retainTrailingAutonomous: options.retainTrailingAutonomous ?? false,
-      restart: options.restart ?? false,
-    });
-    if (plan === undefined) throw CompactionError.insufficientMessages();
-    const first = plan.archival[0]?.timestamp;
-    const last = plan.archival.at(-1)?.timestamp;
-    deps.describePass?.({ turns: plan.archival.filter(isRealUserTurn).length, ...(first === undefined ? {} : { firstAt: first }), ...(last === undefined ? {} : { lastAt: last }) });
-
-    if (!compaction.write_memory) {
-      return await rotateWithoutMemoryWrite(
-        character,
-        thread,
-        deps,
-        effective,
-        plan,
-        loaded.conversationDir,
-        options,
-      );
-    }
-
-    const planned = planCompactionCoverage(character, effective, plan, options);
-    if (planned.blocked === true) {
-      throw new CompactionError(
-        "busy",
-        `Compaction for ${character}/${thread} is waiting for another pass's memory claim ` +
-          `to finish or expire; conversation kept`,
-      );
-    }
-    coverage = planned.coverage;
-    if (planned.redundant) {
-      if (plan.checkpoint !== undefined) {
-        const settled = await reconcileAbandonedPass(dataDir, character, thread, plan.checkpoint.id);
-        if (settled) return undefined;
-      }
-      shoreLog.info(
-        `shore: the whole archival range for ${character}/${thread} was already written to ` +
-          `memory from another branch; rotating it into the archive without a second pass`,
-      );
-      return await rotateWithoutMemoryWrite(
-        character,
-        thread,
-        deps,
-        effective,
-        plan,
-        loaded.conversationDir,
-        options,
-        "archive-only rotation; this range was already covered by another branch's compaction",
-      );
-    }
-
-    const chatRequest = await resolveChatRequest(character, thread, loaded.store.messages(), effective,
-      deps.tools?.mcpToolDefs?.(toolGrants(effective.app.tools)) ?? [], deps.env);
-    const resolved = await resolveDeps(character, deps, effective, thread,
-      [...loaded.store.messages()], chatRequest.tools, options.dryRun ?? false);
-
-    const outcome = await compact(
-      {
-        conversationId: character,
-        plan,
-        promptTemplate: resolved.promptTemplate,
-        charName: character,
-        thread,
-        ...await noticeFor(dataDir, character, thread),
-        userName: resolved.displayName,
-        llm: resolved.llm,
-        conversationMgr: conversationManager(
-          loaded.conversationDir,
-          {
-            dbPath: join(dataDir, HISTORY_DB_FILE),
-            archiveKey: archiveKey(character, thread),
-          },
-          deps.now ?? (() => new Date().toISOString()),
-          deps.newId ?? (() => crypto.randomUUID()),
-        ),
-        ...(resolved.markdownStore === undefined ? {} : { markdownStore: resolved.markdownStore }),
-        dryRun: options.dryRun ?? false,
-        restart: options.restart ?? false,
-        ...(options.keepTurnsOverride === undefined
-          ? {}
-          : { keepTurnsOverride: options.keepTurnsOverride }),
-        chatRequest,
-        dataDir,
-        foreground: options.trigger === "manual",
-        tools: resolved.tools,
-        ...(planned.coverage === undefined ? {} : { coverage: planned.coverage }),
-        ...(resolved.maxToolRounds === undefined
-          ? {}
-          : { maxToolRounds: resolved.maxToolRounds }),
-        ...(deps.emit === undefined ? {} : { emit: tagCompactionFrames(deps.emit) }),
-        ...(deps.signal === undefined ? {} : { signal: deps.signal }),
-        commitUnder: underThread(deps, character, thread),
-        afterArchive: settleArchive(deps, character, thread),
-      },
-      { keepRecentTurns: resolved.effective.app.compaction.keep_recent_turns },
-    );
-
-    await pushAfterCompaction(resolved.effective.app.compaction.git_push, outcome, async () => {
-      await gitPushWorkspaceBestEffort(resolved.tools.workspace ?? resolved.tools.workspaceDir);
-    });
-
-    return outcome;
-  } finally {
-    try {
-      if (coverage !== undefined) {
-        const checkpoint = await loadCompactionCheckpoint(dataDir, character, thread);
-        if (checkpoint?.coverageClaim !== coverage.claim) {
-          releaseCompactionCoverage(dataDir, character, coverage.claim);
-        }
-      }
-    } catch (e) {
-      shoreLog.warn(`shore: failed to release uncheckpointed compaction claim for ${character}/${thread}: ${String(e)}`);
-    } finally {
-      guard.release();
-    }
-  }
-}
-
-export async function runSegmentCompactionPass(
-  character: string,
-  deps: CompactionRunDeps,
-  options: { segment: number; thread?: string },
-): Promise<CompactionOutcome> {
-  deps.signal?.throwIfAborted();
-  const dataDir = deps.config.dirs.data;
-  const thread = options.thread ?? (await homeThreadOf(dataDir, character));
-  const archived = readArchivedSegment(dataDir, character, thread, options.segment);
-  const guard = tryBeginCompaction(dataDir, character);
-  if (guard === undefined) throw CompactionError.busy(character);
-  const pass = startPass(dataDir, { character, thread, trigger: "manual", startedAt: Date.now() }, deps.emit, deps.signal);
-  try {
-    const outcome = await segmentPass(character, { ...deps, emit: pass.emit, signal: pass.signal }, thread, options.segment, archived);
-    pass.finish(outcome);
-    return outcome;
-  } catch (e) {
-    pass.fail(e);
-    throw e;
-  } finally {
-    guard.release();
-  }
 }
 
 export function readArchivedSegment(
@@ -449,152 +193,6 @@ export function readArchivedSegment(
   }
 }
 
-async function segmentPass(
-  character: string,
-  deps: CompactionRunDeps,
-  thread: string,
-  segment: number,
-  archived: { messages: Message[]; priorContext: boolean },
-): Promise<CompactionOutcome> {
-  const effective = effectiveConfig(character, deps.config);
-  if (!effective.app.compaction.write_memory) {
-    throw CompactionError.llm("memory writes are turned off (compaction.write_memory = false)");
-  }
-  const chatRequest = await resolveChatRequest(character, thread, archived.messages, effective,
-    deps.tools?.mcpToolDefs?.(toolGrants(effective.app.tools)) ?? [], deps.env, { archived: archived.priorContext });
-  const resolved = await resolveDeps(character, deps, effective, thread, archived.messages, chatRequest.tools, false);
-  const outcome = await compactSegment({
-    segment,
-    messages: archived.messages,
-    promptTemplate: resolved.promptTemplate,
-    charName: character,
-    ...await noticeFor(effective.dirs.data, character, thread),
-    userName: resolved.displayName,
-    llm: resolved.llm,
-    ...(resolved.markdownStore === undefined ? {} : { markdownStore: resolved.markdownStore }),
-    chatRequest,
-    tools: resolved.tools,
-    ...(resolved.maxToolRounds === undefined ? {} : { maxToolRounds: resolved.maxToolRounds }),
-    ...(deps.emit === undefined ? {} : { emit: tagCompactionFrames(deps.emit) }),
-    ...(deps.signal === undefined ? {} : { signal: deps.signal }),
-  });
-  await pushAfterCompaction(resolved.effective.app.compaction.git_push, outcome, async () => {
-    await gitPushWorkspaceBestEffort(resolved.tools.workspace ?? resolved.tools.workspaceDir);
-  });
-  return outcome;
-}
-
-interface ResolvedDeps {
-  effective: LoadedConfig;
-  promptTemplate: string;
-  displayName: string;
-  llm: RealCompactionLlm;
-  markdownStore: MarkdownMemoryStore | undefined;
-  tools: CompactionTools;
-  maxToolRounds: number | undefined;
-}
-
-interface PlannedCoverage {
-  redundant: boolean;
-  blocked?: boolean;
-  coverage?: CompactionCoverage;
-}
-
-export function planCompactionCoverage(
-  character: string,
-  effective: LoadedConfig,
-  plan: ArchivalPlan,
-  options: CompactionRunOptions,
-): PlannedCoverage {
-  if (options.dryRun === true || plan.archival.length === 0) return { redundant: false };
-
-  const dbPath = join(effective.dirs.data, HISTORY_DB_FILE);
-  const resumeClaim = plan.resumed ? plan.checkpoint?.coverageClaim : undefined;
-  const claimed = withCoverageStore(dbPath, (store) => {
-    if (!plan.resumed && plan.checkpoint?.coverageClaim !== undefined) {
-      store.releaseMemoryCoverage(character, "compaction", plan.checkpoint.coverageClaim);
-    }
-    return claimUncovered(store, character, "compaction", plan.archival, {
-      contiguous: true,
-      ...(resumeClaim === undefined ? {} : { claim: resumeClaim }),
-    });
-  });
-
-  if (coverageIsRedundant(claimed)) return { redundant: true };
-  if (coverageIsPartial(claimed) || (claimed.pending === 0 && claimed.unversioned === 0)) {
-    withCoverageStore(dbPath, (store) => {
-      store.releaseMemoryCoverage(character, "compaction", claimed.claim);
-    });
-    return { redundant: false, blocked: true };
-  }
-  return {
-    redundant: false,
-    coverage: {
-      claim: claimed.claim,
-      unit: claimed.unit,
-      claimed: claimed.claimed.length,
-      background: claimed.backgroundMessages,
-      fresh: plan.archival.length - claimed.backgroundMessages,
-    },
-  };
-}
-
-async function reconcileAbandonedPass(
-  dataDir: string,
-  character: string,
-  thread: string,
-  checkpointId: string,
-): Promise<boolean> {
-  const archived = await hasCompactionOperation(
-    conversationRef(dataDir, character, thread, false),
-    checkpointId,
-  );
-  await removeCompactionCheckpoint(dataDir, character, thread);
-  shoreLog.warn(
-    `shore: discarding compaction checkpoint ${checkpointId} for ${character}/${thread}: ` +
-      `another branch wrote up everything it was going to summarise. ` +
-      (archived
-        ? "Its turns were already archived, so there is nothing left to do"
-        : "Its turns are rotated into the archive without a second memory pass") +
-      ". The memory it already wrote stays on disk",
-  );
-  return archived;
-}
-
-export function releaseCompactionCoverage(
-  dataDir: string,
-  character: string,
-  claim: string,
-): void {
-  withCoverageStore(join(dataDir, HISTORY_DB_FILE), (store) => {
-    store.releaseMemoryCoverage(character, "compaction", claim);
-  });
-}
-
-async function noticeFor(dataDir: string, character: string, thread: string): Promise<{ threadNotice?: string }> {
-  const notice = await threadCompactionNotice(dataDir, character, thread).catch(() => undefined);
-  return notice === undefined ? {} : { threadNotice: notice };
-}
-
-export async function threadCompactionNotice(
-  dataDir: string,
-  character: string,
-  thread: string,
-): Promise<string | undefined> {
-  const index = await readThreadsIndex(dataDir, character);
-  if (index === undefined) return undefined;
-  const home = homeThread(index);
-  const record = threadRecord(index, thread);
-  if (record === undefined || thread === home) return undefined;
-  const named = record.label === undefined ? `"${thread}"` : `"${thread}" (${record.label})`;
-  const purpose = record.purpose === undefined ? "" : ` It is for: ${record.purpose}`;
-  return (
-    `\n\nThis conversation is from the side thread ${named}, not your home thread "${home}".${purpose} ` +
-    `Write what matters from it where this thread's material belongs, such as a file of its own that ` +
-    `MEMORY.md points to, rather than as part of what happened in the home thread.`
-  );
-}
-
 export function effectiveConfig(character: string, config: LoadedConfig): LoadedConfig {
   try {
     return loadCharacterConfig(config, character) ?? config;
@@ -604,126 +202,6 @@ export function effectiveConfig(character: string, config: LoadedConfig): Loaded
         `compacting under the global config: ${String(e)}`,
     );
     return config;
-  }
-}
-
-async function resolveDeps(
-  character: string,
-  deps: CompactionRunDeps,
-  effective: LoadedConfig,
-  thread: string,
-  conversation: readonly Message[],
-  tools: readonly ToolDefinition[] | undefined,
-  dryRun: boolean,
-): Promise<ResolvedDeps> {
-  const configDir = effective.dirs.config;
-  const promptTemplate = resolvePromptTemplate(configDir, character, "compact.md") ?? DEFAULT_COMPACT_PROMPT;
-
-  const threadModel = await threadChatModel(effective.dirs.data, character, thread);
-  const model = required(resolveBackgroundModel(
-    configView(effective), "compaction", character,
-    (v, c, n, h) => findEffectiveModel(v, c, n, h),
-    threadModel,
-  ));
-
-  let markdownStore: MarkdownMemoryStore | undefined;
-  try {
-    markdownStore = await MarkdownMemoryStore.open(
-      characterMemoryDir(configDir, character, effective.dirs.workspace),
-      characterWorkspace(effective, character),
-    );
-  } catch (e) {
-    shoreLog.warn(`shore: markdown memory store unavailable for ${character}: ${String(e)}`);
-  }
-
-  const toolCtx = await buildToolContext(effective, effective.dirs.data, character, {
-    ...deps.tools, thread, conversation, dryRun,
-  });
-  if (deps.signal !== undefined) toolCtx.signal = deps.signal;
-  const entry = effective.providers.get(model.providerKey);
-  const providerEntry = entry === undefined ? undefined : credentialEntry(entry);
-
-  return {
-    effective,
-    promptTemplate,
-    displayName: resolveDisplayName(effective.app.chat),
-    llm: new RealCompactionLlm({
-      model: toRequestModel(model),
-      character,
-      generate: deps.generate,
-      cacheDir: effective.dirs.cache,
-      env: deps.env,
-      providerEntry,
-      emit: deps.emit === undefined ? undefined : tagCompactionFrames(deps.emit),
-      signal: deps.signal,
-    }),
-    markdownStore,
-    tools: compactionTools(toolCtx, effective, tools, imageLimitsFor(model.sdk, model.modelId)),
-    maxToolRounds: model.maxToolRounds,
-  };
-}
-
-function compactionTools(
-  ctx: ToolContext,
-  config: LoadedConfig,
-  tools: readonly ToolDefinition[] | undefined,
-  imageLimits: ImageLimits,
-): CompactionTools {
-  const exec: ToolExecution = {
-    sendDirect: () => {},
-    ctx,
-    limits: toolLimitsFrom(config.app.tools, config.app.subagents.agents),
-    imageLimits,
-    now: () => new Date().toISOString(),
-    newMessageId: () => `m_${crypto.randomUUID()}`,
-    schemas: schemasFrom(tools),
-  };
-  const workspace = ctx.workspace ?? new CharacterWorkspace(ctx.workspaceDir);
-  return {
-    workspaceDir: ctx.workspaceDir,
-    workspace,
-    turns: workspaceTurnsFor(config.dirs, ctx.characterName, workspace),
-    dispatch: async (name, input, trackNestedWrite) => {
-      if (trackNestedWrite !== undefined) {
-        ctx.trackWorkspaceWrite = async (nestedName, nestedInput, write) => {
-          let value: unknown;
-          const result = await trackNestedWrite(nestedName, nestedInput, () => renderToolOutcome(async () => {
-            value = await write();
-            return value;
-          }));
-          if (result.isError) throw new Error(result.output);
-          return value;
-        };
-      }
-      try {
-        const run = await runToolUse(
-          { id: `compaction_${crypto.randomUUID()}`, name, input },
-          exec,
-          [],
-        );
-        return { output: run.output, isError: run.isError, ...(run.block.type === "tool_result" ? { content: run.block.content } : {}) };
-      } finally {
-        delete ctx.trackWorkspaceWrite;
-      }
-    },
-    deferEdit: async (path) => await queueDeferredEdit(ctx.characterDataDir, path, ctx.thread),
-    ensureWorkspaceGitRepo: async (workspaceDir) => {
-      await ensureWorkspaceGitRepoBestEffort(workspace.at(workspaceDir));
-    },
-    gitHead: async (workspaceDir) => await gitHead(workspace.at(workspaceDir)),
-    gitCommitAll: async (workspaceDir, charName, message) =>
-      await gitCommitAll(workspace.at(workspaceDir), charName, message),
-  };
-}
-
-export async function renderToolOutcome(
-  call: () => Promise<unknown>,
-): Promise<{ output: string; isError: boolean }> {
-  try {
-    const value = await call();
-    return { output: renderToolValue(value), isError: false };
-  } catch (e) {
-    return { output: e instanceof Error ? e.message : String(e), isError: true };
   }
 }
 
@@ -777,7 +255,7 @@ export function compactionRunner(
           await cache.reprimeFromDisk(character, config.dirs.data, config, { ...rebuild, ...(deps.env === undefined ? {} : { env: deps.env }) });
         },
       }),
-    }, "turn", thread === undefined ? {} : { thread }),
+    }, thread === undefined ? {} : { thread }),
     applyDeferredEdits: (charDataDir, workspace, thread) =>
       applyDeferredEdits(charDataDir, workspace, thread),
   };

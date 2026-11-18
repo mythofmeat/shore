@@ -13,7 +13,7 @@ import { parseToolArgs } from "../src/llm/tool_args.ts";
 import { type SidecarProvider, type StreamEvent } from "../src/llm/types.ts";
 import { runProcess } from "../src/tools/process.ts";
 import { ConversationEngine } from "../src/engine/conversation.ts";
-import { clear } from "../src/commands/segments.ts";
+import { runCompactionPass } from "../src/memory/compaction/run.ts";
 
 test("a restored legacy file cannot overwrite authoritative database state", async () => {
   const root = await mkdtemp(testTmp("legacy-conflict-"));
@@ -222,7 +222,7 @@ test("concurrent generation requests own complete turns in submission order", as
   expect(h.engine.messages().map((message) => message.content)).toEqual(["A", "reply 1", "B", "reply 2"]);
 });
 
-test("clear cannot be undone by a generation that was already running", async () => {
+test("an archive started while a reply is running waits for the reply, and archives it with the rest", async () => {
   const paused = gate();
   const started = gate();
   const h = await reliabilityGeneration({ ...plain, async *stream(_request, signal) {
@@ -233,10 +233,10 @@ test("clear cannot be undone by a generation that was already running", async ()
   } });
   const running = h.run().catch(() => {});
   await started.ready;
-  const clearing = clear(h.engine, { dataDir: h.config.dirs.data }, {});
+  const archiving = runCompactionPass("ada", { config: h.config }, { keepTurnsOverride: 0 });
   await delay(20);
   paused.release();
-  await Promise.all([running, clearing]);
+  await Promise.all([running, archiving]);
   expect(h.engine.messages()).toEqual([]);
 });
 

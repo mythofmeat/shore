@@ -79,7 +79,7 @@ A side thread's purpose and files are in the prompt of a wake there. The files a
 - Everything else is your working: how the wake opened, each round of tool use, and the final response with the note. It goes to your wakes thread, a thread Shore makes the first time it is needed and marks in the list `{{threads}}` gives. {{user}} can read it there but doesn't write there, and no wake runs there.
 - The thread the wake ran in keeps how it opened, a line saying where its working went, and the message you sent.
 - A wake in a sealed thread is the exception: its working stays in the sealed thread, which is hidden anyway.
-- Your working isn't shown to you again. A later wake there starts fresh, and your replies there and that thread's compaction are shown the wake as how it opened, a line saying how many tool calls it made, your note without its thinking, and the message you sent. What you will need again belongs in the note or in a file.
+- Your working isn't shown to you again. A later wake there starts fresh, and your replies there are shown the wake as how it opened, a line saying how many tool calls it made, your note without its thinking, and the message you sent. What you will need again belongs in the note or in a file.
 
 ## How long a wake may run
 

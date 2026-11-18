@@ -20,7 +20,7 @@ import { rustLines } from "../lines.ts";
 import type { SegmentArchiveHook } from "./archive.ts";
 import { RealCompactionLlm } from "./llm.ts";
 import { buildFinalMessage } from "./manager.ts";
-import { stripOneTrailingNewline } from "./prompts.ts";
+import { stripOneTrailingNewline } from "../../engine/prompt.ts";
 import { effectiveConfig, resolveChatRequest, type CompactionRunDeps } from "./run.ts";
 
 export const DEFAULT_LABEL_PROMPT: string = stripOneTrailingNewline(labelPromptRaw);

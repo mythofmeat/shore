@@ -1329,7 +1329,7 @@
     },
     {
       "path": "shore compact",
-      "about": "Summarize the conversation into memory and shorten the active window. The pass runs on the daemon and is shown live: its reasoning, tool calls and results. Ctrl-C only stops watching; the pass carries on",
+      "about": "Archive the older part of the conversation and shorten the active window. A reply you haven't read yet stays, with everything after it. Archived turns can be opened from the top of the thread and searched in the chat logs",
       "long_about": null,
       "hidden": false,
       "aliases": [],
@@ -1341,7 +1341,7 @@
           "long": null,
           "aliases": [],
           "short_aliases": [],
-          "help": "How many recent user turns to leave in the conversation. Everything older is folded into markdown memory. 0 keeps none of it, leaving only the prompt files and the memory index",
+          "help": "How many recent user turns to leave in the conversation. Everything older is archived. 0 keeps none of it",
           "long_help": null,
           "action": "Set",
           "required": false,
@@ -1353,56 +1353,6 @@
           "defaults": [],
           "choices": [],
           "conflicts": [
-            "watch",
-            "cancel"
-          ],
-          "env": null
-        },
-        {
-          "id": "restart",
-          "short": null,
-          "long": "restart",
-          "aliases": [],
-          "short_aliases": [],
-          "help": "Throw away a paused checkpoint and summarize from scratch. Use this when a pass stopped partway — out of quota, provider down, memory files edited since — and `shore compact` keeps reporting paused. The memory it already wrote stays; those turns get summarized again",
-          "long_help": null,
-          "action": "SetTrue",
-          "required": false,
-          "global": false,
-          "hidden": false,
-          "require_equals": false,
-          "min_values": 0,
-          "max_values": 0,
-          "defaults": [
-            "false"
-          ],
-          "choices": [],
-          "conflicts": [
-            "watch",
-            "cancel"
-          ],
-          "env": null
-        },
-        {
-          "id": "segment",
-          "short": null,
-          "long": "segment",
-          "aliases": [],
-          "short_aliases": [],
-          "help": "Write memory from an archived segment (see `shore segments`) as if it were being compacted now. The archive and the conversation are left as they are. Use it to redo a segment whose pass wrote nothing",
-          "long_help": null,
-          "action": "Set",
-          "required": false,
-          "global": false,
-          "hidden": false,
-          "require_equals": false,
-          "min_values": 1,
-          "max_values": 1,
-          "defaults": [],
-          "choices": [],
-          "conflicts": [
-            "keep_turns",
-            "restart",
             "watch",
             "cancel"
           ],
@@ -1414,7 +1364,7 @@
           "long": "watch",
           "aliases": [],
           "short_aliases": [],
-          "help": "Follow the compaction already running, whoever started it, from what it has done so far to how it ends. With none running, show how the last pass ended",
+          "help": "Show the compaction running now, if any, until it ends",
           "long_help": null,
           "action": "SetTrue",
           "required": false,
@@ -1438,7 +1388,7 @@
           "long": "cancel",
           "aliases": [],
           "short_aliases": [],
-          "help": "Stop the running compaction. It pauses with its checkpoint kept, so `shore compact` resumes it later",
+          "help": "Stop the compaction running now, if any",
           "long_help": null,
           "action": "SetTrue",
           "required": false,
@@ -2055,100 +2005,6 @@
           "action": "SetTrue",
           "required": false,
           "global": true,
-          "hidden": false,
-          "require_equals": false,
-          "min_values": 0,
-          "max_values": 0,
-          "defaults": [
-            "false"
-          ],
-          "choices": [],
-          "conflicts": [],
-          "env": null
-        },
-        {
-          "id": "help",
-          "short": "h",
-          "long": "help",
-          "aliases": [],
-          "short_aliases": [],
-          "help": "Print help",
-          "long_help": null,
-          "action": "Help",
-          "required": false,
-          "global": false,
-          "hidden": false,
-          "require_equals": false,
-          "min_values": 0,
-          "max_values": 0,
-          "defaults": [],
-          "choices": [],
-          "conflicts": [],
-          "env": null
-        }
-      ]
-    },
-    {
-      "path": "shore clear",
-      "about": "Archive the active conversation without summarizing it into memory",
-      "long_about": null,
-      "hidden": false,
-      "aliases": [],
-      "subcommand_required": false,
-      "arguments": [
-        {
-          "id": "exclude",
-          "short": null,
-          "long": "exclude",
-          "aliases": [],
-          "short_aliases": [],
-          "help": "Exclude the new segment from history search immediately",
-          "long_help": null,
-          "action": "SetTrue",
-          "required": false,
-          "global": false,
-          "hidden": false,
-          "require_equals": false,
-          "min_values": 0,
-          "max_values": 0,
-          "defaults": [
-            "false"
-          ],
-          "choices": [],
-          "conflicts": [],
-          "env": null
-        },
-        {
-          "id": "note",
-          "short": null,
-          "long": "note",
-          "aliases": [],
-          "short_aliases": [],
-          "help": "Attach a note to the new segment",
-          "long_help": null,
-          "action": "Set",
-          "required": false,
-          "global": false,
-          "hidden": false,
-          "require_equals": false,
-          "min_values": 1,
-          "max_values": 1,
-          "defaults": [],
-          "choices": [],
-          "conflicts": [],
-          "env": null
-        },
-        {
-          "id": "json",
-          "short": null,
-          "long": "json",
-          "aliases": [],
-          "short_aliases": [],
-          "help": "Output raw JSON",
-          "long_help": null,
-          "action": "SetTrue",
-          "required": false,
-          "global": false,
           "hidden": false,
           "require_equals": false,
           "min_values": 0,
@@ -3328,7 +3184,7 @@
           "long": "compaction",
           "aliases": [],
           "short_aliases": [],
-          "help": "When this thread gets long, compact it into memory as the home thread does, instead of trimming its oldest turns into the archive. `shore compact` works either way",
+          "help": "Archive this thread's older turns at the `[compaction]` limits, as the home thread's are, instead of only once it nearly fills the model's context. `shore compact` works either way",
           "long_help": null,
           "action": "SetTrue",
           "required": false,
@@ -3810,8 +3666,8 @@
     },
     {
       "path": "shore thread compaction",
-      "about": "Choose what happens when a thread gets long: compact it into memory, or trim its oldest turns into the archive",
-      "long_about": null,
+      "about": "Choose whether a thread compacts or trims when it gets long",
+      "long_about": "Choose whether a thread compacts or trims when it gets long\n\nA thread that compacts has its older turns archived at the `[compaction]` limits, as the home thread's are. One that trims has them archived only once it nearly fills the model's context.",
       "hidden": false,
       "aliases": [],
       "subcommand_required": false,
@@ -3842,7 +3698,7 @@
           "long": null,
           "aliases": [],
           "short_aliases": [],
-          "help": "`on` compacts into memory, as the home thread does; `off` trims into the archive",
+          "help": "`on` compacts at the `[compaction]` limits, as the home thread does; `off` trims once the thread nearly fills the model's context",
           "long_help": null,
           "action": "Set",
           "required": true,
@@ -3887,8 +3743,8 @@
           "long": "help",
           "aliases": [],
           "short_aliases": [],
-          "help": "Print help",
-          "long_help": null,
+          "help": "Print help (see more with '--help')",
+          "long_help": "Print help (see a summary with '-h')",
           "action": "Help",
           "required": false,
           "global": false,
@@ -4828,7 +4684,7 @@
     {
       "path": "shore thread fork",
       "about": "Branch a thread: the new one starts with a snapshot of the source's context",
-      "long_about": "Branch a thread: the new one starts with a snapshot of the source's context\n\nThe copy is independent from the moment it is made: later edits, regeneration, compaction or retirement on either side leave the other alone. Both threads keep the whole transcript, and a message copied by a fork is one conversation event in two places, so recall shows it once and memory processing runs over it once.",
+      "long_about": "Branch a thread: the new one starts with a snapshot of the source's context\n\nThe copy is independent from the moment it is made: later edits, regeneration, compaction or retirement on either side leave the other alone. Both threads keep the whole transcript, and a message copied by a fork is one conversation event in two places, so the chat logs show it once.",
       "hidden": false,
       "aliases": [],
       "subcommand_required": false,
@@ -6006,7 +5862,7 @@
     {
       "path": "shore model use",
       "about": "Switch the model something runs on",
-      "long_about": "Switch the model something runs on\n\nSpell out `use` when a model's name would otherwise read as one of these subcommands. An unknown name is an error, never a fallback.\n\nBare, this sets the character's chat model, which every thread without a model of its own uses. With --thread (or SHORE_THREAD) it gives just that thread its own model. Every other target writes the config file, which is global: `--background=compaction` writes `compaction.model`, `--background=wake` writes `triggers.model`, the model wakes run on, bare `--background` writes both; `--subagent=<name>` writes `subagents.<name>.model`, and bare `--subagent` writes `subagents.model`.",
+      "long_about": "Switch the model something runs on\n\nSpell out `use` when a model's name would otherwise read as one of these subcommands. An unknown name is an error, never a fallback.\n\nBare, this sets the character's chat model, which every thread without a model of its own uses. With --thread (or SHORE_THREAD) it gives just that thread its own model. Every other target writes the config file, which is global: `--background` writes `triggers.model`, the model wakes run on; `--subagent=<name>` writes `subagents.<name>.model`, and bare `--subagent` writes `subagents.model`.",
       "hidden": false,
       "aliases": [],
       "subcommand_required": false,
@@ -6059,7 +5915,7 @@
           "long": "background",
           "aliases": [],
           "short_aliases": [],
-          "help": "Background tasks: bare means wakes and compaction; naming one requires =compaction or =wake",
+          "help": "Wakes, the only background task: bare and =wake mean the same",
           "long_help": null,
           "action": "Set",
           "required": false,
@@ -6071,8 +5927,7 @@
           "defaults": [],
           "choices": [
             "all",
-            "wake",
-            "compaction"
+            "wake"
           ],
           "conflicts": [
             "chat"
@@ -6127,7 +5982,7 @@
     {
       "path": "shore model info",
       "about": "Describe a model: provider, sdk, limits, and where it resolves from",
-      "long_about": "Describe a model: provider, sdk, limits, and where it resolves from\n\nBare, describes the active chat model. A target flag describes whatever that role currently resolves to, which is the quick way to answer \"what is compaction actually running on\".",
+      "long_about": "Describe a model: provider, sdk, limits, and where it resolves from\n\nBare, describes the active chat model. A target flag describes whatever that role currently resolves to, which is the quick way to answer \"what are wakes actually running on\".",
       "hidden": false,
       "aliases": [],
       "subcommand_required": false,
@@ -6180,7 +6035,7 @@
           "long": "background",
           "aliases": [],
           "short_aliases": [],
-          "help": "Background tasks: bare means wakes and compaction; naming one requires =compaction or =wake",
+          "help": "Wakes, the only background task: bare and =wake mean the same",
           "long_help": null,
           "action": "Set",
           "required": false,
@@ -6192,8 +6047,7 @@
           "defaults": [],
           "choices": [
             "all",
-            "wake",
-            "compaction"
+            "wake"
           ],
           "conflicts": [
             "chat"
@@ -6248,7 +6102,7 @@
     {
       "path": "shore model setting",
       "about": "Show, set, or clear saved sampler settings",
-      "long_about": "Show, set, or clear saved sampler settings\n\nBare and with no key, this is the overview: every role whose model or settings are its own rather than inherited, in one place. Add a target flag to see just that one. With a key and a value it saves; with --reset and a key it clears. Clearing everything at once is not supported — name the key.\n\nA sub-agent's settings are its own: they start from its model's catalog entry and take nothing from the chat model's settings, so tuning chat never moves a sub-agent.\n\nBare --subagent writes once against the model your sub-agents share, covering all of them; it errors if they are not all on one model. A named sub-agent overrides that shared value. Because the shared value belongs to the model, changing subagents.model picks up that model's settings rather than carrying the old ones over.\n\nA background task's settings sit on top of its model's: wakes and compaction take whatever their model has, chat's when they share it, and override only the keys set for them, so tuning a task never moves chat. Bare --background writes the same value for both.\n\nThe keys are temperature, top_p, reasoning_effort, reasoning_budget_tokens, max_output_tokens, cache_ttl, cache_keepalive, cache_keepalive_pings, sdk, reasoning_replay and max_tool_rounds.\n\ncache_keepalive is the interval between cache keepalive pings, or off. Any model can have one. After each reply, the model gets cache_keepalive_pings pings (default 1) spaced by that interval; the next message starts the count over. Only the model you are chatting with is pinged.\n\nsdk takes anthropic, openai, openrouter, gemini, zai, deepseek or moonshot, which forces a wire shape on a discovered model whose provider catalog labelled it wrong.\n\nThe vendor knobs openrouter_routing, gemini_thinking_mode and zai_clear_reasoning are settable per model too. A model only lists the knobs its own sdk honors.",
+      "long_about": "Show, set, or clear saved sampler settings\n\nBare and with no key, this is the overview: every role whose model or settings are its own rather than inherited, in one place. Add a target flag to see just that one. With a key and a value it saves; with --reset and a key it clears. Clearing everything at once is not supported — name the key.\n\nA sub-agent's settings are its own: they start from its model's catalog entry and take nothing from the chat model's settings, so tuning chat never moves a sub-agent.\n\nBare --subagent writes once against the model your sub-agents share, covering all of them; it errors if they are not all on one model. A named sub-agent overrides that shared value. Because the shared value belongs to the model, changing subagents.model picks up that model's settings rather than carrying the old ones over.\n\nWakes' settings sit on top of their model's: wakes take whatever that model has, chat's when they share it, and override only the keys set with --background, so tuning wakes never moves chat.\n\nThe keys are temperature, top_p, reasoning_effort, reasoning_budget_tokens, max_output_tokens, cache_ttl, cache_keepalive, cache_keepalive_pings, sdk, reasoning_replay and max_tool_rounds.\n\ncache_keepalive is the interval between cache keepalive pings, or off. Any model can have one. After each reply, the model gets cache_keepalive_pings pings (default 1) spaced by that interval; the next message starts the count over. Only the model you are chatting with is pinged.\n\nsdk takes anthropic, openai, openrouter, gemini, zai, deepseek or moonshot, which forces a wire shape on a discovered model whose provider catalog labelled it wrong.\n\nThe vendor knobs openrouter_routing, gemini_thinking_mode and zai_clear_reasoning are settable per model too. A model only lists the knobs its own sdk honors.",
       "hidden": false,
       "aliases": [],
       "subcommand_required": false,
@@ -6365,7 +6219,7 @@
           "long": "background",
           "aliases": [],
           "short_aliases": [],
-          "help": "Background tasks: bare means wakes and compaction; naming one requires =compaction or =wake",
+          "help": "Wakes, the only background task: bare and =wake mean the same",
           "long_help": null,
           "action": "Set",
           "required": false,
@@ -6377,8 +6231,7 @@
           "defaults": [],
           "choices": [
             "all",
-            "wake",
-            "compaction"
+            "wake"
           ],
           "conflicts": [
             "chat"
@@ -6579,7 +6432,7 @@
     {
       "path": "shore model reset",
       "about": "Drop a saved selection and fall back to what it would inherit",
-      "long_about": "Drop a saved selection and fall back to what it would inherit\n\nBare, this clears the character's chat model, so it falls back to chat.model or the first configured model. With --thread (or SHORE_THREAD) it clears just that thread's own model, so the thread uses the character's again. Other targets clear the config keys `use` would have written, so the role falls back the way it did before anything was pinned. Bare --background clears triggers.model and compaction.model; bare --subagent clears subagents.model and every per-sub-agent override.",
+      "long_about": "Drop a saved selection and fall back to what it would inherit\n\nBare, this clears the character's chat model, so it falls back to chat.model or the first configured model. With --thread (or SHORE_THREAD) it clears just that thread's own model, so the thread uses the character's again. Other targets clear the config keys `use` would have written, so the role falls back the way it did before anything was pinned. --background clears triggers.model; bare --subagent clears subagents.model and every per-sub-agent override.",
       "hidden": false,
       "aliases": [],
       "subcommand_required": false,
@@ -6612,7 +6465,7 @@
           "long": "background",
           "aliases": [],
           "short_aliases": [],
-          "help": "Background tasks: bare means wakes and compaction; naming one requires =compaction or =wake",
+          "help": "Wakes, the only background task: bare and =wake mean the same",
           "long_help": null,
           "action": "Set",
           "required": false,
@@ -6624,8 +6477,7 @@
           "defaults": [],
           "choices": [
             "all",
-            "wake",
-            "compaction"
+            "wake"
           ],
           "conflicts": [
             "chat"
@@ -10107,20 +9959,6 @@
     {
       "argv": [
         "compact",
-        "0",
-        "--restart"
-      ],
-      "mapping": {
-        "name": "compact",
-        "args": {
-          "restart": true,
-          "keep_turns": 0
-        }
-      }
-    },
-    {
-      "argv": [
-        "compact",
         "--watch"
       ],
       "mapping": {
@@ -10136,21 +9974,6 @@
       "mapping": {
         "name": "compact_cancel",
         "args": {}
-      }
-    },
-    {
-      "argv": [
-        "clear",
-        "--exclude",
-        "--note",
-        "archived"
-      ],
-      "mapping": {
-        "name": "clear",
-        "args": {
-          "exclude": true,
-          "note": "archived"
-        }
       }
     },
     {
@@ -10699,21 +10522,6 @@
         "args": {
           "name": "fixture:model",
           "background_task": "wake"
-        }
-      }
-    },
-    {
-      "argv": [
-        "model",
-        "use",
-        "fixture:model",
-        "--background=compaction"
-      ],
-      "mapping": {
-        "name": "switch_model",
-        "args": {
-          "name": "fixture:model",
-          "background_task": "compaction"
         }
       }
     },
@@ -12082,10 +11890,6 @@
       [
         "status",
         "status"
-      ],
-      [
-        "clear",
-        "clear"
       ]
     ]
   }

@@ -1,7 +1,6 @@
 import type { RunningView } from "../autonomy/service.ts";
 import { rfc3339 } from "../commands/status.ts";
 import type { GenerationView } from "../handler/router.ts";
-import { runningPasses } from "../memory/compaction/activity.ts";
 import type { RunningStatusReport } from "../protocol/RunningStatusReport.ts";
 import type { RunningWork } from "../protocol/RunningWork.ts";
 import type { RunningWorkKind } from "../protocol/RunningWorkKind.ts";
@@ -12,7 +11,6 @@ export interface ShutdownWindowState {
 }
 
 export interface RunningSources {
-  readonly dataDir: string;
   readonly generations: () => readonly GenerationView[];
   readonly wakes: () => readonly RunningView[];
   readonly shutdown: () => ShutdownWindowState | undefined;
@@ -34,7 +32,6 @@ export function runningReport(sources: RunningSources): RunningStatusReport {
   const work = [
     ...sources.generations().map((g) => item("message", g.character, g.thread, g.startedAt)),
     ...sources.wakes().map((w) => item("wake", w.character, null, w.startedAt)),
-    ...runningPasses(sources.dataDir).map((p) => item("compaction", p.character, p.thread, p.startedAt)),
   ]
     .toSorted((a, b) => a.startedAt - b.startedAt)
     .map(({ report }) => report);

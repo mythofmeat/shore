@@ -138,8 +138,8 @@ function resolveActiveModel(ctx: ModelsContext): ResolvedModel {
 }
 
 function backgroundTask(selector: string): BackgroundTask {
-  if (selector === "wake" || selector === "compaction") return selector;
-  throw invalidRequest(`unknown background task: ${selector}; expected all, wake or compaction`);
+  if (selector === "wake") return selector;
+  throw invalidRequest(`unknown background task: ${selector}; expected all or wake`);
 }
 
 function backgroundTargetModel(ctx: ModelsContext, task: BackgroundTask): ResolvedModel {
@@ -150,7 +150,7 @@ function backgroundTargetModel(ctx: ModelsContext, task: BackgroundTask): Resolv
     ? resolveActiveModel(ctx)
     : resolveChatModelForCharacter(
       configView(ctx.config), ctx.characterName, findEffective,
-      task === "compaction" ? ctx.threadModel : ctx.homeThreadModel, ctx.preferences,
+      ctx.homeThreadModel, ctx.preferences,
     );
   if (inherited === undefined) {
     throw notFound(
@@ -305,7 +305,7 @@ function backgroundRole(ctx: ModelsContext, task: BackgroundTask, inherits?: Cha
   if (perTask !== undefined) {
     return { role: task, model: qualify(ctx, perTask), source: backgroundModelKey(task) };
   }
-  const chat = task === "compaction" ? inherits?.thread ?? chatRole(ctx) : inherits?.home ?? homeChatRole(ctx);
+  const chat = inherits?.home ?? homeChatRole(ctx);
   return { role: task, model: chat.model, source: chat.model === null ? null : "inherits chat" };
 }
 

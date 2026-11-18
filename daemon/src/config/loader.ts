@@ -427,13 +427,6 @@ function validateConfig(
   warnOnUnresolvableModelRef(
     catalog,
     providers,
-    "compaction.model",
-    app.compaction.model,
-    onWarn,
-  );
-  warnOnUnresolvableModelRef(
-    catalog,
-    providers,
     "subagents.model",
     app.subagents.model,
     onWarn,

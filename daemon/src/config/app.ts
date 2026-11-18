@@ -305,13 +305,13 @@ const DAEMON: StructSpec<DaemonConfig> = {
   },
 };
 
-export type BackgroundTask = "wake" | "compaction";
+export type BackgroundTask = "wake";
 
 export function resolveBackgroundModelName(
-  app: Pick<AppConfig, "triggers" | "compaction">,
+  app: Pick<AppConfig, "triggers">,
   task: BackgroundTask,
 ): string | undefined {
-  return { wake: app.triggers, compaction: app.compaction }[task].model;
+  return { wake: app.triggers }[task].model;
 }
 
 export function resolveDisplayName(
@@ -645,8 +645,6 @@ function imageSettingsProblem(settings: ImageOverride | ImageSettings): string |
 
 export interface CompactionConfig {
   enabled: boolean;
-  model: string | undefined;
-  write_memory: boolean;
   label_segments: boolean;
   idle_after: ConfigDuration;
   archive_after: ConfigDuration;
@@ -659,8 +657,6 @@ export interface CompactionConfig {
 
 export const defaultCompactionConfig = (): CompactionConfig => ({
   enabled: true,
-  model: undefined,
-  write_memory: true,
   label_segments: true,
   idle_after: ConfigDuration.fromSecs(7200),
   archive_after: ConfigDuration.fromSecs(0),
@@ -676,8 +672,6 @@ const COMPACTION: StructSpec<CompactionConfig> = {
   make: defaultCompactionConfig,
   fields: {
     enabled: readBool,
-    model: optional(readChatModelName),
-    write_memory: readBool,
     label_segments: readBool,
     idle_after: readDuration,
     archive_after: readDuration,

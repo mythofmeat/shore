@@ -130,10 +130,10 @@ test("a label is the first line the model wrote, trimmed and cut at 60 character
   expect(labelFromReply(" \n ")).toBeUndefined();
 });
 
-test("clearing a conversation asks the chat's model for a label with the chat's own request plus one message, and the segment gets it", async () => {
+test("archiving a conversation asks the chat's model for a label with the chat's own request plus one message, and the segment gets it", async () => {
   await world(async ({ command, settled, segments, of, config }) => {
     unsetTestEnv(KEY_ENV);
-    await command("clear", {});
+    await command("compact", { keep_turns: 0 });
     await settled();
 
     expect(segments()).toEqual([{ idx: 0, label: "Lighting the lamp" }]);
@@ -160,7 +160,7 @@ test("clearing a conversation asks the chat's model for a label with the chat's 
 
 test("a character's own label.md is the message the label is asked for with", async () => {
   await world(async ({ command, settled, of }) => {
-    await command("clear", {});
+    await command("compact", { keep_turns: 0 });
     await settled();
     expect(of("label").map((request) => textOf(request).at(-1))).toEqual(["Name this talk between ada and Mara."]);
   }, undefined, async (workspace) => {
@@ -173,7 +173,7 @@ test("a character's own label.md is the message the label is asked for with", as
 test("a label set by hand while the model is still answering is kept", async () => {
   await world(async ({ script, command, settled, segments }) => {
     script.held = Promise.withResolvers<void>();
-    await command("clear", {});
+    await command("compact", { keep_turns: 0 });
     await command("segments", { action: "label", index: 0, value: "By hand" });
     script.held.resolve();
     await settled();
@@ -181,12 +181,12 @@ test("a label set by hand while the model is still answering is kept", async () 
   });
 });
 
-test("a label call that fails, or answers with a tool call or with nothing, leaves the segment unlabelled and the clear done", async () => {
+test("a label call that fails, or answers with a tool call or with nothing, leaves the segment unlabelled and the archive done", async () => {
   await world(async ({ script, command, settled, segments, say, of }) => {
     const warned = spyOn(shoreLog, "warn").mockImplementation(() => {});
     try {
       script.label = new Error("provider fell over");
-      await command("clear", {});
+      await command("compact", { keep_turns: 0 });
       await settled();
       expect(warned.mock.calls.map(([line]) => String(line)).filter((line) => line.includes("unlabelled"))).toEqual([
         "shore: segment 0 of ada was left unlabelled: CompactionError: llm: provider fell over",
@@ -197,12 +197,12 @@ test("a label call that fails, or answers with a tool call or with nothing, leav
 
     script.label = "call a tool";
     await say("and the door?");
-    await command("clear", {});
+    await command("compact", { keep_turns: 0 });
     await settled();
 
     script.label = "  \n";
     await say("and the stairs?");
-    await command("clear", {});
+    await command("compact", { keep_turns: 0 });
     await settled();
 
     expect(segments()).toEqual([{ idx: 0, label: undefined }, { idx: 1, label: undefined }, { idx: 2, label: undefined }]);
@@ -212,7 +212,7 @@ test("a label call that fails, or answers with a tool call or with nothing, leav
 
 test("with compaction.label_segments off no label is asked for", async () => {
   await world(async ({ command, settled, segments, of }) => {
-    await command("clear", {});
+    await command("compact", { keep_turns: 0 });
     await settled();
     expect(segments()).toEqual([{ idx: 0, label: undefined }]);
     expect(of("label")).toEqual([]);
@@ -237,7 +237,6 @@ test("a conversation compacted for being idle is labelled, and one archived afte
     setSystemTime(new Date(start + HOUR));
     await runtime.autonomy.runDue();
     await settled();
-    expect(of("compaction")).toHaveLength(1);
     expect(segments()).toEqual([{ idx: 0, label: "Lighting the lamp" }]);
     expect(of("label")).toHaveLength(1);
 
@@ -258,7 +257,7 @@ test("a conversation compacted for being idle is labelled, and one archived afte
 test("label --auto asks for a label for an archived segment, leaves a labelled one alone, and replaces it or uses another model when told to", async () => {
   await world(async ({ script, command, of }) => {
     unsetTestEnv(KEY_ENV);
-    await command("clear", {});
+    await command("compact", { keep_turns: 0 });
     expect(of("label")).toEqual([]);
 
     const first = await command("segments", { action: "label", index: 0, auto: true });
@@ -281,7 +280,7 @@ test("label --auto asks for a label for an archived segment, leaves a labelled o
 
 test("label --auto is refused with a label, without a segment to label, or when the model gives none, and replace and model need it", async () => {
   await world(async ({ script, command, segments, of }) => {
-    await command("clear", {});
+    await command("compact", { keep_turns: 0 });
     const refused = async (args: Record<string, unknown>): Promise<unknown> => {
       const answer = await command("segments", { action: "label", index: 0, ...args }) as { type: string; code?: string; message?: string };
       return [answer.type, answer.code, answer.message];
@@ -305,7 +304,7 @@ test("label --auto is refused with a label, without a segment to label, or when 
 test("settled waits for a label that is still being asked for", async () => {
   await world(async ({ script, command, settled, segments }) => {
     script.held = Promise.withResolvers<void>();
-    await command("clear", {});
+    await command("compact", { keep_turns: 0 });
     let done = false;
     const waiting = settled().then(() => { done = true; });
     await Bun.sleep(20);
@@ -320,7 +319,7 @@ test("settled waits for a label that is still being asked for", async () => {
 test("once labelling is stopped, a new segment is no longer labelled", async () => {
   await world(async ({ command, settled, stop, segments, of }) => {
     stop();
-    await command("clear", {});
+    await command("compact", { keep_turns: 0 });
     await settled();
     expect(segments()).toEqual([{ idx: 0, label: undefined }]);
     expect(of("label")).toEqual([]);
@@ -329,7 +328,7 @@ test("once labelling is stopped, a new segment is no longer labelled", async () 
 
 test("label --auto reports a segment as skipped when a label was set by hand while the model was answering", async () => {
   await world(async ({ script, command, segments }) => {
-    await command("clear", {});
+    await command("compact", { keep_turns: 0 });
     script.held = Promise.withResolvers<void>();
     const asking = command("segments", { action: "label", index: 0, auto: true });
     await Bun.sleep(20);
@@ -350,12 +349,12 @@ test("labelling a segment, as it is archived or by command, leaves the history d
         return false;
       }
     }).length;
-    await command("clear", {});
+    await command("compact", { keep_turns: 0 });
     await settled();
     const before = open();
 
     await say("and the door?");
-    await command("clear", {});
+    await command("compact", { keep_turns: 0 });
     await settled();
     expect(open()).toBe(before);
 
@@ -367,7 +366,7 @@ test("labelling a segment, as it is archived or by command, leaves the history d
 
 test("label --auto is refused by a daemon that has no model to ask", async () => {
   await world(async ({ command, config }) => {
-    await command("clear", {});
+    await command("compact", { keep_turns: 0 });
     expect(await outcomeOf(segmentsCommand(config.dirs.data, "ada", "main", { action: "label", index: 0, auto: true }))).toThrow("this daemon has no model to ask for a label");
   }, (app) => { app.compaction.label_segments = false; });
 });

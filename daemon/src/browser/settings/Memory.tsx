@@ -64,10 +64,10 @@ export function MemoryPage({ state }: { state: ChromeSnapshot }) {
   if (state.character === null) return <NeedsCharacter />;
   const data = listing.data !== undefined && "segments" in listing.data ? listing.data : undefined;
   return <>
-    <p className="settings-description">When a thread is compacted or cleared, the older messages become a segment. Excluded segments stay stored but aren’t used for memory.</p>
+    <p className="settings-description">When a thread is compacted, its older turns become a segment. Excluded segments stay stored but aren’t used for memory.</p>
     <SettingsSection title={`Segments in ${state.character} / ${state.thread ?? "main"}`}>
       <Loading error={listing.error} ready={data !== undefined}>
-        {data?.segments.length === 0 ? <p className="settings-empty">No segments yet. They appear after the thread is compacted or cleared.</p> : null}
+        {data?.segments.length === 0 ? <p className="settings-empty">No segments yet. They appear after the thread is compacted.</p> : null}
         <div className="segment-list">{data?.segments.map((segment) => <Segment key={segment.index} segment={segment} changed={listing.refresh} />)}</div>
       </Loading>
     </SettingsSection>

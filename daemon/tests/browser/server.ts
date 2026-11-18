@@ -5,7 +5,7 @@ import { startDaemon } from "../../src/daemon/run.ts";
 import type { SidecarProvider } from "../../src/llm/types.ts";
 import { seedDiagnosticFixture } from "../support/diagnostic_fixture.ts";
 import { restoreTestEnv, setTestEnv } from "../support/env.ts";
-import { cacheFixture, compactionFixture, seedArchivedSegment } from "../support/memory_fixture.ts";
+import { cacheFixture, seedArchivedSegment } from "../support/memory_fixture.ts";
 import { answerPricingCatalogsWithNoModels } from "../support/pricing_catalogs.ts";
 import { toolFixture } from "../support/tool_fixture.ts";
 import { seedUsageFixture, USAGE_FIXTURE_CONFIG } from "../support/usage_fixture.ts";
@@ -75,11 +75,8 @@ ${process.env["SHORE_BROWSER_CALM_BUDGET"] === "true" ? '[[budgets]]\nname = "Qu
 const PICTURE = (await sizedImage(48, 32)).toString("base64");
 let generation = 0;
 const answered = new Set<string>();
-const cleanup = new AbortController();
-const memoryStream = compactionFixture(cleanup.signal);
 const provider: SidecarProvider = {
   async *stream(request, signal) {
-    if (request.context?.call_type === "compaction") { yield* memoryStream(request, signal); return; }
     if (request.context?.call_type === "subagent") { yield* toolFixture(request, signal); return; }
     generation += 1;
     const question = request.messages.findLast((message) => message.role === "user")?.content.filter((block) => block.type === "text").map((block) => block.text).join(" ") ?? "";
@@ -214,8 +211,8 @@ try {
   await seedDiagnosticFixture(daemon.runtime, "nova");
   if (process.env["SHORE_BROWSER_USAGE_SEED"] === "true") await seedUsageFixture(daemon.runtime);
   seedArchivedSegment(daemon.runtime, "recovery");
-  process.once("SIGTERM", () => { cleanup.abort(); daemon.stop(); });
-  process.once("SIGINT", () => { cleanup.abort(); daemon.stop(); });
+  process.once("SIGTERM", () => { daemon.stop(); });
+  process.once("SIGINT", () => { daemon.stop(); });
   if (daemon.web === undefined) throw new Error("Browser fixture did not start its web listener");
   console.log(`SHORE_BROWSER_READY ${daemon.web.origin} ${String(daemon.port)}`);
   await daemon.done;

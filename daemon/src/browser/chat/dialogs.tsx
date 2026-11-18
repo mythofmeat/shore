@@ -5,9 +5,9 @@ import { toasts } from "../ui/toast.tsx";
 import { conversation, errorText, replyMarks, streamReplies, workspace } from "../app/state.ts";
 import { useReplyMarks } from "./marks.tsx";
 import { threadLabel } from "../sidebar/Sidebar.tsx";
-import { compactionSummary, turnCount } from "./transcript.ts";
+import { compactionSummary } from "./transcript.ts";
 
-export type ConversationDialog = "compact" | "clear" | "reason" | "system";
+export type ConversationDialog = "compact" | "reason" | "system";
 
 export function useSubmit(close: () => void) {
   const [busy, setBusy] = useState(false);
@@ -72,28 +72,18 @@ export function ConversationDialogs({ dialog, state, close }: { dialog: Conversa
   const { busy, error, run } = useSubmit(close);
   const [text, setText] = useState("");
   const [turns, setTurns] = useState("");
-  const [restart, setRestart] = useState(false);
   const label = thread === undefined ? state.thread ?? "" : threadLabel(thread);
   switch (dialog) {
     case "compact": return <Form title="Compact context" close={close} busy={busy} error={error} action="Compact" submit={() => {
       close();
       void compactInBackground(state, label, async () => {
-        const report = await workspace.actions.run("compact", { ...(turns === "" ? {} : { keep_turns: Number(turns) }), ...(restart ? { restart: true } : {}) });
+        const report = await workspace.actions.run("compact", turns === "" ? {} : { keep_turns: Number(turns) });
         if (viewing(state)) await resync(state);
         return compactionSummary(report);
       });
     }}>
-      <p className="form-text">Summarizes older turns into memory so the thread fits the model’s context. Recent turns stay as they are. It runs in the background, so you can keep chatting in other threads, and closing this tab doesn’t stop it.</p>
+      <p className="form-text">Archives the older turns of this thread as a segment you can open from the top of the thread. A reply you haven’t read stays, with everything after it.</p>
       <label className="field"><span>Turns to keep <span className="muted">(optional)</span></span><input className="input" inputMode="numeric" placeholder="Configured default" value={turns} onChange={(event) => setTurns(event.target.value.replace(/\D/g, ""))} /></label>
-      <label className="check"><input type="checkbox" checked={restart} onChange={(event) => setRestart(event.target.checked)} />Restart a paused compaction instead of resuming it</label>
-    </Form>;
-    case "clear": return <Form title="Clear context" close={close} busy={busy} error={error} action="Clear" danger submit={() => run(async () => {
-      const result = await workspace.actions.run("clear", { ...(text.trim() === "" ? {} : { note: text.trim() }), ...(restart ? { exclude: true } : {}) });
-      await resync(state); return `Cleared ${turnCount(result.segment.turn_count)} from the active context`;
-    })}>
-      <p className="form-text">Starts a fresh context. Earlier messages are kept as a segment you can open from the top of the thread.</p>
-      <label className="field"><span>Note for the segment <span className="muted">(optional)</span></span><input className="input" value={text} onChange={(event) => setText(event.target.value)} /></label>
-      <label className="check"><input type="checkbox" checked={restart} onChange={(event) => setRestart(event.target.checked)} />Exclude the cleared messages from memory</label>
     </Form>;
     case "reason": return <ReasonForm close={close} busy={busy} error={error} />;
     case "system": return <Form title="Add system message" close={close} busy={busy} error={error} action="Add" disabled={text.trim() === ""} submit={() => run(async () => {

@@ -3,23 +3,12 @@ import { shoreLog } from "../log.ts";
 
 
 import type { LoadedConfig } from "../config/loader.ts";
-import { runCompactionPass, runSegmentCompactionPass, type CompactionRunDeps } from "../memory/compaction/run.ts";
-import {
-  CompactionError,
-  CompactionRefused,
-  type CompactionOutcome,
-  type MemoryFileOp,
-} from "../memory/compaction/types.ts";
-import { busy, CommandError, internalError, invalidRequest, notFound } from "./errors.ts";
-import { cancelPass, lastPass, runningPass, watchPass, type EndedPass } from "../memory/compaction/activity.ts";
+import { runCompactionPass, type CompactionRunDeps } from "../memory/compaction/run.ts";
+import { CompactionError, type CompactionOutcome } from "../memory/compaction/types.ts";
+import { CommandError, invalidRequest } from "./errors.ts";
 import type { FrameSink } from "../llm/stream.ts";
-import type { CompactionPassEnd } from "../protocol/CompactionPassEnd.ts";
-import type { CompactionTrigger } from "../protocol/CompactionTrigger.ts";
-import { toRfc3339 } from "../ledger/zoned.ts";
 import type { OperationInput, OperationResult } from "../operations/types.ts";
 type Args = OperationInput<"compact">;
-
-const PREVIEW_CHARS = 200;
 
 export interface CompactEngine {
   readonly characterName: string;
@@ -39,47 +28,20 @@ export interface CompactContext {
   repoint?: (character: string, config: LoadedConfig) => Promise<void>;
 }
 
-export function parseCompactArgs(args: Args): {
-  dryRun: boolean;
-  restart: boolean;
-  keepTurnsOverride: number | undefined;
-  segment: number | undefined;
-} {
-  return {
-    dryRun: args.dry_run ?? false,
-    restart: args.restart ?? false,
-    keepTurnsOverride: args.keep_turns ?? undefined,
-    segment: args.segment ?? undefined,
-  };
-}
-
 export async function compact(
   engine: CompactEngine,
   ctx: CompactContext,
   args: Args,
 ): Promise<OperationResult<"compact">> {
-  const { dryRun, restart, keepTurnsOverride, segment } = parseCompactArgs(args);
+  const dryRun = args.dry_run ?? false;
+  const keepTurnsOverride = args.keep_turns ?? undefined;
   const character = engine.characterName;
-  if (segment !== undefined) return await compactSegmentCommand(engine, ctx, segment, dryRun || restart || keepTurnsOverride !== undefined);
-  const live = runningPass(ctx.config.dirs.data, character);
-  if (live !== undefined) {
-    if (dryRun || restart || keepTurnsOverride !== undefined) {
-      throw busy(
-        `A ${TRIGGER_NAMES[live.trigger]} compaction is already running for ${character}; ` +
-          "watch it with `shore compact --watch` or stop it with `shore compact --cancel`",
-      );
-    }
-    ctx.run.emit?.({ type: "phase", rid: null, phase: `following the ${TRIGGER_NAMES[live.trigger]} compaction already running`, model: null });
-    const ended = await watchPass(ctx.config.dirs.data, character, ctx.run.emit ?? (() => {}), ctx.run.signal);
-    if (ended !== undefined) return watchedReport(ended);
-  }
 
   let outcome: CompactionOutcome | undefined;
   try {
     outcome = await runCompactionPass(
       character,
       {
-        ...ctx.run,
         config: ctx.config,
         afterArchive: async (thread) => {
           if (thread === await homeThreadOf(ctx.config.dirs.data, character)) await ctx.repoint?.(character, ctx.config);
@@ -87,60 +49,32 @@ export async function compact(
       },
       {
         dryRun,
-        restart,
-        trigger: "manual",
         ...(engine.thread === undefined ? {} : { thread: engine.thread }),
         ...(keepTurnsOverride === undefined ? {} : { keepTurnsOverride }),
       },
     );
   } catch (e) {
-    throw compactionError(e);
+    if (e instanceof CompactionError && e.kind === "busy") throw new CommandError("busy", e.message);
+    if (e instanceof CompactionError && (e.kind === "insufficient_messages" || e.kind === "wakes_thread")) throw invalidRequest(e.message);
+    throw e;
   }
 
   if (outcome === undefined) throw invalidRequest("No messages to compact");
 
-  return await buildCompactionResponse(engine, ctx, character, outcome);
-}
-
-async function compactSegmentCommand(
-  engine: CompactEngine,
-  ctx: CompactContext,
-  segment: number,
-  mixed: boolean,
-): Promise<OperationResult<"compact">> {
-  const character = engine.characterName;
-  if (mixed) throw invalidRequest("--segment writes memory from an archived segment; it takes no keep-turns, --restart or dry run");
-  const live = runningPass(ctx.config.dirs.data, character);
-  if (live !== undefined) {
-    throw busy(
-      `A ${TRIGGER_NAMES[live.trigger]} compaction is already running for ${character}; ` +
-        "wait for it with `shore compact --watch`, then run this again",
-    );
-  }
-  let outcome: CompactionOutcome;
-  try {
-    outcome = await runSegmentCompactionPass(
-      character,
-      { ...ctx.run, config: ctx.config },
-      { segment, ...(engine.thread === undefined ? {} : { thread: engine.thread }) },
-    );
-  } catch (e) {
-    throw compactionError(e);
-  }
-  return await buildCompactionResponse(engine, ctx, character, outcome);
-}
-
-const TRIGGER_NAMES: Record<CompactionTrigger, string> = {
-  manual: "manual",
-  idle: "idle",
-  turn: "chat-turn",
-  deep_archive: "deep-archive",
-};
-
-function watchedReport(ended: EndedPass): OperationResult<"compact"> {
-  if (ended.end.kind === "failed") throw internalError(ended.end.error);
-  if (ended.end.outcome === undefined) throw invalidRequest("No messages to compact");
-  return compactionReport(ended.character, ended.end.outcome);
+  shoreLog.info(
+    `shore: archived the conversation for ${character} ` +
+      `(dry_run=${String(outcome.dryRun)}, compacted_turns=${String(outcome.compactedTurns)}, ` +
+      `retained_turns=${String(outcome.retainedTurns)})`,
+  );
+  if (!outcome.dryRun) await completeCompaction(engine, ctx, character, outcome.retainedTurns);
+  return {
+    status: "rotated",
+    character,
+    dry_run: outcome.dryRun,
+    memory_files_written: [],
+    compacted_turns: outcome.compactedTurns,
+    retained_turns: outcome.retainedTurns,
+  };
 }
 
 export interface CompactionWatchContext {
@@ -149,172 +83,12 @@ export interface CompactionWatchContext {
   signal?: AbortSignal | undefined;
 }
 
-export async function watchCompaction(character: string, ctx: CompactionWatchContext): Promise<OperationResult<"compact_watch">> {
-  const dataDir = ctx.config.dirs.data;
-  const ended = await watchPass(dataDir, character, ctx.emit ?? (() => {}), ctx.signal);
-  return ended === undefined
-    ? { character, state: "idle", pass: passEnd(lastPass(dataDir, character)) }
-    : { character, state: "finished", pass: passEnd(ended) };
+export function watchCompaction(character: string, _ctx: CompactionWatchContext): OperationResult<"compact_watch"> {
+  return { character, state: "idle", pass: null };
 }
 
-export async function cancelCompaction(character: string, ctx: CompactionWatchContext): Promise<OperationResult<"compact_cancel">> {
-  const dataDir = ctx.config.dirs.data;
-  const ended = await cancelPass(dataDir, character, "Compaction cancelled on request");
-  return ended === undefined
-    ? { character, state: "idle", pass: passEnd(lastPass(dataDir, character)) }
-    : { character, state: "cancelled", pass: passEnd(ended) };
-}
-
-export function passEnd(ended: EndedPass | undefined): CompactionPassEnd | null {
-  if (ended === undefined) return null;
-  const { end } = ended;
-  return {
-    thread: ended.thread,
-    trigger: ended.trigger,
-    started_at: toRfc3339(ended.startedAt),
-    ended_at: toRfc3339(ended.endedAt),
-    report: end.kind === "outcome" && end.outcome !== undefined ? compactionReport(ended.character, end.outcome) : null,
-    error: end.kind === "failed" ? end.error : null,
-  };
-}
-
-export function compactionError(e: unknown): CommandError {
-  if (e instanceof CommandError) return e;
-  if (e instanceof CompactionError) {
-    if (e.kind === "busy") return new CommandError("busy", e.message);
-    if (e.kind === "insufficient_messages" || e.kind === "wakes_thread") return invalidRequest(e.message);
-    if (e.kind === "not_found") return notFound(e.message);
-    return internalError(e.message);
-  }
-  if (e instanceof CompactionRefused) return internalError(`${e.message}. Nothing changed in the archive; run the same command to try again`);
-  return internalError(e instanceof Error ? e.message : String(e));
-}
-
-export async function buildCompactionResponse(
-  engine: CompactEngine,
-  ctx: CompactContext,
-  character: string,
-  outcome: CompactionOutcome,
-): Promise<OperationResult<"compact">> {
-  if (outcome.kind === "compacted") {
-    shoreLog.info(
-      `shore: compaction completed for ${character} ` +
-        `(entries=${outcome.memoryFilesWritten.length}, compacted_turns=${outcome.compactedTurns}, ` +
-        `retained_turns=${outcome.retainedTurns})`,
-    );
-    await completeCompaction(engine, ctx, character, outcome.retainedTurns);
-  }
-
-  if (outcome.kind === "rotated") {
-    shoreLog.info(
-      `shore: archive-only rotation for ${character} ` +
-        `(dry_run=${String(outcome.dryRun)}, compacted_turns=${String(outcome.compactedTurns)}, ` +
-        `retained_turns=${String(outcome.retainedTurns)})`,
-    );
-    if (!outcome.dryRun) {
-      await completeCompaction(engine, ctx, character, outcome.retainedTurns);
-    }
-  }
-
-  if (outcome.kind === "truncated") {
-    shoreLog.warn(
-      `shore: compaction for ${character} hit the token ceiling ` +
-        `(${String(outcome.truncatedTurns)} truncated turn(s)) — conversation NOT archived`,
-    );
-  }
-
-  if (outcome.kind === "segment") {
-    shoreLog.info(
-      `shore: wrote memory from archived segment ${String(outcome.segment)} for ${character} ` +
-        `(entries=${String(outcome.memoryFilesWritten.length)}, turns=${String(outcome.compactedTurns)}, ` +
-        `tool_rounds=${String(outcome.toolRounds)})`,
-    );
-  }
-
-  if (outcome.kind === "paused") {
-    shoreLog.warn(
-      `shore: compaction paused for ${character} — conversation NOT archived ` +
-        `(checkpoint=${outcome.checkpointId}, reason=${outcome.reason}, ` +
-        `detail=${outcome.detail ?? "none"}, tool_rounds=${outcome.toolRounds})`,
-    );
-  }
-
-  return compactionReport(character, outcome);
-}
-
-export function compactionReport(character: string, outcome: CompactionOutcome): OperationResult<"compact"> {
-  switch (outcome.kind) {
-    case "compacted":
-      return {
-        status: "compacted",
-        character,
-        memory_files_written: outcome.memoryFilesWritten,
-        compacted_turns: outcome.compactedTurns,
-        retained_turns: outcome.retainedTurns,
-        new_conversation_id: outcome.newConversationId,
-        tool_rounds: outcome.toolRounds,
-        tools_called: outcome.toolsCalled,
-      };
-    case "rotated":
-      return {
-        status: "rotated",
-        character,
-        dry_run: outcome.dryRun,
-        memory_files_written: [],
-        compacted_turns: outcome.compactedTurns,
-        retained_turns: outcome.retainedTurns,
-      };
-    case "truncated":
-      return {
-        status: "truncated",
-        character,
-        compacted_turns: outcome.compactedTurns,
-        tool_rounds: outcome.toolRounds,
-        tools_called: outcome.toolsCalled,
-        truncated_turns: outcome.truncatedTurns,
-        partial_writes: outcome.partialWrites,
-      };
-    case "paused":
-      return {
-        status: "paused",
-        character,
-        checkpoint_id: outcome.checkpointId,
-        compacted_turns: outcome.compactedTurns,
-        tool_rounds: outcome.toolRounds,
-        tools_called: outcome.toolsCalled,
-        reason: outcome.reason,
-        detail: outcome.detail ?? null,
-        resume_at: outcome.resumeAt ?? null,
-      };
-    case "segment":
-      return {
-        status: "segment",
-        character,
-        segment: outcome.segment,
-        compacted_turns: outcome.compactedTurns,
-        memory_files_written: outcome.memoryFilesWritten,
-        tool_rounds: outcome.toolRounds,
-        tools_called: outcome.toolsCalled,
-      };
-    case "dry_run":
-      return {
-        status: "dry_run",
-        character,
-        would_write_files: outcome.wouldWriteFiles,
-        file_ops_preview: outcome.fileOpsPreview.map(previewOf),
-        compacted_turns: outcome.compactedTurns,
-        retained_turns: outcome.retainedTurns,
-        tool_rounds: outcome.toolRounds,
-        tools_called: outcome.toolsCalled,
-      };
-  }
-}
-
-function previewOf(op: MemoryFileOp): { path: string; content_preview: string } {
-  return {
-    path: op.path,
-    content_preview: Array.from(op.content).slice(0, PREVIEW_CHARS).join(""),
-  };
+export function cancelCompaction(character: string, _ctx: CompactionWatchContext): OperationResult<"compact_cancel"> {
+  return { character, state: "idle", pass: null };
 }
 
 async function completeCompaction(

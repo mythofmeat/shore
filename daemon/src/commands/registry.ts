@@ -5,7 +5,7 @@ import { deleteCharacter, exportBackup, exportCharacter, importArchive, importCh
 import { usage } from "./usage.ts";
 import { usageConfigView } from "../ledger/budget.ts";
 import { describeTool, runTool } from "./run_tool.ts";
-import { clear, segments } from "./segments.ts";
+import { segments } from "./segments.ts";
 import { status, errorLog, wakeLog, wakeNow, setDormant, setActive } from "./status.ts";
 import { diary } from "./diary.ts";
 import { statusContext } from "./status_context.ts";
@@ -28,7 +28,6 @@ import { alt, deleteMessages, edit, get, historyPage, injectSystem, listAlternat
 import { listMarks, mark, unmark, type MarkContext } from "./marks.ts";
 import { workspaceTurnsFor, type WorkspaceTurns } from "../tools/workspace_turns.ts";
 import { characterWorkspace } from "../tools/character_workspace.ts";
-import { effectiveConfig, saveWorkspaceAfterArchive } from "../memory/compaction/run.ts";
 import { config, configCheck, configSchemaCommand, configReload, tools } from "./config.ts";
 import { listProviderModels, refreshProviderModels, refreshAllProviderModels, reportedNanoGptSubscription, type ProvidersContext } from "./providers.ts";
 import {
@@ -102,7 +101,7 @@ const wakePresentation = { ...diagnosticPresentation, prerequisites: ["autonomy"
 const modelPresentation = { category: "Models", scope: "optional_character", prerequisites: [], effects: ["read"], confirmation: "none" } as const;
 const modelTargetFields = {
   name: { label: "Model", choices: "models", hint: "Omit for the active model; do not combine with role selectors" },
-  background_task: { label: "Background task", hint: "all, wake or compaction" },
+  background_task: { label: "Background task", hint: "all or wake" },
   subagent: { label: "Subagent", choices: "subagents", hint: "A configured name, or all for the shared subagent model" },
 } as const;
 const modelHiddenField = { label: "Include hidden models", hint: "Allow a model excluded by discovery filters" } as const;
@@ -187,15 +186,13 @@ export const commandOperations: OperationRegistry<CommandOperationContext> = {
     return args.describe === true ? describeTool(engine.characterName, toolContext, args) : runTool(engine.characterName, toolContext, args);
   }),
   compact: register("compact", { category: "Memory", scope: "character", prerequisites: ["compaction"], effects: ["history_write", "workspace_write", "provider_call"], confirmation: "archive", label: "Compact active context", fields: {
-    dry_run: { label: "Preview only", hint: "Uses the provider to preview memory writes without archiving the conversation" },
-    restart: { label: "Restart paused work", hint: "Discard the paused checkpoint and summarize again; already written memory files remain" },
+    dry_run: { label: "Preview only", hint: "Shows how many turns would be archived without archiving them" },
     keep_turns: { label: "Retain recent turns", hint: "Zero retains no recent user turns; omit for configured retention" },
-    segment: { label: "Archived segment", hint: "Write memory from this archived segment again; the archive and the conversation stay as they are" },
-  }, policies: [{ condition: { kind: "equals", field: "dry_run", value: true }, effects: ["read", "provider_call"], confirmation: "none" }] }, (context, args) => {
+  }, policies: [{ condition: { kind: "equals", field: "dry_run", value: true }, effects: ["read"], confirmation: "none" }] }, (context, args) => {
     const engine = engineOf(context);
     const compaction = context.deps.compaction;
     if (compaction === undefined) throw internalError("compact is not available in this build");
-    return compact(engine, { ...compaction, config: context.session.config, autonomy: context.deps.autonomy, run: { ...compaction.run, ...(context.session.signal === undefined ? {} : { signal: context.session.signal }), ...(context.session.emit === undefined ? {} : { emit: context.session.emit }) } }, args);
+    return compact(engine, { ...compaction, config: context.session.config, autonomy: context.deps.autonomy }, args);
   }),
   compact_watch: register("compact_watch", { category: "Memory", scope: "character", prerequisites: ["compaction"], effects: ["read"], confirmation: "none", label: "Watch the running compaction", fields: {} },
     (context) => watchCompaction(engineOf(context).characterName, { config: context.session.config, emit: context.session.emit, signal: context.session.signal })),
@@ -218,14 +215,6 @@ export const commandOperations: OperationRegistry<CommandOperationContext> = {
     return segments(context.session.dataDir, engineOf(context).characterName, engineOf(context).thread, args, context.deps.historyIndex,
       compaction?.label === undefined ? undefined : { ...compaction.run, generate: compaction.label, config: context.session.config });
   }),
-  clear: register("clear", { category: "Memory", scope: "character", prerequisites: [], effects: ["history_write"], confirmation: "archive", label: "Clear active context", fields: {
-    exclude: { label: "Exclude from history search", hint: "The archived segment stays inspectable and can be included again" },
-    note: { label: "Archive note", multiline: true },
-  } }, (context, args) => workspaceSaved(context, clear(engineOf(context), {
-    dataDir: context.session.dataDir,
-    ...(context.deps.compaction?.repoint === undefined ? {} : { repoint: async (name) => await context.deps.compaction?.repoint?.(name, context.session.config) }),
-    onComplete: (name) => context.deps.autonomy.onCompactionComplete(name, 0),
-  }, args))),
   status: register("status", { ...diagnosticPresentation, label: "System status", fields: {} },
     (context) => status(statusContext(engineOf(context), context.session, context.deps))),
   error_log: register("error_log", { ...diagnosticPresentation, label: "Errors and key fallbacks", fields: { count: diagnosticCount } },
@@ -494,7 +483,7 @@ export const commandOperations: OperationRegistry<CommandOperationContext> = {
   }, async (context, args) => threadLock(await threadListingContext(context.deps, engineOf(context), context.session), args)),
   thread_compaction: register("thread_compaction", {
     ...threadPresentation, label: "Set whether a thread compacts", effects: ["history_write"],
-    fields: { name: threadName, compaction: { label: "Compact", hint: "When the thread gets long, compact it into memory; off trims its oldest turns into the archive" } },
+    fields: { name: threadName, compaction: { label: "Compact", hint: "On: older turns are archived at the compaction limits. Off: only when the thread nearly fills the model's context" } },
   }, async (context, args) => threadCompaction(await threadListingContext(context.deps, engineOf(context), context.session), args)),
   thread_move: register("thread_move", {
     ...threadPresentation, label: "Move a thread in the list", effects: ["history_write"],
@@ -576,12 +565,6 @@ async function announced<T>(context: CommandOperationContext, args: unknown, res
   const name = typeof args === "object" && args !== null && "name" in args && typeof args.name === "string" ? args.name : context.session.thread;
   if (name !== undefined && context.engine !== undefined) context.deps.threadsChanged?.(context.engine.characterName, name);
   return settled;
-}
-
-async function workspaceSaved<T extends { character: string }>(context: CommandOperationContext, archived: Promise<T>): Promise<T> {
-  const result = await archived;
-  await saveWorkspaceAfterArchive(context.session.config, effectiveConfig(result.character, context.session.config), result.character);
-  return result;
 }
 
 export function commandCatalogue(context?: CommandOperationContext) {

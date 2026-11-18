@@ -1,7 +1,7 @@
 import { expect, test } from "bun:test";
 
 import type { ThreadView } from "../../src/protocol/ThreadView.ts";
-import { useApp } from "./app.ts";
+import { HOLD, useApp } from "./app.ts";
 import { LISTING } from "./daemon.ts";
 import { acting, button, click, mount, type } from "./dom.ts";
 
@@ -50,7 +50,7 @@ test("a thread's settings show whether it compacts or trims when it gets long, a
   const { ThreadDialogs } = await import("../../src/browser/chat/thread_dialogs.tsx");
   const { chromeOf } = await import("../../src/browser/chrome.ts");
   const state = { ...chromeOf(undefined, app.state().workspace.getSnapshot()), threads: [HOME, SIDE] };
-  const choice = () => [...document.body.querySelectorAll("select")].find((select) => (select.closest("label")?.textContent ?? "").startsWith("When it gets long"));
+  const choice = () => [...document.body.querySelectorAll("select")].find((select) => (select.closest("label")?.textContent ?? "").startsWith("Older turns are archived"));
 
   const compacting = await mount(<ThreadDialogs state={state} request={{ kind: "settings", thread: "story" }} close={() => {}} />);
   expect(choice()?.value).toBe("compact");
@@ -176,10 +176,108 @@ test("the wakes thread is for reading: a note stands in for the composer, its me
   expect(options.some((label) => label.startsWith("Thread settings"))).toBe(true);
   await palette.unmount();
 
-  const choice = () => [...document.body.querySelectorAll("select")].find((select) => (select.closest("label")?.textContent ?? "").startsWith("When it gets long"));
+  const choice = () => [...document.body.querySelectorAll("select")].find((select) => (select.closest("label")?.textContent ?? "").startsWith("Older turns are archived"));
   const settings = await mount(<ThreadDialogs state={kept} request={{ kind: "settings", thread: "story" }} close={() => {}} />);
   expect(choice()).toBeUndefined();
   expect(document.body.querySelector("dialog, [role=dialog]")).not.toBeNull();
   await settings.unmount();
+  await quiet();
+});
+
+const field = (root: ParentNode, name: string) => [...root.querySelectorAll("input, textarea, select")].find((control) => (control.closest("label")?.textContent ?? "").startsWith(name));
+
+test("a new thread needs a name, says so while it is being made, opens in the chat once it is, and a refusal is shown and can be tried again", async () => {
+  const { NewThreadDialog } = await import("../../src/browser/sidebar/dialogs.tsx");
+  const { navigate } = await import("../../src/browser/app/route.ts");
+  let creating: () => unknown = () => { throw new Error("a thread named lamp already exists"); };
+  app.answer((request) => {
+    if (request["name"] === "create_thread") return creating();
+    if (request["name"] === "switch_thread") return { character: "ada", thread: "lamp", changed: true };
+    return undefined;
+  });
+  navigate({ view: "settings", page: "memory" });
+  let closed = 0;
+  const view = await mount(<NewThreadDialog character="ada" close={() => { closed += 1; }} />);
+  const create = () => view.host.querySelector<HTMLButtonElement>("button[type=submit]");
+  const shown = () => [create()?.textContent, create()?.disabled, view.host.querySelector("[role=alert]")?.textContent ?? null];
+  expect(view.host.querySelector("h2")?.textContent).toBe("New thread with ada");
+  expect(shown()).toEqual(["Create", true, null]);
+  expect((field(view.host, "Older turns are archived") as HTMLSelectElement).value).toBe("trim");
+
+  const since = app.socket().sent.length;
+  await type(field(view.host, "Name"), " lamp ");
+  expect(shown()).toEqual(["Create", false, null]);
+  const submitted = new Event("submit", { bubbles: true, cancelable: true });
+  await acting(() => { view.host.querySelector("form")?.dispatchEvent(submitted); });
+  await settle();
+  expect(submitted.defaultPrevented).toBe(true);
+  expect(shown()).toEqual(["Create", false, "a thread named lamp already exists"]);
+  expect([closed, location.hash, asked(since, "switch_thread")]).toEqual([0, "#settings/memory", []]);
+
+  creating = () => HOLD;
+  await click(create());
+  expect(shown()).toEqual(["Creating…", true, null]);
+  const held = app.sent(since).findLast((request) => request["name"] === "create_thread");
+  await acting(async () => {
+    app.socket().receive({ type: "command_output", rid: held?.["rid"], name: "create_thread", data: LISTING });
+    app.socket().receive({ type: "request_finished", rid: held?.["rid"], outcome: "completed" });
+    await Bun.sleep(5);
+  });
+  expect(asked(since, "create_thread")).toEqual([{ name: "lamp" }, { name: "lamp" }]);
+  expect(asked(since, "switch_thread")).toEqual([{ name: "lamp", resync: true }]);
+  expect([closed, location.hash]).toEqual([1, ""]);
+  expect(shown()).toEqual(["Create", false, null]);
+  await view.unmount();
+});
+
+test("a new thread is made with whatever else was filled in: its label, purpose, model, files one to a line, and compacting at home's limits", async () => {
+  const { NewThreadDialog } = await import("../../src/browser/sidebar/dialogs.tsx");
+  app.answer((request) => {
+    if (request["name"] === "create_thread") return LISTING;
+    if (request["name"] === "switch_thread") return { character: "ada", thread: "lamp", changed: true };
+    return undefined;
+  });
+  const view = await mount(<NewThreadDialog character="ada" close={() => {}} />);
+  expect([field(view.host, "Purpose")?.getAttribute("rows"), field(view.host, "Files in the prompt")?.getAttribute("rows")]).toEqual(["2", "3"]);
+  const since = app.socket().sent.length;
+  await type(field(view.host, "Name"), "lamp");
+  await type(field(view.host, "Label"), " The lamp ");
+  await type(field(view.host, "Purpose"), " Keep the light ");
+  await type(field(view.host, "Model"), " opus ");
+  await type(field(view.host, "Files in the prompt"), "notes/a.md\n\n  [[lamp/]]  \n");
+  await type(field(view.host, "Older turns are archived"), "compact");
+  await click(view.host.querySelector("button[type=submit]"));
+  await settle();
+  expect(asked(since, "create_thread")).toEqual([{ name: "lamp", label: "The lamp", purpose: "Keep the light", files: ["notes/a.md", "[[lamp/]]"], model: "opus", compaction: true }]);
+  await view.unmount();
+});
+
+test("a thread's settings open on what the thread has, save nothing that wasn't changed, and choose its model in a picker for that thread alone", async () => {
+  const { ThreadDialogs } = await import("../../src/browser/chat/thread_dialogs.tsx");
+  const { chromeOf } = await import("../../src/browser/chrome.ts");
+  const kept: ThreadView = { ...SIDE, id: "kept", locked: true, chat_model: "anthropic:opus" };
+  const state = { ...chromeOf(undefined, app.state().workspace.getSnapshot()), threads: [HOME, SIDE, kept] };
+  const dialogs = () => [...document.body.querySelectorAll("dialog")].map((dialog) => dialog.querySelector("h2")?.textContent);
+  const lock = () => document.body.querySelector<HTMLInputElement>("input[type=checkbox]")?.checked;
+  const model = () => document.body.querySelector(".thread-model")?.textContent;
+
+  const mine = await mount(<ThreadDialogs state={state} request={{ kind: "settings", thread: "kept" }} close={() => {}} />);
+  expect([lock(), model(), dialogs()]).toEqual([true, "opus", ["Thread settings"]]);
+  expect([field(document.body, "Purpose")?.getAttribute("rows"), field(document.body, "Files in the prompt")?.getAttribute("rows")]).toEqual(["2", "3"]);
+  const since = app.socket().sent.length;
+  await click(button(document.body, "Save"));
+  await settle();
+  expect(app.sent(since).filter((request) => request["type"] === "command").map((request) => request["name"])).toEqual(["list_threads"]);
+  await mine.unmount();
+
+  const plain = await mount(<ThreadDialogs state={state} request={{ kind: "settings", thread: "side" }} close={() => {}} />);
+  expect([lock(), model(), dialogs()]).toEqual([false, "ada’s default", ["Thread settings"]]);
+  await click(document.body.querySelector(".thread-model"));
+  expect(dialogs()).toEqual(["Thread settings", "Model for thread side"]);
+  expect(document.body.querySelector("[role=radiogroup][aria-label='Apply to']")).toBeNull();
+  const picker = [...document.body.querySelectorAll("dialog")].find((dialog) => dialog.querySelector("h2")?.textContent === "Model for thread side");
+  await click(button(picker ?? document.body, "Close"));
+  expect(dialogs()).toEqual(["Thread settings"]);
+  await plain.unmount();
   await quiet();
 });

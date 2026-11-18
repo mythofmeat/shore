@@ -140,22 +140,18 @@ export class InProcessAutonomyExecutor implements AutonomyExecutor {
     });
   }
 
-  async runDeepArchive(
-    character: string,
-    coveredTurnCount: number,
-  ): Promise<AutonomyActionResult> {
+  async runDeepArchive(character: string): Promise<AutonomyActionResult> {
     return await this.#withForeground(async () => {
       const config = this.#deps.registry.effectiveConfig(character);
       return await runDeepIdleArchive(character, {
         config,
         cache: this.#deps.cache,
         rebuild: this.#deps.rebuild,
-        run: this.#compactionDeps(config),
         engine: this.#engineReloader(),
         ...(this.#deps.notifyCompactionComplete === undefined
           ? {}
           : { notify: this.#deps.notifyCompactionComplete }),
-      }, coveredTurnCount);
+      });
     });
   }
 

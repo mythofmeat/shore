@@ -1,9 +1,9 @@
 use shore_common::protocol::operations::{
-    CancelCompaction, ConfigReloadArgs, ConversationLog, ConversationLogArgs, ConversationPage,
-    CreateCharacter, DeleteCharacter, DeleteCharacterArgs, EmptyOperationArgs, GetMessage,
-    GetMessageArgs, NamedOperationArgs, Operation, OperationResponse, PinThreadModel, ReadStatus,
+    ConfigReloadArgs, ConversationLog, ConversationLogArgs, ConversationPage, CreateCharacter,
+    DeleteCharacter, DeleteCharacterArgs, EmptyOperationArgs, GetMessage, GetMessageArgs,
+    NamedOperationArgs, Operation, OperationResponse, PinThreadModel, ReadStatus,
     ReloadConfiguration, ResetModel, ResetModelArgs, SwitchCharacter, SwitchModel, SwitchModelArgs,
-    SwitchThread, SwitchThreadArgs, ThreadModelArgs, is_registered_operation,
+    SwitchThread, SwitchThreadArgs, ThreadModelArgs, WatchCompaction, is_registered_operation,
 };
 use std::io::{self, IsTerminal, Read as _};
 use std::path::{Path, PathBuf};
@@ -313,7 +313,6 @@ pub(crate) async fn execute(
         | CliCommand::Provider { .. }
         | CliCommand::Compact { .. }
         | CliCommand::Segments { .. }
-        | CliCommand::Clear { .. }
         | CliCommand::Config { .. }
         | CliCommand::Usage { .. }
         | CliCommand::Diary { .. }
@@ -375,7 +374,6 @@ pub(crate) fn wants_json(other: &CliCommand) -> bool {
         | CliCommand::Diary { json, .. }
         | CliCommand::Presence { json, .. }
         | CliCommand::Segments { json, .. }
-        | CliCommand::Clear { json, .. }
         | CliCommand::Usage { json, .. } => *json,
         CliCommand::Debug { subcommand } => matches!(
             subcommand,
@@ -405,7 +403,7 @@ async fn handle_compact(
         return Err("compact must map to an SWP command".into());
     };
     _ = conn.send_command(name, args).await?;
-    let watching = name != CancelCompaction::NAME;
+    let watching = name == WatchCompaction::NAME;
     if watching {
         output::print_notice(
             "Ctrl-C stops watching; the compaction keeps running. `shore compact --cancel` stops it.",
@@ -1243,7 +1241,6 @@ fn reads_the_selected_thread(command: &CliCommand) -> bool {
         CliCommand::Msg { .. }
         | CliCommand::Log { .. }
         | CliCommand::Compact { .. }
-        | CliCommand::Clear { .. }
         | CliCommand::Segments { .. } => true,
 
         CliCommand::Thread { .. }
@@ -2005,7 +2002,6 @@ mod tests {
             vec!["msg", "send", "hi"],
             vec!["log"],
             vec!["compact"],
-            vec!["clear"],
             vec!["segments"],
         ] {
             let mut full = vec!["shore"];
@@ -2081,7 +2077,7 @@ mod tests {
                     "model",
                     "use",
                     "haiku",
-                    "--background=compaction"
+                    "--background=wake"
                 ],
                 None
             ),

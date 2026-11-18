@@ -13,13 +13,7 @@ import type { OperationInput, OperationResult } from "../operations/types.ts";
 import type { AutonomyStatusReport } from "../protocol/AutonomyStatusReport.ts";
 import type { McpStatusReport } from "../protocol/McpStatusReport.ts";
 import type { ActivityStatusReport } from "../protocol/ActivityStatusReport.ts";
-import type { CompactionStatusReport } from "../protocol/CompactionStatusReport.ts";
 import type { RunningStatusReport } from "../protocol/RunningStatusReport.ts";
-import { homeThreadOf } from "../engine/threads.ts";
-import { toRfc3339 } from "../ledger/zoned.ts";
-import { lastPass, runningPass } from "../memory/compaction/activity.ts";
-import { loadCompactionCheckpoint } from "../memory/compaction/checkpoint.ts";
-import { passEnd } from "./compact.ts";
 
 type Args = OperationInput<"error_log">;
 
@@ -135,7 +129,6 @@ export async function status(ctx: StatusContext): Promise<OperationResult<"statu
     activity: report === undefined ? null : activityWire(report.stats, report.messageCount),
     history_index: historyIndexSection(ctx.historyIndex, ctx.characterName),
     ...(mcp === undefined ? {} : { mcp }),
-    compaction: await compactionSection(ctx),
     ...(ctx.running === undefined ? {} : { running: ctx.running }),
   };
   return {
@@ -156,34 +149,6 @@ export async function status(ctx: StatusContext): Promise<OperationResult<"statu
     pending_deferred_edits: pending,
     ...sections,
     sections: Object.keys(sections),
-  };
-}
-
-async function compactionSection(ctx: StatusContext): Promise<CompactionStatusReport> {
-  const dataDir = ctx.config.dirs.data;
-  const character = ctx.characterName;
-  const live = runningPass(dataDir, character);
-  const thread = ctx.thread ?? await homeThreadOf(dataDir, character);
-  const checkpoint = await loadCompactionCheckpoint(dataDir, character, thread).catch(() => undefined);
-  return {
-    running: live === undefined ? null : {
-      thread: live.thread,
-      trigger: live.trigger,
-      started_at: toRfc3339(live.startedAt),
-      phase: live.phase ?? null,
-      last_tool: live.lastTool ?? null,
-    },
-    paused: live !== undefined || checkpoint?.state !== "paused" ? null : {
-      thread,
-      checkpoint_id: checkpoint.id,
-      reason: checkpoint.pauseReason ?? "provider",
-      detail: checkpoint.pauseDetail ?? null,
-      resume_at: checkpoint.resumeAt ?? null,
-      tool_rounds: checkpoint.loop.toolRounds,
-      compacted_turns: checkpoint.compactedTurns,
-      updated_at: checkpoint.updatedAt,
-    },
-    last: passEnd(lastPass(dataDir, character)),
   };
 }
 

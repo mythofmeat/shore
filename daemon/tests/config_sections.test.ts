@@ -28,7 +28,7 @@ async function reading(): Promise<{ write: (toml: string) => Promise<void>; read
     read: () => {
       const { compaction } = loadConfig(join(root, "config.toml"), { env: { SHORE_CONFIG_DIR: root }, onWarn: () => {} }).app;
       return [
-        compaction.enabled, compaction.model, compaction.write_memory, compaction.label_segments, Number(compaction.idle_after.asSecs()),
+        compaction.enabled, compaction.label_segments, Number(compaction.idle_after.asSecs()),
         Number(compaction.archive_after.asSecs()), compaction.min_turns, compaction.max_turns, compaction.max_context_tokens,
         compaction.keep_recent_turns, compaction.git_push,
       ];
@@ -36,16 +36,21 @@ async function reading(): Promise<{ write: (toml: string) => Promise<void>; read
   };
 }
 
-test("[compaction] is read under the names in the file, a model among them, and a new install compacts after two idle hours and pushes nothing", async () => {
+test("[compaction] is read under the names in the file, and a new install compacts after two idle hours and pushes nothing", async () => {
   const { write, read } = await reading();
   await write('[chat]\ndisplay_name = "eve"\n');
-  expect(read()).toEqual([true, undefined, true, true, 7200, 0, 12, 30, 200_000, 2, false]);
+  expect(read()).toEqual([true, true, 7200, 0, 12, 30, 200_000, 2, false]);
 
   await write([
-    "[compaction]", "enabled = false", 'model = "anthropic:claude-haiku-5-5"', "write_memory = false", "label_segments = false", 'idle_after = "40m"',
+    "[compaction]", "enabled = false", "label_segments = false", 'idle_after = "40m"',
     'archive_after = "3d"', "min_turns = 4", "max_turns = 40", "max_context_tokens = 500000", "keep_recent_turns = 0", "git_push = true", "",
   ].join("\n"));
-  expect(read()).toEqual([false, "anthropic:claude-haiku-5-5", false, false, 2400, 259_200, 4, 40, 500_000, 0, true]);
+  expect(read()).toEqual([false, false, 2400, 259_200, 4, 40, 500_000, 0, true]);
+
+  await write("[compaction]\nwrite_memory = false\n");
+  expect(read).toThrow("unknown field `compaction.write_memory`");
+  await write('[compaction]\nmodel = "anthropic:claude-haiku-5-5"\n');
+  expect(read).toThrow("unknown field `compaction.model`");
 
   await write('[compaction]\nidle_trigger = "1h"\n');
   expect(read).toThrow("unknown field `compaction.idle_trigger`");
@@ -94,19 +99,18 @@ test("[presence], [marks], [matrix] and [image] are read from the file, and a se
   ]);
 });
 
-test("a model named in [chat], [triggers] or [compaction] that can't be found is warned about under that section's key", async () => {
+test("a model named in [chat], [triggers] or [subagents] that can't be found is warned about under that section's key", async () => {
   const root = await mkdtemp(testTmp("shore-config-sections-"));
   await writeFile(join(root, "config.toml"), [
-    '[chat]\nmodel = "nope"\n[triggers]\nmodel = "nope-a"\n[compaction]\nmodel = "ghost:nope-b"',
-    '[subagents]\nmodel = "nope-d"\n[subagents.scout]\ndescription = "looks"\nprompt = "look"\nmodel = "nope-e"\n',
+    '[chat]\nmodel = "nope"\n[triggers]\nmodel = "nope-a"',
+    '[subagents]\nmodel = "ghost:nope-d"\n[subagents.scout]\ndescription = "looks"\nprompt = "look"\nmodel = "nope-e"\n',
   ].join("\n"));
   const warned: (readonly (readonly [string, string])[])[] = [];
   loadConfig(join(root, "config.toml"), { env: { SHORE_CONFIG_DIR: root }, onWarn: (_message, fields) => { warned.push(fields); } });
   expect(warned).toEqual([
     [["field", "chat.model"], ["name", "nope"]],
     [["field", "triggers.model"], ["name", "nope-a"]],
-    [["field", "compaction.model"], ["name", "ghost:nope-b"], ["provider", "ghost"]],
-    [["field", "subagents.model"], ["name", "nope-d"]],
+    [["field", "subagents.model"], ["name", "ghost:nope-d"], ["provider", "ghost"]],
     [["field", "subagents.scout.model"], ["name", "nope-e"]],
   ]);
 });

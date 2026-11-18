@@ -1,5 +1,4 @@
 import { compactLater, type CompactionCompletion } from "../memory/compaction/background.ts";
-import { runningPass } from "../memory/compaction/activity.ts";
 import { shoreLog } from "../log.ts";
 
 import type { LoadedConfig } from "../config/loader.ts";
@@ -9,7 +8,6 @@ import type { ServerMessage } from "../protocol/ServerMessage.ts";
 import type { StreamResult } from "../llm/stream.ts";
 import { emitStreamEnd } from "../llm/stream.ts";
 import type { Usage } from "../llm/types.ts";
-import { compactionHeld } from "../memory/compaction/checkpoint.ts";
 import { firstUnreadReply, homeThread, homeThreadOf, isWakeOpener, readThreadsIndex } from "../engine/threads.ts";
 import { MessageStore } from "../engine/message_store.ts";
 import { conversationRef, SegmentReader } from "../engine/segments.ts";
@@ -20,7 +18,6 @@ import { archivalPlanInput, archiveSplitIndex } from "../memory/compaction/plan.
 import { conversationManager } from "../memory/compaction/archive.ts";
 import { tryBeginCompaction } from "../memory/compaction/manager.ts";
 import { join } from "node:path";
-import { CompactionPaused } from "../memory/compaction/types.ts";
 import type { CharacterWorkspace } from "../tools/character_workspace.ts";
 import { emitNewMessageEvent } from "./persistence.ts";
 import { ingestImages, type ImageUpload } from "./images.ts";
@@ -46,7 +43,7 @@ export interface TurnAutonomy {
   onUserActivityElsewhere?(character: string): void;
   shouldCompactNow(character: string, turnCount: number, contextTokens: number, crowded?: boolean): boolean;
   onCompactionComplete(character: string, retained: number): void;
-  onCompactionFailed(character: string, retryAt?: number): void;
+  onCompactionFailed(character: string): void;
 }
 
 export interface TurnContext {
@@ -254,14 +251,12 @@ export async function maybeCompact(
   dataDir: string,
   contextTokens: number,
   runner: CompactionRunner,
-  crowded = false,
-): Promise<boolean> {
+  crowded: boolean,
+): Promise<void> {
   const turnCount = engine.userTurnCount();
   const thread = engine.thread ?? await homeThreadOf(dataDir, charName);
-  if (await compactionHeld(dataDir, charName, thread)) return false;
-  if (runningPass(dataDir, charName)?.thread === thread) return false;
-  if (!ctx.autonomy.shouldCompactNow(charName, turnCount, contextTokens, crowded)) return false;
-  return compactLater(dataDir, charName, thread, async () => await compactAfterTurn(ctx, charName, config, thread, runner));
+  if (!ctx.autonomy.shouldCompactNow(charName, turnCount, contextTokens, crowded)) return;
+  compactLater(dataDir, charName, thread, async () => await compactAfterTurn(ctx, charName, config, thread, runner));
 }
 
 export async function compactAfterTurn(
@@ -276,16 +271,11 @@ export async function compactAfterTurn(
     completion = await runner.run(charName, config, thread);
   } catch (e) {
     shoreLog.warn(`shore: compaction after a turn failed for ${charName}/${thread}: ${String(e)}`);
-    ctx.autonomy.onCompactionFailed(
-      charName,
-      e instanceof CompactionPaused && e.resumeAt !== undefined
-        ? Date.parse(e.resumeAt)
-        : undefined,
-    );
+    ctx.autonomy.onCompactionFailed(charName);
     return;
   }
   if (completion.kind !== "completed") {
-    ctx.autonomy.onCompactionFailed(charName, completion.retryAt);
+    ctx.autonomy.onCompactionFailed(charName);
     return;
   }
   ctx.autonomy.onCompactionComplete(charName, completion.retained);

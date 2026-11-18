@@ -40,7 +40,7 @@ describe("the memory page", () => {
     app.answer((request) => request["name"] === "segments" ? { character: "ada", thread: "story", count: 0, segments: [] } : undefined);
     const empty = await mount(<MemoryPage state={snapshot} />);
     await settle();
-    expect(empty.host.querySelector(".settings-empty")?.textContent).toBe("No segments yet. They appear after the thread is compacted or cleared.");
+    expect(empty.host.querySelector(".settings-empty")?.textContent).toBe("No segments yet. They appear after the thread is compacted.");
     app.answer((request) => { if (request["name"] === "segments") throw new Error("no index"); return undefined; });
     const failing = await mount(<MemoryPage state={snapshot} />);
     await settle();
