@@ -294,7 +294,7 @@ async function runGenerationCore(
   const workspace = characterWorkspace(config, charName);
   const workspaceTurns = workspaceTurnsFor(config.dirs, charName, workspace);
   const replaced = regen ? replyVersions(engine.messagesAfterLastUserTurn()) : [];
-  if (replaced.length > 0) await undoTurns(workspaceTurns, engine.thread, [...replaced].reverse());
+  await undoTurns(workspaceTurns, engine.thread, [...replaced].reverse());
   const known = new Set(replyVersions(engine.messages()));
   const recorder = new WorkspaceRecorder(workspaceTurns);
   const settleWorkspace = async (): Promise<void> => {
@@ -306,7 +306,7 @@ async function runGenerationCore(
       return;
     }
     await recorder.discard();
-    if (replaced.length > 0) await redoTurns(workspaceTurns, engine.thread, replaced);
+    await redoTurns(workspaceTurns, engine.thread, replaced);
   };
 
   let result: StreamResult;
