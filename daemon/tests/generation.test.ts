@@ -15,7 +15,6 @@ import { ProviderRegistry } from "../src/config/providers.ts";
 import type { LoadedConfig } from "../src/config/loader.ts";
 import type { SidecarProvider, SidecarRequest, StreamEvent } from "../src/llm/types.ts";
 import { generationEngine, runGeneration, type GenerationDeps } from "../src/handler/generation.ts";
-import { keptDiary } from "../src/autonomy/diary.ts";
 import { testTmp } from "./support/tmp.ts";
 import { recordedTurns, WorkspaceRecorder, workspaceTurnsFor, type WorkspaceTurns } from "../src/tools/workspace_turns.ts";
 import { outcomeOf } from "./support/outcome.ts";
@@ -415,15 +414,21 @@ describe("a reply's turn", () => {
 
   test("its tools work in the thread the reply is in", async () => {
     const handed: (string | undefined)[] = [];
+    const from: string[] = [];
     const run = await runTurn({
       history: [], regen: false, thread: "ring", events: answered,
-      tools: ["write_diary"],
-      toolRound: [{ type: "tool_use", id: "tool_note", name: "write_diary", input: { text: "Told part one." } }],
-      adjust: (generation) => { generation.tools = (_character, turn) => { handed.push(turn.thread); return {}; }; },
+      tools: ["wake_in_thread"],
+      toolRound: [{ type: "tool_use", id: "tool_hand", name: "wake_in_thread", input: { thread: "garden", reason: "Carry on." } }],
+      adjust: (generation) => {
+        generation.tools = (_character, turn) => {
+          handed.push(turn.thread);
+          return { wakeInThread: (_name, thread) => { from.push(thread); return { kind: "queued", limitMs: undefined }; } };
+        };
+      },
     });
     expect(run.error).toBeUndefined();
     expect(handed).toEqual(["ring"]);
-    expect(keptDiary(join(run.dataDir, "ada"), Date.now()).map((note) => [note.thread, note.text])).toEqual([["ring", "Told part one."]]);
+    expect(from).toEqual(["ring"]);
   });
 
   test("a round its first key started before refusing the call is not kept when the spare key answers", async () => {

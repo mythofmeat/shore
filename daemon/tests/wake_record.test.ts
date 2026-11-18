@@ -3,8 +3,7 @@ import { mkdtemp } from "node:fs/promises";
 import { join } from "node:path";
 
 import type { BackgroundLoopResult } from "../src/autonomy/background_loop.ts";
-import { keepWakeRecord, keptNote, recordWakeEnd, stopOf, wakeRecord, wakeStopNote, WakeWords, type WakeEnd, type WakeRecord, type WakeStop } from "../src/autonomy/wake_record.ts";
-import type { DiaryNote } from "../src/engine/types.ts";
+import { cutLastWords, keepWakeRecord, recordWakeEnd, stopOf, wakeRecord, wakeStopNote, WakeWords, type WakeEnd, type WakeRecord, type WakeStop } from "../src/autonomy/wake_record.ts";
 import { deleteThreadState } from "../src/storage/files.ts";
 import { writeCharacterState } from "../src/storage/store.ts";
 import { testTmp } from "./support/tmp.ts";
@@ -29,35 +28,30 @@ function wrote(...rounds: [text: string, tool: boolean][]): WakeWords {
 }
 
 function ended(over: Partial<WakeEnd> = {}): WakeEnd {
-  return { startedAt: T0 + 60 * MINUTE, endedAt: T0 + 70 * MINUTE, limitMs: 30 * MINUTE, loop: loop(), words: new WakeWords(), sent: false, note: undefined, ...over };
+  return { startedAt: T0 + 60 * MINUTE, endedAt: T0 + 70 * MINUTE, limitMs: 30 * MINUTE, loop: loop(), words: new WakeWords(), sent: false, ...over };
 }
 
-const NOTE: DiaryNote = { id: "d2", at: new Date(T0 + 70 * MINUTE).toISOString(), thread: "ring", source: "wake", text: "Verse three is done." };
-const KEPT = { id: "d1", at: new Date(T0).toISOString(), text: "Verse two is done." };
-const BEFORE: WakeRecord = { through: T0, note: KEPT };
+const BEFORE: WakeRecord = { through: T0 };
 
-test("a wake's words are its last text, and its closing note only when it ended on text with no tool call after", () => {
+test("a wake's words are the last text it wrote, with or without a tool call after", () => {
   const words = wrote(["Let me look.", true], ["  \n", true]);
-  expect([words.closing, words.last]).toEqual(["", "Let me look."]);
+  expect(words.last).toBe("Let me look.");
   words.heard({ role: "user", blocks: [{ type: "text", text: "a nudge" }] });
-  expect([words.closing, words.last]).toEqual(["", "Let me look."]);
+  expect(words.last).toBe("Let me look.");
   words.heard({ role: "assistant", blocks: [{ type: "text", text: " Half " }, { type: "text", text: "done. " }] });
-  expect([words.closing, words.last]).toEqual([" Half done. ", "Half done."]);
+  expect(words.last).toBe("Half done.");
   words.heard({ role: "assistant", blocks: [{ type: "text", text: "One more." }, { type: "tool_use", id: "t", name: "read", input: {} }] });
-  expect([words.closing, words.last]).toEqual(["", "One more."]);
+  expect(words.last).toBe("One more.");
 });
 
-test("a wake that finished moves where its thread was looked at up to its start, and keeps its note or else the one before", async () => {
+test("a wake that finished moves where its thread was looked at up to its start, and keeps nothing of what it wrote", async () => {
   const dir = await character();
   expect(wakeRecord(dir, "ring")).toEqual({});
   recordWakeEnd(dir, "ring", {}, ended());
   expect(wakeRecord(dir, "ring")).toEqual({ through: T0 + 60 * MINUTE });
 
-  recordWakeEnd(dir, "ring", BEFORE, ended({ note: NOTE }));
-  expect(wakeRecord(dir, "ring")).toEqual({ through: T0 + 60 * MINUTE, note: { id: "d2", at: NOTE.at, text: "Verse three is done." } });
-
-  recordWakeEnd(dir, "ring", BEFORE, ended());
-  expect(wakeRecord(dir, "ring")).toEqual({ through: T0 + 60 * MINUTE, note: KEPT });
+  recordWakeEnd(dir, "ring", BEFORE, ended({ words: wrote(["Verse three is done.", false]) }));
+  expect(wakeRecord(dir, "ring")).toEqual({ through: T0 + 60 * MINUTE });
   expect(wakeRecord(dir, "garden")).toEqual({});
 });
 
@@ -70,12 +64,13 @@ test("a wake that was stopped leaves where its thread was looked at alone, and r
     stopped: { at: T0 + 70 * MINUTE, why: "time", limitMs: 90 * MINUTE, rounds: 4, sent: true, last: "Now the lamp." },
   });
 
-  recordWakeEnd(dir, "ring", {}, ended({ loop: loop({ stoppedAt: "interrupted" }), note: NOTE }));
-  expect(wakeRecord(dir, "ring")).toEqual({ note: { id: "d2", at: NOTE.at, text: "Verse three is done." }, stopped: { at: T0 + 70 * MINUTE, why: "interrupted", limitMs: 30 * MINUTE, rounds: 3, sent: false, last: "" } });
+  recordWakeEnd(dir, "ring", {}, ended({ loop: loop({ stoppedAt: "interrupted" }) }));
+  expect(wakeRecord(dir, "ring")).toEqual({ stopped: { at: T0 + 70 * MINUTE, why: "interrupted", limitMs: 30 * MINUTE, rounds: 3, sent: false, last: "" } });
 
   const long = wrote([`${"é".repeat(1500)}!`, true]);
   recordWakeEnd(dir, "ring", {}, ended({ loop: loop({ stoppedAt: "rounds" }), words: long }));
   expect(wakeRecord(dir, "ring").stopped).toMatchObject({ why: "rounds", last: `${"é".repeat(1500)}… [cut]` });
+  expect(cutLastWords("é".repeat(1500))).toBe("é".repeat(1500));
 
   expect(stopOf(loop())).toBeUndefined();
   expect(stopOf(loop({ stoppedAt: "rounds" }))).toBe("rounds");
@@ -87,10 +82,10 @@ test("a wake whose model call failed leaves the record as it was, so the next on
   const dir = await character();
   const stopped: WakeStop = { at: T0, why: "time", limitMs: 30 * MINUTE, rounds: 2, sent: false, last: "" };
   keepWakeRecord(dir, "ring", { ...BEFORE, stopped });
-  recordWakeEnd(dir, "ring", { ...BEFORE, stopped }, ended({ loop: loop({ failedRound: 0 }), note: NOTE }));
+  recordWakeEnd(dir, "ring", { ...BEFORE, stopped }, ended({ loop: loop({ failedRound: 0 }) }));
   expect(wakeRecord(dir, "ring")).toEqual({ ...BEFORE, stopped });
   recordWakeEnd(dir, "ring", { ...BEFORE, stopped }, ended());
-  expect(wakeRecord(dir, "ring")).toEqual({ through: T0 + 60 * MINUTE, note: KEPT });
+  expect(wakeRecord(dir, "ring")).toEqual({ through: T0 + 60 * MINUTE });
 });
 
 test("the next wake is told how the last one was stopped, in these words", () => {
@@ -108,14 +103,6 @@ test("the next wake is told how the last one was stopped, in these words", () =>
     "Nothing from it was sent to eve. Whatever it had already changed with its tools is still in place.]",
   );
   expect(wakeStopNote({ ...stop, limitMs: 2 * 60 * MINUTE }, "eve", "UTC")).toStartWith("[Your last wake here reached its limit of 2 hours and was stopped at ");
-});
-
-test("the note the last wake in a thread ended with is kept for the next one, unless the diary it is shown already has it", () => {
-  const record: WakeRecord = { note: { id: "d1", at: new Date(T0).toISOString(), text: "Verse two is done.\nNext: the bridge." } };
-  expect(keptNote(record, [], "UTC")).toBe("[Your note from the end of your last wake here, Friday 2026-10-30 · 12:00 PM, kept for this one:]\n\nVerse two is done.\nNext: the bridge.");
-  expect(keptNote(record, [{ id: "d0" }, { id: "d9" }], "UTC")).toStartWith("[Your note from the end of your last wake here, Friday 2026-10-30 · 12:00 PM, kept for this one:]");
-  expect(keptNote(record, [{ id: "d0" }, { id: "d1" }], "UTC")).toBeUndefined();
-  expect(keptNote({}, [], "UTC")).toBeUndefined();
 });
 
 test("a record goes when its thread does", async () => {

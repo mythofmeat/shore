@@ -35,7 +35,7 @@ function shown(messages: readonly Message[]): [role: string, text: string][] {
   ]);
 }
 
-test("a wake that finished is seen later as how it opened, a line counting its tool calls, its note without the thinking, and what it sent", () => {
+test("a wake that finished is seen later as how it opened, a line counting its tool calls, and what it sent, with none of what it ended on", () => {
   const stored = thread(
     ["user", "tell me a story"],
     ["assistant", [call("read", "r0")]],
@@ -63,17 +63,16 @@ test("a wake that finished is seen later as how it opened, a line counting its t
 
   expect(seen.slice(0, 6)).toEqual(stored.slice(0, 6));
   expect(seen[6]).toEqual({
-    msg_id: "m10",
+    msg_id: "m11",
     role: "system",
     origin: "autonomous",
-    content: "[Your working in this wake isn't shown here: 3 tool calls. Your note from the end of it follows.]",
+    content: "[Your working in this wake isn't shown here: 3 tool calls.]",
     images: [],
-    content_blocks: [{ type: "text", text: "[Your working in this wake isn't shown here: 3 tool calls. Your note from the end of it follows.]" }],
-    timestamp: "2026-10-30T12:10:00.000Z",
+    content_blocks: [{ type: "text", text: "[Your working in this wake isn't shown here: 3 tool calls.]" }],
+    timestamp: "2026-10-30T12:11:00.000Z",
   });
-  expect(seen[7]).toEqual({ ...stored[11], content_blocks: [{ type: "text", text: "Told part one.\n[sent to eve as the next message here]" }] } as Message);
-  expect(seen.slice(8)).toEqual(stored.slice(12));
-  expect(seen).toHaveLength(13);
+  expect(seen.slice(7)).toEqual(stored.slice(12));
+  expect(seen).toHaveLength(12);
 });
 
 test("a wake that was stopped is seen later with how far it had got: its tool calls, the last of them, and the last thing the character wrote", () => {
@@ -89,7 +88,7 @@ test("a wake that was stopped is seen later with how far it had got: its tool ca
     ["assistant", "Rue."],
   ))).toEqual([
     ["user", "[wake]\n\nThe show."],
-    ["system", "[Your working in this wake isn't shown here: 2 tool calls, ending with `bash`. It ended without a note from you. The last thing you wrote in it: \"Let me look.\"]"],
+    ["system", "[Your working in this wake isn't shown here: 2 tool calls, ending with `bash`. It ended before you had finished. The last thing you wrote in it: \"Let me look.\"]"],
     ["system", "[eve wrote here, so Shore stopped it.]"],
     ["user", "wait, what is the fox called?"],
     ["assistant", "Rue."],
@@ -100,7 +99,7 @@ test("a wake that was stopped is seen later with how far it had got: its tool ca
     ["assistant", [{ type: "text", text: "Trying the door." }, call("bash", "b1")]],
   ))).toEqual([
     ["user", "[wake]"],
-    ["system", "[Your working in this wake isn't shown here: 1 tool call, ending with `bash`. It ended without a note from you. The last thing you wrote in it: \"Trying the door.\"]"],
+    ["system", "[Your working in this wake isn't shown here: 1 tool call, ending with `bash`. It ended before you had finished. The last thing you wrote in it: \"Trying the door.\"]"],
   ]);
 
   expect(shown(thread(
@@ -110,8 +109,7 @@ test("a wake that was stopped is seen later with how far it had got: its tool ca
     ["assistant", [{ type: "thinking", thinking: "Nothing to say.", signature: "s" }, { type: "text", text: " \n" }]],
   ))).toEqual([
     ["user", "[wake]"],
-    ["system", "[Your working in this wake isn't shown here: 1 tool call, ending with `bash`. It ended without a note from you.]"],
-    ["assistant", " \n"],
+    ["system", "[Your working in this wake isn't shown here: 1 tool call.]"],
   ]);
 
   expect(shown(thread(
@@ -122,7 +120,7 @@ test("a wake that was stopped is seen later with how far it had got: its tool ca
     ["user", "hm"],
   ))).toEqual([
     ["user", "[wake]"],
-    ["system", "[Your working in this wake isn't shown here: 1 tool call, ending with `bash`. It ended without a note from you.]"],
+    ["system", "[Your working in this wake isn't shown here: 1 tool call, ending with `bash`. It ended before you had finished.]"],
     ["assistant", "Sent before it stopped."],
     ["user", "hm"],
   ]);
@@ -132,7 +130,7 @@ test("a wake that was stopped is seen later with how far it had got: its tool ca
     ["user", [result("lost")]],
   ))).toEqual([
     ["user", "[wake]"],
-    ["system", "[Your working in this wake isn't shown here: 0 tool calls. It ended without a note from you.]"],
+    ["system", "[Your working in this wake isn't shown here: 0 tool calls. It ended before you had finished.]"],
   ]);
 });
 
@@ -146,7 +144,7 @@ test("the last thing a stopped wake wrote is cut at 1,500 characters, counted as
   expect(last(`${whole}!`)).toEndWith(`The last thing you wrote in it: "${whole}… [cut]"]`);
 });
 
-test("a wake with nothing but its note keeps the note, and two wakes in a row are each cut down on their own", () => {
+test("a wake that only wrote is seen later as a line too, and two wakes in a row are each cut down on their own", () => {
   expect(shown(thread(
     ["user", "[wake]\n\nFirst.", "autonomous"],
     ["assistant", [{ type: "thinking", thinking: "Nothing to do.", signature: "s" }, { type: "text", text: "All quiet." }]],
@@ -159,12 +157,11 @@ test("a wake with nothing but its note keeps the note, and two wakes in a row ar
     ["assistant", "Here it is.", "autonomous"],
   ))).toEqual([
     ["user", "[wake]\n\nFirst."],
-    ["assistant", "All quiet."],
+    ["system", "[Your working in this wake isn't shown here: 0 tool calls.]"],
     ["user", "[wake]\n\nSecond."],
-    ["system", "[Your working in this wake isn't shown here: 1 tool call. Your note from the end of it follows.]"],
-    ["assistant", "Read it."],
+    ["system", "[Your working in this wake isn't shown here: 1 tool call.]"],
     ["user", "[Your message has not been sent yet.]"],
-    ["assistant", "Fixed the picture."],
+    ["system", "[Your working in this wake isn't shown here: 0 tool calls.]"],
     ["assistant", "Here it is."],
   ]);
 });
@@ -182,12 +179,11 @@ test("a wake's opener is seen later as what set the wake off, without the wake's
   stored[4] = { ...opener, shown_later: "[wake]\n\n[Your trigger \"show\" fired again.]" };
   expect(shown(stored)).toEqual([
     ["user", "[wake]\n\n[Your trigger \"show\" fired.]\n\n[This is a wake. A long prompt.]"],
-    ["system", "[Your working in this wake isn't shown here: 1 tool call. Your note from the end of it follows.]"],
-    ["assistant", "Told part one."],
+    ["system", "[Your working in this wake isn't shown here: 1 tool call.]"],
     ["user", "[wake]\n\n[Your trigger \"show\" fired again.]"],
-    ["assistant", "Told part two."],
+    ["system", "[Your working in this wake isn't shown here: 0 tool calls.]"],
   ]);
-  const later = withoutWakeWorking(stored)[3];
+  const later = withoutWakeWorking(stored)[2];
   expect([later?.content, later?.msg_id, later?.origin, later?.timestamp]).toEqual(["[wake]\n\n[Your trigger \"show\" fired again.]", opener.msg_id, "autonomous", opener.timestamp]);
   expect(stored[4]?.content).toBe(opener.content);
 });

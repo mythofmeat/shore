@@ -1,5 +1,4 @@
 import { withConversation } from "../engine/lifecycle.ts";
-import { unseenDiary } from "../autonomy/diary.ts";
 import { noteSeen, presence, unshownPresence } from "../autonomy/presence.ts";
 import type { RunningWake } from "../autonomy/runner.ts";
 import { withoutWakeWorking } from "../autonomy/wake_working.ts";
@@ -135,7 +134,6 @@ export interface GenerationDeps {
   autonomy: TurnAutonomy & PersistContext["autonomy"];
   runningWake?: (character: string) => RunningWake | undefined;
   userActiveIn?: (character: string, thread: string) => void;
-  userBack?: (character: string) => Promise<void>;
   notifier: PersistContext["notifier"];
   diagnostics: GenerationDiagnostics;
   emitEvent: (message: ServerMessage) => void;
@@ -318,15 +316,12 @@ async function runGenerationCore(
     const arrival = regen || !bodyHasContent(body)
       ? { cold: false, annotations: {} }
       : await threadArrival(deps, engine, charName, home, resolved, now());
-    if (!regen && bodyHasContent(body)) await deps.userBack?.(charName);
     if (!regen && bodyHasContent(body)) noteSeen(deps.dataDir, Date.parse(now()));
-    const diary = unseenDiary(characterDataDir(deps.dataDir, charName), engine.messages(), Date.parse(now()), engine.thread);
-    const running = wakeNotTold(deps.runningWake?.(charName), engine.messages());
+    const running = wakeNotTold(deps.runningWake?.(charName), engine.thread, engine.messages());
     const status = unshownPresence(presence(deps.dataDir), engine.messages());
     await ensureAndBackfillAutonomy(turnCtx, engine, charName, config);
     const regenAlt = await appendUserTurn(turnCtx, engine, config.dirs.cache, charName, body, regen, params.rid, imageSettingsFor(config.app.images, "upload"), {
       ...arrival.annotations,
-      ...(diary.length === 0 ? {} : { diary }),
       ...(running === undefined ? {} : { wake_running: running }),
       ...(status === undefined ? {} : { presence: status }),
     });
@@ -466,8 +461,8 @@ async function runGenerationCore(
   );
 }
 
-function wakeNotTold(running: RunningWake | undefined, active: readonly Message[]): Message["wake_running"] {
-  if (running === undefined) return undefined;
+function wakeNotTold(running: RunningWake | undefined, here: string, active: readonly Message[]): Message["wake_running"] {
+  if (running === undefined || running.thread === here) return undefined;
   const startedAt = new Date(running.startedAt).toISOString();
   if (active.some((message) => message.wake_running?.started_at === startedAt)) return undefined;
   return { started_at: startedAt, thread: running.thread };

@@ -8,7 +8,7 @@ import type { LoadedConfig } from "../config/loader.ts";
 import { applyBackgroundSettings, configView, resolveChatModelForCharacter } from "../config/preferences.ts";
 import { withConversation } from "../engine/lifecycle.ts";
 import { deriveContentFromBlocks, isToolResultOnly } from "../engine/message_store.ts";
-import { agoPhrase, diaryText, DIARY_FOR_WAKE, estimateHistoryTokens, formatWallClock, nearMessageBudget, presenceText, renderTemplate } from "../engine/prompt.ts";
+import { agoPhrase, estimateHistoryTokens, formatWallClock, nearMessageBudget, presenceText, renderTemplate } from "../engine/prompt.ts";
 import { sealedThreads, type SealedThread } from "../engine/sealed_list.ts";
 import { NO_PRIOR_CONTEXT } from "../engine/segments.ts";
 import { homeThread, isWakeOpener, readThreadsIndex, threadActivities, threadActivityNow, type ThreadsIndex } from "../engine/threads.ts";
@@ -32,17 +32,16 @@ import { sentPicturesDir } from "../storage/sent_pictures.ts";
 import { characterWorkspace } from "../tools/character_workspace.ts";
 import { pruneTurns, replyVersions, WorkspaceRecorder, workspaceTurnsFor } from "../tools/workspace_turns.ts";
 import { backgroundModelRequest, backgroundTaskModel } from "./background_model.ts";
-import { addDiaryNote, closingNote, recentDiary } from "./diary.ts";
 import type { WakeEventKind } from "./wake_log.ts";
 import { runBackgroundLoop, type BackgroundLoopDeps, type BackgroundLoopResult, type LoopRound } from "./background_loop.ts";
 import { presence } from "./presence.ts";
-import { firedBy, WAKE_QUIET_MS, type TriggerFiring, type WakeNews, type WakeResult } from "./runner.ts";
+import { WAKE_QUIET_MS, type TriggerFiring, type WakeNews, type WakeResult } from "./runner.ts";
 import { sealedListNote, sealedWakeNote } from "./sealed_notes.ts";
 import { digestWords, threadDigest, type ThreadReader } from "./thread_digest.ts";
 import { Outbox, postElsewhere, postMessage, reachableThreads, sendingsHere } from "./outbox.ts";
 import { pushRefusal, type PushOutcome } from "./push.ts";
 import { spanPhrase, timeLeftPhrase, triggerFiredNote, wakeNewsNote } from "./wake_shape.ts";
-import { keptNote, recordWakeEnd, stopOf, wakeRecord, wakeStopNote, WakeWords, type WakeStopReason } from "./wake_record.ts";
+import { recordWakeEnd, stopOf, wakeRecord, wakeStopNote, WakeWords, type WakeStopReason } from "./wake_record.ts";
 import { keptWorkingSummary, withoutWakeWorking } from "./wake_working.ts";
 
 export const WAKE_OPENER = "[wake]";
@@ -50,8 +49,6 @@ export const WAKE_OPENER = "[wake]";
 const LONGEST_WRAP_UP_MS = 15 * 60_000;
 
 const DEFAULT_WAKE_TEMPLATE = wakeTemplateRaw.trimEnd();
-
-const TAGGED = /<sendMessage>[\s\S]*?<\/sendMessage>/;
 
 export interface WakeEngine extends ThreadReader {
   readonly thread: string;
@@ -110,13 +107,8 @@ export function wrapUpMsFor(limitMs: number): number {
 export function wakeWrapUpText(msLeft: number, rounds: number, userName: string): string {
   const stop = rounds === 1 ? "after this round" : `after ${String(rounds)} more rounds, counting this one`;
   return `[System nudge: this wake stops in ${timeLeftPhrase(msLeft)} or ${stop}, whichever comes first. ` +
-    "Wrap up now: finish with your note to yourself, saying where you stopped so you can pick it up here next time. " +
-    `Nothing in it is sent to ${userName}.]`;
-}
-
-export function tagsSentNothingNote(thread: string, userName: string): string {
-  return `Your wake in "${thread}" wrapped a message in <sendMessage> tags. The tags no longer send anything, so ${userName} was not sent it. ` +
-    "A message is sent with the `send_message` tool.";
+    "Wrap up now. Your next wake starts fresh, so whatever it will need has to be in a file before this one stops, " +
+    `and nothing reaches ${userName} unless you send it.]`;
 }
 
 export function wakeStoppedNote(why: WakeStopReason, userName: string, limitMs: number): string {
@@ -127,11 +119,6 @@ export function wakeStoppedNote(why: WakeStopReason, userName: string, limitMs: 
   return why === "time"
     ? `[This wake reached its limit of ${spanPhrase(limitMs)}, and Shore stopped it here.]`
     : "[This wake used up its rounds of tool use, and Shore stopped it here.]";
-}
-
-export function wakeCutShortNote(why: "time" | "rounds", thread: string, limitMs: number): string {
-  const ran = why === "time" ? `reached its limit of ${spanPhrase(limitMs)}` : "used up its rounds of tool use";
-  return `Your wake in "${thread}" ${ran} before you finished. Where it stopped is in that thread.`;
 }
 
 export function leadingWakeTurns(messages: readonly Message[]): number {
@@ -209,17 +196,11 @@ async function keepWorking(log: WorkingLog, message: Message): Promise<void> {
   }
 }
 
-function noteShownLater(closing: string): string | undefined {
-  const text = closing.trim();
-  return text === "" ? undefined : text;
-}
-
 export async function runWake(character: string, config: LoadedConfig, wake: Wake, deps: WakeDeps): Promise<WakeResult> {
   const events: { kind: WakeEventKind; detail: string }[] = [];
   const characterDir = characterDataDir(config.dirs.data, character);
   const engine = await deps.engine(character, wake.thread);
   if (engine === undefined) {
-    addDiaryNote(characterDir, { at: deps.now?.() ?? Date.now(), thread: "", source: "shore", text: `You were to be woken in the thread "${wake.thread}" by ${firedBy(wake.fired)}, but you have no such thread, so nothing ran. \`threads\` lists the threads you do have.` });
     events.push({ kind: "call_failed", detail: `Wake skipped: no thread "${wake.thread}"` });
     return { events };
   }
@@ -227,7 +208,6 @@ export async function runWake(character: string, config: LoadedConfig, wake: Wak
   const thread = engine.thread;
   const log = seal === undefined ? await deps.workingLog?.(character) : undefined;
   if (log?.engine.thread === thread) {
-    addDiaryNote(characterDir, { at: deps.now?.() ?? Date.now(), thread: "", source: "shore", text: `You were to be woken in the thread "${thread}" by ${firedBy(wake.fired)}, but that is where Shore keeps the working from your wakes, so nothing ran. Name another thread for it, or none for your home thread.` });
     events.push({ kind: "call_failed", detail: `Wake skipped: "${thread}" keeps the working from wakes` });
     return { events };
   }
@@ -282,7 +262,6 @@ export async function runWake(character: string, config: LoadedConfig, wake: Wak
       ["send_message", toolEnabled(config.app.tools, "send_message") ? "yes" : ""],
     ]));
     const record = wakeRecord(characterDir, thread);
-    const recent = recentDiary(characterDir, nowMs);
     const status = presence(config.dirs.data);
     const fired = wake.fired.map((firing) => triggerFiredNote(firing, timeZone));
     const setOffBy = [...new Set(wake.fired.map((firing) => firing.name).filter((name) => name !== ""))].join(", ");
@@ -306,8 +285,6 @@ export async function runWake(character: string, config: LoadedConfig, wake: Wak
       await lastWroteNote(config.dirs.data, character, index, thread, userName, nowMs).catch(() => undefined),
       status === undefined || status.status === "" ? undefined : presenceText(status, nowMs, `${userName}'s`),
       seal === undefined ? sealedListNote(sealedThreads(characterDir), timeZone) : undefined,
-      keptNote(record, recent.notes, timeZone),
-      recent.notes.length === 0 ? undefined : diaryText(recent.notes, DIARY_FOR_WAKE, timeZone, recent.omitted),
       ...setOff,
     ].filter((part) => part !== undefined).join("\n\n"));
 
@@ -399,7 +376,7 @@ export async function runWake(character: string, config: LoadedConfig, wake: Wak
       return { events };
     }
     if (loop.failedRound !== undefined) await (log?.engine ?? engine).recoverInterruptedToolLoop("The wake ended before this tool returned a result.");
-    const kept = log === undefined ? undefined : keptWorkingSummary(working, { id: log.engine.thread, label: log.label }, noteShownLater(words.closing), {
+    const kept = log === undefined ? undefined : keptWorkingSummary(working, { id: log.engine.thread, label: log.label }, {
       msg_id: newId(),
       timestamp: (deps.nowIso ?? (() => new Date().toISOString()))(),
     });
@@ -421,7 +398,7 @@ export async function runWake(character: string, config: LoadedConfig, wake: Wak
     let sent: Message | undefined;
     for (const sending of sendings) sent = await postMessage(character, request, sending, heard, note, { thread, engine }, pictures) ?? sent;
     afterwards = async () => {
-      await postElsewhere(away, { character, from: thread, turn: "wake", characterDir, engine: async (name) => await deps.engine(character, name), now: deps.now }, request, heard, note, pictures);
+      await postElsewhere(away, { character, from: thread, turn: "wake", engine: async (name) => await deps.engine(character, name) }, request, heard, note, pictures);
     };
     const keptIn = sent === undefined && log !== undefined ? log.engine : engine;
     const newest = replyVersions(keptIn.messages()).filter((version) => !known.has(version)).at(-1);
@@ -431,12 +408,8 @@ export async function runWake(character: string, config: LoadedConfig, wake: Wak
     }
 
     const endedAt = deps.now?.() ?? Date.now();
-    if (TAGGED.test(words.closing)) addDiaryNote(characterDir, { at: endedAt, thread: "", source: "shore", text: tagsSentNothingNote(thread, userName) });
-    const noted = closingNote(words.closing);
-    const left = noted === undefined ? undefined : addDiaryNote(characterDir, { at: endedAt, thread, source: "wake", text: noted });
-    recordWakeEnd(characterDir, thread, record, { startedAt: nowMs, endedAt, limitMs: wake.limitMs, loop, words, sent: sent !== undefined || away.length > 0, note: left });
+    recordWakeEnd(characterDir, thread, record, { startedAt: nowMs, endedAt, limitMs: wake.limitMs, loop, words, sent: sent !== undefined || away.length > 0 });
     if (stopped === "interrupted") return { events, interrupted: true };
-    if (stopped !== undefined) addDiaryNote(characterDir, { at: endedAt, thread: "", source: "shore", text: wakeCutShortNote(stopped, thread, wake.limitMs) });
 
     const runner = heard.compaction;
     const settings = config.app.compaction;

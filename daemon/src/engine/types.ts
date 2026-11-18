@@ -42,15 +42,6 @@ export interface MessageAlternative {
   attempt?: string;
 }
 
-export interface DiaryNote {
-  id: string;
-  at: string;
-  thread: string;
-  source: "wake" | "trigger" | "shore" | "note";
-  trigger?: string;
-  text: string;
-}
-
 export interface Message {
   msg_id: string;
   role: Role;
@@ -67,9 +58,7 @@ export interface Message {
   version?: string;
   attempt?: string;
   last_elsewhere?: { thread: string; at: string };
-  diary?: DiaryNote[];
   wake_running?: { started_at: string; thread?: string | undefined };
   presence?: { status: string; set_at: string };
   shown_later?: string;
-  wake_note?: string;
 }

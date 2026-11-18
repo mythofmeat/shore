@@ -15,7 +15,6 @@ import { handleChatLogs, type ChatLogOptions } from "./history.ts";
 import { handleGenerateImage, type ImageGenConfigView, type ImageGenerator } from "./images.ts";
 import { handleModelHistory, type ModelHistoryQuery } from "./model_history.ts";
 import { handleListTriggers } from "./list_triggers.ts";
-import { addDiaryNote } from "../autonomy/diary.ts";
 import type { TriggersView } from "../autonomy/trigger_loop.ts";
 import { hostZone } from "../ledger/zoned.ts";
 import type { StartedSealedThread } from "./start_sealed_thread.ts";
@@ -217,13 +216,6 @@ export async function dispatchTool(
 
     case "list_triggers":
       return handleListTriggers(ctx.triggers?.(), ctx.userName ?? "the user");
-
-    case "write_diary": {
-      const text = typeof args["text"] === "string" ? args["text"].trim() : "";
-      if (text === "") throw new InvalidArgs("text must be a non-empty string");
-      addDiaryNote(ctx.characterDataDir, { at: Date.now(), thread: ctx.thread ?? "", source: "note", text });
-      return "Noted in your diary. Your other turns will see it for the next day.";
-    }
 
     case "wake_in_thread":
       return handleWakeInThread(args, ctx.thread, ctx.wakeInThread, ctx.userName ?? "the user");

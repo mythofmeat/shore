@@ -6,14 +6,13 @@ import { runDeepIdleArchive } from "./deep_archive.ts";
 import type { LastRequestCache } from "../cache/last_request.ts";
 import type { PostArchiveEngine } from "./post_archive.ts";
 import type { AutonomyActionResult, AutonomyExecutor, OpenedSeal, WakeHooks, WakeResult, WakeRun } from "./runner.ts";
-import { addDiaryNote } from "./diary.ts";
 import { runWake } from "./wake.ts";
 import { sealedFilesDir } from "../handler/sealed_thread.ts";
 import type { ToolContext } from "../tools/dispatch.ts";
 import type { CompactionReason } from "./tick.ts";
 import type { CharacterRegistry } from "../characters.ts";
 import { resolveDisplayName } from "../config/app.ts";
-import { characterDataDir, rustJoin } from "../config/dirs.ts";
+import { rustJoin } from "../config/dirs.ts";
 import type { LoadedConfig } from "../config/loader.ts";
 import { usageConfigView } from "../ledger/budget.ts";
 import type { Message } from "../engine/types.ts";
@@ -113,9 +112,6 @@ export class InProcessAutonomyExecutor implements AutonomyExecutor {
     const config = this.#deps.registry.effectiveConfig(character);
     const user = resolveDisplayName(config.app.chat, this.#deps.env);
     return opened.map((sealed) => {
-      addDiaryNote(characterDataDir(config.dirs.data, character), {
-        at: now, thread: sealed.id, source: "shore", text: `The seal on "${sealed.label}" came off. Its thread, \`${sealed.id}\`, is in ${user}'s thread list from now on, and you are being woken there.`,
-      });
       this.#deps.emitEvent?.({ type: "threads_changed", character, thread: sealed.id });
       return { thread: sealed.id, reason: `${user} can see this thread and everything in it from now on. This wake is for giving them what you made.` };
     });

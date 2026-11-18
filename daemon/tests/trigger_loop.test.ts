@@ -2,7 +2,6 @@ import { expect, test } from "bun:test";
 import { mkdtemp } from "node:fs/promises";
 import { join } from "node:path";
 
-import { keptDiary } from "../src/autonomy/diary.ts";
 import type { TriggerFiring } from "../src/autonomy/runner.ts";
 import type { CheckOutcome } from "../src/autonomy/trigger_check.ts";
 import { CharacterTriggers, type TriggerSettings } from "../src/autonomy/trigger_loop.ts";
@@ -26,7 +25,6 @@ interface World {
   woke: TriggerFiring[];
   triggers: CharacterTriggers;
   at: (minutes: number) => Promise<void>;
-  notes: () => [from: string, text: string][];
   restart: () => void;
 }
 
@@ -69,7 +67,6 @@ async function world(file: string | undefined, dir?: string): Promise<World> {
     w.now = T0 + minutes * MINUTE;
     await w.triggers.tick();
   };
-  w.notes = () => keptDiary(w.dir, Date.now()).map((note) => [note.source === "trigger" ? note.trigger ?? "" : note.source, note.text]);
   return w;
 }
 
@@ -87,7 +84,6 @@ test("a schedule starts counting when Shore first sees it, fires when its time c
   expect(w.woke).toHaveLength(1);
   await w.at(120);
   expect(w.woke).toHaveLength(2);
-  expect(w.notes()).toEqual([]);
   expect(w.ran).toEqual([]);
 });
 
@@ -119,7 +115,8 @@ test("nothing runs while triggers are off, and what comes due while the characte
   expect(asleep.ran).toEqual([]);
   await asleep.at(260);
   expect(asleep.woke).toEqual([{ name: "lamp", reason: "Trim the lamp.", at: T0 + 260 * MINUTE }]);
-  expect(asleep.notes()).toEqual([["tide", "The tide is out."]]);
+  expect(asleep.ran).toEqual([["tide", 60_000]]);
+  expect(asleep.triggers.view().triggers.map((each) => [each.trigger.name, each.fired])).toEqual([["lamp", 1], ["tide", 1]]);
 });
 
 test("a trigger that comes due during its cooldown waits for it to end, and its check isn't run until then", async () => {
@@ -139,24 +136,24 @@ test("a trigger that comes due during its cooldown waits for it to end, and its 
   expect(w.ran).toHaveLength(2);
 });
 
-test("a trigger with a check isn't run for a character without the bash tool, which it is told once, and runs once it has the tool", async () => {
-  const w = await world('[tide]\nevery = "1h"\ncheck = "tide.sh"\n\n[lamp]\nevery = "1h"\nreason = "Trim the lamp."\nwake = false\n');
+test("a trigger with a check isn't run for a character without the bash tool, which the list of its triggers says, and runs once it has the tool", async () => {
+  const w = await world('[tide]\nevery = "1h"\ncheck = "tide.sh"\n\n[lamp]\nevery = "1h"\nreason = "Trim the lamp."\n');
   w.settings = { ...w.settings, checks: false };
   w.checks["tide"] = { kind: "fired", output: "The tide is out." };
   await w.at(0);
   await w.at(60);
   await w.at(120);
   expect(w.ran).toEqual([]);
-  expect(w.woke).toEqual([]);
-  const told = "These triggers in TRIGGERS.toml aren't running:\n- `tide` isn't running: its `check` is a command, and you don't have the `bash` tool to run commands with";
-  expect(w.notes()).toEqual([["shore", told], ["lamp", "Trim the lamp."]]);
+  expect(w.woke.map((firing) => firing.name)).toEqual(["lamp", "lamp"]);
+  expect(w.triggers.view().problems).toEqual(["`tide` isn't running: its `check` is a command, and you don't have the `bash` tool to run commands with"]);
   expect(w.triggers.view().triggers.map((each) => each.trigger.name)).toEqual(["lamp"]);
 
   w.settings = { ...w.settings, checks: true };
   await w.at(121);
   await w.at(181);
   expect(w.ran).toEqual([["tide", 60_000]]);
-  expect(w.woke.map((firing) => [firing.name, firing.reason])).toEqual([["tide", "The tide is out."]]);
+  expect(w.triggers.view().problems).toEqual([]);
+  expect(w.woke.filter((firing) => firing.name === "tide").map((firing) => firing.reason)).toEqual(["The tide is out."]);
 });
 
 test("a quiet check does nothing, and one that prints fires with the trigger's reason above what it printed", async () => {
@@ -170,7 +167,6 @@ test("a quiet check does nothing, and one that prints fires with the trigger's r
   expect(w.ran).toHaveLength(1);
   await w.at(120);
   expect(w.woke).toEqual([{ name: "tide", reason: "Look at the shore.\nThe tide is out.", at: T0 + 2 * HOUR }]);
-  expect(w.notes()).toEqual([]);
 });
 
 test("when a check last ran is kept, whether it printed, stayed quiet or failed, and through a restart, and a trigger with no check has no such time", async () => {
@@ -180,7 +176,7 @@ test("when a check last ran is kept, whether it printed, stayed quiet or failed,
   expect(checked()).toEqual([undefined, undefined]);
   await w.at(60);
   expect(checked()).toEqual([T0 + HOUR, undefined]);
-  expect(w.triggers.view().triggers[0]).toMatchObject({ fired: 0, lastFiredAt: undefined, failing: false });
+  expect(w.triggers.view().triggers[0]).toMatchObject({ fired: 0, lastFiredAt: undefined, problem: undefined });
 
   w.checks["tide"] = { kind: "fired", output: "The tide is out." };
   await w.at(120);
@@ -188,22 +184,24 @@ test("when a check last ran is kept, whether it printed, stayed quiet or failed,
 
   w.checks["tide"] = { kind: "failed", problem: "it exited with status 2" };
   await w.at(180);
-  expect(w.triggers.view().triggers[0]).toMatchObject({ failing: true, lastFiredAt: T0 + 2 * HOUR, checkedAt: T0 + 3 * HOUR });
+  expect(w.triggers.view().triggers[0]).toMatchObject({ problem: "it exited with status 2", lastFiredAt: T0 + 2 * HOUR, checkedAt: T0 + 3 * HOUR });
   w.restart();
   await w.at(181);
   expect(checked()).toEqual([T0 + 3 * HOUR, undefined]);
+  expect(w.triggers.view().triggers[0]?.problem).toBe("it exited with status 2");
 
-  writeCharacterState(w.dir, "triggers.json", JSON.stringify({ records: { tide: { since: T0 + 181 * MINUTE, fired: 1, checkedAt: "then" } } }));
+  writeCharacterState(w.dir, "triggers.json", JSON.stringify({ records: { tide: { since: T0 + 181 * MINUTE, fired: 1, checkedAt: "then", problem: 2 } } }));
   await w.at(182);
   expect(checked()).toEqual([undefined, undefined]);
+  expect(w.triggers.view().triggers[0]?.problem).toBeUndefined();
 });
 
-test("a one-off that was to wake the character does so even when its check fails, saying why, and one that only leaves an entry says nothing will come of it", async () => {
+test("a one-off that was to wake the character does so even when its check fails, saying why, and one that never wakes is only kept as failing", async () => {
   const w = await world([
     '[call]\non = "2026-10-30 13:00"\ncheck = "call.sh"\nreason = "Time to call."\n',
     '[bare]\non = "2026-10-30 13:00"\ncheck = "bare.sh"\n',
     '[note]\non = "2026-10-30 13:00"\ncheck = "note.sh"\nwake = false\n',
-    '[after]\nfollows = "call"\nreason = "Write up the call."\nwake = false\n',
+    '[after]\nfollows = "call"\nreason = "Write up the call."\n',
     '[watch]\nevery = "1h"\ncheck = "watch.sh"\nreason = "Keep watch."\n',
   ].join("\n"));
   for (const name of ["call", "bare", "note", "watch"]) w.checks[name] = { kind: "failed", problem: "it exited with status 2" };
@@ -214,14 +212,13 @@ test("a one-off that was to wake the character does so even when its check fails
     { name: "call", reason: `Time to call.\n${woken}`, at: T0 + HOUR },
     { name: "bare", reason: woken, at: T0 + HOUR },
   ]);
-  expect(w.notes()).toEqual([
-    ["shore", "The check for your trigger `note` failed: it exited with status 2. It is a one-off, which gets no second try, so nothing will come of it."],
-    ["shore", "The check for your trigger `watch` failed: it exited with status 2. It keeps being tried, and you'll be told again only once it has worked and then failed again."],
-  ]);
-  expect(w.triggers.view().triggers.slice(0, 3).map((each) => [each.fired, each.failing, each.lastFiredAt, each.checkedAt, each.nextAt])).toEqual([
-    [1, true, T0 + HOUR, T0 + HOUR, undefined],
-    [1, true, T0 + HOUR, T0 + HOUR, undefined],
-    [0, true, undefined, T0 + HOUR, undefined],
+  const failed = "it exited with status 2";
+  expect(w.triggers.view().triggers.map((each) => [each.trigger.name, each.fired, each.problem, each.lastFiredAt, each.checkedAt, each.nextAt])).toEqual([
+    ["call", 1, failed, T0 + HOUR, T0 + HOUR, undefined],
+    ["bare", 1, failed, T0 + HOUR, T0 + HOUR, undefined],
+    ["note", 0, failed, undefined, T0 + HOUR, undefined],
+    ["after", 0, undefined, undefined, undefined, undefined],
+    ["watch", 0, failed, undefined, T0 + HOUR, T0 + 2 * HOUR],
   ]);
 
   await w.at(61);
@@ -232,7 +229,7 @@ test("a one-off that was to wake the character does so even when its check fails
   expect(w.woke).toHaveLength(2);
   await w.triggers.finished(["call"]);
   await w.at(121);
-  expect(w.notes().map(([from]) => from)).toEqual(["shore", "shore", "after"]);
+  expect(w.woke.map((firing) => firing.name)).toEqual(["call", "bare", "after"]);
 });
 
 test("a one-off stays listed as fired with no next time, and a later time written in its place arms it again with no cooldown to wait out", async () => {
@@ -258,42 +255,41 @@ test("a one-off stays listed as fired with no next time, and a later time writte
   expect(w.triggers.view().triggers[0]).toMatchObject({ fired: 2, lastFiredAt: T0 + 90 * MINUTE, nextAt: undefined });
 });
 
-test("a failing check is reported once, and again only after it has worked in between", async () => {
+test("a failing check is kept with what went wrong until it works again, and nobody is woken for it", async () => {
   const w = await world('[tide]\nevery = "10m"\ncheck = "tide.sh"\nwake = false\n');
-  const failed = "The check for your trigger `tide` failed: it exited with status 2. It keeps being tried, and you'll be told again only once it has worked and then failed again.";
+  const tide = (): unknown => w.triggers.view().triggers[0];
   w.checks["tide"] = { kind: "failed", problem: "it exited with status 2" };
   await w.at(0);
   await w.at(10);
-  expect(w.notes()).toEqual([["shore", failed]]);
+  expect(tide()).toMatchObject({ problem: "it exited with status 2", fired: 0, lastFiredAt: undefined });
   await w.at(20);
   expect(w.ran).toHaveLength(2);
-  expect(w.notes()).toHaveLength(1);
-  expect(w.triggers.view().triggers[0]).toMatchObject({ failing: true, fired: 0, lastFiredAt: undefined });
+  expect(tide()).toMatchObject({ problem: "it exited with status 2", fired: 0, checkedAt: T0 + 20 * MINUTE });
 
   w.checks["tide"] = { kind: "quiet" };
   await w.at(30);
-  expect(w.triggers.view().triggers[0]?.failing).toBe(false);
-  w.checks["tide"] = { kind: "failed", problem: "it exited with status 2" };
+  expect(tide()).toMatchObject({ problem: undefined, fired: 0 });
+  w.checks["tide"] = { kind: "failed", problem: "it was still running at its time limit and was stopped" };
   await w.at(40);
-  expect(w.notes()).toEqual([["shore", failed], ["shore", failed]]);
+  expect(tide()).toMatchObject({ problem: "it was still running at its time limit and was stopped" });
 
   w.checks["tide"] = { kind: "fired", output: "The tide is out." };
   await w.at(50);
-  expect(w.triggers.view().triggers[0]).toMatchObject({ failing: false, fired: 1, lastFiredAt: T0 + 50 * MINUTE });
+  expect(tide()).toMatchObject({ problem: undefined, fired: 1, lastFiredAt: T0 + 50 * MINUTE });
   expect(w.woke).toEqual([]);
 });
 
-test("a trigger that doesn't wake leaves a diary entry in its own name, with no cooldown unless it sets one", async () => {
+test("a trigger that doesn't wake runs its check each time it comes due, and wakes nobody whatever the check prints", async () => {
   const w = await world('[tide]\nevery = "10m"\ncheck = "tide.sh"\nwake = false\n');
   w.checks["tide"] = { kind: "fired", output: "The tide is out." };
   await w.at(0);
   await w.at(10);
-  expect(w.notes()).toEqual([["tide", "The tide is out."]]);
+  expect(w.triggers.view().triggers[0]).toMatchObject({ fired: 1, lastFiredAt: T0 + 10 * MINUTE });
   w.checks["tide"] = { kind: "fired", output: "The tide is in." };
   await w.at(20);
-  expect(w.notes()).toEqual([["tide", "The tide is in."]]);
+  expect(w.triggers.view().triggers[0]).toMatchObject({ fired: 2, lastFiredAt: T0 + 20 * MINUTE });
+  expect(w.ran).toEqual([["tide", 60_000], ["tide", 60_000]]);
   expect(w.woke).toEqual([]);
-  expect(keptDiary(w.dir, Date.now())[0]).toMatchObject({ at: new Date(T0 + 20 * MINUTE).toISOString(), thread: "", source: "trigger", trigger: "tide" });
 });
 
 test("a trigger that comes due outside its hours is skipped, not held until they open", async () => {
@@ -378,7 +374,7 @@ test("a trigger for a status change waits for one, and for its own cooldown, wit
   expect(off.woke).toEqual([]);
 });
 
-test("a follower fires after the trigger it names: at once when that one left a note, and after its wake is finished when it woke the character", async () => {
+test("a follower fires after the trigger it names: at the next look when that one doesn't wake, and after its wake is finished when it woke the character", async () => {
   const w = await world([
     '[recap]\nfollows = "tide"\nreason = "Write up the tide."\ncooldown = "1m"\n',
     '[tide]\nevery = "1h"\ncheck = "tide.sh"\nwake = false\n',
@@ -421,24 +417,24 @@ test("a trigger switched off doesn't fire or run its check until it is switched 
   expect(w.ran).toEqual([["tide", 60_000]]);
 });
 
-test("triggers that don't make sense are reported to the character once, and again when what's wrong changes", async () => {
+test("triggers that don't make sense are listed as not running, and the list follows the file", async () => {
   const w = await world('[lamp]\nreason = "Trim the lamp."\n\n[tide]\nevery = "1h"\nreason = "Look."\n');
   const lamp = "`lamp` isn't running: it needs exactly one of `every`, `at`, `on`, `when` or `follows` to say when it fires";
   await w.at(0);
   await w.at(1);
-  expect(w.notes()).toEqual([["shore", `These triggers in TRIGGERS.toml aren't running:\n- ${lamp}`]]);
   expect(w.triggers.view().problems).toEqual([lamp]);
+  expect(w.triggers.view().triggers.map((each) => each.trigger.name)).toEqual(["tide"]);
 
   w.file = HOURLY;
   await w.at(2);
-  expect(w.notes()).toHaveLength(1);
   expect(w.triggers.view().problems).toEqual([]);
 
   w.file = '[lamp]\nevery = "1h"\n\n[ferry]\nat = "noon"\nreason = "r"\n';
   await w.at(3);
-  expect(w.notes()).toHaveLength(2);
-  expect(w.notes()[1]?.[1]).toStartWith("These triggers in TRIGGERS.toml aren't running:\n- `lamp` isn't running: it needs a `reason`");
-  expect(w.notes()[1]?.[1]).toContain("\n- `ferry` isn't running: `at` must be");
+  expect(w.triggers.view().problems).toHaveLength(2);
+  expect(w.triggers.view().problems[0]).toStartWith("`lamp` isn't running: it needs a `reason`");
+  expect(w.triggers.view().problems[1]).toStartWith("`ferry` isn't running: `at` must be");
+  expect(w.woke).toEqual([]);
 });
 
 test("an edited file is picked up at the next look, a trigger taken out and put back starts over, and a file that can't be read changes nothing", async () => {
@@ -481,7 +477,7 @@ test("what is known about each trigger survives a restart, and state that can't 
   w.restart();
   expect(w.triggers.view().triggers).toEqual([]);
   await w.at(61);
-  expect(w.triggers.view().triggers[0]).toMatchObject({ fired: 1, lastFiredAt: T0 + HOUR, off: false, failing: false, nextAt: T0 + 2 * HOUR });
+  expect(w.triggers.view().triggers[0]).toMatchObject({ fired: 1, lastFiredAt: T0 + HOUR, off: false, problem: undefined, nextAt: T0 + 2 * HOUR });
 
   writeCharacterState(w.dir, "triggers.json", "{not json");
   await w.at(120);
@@ -504,63 +500,6 @@ test("a check that throws doesn't stop the triggers from being looked at again",
   w.checks["tide"] = { kind: "fired", output: "The tide is out." };
   await w.at(11);
   expect(w.woke).toEqual([{ name: "tide", reason: "The tide is out.", at: T0 + 11 * MINUTE }]);
-});
-
-const BACK = '[welcome]\nwhen = "user_back"\nafter = "8h"\nreason = "They were away a while."\n';
-
-test("a trigger for the user's return leaves its entry as they arrive, only when they were away long enough, and never from the regular look", async () => {
-  const w = await world(BACK);
-  await w.at(0);
-  await w.at(600);
-  expect(w.notes()).toEqual([]);
-  await w.triggers.userBack(8 * HOUR - 1);
-  expect(w.notes()).toEqual([]);
-  await w.triggers.userBack(8 * HOUR);
-  expect(w.notes()).toEqual([["welcome", "They were away a while."]]);
-  expect(w.woke).toEqual([]);
-  expect(w.triggers.view().triggers[0]).toMatchObject({ fired: 1, lastFiredAt: T0 + 600 * MINUTE, nextAt: undefined });
-});
-
-test("the check of a trigger for the user's return gets ten seconds at most, since their reply waits on it", async () => {
-  const w = await world('[welcome]\nwhen = "user_back"\nafter = "8h"\ncheck = "welcome.sh"\ncooldown = "1h"\nbetween = "08:00-23:00"\n');
-  w.checks["welcome"] = { kind: "fired", output: "Three days since the last note." };
-  await w.triggers.userBack(9 * HOUR);
-  expect(w.ran).toEqual([["welcome", 10_000]]);
-  expect(w.notes()).toEqual([["welcome", "Three days since the last note."]]);
-
-  w.now = T0 + 59 * MINUTE;
-  await w.triggers.userBack(9 * HOUR);
-  expect(w.ran).toHaveLength(1);
-  w.now = T0 + HOUR;
-  w.settings = { ...w.settings, checkLimitMs: 4_000 };
-  await w.triggers.userBack(9 * HOUR);
-  expect(w.ran).toEqual([["welcome", 10_000], ["welcome", 4_000]]);
-
-  w.now = T0 + 12 * HOUR;
-  await w.triggers.userBack(9 * HOUR);
-  expect(w.ran).toHaveLength(2);
-});
-
-test("a trigger for the user's return works while the character is dormant, but not when it is switched off or triggers are off", async () => {
-  const w = await world(BACK);
-  w.dormant = true;
-  await w.triggers.userBack(9 * HOUR);
-  expect(w.notes()).toHaveLength(1);
-
-  const off = await world(BACK);
-  off.settings = { ...off.settings, off: ["welcome"] };
-  await off.triggers.userBack(9 * HOUR);
-  off.settings = { ...off.settings, off: [], enabled: false };
-  await off.triggers.userBack(9 * HOUR);
-  expect(off.notes()).toEqual([]);
-  off.settings = { ...off.settings, enabled: true };
-  await off.triggers.userBack(9 * HOUR);
-  expect(off.notes()).toHaveLength(1);
-
-  const other = await world(HOURLY);
-  await other.triggers.userBack(9 * HOUR);
-  expect(other.woke).toEqual([]);
-  expect(other.notes()).toEqual([]);
 });
 
 test("a one-off fires once at its time, late if Shore wasn't looking then, and never if its time had passed when it was added", async () => {

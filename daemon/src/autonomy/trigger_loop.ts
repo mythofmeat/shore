@@ -1,17 +1,10 @@
 import { shoreLog } from "../log.ts";
 import { readCharacterState, writeCharacterState } from "../storage/store.ts";
-import { addDiaryNote } from "./diary.ts";
 import type { TriggerFiring } from "./runner.ts";
 import type { CheckOutcome } from "./trigger_check.ts";
 import { coolingDown, inItsHours, parseTriggers, scheduledAt, TRIGGERS_FILE, type ParsedTriggers, type Trigger } from "./triggers.ts";
 
 const TRIGGER_STATE = "triggers.json";
-
-export const ARRIVAL_CHECK_LIMIT_MS = 10_000;
-
-export function arrivalCheckLimitMs(checkLimitMs: number): number {
-  return Math.min(checkLimitMs, ARRIVAL_CHECK_LIMIT_MS);
-}
 
 export interface TriggerRecord {
   since: number;
@@ -19,13 +12,12 @@ export interface TriggerRecord {
   lastFiredAt?: number;
   quietFor?: number;
   checkedAt?: number;
-  failing?: true;
+  problem?: string;
   pending?: true;
 }
 
 interface TriggerState {
   records: Record<string, TriggerRecord>;
-  problems: string[];
 }
 
 export interface TriggerSettings {
@@ -52,7 +44,7 @@ export interface TriggerLoopDeps {
 export interface TriggerView {
   trigger: Trigger;
   off: boolean;
-  failing: boolean;
+  problem: string | undefined;
   fired: number;
   lastFiredAt: number | undefined;
   checkedAt: number | undefined;
@@ -67,7 +59,7 @@ export interface TriggersView {
 
 function record(raw: unknown): TriggerRecord | undefined {
   if (typeof raw !== "object" || raw === null) return undefined;
-  const { since, fired, lastFiredAt, quietFor, checkedAt, failing, pending } = raw as Record<string, unknown>;
+  const { since, fired, lastFiredAt, quietFor, checkedAt, problem, pending } = raw as Record<string, unknown>;
   if (typeof since !== "number" || typeof fired !== "number") return undefined;
   return {
     since,
@@ -75,16 +67,9 @@ function record(raw: unknown): TriggerRecord | undefined {
     ...(typeof lastFiredAt === "number" ? { lastFiredAt } : {}),
     ...(typeof quietFor === "number" ? { quietFor } : {}),
     ...(typeof checkedAt === "number" ? { checkedAt } : {}),
-    ...(failing === true ? { failing } : {}),
+    ...(typeof problem === "string" ? { problem } : {}),
     ...(pending === true ? { pending } : {}),
   };
-}
-
-export function checkFailedNote(trigger: string, problem: string, oneOff: boolean): string {
-  const failed = `The check for your trigger \`${trigger}\` failed: ${problem}.`;
-  return oneOff
-    ? `${failed} It is a one-off, which gets no second try, so nothing will come of it.`
-    : `${failed} It keeps being tried, and you'll be told again only once it has worked and then failed again.`;
 }
 
 export function wokenWithoutCheckNote(problem: string): string {
@@ -93,10 +78,6 @@ export function wokenWithoutCheckNote(problem: string): string {
 
 function eventOf(trigger: Trigger): string | undefined {
   return trigger.when.kind === "event" ? trigger.when.event : undefined;
-}
-
-function arrives(trigger: Trigger): boolean {
-  return eventOf(trigger) === "user_back";
 }
 
 export class CharacterTriggers {
@@ -115,11 +96,10 @@ export class CharacterTriggers {
       const resting = this.#deps.dormant();
       await this.#load(settings);
       const state = this.#state();
-      this.#reportProblems(state);
       const running = new Set(this.#parsed.triggers.map((trigger) => trigger.name));
       state.records = Object.fromEntries(Object.entries(state.records).filter(([name]) => running.has(name)));
       for (const trigger of this.#parsed.triggers) {
-        if (settings.off.includes(trigger.name) || arrives(trigger)) continue;
+        if (settings.off.includes(trigger.name)) continue;
         const now = this.#deps.now();
         const known = state.records[trigger.name] ?? { since: now, fired: 0 };
         state.records[trigger.name] = known;
@@ -128,25 +108,7 @@ export class CharacterTriggers {
         const { pending: _was, quietFor: _before, ...kept } = known;
         const next: TriggerRecord = { ...kept, since: now, ...(last === undefined ? {} : { quietFor: last }) };
         state.records[trigger.name] = next;
-        if (!resting && inItsHours(trigger.between, now, this.#deps.timeZone)) await this.#run(trigger, next, settings, settings.checkLimitMs, state);
-      }
-      this.#save(state);
-    });
-  }
-
-  async userBack(awayMs: number): Promise<void> {
-    await this.#inTurn(async () => {
-      const settings = this.#deps.settings();
-      if (!settings.enabled) return;
-      await this.#load(settings);
-      const state = this.#state();
-      for (const trigger of this.#parsed.triggers) {
-        if (settings.off.includes(trigger.name) || !arrives(trigger)) continue;
-        const now = this.#deps.now();
-        const known = state.records[trigger.name] ?? { since: now, fired: 0 };
-        if (trigger.when.kind !== "event" || awayMs < trigger.when.afterMs) continue;
-        if (coolingDown(trigger.cooldownMs, known.lastFiredAt, now) || !inItsHours(trigger.between, now, this.#deps.timeZone)) continue;
-        await this.#run(trigger, known, settings, arrivalCheckLimitMs(settings.checkLimitMs), state);
+        if (!resting && inItsHours(trigger.between, now, this.#deps.timeZone)) await this.#run(trigger, next, settings, state);
       }
       this.#save(state);
     });
@@ -184,7 +146,7 @@ export class CharacterTriggers {
         return {
           trigger,
           off: settings.off.includes(trigger.name),
-          failing: known?.failing === true,
+          problem: known?.problem,
           fired: known?.fired ?? 0,
           lastFiredAt: known?.lastFiredAt,
           checkedAt: known?.checkedAt,
@@ -220,24 +182,15 @@ export class CharacterTriggers {
         const known = record(raw);
         return known === undefined ? [] : [[name, known] as const];
       });
-      const problems = Array.isArray(parsed["problems"]) ? parsed["problems"].filter((problem): problem is string => typeof problem === "string") : [];
-      return { records: Object.fromEntries(records), problems };
+      return { records: Object.fromEntries(records) };
     } catch (error) {
       shoreLog.error(`shore: could not read trigger state at ${this.#deps.characterDir}: ${String(error)}`);
-      return { records: {}, problems: [] };
+      return { records: {} };
     }
   }
 
   #save(state: TriggerState): void {
     writeCharacterState(this.#deps.characterDir, TRIGGER_STATE, JSON.stringify(state));
-  }
-
-  #reportProblems(state: TriggerState): void {
-    const problems = this.#parsed.problems;
-    if (problems.join("\n") === state.problems.join("\n")) return;
-    state.problems = [...problems];
-    if (problems.length === 0) return;
-    this.#tell(`These triggers in ${TRIGGERS_FILE} aren't running:\n${problems.map((problem) => `- ${problem}`).join("\n")}`);
   }
 
   #due(trigger: Trigger, known: TriggerRecord, now: number): boolean {
@@ -249,22 +202,21 @@ export class CharacterTriggers {
     return at === undefined ? known.pending === true : now >= at;
   }
 
-  async #run(trigger: Trigger, known: TriggerRecord, settings: TriggerSettings, limitMs: number, state: TriggerState): Promise<void> {
-    const outcome: CheckOutcome = trigger.check === undefined ? { kind: "fired", output: "" } : await this.#deps.runCheck(trigger, limitMs);
+  async #run(trigger: Trigger, known: TriggerRecord, settings: TriggerSettings, state: TriggerState): Promise<void> {
+    const outcome: CheckOutcome = trigger.check === undefined ? { kind: "fired", output: "" } : await this.#deps.runCheck(trigger, settings.checkLimitMs);
     const now = this.#deps.now();
-    const { failing: wasFailing, ...before } = known;
+    const { problem: _before, ...before } = known;
     const sound: TriggerRecord = trigger.check === undefined ? before : { ...before, checkedAt: now };
     const oneOff = trigger.when.kind === "once";
     if (outcome.kind === "failed" && !(oneOff && trigger.wakes)) {
-      state.records[trigger.name] = { ...sound, failing: true };
-      if (wasFailing !== true) this.#tell(checkFailedNote(trigger.name, outcome.problem, oneOff));
+      state.records[trigger.name] = { ...sound, problem: outcome.problem };
       return;
     }
     state.records[trigger.name] = sound;
     if (outcome.kind === "quiet") return;
     const said = outcome.kind === "failed" ? wokenWithoutCheckNote(outcome.problem) : outcome.output;
     const reason = [trigger.reason ?? "", said].filter((part) => part !== "").join("\n");
-    state.records[trigger.name] = { ...sound, ...(outcome.kind === "failed" ? { failing: true as const } : {}), fired: sound.fired + 1, lastFiredAt: now };
+    state.records[trigger.name] = { ...sound, ...(outcome.kind === "failed" ? { problem: outcome.problem } : {}), fired: sound.fired + 1, lastFiredAt: now };
     if (trigger.wakes) {
       this.#deps.wake({
         name: trigger.name, reason, at: now,
@@ -273,7 +225,6 @@ export class CharacterTriggers {
       });
       return;
     }
-    addDiaryNote(this.#deps.characterDir, { at: now, thread: "", source: "trigger", trigger: trigger.name, text: reason });
     this.#letFollow(state, (follower) => follower.when.kind === "follows" && follower.when.trigger === trigger.name);
   }
 
@@ -282,9 +233,5 @@ export class CharacterTriggers {
     for (const follower of this.#parsed.triggers.filter(follows)) {
       state.records[follower.name] = { ...(state.records[follower.name] ?? { since: now, fired: 0 }), pending: true };
     }
-  }
-
-  #tell(text: string): void {
-    addDiaryNote(this.#deps.characterDir, { at: this.#deps.now(), thread: "", source: "shore", text });
   }
 }

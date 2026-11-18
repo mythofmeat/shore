@@ -3,7 +3,7 @@ import { required } from "../util/required.ts";
 import builtinSystemTemplate from "../../prompts/engine/builtin_system.md" with { type: "text" };
 import threadTemplate from "../../prompts/engine/thread.md" with { type: "text" };
 import { hostZone, naiveInZone, partsOf } from "../ledger/zoned";
-import type { ContentBlock, DiaryNote, ImageRef, Message, Role } from "./types";
+import type { ContentBlock, ImageRef, Message, Role } from "./types";
 import { estimateTokens, withSafetyMargin } from "./tokens.ts";
 import { withDynamicBlocksLast } from "../llm/system_boundary.ts";
 import { unsentNotice } from "./embeds.ts";
@@ -36,12 +36,6 @@ const THREAD_TEMPLATE = threadTemplate.trimEnd();
 
 const THREAD_FILES_HEADER =
   "Files kept in this thread's prompt. Changes to them show up here after a long pause in this thread, or after it compacts.";
-
-export const DIARY_FOR_WAKE = "Your diary from the last day. Each entry says where it came from.";
-
-export const DIARY_FOR_CHAT = "New in your diary. Each entry says where it came from.";
-
-const DIARY_END = "[End of your diary.]";
 
 export type UserTimestampMode = "never" | "always" | "auto";
 
@@ -264,8 +258,7 @@ export function estimateMessageTokens(
   msg: Message,
   tier: ImageTier = HIGH_RESOLUTION_IMAGE_TIER,
 ): number {
-  const diary = (msg.diary ?? []).reduce((total, note) => total + estimateTokens(note.text), 0);
-  return diary + msg.content_blocks.reduce(
+  return msg.content_blocks.reduce(
     (total, block) => total + estimateBlockTokens(block, tier),
     isToolResultOnly(msg) ? 0 : msg.images.reduce((total, image) => image.embed === undefined ? total + attachedImageTokens(image, tier) : total, 0),
   );
@@ -354,18 +347,6 @@ export function wakeRunningText(running: NonNullable<Message["wake_running"]>, t
   return `[A wake of yours in ${where} has been running since ${since}. It can't see this conversation. It is only told that a message arrived.]`;
 }
 
-function noteFrom(note: DiaryNote): string {
-  if (note.source === "trigger") return `from your trigger "${note.trigger ?? ""}"`;
-  if (note.source === "note") return `your note, written in "${note.thread}"`;
-  return note.source === "shore" ? "from Shore" : `your note at the end of a wake in "${note.thread}"`;
-}
-
-export function diaryText(notes: readonly DiaryNote[], heading: string, timeZone: string, omitted = 0): string {
-  const left = omitted === 0 ? [] : [`(Earlier entries not shown: ${String(omitted)}.)`];
-  const shown = notes.map((note) => `${noteFrom(note)} · ${formatWallClock(Date.parse(note.at), timeZone)}\n${note.text}`);
-  return [`[${heading}]`, ...left, ...shown, DIARY_END].join("\n\n");
-}
-
 export function formatWallClock(instantMs: number, timeZone: string): string {
   const naive = naiveInZone(instantMs, timeZone);
   const { year, month, day, hour } = partsOf(naive);
@@ -421,7 +402,7 @@ function trimMessages(
   timeZone: string,
   imageTier: ImageTier,
 ): PromptMessage[] {
-  const selected: { pm: PromptMessage; ts: string; wake: boolean; elsewhere: Message["last_elsewhere"]; diary: Message["diary"]; running: Message["wake_running"]; presence: Message["presence"] }[] = [];
+  const selected: { pm: PromptMessage; ts: string; wake: boolean; elsewhere: Message["last_elsewhere"]; running: Message["wake_running"]; presence: Message["presence"] }[] = [];
   let usedTokens = 0;
 
   for (let i = messages.length - 1; i >= 0; i--) {
@@ -441,7 +422,6 @@ function trimMessages(
       ts: msg.timestamp,
       wake: msg.role === "assistant" && msg.origin === "autonomous",
       elsewhere: msg.last_elsewhere,
-      diary: msg.diary,
       running: msg.wake_running,
       presence: msg.presence,
     });
@@ -470,7 +450,7 @@ function trimMessages(
     return pm;
   };
 
-  for (const { pm, ts, wake, elsewhere, diary, running, presence } of selected) {
+  for (const { pm, ts, wake, elsewhere, running, presence } of selected) {
     const currentMs = parseRfc3339(ts);
 
     if (wake) result.push(noticed(syntheticUserTurn(wakeMarker(currentMs, mode, timeZone))));
@@ -515,12 +495,6 @@ function trimMessages(
 
     if (running !== undefined) {
       const text = wakeRunningText(running, timeZone);
-      pm.content = `${text}\n\n${pm.content}`;
-      pm.content_blocks = [{ type: "text", text }, ...pm.content_blocks];
-    }
-
-    if (diary !== undefined) {
-      const text = diaryText(diary, DIARY_FOR_CHAT, timeZone);
       pm.content = `${text}\n\n${pm.content}`;
       pm.content_blocks = [{ type: "text", text }, ...pm.content_blocks];
     }

@@ -1468,33 +1468,6 @@ wire_types! {
         pub choices: Vec<String>,
     }
 
-    #[serde(deny_unknown_fields)]
-    #[derive(Default)]
-    pub struct DiaryArgs {
-        #[serde(default, skip_serializing_if = "Option::is_none")]
-        pub count: Option<u32>,
-    }
-
-    #[serde(rename_all = "snake_case")]
-    pub enum DiarySource { Wake, Trigger, Shore, Note }
-
-    pub struct DiaryEntry {
-        pub at: String,
-        pub thread: String,
-        pub source: DiarySource,
-        #[serde(default, skip_serializing_if = "Option::is_none")]
-        #[ts(optional)]
-        pub trigger: Option<String>,
-        pub text: String,
-        pub shown: bool,
-    }
-
-    pub struct DiaryResult {
-        pub character: String,
-        pub notes: Vec<DiaryEntry>,
-        pub kept: u32,
-    }
-
     #[serde(rename_all = "snake_case")]
     pub enum KeepaliveRequestSource { CachedLastRequest, RebuiltFromDisk }
 
@@ -3058,7 +3031,6 @@ operations! {
     ReadSubagentTraces: "subagent_trace" (SubagentTraceArgs) => SubagentTraceResult,
     StartWake: "wake_now" (EmptyOperationArgs) => WakeControlResult,
     Presence: "presence" (PresenceArgs) => PresenceResult,
-    ReadDiary: "diary" (DiaryArgs) => DiaryResult,
     SetDormant: "set_dormant" (EmptyOperationArgs) => WakeControlResult,
     SetActive: "set_active" (EmptyOperationArgs) => WakeControlResult,
     PingKeepalive: "keepalive_ping_now" (EmptyOperationArgs) => KeepalivePingResult,

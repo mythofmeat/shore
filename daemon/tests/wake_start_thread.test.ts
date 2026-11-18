@@ -29,7 +29,7 @@ function threadToolsProvider(toolResults: string[], calls: GenerateResponse["con
     for (const result of results) toolResults.push(JSON.stringify(result));
     const call = waking ? calls[toolResults.length] : undefined;
     const blocks: GenerateResponse["content_blocks"] = call === undefined
-      ? [{ type: "text", text: waking ? "NO_NOTE" : "hello" }]
+      ? [{ type: "text", text: waking ? "Done." : "hello" }]
       : [call];
     return {
       model: request.model,

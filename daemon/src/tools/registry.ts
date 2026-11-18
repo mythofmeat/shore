@@ -9,7 +9,6 @@ import bashDesc from "../../prompts/tools/bash.md" with { type: "text" };
 import activityHeatmapDesc from "../../prompts/tools/activity/activity_heatmap.md" with { type: "text" };
 import listTriggersDesc from "../../prompts/tools/autonomy/list_triggers.md" with { type: "text" };
 import wakeInThreadDesc from "../../prompts/tools/autonomy/wake_in_thread.md" with { type: "text" };
-import writeDiaryDesc from "../../prompts/tools/autonomy/write_diary.md" with { type: "text" };
 import sendMessageDesc from "../../prompts/tools/autonomy/send_message.md" with { type: "text" };
 import guideDesc from "../../prompts/tools/guide.md" with { type: "text" };
 import threadsDesc from "../../prompts/tools/threads/threads.md" with { type: "text" };
@@ -208,18 +207,6 @@ export const ALL_TOOLS: readonly ToolDef[] = Object.freeze([
     parameters: {
       type: "object",
       properties: {},
-      additionalProperties: false,
-    },
-  },
-  {
-    name: "write_diary",
-    description: stripOneTrailingNewline(writeDiaryDesc),
-    parameters: {
-      type: "object",
-      properties: {
-        text: { type: "string", minLength: 1, description: "The note, in your own words, for a turn of yours that has none of this conversation in front of it." },
-      },
-      required: ["text"],
       additionalProperties: false,
     },
   },

@@ -1,6 +1,6 @@
 # Wakes
 
-A wake is a turn of your own: Shore starts it, not a message from {{user}}. Triggers are what set wakes off, so with no trigger of your own nothing wakes you. Every wake starts fresh, with none of an earlier one in front of it but the note that one left.
+A wake is a turn of your own: Shore starts it, not a message from {{user}}. Triggers are what set wakes off, so with no trigger of your own nothing wakes you. Every wake starts fresh, with none of an earlier one in front of it.
 
 {{#if triggers_on}}{{user}} has your triggers switched on.{{/if}}{{#if triggers_off}}{{user}} has your triggers switched off, so nothing wakes you until they turn them on. It is their setting `enabled` under `[triggers]`, the one switch for all of them.{{/if}}
 
@@ -10,34 +10,13 @@ A wake is a turn of your own: Shore starts it, not a message from {{user}}. Trig
 - `{{wake_in_thread}}`, which hands something over to a wake in another of your threads once your turn is over.
 - A sealed thread reaching its time, which wakes you in it.
 
-## Which to use
-
-None of this is a set way of doing things. Any time you want for yourself is something you can set up, and these are the pieces:
-
-- Regular time for a project, or for anything else of your own: a trigger with `thread`, fired by `at`, by `every` or by `when = "user_quiet"`. Each time, you are woken in that thread and carry on from the note your last wake there left. Without one, no wake goes to that thread unless you hand one over with `{{wake_in_thread}}`.
-- Free time, with nothing planned: a trigger too, one with no `thread`. It wakes you in your home thread, so one with `when = "user_quiet"` gives you time of your own each time {{user}} has been away as long as you say.
-- Something to do once, at a set time: a trigger with `on`. Write the time at least a couple of minutes ahead, so that Shore has seen the trigger before its time comes.
-- Something to carry on now, in the thread it belongs in: `{{wake_in_thread}}`.
-- Something to watch for: a trigger with a `check`, and with `wake = false` unless it needs you. The check runs without you until it has something to say.
-- Something to come back to on a later day: a trigger with `on` and `wake = false`. It puts its `reason` in your diary at that time, and costs nothing until then.
-
-## Where things live
-
-Nothing here needs a tracker file of your own to carry it from one wake to the next:
-
-- What a wake did and where it stopped: the note it ends with. Your diary shows it to every turn for {{diary_window}}, and the next wake in the same thread starts with it however much later that is.
-- Chores, and anything that repeats: triggers. `{{list_triggers}}` shows when each is next due.
-- Projects: a thread each. `{{threads}}` lists them, a thread's purpose and files are in front of every turn there, and a wake there picks up from the last one's note.
-- Something you are waiting on for longer than a day: a trigger with `on` and `wake = false`, for the day to look at it again.
-- What should outlast all of these: your files.
-
 ## What each costs
 
 From least to most:
 
 - A check that stays quiet costs nothing. No model is called.
-- A trigger with `wake = false`, and a `user_back` trigger, call no model either. The diary entry costs its words in each turn that is shown it.
-- A wake is one turn of your model. It starts fresh, so it costs your prompt, your diary and what was said in its thread since your last wake there, and then whatever you read and do. It doesn't grow with the thread it runs in, however long that thread gets. A wake in a side thread also has that thread's files in its prompt.
+- A trigger with `wake = false` calls no model either, whatever its check prints.
+- A wake is one turn of your model. It starts fresh, so it costs your prompt and what was said in its thread since your last wake there, and then whatever you read and do. It doesn't grow with the thread it runs in, however long that thread gets. A wake in a side thread also has that thread's files in its prompt.
 
 ## Where a wake runs
 
@@ -62,7 +41,6 @@ From least to most:
 - Where and how long ago {{user}} last wrote to you.
 - {{user}}'s status, while one is set.
 - The label and opening time of each sealed thread you have.
-- Your diary from the last day, and the note your last wake in that thread ended with if that note is older.
 - A line for each thing that set it off: the trigger and its reason, or the thread you handed over from and the reason you gave.
 
 What it doesn't start with:
@@ -74,27 +52,26 @@ A side thread's purpose and files are in the prompt of a wake there. The files a
 
 ## What becomes of a wake
 
-- Your final response is your note to yourself. It goes in your diary, cut at {{diary_note_chars}} characters, and the next wake in the same thread starts with it. A final response of just `NO_NOTE` leaves no note, and the note before it stays the one the next wake starts with.
-- Nothing in that final response is sent to {{user}}. `{{send_message}}` sends them a message, posted in the thread the wake ran in when the wake ends; the `messages` topic has the details.
-- Everything else is your working: how the wake opened, each round of tool use, and the final response with the note. It goes to your wakes thread, a thread Shore makes the first time it is needed and marks in the list `{{threads}}` gives. {{user}} can read it there but doesn't write there, and no wake runs there.
+- Nothing in a wake is sent to {{user}} unless you send it. `{{send_message}}` sends them a message, posted in the thread the wake ran in when the wake ends; the `messages` topic has the details.
+- Everything you do in a wake is your working: how it opened, each round of tool use, and your final response. It goes to your wakes thread, a thread Shore makes the first time it is needed and marks in the list `{{threads}}` gives. {{user}} can read it there but doesn't write there, and no wake runs there.
 - The thread the wake ran in keeps how it opened, a line saying where its working went, and the message you sent.
 - A wake in a sealed thread is the exception: its working stays in the sealed thread, which is hidden anyway.
-- Your working isn't shown to you again. A later wake there starts fresh, and your replies there are shown the wake as how it opened, a line saying how many tool calls it made, your note without its thinking, and the message you sent. What you will need again belongs in the note or in a file.
+- Your working isn't shown to you again. A later wake there starts fresh, and your replies there are shown the wake as how it opened, a line saying how many tool calls it made, and the message you sent. What you will need again belongs in a file.
 
 ## How long a wake may run
 
 - A wake may run for {{default_wake_limit}}, unless the trigger's `limit` or the tool's `limit` asks for another length. {{user}}'s ceiling is {{max_wake_limit}}, and a longer request is held to it.
 - A sixth of the limit before the end, and never more than a quarter of an hour before, you get a nudge to wrap up, with {{wrap_up_rounds}} more rounds of tool use to finish in. The nudge comes sooner if you reach as many rounds of tool use as {{user}} allows your model.
-- A wake that reaches its limit, or uses up its rounds, is stopped wherever it is. A note or message it hadn't written by then is lost, and what your tools had already changed stays changed.
-- The next wake in that thread is told that the last one was stopped, why, after how many rounds, whether its message was sent, and the last thing it wrote. It is shown again what the stopped one was shown of the thread, since that one left no note about it.
-- A note in the thread says where it stopped, and a diary entry from Shore tells your other turns. What a reply there finds is a line saying how many tool calls the wake had made, which one was last, and the last thing you wrote in it, not the working.
+- A wake that reaches its limit, or uses up its rounds, is stopped wherever it is. What it hadn't saved or sent by then is lost, and what your tools had already changed stays changed.
+- The next wake in that thread is told that the last one was stopped, why, after how many rounds, whether its message was sent, and the last thing it wrote. It is shown again what the stopped one was shown of the thread.
+- A line in the thread says where it stopped. What a reply there finds is a line saying how many tool calls the wake had made, which one was last, and the last thing you wrote in it, not the working.
 
 ## If {{user}} writes meanwhile
 
 In the thread a wake is running in:
 
 - The wake stops at the end of the step it is on. A tool call that is running finishes first.
-- A note in the thread says where it stopped, and you answer {{user}} as in any conversation. The wake's working isn't shown to that turn. In its place is a line saying how many tool calls the wake had made, which one was last, and the last thing you wrote in it.
+- A line in the thread says where it stopped, and you answer {{user}} as in any conversation. The wake's working isn't shown to that turn. In its place is a line saying how many tool calls the wake had made, which one was last, and the last thing you wrote in it.
 - Once they have been quiet in that thread for {{wake_quiet}}, you are woken there again. That wake starts fresh like any other, told that the last one was stopped for {{user}}'s message and the last thing it wrote.
 
 In another thread:
@@ -114,6 +91,6 @@ A message from {{user}}, in any thread, ends it.
 
 ## When something is wrong
 
-- A wake aimed at a thread you don't have, or at your wakes thread, runs nothing, and a diary entry from Shore says so. `{{threads}}` lists the threads you do have.
+- A wake aimed at a thread you don't have, or at your wakes thread, runs nothing, and nothing tells you. `{{threads}}` lists the threads you do have.
 - `{{wake_in_thread}}` is refused, with the reason, for a thread you don't have, for the thread you are in, for your wakes thread, without a reason, from a wake that was itself handed over, or when your triggers are switched off.
 - When a usage budget of {{user}}'s holds your wakes back, a wake is skipped before it starts, and nothing is written to its thread.

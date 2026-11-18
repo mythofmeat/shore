@@ -1,11 +1,6 @@
 use crate::cli::{CliCommand, ConfigCommand};
 
 const TUI_OUTPUT_WIDTH: usize = 80;
-const PAGER_FRAME_AND_MARGIN: usize = 8;
-
-fn pager_width(terminal: usize) -> usize {
-    TUI_OUTPUT_WIDTH.min(terminal.saturating_sub(PAGER_FRAME_AND_MARGIN))
-}
 
 fn written(write: impl FnOnce(&mut Vec<u8>)) -> String {
     let mut buffer = Vec::new();
@@ -46,7 +41,6 @@ fn config_modes(command: &CliCommand) -> (bool, bool) {
         | CliCommand::Model { .. }
         | CliCommand::Provider { .. }
         | CliCommand::Usage { .. }
-        | CliCommand::Diary { .. }
         | CliCommand::Presence { .. }
         | CliCommand::Completions { .. }
         | CliCommand::View { .. }
@@ -505,9 +499,6 @@ pub(crate) fn render(
                 .unwrap_or("?")
         )),
         "refresh_all_provider_models" => Some(render_provider_refresh_all(data)),
-        "diary" => Some(written(|out| {
-            crate::output::diary::write_diary(out, data, pager_width(crate::output::term_width()));
-        })),
         "presence" => Some(crate::output::commands::presence_text(data)),
         "mark" | "unmark" | "marks" => Some(crate::output::commands::marks_text(wire_name, data)),
         "wake_now" => Some(format!(
@@ -709,52 +700,6 @@ mod tests {
         assert_eq!(
             super::render("debug set_active", "set_active", &data, "eve").as_deref(),
             Some("ada is now active.")
-        );
-    }
-
-    #[test]
-    fn the_diary_is_wrapped_to_fit_inside_the_pager_however_narrow_the_terminal() {
-        assert_eq!(super::pager_width(200), 80);
-        assert_eq!(super::pager_width(88), 80);
-        assert_eq!(super::pager_width(87), 79);
-        assert_eq!(super::pager_width(62), 54);
-        for terminal in 12_u16..=120 {
-            let (popup, _viewport) = crate::tui::ui::output_pager_layout(
-                ratatui::layout::Rect::new(0, 0, terminal, 24),
-                10,
-            );
-            let inside = usize::from(popup.width).saturating_sub(2);
-            assert!(
-                super::pager_width(usize::from(terminal)) < inside,
-                "a {terminal}-column terminal"
-            );
-        }
-
-        crate::output::set_color_enabled(false);
-        let long = ["lamps"; 13].join(" ");
-        let data = json!({ "character": "ada", "kept": 2, "notes": [
-            { "at": "dawn", "thread": "main", "source": "note", "text": "Ferry times.", "shown": false },
-            { "at": "noon", "thread": "own-time", "source": "wake", "text": long, "shown": true },
-        ] });
-        assert_eq!(
-            super::render("diary -n 5", "diary", &data, "ada"),
-            Some(
-                [
-                    format!(
-                        "\u{2500}\u{2500} diary (ada, 2 notes) {}",
-                        "\u{2500}".repeat(48)
-                    )
-                    .as_str(),
-                    "",
-                    "  dawn            note in \"main\"  \u{00b7} no longer shown to ada",
-                    "    Ferry times.",
-                    "",
-                    "  noon            wake in \"own-time\"",
-                    "    lamps lamps lamps lamps lamps lamps lamps lamps lamps lamps lamps",
-                    "    lamps lamps",
-                ]
-                .join("\n")
-            )
         );
     }
 

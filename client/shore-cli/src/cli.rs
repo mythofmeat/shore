@@ -5,17 +5,17 @@ use shore_common::protocol::operations::{
     ActivateSession, BackgroundModelTarget, CallLogArgs, CancelCompaction, CheckConfiguration,
     CompactArgs, CompactConversation, ConfigArgs, Configuration, ConfigurationSchema,
     ConversationLog, ConversationLogArgs, DeleteMessages, DeleteMessagesArgs, DiagnosticCountArgs,
-    DiaryArgs, EditMessage, EditMessageArgs, EmptyOperationArgs, ExecuteTool, FavoriteModel,
+    EditMessage, EditMessageArgs, EmptyOperationArgs, ExecuteTool, FavoriteModel,
     FavoriteModelArgs, GetMessage, GetMessageArgs, InjectSystem, InjectSystemArgs, InspectCalls,
     InspectModel, InspectSegments, ListMarks, ListMarksArgs, ListModels, ListModelsArgs,
     ListProviderModels, ListProviders, MarkArgs, MarkKind, MarkReply, MessageReferences,
     ModelInfoArgs, ModelPreferenceScope, ModelSettings, ModelSettingsArgs, Operation,
-    PingKeepalive, Presence, PresenceArgs, ProviderArgs, ProviderModelsArgs, ReadDiary,
-    ReadErrorLog, ReadStatus, ReadSubagentTraces, ReadTranscript, ReadWakeLog,
-    RefreshAllProviderModels, RefreshProviderModels, ResetModel, ResetModelArgs, RunToolArgs,
-    SegmentAction, SegmentsArgs, SetActive, SetDormant, SetModelSetting, SetModelSettingArgs,
-    StartWake, SubagentTraceArgs, SwitchModel, SwitchModelArgs, ToolAccessListing, TranscriptArgs,
-    TranscriptSource, UnmarkArgs, UnmarkReply, WatchCompaction,
+    PingKeepalive, Presence, PresenceArgs, ProviderArgs, ProviderModelsArgs, ReadErrorLog,
+    ReadStatus, ReadSubagentTraces, ReadTranscript, ReadWakeLog, RefreshAllProviderModels,
+    RefreshProviderModels, ResetModel, ResetModelArgs, RunToolArgs, SegmentAction, SegmentsArgs,
+    SetActive, SetDormant, SetModelSetting, SetModelSettingArgs, StartWake, SubagentTraceArgs,
+    SwitchModel, SwitchModelArgs, ToolAccessListing, TranscriptArgs, TranscriptSource, UnmarkArgs,
+    UnmarkReply, WatchCompaction,
 };
 use shore_common::protocol::types::Role;
 use std::collections::BTreeMap;
@@ -467,18 +467,6 @@ pub(crate) enum CliCommand {
         /// Clear the status
         #[arg(long, conflicts_with = "status")]
         clear: bool,
-
-        /// Output raw JSON
-        #[arg(long)]
-        json: bool,
-    },
-
-    /// Show the notes the character has left in its diary for its other turns
-    #[command(display_order = 7)]
-    Diary {
-        /// Number of notes to show, newest last; 0 shows every note the diary keeps
-        #[arg(short = 'n', long = "count", default_value = "20")]
-        count: u32,
 
         /// Output raw JSON
         #[arg(long)]
@@ -2802,9 +2790,6 @@ pub(crate) fn to_swp_command(
         CliCommand::Trace { .. } => trace_to_swp(cmd),
 
         CliCommand::Status { .. } => operation_to_swp::<ReadStatus>(EmptyOperationArgs {}),
-        CliCommand::Diary { count, .. } => operation_to_swp::<ReadDiary>(DiaryArgs {
-            count: Some(*count),
-        }),
         CliCommand::Presence { status, clear, .. } => operation_to_swp::<Presence>(PresenceArgs {
             status: if *clear {
                 Some(String::new())
@@ -3719,8 +3704,6 @@ mod tests {
                 Some(("character_info", json!({"name": ""}))),
             ),
             (&["status"], Some(("status", json!({})))),
-            (&["diary"], Some(("diary", json!({"count": 20})))),
-            (&["diary", "-n", "0"], Some(("diary", json!({"count": 0})))),
             (&["presence"], Some(("presence", json!({})))),
             (
                 &["presence", "at work"],

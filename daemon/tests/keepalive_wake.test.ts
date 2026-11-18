@@ -24,7 +24,7 @@ function recordingProvider(seen: SidecarRequest[], wakeRead: number): SidecarPro
     const calledTool = Array.isArray(tail) && tail.some((block) => block.type === "tool_result");
     const blocks: GenerateResponse["content_blocks"] = waking && !calledTool
       ? [{ type: "tool_use", id: "look", name: "read", input: { file_path: "SOUL.md" } }]
-      : [{ type: "text", text: waking ? "NO_NOTE" : "hello" }];
+      : [{ type: "text", text: waking ? "Trimmed the lamp." : "hello" }];
     return {
       model: request.model,
       content: blocks.flatMap((block) => block.type === "text" ? [block.text] : []).join(""),
@@ -106,6 +106,6 @@ test("a wake starts from a fresh context: none of the last wake's exchange is on
 
     const sent = wireBlocks(next.messages).map((entry) => entry.block as { type?: string; text?: string });
     expect(sent.filter((block) => block.type === "tool_use" || block.type === "tool_result")).toEqual([]);
-    expect(sent.some((block) => block.text === "NO_NOTE")).toBe(false);
+    expect(sent.some((block) => block.text === "Trimmed the lamp.")).toBe(false);
   });
 });
