@@ -357,7 +357,6 @@ async function runGenerationCore(
 
     let intermediatePersisted = false;
     const persistIntermediate = async (message: Message): Promise<void> => {
-      params.signal.throwIfAborted();
       const persisted = message.role === "assistant"
         ? {
             ...message,

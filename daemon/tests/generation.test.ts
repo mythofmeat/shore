@@ -3,7 +3,7 @@ import { readFile } from "./support/stored_files.ts";
 import { afterAll, describe, expect, spyOn, test } from "bun:test";
 import { restoreTestEnv, setTestEnv } from "./support/env.ts";
 import { mkdtemp, mkdir, writeFile } from "node:fs/promises";
-import { existsSync, readFileSync } from "node:fs";
+import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { ConversationEngine } from "../src/engine/conversation.ts";
 import { characterActiveJsonl, MAIN_THREAD } from "../src/config/dirs.ts";
@@ -17,6 +17,7 @@ import type { SidecarProvider, SidecarRequest, StreamEvent } from "../src/llm/ty
 import { generationEngine, runGeneration, type GenerationDeps } from "../src/handler/generation.ts";
 import type { ImageUpload } from "../src/handler/images.ts";
 import { imageSupportFor } from "../src/llm/image_support.ts";
+import { sentPicturesDir } from "../src/storage/sent_pictures.ts";
 import { CharacterWorkspace } from "../src/tools/character_workspace.ts";
 import { sizedImage } from "./support/sized_image.ts";
 import { testTmp } from "./support/tmp.ts";
@@ -579,11 +580,24 @@ describe("what a reply checks before it runs and leaves behind after", () => {
     expect((await readBack(run.dataDir)).map((message) => message.role)).toEqual(["user"]);
   });
 
-  test("a reply stopped before it was kept isn't kept, even when the model had already answered", async () => {
+  test("a reply stopped before it was kept isn't kept, even when the model had already answered, and no picture in it is put with the ones sent", async () => {
+    const shows: StreamEvent[] = [
+      { type: "start", model: "claude-fixture" },
+      { type: "text", text: "The lamp: ![[lamp.png]]" },
+      { type: "done", content: "The lamp: ![[lamp.png]]", finish_reason: "end_turn", usage, timing },
+    ];
+    const sent = (dataDir: string): number => existsSync(sentPicturesDir(dataDir, "ada")) ? readdirSync(sentPicturesDir(dataDir, "ada")).length : 0;
+    const drawn = async (turns: WorkspaceTurns): Promise<void> => { await writeFile(join(turns.workspace, "lamp.png"), await sizedImage(8, 8)); };
+
+    const kept = await runTurn({ history: [], regen: false, events: shows, seed: drawn });
+    expect(kept.error).toBeUndefined();
+    expect(sent(kept.dataDir)).toBe(1);
+
     const stop = new AbortController();
-    const run = await runTurn({ history: [], regen: false, events: answered, signal: stop.signal, during: async () => { stop.abort(new Error("stopped by the user")); } });
+    const run = await runTurn({ history: [], regen: false, events: shows, seed: drawn, signal: stop.signal, during: async () => { stop.abort(new Error("stopped by the user")); } });
     expect(run.error).toBeDefined();
     expect((await readBack(run.dataDir)).map((message) => message.role)).toEqual(["user"]);
+    expect(sent(run.dataDir)).toBe(0);
   });
 
   test("what a reply leaves for keeping its cache warm holds the round its tool was called in and the id of the request that asked for it, and the user is told how long the reply took", async () => {

@@ -36,8 +36,7 @@ function workingNote(working: readonly Message[], where = "isn't shown here"): s
 }
 
 function standIn(working: readonly Message[]): Message[] {
-  const last = working.at(-1);
-  if (last === undefined) return [];
+  const last = required(working.at(-1));
   const text = workingNote(working);
   return [{
     msg_id: last.msg_id,
