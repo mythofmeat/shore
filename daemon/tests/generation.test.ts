@@ -525,12 +525,61 @@ describe("what a reply checks before it runs and leaves behind after", () => {
         throw new Error("no turn here generates");
       },
     });
+    const learned = (dataDir: string): boolean | undefined => imageSupportFor({ providerKey: "anthropic", modelId: "claude-fixture" }, join(dataDir, "..", "cache"));
     const unknown = await runTurn({ history: [], regen: false, events: [], provider: turnsDown(), pictures: [await lamp()] });
     expect(unknown.error).toBe(NOT_SENT);
-    expect(imageSupportFor({ providerKey: "anthropic", modelId: "claude-fixture" }, join(unknown.dataDir, "..", "cache"))).toBe(false);
+    expect(learned(unknown.dataDir)).toBe(false);
 
     const declared = await runTurn({ history: [], regen: false, events: [], provider: turnsDown(), takesPictures: true, pictures: [await lamp()] });
     expect(declared.error).toBe(NOT_SENT);
+  });
+
+  test("a model that turns a picture down while it has its tools is remembered as taking none too", async () => {
+    const run = await runTurn({
+      history: [], regen: false, events: [], tools: ["read"], pictures: [await lamp()],
+      provider: {
+        async *stream() {
+          yield* [];
+          throw new Error("a tool reply streams with its tools");
+        },
+        generate: () => {
+          throw new Error("no turn here generates");
+        },
+        async *streamWithTools() {
+          yield* [];
+          throw new Error("this model does not support image input");
+        },
+      },
+    });
+    expect(run.error).toBe(NOT_SENT);
+    expect(imageSupportFor({ providerKey: "anthropic", modelId: "claude-fixture" }, join(run.dataDir, "..", "cache"))).toBe(false);
+  });
+
+  test("once a model is remembered as taking no pictures, its later requests say so", async () => {
+    const root = await mkdtemp(testTmp("shore-gen-"));
+    const refused = await runTurn({
+      root, history: [], regen: false, events: [], pictures: [await lamp()],
+      provider: {
+        async *stream() {
+          yield* [];
+          throw new Error("this model does not support image input");
+        },
+        generate: () => {
+          throw new Error("no turn here generates");
+        },
+      },
+    });
+    expect(refused.error).toBe(NOT_SENT);
+
+    const seen: SidecarRequest[] = [];
+    const later = await runTurn({ root, history: [], regen: false, events: answered, seen });
+    expect(later.error).toBeUndefined();
+    expect(seen.map((request) => request.supports_images)).toEqual([false]);
+
+    const fresh: SidecarRequest[] = [];
+    const never = await runTurn({ history: [], regen: false, events: answered, seen: fresh });
+    expect(never.error).toBeUndefined();
+    expect(fresh.map((request) => "supports_images" in request)).toEqual([false]);
   });
 
   test("a reply asked for again says which messages it takes the place of, and isn't taken for the user arriving after a pause", async () => {
