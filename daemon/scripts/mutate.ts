@@ -5,6 +5,7 @@ import { join } from "node:path";
 
 import { parseInventorySources } from "./capability_inventory.ts";
 import { DAEMON_EQUIVALENTS, DAEMON_FLOORS } from "./mutation_guards.ts";
+import { unreclaimable } from "./scope_memory.ts";
 
 const ROOT = join(import.meta.dir, "..");
 const COPIED = ["src", "tests"];
@@ -336,13 +337,31 @@ function stop(pid: number): void {
 function scopeMemory(pid: number, unit: string): number {
   try {
     const group = readFileSync(`/proc/${String(pid)}/cgroup`, "utf8").trim().split("::")[1] ?? "";
-    return group.endsWith(`/${unit}.scope`) ? Number(readFileSync(`/sys/fs/cgroup${group}/memory.current`, "utf8")) : 0;
+    if (!group.endsWith(`/${unit}.scope`)) return 0;
+    const dir = `/sys/fs/cgroup${group}`;
+    return unreclaimable(Number(readFileSync(`${dir}/memory.current`, "utf8")), readFileSync(`${dir}/memory.stat`, "utf8"));
   } catch {
     return 0;
   }
 }
 
-async function bunTest(dir: string, args: readonly string[], timeoutMs: number, log?: string): Promise<{ code: number | undefined; ms: number }> {
+interface TestRun {
+  code: number | undefined;
+  ms: number;
+  stoppedAt: number | undefined;
+}
+
+function mib(bytes: number): string {
+  return String(Math.round(bytes / 1024 ** 2));
+}
+
+function ending(run: TestRun): string {
+  if (run.code === undefined) return "timed out";
+  if (run.stoppedAt !== undefined) return `stopped holding ${mib(run.stoppedAt)} MiB the kernel couldn't reclaim, over the ${mib(MEMORY_KILL_BYTES)} MiB a test run may hold`;
+  return `exit ${String(run.code)}`;
+}
+
+async function bunTest(dir: string, args: readonly string[], timeoutMs: number, log?: string): Promise<TestRun> {
   const started = performance.now();
   const fd = log === undefined ? undefined : openSync(log, "w");
   scopes += 1;
@@ -354,8 +373,12 @@ async function bunTest(dir: string, args: readonly string[], timeoutMs: number, 
     timedOut = true;
     stop(proc.pid);
   }, timeoutMs);
+  let stoppedAt: number | undefined;
   const watchdog = unit === undefined ? undefined : setInterval(() => {
-    if (scopeMemory(proc.pid, unit) > MEMORY_KILL_BYTES) stop(proc.pid);
+    const held = scopeMemory(proc.pid, unit);
+    if (held <= MEMORY_KILL_BYTES) return;
+    stoppedAt ??= held;
+    stop(proc.pid);
   }, MEMORY_POLL_MS);
   const code = await proc.exited;
   clearTimeout(timer);
@@ -363,7 +386,7 @@ async function bunTest(dir: string, args: readonly string[], timeoutMs: number, 
   if (fd !== undefined) closeSync(fd);
   stop(proc.pid);
   running.delete(proc.pid);
-  return { code: timedOut ? undefined : code, ms: performance.now() - started };
+  return { code: timedOut ? undefined : code, ms: performance.now() - started, stoppedAt };
 }
 
 function cleanUp(): void {
@@ -442,7 +465,7 @@ async function collectCoverage(files: ReadonlySet<string>, workers: number): Pro
   const hits = new Map<string, Map<number, number[]>>();
   const executable = new Map<string, Set<number>>();
   runs.forEach(({ test, run, lcov, log }, index) => {
-    if (run.code !== 0) problems.push(`tests/${test} fails before any mutation (${run.code === undefined ? "timed out" : `exit ${String(run.code)}`}); its output is in ${log}\n${failures(log)}`);
+    if (run.code !== 0) problems.push(`tests/${test} fails before any mutation (${ending(run)}); its output is in ${log}\n${failures(log)}`);
     else rmSync(log, { force: true });
     for (const [file, lines] of lcov) {
       if (!files.has(file)) continue;
@@ -507,7 +530,8 @@ async function runMutants(mutants: readonly Mutant[], coverage: Coverage, worker
       const log = join(dir, "together.log");
       const run = await bunTest(dir, [TEST_TIMEOUT, "--bail", ...paths(tests)], timeoutFor(tests), log);
       if (run.code === 0) return true;
-      problems.push(`${paths(tests).join(" ")} fail together with nothing mutated (${run.code === undefined ? "timed out" : `exit ${String(run.code)}`}), though each passes on its own: an earlier file leaves something behind that a later one trips on\n${failures(log)}`);
+      const cause = run.stoppedAt === undefined ? ", though each passes on its own: an earlier file leaves something behind that a later one trips on" : "";
+      problems.push(`${paths(tests).join(" ")} fail together with nothing mutated (${ending(run)})${cause}\n${failures(log)}`);
       return false;
     })();
     together.set(key, check);
@@ -519,7 +543,7 @@ async function runMutants(mutants: readonly Mutant[], coverage: Coverage, worker
     const log = join(dir, "mutant.log");
     const pristine = readFileSync(path, "utf8");
     writeFileSync(path, pristine.slice(0, mutant.start) + mutant.replacement + pristine.slice(mutant.end));
-    let run: Awaited<ReturnType<typeof bunTest>>;
+    let run: TestRun;
     try {
       run = await bunTest(dir, [TEST_TIMEOUT, "--bail", ...paths(chosen)], timeoutFor(chosen), log);
     } finally {
