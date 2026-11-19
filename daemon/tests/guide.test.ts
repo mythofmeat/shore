@@ -388,7 +388,7 @@ test("the guide says how far back the count of messages goes, and leaves what a 
   expect(send).toBe(
     "Send eve a message. From a wake, where nothing you write reaches them otherwise, it is posted in the thread the wake runs in, or in the one `thread` names. " +
     "In a conversation your reply is already the message, so there it is only for saying something in another thread. It is delivered when the turn ends, and each call in a turn is its own message. " +
-    "A picture or a video from your workspace goes in it the way notes embed one, as `![[name]]` or `![](path)`; if one can't be found, nothing is sent and the result says which. " +
+    "A picture or a video goes in it the way notes embed one, as `![[name]]` for a file in your workspace or `![](path)` for one anywhere you can read; if one can't be found, nothing is sent and the result says which. " +
     "`push` also sends it to eve's phone, so it reaches them when they don't have Shore open.",
   );
 });

@@ -13,7 +13,7 @@ From a conversation `{{send_message}}` is only for saying something in another t
 
 It is refused, with the reason, for a thread you don't have, for your wakes thread, and for a sealed thread you aren't in. A wake in a sealed thread sends only inside it.
 
-A picture or a video from your workspace goes in a message the way notes embed one, as `![[name]]` or `![](path)`, and {{user}} sees it where you put it. If one can't be found, the message isn't sent and the result says which.
+A picture or a video goes in a message the way notes embed one, as `![[name]]` for a file in your workspace or `![](path)` for one anywhere you can read, and {{user}} sees it where you put it. If one can't be found, the message isn't sent and the result says which.
 
 ## Pushes
 

@@ -1,7 +1,7 @@
 import { afterAll, describe, expect, spyOn, test } from "bun:test";
 import { randomUUID } from "node:crypto";
 import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
-import { chmod, mkdir, readdir, writeFile } from "node:fs/promises";
+import { chmod, mkdir, readdir, readFile, writeFile } from "node:fs/promises";
 import { basename, dirname, join } from "node:path";
 import { Parser } from "tar";
 import { deleteCharacter, exportBackup, exportCharacter, importCharacter, readTransfer, writeTransfer, type ArchiveContext } from "../src/commands/archive.ts";
@@ -12,6 +12,7 @@ import { HistoryStore } from "../src/engine/history_store.ts";
 import { sealThread } from "../src/engine/sealed.ts";
 import type { Message } from "../src/engine/types.ts";
 import { ingestImages } from "../src/handler/images.ts";
+import { sendPictures } from "../src/handler/pictures.ts";
 import { sealedFilesDir, startSealedThread } from "../src/handler/sealed_thread.ts";
 import { buildLlmMessages } from "../src/handler/wire_messages.ts";
 import { claudeAccountInUsePath, claudePlanLimitsPath } from "../src/ledger/plan_limits.ts";
@@ -203,6 +204,22 @@ describe.skipIf(!READY)("a character whose tools run as its own user", () => {
     expect(statSync(join(workspace.dir, "kept.png")).uid).toBe(user.uid);
     expect(readFileSync(shown)).toEqual(png);
     expect(existsSync(join(dirname(shown), "added.png"))).toBe(false);
+  });
+
+  test("sends a picture from wherever it can read, even where the daemon can't, and not one it can't read", async () => {
+    const user = await ownUser();
+    const workspace = await freshWorkspace();
+    const png = Buffer.from("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==", "base64");
+    const own = join(user.home ?? "", `${randomUUID()}.png`);
+    expect((await bash(workspace, `echo '${png.toString("base64")}' | base64 -d > '${own}' && echo written`)).stdout).toBe("written\n");
+    expect(await failure(readFile(own))).toContain("EACCES");
+    const closed = join(ROOT, `${randomUUID()}.png`);
+    await writeFile(closed, png, { mode: 0o600 });
+    const [sent, refused] = await sendPictures([`![](${own}) ![](${closed})`], { workspace, dir: await privateDir("isolation-sent") });
+    expect(sent?.problem).toBeUndefined();
+    expect(readFileSync(sent?.path ?? "")).toEqual(png);
+    expect(refused?.path).toBe("");
+    expect(refused?.problem).toContain("EACCES");
   });
 
   test("is told about at start when it cannot reach its pictures", async () => {
