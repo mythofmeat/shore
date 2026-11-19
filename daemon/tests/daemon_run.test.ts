@@ -30,6 +30,7 @@ import * as turnModule from "../src/handler/turn.ts";
 import { loadForCharacter } from "../src/config/preferences.ts";
 import { threadChatModel } from "../src/engine/threads.ts";
 import { outcomeOf } from "./support/outcome.ts";
+import { handlesUnder } from "./support/handles.ts";
 import { until, untilAsync } from "./support/until.ts";
 import { BrowserSocket } from "./support/browser.ts";
 
@@ -1003,7 +1004,7 @@ describe("what a daemon tells its log", () => {
 });
 
 describe("a daemon going down", () => {
-  test("saves what its characters' wakes keep, closes its stores, and lets go of its data directory", async () => {
+  test("saves what its characters' wakes keep, closes its stores, leaves no file of its own open, and lets go of its data directory", async () => {
     const place = await layout(MODEL_CONFIG);
     const daemon = await start(place, [], { anthropic: scriptedProvider("hello") });
     const client = await Client.open(daemon.port, "ada");
@@ -1019,6 +1020,7 @@ describe("a daemon going down", () => {
     await daemon.done;
     running.length = 0;
     expect(() => daemon.runtime.callStore?.callCount()).toThrow();
+    expect(handlesUnder(place.root)).toBe(0);
     expect(decodeState(readCharacterState(characterDataDir(data, "ada"), STATE_FILENAME) ?? "")?.lastUserAt).toBeNumber();
     expect((await start(place)).port).toBeGreaterThan(0);
   });

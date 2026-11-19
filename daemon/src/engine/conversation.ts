@@ -339,6 +339,10 @@ export class ConversationEngine {
     });
   }
 
+  close(): void {
+    this.#segments.close();
+  }
+
   historySnapshot(config: unknown): History {
     const messages = structuredClone(mergeToolLoopMessages([...this.#messages.messages()]));
     embedMessagesImageData(messages);

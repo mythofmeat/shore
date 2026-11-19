@@ -34,7 +34,7 @@ import {
 } from "./config/dirs.ts";
 import { HISTORY_DB_FILE } from "./engine/history_store.ts";
 import { mcpBearerToken, type McpServerConfig } from "./config/app.ts";
-import { loadConfig, type LoadedConfig } from "./config/loader.ts";
+import type { LoadedConfig } from "./config/loader.ts";
 import type { HistoryListener } from "./engine/conversation.ts";
 import type { Message } from "./engine/types.ts";
 import type { ServerMessage } from "./protocol/ServerMessage.ts";
@@ -88,7 +88,7 @@ const COST_BACKFILL_MS = 6 * 3_600_000;
 export interface RuntimeOptions {
   providers: Partial<Record<SidecarRequest["sdk"], SidecarProvider>>;
   configPath?: string | undefined;
-  config?: LoadedConfig | undefined;
+  config: LoadedConfig;
   env?: NodeJS.ProcessEnv | undefined;
   onHistory?: HistoryListener | undefined;
   emit?: ((character: string, revision: number, msg: Message, thread: string) => void) | undefined;
@@ -120,9 +120,7 @@ export interface ShoreRuntime {
 }
 
 export async function createRuntime(options: RuntimeOptions): Promise<ShoreRuntime> {
-  const config =
-    options.config ??
-    loadConfig(options.configPath, options.env === undefined ? {} : { env: options.env });
+  const config = options.config;
 
   createRuntimeDirs(config);
   closeProviderCaches(config.dirs.cache);
@@ -252,8 +250,8 @@ export async function createRuntime(options: RuntimeOptions): Promise<ShoreRunti
         }, {
           providers,
           registry,
-          ...(callStore === undefined ? {} : { callStore }),
-          ...(options.env === undefined ? {} : { env: options.env }),
+          callStore,
+          env: options.env,
         }, { view: (character) => triggers.view(character) }),
         startThread: (character, request) => startCharacterThread(
           { registry, dataDir: config.dirs.data, emitEvent: options.emitEvent },
@@ -267,19 +265,19 @@ export async function createRuntime(options: RuntimeOptions): Promise<ShoreRunti
         ),
       },
       rebuild: {
-        ...(options.env === undefined ? {} : { env: options.env }),
+        env: options.env,
         mcpRegistry: {
           toolDefsFiltered: (patterns) => mcp.current.toolDefsFiltered(patterns),
         },
       },
-      ...(callStore === undefined ? {} : { callStore }),
+      callStore,
       ...(options.emit === undefined ? {} : { emit: options.emit }),
       ...(options.emitEvent === undefined ? {} : { emitEvent: options.emitEvent }),
       ...(options.env === undefined ? {} : { env: options.env }),
       notifyAutonomousMessage: autonomousMessageNotifier(notifier),
       notifyCompactionComplete: compactionCompleteNotifier(notifier),
       beginForeground: () => historyIndex.beginForeground(),
-      runActivity: async (run, signal) => await snapshotGate.withActivity(run, signal),
+      runActivity: async (run) => await snapshotGate.withActivity(run),
     }),
   );
   autonomy.attachKeepalive(keepalive);
@@ -309,6 +307,7 @@ export async function createRuntime(options: RuntimeOptions): Promise<ShoreRunti
       closeSignIns();
       await historyIndex.shutdown();
       await mcp.current.shutdown();
+      await registry.close();
       closeWorkspaceHelpers();
       closeStorageConnections();
       uninstallWireCapture();

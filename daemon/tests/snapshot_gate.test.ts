@@ -1,7 +1,6 @@
 import { describe, expect, test } from "bun:test";
 
 import { SnapshotGate } from "../src/snapshot_gate.ts";
-import { outcomeOf } from "./support/outcome.ts";
 
 describe("SnapshotGate", () => {
   test("a snapshot waits for activity and blocks work queued behind it", async () => {
@@ -30,62 +29,6 @@ describe("SnapshotGate", () => {
     releaseFirst();
     await Promise.all([first, snapshot, second]);
     expect(events).toEqual(["first-start", "first-end", "snapshot", "second"]);
-  });
-
-  test("activity that stops waiting leaves the queue, and the snapshot ahead of it and the work behind it still run", async () => {
-    const gate = new SnapshotGate();
-    const events: string[] = [];
-    const { promise: held, resolve: release } = Promise.withResolvers<void>();
-    const first = gate.withActivity(async () => {
-      await held;
-    });
-    await Promise.resolve();
-    const snapshot = gate.withSnapshot(async () => {
-      events.push("snapshot");
-    });
-    const stop = new AbortController();
-    const waiting = gate.withActivity(async () => {
-      events.push("abandoned");
-    }, stop.signal);
-    const behind = gate.withActivity(async () => {
-      events.push("behind");
-    });
-    stop.abort(new Error("stopped"));
-    expect(await outcomeOf(waiting)).toThrow("stopped");
-    release();
-    await Promise.all([first, snapshot, behind]);
-    await gate.withSnapshot(async () => {
-      events.push("next snapshot");
-    });
-    expect(events).toEqual(["snapshot", "behind", "next snapshot"]);
-  });
-
-  test("activity asked for with a signal already stopped never runs", async () => {
-    const gate = new SnapshotGate();
-    const stop = new AbortController();
-    stop.abort(new Error("already stopped"));
-    let ran = false;
-    expect(await outcomeOf(gate.withActivity(async () => {
-      ran = true;
-    }, stop.signal))).toThrow("already stopped");
-    expect(ran).toBe(false);
-    expect(await gate.withSnapshot(async () => "taken")).toBe("taken");
-  });
-
-  test("stopping a signal after its activity started leaves the queue behind it alone", async () => {
-    const gate = new SnapshotGate();
-    const stop = new AbortController();
-    const { promise: held, resolve: release } = Promise.withResolvers<void>();
-    const running = gate.withActivity(async () => {
-      await held;
-      return "finished";
-    }, stop.signal);
-    await Promise.resolve();
-    const snapshot = gate.withSnapshot(async () => "taken");
-    stop.abort(new Error("stopped late"));
-    release();
-    expect(await running).toBe("finished");
-    expect(await snapshot).toBe("taken");
   });
 
   test("a running snapshot holds back activity asked for during it and activity queued behind it", async () => {

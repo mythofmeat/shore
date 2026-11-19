@@ -259,6 +259,12 @@ export class CharacterRegistry {
     return await loading;
   }
 
+  async close(): Promise<void> {
+    for (const loaded of await Promise.allSettled(this.#engines.values())) {
+      if (loaded.status === "fulfilled") loaded.value.close();
+    }
+  }
+
   async #load(name: string, thread: string, heard = true): Promise<ConversationEngine> {
     const engine = await ConversationEngine.load(name, this.#dataDir, heard ? this.#onHistory : undefined, thread);
     const recovered = await engine.recoverInterruptedToolLoop("Tool execution was interrupted by a Shore daemon restart before it returned a result.");
