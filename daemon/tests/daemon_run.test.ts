@@ -160,6 +160,18 @@ async function instances(place: Layout): Promise<InstanceInfo[]> {
   return JSON.parse(await readFile(place.instancesPath, "utf8")) as InstanceInfo[];
 }
 
+async function settlesWithin(work: Promise<unknown>, ms: number): Promise<boolean> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const late = new Promise<false>((resolve) => {
+    timer = setTimeout(() => resolve(false), ms);
+  });
+  try {
+    return await Promise.race([work.then(() => true), late]);
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
 class Client {
   readonly frames: Record<string, unknown>[] = [];
   #buffered = "";
@@ -564,6 +576,41 @@ describe("going down", () => {
     } finally {
       client.close();
       running.length = 0;
+    }
+  });
+
+  test("a client that connected and never said hello is hung up on, and doesn't keep the daemon from stopping", async () => {
+    const daemon = await start(await layout());
+    const socket = connect({ host: "127.0.0.1", port: daemon.port });
+    const hungUp = new Promise<void>((resolve) => {
+      socket.once("close", () => resolve());
+    });
+    try {
+      await new Promise<void>((resolve) => {
+        socket.once("data", () => resolve());
+      });
+      daemon.stop();
+      expect(await settlesWithin(daemon.done, 5_000)).toBe(true);
+      expect(await settlesWithin(hungUp, 1_000)).toBe(true);
+    } finally {
+      socket.destroy();
+    }
+  });
+
+  test("a client that stopped reading doesn't keep the daemon from stopping", async () => {
+    const daemon = await start(await layout());
+    const client = await Client.open(daemon.port, "ada");
+    try {
+      await client.awaitFrame("history");
+      client.socket.pause();
+      daemon.server.broadcast({ type: "error", code: "internal_error", message: "x".repeat(32 << 20) });
+      await new Promise((resolve) => {
+        setTimeout(resolve, 0);
+      });
+      daemon.stop();
+      expect(await settlesWithin(daemon.done, 5_000)).toBe(true);
+    } finally {
+      client.close();
     }
   });
 

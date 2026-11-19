@@ -1,6 +1,7 @@
 import { OutboundQueue, type QueueLimits } from "./outbound.ts";
 import { contentForClient } from "./content_projection.ts";
 import { HistoryMediaDelivery } from "./history_media.ts";
+import { required } from "../util/required.ts";
 import { abortRejection } from "../llm/abort.ts";
 import { createServer, type Server as NetServer, type Socket } from "node:net";
 
@@ -37,6 +38,20 @@ export interface ServerConfig {
   readonly handshake?: HandshakeProvider;
   readonly authenticate: (token: string | null | undefined) => boolean;
   readonly log?: Logger;
+}
+
+const HANG_UP_AFTER_MS = 2_000;
+
+async function settlesWithin(work: Promise<unknown>, ms: number): Promise<boolean> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const late = new Promise<boolean>((resolve) => {
+    timer = setTimeout(() => resolve(false), ms);
+  });
+  try {
+    return await Promise.race([work.then(() => true), late]);
+  } finally {
+    clearTimeout(timer);
+  }
 }
 
 class RouteQueue {
@@ -158,7 +173,6 @@ export class Server {
   readonly #events = new Broadcast();
   readonly #routes = new RouteQueue();
   readonly #connections = new Set<Promise<void>>();
-  readonly #localPeers = new Set<() => Promise<void>>();
   #stopped = false;
   #serving = false;
   readonly #stopController = new AbortController();
@@ -235,18 +249,11 @@ export class Server {
     const detach = (): Promise<void> => {
       if (detachment !== undefined) return detachment;
       detached = true;
-      signal.removeEventListener("abort", aborted);
       inbox.close(true);
       subscription.unsubscribe();
       this.#router.unregisterSession(clientId);
       this.#config.log?.info?.("Local client detached", { client_id: clientId });
-      detachment = (async () => {
-        try {
-          await this.#route({ kind: "session_disconnected", sessionId: clientId });
-        } finally {
-          this.#localPeers.delete(detach);
-        }
-      })();
+      detachment = this.#route({ kind: "session_disconnected", sessionId: clientId });
       return detachment;
     };
     const aborted = (): void => {
@@ -265,7 +272,6 @@ export class Server {
     this.#router.registerSession(client, async (msg, catchUp) => {
       deliver(msg, catchUp);
     });
-    this.#localPeers.add(detach);
     signal.addEventListener("abort", aborted);
     deliver(historyMessage(history), true);
 
@@ -351,8 +357,12 @@ export class Server {
   }
 
   async serve(): Promise<void> {
-    const listener = this.#listener ?? ((await this.bind(), this.#listener));
-    if (listener === null) throw new Error("listener was not bound");
+    const listener = required(this.#listener);
+    const sockets = new Set<Socket>();
+    listener.on("connection", (socket: Socket) => {
+      sockets.add(socket);
+      socket.once("close", () => sockets.delete(socket));
+    });
 
     const address = listener.address();
     this.#config.log?.info?.("TCP listening", {
@@ -367,13 +377,15 @@ export class Server {
     await this.#shutdownSignal;
 
     this.#config.log?.info?.("Server shutting down");
-    await Promise.allSettled([...this.#localPeers].map((detach) => detach()));
-
-    await new Promise<void>((resolve) => {
-      listener.close(() => resolve());
-    });
-    await Promise.allSettled(this.#connections);
-    this.#events.close();
+    listener.close();
+    const finished = Promise.allSettled(this.#connections);
+    if (!await settlesWithin(finished, HANG_UP_AFTER_MS)) {
+      this.#config.log?.warn?.("Hanging up on clients that didn't finish", { clients: sockets.size });
+      for (const socket of sockets) socket.destroy();
+      if (!await settlesWithin(finished, HANG_UP_AFTER_MS)) {
+        this.#config.log?.warn?.("Stopped with client handlers still running", { handlers: this.#connections.size });
+      }
+    }
     this.#routes.close();
   }
 

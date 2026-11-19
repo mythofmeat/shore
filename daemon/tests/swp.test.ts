@@ -1,9 +1,10 @@
-import { describe, expect, test, afterEach } from "bun:test";
+import { describe, expect, test, afterEach, jest } from "bun:test";
+import { connect as openSocket, type Socket } from "node:net";
 import { type ClientMessage } from "../src/protocol/ClientMessage";
 import { WireError, WireReader, MAX_PRE_AUTH_WIRE_MESSAGE_SIZE, type ByteSink } from "../src/swp/framing";
 import { type ServerMessage } from "../src/protocol/ServerMessage";
 import { Broadcast } from "../src/swp/broadcast";
-import { handleConnection, messageLoop, type ConnectionContext, type PingClock } from "../src/swp/connection";
+import { handleConnection, messageLoop, type ConnectionContext, type Logger, type PingClock } from "../src/swp/connection";
 import { SessionRouter, type RoutedMessage, type SessionMeta } from "../src/swp/session";
 import { Server } from "../src/swp/server.ts";
 import { eventMatchesSession } from "../src/swp/routing.ts";
@@ -599,5 +600,136 @@ describe("wire array decoding", () => {
     expect(await decode({ type: "regen", stream: true, another_take: true, reason: "shorter", tags: ["too long"] }))
       .toEqual({ type: "regen", stream: true, another_take: true, reason: "shorter", tags: ["too long"] });
     expect(await decode({ type: "regen", stream: false, guidance: "warmer" })).toEqual({ type: "regen", stream: false, reason: "warmer" });
+  });
+});
+
+describe("stopping", () => {
+  const GRACE_MS = 2_000;
+  const immediate = (): Promise<void> => new Promise((resolve) => {
+    setImmediate(resolve);
+  });
+
+  async function stoppable(history?: () => Promise<never>) {
+    const logged: [string, string, Record<string, unknown> | undefined][] = [];
+    const log: Logger = {
+      info: (msg, fields) => logged.push(["info", msg, fields]),
+      warn: (msg, fields) => logged.push(["warn", msg, fields]),
+    };
+    const server = new Server({
+      addr: "127.0.0.1:0",
+      serverName: "shore-test",
+      authenticate: () => true,
+      handshake: {
+        hello: () => Promise.resolve({ characters: [{ name: "ada" }] }),
+        history: history ?? ((selected) => Promise.resolve({ messages: [], previousSegment: null, config: {}, selectedCharacter: selected, selectedThread: null, revision: 1 })),
+      },
+      log,
+    });
+    const { port } = await server.bind();
+    const running = server.serve();
+    const routed: RoutedMessage[] = [];
+    const routing = (async () => {
+      for await (const each of server.routes()) routed.push(each);
+    })();
+    const open = async (): Promise<{ socket: Socket; frames: string[]; closed: () => boolean; hungUp: Promise<void> }> => {
+      const socket = openSocket({ host: "127.0.0.1", port });
+      const frames: string[] = [];
+      let closed = false;
+      const hungUp = new Promise<void>((resolve) => {
+        socket.once("close", () => {
+          closed = true;
+          resolve();
+        });
+      });
+      const greeted = new Promise<void>((resolve) => {
+        socket.once("data", () => resolve());
+      });
+      socket.on("data", (chunk: Buffer) => frames.push(chunk.toString("utf8")));
+      await greeted;
+      return { socket, frames, closed: () => closed, hungUp };
+    };
+    const warnings = () => logged.filter(([level]) => level === "warn").map(([, msg, fields]) => [msg, fields]);
+    cleanups.push(async () => {
+      jest.useRealTimers();
+      server.stop();
+      await Promise.allSettled([running, routing]);
+    });
+    return { server, running, routing, routed, open, logged, warnings };
+  }
+
+  test("a client that never says hello is hung up on exactly when the grace runs out, and only clients still open are counted", async () => {
+    const { server, running, open, logged, warnings } = await stoppable();
+    const gone = await open();
+    gone.socket.destroy();
+    while (!logged.some(([, msg]) => msg === "Client closed before hello")) await immediate();
+    const silent = await open();
+    jest.useFakeTimers();
+    server.stop();
+    while (jest.getTimerCount() === 0) await immediate();
+    jest.advanceTimersByTime(GRACE_MS - 1);
+    for (let turn = 0; turn < 20; turn += 1) await immediate();
+    expect(silent.closed()).toBe(false);
+    jest.advanceTimersByTime(1);
+    await silent.hungUp;
+    await running;
+    expect(warnings()).toEqual([["Hanging up on clients that didn't finish", { clients: 1 }]]);
+  });
+
+  test("a client stuck behind a write it can't take is hung up on, and its disconnect reaches the routes before they end", async () => {
+    const { server, running, routing, routed, open } = await stoppable();
+    const stuck = await open();
+    stuck.socket.write(`${JSON.stringify({ type: "hello", client_type: "tui", client_name: "test", capabilities: [], character: "ada" })}\n`);
+    while (!stuck.frames.join("").includes('"type":"history"')) await immediate();
+    while (!routed.some((each) => each.kind === "session_connected")) await immediate();
+    stuck.socket.pause();
+    server.broadcast({ type: "error", code: "internal_error", message: "x".repeat(32 << 20) });
+    await immediate();
+    jest.useFakeTimers();
+    server.stop();
+    while (jest.getTimerCount() === 0) await immediate();
+    jest.advanceTimersByTime(GRACE_MS);
+    await running;
+    await routing;
+    expect(routed.map((each) => each.kind)).toEqual(["session_connected", "session_disconnected"]);
+  });
+
+  test("a client whose handler is stuck on something besides its socket is given up on after a second grace, and the server still stops", async () => {
+    let asked = false;
+    const { server, running, open, warnings } = await stoppable(() => {
+      asked = true;
+      return new Promise<never>(() => {});
+    });
+    const stuck = await open();
+    stuck.socket.write(`${JSON.stringify({ type: "hello", client_type: "tui", client_name: "test", capabilities: [], character: "ada" })}\n`);
+    while (!asked) await immediate();
+    jest.useFakeTimers();
+    server.stop();
+    while (jest.getTimerCount() === 0) await immediate();
+    jest.advanceTimersByTime(GRACE_MS);
+    await stuck.hungUp;
+    while (jest.getTimerCount() === 0) await immediate();
+    jest.advanceTimersByTime(GRACE_MS - 1);
+    for (let turn = 0; turn < 20; turn += 1) await immediate();
+    expect(warnings()).toEqual([["Hanging up on clients that didn't finish", { clients: 1 }]]);
+    jest.advanceTimersByTime(1);
+    await running;
+    expect(warnings()).toEqual([
+      ["Hanging up on clients that didn't finish", { clients: 1 }],
+      ["Stopped with client handlers still running", { handlers: 1 }],
+    ]);
+  });
+
+  test("a server whose clients all finish in time hangs up on no one and leaves no timer behind", async () => {
+    const { server, running, open, warnings } = await stoppable();
+    const client = await open();
+    client.socket.write(`${JSON.stringify({ type: "hello", client_type: "tui", client_name: "test", capabilities: [] })}\n`);
+    while (!client.frames.join("").includes('"type":"history"')) await immediate();
+    jest.useFakeTimers();
+    server.stop();
+    await running;
+    await client.hungUp;
+    expect(client.frames.join("")).toContain('"type":"shutdown"');
+    expect(jest.getTimerCount()).toBe(0);
+    expect(warnings()).toEqual([]);
   });
 });
