@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, jest, test } from "bun:test";
+import { afterEach, describe, expect, test } from "bun:test";
 import { Database } from "bun:sqlite";
 import { existsSync, mkdirSync, readdirSync, readFileSync } from "node:fs";
 import { mkdir, mkdtemp, rename, rm, utimes, writeFile } from "node:fs/promises";
@@ -324,16 +324,18 @@ describe("a runtime's keepalive", () => {
 });
 
 describe("a runtime shutting down", () => {
-  test("leaves no timer of its own behind", async () => {
-    jest.useFakeTimers();
-    try {
-      const runtime = await createRuntime({ config: await install(), providers: {}, env: {} });
-      runtime.cacheRefresh.refresh("ada", "compaction");
-      await stop(runtime);
-      expect(jest.getTimerCount()).toBe(0);
-    } finally {
-      jest.useRealTimers();
-    }
+  test("drops the cached request it was waiting to rebuild, and indexes no more history", async () => {
+    const config = await install();
+    const runtime = await createRuntime({ config, providers: {}, env: {} });
+    runtime.cacheRefresh.refresh("ada", "compaction", "main");
+    expect(runtime.cacheRefresh.targetThread("ada")).toBe("main");
+    await stop(runtime);
+    expect(runtime.cacheRefresh.targetThread("ada")).toBeUndefined();
+    const index = historyIndexPath(config.dirs.cache, "ada");
+    await rm(index);
+    runtime.historyIndex.noteMutation("ada");
+    await runtime.historyIndex.runOnce();
+    expect(existsSync(index)).toBe(false);
   });
 
   test("shuts its MCP servers down", async () => {
