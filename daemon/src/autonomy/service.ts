@@ -1,3 +1,4 @@
+import type { TriggersView } from "./trigger_loop.ts";
 import { shoreLog } from "../log.ts";
 
 import type { ActivityStats } from "./activity.ts";
@@ -93,6 +94,7 @@ export class AutonomyService {
   readonly #now: () => number;
   #keepalive: KeepaliveService | undefined;
   #listener: ((character: string) => AutonomyEvents) | undefined;
+  #triggers: ((character: string) => Promise<TriggersView>) | undefined;
   #closed = false;
   #ticking: Promise<void> = Promise.resolve();
 
@@ -110,6 +112,14 @@ export class AutonomyService {
 
   onEvents(listener: (character: string) => AutonomyEvents): void {
     this.#listener = listener;
+  }
+
+  showTriggersFrom(view: (character: string) => Promise<TriggersView>): void {
+    this.#triggers = view;
+  }
+
+  async triggers(character: string): Promise<TriggersView | undefined> {
+    return await this.#triggers?.(character);
   }
 
   characters(): string[] {

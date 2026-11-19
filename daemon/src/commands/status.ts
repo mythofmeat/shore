@@ -14,6 +14,10 @@ import type { AutonomyStatusReport } from "../protocol/AutonomyStatusReport.ts";
 import type { McpStatusReport } from "../protocol/McpStatusReport.ts";
 import type { ActivityStatusReport } from "../protocol/ActivityStatusReport.ts";
 import type { RunningStatusReport } from "../protocol/RunningStatusReport.ts";
+import type { TriggersStatusReport } from "../protocol/TriggersStatusReport.ts";
+import type { TriggersView } from "../autonomy/trigger_loop.ts";
+import { hostZone } from "../ledger/zoned.ts";
+import { describeTrigger, userVoice } from "../tools/list_triggers.ts";
 
 type Args = OperationInput<"error_log">;
 
@@ -69,6 +73,19 @@ export function autonomyWire(autonomy: AutonomyStatus, now: number): AutonomySta
   };
 }
 
+export function triggersWire(view: TriggersView, character: string, active: boolean, timeZone: string): TriggersStatusReport {
+  const due = view.enabled && active
+    ? view.triggers.flatMap((each) => (each.trigger.wakes && !each.off && each.nextAt !== undefined ? [{ trigger: each.trigger.name, at: each.nextAt }] : []))
+    : [];
+  const next = due.reduce<(typeof due)[number] | undefined>((soonest, each) => (soonest !== undefined && soonest.at <= each.at ? soonest : each), undefined);
+  return {
+    enabled: view.enabled,
+    ...(next === undefined ? {} : { next_wake: { trigger: next.trigger, at: rfc3339(next.at) } }),
+    triggers: view.triggers.map((each) => describeTrigger(each, userVoice(character), timeZone)),
+    not_running: view.problems,
+  };
+}
+
 function mcpWire(servers: readonly McpServerStatus[]): McpStatusReport {
   return {
     configured: servers.length,
@@ -118,6 +135,8 @@ export async function status(ctx: StatusContext): Promise<OperationResult<"statu
   const tokens = ctx.conversationTokens;
   const halts = ctx.autonomy.keepaliveHalts(ctx.characterName);
   const mcp = ctx.mcpServers === undefined ? undefined : mcpWire(ctx.mcpServers);
+  const view = await ctx.autonomy.triggers(ctx.characterName);
+  const triggers = view === undefined ? undefined : triggersWire(view, ctx.characterName, state?.state === "Active", hostZone());
   const sections = {
     tokens: {
       input: tokens.input,
@@ -126,6 +145,7 @@ export async function status(ctx: StatusContext): Promise<OperationResult<"statu
       cache_write: tokens.cache_write,
     },
     autonomy: state === undefined ? null : autonomyWire(state, now),
+    ...(triggers === undefined ? {} : { triggers }),
     activity: report === undefined ? null : activityWire(report.stats, report.messageCount),
     history_index: historyIndexSection(ctx.historyIndex, ctx.characterName),
     ...(mcp === undefined ? {} : { mcp }),

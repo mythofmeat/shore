@@ -56,6 +56,10 @@ pub(crate) fn write_status<W: Write>(out: &mut W, data: &Value, character: &str)
     if let Some(autonomy) = data.get("autonomy").filter(|value| !value.is_null()) {
         super::autonomy::add_autonomy_rows(&mut rows, autonomy);
     }
+    if let Some(triggers) = data.get("triggers") {
+        let (line, tone) = super::triggers::status_row(triggers, name, chrono::Local::now());
+        rows.add_toned("triggers", &line, tone);
+    }
 
     let pending = number(data, "pending_deferred_edit_count");
     if pending > 0 {
@@ -239,6 +243,15 @@ pub(crate) fn write_section<W: Write>(out: &mut W, data: &Value, name: &str) -> 
     }
     if name == "running" {
         super::running::write_status_section(out, value);
+        return true;
+    }
+    if name == "triggers" {
+        let dormant = data
+            .get("autonomy")
+            .and_then(|autonomy| autonomy.get("state"))
+            .and_then(Value::as_str)
+            == Some("Dormant");
+        super::triggers::write_status_section(out, value, text(data, "character"), dormant);
         return true;
     }
     section(out, name, None);

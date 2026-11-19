@@ -3764,6 +3764,16 @@
             }
           ]
         },
+        "triggers": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/TriggersStatusReport"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
         "activity": {
           "anyOf": [
             {
@@ -3983,6 +3993,75 @@
             "budget_paused",
             "recap_written",
             "recap_missing"
+          ]
+        },
+        "TriggersStatusReport": {
+          "type": "object",
+          "properties": {
+            "enabled": {
+              "type": "boolean"
+            },
+            "next_wake": {
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/NextWakeReport"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "triggers": {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/TriggerStatusReport"
+              }
+            },
+            "not_running": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            }
+          },
+          "required": [
+            "enabled",
+            "triggers",
+            "not_running"
+          ]
+        },
+        "NextWakeReport": {
+          "type": "object",
+          "properties": {
+            "trigger": {
+              "type": "string"
+            },
+            "at": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "trigger",
+            "at"
+          ]
+        },
+        "TriggerStatusReport": {
+          "type": "object",
+          "properties": {
+            "name": {
+              "type": "string"
+            },
+            "does": {
+              "type": "string"
+            },
+            "status": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "name",
+            "does",
+            "status"
           ]
         },
         "ActivityStatusReport": {

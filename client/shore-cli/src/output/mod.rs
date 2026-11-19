@@ -11,6 +11,7 @@ pub(crate) mod status;
 pub(crate) mod styling;
 pub(crate) mod tools;
 pub(crate) mod transcript;
+pub(crate) mod triggers;
 pub(crate) mod usage;
 pub(crate) mod vocab;
 

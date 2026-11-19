@@ -15,7 +15,35 @@ function clock(minute: number): string {
   return `${String(Math.floor(minute / 60)).padStart(2, "0")}:${String(minute % 60).padStart(2, "0")}`;
 }
 
-function whenPhrase(when: TriggerWhen, userName: string, timeZone: string): string {
+export interface TriggerVoice {
+  wakes: string;
+  neverWakes: string;
+  statusChanges: string;
+  quietFor: string;
+  switchedOff: string;
+}
+
+export function characterVoice(userName: string): TriggerVoice {
+  return {
+    wakes: "wakes you",
+    neverWakes: "never wakes you",
+    statusChanges: `when ${userName} changes their status`,
+    quietFor: `when ${userName} has been quiet for`,
+    switchedOff: `switched off by ${userName}`,
+  };
+}
+
+export function userVoice(character: string): TriggerVoice {
+  return {
+    wakes: `wakes ${character}`,
+    neverWakes: `never wakes ${character}`,
+    statusChanges: "when you change your status",
+    quietFor: "when you have been quiet for",
+    switchedOff: "switched off by you",
+  };
+}
+
+function whenPhrase(when: TriggerWhen, voice: TriggerVoice, timeZone: string): string {
   if (when.kind === "every") return `every ${length(when.everyMs)}`;
   if (when.kind === "at") {
     const days = when.weekdays.length === DAYS.length ? "every day" : when.weekdays.map((day) => DAYS[day]).join(", ");
@@ -23,8 +51,8 @@ function whenPhrase(when: TriggerWhen, userName: string, timeZone: string): stri
   }
   if (when.kind === "once") return `once, ${formatWallClock(resolveInZone(asNaive(when.local), timeZone), timeZone)}`;
   if (when.kind === "follows") return `after \`${when.trigger}\``;
-  if (when.event === "status_changed") return `when ${userName} changes their status`;
-  return `when ${userName} has been quiet for ${length(when.afterMs)}`;
+  if (when.event === "status_changed") return voice.statusChanges;
+  return `${voice.quietFor} ${length(when.afterMs)}`;
 }
 
 function checkStatus(each: TriggerView, timeZone: string): string[] {
@@ -35,13 +63,19 @@ function checkStatus(each: TriggerView, timeZone: string): string[] {
   return each.checkedAt === each.lastFiredAt ? [] : [`last checked ${at}, printed nothing`];
 }
 
-function described(each: TriggerView, userName: string, timeZone: string): string {
+export interface DescribedTrigger {
+  name: string;
+  does: string;
+  status: string;
+}
+
+export function describeTrigger(each: TriggerView, voice: TriggerVoice, timeZone: string): DescribedTrigger {
   const { trigger } = each;
-  const where = trigger.thread === undefined ? "wakes you" : `wakes you in "${trigger.thread}"`;
+  const where = trigger.thread === undefined ? voice.wakes : `${voice.wakes} in "${trigger.thread}"`;
   const parts = [
-    whenPhrase(trigger.when, userName, timeZone),
+    whenPhrase(trigger.when, voice, timeZone),
     ...(trigger.check === undefined ? [] : [trigger.wakes ? `if \`${trigger.check}\` prints` : `runs \`${trigger.check}\``]),
-    trigger.wakes ? where : "never wakes you",
+    trigger.wakes ? where : voice.neverWakes,
     ...(trigger.reason === undefined ? [] : [`"${trigger.reason}"`]),
     ...(trigger.between === undefined ? [] : [`only ${clock(trigger.between.startMinute)}-${clock(trigger.between.endMinute)}`]),
     ...(trigger.limitMs === undefined ? [] : [`for up to ${length(trigger.limitMs)}`]),
@@ -50,19 +84,24 @@ function described(each: TriggerView, userName: string, timeZone: string): strin
   const status = [
     ...(each.nextAt === undefined ? [] : [`next ${formatWallClock(each.nextAt, timeZone)}`]),
     each.lastFiredAt === undefined ? "never fired" : `fired ${String(each.fired)} ${each.fired === 1 ? "time" : "times"}, last ${formatWallClock(each.lastFiredAt, timeZone)}`,
-    ...(each.off ? [`switched off by ${userName}`] : []),
+    ...(each.off ? [voice.switchedOff] : []),
     ...checkStatus(each, timeZone),
   ];
-  return `${trigger.name}: ${parts.join(", ")}\n  ${status.join(" · ")}`;
+  return { name: trigger.name, does: parts.join(", "), status: status.join(" · ") };
 }
 
-export function handleListTriggers(view: TriggersView | undefined, userName: string, timeZone: string = hostZone()): string {
+export async function handleListTriggers(pending: Promise<TriggersView> | undefined, userName: string, timeZone: string = hostZone()): Promise<string> {
+  const view = await pending;
   if (view === undefined) throw new ToolIoError("triggers are not available in this context");
   const where = `Your triggers, from ${TRIGGERS_FILE} in your workspace root.`;
+  const voice = characterVoice(userName);
   return [
     view.enabled ? where : `${where} ${userName} has your triggers switched off, so nothing fires.`,
     ...(view.triggers.length === 0 && view.problems.length === 0 ? ["You have none there yet, so nothing wakes you on its own."] : []),
-    ...view.triggers.map((each) => described(each, userName, timeZone)),
+    ...view.triggers.map((each) => {
+      const { name, does, status } = describeTrigger(each, voice, timeZone);
+      return `${name}: ${does}\n  ${status}`;
+    }),
     ...(view.problems.length === 0 ? [] : [`Not running:\n${view.problems.map((problem) => `- ${problem}`).join("\n")}`]),
   ].join("\n\n");
 }

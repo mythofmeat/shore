@@ -45,7 +45,7 @@ function RequestHistory({ state }: { state: ChromeSnapshot }) {
 const SECTION_FIELDS: Record<string, readonly (keyof StatusReport)[]> = {
   conversation: ["turn_count", "context_tokens", "active_model", "tokens"],
   folders: ["config_dir", "data_dir", "cache_dir"],
-  autonomy: ["autonomy"], activity: ["activity"], history_index: ["history_index"], mcp: ["mcp"], keepalive: ["keepalive_halts"], edits: ["pending_deferred_edit_count", "pending_deferred_edits"],
+  autonomy: ["autonomy"], triggers: ["triggers"], activity: ["activity"], history_index: ["history_index"], mcp: ["mcp"], keepalive: ["keepalive_halts"], edits: ["pending_deferred_edit_count", "pending_deferred_edits"],
 };
 
 function StatusView({ report }: { report: StatusReport }) {

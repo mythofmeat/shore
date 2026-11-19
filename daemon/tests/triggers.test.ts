@@ -6,6 +6,7 @@ import type { TriggersView, TriggerView } from "../src/autonomy/trigger_loop.ts"
 import { loadConfig } from "../src/config/loader.ts";
 import { configSchema } from "../src/config/schema.ts";
 import { handleListTriggers } from "../src/tools/list_triggers.ts";
+import { rejectionOf } from "./support/outcome.ts";
 import { testTmp } from "./support/tmp.ts";
 import { coolingDown, inItsHours, nextAt, parseTriggers, scheduledAt, type Trigger, type TriggerWhen } from "../src/autonomy/triggers.ts";
 
@@ -375,61 +376,61 @@ test("a one-off is due at its time in the local zone, and never again once that 
   expect(scheduledAt(once, Date.UTC(2026, 10, 1), "Australia/Sydney")).toBe(Date.UTC(2026, 10, 11, 13));
 });
 
-function shown(body: string, status: Partial<Omit<TriggerView, "trigger">> = {}): string {
+async function shown(body: string, status: Partial<Omit<TriggerView, "trigger">> = {}): Promise<string> {
   const trigger = only(body);
   if (typeof trigger === "string") throw new Error(trigger);
   const view: TriggersView = { enabled: true, problems: [], triggers: [{ trigger, off: false, problem: undefined, fired: 0, lastFiredAt: undefined, checkedAt: undefined, nextAt: undefined, ...status }] };
-  return handleListTriggers(view, "eve", "UTC").split("\n\n").slice(1).join("\n\n");
+  return (await handleListTriggers(Promise.resolve(view), "eve", "UTC")).split("\n\n").slice(1).join("\n\n");
 }
 
-test("the list says when each trigger fires, what it does, and what limits it", () => {
-  expect(shown('every = "90m"\nreason = "Trim the lamp."')).toBe('t: every 90m, wakes you, "Trim the lamp.", at most every 1h\n  never fired');
-  expect(shown('every = "2d"\ncheck = "tide.sh"\nwake = false')).toBe("t: every 2d, runs `tide.sh`, never wakes you\n  never fired · its check hasn't run yet");
-  expect(shown('every = "30m"\ncheck = "mail.sh"')).toBe("t: every 30m, if `mail.sh` prints, wakes you, at most every 1h\n  never fired · its check hasn't run yet");
-  expect(shown('at = "20:00"\nreason = "Supper."\ncooldown = "30m"')).toBe('t: every day at 20:00, wakes you, "Supper.", at most every 30m\n  never fired');
-  expect(shown('at = "Sat, Mon 9:05"\nreason = "r"\nbetween = "08:00-23:30"')).toBe('t: Mon, Sat at 09:05, wakes you, "r", only 08:00-23:30, at most every 1h\n  never fired');
-  expect(shown('at = "sun 0:00"\ncheck = "tide.sh"\nreason = "r"\nwake = false\nbetween = "22:00-03:07"')).toBe('t: Sun at 00:00, runs `tide.sh`, never wakes you, "r", only 22:00-03:07\n  never fired · its check hasn\'t run yet');
-  expect(shown('on = "2026-11-12 00:00"\nreason = "It is time."')).toBe('t: once, Thursday 2026-11-12 · 12:00 AM, wakes you, "It is time."\n  never fired');
-  expect(shown('when = "user_quiet"\nafter = "36h"\nreason = "r"')).toBe('t: when eve has been quiet for 36h, wakes you, "r", at most every 1h\n  never fired');
-  expect(shown('when = "status_changed"\nreason = "r"')).toBe('t: when eve changes their status, wakes you, "r", at most every 1h\n  never fired');
+test("the list says when each trigger fires, what it does, and what limits it", async () => {
+  expect(await shown('every = "90m"\nreason = "Trim the lamp."')).toBe('t: every 90m, wakes you, "Trim the lamp.", at most every 1h\n  never fired');
+  expect(await shown('every = "2d"\ncheck = "tide.sh"\nwake = false')).toBe("t: every 2d, runs `tide.sh`, never wakes you\n  never fired · its check hasn't run yet");
+  expect(await shown('every = "30m"\ncheck = "mail.sh"')).toBe("t: every 30m, if `mail.sh` prints, wakes you, at most every 1h\n  never fired · its check hasn't run yet");
+  expect(await shown('at = "20:00"\nreason = "Supper."\ncooldown = "30m"')).toBe('t: every day at 20:00, wakes you, "Supper.", at most every 30m\n  never fired');
+  expect(await shown('at = "Sat, Mon 9:05"\nreason = "r"\nbetween = "08:00-23:30"')).toBe('t: Mon, Sat at 09:05, wakes you, "r", only 08:00-23:30, at most every 1h\n  never fired');
+  expect(await shown('at = "sun 0:00"\ncheck = "tide.sh"\nreason = "r"\nwake = false\nbetween = "22:00-03:07"')).toBe('t: Sun at 00:00, runs `tide.sh`, never wakes you, "r", only 22:00-03:07\n  never fired · its check hasn\'t run yet');
+  expect(await shown('on = "2026-11-12 00:00"\nreason = "It is time."')).toBe('t: once, Thursday 2026-11-12 · 12:00 AM, wakes you, "It is time."\n  never fired');
+  expect(await shown('when = "user_quiet"\nafter = "36h"\nreason = "r"')).toBe('t: when eve has been quiet for 36h, wakes you, "r", at most every 1h\n  never fired');
+  expect(await shown('when = "status_changed"\nreason = "r"')).toBe('t: when eve changes their status, wakes you, "r", at most every 1h\n  never fired');
 });
 
-test("the list says when each trigger is next due, how often it has fired, and whether it is off", () => {
+test("the list says when each trigger is next due, how often it has fired, and whether it is off", async () => {
   const body = 'every = "1h"\nreason = "r"\ncooldown = "0m"';
   const at = Date.UTC(2026, 9, 30, 13);
-  expect(shown(body, { nextAt: at })).toBe('t: every 1h, wakes you, "r"\n  next Friday 2026-10-30 · 1:00 PM · never fired');
-  expect(shown(body, { fired: 1, lastFiredAt: at })).toBe('t: every 1h, wakes you, "r"\n  fired 1 time, last Friday 2026-10-30 · 1:00 PM');
-  expect(shown(body, { fired: 2, lastFiredAt: at, nextAt: at + HOUR, off: true, problem: "it exited with status 2", checkedAt: at })).toBe(
+  expect(await shown(body, { nextAt: at })).toBe('t: every 1h, wakes you, "r"\n  next Friday 2026-10-30 · 1:00 PM · never fired');
+  expect(await shown(body, { fired: 1, lastFiredAt: at })).toBe('t: every 1h, wakes you, "r"\n  fired 1 time, last Friday 2026-10-30 · 1:00 PM');
+  expect(await shown(body, { fired: 2, lastFiredAt: at, nextAt: at + HOUR, off: true, problem: "it exited with status 2", checkedAt: at })).toBe(
     't: every 1h, wakes you, "r"\n  next Friday 2026-10-30 · 2:00 PM · fired 2 times, last Friday 2026-10-30 · 1:00 PM · switched off by eve',
   );
 });
 
-test("the list says of a check when it last ran and whether it printed nothing or failed, so a quiet check can be told from one that isn't running", () => {
+test("the list says of a check when it last ran and whether it printed nothing or failed, so a quiet check can be told from one that isn't running", async () => {
   const body = 'every = "1h"\ncheck = "tide.sh"\nwake = false';
   const head = "t: every 1h, runs `tide.sh`, never wakes you\n  ";
   const at = Date.UTC(2026, 9, 30, 13);
-  expect(shown(body)).toBe(`${head}never fired · its check hasn't run yet`);
-  expect(shown(body, { checkedAt: at })).toBe(`${head}never fired · last checked Friday 2026-10-30 · 1:00 PM, printed nothing`);
-  expect(shown(body, { fired: 1, lastFiredAt: at, checkedAt: at })).toBe(`${head}fired 1 time, last Friday 2026-10-30 · 1:00 PM`);
-  expect(shown(body, { fired: 1, lastFiredAt: at, checkedAt: at + HOUR })).toBe(`${head}fired 1 time, last Friday 2026-10-30 · 1:00 PM · last checked Friday 2026-10-30 · 2:00 PM, printed nothing`);
-  expect(shown(body, { problem: "it exited with status 2: no tide", checkedAt: at })).toBe(`${head}never fired · its check failed when last tried, Friday 2026-10-30 · 1:00 PM: it exited with status 2: no tide`);
-  expect(shown(body, { problem: "it exited with status 2: no tide" })).toBe(`${head}never fired · its check is failing: it exited with status 2: no tide`);
+  expect(await shown(body)).toBe(`${head}never fired · its check hasn't run yet`);
+  expect(await shown(body, { checkedAt: at })).toBe(`${head}never fired · last checked Friday 2026-10-30 · 1:00 PM, printed nothing`);
+  expect(await shown(body, { fired: 1, lastFiredAt: at, checkedAt: at })).toBe(`${head}fired 1 time, last Friday 2026-10-30 · 1:00 PM`);
+  expect(await shown(body, { fired: 1, lastFiredAt: at, checkedAt: at + HOUR })).toBe(`${head}fired 1 time, last Friday 2026-10-30 · 1:00 PM · last checked Friday 2026-10-30 · 2:00 PM, printed nothing`);
+  expect(await shown(body, { problem: "it exited with status 2: no tide", checkedAt: at })).toBe(`${head}never fired · its check failed when last tried, Friday 2026-10-30 · 1:00 PM: it exited with status 2: no tide`);
+  expect(await shown(body, { problem: "it exited with status 2: no tide" })).toBe(`${head}never fired · its check is failing: it exited with status 2: no tide`);
 });
 
-test("the list covers every trigger and those that aren't running, and says so when there are none or the character's triggers are off", () => {
+test("the list covers every trigger and those that aren't running, and says so when there are none or the character's triggers are off", async () => {
   const parsed = parse('[show]\nat = "Sat 20:00"\nreason = "The show."\n\n[recap]\nfollows = "show"\ncheck = "recap.sh"\nwake = false\n\n[lamp]\nreason = "r"\n');
   const view: TriggersView = { enabled: true, problems: parsed.problems, triggers: parsed.triggers.map((trigger) => ({ trigger, off: false, problem: undefined, fired: 0, lastFiredAt: undefined, checkedAt: undefined, nextAt: undefined })) };
-  expect(handleListTriggers(view, "eve", "UTC")).toBe([
+  expect(await handleListTriggers(Promise.resolve(view), "eve", "UTC")).toBe([
     "Your triggers, from TRIGGERS.toml in your workspace root.",
     'show: Sat at 20:00, wakes you, "The show.", at most every 1h\n  never fired',
     "recap: after `show`, runs `recap.sh`, never wakes you\n  never fired · its check hasn't run yet",
     "Not running:\n- `lamp` isn't running: it needs exactly one of `every`, `at`, `on`, `when` or `follows` to say when it fires",
   ].join("\n\n"));
-  expect(handleListTriggers({ enabled: true, triggers: [], problems: [] }, "eve", "UTC")).toBe("Your triggers, from TRIGGERS.toml in your workspace root.\n\nYou have none there yet, so nothing wakes you on its own.");
-  expect(handleListTriggers({ enabled: false, triggers: [], problems: ["`lamp` isn't running: why"] }, "eve", "UTC")).toBe(
+  expect(await handleListTriggers(Promise.resolve({ enabled: true, triggers: [], problems: [] }), "eve", "UTC")).toBe("Your triggers, from TRIGGERS.toml in your workspace root.\n\nYou have none there yet, so nothing wakes you on its own.");
+  expect(await handleListTriggers(Promise.resolve({ enabled: false, triggers: [], problems: ["`lamp` isn't running: why"] }), "eve", "UTC")).toBe(
     "Your triggers, from TRIGGERS.toml in your workspace root. eve has your triggers switched off, so nothing fires.\n\nNot running:\n- `lamp` isn't running: why",
   );
-  expect(() => handleListTriggers(undefined, "eve", "UTC")).toThrow("triggers are not available in this context");
+  expect(String(await rejectionOf(handleListTriggers(undefined, "eve", "UTC")))).toContain("triggers are not available in this context");
 });
 
 test("no name is kept back from the character's triggers, and one with a check isn't run for a character without the bash tool", () => {
@@ -463,8 +464,8 @@ test("a trigger can name the thread its wake runs in, and how long its wake may 
   expect(where('thread = "garden"\ncheck = "tide.sh"\nwake = false')).toBe("`t` isn't running: `thread` is where a wake runs, and this trigger doesn't wake you");
 });
 
-test("the list says which thread a trigger wakes the character in and for how long", () => {
-  expect(shown('at = "Sat 20:00"\nreason = "The show."\nthread = "ring"\nlimit = "2h"')).toBe('t: Sat at 20:00, wakes you in "ring", "The show.", for up to 2h, at most every 1h\n  never fired');
-  expect(shown('every = "1d"\nreason = "r"\nthread = "ring"\ncooldown = "0s"')).toBe('t: every 1d, wakes you in "ring", "r"\n  never fired');
-  expect(shown('every = "1d"\nreason = "r"\nlimit = "45m"\ncooldown = "0s"')).toBe('t: every 1d, wakes you, "r", for up to 45m\n  never fired');
+test("the list says which thread a trigger wakes the character in and for how long", async () => {
+  expect(await shown('at = "Sat 20:00"\nreason = "The show."\nthread = "ring"\nlimit = "2h"')).toBe('t: Sat at 20:00, wakes you in "ring", "The show.", for up to 2h, at most every 1h\n  never fired');
+  expect(await shown('every = "1d"\nreason = "r"\nthread = "ring"\ncooldown = "0s"')).toBe('t: every 1d, wakes you in "ring", "r"\n  never fired');
+  expect(await shown('every = "1d"\nreason = "r"\nlimit = "45m"\ncooldown = "0s"')).toBe('t: every 1d, wakes you, "r", for up to 45m\n  never fired');
 });

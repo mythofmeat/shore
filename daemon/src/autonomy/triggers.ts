@@ -20,6 +20,8 @@ const ON = /^(\d{4}-\d{2}-\d{2})[ T](\d{2}:\d{2})$/;
 
 const MINUTE_MS = 60_000;
 
+const EVERY_DAY = WEEKDAYS.map((_day, weekday) => weekday);
+
 export type TriggerEvent = (typeof EVENTS)[number];
 
 export type TriggerWhen =
@@ -196,8 +198,22 @@ export function coolingDown(cooldownMs: number, lastFiredAt: number | undefined,
   return lastFiredAt !== undefined && now - lastFiredAt < cooldownMs;
 }
 
+function localMinute(instant: number, timeZone: string): number {
+  return Math.floor((naiveInZone(instant, timeZone) % DAY_MS) / MINUTE_MS);
+}
+
 export function inItsHours(between: DayWindow | undefined, now: number, timeZone: string): boolean {
-  if (between === undefined) return true;
-  const local = naiveInZone(now, timeZone);
-  return inDayWindow(between, Math.floor((local % DAY_MS) / MINUTE_MS));
+  return between === undefined || inDayWindow(between, localMinute(now, timeZone));
+}
+
+export function nextFiring({ when, between }: Trigger, due: number, timeZone: string): number | undefined {
+  if (between === undefined) return due;
+  const tried = new Set<number>();
+  let at = due;
+  for (let minute = localMinute(at, timeZone); !inDayWindow(between, minute); minute = localMinute(at, timeZone)) {
+    if (tried.has(minute)) return undefined;
+    tried.add(minute);
+    if (when.kind === "every") at += Math.ceil((nextAt({ kind: "at", weekdays: EVERY_DAY, minute: between.startMinute }, at, timeZone) - at) / when.everyMs) * when.everyMs;
+  }
+  return at;
 }

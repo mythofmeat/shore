@@ -130,7 +130,7 @@ test("a dry run doesn't hand a wake over, start a thread or call an outside tool
       asked.push(name);
       return "called";
     },
-    triggers: () => ({ enabled: false, problems: [], triggers: [] }),
+    triggers: async () => ({ enabled: false, problems: [], triggers: [] }),
   };
   const blocked = async (name: string, input: unknown): Promise<string> => {
     try {
