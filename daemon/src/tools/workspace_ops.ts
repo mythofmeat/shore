@@ -11,7 +11,6 @@ import { listedWorkspaceFiles } from "./workspace_names.ts";
 import { lookUpPictures, type PictureLookup, type PictureTarget } from "./message_pictures.ts";
 import { firstVideoFrame } from "./video.ts";
 import { indexTree, type IndexedEntry } from "./tree_index.ts";
-import { restoreWorkspaceEntry, workspaceEntry, type WorkspaceEntry } from "./workspace_snapshot.ts";
 
 export type FileRead = { data: string } | { error: { code?: string; message: string } };
 
@@ -28,15 +27,11 @@ export interface WorkspaceOpTable {
   exists: (args: { paths: string[] }) => Promise<boolean[]>;
   mkdir: (args: { path: string }) => Promise<void>;
   createFile: (args: { path: string; data: string }) => Promise<boolean>;
-  writeFile: (args: { path: string; data: string }) => Promise<void>;
-  deleteFile: (args: { path: string }) => Promise<void>;
   realpath: (args: { path: string }) => Promise<string>;
   entries: (args: { path: string }) => Promise<string[] | null>;
   clear: (args: { path: string }) => Promise<void>;
   remove: (args: { root: string; path: string }) => Promise<void>;
   index: (args: { root: string }) => Promise<IndexedEntry[] | null>;
-  entry: (args: { path: string }) => Promise<WorkspaceEntry | null>;
-  restore: (args: { path: string; entry: WorkspaceEntry | null }) => Promise<void>;
 }
 
 export type WorkspaceOp = keyof WorkspaceOpTable;
@@ -100,13 +95,6 @@ export const WORKSPACE_OPS: WorkspaceOpTable = {
       throw error;
     }
   },
-  writeFile: async ({ path, data }) => {
-    await mkdir(dirname(path), { recursive: true });
-    await writeFile(path, Buffer.from(data, "base64"));
-  },
-  deleteFile: async ({ path }) => {
-    await rm(path);
-  },
   realpath: async ({ path }) => await realpath(path),
   entries: async ({ path }) => {
     try {
@@ -131,10 +119,6 @@ export const WORKSPACE_OPS: WorkspaceOpTable = {
     await pruneEmptyParents(root, path);
   },
   index: async ({ root }) => await indexTree(root),
-  entry: async ({ path }) => await workspaceEntry(path),
-  restore: async ({ path, entry }) => {
-    await restoreWorkspaceEntry(path, entry);
-  },
 };
 
 export function isWorkspaceOp(name: string): name is WorkspaceOp {

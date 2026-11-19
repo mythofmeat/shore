@@ -367,7 +367,6 @@ export const DAEMON_FLOORS: Readonly<Record<string, number>> = {
   "src/tools/workspace_names.ts": 0.55,
   "src/tools/workspace_ops.ts": 0.5,
   "src/tools/workspace_path.ts": 0.9,
-  "src/tools/workspace_snapshot.ts": 0.3,
   "src/tools/workspace_turns.ts": 0.75,
   "src/transcript_capture.ts": 0.15,
   "src/util/base64.ts": 0.7,
