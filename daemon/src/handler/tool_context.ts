@@ -47,7 +47,7 @@ export interface ToolContextDeps extends Partial<ToolConversation> {
   imageGenerator?: ToolContext["imageGenerator"];
   modelHistoryQuery?: ToolContext["modelHistoryQuery"];
   activityStats?: (character: string, days: number) => ReturnType<ActivityStatsLookup>;
-  triggersView?: (character: string) => TriggersView;
+  triggersView?: (character: string) => Promise<TriggersView>;
   push?: (character: string, message: string) => Promise<PushOutcome>;
   wakeInThread?: (character: string, from: string, request: WakeInThreadRequest) => WakeHandOff;
   startThread?: (character: string, request: StartThreadRequest) => Promise<void>;

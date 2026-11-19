@@ -2,7 +2,7 @@ import { shoreLog } from "../log.ts";
 import { readCharacterState, writeCharacterState } from "../storage/store.ts";
 import type { TriggerFiring } from "./runner.ts";
 import type { CheckOutcome } from "./trigger_check.ts";
-import { coolingDown, inItsHours, parseTriggers, scheduledAt, TRIGGERS_FILE, type ParsedTriggers, type Trigger } from "./triggers.ts";
+import { coolingDown, inItsHours, nextFiring, parseTriggers, scheduledAt, TRIGGERS_FILE, type ParsedTriggers, type Trigger } from "./triggers.ts";
 
 const TRIGGER_STATE = "triggers.json";
 
@@ -80,6 +80,12 @@ function eventOf(trigger: Trigger): string | undefined {
   return trigger.when.kind === "event" ? trigger.when.event : undefined;
 }
 
+function dueAt(trigger: Trigger, known: TriggerRecord | undefined, lastUserAt: number | undefined, timeZone: string): number | undefined {
+  const { when } = trigger;
+  if (when.kind !== "event") return known === undefined ? undefined : scheduledAt(when, known.since, timeZone);
+  return when.event === "user_quiet" && lastUserAt !== undefined && known?.quietFor !== lastUserAt ? lastUserAt + when.afterMs : undefined;
+}
+
 export class CharacterTriggers {
   readonly #deps: TriggerLoopDeps;
   #parsed: ParsedTriggers = { triggers: [], problems: [] };
@@ -133,15 +139,17 @@ export class CharacterTriggers {
     });
   }
 
-  view(): TriggersView {
+  async view(): Promise<TriggersView> {
     const settings = this.#deps.settings();
+    await this.#load(settings);
     const state = this.#state();
+    const lastUserAt = this.#deps.lastUserAt();
     return {
       enabled: settings.enabled,
       problems: this.#parsed.problems,
       triggers: this.#parsed.triggers.map((trigger) => {
         const known = state.records[trigger.name];
-        const scheduled = known === undefined ? undefined : scheduledAt(trigger.when, known.since, this.#deps.timeZone);
+        const due = dueAt(trigger, known, lastUserAt, this.#deps.timeZone);
         const cooled = known?.lastFiredAt === undefined ? undefined : known.lastFiredAt + trigger.cooldownMs;
         return {
           trigger,
@@ -150,7 +158,7 @@ export class CharacterTriggers {
           fired: known?.fired ?? 0,
           lastFiredAt: known?.lastFiredAt,
           checkedAt: known?.checkedAt,
-          nextAt: scheduled === undefined ? undefined : Math.max(scheduled, cooled ?? scheduled),
+          nextAt: due === undefined ? undefined : nextFiring(trigger, Math.max(due, cooled ?? due), this.#deps.timeZone),
         };
       }),
     };

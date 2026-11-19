@@ -76,7 +76,7 @@ export interface ToolContext {
   mcpCall?: (name: string, input: unknown, signal?: AbortSignal) => Promise<unknown>;
 
 
-  triggers?: () => TriggersView;
+  triggers?: () => Promise<TriggersView>;
 
   sendMessage?: SendMessage;
 

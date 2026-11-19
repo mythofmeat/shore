@@ -116,7 +116,7 @@ test("nothing runs while triggers are off, and what comes due while the characte
   await asleep.at(260);
   expect(asleep.woke).toEqual([{ name: "lamp", reason: "Trim the lamp.", at: T0 + 260 * MINUTE }]);
   expect(asleep.ran).toEqual([["tide", 60_000]]);
-  expect(asleep.triggers.view().triggers.map((each) => [each.trigger.name, each.fired])).toEqual([["lamp", 1], ["tide", 1]]);
+  expect((await asleep.triggers.view()).triggers.map((each) => [each.trigger.name, each.fired])).toEqual([["lamp", 1], ["tide", 1]]);
 });
 
 test("a trigger that comes due during its cooldown waits for it to end, and its check isn't run until then", async () => {
@@ -145,14 +145,14 @@ test("a trigger with a check isn't run for a character without the bash tool, wh
   await w.at(120);
   expect(w.ran).toEqual([]);
   expect(w.woke.map((firing) => firing.name)).toEqual(["lamp", "lamp"]);
-  expect(w.triggers.view().problems).toEqual(["`tide` isn't running: its `check` is a command, and you don't have the `bash` tool to run commands with"]);
-  expect(w.triggers.view().triggers.map((each) => each.trigger.name)).toEqual(["lamp"]);
+  expect((await w.triggers.view()).problems).toEqual(["`tide` isn't running: its `check` is a command, and you don't have the `bash` tool to run commands with"]);
+  expect((await w.triggers.view()).triggers.map((each) => each.trigger.name)).toEqual(["lamp"]);
 
   w.settings = { ...w.settings, checks: true };
   await w.at(121);
   await w.at(181);
   expect(w.ran).toEqual([["tide", 60_000]]);
-  expect(w.triggers.view().problems).toEqual([]);
+  expect((await w.triggers.view()).problems).toEqual([]);
   expect(w.woke.filter((firing) => firing.name === "tide").map((firing) => firing.reason)).toEqual(["The tide is out."]);
 });
 
@@ -171,29 +171,29 @@ test("a quiet check does nothing, and one that prints fires with the trigger's r
 
 test("when a check last ran is kept, whether it printed, stayed quiet or failed, and through a restart, and a trigger with no check has no such time", async () => {
   const w = await world(`[tide]\nevery = "1h"\ncheck = "tide.sh"\nwake = false\n\n${HOURLY}`);
-  const checked = (): (number | undefined)[] => w.triggers.view().triggers.map((each) => each.checkedAt);
+  const checked = async (): Promise<(number | undefined)[]> => (await w.triggers.view()).triggers.map((each) => each.checkedAt);
   await w.at(0);
-  expect(checked()).toEqual([undefined, undefined]);
+  expect(await checked()).toEqual([undefined, undefined]);
   await w.at(60);
-  expect(checked()).toEqual([T0 + HOUR, undefined]);
-  expect(w.triggers.view().triggers[0]).toMatchObject({ fired: 0, lastFiredAt: undefined, problem: undefined });
+  expect(await checked()).toEqual([T0 + HOUR, undefined]);
+  expect((await w.triggers.view()).triggers[0]).toMatchObject({ fired: 0, lastFiredAt: undefined, problem: undefined });
 
   w.checks["tide"] = { kind: "fired", output: "The tide is out." };
   await w.at(120);
-  expect(w.triggers.view().triggers[0]).toMatchObject({ fired: 1, lastFiredAt: T0 + 2 * HOUR, checkedAt: T0 + 2 * HOUR });
+  expect((await w.triggers.view()).triggers[0]).toMatchObject({ fired: 1, lastFiredAt: T0 + 2 * HOUR, checkedAt: T0 + 2 * HOUR });
 
   w.checks["tide"] = { kind: "failed", problem: "it exited with status 2" };
   await w.at(180);
-  expect(w.triggers.view().triggers[0]).toMatchObject({ problem: "it exited with status 2", lastFiredAt: T0 + 2 * HOUR, checkedAt: T0 + 3 * HOUR });
+  expect((await w.triggers.view()).triggers[0]).toMatchObject({ problem: "it exited with status 2", lastFiredAt: T0 + 2 * HOUR, checkedAt: T0 + 3 * HOUR });
   w.restart();
   await w.at(181);
-  expect(checked()).toEqual([T0 + 3 * HOUR, undefined]);
-  expect(w.triggers.view().triggers[0]?.problem).toBe("it exited with status 2");
+  expect(await checked()).toEqual([T0 + 3 * HOUR, undefined]);
+  expect((await w.triggers.view()).triggers[0]?.problem).toBe("it exited with status 2");
 
   writeCharacterState(w.dir, "triggers.json", JSON.stringify({ records: { tide: { since: T0 + 181 * MINUTE, fired: 1, checkedAt: "then", problem: 2 } } }));
   await w.at(182);
-  expect(checked()).toEqual([undefined, undefined]);
-  expect(w.triggers.view().triggers[0]?.problem).toBeUndefined();
+  expect(await checked()).toEqual([undefined, undefined]);
+  expect((await w.triggers.view()).triggers[0]?.problem).toBeUndefined();
 });
 
 test("a one-off that was to wake the character does so even when its check fails, saying why, and one that never wakes is only kept as failing", async () => {
@@ -213,7 +213,7 @@ test("a one-off that was to wake the character does so even when its check fails
     { name: "bare", reason: woken, at: T0 + HOUR },
   ]);
   const failed = "it exited with status 2";
-  expect(w.triggers.view().triggers.map((each) => [each.trigger.name, each.fired, each.problem, each.lastFiredAt, each.checkedAt, each.nextAt])).toEqual([
+  expect((await w.triggers.view()).triggers.map((each) => [each.trigger.name, each.fired, each.problem, each.lastFiredAt, each.checkedAt, each.nextAt])).toEqual([
     ["call", 1, failed, T0 + HOUR, T0 + HOUR, undefined],
     ["bare", 1, failed, T0 + HOUR, T0 + HOUR, undefined],
     ["note", 0, failed, undefined, T0 + HOUR, undefined],
@@ -238,11 +238,11 @@ test("a one-off stays listed as fired with no next time, and a later time writte
   await w.at(60);
   expect(w.woke).toHaveLength(1);
   await w.at(70);
-  expect(w.triggers.view().triggers.map((each) => [each.trigger.name, each.fired, each.lastFiredAt, each.nextAt])).toEqual([["call", 1, T0 + HOUR, undefined]]);
+  expect((await w.triggers.view()).triggers.map((each) => [each.trigger.name, each.fired, each.lastFiredAt, each.nextAt])).toEqual([["call", 1, T0 + HOUR, undefined]]);
 
   w.file = '[call]\non = "2026-10-30 13:30"\nreason = "Time to call again."\n';
   await w.at(71);
-  expect(w.triggers.view().triggers[0]).toMatchObject({ fired: 1, nextAt: T0 + 90 * MINUTE });
+  expect((await w.triggers.view()).triggers[0]).toMatchObject({ fired: 1, nextAt: T0 + 90 * MINUTE });
   await w.at(89);
   expect(w.woke).toHaveLength(1);
   await w.at(90);
@@ -252,30 +252,30 @@ test("a one-off stays listed as fired with no next time, and a later time writte
   ]);
   await w.at(600);
   expect(w.woke).toHaveLength(2);
-  expect(w.triggers.view().triggers[0]).toMatchObject({ fired: 2, lastFiredAt: T0 + 90 * MINUTE, nextAt: undefined });
+  expect((await w.triggers.view()).triggers[0]).toMatchObject({ fired: 2, lastFiredAt: T0 + 90 * MINUTE, nextAt: undefined });
 });
 
 test("a failing check is kept with what went wrong until it works again, and nobody is woken for it", async () => {
   const w = await world('[tide]\nevery = "10m"\ncheck = "tide.sh"\nwake = false\n');
-  const tide = (): unknown => w.triggers.view().triggers[0];
+  const tide = async (): Promise<unknown> => (await w.triggers.view()).triggers[0];
   w.checks["tide"] = { kind: "failed", problem: "it exited with status 2" };
   await w.at(0);
   await w.at(10);
-  expect(tide()).toMatchObject({ problem: "it exited with status 2", fired: 0, lastFiredAt: undefined });
+  expect(await tide()).toMatchObject({ problem: "it exited with status 2", fired: 0, lastFiredAt: undefined });
   await w.at(20);
   expect(w.ran).toHaveLength(2);
-  expect(tide()).toMatchObject({ problem: "it exited with status 2", fired: 0, checkedAt: T0 + 20 * MINUTE });
+  expect(await tide()).toMatchObject({ problem: "it exited with status 2", fired: 0, checkedAt: T0 + 20 * MINUTE });
 
   w.checks["tide"] = { kind: "quiet" };
   await w.at(30);
-  expect(tide()).toMatchObject({ problem: undefined, fired: 0 });
+  expect(await tide()).toMatchObject({ problem: undefined, fired: 0 });
   w.checks["tide"] = { kind: "failed", problem: "it was still running at its time limit and was stopped" };
   await w.at(40);
-  expect(tide()).toMatchObject({ problem: "it was still running at its time limit and was stopped" });
+  expect(await tide()).toMatchObject({ problem: "it was still running at its time limit and was stopped" });
 
   w.checks["tide"] = { kind: "fired", output: "The tide is out." };
   await w.at(50);
-  expect(tide()).toMatchObject({ problem: undefined, fired: 1, lastFiredAt: T0 + 50 * MINUTE });
+  expect(await tide()).toMatchObject({ problem: undefined, fired: 1, lastFiredAt: T0 + 50 * MINUTE });
   expect(w.woke).toEqual([]);
 });
 
@@ -284,17 +284,19 @@ test("a trigger that doesn't wake runs its check each time it comes due, and wak
   w.checks["tide"] = { kind: "fired", output: "The tide is out." };
   await w.at(0);
   await w.at(10);
-  expect(w.triggers.view().triggers[0]).toMatchObject({ fired: 1, lastFiredAt: T0 + 10 * MINUTE });
+  expect((await w.triggers.view()).triggers[0]).toMatchObject({ fired: 1, lastFiredAt: T0 + 10 * MINUTE });
   w.checks["tide"] = { kind: "fired", output: "The tide is in." };
   await w.at(20);
-  expect(w.triggers.view().triggers[0]).toMatchObject({ fired: 2, lastFiredAt: T0 + 20 * MINUTE });
+  expect((await w.triggers.view()).triggers[0]).toMatchObject({ fired: 2, lastFiredAt: T0 + 20 * MINUTE });
   expect(w.ran).toEqual([["tide", 60_000], ["tide", 60_000]]);
   expect(w.woke).toEqual([]);
 });
 
 test("a trigger that comes due outside its hours is skipped, not held until they open", async () => {
   const w = await world('[lamp]\nevery = "1h"\nreason = "Trim the lamp."\nbetween = "14:30-16:00"\n');
+  const next = async (): Promise<number | undefined> => (await w.triggers.view()).triggers[0]?.nextAt;
   await w.at(0);
+  expect(await next()).toBe(T0 + 3 * HOUR);
   await w.at(60);
   await w.at(120);
   await w.at(150);
@@ -302,9 +304,25 @@ test("a trigger that comes due outside its hours is skipped, not held until they
   expect(w.woke).toEqual([]);
   await w.at(180);
   expect(w.woke).toEqual([{ name: "lamp", reason: "Trim the lamp.", at: T0 + 3 * HOUR }]);
+  expect(await next()).toBe(T0 + 27 * HOUR);
   await w.at(240);
   await w.at(241);
   expect(w.woke).toHaveLength(1);
+});
+
+test("a trigger whose times never fall inside its hours has no next time, and one for the user going quiet has one only if the quiet ends inside them", async () => {
+  const w = await world([
+    '[daily]\nevery = "24h"\nreason = "Daily."\nbetween = "14:30-16:00"',
+    '[supper]\nat = "13:30"\nreason = "Supper."\nbetween = "14:30-16:00"',
+    '[early]\nwhen = "user_quiet"\nafter = "2h"\nreason = "Gone a while."\nbetween = "14:30-16:00"',
+    '[late]\nwhen = "user_quiet"\nafter = "3h"\nreason = "Gone longer."\nbetween = "14:30-16:00"',
+    '[status]\nwhen = "status_changed"\nreason = "Their status changed."',
+  ].join("\n\n"));
+  w.lastUserAt = T0;
+  await w.at(0);
+  expect((await w.triggers.view()).triggers.map((each) => [each.trigger.name, each.nextAt])).toEqual([
+    ["daily", undefined], ["supper", undefined], ["early", undefined], ["late", T0 + 3 * HOUR], ["status", undefined],
+  ]);
 });
 
 test("a trigger for a time of day fires at that time, and once, late, if Shore wasn't looking then", async () => {
@@ -322,14 +340,18 @@ test("a trigger for a time of day fires at that time, and once, late, if Shore w
 
 test("a trigger for the user going quiet fires once each time they have been quiet that long", async () => {
   const w = await world('[missed]\nwhen = "user_quiet"\nafter = "2h"\nreason = "They have been gone a while."\ncooldown = "1m"\n');
+  const next = async (): Promise<number | undefined> => (await w.triggers.view()).triggers[0]?.nextAt;
   await w.at(0);
   await w.at(500);
   expect(w.woke).toEqual([]);
+  expect(await next()).toBeUndefined();
   w.lastUserAt = T0 + 500 * MINUTE;
+  expect(await next()).toBe(T0 + 620 * MINUTE);
   await w.at(619);
   expect(w.woke).toEqual([]);
   await w.at(620);
   expect(w.woke).toEqual([{ name: "missed", reason: "They have been gone a while.", at: T0 + 620 * MINUTE }]);
+  expect(await next()).toBeUndefined();
   await w.at(900);
   expect(w.woke).toHaveLength(1);
   w.lastUserAt = T0 + 901 * MINUTE;
@@ -360,10 +382,10 @@ test("a trigger for a status change waits for one, and for its own cooldown, wit
   early.restart();
   writeCharacterState(early.dir, "triggers.json", "{}");
   await early.triggers.statusChanged();
-  expect(early.triggers.view().triggers.map((each) => each.fired)).toEqual([0, 0]);
+  expect((await early.triggers.view()).triggers.map((each) => each.fired)).toEqual([0, 0]);
   await early.at(1);
   expect(early.woke.map((firing) => firing.name)).toEqual(["status"]);
-  expect(early.triggers.view().triggers.map((each) => each.fired)).toEqual([1, 0]);
+  expect((await early.triggers.view()).triggers.map((each) => each.fired)).toEqual([1, 0]);
 
   const off = await world('[status]\nwhen = "status_changed"\nreason = "Their status changed."\n');
   off.settings = { ...off.settings, enabled: false };
@@ -408,7 +430,7 @@ test("a trigger switched off doesn't fire or run its check until it is switched 
   await w.at(10);
   expect(w.ran).toEqual([]);
   expect(w.woke.map((firing) => firing.name)).toEqual(["lamp"]);
-  expect(w.triggers.view().triggers.map((each) => [each.trigger.name, each.off, each.fired, each.nextAt])).toEqual([["tide", true, 0, undefined], ["lamp", false, 1, T0 + 20 * MINUTE]]);
+  expect((await w.triggers.view()).triggers.map((each) => [each.trigger.name, each.off, each.fired, each.nextAt])).toEqual([["tide", true, 0, undefined], ["lamp", false, 1, T0 + 20 * MINUTE]]);
   w.settings = { ...w.settings, off: [] };
   await w.at(11);
   await w.at(20);
@@ -422,25 +444,25 @@ test("triggers that don't make sense are listed as not running, and the list fol
   const lamp = "`lamp` isn't running: it needs exactly one of `every`, `at`, `on`, `when` or `follows` to say when it fires";
   await w.at(0);
   await w.at(1);
-  expect(w.triggers.view().problems).toEqual([lamp]);
-  expect(w.triggers.view().triggers.map((each) => each.trigger.name)).toEqual(["tide"]);
+  expect((await w.triggers.view()).problems).toEqual([lamp]);
+  expect((await w.triggers.view()).triggers.map((each) => each.trigger.name)).toEqual(["tide"]);
 
   w.file = HOURLY;
   await w.at(2);
-  expect(w.triggers.view().problems).toEqual([]);
+  expect((await w.triggers.view()).problems).toEqual([]);
 
   w.file = '[lamp]\nevery = "1h"\n\n[ferry]\nat = "noon"\nreason = "r"\n';
   await w.at(3);
-  expect(w.triggers.view().problems).toHaveLength(2);
-  expect(w.triggers.view().problems[0]).toStartWith("`lamp` isn't running: it needs a `reason`");
-  expect(w.triggers.view().problems[1]).toStartWith("`ferry` isn't running: `at` must be");
+  expect((await w.triggers.view()).problems).toHaveLength(2);
+  expect((await w.triggers.view()).problems[0]).toStartWith("`lamp` isn't running: it needs a `reason`");
+  expect((await w.triggers.view()).problems[1]).toStartWith("`ferry` isn't running: `at` must be");
   expect(w.woke).toEqual([]);
 });
 
 test("an edited file is picked up at the next look, a trigger taken out and put back starts over, and a file that can't be read changes nothing", async () => {
   const w = await world(undefined);
   await w.at(0);
-  expect(w.triggers.view()).toEqual({ enabled: true, triggers: [], problems: [] });
+  expect((await w.triggers.view())).toEqual({ enabled: true, triggers: [], problems: [] });
   w.file = HOURLY;
   await w.at(10);
   await w.at(69);
@@ -454,7 +476,7 @@ test("an edited file is picked up at the next look, a trigger taken out and put 
   await w.at(72);
   await w.at(131);
   expect(w.woke).toHaveLength(1);
-  expect(w.triggers.view().triggers[0]).toMatchObject({ fired: 0, lastFiredAt: undefined, nextAt: T0 + 132 * MINUTE });
+  expect((await w.triggers.view()).triggers[0]).toMatchObject({ fired: 0, lastFiredAt: undefined, nextAt: T0 + 132 * MINUTE });
   w.unreadable = true;
   await w.at(132);
   expect(w.woke).toHaveLength(2);
@@ -463,7 +485,21 @@ test("an edited file is picked up at the next look, a trigger taken out and put 
   w.settings = { ...w.settings, wakeCooldownMs: 3 * HOUR };
   await w.at(192);
   expect(w.woke).toHaveLength(2);
-  expect(w.triggers.view().triggers[0]).toMatchObject({ fired: 1, lastFiredAt: T0 + 132 * MINUTE, nextAt: T0 + 312 * MINUTE });
+  expect((await w.triggers.view()).triggers[0]).toMatchObject({ fired: 1, lastFiredAt: T0 + 132 * MINUTE, nextAt: T0 + 312 * MINUTE });
+});
+
+test("the list is read from the file whenever it is asked for, with triggers switched off too, and a file that can't be read leaves the list it had", async () => {
+  const w = await world(undefined);
+  w.settings = { ...w.settings, enabled: false };
+  expect(await w.triggers.view()).toEqual({ enabled: false, triggers: [], problems: [] });
+  w.file = HOURLY;
+  expect((await w.triggers.view()).triggers.map((each) => each.trigger.name)).toEqual(["lamp"]);
+  w.unreadable = true;
+  expect((await w.triggers.view()).triggers.map((each) => each.trigger.name)).toEqual(["lamp"]);
+  w.unreadable = false;
+  w.file = "";
+  expect((await w.triggers.view()).triggers).toEqual([]);
+  expect(w.woke).toEqual([]);
 });
 
 test("what is known about each trigger survives a restart, and state that can't be read starts over", async () => {
@@ -475,20 +511,20 @@ test("what is known about each trigger survives a restart, and state that can't 
   await w.at(60);
   expect(w.woke).toHaveLength(1);
   w.restart();
-  expect(w.triggers.view().triggers).toEqual([]);
+  expect((await w.triggers.view()).triggers[0]).toMatchObject({ fired: 1, lastFiredAt: T0 + HOUR, nextAt: T0 + 2 * HOUR });
   await w.at(61);
-  expect(w.triggers.view().triggers[0]).toMatchObject({ fired: 1, lastFiredAt: T0 + HOUR, off: false, problem: undefined, nextAt: T0 + 2 * HOUR });
+  expect((await w.triggers.view()).triggers[0]).toMatchObject({ fired: 1, lastFiredAt: T0 + HOUR, off: false, problem: undefined, nextAt: T0 + 2 * HOUR });
 
   writeCharacterState(w.dir, "triggers.json", "{not json");
   await w.at(120);
   expect(w.woke).toHaveLength(1);
-  expect(w.triggers.view().triggers[0]).toMatchObject({ fired: 0, nextAt: T0 + 180 * MINUTE });
+  expect((await w.triggers.view()).triggers[0]).toMatchObject({ fired: 0, nextAt: T0 + 180 * MINUTE });
   writeCharacterState(w.dir, "triggers.json", JSON.stringify({ records: { lamp: { since: "then", fired: 1 }, gone: 5 }, problems: "none" }));
   await w.at(121);
-  expect(w.triggers.view().triggers[0]).toMatchObject({ fired: 0, nextAt: T0 + 181 * MINUTE });
+  expect((await w.triggers.view()).triggers[0]).toMatchObject({ fired: 0, nextAt: T0 + 181 * MINUTE });
   writeCharacterState(w.dir, "triggers.json", JSON.stringify({ records: { gone: null, lamp: { since: T0 + 100 * MINUTE, fired: 7, lastFiredAt: T0 + 100 * MINUTE } } }));
   await w.at(122);
-  expect(w.triggers.view().triggers[0]).toMatchObject({ fired: 7, lastFiredAt: T0 + 100 * MINUTE, nextAt: T0 + 160 * MINUTE });
+  expect((await w.triggers.view()).triggers[0]).toMatchObject({ fired: 7, lastFiredAt: T0 + 100 * MINUTE, nextAt: T0 + 160 * MINUTE });
 });
 
 test("a check that throws doesn't stop the triggers from being looked at again", async () => {
@@ -505,7 +541,7 @@ test("a check that throws doesn't stop the triggers from being looked at again",
 test("a one-off fires once at its time, late if Shore wasn't looking then, and never if its time had passed when it was added", async () => {
   const w = await world('[midnight]\non = "2026-10-30 13:30"\nreason = "It is time."\n\n[missed]\non = "2026-10-30 11:00"\nreason = "Too late."\n');
   await w.at(0);
-  expect(w.triggers.view().triggers.map((each) => each.nextAt)).toEqual([T0 + 90 * MINUTE, undefined]);
+  expect((await w.triggers.view()).triggers.map((each) => each.nextAt)).toEqual([T0 + 90 * MINUTE, undefined]);
   await w.at(89);
   expect(w.woke).toEqual([]);
   await w.at(95);
@@ -513,7 +549,7 @@ test("a one-off fires once at its time, late if Shore wasn't looking then, and n
   await w.at(96);
   await w.at(3 * 24 * 60);
   expect(w.woke).toHaveLength(1);
-  expect(w.triggers.view().triggers.map((each) => [each.fired, each.nextAt])).toEqual([[1, undefined], [0, undefined]]);
+  expect((await w.triggers.view()).triggers.map((each) => [each.fired, each.nextAt])).toEqual([[1, undefined], [0, undefined]]);
 });
 
 test("a firing says which thread to wake the character in, with the limit it asked for held to the user's ceiling", async () => {

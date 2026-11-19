@@ -1287,8 +1287,8 @@ function withTriggers(app: AppConfig): void {
   app.tools.enabled.push("bash");
 }
 
-function firedOf(runtime: ShoreRuntime, name: string): number | undefined {
-  return runtime.triggers.view("ada").triggers.find((each) => each.trigger.name === name)?.fired;
+async function firedOf(runtime: ShoreRuntime, name: string): Promise<number | undefined> {
+  return (await runtime.triggers.view("ada")).triggers.find((each) => each.trigger.name === name)?.fired;
 }
 
 test("a trigger in the character's file wakes it when its check prints, and the check is handed what Shore knows", async () => {
@@ -1324,7 +1324,7 @@ test("a trigger in the character's file wakes it when its check prints, and the 
     expect(facts.activity.share_of_messages_by_local_hour).toHaveLength(24);
     expect(facts.activity.share_of_messages_by_local_hour.reduce((sum, share) => sum + share, 0)).toBe(1);
     expect(facts.activity.median_secs_between_sessions).toBeNull();
-    expect(runtime.triggers.view("ada")).toMatchObject({ enabled: true, problems: [], triggers: [{ fired: 1, lastFiredAt: T0 + 11 * MINUTE, off: false }] });
+    expect((await runtime.triggers.view("ada"))).toMatchObject({ enabled: true, problems: [], triggers: [{ fired: 1, lastFiredAt: T0 + 11 * MINUTE, off: false }] });
   }, withTriggers);
 });
 
@@ -1338,11 +1338,11 @@ test("a follower's turn comes once the wake its leader caused is over, whether t
     at(11);
     await runtime.triggers.tick();
     await runtime.triggers.tick();
-    expect(firedOf(runtime, "after")).toBe(0);
+    expect(await firedOf(runtime, "after")).toBe(0);
     await runtime.autonomy.runDue();
     expect(script.wakes.length).toBeGreaterThan(0);
     await runtime.triggers.tick();
-    expect(firedOf(runtime, "after")).toBe(1);
+    expect(await firedOf(runtime, "after")).toBe(1);
 
     const held = hold();
     script.beatHeld = held;
@@ -1351,12 +1351,12 @@ test("a follower's turn comes once the wake its leader caused is over, whether t
     await held.started.promise;
     at(21);
     await runtime.triggers.tick();
-    expect(runtime.triggers.view("ada").triggers.map((each) => each.fired)).toEqual([2, 1]);
+    expect((await runtime.triggers.view("ada")).triggers.map((each) => each.fired)).toEqual([2, 1]);
     held.release.resolve();
     await ticking;
     at(22);
     await runtime.triggers.tick();
-    expect(runtime.triggers.view("ada").triggers.map((each) => each.fired)).toEqual([2, 2]);
+    expect((await runtime.triggers.view("ada")).triggers.map((each) => each.fired)).toEqual([2, 2]);
   }, withTriggers);
 });
 
@@ -1374,14 +1374,14 @@ test("a trigger that fires while a wake is writing its last words isn't lost: it
     await end.started.promise;
     at(11);
     await runtime.triggers.tick();
-    expect(runtime.triggers.view("ada").triggers.map((each) => each.fired)).toEqual([1, 0]);
+    expect((await runtime.triggers.view("ada")).triggers.map((each) => each.fired)).toEqual([1, 0]);
     end.release.resolve();
     await ticking;
     expect(script.wakes).toHaveLength(2);
     expect(script.wakes.map(textOf).join("\n")).not.toContain("Trim the lamp.");
     at(12);
     await runtime.triggers.tick();
-    expect(firedOf(runtime, "after")).toBe(0);
+    expect(await firedOf(runtime, "after")).toBe(0);
 
     script.wakes.length = 0;
     await runtime.autonomy.runDue();
@@ -1389,7 +1389,7 @@ test("a trigger that fires while a wake is writing its last words isn't lost: it
     expect(textOf(script.wakes[0] as SidecarRequest)).toContain('[Your trigger "lamp" fired at Friday 2026-10-30 · 12:11 PM: Trim the lamp.]');
     expect(runtime.autonomy.log("ada", 100).map((event) => event.detail)).toContain('Woken in "main" by trigger "lamp"');
     await runtime.triggers.tick();
-    expect(runtime.triggers.view("ada").triggers.map((each) => each.fired)).toEqual([1, 1]);
+    expect((await runtime.triggers.view("ada")).triggers.map((each) => each.fired)).toEqual([1, 1]);
 
     script.wakes.length = 0;
     at(13);
@@ -1414,7 +1414,7 @@ test("the character's triggers run whenever they are switched on, a check only w
     await say("hello");
     await looks(runtime);
     expect(existsSync(join(workspace, "ran"))).toBe(false);
-    const view = runtime.triggers.view("ada");
+    const view = await runtime.triggers.view("ada");
     expect([view.enabled, view.triggers.map((each) => [each.trigger.name, each.fired]), view.problems]).toEqual([true, [["lamp", 1]], [noBash]]);
   });
 
@@ -1423,7 +1423,7 @@ test("the character's triggers run whenever they are switched on, a check only w
     await say("hello");
     await looks(runtime);
     expect(existsSync(join(workspace, "ran"))).toBe(false);
-    expect(runtime.triggers.view("ada").enabled).toBe(false);
+    expect((await runtime.triggers.view("ada")).enabled).toBe(false);
   }, (app) => {
     withTriggers(app);
     app.triggers.enabled = false;
@@ -1435,7 +1435,7 @@ test("the character's triggers run whenever they are switched on, a check only w
     expect(runtime.autonomy.forceDormancy("ada", "dormant")).toBe(true);
     await looks(runtime);
     expect(existsSync(join(workspace, "ran"))).toBe(false);
-    expect(runtime.triggers.view("ada").problems).toEqual([]);
+    expect((await runtime.triggers.view("ada")).problems).toEqual([]);
     expect(runtime.autonomy.forceDormancy("ada", "active")).toBe(true);
     at(12);
     await runtime.triggers.tick();
@@ -1453,7 +1453,7 @@ test("the user's settings reach the character's triggers: a longer cooldown, a s
     await looks(runtime);
     expect(performance.now() - started).toBeLessThan(15_000);
     expect(existsSync(join(workspace, "ran"))).toBe(false);
-    expect(runtime.triggers.view("ada").triggers.map((each) => [each.trigger.name, each.off, each.trigger.cooldownMs, each.nextAt, each.problem])).toEqual([
+    expect((await runtime.triggers.view("ada")).triggers.map((each) => [each.trigger.name, each.off, each.trigger.cooldownMs, each.nextAt, each.problem])).toEqual([
       ["touch", true, 3 * 60 * MINUTE, undefined, undefined],
       ["slow", false, 0, T0 + 21 * MINUTE, "it was still running at its time limit and was stopped"],
       ["lamp", false, 3 * 60 * MINUTE, T0 + 191 * MINUTE, undefined],
@@ -1471,21 +1471,21 @@ test("a character with no triggers file has none, and a file that can't be read 
     await say("hello");
     at(1);
     await runtime.triggers.tick();
-    expect(runtime.triggers.view("ada")).toEqual({ enabled: true, triggers: [], problems: [] });
+    expect((await runtime.triggers.view("ada"))).toEqual({ enabled: true, triggers: [], problems: [] });
 
     await writeFile(join(workspace, "TRIGGERS.toml"), TOUCH);
     at(2);
     await runtime.triggers.tick();
-    expect(runtime.triggers.view("ada").triggers.map((each) => each.trigger.name)).toEqual(["touch"]);
+    expect((await runtime.triggers.view("ada")).triggers.map((each) => each.trigger.name)).toEqual(["touch"]);
     await rm(join(workspace, "TRIGGERS.toml"));
     await mkdir(join(workspace, "TRIGGERS.toml"));
     at(3);
     await runtime.triggers.tick();
-    expect(runtime.triggers.view("ada").triggers.map((each) => each.trigger.name)).toEqual(["touch"]);
+    expect((await runtime.triggers.view("ada")).triggers.map((each) => each.trigger.name)).toEqual(["touch"]);
     await rm(join(workspace, "TRIGGERS.toml"), { recursive: true });
     at(4);
     await runtime.triggers.tick();
-    expect(runtime.triggers.view("ada").triggers).toEqual([]);
+    expect((await runtime.triggers.view("ada")).triggers).toEqual([]);
   }, withTriggers);
 });
 
@@ -1501,7 +1501,7 @@ test("a check still running when Shore shuts down is stopped, and nothing is rec
     at(11);
     looking = runtime.triggers.tick();
     await new Promise<void>((resolve) => { setTimeout(resolve, 200); });
-    state = JSON.stringify(runtime.triggers.view("ada").triggers.map((each) => [each.fired, each.problem ?? null]));
+    state = JSON.stringify((await runtime.triggers.view("ada")).triggers.map((each) => [each.fired, each.problem ?? null]));
   }, withTriggers);
   await looking;
   expect(performance.now() - started).toBeLessThan(15_000);
@@ -1607,13 +1607,30 @@ test("the character can list its triggers from a conversation, and is told when 
     script.replyTool = { name: "list_triggers", input: {} };
     await say("what have you set up?");
     expect(lastToolResult(await thread("main"))).toEqual({
-      text: "Your triggers, from TRIGGERS.toml in your workspace root. peggy has your triggers switched off, so nothing fires.\n\nYou have none there yet, so nothing wakes you on its own.",
+      text: 'Your triggers, from TRIGGERS.toml in your workspace root. peggy has your triggers switched off, so nothing fires.\n\nlamp: every 1h, wakes you, "Trim the lamp.", at most every 1h\n  never fired',
       failed: false,
     });
   }, (app) => {
     app.tools.enabled = [...app.tools.enabled, "list_triggers"];
     app.triggers.enabled = false;
   });
+});
+
+test("the user's status lists the character's triggers as its file has them, and names the one due next to wake it", async () => {
+  await withCharacter(async ({ runtime, workspace, say, command }) => {
+    await writeFile(join(workspace, "TRIGGERS.toml"), '[lamp]\nevery = "1h"\nreason = "Trim the lamp."\n');
+    await say("hello");
+    at(1);
+    await runtime.triggers.tick();
+    const shown = await command("status", {}) as unknown as { data: { triggers: unknown; sections: string[] } };
+    expect(shown.data.triggers).toEqual({
+      enabled: true,
+      next_wake: { trigger: "lamp", at: "2026-10-30T13:01:00+00:00" },
+      triggers: [{ name: "lamp", does: 'every 1h, wakes ada, "Trim the lamp.", at most every 1h', status: "next Friday 2026-10-30 · 1:01 PM · never fired" }],
+      not_running: [],
+    });
+    expect(shown.data.sections).toContain("triggers");
+  }, withTriggers);
 });
 
 test("from a conversation the character sends to another thread once its reply is done, and with a push the message reaches the user's topic once, at normal priority", async () => {
@@ -1875,7 +1892,7 @@ test("the presence command sets one of the user's own statuses, shows and clears
     await runtime.triggers.tick();
     expect((await command("presence", {}) as { data?: unknown }).data).toEqual({ choices });
     await runtime.triggers.tick();
-    expect(firedOf(runtime, "status")).toBe(0);
+    expect(await firedOf(runtime, "status")).toBe(0);
 
     at(5);
     const set = await command("presence", { status: "  at work " });
@@ -1884,7 +1901,7 @@ test("the presence command sets one of the user's own statuses, shows and clears
     expect(presence(data)).toEqual({ status: "at work", set_at: new Date(T0 + 5 * MINUTE).toISOString() });
     at(6);
     await runtime.triggers.tick();
-    expect(firedOf(runtime, "status")).toBe(1);
+    expect(await firedOf(runtime, "status")).toBe(1);
     expect((await command("presence", {}) as { data?: unknown }).data).toEqual({ status: "at work", set_at: new Date(T0 + 5 * MINUTE).toISOString(), choices });
     expect((await command("presence", { status: null }) as { data?: unknown }).data).toEqual({ status: "at work", set_at: new Date(T0 + 5 * MINUTE).toISOString(), choices });
 
@@ -1894,7 +1911,7 @@ test("the presence command sets one of the user's own statuses, shows and clears
     expect(JSON.stringify(refused)).toContain(`\\"on the moon\\" isn't one of your statuses: yours are asleep, at work. Add it to presence.statuses to use it.`);
     expect(presence(data)?.status).toBe("at work");
     await runtime.triggers.tick();
-    expect(firedOf(runtime, "status")).toBe(1);
+    expect(await firedOf(runtime, "status")).toBe(1);
 
     at(8);
     const cleared = await command("presence", { status: " " });
@@ -2128,7 +2145,7 @@ test("the user's message stops a wake in that thread at the end of its step and 
       ["wake", "User active in another thread — idle counter reset"],
     ]);
     await runtime.triggers.tick();
-    expect(firedOf(runtime, "after")).toBe(0);
+    expect(await firedOf(runtime, "after")).toBe(0);
 
     script.again = 0;
     script.aside = undefined;
@@ -2148,7 +2165,7 @@ test("the user's message stops a wake in that thread at the end of its step and 
     ], [FIRED])]]);
     expect((await thread("ring")).at(-1)?.content).toBe("Part one: Rue came to the gate.");
     await runtime.triggers.tick();
-    expect(firedOf(runtime, "after")).toBe(1);
+    expect(await firedOf(runtime, "after")).toBe(1);
     at(40);
     await runtime.autonomy.runDue();
     expect(script.wakes).toHaveLength(3);

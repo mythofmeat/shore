@@ -1124,6 +1124,26 @@ wire_types! {
         pub recent_events: Vec<WakeEvent>,
     }
 
+    pub struct TriggerStatusReport {
+        pub name: String,
+        pub does: String,
+        pub status: String,
+    }
+
+    pub struct NextWakeReport {
+        pub trigger: String,
+        pub at: String,
+    }
+
+    pub struct TriggersStatusReport {
+        pub enabled: bool,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        #[ts(optional)]
+        pub next_wake: Option<NextWakeReport>,
+        pub triggers: Vec<TriggerStatusReport>,
+        pub not_running: Vec<String>,
+    }
+
     pub struct ActivityStatusReport {
         pub hour_histogram: Vec<f64>,
         pub hour_classifications: Vec<ActivityHourClass>,
@@ -1219,6 +1239,9 @@ wire_types! {
         pub tokens: TokenCounts,
         #[serde(deserialize_with = "deserialize_nullable")]
         pub autonomy: Option<AutonomyStatusReport>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        #[ts(optional)]
+        pub triggers: Option<TriggersStatusReport>,
         #[serde(deserialize_with = "deserialize_nullable")]
         pub activity: Option<ActivityStatusReport>,
         #[serde(deserialize_with = "deserialize_nullable")]

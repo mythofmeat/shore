@@ -18,7 +18,7 @@ const TRIGGER_TICK_MS = 30_000;
 const ABSENT = new Set(["ENOENT", "ENOTDIR"]);
 
 export interface TriggerServiceDeps {
-  autonomy: Pick<AutonomyService, "characters" | "status" | "wakeFor" | "activityStats" | "onEvents">;
+  autonomy: Pick<AutonomyService, "characters" | "status" | "wakeFor" | "activityStats" | "onEvents" | "showTriggersFrom">;
   config(character: string): LoadedConfig;
 }
 
@@ -79,6 +79,7 @@ export class TriggerService {
     deps.autonomy.onEvents((character) => ({
       wakeDone: (names) => { void this.#for(character).finished(names); },
     }));
+    deps.autonomy.showTriggersFrom(async (character) => await this.view(character));
   }
 
   async tick(): Promise<void> {
@@ -89,8 +90,8 @@ export class TriggerService {
     await Promise.all(this.#deps.autonomy.characters().map(async (character) => { await this.#for(character).statusChanged(); }));
   }
 
-  view(character: string): TriggersView {
-    return this.#for(character).view();
+  async view(character: string): Promise<TriggersView> {
+    return await this.#for(character).view();
   }
 
   stop(): void {
