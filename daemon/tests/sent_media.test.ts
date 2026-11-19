@@ -1,7 +1,7 @@
-import { expect, test } from "bun:test";
+import { expect, spyOn, test } from "bun:test";
 import { existsSync } from "node:fs";
-import { mkdir, readFile, truncate, writeFile } from "node:fs/promises";
-import { join } from "node:path";
+import { mkdir, readdir, readFile, symlink, truncate, writeFile } from "node:fs/promises";
+import { dirname, join } from "node:path";
 
 import { imageDataForPath } from "../src/engine/wire_images.ts";
 import { firstSentPicture, pictureProblems, sendPictures } from "../src/handler/pictures.ts";
@@ -9,6 +9,7 @@ import { displayCopyPath, keepSentPicture, keepSentVideo, MAX_SENT_VIDEO_BYTES, 
 import { CharacterWorkspace } from "../src/tools/character_workspace.ts";
 import { toolMediaOf } from "../src/tools/media.ts";
 import { handleRead } from "../src/tools/read.ts";
+import * as workspaceNames from "../src/tools/workspace_names.ts";
 import { animatedPng, noisePng, transparentPng, withTextChunk } from "./support/test_images.ts";
 import { testTmp } from "./support/tmp.ts";
 
@@ -98,6 +99,40 @@ test("a video's poster is what goes inline and what notifications show, so the p
   expect(await keepSentVideo(sent, Buffer.concat([mp4Header(), Buffer.alloc(64)]), "video/mp4", () => { throw new Error("the poster is already there"); })).toBe(video);
   const unreadable = await keepSentVideo(sent, Buffer.concat([mp4Header(), Buffer.alloc(65)]), "video/mp4", async () => Buffer.from("not a picture"));
   expect(shownPicturePath(unreadable)).toBe(unreadable);
+});
+
+test("a picture is sent from wherever it can be read: by its full path, by a path that leaves the workspace, or through a link in it", async () => {
+  const { dir, sender } = await world();
+  const elsewhere = join(dirname(dir), "elsewhere");
+  await mkdir(elsewhere);
+  await writeFile(join(elsewhere, "harbor.png"), transparentPng(8, 8));
+  await symlink(join(elsewhere, "harbor.png"), join(dir, "linked.png"));
+  const text = `![](${join(elsewhere, "harbor.png")}) ![](../elsewhere/harbor.png) ![](linked.png)`;
+  const images = await sendPictures([text], sender);
+  expect(images.map(({ name, problem }) => ({ name, problem }))).toEqual([
+    { name: "harbor.png", problem: undefined },
+    { name: "harbor.png", problem: undefined },
+    { name: "linked.png", problem: undefined },
+  ]);
+  for (const image of images) expect(await readFile(image.path)).toEqual(await readFile(join(elsewhere, "harbor.png")));
+  expect(await pictureProblems([text], sender.workspace)).toEqual([]);
+});
+
+test("a reply stopped while its pictures are looked up keeps none of them, whether it was stopped before or during the search", async () => {
+  const { dir, sent, sender } = await world();
+  await writeFile(join(dir, "harbor.png"), transparentPng(4, 4));
+  expect(await refusal(sendPictures(["![](harbor.png)"], sender, AbortSignal.abort()))).toContain("AbortError");
+  const stop = new AbortController();
+  const search = spyOn(workspaceNames, "workspaceNames").mockImplementation(async () => {
+    stop.abort();
+    throw stop.signal.reason;
+  });
+  try {
+    expect(await refusal(sendPictures(["![[harbor]]"], sender, stop.signal))).toContain("AbortError");
+  } finally {
+    search.mockRestore();
+  }
+  expect(await readdir(sent)).toEqual([]);
 });
 
 test("an animated PNG can go by the name its tools give it", async () => {

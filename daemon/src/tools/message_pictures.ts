@@ -1,5 +1,5 @@
-import { realpath, stat } from "node:fs/promises";
-import { relative, resolve, sep } from "node:path";
+import { stat } from "node:fs/promises";
+import { resolve } from "node:path";
 import { MAX_LISTED_MEDIA_NOTES } from "./media.ts";
 import { openRegularFile } from "./file_access.ts";
 import { imageMime, MAX_READ_IMAGE_BYTES } from "./read_image.ts";
@@ -15,11 +15,6 @@ export interface PictureTarget {
 export type PictureLookup = { path: string } | { problem: string } | null;
 
 export const CANNOT_BE_SENT = "it is not a PNG, JPEG, GIF or WebP picture, or an MP4 or WebM video";
-
-function inside(root: string, path: string): boolean {
-  const rel = relative(root, path);
-  return rel !== "" && rel !== ".." && !rel.startsWith(`..${sep}`) && !rel.startsWith(sep);
-}
 
 async function exists(path: string): Promise<boolean> {
   try {
@@ -53,16 +48,13 @@ export async function lookUpPictures(
 ): Promise<PictureLookup[]> {
   let names: Promise<WorkspaceNames> | undefined;
   const found = () => names ??= workspaceNames(workspaceDir, signal);
-  const root = await realpath(workspaceDir).catch(() => resolve(workspaceDir));
   const results: PictureLookup[] = [];
   for (const { target, wikilink } of targets) {
     signal?.throwIfAborted();
     try {
       const requested = resolve(workspaceDir, target);
       if (!wikilink && await exists(requested)) {
-        const real = await realpath(requested);
-        if (!inside(root, real)) throw new Error(`${target} is outside the workspace`);
-        results.push(await checked(real));
+        results.push(await checked(requested));
         continue;
       }
       const path = await embeddedPicture(await found(), target, MAX_LISTED_MEDIA_NOTES, PICTURES_AND_VIDEOS);
