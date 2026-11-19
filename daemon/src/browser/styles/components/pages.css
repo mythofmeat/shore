@@ -7,6 +7,25 @@
   font-size: var(--text-sm);
 }
 
+.status-section,
+.kv.tree dd:has(> .kv.tree, > .tree-list) {
+  container-type: inline-size;
+}
+
+@container (max-width: 480px) {
+  .kv.tree {
+    grid-template-columns: max-content 1fr;
+  }
+
+  .kv.tree dd:has(> .kv.tree, > .tree-list) {
+    grid-column: 1 / -1;
+  }
+
+  .kv.tree dd:has(> .kv.tree) {
+    padding-left: 12px;
+  }
+}
+
 .tree-list {
   margin: 0;
   padding-left: 1.2em;
