@@ -76,7 +76,7 @@ export function idleAnchorMessage(
 }
 
 export interface RebuildDeps {
-  env?: NodeJS.ProcessEnv;
+  env?: NodeJS.ProcessEnv | undefined;
   mcpRegistry: Pick<McpRegistry, "toolDefsFiltered">;
   newId?: () => string;
   now?: () => string;

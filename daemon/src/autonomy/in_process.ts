@@ -47,7 +47,7 @@ export interface InProcessExecutorDeps {
   rebuild: RebuildDeps;
   env?: NodeJS.ProcessEnv;
   beginForeground?: () => () => void;
-  runActivity?: <T>(run: () => Promise<T>, signal?: AbortSignal) => Promise<T>;
+  runActivity?: <T>(run: () => Promise<T>) => Promise<T>;
 }
 
 export class InProcessAutonomyExecutor implements AutonomyExecutor {

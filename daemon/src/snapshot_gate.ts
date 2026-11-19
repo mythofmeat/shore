@@ -2,11 +2,6 @@ import { required } from "./util/required.ts";
 
 type Release = () => void;
 
-function abandoned(signal: AbortSignal | undefined): Error {
-  const reason: unknown = signal?.reason;
-  return reason instanceof Error ? reason : new Error("stopped waiting for the snapshot gate");
-}
-
 interface Waiter {
   readonly exclusive: boolean;
   readonly resolve: (release: Release) => void;
@@ -17,8 +12,8 @@ export class SnapshotGate {
   #writer = false;
   readonly #waiters: Waiter[] = [];
 
-  async withActivity<T>(run: () => Promise<T>, signal?: AbortSignal): Promise<T> {
-    const release = await this.#acquire(false, signal);
+  async withActivity<T>(run: () => Promise<T>): Promise<T> {
+    const release = await this.#acquire(false);
     try {
       return await run();
     } finally {
@@ -35,25 +30,9 @@ export class SnapshotGate {
     }
   }
 
-  #acquire(exclusive: boolean, signal?: AbortSignal): Promise<Release> {
-    return new Promise((resolve, reject) => {
-      if (signal?.aborted === true) {
-        reject(abandoned(signal));
-        return;
-      }
-      const abandon = () => {
-        this.#waiters.splice(this.#waiters.indexOf(waiter), 1);
-        reject(abandoned(signal));
-      };
-      const waiter: Waiter = {
-        exclusive,
-        resolve: (release) => {
-          signal?.removeEventListener("abort", abandon);
-          resolve(release);
-        },
-      };
-      signal?.addEventListener("abort", abandon);
-      this.#waiters.push(waiter);
+  #acquire(exclusive: boolean): Promise<Release> {
+    return new Promise((resolve) => {
+      this.#waiters.push({ exclusive, resolve });
       this.#drain();
     });
   }
