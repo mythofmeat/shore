@@ -468,7 +468,7 @@ describe.skipIf(!READY)("a character whose tools run as its own user", () => {
       "sleep 300 &",
       "echo \"$$ $!\"",
     ];
-    await home.call("writeFile", { path: script, data: Buffer.from(`${commands.join("\n")}\n`).toString("base64") });
+    expect((await home.run("sh", ["-c", 'cat > "$1"', "sh", script], { stdin: `${commands.join("\n")}\n` })).code).toBe(0);
     const { daemon, logged, log } = await startDaemonProcess({ SHORE_TOKEN: "isolation-token" });
     let pids: RegExpExecArray | null = null;
     try {
@@ -496,8 +496,7 @@ describe.skipIf(!READY)("a character whose tools run as its own user", () => {
     } finally {
       daemon.kill("SIGKILL");
       if (pids?.[2] !== undefined && running(Number(pids[2]))) process.kill(Number(pids[2]), "SIGKILL");
-      await home.call("deleteFile", { path: script });
-      await home.call("deleteFile", { path: output }).catch(() => {});
+      await home.run("rm", ["-f", script, output]);
     }
   }, 60_000);
 });
