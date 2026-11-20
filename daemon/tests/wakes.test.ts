@@ -3360,12 +3360,15 @@ test("a wake whose tool call breaks off leaves its thread with an answer to that
     expect(shape((await thread("main")).slice(2))).toEqual([
       ["user", ["text"]],
       ["system", ["text"]],
+      ["system", ["text"]],
     ]);
-    expect((await thread("main")).at(-1)?.shown_later).toBe('[Your working in this wake is in your thread "wakes", not here: 1 tool call, ending with `read`. It ended before you had finished.]');
+    expect((await thread("main")).at(-2)?.shown_later).toBe('[Your working in this wake is in your thread "wakes", not here: 1 tool call, ending with `read`. It ended before you had finished.]');
+    expect((await thread("main")).at(-1)?.content).toBe('[This wake failed here, before it had finished, with this error: "the tool runner broke".]');
     expect(shape(await thread("wakes"))).toEqual([
       ["user", ["text"]],
       ["assistant", ["tool_use"]],
       ["user", [["tool_result", true, "The wake ended before this tool returned a result."]]],
+      ["system", ["text"]],
     ]);
     expect((await thread("main")).filter((message) => message.role === "assistant" && message.origin === "autonomous")).toEqual([]);
     expect(runtime.autonomy.log("ada", 100).map((event) => [event.kind, event.detail]).slice(-2)).toEqual([
@@ -3469,7 +3472,7 @@ test("a character's own thread called wakes is left alone, and Shore keeps the w
   });
 });
 
-test("a wake whose first call fails leaves how it opened in its thread and nothing more, and its working thread holds only that", async () => {
+test("a wake whose first call fails leaves how it opened and a line saying it failed with what error, in its thread and its working thread, and the next wake there is told", async () => {
   await withCharacter(async ({ runtime, script, say, wakeNow, thread }) => {
     await say("hello");
     script.fails = new Error("overloaded");
@@ -3480,9 +3483,15 @@ test("a wake whose first call fails leaves how it opened in its thread and nothi
     } finally {
       quiet.mockRestore();
     }
-    expect(stored((await thread("main")).slice(2))).toEqual([["user", "autonomous", wakeSeenLater(byHand("12:10 PM"))]]);
-    expect(stored(await thread("wakes")).map(([role, origin]) => [role, origin])).toEqual([["user", "autonomous"]]);
-    expect(runtime.autonomy.log("ada", 100).map((event) => event.kind).at(-1)).toBe("call_failed");
+    const failed = '[This wake failed here, before it had finished, with this error: "overloaded".]';
+    expect(stored((await thread("main")).slice(2))).toEqual([["user", "autonomous", wakeSeenLater(byHand("12:10 PM"))], ["system", "autonomous", failed]]);
+    expect(stored(await thread("wakes")).map(([role, origin, content]) => [role, origin, role === "system" ? content : ""])).toEqual([["user", "autonomous", ""], ["system", "autonomous", failed]]);
+    expect(runtime.autonomy.log("ada", 100).map((event) => event.kind).slice(-2)).toEqual(["tick_fired", "call_failed"]);
+
+    script.wakes.length = 0;
+    at(20);
+    await wakeNow();
+    expect(turnsOf(script.wakes[0]).at(-1)?.[1]).toContain("\n\n[Your last wake here failed at Friday 2026-10-30 · 12:10 PM, after 0 rounds, before it had finished, with this error: \"overloaded\". Nothing from it was sent to User. Whatever it had already changed with its tools is still in place.]\n\n");
   });
 });
 

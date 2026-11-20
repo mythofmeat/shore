@@ -1,5 +1,7 @@
 import { formatWallClock } from "../engine/prompt.ts";
+import { budgetStopIn, describeError } from "../llm/errors.ts";
 import { shoreLog } from "../log.ts";
+import { truncateSummary } from "../notifications.ts";
 import { readCharacterState, writeCharacterState } from "../storage/store.ts";
 import type { BackgroundLoopResult, LoopRound } from "./background_loop.ts";
 import { spanPhrase } from "./wake_shape.ts";
@@ -11,16 +13,15 @@ export function cutLastWords(text: string): string {
   return chars.length > LAST_WORDS_CHARS ? `${chars.slice(0, LAST_WORDS_CHARS).join("")}… [cut]` : text;
 }
 
-export type WakeStopReason = "time" | "rounds" | "interrupted";
+export type WakeEnding = { why: "time" | "rounds" | "interrupted" } | { why: "failed"; error: string };
 
-export interface WakeStop {
+export type WakeStop = WakeEnding & {
   at: number;
-  why: WakeStopReason;
   limitMs: number;
   rounds: number;
   sent: boolean;
   last: string;
-}
+};
 
 export interface WakeRecord {
   through?: number;
@@ -58,35 +59,46 @@ export class WakeWords {
   }
 }
 
-export function stopOf(loop: Pick<BackgroundLoopResult, "timedOut" | "stoppedAt">): WakeStopReason | undefined {
-  return loop.timedOut === true ? "time" : loop.stoppedAt;
+export function failureText(failure: unknown): string {
+  const stop = budgetStopIn(failure);
+  return stop === undefined ? truncateSummary(describeError(failure), 200) : stop.summary ?? stop.message;
+}
+
+export function stopOf(loop: Pick<BackgroundLoopResult, "timedOut" | "stoppedAt" | "failedRound" | "failure">): WakeEnding | undefined {
+  if (loop.timedOut === true) return { why: "time" };
+  if (loop.stoppedAt !== undefined) return { why: loop.stoppedAt };
+  return loop.failedRound === undefined ? undefined : { why: "failed", error: failureText(loop.failure) };
 }
 
 export interface WakeEnd {
   startedAt: number;
   endedAt: number;
   limitMs: number;
-  loop: Pick<BackgroundLoopResult, "timedOut" | "stoppedAt" | "failedRound" | "rounds">;
+  loop: Pick<BackgroundLoopResult, "timedOut" | "stoppedAt" | "failedRound" | "failure" | "rounds">;
   words: WakeWords;
   sent: boolean;
 }
 
 export function recordWakeEnd(characterDir: string, thread: string, before: WakeRecord, end: WakeEnd): void {
-  const why = stopOf(end.loop);
-  if (why !== undefined) {
-    const stopped: WakeStop = { at: end.endedAt, why, limitMs: end.limitMs, rounds: end.loop.rounds, sent: end.sent, last: cutLastWords(end.words.last) };
-    keepWakeRecord(characterDir, thread, { ...(before.through === undefined ? {} : { through: before.through }), stopped });
+  const ending = stopOf(end.loop);
+  if (ending === undefined) {
+    keepWakeRecord(characterDir, thread, { through: end.startedAt });
     return;
   }
-  if (end.loop.failedRound !== undefined) return;
-  keepWakeRecord(characterDir, thread, { through: end.startedAt });
+  const stopped: WakeStop = { ...ending, at: end.endedAt, limitMs: end.limitMs, rounds: end.loop.rounds, sent: end.sent, last: cutLastWords(end.words.last) };
+  keepWakeRecord(characterDir, thread, { ...(before.through === undefined ? {} : { through: before.through }), stopped });
 }
 
 export function wakeStopNote(stop: WakeStop, userName: string, timeZone: string): string {
   const rounds = stop.rounds === 1 ? "1 round" : `${String(stop.rounds)} rounds`;
-  const ran = stop.why === "time" ? `reached its limit of ${spanPhrase(stop.limitMs)} and was stopped` : "used up its rounds of tool use and was stopped";
-  const why = stop.why === "interrupted" ? `was stopped for ${userName}'s message` : ran;
+  const why = {
+    time: `reached its limit of ${spanPhrase(stop.limitMs)} and was stopped`,
+    rounds: "used up its rounds of tool use and was stopped",
+    interrupted: `was stopped for ${userName}'s message`,
+    failed: "failed",
+  }[stop.why];
+  const error = stop.why === "failed" ? `, with this error: "${stop.error}"` : "";
   const sent = stop.sent ? `The message it had already written was still sent to ${userName}.` : `Nothing from it was sent to ${userName}.`;
   const last = stop.last === "" ? "" : ` The last thing it wrote: "${stop.last}"`;
-  return `[Your last wake here ${why} at ${formatWallClock(stop.at, timeZone)}, after ${rounds}, before it had finished. ${sent}${last} Whatever it had already changed with its tools is still in place.]`;
+  return `[Your last wake here ${why} at ${formatWallClock(stop.at, timeZone)}, after ${rounds}, before it had finished${error}. ${sent}${last} Whatever it had already changed with its tools is still in place.]`;
 }

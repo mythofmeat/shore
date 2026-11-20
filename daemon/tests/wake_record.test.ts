@@ -73,19 +73,26 @@ test("a wake that was stopped leaves where its thread was looked at alone, and r
   expect(cutLastWords("é".repeat(1500))).toBe("é".repeat(1500));
 
   expect(stopOf(loop())).toBeUndefined();
-  expect(stopOf(loop({ stoppedAt: "rounds" }))).toBe("rounds");
-  expect(stopOf(loop({ timedOut: true, stoppedAt: "rounds" }))).toBe("time");
-  expect(stopOf(loop({ timedOut: false, stoppedAt: "interrupted" }))).toBe("interrupted");
+  expect(stopOf(loop({ stoppedAt: "rounds" }))).toEqual({ why: "rounds" });
+  expect(stopOf(loop({ timedOut: true, stoppedAt: "rounds", failedRound: 2, failure: new Error("aborted") }))).toEqual({ why: "time" });
+  expect(stopOf(loop({ timedOut: false, stoppedAt: "interrupted", failedRound: 2, failure: new Error("aborted") }))).toEqual({ why: "interrupted" });
 });
 
-test("a wake whose model call failed leaves the record as it was, so the next one is told the same", async () => {
+test("a wake whose model call failed records that it failed, with the error, and leaves where its thread was looked at alone", async () => {
   const dir = await character();
-  const stopped: WakeStop = { at: T0, why: "time", limitMs: 30 * MINUTE, rounds: 2, sent: false, last: "" };
-  keepWakeRecord(dir, "ring", { ...BEFORE, stopped });
-  recordWakeEnd(dir, "ring", { ...BEFORE, stopped }, ended({ loop: loop({ failedRound: 0 }) }));
-  expect(wakeRecord(dir, "ring")).toEqual({ ...BEFORE, stopped });
-  recordWakeEnd(dir, "ring", { ...BEFORE, stopped }, ended());
-  expect(wakeRecord(dir, "ring")).toEqual({ through: T0 + 60 * MINUTE });
+  const failure = new Error("claude_agent: usage limit reached", { cause: new Error("429") });
+  recordWakeEnd(dir, "ring", BEFORE, ended({ loop: loop({ failedRound: 3, failure, rounds: 4 }), words: wrote(["Half done.", true]) }));
+  expect(wakeRecord(dir, "ring")).toEqual({
+    ...BEFORE,
+    stopped: { at: T0 + 70 * MINUTE, why: "failed", error: "claude_agent: usage limit reached", limitMs: 30 * MINUTE, rounds: 4, sent: false, last: "Half done." },
+  });
+  expect(stopOf(loop({ failedRound: 0, failure: "not an Error" }))).toEqual({ why: "failed", error: "not an Error" });
+  expect(stopOf(loop({ failedRound: 1, failure: new Error(`${"é".repeat(99)}ab`) }))).toEqual({ why: "failed", error: `${"é".repeat(99)}ab` });
+  expect(stopOf(loop({ failedRound: 1, failure: new Error(`${"é".repeat(99)}abc`) }))).toEqual({ why: "failed", error: `${"é".repeat(99)}ab…` });
+  const budget = (summary?: string) => new Error("call refused", { cause: Object.assign(new Error("Budget Monthly is spent until 2026-12-01"), { name: "BudgetBlocked", ...(summary === undefined ? {} : { summary }) }) });
+  expect([stopOf(loop({ failedRound: 1, failure: budget("Monthly budget spent") })), stopOf(loop({ failedRound: 1, failure: budget() }))]).toEqual([
+    { why: "failed", error: "Monthly budget spent" }, { why: "failed", error: "Budget Monthly is spent until 2026-12-01" },
+  ]);
 });
 
 test("the next wake is told how the last one was stopped, in these words", () => {
@@ -103,6 +110,10 @@ test("the next wake is told how the last one was stopped, in these words", () =>
     "Nothing from it was sent to eve. Whatever it had already changed with its tools is still in place.]",
   );
   expect(wakeStopNote({ ...stop, limitMs: 2 * 60 * MINUTE }, "eve", "UTC")).toStartWith("[Your last wake here reached its limit of 2 hours and was stopped at ");
+  expect(wakeStopNote({ ...stop, why: "failed", error: "usage limit reached", rounds: 73, last: "Half done." }, "eve", "UTC")).toBe(
+    '[Your last wake here failed at Friday 2026-10-30 · 12:30 PM, after 73 rounds, before it had finished, with this error: "usage limit reached". ' +
+    'Nothing from it was sent to eve. The last thing it wrote: "Half done." Whatever it had already changed with its tools is still in place.]',
+  );
 });
 
 test("a record goes when its thread does", async () => {
