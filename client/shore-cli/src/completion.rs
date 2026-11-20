@@ -37,6 +37,7 @@ pub(crate) enum Completes {
     Folders,
     ImageTargets,
     LimitOff,
+    MarkTags,
     MessageRefs,
     Models,
     ProviderPresets,
@@ -79,6 +80,7 @@ impl Completes {
             Self::Credentials | Self::Providers => &[Source::Providers],
             Self::FavoriteModels | Self::Models => &[Source::Models],
             Self::Folders | Self::Threads => &[Source::Threads],
+            Self::MarkTags => &[Source::Marks],
             Self::MessageRefs => &[Source::History],
             Self::ProviderPresets | Self::Sdks => &[Source::Presets],
             Self::ProviderSettingValues => &[Source::Config, Source::Presets],
@@ -104,6 +106,7 @@ pub(crate) enum Source {
     Characters,
     Config,
     History,
+    Marks,
     Models,
     Presence,
     Presets,
@@ -137,6 +140,7 @@ impl Source {
         matches!(
             self,
             Self::Calls
+                | Self::Marks
                 | Self::Presence
                 | Self::Presets
                 | Self::Segments
@@ -156,6 +160,7 @@ impl Source {
             Self::Characters | Self::History => return None,
             Self::Calls => ("call_log", json!({ "count": 20 })),
             Self::Config => ("config_schema", json!({})),
+            Self::Marks => ("marks", json!({ "refs": [] })),
             Self::Models => ("list_models", json!({})),
             Self::Presence => ("presence", json!({})),
             Self::Presets => ("provider_presets", json!({})),
@@ -267,6 +272,8 @@ pub(crate) struct PaletteCatalog {
     pub budget_names: Vec<PaletteValue>,
     pub workspace_files: Vec<PaletteValue>,
     pub statuses: Vec<PaletteValue>,
+    like_tags: Vec<PaletteValue>,
+    dislike_tags: Vec<PaletteValue>,
     tool_arguments: Vec<PaletteValue>,
     arguments_of: Option<String>,
     arguments_wanted: Option<String>,
@@ -280,6 +287,10 @@ impl PaletteCatalog {
             Source::Characters | Source::History => {}
             Source::Calls => self.calls = call_values(data),
             Source::Config => self.absorb_config(data),
+            Source::Marks => {
+                self.like_tags = named_values(data, "like_tags");
+                self.dislike_tags = named_values(data, "dislike_tags");
+            }
             Source::Models => self.absorb_models(data),
             Source::Presence => self.statuses = named_values(data, "choices"),
             Source::Presets => self.absorb_presets(data),
@@ -574,6 +585,13 @@ impl PaletteCatalog {
             Completes::Folders => self.folders.clone(),
             Completes::ImageTargets => plain_values(&["paste", "clear"]),
             Completes::LimitOff => plain_values(&["off"]),
+            Completes::MarkTags => {
+                if line.at(&["msg", "like"]).is_some() {
+                    self.like_tags.clone()
+                } else {
+                    self.dislike_tags.clone()
+                }
+            }
             Completes::MessageRefs => {
                 let mut refs = plain_values(&["last", "-1", "-2", "-3"]);
                 refs.extend(self.message_refs.iter().cloned());
@@ -1510,6 +1528,10 @@ mod tests {
             Source::Presence,
             &json!({ "status": "asleep", "choices": ["asleep", "busy"] }),
         );
+        catalog.absorb(
+            Source::Marks,
+            &json!({ "like_tags": ["warm"], "dislike_tags": ["flat", "long"], "replies": [] }),
+        );
         catalog
     }
 
@@ -1603,6 +1625,10 @@ mod tests {
             ("view compaction ", &["on", "off", "toggle"]),
             ("view usage ", &["off", "always", "warn", "toggle"]),
             ("ui segment ", &["older", "newer", "current", "2", "1"]),
+            ("msg like --tag ", &["warm"]),
+            ("msg like 3 --tag warm --tag ", &["warm"]),
+            ("msg dislike --tag ", &["flat", "long"]),
+            ("msg regen --tag ", &["flat", "long"]),
         ];
         for (input, expected) in cases {
             assert_eq!(&offered(input), expected, "completing {input:?}");
@@ -1653,6 +1679,19 @@ mod tests {
             palette_completions("segments show ", &mut catalog).needed,
             [Source::Segments],
             "reopening the palette refreshes values that go stale"
+        );
+    }
+
+    #[test]
+    fn reason_tags_are_asked_for_without_any_reply_so_a_thread_with_none_still_has_them() {
+        let mut catalog = PaletteCatalog::default();
+        assert_eq!(
+            palette_completions("msg dislike --tag ", &mut catalog).needed,
+            [Source::Marks]
+        );
+        assert_eq!(
+            catalog.palette_request(Source::Marks),
+            Some(("marks", json!({ "refs": [] })))
         );
     }
 
