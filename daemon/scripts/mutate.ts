@@ -22,6 +22,9 @@ const cap = ["systemd-run", "--user", "--scope", "-q", "-p", `MemoryMax=${String
 const running = new Map<number, string | undefined>();
 let scopes = 0;
 const scratch = new Set<string>();
+const ISOLATION = "isolation.test.ts";
+let isolationImage: string | undefined;
+let containers = 0;
 const LOGGING_CALL = /^(?:shoreLog|console|(?:[\w$#]+\??\.)*log)\??\.(?:debug|info|warn|error|trace|log)(?:\?\.)?\(/;
 
 export interface Mutant {
@@ -389,6 +392,30 @@ async function bunTest(dir: string, args: readonly string[], timeoutMs: number, 
   return { code: timedOut ? undefined : code, ms: performance.now() - started, stoppedAt };
 }
 
+function buildIsolationImage(): string | undefined {
+  const built = Bun.spawnSync(["docker", "build", "-q", "--build-arg", `BUN_VERSION=${readFileSync(join(ROOT, ".bun-version"), "utf8").trim()}`, "-f", join(ROOT, "scripts", "isolation.Dockerfile"), join(ROOT, "scripts")], { stderr: "pipe" });
+  const image = built.stdout.toString().trim();
+  return built.exitCode === 0 && image !== "" ? image : undefined;
+}
+
+async function isolationTest(image: string, dir: string, timeoutMs: number, log?: string): Promise<TestRun> {
+  const started = performance.now();
+  const fd = log === undefined ? undefined : openSync(log, "w");
+  containers += 1;
+  const name = `shore-mutate-${String(process.pid)}-${String(containers)}`;
+  const mounts = [`${ROOT}:/src/daemon:ro`, ...COPIED.map((copied) => `${join(dir, copied)}:/src/daemon/${copied}:ro`)].flatMap((mount) => ["-v", mount]);
+  const proc = Bun.spawn(["docker", "run", "--rm", "--name", name, ...mounts, image, TEST_TIMEOUT, `./tests/${ISOLATION}`], { stdout: fd ?? "ignore", stderr: fd ?? "ignore" });
+  let timedOut = false;
+  const timer = setTimeout(() => {
+    timedOut = true;
+    Bun.spawnSync(["docker", "kill", name], { stdout: "ignore", stderr: "ignore" });
+  }, timeoutMs);
+  const code = await proc.exited;
+  clearTimeout(timer);
+  if (fd !== undefined) closeSync(fd);
+  return { code: timedOut ? undefined : code, ms: performance.now() - started, stoppedAt: undefined };
+}
+
 function cleanUp(): void {
   for (const pid of running.keys()) stop(pid);
   for (const dir of scratch) rmSync(dir, { recursive: true, force: true });
@@ -481,6 +508,32 @@ async function collectCoverage(files: ReadonlySet<string>, workers: number): Pro
   });
   if (problems.length === 0) rmSync(logs, { recursive: true, force: true });
   return { coverage: { tests, ms: runs.map((r) => r.run.ms), hits, executable }, problems };
+}
+
+async function underIsolation(image: string, results: readonly Result[], workers: number): Promise<{ results: Result[]; problems: string[] }> {
+  const missed = results.filter((r) => r.outcome === "survived" || r.outcome === "uncovered");
+  if (missed.length === 0) return { results: [...results], problems: [] };
+  const timeoutMs = MIN_TIMEOUT_MS * TIMEOUT_FACTOR;
+  const [baseline] = await pool([0], 1, "isolation", async (dir) => {
+    const log = join(dir, "isolation.log");
+    return { run: await isolationTest(image, dir, timeoutMs, log), log };
+  });
+  if (baseline === undefined || baseline.run.code !== 0) {
+    return { results: [...results], problems: [`tests/${ISOLATION} fails in its container before any mutation (${baseline === undefined ? "it didn't run" : ending(baseline.run)})${baseline === undefined ? "" : `\n${failures(baseline.log)}`}`] };
+  }
+  console.error(`${String(missed.length)} mutants no other test catches, run against tests/${ISOLATION} in its container`);
+  const caught = new Map(await pool(missed, workers, "isolation", async (dir, { mutant }): Promise<[Mutant, Outcome | undefined]> => {
+    const path = join(dir, mutant.file);
+    const pristine = readFileSync(path, "utf8");
+    writeFileSync(path, pristine.slice(0, mutant.start) + mutant.replacement + pristine.slice(mutant.end));
+    try {
+      const run = await isolationTest(image, dir, timeoutMs);
+      return [mutant, run.code === 0 ? undefined : run.code === undefined ? "timeout" : "killed"];
+    } finally {
+      writeFileSync(path, pristine);
+    }
+  }));
+  return { results: results.map((r) => ({ mutant: r.mutant, outcome: caught.get(r.mutant) ?? r.outcome })), problems: [] };
 }
 
 interface Result {
@@ -635,6 +688,13 @@ async function main(args: readonly string[]): Promise<number> {
     ? requested
     : Math.max(1, Math.min(Math.floor(availableParallelism() / 4), capped ? Math.floor(freemem() / (MEMORY_CAP_BYTES * 1.25)) : Infinity));
   if (!capped) console.error("systemd-run --user is unavailable, so test runs have no memory cap");
+  if (args.includes("--isolation")) {
+    isolationImage = buildIsolationImage();
+    if (isolationImage === undefined) {
+      console.log("problem: --isolation needs docker to build scripts/isolation.Dockerfile, and it didn't build");
+      return 1;
+    }
+  }
 
   if (diffArg !== undefined) {
     const rev = diffArg.slice("--diff=".length);
@@ -651,8 +711,11 @@ async function main(args: readonly string[]): Promise<number> {
       for (const p of problems) console.log(`problem: ${p}`);
       return 1;
     }
-    const { results, problems: leaks } = await runMutants(chosen, coverage, workers);
-    problems.push(...leaks);
+    const ran = await runMutants(chosen, coverage, workers);
+    problems.push(...ran.problems);
+    const contained = isolationImage === undefined ? { results: ran.results, problems: [] } : await underIsolation(isolationImage, ran.results, workers);
+    problems.push(...contained.problems);
+    const results = contained.results;
     let missed = 0;
     for (const r of results) {
       const caught = r.outcome === "killed" || r.outcome === "timeout";
