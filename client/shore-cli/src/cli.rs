@@ -646,7 +646,7 @@ pub(crate) enum MsgCommand {
 
         /// A reason tag from marks.dislike_tags in your config, alone or
         /// with --reason; repeat for more
-        #[arg(long = "tag", value_name = "TAG")]
+        #[arg(long = "tag", value_name = "TAG", add = values(Completes::MarkTags))]
         tags: Vec<String>,
     },
 
@@ -754,7 +754,7 @@ pub(crate) struct MarkOptions {
 
     /// A reason tag from your config: marks.like_tags for a like,
     /// marks.dislike_tags for a dislike; repeat for more
-    #[arg(long = "tag", value_name = "TAG")]
+    #[arg(long = "tag", value_name = "TAG", add = values(Completes::MarkTags))]
     pub(crate) tags: Vec<String>,
 
     /// Output raw JSON
