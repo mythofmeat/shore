@@ -420,26 +420,38 @@ const PRESENCE: StructSpec<PresenceConfig> = {
 };
 
 export interface MarksConfig {
-  tags: string[];
+  like_tags: string[];
+  dislike_tags: string[];
 }
 
+export type MarkTagList = keyof MarksConfig;
+
 export const defaultMarksConfig = (): MarksConfig => ({
-  tags: ["didn't look hard enough", "out of character", "too long", "repetitive"],
+  like_tags: [],
+  dislike_tags: ["didn't look hard enough", "out of character", "too long", "repetitive"],
 });
 
 export const MAX_MARK_TAG_CHARS = 80;
 
+export function markTagList(kind: "like" | "dislike"): MarkTagList {
+  return kind === "like" ? "like_tags" : "dislike_tags";
+}
+
 export function validateMarks(marks: MarksConfig): string | undefined {
-  const wrong = marks.tags.find((tag) => tag.trim() !== tag || tag === "" || Array.from(tag).length > MAX_MARK_TAG_CHARS);
-  if (wrong !== undefined) return `marks.tags has ${JSON.stringify(wrong)}; a tag is 1 to ${String(MAX_MARK_TAG_CHARS)} characters with no space at either end`;
-  const repeated = marks.tags.find((tag, index) => marks.tags.indexOf(tag) !== index);
-  return repeated === undefined ? undefined : `marks.tags lists ${JSON.stringify(repeated)} twice`;
+  for (const list of ["like_tags", "dislike_tags"] as const) {
+    const tags = marks[list];
+    const wrong = tags.find((tag) => tag.trim() !== tag || tag === "" || Array.from(tag).length > MAX_MARK_TAG_CHARS);
+    if (wrong !== undefined) return `marks.${list} has ${JSON.stringify(wrong)}; a tag is 1 to ${String(MAX_MARK_TAG_CHARS)} characters with no space at either end`;
+    const repeated = tags.find((tag, index) => tags.indexOf(tag) !== index);
+    if (repeated !== undefined) return `marks.${list} lists ${JSON.stringify(repeated)} twice`;
+  }
+  return undefined;
 }
 
 const MARKS: StructSpec<MarksConfig> = {
   name: "MarksConfig",
   make: defaultMarksConfig,
-  fields: { tags: readStringSeq },
+  fields: { like_tags: readStringSeq, dislike_tags: readStringSeq },
 };
 
 interface ToolOverride {

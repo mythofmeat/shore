@@ -1,5 +1,6 @@
 import regenerateTemplate from "../../prompts/engine/regenerate.md" with { type: "text" };
 
+import type { MarkTagList } from "../config/app.ts";
 import { mergeToolLoopMessages } from "../engine/merge.ts";
 import { marksOf, newAttemptId, replyOf, setMark, type AttemptAsked, type AttemptScope, type Mark } from "../engine/marks.ts";
 import { renderTemplate } from "../engine/prompt.ts";
@@ -34,14 +35,15 @@ export class NothingToReplaceError extends CommandError {
 }
 
 export class UnknownTagError extends CommandError {
-  constructor(tag: string, tags: readonly string[]) {
-    super("invalid_request", `${JSON.stringify(tag)} isn't one of your tags: ${tags.length === 0 ? "marks.tags in your config is empty" : `yours are ${tags.join(", ")}`}. Add it to marks.tags to use it.`);
+  constructor(tag: string, tags: readonly string[], list: MarkTagList) {
+    const kind = list === "like_tags" ? "like" : "dislike";
+    super("invalid_request", `${JSON.stringify(tag)} isn't one of your ${kind} tags: ${tags.length === 0 ? `marks.${list} in your config is empty` : `yours are ${tags.join(", ")}`}. Add it to marks.${list} to use it.`);
   }
 }
 
-export function checkTags(tags: readonly string[], configured: readonly string[]): string[] {
-  const unknown = tags.find((tag) => !configured.includes(tag));
-  if (unknown !== undefined) throw new UnknownTagError(unknown, configured);
+export function checkTags(tags: readonly string[], configured: readonly string[], list: MarkTagList, held: readonly string[] = []): string[] {
+  const unknown = tags.find((tag) => !configured.includes(tag) && !held.includes(tag));
+  if (unknown !== undefined) throw new UnknownTagError(unknown, configured, list);
   return [...new Set(tags)];
 }
 
@@ -57,7 +59,7 @@ export async function planAttempt(
   if (choice === undefined || tail === undefined) return { attempt, asked: "first" };
   const reply = replyOf(tail);
   const shown = required(reply.attempts.find((candidate) => candidate.shown));
-  const tags = choice.kind === "with_reason" ? checkTags(choice.tags, settings.tags) : [];
+  const tags = choice.kind === "with_reason" ? checkTags(choice.tags, settings.tags, "dislike_tags") : [];
   const replaces = await engine.attemptOf(reply.msgId, shown.index);
   if (choice.kind === "reroll") return { attempt, asked: "reroll", replaces };
   if (choice.kind === "with_reason") setMark(scope, replaces, { kind: "dislike", reason: choice.reason, tags }, settings.now);

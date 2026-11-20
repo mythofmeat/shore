@@ -255,7 +255,8 @@ function describeOption(path: readonly string[]): string {
     warn_fractions: "Budget fractions that trigger warnings (0.9 means 90%).",
     pace_warn_fractions: "Pacing fractions that trigger warnings.",
     statuses: "The statuses you can set for yourself with shore presence, in the order they are offered. Your characters see the one that is set, with how long ago you set it. Defaults to asleep, busy and away.",
-    tags: "Reasons you can give in one click when you like or dislike a reply, or regenerate one with a reason, in the order they are offered. A written reason can go with them. Defaults to didn't look hard enough, out of character, too long and repetitive.",
+    like_tags: "Reasons you can give in one click when you like a reply, in the order they are offered. A written reason can go with them. Empty by default, which offers none.",
+    dislike_tags: "Reasons you can give in one click when you dislike a reply or regenerate one with a reason, in the order they are offered. A written reason can go with them. Defaults to didn't look hard enough, out of character, too long and repetitive.",
     push_topic: "ntfy topic a message the character sends with `push` goes to, on the server in notifications.url. Give it a topic of its own, apart from notifications.topic. Unset means the character can't push.",
     push_every: "Least time between two pushes from the character. Defaults to 1d.",
   };
@@ -278,12 +279,16 @@ export function findSchemaEntry(entries: readonly SchemaEntry[], key: string): S
   return template === undefined ? undefined : { ...template, key };
 }
 
+const RETIRED_KEYS = new Map([["marks.tags", "is now two lists: marks.like_tags for a like and marks.dislike_tags for a dislike"]]);
+
 export function validateConfigSource(input: Record<string, unknown>, source: string): void {
   const entries = configSchema({ instancesAt: () => [] });
   const visit = (value: unknown, path: (string | number)[]): void => {
     const shown = configPathText(path);
     const info = findSchemaEntry(entries, formatConfigPath(path.map(String)));
     if (info === undefined) {
+      const retired = RETIRED_KEYS.get(shown);
+      if (retired !== undefined) throw new Error(`${source}: ${shown} ${retired}`);
       const expected = entries.filter((candidate) => parseConfigPath(candidate.key).length === 1).map((candidate) => `\`${candidate.key}\``);
       throw new Error(`${source}: unknown field \`${shown}\`${path.length === 1 ? `, expected one of ${expected.join(", ")}` : ""}`);
     }

@@ -77,6 +77,8 @@ export function MarkEditor({ message, scope, editing, attempt }: { message: Repl
   const save = () => act(async () => await replyMarks.mark(scope, message, editing.position, { kind, ...(editing.phrase === null ? {} : { phrase: editing.phrase }), reason, tags }));
   const remove = () => act(async () => await replyMarks.unmark(scope, message, editing.position, editing.phrase));
   const toggle = (tag: string) => setTags(tags.includes(tag) ? tags.filter((item) => item !== tag) : [...tags, tag]);
+  const choose = (option: MarkKind) => { setKind(option); setTags(option === held?.kind ? held.tags : []); };
+  const offered = [...new Set([...replyMarks.tags(kind), ...(kind === held?.kind ? held.tags : [])])];
   const what = editing.phrase === null ? "this response" : `“${editing.phrase}”`;
   return <div className="mark-editor" role="group" aria-label={`Your mark on ${what}`} onKeyDown={(event) => {
     if (event.key === "Escape") { event.preventDefault(); close(); }
@@ -85,13 +87,13 @@ export function MarkEditor({ message, scope, editing, attempt }: { message: Repl
     <div className="mark-editor-head">
       <span className="mark-editor-what">{editing.phrase === null ? "This response" : `“${editing.phrase}”`}</span>
       <span className="segmented" role="radiogroup" aria-label="Like or dislike">
-        {(["like", "dislike"] as const).map((option) => <button key={option} type="button" role="radio" aria-checked={kind === option} onClick={() => setKind(option)}>
+        {(["like", "dislike"] as const).map((option) => <button key={option} type="button" role="radio" aria-checked={kind === option} onClick={() => choose(option)}>
           <Icon name={option} size={14} />{option === "like" ? "Like" : "Dislike"}
         </button>)}
       </span>
     </div>
-    {replyMarks.tags().length === 0 ? null : <div className="mark-tags" role="group" aria-label="Reasons">
-      {replyMarks.tags().map((tag) => <button key={tag} type="button" className={`mark-tag ${tags.includes(tag) ? "on" : ""}`} aria-pressed={tags.includes(tag)} onClick={() => toggle(tag)}>{tag}</button>)}
+    {offered.length === 0 ? null : <div className="mark-tags" role="group" aria-label="Reasons">
+      {offered.map((tag) => <button key={tag} type="button" className={`mark-tag ${tags.includes(tag) ? "on" : ""}`} aria-pressed={tags.includes(tag)} onClick={() => toggle(tag)}>{tag}</button>)}
     </div>}
     <textarea ref={area} className="input textarea mark-reason" rows={2} aria-label="Why, in your own words" placeholder="Why? (optional)" value={reason} disabled={busy} onChange={(event) => setReason(event.target.value)} />
     <div className="edit-actions">

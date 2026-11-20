@@ -75,7 +75,7 @@ function toolCall(name: string): StreamEvent[] {
   ];
 }
 
-async function world(rounds: Round[], options: { tools?: string[]; history?: Message[]; tags?: string[] } = {}): Promise<World> {
+async function world(rounds: Round[], options: { tools?: string[]; history?: Message[]; likeTags?: string[]; dislikeTags?: string[] } = {}): Promise<World> {
   const root = await mkdtemp(testTmp("shore-marks-"));
   const dirs = { config: join(root, "config"), data: join(root, "data"), cache: join(root, "cache"), runtime: join(root, "run") };
   for (const dir of Object.values(dirs)) await mkdir(dir, { recursive: true });
@@ -84,7 +84,8 @@ async function world(rounds: Round[], options: { tools?: string[]; history?: Mes
   app.chat.max_retries = 0;
   app.chat.model = "fixture";
   app.chat.display_name = "Sam";
-  if (options.tags !== undefined) app.marks.tags = options.tags;
+  if (options.likeTags !== undefined) app.marks.like_tags = options.likeTags;
+  if (options.dislikeTags !== undefined) app.marks.dislike_tags = options.dislikeTags;
   const models = emptyCatalog();
   models.chat.set("chat.fixture", {
     name: "fixture", qualifiedName: "chat.fixture", category: "chat", providerKey: "anthropic", sdk: "anthropic",
@@ -168,7 +169,7 @@ async function world(rounds: Round[], options: { tools?: string[]; history?: Mes
     sent,
     say: async (text) => await turn(text, undefined),
     regen: async (choice) => await turn("", choice ?? { kind: "reroll" }),
-    marks: { engine, data: dirs.data, tags: app.marks.tags, now: () => NOW },
+    marks: { engine, data: dirs.data, marks: app.marks, now: () => NOW },
     lastRequest: () => kept,
   };
 }
@@ -276,7 +277,7 @@ describe("regenerating", () => {
   test("a reason with a tag that isn't configured is refused before anything happens", async () => {
     const at = await world(["First try."]);
     await at.say("Hi.");
-    expect(await outcomeOf(at.regen({ kind: "with_reason", tags: ["rude"] }))).toThrow("\"rude\" isn't one of your tags");
+    expect(await outcomeOf(at.regen({ kind: "with_reason", tags: ["rude"] }))).toThrow("\"rude\" isn't one of your dislike tags: yours are didn't look hard enough, out of character, too long, repetitive. Add it to marks.dislike_tags to use it.");
     expect(at.sent).toHaveLength(1);
     expect(attemptsOf(at)[0]?.marks).toEqual([]);
   });
@@ -396,9 +397,9 @@ describe("marking replies", () => {
     expect(await outcomeOf(marked(at, { ref: first, position: 0 }))).toThrow("Attempt 0 is out of range; this reply has 1 attempt");
     expect(await outcomeOf(marked(at, { ref: "1" }))).toThrow("No reply 1 here; only the character's replies can be marked");
     expect(await outcomeOf(marked(at, { reason: "x".repeat(4001) }))).toThrow("A reason is at most 4000 characters");
-    expect(await outcomeOf(marked(at, { tags: ["rude"] }))).toThrow("\"rude\" isn't one of your tags");
+    expect(await outcomeOf(marked(at, { tags: ["rude"] }))).toThrow("\"rude\" isn't one of your like tags: marks.like_tags in your config is empty. Add it to marks.like_tags to use it.");
     const listing = listMarks(at.marks, { refs: [first, "last", "m_nowhere"] });
-    expect(listing.tags).toEqual(["didn't look hard enough", "out of character", "too long", "repetitive"]);
+    expect([listing.like_tags, listing.dislike_tags]).toEqual([[], ["didn't look hard enough", "out of character", "too long", "repetitive"]]);
     expect(listing.replies.map((entry) => entry.attempts.map((attempt) => [attempt.position, attempt.shown, attempt.marks.map((m) => m.kind)]))).toEqual([
       [[1, true, ["like"]]],
       [[1, false, ["dislike"]], [2, true, []]],
@@ -563,29 +564,42 @@ describe("marks over a conversation's life", () => {
 });
 
 describe("the tags a reason can carry", () => {
-  test("are a list in the config, each 1 to 80 characters, with no repeats", async () => {
+  test("are two lists in the config, one for a like and one for a dislike, each tag 1 to 80 characters with no repeats", async () => {
     const root = await mkdtemp(testTmp("shore-marks-config-"));
-    const read = async (toml: string): Promise<string[]> => {
+    const read = async (toml: string) => {
       await Bun.write(join(root, "config.toml"), toml);
-      return loadConfig(join(root, "config.toml"), { env: { SHORE_CONFIG_DIR: root }, onWarn: () => {} }).app.marks.tags;
+      return loadConfig(join(root, "config.toml"), { env: { SHORE_CONFIG_DIR: root }, onWarn: () => {} }).app.marks;
     };
-    expect(await read('[chat]\ndisplay_name = "eve"\n')).toEqual(["didn't look hard enough", "out of character", "too long", "repetitive"]);
-    expect(await read(`[marks]\ntags = ["cold", "${"🕯".repeat(80)}"]\n`)).toEqual(["cold", "🕯".repeat(80)]);
-    expect(await read("[marks]\ntags = []\n")).toEqual([]);
+    expect(await read('[chat]\ndisplay_name = "eve"\n')).toEqual({ like_tags: [], dislike_tags: ["didn't look hard enough", "out of character", "too long", "repetitive"] });
+    expect(await read(`[marks]\nlike_tags = ["warm"]\ndislike_tags = ["cold", "${"🕯".repeat(80)}"]\n`)).toEqual({ like_tags: ["warm"], dislike_tags: ["cold", "🕯".repeat(80)] });
+    expect((await read("[marks]\ndislike_tags = []\n")).dislike_tags).toEqual([]);
     const refused = async (toml: string): Promise<string> => String(await rejectionOf(read(toml)));
     const shape = "a tag is 1 to 80 characters with no space at either end";
-    expect(await refused('[marks]\ntags = ["cold", ""]\n')).toContain(`marks.tags has ""; ${shape}`);
-    expect(await refused('[marks]\ntags = ["cold "]\n')).toContain(`marks.tags has "cold "; ${shape}`);
-    expect(await refused(`[marks]\ntags = ["${"z".repeat(81)}"]\n`)).toContain(`marks.tags has "${"z".repeat(81)}"; ${shape}`);
-    expect(await refused('[marks]\ntags = ["cold", "dull", "cold"]\n')).toContain('marks.tags lists "cold" twice');
-    expect(configSchema({ instancesAt: () => [] }).find((entry) => entry.key === "marks.tags")?.description ?? "").toStartWith("Reasons you can give in one click");
+    expect(await refused('[marks]\ndislike_tags = ["cold", ""]\n')).toContain(`marks.dislike_tags has ""; ${shape}`);
+    expect(await refused('[marks]\nlike_tags = ["warm "]\n')).toContain(`marks.like_tags has "warm "; ${shape}`);
+    expect(await refused(`[marks]\nlike_tags = ["${"z".repeat(81)}"]\n`)).toContain(`marks.like_tags has "${"z".repeat(81)}"; ${shape}`);
+    expect(await refused('[marks]\nlike_tags = ["warm", "fond", "warm"]\n')).toContain('marks.like_tags lists "warm" twice');
+    expect(await refused('[marks]\ndislike_tags = ["cold", "cold"]\n')).toContain('marks.dislike_tags lists "cold" twice');
+    expect(await refused('[marks]\ntags = ["cold"]\n')).toContain("marks.tags is now two lists: marks.like_tags for a like and marks.dislike_tags for a dislike");
+    const described = (key: string) => configSchema({ instancesAt: () => [] }).find((entry) => entry.key === key)?.description ?? "";
+    expect([described("marks.like_tags"), described("marks.dislike_tags")]).toEqual([
+      "Reasons you can give in one click when you like a reply, in the order they are offered. A written reason can go with them. Empty by default, which offers none.",
+      "Reasons you can give in one click when you dislike a reply or regenerate one with a reason, in the order they are offered. A written reason can go with them. Defaults to didn't look hard enough, out of character, too long and repetitive.",
+    ]);
   });
 
-  test("an empty list leaves only written reasons", async () => {
-    const at = await world(["Reply."], { tags: [] });
+  test("a mark is checked against its own kind's list, and an old mark keeps the tags it already has", async () => {
+    const at = await world(["Reply."], { likeTags: ["warm"], dislikeTags: ["cold"] });
     await at.say("Hi.");
-    expect(await outcomeOf(marked(at, { tags: ["too long"] }))).toThrow("\"too long\" isn't one of your tags: marks.tags in your config is empty. Add it to marks.tags to use it.");
-    expect(listMarks(at.marks, {}).tags).toEqual([]);
+    expect(await outcomeOf(marked(at, { kind: "like", tags: ["cold"] }))).toThrow("\"cold\" isn't one of your like tags: yours are warm. Add it to marks.like_tags to use it.");
+    expect(await outcomeOf(marked(at, { kind: "dislike", tags: ["warm"] }))).toThrow("\"warm\" isn't one of your dislike tags: yours are cold. Add it to marks.dislike_tags to use it.");
+    expect((await marked(at, { kind: "like", tags: ["warm"] })).marks).toMatchObject([{ kind: "like", tags: ["warm"] }]);
+    at.marks.marks.like_tags = [];
+    expect((await marked(at, { kind: "like", tags: ["warm"], reason: "still warm" })).marks).toMatchObject([{ kind: "like", tags: ["warm"], reason: "still warm" }]);
+    expect(await outcomeOf(marked(at, { kind: "dislike", tags: ["warm"] }))).toThrow("\"warm\" isn't one of your dislike tags");
+    expect(await outcomeOf(marked(at, { kind: "like", tags: ["warm"], phrase: "Reply" }))).toThrow("\"warm\" isn't one of your like tags: marks.like_tags in your config is empty");
+    expect(await outcomeOf(at.regen({ kind: "with_reason", reason: "", tags: ["warm"] }))).toThrow("\"warm\" isn't one of your dislike tags: yours are cold. Add it to marks.dislike_tags to use it.");
+    expect([listMarks(at.marks, {}).like_tags, listMarks(at.marks, {}).dislike_tags]).toEqual([[], ["cold"]]);
   });
 });
 
@@ -673,14 +687,15 @@ describe("marking through the daemon's operations", () => {
   test("run as operations, marks are checked against the protocol and stamped with the daemon's clock", async () => {
     const at = await world(["Hello there."]);
     await at.say("Hi.");
-    const session = { dataDir: at.data, config: { app: { marks: { tags: ["cold"] } } } };
+    const session = { dataDir: at.data, config: { app: { marks: { like_tags: ["cold"], dislike_tags: ["flat"] } } } };
     const context = (now?: () => number) => ({ session, deps: now === undefined ? {} : { now }, engine: at.engine }) as never;
     const liked = await commandOperations.mark.invoke(context(() => Date.parse("2026-11-01T00:00:00Z")), { kind: "like", tags: ["cold"] });
     expect(liked).toMatchObject({ position: 1, changed: true, marks: [{ kind: "like", tags: ["cold"], at: "2026-11-01T00:00:00.000Z" }] });
     const before = Date.now();
     const disliked = await commandOperations.mark.invoke(context(), { kind: "dislike" });
     expect(Date.parse(String(disliked.marks[0]?.at))).toBeGreaterThanOrEqual(before - 1000);
-    expect((await commandOperations.marks.invoke(context(), {})).tags).toEqual(["cold"]);
+    const listing = await commandOperations.marks.invoke(context(), {});
+    expect([listing.like_tags, listing.dislike_tags]).toEqual([["cold"], ["flat"]]);
     expect((await commandOperations.unmark.invoke(context(), {})).marks).toEqual([]);
     const asked: unknown = { kind: "meh" };
     expect(() => { void commandOperations.mark.invoke(context(), asked); }).toThrow("/kind");

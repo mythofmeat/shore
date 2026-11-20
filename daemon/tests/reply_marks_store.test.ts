@@ -22,7 +22,7 @@ function daemon(answer: (name: string, input: Record<string, unknown>) => unknow
     if (given !== undefined) return given;
     if (name === "marks") {
       const refs = (input["refs"] ?? []) as string[];
-      return { tags: ["too long"], replies: refs.filter((ref) => ref !== "m_gone").map((ref) => ({ ref, attempts: [attempt(1, true)] })) };
+      return { like_tags: ["warm"], dislike_tags: ["too long"], replies: refs.filter((ref) => ref !== "m_gone").map((ref) => ({ ref, attempts: [attempt(1, true)] })) };
     }
     return { ref: String(input["ref"]), position: Number(input["position"]), attempt: "at_new", phrase: input["phrase"] ?? null, changed: true, marks: [{ ...liked, kind: input["kind"] ?? "like", phrase: input["phrase"] ?? null }] };
   }) as MarkRun;
@@ -61,7 +61,7 @@ describe("the marks a transcript shows", () => {
     expect(link.calls).toEqual([{ name: "marks", input: { refs: ["m_1", "m_2", "m_gone"] } }]);
     expect(store.attempts({ msg_id: "m_1" })).toEqual([attempt(1, true)]);
     expect(store.attempts({ msg_id: "m_gone" }), "a reply the daemon didn't list has none").toEqual([]);
-    expect(store.tags()).toEqual(["too long"]);
+    expect([store.tags("like"), store.tags("dislike")]).toEqual([["warm"], ["too long"]]);
     expect([heard, gone]).toEqual([1, 0]);
     expect(store.getSnapshot()).toBe(1);
 
@@ -75,7 +75,7 @@ describe("the marks a transcript shows", () => {
     store.edit({ ref: "m_1", position: 1, phrase: null, place: "row" });
     store.want("ada/other", [{ msg_id: "m_1" }]);
     expect(store.editing(), "leaving the thread closes an open editor").toBeNull();
-    expect(store.tags(), "and the tags are asked for again").toEqual([]);
+    expect([store.tags("like"), store.tags("dislike")], "and the tags are asked for again").toEqual([[], []]);
     expect(store.attempts({ msg_id: "m_1" })).toBeUndefined();
     await settled();
     expect(link.calls.at(-1)).toEqual({ name: "marks", input: { refs: ["m_1"] } });
@@ -170,10 +170,11 @@ describe("marking from the browser", () => {
   });
 
   test("the configured tags are asked for once when nothing has loaded them yet", async () => {
-    const link = daemon((name) => name === "marks" ? { tags: ["cold"], replies: [] } : undefined);
+    const link = daemon((name) => name === "marks" ? { like_tags: ["warm"], dislike_tags: ["cold"], replies: [] } : undefined);
     const store = new ReplyMarkStore(link.run);
-    expect(await store.loadTags()).toEqual(["cold"]);
-    expect(await store.loadTags()).toEqual(["cold"]);
+    await store.loadTags();
+    await store.loadTags();
+    expect([store.tags("like"), store.tags("dislike")]).toEqual([["warm"], ["cold"]]);
     expect(link.calls).toEqual([{ name: "marks", input: {} satisfies OperationInput<"marks"> }]);
     expect(store.getSnapshot()).toBe(1);
   });

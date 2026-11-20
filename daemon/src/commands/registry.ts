@@ -57,7 +57,7 @@ function markContext(context: CommandOperationContext): MarkContext {
   return {
     engine: engineOf(context),
     data: context.session.dataDir,
-    tags: context.session.config.app.marks.tags,
+    marks: context.session.config.app.marks,
     now: now === undefined ? () => new Date().toISOString() : () => new Date(now()).toISOString(),
   };
 }
@@ -374,7 +374,7 @@ export const commandOperations: OperationRegistry<CommandOperationContext> = {
     kind: { label: "Mark", hint: "like or dislike" },
     phrase: { label: "Phrase", hint: "Words from the attempt to mark instead of the whole reply" },
     reason: { label: "Reason", multiline: true, hint: "Why, in your own words; optional" },
-    tags: { label: "Reason tags", hint: "Tags from marks.tags in your config; optional" },
+    tags: { label: "Reason tags", hint: "Tags from marks.like_tags for a like or marks.dislike_tags for a dislike in your config; optional" },
   } }, (context, args) => mark(markContext(context), args)),
   unmark: register("unmark", { ...conversationPresentation, label: "Remove a mark", effects: ["history_write"], fields: {
     ref: { ...messageRef, hint: "A reply's message ID or index, including archived replies; omit for the latest reply" },

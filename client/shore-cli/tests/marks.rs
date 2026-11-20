@@ -70,13 +70,13 @@ fn a_dislike_an_unmark_and_the_listing_print_what_the_daemon_holds_or_its_raw_an
         )]
     );
 
-    let listing = json!({ "tags": ["too long"], "replies": [{ "ref": "m_1", "attempts": [
+    let listing = json!({ "like_tags": [], "dislike_tags": ["too long"], "replies": [{ "ref": "m_1", "attempts": [
         { "position": 1, "shown": true, "attempt": "at_1", "asked": "with_reason", "marks": [] },
     ] }] });
     let (listed, listing_asked) = asked(listing, &["msg", "marks", "last"]);
     assert_eq!(
         printed(&listed),
-        "m_1\n  1. shown, with a reason: no marks\nReason tags: too long."
+        "m_1\n  1. shown, with a reason: no marks\nNo like tags are set in marks.like_tags.\nTags for a dislike: too long."
     );
     assert_eq!(
         sent(&listing_asked),

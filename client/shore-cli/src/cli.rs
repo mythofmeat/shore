@@ -644,8 +644,8 @@ pub(crate) enum MsgCommand {
         #[arg(short, long, alias = "guidance", short_alias = 'g')]
         reason: Option<String>,
 
-        /// A reason tag from marks.tags in your config, alone or with
-        /// --reason; repeat for more
+        /// A reason tag from marks.dislike_tags in your config, alone or
+        /// with --reason; repeat for more
         #[arg(long = "tag", value_name = "TAG")]
         tags: Vec<String>,
     },
@@ -752,7 +752,8 @@ pub(crate) struct MarkOptions {
     #[arg(short, long)]
     pub(crate) reason: Option<String>,
 
-    /// A reason tag from marks.tags in your config; repeat for more
+    /// A reason tag from your config: marks.like_tags for a like,
+    /// marks.dislike_tags for a dislike; repeat for more
     #[arg(long = "tag", value_name = "TAG")]
     pub(crate) tags: Vec<String>,
 

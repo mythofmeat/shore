@@ -897,11 +897,13 @@ pub(crate) fn marks_text(name: &str, data: &serde_json::Value) -> String {
                 }
             }
         }
-        lines.push(if listing.tags.is_empty() {
-            "No reason tags are set in marks.tags.".to_owned()
-        } else {
-            format!("Reason tags: {}.", listing.tags.join(", "))
-        });
+        for (kind, tags) in [("like", &listing.like_tags), ("dislike", &listing.dislike_tags)] {
+            lines.push(if tags.is_empty() {
+                format!("No {kind} tags are set in marks.{kind}_tags.")
+            } else {
+                format!("Tags for a {kind}: {}.", tags.join(", "))
+            });
+        }
         return lines.join("\n");
     }
     let Ok(changed) = serde_json::from_value::<MarkChanged>(data.clone()) else {

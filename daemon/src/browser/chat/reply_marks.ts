@@ -30,7 +30,7 @@ export class ReplyMarkStore {
   #replies = new Map<string, readonly AttemptMarks[]>();
   #asked = new Set<string>();
   #queue = new Map<string, string>();
-  #tags: readonly string[] | undefined;
+  #tags: Readonly<Record<MarkKind, readonly string[]>> | undefined;
   #editing: Editing | null = null;
   #version = 0;
   #scheduled = false;
@@ -47,7 +47,7 @@ export class ReplyMarkStore {
   }
 
   attempts(message: ReplyKey): readonly AttemptMarks[] | undefined { return this.#replies.get(replyKey(message)); }
-  tags(): readonly string[] { return this.#tags ?? []; }
+  tags(kind: MarkKind): readonly string[] { return this.#tags?.[kind] ?? []; }
   editing(): Editing | null { return this.#editing; }
 
   edit(editing: Editing | null): void {
@@ -85,18 +85,18 @@ export class ReplyMarkStore {
       for (const [key] of batch) { this.#queue.delete(key); this.#asked.add(key); }
       const listing = await this.run("marks", { refs: batch.map(([, ref]) => ref) }).catch(() => undefined);
       if (listing === undefined || scope !== this.#scope) continue;
-      this.#tags = listing.tags;
+      this.#tags = { like: listing.like_tags, dislike: listing.dislike_tags };
       const found = new Map(listing.replies.map((reply) => [reply.ref, reply.attempts]));
       for (const [key, ref] of batch) this.#replies.set(key, found.get(ref) ?? []);
       this.#changed();
     }
   }
 
-  async loadTags(): Promise<readonly string[]> {
-    if (this.#tags !== undefined) return this.#tags;
-    this.#tags = (await this.run("marks", {})).tags;
+  async loadTags(): Promise<void> {
+    if (this.#tags !== undefined) return;
+    const listing = await this.run("marks", {});
+    this.#tags = { like: listing.like_tags, dislike: listing.dislike_tags };
     this.#changed();
-    return this.#tags;
   }
 
   #store(scope: string, key: string, changed: OperationResult<"mark">): void {

@@ -2635,7 +2635,8 @@ wire_types! {
     }
 
     pub struct MarkListing {
-        pub tags: Vec<String>,
+        pub like_tags: Vec<String>,
+        pub dislike_tags: Vec<String>,
         pub replies: Vec<ReplyMarks>,
     }
 

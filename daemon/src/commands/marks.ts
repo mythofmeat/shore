@@ -1,3 +1,4 @@
+import { markTagList, type MarksConfig } from "../config/app.ts";
 import type { ConversationEngine } from "../engine/conversation.ts";
 import { askedFor, locatePhrase, marksOf, removeMark, setMark, type AttemptScope, type Mark, type Reply } from "../engine/marks.ts";
 import { mergeToolLoopMessages } from "../engine/merge.ts";
@@ -12,7 +13,7 @@ export const MAX_MARK_REASON_CHARS = 4000;
 export interface MarkContext {
   engine: ConversationEngine;
   data: string;
-  tags: readonly string[];
+  marks: MarksConfig;
   now: () => string;
 }
 
@@ -65,9 +66,11 @@ export async function mark(context: MarkContext, args: OperationInput<"mark">): 
   const target = targetOf(context.engine, args.ref, args.position);
   const phrase = phraseIn(target, args.phrase);
   const reason = reasonOf(args.reason);
-  const tags = checkTags(args.tags ?? [], context.tags);
   const attempt = await context.engine.attemptOf(target.reply.msgId, target.index);
   const scope = scopeOf(context);
+  const list = markTagList(args.kind);
+  const held = (marksOf(scope, [attempt]).get(attempt) ?? []).find((each) => each.kind === args.kind && each.phrase === (phrase ?? null))?.tags ?? [];
+  const tags = checkTags(args.tags ?? [], context.marks[list], list, held);
   const changed = setMark(scope, attempt, { kind: args.kind, phrase, reason, tags }, context.now());
   return changedResult(scope, target, attempt, phrase, changed);
 }
@@ -109,7 +112,8 @@ export function listMarks(context: MarkContext, args: OperationInput<"marks">): 
   const marks = marksOf(scope, ids);
   const asked = askedFor(scope, ids);
   return {
-    tags: [...context.tags],
+    like_tags: [...context.marks.like_tags],
+    dislike_tags: [...context.marks.dislike_tags],
     replies: replies.map((reply) => ({
       ref: reply.msgId,
       attempts: reply.attempts.map((attempt) => ({

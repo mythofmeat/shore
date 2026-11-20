@@ -34,7 +34,7 @@ function daemon(start: Record<number, MarkView[]> = {}, positions = 1): Daemon {
       return { ref: "m_reply", alt_index: positions - 1, position: positions, alt_count: positions, alternatives: Array.from({ length: positions }, (_, index) => ({ index, position: index + 1, active: index === positions - 1, content: `Try ${String(index + 1)}`, images: [], timestamp: AT })) };
     }
     if (name === "marks") {
-      return { tags: ["too long", "repetitive"], replies: [{ ref: "m_reply", attempts: Array.from({ length: positions }, (_, index) => ({ position: index + 1, shown: index === positions - 1, attempt: `at_${String(index + 1)}`, asked: "first", marks: state.marks.get(index + 1) ?? [] })) }] };
+      return { like_tags: ["warm"], dislike_tags: ["too long", "repetitive"], replies: [{ ref: "m_reply", attempts: Array.from({ length: positions }, (_, index) => ({ position: index + 1, shown: index === positions - 1, attempt: `at_${String(index + 1)}`, asked: "first", marks: state.marks.get(index + 1) ?? [] })) }] };
     }
     const position = Number(args["position"]);
     const phrase = (args["phrase"] as string | undefined) ?? null;
@@ -76,19 +76,30 @@ test("a reply's like and dislike show its mark, liking it opens a place to say w
   expect(pressed(view.host)).toEqual([["Liked; remove the like", "true"], ["Dislike", "false"]]);
   expect(editor(view.host)?.getAttribute("aria-label")).toBe("Your mark on this response");
   expect([...view.host.querySelectorAll(".mark-editor [role=radio]")].map((radio) => [radio.textContent, radio.getAttribute("aria-checked")])).toEqual([["Like", "true"], ["Dislike", "false"]]);
+  const offered = () => [...view.host.querySelectorAll(".mark-tag")].map((tag) => [tag.textContent, tag.getAttribute("aria-pressed")]);
+  expect(offered()).toEqual([["warm", "false"]]);
+  await click([...view.host.querySelectorAll(".mark-editor [role=radio]")][1]);
   await click(button(view.host, "too long"));
   await click(button(view.host, "repetitive"));
   await click(button(view.host, "repetitive"));
-  expect([...view.host.querySelectorAll(".mark-tag")].map((tag) => [tag.textContent, tag.getAttribute("aria-pressed")])).toEqual([["too long", "true"], ["repetitive", "false"]]);
+  expect(offered()).toEqual([["too long", "true"], ["repetitive", "false"]]);
+  await click([...view.host.querySelectorAll(".mark-editor [role=radio]")][0]);
+  expect(offered(), "going back to a like offers the like tags and keeps none picked for a dislike").toEqual([["warm", "false"]]);
+  await click(button(view.host, "warm"));
   await type(view.host.querySelector(".mark-reason"), "warm but long");
   await click(button(view.host, "Save"));
   await settle();
-  expect(state.sent.at(-1)).toEqual(["mark", { ref: "m_reply", position: 1, kind: "like", reason: "warm but long", tags: ["too long"] }]);
+  expect(state.sent.at(-1)).toEqual(["mark", { ref: "m_reply", position: 1, kind: "like", reason: "warm but long", tags: ["warm"] }]);
   expect(editor(view.host)).toBeNull();
-  expect(chips(view.host)).toEqual([["mark-chip like whole", "Likedtoo long; warm but long"]]);
+  expect(chips(view.host)).toEqual([["mark-chip like whole", "Likedwarm; warm but long"]]);
 
-  await click(button(view.host, "Liked: too long; warm but long. Change"));
+  await click(button(view.host, "Liked: warm; warm but long. Change"));
   expect(editor(view.host)).not.toBeNull();
+  expect(offered(), "an open mark shows the tags it holds").toEqual([["warm", "true"]]);
+  await click([...view.host.querySelectorAll(".mark-editor [role=radio]")][1]);
+  expect(offered()).toEqual([["too long", "false"], ["repetitive", "false"]]);
+  await click([...view.host.querySelectorAll(".mark-editor [role=radio]")][0]);
+  expect(offered(), "going back to the mark's own kind brings back the tags it holds").toEqual([["warm", "true"]]);
   expect((view.host.querySelector(".mark-reason") as HTMLTextAreaElement).value).toBe("warm but long");
   await click(button(view.host, "Close"));
   expect(editor(view.host)).toBeNull();
@@ -349,7 +360,7 @@ test("the editor takes the focus without scrolling, keeps its keys to itself, an
   const focused: [string, FocusOptions | undefined][] = [];
   patch(HTMLElement.prototype, "focus", { writable: true, value: function (this: HTMLElement, options?: FocusOptions) { focused.push([this.className, options]); } });
   const view = await row(reply());
-  await click(button(view.host, "Like"));
+  await click(button(view.host, "Dislike"));
   await settle();
   expect(focused.filter(([name]) => name.includes("mark-reason"))).toEqual([["input textarea mark-reason", { preventScroll: true }]]);
   const area = view.host.querySelector(".mark-reason");
@@ -498,7 +509,7 @@ test("the selection's buttons sit under it and stay on screen, the toolbar keeps
 test("the reason dialog and the editor load the tags when nothing has yet, show a single tag, and say tags can stand in for words", async () => {
   let tags = ["only"];
   app.answer((asked) => {
-    if (asked["name"] === "marks") return { tags, replies: [] };
+    if (asked["name"] === "marks") return { like_tags: ["fond"], dislike_tags: tags, replies: [] };
     if (asked["name"] === "mark") return { ref: "m_fresh", position: 1, attempt: "at_1", phrase: null, changed: true, marks: [{ kind: "like", phrase: null, reason: null, tags: [], at: AT }] };
     return undefined;
   });
@@ -527,7 +538,7 @@ test("the reason dialog and the editor load the tags when nothing has yet, show 
   const view = await mount(<MessageRow message={reply({ msg_id: "m_fresh" })} character="ada" avatar={null} last={false} metadata={undefined} display={defaultViews()} busy={false} mobile={false} openImage={() => {}} />);
   await click(button(view.host, "Like"));
   await settle();
-  expect([...view.host.querySelectorAll(".mark-editor .mark-tag")].map((tag) => tag.textContent)).toEqual(["only"]);
+  expect([...view.host.querySelectorAll(".mark-editor .mark-tag")].map((tag) => tag.textContent)).toEqual(["fond"]);
 });
 
 test("the thread menu offers another take and a reason only when it can, and opens the reason dialog when asked", async () => {
