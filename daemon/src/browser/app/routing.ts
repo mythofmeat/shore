@@ -7,7 +7,7 @@ export const SETTINGS_PAGES = [
   { id: "usage", label: "Usage & budgets", group: "Daemon" },
   { id: "configuration", label: "Configuration", group: "Daemon" },
   { id: "devices", label: "Devices", group: "Daemon" },
-  { id: "memory", label: "Memory & segments", group: "Advanced" },
+  { id: "segments", label: "Segments", group: "Advanced" },
   { id: "diagnostics", label: "Diagnostics", group: "Advanced" },
   { id: "traces", label: "Traces & call log", group: "Advanced" },
   { id: "tools", label: "Tool runner", group: "Advanced" },

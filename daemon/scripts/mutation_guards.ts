@@ -73,7 +73,6 @@ export const DAEMON_FLOORS: Readonly<Record<string, number>> = {
   "src/browser/settings/Devices.tsx": 0,
   "src/browser/settings/Diagnostics.tsx": 0,
   "src/browser/settings/Keyboard.tsx": 0,
-  "src/browser/settings/Memory.tsx": 0,
   "src/browser/settings/Models.tsx": 0,
   "src/browser/settings/Providers.tsx": 0,
   "src/browser/settings/Settings.tsx": 0,
