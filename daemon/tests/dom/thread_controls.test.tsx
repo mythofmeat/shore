@@ -195,7 +195,7 @@ test("a new thread needs a name, says so while it is being made, opens in the ch
     if (request["name"] === "switch_thread") return { character: "ada", thread: "lamp", changed: true };
     return undefined;
   });
-  navigate({ view: "settings", page: "memory" });
+  navigate({ view: "settings", page: "segments" });
   let closed = 0;
   const view = await mount(<NewThreadDialog character="ada" close={() => { closed += 1; }} />);
   const create = () => view.host.querySelector<HTMLButtonElement>("button[type=submit]");
@@ -212,7 +212,7 @@ test("a new thread needs a name, says so while it is being made, opens in the ch
   await settle();
   expect(submitted.defaultPrevented).toBe(true);
   expect(shown()).toEqual(["Create", false, "a thread named lamp already exists"]);
-  expect([closed, location.hash, asked(since, "switch_thread")]).toEqual([0, "#settings/memory", []]);
+  expect([closed, location.hash, asked(since, "switch_thread")]).toEqual([0, "#settings/segments", []]);
 
   creating = () => HOLD;
   await click(create());

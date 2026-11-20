@@ -108,7 +108,7 @@ describe("the settings screen", () => {
     expect(groups.map((group) => [group.getAttribute("aria-label"), [...group.querySelectorAll("button")].map((item) => item.textContent)])).toEqual([
       ["Chat", ["Models", "Characters", "Appearance", "Keyboard shortcuts"]],
       ["Daemon", ["Providers", "Usage & budgets", "Configuration", "Devices"]],
-      ["Advanced", ["Memory & segments", "Diagnostics", "Traces & call log", "Tool runner", "Character archives", "Debug"]],
+      ["Advanced", ["Segments", "Diagnostics", "Traces & call log", "Tool runner", "Character archives", "Debug"]],
     ]);
     const current = button(view.host, "Keyboard shortcuts");
     expect([current.className, current.getAttribute("aria-current"), button(view.host, "Models").hasAttribute("aria-current")]).toEqual(["settings-nav-item on", "page", false]);

@@ -10,59 +10,134 @@ const summary = (index: number, extra: Record<string, unknown> = {}) => ({
   label: null, note: null, memory_before: null, memory_after: null, ...extra,
 });
 const settle = async () => { await acting(() => Bun.sleep(5)); };
+const thread = (id: string, label?: string) => ({ id, created_at: "2026-11-01T00:00:00Z", compaction: true, home: id === "main", current: false, ...(label === undefined ? {} : { label }) });
+const THREADS = [thread("main", "Home"), thread("story")];
+const listing = (name: string, segments: unknown[]) => ({ character: "ada", thread: name, count: segments.length, segments });
+const askedFor = (since: number) => app.sent(since).filter((request) => request["name"] === "segments").map((request) => request["args"]);
+const segmentRows = (host: HTMLElement) => [...host.querySelectorAll(".segment")].map((segment) => [segment.querySelector(".setting-label")?.textContent, segment.querySelector(".setting-description")?.textContent]);
+const page = async () => (await import("../../src/browser/settings/Segments.tsx")).SegmentsPage;
 
-describe("the memory page", () => {
-  test("needs a character, then lists the thread's segments with their labels, notes and dates", async () => {
-    const { MemoryPage } = await import("../../src/browser/settings/Memory.tsx");
+describe("the segments page", () => {
+  test("needs a character and a connection, then lists the open thread's segments, newest first, with their labels, notes and dates", async () => {
+    const SegmentsPage = await page();
     const { formatTime } = await import("../../src/browser/settings/shared.tsx");
-    const snapshot = app.state().workspace.getSnapshot();
+    const snapshot = { ...app.state().workspace.getSnapshot(), threads: THREADS };
     const before = app.socket().sent.length;
-    const none = await mount(<MemoryPage state={{ ...snapshot, character: null }} />);
+    const none = await mount(<SegmentsPage state={{ ...snapshot, character: null }} />);
+    await mount(<SegmentsPage state={{ ...snapshot, character: "ada", status: "reconnecting" }} />);
     await settle();
     expect(none.host.textContent).toContain("Choose a character");
-    expect(app.sent(before).some((request) => request["name"] === "segments")).toBe(false);
-    app.answer((request) => request["name"] === "segments" ? { character: "ada", thread: "story", count: 2, segments: [summary(1, { label: "The start", note: "keep", excluded: true }), summary(2)] } : undefined);
-    const view = await mount(<MemoryPage state={{ ...snapshot, character: "ada", thread: "story" }} />);
+    expect(askedFor(before)).toEqual([]);
+    app.answer((request) => request["name"] === "segments" ? listing("story", [
+      summary(1, { label: "The start", note: "keep", excluded: true }),
+      summary(2, { last_message_at: "2026-11-05T00:00:00Z" }),
+      summary(3, { last_message_at: null, compacted_at: "2026-11-04T00:00:00Z" }),
+      summary(4, { last_message_at: "2026-11-05T00:00:00Z" }),
+    ]) : undefined);
+    const view = await mount(<SegmentsPage state={{ ...snapshot, character: "ada", thread: "story" }} />);
     await settle();
-    expect(view.host.querySelector("h2")?.textContent).toBe("Segments in ada / story");
-    const segments = [...view.host.querySelectorAll(".segment")];
-    expect(segments.map((segment) => [segment.className, segment.querySelector(".setting-label")?.textContent])).toEqual([["segment excluded", "The startexcluded"], ["segment ", "Segment 2"]]);
-    expect(segments[0]?.querySelectorAll(".setting-description")[0]?.textContent).toBe(`12 turns · ${formatTime("2026-11-01T00:00:00Z")} – ${formatTime("2026-11-02T00:00:00Z")} · compacted ${formatTime("2026-11-03T00:00:00Z")}`);
-    expect([segments[0]?.querySelectorAll(".setting-description")[1]?.textContent, segments[1]?.querySelectorAll(".setting-description").length]).toEqual(["Note: keep", 1]);
-    const main = await mount(<MemoryPage state={{ ...snapshot, character: "ada", thread: null }} />);
+    expect(askedFor(before)).toEqual([{ thread: "story" }]);
+    expect(view.host.querySelector("h2")?.textContent).toBe("Segments in ada");
+    expect(view.host.querySelector(".settings-description")?.textContent).toBe("When a thread is compacted, its older turns become a segment.");
+    const picker = view.host.querySelector<HTMLSelectElement>("select[aria-label=Thread]");
+    expect([picker?.value, [...(picker?.options ?? [])].map((option) => [option.value, option.textContent])]).toEqual(["story", [["", "All threads"], ["main", "Home"], ["story", "story"]]]);
+    expect(segmentRows(view.host).map(([label]) => label)).toEqual(["Segment 4", "Segment 2", "Segment 3", "The startexcluded"]);
+    const first = view.host.querySelectorAll(".segment")[3];
+    expect([first?.className, first?.querySelectorAll(".setting-description")[0]?.textContent, first?.querySelectorAll(".setting-description")[1]?.textContent]).toEqual([
+      "segment excluded", `12 turns · ${formatTime("2026-11-01T00:00:00Z")} – ${formatTime("2026-11-02T00:00:00Z")} · compacted ${formatTime("2026-11-03T00:00:00Z")}`, "Note: keep",
+    ]);
+    expect(view.host.querySelectorAll(".segment")[0]?.querySelectorAll(".setting-description")).toHaveLength(1);
+    const asked = app.socket().sent.length;
+    await mount(<SegmentsPage state={{ ...snapshot, character: "ada", thread: null, threads: [] }} />);
     await settle();
-    expect(main.host.querySelector("h2")?.textContent).toBe("Segments in ada / main");
+    expect(askedFor(asked), "the main thread is the open one when none is named, listed or not").toEqual([{ thread: "main" }]);
   });
 
-  test("says when there are no segments yet, or why they could not be listed", async () => {
-    const { MemoryPage } = await import("../../src/browser/settings/Memory.tsx");
-    const snapshot = { ...app.state().workspace.getSnapshot(), character: "ada" };
-    app.answer((request) => request["name"] === "segments" ? { character: "ada", thread: "story", count: 0, segments: [] } : undefined);
-    const empty = await mount(<MemoryPage state={snapshot} />);
+  test("all threads lists every thread's segments together, newest first, each saying which thread it is from, and acts on each in its own thread", async () => {
+    const SegmentsPage = await page();
+    const opened: unknown[][] = [];
+    const openSegment = spyOn(app.state().workspace, "openSegment").mockImplementation(async (index) => { await Promise.resolve(); opened.push(["segment", index]); });
+    const openThread = spyOn(app.state().workspace, "openThread").mockImplementation(async (name) => { await Promise.resolve(); opened.push(["thread", name]); });
+    app.restores.push(() => { openSegment.mockRestore(); openThread.mockRestore(); });
+    const changes: unknown[] = [];
+    app.answer((request) => {
+      if (request["name"] !== "segments") return undefined;
+      const args = request["args"] as { action?: string; thread: string };
+      if (args.action !== undefined) { changes.push(args); return { character: "ada", thread: args.thread, action: args.action, segment: summary(1) }; }
+      return args.thread === "main" ? listing("main", [summary(1)]) : listing("story", [summary(1, { last_message_at: "2026-11-03T00:00:00Z" }), summary(2, { last_message_at: "2026-11-01T00:00:00Z" })]);
+    });
+    const view = await mount(<SegmentsPage state={{ ...app.state().workspace.getSnapshot(), character: "ada", thread: "story", threads: THREADS }} />);
     await settle();
-    expect(empty.host.querySelector(".settings-empty")?.textContent).toBe("No segments yet. They appear after the thread is compacted.");
-    app.answer((request) => { if (request["name"] === "segments") throw new Error("no index"); return undefined; });
-    const failing = await mount(<MemoryPage state={snapshot} />);
+    const before = app.socket().sent.length;
+    await type(view.host.querySelector("select[aria-label=Thread]"), "");
+    await settle();
+    expect(askedFor(before)).toEqual([{ thread: "main" }, { thread: "story" }]);
+    expect(segmentRows(view.host).map(([label, about]) => [label, about?.split(" · ")[0]])).toEqual([["Segment 1", "story"], ["Segment 1", "Home"], ["Segment 2", "story"]]);
+    const home = view.host.querySelectorAll<HTMLElement>(".segment")[1];
+    const own = view.host.querySelectorAll<HTMLElement>(".segment")[0];
+    await click(button(home ?? view.host, "Exclude from chat logs"));
+    await settle();
+    expect(changes).toEqual([{ action: "exclude", index: 1, thread: "main" }]);
+    await click(button(own ?? view.host, "Open in chat"));
+    await settle();
+    await click(button(view.host.querySelectorAll<HTMLElement>(".segment")[1] ?? view.host, "Open in chat"));
+    await settle();
+    expect(opened, "a segment in another thread opens that thread first").toEqual([["segment", 1], ["thread", "main"], ["segment", 1]]);
+    await type(view.host.querySelector("select[aria-label=Thread]"), "story");
+    await settle();
+    expect(segmentRows(view.host).map(([, about]) => about?.startsWith("12 turns"))).toEqual([true, true]);
+  });
+
+  test("says when there are no segments yet, or why they could not be listed until another thread lists, and ignores an answer for a thread no longer shown", async () => {
+    const SegmentsPage = await page();
+    const snapshot = { ...app.state().workspace.getSnapshot(), character: "ada", thread: "story", threads: THREADS };
+    app.answer((request) => request["name"] === "segments" ? listing("story", []) : undefined);
+    const empty = await mount(<SegmentsPage state={snapshot} />);
+    await settle();
+    expect(empty.host.querySelector(".settings-empty")?.textContent).toBe("No segments yet. They appear when a thread is compacted.");
+    app.answer((request) => request["name"] === "segments" ? { character: "ada", thread: "story", action: "exclude", segment: summary(1) } : undefined);
+    const odd = await mount(<SegmentsPage state={snapshot} />);
+    await settle();
+    expect(odd.host.querySelector(".settings-empty")?.textContent, "an answer that is not a listing lists nothing").toBe("No segments yet. They appear when a thread is compacted.");
+    app.answer((request) => {
+      if (request["name"] !== "segments") return undefined;
+      if ((request["args"] as { thread: string }).thread === "story") throw new Error("no index");
+      return listing("main", [summary(7)]);
+    });
+    const failing = await mount(<SegmentsPage state={snapshot} />);
     await settle();
     expect(failing.host.querySelector("[role=alert]")?.textContent).toBe("no index");
-    app.answer((request) => request["name"] === "segments" ? { character: "ada", thread: "story", action: "exclude", segment: summary(1) } : undefined);
-    const odd = await mount(<MemoryPage state={snapshot} />);
+    await type(failing.host.querySelector("select[aria-label=Thread]"), "main");
     await settle();
-    expect(odd.host.querySelector(".settings-empty [role=status]"), "an answer that is not a listing shows nothing yet").not.toBeNull();
+    expect([failing.host.querySelector("[role=alert]"), segmentRows(failing.host).map(([label]) => label)]).toEqual([null, ["Segment 7"]]);
+
+    app.answer((request) => {
+      if (request["name"] !== "segments") return undefined;
+      return (request["args"] as { thread: string }).thread === "story" ? HOLD : listing("main", [summary(8)]);
+    });
+    const late = await mount(<SegmentsPage state={snapshot} />);
+    await settle();
+    const held = app.socket().sent.filter((request) => request["name"] === "segments").at(-1);
+    await type(late.host.querySelector("select[aria-label=Thread]"), "main");
+    await settle();
+    app.socket().receive({ type: "command_output", rid: held?.["rid"], name: "segments", data: listing("story", [summary(9)]) });
+    app.socket().receive({ type: "request_finished", rid: held?.["rid"], outcome: "completed" });
+    await settle();
+    expect(segmentRows(late.host).map(([label]) => label)).toEqual(["Segment 8"]);
   });
 
   test("shows a segment's memory and messages once, by who said them", async () => {
-    const { MemoryPage } = await import("../../src/browser/settings/Memory.tsx");
-    const snapshot = { ...app.state().workspace.getSnapshot(), character: "ada" };
+    const SegmentsPage = await page();
+    const snapshot = { ...app.state().workspace.getSnapshot(), character: "ada", thread: "story", threads: THREADS };
     let shows = 0;
     const message = (id: string, role: string, content: string) => ({ msg_id: id, role, content, images: [], content_blocks: [], timestamp: "2026-11-01T00:00:00Z" });
     app.answer((request) => {
       if (request["name"] !== "segments") return undefined;
       const args = request["args"] as { action?: string };
       if (args.action === "show") { shows += 1; return shows === 1 ? HOLD : { character: "ada", thread: "story", segment: summary(1), messages: [message("m_1", "user", "hi"), message("m_2", "assistant", "hello"), message("m_3", "system", "noted")] }; }
-      return { character: "ada", thread: "story", count: 1, segments: [summary(1, { memory_after: "**remembered**" })] };
+      return listing("story", [summary(1, { memory_after: "**remembered**" })]);
     });
-    const view = await mount(<MemoryPage state={snapshot} />);
+    const view = await mount(<SegmentsPage state={snapshot} />);
     await settle();
     const toggle = button(view.host, "View");
     expect(toggle.getAttribute("aria-expanded")).toBe("false");
@@ -70,6 +145,7 @@ describe("the memory page", () => {
     await settle();
     expect(view.host.querySelector(".segment-body [aria-label='Loading messages']")).not.toBeNull();
     const held = app.socket().sent.filter((request) => request["name"] === "segments").at(-1);
+    expect(held?.["args"]).toEqual({ action: "show", index: 1, thread: "story" });
     app.socket().receive({ type: "command_output", rid: held?.["rid"], name: "segments", data: { character: "ada", thread: "story", segment: summary(1), messages: [message("m_1", "user", "hi"), message("m_2", "assistant", "hello"), message("m_3", "system", "noted")] } });
     app.socket().receive({ type: "request_finished", rid: held?.["rid"], outcome: "completed" });
     await settle();
@@ -82,8 +158,8 @@ describe("the memory page", () => {
     expect(shows, "shown once").toBe(1);
   });
 
-  test("excludes or includes a segment, labels and notes it, and opens it in the chat", async () => {
-    const { MemoryPage } = await import("../../src/browser/settings/Memory.tsx");
+  test("excludes or includes a segment in the chat logs, labels and notes it, and opens it in the chat", async () => {
+    const SegmentsPage = await page();
     const { toasts } = await import("../../src/browser/ui/toast.tsx");
     const shown = spyOn(toasts, "show");
     const opened = spyOn(app.state().workspace, "openSegment").mockResolvedValue();
@@ -94,34 +170,40 @@ describe("the memory page", () => {
     app.answer((request) => {
       if (request["name"] !== "segments") return undefined;
       const args = request["args"] as { action?: string };
-      if (args.action === undefined) { lists += 1; return { character: "ada", thread: "story", count: 1, segments: [summary(4, { excluded, label: changes.some((change) => (change as { action: string }).action === "label") ? "Named" : null })] }; }
+      if (args.action === undefined) { lists += 1; return listing("story", [summary(4, { excluded, label: changes.some((change) => (change as { action: string }).action === "label") ? "Named" : null })]); }
       changes.push(args);
       if (args.action === "exclude") excluded = true;
       if (args.action === "include") excluded = false;
       return { character: "ada", thread: "story", action: args.action, segment: summary(4) };
     });
-    const view = await mount(<MemoryPage state={{ ...app.state().workspace.getSnapshot(), character: "ada" }} />);
+    const view = await mount(<SegmentsPage state={{ ...app.state().workspace.getSnapshot(), character: "ada", thread: "story", threads: THREADS }} />);
     await settle();
-    await click(button(view.host, "Exclude from memory"));
+    await click(button(view.host, "Exclude from chat logs"));
     await settle();
-    await click(button(view.host, "Include in memory"));
+    await click(button(view.host, "Include in chat logs"));
     await settle();
     await click(button(view.host, "Add label"));
     await type(view.host.querySelector("input[aria-label=Label]"), "Named");
-    await acting(() => { view.host.querySelector("input[aria-label=Label]")?.closest("form")?.requestSubmit(); });
+    const form = view.host.querySelector("input[aria-label=Label]")?.closest("form");
+    let submitted = true;
+    await acting(() => { submitted = form?.dispatchEvent(new Event("submit", { bubbles: true, cancelable: true })) ?? true; });
     await settle();
-    expect(view.host.querySelector("input[aria-label=Label]"), "saving closes the editor").toBeNull();
+    expect([submitted, view.host.querySelector("input[aria-label=Label]")], "saving stays on the page and closes the editor").toEqual([false, null]);
     await click(button(view.host, "Edit label"));
-    expect(view.host.querySelector<HTMLInputElement>("input[aria-label=Label]")?.value).toBe("Named");
+    await type(view.host.querySelector("input[aria-label=Label]"), "Renamed");
+    await click(button(view.host, "Cancel"));
+    expect(view.host.querySelector("input[aria-label=Label]"), "cancelling closes the editor").toBeNull();
+    await click(button(view.host, "Edit label"));
+    expect(view.host.querySelector<HTMLInputElement>("input[aria-label=Label]")?.value, "and reopening starts from the saved label").toBe("Named");
     await click(button(view.host, "Cancel"));
     await click(button(view.host, "Add note"));
     await type(view.host.querySelector("input[aria-label=Note]"), "why");
     await acting(() => { view.host.querySelector("input[aria-label=Note]")?.closest("form")?.requestSubmit(); });
     await settle();
-    expect(changes).toEqual([{ action: "exclude", index: 4 }, { action: "include", index: 4 }, { action: "label", index: 4, value: "Named" }, { action: "note", index: 4, value: "why" }]);
-    expect(shown.mock.calls).toEqual([["Segment 4 excluded from memory"], ["Segment 4 included in memory"]]);
+    expect(changes).toEqual([{ action: "exclude", index: 4, thread: "story" }, { action: "include", index: 4, thread: "story" }, { action: "label", index: 4, thread: "story", value: "Named" }, { action: "note", index: 4, thread: "story", value: "why" }]);
+    expect(shown.mock.calls).toEqual([["Segment 4 excluded from chat logs"], ["Segment 4 included in chat logs"]]);
     expect(lists, "the list is read again after each change").toBe(5);
-    location.hash = "#settings/memory";
+    location.hash = "#settings/segments";
     await click(button(view.host, "Open in chat"));
     await settle();
     expect([opened.mock.calls, location.hash]).toEqual([[[4]], ""]);
