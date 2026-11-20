@@ -897,7 +897,10 @@ pub(crate) fn marks_text(name: &str, data: &serde_json::Value) -> String {
                 }
             }
         }
-        for (kind, tags) in [("like", &listing.like_tags), ("dislike", &listing.dislike_tags)] {
+        for (kind, tags) in [
+            ("like", &listing.like_tags),
+            ("dislike", &listing.dislike_tags),
+        ] {
             lines.push(if tags.is_empty() {
                 format!("No {kind} tags are set in marks.{kind}_tags.")
             } else {

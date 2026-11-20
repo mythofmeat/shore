@@ -774,7 +774,10 @@ mod tests {
                 &json!({ "like_tags": ["in character"], "dislike_tags": [], "replies": [] }),
                 "ada"
             ),
-            Some("Tags for a like: in character.\nNo dislike tags are set in marks.dislike_tags.".to_owned())
+            Some(
+                "Tags for a like: in character.\nNo dislike tags are set in marks.dislike_tags."
+                    .to_owned()
+            )
         );
         let changed = json!({ "ref": "m_1", "position": 2, "attempt": "at_2", "changed": true, "marks": [
             { "kind": "like", "phrase": null, "reason": "warm", "tags": [], "at": "now" },
