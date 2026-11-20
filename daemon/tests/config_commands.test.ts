@@ -253,8 +253,8 @@ describe("[[budgets]] and [plan_limits] in config output", () => {
       'budgets."<index>".model: string?', 'budgets."<index>".name: string', 'budgets."<index>".pace_action: warn | block | pause_background | pause_wakes?',
       'budgets."<index>".pace_period: hour | day | week | month?', 'budgets."<index>".pace_warn_action: warn | block | pause_background | pause_wakes?',
       'budgets."<index>".pace_warn_fractions: list of number?', 'budgets."<index>".period: hour | day | week | month', 'budgets."<index>".provider: string?',
-      'budgets."<index>".reset_day_of_month: u32?', 'budgets."<index>".reset_day_of_week: monday | tuesday | wednesday | thursday | friday | saturday | sunday?',
-      'budgets."<index>".reset_hour: u32?', 'budgets."<index>".usage_kinds: list of string', 'budgets."<index>".warn_action: warn | block | pause_background | pause_wakes?',
+      'budgets."<index>".reset_day_of_month: integer?', 'budgets."<index>".reset_day_of_week: monday | tuesday | wednesday | thursday | friday | saturday | sunday?',
+      'budgets."<index>".reset_hour: integer?', 'budgets."<index>".usage_kinds: list of string', 'budgets."<index>".warn_action: warn | block | pause_background | pause_wakes?',
       'budgets."<index>".warn_fractions: list of number', "plan_limits.five_hour.limit_action: warn | block | pause_background | pause_wakes",
       "plan_limits.five_hour.limit_fraction: number", "plan_limits.five_hour.warn_fractions: list of number", "usage.timezone: string",
     ]);
@@ -375,14 +375,14 @@ describe("a model's settings in the model commands", () => {
     const w = await build("ada", TOML);
     const rows = (prefix: string): string[] => schemaOf(w.ctx).filter((row) => row.key.startsWith(prefix) && !row.key.includes("keys")).map((row) => `${row.key.slice(prefix.length)}: ${row.type}${row.optional ? "?" : ""}`);
     const settings = [
-      "cache_ttl: duration?", "gemini_thinking_mode: auto | budget | level?", "max_context_tokens: u32?", "max_output_tokens: u32?", "max_tool_rounds: u32?", "openrouter_routing: table?",
-      "reasoning_budget_tokens: u32?", "reasoning_effort: string?", "reasoning_replay: all | none?", "sdk: string?", "supports_images: boolean?", "system_prompt: string?", "temperature: number?",
+      "cache_ttl: duration?", "gemini_thinking_mode: auto | budget | level?", "max_context_tokens: integer?", "max_output_tokens: integer?", "max_tool_rounds: integer?", "openrouter_routing: table?",
+      "reasoning_budget_tokens: integer?", "reasoning_effort: string?", "reasoning_replay: all | none?", "sdk: string?", "supports_images: boolean?", "system_prompt: string?", "temperature: number?",
       "top_p: number?", "zai_clear_reasoning: boolean?",
     ];
     expect(rows('chat."openrouter:x/y".')).toEqual(settings);
     expect(rows("providers.anthropic.")).toEqual([
       "api_key_env: string?", "base_url: string?", "cache_ttl: duration?", "discover: boolean", "enabled: boolean", "gemini_thinking_mode: auto | budget | level?", "ignore_models: list of string",
-      "max_context_tokens: u32?", "max_output_tokens: u32?", "max_tool_rounds: u32?", "no_auth: boolean", "openrouter_routing: table?", "pin: string?", "reasoning_budget_tokens: u32?",
+      "max_context_tokens: integer?", "max_output_tokens: integer?", "max_tool_rounds: integer?", "no_auth: boolean", "openrouter_routing: table?", "pin: string?", "reasoning_budget_tokens: integer?",
       "reasoning_effort: string?", "reasoning_replay: all | none?", "sdk: string?", "subscription: boolean", "supports_images: boolean?", "system_prompt: string?", "temperature: number?",
       "top_p: number?", "zai_clear_reasoning: boolean?",
     ]);

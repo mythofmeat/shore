@@ -5,6 +5,7 @@ import { settingApplicability, validateSetting } from "../llm/settings.ts";
 import type { DiscoveredModelSupport } from "../llm/discovery.ts";
 import { isGeminiThinkingMode, SDK_VARIANTS, sdkFromWire, type GeminiThinkingMode, type Sdk } from "../llm/types.ts";
 import type { ParseResult } from "./duration.ts";
+import { placed, within } from "./failure.ts";
 import type { CacheKeepaliveSetting } from "./keepalive.ts";
 import { DEFAULT_MAX_CONTEXT_TOKENS, DEFAULT_MAX_OUTPUT_TOKENS } from "./model_defaults.ts";
 export {
@@ -12,7 +13,7 @@ export {
   parseCacheKeepalive,
   type CacheKeepaliveSetting,
 } from "./keepalive.ts";
-import { compareByCodePoint, sortedKeys } from "../util/sort.ts";
+import { sortedKeys } from "../util/sort.ts";
 import type { ThinkingReplay } from "../llm/types.ts";
 import type { ResolvedModel as RequestResolvedModel } from "../llm/request.ts";
 import {
@@ -443,7 +444,7 @@ function parseCategory(
       if (provider === "" || modelId === "" || !isTable(value)) throw CatalogError.parseEntry(category, provider, modelId, "expected a provider:model_id settings table");
       if (value.model_id !== undefined || value.api_key_env !== undefined || value.base_url !== undefined) throw CatalogError.parseEntry(category, provider, modelId, "model identity belongs in the table key; credentials and base_url belong in providers");
       const parsed = readModelConfigFields(value);
-      if ("err" in parsed) throw CatalogError.parseEntry(category, provider, modelId, parsed.err);
+      if ("err" in parsed) throw new CatalogError("parse_entry", placed(parsed, [category, providerKey]));
       const defaults = hardcodedProviderDefaults(provider).fields;
       const entry = providers?.get(provider);
       if (entry?.sdk !== undefined) defaults.sdk = entry.sdk;
@@ -457,7 +458,7 @@ function parseCategory(
     throw CatalogError.parseEntry(category, providerKey, "", "expected a provider:model_id settings table");
   }
 
-  return new Map(models.sort((a, b) => compareByCodePoint(a[0], b[0])));
+  return new Map(models);
 }
 
 function parseAuxSection<T>(
@@ -498,11 +499,11 @@ function parseAuxSection<T>(
 
     const settings = read(value);
     if ("err" in settings) {
-      throw CatalogError.auxProfileInvalid(category, key, settings.err, example);
+      throw CatalogError.auxProfileInvalid(category, key, placed(settings), example);
     }
     out.push([key, settings.ok]);
   }
-  return new Map(out.sort((a, b) => compareByCodePoint(a[0], b[0])));
+  return new Map(out);
 }
 
 function baseProviderDefaults(): ModelConfigFields {
@@ -655,14 +656,14 @@ export function invalidType(value: unknown, expected: string): string {
 function readString(table: Record<string, unknown>, key: string): ParseResult<string | undefined> {
   const value = table[key];
   if (value === undefined) return { ok: undefined };
-  if (typeof value !== "string") return { err: invalidType(value, "a string") };
+  if (typeof value !== "string") return within(key, { err: invalidType(value, "string") });
   return { ok: value };
 }
 
 function readBool(table: Record<string, unknown>, key: string): ParseResult<boolean | undefined> {
   const value = table[key];
   if (value === undefined) return { ok: undefined };
-  if (typeof value !== "boolean") return { err: invalidType(value, "a boolean") };
+  if (typeof value !== "boolean") return within(key, { err: invalidType(value, "boolean") });
   return { ok: value };
 }
 
@@ -670,10 +671,10 @@ function readU32(table: Record<string, unknown>, key: string): ParseResult<numbe
   const value = table[key];
   if (value === undefined) return { ok: undefined };
   if (typeof value !== "number" || !Number.isInteger(value)) {
-    return { err: invalidType(value, "u32") };
+    return within(key, { err: invalidType(value, "integer") });
   }
   if (value < 0 || value > 0xffff_ffff) {
-    return { err: `invalid value: integer \`${value}\`, expected u32` };
+    return within(key, { err: `invalid value: integer \`${value}\`, expected an integer from 0 to 4294967295` });
   }
   return { ok: value };
 }
@@ -681,7 +682,7 @@ function readU32(table: Record<string, unknown>, key: string): ParseResult<numbe
 function readF64(table: Record<string, unknown>, key: string): ParseResult<number | undefined> {
   const value = table[key];
   if (value === undefined) return { ok: undefined };
-  if (typeof value !== "number") return { err: invalidType(value, "a float") };
+  if (typeof value !== "number") return within(key, { err: invalidType(value, "number") });
   return { ok: value };
 }
 
@@ -694,7 +695,7 @@ export function readModelConfigFields(table: Record<string, unknown>): ParseResu
   if ("err" in sdkRaw) return sdkRaw;
   if (sdkRaw.ok !== undefined) {
     const sdk = deserializeSdk(sdkRaw.ok);
-    if ("err" in sdk) return sdk;
+    if ("err" in sdk) return within("sdk", sdk);
     out.sdk = sdk.ok;
   }
 
@@ -746,16 +747,16 @@ export function readModelConfigFields(table: Record<string, unknown>): ParseResu
   if (table["openrouter_routing"] !== undefined) {
     out.openrouterRouting = table["openrouter_routing"];
   }
-  if (out.maxToolRounds === 0) return { err: "max_tool_rounds must be positive" };
+  if (out.maxToolRounds === 0) return within("max_tool_rounds", { err: "must be positive" });
   if (table.reasoning_replay !== undefined) {
     const replay = table.reasoning_replay;
     if (replay === "all") out.reasoningReplay = "all";
     else if (replay === "none") out.reasoningReplay = "none";
-    else return { err: "reasoning_replay must be all or none" };
+    else return within("reasoning_replay", { err: "must be all or none" });
   }
   const mode = table["gemini_thinking_mode"];
   if (mode !== undefined) {
-    if (!isGeminiThinkingMode(mode)) return { err: "gemini_thinking_mode must be auto, budget, or level" };
+    if (!isGeminiThinkingMode(mode)) return within("gemini_thinking_mode", { err: "must be auto, budget, or level" });
     out.geminiThinkingMode = mode;
   }
 

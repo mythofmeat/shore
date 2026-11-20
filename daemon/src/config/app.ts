@@ -1,5 +1,6 @@
 import { compareByCodePoint, sortedKeys } from "../util/sort.ts";
 import { ConfigDuration, type ParseResult } from "./duration.ts";
+import { within } from "./failure.ts";
 import { invalidType } from "./models.ts";
 import { DEFAULT_MAX_INLINE_IMAGE_BYTES } from "../tools/media.ts";
 import { DEFAULT_IMAGE_CACHE_BYTES } from "../storage/image_cache.ts";
@@ -68,6 +69,31 @@ function typed<T>(read: Reader<T>, info: ConfigTypeInfo): Reader<T> {
   return read;
 }
 
+export function typeWords(info: ConfigTypeInfo): string {
+  switch (info.kind) {
+    case "boolean":
+      return "boolean";
+    case "string":
+      return "string";
+    case "integer":
+      return "integer";
+    case "float":
+      return "number";
+    case "duration":
+      return "duration";
+    case "enum":
+      return (info.variants ?? []).join(" | ");
+    case "list":
+      return `list of ${info.item === undefined ? "values" : typeWords(info.item)}`;
+    case "map":
+      return `table of ${info.item === undefined ? "values" : typeWords(info.item)}`;
+    case "table":
+      return "table";
+    case "unknown":
+      return "value";
+  }
+}
+
 function typeOf(read: Reader<unknown>): ConfigTypeInfo {
   return READER_TYPES.get(read as unknown as Reader<never>) ?? { kind: "unknown" };
 }
@@ -95,7 +121,7 @@ interface StructSpec<T> {
 }
 
 function readStruct<T extends object>(spec: StructSpec<T>, value: TomlValue): ParseResult<T> {
-  if (!isTable(value)) return { err: invalidType(value, `struct ${spec.name}`) };
+  if (!isTable(value)) return { err: invalidType(value, "table") };
 
   const elsewhere = new Set<string>(spec.alsoAccepted ?? []);
   const known = [...Object.keys(spec.fields), ...elsewhere];
@@ -108,12 +134,12 @@ function readStruct<T extends object>(spec: StructSpec<T>, value: TomlValue): Pa
       if (elsewhere.has(key) || spec.others === "read elsewhere") continue;
       if (spec.others === undefined) return { err: unknownField(key, known) };
       const other = spec.others.read(value[key]);
-      if ("err" in other) return other;
+      if ("err" in other) return within(key, other);
       (out[spec.others.into] as Map<string, unknown>).set(key, other.ok);
       continue;
     }
     const parsed = read(value[key]);
-    if ("err" in parsed) return parsed;
+    if ("err" in parsed) return within(key, parsed);
     (out as Record<string, unknown>)[key] = parsed.ok;
     seen.add(key);
   }
@@ -125,12 +151,12 @@ function readStruct<T extends object>(spec: StructSpec<T>, value: TomlValue): Pa
 }
 
 const readBool: Reader<boolean> = typed(
-  (v) => (typeof v === "boolean" ? { ok: v } : { err: invalidType(v, "a boolean") }),
+  (v) => (typeof v === "boolean" ? { ok: v } : { err: invalidType(v, "boolean") }),
   { kind: "boolean" },
 );
 
 const readString: Reader<string> = typed(
-  (v) => (typeof v === "string" ? { ok: v } : { err: invalidType(v, "a string") }),
+  (v) => (typeof v === "string" ? { ok: v } : { err: invalidType(v, "string") }),
   { kind: "string" },
 );
 
@@ -138,8 +164,8 @@ function readUint(name: "usize" | "u32" | "u64"): Reader<number> {
   const max = name === "u32" ? 0xffff_ffff : Number.POSITIVE_INFINITY;
   return typed(
     (v) => {
-      if (typeof v !== "number" || !Number.isInteger(v)) return { err: invalidType(v, name) };
-      if (v < 0 || v > max) return { err: `invalid value: integer \`${v}\`, expected ${name}` };
+      if (typeof v !== "number" || !Number.isInteger(v)) return { err: invalidType(v, "integer") };
+      if (v < 0 || v > max) return { err: `invalid value: integer \`${v}\`, expected an integer from 0${max === Number.POSITIVE_INFINITY ? "" : ` to ${String(max)}`}` };
       return { ok: v };
     },
     { kind: "integer", width: name },
@@ -150,7 +176,7 @@ const readUsize = readUint("usize");
 const readU32 = readUint("u32");
 
 const readF64: Reader<number> = typed(
-  (v) => (typeof v === "number" ? { ok: v } : { err: invalidType(v, "f64") }),
+  (v) => (typeof v === "number" ? { ok: v } : { err: invalidType(v, "number") }),
   { kind: "float" },
 );
 
@@ -161,11 +187,11 @@ const readDuration: Reader<ConfigDuration> = typed((v) => ConfigDuration.deseria
 function readSeq<T>(inner: Reader<T>): Reader<T[]> {
   return typed(
     (v) => {
-      if (!Array.isArray(v)) return { err: invalidType(v, "a sequence") };
+      if (!Array.isArray(v)) return { err: invalidType(v, typeWords({ kind: "list", item: typeOf(inner) })) };
       const out: T[] = [];
-      for (const item of v) {
+      for (const [index, item] of v.entries()) {
         const parsed = inner(item);
-        if ("err" in parsed) return parsed;
+        if ("err" in parsed) return within(index, parsed);
         out.push(parsed.ok);
       }
       return { ok: out };
@@ -178,7 +204,7 @@ const readStringSeq = readSeq(readString);
 
 const readToolsUser: Reader<string> = typed(
   (v) => {
-    if (typeof v !== "string") return { err: invalidType(v, "a string") };
+    if (typeof v !== "string") return { err: invalidType(v, "string") };
     const parsed = parseToolsUser(v);
     return "err" in parsed ? { err: parsed.err } : { ok: v };
   },
@@ -189,7 +215,7 @@ const ENV_NAME = /^[A-Za-z_][A-Za-z0-9_]*$/;
 
 const readEnvNameSeq = readSeq(typed(
   (v) => {
-    if (typeof v !== "string") return { err: invalidType(v, "a string") };
+    if (typeof v !== "string") return { err: invalidType(v, "string") };
     return ENV_NAME.test(v) ? { ok: v } : { err: `\`${v}\` is not an environment variable name` };
   },
   { kind: "string" },
@@ -199,11 +225,11 @@ const readF64Seq = readSeq(readF64);
 function readMap<V>(inner: Reader<V>): Reader<Map<string, V>> {
   return typed(
     (v) => {
-      if (!isTable(v)) return { err: invalidType(v, "a map") };
+      if (!isTable(v)) return { err: invalidType(v, typeWords({ kind: "map", item: typeOf(inner) })) };
       const out = new Map<string, V>();
       for (const key of sortedKeys(v)) {
         const parsed = inner(v[key]);
-        if ("err" in parsed) return parsed;
+        if ("err" in parsed) return within(key, parsed);
         out.set(key, parsed.ok);
       }
       return { ok: out };
@@ -225,7 +251,7 @@ function readEnum<T extends string>(variants: readonly T[]): Reader<T> {
   return typed(
     (v) => {
       if (typeof v !== "string") {
-        return { err: "invalid type: unit variant, expected string only" };
+        return { err: invalidType(v, typeWords({ kind: "enum", variants })) };
       }
       if (!(variants as readonly string[]).includes(v)) {
         return { err: `unknown variant \`${v}\`, expected ${expectedList(variants) ?? ""}` };
@@ -819,7 +845,7 @@ export type NotificationEvent = (typeof NOTIFICATION_EVENTS)[number];
 
 const readNotificationEvents: Reader<NotificationEvent[]> = typed(
   (v) => {
-    if (!Array.isArray(v)) return { err: invalidType(v, "a sequence") };
+    if (!Array.isArray(v)) return { err: invalidType(v, typeWords({ kind: "list", item: { kind: "enum", variants: NOTIFICATION_EVENTS } })) };
     if (v.some((event) => !(NOTIFICATION_EVENTS as readonly unknown[]).includes(event))) return { err: "notifications.events contains an unknown event" };
     return { ok: NOTIFICATION_EVENTS.filter((event) => v.includes(event)) };
   },

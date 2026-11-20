@@ -544,7 +544,7 @@ describe("tools.no_new_privs", () => {
     expect(config.app.tools.no_new_privs).toBe(true);
     expect(characterToolsFor(config, "ada")).toEqual({ user: "ada", passEnv: [], noNewPrivs: false });
     expect(characterToolsFor(config, "bea")).toEqual({ user: "bea", passEnv: [], noNewPrivs: true });
-    expect(() => characterToolsFor(config, "cy")).toThrow("a boolean");
+    expect(() => characterToolsFor(config, "cy")).toThrow("tools.no_new_privs: invalid type: string \"false\", expected boolean");
   });
 
   test("turned off drops only setpriv's --no-new-privs, and only for a user of the character's own", () => {

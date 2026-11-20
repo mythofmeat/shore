@@ -34,7 +34,7 @@ function integerLiteral(raw: string, width: SchemaEntry["width"]): string {
     throw new SchemaValueError(`${JSON.stringify(raw)} is too large`);
   }
   if (width === "u32" && value > U32_MAX) {
-    throw new SchemaValueError(`${value} exceeds the maximum for u32 (${U32_MAX})`);
+    throw new SchemaValueError(`${value} is more than the most it can be, ${U32_MAX}`);
   }
   return String(value);
 }
