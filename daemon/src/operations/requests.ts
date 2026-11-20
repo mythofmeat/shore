@@ -32,7 +32,7 @@ export const coreRequests = {
     stream,
     another_take: { label: "Another take", hint: "Show the new attempt the earlier ones and ask for something different. This is not a dislike." },
     reason: { label: "Reason", multiline: true, hint: "Why the shown attempt missed. The new attempt sees the earlier ones and this reason, and the shown attempt is disliked with it." },
-    tags: { label: "Reason tags", hint: "Tags from the configured list, given with or instead of a written reason" },
+    tags: { label: "Reason tags", hint: "Tags from marks.dislike_tags in your config, given with or instead of a written reason" },
   } }, (request) => ({ kind: "generation", regen: true, body: {
     rid: request.rid ?? null, text: "", stream: request.stream, images: [], image_data: [],
     regen: regenChoice(request.another_take === true, request.reason ?? undefined, request.tags ?? []),

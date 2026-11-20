@@ -559,7 +559,7 @@ describe("replies", () => {
       [new WakeTurnError("ada"), "invalid_request", "The last turn here is a wake of ada's own, not a reply to you, so there is nothing to regenerate. Write to ada instead.", undefined],
       [new WakesThreadError("ada", "wakes"), "invalid_request", "\"wakes\" is where Shore keeps the working from ada's wakes, so you can read it but not write there. Write to ada in another thread.", undefined],
       [new NothingToReplaceError(), "invalid_request", "There's no reply here to give a reason about. Regenerate without one, or write to the character instead.", undefined],
-      [new UnknownTagError("rude", []), "invalid_request", "\"rude\" isn't one of your tags: marks.tags in your config is empty. Add it to marks.tags to use it.", undefined],
+      [new UnknownTagError("rude", [], "dislike_tags"), "invalid_request", "\"rude\" isn't one of your dislike tags: marks.dislike_tags in your config is empty. Add it to marks.dislike_tags to use it.", undefined],
       [new CharacterConfigError("ada", new Error("bad toml")), "invalid_request", `invalid config for character "ada": bad toml`, undefined],
       [new DOMException("too slow", "TimeoutError"), "timeout", "too slow", undefined],
       [{ kind: "stream_errored", message: "cut off", usage, timing, timeout: true }, "timeout", "stream errored after partial usage: cut off", undefined],

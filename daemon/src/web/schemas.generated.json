@@ -9599,7 +9599,13 @@
       "MarkListing": {
         "type": "object",
         "properties": {
-          "tags": {
+          "like_tags": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "dislike_tags": {
             "type": "array",
             "items": {
               "type": "string"
@@ -9613,7 +9619,8 @@
           }
         },
         "required": [
-          "tags",
+          "like_tags",
+          "dislike_tags",
           "replies"
         ]
       },
@@ -19525,7 +19532,13 @@
       "MarkListing": {
         "type": "object",
         "properties": {
-          "tags": {
+          "like_tags": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "dislike_tags": {
             "type": "array",
             "items": {
               "type": "string"
@@ -19539,7 +19552,8 @@
           }
         },
         "required": [
-          "tags",
+          "like_tags",
+          "dislike_tags",
           "replies"
         ]
       },

@@ -736,7 +736,8 @@ mod tests {
     #[test]
     fn marks_read_as_what_was_liked_or_disliked_and_why() {
         let listing = json!({
-            "tags": ["too long", "repetitive"],
+            "like_tags": [],
+            "dislike_tags": ["too long", "repetitive"],
             "replies": [{ "ref": "m_1", "attempts": [
                 { "position": 1, "shown": false, "attempt": "at_1", "asked": "first", "marks": [
                     { "kind": "dislike", "phrase": null, "reason": "flat", "tags": ["too long"], "at": "now" },
@@ -760,7 +761,8 @@ mod tests {
                     "  3.: no marks",
                     "  4. another take: no marks",
                     "  5. reroll: no marks",
-                    "Reason tags: too long, repetitive.",
+                    "No like tags are set in marks.like_tags.",
+                    "Tags for a dislike: too long, repetitive.",
                 ]
                 .join("\n")
             )
@@ -769,10 +771,10 @@ mod tests {
             super::render(
                 "msg marks",
                 "marks",
-                &json!({ "tags": [], "replies": [] }),
+                &json!({ "like_tags": ["in character"], "dislike_tags": [], "replies": [] }),
                 "ada"
             ),
-            Some("No reason tags are set in marks.tags.".to_owned())
+            Some("Tags for a like: in character.\nNo dislike tags are set in marks.dislike_tags.".to_owned())
         );
         let changed = json!({ "ref": "m_1", "position": 2, "attempt": "at_2", "changed": true, "marks": [
             { "kind": "like", "phrase": null, "reason": "warm", "tags": [], "at": "now" },

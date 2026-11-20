@@ -37,7 +37,7 @@ function ReasonForm({ close, busy, error }: { close: () => void; busy: boolean; 
   const [text, setText] = useState("");
   const [tags, setTags] = useState<readonly string[]>([]);
   useEffect(() => { void replyMarks.loadTags().catch(() => {}); }, []);
-  const offered = replyMarks.tags();
+  const offered = replyMarks.tags("dislike");
   return <Form title="Regenerate with a reason" close={close} busy={busy} error={error} action="Regenerate" disabled={text.trim() === "" && tags.length === 0} submit={() => {
     close();
     void conversation.regenerate({ reason: text, tags }, streamReplies()).catch((failure: unknown) => toasts.show(errorText(failure), "error"));

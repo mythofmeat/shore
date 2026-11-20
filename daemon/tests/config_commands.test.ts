@@ -174,7 +174,7 @@ describe("[tools], [subagents] and [notifications] in config output", () => {
       kind: "list", item_kind: "enum", settable: true, values: ["autonomous_message", "cache_warning", "compaction_complete", "error", "message_complete", "usage_warning"],
     });
     expect([rows.get("matrix")?.restart_required, rows.get("matrix.homeserver_url")?.restart_required, rows.get("daemon.listen_addr")?.restart_required]).toEqual([true, true, true]);
-    expect([rows.get("tools.enabled")?.restart_required, rows.get("marks.tags")?.restart_required, rows.get("image.model")?.restart_required]).toEqual([false, false, false]);
+    expect([rows.get("tools.enabled")?.restart_required, rows.get("marks.like_tags")?.restart_required, rows.get("marks.dislike_tags")?.restart_required, rows.get("image.model")?.restart_required]).toEqual([false, false, false, false]);
     for (const gone of ["tools.per_tool", "subagents.agents", "notifications.enabled", "notifications.backend", "notifications.ntfy.url", "matrix.homeserver", "defaults.subagent_model"]) {
       expect(keys.filter((key) => key === gone || key.startsWith(`${gone}.`))).toEqual([]);
     }

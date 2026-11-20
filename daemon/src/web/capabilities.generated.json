@@ -3939,7 +3939,7 @@
     "MarkArgs": "{ ref?: string | null, position?: number | null, kind: MarkKind, phrase?: string | null, reason?: string | null, tags?: Array<string> | null, }",
     "MarkChanged": "{ ref: string, position: number, attempt: string, phrase: string | null, changed: boolean, marks: Array<MarkView>, }",
     "MarkKind": "\"like\" | \"dislike\"",
-    "MarkListing": "{ tags: Array<string>, replies: Array<ReplyMarks>, }",
+    "MarkListing": "{ like_tags: Array<string>, dislike_tags: Array<string>, replies: Array<ReplyMarks>, }",
     "MarkThreadReadArgs": "{ name: string, through?: string | null, }",
     "MarkView": "{ kind: MarkKind, phrase: string | null, reason: string | null, tags: Array<string>, at: string, }",
     "McpConnectionState": "\"connected\" | \"unavailable\" | \"retrying\" | \"invalid\"",
