@@ -25,13 +25,21 @@ import { effectiveConfig, resolveChatRequest, type CompactionRunDeps } from "./r
 
 export const DEFAULT_LABEL_PROMPT: string = stripOneTrailingNewline(labelPromptRaw);
 
-export const SEGMENT_LABEL_CHARS = 60;
+export const SEGMENT_LABEL_CHARS = 160;
 
 export type SegmentLabelDeps = Pick<CompactionRunDeps, "config" | "generate" | "tools" | "env">;
 
 export function labelFromReply(reply: string): string | undefined {
   const line = reply.split("\n").map((each) => each.trim()).find((each) => each !== "");
-  return line === undefined ? undefined : Array.from(line).slice(0, SEGMENT_LABEL_CHARS).join("");
+  return line === undefined ? undefined : shortenLabel(Array.from(line));
+}
+
+function shortenLabel(chars: readonly string[]): string {
+  if (chars.length <= SEGMENT_LABEL_CHARS) return chars.join("");
+  const fits = chars.slice(0, SEGMENT_LABEL_CHARS - 1);
+  const lastSpace = chars.slice(0, SEGMENT_LABEL_CHARS).findLastIndex((char) => /\s/.test(char));
+  const words = lastSpace === -1 ? fits : chars.slice(0, lastSpace);
+  return `${words.join("").trimEnd()}…`;
 }
 
 export async function prepareLabelCall(

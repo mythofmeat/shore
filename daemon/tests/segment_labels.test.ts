@@ -25,7 +25,7 @@ import { eventsForResponse } from "./support/stream.ts";
 
 const KEY_ENV = "SHORE_TEST_SEGMENT_LABELS_KEY";
 const HOUR = 60 * 60_000;
-const PROMPT = "Give a short label for this conversation so Mara can find it later. Write it as a title, in the third person, with no \"I\", \"we\" or \"you\". Reply with only the label.";
+const PROMPT = "Write a one-line label for this conversation that says what happened in it, so you and Mara can tell later what it was about. Keep it under twenty words, in the third person, with no \"I\", \"we\" or \"you\". Reply with only the label.";
 
 afterEach(() => {
   setSystemTime();
@@ -122,12 +122,15 @@ function textOf(request: SidecarRequest): string[] {
   return request.messages.map((message) => message.content.flatMap((block) => block.type === "text" ? [block.text] : []).join(""));
 }
 
-test("a label is the first line the model wrote, trimmed and cut at 60 characters", () => {
+test("a label is the first line the model wrote, trimmed, and one over 160 characters ends at the last whole word that fits, then an ellipsis", () => {
   expect(labelFromReply("  Lighting the lamp  \nand more")).toBe("Lighting the lamp");
   expect(labelFromReply("\n\n  \nSecond thoughts")).toBe("Second thoughts");
-  expect(labelFromReply("x".repeat(61))).toBe("x".repeat(60));
-  expect(labelFromReply("é".repeat(61))).toBe("é".repeat(60));
   expect(labelFromReply(" \n ")).toBeUndefined();
+  expect(labelFromReply("x".repeat(160))).toBe("x".repeat(160));
+  expect(labelFromReply(`a${" word".repeat(40)}`)).toBe(`a${" word".repeat(31)}…`);
+  expect(labelFromReply(`${"word ".repeat(32)}more`)).toBe(`${"word ".repeat(31)}word…`);
+  expect(labelFromReply(`${"x".repeat(150)}  ${"y".repeat(20)}`)).toBe(`${"x".repeat(150)}…`);
+  expect(labelFromReply("🌊".repeat(161))).toBe(`${"🌊".repeat(159)}…`);
 });
 
 test("archiving a conversation asks the chat's model for a label with the chat's own request plus one message, and the segment gets it", async () => {

@@ -1,1 +1,1 @@
-Give a short label for this conversation so {{user}} can find it later. Write it as a title, in the third person, with no "I", "we" or "you". Reply with only the label.
+Write a one-line label for this conversation that says what happened in it, so you and {{user}} can tell later what it was about. Keep it under twenty words, in the third person, with no "I", "we" or "you". Reply with only the label.
