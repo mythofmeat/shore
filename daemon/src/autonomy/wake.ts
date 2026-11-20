@@ -41,7 +41,7 @@ import { digestWords, threadDigest, type ThreadReader } from "./thread_digest.ts
 import { Outbox, postElsewhere, postMessage, reachableThreads, sendingsHere } from "./outbox.ts";
 import { pushRefusal, type PushOutcome } from "./push.ts";
 import { spanPhrase, timeLeftPhrase, triggerFiredNote, wakeNewsNote } from "./wake_shape.ts";
-import { recordWakeEnd, stopOf, wakeRecord, wakeStopNote, WakeWords, type WakeStopReason } from "./wake_record.ts";
+import { recordWakeEnd, stopOf, wakeRecord, wakeStopNote, WakeWords, type WakeEnding } from "./wake_record.ts";
 import { keptWorkingSummary, withoutWakeWorking } from "./wake_working.ts";
 
 export const WAKE_OPENER = "[wake]";
@@ -111,14 +111,18 @@ export function wakeWrapUpText(msLeft: number, rounds: number, userName: string)
     `and nothing reaches ${userName} unless you send it.]`;
 }
 
-export function wakeStoppedNote(why: WakeStopReason, userName: string, limitMs: number): string {
-  if (why === "interrupted") {
-    return `[${userName} wrote here while this wake was running, so Shore stopped it here for you to answer them. ` +
-      `Once they have been quiet in this thread for ${spanPhrase(WAKE_QUIET_MS)}, Shore wakes you here again to pick it up.]`;
+export function wakeStoppedNote(ending: WakeEnding, userName: string, limitMs: number): string {
+  switch (ending.why) {
+    case "interrupted":
+      return `[${userName} wrote here while this wake was running, so Shore stopped it here for you to answer them. ` +
+        `Once they have been quiet in this thread for ${spanPhrase(WAKE_QUIET_MS)}, Shore wakes you here again to pick it up.]`;
+    case "time":
+      return `[This wake reached its limit of ${spanPhrase(limitMs)}, and Shore stopped it here.]`;
+    case "rounds":
+      return "[This wake used up its rounds of tool use, and Shore stopped it here.]";
+    case "failed":
+      return `[This wake failed here, before it had finished, with this error: "${ending.error}".]`;
   }
-  return why === "time"
-    ? `[This wake reached its limit of ${spanPhrase(limitMs)}, and Shore stopped it here.]`
-    : "[This wake used up its rounds of tool use, and Shore stopped it here.]";
 }
 
 export function leadingWakeTurns(messages: readonly Message[]): number {
@@ -381,12 +385,15 @@ export async function runWake(character: string, config: LoadedConfig, wake: Wak
       timestamp: (deps.nowIso ?? (() => new Date().toISOString()))(),
     });
     if (kept !== undefined) await engine.appendMessage(kept);
-    const stopped = stopOf(loop);
-    if (stopped !== undefined) {
-      note(stopped === "interrupted" ? "wake" : "timeout", stopped === "interrupted"
-        ? `Wake in "${thread}" stopped for ${userName}'s message`
-        : `Wake in "${thread}" ${stopped === "time" ? `reached its limit of ${spanPhrase(wake.limitMs)}` : "used up its rounds"} and was stopped`);
-      const why = roundMessage({ role: "system", blocks: [{ type: "text", text: wakeStoppedNote(stopped, userName, wake.limitMs) }] }, request, deps);
+    const ending = stopOf(loop);
+    const stopped = ending?.why;
+    if (ending !== undefined) {
+      if (ending.why !== "failed") {
+        note(ending.why === "interrupted" ? "wake" : "timeout", ending.why === "interrupted"
+          ? `Wake in "${thread}" stopped for ${userName}'s message`
+          : `Wake in "${thread}" ${ending.why === "time" ? `reached its limit of ${spanPhrase(wake.limitMs)}` : "used up its rounds"} and was stopped`);
+      }
+      const why = roundMessage({ role: "system", blocks: [{ type: "text", text: wakeStoppedNote(ending, userName, wake.limitMs) }] }, request, deps);
       await engine.appendMessage(why);
       if (log !== undefined) await keepWorking(log, { ...why, msg_id: newId() });
     }

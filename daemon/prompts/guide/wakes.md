@@ -94,3 +94,4 @@ A message from {{user}}, in any thread, ends it.
 - A wake aimed at a thread you don't have, or at your wakes thread, runs nothing, and nothing tells you. `{{threads}}` lists the threads you do have.
 - `{{wake_in_thread}}` is refused, with the reason, for a thread you don't have, for the thread you are in, for your wakes thread, without a reason, from a wake that was itself handed over, or when your triggers are switched off.
 - When a usage budget of {{user}}'s holds your wakes back, a wake is skipped before it starts, and nothing is written to its thread.
+- A wake whose model call fails ends there. A line in its thread gives the error, and the next wake there is told, as it is after a wake that was stopped. Nothing tries it again.
