@@ -8,6 +8,8 @@ import { writeState, readState } from "../src/storage/store.ts";
 import { loadConfig } from "../src/config/loader.ts";
 import { setTestEnv, restoreTestEnv } from "./support/env.ts";
 import { reliabilityGeneration } from "./support/reliability_generation.ts";
+import { runGeneration } from "../src/handler/generation.ts";
+import type { ServerMessage } from "../src/protocol/ServerMessage.ts";
 import { eventMatchesSession } from "../src/swp/routing.ts";
 import { parseToolArgs } from "../src/llm/tool_args.ts";
 import { type SidecarProvider, type StreamEvent } from "../src/llm/types.ts";
@@ -279,4 +281,35 @@ test("a running turn does not block a different conversation", async () => {
     release.release();
     await running;
   }
+});
+
+test("a reply that fails partway is reported only once what it already streamed has reached the client, and a frame that can't reach it doesn't hide why the reply failed", async () => {
+  const h = await reliabilityGeneration({
+    generate: async () => { throw new Error("stream only"); },
+    async *stream(): AsyncIterable<StreamEvent> {
+      yield { type: "text", text: "Half of it" };
+      throw Object.assign(new Error("the model went away"), { status: 400 });
+    },
+  });
+  const failing = (send: (frame: ServerMessage) => Promise<void>, logged: string[] = []) => runGeneration({ ...h.deps, log: { error: (message) => { logged.push(message); } } }, {
+    meta: { session: { sessionId: 1 } } as never,
+    body: { rid: null, text: "hello", stream: true, images: [], image_data: [] },
+    regen: false, charName: "ada", rid: null, signal: new AbortController().signal, send,
+  }).then(() => "finished", (error: unknown) => String(error));
+
+  let release = () => {};
+  const held = new Promise<void>((resolve) => { release = resolve; });
+  const delivered: string[] = [];
+  const reported = failing(async (frame) => {
+    if (frame.type === "stream_chunk") await held;
+    delivered.push(frame.type);
+  });
+  expect(await Promise.race([reported.then(() => "reported"), Bun.sleep(300).then(() => "waiting")])).toBe("waiting");
+  release();
+  expect(await reported).toContain("the model went away");
+  expect(delivered).toContain("stream_chunk");
+
+  const logged: string[] = [];
+  expect(await failing(async () => { throw new Error("the socket closed"); }, logged)).toContain("the model went away");
+  expect(logged).toEqual(["generation frame delivery failed"]);
 });

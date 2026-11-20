@@ -211,4 +211,20 @@ describe("a conversation's requests in flight", () => {
     new ConversationRequests(link.fake).cancel();
     expect(link.cancels()).toBe(1);
   });
+
+  test("continuing a reply sends a message with nothing in it, and one that does not complete says why", async () => {
+    const outcomes: [RequestFinished["outcome"], string | undefined, string][] = [
+      ["completed", undefined, "continued"],
+      ["failed", "the provider is down", "Error: the provider is down"],
+      ["cancelled", undefined, "Error: The reply was stopped"],
+      ["superseded", undefined, "Error: The reply didn't finish"],
+    ];
+    for (const [outcome, error, said] of outcomes) {
+      const link = connection();
+      const continuing = new ConversationRequests(link.fake).continueReply(false).then(() => "continued", (problem: unknown) => String(problem));
+      expect(link.submitted.at(-1)?.request).toEqual({ type: "message", text: "", stream: false, images: [] });
+      await link.finish("r_1", outcome, error);
+      expect(await continuing).toBe(said);
+    }
+  });
 });

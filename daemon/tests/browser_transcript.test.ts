@@ -77,7 +77,7 @@ describe("dates and times", () => {
     expect(timeLabel("not a time")).toBe("");
   });
 
-  test("the transcript gets a day line wherever the day changes, and its last turn is marked", () => {
+  test("the transcript gets a day line wherever the day changes, and its last turn is marked, as is a note after it while nothing follows the note", () => {
     const messages = [
       message("m_1", "user", [], "2026-11-09T22:00:00"),
       message("m_2", "assistant", [], "2026-11-09T23:00:00"),
@@ -87,8 +87,9 @@ describe("dates and times", () => {
     ];
     const items = transcriptItems(messages, new Date(2026, 10, 10, 12));
     expect(items.map((item) => item.kind === "day" ? `day ${item.label}` : `${item.message.msg_id}${item.last ? " last" : ""}`)).toEqual([
-      "day Yesterday", "m_1", "m_2", "day Today", "m_3", "m_4 last", "m_5",
+      "day Yesterday", "m_1", "m_2", "day Today", "m_3", "m_4 last", "m_5 last",
     ]);
+    expect(transcriptItems([...messages, message("m_6", "user", [], "2026-11-10T10:00:00")], new Date(2026, 10, 10, 12)).flatMap((item) => item.kind === "message" && item.last ? [item.message.msg_id] : [])).toEqual(["m_6"]);
     expect(items.filter((item) => item.kind === "day").map((item) => item.key)).toEqual(["day:2026-10-9:m_1", "day:2026-10-10:m_3"]);
     expect(items.flatMap((item) => item.kind === "message" ? [item.index] : [])).toEqual([0, 1, 2, 3, 4]);
     expect(lastTurnIndex(messages)).toBe(3);

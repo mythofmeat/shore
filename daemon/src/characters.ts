@@ -17,6 +17,7 @@ import {
   type ForkThreadOptions,
 } from "./engine/fork.ts";
 import { openDueSeals, sealThread, type NewSealedThread } from "./engine/sealed.ts";
+import { interruptedReplyNote, replyWasInterrupted } from "./engine/interrupted_reply.ts";
 import { sealedIn, sealedThreads, type SealedThread } from "./engine/sealed_list.ts";
 import { tryBeginCompaction } from "./memory/compaction/manager.ts";
 import { KeyedMutex } from "./util/keyed_mutex.ts";
@@ -274,6 +275,7 @@ export class CharacterRegistry {
   async #load(name: string, thread: string, heard = true): Promise<ConversationEngine> {
     const engine = await ConversationEngine.load(name, this.#dataDir, heard ? this.#onHistory : undefined, thread);
     const recovered = await engine.recoverInterruptedToolLoop("Tool execution was interrupted by a Shore daemon restart before it returned a result.");
+    if (replyWasInterrupted(this.#dataDir, name, thread)) await engine.appendMessage(interruptedReplyNote(new Date().toISOString()));
     if (recovered > 0) {
       shoreLog.warn(
         `shore: recovered ${String(recovered)} interrupted tool call(s) for ${name}/${thread}`,

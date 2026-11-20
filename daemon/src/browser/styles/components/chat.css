@@ -743,6 +743,10 @@ button.chip:hover {
   font-size: var(--text-md);
 }
 
+.system-note .button {
+  margin-top: 8px;
+}
+
 .composer-note {
   color: var(--text-2);
   font-size: var(--text-md);

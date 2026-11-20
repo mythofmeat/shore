@@ -1,4 +1,5 @@
 import { withConversation } from "../engine/lifecycle.ts";
+import { markReplyRunning } from "../engine/interrupted_reply.ts";
 import { noteSeen, presence, unshownPresence } from "../autonomy/presence.ts";
 import type { RunningWake } from "../autonomy/runner.ts";
 import { withoutWakeWorking } from "../autonomy/wake_working.ts";
@@ -200,24 +201,21 @@ export async function runGeneration(
   return await withConversation(threadDataDir(deps.dataDir, params.charName, engine.thread), "turn", async (signal) => {
   params = { ...params, signal };
   const delivery = new OrderedDelivery(params.send);
-  let generationFailure: unknown;
-  let generationFailed = false;
+  const finished = markReplyRunning(deps.dataDir, params.charName, engine.thread);
   try {
     await runGenerationCore(deps, engine, { ...params, send: delivery.send }, () => delivery.flush());
   } catch (error) {
-    generationFailure = error;
-    generationFailed = true;
+    try {
+      await delivery.flush();
+    } catch (lost) {
+      deps.log?.error?.("generation frame delivery failed", {
+        error: lost instanceof Error ? lost.message : String(lost),
+      });
+    }
+    throw error;
+  } finally {
+    finished();
   }
-
-  try {
-    await delivery.flush();
-  } catch (error) {
-    deps.log?.error?.("generation frame delivery failed", {
-      error: error instanceof Error ? error.message : String(error),
-    });
-    if (!generationFailed) throw error;
-  }
-  if (generationFailed) throw generationFailure;
   }, params.signal);
 }
 

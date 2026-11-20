@@ -58,5 +58,9 @@ export class ConversationRequests {
     });
     if (result.outcome !== "completed") throw new Error(result.error?.message ?? (result.outcome === "cancelled" ? "Regeneration stopped" : `Regeneration ${result.outcome}`));
   }
+  async continueReply(stream: boolean): Promise<void> {
+    const result = await this.submit("message", { text: "", stream, images: [] });
+    if (result.outcome !== "completed") throw new Error(result.error?.message ?? (result.outcome === "cancelled" ? "The reply was stopped" : "The reply didn't finish"));
+  }
   cancel(): void { this.connection.cancel(); }
 }

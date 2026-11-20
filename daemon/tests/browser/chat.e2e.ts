@@ -1,6 +1,7 @@
 import type { Locator, Page, WebSocketRoute } from "@playwright/test";
 import { expect, test } from "./fixtures.ts";
 import { createCharacter, createThread, send, signIn, watchPage } from "./helpers.ts";
+import { INTERRUPTED_REPLY_NOTE } from "../../src/engine/interrupted_note.ts";
 
 test("sending clears the message box at once and regenerating replaces the reply in place", async ({ page }) => {
   const check = await watchPage(page);
@@ -652,5 +653,44 @@ test("the sidebar's footer keeps the user's status, settings and the connection 
   await page.setViewportSize({ width: 280, height: 653 });
   await page.getByRole("button", { name: "Open sidebar", exact: true }).click();
   await expectFooterInsideSidebar(page, "Reconnecting…");
+  await finish();
+});
+
+async function expectOfferInsideNote(note: Locator): Promise<void> {
+  const edges = async (part: Locator) => {
+    const box = await part.boundingBox();
+    if (box === null) throw new Error("a part of the note is not on the page");
+    return { left: box.x, right: box.x + box.width, top: box.y, bottom: box.y + box.height };
+  };
+  const [around, words, offer] = await Promise.all([edges(note), edges(note.locator(".prose")), edges(note.getByRole("button", { name: "Continue the reply" }))]);
+  expect(await note.evaluate((part: Sized) => part.scrollWidth - part.clientWidth)).toBe(0);
+  expect(offer.left).toBeGreaterThanOrEqual(around.left);
+  expect(offer.right).toBeLessThanOrEqual(around.right);
+  expect(offer.bottom).toBeLessThanOrEqual(around.bottom);
+  expect(offer.top - words.bottom).toBeGreaterThanOrEqual(6);
+}
+
+test("a reply cut short by a restart says so in its thread and carries on at a click, with the offer inside its note at the largest text and on the narrowest phone", async ({ page }) => {
+  const finish = await watchPage(page);
+  await signIn(page);
+  await createCharacter(page, "stray");
+  const note = page.locator("div.system-note").filter({ hasText: INTERRUPTED_REPLY_NOTE });
+  const offer = note.getByRole("button", { name: "Continue the reply" });
+  await expect(offer).toBeEnabled();
+  await expectOfferInsideNote(note);
+
+  await page.evaluate("localStorage.setItem('shore.font-size', 'larger')");
+  await page.reload();
+  await expect(offer).toBeEnabled();
+  await expectOfferInsideNote(note);
+  await page.setViewportSize({ width: 280, height: 653 });
+  await expect(page.getByRole("complementary", { name: "Characters and threads" })).toBeHidden();
+  await expectOfferInsideNote(note);
+
+  await offer.click();
+  await expect(page.locator("article.message.assistant:not(.streaming)")).toContainText("Answer");
+  await expect(page.locator("article.message.assistant")).toHaveCount(1);
+  await expect(note).toBeVisible();
+  await expect(offer).toHaveCount(0);
   await finish();
 });
