@@ -1,5 +1,6 @@
 import { describe, expect, test, afterEach, jest } from "bun:test";
 import { connect as openSocket, type Socket } from "node:net";
+import { join } from "node:path";
 import { type ClientMessage } from "../src/protocol/ClientMessage";
 import { WireError, WireReader, MAX_PRE_AUTH_WIRE_MESSAGE_SIZE, type ByteSink } from "../src/swp/framing";
 import { type ServerMessage } from "../src/protocol/ServerMessage";
@@ -665,7 +666,7 @@ describe("stopping", () => {
     const silent = await open();
     jest.useFakeTimers();
     server.stop();
-    while (jest.getTimerCount() === 0) await immediate();
+    while (!logged.some(([, msg]) => msg === "Server shutting down")) await immediate();
     jest.advanceTimersByTime(GRACE_MS - 1);
     for (let turn = 0; turn < 20; turn += 1) await immediate();
     expect(silent.closed()).toBe(false);
@@ -676,7 +677,7 @@ describe("stopping", () => {
   });
 
   test("a client stuck behind a write it can't take is hung up on, and its disconnect reaches the routes before they end", async () => {
-    const { server, running, routing, routed, open } = await stoppable();
+    const { server, running, routing, routed, open, logged } = await stoppable();
     const stuck = await open();
     stuck.socket.write(`${JSON.stringify({ type: "hello", client_type: "tui", client_name: "test", capabilities: [], character: "ada" })}\n`);
     while (!stuck.frames.join("").includes('"type":"history"')) await immediate();
@@ -686,7 +687,7 @@ describe("stopping", () => {
     await immediate();
     jest.useFakeTimers();
     server.stop();
-    while (jest.getTimerCount() === 0) await immediate();
+    while (!logged.some(([, msg]) => msg === "Server shutting down")) await immediate();
     jest.advanceTimersByTime(GRACE_MS);
     await running;
     await routing;
@@ -695,7 +696,7 @@ describe("stopping", () => {
 
   test("a client whose handler is stuck on something besides its socket is given up on after a second grace, and the server still stops", async () => {
     let asked = false;
-    const { server, running, open, warnings } = await stoppable(() => {
+    const { server, running, open, logged, warnings } = await stoppable(() => {
       asked = true;
       return new Promise<never>(() => {});
     });
@@ -704,10 +705,10 @@ describe("stopping", () => {
     while (!asked) await immediate();
     jest.useFakeTimers();
     server.stop();
-    while (jest.getTimerCount() === 0) await immediate();
+    while (!logged.some(([, msg]) => msg === "Server shutting down")) await immediate();
     jest.advanceTimersByTime(GRACE_MS);
     await stuck.hungUp;
-    while (jest.getTimerCount() === 0) await immediate();
+    while (warnings().length === 0) await immediate();
     jest.advanceTimersByTime(GRACE_MS - 1);
     for (let turn = 0; turn < 20; turn += 1) await immediate();
     expect(warnings()).toEqual([["Hanging up on clients that didn't finish", { clients: 1 }]]);
@@ -719,7 +720,7 @@ describe("stopping", () => {
     ]);
   });
 
-  test("a server whose clients all finish in time hangs up on no one and leaves no timer behind", async () => {
+  test("a server whose clients all finish in time hangs up on no one", async () => {
     const { server, running, open, warnings } = await stoppable();
     const client = await open();
     client.socket.write(`${JSON.stringify({ type: "hello", client_type: "tui", client_name: "test", capabilities: [] })}\n`);
@@ -729,7 +730,20 @@ describe("stopping", () => {
     await running;
     await client.hungUp;
     expect(client.frames.join("")).toContain('"type":"shutdown"');
-    expect(jest.getTimerCount()).toBe(0);
     expect(warnings()).toEqual([]);
+  });
+
+  test("a server whose clients all finish in time leaves nothing behind to keep its process running", async () => {
+    const child = Bun.spawn([process.execPath, join(import.meta.dir, "support", "swp_stop.ts")], { stdout: "pipe", stderr: "pipe" });
+    const reader = child.stdout.getReader();
+    let said = "";
+    while (!said.includes("stopped\n")) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      said += new TextDecoder().decode(value);
+    }
+    const stoppedAt = performance.now();
+    expect([await child.exited, said]).toEqual([0, "stopped\n"]);
+    expect(performance.now() - stoppedAt).toBeLessThan(GRACE_MS / 2);
   });
 });
