@@ -81,7 +81,7 @@ export function transcriptItems(messages: readonly Message[], now = new Date()):
       const key = dayKey(date);
       if (key !== previousDay) { items.push({ kind: "day", key: `day:${key}:${message.msg_id}`, label: dayLabel(date, now) }); previousDay = key; }
     }
-    items.push({ kind: "message", key: message.msg_id, message, index, last: index === lastTurn });
+    items.push({ kind: "message", key: message.msg_id, message, index, last: message.role === "system" ? index === messages.length - 1 : index === lastTurn });
   });
   return items;
 }

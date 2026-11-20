@@ -18,6 +18,7 @@ import { conversation, errorText, perform, replyMarks, streamReplies, useWorkspa
 import { openConversationDialog } from "../app/intents.ts";
 import { markScope, MarkChips, MarkEditor, MarkToggles, RowMarkEditor, usePhraseHighlights, useReplyMarks } from "./marks.tsx";
 import { shownAttempt } from "./reply_marks.ts";
+import { INTERRUPTED_REPLY_NOTE } from "../../engine/interrupted_note.ts";
 import { activityHeadline, blockViews, bodyItems, chatLogMessageId, formatToolInput, isChatLogTool, messageCopyLabel, swipeState, timeLabel, toolSummary, type BlockView, type StepView } from "./transcript.ts";
 import { showWorkspaceNote, swipe as swipeTo } from "./actions.ts";
 
@@ -263,6 +264,14 @@ function Swipe({ message, last, busy, scope }: { message: Message; last: boolean
   </div>;
 }
 
+function SystemNote({ text, carryOn, busy }: { text: string; carryOn: boolean; busy: boolean }) {
+  const resume = () => { void conversation.continueReply(streamReplies()).catch((error: unknown) => toasts.show(errorText(error), "error")); };
+  return <div className="system-note">
+    <Markdown text={text} />
+    {carryOn ? <button type="button" className="button" disabled={busy} onClick={resume}>Continue the reply</button> : null}
+  </div>;
+}
+
 export const MessageRow = memo(function MessageRow({ message, character, avatar, last, lastUser = false, metadata, display, busy, mobile, openImage, readOnly = false }: {
   message: Message; character: string; avatar: CharacterAvatar | null | undefined; last: boolean; lastUser?: boolean; metadata: StreamMetadata | undefined;
   display: ViewValues; busy: boolean; mobile: boolean; openImage: OpenImage; readOnly?: boolean;
@@ -299,7 +308,7 @@ export const MessageRow = memo(function MessageRow({ message, character, avatar,
       <Markdown text={opener === undefined ? message.content : message.content.slice(opener[0].length).trim()} />
     </details>;
   }
-  if (message.role === "system") return <div className="system-note"><Markdown text={message.content} /></div>;
+  if (message.role === "system") return <SystemNote text={message.content} carryOn={last && !readOnly && message.content === INTERRUPTED_REPLY_NOTE} busy={busy} />;
   const actions: MenuItem[] = readOnly ? [{ label: "Copy", icon: "copy", onSelect: copy }] : [
     { label: "Copy", icon: "copy", onSelect: copy },
     { label: "Edit", icon: "edit", onSelect: () => setMode("edit") },

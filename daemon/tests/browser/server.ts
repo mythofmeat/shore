@@ -2,6 +2,7 @@ import { mkdtemp, mkdir, writeFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { startDaemon } from "../../src/daemon/run.ts";
+import { threadFile, writeDurable } from "../../src/storage/files.ts";
 import type { SidecarProvider } from "../../src/llm/types.ts";
 import { seedDiagnosticFixture } from "../support/diagnostic_fixture.ts";
 import { restoreTestEnv, setTestEnv } from "../support/env.ts";
@@ -211,6 +212,7 @@ try {
   await seedDiagnosticFixture(daemon.runtime, "nova");
   if (process.env["SHORE_BROWSER_USAGE_SEED"] === "true") await seedUsageFixture(daemon.runtime);
   seedArchivedSegment(daemon.runtime, "recovery");
+  writeDurable(threadFile(daemon.runtime.registry.globalConfig().dirs.data, "stray", "main", "reply_running.json"), JSON.stringify({ instance: "an earlier daemon" }));
   process.once("SIGTERM", () => { daemon.stop(); });
   process.once("SIGINT", () => { daemon.stop(); });
   if (daemon.web === undefined) throw new Error("Browser fixture did not start its web listener");
