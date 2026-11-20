@@ -1,5 +1,6 @@
 import {
   defaultSdk,
+  invalidType,
   readModelConfigFields,
   sdkFromWire,
   type ModelConfigFields,
@@ -7,6 +8,8 @@ import {
   type Sdk,
 } from "./models.ts";
 import { MODEL_FIELDS } from "./surface.ts";
+import type { ParseFailure, ParseResult } from "./duration.ts";
+import { configPathText, placed, within } from "./failure.ts";
 import { compareByCodePoint, sortedKeys } from "../util/sort.ts";
 import { isKeylessSdk, type ProviderEntry as CredentialsProviderEntry } from "../llm/credentials.ts";
 import type { ClaudeLoginSettings } from "../llm/claude_accounts.ts";
@@ -33,7 +36,7 @@ export class ProviderRegistryError extends Error {
   static parseEntry(provider: string, source: string): ProviderRegistryError {
     return new ProviderRegistryError(
       "parse_entry",
-      `failed to parse [providers.${provider}]: ${source}`,
+      `${configPathText(["providers", provider])}: ${source}`,
     );
   }
 
@@ -303,7 +306,7 @@ function isTable(value: unknown): value is Record<string, unknown> {
 
 function parseEntry(provider: string, value: unknown): ProviderEntry {
   const entry = readEntry(value, provider);
-  if ("err" in entry) throw ProviderRegistryError.parseEntry(provider, entry.err);
+  if ("err" in entry) throw new ProviderRegistryError("parse_entry", placed(entry, ["providers", provider]));
   const parsed = entry.ok;
 
   if (parsed.apiKeyEnv !== undefined && parsed.keys.length > 0) {
@@ -352,7 +355,11 @@ function parseEntry(provider: string, value: unknown): ProviderEntry {
   return parsed;
 }
 
-type ReadResult<T> = { ok: T } | { err: string };
+type ReadResult<T> = ParseResult<T>;
+
+function wrong(key: string | number, value: unknown, expected: string): ParseFailure {
+  return within(key, { err: invalidType(value, expected) });
+}
 
 const ENTRY_KEYS = [
   "enabled",
@@ -379,7 +386,7 @@ function unknownField(table: Record<string, unknown>, known: readonly string[]):
 }
 
 function readEntry(value: unknown, name?: string): ReadResult<ProviderEntry> {
-  if (!isTable(value)) return { err: "invalid type: expected a table" };
+  if (!isTable(value)) return { err: invalidType(value, "table") };
   const unknown = unknownField(value, ENTRY_KEYS);
   if (unknown !== undefined) return { err: unknown };
 
@@ -387,21 +394,21 @@ function readEntry(value: unknown, name?: string): ReadResult<ProviderEntry> {
 
   for (const field of ["enabled", "subscription"] as const) {
     if (value[field] === undefined) continue;
-    if (typeof value[field] !== "boolean") return { err: "invalid type: expected a boolean" };
+    if (typeof value[field] !== "boolean") return wrong(field, value[field], "boolean");
     out[field] = value[field];
   }
   if (value["no_auth"] !== undefined) {
-    if (typeof value["no_auth"] !== "boolean") return { err: "invalid type: expected a boolean" };
+    if (typeof value["no_auth"] !== "boolean") return wrong("no_auth", value["no_auth"], "boolean");
     out.noAuth = value["no_auth"];
   }
   if (value["pin"] !== undefined) {
-    if (typeof value["pin"] !== "string") return { err: "invalid type: expected a string" };
+    if (typeof value["pin"] !== "string") return wrong("pin", value["pin"], "string");
     out.pin = value["pin"];
   }
   if (value["sdk"] !== undefined) {
-    if (typeof value["sdk"] !== "string") return { err: "invalid type: expected a string" };
+    if (typeof value["sdk"] !== "string") return wrong("sdk", value["sdk"], "string");
     const sdk = sdkFromWire(value["sdk"]);
-    if (sdk === undefined) return { err: `unknown variant \`${value["sdk"]}\`` };
+    if (sdk === undefined) return within("sdk", { err: `unknown variant \`${value["sdk"]}\`` });
     out.sdk = sdk;
     if (value["subscription"] === undefined && isKeylessSdk(sdk)) out.subscription = true;
   }
@@ -411,29 +418,29 @@ function readEntry(value: unknown, name?: string): ReadResult<ProviderEntry> {
   ] as const) {
     const raw = value[key];
     if (raw === undefined) continue;
-    if (typeof raw !== "string") return { err: "invalid type: expected a string" };
+    if (typeof raw !== "string") return wrong(key, raw, "string");
     out[field] = raw;
   }
 
   if (value["discover"] !== undefined) {
-    if (typeof value["discover"] !== "boolean") return { err: "invalid type: expected a boolean" };
+    if (typeof value["discover"] !== "boolean") return wrong("discover", value["discover"], "boolean");
     out.discover = value["discover"];
   }
   const ignore = value["ignore_models"];
   if (ignore !== undefined) {
-    if (!Array.isArray(ignore)) return { err: "invalid type: expected a sequence" };
-    for (const pat of ignore) {
-      if (typeof pat !== "string") return { err: "invalid type: expected a string" };
+    if (!Array.isArray(ignore)) return wrong("ignore_models", ignore, "list of string");
+    for (const [index, pat] of ignore.entries()) {
+      if (typeof pat !== "string") return within("ignore_models", wrong(index, pat, "string"));
       out.ignoreModels.push(pat);
     }
   }
 
   const keys = value["keys"];
   if (keys !== undefined) {
-    if (!Array.isArray(keys)) return { err: "invalid type: expected a sequence" };
-    for (const raw of keys) {
+    if (!Array.isArray(keys)) return wrong("keys", keys, "list of table");
+    for (const [index, raw] of keys.entries()) {
       const read = readKey(raw);
-      if ("err" in read) return read;
+      if ("err" in read) return within("keys", within(index, read));
       out.keys.push(read.ok);
     }
   }
@@ -446,41 +453,42 @@ function readEntry(value: unknown, name?: string): ReadResult<ProviderEntry> {
 }
 
 function readKey(value: unknown): ReadResult<ProviderKeyEntry> {
-  if (!isTable(value)) return { err: "invalid type: expected a table" };
+  if (!isTable(value)) return { err: invalidType(value, "table") };
   const unknown = unknownField(value, KEY_KEYS);
   if (unknown !== undefined) return { err: unknown };
 
   const name = value["name"];
   const env = value["api_key_env"];
-  if (typeof name !== "string") return { err: "missing field `name`" };
-  if (env !== undefined && (typeof env !== "string" || env.trim() === "")) return { err: "`api_key_env` must name an environment variable" };
+  if (name === undefined) return { err: "missing field `name`" };
+  if (typeof name !== "string") return wrong("name", name, "string");
+  if (env !== undefined && (typeof env !== "string" || env.trim() === "")) return within("api_key_env", { err: "must name an environment variable" });
 
   const out: ProviderKeyEntry = { name, apiKeyEnv: env ?? "", stored: env === undefined, enabled: true, warnOnFallback: false };
   const limit = value["spend_limit_usd"];
   const period = value["spend_period"];
   if (limit !== undefined) {
     const cost = typeof limit === "bigint" ? Number(limit) : limit;
-    if (typeof cost !== "number" || !Number.isFinite(cost) || cost <= 0) return { err: "`spend_limit_usd` must be a positive number" };
+    if (typeof cost !== "number" || !Number.isFinite(cost) || cost <= 0) return within("spend_limit_usd", { err: "must be a positive number" });
     if (period !== undefined && (typeof period !== "string" || !(SPEND_PERIODS as readonly string[]).includes(period))) {
-      return { err: `\`spend_period\` must be one of ${SPEND_PERIODS.join(", ")}` };
+      return within("spend_period", { err: `must be one of ${SPEND_PERIODS.join(", ")}` });
     }
     out.spendLimit = { costUsd: cost, period: (period ?? "month") as SpendPeriod };
   } else if (period !== undefined) {
-    return { err: "`spend_period` needs `spend_limit_usd`" };
+    return within("spend_period", { err: "needs `spend_limit_usd`" });
   }
   if (value["enabled"] !== undefined) {
-    if (typeof value["enabled"] !== "boolean") return { err: "invalid type: expected a boolean" };
+    if (typeof value["enabled"] !== "boolean") return wrong("enabled", value["enabled"], "boolean");
     out.enabled = value["enabled"];
   }
   if (value["warn_on_fallback"] !== undefined) {
     if (typeof value["warn_on_fallback"] !== "boolean") {
-      return { err: "invalid type: expected a boolean" };
+      return wrong("warn_on_fallback", value["warn_on_fallback"], "boolean");
     }
     out.warnOnFallback = value["warn_on_fallback"];
   }
   const dir = value["dir"];
   if (dir !== undefined) {
-    if (typeof dir !== "string") return { err: "invalid type: expected a string" };
+    if (typeof dir !== "string") return wrong("dir", dir, "string");
     out.dir = dir;
   }
   for (const [window, field] of Object.entries(WINDOW_LIMIT_FIELDS) as [keyof WindowLimits, string][]) {
@@ -488,7 +496,7 @@ function readKey(value: unknown): ReadResult<ProviderKeyEntry> {
     if (raw === undefined) continue;
     const fraction = typeof raw === "bigint" ? Number(raw) : raw;
     if (typeof fraction !== "number" || !Number.isFinite(fraction) || fraction <= 0 || fraction > 1) {
-      return { err: `\`${field}\` must be a fraction above 0 and at most 1 (0.5 is half the window)` };
+      return within(field, { err: "must be a fraction above 0 and at most 1 (0.5 is half the window)" });
     }
     out.windowLimits = { ...out.windowLimits, [window]: fraction };
   }

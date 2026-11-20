@@ -69,7 +69,7 @@ describe("a section that holds named tables beside its settings", () => {
     expect(tools["per_tool"]).toEqual({ bash: { max_result_chars: null, timeout: "1m" }, read: { max_result_chars: 9, timeout: null } });
     expect(Object.keys(tools["per_tool"] as object)).toEqual(["bash", "read"]);
     expect(rejected("[tools.bash]\nbogus = 1\n")).toBe("unknown field `bogus`, expected one of `max_result_chars`, `max_inline_image_bytes`, `timeout`");
-    expect(rejected("[tools]\nbash = 5\n")).toBe("invalid type: integer `5`, expected struct ToolOverride");
+    expect(rejected("[tools]\nbash = 5\n")).toBe("invalid type: integer `5`, expected table");
   });
 
   test("a table under [subagents] that isn't one of its settings defines a sub-agent", () => {

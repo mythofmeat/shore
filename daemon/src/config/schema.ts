@@ -2,8 +2,10 @@ import {
   appConfigShape,
   type ConfigTypeInfo,
   type ConfigValueSource,
+  typeWords,
 } from "./app.ts";
 import { requiresRestart } from "./restart.ts";
+import { configPathText } from "./failure.ts";
 import { formatConfigPath, isConfigTable, MODEL_FIELDS, parseConfigPath } from "./surface.ts";
 import { GEMINI_THINKING_MODES } from "../llm/types.ts";
 
@@ -18,31 +20,6 @@ export type SchemaEntry = ConfigSchemaEntry & {
 
 const DURATION_EXAMPLES = ["0s", "30s", "5m", "1h", "12h", "7d"] as const;
 const BOOLEANS = ["true", "false"] as const;
-
-function describe(info: ConfigTypeInfo): string {
-  switch (info.kind) {
-    case "boolean":
-      return "boolean";
-    case "string":
-      return "string";
-    case "integer":
-      return info.width ?? "integer";
-    case "float":
-      return "number";
-    case "duration":
-      return "duration";
-    case "enum":
-      return (info.variants ?? []).join(" | ");
-    case "list":
-      return `list of ${info.item === undefined ? "values" : describe(info.item)}`;
-    case "map":
-      return `table of ${info.item === undefined ? "values" : describe(info.item)}`;
-    case "table":
-      return "table";
-    case "unknown":
-      return "value";
-  }
-}
 
 function candidates(info: ConfigTypeInfo): readonly string[] {
   switch (info.kind) {
@@ -91,7 +68,7 @@ function entry(key: string, info: ConfigTypeInfo): SchemaEntry {
     kind: info.kind,
     ...(info.item === undefined ? {} : { item_kind: info.item.kind }),
     ...(width === undefined ? {} : { width }),
-    type: describe(info),
+    type: typeWords(info),
     settable: settable(info),
     optional: info.optional === true,
     restart_required: requiresRestart(key),
@@ -303,21 +280,21 @@ export function findSchemaEntry(entries: readonly SchemaEntry[], key: string): S
 
 export function validateConfigSource(input: Record<string, unknown>, source: string): void {
   const entries = configSchema({ instancesAt: () => [] });
-  const visit = (value: unknown, path: string[]): void => {
-    const key = formatConfigPath(path);
-    const info = findSchemaEntry(entries, key);
+  const visit = (value: unknown, path: (string | number)[]): void => {
+    const shown = configPathText(path);
+    const info = findSchemaEntry(entries, formatConfigPath(path.map(String)));
     if (info === undefined) {
       const expected = entries.filter((candidate) => parseConfigPath(candidate.key).length === 1).map((candidate) => `\`${candidate.key}\``);
-      throw new Error(`${source}: unknown field \`${key}\`${path.length === 1 ? `, expected one of ${expected.join(", ")}` : ""}`);
+      throw new Error(`${source}: unknown field \`${shown}\`${path.length === 1 ? `, expected one of ${expected.join(", ")}` : ""}`);
     }
     if (info.kind === "table") {
-      if (!isConfigTable(value)) throw new Error(`${source}: ${key} must be a table`);
+      if (!isConfigTable(value)) throw new Error(`${source}: ${shown} must be a table`);
       if (path.at(-1) === "openrouter_routing") return;
       for (const [name, child] of Object.entries(value)) visit(child, [...path, name]);
     } else if (info.kind === "list" && info.item_kind === "table" && Array.isArray(value)) {
-      for (const [index, child] of value.entries()) visit(child, [...path, String(index)]);
+      for (const [index, child] of value.entries()) visit(child, [...path, index]);
     } else if (info.kind === "enum" && !info.values.includes(String(value))) {
-      throw new Error(`${source}: ${key} must be ${info.values.join(", ")}`);
+      throw new Error(`${source}: ${shown} must be ${info.values.join(", ")}`);
     }
   };
   for (const [key, value] of Object.entries(input)) visit(value, [key]);

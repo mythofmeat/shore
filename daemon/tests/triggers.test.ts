@@ -320,7 +320,7 @@ test("[triggers] holds every setting of a character's triggers and wakes, the sw
   expect(read).toThrow("unknown field `triggers.default_interval`");
 
   await writeFile(join(root, "config.toml"), '[[budgets]]\nname = "beats"\nperiod = "month"\ncost_usd = 1\nlimit_action = "pause_heartbeat"\n');
-  expect(read).toThrow("budgets.0.limit_action must be warn, block, pause_background, pause_wakes");
+  expect(read).toThrow("budgets[0].limit_action must be warn, block, pause_background, pause_wakes");
 
   await writeFile(join(root, "config.toml"), '[triggers]\ncheck_time_limit = "0s"\n');
   expect(read).toThrow("triggers.check_time_limit must be greater than zero");

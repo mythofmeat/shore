@@ -274,8 +274,8 @@ test("[notifications] is read under the names in the file: how to deliver, which
 
   expect(await outcomeOf(load('[notifications]\nvia = "pigeon"\n'))).toThrow("notifications.via must be off, notify_send, ntfy, command");
   expect(await outcomeOf(load('[notifications]\nevents = ["error", "nope"]\n'))).toThrow("notifications.events contains an unknown event");
-  expect(await outcomeOf(load('[notifications]\nevents = "error"\n'))).toThrow('invalid type: string "error", expected a sequence');
-  expect(await outcomeOf(load("[notifications.events]\nerror = true\n"))).toThrow("invalid type: map, expected a sequence");
+  expect(await outcomeOf(load('[notifications]\nevents = "error"\n'))).toThrow('notifications.events: invalid type: string "error", expected list of autonomous_message | cache_warning | compaction_complete | error | message_complete | usage_warning');
+  expect(await outcomeOf(load("[notifications.events]\nerror = true\n"))).toThrow("notifications.events: invalid type: map, expected list of ");
   expect(await outcomeOf(load("[notifications]\nenabled = true\n"))).toThrow("unknown field `notifications.enabled`");
   expect(await outcomeOf(load('[notifications.ntfy]\ntopic = "shore"\n'))).toThrow("unknown field `notifications.ntfy`");
 });
@@ -288,7 +288,7 @@ test("[image] holds the model pictures are made with beside each image model's o
   expect([...(await load("[image]\n")).models.imageGeneration]).toEqual([]);
 
   expect(await outcomeOf(load('[image."openai:gpt-image"]\nsize = 5\n'))).toThrow(
-    `${join(root, "config.toml")}: [image."openai:gpt-image"] is not a valid \`provider:model_id\` settings table: invalid type: integer \`5\`, expected a string. Identity is the key (e.g. \`[image."openai:dall-e-3"]\`)`,
+    `${join(root, "config.toml")}: [image."openai:gpt-image"] is not a valid \`provider:model_id\` settings table: size: invalid type: integer \`5\`, expected string. Identity is the key (e.g. \`[image."openai:dall-e-3"]\`)`,
   );
   expect(await outcomeOf(load('[image]\nmodel = "gpt-image"\n'))).toThrow('image.model "gpt-image" must be a `provider:model_id` identity');
   expect(await outcomeOf(load('[image_generation."openai:gpt-image"]\nsize = "1024x1024"\n'))).toThrow("unknown field `image_generation`, expected one of ");
@@ -396,11 +396,11 @@ test("[[budgets]], [plan_limits] and [usage] are read under the names in the fil
   }]);
 
   for (const [toml, refusal] of [
-    ["[[budgets]]\ncost_usd = 5\nwarn_at = [0.5]\n", "unknown field `budgets.0.warn_at`"],
-    ["[[budgets]]\ncost_usd = 5\nlimit = \"block\"\n", "unknown field `budgets.0.limit`"],
-    ["[[budgets]]\ncost_usd = 5\nusage_kind = [\"background\"]\n", "unknown field `budgets.0.usage_kind`"],
-    ["[[budgets]]\ncost_usd = 5\nallow_compaction_over_budget = true\n", "unknown field `budgets.0.allow_compaction_over_budget`"],
-    ["[[budgets]]\ncost_usd = 5\npace_period = \"hour\"\npace_warn_at = [0.5]\n", "unknown field `budgets.0.pace_warn_at`"],
+    ["[[budgets]]\ncost_usd = 5\nwarn_at = [0.5]\n", "unknown field `budgets[0].warn_at`"],
+    ["[[budgets]]\ncost_usd = 5\nlimit = \"block\"\n", "unknown field `budgets[0].limit`"],
+    ["[[budgets]]\ncost_usd = 5\nusage_kind = [\"background\"]\n", "unknown field `budgets[0].usage_kind`"],
+    ["[[budgets]]\ncost_usd = 5\nallow_compaction_over_budget = true\n", "unknown field `budgets[0].allow_compaction_over_budget`"],
+    ["[[budgets]]\ncost_usd = 5\npace_period = \"hour\"\npace_warn_at = [0.5]\n", "unknown field `budgets[0].pace_warn_at`"],
     ["[[usage.budgets]]\ncost_usd = 5\n", "unknown field `usage.budgets`"],
     ["[usage.plan_limits.five_hour]\nlimit_fraction = 0.5\n", "unknown field `usage.plan_limits`"],
   ] as const) {
@@ -502,25 +502,25 @@ test("[providers.<name>] is read under the names in the file: whether to look fo
   }]);
 
   for (const [toml, refusal] of [
-    ['[providers.x]\ndiscover = "yes"\n', "failed to parse [providers.x]: invalid type: expected a boolean"],
-    ['[providers.x]\nignore_models = "old-*"\n', "failed to parse [providers.x]: invalid type: expected a sequence"],
-    ["[providers.x]\nignore_models = [5]\n", "failed to parse [providers.x]: invalid type: expected a string"],
-    ['[providers.x]\ntemperature = "hot"\n', 'failed to parse [providers.x]: invalid type: string "hot", expected a float'],
+    ['[providers.x]\ndiscover = "yes"\n', 'providers.x.discover: invalid type: string "yes", expected boolean'],
+    ['[providers.x]\nignore_models = "old-*"\n', 'providers.x.ignore_models: invalid type: string "old-*", expected list of string'],
+    ["[providers.x]\nignore_models = [\"a\", 5]\n", "providers.x.ignore_models[1]: invalid type: integer `5`, expected string"],
+    ['[providers.x]\ntemperature = "hot"\n', 'providers.x.temperature: invalid type: string "hot", expected number'],
     ["[providers.x.discovery]\nenabled = true\n", "unknown field `providers.x.discovery`"],
     ["[providers.x.defaults]\ntemperature = 0.3\n", "unknown field `providers.x.defaults`"],
-    ['[[providers.x.keys]]\nname = "work"\nenv = "SHORE_TEST_FULL_KEY"\n', "unknown field `providers.x.keys.0.env`"],
+    ['[[providers.x.keys]]\nname = "work"\nenv = "SHORE_TEST_FULL_KEY"\n', "unknown field `providers.x.keys[0].env`"],
   ] as const) {
     await write(toml);
     expect(read).toThrow(refusal);
   }
   expect(() => ProviderRegistry.fromSection({ x: { discovery: { enabled: true } } })).toThrow(
-    "failed to parse [providers.x]: unknown field `discovery`, expected one of `enabled`, `subscription`, `no_auth`, `pin`, `sdk`, `base_url`, `api_key_env`, `keys`, `discover`, `ignore_models`, " +
+    "providers.x: unknown field `discovery`, expected one of `enabled`, `subscription`, `no_auth`, `pin`, `sdk`, `base_url`, `api_key_env`, `keys`, `discover`, `ignore_models`, " +
       "`max_context_tokens`, `max_output_tokens`, `temperature`, `top_p`, `reasoning_effort`, `reasoning_budget_tokens`, `cache_ttl`, `reasoning_replay`, `max_tool_rounds`, `openrouter_routing`, " +
       "`gemini_thinking_mode`, `zai_clear_reasoning`, `supports_images`, `system_prompt`",
   );
-  expect(() => ProviderRegistry.fromSection({ x: { gemini_thinking_mode: "fast" } })).toThrow("failed to parse [providers.x]: gemini_thinking_mode must be auto, budget, or level");
+  expect(() => ProviderRegistry.fromSection({ x: { gemini_thinking_mode: "fast" } })).toThrow("providers.x.gemini_thinking_mode: must be auto, budget, or level");
   expect(() => ProviderRegistry.fromSection({ x: { keys: [{ name: "work", env: "K" }] } })).toThrow(
-    "failed to parse [providers.x]: unknown field `env`, expected one of `name`, `api_key_env`, `enabled`",
+    "providers.x.keys[0]: unknown field `env`, expected one of `name`, `api_key_env`, `enabled`",
   );
 });
 
@@ -564,9 +564,9 @@ test("a model's settings in its own table and in its provider's reach the model 
     ]).toEqual(["none", "all", "none", "all"]);
 
     await write("[providers.anthropic]\nmax_tool_rounds = 0\n");
-    expect(read).toThrow("failed to parse [providers.anthropic]: max_tool_rounds must be positive");
+    expect(read).toThrow("providers.anthropic.max_tool_rounds: must be positive");
     await write('[chat."anthropic:claude-x"]\nmax_tool_rounds = 0\n');
-    expect(read).toThrow('chat."anthropic:claude-x": max_tool_rounds must be positive');
+    expect(read).toThrow('chat."anthropic:claude-x".max_tool_rounds: must be positive');
   } finally {
     warned.mockRestore();
   }
@@ -583,4 +583,23 @@ test("a config's include list brings in the settings of the files it names, skip
   await writeFile(join(root, "extra.toml"), "[chat]\nbogus = 1\n");
   await write('include = ["extra.toml"]\n');
   expect(read).toThrow("extra.toml: unknown field `chat.bogus`");
+});
+
+test("a value of the wrong type is refused naming its key as written, in a named table, a list and a model's settings, and a missing key names its table", async () => {
+  const { root, load } = await sections();
+  const file = join(root, "config.toml");
+  for (const [toml, refusal] of [
+    ['[tools.bash]\ntimeout = "soon"\n', `${file}: tools.bash.timeout: invalid duration suffix: soon`],
+    ['[tools]\nenabled = ["bash", 5]\n', `${file}: tools.enabled[1]: invalid type: integer \`5\`, expected string`],
+    ['[tools]\nmax_result_chars = -1\n', `${file}: tools.max_result_chars: invalid value: integer \`-1\`, expected an integer from 0`],
+    ['[mcp.search]\ncommand = "srch"\n[mcp.search.env]\nTOKEN = 5\n', `${file}: mcp.search.env.TOKEN: invalid type: integer \`5\`, expected string`],
+    ['[chat."anthropic:claude-x"]\ntemperature = "hot"\n', `${file}: chat."anthropic:claude-x".temperature: invalid type: string "hot", expected number`],
+    ['[subagents.scout]\ndescription = "looks"\n', "subagents.scout: missing field `prompt`"],
+  ] as const) {
+    expect(await outcomeOf(load(toml))).toThrow(refusal);
+  }
+  await mkdir(join(root, "characters", "ada"), { recursive: true });
+  await writeFile(join(root, "characters", "ada", "config.toml"), "[tools]\nmax_result_chars = \"lots\"\n");
+  const global = await load("");
+  expect(() => loadCharacterConfig(global, "ada")).toThrow('tools.max_result_chars: invalid type: string "lots", expected integer');
 });

@@ -1,4 +1,5 @@
 import { validateConfigSource } from "./schema.ts";
+import { placed } from "./failure.ts";
 import { shoreLog } from "../log.ts";
 import { hardcodedProviderBaseUrl } from "../llm/request.ts";
 
@@ -35,7 +36,6 @@ import { rustTrim } from "./duration.ts";
 import { catalogFromSections, findModel, readModelConfigFields, CatalogError, type ModelCatalog } from "./models.ts";
 import { credentialBudgets, isCredentialBudget, markCredentialBudget, ProviderRegistry, ProviderRegistryError } from "./providers.ts";
 import { renderStarterConfig } from "./starter.ts";
-import { formatConfigPath } from "./surface.ts";
 
 export type TomlTable = Record<string, unknown>;
 
@@ -296,13 +296,13 @@ function checkSource(table: TomlTable, source: string): void {
   try {
     validateConfigSource(table, source);
     const valid = validateAppConfigLayer(table);
-    if ("err" in valid) throw new Error(`${source}: ${valid.err}`);
+    if ("err" in valid) throw new Error(`${source}: ${placed(valid)}`);
     ProviderRegistry.fromSection(sectionTable(table.providers));
     catalogFromSections(undefined, imageModelProfiles(sectionTable(table.image)));
     for (const [name, entries] of Object.entries(sectionTable(table.chat) ?? {})) {
       if (!isTable(entries)) continue;
       const parsed = readModelConfigFields(entries);
-      if ("err" in parsed) throw new Error(`${source}: ${formatConfigPath(["chat", name])}: ${parsed.err}`);
+      if ("err" in parsed) throw new Error(`${source}: ${placed(parsed, ["chat", name])}`);
     }
   } catch (e) {
     const message = e instanceof Error ? e.message : String(e);
@@ -327,7 +327,7 @@ export function parseConfigTable(
   const imageGenerationSection = imageModelProfiles(sectionTable(remainder.image));
   const providersSection = sectionTable(remainder.providers);
   const parsed = parseAppConfig(remainder);
-  if ("err" in parsed) throw new ConfigError("parse_app", parsed.err);
+  if ("err" in parsed) throw new ConfigError("parse_app", placed(parsed));
   const app = parsed.ok;
 
 
@@ -335,8 +335,7 @@ export function parseConfigTable(
   try {
     providers = ProviderRegistry.fromSection(providersSection);
   } catch (e) {
-    if (!(e instanceof ProviderRegistryError)) throw e;
-    throw new ConfigError("provider_registry", e.message);
+    throw e instanceof ProviderRegistryError ? new ConfigError("provider_registry", e.message) : e;
   }
   for (const limit of credentialBudgets(providers)) {
     app.budgets.push(markCredentialBudget({ ...newUsageBudget(), ...limit, limit_action: "block" }));
@@ -350,8 +349,7 @@ export function parseConfigTable(
       providers,
     );
   } catch (e) {
-    if (!(e instanceof CatalogError)) throw e;
-    throw new ConfigError("catalog", e.message);
+    throw e instanceof CatalogError ? new ConfigError("catalog", e.message) : e;
   }
 
   validateConfig(app, models, providers, onWarn);

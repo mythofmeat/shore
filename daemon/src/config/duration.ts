@@ -5,7 +5,9 @@ const MILLIS_PER_DAY = 86_400_000n;
 
 const U64_MAX = 18_446_744_073_709_551_615n;
 
-export type ParseResult<T> = { ok: T } | { err: string };
+export type ConfigPathPart = string | number;
+export interface ParseFailure { err: string; at?: readonly ConfigPathPart[] }
+export type ParseResult<T> = { ok: T } | ParseFailure;
 
 export function rustTrim(s: string): string {
   return s.replace(/^\p{White_Space}+/u, "").replace(/\p{White_Space}+$/u, "");
