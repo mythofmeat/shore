@@ -3,7 +3,7 @@ import { required } from "../src/util/required.ts";
 import { afterEach, describe, expect, jest, spyOn, test } from "bun:test";
 import { connect, createServer, type Socket } from "node:net";
 import { chmod, mkdir, mkdtemp, readFile, stat, writeFile } from "node:fs/promises";
-import { existsSync } from "node:fs";
+import { existsSync, readdirSync, readFileSync, readlinkSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { exitIfStillRunning, startDaemon, type DaemonOptions, type RunningDaemon } from "../src/daemon/run.ts";
@@ -922,19 +922,27 @@ async function listening(port = 0): Promise<{ port: number; close: () => Promise
   };
 }
 
-async function freePort(): Promise<number> {
-  const probe = await listening();
-  await probe.close();
-  return probe.port;
+function listeningPorts(): Set<number> {
+  const ours = new Set(readdirSync("/proc/self/fd").flatMap((descriptor) => {
+    try {
+      const inode = /^socket:\[(\d+)\]$/.exec(readlinkSync(`/proc/self/fd/${descriptor}`))?.[1];
+      return inode === undefined ? [] : [inode];
+    } catch {
+      return [];
+    }
+  }));
+  const ports = new Set<number>();
+  for (const table of ["/proc/net/tcp", "/proc/net/tcp6"]) {
+    for (const line of readFileSync(table, "utf8").split("\n").slice(1)) {
+      const [, local, , state, , , , , , inode] = line.trim().split(/\s+/);
+      if (state === "0A" && inode !== undefined && ours.has(inode)) ports.add(Number.parseInt(local?.split(":").at(-1) ?? "", 16));
+    }
+  }
+  return ports;
 }
 
-async function portIsFree(port: number): Promise<boolean> {
-  try {
-    await (await listening(port)).close();
-    return true;
-  } catch {
-    return false;
-  }
+function openedSince(before: ReadonlySet<number>): number[] {
+  return [...listeningPorts()].filter((port) => !before.has(port));
 }
 
 async function refused(options: DaemonOptions): Promise<StartupError> {
@@ -1057,33 +1065,33 @@ describe("a daemon that fails to start", () => {
   test("because its browser transport can't listen gives up its own port and its data directory", async () => {
     const taken = await listening();
     const place = await layout(`[daemon.web]\nenabled = true\nbind_addr = "127.0.0.1:${taken.port}"\n`);
-    const port = await freePort();
+    const before = listeningPorts();
     try {
-      const failure = await refused({ argv: ["--config", place.configPath, "--addr", `127.0.0.1:${port}`], env: place.env, providers: {}, instancesPath: place.instancesPath });
+      const failure = await refused({ argv: ["--config", place.configPath, "--addr", "127.0.0.1:0"], env: place.env, providers: {}, instancesPath: place.instancesPath });
       expect([failure.kind, failure.message]).toEqual(["server_run", expect.stringContaining("Failed to start browser transport") as string]);
-      expect(await portIsFree(port)).toBe(true);
+      expect(openedSince(before)).toEqual([]);
     } finally {
       await taken.close();
     }
+    await writeFile(place.configPath, `[daemon.web]\nenabled = true\nbind_addr = "127.0.0.1:0"\n`);
     expect((await start(place)).web).toBeDefined();
   });
 
   test("because it can't record itself as running gives up both of its ports and its data directory", async () => {
-    const webPort = await freePort();
-    const place = await layout(`[daemon.web]\nenabled = true\nbind_addr = "127.0.0.1:${webPort}"\n`);
+    const place = await layout(`[daemon.web]\nenabled = true\nbind_addr = "127.0.0.1:0"\n`);
     await writeFile(join(place.root, "a-file"), "");
-    const port = await freePort();
-    const failure = await refused({ argv: ["--config", place.configPath, "--addr", `127.0.0.1:${port}`], env: place.env, providers: {}, instancesPath: join(place.root, "a-file", "instances.json") });
+    const before = listeningPorts();
+    const failure = await refused({ argv: ["--config", place.configPath, "--addr", "127.0.0.1:0"], env: place.env, providers: {}, instancesPath: join(place.root, "a-file", "instances.json") });
     expect(failure.kind).toBe("register_instance");
-    expect([await portIsFree(port), await portIsFree(webPort)]).toEqual([true, true]);
+    expect(openedSince(before)).toEqual([]);
     expect((await start(place)).port).toBeGreaterThan(0);
   });
 });
 
 describe("a daemon's teardown", () => {
   test("going down also stops its browser transport, its clocks and its matrix bridge", async () => {
-    const webPort = await freePort();
-    const place = await layout(`[daemon.web]\nenabled = true\nbind_addr = "127.0.0.1:${webPort}"\n`);
+    const place = await layout(`[daemon.web]\nenabled = true\nbind_addr = "127.0.0.1:0"\n`);
+    let webPort: number | undefined;
     const realClocks = runtimeModule.startRuntimeClocks;
     const realBridge = matrixModule.superviseMatrixBridge;
     const stopped: string[] = [];
@@ -1097,6 +1105,8 @@ describe("a daemon's teardown", () => {
     });
     try {
       const daemon = await start(place);
+      webPort = daemon.web?.port;
+      expect(listeningPorts().has(webPort ?? 0)).toBe(true);
       daemon.stop();
       await daemon.done;
       running.length = 0;
@@ -1104,25 +1114,24 @@ describe("a daemon's teardown", () => {
       clocks.mockRestore();
       bridge.mockRestore();
     }
-    expect([stopped, await portIsFree(webPort)]).toEqual([["matrix bridge", "clocks"], true]);
+    expect([stopped, listeningPorts().has(webPort ?? 0)]).toEqual([["matrix bridge", "clocks"], false]);
   });
 
   test("a failure late in startup takes down everything started before it, and frees its ports and data directory", async () => {
-    const webPort = await freePort();
-    const place = await layout(`[daemon.web]\nenabled = true\nbind_addr = "127.0.0.1:${webPort}"\n`);
-    const port = await freePort();
+    const place = await layout(`[daemon.web]\nenabled = true\nbind_addr = "127.0.0.1:0"\n`);
+    const before = listeningPorts();
     const { log, lines } = recorder();
     const bridge = spyOn(matrixModule, "superviseMatrixBridge").mockImplementation(() => {
       throw new Error("no bridge today");
     });
     let failure: StartupError | undefined;
     try {
-      failure = await refused({ argv: ["--config", place.configPath, "--addr", `127.0.0.1:${port}`], env: place.env, providers: {}, instancesPath: place.instancesPath, log });
+      failure = await refused({ argv: ["--config", place.configPath, "--addr", "127.0.0.1:0"], env: place.env, providers: {}, instancesPath: place.instancesPath, log });
     } finally {
       bridge.mockRestore();
     }
     expect([failure.kind, failure.message]).toEqual(["server_run", expect.stringContaining("no bridge today") as string]);
-    expect([await portIsFree(port), await portIsFree(webPort)]).toEqual([true, true]);
+    expect(openedSince(before)).toEqual([]);
     expect(await instances(place)).toEqual([]);
     expect(["Auto-discovery loop stopped", "Config hot reload watcher stopped", "Unregistered daemon instance"].filter((line) => !lines.includes(line))).toEqual([]);
     expect((await start(place)).port).toBeGreaterThan(0);
