@@ -10,7 +10,10 @@ const HELLO = { type: "hello", v: 1, server_name: "shore", characters: [] };
 const HISTORY = { type: "history", messages: [], config: {}, revision: 1, selected_character: "ada", selected_thread: "story" };
 const MESSAGE: BrowserRequest = { type: "message", text: "hi", stream: true, images: [] };
 
+const rigged: BrowserConnection[] = [];
+
 afterEach(() => {
+  for (const connection of rigged.splice(0)) connection.stop();
   jest.useRealTimers();
   setSystemTime();
 });
@@ -68,6 +71,7 @@ function rig(options: Partial<BrowserConnectionOptions> = {}) {
     },
     ...options,
   });
+  rigged.push(connection);
   const updates: ConnectionUpdate[] = [];
   connection.subscribe((update) => { updates.push(update); });
   const answer = (path: string, ...next: ((init: RequestInit) => Response | Promise<Response>)[]) => { replies.set(path, [...(replies.get(path) ?? []), ...next]); };

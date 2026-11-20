@@ -396,6 +396,7 @@ export const DAEMON_EQUIVALENTS: readonly string[] = [
   "src/daemon/data_directory_lease.ts:ownerIsDead: …ecordedStart) && recordedStart 「< → <=」 performance.timeOrigin;",
   "src/storage/archive.ts:exportUnifiedDatabase: …new Database(path, { readonly: 「true → false」 });",
   "src/storage/archive.ts:importUnifiedDatabase: …tabase(sourcePath, { readonly: 「true → false」 });",
+  "src/engine/conversation.ts:ConversationEngine.reload: createHistoryDb: 「true → false」,",
   "src/llm/prepare_images.ts:encodeWithin: if (encoding === \"png\") 「return await attempt(target, \"png\", set… → {}」",
   "src/llm/prepare_images.ts:encodeWithin: …nking(\"png\", settings.quality, 「false → true」);",
   "src/llm/prepare_images.ts:encodeWithin: if (as === \"jpeg\" 「&& → ||」 mayBeTransparent(bytes)) {",

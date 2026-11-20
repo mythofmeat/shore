@@ -340,7 +340,7 @@ test("label --auto reports a segment as skipped when a label was set by hand whi
 });
 
 test("labelling a segment, as it is archived or by command, leaves the history database with no more open handles than before", async () => {
-  await world(async ({ command, settled, say, config }) => {
+  await world(async ({ command, settled, say, config, runtime }) => {
     const history = join(config.dirs.data, HISTORY_DB_FILE);
     const open = (): number => readdirSync("/proc/self/fd").filter((descriptor) => {
       try {
@@ -351,6 +351,8 @@ test("labelling a segment, as it is archived or by command, leaves the history d
     }).length;
     await command("compact", { keep_turns: 0 });
     await settled();
+    const endIndexHold = runtime.historyIndex.beginForeground();
+    await runtime.historyIndex.runOnce();
     const before = open();
 
     await say("and the door?");
@@ -361,6 +363,7 @@ test("labelling a segment, as it is archived or by command, leaves the history d
     await command("segments", { action: "label", index: 1, auto: true, replace: true });
     await command("segments", { action: "label", index: 1, auto: true });
     expect(open()).toBe(before);
+    endIndexHold();
   });
 });
 
