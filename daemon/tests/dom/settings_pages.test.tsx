@@ -117,10 +117,21 @@ describe("the settings screen", () => {
     expect(location.hash).toBe("#settings/debug");
     await click(view.host.querySelector(".settings-nav-item.back"));
     expect(location.hash).toBe("");
-    const logout = spyOn(state.workspace.connection, "signOut").mockResolvedValue();
+    const logout = spyOn(state.workspace.connection, "signOut").mockRejectedValueOnce(new Error("the daemon went away")).mockResolvedValue();
     app.restores.push(() => { logout.mockRestore(); });
-    await click(button(view.host, "Disconnect"));
-    expect(logout).toHaveBeenCalledTimes(1);
+    const asked = () => document.querySelector("dialog");
+    expect([asked(), view.host.querySelector(".settings-nav-item.back svg")?.getAttribute("width")]).toEqual([null, "16"]);
+    const dialog = (): HTMLDialogElement => { const open = asked(); if (open === null) throw new Error("no dialog is open"); return open; };
+    await click(button(view.host, "Sign out"));
+    expect([asked()?.querySelector("h2")?.textContent, logout.mock.calls.length]).toEqual(["Sign out of this browser?", 0]);
+    expect(asked()?.textContent).toContain("you'll need the access token, or a sign-in code from a device that is still signed in");
+    await click(button(dialog(), "Cancel"));
+    expect([asked(), logout.mock.calls.length]).toEqual([null, 0]);
+    await click(button(view.host, "Sign out"));
+    await click(asked()?.querySelector("button[type='submit']"));
+    expect([asked()?.querySelector("[role='alert']")?.textContent, logout.mock.calls.length]).toEqual(["the daemon went away", 1]);
+    await click(asked()?.querySelector("button[type='submit']"));
+    expect([asked(), logout.mock.calls.length]).toEqual([null, 2]);
     await view.unmount();
   });
 
@@ -130,6 +141,9 @@ describe("the settings screen", () => {
     let toggled = 0;
     const view = await mount(<Settings state={state.workspace.getSnapshot()} page="keyboard" sidebarOpen={false} toggleSidebar={() => { toggled += 1; }} />);
     expect(view.host.querySelector(".topbar-title")?.textContent).toBe("Settings");
+    const { Icon } = await import("../../src/browser/ui/icons.tsx");
+    const panel = await mount(<Icon name="panel" />);
+    expect(button(view.host, "Expand sidebar").querySelector("svg")?.outerHTML).toBe(panel.host.innerHTML);
     await click(button(view.host, "Expand sidebar"));
     expect(toggled).toBe(1);
     const original = globalThis.matchMedia;
@@ -137,6 +151,7 @@ describe("the settings screen", () => {
     app.restores.push(() => { globalThis.matchMedia = original; });
     const narrow = await mount(<Settings state={state.workspace.getSnapshot()} page="keyboard" sidebarOpen toggleSidebar={() => { toggled += 1; }} />);
     expect([narrow.host.querySelector(".topbar-title")?.textContent, narrow.host.querySelector(".settings-nav-mobile summary")?.textContent]).toEqual(["Settings/Keyboard shortcuts", "Keyboard shortcuts"]);
+    expect(narrow.host.querySelector(".settings-nav-mobile summary svg")?.getAttribute("width")).toBe("14");
     expect(narrow.host.querySelector("[aria-label='Open sidebar']"), "the sidebar is open").toBeNull();
     const closed = await mount(<Settings state={state.workspace.getSnapshot()} page="keyboard" sidebarOpen={false} toggleSidebar={() => { toggled += 1; }} />);
     await click(button(closed.host, "Open sidebar"));

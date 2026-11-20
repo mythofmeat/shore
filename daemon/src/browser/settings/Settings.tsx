@@ -1,13 +1,27 @@
+import { useState } from "react";
 import type { ChromeSnapshot } from "../workspace.ts";
 import { IconButton } from "../ui/controls.tsx";
 import { Icon } from "../ui/icons.tsx";
 import { useMediaQuery } from "../ui/hooks.ts";
 import { navigate, SETTINGS_PAGES, type SettingsPage } from "../app/route.ts";
-import { perform, workspace } from "../app/state.ts";
+import { workspace } from "../app/state.ts";
+import { Form, useSubmit } from "../chat/dialogs.tsx";
 import { ConnectionBanner } from "../app/banner.tsx";
 import { SETTINGS_PAGE_VIEWS } from "./pages.tsx";
 
 const GROUPS = ["Chat", "Daemon", "Advanced"] as const;
+
+function SignOut() {
+  const [asking, setAsking] = useState(false);
+  const close = () => setAsking(false);
+  const { busy, error, run } = useSubmit(close);
+  return <>
+    <button type="button" className="settings-nav-item" onClick={() => setAsking(true)}>Sign out</button>
+    {asking ? <Form title="Sign out of this browser?" close={close} action="Sign out" danger busy={busy} error={error} submit={() => run(async () => { await workspace.connection.signOut(); return undefined; })}>
+      <p className="form-text">To sign back in you'll need the access token, or a sign-in code from a device that is still signed in (Settings › Devices).</p>
+    </Form> : null}
+  </>;
+}
 
 export function Settings({ state, page, sidebarOpen, toggleSidebar }: { state: ChromeSnapshot; page: SettingsPage; sidebarOpen: boolean; toggleSidebar: () => void }) {
   const narrow = useMediaQuery("(max-width: 700px)");
@@ -20,7 +34,7 @@ export function Settings({ state, page, sidebarOpen, toggleSidebar }: { state: C
       {SETTINGS_PAGES.filter((item) => item.group === group).map((item) =>
         <button key={item.id} type="button" className={`settings-nav-item ${item.id === page ? "on" : ""}`} aria-current={item.id === page ? "page" : undefined} onClick={() => navigate({ view: "settings", page: item.id })}>{item.label}</button>)}
     </div>)}
-    <div className="settings-nav-footer"><button type="button" className="settings-nav-item" onClick={() => perform(() => workspace.connection.signOut())}>Disconnect</button></div>
+    <div className="settings-nav-footer"><SignOut /></div>
   </nav>;
   return <div className="settings">
     {!sidebarOpen || narrow ? <header className="topbar settings-topbar">
