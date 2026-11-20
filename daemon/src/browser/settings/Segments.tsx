@@ -11,6 +11,7 @@ import { SettingsSection } from "./layout.tsx";
 import { turnCount } from "../chat/transcript.ts";
 import { threadLabel } from "../sidebar/Sidebar.tsx";
 import { formatTime, Loading, NeedsCharacter, useAction } from "./shared.tsx";
+import { Form, useSubmit } from "../chat/dialogs.tsx";
 
 function TextEdit({ label, value, save, busy }: { label: string; value: string | null; save: (value: string) => void; busy: boolean }) {
   const [editing, setEditing] = useState(false);
@@ -55,6 +56,14 @@ function Segment({ listed: { thread, name, segment }, named, open: openInChat, c
   const [open, setOpen] = useState(false);
   const [inspection, setInspection] = useState<SegmentInspection>();
   const { busy, run } = useAction();
+  const writing = useAction();
+  const [replacing, setReplacing] = useState(false);
+  const replace = useSubmit(() => setReplacing(false));
+  const autoLabel = async () => {
+    await workspace.actions.run("segments", { action: "label", index: segment.index, thread, auto: true, replace: segment.label !== null });
+    changed();
+    return undefined;
+  };
   const act = (action: "exclude" | "include" | "label" | "note", value?: string) => void run(async () => {
     await workspace.actions.run("segments", { action, index: segment.index, thread, ...(value === undefined ? {} : { value }) });
     changed();
@@ -81,8 +90,12 @@ function Segment({ listed: { thread, name, segment }, named, open: openInChat, c
       <button type="button" className="button ghost" onClick={() => perform(async () => { await openInChat(); navigate({ view: "chat" }); })}>Open in chat</button>
       <button type="button" className="button ghost" disabled={busy} onClick={() => act(segment.excluded ? "include" : "exclude")}>{segment.excluded ? "Include in chat logs" : "Exclude from chat logs"}</button>
       <TextEdit label="Label" value={segment.label} busy={busy} save={(value) => act("label", value)} />
+      <button type="button" className="button ghost" disabled={writing.busy} onClick={() => { if (segment.label === null) void writing.run(autoLabel); else setReplacing(true); }}>{writing.busy ? "Labelling…" : "Auto-label"}</button>
       <TextEdit label="Note" value={segment.note} busy={busy} save={(value) => act("note", value)} />
     </div>
+    {replacing ? <Form title="Replace this label?" close={() => setReplacing(false)} action="Replace" busy={replace.busy} error={replace.error} submit={() => replace.run(autoLabel)}>
+      <p className="form-text">The chat model will read the segment and write a new label in place of “{segment.label}”.</p>
+    </Form> : null}
     {open ? <div className="segment-body">
       {segment.memory_after === null ? null : <><div className="tool-label">Memory after this segment</div><div className="readout prose-readout"><Markdown text={segment.memory_after} /></div></>}
       {inspection === undefined ? <Spinner label="Loading messages" /> : <div className="segment-messages">{inspection.messages.map((message) => <div key={message.msg_id} className="segment-message"><span className="setting-label">{message.role === "user" ? "You" : message.role === "assistant" ? inspection.character : "System"}</span><Markdown text={message.content} /></div>)}</div>}

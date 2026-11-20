@@ -208,6 +208,75 @@ describe("the segments page", () => {
     await settle();
     expect([opened.mock.calls, location.hash]).toEqual([[[4]], ""]);
   });
+
+  function labelling(labels: Map<number, string | null>, answer: () => unknown) {
+    const asked: unknown[] = [];
+    let lists = 0;
+    app.answer((request) => {
+      if (request["name"] !== "segments") return undefined;
+      const args = request["args"] as { action?: string };
+      if (args.action === undefined) { lists += 1; return listing("story", [...labels].map(([index, label]) => summary(index, { label }))); }
+      asked.push(args);
+      return answer();
+    });
+    return { asked, lists: () => lists };
+  }
+  const mountStory = async () => {
+    const SegmentsPage = await page();
+    const view = await mount(<SegmentsPage state={{ ...app.state().workspace.getSnapshot(), character: "ada", thread: "story", threads: THREADS }} />);
+    await settle();
+    return view.host;
+  };
+  const dialog = () => document.querySelector<HTMLDialogElement>("dialog");
+
+  test("a segment without a label is labelled by the chat model at once, and its button says so while the model works", async () => {
+    const labels = new Map<number, string | null>([[1, null]]);
+    const calls = labelling(labels, () => HOLD);
+    const host = await mountStory();
+    await click(button(host, "Auto-label"));
+    await settle();
+    expect([calls.asked, button(host, "Labelling…").disabled, dialog()]).toEqual([[{ action: "label", index: 1, thread: "story", auto: true, replace: false }], true, null]);
+    const held = app.socket().sent.filter((request) => request["name"] === "segments").at(-1);
+    labels.set(1, "The harbour");
+    app.socket().receive({ type: "command_output", rid: held?.["rid"], name: "segments", data: { character: "ada", thread: "story", action: "label", segment: summary(1, { label: "The harbour" }), skipped: false } });
+    app.socket().receive({ type: "request_finished", rid: held?.["rid"], outcome: "completed" });
+    await settle();
+    expect([calls.lists(), segmentRows(host).map(([label]) => label), button(host, "Auto-label").disabled]).toEqual([2, ["The harbour"], false]);
+  });
+
+  test("a label call that fails says why and leaves the segment as it was", async () => {
+    const { toasts } = await import("../../src/browser/ui/toast.tsx");
+    const shown = spyOn(toasts, "show");
+    app.restores.push(() => { shown.mockRestore(); });
+    const calls = labelling(new Map([[1, null]]), () => { throw new Error("could not label segment 1: the model is down"); });
+    const host = await mountStory();
+    await click(button(host, "Auto-label"));
+    await settle();
+    expect([shown.mock.calls, calls.lists(), segmentRows(host).map(([label]) => label)]).toEqual([[["could not label segment 1: the model is down", "error"]], 1, ["Segment 1"]]);
+  });
+
+  test("a segment that has a label asks before the model replaces it, and a refusal stays in the question", async () => {
+    const labels = new Map<number, string | null>([[2, "Old name"]]);
+    let refuse = true;
+    const calls = labelling(labels, () => {
+      if (refuse) throw new Error("this daemon has no model to ask for a label");
+      labels.set(2, "New name");
+      return { character: "ada", thread: "story", action: "label", segment: summary(2, { label: "New name" }), skipped: false };
+    });
+    const host = await mountStory();
+    await click(button(host, "Auto-label"));
+    expect([dialog()?.querySelector("h2")?.textContent, dialog()?.querySelector(".form-text")?.textContent, calls.asked]).toEqual(["Replace this label?", "The chat model will read the segment and write a new label in place of “Old name”.", []]);
+    await click(button(dialog() ?? host, "Cancel"));
+    expect([dialog(), calls.asked]).toEqual([null, []]);
+    await click(button(host, "Auto-label"));
+    await click(button(dialog() ?? host, "Replace"));
+    await settle();
+    expect([dialog()?.querySelector("[role=alert]")?.textContent, calls.lists()]).toEqual(["this daemon has no model to ask for a label", 1]);
+    refuse = false;
+    await click(button(dialog() ?? host, "Replace"));
+    await settle();
+    expect([dialog(), calls.asked, segmentRows(host).map(([label]) => label)]).toEqual([null, [{ action: "label", index: 2, thread: "story", auto: true, replace: true }, { action: "label", index: 2, thread: "story", auto: true, replace: true }], ["New name"]]);
+  });
 });
 
 describe("the diagnostics page", () => {
