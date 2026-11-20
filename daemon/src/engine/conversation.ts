@@ -1,4 +1,4 @@
-import { registerConversation, withConversation } from "./lifecycle.ts";
+import { outsideConversation, registerConversation, withConversation } from "./lifecycle.ts";
 import { threadFile } from "../storage/files.ts";
 
 import { join, dirname } from "node:path";
@@ -66,6 +66,7 @@ export class ConversationEngine {
   #messages: MessageStore;
   #segments: SegmentReader;
   #revision = 0;
+  #closed = false;
   #tailStart = 0;
   #tailAnchor: string | null = null;
   readonly #deltaImages = new Map<string, string>();
@@ -326,6 +327,7 @@ export class ConversationEngine {
 
   async reload(): Promise<void> {
     return await withConversation(this.#conversationDir, "rewrite", async () => {
+      if (this.#closed) return;
       this.#messages = await MessageStore.load(threadFile(dirname(this.#historyDbPath), this.#characterName, this.#thread, "active.jsonl"));
       this.#segments.close();
       this.#segments = await SegmentReader.load({
@@ -340,7 +342,12 @@ export class ConversationEngine {
   }
 
   close(): void {
+    this.#closed = true;
     this.#segments.close();
+  }
+
+  async closeWhenIdle(): Promise<void> {
+    await outsideConversation(async () => { await withConversation(this.#conversationDir, "update", async () => { this.close(); }); });
   }
 
   historySnapshot(config: unknown): History {

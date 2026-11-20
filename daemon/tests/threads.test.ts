@@ -2,7 +2,7 @@ import { describe, expect, test } from "bun:test";
 import { createFolder, deleteFolder, moveFolder, moveThread, placedThreads, renameFolder, setFolderSort } from "../src/engine/thread_layout.ts";
 import { MAX_THREAD_ID_LENGTH, archiveThread, assertThreadId, isValidThreadId, createThread, ensureThreads, ensureWakesThread, wakesThread, firstUnreadReply, markThreadRead, readThreadsIndex, setHomeThread, setThreadCompaction, threadActivityNow, threadFilePaths, writeThreadsIndex, type ThreadsIndex } from "../src/engine/threads.ts";
 import { readFileSync, readFile } from "./support/stored_files.ts";
-import { mkdirSync, mkdtempSync, writeFileSync, existsSync } from "node:fs";
+import { mkdirSync, mkdtempSync, readdirSync, readlinkSync, realpathSync, rmSync, writeFileSync, existsSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { CharacterRegistry } from "../src/characters.ts";
@@ -16,6 +16,8 @@ import { mkdir, rm } from "node:fs/promises";
 import { HISTORY_DB_FILE, HistoryStore } from "../src/engine/history_store.ts";
 import { FORK_MARKER_FILE, forkThread, recoverForks, selectForkContext } from "../src/engine/fork.ts";
 import { MessageStore } from "../src/engine/message_store.ts";
+import { refreshConversation, withConversation } from "../src/engine/lifecycle.ts";
+import type { ConversationEngine } from "../src/engine/conversation.ts";
 import { type ContentBlock, type Message } from "../src/engine/types.ts";
 import { testTmp } from "./support/tmp.ts";
 import { outcomeOf } from "./support/outcome.ts";
@@ -99,6 +101,116 @@ describe("creating a thread", () => {
     const data = await freshDataDir();
     mkdirSync(join(data, "ada", "threads", "again"), { recursive: true });
     expect((await createThread(data, "ada", "again", NOW)).threads.map((thread) => thread.id)).toContain("again");
+  });
+});
+
+function historyHandles(dataDir: string): () => number {
+  const history = join(realpathSync(dataDir), HISTORY_DB_FILE);
+  return () => readdirSync("/proc/self/fd").filter((descriptor) => {
+    try {
+      return readlinkSync(`/proc/self/fd/${descriptor}`).startsWith(history);
+    } catch {
+      return false;
+    }
+  }).length;
+}
+
+async function whenIdle(engine: ConversationEngine): Promise<void> {
+  await withConversation(engine.conversationDir, "update", async () => {});
+}
+
+describe("an engine the registry lets go of", () => {
+  const closed = (engine: ConversationEngine): boolean => {
+    try {
+      engine.segments().segmentCount();
+      return false;
+    } catch {
+      return true;
+    }
+  };
+
+  test("is closed when its thread is archived, its seal opens or its character is removed, and the next engine takes over its handle on shore.db", async () => {
+    const { registry, dataDir, configDir, loaded } = await registryWith("aria", "bea");
+    const open = historyHandles(dataDir);
+    await registry.createThread("aria", "side");
+    const side = await registry.getOrCreate("aria", "side");
+    const withOne = open();
+    await registry.archiveThread("aria", "side");
+    await whenIdle(side);
+    await registry.createThread("aria", "second");
+    await registry.getOrCreate("aria", "second");
+    expect([closed(side), open()]).toEqual([true, withOne]);
+
+    await registry.sealThread("aria", { id: "letter", label: "A letter", unsealAt: Date.now() + 60_000 });
+    const sealed = await registry.sealedEngine("aria", "letter");
+    if (sealed === undefined) throw new Error("the sealed thread has no engine");
+    const withTwo = open();
+    expect((await registry.openDueSeals("aria", Date.now() + 120_000)).map((thread) => thread.id)).toEqual(["letter"]);
+    await whenIdle(sealed);
+    expect(await registry.getOrCreate("aria", "letter")).not.toBe(sealed);
+    expect([closed(sealed), open()]).toEqual([true, withTwo]);
+
+    const bea = await registry.getOrCreate("bea");
+    const withThree = open();
+    rmSync(join(configDir, "characters", "bea"), { recursive: true });
+    expect((await registry.reloadRuntimeState(loaded)).droppedEngines).toBe(1);
+    await whenIdle(bea);
+    await registry.createThread("aria", "third");
+    await registry.getOrCreate("aria", "third");
+    expect([closed(bea), open()]).toEqual([true, withThree]);
+  });
+
+  test("keeps working until whatever is using its conversation is done, and a reload afterwards opens nothing", async () => {
+    const { registry } = await registryWith("aria");
+    await registry.createThread("aria", "side");
+    const side = await registry.getOrCreate("aria", "side");
+    await withConversation(side.conversationDir, "turn", async () => {
+      await registry.archiveThread("aria", "side");
+      await Bun.sleep(20);
+      expect(closed(side)).toBe(false);
+    });
+    await whenIdle(side);
+    expect(closed(side)).toBe(true);
+    await refreshConversation(side.conversationDir);
+    expect(closed(side)).toBe(true);
+  });
+});
+
+describe("reloading", () => {
+  test("an engine moves its revision on, and opens shore.db afresh if it has gone", async () => {
+    const { registry, dataDir } = await registryWith("aria");
+    await registry.createThread("aria", "side");
+    const side = await registry.getOrCreate("aria", "side");
+    const revision = side.currentRevision();
+    const db = join(dataDir, HISTORY_DB_FILE);
+    for (const suffix of ["", "-wal", "-shm"]) rmSync(`${db}${suffix}`, { force: true });
+    await side.reload();
+    const store = HistoryStore.open(db);
+    try {
+      store.putSegment("aria/side", 0, { file: "0001.jsonl", compacted_at: NOW }, []);
+    } finally {
+      store.close();
+    }
+    expect([side.currentRevision(), side.segments().segmentCount()]).toEqual([revision + 1, 1]);
+  });
+
+  test("the runtime state takes the new config, forgets each character's own config and a removed character's threads, and says whether the characters changed", async () => {
+    const { registry, configDir, loaded } = await registryWith("aria", "bea");
+    await registry.createThread("aria", "side");
+    await registry.createThread("bea", "side");
+    const own = join(configDir, "characters", "aria", "config.toml");
+    writeFileSync(own, '[chat]\ndisplay_name = "Mara"\n');
+    expect(registry.effectiveConfig("aria").app.chat.display_name).toBe("Mara");
+    writeFileSync(own, '[chat]\ndisplay_name = "Pip"\n');
+    const next = { ...loaded };
+    expect(await registry.reloadRuntimeState(next)).toEqual({ availableBefore: 2, availableAfter: 2, characterDiscoveryChanged: false, droppedEngines: 0 });
+    expect(registry.globalConfig()).toBe(next);
+    expect(registry.effectiveConfig("aria").app.chat.display_name).toBe("Pip");
+
+    rmSync(join(configDir, "characters", "bea"), { recursive: true });
+    expect(await registry.reloadRuntimeState(next)).toEqual({ availableBefore: 2, availableAfter: 1, characterDiscoveryChanged: true, droppedEngines: 0 });
+    expect(registry.listThreads("aria").map((thread) => thread.id)).toContain("side");
+    expect(registry.listThreads("bea")).toEqual([]);
   });
 });
 

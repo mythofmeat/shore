@@ -246,7 +246,7 @@ export class CharacterRegistry {
     return await this.#withThreadIndex(name, async () => {
       const { opened, index } = await openDueSeals(this.#dataDir, name, now);
       if (index !== undefined) this.#remember(name, index);
-      for (const sealed of opened) this.#engines.delete(engineKey(name, sealed.id));
+      for (const sealed of opened) this.#drop(engineKey(name, sealed.id));
       return opened;
     });
   }
@@ -257,6 +257,12 @@ export class CharacterRegistry {
     const loading = this.#engines.get(key) ?? this.#load(name, thread, false);
     this.#engines.set(key, loading);
     return await loading;
+  }
+
+  #drop(key: string): void {
+    const loading = this.#engines.get(key);
+    this.#engines.delete(key);
+    void loading?.then(async (engine) => { await engine.closeWhenIdle(); }, () => {});
   }
 
   async close(): Promise<void> {
@@ -316,7 +322,7 @@ export class CharacterRegistry {
   ): Promise<ThreadsIndex> {
     return await this.#withThreadIndex(name, async () => {
       const index = await archiveThread(this.#dataDir, name, id, options);
-      this.#engines.delete(engineKey(name, id));
+      this.#drop(engineKey(name, id));
       return this.#remember(name, index);
     }, signal);
   }
@@ -557,7 +563,7 @@ export class CharacterRegistry {
     let droppedEngines = 0;
     for (const key of Array.from(this.#engines.keys())) {
       if (!afterSet.has(engineCharacter(key))) {
-        this.#engines.delete(key);
+        this.#drop(key);
         droppedEngines += 1;
       }
     }
