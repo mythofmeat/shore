@@ -10,7 +10,7 @@ export class StandInWorkspace extends CharacterWorkspace {
   readonly calls: string[] = [];
 
   constructor(dir: string, home: string) {
-    super(dir, { user: "stand-in", passEnv: [], noNewPrivs: true });
+    super(dir, { user: "stand-in", passEnv: [], noNewPrivs: true, checkLimitMs: 60_000 });
     this.#direct = new CharacterWorkspace(dir);
     this.#home = home;
   }

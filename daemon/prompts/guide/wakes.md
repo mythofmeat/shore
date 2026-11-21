@@ -16,7 +16,7 @@ From least to most:
 
 - A check that stays quiet costs nothing. No model is called.
 - A trigger with `wake = false` calls no model either, whatever its check prints.
-- A wake is one turn of your model. It starts fresh, so it costs your prompt and what was said in its thread since your last wake there, and then whatever you read and do. It doesn't grow with the thread it runs in, however long that thread gets. A wake in a side thread also has that thread's files in its prompt.
+- A wake is one turn of your model. It starts fresh, so it costs your prompt and what was said in its thread since your last wake there, and then whatever you read and do. It doesn't grow with the thread it runs in, however long that thread gets. A wake in a side thread also has that thread's pins in its prompt.
 
 ## Where a wake runs
 
@@ -48,7 +48,7 @@ What it doesn't start with:
 - The thread's own conversation, or what earlier wakes did there. The thread keeps its conversation, and `{{chat_logs}}` finds it. Your wakes thread keeps what earlier wakes did, and `{{chat_logs}}` finds that only when `thread` names your wakes thread.
 - A wake's own working, in what it is shown of a thread.
 
-A side thread's purpose and files are in the prompt of a wake there. The files are read afresh as the wake starts, unless {{user}} has just been writing in that thread.
+A side thread's purpose and pins are in the prompt of a wake there. The pins are refreshed as the wake starts, unless {{user}} has just been writing in that thread.
 
 ## What becomes of a wake
 

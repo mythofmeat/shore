@@ -13,7 +13,7 @@ import { ConfigDuration } from "../config/duration.ts";
 import type { LoadedConfig } from "../config/loader.ts";
 import { renderTemplate } from "../engine/prompt.ts";
 import { InvalidArgs } from "./errors.ts";
-import { byteSize, MAX_THREAD_FILE_BYTES, MAX_THREAD_FILES_BYTES } from "./thread_file_text.ts";
+import { byteSize, MAX_THREAD_PIN_BYTES, MAX_THREAD_PINS_BYTES } from "./thread_file_text.ts";
 
 const GUIDE_TOPICS = ["triggers", "wakes", "threads", "messages"] as const;
 
@@ -65,8 +65,8 @@ export function guideValues(config: LoadedConfig, userName: string): Map<string,
     ["wake_quiet", span(WAKE_QUIET_MS)],
     ["dormant_after_wakes", String(limits.max_idle_wakes)],
     ["dormant_after_idle", limits.idle_timeout.toString()],
-    ["thread_file_size", byteSize(MAX_THREAD_FILE_BYTES)],
-    ["thread_files_size", byteSize(MAX_THREAD_FILES_BYTES)],
+    ["thread_pin_size", byteSize(MAX_THREAD_PIN_BYTES)],
+    ["thread_pins_size", byteSize(MAX_THREAD_PINS_BYTES)],
     either(notifications.push_topic !== "", "push_on", "push_off"),
     ["push_every", notifications.push_every.toString()],
     ["push_chars", count(PUSH_CHARS)],

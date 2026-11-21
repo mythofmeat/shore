@@ -338,7 +338,7 @@ test("each [triggers] setting is described in the config schema, and the switch 
   const schema = configSchema({ instancesAt: () => [] });
   const described = schema.filter((entry) => entry.key.startsWith("triggers.")).map((entry) => [entry.key, (entry.description ?? "").split(" ").slice(0, 4).join(" ")]);
   expect(described).toEqual([
-    ["triggers.check_time_limit", "Longest a trigger's check"],
+    ["triggers.check_time_limit", "Longest a trigger's check,"],
     ["triggers.enabled", "Give the character time"],
     ["triggers.idle_timeout", "Time since the user's"],
     ["triggers.max_idle_wakes", "Wakes in a row"],

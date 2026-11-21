@@ -43,7 +43,7 @@ const OTHER = process.env["SHORE_ISOLATION_OTHER_USER"] ?? "";
 const READY = ROOT !== "" && USER !== "" && OTHER !== "" && canSwitchUser();
 const SECRET = join(ROOT, "config", "token");
 const PATCH_HELPER = join(import.meta.dir, "..", "dist", "shore-apply-patch");
-const OWN_USER: CharacterTools = { user: USER, passEnv: [], noNewPrivs: true };
+const OWN_USER: CharacterTools = { user: USER, passEnv: [], noNewPrivs: true, checkLimitMs: 60_000 };
 
 afterAll(() => {
   closeWorkspaceHelpers();
@@ -542,8 +542,8 @@ describe("tools.no_new_privs", () => {
       onWarn: () => {},
     });
     expect(config.app.tools.no_new_privs).toBe(true);
-    expect(characterToolsFor(config, "ada")).toEqual({ user: "ada", passEnv: [], noNewPrivs: false });
-    expect(characterToolsFor(config, "bea")).toEqual({ user: "bea", passEnv: [], noNewPrivs: true });
+    expect(characterToolsFor(config, "ada")).toEqual({ user: "ada", passEnv: [], noNewPrivs: false, checkLimitMs: 60_000 });
+    expect(characterToolsFor(config, "bea")).toEqual({ user: "bea", passEnv: [], noNewPrivs: true, checkLimitMs: 60_000 });
     expect(() => characterToolsFor(config, "cy")).toThrow("tools.no_new_privs: invalid type: string \"false\", expected boolean");
   });
 

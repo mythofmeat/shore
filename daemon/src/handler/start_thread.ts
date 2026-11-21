@@ -31,7 +31,7 @@ export async function startCharacterThread(starter: ThreadStarter, character: st
     compaction: true,
     created_by: "character",
     ...(request.purpose === undefined ? {} : { purpose: request.purpose }),
-    ...(request.files === undefined ? {} : { files: request.files }),
+    ...(request.pins === undefined ? {} : { pins: request.pins }),
   });
   if (request.folder !== undefined) {
     const folder = request.folder;

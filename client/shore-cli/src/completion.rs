@@ -1585,11 +1585,8 @@ mod tests {
             ("provider models ", &["openrouter", "anthropic"]),
             ("provider refresh ", &["openrouter", "anthropic"]),
             ("thread lock ", &["main", "story"]),
-            ("thread files story ", &["MEMORY.md", "notes/lighthouse.md"]),
-            (
-                "thread new x --file ",
-                &["MEMORY.md", "notes/lighthouse.md"],
-            ),
+            ("thread pins story ", &["MEMORY.md", "notes/lighthouse.md"]),
+            ("thread new x --pin ", &["MEMORY.md", "notes/lighthouse.md"]),
             ("thread unlock ", &["main", "story"]),
             ("thread compaction ", &["main", "story"]),
             ("thread compaction story ", &["on", "off"]),

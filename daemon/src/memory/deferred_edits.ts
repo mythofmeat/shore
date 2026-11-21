@@ -9,13 +9,14 @@ import {
   threadDirIn,
   characterWorkspaceDir,
 } from "../config/dirs.ts";
-import { homeThreadIn, readThreadsIndexIn, threadRecord } from "../engine/threads.ts";
+import { homeThreadIn, pinnedCommand, readThreadsIndexIn, threadRecord } from "../engine/threads.ts";
 
 import { asCharacterWorkspace, type CharacterWorkspace } from "../tools/character_workspace.ts";
 import {
   normalizePromptVisiblePath,
 } from "../tools/workspace_path";
-import { cutToBytes, MAX_THREAD_FILES_BYTES, byteSize, threadFilePromptText } from "../tools/thread_file_text.ts";
+import { cutToBytes, MAX_THREAD_PINS_BYTES, byteSize, threadFilePromptText } from "../tools/thread_file_text.ts";
+import { pinnedCommandText } from "../tools/pinned_command.ts";
 import { localRfc3339 } from "../util/time.ts";
 import defaultToolsGuidance from "../../prompts/engine/default_tools.md" with { type: "text" };
 
@@ -27,7 +28,7 @@ const MEMORY_DIR = "memory";
 
 const QUEUE_FILE = "deferred_edits.jsonl";
 
-const THREAD_FILES_DIR = "thread_files";
+const THREAD_PINS_DIR = "thread_pins";
 const stateFile = (thread: string, file: string): string => thread === MAIN_THREAD ? file : `threads/${thread}/${file}`;
 export const memoryIndexPath = (
   configDir: string,
@@ -50,6 +51,13 @@ async function workspaceFile(workspace: CharacterWorkspace, name: string): Promi
 async function threadFileContent(workspace: CharacterWorkspace, name: string): Promise<string | undefined> {
   const bytes = await workspaceBytes(workspace, name).catch(() => undefined);
   return bytes === undefined ? undefined : threadFilePromptText(name, bytes);
+}
+
+async function pinContent(characterDataDir: string, workspace: CharacterWorkspace, pin: string): Promise<string | undefined> {
+  const command = pinnedCommand(pin);
+  return command === undefined
+    ? await threadFileContent(workspace, pin)
+    : await pinnedCommandText(workspace, characterScope(characterDataDir).character, command);
 }
 
 async function effectiveContent(workspace: CharacterWorkspace, name: string): Promise<string | undefined> {
@@ -172,10 +180,10 @@ async function copyPromptVisibleFile(
 ): Promise<void> {
   const key = stateFile(thread, `active_prompt/${path}`);
   if (seedOnly && readCharacterState(characterDataDir, key) !== undefined) return;
-  const workspacePath = workspacePathOf(path);
-  const content = workspacePath === path
+  const pin = pinOf(path);
+  const content = pin === undefined
     ? await workspaceFile(workspace, path)
-    : await threadFileContent(workspace, workspacePath);
+    : await pinContent(characterDataDir, workspace, pin);
   if (content !== undefined) writeCharacterState(characterDataDir, key, content);
   else deleteCharacterState(characterDataDir, key);
 }
@@ -188,12 +196,12 @@ export async function ensureCharacterWorkspace(workspace: CharacterWorkspace): P
 
 async function snapshotFiles(characterDataDir: string, thread: string): Promise<string[]> {
   const index = await readThreadsIndexIn(characterDataDir);
-  const files = index === undefined ? [] : threadRecord(index, thread)?.files ?? [];
-  return [...PROTECTED_PATHS, MEMORY_INDEX_FILE, ...files.map((file) => `${THREAD_FILES_DIR}/${file}`)];
+  const pins = index === undefined ? [] : threadRecord(index, thread)?.pins ?? [];
+  return [...PROTECTED_PATHS, MEMORY_INDEX_FILE, ...pins.map((pin) => `${THREAD_PINS_DIR}/${pin}`)];
 }
 
-function workspacePathOf(snapshotPath: string): string {
-  return snapshotPath.startsWith(`${THREAD_FILES_DIR}/`) ? snapshotPath.slice(THREAD_FILES_DIR.length + 1) : snapshotPath;
+function pinOf(snapshotPath: string): string | undefined {
+  return snapshotPath.startsWith(`${THREAD_PINS_DIR}/`) ? snapshotPath.slice(THREAD_PINS_DIR.length + 1) : undefined;
 }
 
 export async function ensureActivePromptSnapshot(
@@ -202,11 +210,8 @@ export async function ensureActivePromptSnapshot(
   thread = MAIN_THREAD,
 ): Promise<void> {
   await ensureCharacterWorkspace(workspace);
-
-  for (const path of await snapshotFiles(characterDataDir, thread)) {
-    await copyPromptVisibleFile(characterDataDir, workspace, path, true, thread);
-  }
-
+  const paths = await snapshotFiles(characterDataDir, thread);
+  await Promise.all(paths.map(async (path) => { await copyPromptVisibleFile(characterDataDir, workspace, path, true, thread); }));
   writeCharacterState(characterDataDir, stateFile(thread, "active_prompt/.snapshot"), "1");
 }
 
@@ -217,43 +222,41 @@ export async function refreshActivePromptSnapshot(
 ): Promise<void> {
   await ensureCharacterWorkspace(workspace);
   writeCharacterState(characterDataDir, stateFile(thread, "active_prompt/.snapshot"), "1");
-  for (const path of await snapshotFiles(characterDataDir, thread)) {
-    await copyPromptVisibleFile(characterDataDir, workspace, path, false, thread);
-  }
+  const paths = await snapshotFiles(characterDataDir, thread);
+  await Promise.all(paths.map(async (path) => { await copyPromptVisibleFile(characterDataDir, workspace, path, false, thread); }));
 }
 
-export interface ThreadFile {
-  path: string;
+export interface ThreadPin {
+  pin: string;
   content: string | undefined;
 }
 
-export async function loadThreadFiles(
+export async function loadThreadPins(
   characterDataDir: string,
   workspace: CharacterWorkspace,
   thread: string,
-  files: readonly string[],
-): Promise<ThreadFile[]> {
+  pins: readonly string[],
+): Promise<ThreadPin[]> {
   const snapshot = await activePromptSnapshotExists(characterDataDir, thread);
-  const loaded: ThreadFile[] = [];
-  let room = MAX_THREAD_FILES_BYTES;
-  for (const path of files) {
-    const content = snapshot
-      ? readCharacterState(characterDataDir, stateFile(thread, `active_prompt/${THREAD_FILES_DIR}/${path}`))
-      : await threadFileContent(workspace, path);
-    const fitted = content === undefined ? undefined : fitThreadFile(path, content, room);
+  const contents = await Promise.all(pins.map(async (pin) => snapshot
+    ? readCharacterState(characterDataDir, stateFile(thread, `active_prompt/${THREAD_PINS_DIR}/${pin}`))
+    : await pinContent(characterDataDir, workspace, pin)));
+  let room = MAX_THREAD_PINS_BYTES;
+  return pins.map((pin, at) => {
+    const content = contents[at];
+    const fitted = content === undefined ? undefined : fitThreadPin(pin, content, room);
     room = fitted === content ? room - Buffer.byteLength(content ?? "", "utf8") : 0;
-    loaded.push({ path, content: fitted });
-  }
-  return loaded;
+    return { pin, content: fitted };
+  });
 }
 
-function fitThreadFile(path: string, content: string, room: number): string {
+function fitThreadPin(pin: string, content: string, room: number): string {
   if (Buffer.byteLength(content, "utf8") <= room) return content;
-  const together = `a thread's files can be at most ${byteSize(MAX_THREAD_FILES_BYTES)} together`;
+  const together = `a thread's pins can be at most ${byteSize(MAX_THREAD_PINS_BYTES)} together`;
   const head = cutToBytes(content, room).trimEnd();
-  return head === ""
-    ? `(Left out: ${together}. \`read\` ${path} to see it.)`
-    : `${head}\n\n[Cut: ${together}; \`read\` ${path} for the rest.]`;
+  const file = pinnedCommand(pin) === undefined;
+  if (head === "") return file ? `(Left out: ${together}. \`read\` ${pin} to see it.)` : `(Left out: ${together}.)`;
+  return file ? `${head}\n\n[Cut: ${together}; \`read\` ${pin} for the rest.]` : `${head}\n\n[Cut: ${together}.]`;
 }
 
 export async function forkPromptState(

@@ -21,12 +21,14 @@ The action `start` makes one, and switching to it is {{user}}'s call: you stay w
 
 - `name` is its id: letters, digits, dot, dash or underscore, starting with a letter or digit, at most 64 characters. `label` is the name {{user}}'s thread list shows.
 - `purpose` is a line or two on what the thread is for. You are shown it whenever you are in that thread.
-- `files` are workspace files kept in the thread's prompt, given as paths or as `[[links]]` the way `{{read}}` takes them. A folder link like `[[lighthouse/]]` means its `INDEX.md`. Each must be text of at most {{thread_file_size}}, and they may come to {{thread_files_size}} together. If any can't be found or doesn't fit, the thread isn't started, and the error names each one.
-- The files are shown as they were when you last arrived. A change to one shows up in that thread after a long pause there, or after the thread compacts, so that its prompt doesn't change in the middle of a conversation. A wake there reads them afresh, unless {{user}} has just been writing in the thread.
+- `pins` are what is kept in the thread's prompt: workspace files, and the output of commands.
+- A pinned file is given as a path or as a `[[link]]` the way `{{read}}` takes it. A folder link like `[[lighthouse/]]` means its `INDEX.md`. Each file must be text of at most {{thread_pin_size}}, and the files may come to {{thread_pins_size}} together. If any can't be found or doesn't fit, the thread isn't started, and the error names each one.
+- A pin that starts with `!` is a shell command, such as `!git -C notes log --oneline -10`. It runs in your workspace the way a `bash` call does, and what it prints is kept in its place, up to {{thread_pin_size}}. One still running after {{check_time_limit}} is stopped, and the prompt says so. You can pin a command only if you have the `bash` tool.
+- Pins are shown as they were when you last arrived. A file is read again, and a command run again, after a long pause in that thread or after the thread compacts, so that its prompt doesn't change in the middle of a conversation. A wake there refreshes them, unless {{user}} has just been writing in the thread.
 - `opening` is your first message there, so {{user}} finds something when they switch to it.
 - `folder` puts the thread in a folder of {{user}}'s thread list, which is made if there isn't one by that name.
 
-The action `edit` changes a side thread's label, purpose or files, whoever started it. Give only what should change. An empty `label` or `purpose` clears it, and `files` replaces the whole list. If any file can't be found or doesn't fit, nothing changes, the label and purpose included. It is refused for your home thread and for a thread {{user}} has locked, which `list` marks.
+The action `edit` changes a side thread's label, purpose or pins, whoever started it. Give only what should change. An empty `label` or `purpose` clears it, and `pins` replaces the whole list. If any pinned file can't be found or doesn't fit, nothing changes, the label and purpose included. It is refused for your home thread and for a thread {{user}} has locked, which `list` marks.
 
 A side thread has no time of its own until you give it some: nothing wakes you in it unasked. A trigger with `thread` set to the thread's id gives it regular time, at the hours or the interval you choose, and `{{wake_in_thread}}` takes you there once. The `triggers` topic has an example.
 

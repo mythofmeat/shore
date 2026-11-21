@@ -21,7 +21,7 @@ import { defineOperation, discoverOperations, type OperationPresentation, type O
 import type { CommandDeps, CommandSession } from "./dispatch.ts";
 import { internalError, invalidRequest } from "./errors.ts";
 import { characterInfo, createCharacterAs, listCharacters, switchCharacter } from "./navigation.ts";
-import { archiveThread, forkThread, listThreads, markRead, newThread, switchThread, threadCompaction, threadFiles, threadFolderCreate, threadFolderDelete, threadFolderMove, threadFolderRename, threadFolderSort, threadHome, threadLabel, threadLock, threadModel, threadMove, threadPurpose, threadSort } from "./threads.ts";
+import { archiveThread, forkThread, listThreads, markRead, newThread, switchThread, threadCompaction, threadFolderCreate, threadFolderDelete, threadFolderMove, threadFolderRename, threadFolderSort, threadHome, threadLabel, threadLock, threadModel, threadMove, threadPins, threadPurpose, threadSort } from "./threads.ts";
 import { archiveWithSignal, threadContext, threadListingContext } from "./thread_context.ts";
 import { alt, deleteMessages, edit, get, historyPage, injectSystem, listAlternatives, log } from "./conversation.ts";
 import { listMarks, mark, unmark, type MarkContext } from "./marks.ts";
@@ -433,7 +433,7 @@ export const commandOperations: OperationRegistry<CommandOperationContext> = {
     fields: {
       name: { label: "New thread ID" }, label: { label: "Label" },
       purpose: { label: "Purpose", multiline: true, hint: "What the thread is for; the character sees it in this thread" },
-      files: { label: "Files in the prompt", hint: "Workspace paths or [[links]] kept in this thread's prompt" },
+      pins: { label: "Pinned in the prompt", hint: "Workspace paths, [[links]] or !commands kept in this thread's prompt" },
       model: { label: "Chat model", choices: "models" }, compaction: { label: "Enable scheduled compaction" },
     },
   }, async (context, args) => newThread(await threadListingContext(context.deps, engineOf(context), context.session), args)),
@@ -469,13 +469,13 @@ export const commandOperations: OperationRegistry<CommandOperationContext> = {
     ...threadPresentation, label: "Set thread purpose", effects: ["history_write"],
     fields: { name: threadName, purpose: { label: "Purpose", multiline: true, hint: "Leave empty to clear" } },
   }, async (context, args) => threadPurpose(await threadListingContext(context.deps, engineOf(context), context.session), args)),
-  thread_files: register("thread_files", {
-    ...threadPresentation, label: "Set thread files", effects: ["history_write"],
-    fields: { name: threadName, files: { label: "Files in the prompt", hint: "Workspace paths or [[links]]; leave empty to clear" } },
-  }, async (context, args) => threadFiles(await threadListingContext(context.deps, engineOf(context), context.session), args)),
+  thread_pins: register("thread_pins", {
+    ...threadPresentation, label: "Set thread pins", effects: ["history_write"],
+    fields: { name: threadName, pins: { label: "Pinned in the prompt", hint: "Workspace paths, [[links]] or !commands; leave empty to clear" } },
+  }, async (context, args) => threadPins(await threadListingContext(context.deps, engineOf(context), context.session), args)),
   thread_lock: register("thread_lock", {
     ...threadPresentation, label: "Lock thread", effects: ["history_write"],
-    fields: { name: threadName, locked: { label: "Locked", hint: "Only you change a locked thread's label, purpose and files; the character can't" } },
+    fields: { name: threadName, locked: { label: "Locked", hint: "Only you change a locked thread's label, purpose and pins; the character can't" } },
   }, async (context, args) => threadLock(await threadListingContext(context.deps, engineOf(context), context.session), args)),
   thread_compaction: register("thread_compaction", {
     ...threadPresentation, label: "Set whether a thread compacts", effects: ["history_write"],
@@ -552,7 +552,7 @@ export function runRegisteredOperation<N extends OperationName>(
 }
 
 const THREAD_CHANGES: ReadonlySet<string> = new Set([
-  "create_thread", "fork_thread", "thread_home", "thread_label", "thread_purpose", "thread_files", "thread_lock", "thread_compaction", "thread_model",
+  "create_thread", "fork_thread", "thread_home", "thread_label", "thread_purpose", "thread_pins", "thread_lock", "thread_compaction", "thread_model",
   "thread_move", "thread_sort", "thread_folder_create", "thread_folder_rename", "thread_folder_delete", "thread_folder_move", "thread_folder_sort",
 ]);
 

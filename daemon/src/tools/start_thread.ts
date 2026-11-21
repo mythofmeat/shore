@@ -6,7 +6,7 @@ export interface StartThreadRequest {
   name: string;
   label: string;
   purpose?: string;
-  files?: string[];
+  pins?: string[];
   opening?: string;
   folder?: string;
 }
@@ -28,20 +28,20 @@ export function startThreadRequest(input: Record<string, unknown>): StartThreadR
   }
   const label = text(input, "label");
   if (label === undefined) throw new InvalidArgs("label is required");
-  const files = input["files"];
-  if (files !== undefined && (!Array.isArray(files) || !files.every((file) => typeof file === "string"))) {
-    throw new InvalidArgs("files must be a list of workspace paths");
+  const pins = input["pins"];
+  if (pins !== undefined && (!Array.isArray(pins) || !pins.every((pin) => typeof pin === "string"))) {
+    throw new InvalidArgs("pins must be a list of workspace paths and !commands");
   }
   const purpose = text(input, "purpose");
   const opening = text(input, "opening");
   const named = text(input, "folder");
   const folder = named === undefined ? undefined : cleanFolderName(named);
-  const paths = files?.map((file) => file.trim()).filter((file) => file !== "") ?? [];
+  const given = pins?.map((pin) => pin.trim()).filter((pin) => pin !== "") ?? [];
   return {
     name,
     label,
     ...(purpose === undefined ? {} : { purpose }),
-    ...(paths.length === 0 ? {} : { files: paths }),
+    ...(given.length === 0 ? {} : { pins: given }),
     ...(opening === undefined ? {} : { opening }),
     ...(folder === undefined ? {} : { folder }),
   };

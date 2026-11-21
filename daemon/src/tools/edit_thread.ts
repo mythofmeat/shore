@@ -13,13 +13,13 @@ function setting(input: Record<string, unknown>, field: string): string | null |
   return trimmed === "" ? null : trimmed;
 }
 
-function fileList(input: Record<string, unknown>): string[] | undefined {
-  const files = input["files"];
-  if (files === undefined || files === null) return undefined;
-  if (!Array.isArray(files) || !files.every((file) => typeof file === "string")) {
-    throw new InvalidArgs("files must be a list of workspace paths");
+function pinList(input: Record<string, unknown>): string[] | undefined {
+  const pins = input["pins"];
+  if (pins === undefined || pins === null) return undefined;
+  if (!Array.isArray(pins) || !pins.every((pin) => typeof pin === "string")) {
+    throw new InvalidArgs("pins must be a list of workspace paths and !commands");
   }
-  return files.map((file) => file.trim()).filter((file) => file !== "");
+  return pins.map((pin) => pin.trim()).filter((pin) => pin !== "");
 }
 
 export function editThreadRequest(input: Record<string, unknown>): EditThreadRequest {
@@ -27,15 +27,15 @@ export function editThreadRequest(input: Record<string, unknown>): EditThreadReq
   if (name === "") throw new InvalidArgs("name is required: the id of the thread to change");
   const label = setting(input, "label");
   const purpose = setting(input, "purpose");
-  const files = fileList(input);
-  if (label === undefined && purpose === undefined && files === undefined) {
-    throw new InvalidArgs("give at least one of label, purpose or files to change");
+  const pins = pinList(input);
+  if (label === undefined && purpose === undefined && pins === undefined) {
+    throw new InvalidArgs("give at least one of label, purpose or pins to change");
   }
   return {
     name,
     ...(label === undefined ? {} : { label }),
     ...(purpose === undefined ? {} : { purpose }),
-    ...(files === undefined ? {} : { files }),
+    ...(pins === undefined ? {} : { pins }),
   };
 }
 
@@ -43,7 +43,7 @@ function changes(request: EditThreadRequest, record: ThreadRecord | undefined): 
   return [
     ...(request.label === undefined ? [] : [record?.label === undefined ? "label cleared" : `label "${record.label}"`]),
     ...(request.purpose === undefined ? [] : [record?.purpose === undefined ? "purpose cleared" : "purpose set"]),
-    ...(request.files === undefined ? [] : [record?.files === undefined ? "files cleared" : `files ${record.files.join(", ")}`]),
+    ...(request.pins === undefined ? [] : [record?.pins === undefined ? "pins cleared" : `pins ${record.pins.join(", ")}`]),
   ];
 }
 
@@ -61,7 +61,7 @@ export async function handleEditThread(
     if (!(e instanceof ThreadError)) throw e;
     if (e.kind === "locked") {
       throw new ToolIoError(
-        `Nothing changed: ${userName} locked the thread "${request.name}", so its label, purpose and files change only when ${userName} changes them.`,
+        `Nothing changed: ${userName} locked the thread "${request.name}", so its label, purpose and pins change only when ${userName} changes them.`,
       );
     }
     throw new ToolIoError(e.message);

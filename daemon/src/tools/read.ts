@@ -7,7 +7,7 @@ import { IMAGE_EXTENSIONS, imageMime, readImage, readVideoFrame } from "./read_i
 import { MEDIA_HEADER_BYTES, videoMime } from "./video.ts";
 import { expandMarkdownImages, type TextPage } from "./markdown_images.ts";
 import { readFolder } from "./read_folder.ts";
-import { byteSize, MAX_THREAD_FILE_BYTES, MAX_THREAD_FILES_BYTES, threadFileText } from "./thread_file_text.ts";
+import { byteSize, MAX_THREAD_PIN_BYTES, MAX_THREAD_PINS_BYTES, threadFileText } from "./thread_file_text.ts";
 import { linkedFile, namedFile, workspaceNames, type WorkspaceNames } from "./workspace_names.ts";
 import { WORKSPACE_LINK } from "./workspace_path.ts";
 import { defaultImagesConfig, imageSettingsFor, type ImagesConfig } from "../config/app.ts";
@@ -107,9 +107,9 @@ async function promptFile(value: string, workspaceDir: string, names: () => Prom
 async function promptFileBytes(value: string, path: string, shown: string): Promise<number> {
   const label = WORKSPACE_LINK.test(value) ? `${value} (${shown})` : shown;
   const { size } = await stat(path);
-  if (size > MAX_THREAD_FILE_BYTES) throw new Error(`${label} is ${byteSize(size)}; a thread file can be at most ${byteSize(MAX_THREAD_FILE_BYTES)}`);
+  if (size > MAX_THREAD_PIN_BYTES) throw new Error(`${label} is ${byteSize(size)}; a pinned file can be at most ${byteSize(MAX_THREAD_PIN_BYTES)}`);
   const read = threadFileText(path, await readFile(path));
-  if ("reason" in read) throw new Error(`${label} ${read.reason}; a thread file must be text`);
+  if ("reason" in read) throw new Error(`${label} ${read.reason}; a pinned file must be text`);
   return size;
 }
 
@@ -131,8 +131,8 @@ export async function locateWorkspaceFiles(files: readonly string[], workspaceDi
     }
   }
   const total = [...sizes.values()].reduce((sum, size) => sum + size, 0);
-  if (problems.length === 0 && total > MAX_THREAD_FILES_BYTES) {
-    problems.push(`together these files are ${byteSize(total)}; a thread's files can be at most ${byteSize(MAX_THREAD_FILES_BYTES)} together`);
+  if (problems.length === 0 && total > MAX_THREAD_PINS_BYTES) {
+    problems.push(`together these files are ${byteSize(total)}; a thread's pins can be at most ${byteSize(MAX_THREAD_PINS_BYTES)} together`);
   }
   return { paths, problems };
 }

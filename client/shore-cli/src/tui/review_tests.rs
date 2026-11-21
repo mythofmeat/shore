@@ -69,3 +69,25 @@ fn failed_sends_restore_images_even_after_the_cleared_draft_was_collected() {
         }
     }
 }
+
+#[test]
+fn setting_a_threads_pins_refreshes_the_thread_list() {
+    let mut app = App::default();
+    let _ = handle_server_message(
+        &mut app,
+        frame(json!({
+            "type": "command_output", "name": "thread_pins",
+            "data": { "character": "ada", "home": "main", "current": "main", "threads": [
+                { "id": "main", "created_at": "2026-11-21T00:00:00Z", "compaction": true, "home": true, "current": true },
+                { "id": "tale", "created_at": "2026-11-21T00:00:00Z", "compaction": false, "home": false, "current": false, "pins": ["!date"] },
+            ] },
+        })),
+    );
+    assert_eq!(
+        app.threads
+            .iter()
+            .map(|row| row.id.as_str())
+            .collect::<Vec<_>>(),
+        ["main", "tale"]
+    );
+}

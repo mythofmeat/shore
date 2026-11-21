@@ -1,9 +1,9 @@
 import { extname } from "node:path";
 import { IMAGE_EXTENSIONS, imageMime } from "./read_image.ts";
 
-export const MAX_THREAD_FILE_BYTES = 32 * 1024;
+export const MAX_THREAD_PIN_BYTES = 32 * 1024;
 
-export const MAX_THREAD_FILES_BYTES = 128 * 1024;
+export const MAX_THREAD_PINS_BYTES = 128 * 1024;
 
 export function byteSize(bytes: number): string {
   return bytes < 1024 * 1024 ? `${String(Math.ceil(bytes / 1024))} KB` : `${(bytes / 1024 / 1024).toFixed(1)} MB`;
@@ -29,7 +29,7 @@ export function cutToBytes(text: string, limit: number): string {
 
 export function threadFilePromptText(path: string, bytes: Uint8Array): string {
   const read = threadFileText(path, bytes);
-  if ("reason" in read) return `(${path} ${read.reason}, so it isn't shown. A thread file must be text.)`;
-  if (bytes.length <= MAX_THREAD_FILE_BYTES) return read.text;
-  return `${cutToBytes(read.text, MAX_THREAD_FILE_BYTES).trimEnd()}\n\n[Cut at ${byteSize(MAX_THREAD_FILE_BYTES)} of ${byteSize(bytes.length)}; \`read\` ${path} for the rest.]`;
+  if ("reason" in read) return `(${path} ${read.reason}, so it isn't shown. A pinned file must be text.)`;
+  if (bytes.length <= MAX_THREAD_PIN_BYTES) return read.text;
+  return `${cutToBytes(read.text, MAX_THREAD_PIN_BYTES).trimEnd()}\n\n[Cut at ${byteSize(MAX_THREAD_PIN_BYTES)} of ${byteSize(bytes.length)}; \`read\` ${path} for the rest.]`;
 }

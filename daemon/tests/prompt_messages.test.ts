@@ -186,3 +186,13 @@ test("a message that arrived while a wake was running elsewhere says so above wh
   expect(built[0]?.content).toBe(`${running}\n\nhello`);
   expect(built[0]?.content_blocks).toEqual([{ type: "text", text: running }, { type: "text", text: "hello" }]);
 });
+
+test("the system prompt has a block for each part that has something in it, with the memory index and the thread's pins last", () => {
+  const thread = { id: "story", home: "main", created_at: new Date(T0).toISOString(), started_by_you: false, pins: [{ pin: "notes.md", content: "Chapter three." }] };
+  const full = prompt([said("user", "hi", 0)], { system_prompt: "You are ada.", tools_guidance: "Use the tools.", character_definition: "Ada.", user_definition: "Eve.", memory_index: "- notes", thread }).system;
+  expect(full.map((block) => block.label)).toEqual(["system", "tools_guidance", "character", "user", "thread", "memory_index", "thread_pins"]);
+  expect(full.filter((block) => ["tools_guidance", "character", "user", "memory_index"].includes(block.label)).map((block) => block.content)).toEqual(["Use the tools.", "Ada.", "Eve.", "- notes"]);
+
+  const bare = prompt([said("user", "hi", 0)], { system_prompt: "You are ada.", tools_guidance: "", character_definition: "", user_definition: "", memory_index: "" }).system;
+  expect(bare.map((block) => block.label)).toEqual(["system"]);
+});

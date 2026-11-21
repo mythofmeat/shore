@@ -3139,12 +3139,12 @@
           "env": null
         },
         {
-          "id": "files",
+          "id": "pins",
           "short": null,
-          "long": "file",
+          "long": "pin",
           "aliases": [],
           "short_aliases": [],
-          "help": "Workspace file to keep in this thread's prompt, like a story's notes, as a path or a [[link]]; repeat for more",
+          "help": "Pin to keep in this thread's prompt: a workspace file, like a story's notes, as a path or a [[link]], or a shell command starting with !, whose output is kept instead; repeat for more",
           "long_help": null,
           "action": "Append",
           "required": false,
@@ -3429,8 +3429,8 @@
       ]
     },
     {
-      "path": "shore thread files",
-      "about": "Set the workspace files kept in a thread's prompt, next to MEMORY.md",
+      "path": "shore thread pins",
+      "about": "Set what is pinned to a thread's prompt, next to MEMORY.md: workspace files, and the output of shell commands",
       "long_about": null,
       "hidden": false,
       "aliases": [],
@@ -3457,12 +3457,12 @@
           "env": null
         },
         {
-          "id": "files",
+          "id": "pins",
           "short": null,
           "long": null,
           "aliases": [],
           "short_aliases": [],
-          "help": "Paths relative to the workspace root or [[links]], like [[notes]] or [[lighthouse/]]; omit all to clear the list",
+          "help": "Paths relative to the workspace root, [[links]] like [[notes]] or [[lighthouse/]], or shell commands starting with !, like '!git log --oneline -5'; omit all to clear the list",
           "long_help": null,
           "action": "Append",
           "required": false,
@@ -3522,7 +3522,7 @@
     },
     {
       "path": "shore thread lock",
-      "about": "Lock a thread's label, purpose and files, so only you change them. The character can still edit the files themselves",
+      "about": "Lock a thread's label, purpose and pins, so only you change them. The character can still edit the pinned files themselves",
       "long_about": null,
       "hidden": false,
       "aliases": [],
@@ -3594,7 +3594,7 @@
     },
     {
       "path": "shore thread unlock",
-      "about": "Unlock a thread, so the character can change its label, purpose and files again",
+      "about": "Unlock a thread, so the character can change its label, purpose and pins again",
       "long_about": null,
       "hidden": false,
       "aliases": [],

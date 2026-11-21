@@ -35,7 +35,7 @@ function described(
   const lines = [
     `${name}${marks.length === 0 ? "" : ` (${marks.join(", ")})`} · compaction ${record.compaction ? "on" : "off"}`,
     ...(record.purpose === undefined ? [] : [`  purpose: ${record.purpose}`]),
-    ...(record.files === undefined || record.files.length === 0 ? [] : [`  files: ${record.files.join(", ")}`]),
+    ...(record.pins === undefined || record.pins.length === 0 ? [] : [`  pins: ${record.pins.join(", ")}`]),
     `  started by ${record.created_by === "character" ? "you" : user} on ${started}`,
     Number.isNaN(lastMs)
       ? `  ${user} hasn't written here yet`

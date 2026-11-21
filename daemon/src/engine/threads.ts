@@ -1,4 +1,5 @@
 import { withConversation } from "./lifecycle.ts";
+import { required } from "../util/required.ts";
 import { threadFile, readDurable, writeDurable, deleteThreadState, durableLinesAfter, durableMark, durablePrefixUnchanged } from "../storage/files.ts";
 import type { StateMark } from "../storage/store.ts";
 import { existsSync } from "node:fs";
@@ -22,11 +23,11 @@ import { normalizePromptVisiblePath, normalizeWorkspacePath, pathComponents, WOR
 
 export const MAX_THREAD_ID_LENGTH = 64;
 
-export const MAX_THREAD_FILES = 20;
+export const MAX_THREAD_PINS = 20;
 
 const THREAD_ID = /^[A-Za-z0-9][A-Za-z0-9._-]*$/;
 
-export type ThreadErrorKind = "invalid_id" | "invalid_files" | "invalid_folder" | "invalid_seal" | "exists" | "not_found" | "is_home" | "is_wakes" | "is_pinned" | "locked";
+export type ThreadErrorKind = "invalid_id" | "invalid_pins" | "invalid_folder" | "invalid_seal" | "exists" | "not_found" | "is_home" | "is_wakes" | "is_pinned" | "locked";
 
 export class ThreadError extends Error {
   constructor(
@@ -63,7 +64,7 @@ export interface ThreadRecord {
   id: string;
   label?: string;
   purpose?: string;
-  files?: string[];
+  pins?: string[];
   created_at: string;
   created_by?: "character";
   chat_model?: string;
@@ -412,60 +413,87 @@ export async function ensureThreads(
 export interface NewThread {
   label?: string;
   purpose?: string;
-  files?: readonly string[];
+  pins?: readonly string[];
   chat_model?: string;
   compaction?: boolean;
   created_by?: "character";
 }
 
-function threadFilePath(raw: string): string {
+const COMMAND_PIN = "!";
+
+export function pinnedCommand(pin: string): string | undefined {
+  return pin.startsWith(COMMAND_PIN) ? pin.slice(COMMAND_PIN.length) : undefined;
+}
+
+function commandPin(raw: string): string {
+  const command = raw.slice(COMMAND_PIN.length).trim();
+  if (command === "") throw new ThreadError("invalid_pins", "a command pin has nothing after its !");
+  if (/[\r\n\0]/.test(command)) throw new ThreadError("invalid_pins", `the command pin ${JSON.stringify(raw)} must be a single line`);
+  return `${COMMAND_PIN}${command}`;
+}
+
+function filePin(raw: string): string {
   const parts = pathComponents(normalizeWorkspacePath(raw));
-  if (parts.length === 0) throw new ThreadError("invalid_files", "a thread file path is empty");
+  if (parts.length === 0) throw new ThreadError("invalid_pins", "a pinned file's path is empty");
   if (parts.includes("..")) {
-    throw new ThreadError("invalid_files", `thread file ${JSON.stringify(raw)} leaves the workspace`);
+    throw new ThreadError("invalid_pins", `the pinned file ${JSON.stringify(raw)} leaves the workspace`);
   }
   const path = parts.join("/");
+  if (path.startsWith(COMMAND_PIN)) {
+    throw new ThreadError("invalid_pins", `${path} can't be pinned, because a pin that starts with ${COMMAND_PIN} is a command`);
+  }
   if (normalizePromptVisiblePath(path) !== undefined) {
-    throw new ThreadError("invalid_files", `${path} is already in every thread's prompt`);
+    throw new ThreadError("invalid_pins", `${path} is already in every thread's prompt`);
   }
   return path;
 }
 
-export function threadFilePaths(files: readonly string[]): string[] {
-  const paths = [...new Set(files.map(threadFilePath))];
-  if (paths.length > MAX_THREAD_FILES) {
-    throw new ThreadError("invalid_files", `a thread can load at most ${String(MAX_THREAD_FILES)} files`);
+function threadPin(raw: string): string {
+  const trimmed = raw.trim();
+  return trimmed.startsWith(COMMAND_PIN) ? commandPin(trimmed) : filePin(raw);
+}
+
+export function threadPins(pins: readonly string[]): string[] {
+  const valid = [...new Set(pins.map(threadPin))];
+  if (valid.length > MAX_THREAD_PINS) {
+    throw new ThreadError("invalid_pins", `a thread can have at most ${String(MAX_THREAD_PINS)} pins`);
   }
-  return paths;
+  return valid;
+}
+
+export function refuseCommandPins(pins: readonly string[], kept: readonly string[]): void {
+  const added = pins.filter((pin) => pinnedCommand(pin) !== undefined && !kept.includes(pin));
+  if (added.length === 0) return;
+  throw new ThreadError("invalid_pins", `nothing changed, because a command pin runs in a shell and you have no bash tool: ${added.join(", ")}`);
 }
 
 export type LocateFiles = (files: string[]) => Promise<{ paths: string[]; problems: string[] }>;
 
-export async function resolveThreadFiles(files: readonly string[], locate: LocateFiles): Promise<string[]> {
+export async function resolveThreadPins(pins: readonly string[], locate: LocateFiles): Promise<string[]> {
   const requested: string[] = [];
   const problems: string[] = [];
-  for (const file of files) {
-    const trimmed = file.trim();
-    if (WORKSPACE_LINK.test(trimmed)) {
+  for (const pin of pins) {
+    const trimmed = pin.trim();
+    if (trimmed.startsWith(COMMAND_PIN) || WORKSPACE_LINK.test(trimmed)) {
       requested.push(trimmed);
       continue;
     }
     try {
-      requested.push(threadFilePath(file));
+      requested.push(filePin(pin));
     } catch (e) {
-      if (!(e instanceof ThreadError)) throw e;
-      problems.push(e.message);
+      problems.push((e as Error).message);
     }
   }
-  const located = requested.length === 0 ? { paths: [], problems: [] } : await locate(requested);
+  const located = await locate(requested.filter((pin) => !pin.startsWith(COMMAND_PIN)));
   problems.push(...located.problems);
   if (problems.length > 0) {
     throw new ThreadError(
-      "invalid_files",
-      `nothing changed, because ${problems.length === 1 ? "a thread file" : "these thread files"} can't be loaded:\n${problems.map((problem) => `- ${problem}`).join("\n")}`,
+      "invalid_pins",
+      `nothing changed, because ${problems.length === 1 ? "a pin" : "these pins"} can't be loaded:\n${problems.map((problem) => `- ${problem}`).join("\n")}`,
     );
   }
-  return threadFilePaths(located.paths);
+  let next = 0;
+  return threadPins(requested.map((pin) => pin.startsWith(COMMAND_PIN) ? pin : filePin(required(located.paths[next++]))));
 }
 
 export async function createThread(
@@ -480,7 +508,7 @@ export async function createThread(
   if (threadRecord(index, id) !== undefined) {
     throw new ThreadError("exists", `thread ${JSON.stringify(id)} already exists for ${character}`);
   }
-  const files = options.files === undefined ? [] : threadFilePaths(options.files);
+  const pins = options.pins === undefined ? [] : threadPins(options.pins);
   await mkdir(threadDataDir(data, character, id), { recursive: true });
   const record: ThreadRecord = {
     id,
@@ -489,7 +517,7 @@ export async function createThread(
     compaction: options.compaction ?? false,
     ...(options.label === undefined ? {} : { label: options.label }),
     ...(options.purpose === undefined ? {} : { purpose: options.purpose }),
-    ...(files.length === 0 ? {} : { files }),
+    ...(pins.length === 0 ? {} : { pins }),
     ...(options.chat_model === undefined ? {} : { chat_model: options.chat_model }),
   };
   const next: ThreadsIndex = { ...index, threads: [...index.threads, record] };
@@ -543,7 +571,7 @@ export async function setHomeThread(
   return next;
 }
 
-type ThreadSetting = "label" | "purpose" | "files" | "chat_model" | "locked";
+type ThreadSetting = "label" | "purpose" | "pins" | "chat_model" | "locked";
 
 function withSetting<K extends ThreadSetting>(record: ThreadRecord, key: K, value: ThreadRecord[K] | undefined): ThreadRecord {
   const { [key]: _dropped, ...rest } = record;
@@ -584,15 +612,15 @@ export async function setThreadPurpose(
   return await setThreadField(data, character, id, "purpose", purpose, now);
 }
 
-export async function setThreadFiles(
+export async function setThreadPins(
   data: string,
   character: string,
   id: string,
-  files: readonly string[],
+  pins: readonly string[],
   now: string,
 ): Promise<ThreadsIndex> {
-  const paths = threadFilePaths(files);
-  return await setThreadField(data, character, id, "files", paths.length === 0 ? undefined : paths, now);
+  const valid = threadPins(pins);
+  return await setThreadField(data, character, id, "pins", valid.length === 0 ? undefined : valid, now);
 }
 
 export async function setThreadModel(
@@ -635,7 +663,7 @@ export async function setThreadCompaction(
 export interface ThreadEdit {
   label?: string | null;
   purpose?: string | null;
-  files?: readonly string[];
+  pins?: readonly string[];
 }
 
 export function requireEditableByCharacter(index: ThreadsIndex, character: string, id: string): ThreadRecord {
@@ -643,11 +671,11 @@ export function requireEditableByCharacter(index: ThreadsIndex, character: strin
   if (record.id === homeThread(index)) {
     throw new ThreadError(
       "is_home",
-      `thread ${JSON.stringify(id)} is the home thread for ${character}, and the home thread's prompt shows no purpose or files`,
+      `thread ${JSON.stringify(id)} is the home thread for ${character}, and the home thread's prompt shows no purpose or pins`,
     );
   }
   if (record.locked === true) {
-    throw new ThreadError("locked", `thread ${JSON.stringify(id)} is locked, so only the user changes its label, purpose and files`);
+    throw new ThreadError("locked", `thread ${JSON.stringify(id)} is locked, so only the user changes its label, purpose and pins`);
   }
   return record;
 }
@@ -658,14 +686,16 @@ export async function editThreadAsCharacter(
   id: string,
   edit: ThreadEdit,
   now: string,
+  runsCommands: boolean,
 ): Promise<ThreadsIndex> {
   const index = await ensureThreads(data, character, now);
   let record = requireEditableByCharacter(index, character, id);
   if (edit.label !== undefined) record = withSetting(record, "label", edit.label ?? undefined);
   if (edit.purpose !== undefined) record = withSetting(record, "purpose", edit.purpose ?? undefined);
-  if (edit.files !== undefined) {
-    const files = threadFilePaths(edit.files);
-    record = withSetting(record, "files", files.length === 0 ? undefined : files);
+  if (edit.pins !== undefined) {
+    const pins = threadPins(edit.pins);
+    if (!runsCommands) refuseCommandPins(pins, record.pins ?? []);
+    record = withSetting(record, "pins", pins.length === 0 ? undefined : pins);
   }
   const next = replaceThread(index, record);
   await writeThreadsIndex(data, character, next);

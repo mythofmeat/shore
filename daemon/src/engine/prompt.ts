@@ -11,6 +11,7 @@ import { base64ImageDimensions, fileImageDimensions } from "../llm/image_dimensi
 import { HIGH_RESOLUTION_IMAGE_TIER, imageTokens, sentImageTokens, type ImageTier } from "../llm/image_tokens.ts";
 import { findModelCopy } from "../llm/images.ts";
 import { isToolResultOnly } from "./message_store.ts";
+import { pinnedCommand } from "./threads.ts";
 import { DEFAULT_MAX_CONTEXT_TOKENS, DEFAULT_MAX_OUTPUT_TOKENS } from "../config/model_defaults.ts";
 
 export const EARLIER_CONVERSATION_NOT_SHOWN = "[earlier conversation not shown]";
@@ -34,8 +35,8 @@ const BUILTIN_SYSTEM_TEMPLATE = builtinSystemTemplate.trimEnd();
 
 const THREAD_TEMPLATE = threadTemplate.trimEnd();
 
-const THREAD_FILES_HEADER =
-  "Files kept in this thread's prompt. Changes to them show up here after a long pause in this thread, or after it compacts.";
+const THREAD_PINS_HEADER =
+  "Files and command output pinned to this thread's prompt. Changes show up here after a long pause in this thread, or after it compacts; commands run again then.";
 
 export type UserTimestampMode = "never" | "always" | "auto";
 
@@ -66,7 +67,7 @@ export interface ThreadPrompt {
   started_by_you: boolean;
   label?: string | undefined;
   purpose?: string | undefined;
-  files: readonly { path: string; content: string | undefined }[];
+  pins: readonly { pin: string; content: string | undefined }[];
 }
 
 export interface PromptParams {
@@ -130,10 +131,15 @@ function threadBlock(thread: ThreadPrompt, vars: ReadonlyMap<string, string>, ti
   ])).trim();
 }
 
-function threadFilesBlock(files: ThreadPrompt["files"]): string {
-  const shown = files.map(({ path, content }) =>
-    `## ${path}\n\n${content === undefined || content.trim() === "" ? "(This file is empty or isn't in the workspace.)" : content.trimEnd()}`);
-  return [THREAD_FILES_HEADER, ...shown].join("\n\n");
+function pinSection(pin: string, content: string | undefined): string {
+  const command = pinnedCommand(pin);
+  const shown = content?.trimEnd() ?? "";
+  if (command !== undefined) return `## $ ${command}\n\n${shown === "" ? "(This command hasn't run yet.)" : shown}`;
+  return `## ${pin}\n\n${shown === "" ? "(This file is empty or isn't in the workspace.)" : shown}`;
+}
+
+function threadPinsBlock(pins: ThreadPrompt["pins"]): string {
+  return [THREAD_PINS_HEADER, ...pins.map(({ pin, content }) => pinSection(pin, content))].join("\n\n");
 }
 
 function buildSystemBlocks(params: PromptParams, timeZone: string): SystemBlock[] {
@@ -176,8 +182,8 @@ function buildSystemBlocks(params: PromptParams, timeZone: string): SystemBlock[
     system.push({ label: "memory_index", content: index });
   }
 
-  if (params.thread !== undefined && params.thread.files.length > 0) {
-    system.push({ label: "thread_files", content: threadFilesBlock(params.thread.files) });
+  if (params.thread !== undefined && params.thread.pins.length > 0) {
+    system.push({ label: "thread_pins", content: threadPinsBlock(params.thread.pins) });
   }
 
   return withDynamicBlocksLast(system);
