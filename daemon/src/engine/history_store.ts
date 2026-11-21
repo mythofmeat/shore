@@ -443,7 +443,7 @@ export class HistoryStore {
     const query = this.#db.query(
       `SELECT s.idx, s.file, s.compacted_at, s.compaction_id,
               s.memory_before, s.memory_after, s.excluded, s.label, s.note,
-              (SELECT COUNT(*) FROM history_messages m
+              (SELECT COUNT(*) FROM history_messages m INDEXED BY idx_history_messages_slot
                WHERE m.character = s.character AND m.segment = s.idx AND m.is_user_turn = 1) AS turn_count,
               (SELECT m.timestamp FROM history_messages m
                WHERE m.character = s.character AND m.segment = s.idx

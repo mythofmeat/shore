@@ -139,6 +139,10 @@ function compareKeys(a: string, b: string): number {
 
 const ATTACHMENT_STAMP = /^\d{8}_\d{6}_/;
 
+async function letOthersRun(): Promise<void> {
+  await new Promise<void>((resolve) => { setImmediate(resolve); });
+}
+
 function shownPictures(message: Message): { label: string; path: string }[] {
   if (message.role !== "user" || isToolResultOnly(message)) return [];
   return message.images.flatMap((image) => image.embed !== undefined ? [] : [{
@@ -181,12 +185,13 @@ function messageKey(message: Message, text: string): string {
 async function readCorpus(ref: CharacterHistoryRef): Promise<Item[]> {
   const reader = await CharacterHistoryReader.load(ref);
   try {
-    const entries = reader.entries().sort((a, b) => compareKeys(a.archiveKey, b.archiveKey) || a.idx - b.idx);
+    const entries = reader.entries();
     const firstSeen = new Map<string, Item>();
     const seenInThread = new Set<string>();
     const cursors = new Map<string, ThreadCursor>();
     const items: Item[] = [];
     for (const entry of entries) {
+      await letOthersRun();
       const thread = threadOf(ref.character, entry.archiveKey);
       const cursor = cursors.get(thread) ?? { seq: 0, run: 0, ts: 0, broken: false };
       cursors.set(thread, cursor);
@@ -270,8 +275,8 @@ function builtFingerprint(path: string): string | undefined {
   }
 }
 
-function writeIndex(path: string, items: Item[], fingerprint: string): void {
-  items.sort((a, b) => a.ts - b.ts || compareKeys(a.thread, b.thread) || a.seq - b.seq);
+async function writeIndex(path: string, items: Item[], fingerprint: string): Promise<void> {
+  items.sort((a, b) => a.ts - b.ts || compareKeys(a.thread, b.thread));
   items.forEach((item, i) => { item.id = i + 1; });
   mkdirSync(dirname(path), { recursive: true });
   const temp = `${path}.${String(process.pid)}.${crypto.randomUUID()}.tmp`;
@@ -283,19 +288,20 @@ function writeIndex(path: string, items: Item[], fingerprint: string): void {
         `INSERT INTO messages (id, msg_id, thread, seq, run, ts, speaker, wake, model, also_in, copy_of, key, pictures, text)
          VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14)`,
       );
+      const searchable = db.query("INSERT INTO messages_fts (rowid, text) VALUES (?1, ?2)");
+      db.run("BEGIN");
+      for (const item of items) {
+        await letOthersRun();
+        put.run(
+          item.id, item.msgId, item.thread, item.seq, item.run, item.ts, item.speaker, item.wake ? 1 : 0,
+          item.model, item.alsoIn.length === 0 ? null : JSON.stringify(item.alsoIn), item.copyOf?.id ?? null, item.key, item.pictures, item.text,
+        );
+        searchable.run(item.id, item.text);
+      }
       const meta = db.query("INSERT INTO metadata (key, value) VALUES (?1, ?2)");
-      db.transaction(() => {
-        for (const item of items) {
-          put.run(
-            item.id, item.msgId, item.thread, item.seq, item.run, item.ts, item.speaker, item.wake ? 1 : 0,
-            item.model, item.alsoIn.length === 0 ? null : JSON.stringify(item.alsoIn), item.copyOf?.id ?? null, item.key, item.pictures, item.text,
-          );
-        }
-        db.run("INSERT INTO messages_fts (messages_fts) VALUES ('rebuild')");
-        meta.run("fingerprint", fingerprint);
-        meta.run("built_at", new Date().toISOString());
-        meta.run("messages", String(items.filter((item) => item.copyOf === undefined).length));
-      })();
+      meta.run("fingerprint", fingerprint);
+      meta.run("messages", String(items.filter((item) => item.copyOf === undefined).length));
+      db.run("COMMIT");
     } finally {
       db.close();
     }
@@ -314,7 +320,7 @@ export async function refreshHistoryIndex(ref: CharacterHistoryRef, path: string
   const fingerprint = await sourceFingerprint(ref);
   if (!force && builtFingerprint(path) === fingerprint) return false;
   const { items, fingerprint: settled } = await readStableCorpus(ref, fingerprint);
-  writeIndex(path, items, settled);
+  await writeIndex(path, items, settled);
   return true;
 }
 

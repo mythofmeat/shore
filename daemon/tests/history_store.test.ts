@@ -321,3 +321,31 @@ test("the chat log index is put in place readable by the daemon alone, and close
   expect(modesPutInPlace).toHaveLength(1);
   expect(modeOf(options.indexPath)).toBe(0o600);
 });
+
+test("each archived conversation is listed with its turns, its first and last times, and only the details it was given", () => {
+  const store = HistoryStore.openInMemory();
+  store.putSegment("ada", 0, { file: HISTORY_DB_FILE, compacted_at: "2026-08-13T11:00:00Z" }, [
+    { ...message("u1", "first question"), timestamp: "2026-08-13T10:00:00Z" },
+    { ...message("a1", "first answer"), timestamp: "2026-08-13T10:01:00Z" },
+  ]);
+  store.putSegment("ada", 1, {
+    file: HISTORY_DB_FILE, compacted_at: "2026-08-14T11:00:00Z", compaction_id: "pass-1",
+    memory_before: "before", memory_after: "after", excluded: true, label: "Second", note: "kept for later",
+  }, [
+    { ...message("u2", "second question"), timestamp: "2026-08-14T10:00:00Z" },
+    { ...message("a2", "second answer"), timestamp: "2026-08-14T10:01:00Z" },
+    { ...message("u3", "third question"), timestamp: "2026-08-14T10:02:00Z" },
+  ]);
+  store.putSegment("ada/side", 0, { file: HISTORY_DB_FILE, compacted_at: "2026-08-15T11:00:00Z" }, [
+    { ...message("u4", "elsewhere"), timestamp: "2026-08-15T10:00:00Z" },
+  ]);
+  const bare = { idx: 0, file: HISTORY_DB_FILE, compacted_at: "2026-08-13T11:00:00Z", turn_count: 1, first_message_at: "2026-08-13T10:00:00Z", last_message_at: "2026-08-13T10:01:00Z" };
+  const full = {
+    idx: 1, file: HISTORY_DB_FILE, compacted_at: "2026-08-14T11:00:00Z", compaction_id: "pass-1", memory_before: "before", memory_after: "after",
+    excluded: true, label: "Second", note: "kept for later", turn_count: 2, first_message_at: "2026-08-14T10:00:00Z", last_message_at: "2026-08-14T10:02:00Z",
+  };
+  expect(store.entries("ada")).toEqual([bare, full]);
+  expect(store.entry("ada", 1)).toEqual(full);
+  expect(store.entries("ada/side").map((entry) => entry.turn_count)).toEqual([1]);
+  store.close();
+});
