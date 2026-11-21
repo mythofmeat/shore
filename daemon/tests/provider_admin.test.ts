@@ -4,10 +4,11 @@ import { join } from "node:path";
 
 import { config, type ConfigContext } from "../src/commands/config.ts";
 import {
-  addCredential, addProvider, listProviderStatuses, orderCredentials, providerDetail, removeCredential, removeProvider,
+  addCredential, addProvider, listProviderStatuses, orderCredentials, providerDetail, providerUsers, removeCredential, removeProvider,
   selectCredential, setCredentialLimit, testCredential, updateCredential, updateProvider, type ProviderAdminContext,
 } from "../src/commands/provider_admin.ts";
 import { loadConfig } from "../src/config/loader.ts";
+import { characterPreferencesPath, emptyPreferences, globalPreferencesPath, saveCharacterPreferences, saveGlobalPreferences } from "../src/config/preferences.ts";
 import { closeLedgers } from "../src/ledger/record.ts";
 import { Ledger } from "../src/ledger/store.ts";
 import { toCredentialsEntry } from "../src/config/providers.ts";
@@ -303,6 +304,45 @@ describe("removing providers", () => {
   test("a provider still in use is not removed, and the refusal names what uses it", async () => {
     const w = await world("[chat]\nmodel = \"openrouter:anthropic/claude\"\n\n[providers.openrouter]\ndiscover = true\n");
     expect(() => removeProvider(w.ctx, { provider: "openrouter" })).toThrow("chat.model (openrouter:anthropic/claude)");
+  });
+
+  test("what uses a provider is every config, character overlay, character's pick, live thread and default pick that names it, each once", async () => {
+    const w = await world('[chat]\nmodel = "x:y"\n\n[triggers]\nmodel = "openrouter:t"\n\n[providers.openrouter]\ndiscover = true\n');
+    const configDir = w.session.config.dirs.config;
+    const data = w.session.config.dirs.data;
+    const overlay = async (character: string, toml: string) => {
+      await mkdir(join(configDir, "characters", character), { recursive: true });
+      await writeFile(join(configDir, "characters", character, "config.toml"), toml);
+    };
+    await overlay("ada", '[chat]\nmodel = "openrouter:a"\n');
+    await overlay("bo", '[triggers]\nmodel = "openrouter:t"\n\n[image]\nmodel = "openrouter:i"\n');
+    await overlay("cy", "[chat\n");
+    await mkdir(join(configDir, "characters", "dee"), { recursive: true });
+    saveCharacterPreferences(data, "ada", { ...emptyPreferences(), selected: { provider: "openrouter", modelId: "m" } });
+    saveCharacterPreferences(data, "bo", { ...emptyPreferences(), selected: { provider: "deepseek", modelId: "chat" } });
+    await mkdir(join(data, "dee", "preferences"), { recursive: true });
+    await writeFile(characterPreferencesPath(data, "dee"), "[selected\n");
+    saveGlobalPreferences(data, { ...emptyPreferences(), selected: { provider: "openrouter", modelId: "d" } });
+    const threads: Record<string, { id: string; chat_model?: string; archived?: boolean }[]> = {
+      ada: [{ id: "main" }, { id: "story", chat_model: "openrouter:s" }, { id: "old", chat_model: "openrouter:o", archived: true }, { id: "other", chat_model: "deepseek:chat" }],
+      cy: [{ id: "lamp", chat_model: "openrouter:c" }],
+      dee: [{ id: "ring", chat_model: "openrouter:r" }],
+    };
+    const ctx = { ...w.ctx, threads: { listThreads: (character: string) => threads[character] ?? [] } };
+
+    expect(providerUsers(ctx, "openrouter")).toEqual([
+      "triggers.model (openrouter:t)",
+      "ada's chat.model (openrouter:a)",
+      "ada's model (openrouter:m)",
+      "ada's thread story (openrouter:s)",
+      "bo's image.model (openrouter:i)",
+      "cy's thread lamp (openrouter:c)",
+      "dee's model preferences, which can't be read",
+      "dee's thread ring (openrouter:r)",
+      "the default model (openrouter:d)",
+    ]);
+    await writeFile(globalPreferencesPath(data), "[selected\n");
+    expect(providerUsers(ctx, "openrouter").slice(-3)).toEqual(["cy's thread lamp (openrouter:c)", "dee's model preferences, which can't be read", "dee's thread ring (openrouter:r)"]);
   });
 
   test("a provider only sub-agents run on is still in use", async () => {

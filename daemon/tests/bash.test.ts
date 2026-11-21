@@ -3,6 +3,8 @@ import { mkdir, mkdtemp, readFile, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { dispatchTool, dispatchWithinDeadline, windowToolResult, withResultCeiling, type ToolContext } from "../src/tools/dispatch.ts";
+import { withPromptChanges } from "../src/tools/bash.ts";
+import { rejectionOf } from "./support/outcome.ts";
 import { runToolUse, type ToolExecution } from "../src/tools/execute.ts";
 import { CharacterWorkspace } from "../src/tools/character_workspace.ts";
 import { BUILTIN_TOOL_SCHEMAS } from "./support/builtin_tool_schemas.ts";
@@ -225,5 +227,28 @@ describe("a file tool that changes a workspace file the prompt lists", () => {
     expect(patched).toMatchObject({ prompt_files_changed: ["MAP.md"] });
     expect(patched).not.toMatchObject({ exit_code: 0 });
     expect(queued).toEqual(["MAP.md"]);
+  });
+});
+
+describe("reading the listed prompt files around a write", () => {
+  function failingReads(dir: string, error: { message: string; code?: string }): CharacterWorkspace {
+    const workspace = new CharacterWorkspace(dir, undefined, ["MAP.md"]);
+    const call = workspace.call.bind(workspace);
+    const failing = async (op: string, args: unknown, signal?: AbortSignal): Promise<unknown> =>
+      op === "readFiles" ? [{ error }] : await call(op as never, args as never, signal);
+    return Object.assign(workspace, { call: failing as CharacterWorkspace["call"] });
+  }
+
+  test("a read that fails for any reason but the file being missing or unreadable stops the write, with its code when it has one", async () => {
+    const { ctx } = await world();
+    let wrote = false;
+    const write = async () => { wrote = true; return "done"; };
+    const coded = await rejectionOf(withPromptChanges(failingReads(ctx.workspaceDir, { message: "disk on fire", code: "EIO" }), write));
+    expect(coded).toBeInstanceOf(Error);
+    expect([(coded as Error).message, (coded as NodeJS.ErrnoException).code]).toEqual(["disk on fire", "EIO"]);
+    const bare = await rejectionOf(withPromptChanges(failingReads(ctx.workspaceDir, { message: "no reason given" }), write));
+    expect([(bare as Error).message, Object.hasOwn(bare as object, "code")]).toEqual(["no reason given", false]);
+    expect(wrote).toBe(false);
+    expect(await withPromptChanges(failingReads(ctx.workspaceDir, { message: "gone", code: "ENOENT" }), write)).toBe("done");
   });
 });

@@ -1,10 +1,15 @@
 import { describe, expect, spyOn, test } from "bun:test";
-import { mkdir, mkdtemp, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 
 import { chmodSync, readFileSync } from "node:fs";
 
-import { config, schemaOf, tools, type ConfigContext, type ConfigRuntime } from "../src/commands/config.ts";
+import { config, configReload, schemaOf, tools, type ConfigContext, type ConfigRuntime } from "../src/commands/config.ts";
+import { ensureActivePromptSnapshot, loadActivePromptFile } from "../src/memory/deferred_edits.ts";
+import { initializeDatabase } from "../src/storage/database.ts";
+import { writeDurable } from "../src/storage/files.ts";
+import { characterWorkspace } from "../src/tools/character_workspace.ts";
+import { outcomeOf } from "./support/outcome.ts";
 import { modelInfo, modelSettings, resetModel, setModelSetting, switchModel } from "../src/commands/models.ts";
 import { describeTool, resolveTool, type RunToolContext } from "../src/commands/run_tool.ts";
 import { loadConfig } from "../src/config/loader.ts";
@@ -590,5 +595,75 @@ Authorization = "Bearer hdr_do_not_leak"
   test("an unset secret reads as empty", async () => {
     const w = await build(undefined, '[mcp.weather]\ncommand="weather-mcp"\n[mcp.weather.env]\nWEATHER_API_KEY=""');
     expect(config(w.ctx, { key: "mcp.weather.env.WEATHER_API_KEY" })).toMatchObject({ config: "" });
+  });
+});
+
+describe("reloading the config", () => {
+  const PROMPT = '[[prompt]]\nworkspace = "SOUL.md"\n';
+
+  async function reloadable(character: string | undefined): Promise<World & { workspace: string; data: string }> {
+    const world = await build(character, `${PROMPT}[chat]\nmodel = "anthropic:first"\n`, [["config/characters/ada/workspace/SOUL.md", "Ada, first."]]);
+    const data = join(world.ctx.config.dirs.data, "ada");
+    await mkdir(data, { recursive: true });
+    initializeDatabase(world.ctx.config.dirs.data);
+    await ensureActivePromptSnapshot(data, characterWorkspace(world.ctx.config, "ada"));
+    const workspace = join(world.root, "config", "characters", "ada", "workspace");
+    await writeFile(join(workspace, "SOUL.md"), "Ada, second.");
+    await writeFile(world.ctx.configPath, `${PROMPT}[chat]\nmodel = "anthropic:second"\n[daemon]\nshutdown_grace = "1m"\n`);
+    return { ...world, workspace, data };
+  }
+
+  test("checked, loads the file fresh and changes nothing, naming what needs a restart and the prompt files changed since the snapshot", async () => {
+    const world = await reloadable("ada");
+    const before = world.ctx.config;
+    expect(await configReload(world.ctx, {})).toEqual({
+      applied: false, restart_required: ["[daemon]"], config_path: world.ctx.configPath, character: "ada", changed_prompt_files: ["SOUL.md"],
+    });
+    expect([world.ctx.config, world.calls]).toEqual([before, []]);
+
+    const bare = await reloadable(undefined);
+    await writeFile(bare.ctx.configPath, `${PROMPT}[chat]\nmodel = "anthropic:second"\n`);
+    expect(await configReload(bare.ctx, { apply: false })).toEqual({ applied: false, config_path: bare.ctx.configPath, character: null, changed_prompt_files: [] });
+  });
+
+  test("measures what needs a restart against the config the daemon runs, when it has one", async () => {
+    const world = await reloadable("ada");
+    const running = loadConfig(world.ctx.configPath, { env: world.ctx.env ?? {}, onWarn: () => {} });
+    expect(await configReload({ ...world.ctx, runtime: { ...world.ctx.runtime, globalConfig: () => running } }, {})).not.toHaveProperty("restart_required");
+  });
+
+  test("applied, takes the fresh config in, and with refresh_prompts also takes the changed prompt files in and says so", async () => {
+    const world = await reloadable("ada");
+    expect(await configReload(world.ctx, { apply: true })).toEqual({
+      applied: true, restart_required: ["[daemon]"], config_path: world.ctx.configPath, character: "ada", changed_prompt_files: ["SOUL.md"], prompts_refreshed: false,
+    });
+    expect([world.ctx.config.app.chat.model, world.calls]).toEqual(["anthropic:second", ["adoptGlobalConfig", "reloadRuntimeConfig"]]);
+
+    const refreshing = await reloadable("ada");
+    writeDurable(join(refreshing.data, "threads", "main", "active.jsonl"), `${JSON.stringify({ msg_id: "m1", role: "user", content: "hi", images: [], content_blocks: [{ type: "text", text: "hi" }], timestamp: "2026-11-22T00:00:00Z" })}\n`);
+    expect(await configReload(refreshing.ctx, { apply: true, refresh_prompts: true })).toMatchObject({ applied: true, changed_prompt_files: ["SOUL.md"], prompts_refreshed: true });
+    expect(refreshing.calls).toEqual(["notifyPromptSnapshotRefreshed:ada", "adoptGlobalConfig", "reloadRuntimeConfig"]);
+    expect(await loadActivePromptFile(refreshing.data, "SOUL.md")).toBe("Ada, second.");
+  });
+
+  test("is refused for a config or character overlay that doesn't load, a prompt refresh with no character, and a refresh that fails", async () => {
+    const broken = await reloadable("ada");
+    await writeFile(broken.ctx.configPath, "[chat\n");
+    expect(await outcomeOf(configReload(broken.ctx, {}))).toThrow("Config error: ");
+
+    const overlay = await reloadable("ada");
+    await writeFile(join(overlay.root, "config", "characters", "ada", "config.toml"), "[chat\n");
+    expect(await outcomeOf(configReload(overlay.ctx, {}))).toThrow("Config error in character overlay 'ada': ");
+
+    const nobody = await reloadable(undefined);
+    expect(await outcomeOf(configReload(nobody.ctx, { apply: true, refresh_prompts: true }))).toThrow("Refreshing prompts requires a character context");
+    expect(nobody.calls).toEqual([]);
+
+    const failing = await reloadable("ada");
+    writeDurable(join(failing.data, "threads", "main", "active.jsonl"), `${JSON.stringify({ msg_id: "m1", role: "user", content: "hi", images: [], content_blocks: [{ type: "text", text: "hi" }], timestamp: "2026-11-22T00:00:00Z" })}\n`);
+    await rm(join(failing.workspace, "SOUL.md"));
+    await mkdir(join(failing.workspace, "SOUL.md"));
+    expect(await outcomeOf(configReload(failing.ctx, { apply: true, refresh_prompts: true }))).toThrow("Failed to refresh active prompt snapshot: ");
+    expect(failing.calls).toEqual([]);
   });
 });

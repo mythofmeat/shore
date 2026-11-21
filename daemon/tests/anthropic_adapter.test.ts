@@ -373,6 +373,14 @@ describe("placing cache markers", () => {
     expect(marked(messages)).toEqual([[true], [false], [true], []]);
   });
 
+  test("the system prompt's marker goes on its last block, and a request with no system prompt gets none", () => {
+    const messages: Param[] = [{ role: "user", content: [{ type: "text", text: "a" }] }];
+    const system: Sys[] = [{ type: "text", text: "one" }, { type: "text", text: "two" }];
+    expect(placeContinuationBreakpoints(messages, system, [{ text: "one", label: "SOUL.md" }, { text: "two", label: "MAP.md" }], "5m").sysBp).toEqual([1]);
+    expect(system.map((b) => "cache_control" in b)).toEqual([false, true]);
+    expect(placeContinuationBreakpoints([{ role: "user", content: [{ type: "text", text: "a" }] }], [], [], "5m").sysBp).toEqual([]);
+  });
+
   test("the request plan reports how many markers were asked for and where they went", () => {
     const plan = buildAnthropicPlan(req({
       provider_options: { cache_ttl: "1h" },

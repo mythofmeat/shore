@@ -44,3 +44,20 @@ describe("refusing to make a character over someone", () => {
     expect(await readdir(config)).toEqual(["characters"]);
   });
 });
+
+describe("a workspace its tools' user can't make", () => {
+  const refusing = (root: string, user: string | undefined, thrown: unknown) => (name: string): CharacterWorkspace => {
+    const workspace = new CharacterWorkspace(join(root, name), { user, passEnv: [], noNewPrivs: true, checkLimitMs: 1000 });
+    return Object.assign(workspace, { call: async () => { throw thrown; } });
+  };
+
+  test("stops the new character, says who couldn't make which folder and why, and leaves no config folder", async () => {
+    const config = await tempRoot();
+    const ws = join(config, "w");
+    expect(await outcomeOf(createCharacter(config, { name: "ada" }, refusing(ws, "ada", new Error("EACCES: permission denied")))))
+      .toThrow(`ada's tools run as ada, who cannot create ${join(ws, "ada")} (EACCES: permission denied): create that folder owned by them first`);
+    expect(await outcomeOf(createCharacter(config, { name: "bo" }, refusing(ws, undefined, "no helper"))))
+      .toThrow(`bo's tools run as another user, who cannot create ${join(ws, "bo")} (no helper): create that folder owned by them first`);
+    expect(await readdir(config)).toEqual([]);
+  });
+});

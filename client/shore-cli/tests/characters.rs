@@ -55,3 +55,16 @@ fn character_info_lists_the_prompt_files_and_leaves_the_row_out_without_any() {
     assert!(plain.contains("/data/ada"), "{plain}");
     assert!(!plain.contains("Prompt files"), "{plain}");
 }
+
+#[test]
+fn deleting_a_character_without_a_terminal_to_confirm_on_asks_for_yes_and_deletes_nothing() {
+    let (output, frames) = asked(json!({}), &["character", "delete", "ada"]);
+    assert!(!output.status.success(), "{output:?}");
+    let said = String::from_utf8_lossy(&output.stderr);
+    assert!(
+        said.contains("deleting ada cannot be undone; re-run with --yes"),
+        "{said}"
+    );
+    assert!(printed(&output).is_empty(), "{output:?}");
+    assert_eq!(sent(&frames), []);
+}

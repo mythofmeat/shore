@@ -71,6 +71,8 @@ describe("the characters page", () => {
     const view = await mount(<CharactersPage state={snapshot} />);
     const options = () => [...view.host.querySelectorAll("[role=option]")].map((option) => [option.textContent, option.getAttribute("aria-selected"), option.className]);
     expect(options()).toEqual([["Aada", "false", "character-card "], ["Bboactive", "true", "character-card on"]]);
+    expect([...view.host.querySelectorAll<HTMLElement>(".character-card .avatar")].map((avatar) => [avatar.style.width, avatar.style.height])).toEqual([["40px", "40px"], ["40px", "40px"]]);
+    expect(view.host.querySelector("dialog"), "nothing is being made or deleted yet").toBeNull();
     await acting(() => Bun.sleep(5));
     const facts = () => [...view.host.querySelectorAll(".kv-row")].map((row) => `${row.querySelector("dt")?.textContent ?? ""}: ${row.querySelector("dd")?.textContent ?? ""}`);
     expect(facts()).toEqual(["Configuration: Has its own overrides", "Workspace: /ws/ada", "Config folder: /cfg/ada", "Data folder: /data/ada", "Prompt files: A.md, B.md", "Pending edits: C.md"]);
@@ -88,7 +90,7 @@ describe("the characters page", () => {
 
   test("shows a fresh character's plainer details, and a failure to load them", async () => {
     const { CharactersPage } = await import("../../src/browser/settings/Characters.tsx");
-    const snapshot = { ...app.state().workspace.getSnapshot(), character: null, characters: [{ name: "ada" }] };
+    const snapshot = { ...app.state().workspace.getSnapshot(), character: null, characters: [{ name: "ada" }, { name: "bo" }] };
     app.answer((request) => request["name"] === "character_info" ? HOLD : undefined);
     const waiting = await mount(<CharactersPage state={snapshot} />);
     expect(waiting.host.querySelector("[aria-label='Loading character']")).not.toBeNull();
@@ -96,6 +98,7 @@ describe("the characters page", () => {
     app.answer((request) => request["name"] === "character_info" ? details({ has_config_override: false, has_data: false, prompt_files: [], pending_deferred_edits: [] }) : undefined);
     const view = await mount(<CharactersPage state={snapshot} />);
     await acting(() => Bun.sleep(5));
+    expect([...view.host.querySelectorAll("[role=option]")].map((option) => option.getAttribute("aria-selected")), "with none active, the first is chosen").toEqual(["true", "false"]);
     expect([...view.host.querySelectorAll(".kv-row dd")].map((dd) => dd.textContent)).toEqual(["Uses the shared configuration", "/ws/ada", "/cfg/ada", "No data yet", "None in the workspace"]);
     expect(view.host.querySelectorAll(".kv-row dd")[4]?.className).toBe("");
     expect(view.host.querySelector(".tag")).toBeNull();
@@ -121,6 +124,8 @@ describe("the characters page", () => {
     expect([location.hash, opens.mock.calls]).toEqual(["", [["ada"]]]);
     await click(button(view.host, "New character"));
     expect(view.host.querySelector("dialog")?.open).toBe(true);
+    await click(button(view.host, "Cancel"));
+    expect(view.host.querySelector("dialog")).toBeNull();
   });
 
   test("deletes a character only once its name is typed, saving an archive when asked, and says so", async () => {

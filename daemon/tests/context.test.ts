@@ -2,11 +2,11 @@ import { expect, test } from "bun:test";
 import { mkdir, mkdtemp, readdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 
-import type { PromptPart } from "../src/config/app.ts";
+import type { AppConfig, PromptPart } from "../src/config/app.ts";
 import { characterDataDir } from "../src/config/dirs.ts";
 import { findEffectiveModel } from "../src/config/effective_catalog.ts";
 import type { LoadedConfig } from "../src/config/loader.ts";
-import { emptyCatalog } from "../src/config/models.ts";
+import { emptyCatalog, type ResolvedModel } from "../src/config/models.ts";
 import { configView } from "../src/config/preferences.ts";
 import { ProviderRegistry } from "../src/config/providers.ts";
 import { formatWallClock } from "../src/engine/prompt.ts";
@@ -32,7 +32,7 @@ interface World {
   system: () => Promise<string[]>;
 }
 
-async function world(prompt?: PromptPart[]): Promise<World> {
+async function world(prompt?: PromptPart[], tune: (app: AppConfig, model: Record<string, unknown>) => void = () => {}): Promise<World> {
   const root = await mkdtemp(testTmp("shore-context-"));
   const app = promptedAppConfig();
   if (prompt !== undefined) app.prompt = prompt;
@@ -41,10 +41,12 @@ async function world(prompt?: PromptPart[]): Promise<World> {
   app.chat.display_name = "eve";
   app.tools.enabled = [];
   const models = emptyCatalog();
-  models.chat.set("chat.fixture", {
+  const model: Record<string, unknown> = {
     name: "fixture", qualifiedName: "chat.fixture", category: "chat", providerKey: "anthropic",
     sdk: "anthropic", modelId: "claude-fixture", apiKeyEnv: KEY_ENV, maxContextTokens: 200_000, maxOutputTokens: 4096,
-  });
+  };
+  tune(app, model);
+  models.chat.set("chat.fixture", model as unknown as ResolvedModel);
   const config: LoadedConfig = {
     app, models, providers: ProviderRegistry.empty(), rawTable: undefined,
     dirs: { config: join(root, "config"), data: join(root, "data"), cache: join(root, "cache"), runtime: join(root, "runtime") },
@@ -107,7 +109,27 @@ test("a config with no prompt list stops the request rather than sending no syst
   expect(await outcomeOf(system())).toThrow("the config has no [[prompt]] list");
 });
 
-test("the system_prompt part is the model's system_prompt file, and is left out when none is set", async () => {
+test("the system_prompt part is the model's own system_prompt file as a template, over chat's, and an unreadable one names itself", async () => {
+  const opening = (setting: string | undefined, chat: string | undefined) => world([{ shore: "system_prompt" }], (app, model) => {
+    app.chat.system_prompt = chat;
+    if (setting !== undefined) model["systemPrompt"] = setting;
+  });
+  const own = await opening("prompts/model.md", "prompts/chat.md");
+  await mkdir(join(own.configDir, "prompts"), { recursive: true });
+  await writeFile(join(own.configDir, "prompts", "model.md"), "Model opening for {{char}}.");
+  await writeFile(join(own.configDir, "prompts", "chat.md"), "Chat opening.");
+  expect(await own.system()).toEqual(["Model opening for ada."]);
+
+  const shared = await opening(undefined, "prompts/chat.md");
+  await mkdir(join(shared.configDir, "prompts"), { recursive: true });
+  await writeFile(join(shared.configDir, "prompts", "chat.md"), "Chat opening for {{user}}.");
+  expect(await shared.system()).toEqual(["Chat opening for eve."]);
+
+  const gone = await opening("prompts/gone.md", undefined);
+  expect(await outcomeOf(gone.system())).toThrow(`system_prompt "prompts/gone.md" for chat.fixture could not be read at ${join(gone.configDir, "prompts", "gone.md")}: ENOENT`);
+});
+
+test("the system_prompt part is left out when no system_prompt is set", async () => {
   const { configDir, system } = await world([{ shore: "system_prompt" }, { file: "after.md" }]);
   await mkdir(configDir, { recursive: true });
   await writeFile(join(configDir, "after.md"), "After.");

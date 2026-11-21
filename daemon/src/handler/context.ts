@@ -17,7 +17,6 @@ import type { PriorContext } from "../engine/segments.ts";
 import type { Message } from "../engine/types.ts";
 import {
   ensureActivePromptSnapshot,
-  ensureCharacterWorkspace,
   loadPromptFile,
   loadThreadPins,
   resetActivePromptSnapshot,
@@ -57,7 +56,7 @@ async function configFile(config: LoadedConfig, file: string, setting: string): 
   try {
     return await readFile(path, "utf8");
   } catch (e) {
-    throw new Error(`${setting} could not be read at ${path}: ${e instanceof Error ? e.message : String(e)}`, { cause: e });
+    throw new Error(`${setting} could not be read at ${path}: ${(e as Error).message}`, { cause: e });
   }
 }
 
@@ -129,9 +128,8 @@ export async function prepareChatContext(
   } else {
     try {
       await resetActivePromptSnapshot(characterDataDir, params.thread);
-      await ensureCharacterWorkspace(workspace);
     } catch (e) {
-      shoreLog.warn(`shore: failed to prepare character workspace for ${character}: ${String(e)}`);
+      shoreLog.warn(`shore: failed to reset the prompt snapshot for ${character}: ${String(e)}`);
     }
   }
 

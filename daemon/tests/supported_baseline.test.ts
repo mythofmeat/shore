@@ -1,7 +1,7 @@
 import { extract } from "tar";
 import { removeStoredCharacter } from "../src/storage/archive.ts";
 import { expect, test } from "bun:test";
-import { existsSync } from "node:fs";
+import { existsSync, readdirSync, readlinkSync } from "node:fs";
 import { mkdir, mkdtemp, readFile, copyFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -71,6 +71,10 @@ test("the oldest supported release's archive restores current data through the c
   expect((await readSubagentTraces(character))[0]?.result).toBe("saved result");
   const currentArchive = join(root, "current.shore.tar");
   await exportCharacter({ ...context, hasCharacter: () => true }, { character: "ada", output: currentArchive });
+  const staging = readdirSync("/proc/self/fd").filter((fd) => {
+    try { return readlinkSync(`/proc/self/fd/${fd}`).includes("/shore-export-"); } catch { return false; }
+  });
+  expect(staging, "the export closes the database it staged its pictures in").toEqual([]);
   const original = join(root, "original");
   await mkdir(original);
   await extract({ file: archive, cwd: original });

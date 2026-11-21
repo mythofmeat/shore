@@ -1,6 +1,5 @@
 import { readDurable } from "../storage/files.ts";
 import { readCharacterState, writeCharacterState, deleteCharacterState, characterScope, withStorage } from "../storage/store.ts";
-import { mkdir } from "node:fs/promises";
 import { join } from "node:path";
 
 import {
@@ -11,7 +10,6 @@ import {
 import { homeThreadIn, pinnedCommand, readThreadsIndexIn, threadRecord } from "../engine/threads.ts";
 
 import { asCharacterWorkspace, type CharacterWorkspace } from "../tools/character_workspace.ts";
-import { normalizeWorkspacePath } from "../tools/workspace_path";
 import { cutToBytes, MAX_THREAD_PINS_BYTES, byteSize, threadFilePromptText } from "../tools/thread_file_text.ts";
 import { pinnedCommandText } from "../tools/pinned_command.ts";
 import { localRfc3339 } from "../util/time.ts";
@@ -89,43 +87,26 @@ export async function pendingDeferredEditPaths(
   characterDataDir: string,
   thread = MAIN_THREAD,
 ): Promise<string[]> {
-  let content: string;
-  try {
-    content = readCharacterState(characterDataDir, stateFile(thread, QUEUE_FILE)) ?? "";
-  } catch (e) {
-    if ((e as NodeJS.ErrnoException).code === "ENOENT") return [];
-    throw e;
-  }
-
+  const queue = readCharacterState(characterDataDir, stateFile(thread, QUEUE_FILE)) ?? "";
   const paths = new Set<string>();
-  for (const rawLine of content.split("\n")) {
-    const line = rawLine.trim();
-    if (line === "") continue;
+  for (const line of queue.split("\n")) {
     let entry: unknown;
     try {
       entry = JSON.parse(line);
     } catch {
       continue;
     }
-    if (typeof entry !== "object" || entry === null) continue;
-    const raw = (entry as Record<string, unknown>).path;
-    if (typeof raw !== "string") continue;
-    const normalized = normalizeWorkspacePath(raw);
-    if (normalized !== "") paths.add(normalized);
+    const path = (entry as { path?: unknown } | null)?.path;
+    if (typeof path === "string") paths.add(path);
   }
   return [...paths].sort();
 }
 
 export async function queueDeferredEdit(
   characterDataDir: string,
-  requestedPath: string,
+  path: string,
   thread = MAIN_THREAD,
 ): Promise<void> {
-  const path = normalizeWorkspacePath(requestedPath);
-  if (path === "") return;
-
-  await mkdir(characterDataDir, { recursive: true });
-
   const line = JSON.stringify({ path, timestamp: localRfc3339(new Date()) });
   writeCharacterState(characterDataDir, stateFile(thread, QUEUE_FILE), (readCharacterState(characterDataDir, stateFile(thread, QUEUE_FILE)) ?? "") + `${line}\n`);
 }
@@ -162,10 +143,6 @@ async function copyPromptVisibleFile(
   else deleteCharacterState(characterDataDir, key);
 }
 
-export async function ensureCharacterWorkspace(workspace: CharacterWorkspace): Promise<void> {
-  await workspace.call("mkdir", { path: workspace.dir });
-}
-
 async function snapshotFiles(characterDataDir: string, workspace: CharacterWorkspace, thread: string): Promise<string[]> {
   const index = await readThreadsIndexIn(characterDataDir);
   const pins = index === undefined ? [] : threadRecord(index, thread)?.pins ?? [];
@@ -181,7 +158,6 @@ export async function ensureActivePromptSnapshot(
   workspace: CharacterWorkspace,
   thread = MAIN_THREAD,
 ): Promise<void> {
-  await ensureCharacterWorkspace(workspace);
   const paths = await snapshotFiles(characterDataDir, workspace, thread);
   await Promise.all(paths.map(async (path) => { await copyPromptVisibleFile(characterDataDir, workspace, path, true, thread); }));
   writeCharacterState(characterDataDir, stateFile(thread, "active_prompt/.snapshot"), "1");
@@ -192,7 +168,6 @@ export async function refreshActivePromptSnapshot(
   workspace: CharacterWorkspace,
   thread = MAIN_THREAD,
 ): Promise<void> {
-  await ensureCharacterWorkspace(workspace);
   writeCharacterState(characterDataDir, stateFile(thread, "active_prompt/.snapshot"), "1");
   const paths = await snapshotFiles(characterDataDir, workspace, thread);
   await Promise.all(paths.map(async (path) => { await copyPromptVisibleFile(characterDataDir, workspace, path, false, thread); }));

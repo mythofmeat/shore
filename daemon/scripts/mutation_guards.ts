@@ -383,6 +383,9 @@ export const DAEMON_FLOORS: Readonly<Record<string, number>> = {
 };
 
 export const DAEMON_EQUIVALENTS: readonly string[] = [
+  "src/config/dirs.ts:isDirectory: 「return false; → {}」",
+  "src/commands/archive.ts:stageCharacter: if (cachedImages.size 「> → >=」 0) {",
+  "src/commands/archive.ts:admit: if (limits === undefined) 「return true; → {}」",
   "src/commands/registry.ts:<module>: if (compaction === undefined) 「throw internalError(\"compact is not ava… → {}」",
   "src/llm/image_dimensions.ts:webp: const head = read(0, 「16 → 17」);",
   "src/llm/image_dimensions.ts:jpeg: const soi = read(0, 「2 → 3」);",

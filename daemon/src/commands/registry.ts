@@ -396,8 +396,7 @@ export const commandOperations: OperationRegistry<CommandOperationContext> = {
     ...characterPresentation, label: "Create character", effects: ["workspace_write"],
     fields: { name: { label: "Character name" } },
   }, ({ session, deps }, args) => {
-    const creating = createCharacter(session.config.dirs.config, args,
-      (name) => characterWorkspace(session.config, name, { fresh: true }));
+    const creating = createCharacter(session.config.dirs.config, args, (name) => characterWorkspace(session.config, name));
     return deps.onCharacterCreated === undefined
       ? creating
       : creating.then(async (result) => {

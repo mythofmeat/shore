@@ -6,7 +6,7 @@ import { CLAUDE_PLAN_REPORT_REFRESH_MS, claudeLoginOverview, refreshClaudePlanLi
 import { discoverCharacters } from "../config/dirs.ts";
 import { loadCharacterConfig, type LoadedConfig } from "../config/loader.ts";
 import { defaultSdk, hardcodedProviderDefaults } from "../config/models.ts";
-import { loadForCharacter } from "../config/preferences.ts";
+import { characterPreferencesPath, globalPreferencesPath, loadPreferences } from "../config/preferences.ts";
 import { findProviderName, isCredentialBudget, isVisible, signsIn, SPEND_PERIODS, type ProviderEntry, type ProviderKeyEntry } from "../config/providers.ts";
 import { findSchemaEntry } from "../config/schema.ts";
 import { schemaValueLiteral, SchemaValueError } from "../config/schema_value.ts";
@@ -442,19 +442,19 @@ export function providerUsers(ctx: ProviderAdminContext, name: string): string[]
       }
     }
     try {
-      const [, prefs] = loadForCharacter(global.dirs.data, character);
+      const prefs = loadPreferences(characterPreferencesPath(global.dirs.data, character));
       if (prefs.selected.provider !== undefined && findProviderName([name], prefs.selected.provider) === name) {
         users.push(`${character}'s model (${prefs.selected.provider}:${String(prefs.selected.modelId)})`);
       }
     } catch {
-      continue;
+      users.push(`${character}'s model preferences, which can't be read`);
     }
     for (const thread of ctx.threads?.listThreads(character) ?? []) {
       if (thread.archived !== true && uses(own ?? global, thread.chat_model)) users.push(`${character}'s thread ${thread.id} (${String(thread.chat_model)})`);
     }
   }
   try {
-    const [prefs] = loadForCharacter(global.dirs.data, "");
+    const prefs = loadPreferences(globalPreferencesPath(global.dirs.data));
     if (prefs.selected.provider === name) users.push(`the default model (${name}:${String(prefs.selected.modelId)})`);
   } catch {
     return users;

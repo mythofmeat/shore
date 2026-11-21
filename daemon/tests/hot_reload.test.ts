@@ -28,8 +28,16 @@ describe("which changes reload the config", () => {
     [join(CONFIG, "characters", "ada", "workspace", "TRIGGERS.toml"), false],
     [join(CONFIG, "other.toml"), true],
     [join(CONFIG, "prompts", "wake.md"), false],
+    [join(CONFIG, "prompts"), false],
+    [`${CONFIG}/./.env`, true],
+    [`${CONFIG}//conf.d/keys.toml`, true],
   ])("%s → %p", (path, reloads) => {
     expect(pathTriggersReload(CONFIG, CONFIG_PATH, path)).toBe(reloads);
+  });
+
+  test("the config file reloads wherever it is, and the config directory itself never does, whatever it is called", () => {
+    expect(pathTriggersReload(CONFIG, "/etc/shore/main.conf", "/etc/shore/main.conf")).toBe(true);
+    expect(pathTriggersReload("/srv/conf.toml", "/srv/conf.toml/config.toml", "/srv/conf.toml")).toBe(false);
   });
 
   test("a relative config directory and path are taken from the working directory", () => {

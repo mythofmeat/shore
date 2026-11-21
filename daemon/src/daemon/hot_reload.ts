@@ -61,8 +61,6 @@ export function startConfigWatcher(
   let inFlight: Promise<void> = Promise.resolve();
 
   const fire = () => {
-    timer = undefined;
-    if (stopped || pending.size === 0) return;
     const changedPaths = [...pending].sort();
     pending.clear();
     inFlight = inFlight.then(async () => {
@@ -149,14 +147,7 @@ export function pathTriggersReload(
 
   if (first === "conf.d") return parts.length === 1 || hasTomlExtension(path);
 
-  if (first === "characters") {
-    if (parts.length === 1) return true;
-    if (parts.length === 2) return true;
-    if (parts.length === 3 && (parts[2] === "config.toml" || parts[2] === "character.md")) {
-      return true;
-    }
-    return hasTomlExtension(path);
-  }
+  if (first === "characters" && (parts.length <= 2 || (parts.length === 3 && parts[2] === "character.md"))) return true;
 
   return hasTomlExtension(path);
 }

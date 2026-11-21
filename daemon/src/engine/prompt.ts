@@ -143,20 +143,16 @@ function buildSystemBlocks(params: PromptParams, timeZone: string): SystemBlock[
     ["time", ""],
   ]);
 
-  const system: SystemBlock[] = [];
-  for (const section of params.sections) {
-    if ("shore" in section) {
-      const thread = params.thread;
-      if (thread === undefined) continue;
-      if (section.shore === "thread") system.push({ label: "thread", content: threadBlock(thread, vars, timeZone) });
-      else if (thread.pins.length > 0) system.push({ label: "thread_pins", content: threadPinsBlock(thread.pins) });
-      continue;
+  return params.sections.flatMap((section): SystemBlock[] => {
+    if (!("shore" in section)) {
+      const content = section.template ? renderTemplate(section.text ?? "", vars) : section.text ?? "";
+      return content.trim() === "" ? [] : [{ label: section.label, content }];
     }
-    if (section.text === undefined) continue;
-    const content = section.template ? renderTemplate(section.text, vars) : section.text;
-    if (content.trim() !== "") system.push({ label: section.label, content });
-  }
-  return system;
+    const thread = params.thread;
+    if (thread === undefined) return [];
+    if (section.shore === "thread") return [{ label: "thread", content: threadBlock(thread, vars, timeZone) }];
+    return thread.pins.length === 0 ? [] : [{ label: "thread_pins", content: threadPinsBlock(thread.pins) }];
+  });
 }
 
 function availableMessageTokens(

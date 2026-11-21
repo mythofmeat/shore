@@ -5,7 +5,7 @@ import { connect, createServer, type Socket } from "node:net";
 import { chmod, mkdir, mkdtemp, readFile, stat, writeFile } from "node:fs/promises";
 import { existsSync, readdirSync, readFileSync, readlinkSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 import { exitIfStillRunning, startDaemon, type DaemonOptions, type RunningDaemon } from "../src/daemon/run.ts";
 import { StartupError } from "../src/daemon/startup.ts";
 import { Database } from "bun:sqlite";
@@ -524,6 +524,26 @@ describe("hot reload", () => {
     }
   });
 
+  test("a reload that changes a startup-owned section says a restart is needed, and one that changes nothing of that kind doesn't", async () => {
+    const place = await layout();
+    const info = spyOn(shoreLog, "info");
+    const warn = spyOn(shoreLog, "warn");
+    const reloads = () => info.mock.calls.filter(([line]) => String(line).startsWith("shore: config hot reload applied")).length;
+    const restarts = () => warn.mock.calls.map(([line]) => String(line)).filter((line) => line.includes("startup-owned changes"));
+    try {
+      await start(place);
+      await writeFile(place.configPath, "[tools]\nmax_result_chars = 4242\n");
+      await until(() => reloads() === 1, "a reload of a setting that applies at once");
+      expect(restarts()).toEqual([]);
+      await writeFile(place.configPath, '[tools]\nmax_result_chars = 4242\n[daemon]\nshutdown_grace = "1m"\n');
+      await until(() => reloads() === 2, "a reload of a startup-owned setting");
+      expect(restarts()).toEqual(["shore: config hot reload saw startup-owned changes ([daemon]); restart the daemon to apply them"]);
+    } finally {
+      info.mockRestore();
+      warn.mockRestore();
+    }
+  });
+
   test("a character's pictures are opened to the user its tools run as, and closed again, without a restart", async () => {
     const place = await layout("", ["ada"]);
     const folder = join(place.env.XDG_CACHE_HOME ?? "", "shore", "characters", "ada");
@@ -1036,6 +1056,22 @@ describe("a daemon going down", () => {
 });
 
 describe("a daemon coming up", () => {
+  test("makes a character by command that it can talk to at once, without waiting for the config watcher", async () => {
+    const place = await layout(MODEL_CONFIG);
+    const daemon = await start(place, [], {}, false);
+    const client = await Client.open(daemon.port, "ada");
+    try {
+      await client.awaitFrame("history");
+      client.send({ type: "command", rid: "make", name: "create_character", args: { name: "bo" } });
+      const made = await client.awaitFrame("command_output");
+      const configDir = dirname(place.configPath);
+      expect(made["data"]).toEqual({ character: "bo", config_dir: join(configDir, "characters", "bo"), workspace_dir: join(configDir, "characters", "bo", "workspace") });
+      expect(daemon.runtime.registry.availableCharacters()).toEqual(["ada", "bo"]);
+    } finally {
+      client.close();
+    }
+  });
+
   test("makes the workspace folder SHORE_WORKSPACE_DIR names, with the folders above it", async () => {
     const place = await layout("", []);
     const workspace = join(place.root, "deep", "nested", "workspace");

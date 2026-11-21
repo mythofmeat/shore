@@ -49,7 +49,6 @@ import {
   type ThreadsIndex,
 } from "./engine/threads.ts";
 import {
-  ensureCharacterWorkspace,
   resetActivePromptSnapshotIfEmpty,
 } from "./memory/deferred_edits.ts";
 import { characterWorkspace } from "./tools/character_workspace.ts";
@@ -167,7 +166,8 @@ export class CharacterRegistry {
         const index = await this.#withThreadIndex(name, async () =>
           this.#remember(name, await ensureThreads(this.#dataDir, name, new Date().toISOString())),
         );
-        await ensureCharacterWorkspace(characterWorkspace(this.#globalConfig, name));
+        const workspace = characterWorkspace(this.#globalConfig, name);
+        await workspace.call("mkdir", { path: workspace.dir });
         await resetActivePromptSnapshotIfEmpty(
           characterDataDir(this.#dataDir, name),
           threadDataDir(this.#dataDir, name, homeThread(index)),
