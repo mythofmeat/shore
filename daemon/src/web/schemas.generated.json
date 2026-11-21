@@ -6199,19 +6199,13 @@
       "PresenceResult": {
         "type": "object",
         "properties": {
-          "status": {
-            "type": [
-              "string",
-              "null"
-            ]
+          "statuses": {
+            "type": "array",
+            "items": {
+              "$ref": "#/$defs/PresenceStatus"
+            }
           },
-          "set_at": {
-            "type": [
-              "string",
-              "null"
-            ]
-          },
-          "choices": {
+          "history": {
             "type": "array",
             "items": {
               "type": "string"
@@ -6219,7 +6213,23 @@
           }
         },
         "required": [
-          "choices"
+          "statuses",
+          "history"
+        ]
+      },
+      "PresenceStatus": {
+        "type": "object",
+        "properties": {
+          "status": {
+            "type": "string"
+          },
+          "set_at": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "status",
+          "set_at"
         ]
       },
       "KeepalivePingResult": {
@@ -16132,19 +16142,13 @@
       "PresenceResult": {
         "type": "object",
         "properties": {
-          "status": {
-            "type": [
-              "string",
-              "null"
-            ]
+          "statuses": {
+            "type": "array",
+            "items": {
+              "$ref": "#/$defs/PresenceStatus"
+            }
           },
-          "set_at": {
-            "type": [
-              "string",
-              "null"
-            ]
-          },
-          "choices": {
+          "history": {
             "type": "array",
             "items": {
               "type": "string"
@@ -16152,7 +16156,23 @@
           }
         },
         "required": [
-          "choices"
+          "statuses",
+          "history"
+        ]
+      },
+      "PresenceStatus": {
+        "type": "object",
+        "properties": {
+          "status": {
+            "type": "string"
+          },
+          "set_at": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "status",
+          "set_at"
         ]
       },
       "KeepalivePingResult": {

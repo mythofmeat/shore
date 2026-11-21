@@ -59,6 +59,6 @@ export interface Message {
   attempt?: string;
   last_elsewhere?: { thread: string; at: string };
   wake_running?: { started_at: string; thread?: string | undefined };
-  presence?: { status: string; set_at: string };
+  presence?: { statuses: { status: string; set_at: string }[]; changed_at: string };
   shown_later?: string;
 }

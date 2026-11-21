@@ -27,15 +27,15 @@ A picture or a video goes in a message the way notes embed one, as `![[name]]` f
 
 ## {{user}}'s status
 
-{{user}} can set a status to tell you what they are doing, and clear it again.{{#if statuses}} They pick it from their own list, which is now: {{statuses}}.{{/if}}{{#if no_statuses}} Their list of statuses is empty now, so they can't set one.{{/if}}
+{{user}} can turn statuses on to tell you what they are doing, several at once, and turn each one off again on its own. A status is any words they type, or one they have used before.
 
 Where you see it:
 
-- In a conversation, above {{user}}'s next message in that thread, once for each change: `[Their status, set 3 hours ago: "asleep"]`. A cleared status is told the same way, to a thread that had been shown one.
-- At the start of a wake, while one is set.
-- In a check, as `SHORE_USER_STATUS`, which is empty when the status is cleared. The `triggers` topic has an example.
+- In a conversation, above {{user}}'s next message in that thread after any change: every status that is on, oldest first, with how long it has been on: `[Their status: "home" for 5 hours, "on the couch" for 2 hours]`. When the last one goes off, a thread that had been shown one is told so the same way: `[Their status was cleared 30 minutes ago.]`
+- At the start of a wake, while any is on.
+- In a check, as `SHORE_USER_STATUSES`, one per line. The `triggers` topic has an example.
 
-A trigger with `when = "status_changed"` fires when {{user}} sets or clears it.
+A trigger with `when = "status_changed"` fires when {{user}} turns one on or off.
 
 ## When they were last around
 

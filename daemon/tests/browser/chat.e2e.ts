@@ -507,26 +507,39 @@ test("the usage display refreshes after a reply and otherwise leaves the daemon 
 
 const LONG_STATUS = "reading https://example.org/the_long_article_everyone_keeps_sending_me_this_week";
 
-test("the sidebar's status row sets one of the user's statuses, shows it after a reload, and clears it", async ({ page }) => {
+test("the sidebar's status row turns typed statuses on and off, keeps them after a reload, offers the ones used before and forgets one", async ({ page }) => {
   const finish = await watchPage(page);
   await signIn(page);
   await createCharacter(page, "plover");
 
   const unset = page.getByRole("button", { name: "Your status", exact: true });
-  const busy = page.getByRole("button", { name: "Your status: busy", exact: true });
   await expect(unset).toHaveText("Set status");
   await unset.click();
-  const statuses = page.getByRole("menu", { name: "Your status" });
-  await expect(statuses.getByRole("menuitem")).toHaveText(["asleep", "busy", LONG_STATUS]);
-  await statuses.getByRole("menuitem", { name: "busy" }).click();
-  await expect(busy).toHaveText("busy");
+  const panel = page.getByRole("dialog", { name: "Your status" });
+  const field = panel.getByRole("textbox", { name: "Add a status" });
+  await expect(field).toBeFocused();
+  await field.fill("busy");
+  await field.press("Enter");
+  await field.fill("home");
+  await field.press("Enter");
+  const both = page.getByRole("button", { name: "Your status: busy, home", exact: true });
+  await expect(both).toHaveText("busy, home");
 
   await page.reload();
-  await expect(busy).toHaveText("busy");
-  await busy.click();
-  await expect(statuses.getByRole("menuitem")).toHaveText(["asleep", "busySet", LONG_STATUS, "Clear status"]);
-  await statuses.getByRole("menuitem", { name: "Clear status" }).click();
+  await expect(both).toHaveText("busy, home");
+  await both.click();
+  await expect(panel.locator(".status-chip-name")).toHaveText(["busy", "home"]);
+  await panel.getByRole("button", { name: "Turn off busy", exact: true }).click();
+  await expect(page.getByRole("button", { name: "Your status: home", exact: true })).toHaveText("home");
+  const used = panel.getByRole("list", { name: "Used before" });
+  await expect(used.locator(".status-pick")).toHaveText(["busy"]);
+  await panel.getByRole("button", { name: "Forget busy", exact: true }).click();
+  await expect(used).toHaveCount(0);
+  await panel.getByRole("button", { name: "Turn all off", exact: true }).click();
   await expect(unset).toHaveText("Set status");
+  await expect(used.locator(".status-pick")).toHaveText(["home"]);
+  await page.keyboard.press("Escape");
+  await expect(panel).toBeHidden();
   await finish();
 });
 
@@ -587,6 +600,18 @@ test("a sent video plays in the browser's own player at a size its controls fit 
 
 interface Sized { scrollWidth: number; clientWidth: number }
 
+async function expectPanelInsideWindow(page: Page): Promise<void> {
+  const panel = page.getByRole("dialog", { name: "Your status" });
+  await expect(panel).toBeVisible();
+  const box = await panel.boundingBox();
+  const viewport = page.viewportSize();
+  if (box === null || viewport === null) throw new Error("the status panel is not on the page");
+  expect(box.x).toBeGreaterThanOrEqual(0);
+  expect(box.x + box.width).toBeLessThanOrEqual(viewport.width);
+  expect(box.y).toBeGreaterThanOrEqual(0);
+  expect(await panel.evaluate((element: Sized & { querySelectorAll: (selector: string) => Iterable<Sized> }) => [element, ...element.querySelectorAll("*")].every((part) => part.scrollWidth <= part.clientWidth))).toBe(true);
+}
+
 async function expectFooterInsideSidebar(page: Page, connection: string): Promise<void> {
   const sidebar = page.getByRole("complementary", { name: "Characters and threads" });
   await sidebar.evaluate(async (side: { getAnimations: () => { finished: Promise<unknown> }[] }) => { await Promise.all(side.getAnimations().map((animation) => animation.finished)); });
@@ -626,24 +651,34 @@ test("the sidebar's footer keeps the user's status, settings and the connection 
   await expectFooterInsideSidebar(page, "Connected");
 
   await status.click();
-  await page.getByRole("menuitem", { name: LONG_STATUS }).click();
+  const panel = page.getByRole("dialog", { name: "Your status" });
+  await panel.getByRole("textbox", { name: "Add a status" }).fill(LONG_STATUS);
+  await panel.getByRole("textbox", { name: "Add a status" }).press("Enter");
+  await panel.getByRole("textbox", { name: "Add a status" }).fill("home");
+  await panel.getByRole("textbox", { name: "Add a status" }).press("Enter");
+  await expect(status).toHaveText(`${LONG_STATUS}, home`);
+  await expect(status).toHaveAttribute("title", `Your status: ${LONG_STATUS}, home`);
+  await expectPanelInsideWindow(page);
+  await panel.getByRole("button", { name: `Turn off ${LONG_STATUS}`, exact: true }).click();
+  await expect(panel.locator(".status-pick")).toHaveText([LONG_STATUS]);
+  await expectPanelInsideWindow(page);
+  await panel.locator(".status-pick").click();
+  await panel.getByRole("button", { name: "Turn off home", exact: true }).click();
+  await expect(panel.locator(".status-pick")).toHaveText(["home"]);
   await expect(status).toHaveText(LONG_STATUS);
-  await expect(status).toHaveAttribute("title", `Your status: ${LONG_STATUS}`);
-  await expectFooterInsideSidebar(page, "Connected");
-
-  await status.click();
-  const choice = page.getByRole("menuitem", { name: LONG_STATUS });
-  await expect(choice).toBeVisible();
-  expect(await choice.evaluate((item: Sized & { querySelectorAll: (selector: string) => Iterable<Sized> }) => [item, ...item.querySelectorAll("*")].every((part) => part.scrollWidth <= part.clientWidth))).toBe(true);
-  await expectFooterInsideSidebar(page, "Connected");
+  await expectPanelInsideWindow(page);
   await page.keyboard.press("Escape");
-  await expect(choice).toBeHidden();
+  await expect(panel).toBeHidden();
+  await expectFooterInsideSidebar(page, "Connected");
 
   await page.evaluate("localStorage.setItem('shore.font-size', 'larger')");
   await page.reload();
   await expect(status).toHaveText(LONG_STATUS);
   await expect(page.getByText("Connected", { exact: true })).toBeVisible();
   await expectFooterInsideSidebar(page, "Connected");
+  await status.click();
+  await expectPanelInsideWindow(page);
+  await page.keyboard.press("Escape");
 
   cut = true;
   await live?.close();
@@ -653,6 +688,8 @@ test("the sidebar's footer keeps the user's status, settings and the connection 
   await page.setViewportSize({ width: 280, height: 653 });
   await page.getByRole("button", { name: "Open sidebar", exact: true }).click();
   await expectFooterInsideSidebar(page, "Reconnecting…");
+  await status.click();
+  await expectPanelInsideWindow(page);
   await finish();
 });
 

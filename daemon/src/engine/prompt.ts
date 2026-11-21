@@ -312,15 +312,19 @@ function relativeGapPhrase(gapSecs: number): string {
   return `${Math.round(gapSecs / SECS_PER_DAY)} days later`;
 }
 
-export function agoPhrase(gapSecs: number): string {
+function lengthPhrase(gapSecs: number): string {
   if (gapSecs < SECS_PER_HOUR) {
     const minutes = Math.max(1, Math.round(gapSecs / 60));
-    return minutes === 1 ? "a minute ago" : `${String(minutes)} minutes ago`;
+    return minutes === 1 ? "a minute" : `${String(minutes)} minutes`;
   }
-  if (gapSecs < ONE_AND_HALF_HOURS_SECS) return "about an hour ago";
-  if (gapSecs < EIGHTEEN_HOURS_SECS) return `${String(Math.round(gapSecs / SECS_PER_HOUR))} hours ago`;
-  if (gapSecs < THIRTY_SIX_HOURS_SECS) return "about a day ago";
-  return `${String(Math.round(gapSecs / SECS_PER_DAY))} days ago`;
+  if (gapSecs < ONE_AND_HALF_HOURS_SECS) return "about an hour";
+  if (gapSecs < EIGHTEEN_HOURS_SECS) return `${String(Math.round(gapSecs / SECS_PER_HOUR))} hours`;
+  if (gapSecs < THIRTY_SIX_HOURS_SECS) return "about a day";
+  return `${String(Math.round(gapSecs / SECS_PER_DAY))} days`;
+}
+
+export function agoPhrase(gapSecs: number): string {
+  return `${lengthPhrase(gapSecs)} ago`;
 }
 
 function lastElsewherePhrase(elsewhere: Message["last_elsewhere"], instantMs: number): string | undefined {
@@ -343,8 +347,9 @@ function formatTimeMarker(
 }
 
 export function presenceText(presence: NonNullable<Message["presence"]>, at: number, whose: string): string {
-  const ago = agoPhrase(gapSeconds(Date.parse(presence.set_at), at));
-  return presence.status === "" ? `[${whose} status was cleared ${ago}.]` : `[${whose} status, set ${ago}: "${presence.status}"]`;
+  const since = (instant: string): number => gapSeconds(Date.parse(instant), at);
+  if (presence.statuses.length === 0) return `[${whose} status was cleared ${agoPhrase(since(presence.changed_at))}.]`;
+  return `[${whose} status: ${presence.statuses.map((status) => `"${status.status}" for ${lengthPhrase(since(status.set_at))}`).join(", ")}]`;
 }
 
 export function wakeRunningText(running: NonNullable<Message["wake_running"]>, timeZone: string): string {

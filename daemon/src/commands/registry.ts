@@ -234,8 +234,11 @@ export const commandOperations: OperationRegistry<CommandOperationContext> = {
   wake_now: register("wake_now", { ...wakePresentation, label: "Start a wake now", effects: ["runtime_write", "provider_call"], fields: {} },
     (context) => wakeNow(statusContext(engineOf(context), context.session, context.deps))),
   presence: register("presence", { category: "Application", scope: "optional_character", prerequisites: [], effects: ["runtime_write"], confirmation: "none", label: "Your status", fields: {
-    status: { label: "Status", hint: "One of the statuses in presence.statuses, which your characters then see for you. Empty clears it; omit it to only show the current one" },
-  } }, (context, args) => presenceCommand({ dataDir: context.session.dataDir, choices: context.session.config.app.presence.statuses, ...(context.deps.presenceChanged === undefined ? {} : { changed: context.deps.presenceChanged }) }, args)),
+    on: { label: "Turn on", hint: "Statuses your characters then see for you, each with how long it has been on. One already on keeps its time" },
+    off: { label: "Turn off", hint: "Statuses to take off" },
+    clear: { label: "Turn all off", hint: "Take every status off, apart from any turned on in the same request" },
+    forget: { label: "Forget", hint: "Statuses to stop offering from the ones used before" },
+  } }, (context, args) => presenceCommand({ dataDir: context.session.dataDir, ...(context.deps.presenceChanged === undefined ? {} : { changed: context.deps.presenceChanged }) }, args)),
   set_dormant: register("set_dormant", { ...wakePresentation, label: "Make dormant", fields: {} },
     (context) => setDormant(statusContext(engineOf(context), context.session, context.deps))),
   set_active: register("set_active", { ...wakePresentation, label: "Make active", fields: {} },

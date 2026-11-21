@@ -6352,11 +6352,26 @@
       "title": "PresenceArgs",
       "type": "object",
       "properties": {
-        "status": {
-          "type": [
-            "string",
-            "null"
-          ]
+        "on": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "off": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "clear": {
+          "type": "boolean"
+        },
+        "forget": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
         }
       },
       "additionalProperties": false
@@ -6366,19 +6381,13 @@
       "title": "PresenceResult",
       "type": "object",
       "properties": {
-        "status": {
-          "type": [
-            "string",
-            "null"
-          ]
+        "statuses": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/PresenceStatus"
+          }
         },
-        "set_at": {
-          "type": [
-            "string",
-            "null"
-          ]
-        },
-        "choices": {
+        "history": {
           "type": "array",
           "items": {
             "type": "string"
@@ -6386,8 +6395,26 @@
         }
       },
       "required": [
-        "choices"
-      ]
+        "statuses",
+        "history"
+      ],
+      "$defs": {
+        "PresenceStatus": {
+          "type": "object",
+          "properties": {
+            "status": {
+              "type": "string"
+            },
+            "set_at": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "status",
+            "set_at"
+          ]
+        }
+      }
     }
   },
   {

@@ -7,7 +7,7 @@ import { hostZone } from "../ledger/zoned.ts";
 import { shoreLog } from "../log.ts";
 import { characterWorkspace } from "../tools/character_workspace.ts";
 import { localWallClock } from "./activity.ts";
-import { lastSeen, presence, type Presence } from "./presence.ts";
+import { lastSeen, presence, statusNames, type Status } from "./presence.ts";
 import type { AutonomyService } from "./service.ts";
 import { runCheck } from "./trigger_check.ts";
 import { CharacterTriggers, type TriggerSettings, type TriggersView } from "./trigger_loop.ts";
@@ -30,7 +30,8 @@ export interface CheckFacts {
 export interface UserFacts {
   lastUserAt: number | undefined;
   lastSeenAt: number | undefined;
-  status: Presence | undefined;
+  statuses: readonly Status[];
+  statusesSeen?: readonly string[] | undefined;
 }
 
 export function checkFacts(now: number, user: UserFacts, activity: Record<string, unknown> | undefined): CheckFacts {
@@ -38,11 +39,14 @@ export function checkFacts(now: number, user: UserFacts, activity: Record<string
   const last = user.lastUserAt === undefined ? undefined : new Date(user.lastUserAt).toISOString();
   const quiet = user.lastUserAt === undefined ? undefined : Math.floor((now - user.lastUserAt) / 1000);
   const seen = user.lastSeenAt === undefined ? undefined : new Date(user.lastSeenAt).toISOString();
-  const status = user.status === undefined || user.status.status === "" ? undefined : user.status;
+  const on = statusNames(user.statuses);
+  const before = user.statusesSeen ?? on;
+  const added = on.filter((name) => !before.includes(name));
+  const removed = before.filter((name) => !on.includes(name));
   return {
     facts: {
       now: at,
-      user: { last_message_at: last ?? null, quiet_secs: quiet ?? null, last_seen_at: seen ?? null, status: status?.status ?? null, status_set_at: status?.set_at ?? null },
+      user: { last_message_at: last ?? null, quiet_secs: quiet ?? null, last_seen_at: seen ?? null, statuses: user.statuses, statuses_added: added, statuses_removed: removed },
       activity: activity ?? null,
     },
     env: {
@@ -50,8 +54,9 @@ export function checkFacts(now: number, user: UserFacts, activity: Record<string
       SHORE_USER_LAST_MESSAGE_AT: last ?? "",
       SHORE_USER_QUIET_SECS: quiet === undefined ? "" : String(quiet),
       SHORE_USER_LAST_SEEN_AT: seen ?? "",
-      SHORE_USER_STATUS: status?.status ?? "",
-      SHORE_USER_STATUS_SET_AT: status?.set_at ?? "",
+      SHORE_USER_STATUSES: on.join("\n"),
+      SHORE_USER_STATUSES_ADDED: added.join("\n"),
+      SHORE_USER_STATUSES_REMOVED: removed.join("\n"),
     },
   };
 }
@@ -110,6 +115,7 @@ export class TriggerService {
       settings: () => triggerSettings(config().app),
       dormant: () => autonomy.status(character)?.state !== "Active",
       lastUserAt: () => autonomy.status(character)?.last_user_at,
+      statuses: () => statusNames(presence(config().dirs.data)?.statuses ?? []),
       readFile: async () => {
         const workspace = characterWorkspace(config(), character);
         const [read] = await workspace.call("readFiles", { paths: [join(resolve(workspace.dir), TRIGGERS_FILE)] });
@@ -117,7 +123,7 @@ export class TriggerService {
         if (ABSENT.has(read.error.code ?? "")) return undefined;
         throw new Error(read.error.message);
       },
-      runCheck: async (trigger, limitMs) => {
+      runCheck: async (trigger, limitMs, statusesSeen) => {
         const now = this.#now();
         const stats = autonomy.activityStats(character, localWallClock(now));
         const activity = stats === undefined ? undefined : {
@@ -130,7 +136,7 @@ export class TriggerService {
           character,
           trigger: trigger.name,
           command: trigger.check ?? "",
-          ...checkFacts(now, { lastUserAt: autonomy.status(character)?.last_user_at, lastSeenAt: lastSeen(config().dirs.data), status: presence(config().dirs.data) }, activity),
+          ...checkFacts(now, { lastUserAt: autonomy.status(character)?.last_user_at, lastSeenAt: lastSeen(config().dirs.data), statuses: presence(config().dirs.data)?.statuses ?? [], statusesSeen }, activity),
           limitMs,
           signal: this.#stop.signal,
         });

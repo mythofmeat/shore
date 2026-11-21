@@ -396,29 +396,6 @@ const TRIGGERS: StructSpec<TriggersConfig> = {
   },
 };
 
-export interface PresenceConfig {
-  statuses: string[];
-}
-
-export const defaultPresenceConfig = (): PresenceConfig => ({
-  statuses: ["asleep", "busy", "away"],
-});
-
-export const MAX_STATUS_CHARS = 80;
-
-export function validatePresence(presence: PresenceConfig): string | undefined {
-  const wrong = presence.statuses.find((status) => status.trim() !== status || status === "" || Array.from(status).length > MAX_STATUS_CHARS);
-  if (wrong !== undefined) return `presence.statuses has ${JSON.stringify(wrong)}; a status is 1 to ${String(MAX_STATUS_CHARS)} characters with no space at either end`;
-  const repeated = presence.statuses.find((status, index) => presence.statuses.indexOf(status) !== index);
-  return repeated === undefined ? undefined : `presence.statuses lists ${JSON.stringify(repeated)} twice`;
-}
-
-const PRESENCE: StructSpec<PresenceConfig> = {
-  name: "PresenceConfig",
-  make: defaultPresenceConfig,
-  fields: { statuses: readStringSeq },
-};
-
 export interface MarksConfig {
   like_tags: string[];
   dislike_tags: string[];
@@ -1167,7 +1144,6 @@ export interface AppConfig {
   image: ImageConfig;
   images: ImagesConfig;
   triggers: TriggersConfig;
-  presence: PresenceConfig;
   marks: MarksConfig;
   compaction: CompactionConfig;
   tools: ToolsConfig;
@@ -1186,7 +1162,6 @@ export const defaultAppConfig = (): AppConfig => ({
   image: IMAGE.make(),
   images: defaultImagesConfig(),
   triggers: defaultTriggersConfig(),
-  presence: defaultPresenceConfig(),
   marks: defaultMarksConfig(),
   compaction: defaultCompactionConfig(),
   tools: defaultToolsConfig(),
@@ -1209,7 +1184,6 @@ const APP: StructSpec<AppConfig> = {
     image: struct(IMAGE),
     images: struct(IMAGES),
     triggers: struct(TRIGGERS),
-    presence: struct(PRESENCE),
     marks: struct(MARKS),
     compaction: struct(COMPACTION),
     tools: struct(TOOLS),

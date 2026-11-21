@@ -360,11 +360,8 @@
 }
 
 .sidebar-status {
+  position: relative;
   grid-column: 1 / -1;
-}
-
-.sidebar-status .menu {
-  display: flex;
 }
 
 .sidebar-status .unset {
@@ -377,8 +374,71 @@
   color: var(--text-3);
 }
 
-.sidebar-status .menu-label {
-  white-space: normal;
+.status-panel {
+  width: 300px;
+  gap: 8px;
+  padding: 8px;
+}
+
+.status-panel ul {
+  display: flex;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.status-on {
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.status-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding-left: 10px;
+  border: 1px solid var(--accent-line);
+  border-radius: 14px;
+  background: var(--accent-soft);
+  color: var(--accent);
+  font-size: var(--text-sm);
+}
+
+.status-chip-name {
+  overflow-wrap: anywhere;
+}
+
+.status-chip-age {
+  color: var(--text-3);
+  font-variant-numeric: tabular-nums;
+}
+
+.status-panel .icon-button {
+  width: 28px;
+  height: 28px;
+  min-height: 0;
+  padding: 0;
+  justify-content: center;
+  border-radius: var(--radius-pill);
+}
+
+.status-add .input {
+  width: 100%;
+  height: 36px;
+}
+
+.status-history {
+  flex-direction: column;
+}
+
+.status-history li {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.status-pick {
+  flex: 1;
   overflow-wrap: anywhere;
 }
 

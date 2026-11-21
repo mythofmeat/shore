@@ -392,7 +392,7 @@ test("the list says when each trigger fires, what it does, and what limits it", 
   expect(await shown('at = "sun 0:00"\ncheck = "tide.sh"\nreason = "r"\nwake = false\nbetween = "22:00-03:07"')).toBe('t: Sun at 00:00, runs `tide.sh`, never wakes you, "r", only 22:00-03:07\n  never fired · its check hasn\'t run yet');
   expect(await shown('on = "2026-11-12 00:00"\nreason = "It is time."')).toBe('t: once, Thursday 2026-11-12 · 12:00 AM, wakes you, "It is time."\n  never fired');
   expect(await shown('when = "user_quiet"\nafter = "36h"\nreason = "r"')).toBe('t: when eve has been quiet for 36h, wakes you, "r", at most every 1h\n  never fired');
-  expect(await shown('when = "status_changed"\nreason = "r"')).toBe('t: when eve changes their status, wakes you, "r", at most every 1h\n  never fired');
+  expect(await shown('when = "status_changed"\nreason = "r"')).toBe('t: when eve turns a status on or off, wakes you, "r", at most every 1h\n  never fired');
 });
 
 test("the list says when each trigger is next due, how often it has fired, and whether it is off", async () => {

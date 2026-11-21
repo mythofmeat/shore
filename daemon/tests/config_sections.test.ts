@@ -75,26 +75,24 @@ test("a compaction setting that can't work is refused, naming the key as the fil
   expect(read()[0]).toBe(false);
 });
 
-test("[presence], [marks], [matrix] and [image] are read from the file, and a section with nothing under its heading leaves the defaults", async () => {
+test("[marks], [matrix] and [image] are read from the file, and a section with nothing under its heading leaves the defaults", async () => {
   const root = await mkdtemp(testTmp("shore-sections-config-"));
   await writeFile(join(root, "config.toml"), [
-    "[presence]", 'statuses = ["asleep", "at sea"]',
     "[marks]", 'like_tags = ["funny"]', 'dislike_tags = ["flat"]',
     "[matrix]", "enabled = true", 'homeserver_url = "https://matrix.example"', 'user_id = "@ada:example"', 'room_id = "!room:example"', "mirror_user_messages = false",
     "[image]", 'model = "openai:gpt-image"', "",
   ].join("\n"));
   const { app } = loadConfig(join(root, "config.toml"), { env: { SHORE_CONFIG_DIR: root }, onWarn: () => {} });
-  expect([app.presence.statuses, app.marks, app.matrix, app.image.model]).toEqual([
-    ["asleep", "at sea"],
+  expect([app.marks, app.matrix, app.image.model]).toEqual([
     { like_tags: ["funny"], dislike_tags: ["flat"] },
     { enabled: true, homeserver_url: "https://matrix.example", user_id: "@ada:example", room_id: "!room:example", mirror_user_messages: false },
     "openai:gpt-image",
   ]);
 
-  await writeFile(join(root, "config.toml"), "[triggers]\n[compaction]\n[presence]\n[marks]\n[matrix]\n[image]\n");
+  await writeFile(join(root, "config.toml"), "[triggers]\n[compaction]\n[marks]\n[matrix]\n[image]\n");
   const bare = loadConfig(join(root, "config.toml"), { env: { SHORE_CONFIG_DIR: root }, onWarn: () => {} }).app;
-  expect([bare.triggers.enabled, bare.compaction.enabled, bare.presence.statuses, bare.marks, bare.matrix, bare.image.model]).toEqual([
-    false, true, ["asleep", "busy", "away"], { like_tags: [], dislike_tags: ["didn't look hard enough", "out of character", "too long", "repetitive"] },
+  expect([bare.triggers.enabled, bare.compaction.enabled, bare.marks, bare.matrix, bare.image.model]).toEqual([
+    false, true, { like_tags: [], dislike_tags: ["didn't look hard enough", "out of character", "too long", "repetitive"] },
     { enabled: false, homeserver_url: "", user_id: "", room_id: "", mirror_user_messages: true }, undefined,
   ]);
 });
@@ -146,7 +144,7 @@ test("[daemon] holds the address Shore listens on and the cache forensics switch
   expect(restartRequiredChanges(plain, set)).toEqual(["[daemon]"]);
   expect(restartRequiredChanges(plain, await loaded('[matrix]\nenabled = true\nhomeserver_url = "https://matrix.example"\n'))).toEqual(["[matrix]"]);
   expect(restartRequiredChanges(plain, await loaded('[notifications]\ntopic = "shore"\n'))).toEqual(["[notifications]"]);
-  expect(restartRequiredChanges(plain, await loaded('[presence]\nstatuses = ["at sea"]\n[marks]\nlike_tags = ["funny"]\n'))).toEqual([]);
+  expect(restartRequiredChanges(plain, await loaded('[marks]\nlike_tags = ["funny"]\n'))).toEqual([]);
 });
 
 test("a client that connects with no character open is told the model in use: the one it asked for, else chat.model, else the first model configured, else none", async () => {

@@ -46,7 +46,7 @@ A trigger says when it fires with exactly one of these:
 - `at = "20:00"`: at that local time, on the 24-hour clock, every day. Days in front limit it: `at = "Sat 20:00"`, `at = "Mon,Thu 09:30"`. If Shore wasn't running then, it fires once, late.
 - `on = "2026-11-12 00:00"`: once, at that local date and time, or late if Shore wasn't running then. One whose time had already passed when Shore first saw it never fires, so write a time a couple of minutes ahead.
 - `when = "user_quiet"` with `after = "8h"`: once each time {{user}} has gone that long without writing to you.
-- `when = "status_changed"`: when {{user}} sets or clears their status.
+- `when = "status_changed"`: when {{user}} turns a status on or off.
 - `follows = "another-trigger"`: after the trigger of that name in this file. See below for what it waits for.
 
 `after` goes only with `user_quiet`, which needs it.
@@ -87,12 +87,13 @@ A check is handed what Shore knows, in its environment:
 - `SHORE_USER_LAST_MESSAGE_AT`: when {{user}} last wrote to you, in any thread, in the same form.
 - `SHORE_USER_QUIET_SECS`: whole seconds since then.
 - `SHORE_USER_LAST_SEEN_AT`: when {{user}} last wrote to you or a client of theirs last marked a thread read, in the same form. That can be while they are away: the `messages` topic says how.
-- `SHORE_USER_STATUS`: {{user}}'s status, exactly as they set it.
-- `SHORE_USER_STATUS_SET_AT`: when they set it, in the same form.
+- `SHORE_USER_STATUSES`: the statuses {{user}} has on, one per line, oldest first, each exactly as they wrote it.
+- `SHORE_USER_STATUSES_ADDED`: for a `status_changed` trigger, the statuses turned on since it last came due, one per line.
+- `SHORE_USER_STATUSES_REMOVED`: the same for the statuses turned off.
 
-A variable Shore has nothing for is empty. `SHORE_USER_STATUS` and `SHORE_USER_STATUS_SET_AT` are both empty when {{user}} has cleared their status or never set one.{{#if statuses}} A status is always one from {{user}}'s own list, which is now: {{statuses}}.{{/if}}{{#if no_statuses}} {{user}}'s list of statuses is empty now, so they can't set one.{{/if}}
+A variable Shore has nothing for is empty. `SHORE_USER_STATUSES` is empty while {{user}} has no status on, and the last two are empty for every other kind of trigger. A status turned on and off again before the check runs is in neither.
 
-The same facts are on the check's stdin as one line of JSON, with `null` where a variable would be empty, along with figures on when {{user}} writes:
+The same facts are on the check's stdin as one line of JSON, with `null` where a variable would be empty and `[]` where a list would be, along with when each status went on and figures on when {{user}} writes:
 
 ```json
 {
@@ -101,8 +102,12 @@ The same facts are on the check's stdin as one line of JSON, with `null` where a
     "last_message_at": "2026-11-11T23:10:42.000Z",
     "quiet_secs": 29958,
     "last_seen_at": "2026-11-11T23:15:03.000Z",
-    "status": "asleep",
-    "status_set_at": "2026-11-11T23:16:00.000Z"
+    "statuses": [
+      { "status": "home", "set_at": "2026-11-11T18:02:00.000Z" },
+      { "status": "asleep", "set_at": "2026-11-11T23:16:00.000Z" }
+    ],
+    "statuses_added": ["asleep"],
+    "statuses_removed": ["on the couch"]
   },
   "activity": {
     "messages": 4210,
@@ -114,12 +119,12 @@ The same facts are on the check's stdin as one line of JSON, with `null` where a
 
 `messages` is how many of {{user}}'s messages are on record, the same figure `{{activity_heatmap}}` gives as its total: those from the 90 days before Shore last started, and every one since. `share_of_messages_by_local_hour` is the share of them written in each local hour, from midnight on, and `median_secs_between_sessions` is the middle gap between their recent sittings, or `null` when there aren't two to compare. `activity` is `null` when Shore has no record for you.
 
-This trigger wakes you when {{user}} sets one particular status, and stays quiet for any other and for a cleared one:
+This trigger wakes you when {{user}} turns one particular status on, and stays quiet for every other change, including those while it stays on:
 
 ```toml
 [gone-to-bed]
 when = "status_changed"
-check = 'if [ "$SHORE_USER_STATUS" = "asleep" ]; then echo "They have gone to bed."; fi'
+check = 'if printf "%s\n" "$SHORE_USER_STATUSES_ADDED" | grep -qxF "asleep"; then echo "They have gone to bed."; fi'
 ```
 
 ## Cooldowns and hours

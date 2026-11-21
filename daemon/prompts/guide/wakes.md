@@ -39,7 +39,7 @@ From least to most:
 
 - What was said in its thread since your last wake there that finished: {{user}}'s messages, your replies, and what your wakes sent.
 - Where and how long ago {{user}} last wrote to you.
-- {{user}}'s status, while one is set.
+- {{user}}'s statuses, while any is on.
 - The label and opening time of each sealed thread you have.
 - A line for each thing that set it off: the trigger and its reason, or the thread you handed over from and the reason you gave.
 

@@ -804,24 +804,24 @@ mod tests {
     }
 
     #[test]
-    fn the_palette_shows_a_status_in_the_same_words_as_the_command_line() {
+    fn the_palette_shows_statuses_in_the_same_words_as_the_command_line() {
         assert_eq!(
             super::render(
                 "presence asleep",
                 "presence",
-                &json!({ "status": "asleep", "set_at": "just now", "choices": ["asleep"] }),
+                &json!({ "statuses": [{ "status": "asleep", "set_at": "just now" }], "history": ["asleep"] }),
                 "ada"
             ),
-            Some("Your status is \"asleep\", set just now.".to_owned())
+            Some("On: \"asleep\" since just now.".to_owned())
         );
         assert_eq!(
             super::render(
                 "presence --clear",
                 "presence",
-                &json!({ "choices": ["asleep", "busy"] }),
+                &json!({ "statuses": [], "history": ["asleep", "busy"] }),
                 "ada"
             ),
-            Some("You have no status set. You can set one of: asleep, busy.".to_owned())
+            Some("No status is on.\nUsed before: asleep, busy.".to_owned())
         );
     }
 }

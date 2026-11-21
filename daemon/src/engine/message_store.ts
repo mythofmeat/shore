@@ -92,13 +92,21 @@ export function deriveContentFromBlocks(
   return parts.join("\n");
 }
 
-export function normalizeMessage(msg: Message & { heartbeat_running?: Message["wake_running"] }): Message {
-  const { heartbeat_running: runningUnderItsOldName, ...current } = msg;
+type OneStatus = { status: string; set_at: string };
+
+function toldPresence(told: NonNullable<Message["presence"]> | OneStatus): NonNullable<Message["presence"]> {
+  if ("statuses" in told) return told;
+  return { statuses: told.status === "" ? [] : [told], changed_at: told.set_at };
+}
+
+export function normalizeMessage(msg: Omit<Message, "presence"> & { heartbeat_running?: Message["wake_running"]; presence?: Message["presence"] | OneStatus }): Message {
+  const { heartbeat_running: runningUnderItsOldName, presence: told, ...current } = msg;
   const m: Message = {
     ...current,
     content: deriveContentFromBlocks(msg.content_blocks, true),
   };
   if (runningUnderItsOldName !== undefined) m.wake_running = runningUnderItsOldName;
+  if (told !== undefined) m.presence = toldPresence(told);
 
   if (m.alternatives !== undefined && m.alternatives.length > 0) {
     m.alternatives = m.alternatives.map(normalizeAlternative);

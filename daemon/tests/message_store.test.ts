@@ -125,7 +125,7 @@ describe("writing a message to its file", () => {
       version: "v1", attempt: "a1", timestamp: AT, provider_key: "anthropic", model: "claude-lamp", origin: "autonomous",
       last_elsewhere: { thread: "garden", at: "2026-10-30T11:00:00.000Z" },
       wake_running: { started_at: AT, thread: "ring" },
-      presence: { status: "asleep", set_at: AT },
+      presence: { statuses: [{ status: "asleep", set_at: AT }], changed_at: AT },
       shown_later: "[wake]",
     };
     expect(serializeMessages([full])).toBe(`${JSON.stringify({
@@ -133,8 +133,17 @@ describe("writing a message to its file", () => {
       alt_index: 0, alt_count: 1,
       alternatives: [{ content: "The lamp is lit.", images: [{ path: "/pictures/lamp.png" }], content_blocks: said, timestamp: AT, provider_key: "anthropic", model: "claude-lamp", version: "v1", attempt: "a1" }],
       version: "v1", attempt: "a1", timestamp: AT, provider_key: "anthropic", model: "claude-lamp", origin: "autonomous",
-      last_elsewhere: { thread: "garden", at: "2026-10-30T11:00:00.000Z" }, wake_running: { started_at: AT, thread: "ring" }, presence: { status: "asleep", set_at: AT },
+      last_elsewhere: { thread: "garden", at: "2026-10-30T11:00:00.000Z" }, wake_running: { started_at: AT, thread: "ring" }, presence: { statuses: [{ status: "asleep", set_at: AT }], changed_at: AT },
     })}\n`);
+  });
+
+  test("a message stored with one status, from before statuses could be several, reads as that status on, and a cleared one as none on", () => {
+    const stored = (presence: { status: string; set_at: string }) => normalizeMessage({ msg_id: "m1", role: "user", content: "", images: [], content_blocks: [text("hello")], timestamp: AT, presence });
+    expect(stored({ status: "asleep", set_at: AT }).presence).toEqual({ statuses: [{ status: "asleep", set_at: AT }], changed_at: AT });
+    expect(stored({ status: "", set_at: AT }).presence).toEqual({ statuses: [], changed_at: AT });
+    const current = { statuses: [{ status: "home", set_at: AT }], changed_at: AT };
+    expect(normalizeMessage({ msg_id: "m2", role: "user", content: "", images: [], content_blocks: [text("hello")], timestamp: AT, presence: current }).presence).toEqual(current);
+    expect(normalizeMessage({ msg_id: "m3", role: "user", content: "", images: [], content_blocks: [text("hello")], timestamp: AT })).not.toHaveProperty("presence");
   });
 
   test("a message is written without what it doesn't carry, and with no list of alternatives when it has none", () => {

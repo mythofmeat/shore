@@ -51,6 +51,7 @@ pub(crate) enum Completes {
     SettingKeys,
     SettingValues,
     Statuses,
+    StatusesOn,
     SubagentRuns,
     Subagents,
     Threads,
@@ -88,7 +89,7 @@ impl Completes {
             Self::Sections => &[Source::Status],
             Self::SegmentSteps | Self::Segments => &[Source::Segments],
             Self::SettingKeys | Self::SettingValues => &[Source::Settings],
-            Self::Statuses => &[Source::Presence],
+            Self::Statuses | Self::StatusesOn => &[Source::Presence],
             Self::SubagentRuns => &[Source::SubagentRuns],
             Self::Subagents | Self::Tools => &[Source::Tools],
             Self::UsageApiKeys => &[Source::UsageApiKeys],
@@ -272,6 +273,7 @@ pub(crate) struct PaletteCatalog {
     pub budget_names: Vec<PaletteValue>,
     pub workspace_files: Vec<PaletteValue>,
     pub statuses: Vec<PaletteValue>,
+    pub statuses_on: Vec<PaletteValue>,
     like_tags: Vec<PaletteValue>,
     dislike_tags: Vec<PaletteValue>,
     tool_arguments: Vec<PaletteValue>,
@@ -292,7 +294,13 @@ impl PaletteCatalog {
                 self.dislike_tags = named_values(data, "dislike_tags");
             }
             Source::Models => self.absorb_models(data),
-            Source::Presence => self.statuses = named_values(data, "choices"),
+            Source::Presence => {
+                self.statuses = named_values(data, "history");
+                self.statuses_on = rows(data, "statuses")
+                    .filter_map(|status| text(status, "status"))
+                    .map(PaletteValue::plain)
+                    .collect();
+            }
             Source::Presets => self.absorb_presets(data),
             Source::Providers => self.absorb_providers(data),
             Source::Segments => self.segments = segment_values(data),
@@ -646,6 +654,7 @@ impl PaletteCatalog {
                 .map_or_else(Vec::new, |key| self.view_values(key)),
             Completes::WorkspaceFiles => self.workspace_files.clone(),
             Completes::Statuses => self.statuses.clone(),
+            Completes::StatusesOn => self.statuses_on.clone(),
         }
     }
 }
@@ -1526,7 +1535,10 @@ mod tests {
         );
         catalog.absorb(
             Source::Presence,
-            &json!({ "status": "asleep", "choices": ["asleep", "busy"] }),
+            &json!({
+                "statuses": [{ "status": "asleep", "set_at": "2026-11-22T01:00:00.000Z" }],
+                "history": ["asleep", "busy", "in bed"]
+            }),
         );
         catalog.absorb(
             Source::Marks,
@@ -1559,8 +1571,10 @@ mod tests {
                 &["models", "refresh", "add", "anthropic", "openrouter"],
             ),
             ("provider open", &["openrouter"]),
-            ("presence ", &["asleep", "busy"]),
+            ("presence ", &["asleep", "busy", "'in bed'"]),
             ("presence b", &["busy"]),
+            ("presence --off ", &["asleep"]),
+            ("presence --forget i", &["'in bed'"]),
             (
                 "provider openrouter ",
                 &[

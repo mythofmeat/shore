@@ -207,6 +207,8 @@ const WIRE_EXAMPLES: &[&[&str]] = &[
     &["presence"],
     &["presence", "at work"],
     &["presence", "--clear"],
+    &["presence", "--off", "at work"],
+    &["presence", "--forget", "at work"],
     &["debug", "wake_now"],
     &["debug", "set_dormant"],
     &["debug", "set_active"],

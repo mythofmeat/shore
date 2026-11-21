@@ -14,6 +14,7 @@ export interface TriggerRecord {
   checkedAt?: number;
   problem?: string;
   pending?: true;
+  statusesSeen?: string[];
 }
 
 interface TriggerState {
@@ -36,8 +37,9 @@ export interface TriggerLoopDeps {
   settings(): TriggerSettings;
   dormant(): boolean;
   lastUserAt(): number | undefined;
+  statuses(): string[];
   readFile(): Promise<string | undefined>;
-  runCheck(trigger: Trigger, limitMs: number): Promise<CheckOutcome>;
+  runCheck(trigger: Trigger, limitMs: number, statusesSeen: readonly string[] | undefined): Promise<CheckOutcome>;
   wake(firing: TriggerFiring): void;
 }
 
@@ -59,7 +61,7 @@ export interface TriggersView {
 
 function record(raw: unknown): TriggerRecord | undefined {
   if (typeof raw !== "object" || raw === null) return undefined;
-  const { since, fired, lastFiredAt, quietFor, checkedAt, problem, pending } = raw as Record<string, unknown>;
+  const { since, fired, lastFiredAt, quietFor, checkedAt, problem, pending, statusesSeen } = raw as Record<string, unknown>;
   if (typeof since !== "number" || typeof fired !== "number") return undefined;
   return {
     since,
@@ -69,6 +71,7 @@ function record(raw: unknown): TriggerRecord | undefined {
     ...(typeof checkedAt === "number" ? { checkedAt } : {}),
     ...(typeof problem === "string" ? { problem } : {}),
     ...(pending === true ? { pending } : {}),
+    ...(Array.isArray(statusesSeen) ? { statusesSeen: statusesSeen.filter((name) => typeof name === "string") } : {}),
   };
 }
 
@@ -107,14 +110,16 @@ export class CharacterTriggers {
       for (const trigger of this.#parsed.triggers) {
         if (settings.off.includes(trigger.name)) continue;
         const now = this.#deps.now();
-        const known = state.records[trigger.name] ?? { since: now, fired: 0 };
+        const watching = eventOf(trigger) === "status_changed";
+        const found = state.records[trigger.name] ?? { since: now, fired: 0 };
+        const known = watching && found.statusesSeen === undefined ? { ...found, statusesSeen: this.#deps.statuses() } : found;
         state.records[trigger.name] = known;
         if (!this.#due(trigger, known, now) || coolingDown(trigger.cooldownMs, known.lastFiredAt, now)) continue;
         const last = this.#deps.lastUserAt();
-        const { pending: _was, quietFor: _before, ...kept } = known;
-        const next: TriggerRecord = { ...kept, since: now, ...(last === undefined ? {} : { quietFor: last }) };
+        const { pending: _was, quietFor: _before, statusesSeen, ...kept } = known;
+        const next: TriggerRecord = { ...kept, since: now, ...(last === undefined ? {} : { quietFor: last }), ...(watching ? { statusesSeen: this.#deps.statuses() } : {}) };
         state.records[trigger.name] = next;
-        if (!resting && inItsHours(trigger.between, now, this.#deps.timeZone)) await this.#run(trigger, next, settings, state);
+        if (!resting && inItsHours(trigger.between, now, this.#deps.timeZone)) await this.#run(trigger, next, settings, state, statusesSeen);
       }
       this.#save(state);
     });
@@ -210,8 +215,8 @@ export class CharacterTriggers {
     return at === undefined ? known.pending === true : now >= at;
   }
 
-  async #run(trigger: Trigger, known: TriggerRecord, settings: TriggerSettings, state: TriggerState): Promise<void> {
-    const outcome: CheckOutcome = trigger.check === undefined ? { kind: "fired", output: "" } : await this.#deps.runCheck(trigger, settings.checkLimitMs);
+  async #run(trigger: Trigger, known: TriggerRecord, settings: TriggerSettings, state: TriggerState, statusesSeen: readonly string[] | undefined): Promise<void> {
+    const outcome: CheckOutcome = trigger.check === undefined ? { kind: "fired", output: "" } : await this.#deps.runCheck(trigger, settings.checkLimitMs, statusesSeen);
     const now = this.#deps.now();
     const { problem: _before, ...before } = known;
     const sound: TriggerRecord = trigger.check === undefined ? before : { ...before, checkedAt: now };

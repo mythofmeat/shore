@@ -3722,15 +3722,16 @@ mod palette_catalog_tests {
         absorb_palette_catalog(
             &mut app,
             Source::Presence,
-            &serde_json::json!({ "choices": ["asleep", "busy"] }),
+            &serde_json::json!({
+                "statuses": [{ "status": "busy", "set_at": "2026-11-22T01:00:00.000Z" }],
+                "history": ["busy", "asleep"]
+            }),
         );
-        let offered: Vec<&str> = app
-            .palette_catalog
-            .statuses
-            .iter()
-            .map(|status| status.value.as_str())
-            .collect();
-        assert_eq!(offered, ["asleep", "busy"]);
+        let values = |listed: &[crate::completion::PaletteValue]| -> Vec<String> {
+            listed.iter().map(|status| status.value.clone()).collect()
+        };
+        assert_eq!(values(&app.palette_catalog.statuses), ["busy", "asleep"]);
+        assert_eq!(values(&app.palette_catalog.statuses_on), ["busy"]);
     }
 }
 
