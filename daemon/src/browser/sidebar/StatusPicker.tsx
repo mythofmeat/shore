@@ -75,7 +75,7 @@ export function StatusPicker({ ready, store }: { ready: boolean; store: Presence
         {presence.statuses.map((status) => <li key={status.status} className="status-chip">
           <span className="status-chip-name">{status.status}</span>
           <span className="status-chip-age">{onFor(status.set_at, now)}</span>
-          <IconButton icon="close" size={14} label={`Turn off ${status.status}`} onClick={() => { act({ off: [status.status] }); }} />
+          <IconButton icon="close" label={`Turn off ${status.status}`} onClick={() => { act({ off: [status.status] }); }} />
         </li>)}
       </ul>}
       <form className="status-add" onSubmit={(event) => { event.preventDefault(); add(); }}>
@@ -84,7 +84,7 @@ export function StatusPicker({ ready, store }: { ready: boolean; store: Presence
       {offered.length === 0 ? null : <ul className="status-history" aria-label="Used before">
         {offered.map((name) => <li key={name}>
           <button type="button" className="status-pick" onClick={() => { act({ on: [name] }); }}>{name}</button>
-          <IconButton icon="trash" size={14} label={`Forget ${name}`} onClick={() => { act({ forget: [name] }); }} />
+          <IconButton icon="trash" label={`Forget ${name}`} onClick={() => { act({ forget: [name] }); }} />
         </li>)}
       </ul>}
       {on.length === 0 ? null : <button type="button" className="status-clear" onClick={() => { act({ clear: true }); }}>Turn all off</button>}

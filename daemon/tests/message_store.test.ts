@@ -137,6 +137,21 @@ describe("writing a message to its file", () => {
     })}\n`);
   });
 
+  test("a stored message is read with its text taken from its blocks, tool results included, its alternatives counted and the one shown kept among them", () => {
+    const tide: ContentBlock = { type: "tool_result", tool_use_id: "t1", content: "  the tide is out  " };
+    const alt = (written: string) => ({ content: "stale", images: [], content_blocks: [text(written)], timestamp: AT });
+    const stored = (extra: Partial<Message>) => normalizeMessage({ msg_id: "m1", role: "assistant", content: "stale", images: [], content_blocks: [text("looked"), tide], timestamp: AT, ...extra });
+    expect(stored({}).content).toBe("looked\nthe tide is out");
+    const three = stored({ alternatives: [alt("one"), alt("two"), alt("three")], alt_count: 9 });
+    expect([three.alt_count, three.alt_index, three.alternatives?.map((each) => each.content)]).toEqual([3, 2, ["one", "two", "three"]]);
+    expect(stored({ alternatives: [alt("one"), alt("two"), alt("three")], alt_index: 1 }).alt_index).toBe(1);
+    expect(stored({ alternatives: [alt("one"), alt("two")], alt_index: 7 }).alt_index).toBe(1);
+    const one = stored({ alternatives: [alt("one")] });
+    expect([one.alt_count, one.alt_index]).toEqual([1, 0]);
+    const none = stored({ alternatives: [] });
+    expect([none.alt_count, none.alt_index]).toEqual([undefined, undefined]);
+  });
+
   test("a message stored with one status, from before statuses could be several, reads as that status on, and a cleared one as none on", () => {
     const stored = (presence: { status: string; set_at: string }) => normalizeMessage({ msg_id: "m1", role: "user", content: "", images: [], content_blocks: [text("hello")], timestamp: AT, presence });
     expect(stored({ status: "asleep", set_at: AT }).presence).toEqual({ statuses: [{ status: "asleep", set_at: AT }], changed_at: AT });

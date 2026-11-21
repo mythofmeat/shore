@@ -110,9 +110,9 @@ export function normalizeMessage(msg: Omit<Message, "presence"> & { heartbeat_ru
 
   if (m.alternatives !== undefined && m.alternatives.length > 0) {
     m.alternatives = m.alternatives.map(normalizeAlternative);
-    const count = m.alternatives.length;
-    m.alt_count = count;
-    m.alt_index = Math.min(m.alt_index ?? count - 1, count - 1);
+    m.alt_count = m.alternatives.length;
+    const last = m.alt_count - 1;
+    m.alt_index = Math.min(m.alt_index ?? last, last);
   }
   return m;
 }

@@ -1,4 +1,4 @@
-import { afterEach, expect, setSystemTime, test } from "bun:test";
+import { afterEach, expect, setSystemTime, spyOn, test } from "bun:test";
 
 import type { PresenceArgs } from "../../src/protocol/PresenceArgs.ts";
 import type { PresenceResult } from "../../src/protocol/PresenceResult.ts";
@@ -189,6 +189,26 @@ test("Escape closes the panel and goes back to its button, a press outside close
   expect(panel(view.host), "a press inside keeps it open").not.toBeNull();
   await acting(() => { outside.dispatchEvent(new PointerEvent("pointerdown", { bubbles: true })); });
   expect(panel(view.host)).toBeNull();
+});
+
+test("the panel listens for presses outside only while it is open, and stops when it closes or is gone", async () => {
+  const { StatusPicker, PresenceStore } = await picker();
+  const added = spyOn(document, "addEventListener");
+  const removed = spyOn(document, "removeEventListener");
+  restores.push(() => { added.mockRestore(); removed.mockRestore(); });
+  const presses = (spy: typeof added) => spy.mock.calls.filter(([kind]) => kind === "pointerdown").map(([, listener]) => listener);
+  const d = daemon(["asleep"]);
+  const view = await mount(<StatusPicker ready store={new PresenceStore(d.ask, d.failed)} />);
+  expect(presses(added)).toEqual([]);
+  await acting(() => { trigger(view.host)?.click(); });
+  expect(presses(added)).toHaveLength(1);
+  expect(presses(removed)).toEqual([]);
+  await acting(() => { trigger(view.host)?.click(); });
+  expect(presses(removed)).toEqual(presses(added));
+  await acting(() => { trigger(view.host)?.click(); });
+  await view.unmount();
+  expect(presses(added)).toHaveLength(2);
+  expect(presses(removed)).toEqual(presses(added));
 });
 
 test("how long a status has been on is shown in whole minutes, hours or days, and never less than a minute", async () => {
