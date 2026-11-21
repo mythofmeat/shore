@@ -2,10 +2,8 @@ import { afterEach, describe, expect, spyOn, test } from "bun:test";
 import { mkdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 
-import defaultToolsGuidance from "../prompts/engine/default_tools.md" with { type: "text" };
 import { CharacterRegistry } from "../src/characters.ts";
 import { newThread, threadPins as setPinsCommand } from "../src/commands/threads.ts";
-import { defaultAppConfig } from "../src/config/app.ts";
 import { characterDataDir, characterThreadsIndex } from "../src/config/dirs.ts";
 import { ConfigDuration } from "../src/config/duration.ts";
 import type { LoadedConfig } from "../src/config/loader.ts";
@@ -31,6 +29,7 @@ import { dispatchTool } from "../src/tools/dispatch.ts";
 import { outcomeOf, rejectionOf } from "./support/outcome.ts";
 import { testTmp } from "./support/tmp.ts";
 import { required } from "../src/util/required.ts";
+import { promptedAppConfig } from "./support/prompt_list.ts";
 
 const NOW = "2026-11-21T10:00:00Z";
 
@@ -62,7 +61,7 @@ async function setup(options: { files?: Record<string, string>; tools?: string[]
   await mkdir(join(dirs.data, "frank"), { recursive: true });
   await options.beforeStart?.(dirs.data);
   initializeDatabase(dirs.data);
-  const app = defaultAppConfig();
+  const app = promptedAppConfig();
   app.chat.display_name = "Sam";
   app.tools.enabled = options.tools ?? [];
   if (options.checkLimitMs !== undefined) app.triggers.check_time_limit = ConfigDuration.fromMillis(options.checkLimitMs);
@@ -171,6 +170,7 @@ describe("a command pin", () => {
       thread: { id: "story", home: "main", created_at: NOW, started_by_you: false, pins: [{ pin: "!date", content: undefined }, { pin: "notes.md", content: undefined }] },
       character_name: "frank",
       display_name: "Sam",
+      sections: [{ shore: "thread_pins" }],
       has_prior_context: false,
       messages,
       max_context_tokens: 40_000,
@@ -258,17 +258,6 @@ describe("the user's thread commands", () => {
 });
 
 describe("a thread's prompt snapshot", () => {
-  test("gives a new character the default TOOLS.md at its first turn, and gives it back when the prompt is refreshed after it was deleted", async () => {
-    const { dirs, workspace, system, talking, refresh } = await setup();
-    await createThread(dirs.data, "frank", "story", NOW);
-    talking();
-    expect(await system()).toContain(defaultToolsGuidance.trim());
-
-    await Bun.file(join(workspace, "TOOLS.md")).delete();
-    await refresh();
-    expect(await Bun.file(join(workspace, "TOOLS.md")).text()).toBe(defaultToolsGuidance);
-  });
-
   test("taken by a refresh before the thread's prompt was first made counts, so a prompt file changed after it is reported as waiting", async () => {
     const { config, dirs, workspace, talking, refresh } = await setup();
     await createThread(dirs.data, "frank", "story", NOW);

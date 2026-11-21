@@ -1,10 +1,12 @@
 import { compareByCodePoint, sortedKeys } from "../util/sort.ts";
+import { required } from "../util/required.ts";
 import { ConfigDuration, type ParseResult } from "./duration.ts";
 import { within } from "./failure.ts";
 import { invalidType } from "./models.ts";
 import { DEFAULT_MAX_INLINE_IMAGE_BYTES } from "../tools/media.ts";
 import { DEFAULT_IMAGE_CACHE_BYTES } from "../storage/image_cache.ts";
 import { parseToolsUser } from "../tools/character_user.ts";
+import { normalizeWorkspacePath, pathComponents } from "../tools/workspace_path.ts";
 import {
   API_MAX_IMAGE_EDGE,
   DEFAULT_IMAGE_SETTINGS,
@@ -1138,9 +1140,62 @@ export function mcpBearerToken(
   return typeof token === "string" && token !== "" ? token : undefined;
 }
 
+export const SHORE_PROMPT_PARTS = ["system_prompt", "thread", "thread_pins"] as const;
+
+export type ShorePromptPart = (typeof SHORE_PROMPT_PARTS)[number];
+
+interface PromptPartFields {
+  file: string | undefined;
+  workspace: string | undefined;
+  shore: ShorePromptPart | undefined;
+}
+
+export type PromptPart = { file: string } | { workspace: string } | { shore: ShorePromptPart };
+
+const readPromptWorkspacePath: Reader<string> = typed(
+  (v) => {
+    if (typeof v !== "string") return { err: invalidType(v, "string") };
+    const path = promptWorkspacePath(v);
+    return path === undefined ? { err: `\`${v}\` is not a path inside the workspace` } : { ok: path };
+  },
+  { kind: "string" },
+);
+
+const PROMPT_PART: StructSpec<PromptPartFields> = {
+  name: "PromptPart",
+  make: () => ({ file: undefined, workspace: undefined, shore: undefined }),
+  fields: {
+    file: optional(readString),
+    workspace: optional(readPromptWorkspacePath),
+    shore: optional(readEnum(SHORE_PROMPT_PARTS)),
+  },
+};
+
+const readPromptPart: Reader<PromptPart> = typed(
+  (v) => {
+    const parsed = readStruct(PROMPT_PART, v);
+    if ("err" in parsed) return parsed;
+    const { file, workspace, shore } = parsed.ok;
+    const given = [file, workspace, shore].filter((value) => value !== undefined).length;
+    if (given !== 1) return { err: "a prompt part takes exactly one of `file`, `workspace` or `shore`" };
+    return { ok: file !== undefined ? { file } : workspace !== undefined ? { workspace } : { shore: required(shore) } };
+  },
+  { kind: "table", table: () => shapeOf(PROMPT_PART) },
+);
+
+export function promptWorkspacePath(raw: string): string | undefined {
+  const parts = pathComponents(normalizeWorkspacePath(raw));
+  return parts.length === 0 || parts.includes("..") ? undefined : parts.join("/");
+}
+
+export function promptWorkspaceFiles(parts: readonly PromptPart[]): string[] {
+  return [...new Set(parts.flatMap((part) => "workspace" in part ? [part.workspace] : []))];
+}
+
 export interface AppConfig {
   daemon: DaemonConfig;
   chat: ChatConfig;
+  prompt: PromptPart[];
   image: ImageConfig;
   images: ImagesConfig;
   triggers: TriggersConfig;
@@ -1159,6 +1214,7 @@ export interface AppConfig {
 export const defaultAppConfig = (): AppConfig => ({
   daemon: defaultDaemonConfig(),
   chat: defaultChatConfig(),
+  prompt: [],
   image: IMAGE.make(),
   images: defaultImagesConfig(),
   triggers: defaultTriggersConfig(),
@@ -1181,6 +1237,7 @@ const APP: StructSpec<AppConfig> = {
   fields: {
     daemon: struct(DAEMON),
     chat: struct(CHAT),
+    prompt: readSeq(readPromptPart),
     image: struct(IMAGE),
     images: struct(IMAGES),
     triggers: struct(TRIGGERS),

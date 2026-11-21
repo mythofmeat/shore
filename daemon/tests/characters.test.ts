@@ -5,6 +5,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 
 import { CharacterConfigError, CharacterRegistry } from "../src/characters.ts";
+import { discoverCharacters } from "../src/config/dirs.ts";
 import { loadConfig, type LoadedConfig } from "../src/config/loader.ts";
 
 function makeRoot(): string {
@@ -106,5 +107,28 @@ test("an invalid character overlay fails closed with the rejected field", async 
   expect(() => registry.effectiveConfig("Alice")).toThrow(CharacterConfigError);
   expect(() => registry.effectiveConfig("Alice")).toThrow(
     `${join(configDir, "characters", "Alice", "config.toml")}: unknown field \`triggers.invalid_setting\``,
+  );
+});
+
+test("every folder in the config directory's characters folder is a character, whatever it holds, and nothing else is", () => {
+  const root = makeRoot();
+  const configDir = join(root, "config");
+  for (const dir of ["characters/ada", "characters/bo/workspace", "characters/.git", "workspace/cy"]) mkdirSync(join(configDir, dir), { recursive: true });
+  writeFileSync(join(configDir, "characters", "notes.md"), "not a character");
+  writeFileSync(join(configDir, "workspace", "cy", "SOUL.md"), "Cy");
+
+  expect(discoverCharacters(configDir)).toEqual(["ada", "bo"]);
+  expect(discoverCharacters(join(root, "nowhere"))).toEqual([]);
+});
+
+test("with no characters, picking one says where a character's folder goes", async () => {
+  const root = makeRoot();
+  const configDir = join(root, "config");
+  mkdirSync(configDir, { recursive: true });
+  writeFileSync(join(configDir, "config.toml"), "\n");
+  const registry = await CharacterRegistry.create(configDir, join(root, "data"), loadFrom(join(configDir, "config.toml")));
+
+  expect(() => registry.resolveCharacter(undefined)).toThrow(
+    `no characters available — create a folder for one at ${join(configDir, "characters", "<name>")}, or run: shore character new <name>`,
   );
 });

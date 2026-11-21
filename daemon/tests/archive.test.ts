@@ -538,22 +538,31 @@ async function archiveEntries(archive: string): Promise<{ count: number; bytes: 
 }
 
 describe("archive checks", () => {
+  test("a character whose config folder is gone by the time it is exported is refused with that folder named", async () => {
+    const dirs = await root("vanished");
+    await seedCharacter(dirs, "ada", "hello");
+    await rm(join(dirs.config, "characters", "ada"), { recursive: true });
+    const output = join(dirs.runtime, "ada.tar");
+    expect(await outcomeOf(exportCharacter(context(dirs, new Set(["ada"])), { character: "ada", output })))
+      .toThrow(`Character disappeared during export: ${join(dirs.config, "characters", "ada")}`);
+  });
+
   test("an archive that isn't a readable Shore character is refused with what is wrong with it", async () => {
     const dirs = await root("manifests");
     const ctx = context(dirs, new Set());
     const manifest = (fields: Record<string, unknown>): string => JSON.stringify({ format: "shore-character", version: 2, character: "ada", source_data: "/srv/data", ...fields });
     const cases: Array<[Record<string, string>, string]> = [
-      [{ "workspace/SOUL.md": "x" }, "Not a readable Shore character archive: "],
+      [{ "workspace/notes.md": "x" }, "Not a readable Shore character archive: "],
       [{ "manifest.json": "{not json" }, "Not a readable Shore character archive: "],
       [{ "manifest.json": "[]" }, "Unsupported or malformed Shore character archive"],
       [{ "manifest.json": manifest({ format: "other" }) }, "Unsupported or malformed Shore character archive"],
       [{ "manifest.json": manifest({ version: 1 }) }, "Unsupported or malformed Shore character archive"],
       [{ "manifest.json": manifest({ character: "a/b" }) }, "Archive has an invalid character name"],
       [{ "manifest.json": manifest({ character: 5 }) }, "Archive has an invalid character name"],
-      [{ "manifest.json": manifest({}) }, "Archive has no workspace/SOUL.md"],
-      [{ "manifest.json": manifest({}), "workspace/SOUL.md": "x" }, "Archive has no shore.db"],
-      [{ "manifest.json": manifest({ source_data: "relative" }), "workspace/SOUL.md": "x", "shore.db": "" }, "Archive has an invalid source data directory"],
-      [{ "manifest.json": manifest({ source_data: 7 }), "workspace/SOUL.md": "x", "shore.db": "" }, "Archive has an invalid source data directory"],
+      [{ "manifest.json": manifest({}) }, "Archive has no workspace"],
+      [{ "manifest.json": manifest({}), "workspace/notes.md": "x" }, "Archive has no shore.db"],
+      [{ "manifest.json": manifest({ source_data: "relative" }), "workspace/notes.md": "x", "shore.db": "" }, "Archive has an invalid source data directory"],
+      [{ "manifest.json": manifest({ source_data: 7 }), "workspace/notes.md": "x", "shore.db": "" }, "Archive has an invalid source data directory"],
     ];
     for (const [files, refusal] of cases) {
       const failure = await outcomeOf(importCharacter(ctx, { archive: await packed(dirs, files) }));

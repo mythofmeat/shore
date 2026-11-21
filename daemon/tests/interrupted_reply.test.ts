@@ -2,7 +2,7 @@ import { describe, expect, spyOn, test } from "bun:test";
 import { mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { CharacterRegistry } from "../src/characters.ts";
-import { defaultAppConfig } from "../src/config/app.ts";
+
 import { ConversationEngine } from "../src/engine/conversation.ts";
 import { shoreLog } from "../src/log.ts";
 import type { LoadedConfig } from "../src/config/loader.ts";
@@ -15,6 +15,7 @@ import type { SidecarRequest, StreamEvent } from "../src/llm/types.ts";
 import { durableExists, threadFile, writeDurable } from "../src/storage/files.ts";
 import { reliabilityGeneration } from "./support/reliability_generation.ts";
 import { testTmp } from "./support/tmp.ts";
+import { promptedAppConfig } from "./support/prompt_list.ts";
 
 const usage = { input_tokens: 1, output_tokens: 1, cache_read_tokens: 0, cache_creation_tokens: 0 };
 const timing = { total_ms: 1, time_to_first_token_ms: 1 };
@@ -26,7 +27,7 @@ async function registryFor(data: string): Promise<CharacterRegistry> {
   mkdirSync(join(configDir, "characters", "ada", "workspace"), { recursive: true });
   writeFileSync(join(configDir, "characters", "ada", "workspace", "SOUL.md"), "Ada");
   const loaded: LoadedConfig = {
-    app: defaultAppConfig(), models: emptyCatalog(), providers: ProviderRegistry.empty(),
+    app: promptedAppConfig(), models: emptyCatalog(), providers: ProviderRegistry.empty(),
     dirs: { config: configDir, data, runtime: join(root, "runtime"), cache: join(root, "cache") }, rawTable: undefined,
   };
   return await CharacterRegistry.create(configDir, data, loaded);

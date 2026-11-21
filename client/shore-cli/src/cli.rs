@@ -1416,7 +1416,7 @@ pub(crate) enum CharacterCommand {
         name: String,
     },
 
-    /// Delete a character for good: its workspace (SOUL.md and memory), its
+    /// Delete a character for good: its workspace, its
     /// config, its threads and data, its search indexes, and its rows in the
     /// history and usage databases. Nothing is recoverable afterwards unless
     /// you pass --archive.
@@ -1491,7 +1491,7 @@ pub(crate) enum ThreadCommand {
         purpose: Option<String>,
     },
 
-    /// Set what is pinned to a thread's prompt, next to MEMORY.md: workspace files, and the output of shell commands
+    /// Set what is pinned to a thread's prompt: workspace files, and the output of shell commands
     Pins {
         /// Thread id
         #[arg(add = values(Completes::Threads))]

@@ -6,7 +6,7 @@ import { join } from "node:path";
 import { listMarks, mark, unmark, type MarkContext } from "../src/commands/marks.ts";
 import { commandCatalogue, commandOperations } from "../src/commands/registry.ts";
 import { coreRequests } from "../src/operations/requests.ts";
-import { defaultAppConfig } from "../src/config/app.ts";
+
 import { deleteCharacter, exportCharacter, importCharacter, type ArchiveContext } from "../src/commands/archive.ts";
 import { characterActiveJsonl, MAIN_THREAD, threadDataDir } from "../src/config/dirs.ts";
 import type { LoadedConfig } from "../src/config/loader.ts";
@@ -36,6 +36,7 @@ import { readDurable, threadFile, writeDurable } from "../src/storage/files.ts";
 import { restoreTestEnv, setTestEnv } from "./support/env.ts";
 import { outcomeOf, rejectionOf } from "./support/outcome.ts";
 import { testTmp } from "./support/tmp.ts";
+import { promptedAppConfig } from "./support/prompt_list.ts";
 
 afterAll(() => {
   closeLedgers();
@@ -79,7 +80,7 @@ async function world(rounds: Round[], options: { tools?: string[]; history?: Mes
   const root = await mkdtemp(testTmp("shore-marks-"));
   const dirs = { config: join(root, "config"), data: join(root, "data"), cache: join(root, "cache"), runtime: join(root, "run") };
   for (const dir of Object.values(dirs)) await mkdir(dir, { recursive: true });
-  const app = defaultAppConfig();
+  const app = promptedAppConfig();
   app.tools.enabled = options.tools ?? [];
   app.chat.max_retries = 0;
   app.chat.model = "fixture";

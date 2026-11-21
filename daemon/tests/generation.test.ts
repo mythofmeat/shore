@@ -9,7 +9,7 @@ import { ConversationEngine } from "../src/engine/conversation.ts";
 import { characterActiveJsonl, MAIN_THREAD } from "../src/config/dirs.ts";
 import type { ContentBlock, Message } from "../src/engine/types.ts";
 import type { ServerMessage } from "../src/protocol/ServerMessage.ts";
-import { defaultAppConfig } from "../src/config/app.ts";
+
 import { emptyCatalog, NO_CHAT_MODELS_MESSAGE } from "../src/config/models.ts";
 import { ProviderRegistry } from "../src/config/providers.ts";
 import type { LoadedConfig } from "../src/config/loader.ts";
@@ -24,6 +24,7 @@ import { testTmp } from "./support/tmp.ts";
 import { recordedTurns, WorkspaceRecorder, workspaceTurnsFor, type WorkspaceTurns } from "../src/tools/workspace_turns.ts";
 import { outcomeOf } from "./support/outcome.ts";
 import { until } from "./support/until.ts";
+import { promptedAppConfig } from "./support/prompt_list.ts";
 
 afterAll(restoreTestEnv);
 
@@ -33,7 +34,7 @@ async function loadedConfig(withModel: boolean, tools: string[] = [], kept?: str
   const root = kept ?? await mkdtemp(testTmp("shore-gen-"));
   const dirs = { config: join(root, "config"), data: join(root, "data"), cache: join(root, "cache"), runtime: join(root, "run") };
   for (const d of Object.values(dirs)) await mkdir(d, { recursive: true });
-  const app = defaultAppConfig();
+  const app = promptedAppConfig();
   app.tools.enabled = tools;
   app.chat.max_retries = 0;
   const models = emptyCatalog();

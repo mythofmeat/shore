@@ -5,7 +5,7 @@ import { mkdtemp } from "node:fs/promises";
 import { join } from "node:path";
 
 import { TurnAutonomyBridge } from "../src/autonomy/registration.ts";
-import { defaultAppConfig } from "../src/config/app.ts";
+
 import type { LoadedConfig } from "../src/config/loader.ts";
 import { emptyCatalog } from "../src/config/models.ts";
 import { ProviderRegistry } from "../src/config/providers.ts";
@@ -24,6 +24,7 @@ import { CharacterWorkspace } from "../src/tools/character_workspace.ts";
 import { afterFirstChat } from "./support/chat_world.ts";
 import { eventsForResponse } from "./support/stream.ts";
 import { testTmp } from "./support/tmp.ts";
+import { promptedAppConfig } from "./support/prompt_list.ts";
 
 const NOW = "2026-11-12T10:00:00.000Z";
 const SAVED = "save: changes left uncommitted when a conversation was archived";
@@ -75,7 +76,7 @@ async function kept(push: boolean): Promise<Kept> {
   const conversation = [said("a", "user", "is the lamp lit"), said("b", "assistant", "it is"), said("c", "user", "and the door"), said("d", "assistant", "shut")];
   writeDurable(threadFile(data, "ada", "main", "active.jsonl"), conversation.map((message) => `${JSON.stringify(message)}\n`).join(""));
   const start = startRepo(workspace, remote);
-  const app = defaultAppConfig();
+  const app = promptedAppConfig();
   app.compaction.keep_recent_turns = 0;
   app.compaction.git_push = push;
   const config: LoadedConfig = {

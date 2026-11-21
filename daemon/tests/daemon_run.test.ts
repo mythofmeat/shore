@@ -33,6 +33,7 @@ import { outcomeOf } from "./support/outcome.ts";
 import { handlesUnder } from "./support/handles.ts";
 import { until, untilAsync } from "./support/until.ts";
 import { BrowserSocket } from "./support/browser.ts";
+import { PROMPT_LIST_TOML } from "./support/prompt_list.ts";
 
 const running: RunningDaemon[] = [];
 
@@ -98,7 +99,7 @@ async function start(
 
 const MODEL_CONFIG =
   "[chat]\nmodel = \"anthropic:claude-opus-4-8\"\n" +
-  `[providers.anthropic]\napi_key_env = "SHORE_TEST_KEY"\n`;
+  `[providers.anthropic]\napi_key_env = "SHORE_TEST_KEY"\n` + PROMPT_LIST_TOML;
 
 function scriptedProvider(text: string): SidecarProvider {
   return {
@@ -1035,17 +1036,16 @@ describe("a daemon going down", () => {
 });
 
 describe("a daemon coming up", () => {
-  test("makes the workspace folder SHORE_WORKSPACE_DIR names, with the folders above it, and watches it", async () => {
+  test("makes the workspace folder SHORE_WORKSPACE_DIR names, with the folders above it", async () => {
     const place = await layout("", []);
     const workspace = join(place.root, "deep", "nested", "workspace");
-    const { log, lines, fields } = recorder();
+    const { log, lines } = recorder();
     const daemon = await startDaemon({
       argv: ["--config", place.configPath, "--addr", "127.0.0.1:0"], env: { ...place.env, SHORE_WORKSPACE_DIR: workspace },
       providers: {}, instancesPath: place.instancesPath, autoDiscovery: false, log,
     });
     running.push(daemon);
     expect(existsSync(workspace)).toBe(true);
-    expect(fields.get("Config hot reload watcher started")?.["workspace_dir"]).toBe(workspace);
     expect(lines).not.toContain("Auto-discovery loop started");
   });
 });

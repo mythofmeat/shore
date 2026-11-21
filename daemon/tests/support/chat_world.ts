@@ -2,7 +2,7 @@ import { mkdir, mkdtemp, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 
 import { TurnAutonomyBridge } from "../../src/autonomy/registration.ts";
-import { defaultAppConfig, type AppConfig } from "../../src/config/app.ts";
+import { type AppConfig } from "../../src/config/app.ts";
 import type { LoadedConfig } from "../../src/config/loader.ts";
 import { emptyCatalog, type ModelCatalog, type ResolvedModel } from "../../src/config/models.ts";
 import { ProviderRegistry } from "../../src/config/providers.ts";
@@ -14,6 +14,7 @@ import type { ServerMessage } from "../../src/protocol/ServerMessage.ts";
 import { createRuntime } from "../../src/runtime.ts";
 import { setTestEnv } from "./env.ts";
 import { testTmp } from "./tmp.ts";
+import { promptedAppConfig } from "./prompt_list.ts";
 
 export type ChatRuntime = Awaited<ReturnType<typeof createRuntime>>;
 
@@ -42,7 +43,7 @@ export interface ChatWorldOptions {
 export async function afterFirstChat(options: ChatWorldOptions, run: (world: ChatWorld) => Promise<void>): Promise<void> {
   setTestEnv(options.keyEnv, "fixture-key");
   const root = await mkdtemp(testTmp(`shore-${options.name}-`));
-  const app = defaultAppConfig();
+  const app = promptedAppConfig();
   app.chat.model = "fixture";
   app.chat.max_retries = 0;
   app.compaction.enabled = false;

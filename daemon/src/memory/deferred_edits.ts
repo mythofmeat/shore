@@ -7,34 +7,19 @@ import {
   MAIN_THREAD,
   activeJsonlIn,
   threadDirIn,
-  characterWorkspaceDir,
 } from "../config/dirs.ts";
 import { homeThreadIn, pinnedCommand, readThreadsIndexIn, threadRecord } from "../engine/threads.ts";
 
 import { asCharacterWorkspace, type CharacterWorkspace } from "../tools/character_workspace.ts";
-import {
-  normalizePromptVisiblePath,
-} from "../tools/workspace_path";
+import { normalizeWorkspacePath } from "../tools/workspace_path";
 import { cutToBytes, MAX_THREAD_PINS_BYTES, byteSize, threadFilePromptText } from "../tools/thread_file_text.ts";
 import { pinnedCommandText } from "../tools/pinned_command.ts";
 import { localRfc3339 } from "../util/time.ts";
-import defaultToolsGuidance from "../../prompts/engine/default_tools.md" with { type: "text" };
-
-const PROTECTED_PATHS = ["SOUL.md", "USER.md", "TOOLS.md"] as const;
-
-const MEMORY_INDEX_FILE = "MEMORY.md";
-
-const MEMORY_DIR = "memory";
 
 const QUEUE_FILE = "deferred_edits.jsonl";
 
 const THREAD_PINS_DIR = "thread_pins";
 const stateFile = (thread: string, file: string): string => thread === MAIN_THREAD ? file : `threads/${thread}/${file}`;
-export const memoryIndexPath = (
-  configDir: string,
-  charName: string,
-  workspaceRoot?: string,
-) => join(characterWorkspaceDir(configDir, charName, workspaceRoot), MEMORY_INDEX_FILE);
 
 async function workspaceBytes(workspace: CharacterWorkspace, name: string): Promise<Buffer | undefined> {
   const [read] = await workspace.call("readFiles", { paths: [join(workspace.dir, name)] });
@@ -100,14 +85,6 @@ async function activePromptSnapshotExists(characterDir: string, thread: string):
   return readCharacterState(characterDir, stateFile(thread, "active_prompt/.snapshot")) !== undefined;
 }
 
-export async function loadMemoryIndex(
-  characterDataDir: string,
-  workspace: CharacterWorkspace,
-  thread = MAIN_THREAD,
-): Promise<string | undefined> {
-  return await loadPromptFile(characterDataDir, workspace, MEMORY_INDEX_FILE, thread);
-}
-
 export async function pendingDeferredEditPaths(
   characterDataDir: string,
   thread = MAIN_THREAD,
@@ -133,8 +110,8 @@ export async function pendingDeferredEditPaths(
     if (typeof entry !== "object" || entry === null) continue;
     const raw = (entry as Record<string, unknown>).path;
     if (typeof raw !== "string") continue;
-    const normalized = normalizePromptVisiblePath(raw);
-    if (normalized !== undefined) paths.add(normalized);
+    const normalized = normalizeWorkspacePath(raw);
+    if (normalized !== "") paths.add(normalized);
   }
   return [...paths].sort();
 }
@@ -144,17 +121,14 @@ export async function queueDeferredEdit(
   requestedPath: string,
   thread = MAIN_THREAD,
 ): Promise<void> {
-  const path = normalizePromptVisiblePath(requestedPath);
-  if (path === undefined) return;
+  const path = normalizeWorkspacePath(requestedPath);
+  if (path === "") return;
 
   await mkdir(characterDataDir, { recursive: true });
 
   const line = JSON.stringify({ path, timestamp: localRfc3339(new Date()) });
   writeCharacterState(characterDataDir, stateFile(thread, QUEUE_FILE), (readCharacterState(characterDataDir, stateFile(thread, QUEUE_FILE)) ?? "") + `${line}\n`);
 }
-
-export const noteMemoryIndexDeferred = (characterDataDir: string, thread = MAIN_THREAD) =>
-  queueDeferredEdit(characterDataDir, MEMORY_INDEX_FILE, thread);
 
 export async function changedPromptFiles(
   characterDataDir: string,
@@ -163,7 +137,7 @@ export async function changedPromptFiles(
 ): Promise<string[]> {
   if (!(await activePromptSnapshotExists(characterDataDir, thread))) return [];
   const changed: string[] = [];
-  for (const path of [...PROTECTED_PATHS, MEMORY_INDEX_FILE]) {
+  for (const path of workspace.promptFiles) {
     const canonical = await effectiveContent(workspace, path);
     const active = activeContent(characterDataDir, path, thread);
     if (canonical !== active) changed.push(path);
@@ -190,14 +164,12 @@ async function copyPromptVisibleFile(
 
 export async function ensureCharacterWorkspace(workspace: CharacterWorkspace): Promise<void> {
   await workspace.call("mkdir", { path: workspace.dir });
-  await workspace.call("mkdir", { path: join(workspace.dir, MEMORY_DIR) });
-  await workspace.call("createFile", { path: join(workspace.dir, "TOOLS.md"), data: Buffer.from(defaultToolsGuidance, "utf8").toString("base64") });
 }
 
-async function snapshotFiles(characterDataDir: string, thread: string): Promise<string[]> {
+async function snapshotFiles(characterDataDir: string, workspace: CharacterWorkspace, thread: string): Promise<string[]> {
   const index = await readThreadsIndexIn(characterDataDir);
   const pins = index === undefined ? [] : threadRecord(index, thread)?.pins ?? [];
-  return [...PROTECTED_PATHS, MEMORY_INDEX_FILE, ...pins.map((pin) => `${THREAD_PINS_DIR}/${pin}`)];
+  return [...workspace.promptFiles, ...pins.map((pin) => `${THREAD_PINS_DIR}/${pin}`)];
 }
 
 function pinOf(snapshotPath: string): string | undefined {
@@ -210,7 +182,7 @@ export async function ensureActivePromptSnapshot(
   thread = MAIN_THREAD,
 ): Promise<void> {
   await ensureCharacterWorkspace(workspace);
-  const paths = await snapshotFiles(characterDataDir, thread);
+  const paths = await snapshotFiles(characterDataDir, workspace, thread);
   await Promise.all(paths.map(async (path) => { await copyPromptVisibleFile(characterDataDir, workspace, path, true, thread); }));
   writeCharacterState(characterDataDir, stateFile(thread, "active_prompt/.snapshot"), "1");
 }
@@ -222,7 +194,7 @@ export async function refreshActivePromptSnapshot(
 ): Promise<void> {
   await ensureCharacterWorkspace(workspace);
   writeCharacterState(characterDataDir, stateFile(thread, "active_prompt/.snapshot"), "1");
-  const paths = await snapshotFiles(characterDataDir, thread);
+  const paths = await snapshotFiles(characterDataDir, workspace, thread);
   await Promise.all(paths.map(async (path) => { await copyPromptVisibleFile(characterDataDir, workspace, path, false, thread); }));
 }
 
@@ -265,21 +237,27 @@ export async function forkPromptState(
   child: string,
 ): Promise<void> {
   const hasSnapshot = await activePromptSnapshotExists(characterDir, source);
-  const files = hasSnapshot
-    ? [...PROTECTED_PATHS, MEMORY_INDEX_FILE].map(path => `active_prompt/${path}`)
-    : [];
   const { data, character } = characterScope(characterDir);
   withStorage(data, db => db.transaction(() => {
-    const childPromptPrefix = `${character}/${stateFile(child, "active_prompt/")}`;
+    const prefix = (thread: string) => `${character}/${stateFile(thread, "active_prompt/")}`;
+    const childPrefix = prefix(child);
     db.query(
       "DELETE FROM state_files WHERE character = ?1 AND substr(path, 1, length(?2)) = ?2",
-    ).run(character, childPromptPrefix);
+    ).run(character, childPrefix);
     deleteCharacterState(characterDir, stateFile(child, QUEUE_FILE));
-    for (const file of files) {
-      const content = readCharacterState(characterDir, stateFile(source, file)) ?? "";
-      writeCharacterState(characterDir, stateFile(child, file), content);
+    if (hasSnapshot) {
+      const sourcePrefix = prefix(source);
+      const held = db.query<{ path: string }, [string, string]>(
+        "SELECT path FROM state_files WHERE character = ?1 AND substr(path, 1, length(?2)) = ?2",
+      ).all(character, sourcePrefix);
+      for (const { path } of held) {
+        const file = path.slice(sourcePrefix.length);
+        if (file === ".snapshot" || file.startsWith(`${THREAD_PINS_DIR}/`)) continue;
+        const content = readCharacterState(characterDir, stateFile(source, `active_prompt/${file}`)) ?? "";
+        writeCharacterState(characterDir, stateFile(child, `active_prompt/${file}`), content);
+      }
+      writeCharacterState(characterDir, stateFile(child, "active_prompt/.snapshot"), "1");
     }
-    if (hasSnapshot) writeCharacterState(characterDir, stateFile(child, "active_prompt/.snapshot"), "1");
     const queue = readCharacterState(characterDir, stateFile(source, QUEUE_FILE));
     if (queue !== undefined) writeCharacterState(characterDir, stateFile(child, QUEUE_FILE), queue);
   })());

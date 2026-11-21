@@ -35,15 +35,13 @@ function CharacterDetails({ state, name }: { state: ChromeSnapshot; name: string
     {info.error === "" ? null : <p className="form-error" role="alert">{info.error}</p>}
     {details === undefined ? info.error === "" ? <Spinner label="Loading character" /> : null : <>
       <dl className="kv">
-        <div className="kv-row"><dt>Definition</dt><dd>{details.has_definition ? "Set" : "Not written yet"}</dd></div>
         <div className="kv-row"><dt>Configuration</dt><dd>{details.has_config_override ? "Has its own overrides" : "Uses the shared configuration"}</dd></div>
         <div className="kv-row"><dt>Workspace</dt><dd className="mono">{details.workspace_dir}</dd></div>
         <div className="kv-row"><dt>Config folder</dt><dd className="mono">{details.config_dir}</dd></div>
         <div className="kv-row"><dt>Data folder</dt><dd className="mono">{details.has_data ? details.data_dir : "No data yet"}</dd></div>
-        {details.bootstrap_files.length === 0 ? null : <div className="kv-row"><dt>Bootstrap files</dt><dd className="mono">{details.bootstrap_files.join(", ")}</dd></div>}
+        <div className="kv-row"><dt>Prompt files</dt>{details.prompt_files.length === 0 ? <dd>None in the workspace</dd> : <dd className="mono">{details.prompt_files.join(", ")}</dd>}</div>
         {details.pending_deferred_edits.length === 0 ? null : <div className="kv-row"><dt>Pending edits</dt><dd className="mono">{details.pending_deferred_edits.join(", ")}</dd></div>}
       </dl>
-      {details.definition_preview === null ? null : <><div className="tool-label">Definition preview</div><pre className="readout">{details.definition_preview}</pre></>}
       <div className="actions-row">
         {state.character === name ? null : <button type="button" className="button" onClick={() => { navigate({ view: "chat" }); perform(() => workspace.openCharacter(name)); }}>Open threads</button>}
         <button type="button" className="button danger-outline" onClick={() => setDeleting(true)}>Delete…</button>
@@ -58,7 +56,7 @@ export function CharactersPage({ state }: { state: ChromeSnapshot }) {
   const [creating, setCreating] = useState(false);
   const current = state.characters.some((item) => item.name === selected) ? selected : state.characters[0]?.name ?? null;
   return <>
-    <p className="settings-description">Characters on this daemon. A character’s prompt and memory live in its workspace folder.</p>
+    <p className="settings-description">Characters on this daemon, one for each folder in the config folder’s characters folder. What their prompt is made of is the [[prompt]] list in the configuration.</p>
     <SettingsSection title="All characters" actions={<button type="button" className="button" onClick={() => setCreating(true)}>New character</button>}>
       <div className="character-grid" role="listbox" aria-label="Characters">
         {state.characters.map((character) => <button key={character.name} type="button" role="option" aria-selected={character.name === current} className={`character-card ${character.name === current ? "on" : ""}`} onClick={() => setSelected(character.name)}>

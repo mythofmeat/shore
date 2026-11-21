@@ -1,11 +1,9 @@
 import { required } from "../util/required.ts";
 
-import builtinSystemTemplate from "../../prompts/engine/builtin_system.md" with { type: "text" };
 import threadTemplate from "../../prompts/engine/thread.md" with { type: "text" };
 import { hostZone, naiveInZone, partsOf } from "../ledger/zoned";
 import type { ContentBlock, ImageRef, Message, Role } from "./types";
 import { estimateTokens, withSafetyMargin } from "./tokens.ts";
-import { withDynamicBlocksLast } from "../llm/system_boundary.ts";
 import { unsentNotice } from "./embeds.ts";
 import { base64ImageDimensions, fileImageDimensions } from "../llm/image_dimensions.ts";
 import { HIGH_RESOLUTION_IMAGE_TIER, imageTokens, sentImageTokens, type ImageTier } from "../llm/image_tokens.ts";
@@ -30,8 +28,6 @@ const EIGHTEEN_HOURS_SECS = 64_800;
 const THIRTY_SIX_HOURS_SECS = 129_600;
 const SECS_PER_HOUR = 3_600;
 const SECS_PER_DAY = 86_400;
-
-const BUILTIN_SYSTEM_TEMPLATE = builtinSystemTemplate.trimEnd();
 
 const THREAD_TEMPLATE = threadTemplate.trimEnd();
 
@@ -70,15 +66,15 @@ export interface ThreadPrompt {
   pins: readonly { pin: string; content: string | undefined }[];
 }
 
+export type PromptSection =
+  | { label: string; text: string | undefined; template: boolean }
+  | { shore: "thread" | "thread_pins" };
+
 export interface PromptParams {
   thread?: ThreadPrompt | undefined;
   character_name: string;
   display_name: string;
-  system_prompt?: string | undefined;
-  tools_guidance?: string | undefined;
-  character_definition?: string | undefined;
-  user_definition?: string | undefined;
-  memory_index?: string | undefined;
+  sections: readonly PromptSection[];
   has_prior_context: boolean;
   archived_last_at?: string | undefined;
   messages: Message[];
@@ -111,10 +107,6 @@ export function assemblePrompt(
     ),
     messageBudget: availableForMessages,
   };
-}
-
-function present(value: string | undefined): string | undefined {
-  return value !== undefined && value !== "" ? value : undefined;
 }
 
 function threadBlock(thread: ThreadPrompt, vars: ReadonlyMap<string, string>, timeZone: string): string {
@@ -152,41 +144,19 @@ function buildSystemBlocks(params: PromptParams, timeZone: string): SystemBlock[
   ]);
 
   const system: SystemBlock[] = [];
-
-  const systemPrompt = params.system_prompt ?? BUILTIN_SYSTEM_TEMPLATE;
-  if (systemPrompt.trim() !== "") {
-    system.push({ label: "system", content: renderTemplate(systemPrompt, vars) });
+  for (const section of params.sections) {
+    if ("shore" in section) {
+      const thread = params.thread;
+      if (thread === undefined) continue;
+      if (section.shore === "thread") system.push({ label: "thread", content: threadBlock(thread, vars, timeZone) });
+      else if (thread.pins.length > 0) system.push({ label: "thread_pins", content: threadPinsBlock(thread.pins) });
+      continue;
+    }
+    if (section.text === undefined) continue;
+    const content = section.template ? renderTemplate(section.text, vars) : section.text;
+    if (content.trim() !== "") system.push({ label: section.label, content });
   }
-
-  const toolsGuidance = present(params.tools_guidance);
-  if (toolsGuidance !== undefined) {
-    system.push({ label: "tools_guidance", content: toolsGuidance });
-  }
-
-  const charDef = present(params.character_definition);
-  if (charDef !== undefined) {
-    system.push({ label: "character", content: charDef });
-  }
-
-  const userDef = present(params.user_definition);
-  if (userDef !== undefined) {
-    system.push({ label: "user", content: userDef });
-  }
-
-  if (params.thread !== undefined) {
-    system.push({ label: "thread", content: threadBlock(params.thread, vars, timeZone) });
-  }
-
-  const index = present(params.memory_index);
-  if (index !== undefined) {
-    system.push({ label: "memory_index", content: index });
-  }
-
-  if (params.thread !== undefined && params.thread.pins.length > 0) {
-    system.push({ label: "thread_pins", content: threadPinsBlock(params.thread.pins) });
-  }
-
-  return withDynamicBlocksLast(system);
+  return system;
 }
 
 function availableMessageTokens(

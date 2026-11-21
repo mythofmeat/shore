@@ -16,7 +16,6 @@ import { create, extract, type Unpack } from "tar";
 import type { ShoreDirs } from "../config/dirs.ts";
 import { withCurrentNames } from "../config/old_sections.ts";
 import {
-  SOUL_FILE,
   characterCacheDir,
   characterConfigDir,
   characterDataDir,
@@ -488,23 +487,16 @@ async function stageCharacter(
   const dataSource = characterDataDir(dirs.data, character);
   const workspaceInConfig = dirs.workspace === undefined;
 
-  const [soul = false] = workspace === undefined
-    ? [await exists(join(workspaceSource, SOUL_FILE))]
-    : await workspace.call("exists", { paths: [join(workspaceSource, SOUL_FILE)] });
-  if (!soul) {
-    throw invalidRequest(`Character definition disappeared during export: ${workspaceSource}`);
+  if (!await exists(configSource)) {
+    throw invalidRequest(`Character disappeared during export: ${configSource}`);
   }
-  if (await exists(configSource)) {
-    const excluded = resolve(configSource, "workspace");
-    await cp(configSource, join(stage, "config"), {
-      recursive: true,
-      preserveTimestamps: true,
-      verbatimSymlinks: true,
-      filter: async (source) => (!workspaceInConfig || resolve(source) !== excluded) && await admit(source),
-    });
-  } else {
-    await mkdir(join(stage, "config"));
-  }
+  const excluded = resolve(configSource, "workspace");
+  await cp(configSource, join(stage, "config"), {
+    recursive: true,
+    preserveTimestamps: true,
+    verbatimSymlinks: true,
+    filter: async (source) => (!workspaceInConfig || resolve(source) !== excluded) && await admit(source),
+  });
   if (workspace === undefined) {
     await cp(workspaceSource, join(stage, "workspace"), {
       filter: admit,
@@ -626,10 +618,7 @@ async function readManifest(stage: string): Promise<Manifest> {
   if (typeof character !== "string" || !isUsableCharacterName(character)) {
     throw invalidRequest("Archive has an invalid character name");
   }
-  if (!await exists(join(stage, "workspace", SOUL_FILE))) {
-    throw invalidRequest(`Archive has no workspace/${SOUL_FILE}`);
-  }
-  for (const file of ["shore.db"]) {
+  for (const file of ["workspace", "shore.db"]) {
     if (!await exists(join(stage, file))) throw invalidRequest(`Archive has no ${file}`);
   }
   if (typeof value["source_data"] !== "string" || !isAbsolute(value["source_data"])) {

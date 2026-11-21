@@ -51,7 +51,7 @@ export function renderStarterConfig(): string {
   return `# Shore configuration. Set ANTHROPIC_API_KEY in the environment or .env.
 # \`shore config --all\` lists every optional setting, defaults included, and
 # \`shore config keys\` the type each one takes.
-# Add characters/<name>/workspace/SOUL.md to define a character.
+# Each folder in characters/ is a character; its workspace is characters/<name>/workspace.
 # Additional TOML files in conf.d/ load automatically, in filename order.
 # The daemon creates a client authentication token beside this file.
 
@@ -63,6 +63,17 @@ model = "anthropic:claude-opus-4-8"
 
 [tools]
 enabled = ["bash", "read", "edit", "apply_patch", "chat_logs", "threads", "send_message", "guide"]
+
+# The system prompt, in this order. A part is a file in this directory (file),
+# a file in the character's workspace (workspace), or a part Shore writes (shore).
+[[prompt]]
+workspace = "SOUL.md"
+
+[[prompt]]
+shore = "thread"
+
+[[prompt]]
+shore = "thread_pins"
 
 # An image costs one token per 28×28-pixel patch. A 4:3 photo costs 1,036 tokens
 # at 1024×768, 2,352 at 1568×1176 and 3,888 at 2000×1500 (the default size);

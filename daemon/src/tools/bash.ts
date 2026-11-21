@@ -13,12 +13,10 @@ export interface BashResult {
   prompt_files_changed: string[];
 }
 
-const PROMPT_FILES = ["SOUL.md", "USER.md", "TOOLS.md", "MEMORY.md"];
-
 const UNREADABLE = new Set(["ENOENT", "EISDIR", "ENOTDIR", "EACCES", "ELOOP"]);
 
 async function promptContents(workspace: CharacterWorkspace, root: string): Promise<(string | undefined)[]> {
-  const reads = await workspace.call("readFiles", { paths: PROMPT_FILES.map((path) => join(root, path)) });
+  const reads = await workspace.call("readFiles", { paths: workspace.promptFiles.map((path) => join(root, path)) });
   return reads.map((read) => {
     if ("data" in read) return read.data;
     if (UNREADABLE.has(read.error.code ?? "")) return undefined;
@@ -34,7 +32,7 @@ async function changedPromptFiles(
 ): Promise<string[]> {
   const after = await promptContents(workspace, root);
   const changed: string[] = [];
-  for (const [index, path] of PROMPT_FILES.entries()) {
+  for (const [index, path] of workspace.promptFiles.entries()) {
     if (before[index] === after[index]) continue;
     changed.push(path);
     await deferEdit?.(path);
@@ -105,16 +103,22 @@ export async function handleBash(
   return { workdir, exit_code: output.code, stdout: output.stdout, stderr: output.stderr, prompt_files_changed: changed };
 }
 
-export async function withPromptChanges<T>(
+export async function withPromptChanges(
   target: string | CharacterWorkspace,
-  write: () => Promise<T>,
+  write: () => Promise<unknown>,
   deferEdit?: (path: string) => Promise<void> | void,
-): Promise<T> {
+): Promise<unknown> {
   const workspace = asCharacterWorkspace(target);
   const root = resolve(workspace.dir);
   const before = await promptContents(workspace, root);
-  try { return await write(); }
-  finally {
-    await changedPromptFiles(workspace, root, before, deferEdit);
+  let value: unknown;
+  let changed: string[] = [];
+  try {
+    value = await write();
+  } finally {
+    changed = await changedPromptFiles(workspace, root, before, deferEdit);
   }
+  if (changed.length === 0) return value;
+  if (typeof value === "string") return `${value}\nPrompt reload queued: ${changed.join(", ")}.`;
+  return { ...(value as Record<string, unknown>), prompt_files_changed: changed };
 }

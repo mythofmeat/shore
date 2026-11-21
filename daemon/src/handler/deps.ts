@@ -591,7 +591,7 @@ export function configReloader(
       return;
     }
 
-    for (const name of discoverCharacters(config.dirs.config, config.dirs.workspace)) {
+    for (const name of discoverCharacters(config.dirs.config)) {
       try {
         loadCharacterConfig(config, name);
       } catch (e) {

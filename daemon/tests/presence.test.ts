@@ -189,7 +189,7 @@ test("a message that arrived with changed statuses says so right above what the 
   const home: Presence = { statuses: [status("home", T0)], changed_at: AT };
   const running = { started_at: iso(T0 + HOUR) };
   const prompt = assemblePrompt({
-    character_name: "ada", display_name: "eve", has_prior_context: false, user_timestamp_mode: "never",
+    character_name: "ada", display_name: "eve", has_prior_context: false, user_timestamp_mode: "never", sections: [],
     messages: [
       said("m1", "good morning", T0 + HOUR, { presence: home }),
       said("m2", "still there?", T0 + 2 * HOUR, { presence: { statuses: [], changed_at: iso(T0 + 90 * MINUTE) }, wake_running: running }),

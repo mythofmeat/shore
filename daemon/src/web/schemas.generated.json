@@ -9775,19 +9775,12 @@
           },
           "config_dir": {
             "type": "string"
-          },
-          "created_files": {
-            "type": "array",
-            "items": {
-              "type": "string"
-            }
           }
         },
         "required": [
           "character",
           "workspace_dir",
-          "config_dir",
-          "created_files"
+          "config_dir"
         ]
       },
       "CharacterSelection": {
@@ -9832,16 +9825,7 @@
           "workspace_dir": {
             "type": "string"
           },
-          "has_definition": {
-            "type": "boolean"
-          },
-          "definition_preview": {
-            "type": [
-              "string",
-              "null"
-            ]
-          },
-          "bootstrap_files": {
+          "prompt_files": {
             "type": "array",
             "items": {
               "type": "string"
@@ -9868,9 +9852,7 @@
           "active",
           "config_dir",
           "workspace_dir",
-          "has_definition",
-          "definition_preview",
-          "bootstrap_files",
+          "prompt_files",
           "has_config_override",
           "pending_deferred_edits",
           "data_dir",
@@ -19718,19 +19700,12 @@
           },
           "config_dir": {
             "type": "string"
-          },
-          "created_files": {
-            "type": "array",
-            "items": {
-              "type": "string"
-            }
           }
         },
         "required": [
           "character",
           "workspace_dir",
-          "config_dir",
-          "created_files"
+          "config_dir"
         ]
       },
       "CharacterSelection": {
@@ -19775,16 +19750,7 @@
           "workspace_dir": {
             "type": "string"
           },
-          "has_definition": {
-            "type": "boolean"
-          },
-          "definition_preview": {
-            "type": [
-              "string",
-              "null"
-            ]
-          },
-          "bootstrap_files": {
+          "prompt_files": {
             "type": "array",
             "items": {
               "type": "string"
@@ -19811,9 +19777,7 @@
           "active",
           "config_dir",
           "workspace_dir",
-          "has_definition",
-          "definition_preview",
-          "bootstrap_files",
+          "prompt_files",
           "has_config_override",
           "pending_deferred_edits",
           "data_dir",

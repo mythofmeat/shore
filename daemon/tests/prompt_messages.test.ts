@@ -1,6 +1,6 @@
 import { expect, test } from "bun:test";
 
-import { assemblePrompt, type PromptParams } from "../src/engine/prompt.ts";
+import { assemblePrompt, type PromptParams, type PromptSection } from "../src/engine/prompt.ts";
 import type { ContentBlock, Message } from "../src/engine/types.ts";
 
 const MINUTE = 60_000;
@@ -21,7 +21,7 @@ function said(role: Message["role"], words: string | ContentBlock[], minutes: nu
 }
 
 function prompt(messages: Message[], over: Partial<PromptParams> = {}): ReturnType<typeof assemblePrompt> {
-  return assemblePrompt({ character_name: "ada", display_name: "eve", has_prior_context: false, user_timestamp_mode: "never", messages, ...over }, "UTC");
+  return assemblePrompt({ character_name: "ada", display_name: "eve", has_prior_context: false, user_timestamp_mode: "never", sections: [], messages, ...over }, "UTC");
 }
 
 function shown(messages: Message[], over: Partial<PromptParams> = {}): [role: string, text: string][] {
@@ -32,11 +32,17 @@ function sized(tokens: number, letter: string): string {
   return letter.repeat(Math.floor(tokens * 3.2));
 }
 
+const OPENING: PromptSection[] = [{
+  label: "system_prompt",
+  template: true,
+  text: "You are {{char}}, in conversation with {{user}}.\nThis is a text conversation. Communicate directly rather than narrating actions or using roleplay formatting.\nBe consistent with established details and avoid fabricating memory.",
+}];
+
 const call: ContentBlock = { type: "tool_use", id: "t1", name: "read", input: {} };
 const result: ContentBlock = { type: "tool_result", tool_use_id: "t1", content: "done" };
 
 test("a prompt keeps the newest messages that fit its budget, one that fits exactly included, and its newest message even when that alone is too much", () => {
-  const small = { max_context_tokens: 2_000, max_output_tokens: 500 };
+  const small = { max_context_tokens: 2_000, max_output_tokens: 500, sections: OPENING };
   const budget = prompt([], small).messageBudget;
   expect(budget).toBe(1288);
   const kept = (messages: Message[]): string[] => prompt(messages, small).messages.map((message) => `${message.content.slice(0, 1)}${String(message.content.length)}`);
@@ -167,7 +173,7 @@ test("left to Shore, a time is shown after half an hour's gap, once an hour has 
 });
 
 test("what was cut or archived before the first message shown still counts for how long it has been, and one message cut is enough to say that earlier conversation isn't shown", () => {
-  const small = { max_context_tokens: 2_000, max_output_tokens: 500 };
+  const small = { max_context_tokens: 2_000, max_output_tokens: 500, sections: OPENING };
   const cut = shown([said("user", sized(10, "a"), 0), said("user", sized(1280, "c"), 120)], { ...small, user_timestamp_mode: "auto" });
   expect(cut.map(([role, text]) => [role, text.slice(0, 50)])).toEqual([["user", "[2 hours later · Friday 2026-10-30 · 2:00 PM]\n\nccc"]]);
   expect(shown([said("user", sized(10, "a"), 0), said("assistant", sized(10, "b"), 1), said("user", sized(1278, "c"), 2)], small).map(([role, text]) => [role, text.slice(0, 32)])).toEqual([
@@ -187,12 +193,22 @@ test("a message that arrived while a wake was running elsewhere says so above wh
   expect(built[0]?.content_blocks).toEqual([{ type: "text", text: running }, { type: "text", text: "hello" }]);
 });
 
-test("the system prompt has a block for each part that has something in it, with the memory index and the thread's pins last", () => {
+test("the system prompt has a block for each listed part that has something in it, in the order listed", () => {
   const thread = { id: "story", home: "main", created_at: new Date(T0).toISOString(), started_by_you: false, pins: [{ pin: "notes.md", content: "Chapter three." }] };
-  const full = prompt([said("user", "hi", 0)], { system_prompt: "You are ada.", tools_guidance: "Use the tools.", character_definition: "Ada.", user_definition: "Eve.", memory_index: "- notes", thread }).system;
-  expect(full.map((block) => block.label)).toEqual(["system", "tools_guidance", "character", "user", "thread", "memory_index", "thread_pins"]);
-  expect(full.filter((block) => ["tools_guidance", "character", "user", "memory_index"].includes(block.label)).map((block) => block.content)).toEqual(["Use the tools.", "Ada.", "Eve.", "- notes"]);
+  const sections: PromptSection[] = [
+    { shore: "thread_pins" },
+    { label: "MAP.md", text: "- {{char}}'s notes", template: false },
+    { label: "system_prompt", text: "You are {{char}}, talking with {{user}}.", template: true },
+    { label: "SOUL.md", text: undefined, template: false },
+    { label: "USER.md", text: " \n", template: false },
+    { shore: "thread" },
+  ];
+  const full = prompt([said("user", "hi", 0)], { sections, thread }).system;
+  expect(full.map((block) => block.label)).toEqual(["thread_pins", "MAP.md", "system_prompt", "thread"]);
+  expect(full[1]?.content).toBe("- {{char}}'s notes");
+  expect(full[2]?.content).toBe("You are ada, talking with eve.");
+  expect(full[3]?.content).toContain(`side thread "story"`);
 
-  const bare = prompt([said("user", "hi", 0)], { system_prompt: "You are ada.", tools_guidance: "", character_definition: "", user_definition: "", memory_index: "" }).system;
-  expect(bare.map((block) => block.label)).toEqual(["system"]);
+  expect(prompt([said("user", "hi", 0)], { sections }).system.map((block) => block.label)).toEqual(["MAP.md", "system_prompt"]);
+  expect(prompt([said("user", "hi", 0)], { sections, thread: { ...thread, pins: [] } }).system.map((block) => block.label)).toEqual(["MAP.md", "system_prompt", "thread"]);
 });

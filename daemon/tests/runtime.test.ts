@@ -30,6 +30,7 @@ import { providerCacheDir } from "../src/storage/provider_cache.ts";
 import { noisePng } from "./support/test_images.ts";
 import { testTmp } from "./support/tmp.ts";
 import { until } from "./support/until.ts";
+import { PROMPT_LIST_TOML } from "./support/prompt_list.ts";
 
 const running: ShoreRuntime[] = [];
 
@@ -289,7 +290,7 @@ describe("a runtime coming up", () => {
 
 describe("a runtime's MCP servers", () => {
   test("changing their tools rebuilds the requests it had cached with them", async () => {
-    const runtime = await start(await install('[chat]\nmodel = "anthropic:claude-x"\n[providers.anthropic]\napi_key_env = "SHORE_RUNTIME_KEY"\n[tools]\nenabled = ["notes__*"]\n'), { env: { SHORE_RUNTIME_KEY: "sk-from-env" } });
+    const runtime = await start(await install('[chat]\nmodel = "anthropic:claude-x"\n[providers.anthropic]\napi_key_env = "SHORE_RUNTIME_KEY"\n[tools]\nenabled = ["notes__*"]\n' + PROMPT_LIST_TOML), { env: { SHORE_RUNTIME_KEY: "sk-from-env" } });
     const stale = cachedPrefix("ada", "anthropic");
     runtime.cache.set("ada", stale);
     await runtime.refreshMcpCaches({ toolDefsFiltered: () => [{ name: "notes__search", description: "Search the notes", input_schema: {} }] } as unknown as McpRegistry);

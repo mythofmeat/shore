@@ -1520,39 +1520,21 @@ fn print_character_info(data: &serde_json::Value) {
         write_row(&mut out, "Config", dir);
     }
 
-    let has_def = data["has_definition"].as_bool().unwrap_or(false);
-    let has_user = data["has_user_definition"].as_bool().unwrap_or(false);
-    write_row(&mut out, "Definition", if has_def { "yes" } else { "no" });
-    if has_user {
-        write_row(&mut out, "User def", "yes");
-    }
-
     if data["has_config_override"].as_bool().unwrap_or(false) {
         write_row_colored(&mut out, "Config override", "yes", Tone::Warn);
     }
 
-    if let Some(overrides) = data["prompt_overrides"].as_array()
-        && !overrides.is_empty()
+    if let Some(files) = data["prompt_files"].as_array()
+        && !files.is_empty()
     {
-        let names: Vec<&str> = overrides.iter().filter_map(|v| v.as_str()).collect();
-        write_row(&mut out, "Prompts", &names.join(", "));
+        let names: Vec<&str> = files.iter().filter_map(|v| v.as_str()).collect();
+        write_row(&mut out, "Prompt files", &names.join(", "));
     }
 
     if let Some(dir) = data["data_dir"].as_str() {
         write_row(&mut out, "Data", dir);
     }
 
-    if let Some(preview) = data["definition_preview"].as_str()
-        && !preview.is_empty()
-    {
-        _ = writeln!(out);
-        write_section_header(&mut out, "Preview", "", width);
-        for line in preview.lines().take(8) {
-            paint(&mut out, Tone::Muted, &format!("  {line}"));
-            _ = writeln!(out);
-        }
-        if false {}
-    }
     _ = writeln!(out);
 }
 
