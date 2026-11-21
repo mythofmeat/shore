@@ -434,6 +434,14 @@ export const DAEMON_EQUIVALENTS: readonly string[] = [
   "src/swp/outbound.ts:OutboundQueue.push: …|| limits.bytes === Infinity ? 「0 → 1」 : encodeServerMessage(message)…",
   "src/swp/server.ts:Server.attachLocal: this.#nextId += 「1 → 2」;",
   "src/handler/context.ts:threadPrompt: if (thread === undefined) 「return undefined; → {}」",
+  "src/memory/history_index.ts:readCorpus: … cursors.get(thread) ?? { seq: 「0 → 1」, run: 0, ts: 0, broken: false …",
+  "src/memory/history_index.ts:readCorpus: ….get(thread) ?? { seq: 0, run: 「0 → 1」, ts: 0, broken: false };",
+  "src/memory/history_index.ts:readCorpus: …seq: 0, run: 0, ts: 0, broken: 「false → true」 };",
+  "src/memory/history_index.ts:readCorpus: cursor.run += 「1 → 2」;",
+  "src/memory/history_index.ts:readCorpus: cursor.seq += 「1 → 2」;",
+  "src/memory/history_index.ts:readCorpus: id: 「0 → 1」,",
+  "src/memory/history_index.ts:writeIndex: …ach((item, i) => { item.id = i 「+ → -」 1; });",
+  "src/memory/history_index.ts:writeIndex: …h((item, i) => { item.id = i + 「1 → 2」; });",
 ];
 
 export const CLIENT_FLOORS: Readonly<Record<string, number>> = {
