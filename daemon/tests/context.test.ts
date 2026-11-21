@@ -94,7 +94,7 @@ test("the system prompt is the listed parts in the listed order: config files as
   await writeFile(join(workspace, "SOUL.md"), "Ada.");
 
   expect(await system()).toEqual(["- {{char}}'s places", "You are ada, with eve.", "Ada.", "That is all."]);
-  expect(await readdir(workspace)).toEqual(["SOUL.md", "notes"]);
+  expect((await readdir(workspace)).sort()).toEqual(["SOUL.md", "notes"]);
 });
 
 test("a listed config file that can't be read stops the request and names the path", async () => {
