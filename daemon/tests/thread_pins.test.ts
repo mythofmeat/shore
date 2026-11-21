@@ -2,7 +2,9 @@ import { afterEach, describe, expect, spyOn, test } from "bun:test";
 import { mkdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 
+import defaultToolsGuidance from "../prompts/engine/default_tools.md" with { type: "text" };
 import { CharacterRegistry } from "../src/characters.ts";
+import { newThread, threadPins as setPinsCommand } from "../src/commands/threads.ts";
 import { defaultAppConfig } from "../src/config/app.ts";
 import { characterDataDir, characterThreadsIndex } from "../src/config/dirs.ts";
 import { ConfigDuration } from "../src/config/duration.ts";
@@ -18,7 +20,7 @@ import { editCharacterThread } from "../src/handler/edit_thread.ts";
 import { buildGenerationRequest } from "../src/handler/setup.ts";
 import { buildToolContext } from "../src/handler/tool_context.ts";
 import { systemToText } from "../src/llm/types.ts";
-import { applyDeferredEdits } from "../src/memory/deferred_edits.ts";
+import { applyDeferredEdits, changedPromptFiles } from "../src/memory/deferred_edits.ts";
 import { exportUnifiedDatabase, importUnifiedDatabase } from "../src/storage/archive.ts";
 import { initializeDatabase } from "../src/storage/database.ts";
 import { readDurable, threadFile, writeDurable } from "../src/storage/files.ts";
@@ -26,8 +28,9 @@ import { shoreLog } from "../src/log.ts";
 import { databasePath, readCharacterState, writeCharacterState } from "../src/storage/store.ts";
 import { CharacterWorkspace, characterWorkspace } from "../src/tools/character_workspace.ts";
 import { dispatchTool } from "../src/tools/dispatch.ts";
-import { outcomeOf } from "./support/outcome.ts";
+import { outcomeOf, rejectionOf } from "./support/outcome.ts";
 import { testTmp } from "./support/tmp.ts";
+import { required } from "../src/util/required.ts";
 
 const NOW = "2026-11-21T10:00:00Z";
 
@@ -194,6 +197,89 @@ describe("a thread's pinned files", () => {
   });
 });
 
+describe("a thread's pinned files at their limits", () => {
+  test("one of exactly 32 KB can be pinned and is shown whole, and four that come to exactly 128 KB can be pinned together", async () => {
+    const full = (letter: string) => letter.repeat(32 * 1024);
+    const { config, system, talking } = await setup({ files: { "a.md": full("a"), "b.md": full("b"), "c.md": full("c"), "d.md": full("d") } });
+    const registry = await CharacterRegistry.create(config.dirs.config, config.dirs.data, config);
+    await registry.createThread("frank", "story", { pins: ["a.md", "b.md", "c.md", "d.md"] });
+    talking();
+
+    const shown = await system();
+    for (const letter of ["a", "b", "c"]) expect(shown).toContain(`## ${letter}.md\n\n${full(letter)}\n\n## `);
+    expect(shown).toEndWith(`## d.md\n\n${full("d")}`);
+  });
+
+  test("setting them stops when the request is cancelled, rather than reporting the files it couldn't look for", async () => {
+    const { config } = await setup();
+    const registry = await CharacterRegistry.create(config.dirs.config, config.dirs.data, config);
+    await registry.createThread("frank", "story", {});
+    const cancelled = new AbortController();
+    cancelled.abort();
+
+    expect(await rejectionOf(registry.setThreadPins("frank", "story", ["notes/missing.md"], cancelled.signal))).toBe(cancelled.signal.reason);
+  });
+});
+
+describe("the user's thread commands", () => {
+  async function commands() {
+    const { config } = await setup({ files: { "notes.md": "Notes." } });
+    const registry = await CharacterRegistry.create(config.dirs.config, config.dirs.data, config);
+    return { registry, character: "frank", current: "main" };
+  }
+
+  test("make a thread with all it was given, or with only its name", async () => {
+    const user = await commands();
+    const made = await newThread(user, { name: "lamp", label: "The lamp", purpose: "Keep the light", pins: [" notes.md ", "", "!date"], model: "anthropic:opus", compaction: true });
+    expect(made.threads.find((thread) => thread.id === "lamp")).toMatchObject({ label: "The lamp", purpose: "Keep the light", pins: ["notes.md", "!date"], chat_model: "anthropic:opus", compaction: true });
+
+    const bare = (await newThread(user, { name: "bare", pins: null })).threads.find((thread) => thread.id === "bare");
+    expect([bare?.label, bare?.purpose, bare?.pins, bare?.chat_model, bare?.compaction]).toEqual([undefined, undefined, undefined, undefined, false]);
+    expect(await outcomeOf(newThread(user, { name: "lamp" }))).toThrow('thread "lamp" already exists for frank');
+  });
+
+  test("set a thread's pins, clear them when given none, and say when the thread doesn't exist", async () => {
+    const user = await commands();
+    await newThread(user, { name: "lamp" });
+
+    expect((await setPinsCommand(user, { name: "lamp", pins: ["notes.md", "!date"] })).threads.find((thread) => thread.id === "lamp")?.pins).toEqual(["notes.md", "!date"]);
+    expect((await setPinsCommand(user, { name: "lamp" })).threads.find((thread) => thread.id === "lamp")?.pins).toBeUndefined();
+    expect(await outcomeOf(setPinsCommand(user, { name: "nowhere", pins: [] }))).toThrow('no thread "nowhere" for frank');
+  });
+
+  test("refuse pins that aren't a list of text", async () => {
+    const user = await commands();
+    await newThread(user, { name: "lamp" });
+    for (const pins of ["notes.md", [1]]) {
+      expect(await outcomeOf(newThread(user, { name: "odd", pins }))).toThrow("pins must be a list of workspace paths and !commands");
+      expect(await outcomeOf(setPinsCommand(user, { name: "lamp", pins }))).toThrow("pins must be a list of workspace paths and !commands");
+    }
+  });
+});
+
+describe("a thread's prompt snapshot", () => {
+  test("gives a new character the default TOOLS.md at its first turn, and gives it back when the prompt is refreshed after it was deleted", async () => {
+    const { dirs, workspace, system, talking, refresh } = await setup();
+    await createThread(dirs.data, "frank", "story", NOW);
+    talking();
+    expect(await system()).toContain(defaultToolsGuidance.trim());
+
+    await Bun.file(join(workspace, "TOOLS.md")).delete();
+    await refresh();
+    expect(await Bun.file(join(workspace, "TOOLS.md")).text()).toBe(defaultToolsGuidance);
+  });
+
+  test("taken by a refresh before the thread's prompt was first made counts, so a prompt file changed after it is reported as waiting", async () => {
+    const { config, dirs, workspace, talking, refresh } = await setup();
+    await createThread(dirs.data, "frank", "story", NOW);
+    talking();
+    await refresh();
+    await writeFile(join(workspace, "SOUL.md"), "Frank, changed.");
+
+    expect(await changedPromptFiles(characterDataDir(dirs.data, "frank"), characterWorkspace(config, "frank"), "story")).toEqual(["SOUL.md"]);
+  });
+});
+
 describe("setting pins", () => {
   test("a ! with nothing after it, a command over more than one line, or a file named with a leading ! is refused", () => {
     expect(() => threadPins(["!  "])).toThrow("a command pin has nothing after its !");
@@ -257,8 +343,8 @@ describe("threads from before pins", () => {
     version: 1, home: "main",
     threads: [
       { id: "main", created_at: NOW, compaction: true },
-      { id: "story", created_at: NOW, compaction: false, files: ["notes/plan.md", "!odd.md"] },
-      { id: "lamp", created_at: NOW, compaction: false, files: ["!also-odd.md"] },
+      { id: "story", created_at: NOW, compaction: false, files: ["notes/plan.md"] },
+      { id: "lamp", created_at: NOW, compaction: false, files: ["!odd.md"] },
     ],
   } as unknown as ThreadsIndex;
 
@@ -281,12 +367,15 @@ describe("threads from before pins", () => {
 
     expect(said).toEqual([
       "shore: gus/threads.json isn't a thread list Shore can read, so its thread files weren't moved to pins",
-      "shore: these thread files were left out of their threads' pins, because a pin that starts with ! is a command: !odd.md, !also-odd.md",
+      "shore: these thread files were left out of their threads' pins, because a pin that starts with ! is a command: !odd.md",
     ]);
     expect(readDurable(characterThreadsIndex(dirs.data, "gus"))).toBe("{ not json");
 
     const threads = (await readThreadsIndex(dirs.data, "frank"))?.threads;
     expect(threads?.map((thread) => [thread.id, thread.pins, "files" in thread])).toEqual([["main", undefined, false], ["story", ["notes/plan.md"], false], ["lamp", undefined, false]]);
+    const moved = readDurable(characterThreadsIndex(dirs.data, "frank"));
+    await writeThreadsIndex(dirs.data, "frank", required(await readThreadsIndex(dirs.data, "frank")));
+    expect(readDurable(characterThreadsIndex(dirs.data, "frank"))).toBe(moved);
     expect(readCharacterState(characterDir, "threads/story/active_prompt/thread_files/notes/plan.md")).toBeUndefined();
     expect(await system()).toContain("## notes/plan.md\n\nChapter three next.");
   });
@@ -303,7 +392,7 @@ describe("threads from before pins", () => {
       warned.mockRestore();
     }
     expect(warnings).toEqual([]);
-    expect((await readThreadsIndex(dirs.data, "frank"))?.threads.find((thread) => thread.id === "story")).toMatchObject({ files: ["notes/plan.md", "!odd.md"] });
+    expect((await readThreadsIndex(dirs.data, "frank"))?.threads.find((thread) => thread.id === "story")).toMatchObject({ files: ["notes/plan.md"] });
   });
 
   test("in an archive from before pins are imported with pins", async () => {

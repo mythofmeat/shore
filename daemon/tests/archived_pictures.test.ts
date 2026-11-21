@@ -149,3 +149,9 @@ test("archived workspace pictures still open after the workspace dir moves", asy
   expect(image?.path).toBe(join(root, "workspaces", "ada", "art", "drawing.png"));
   expect(readFileSync(image?.path ?? "")).toEqual(drawing);
 });
+
+test("a data folder that has never been used has no archived pictures to repoint at its first start", () => {
+  const { data } = install(testTmp(`archived-pictures-${crypto.randomUUID()}`));
+
+  expect(repointArchivedImages(data)).toEqual({ kept: 0, repointed: 0, missing: 0 });
+});

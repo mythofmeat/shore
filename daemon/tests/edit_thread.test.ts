@@ -18,8 +18,10 @@ import type { ServerMessage } from "../src/protocol/ServerMessage.ts";
 import { initializeDatabase } from "../src/storage/database.ts";
 import { characterWorkspace } from "../src/tools/character_workspace.ts";
 import { dispatchTool } from "../src/tools/dispatch.ts";
+import { editThreadRequest, handleEditThread } from "../src/tools/edit_thread.ts";
 import { handleListThreads } from "../src/tools/list_threads.ts";
-import { outcomeOf } from "./support/outcome.ts";
+import { startThreadRequest } from "../src/tools/start_thread.ts";
+import { outcomeOf, rejectionOf } from "./support/outcome.ts";
 import { testTmp } from "./support/tmp.ts";
 
 const NOW = "2026-11-01T10:00:00Z";
@@ -142,5 +144,42 @@ describe("the character editing a thread", () => {
     expect(await edit({ name: "story", purpose: "Hers again" })).toContain('Changed the thread "story": purpose set.');
     const record = await stored("story");
     expect([record?.purpose, record?.locked]).toEqual(["Hers again", undefined]);
+  });
+
+  test("a locked thread, or the home thread, is refused before any of the new pins is looked for", async () => {
+    const { registry, edit } = await setup({});
+    await registry.createThread("frank", "story", { label: "Lighthouse", created_by: "character" });
+    await threadLock({ registry, character: "frank", current: "main" }, { name: "story", locked: true });
+
+    expect(await outcomeOf(edit({ name: "story", pins: ["stories/missing.md"] })))
+      .toThrow('Nothing changed: Sam locked the thread "story", so its label, purpose and pins change only when Sam changes them.');
+    expect(await outcomeOf(edit({ name: "main", pins: ["stories/missing.md"] })))
+      .toThrow(`thread "main" is the home thread for frank, and the home thread's prompt shows no purpose or pins`);
+  });
+});
+
+describe("what the threads tool is given", () => {
+  test("an edit needs the thread's name and something to change, and pins given as a list of text", () => {
+    expect(() => editThreadRequest({ label: "Lighthouse" })).toThrow("name is required: the id of the thread to change");
+    expect(() => editThreadRequest({ name: "story" })).toThrow("give at least one of label, purpose or pins to change");
+    for (const pins of ["notes.md", [1]]) {
+      expect(() => editThreadRequest({ name: "story", pins })).toThrow("pins must be a list of workspace paths and !commands");
+    }
+  });
+
+  test("a new thread needs a name it can be stored under and a label, and pins given as a list of text", () => {
+    const named = "name must be letters, digits, dot, dash or underscore, starting with a letter or digit, at most";
+    expect(() => startThreadRequest({ label: "Lighthouse" })).toThrow(named);
+    expect(() => startThreadRequest({ name: "../story", label: "Lighthouse" })).toThrow(named);
+    expect(() => startThreadRequest({ name: "story" })).toThrow("label is required");
+    for (const pins of ["notes.md", [1]]) {
+      expect(() => startThreadRequest({ name: "story", label: "Lighthouse", pins })).toThrow("pins must be a list of workspace paths and !commands");
+    }
+  });
+
+  test("an edit where threads can't be edited says so, and a failure that isn't about the thread is passed on as it is", async () => {
+    expect(await outcomeOf(handleEditThread({ name: "story", label: "Lighthouse" }, undefined, "Sam"))).toThrow("threads can't be edited from here");
+    const failure = new Error("the disk is full");
+    expect(await rejectionOf(handleEditThread({ name: "story", label: "Lighthouse" }, async () => await Promise.reject(failure), "Sam"))).toBe(failure);
   });
 });

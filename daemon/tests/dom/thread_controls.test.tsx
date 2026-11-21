@@ -281,3 +281,32 @@ test("a thread's settings open on what the thread has, save nothing that wasn't 
   await plain.unmount();
   await quiet();
 });
+
+test("saving a thread's settings sends each change: its pins, a cleared label, a new purpose, unlocking it and going back to the default model", async () => {
+  app.answer((request) => String(request["name"]).startsWith("thread_") ? LISTING : undefined);
+  const { ThreadDialogs } = await import("../../src/browser/chat/thread_dialogs.tsx");
+  const { chromeOf } = await import("../../src/browser/chrome.ts");
+  const kept: ThreadView = { ...SIDE, id: "kept", label: "Lighthouse", purpose: "A story.", pins: ["stories/lighthouse.md"], locked: true, chat_model: "anthropic:opus" };
+  const state = { ...chromeOf(undefined, app.state().workspace.getSnapshot()), threads: [HOME, kept] };
+
+  const view = await mount(<ThreadDialogs state={state} request={{ kind: "settings", thread: "kept" }} close={() => {}} />);
+  const since = app.socket().sent.length;
+  await type(field(document.body, "Label"), "  ");
+  await type(field(document.body, "Purpose"), " Mara's winter. ");
+  await type(field(document.body, "Pinned in the prompt"), "stories/lighthouse.md\n!git log --oneline -5\n");
+  await click(document.body.querySelector("input[type=checkbox]"));
+  await click(document.body.querySelector(".thread-model"));
+  await click(button(document.body, "Use ada’s default"));
+  await click(button(document.body, "Save"));
+  await settle();
+
+  expect(app.sent(since).filter((request) => String(request["name"]).startsWith("thread_")).map((request) => [request["name"], request["args"]])).toEqual([
+    ["thread_pins", { name: "kept", pins: ["stories/lighthouse.md", "!git log --oneline -5"] }],
+    ["thread_label", { name: "kept", label: null }],
+    ["thread_purpose", { name: "kept", purpose: "Mara's winter." }],
+    ["thread_lock", { name: "kept", locked: false }],
+    ["thread_model", { name: "kept", model: null }],
+  ]);
+  await view.unmount();
+  await quiet();
+});

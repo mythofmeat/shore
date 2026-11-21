@@ -1,6 +1,6 @@
 import { spawn, type ChildProcess, type ChildProcessWithoutNullStreams } from "node:child_process";
 
-import { defaultTriggersConfig } from "../config/app.ts";
+import { defaultToolsConfig, defaultTriggersConfig, type ToolsConfig, type TriggersConfig } from "../config/app.ts";
 import { characterWorkspaceDir } from "../config/dirs.ts";
 import { loadCharacterConfig, type LoadedConfig } from "../config/loader.ts";
 import { shoreLog } from "../log.ts";
@@ -42,7 +42,11 @@ interface Launch {
   env: NodeJS.ProcessEnv;
 }
 
-const NO_USER: CharacterTools = { user: undefined, passEnv: [], noNewPrivs: true, checkLimitMs: defaultTriggersConfig().check_time_limit.asMillis() };
+function toolsFrom(tools: ToolsConfig, triggers: TriggersConfig): CharacterTools {
+  return { user: tools.user, passEnv: tools.pass_env, noNewPrivs: tools.no_new_privs, checkLimitMs: triggers.check_time_limit.asMillis() };
+}
+
+const NO_USER = toolsFrom(defaultToolsConfig(), defaultTriggersConfig());
 
 const helpers = new Map<string, WorkspaceHelper>();
 
@@ -164,7 +168,7 @@ const toolsCache = new WeakMap<LoadedConfig, Map<string, CharacterTools>>();
 
 function toolsOnDisk(config: LoadedConfig, name: string): CharacterTools {
   const { tools, triggers } = (loadCharacterConfig(config, name, () => {}) ?? config).app;
-  return { user: tools.user, passEnv: tools.pass_env, noNewPrivs: tools.no_new_privs, checkLimitMs: triggers.check_time_limit.asMillis() };
+  return toolsFrom(tools, triggers);
 }
 
 export function characterToolsFor(config: LoadedConfig, name: string): CharacterTools {

@@ -15,7 +15,7 @@ export function initializeDatabase(data: string): void {
   openStorage(data).close();
   const path = databasePath(data);
   CallStore.open(path).close();
-  Ledger.create(path, undefined, false).close();
+  Ledger.create(path).close();
   HistoryStore.open(path).close();
   useIncrementalVacuum(path);
   moveStoredThreadFilesToPins(data);

@@ -433,6 +433,7 @@ export const DAEMON_EQUIVALENTS: readonly string[] = [
   "src/browser/chat/QuoteButton.tsx:QuoteButton: const half = (width ?? 「0 → 1」) / 2;",
   "src/swp/outbound.ts:OutboundQueue.push: …|| limits.bytes === Infinity ? 「0 → 1」 : encodeServerMessage(message)…",
   "src/swp/server.ts:Server.attachLocal: this.#nextId += 「1 → 2」;",
+  "src/handler/context.ts:threadPrompt: if (thread === undefined) 「return undefined; → {}」",
 ];
 
 export const CLIENT_FLOORS: Readonly<Record<string, number>> = {
