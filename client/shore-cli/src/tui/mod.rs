@@ -2960,7 +2960,7 @@ pub(crate) fn handle_server_message(app: &mut App, msg: ServerMessage) -> UiEffe
                 | "thread_home"
                 | "thread_label"
                 | "thread_purpose"
-                | "thread_files"
+                | "thread_pins"
                 | "thread_lock"
                 | "thread_compaction"
                 | "thread_move"

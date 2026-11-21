@@ -79,36 +79,36 @@ async function setup(files: Record<string, string>) {
 }
 
 describe("the character editing a thread", () => {
-  test("sets and clears a side thread's label, purpose and files, and that thread's next turn shows them", async () => {
+  test("sets and clears a side thread's label, purpose and pins, and that thread's next turn shows them", async () => {
     const { registry, events, edit, stored, system } = await setup({
       "stories/lighthouse.md": "Mara keeps the light.",
       "cast/mara.md": "Mara, the keeper.",
     });
-    await registry.createThread("frank", "story", { label: "Lighthouse", purpose: "A story.", files: ["stories/lighthouse.md"] });
+    await registry.createThread("frank", "story", { label: "Lighthouse", purpose: "A story.", pins: ["stories/lighthouse.md"] });
     expect(await system("story")).not.toContain("Mara, the keeper.");
 
-    expect(await edit({ name: "story", label: "The lighthouse at Brae", purpose: "Mara's winter, a chapter at a time.", files: ["stories/lighthouse.md", "[[mara]]"] }))
-      .toBe('Changed the thread "story": label "The lighthouse at Brae"; purpose set; files stories/lighthouse.md, cast/mara.md. You\'ll see the change from that thread\'s next turn, the same as when Sam changes it.');
+    expect(await edit({ name: "story", label: "The lighthouse at Brae", purpose: "Mara's winter, a chapter at a time.", pins: ["stories/lighthouse.md", "[[mara]]"] }))
+      .toBe('Changed the thread "story": label "The lighthouse at Brae"; purpose set; pins stories/lighthouse.md, cast/mara.md. You\'ll see the change from that thread\'s next turn, the same as when Sam changes it.');
     const changed = await system("story");
     expect(changed).toContain('\\"The lighthouse at Brae\\"');
     expect(changed).toContain("Mara's winter, a chapter at a time.");
     expect(changed).toContain("Mara, the keeper.");
     expect(events).toEqual([{ type: "threads_changed", character: "frank", thread: "story" }]);
 
-    expect(await edit({ name: "story", label: "", purpose: "", files: [] })).toContain("label cleared; purpose cleared; files cleared");
+    expect(await edit({ name: "story", label: "", purpose: "", pins: [] })).toContain("label cleared; purpose cleared; pins cleared");
     const cleared = await system("story");
     for (const gone of ["Brae", "Mara's winter", "Mara keeps the light.", "Mara, the keeper."]) expect(cleared).not.toContain(gone);
     const record = await stored("story");
-    expect([record?.label, record?.purpose, record?.files]).toEqual([undefined, undefined, undefined]);
+    expect([record?.label, record?.purpose, record?.pins]).toEqual([undefined, undefined, undefined]);
   });
 
   test("a file that can't be loaded changes nothing, the label and purpose included, and the result says which and why", async () => {
     const { registry, events, edit, stored } = await setup({ "stories/lighthouse.md": "Mara keeps the light." });
-    await registry.createThread("frank", "story", { label: "Lighthouse", purpose: "A story.", files: ["stories/lighthouse.md"] });
+    await registry.createThread("frank", "story", { label: "Lighthouse", purpose: "A story.", pins: ["stories/lighthouse.md"] });
     const before = await stored("story");
 
-    const refused = await outcomeOf(edit({ name: "story", label: "Renamed", purpose: "Something else", files: ["stories/lighthouse.md", "stories/lighthose.md"] }));
-    expect(refused).toThrow("nothing changed, because a thread file can't be loaded:\n- stories/lighthose.md does not exist");
+    const refused = await outcomeOf(edit({ name: "story", label: "Renamed", purpose: "Something else", pins: ["stories/lighthouse.md", "stories/lighthose.md"] }));
+    expect(refused).toThrow("nothing changed, because a pin can't be loaded:\n- stories/lighthose.md does not exist");
     expect(await stored("story")).toEqual(before);
     expect(registry.listThreads("frank").find((thread) => thread.id === "story")).toEqual(before);
     expect(events).toEqual([]);
@@ -117,7 +117,7 @@ describe("the character editing a thread", () => {
   test("the home thread and a thread that doesn't exist are refused, and the result says why", async () => {
     const { edit, stored } = await setup({});
     const home = await stored("main");
-    expect(await outcomeOf(edit({ name: "main", label: "Home", purpose: "Everything" }))).toThrow(`thread "main" is the home thread for frank, and the home thread's prompt shows no purpose or files`);
+    expect(await outcomeOf(edit({ name: "main", label: "Home", purpose: "Everything" }))).toThrow(`thread "main" is the home thread for frank, and the home thread's prompt shows no purpose or pins`);
     expect(await outcomeOf(edit({ name: "nowhere", label: "Somewhere" }))).toThrow(`no thread "nowhere" for frank`);
     expect(await stored("main")).toEqual(home);
     expect(await stored("nowhere")).toBeUndefined();
@@ -130,7 +130,7 @@ describe("the character editing a thread", () => {
 
     expect((await threadLock(user, { name: "story", locked: true })).threads.find((thread) => thread.id === "story")?.locked).toBe(true);
     expect(await outcomeOf(edit({ name: "story", purpose: "Mine now" })))
-      .toThrow('Nothing changed: Sam locked the thread "story", so its label, purpose and files change only when Sam changes them.');
+      .toThrow('Nothing changed: Sam locked the thread "story", so its label, purpose and pins change only when Sam changes them.');
     expect((await stored("story"))?.purpose).toBe("A story.");
     expect(await handleListThreads({ dataDir: dirs.data, character: "frank", userName: "Sam", timeZone: "UTC", now: () => Date.parse(NOW) }))
       .toContain('story "Lighthouse" (locked) · compaction off');

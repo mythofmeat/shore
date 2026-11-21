@@ -1,4 +1,4 @@
-const DYNAMIC_SYSTEM_LABELS: ReadonlySet<string> = new Set(["memory_index", "thread_files"]);
+const DYNAMIC_SYSTEM_LABELS: ReadonlySet<string> = new Set(["memory_index", "thread_pins"]);
 
 export function isDynamicSystemBlock(label: string): boolean {
   return DYNAMIC_SYSTEM_LABELS.has(label);

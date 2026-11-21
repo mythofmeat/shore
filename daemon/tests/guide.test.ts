@@ -270,7 +270,9 @@ test("the guide states each thing a character could otherwise only learn by tryi
   expect(wakes).toContain("You go dormant when eve has been away: after 3 wakes in a row with no message from them, or once 2d have passed since their last message. Both are eve's settings.");
   expect(wakes).toContain("While you are dormant nothing wakes you: triggers and checks stop, and a wake that was waiting is dropped. Nothing that came due then is made up afterwards. A sealed thread still opens at its time and wakes you in it.\n\nA message from eve, in any thread, ends it.");
 
-  expect(await guide("threads")).toContain("Each must be text of at most 32 KB, and they may come to 128 KB together.");
+  const threads = await guide("threads");
+  expect(threads).toContain("Each file must be text of at most 32 KB, and the files may come to 128 KB together.");
+  expect(threads).toContain("what it prints is kept in its place, up to 32 KB. One still running after 1m is stopped, and the prompt says so.");
   expect(await guide("messages")).toContain("- The notification is cut at 300 characters.");
 });
 
@@ -339,12 +341,12 @@ test("the guide says a wake starts fresh in whichever thread it runs, and what i
   expect(wakes).toContain("- Nothing in a wake is sent to eve unless you send it. `send_message` sends them a message, posted in the thread the wake ran in when the wake ends; the `messages` topic has the details.\n");
   expect(wakes).toContain("- Everything you do in a wake is your working: how it opened, each round of tool use, and your final response. It goes to your wakes thread, a thread Shore makes the first time it is needed and marks in the list `threads` gives. eve can read it there but doesn't write there, and no wake runs there.\n- The thread the wake ran in keeps how it opened, a line saying where its working went, and the message you sent.\n- A wake in a sealed thread is the exception: its working stays in the sealed thread, which is hidden anyway.\n");
   expect(await guide("threads")).toContain("- Your wakes thread is where Shore keeps the working from your wakes, so that it doesn't crowd the threads they run in. eve reads it but doesn't write there, no wake runs there, and it never compacts: its oldest wakes are moved into the chat logs when it gets long.");
-  expect(wakes).toContain("A side thread's purpose and files are in the prompt of a wake there. The files are read afresh as the wake starts, unless eve has just been writing in that thread.");
+  expect(wakes).toContain("A side thread's purpose and pins are in the prompt of a wake there. The pins are refreshed as the wake starts, unless eve has just been writing in that thread.");
   expect(wakes).toContain("- The next wake in that thread is told that the last one was stopped, why, after how many rounds, whether its message was sent, and the last thing it wrote. It is shown again what the stopped one was shown of the thread.\n");
   expect(wakes).toContain("That wake starts fresh like any other, told that the last one was stopped for eve's message and the last thing it wrote.");
   expect(await guide("triggers")).toContain('- `thread = "a-thread"` makes the wake run in that thread, starting from what was said there since your last wake there.');
   expect(await guide("threads")).toContain("- A wake there starts fresh like any other, so what the next one will need belongs in that folder.");
-  expect(await guide("threads")).toContain("A wake there reads them afresh, unless eve has just been writing in the thread.");
+  expect(await guide("threads")).toContain("A wake there refreshes them, unless eve has just been writing in the thread.");
 });
 
 test("the guide says what becomes of a one-off: once fired, when its check fails, and that it has no cooldown", async () => {

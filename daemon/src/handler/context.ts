@@ -21,7 +21,7 @@ import {
   ensureCharacterWorkspace,
   loadPromptFile,
   loadMemoryIndex,
-  loadThreadFiles,
+  loadThreadPins,
   resetActivePromptSnapshot,
 } from "../memory/deferred_edits.ts";
 import type { CharacterWorkspace } from "../tools/character_workspace.ts";
@@ -90,7 +90,7 @@ async function threadPrompt(
     started_by_you: record.created_by === "character",
     label: record.label,
     purpose: record.purpose,
-    files: await loadThreadFiles(characterDataDir, workspace, record.id, record.files ?? []),
+    pins: await loadThreadPins(characterDataDir, workspace, record.id, record.pins ?? []),
   };
 }
 

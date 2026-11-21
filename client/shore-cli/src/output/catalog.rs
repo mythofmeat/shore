@@ -796,12 +796,12 @@ fn thread_facts(row: &Value) -> String {
     if !source.is_empty() {
         parts.push(format!("forked from {source}"));
     }
-    let files = row
-        .get("files")
+    let pins = row
+        .get("pins")
         .and_then(Value::as_array)
         .map_or(0, Vec::len);
-    if files > 0 {
-        parts.push(format!("{files} file{}", if files == 1 { "" } else { "s" }));
+    if pins > 0 {
+        parts.push(format!("{pins} pin{}", if pins == 1 { "" } else { "s" }));
     }
     if flag(row, "locked") {
         parts.push("locked".to_owned());
@@ -898,7 +898,7 @@ pub(crate) fn write_thread_list<W: Write>(out: &mut W, data: &Value) {
     if threads.iter().any(|thread| flag(thread, "locked")) {
         note(
             out,
-            "a locked thread's label, purpose and files change only when you change them",
+            "a locked thread's label, purpose and pins change only when you change them",
         );
     }
 }

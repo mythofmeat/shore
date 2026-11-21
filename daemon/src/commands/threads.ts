@@ -22,10 +22,10 @@ import { ForkBusy, type ForkResult, type ForkThreadOptions } from "../engine/for
 
 const asStr = (v: unknown): string | undefined => (typeof v === "string" ? v : undefined);
 
-function fileList(value: unknown): string[] | undefined {
+function pinList(value: unknown): string[] | undefined {
   if (value === undefined || value === null) return undefined;
   if (!Array.isArray(value) || !value.every((item) => typeof item === "string")) {
-    throw invalidRequest("files must be a list of workspace paths");
+    throw invalidRequest("pins must be a list of workspace paths and !commands");
   }
   return value.map((item) => item.trim()).filter((item) => item !== "");
 }
@@ -71,10 +71,10 @@ export interface ThreadRegistry {
     purpose: string | undefined,
     signal?: AbortSignal,
   ): Promise<ThreadsIndex>;
-  setThreadFiles(
+  setThreadPins(
     character: string,
     id: string,
-    files: readonly string[],
+    pins: readonly string[],
     signal?: AbortSignal,
   ): Promise<ThreadsIndex>;
   setThreadLocked(
@@ -183,12 +183,12 @@ export async function newThread(ctx: ThreadContext, args: Args): Promise<ThreadL
   const id = requiredId(args);
   const label = optionalText(args["label"], "label");
   const purpose = optionalText(args["purpose"], "purpose");
-  const files = fileList(args["files"]);
+  const pins = pinList(args["pins"]);
   const model = optionalText(args["model"], "model");
   const options: NewThread = {
     ...(label === undefined ? {} : { label }),
     ...(purpose === undefined ? {} : { purpose }),
-    ...(files === undefined ? {} : { files }),
+    ...(pins === undefined ? {} : { pins }),
     ...(model === undefined ? {} : { chat_model: model }),
     ...(args["compaction"] === true ? { compaction: true } : {}),
   };
@@ -237,11 +237,11 @@ export async function threadPurpose(ctx: ThreadContext, args: Args): Promise<Thr
   }
 }
 
-export async function threadFiles(ctx: ThreadContext, args: Args): Promise<ThreadListing> {
+export async function threadPins(ctx: ThreadContext, args: Args): Promise<ThreadListing> {
   const id = requiredId(args);
-  const files = fileList(args["files"]) ?? [];
+  const pins = pinList(args["pins"]) ?? [];
   try {
-    return listing(ctx, await ctx.registry.setThreadFiles(ctx.character, id, files, ctx.signal));
+    return listing(ctx, await ctx.registry.setThreadPins(ctx.character, id, pins, ctx.signal));
   } catch (e) {
     throw threadCommandError(e);
   }

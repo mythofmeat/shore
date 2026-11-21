@@ -238,17 +238,17 @@ test("a new thread is made with whatever else was filled in: its label, purpose,
     return undefined;
   });
   const view = await mount(<NewThreadDialog character="ada" close={() => {}} />);
-  expect([field(view.host, "Purpose")?.getAttribute("rows"), field(view.host, "Files in the prompt")?.getAttribute("rows")]).toEqual(["2", "3"]);
+  expect([field(view.host, "Purpose")?.getAttribute("rows"), field(view.host, "Pinned in the prompt")?.getAttribute("rows")]).toEqual(["2", "3"]);
   const since = app.socket().sent.length;
   await type(field(view.host, "Name"), "lamp");
   await type(field(view.host, "Label"), " The lamp ");
   await type(field(view.host, "Purpose"), " Keep the light ");
   await type(field(view.host, "Model"), " opus ");
-  await type(field(view.host, "Files in the prompt"), "notes/a.md\n\n  [[lamp/]]  \n");
+  await type(field(view.host, "Pinned in the prompt"), "notes/a.md\n\n  [[lamp/]]  \n");
   await type(field(view.host, "Older turns are archived"), "compact");
   await click(view.host.querySelector("button[type=submit]"));
   await settle();
-  expect(asked(since, "create_thread")).toEqual([{ name: "lamp", label: "The lamp", purpose: "Keep the light", files: ["notes/a.md", "[[lamp/]]"], model: "opus", compaction: true }]);
+  expect(asked(since, "create_thread")).toEqual([{ name: "lamp", label: "The lamp", purpose: "Keep the light", pins: ["notes/a.md", "[[lamp/]]"], model: "opus", compaction: true }]);
   await view.unmount();
 });
 
@@ -263,7 +263,7 @@ test("a thread's settings open on what the thread has, save nothing that wasn't 
 
   const mine = await mount(<ThreadDialogs state={state} request={{ kind: "settings", thread: "kept" }} close={() => {}} />);
   expect([lock(), model(), dialogs()]).toEqual([true, "opus", ["Thread settings"]]);
-  expect([field(document.body, "Purpose")?.getAttribute("rows"), field(document.body, "Files in the prompt")?.getAttribute("rows")]).toEqual(["2", "3"]);
+  expect([field(document.body, "Purpose")?.getAttribute("rows"), field(document.body, "Pinned in the prompt")?.getAttribute("rows")]).toEqual(["2", "3"]);
   const since = app.socket().sent.length;
   await click(button(document.body, "Save"));
   await settle();

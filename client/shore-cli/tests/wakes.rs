@@ -132,3 +132,34 @@ fn the_thread_list_marks_home_and_says_where_a_wake_runs() {
         )
     );
 }
+
+#[test]
+fn the_thread_list_counts_each_threads_pins_and_says_what_a_lock_keeps() {
+    let thread = |id: &str, pins: &[&str], locked: bool| {
+        json!({
+            "id": id, "created_at": "2026-11-21T00:00:00Z", "compaction": id == "main", "home": id == "main",
+            "current": id == "main", "turns": 2, "pins": pins, "locked": locked,
+        })
+    };
+    let (output, _frames) = asked(
+        json!({
+            "character": "ada",
+            "threads": [thread("main", &[], false), thread("tale", &["notes.md", "!date"], true), thread("lamp", &["!date"], false)],
+            "home": "main", "current": "main",
+        }),
+        &["thread"],
+    );
+    assert_eq!(
+        lines(&output).get(1..),
+        Some(
+            &[
+                "* main home \u{00b7} 2 turns \u{00b7} compacts".to_owned(),
+                "tale 2 turns \u{00b7} trims \u{00b7} 2 pins \u{00b7} locked".to_owned(),
+                "lamp 2 turns \u{00b7} trims \u{00b7} 1 pin".to_owned(),
+                "a wake runs in home, unless its trigger names another thread".to_owned(),
+                "a locked thread's label, purpose and pins change only when you change them"
+                    .to_owned(),
+            ][..]
+        )
+    );
+}

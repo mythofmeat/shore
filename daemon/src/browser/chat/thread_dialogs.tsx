@@ -2,7 +2,7 @@ import { useState } from "react";
 import type { ThreadView } from "../../protocol/ThreadView.ts";
 import type { ChromeSnapshot } from "../workspace.ts";
 import { workspace } from "../app/state.ts";
-import { threadFileList, WhenLongField } from "../sidebar/dialogs.tsx";
+import { threadPinList, WhenLongField } from "../sidebar/dialogs.tsx";
 import { threadLabel } from "../sidebar/Sidebar.tsx";
 import type { FolderDialogRequest, ThreadDialogRequest } from "../app/intents.ts";
 import { threadSections } from "../sidebar/order.ts";
@@ -10,11 +10,11 @@ import { moveThreadTo } from "./actions.ts";
 import { Form, useSubmit } from "./dialogs.tsx";
 import { ModelPicker, shortModel } from "./models.tsx";
 
-async function saveThreadSettings(thread: ThreadView, values: { label: string; purpose: string; files: string[]; locked: boolean; model: string | null; compaction: boolean }): Promise<void> {
+async function saveThreadSettings(thread: ThreadView, values: { label: string; purpose: string; pins: string[]; locked: boolean; model: string | null; compaction: boolean }): Promise<void> {
   const name = thread.id;
   const label = values.label.trim();
   const purpose = values.purpose.trim();
-  if (values.files.join("\n") !== (thread.files ?? []).join("\n")) await workspace.actions.run("thread_files", { name, files: values.files });
+  if (values.pins.join("\n") !== (thread.pins ?? []).join("\n")) await workspace.actions.run("thread_pins", { name, pins: values.pins });
   if (label !== (thread.label ?? "")) await workspace.actions.run("thread_label", { name, label: label === "" ? null : label });
   if (purpose !== (thread.purpose ?? "")) await workspace.actions.run("thread_purpose", { name, purpose: purpose === "" ? null : purpose });
   if (values.locked !== (thread.locked === true)) await workspace.actions.run("thread_lock", { name, locked: values.locked });
@@ -27,28 +27,28 @@ function ThreadSettingsDialog({ state, thread, close }: { state: ChromeSnapshot;
   const { busy, error, run } = useSubmit(close);
   const [label, setLabel] = useState(thread.label ?? "");
   const [purpose, setPurpose] = useState(thread.purpose ?? "");
-  const [files, setFiles] = useState((thread.files ?? []).join("\n"));
+  const [pins, setPins] = useState((thread.pins ?? []).join("\n"));
   const [locked, setLocked] = useState(thread.locked === true);
   const [model, setModel] = useState<string | null>(thread.chat_model ?? null);
   const [compaction, setCompaction] = useState(thread.compaction);
   const [picking, setPicking] = useState(false);
   const character = state.character ?? "The character";
   return <Form title="Thread settings" close={close} busy={busy} error={error} action="Save" submit={() => run(async () => {
-    await saveThreadSettings(thread, { label, purpose, files: threadFileList(files), locked, model, compaction });
+    await saveThreadSettings(thread, { label, purpose, pins: threadPinList(pins), locked, model, compaction });
     return undefined;
   })}>
     <label className="field"><span>Label</span><input className="input" data-autofocus value={label} placeholder={thread.id} onChange={(event) => setLabel(event.target.value)} /></label>
     <p className="form-hint">Leave empty to show the thread’s name, “{thread.id}”.</p>
     <label className="field"><span>Purpose <span className="muted">(optional)</span></span><textarea className="input textarea" rows={2} value={purpose} onChange={(event) => setPurpose(event.target.value)} /></label>
-    <label className="field"><span>Files in the prompt <span className="muted">(optional)</span></span><textarea className="input textarea mono" rows={3} placeholder={"stories/lighthouse.md\n[[lighthouse/]]"} value={files} onChange={(event) => setFiles(event.target.value)} /></label>
-    <p className="form-hint">The character sees the purpose and these workspace files in this thread’s prompt. One path or [[link]] per line.</p>
+    <label className="field"><span>Pinned in the prompt <span className="muted">(optional)</span></span><textarea className="input textarea mono" rows={3} wrap="off" placeholder={"stories/lighthouse.md\n!git log --oneline -5\n[[lighthouse/]]"} value={pins} onChange={(event) => setPins(event.target.value)} /></label>
+    <p className="form-hint">The character sees the purpose and these pins in this thread’s prompt. One per line: a workspace path or [[link]], or a shell command after a ! whose output is shown instead.</p>
     <div className="field">
       <span>Model</span>
       <button type="button" className="button thread-model" aria-label={`Model: ${model ?? `${character}’s default`}. Change model`} onClick={() => setPicking(true)}><span className="mono">{model === null ? `${character}’s default` : shortModel(model)}</span></button>
     </div>
     {thread.wakes === true ? null : <WhenLongField compaction={compaction} setCompaction={setCompaction} />}
-    <label className="check"><input type="checkbox" checked={locked} onChange={(event) => setLocked(event.target.checked)} />Lock the label, purpose and files</label>
-    <p className="form-hint">Only you can change a locked thread’s label, purpose and files. {character} can still edit the files themselves.</p>
+    <label className="check"><input type="checkbox" checked={locked} onChange={(event) => setLocked(event.target.checked)} />Lock the label, purpose and pins</label>
+    <p className="form-hint">Only you can change a locked thread’s label, purpose and pins. {character} can still edit the pinned files themselves.</p>
     {picking ? <ModelPicker state={state} close={() => setPicking(false)} target={{ kind: "thread", id: thread.id }} scopes={false} current={model} pick={setModel} /> : null}
   </Form>;
 }

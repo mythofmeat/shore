@@ -9,11 +9,11 @@ import { handleStartThread, type StartThreadRequest } from "./start_thread.ts";
 
 const TAKES = {
   list: [],
-  start: ["name", "label", "purpose", "files", "opening", "folder", "sealed_until"],
-  edit: ["name", "label", "purpose", "files"],
+  start: ["name", "label", "purpose", "pins", "opening", "folder", "sealed_until"],
+  edit: ["name", "label", "purpose", "pins"],
 } as const;
 
-const NOT_SEALED_IN = ["purpose", "files", "opening", "folder"];
+const NOT_SEALED_IN = ["purpose", "pins", "opening", "folder"];
 
 export interface ThreadsTool {
   list: ListThreadsOptions;

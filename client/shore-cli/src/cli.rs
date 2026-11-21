@@ -1450,9 +1450,9 @@ pub(crate) enum ThreadCommand {
         #[arg(long)]
         purpose: Option<String>,
 
-        /// Workspace file to keep in this thread's prompt, like a story's notes, as a path or a [[link]]; repeat for more
-        #[arg(long = "file", value_name = "PATH", add = values(Completes::WorkspaceFiles))]
-        files: Vec<String>,
+        /// Pin to keep in this thread's prompt: a workspace file, like a story's notes, as a path or a [[link]], or a shell command starting with !, whose output is kept instead; repeat for more
+        #[arg(long = "pin", value_name = "PIN", add = values(Completes::WorkspaceFiles))]
+        pins: Vec<String>,
 
         /// Chat model for this thread alone
         #[arg(long, add = values(Completes::Models))]
@@ -1483,25 +1483,25 @@ pub(crate) enum ThreadCommand {
         purpose: Option<String>,
     },
 
-    /// Set the workspace files kept in a thread's prompt, next to MEMORY.md
-    Files {
+    /// Set what is pinned to a thread's prompt, next to MEMORY.md: workspace files, and the output of shell commands
+    Pins {
         /// Thread id
         #[arg(add = values(Completes::Threads))]
         name: String,
 
-        /// Paths relative to the workspace root or [[links]], like [[notes]] or [[lighthouse/]]; omit all to clear the list
+        /// Paths relative to the workspace root, [[links]] like [[notes]] or [[lighthouse/]], or shell commands starting with !, like '!git log --oneline -5'; omit all to clear the list
         #[arg(add = values(Completes::WorkspaceFiles))]
-        files: Vec<String>,
+        pins: Vec<String>,
     },
 
-    /// Lock a thread's label, purpose and files, so only you change them. The character can still edit the files themselves
+    /// Lock a thread's label, purpose and pins, so only you change them. The character can still edit the pinned files themselves
     Lock {
         /// Thread id
         #[arg(add = values(Completes::Threads))]
         name: String,
     },
 
-    /// Unlock a thread, so the character can change its label, purpose and files again
+    /// Unlock a thread, so the character can change its label, purpose and pins again
     Unlock {
         /// Thread id
         #[arg(add = values(Completes::Threads))]
@@ -2695,7 +2695,7 @@ pub(crate) fn to_swp_command(
                 name,
                 label,
                 purpose,
-                files,
+                pins,
                 model,
                 compaction,
             } => {
@@ -2709,8 +2709,8 @@ pub(crate) fn to_swp_command(
                     if let Some(text) = purpose {
                         let _previous = map.insert("purpose".into(), json!(text));
                     }
-                    if !files.is_empty() {
-                        let _previous = map.insert("files".into(), json!(files));
+                    if !pins.is_empty() {
+                        let _previous = map.insert("pins".into(), json!(pins));
                     }
                 }
                 Some(("create_thread", args))
@@ -2722,8 +2722,8 @@ pub(crate) fn to_swp_command(
                 "thread_purpose",
                 json!({ "name": name, "purpose": purpose }),
             )),
-            ThreadCommand::Files { name, files } => {
-                Some(("thread_files", json!({ "name": name, "files": files })))
+            ThreadCommand::Pins { name, pins } => {
+                Some(("thread_pins", json!({ "name": name, "pins": pins })))
             }
             ThreadCommand::Lock { name } => {
                 Some(("thread_lock", json!({ "name": name, "locked": true })))
@@ -3621,14 +3621,14 @@ mod tests {
                     "lighthouse",
                     "--purpose",
                     "The lighthouse story",
-                    "--file",
+                    "--pin",
                     "stories/lighthouse.md",
-                    "--file",
-                    "stories/cast.md",
+                    "--pin",
+                    "!git log --oneline -5",
                 ],
                 Some((
                     "create_thread",
-                    json!({"name": "lighthouse", "label": null, "model": null, "compaction": false, "purpose": "The lighthouse story", "files": ["stories/lighthouse.md", "stories/cast.md"]}),
+                    json!({"name": "lighthouse", "label": null, "model": null, "compaction": false, "purpose": "The lighthouse story", "pins": ["stories/lighthouse.md", "!git log --oneline -5"]}),
                 )),
             ),
             (
@@ -3639,10 +3639,16 @@ mod tests {
                 )),
             ),
             (
-                &["thread", "files", "lighthouse", "stories/lighthouse.md"],
+                &[
+                    "thread",
+                    "pins",
+                    "lighthouse",
+                    "stories/lighthouse.md",
+                    "!date",
+                ],
                 Some((
-                    "thread_files",
-                    json!({"name": "lighthouse", "files": ["stories/lighthouse.md"]}),
+                    "thread_pins",
+                    json!({"name": "lighthouse", "pins": ["stories/lighthouse.md", "!date"]}),
                 )),
             ),
             (

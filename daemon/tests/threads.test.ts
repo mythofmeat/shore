@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { createFolder, deleteFolder, moveFolder, moveThread, placedThreads, renameFolder, setFolderSort } from "../src/engine/thread_layout.ts";
-import { MAX_THREAD_ID_LENGTH, archiveThread, assertThreadId, isValidThreadId, createThread, ensureThreads, ensureWakesThread, wakesThread, firstUnreadReply, markThreadRead, readThreadsIndex, setHomeThread, setThreadCompaction, threadActivityNow, threadFilePaths, writeThreadsIndex, type ThreadsIndex } from "../src/engine/threads.ts";
+import { MAX_THREAD_ID_LENGTH, archiveThread, assertThreadId, isValidThreadId, createThread, ensureThreads, ensureWakesThread, wakesThread, firstUnreadReply, markThreadRead, readThreadsIndex, setHomeThread, setThreadCompaction, threadActivityNow, threadPins, writeThreadsIndex, type ThreadsIndex } from "../src/engine/threads.ts";
 import { readFileSync, readFile } from "./support/stored_files.ts";
 import { mkdirSync, mkdtempSync, readdirSync, readlinkSync, realpathSync, rmSync, writeFileSync, existsSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -22,10 +22,10 @@ import { type ContentBlock, type Message } from "../src/engine/types.ts";
 import { testTmp } from "./support/tmp.ts";
 import { outcomeOf } from "./support/outcome.ts";
 
-describe("thread file paths", () => {
+describe("pinned file paths", () => {
   test("lose empty and dot parts, and one that names nothing is refused", () => {
-    expect(threadFilePaths(["stories//lighthouse.md", "stories/./notes.md", "/workspace/./plan.md"])).toEqual(["stories/lighthouse.md", "stories/notes.md", "plan.md"]);
-    expect(() => threadFilePaths(["."])).toThrow("a thread file path is empty");
+    expect(threadPins(["stories//lighthouse.md", "stories/./notes.md", "/workspace/./plan.md"])).toEqual(["stories/lighthouse.md", "stories/notes.md", "plan.md"]);
+    expect(() => threadPins(["."])).toThrow("a pinned file's path is empty");
   });
 });
 

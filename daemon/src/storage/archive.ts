@@ -8,6 +8,7 @@ import { Ledger } from "../ledger/store.ts";
 import { copyArchiveTables, HISTORY_TABLES } from "./archive_rows.ts";
 import { openStorage, pack, unpack, STORAGE_SCHEMA } from "./store.ts";
 import { refileHeartbeatEvents, renameHeartbeatCallTypes } from "./wake_names_migration.ts";
+import { moveThreadFilesToPins } from "./thread_pins_migration.ts";
 
 export function exportUnifiedDatabase(path: string, character: string, output: string, maxBytes?: number): void {
   if (!existsSync(path)) openStorage(dirname(path)).close();
@@ -98,6 +99,7 @@ export function importUnifiedDatabase(path: string, sourcePath: string, characte
       }
       renameHeartbeatCallTypes(destination);
       refileHeartbeatEvents(destination);
+      moveThreadFilesToPins(destination);
     })();
   } finally { source.close(); destination.close(); }
 }

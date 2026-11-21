@@ -95,13 +95,13 @@ async function systemText(config: LoadedConfig, thread: string, messages: Messag
   return JSON.stringify(built.request.system);
 }
 
-describe("a thread's files", () => {
+describe("a thread's pinned files", () => {
   test("a path that leaves the workspace is refused before the thread exists", async () => {
     const config = await setup();
     for (const files of [["../secrets.md"], ["notes/../../secrets.md"]]) {
-      expect(await outcomeOf(createThread(config.dirs.data, "frank", "story", NOW, { files }))).toThrow("leaves the workspace");
+      expect(await outcomeOf(createThread(config.dirs.data, "frank", "story", NOW, { pins: files }))).toThrow("leaves the workspace");
     }
-    expect(await outcomeOf(createThread(config.dirs.data, "frank", "story", NOW, { files: ["SOUL.md"] }))).toThrow("already in every thread's prompt");
+    expect(await outcomeOf(createThread(config.dirs.data, "frank", "story", NOW, { pins: ["SOUL.md"] }))).toThrow("already in every thread's prompt");
   });
 
   test("stay as they were when the thread started until a refresh, so the cached prompt doesn't change mid-conversation", async () => {
@@ -112,7 +112,7 @@ describe("a thread's files", () => {
     await createThread(config.dirs.data, "frank", "story", NOW, {
       label: "The lighthouse",
       purpose: "A story we write a chapter at a time.",
-      files: ["stories/lighthouse.md"],
+      pins: ["stories/lighthouse.md"],
     });
     const messages = [message("u1", "chapter two?", NOW)];
 
@@ -130,18 +130,18 @@ describe("a thread's files", () => {
   });
 });
 
-describe("setting a thread's files", () => {
+describe("setting a thread's pins", () => {
   test("a file that can't be found refuses the whole change and names each one, with the names read would suggest", async () => {
     const config = await setup();
     const registry = await registryWith(config, { "stories/lighthouse.md": "Mara keeps the light.", "city/market.md": "Stalls." });
-    const refused = await outcomeOf(registry.createThread("frank", "story", { files: ["stories/lighthose.md", "[[city/]]", "stories/lighthouse.md"] }));
+    const refused = await outcomeOf(registry.createThread("frank", "story", { pins: ["stories/lighthose.md", "[[city/]]", "stories/lighthouse.md"] }));
     expect(refused).toThrow("stories/lighthose.md does not exist; tried as [[stories/lighthose.md]]: no file matches; did you mean [[lighthouse]]?");
     expect(refused).toThrow("[[city/]]: city/ has no INDEX.md");
     expect(registry.listThreads("frank").map((thread) => thread.id)).toEqual(["main"]);
 
-    await registry.createThread("frank", "story", { files: ["stories/lighthouse.md"] });
-    expect(await outcomeOf(registry.setThreadFiles("frank", "story", ["city"]))).toThrow("city is a folder");
-    expect((await readThreadsIndex(config.dirs.data, "frank"))?.threads.find((thread) => thread.id === "story")?.files).toEqual(["stories/lighthouse.md"]);
+    await registry.createThread("frank", "story", { pins: ["stories/lighthouse.md"] });
+    expect(await outcomeOf(registry.setThreadPins("frank", "story", ["city"]))).toThrow("city is a folder");
+    expect((await readThreadsIndex(config.dirs.data, "frank"))?.threads.find((thread) => thread.id === "story")?.pins).toEqual(["stories/lighthouse.md"]);
   });
 
   test("links resolve the way read resolves them and are stored as plain paths", async () => {
@@ -152,13 +152,13 @@ describe("setting a thread's files", () => {
       "city/market.md": "Stalls.",
       "harbor/market.md": "Fish.",
     });
-    expect(await outcomeOf(registry.createThread("frank", "story", { files: ["[[market]]"] }))).toThrow("[[market]]: 2 files match: [[city/market]], [[harbor/market]]");
-    await registry.createThread("frank", "story", { files: ["[[lighthouse]]", "[[world/]]", "[[city/market]]"] });
-    expect(registry.listThreads("frank").find((thread) => thread.id === "story")?.files).toEqual(["stories/lighthouse.md", "world/INDEX.md", "city/market.md"]);
+    expect(await outcomeOf(registry.createThread("frank", "story", { pins: ["[[market]]"] }))).toThrow("[[market]]: 2 files match: [[city/market]], [[harbor/market]]");
+    await registry.createThread("frank", "story", { pins: ["[[lighthouse]]", "[[world/]]", "[[city/market]]"] });
+    expect(registry.listThreads("frank").find((thread) => thread.id === "story")?.pins).toEqual(["stories/lighthouse.md", "world/INDEX.md", "city/market.md"]);
   });
 });
 
-describe("what a thread file can be", () => {
+describe("what a pinned file can be", () => {
   test("a picture, a file that isn't UTF-8 text, or one too big is refused, and the error says why", async () => {
     const config = await setup();
     const registry = await registryWith(config, { "stories/lighthouse.md": "Mara keeps the light." });
@@ -169,17 +169,17 @@ describe("what a thread file can be", () => {
     await writeFile(join(workspace, "run.log"), "x".repeat(40 * 1024));
     for (const name of ["a", "b", "c", "d", "e"]) await writeFile(join(workspace, `${name}.md`), "y".repeat(30 * 1024));
 
-    const refused = await outcomeOf(registry.createThread("frank", "story", { files: ["[[map]]", "save.dat", "run.log", "stories/lighthouse.md"] }));
-    expect(refused).toThrow("[[map]] (art/map.png) is a picture; a thread file must be text");
-    expect(refused).toThrow("save.dat isn't UTF-8 text; a thread file must be text");
-    expect(refused).toThrow("run.log is 40 KB; a thread file can be at most 32 KB");
-    expect(await outcomeOf(registry.createThread("frank", "story", { files: ["a.md", "b.md", "c.md", "d.md", "e.md"] })))
-      .toThrow("together these files are 150 KB; a thread's files can be at most 128 KB together");
+    const refused = await outcomeOf(registry.createThread("frank", "story", { pins: ["[[map]]", "save.dat", "run.log", "stories/lighthouse.md"] }));
+    expect(refused).toThrow("[[map]] (art/map.png) is a picture; a pinned file must be text");
+    expect(refused).toThrow("save.dat isn't UTF-8 text; a pinned file must be text");
+    expect(refused).toThrow("run.log is 40 KB; a pinned file can be at most 32 KB");
+    expect(await outcomeOf(registry.createThread("frank", "story", { pins: ["a.md", "b.md", "c.md", "d.md", "e.md"] })))
+      .toThrow("together these files are 150 KB; a thread's pins can be at most 128 KB together");
     expect(registry.listThreads("frank").map((thread) => thread.id)).toEqual(["main"]);
 
-    await registry.createThread("frank", "story", { files: ["stories/lighthouse.md"] });
-    expect(await outcomeOf(registry.setThreadFiles("frank", "story", ["art/map.png"]))).toThrow("art/map.png is a picture");
-    expect(registry.listThreads("frank").find((thread) => thread.id === "story")?.files).toEqual(["stories/lighthouse.md"]);
+    await registry.createThread("frank", "story", { pins: ["stories/lighthouse.md"] });
+    expect(await outcomeOf(registry.setThreadPins("frank", "story", ["art/map.png"]))).toThrow("art/map.png is a picture");
+    expect(registry.listThreads("frank").find((thread) => thread.id === "story")?.pins).toEqual(["stories/lighthouse.md"]);
   });
 
   test("a file that grows too big or stops being text after it's set is cut or left out of the prompt, not sent whole", async () => {
@@ -188,7 +188,7 @@ describe("what a thread file can be", () => {
     await mkdir(join(workspace, "notes"), { recursive: true });
     await writeFile(join(workspace, "notes", "log.md"), "short");
     await writeFile(join(workspace, "notes", "map.md"), "a map");
-    await createThread(config.dirs.data, "frank", "story", NOW, { files: ["notes/log.md", "notes/map.md"] });
+    await createThread(config.dirs.data, "frank", "story", NOW, { pins: ["notes/log.md", "notes/map.md"] });
     const messages = [message("u1", "go on", NOW)];
     writeDurable(threadFile(config.dirs.data, "frank", "story", "active.jsonl"), serializeMessages(messages));
 
@@ -197,7 +197,7 @@ describe("what a thread file can be", () => {
     await applyDeferredEdits(characterDataDir(config.dirs.data, "frank"), characterWorkspace(config, "frank"), "story");
     const system = await systemText(config, "story", messages);
     expect(system).toContain("[Cut at 32 KB of 1.0 MB; `read` notes/log.md for the rest.]");
-    expect(system).toContain("(notes/map.md is a picture, so it isn't shown. A thread file must be text.)");
+    expect(system).toContain("(notes/map.md is a picture, so it isn't shown. A pinned file must be text.)");
     expect(system.length).toBeLessThan(40 * 1024);
   });
 });
@@ -220,7 +220,7 @@ describe("listing threads", () => {
     await createThread(data, "frank", "lighthouse", NOW, {
       label: "The lighthouse",
       purpose: "A story we write a chapter at a time.",
-      files: ["stories/lighthouse.md"],
+      pins: ["stories/lighthouse.md"],
       compaction: true,
       created_by: "character",
     });
@@ -238,7 +238,7 @@ describe("listing threads", () => {
     expect(listed).toContain([
       'lighthouse "The lighthouse" (you\'re here) · compaction on',
       "  purpose: A story we write a chapter at a time.",
-      "  files: stories/lighthouse.md",
+      "  pins: stories/lighthouse.md",
       "  started by you on Sunday 2026-11-01 · 10:00 AM",
       "  sam last wrote here Sunday 2026-11-01 · 9:57 AM, 3 minutes ago",
     ].join("\n"));

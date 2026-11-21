@@ -187,6 +187,7 @@ describe("one character's slice of the database", () => {
     const { archive } = exported("orphans");
     const target = dirs();
     initializeDatabase(target.data);
+    const before = rows(databasePath(target.data), "SELECT count(*) FROM state_files");
     const orphanCollection = join(target.root, "orphan-collection.db");
     copyFileSync(archive, orphanCollection);
     const collections = new Database(orphanCollection);
@@ -199,7 +200,7 @@ describe("one character's slice of the database", () => {
     lines.query("INSERT INTO state_lines VALUES ('nobody/list.jsonl', 0, NULL, ?1)").run(new Uint8Array([1]));
     lines.close();
     expect(() => importUnifiedDatabase(databasePath(target.data), orphanLine, "ada")).toThrow("archive row has no owned collection");
-    expect(rows(databasePath(target.data), "SELECT count(*) FROM state_files")).toEqual([0]);
+    expect(rows(databasePath(target.data), "SELECT count(*) FROM state_files")).toEqual(before);
   });
 
   test("an import brings the character's lines, keeps others' attempts pending, leaves nothing open, and moves media paths only between two known folders", () => {

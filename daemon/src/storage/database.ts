@@ -6,6 +6,7 @@ import { HistoryStore } from "../engine/history_store.ts";
 import { Ledger } from "../ledger/store.ts";
 import { shoreLog } from "../log.ts";
 import { databasePath, openStorage } from "./store.ts";
+import { moveStoredThreadFilesToPins } from "./thread_pins_migration.ts";
 
 const INCREMENTAL = 2;
 const BUSY_TIMEOUT_MS = 5000;
@@ -17,6 +18,7 @@ export function initializeDatabase(data: string): void {
   Ledger.create(path, undefined, false).close();
   HistoryStore.open(path).close();
   useIncrementalVacuum(path);
+  moveStoredThreadFilesToPins(data);
 }
 
 export function autoVacuumMode(db: Database): number {

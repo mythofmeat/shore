@@ -1866,7 +1866,7 @@
             "properties": {
               "name": {
                 "type": "string",
-                "const": "thread_files"
+                "const": "thread_pins"
               },
               "data": {
                 "$ref": "#/$defs/ThreadListing"
@@ -9946,7 +9946,7 @@
               "null"
             ]
           },
-          "files": {
+          "pins": {
             "type": [
               "array",
               "null"
@@ -11799,7 +11799,7 @@
             "properties": {
               "name": {
                 "type": "string",
-                "const": "thread_files"
+                "const": "thread_pins"
               },
               "data": {
                 "$ref": "#/$defs/ThreadListing"
@@ -19879,7 +19879,7 @@
               "null"
             ]
           },
-          "files": {
+          "pins": {
             "type": [
               "array",
               "null"

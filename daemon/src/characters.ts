@@ -7,6 +7,7 @@ import {
   discoverCharacters,
   SOUL_FILE,
 } from "./config/dirs.ts";
+import { toolEnabled } from "./config/app.ts";
 import { ConfigError, loadCharacterConfig, type LoadedConfig } from "./config/loader.ts";
 import { ConversationEngine, type HistoryListener } from "./engine/conversation.ts";
 import {
@@ -29,10 +30,11 @@ import {
   ensureWakesThread,
   homeThread,
   wakesThread,
+  refuseCommandPins,
   requireEditableByCharacter,
-  resolveThreadFiles,
+  resolveThreadPins,
   setHomeThread,
-  setThreadFiles,
+  setThreadPins,
   setThreadLabel,
   setThreadCompaction,
   setThreadLocked,
@@ -290,7 +292,8 @@ export class CharacterRegistry {
     options: NewThread = {},
     signal?: AbortSignal,
   ): Promise<ThreadsIndex> {
-    const files = options.files === undefined ? undefined : await this.#threadFiles(name, options.files, signal);
+    const pins = options.pins === undefined ? undefined : await this.#threadPins(name, options.pins, signal);
+    if (pins !== undefined && options.created_by === "character" && !this.#runsCommands(name)) refuseCommandPins(pins, []);
     return await this.#withThreadIndex(
       name,
       async () =>
@@ -298,7 +301,7 @@ export class CharacterRegistry {
           name,
           await createThread(this.#dataDir, name, this.#unsealed(name, id), new Date().toISOString(), {
             ...options,
-            ...(files === undefined ? {} : { files }),
+            ...(pins === undefined ? {} : { pins }),
           }),
         ),
       signal,
@@ -310,9 +313,13 @@ export class CharacterRegistry {
     throw new ThreadError("exists", `thread ${JSON.stringify(id)} already exists for ${name}`);
   }
 
-  async #threadFiles(name: string, files: readonly string[], signal?: AbortSignal): Promise<string[]> {
+  #runsCommands(name: string): boolean {
+    return toolEnabled(this.effectiveConfig(name).app.tools, "bash");
+  }
+
+  async #threadPins(name: string, pins: readonly string[], signal?: AbortSignal): Promise<string[]> {
     const workspace = characterWorkspace(this.#globalConfig, name);
-    return await resolveThreadFiles(files, async (requested) =>
+    return await resolveThreadPins(pins, async (requested) =>
       await workspace.call("locateFiles", { workspaceDir: workspace.dir, files: requested }, signal));
   }
 
@@ -405,19 +412,19 @@ export class CharacterRegistry {
     );
   }
 
-  async setThreadFiles(
+  async setThreadPins(
     name: string,
     id: string,
-    files: readonly string[],
+    pins: readonly string[],
     signal?: AbortSignal,
   ): Promise<ThreadsIndex> {
-    const paths = await this.#threadFiles(name, files, signal);
+    const resolved = await this.#threadPins(name, pins, signal);
     return await this.#withThreadIndex(
       name,
       async () =>
         this.#remember(
           name,
-          await setThreadFiles(this.#dataDir, name, id, paths, new Date().toISOString()),
+          await setThreadPins(this.#dataDir, name, id, resolved, new Date().toISOString()),
         ),
       signal,
     );
@@ -498,7 +505,7 @@ export class CharacterRegistry {
   ): Promise<ThreadsIndex> {
     const known = this.#threads.get(name);
     if (known !== undefined) requireEditableByCharacter(known, name, id);
-    const files = edit.files === undefined ? undefined : await this.#threadFiles(name, edit.files, signal);
+    const pins = edit.pins === undefined ? undefined : await this.#threadPins(name, edit.pins, signal);
     return await this.#withThreadIndex(
       name,
       async () =>
@@ -506,8 +513,8 @@ export class CharacterRegistry {
           name,
           await editThreadAsCharacter(this.#dataDir, name, id, {
             ...edit,
-            ...(files === undefined ? {} : { files }),
-          }, new Date().toISOString()),
+            ...(pins === undefined ? {} : { pins }),
+          }, new Date().toISOString(), this.#runsCommands(name)),
         ),
       signal,
     );

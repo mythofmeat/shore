@@ -17358,7 +17358,7 @@
                 "null"
               ]
             },
-            "files": {
+            "pins": {
               "type": [
                 "array",
                 "null"
@@ -17688,7 +17688,7 @@
             "null"
           ]
         },
-        "files": {
+        "pins": {
           "type": [
             "array",
             "null"
@@ -17796,7 +17796,7 @@
                 "null"
               ]
             },
-            "files": {
+            "pins": {
               "type": [
                 "array",
                 "null"
@@ -18103,7 +18103,7 @@
                 "null"
               ]
             },
-            "files": {
+            "pins": {
               "type": [
                 "array",
                 "null"
@@ -18429,7 +18429,7 @@
                 "null"
               ]
             },
-            "files": {
+            "pins": {
               "type": [
                 "array",
                 "null"
@@ -18784,7 +18784,7 @@
                 "null"
               ]
             },
-            "files": {
+            "pins": {
               "type": [
                 "array",
                 "null"
@@ -19097,7 +19097,7 @@
                 "null"
               ]
             },
-            "files": {
+            "pins": {
               "type": [
                 "array",
                 "null"
@@ -19410,7 +19410,7 @@
                 "null"
               ]
             },
-            "files": {
+            "pins": {
               "type": [
                 "array",
                 "null"
@@ -19621,16 +19621,16 @@
     }
   },
   {
-    "name": "thread_files",
+    "name": "thread_pins",
     "input": {
       "$schema": "https://json-schema.org/draft/2020-12/schema",
-      "title": "ThreadFilesArgs",
+      "title": "ThreadPinsArgs",
       "type": "object",
       "properties": {
         "name": {
           "type": "string"
         },
-        "files": {
+        "pins": {
           "type": [
             "array",
             "null"
@@ -19726,7 +19726,7 @@
                 "null"
               ]
             },
-            "files": {
+            "pins": {
               "type": [
                 "array",
                 "null"
@@ -20037,7 +20037,7 @@
                 "null"
               ]
             },
-            "files": {
+            "pins": {
               "type": [
                 "array",
                 "null"
@@ -20348,7 +20348,7 @@
                 "null"
               ]
             },
-            "files": {
+            "pins": {
               "type": [
                 "array",
                 "null"
@@ -20667,7 +20667,7 @@
                 "null"
               ]
             },
-            "files": {
+            "pins": {
               "type": [
                 "array",
                 "null"
@@ -20974,7 +20974,7 @@
                 "null"
               ]
             },
-            "files": {
+            "pins": {
               "type": [
                 "array",
                 "null"
@@ -21281,7 +21281,7 @@
                 "null"
               ]
             },
-            "files": {
+            "pins": {
               "type": [
                 "array",
                 "null"
@@ -21592,7 +21592,7 @@
                 "null"
               ]
             },
-            "files": {
+            "pins": {
               "type": [
                 "array",
                 "null"
@@ -21899,7 +21899,7 @@
                 "null"
               ]
             },
-            "files": {
+            "pins": {
               "type": [
                 "array",
                 "null"
@@ -22212,7 +22212,7 @@
                 "null"
               ]
             },
-            "files": {
+            "pins": {
               "type": [
                 "array",
                 "null"
@@ -22523,7 +22523,7 @@
                 "null"
               ]
             },
-            "files": {
+            "pins": {
               "type": [
                 "array",
                 "null"
@@ -22836,7 +22836,7 @@
                 "null"
               ]
             },
-            "files": {
+            "pins": {
               "type": [
                 "array",
                 "null"

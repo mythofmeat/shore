@@ -4,7 +4,7 @@ import { toasts } from "../ui/toast.tsx";
 import { navigate } from "../app/route.ts";
 import { workspace } from "../app/state.ts";
 
-export function threadFileList(text: string): string[] {
+export function threadPinList(text: string): string[] {
   return text.split("\n").map((line) => line.trim()).filter((line) => line !== "");
 }
 
@@ -45,7 +45,7 @@ export function NewThreadDialog({ character, close }: { character: string; close
   const [name, setName] = useState("");
   const [label, setLabel] = useState("");
   const [purpose, setPurpose] = useState("");
-  const [files, setFiles] = useState("");
+  const [pins, setPins] = useState("");
   const [model, setModel] = useState("");
   const [compaction, setCompaction] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -54,8 +54,8 @@ export function NewThreadDialog({ character, close }: { character: string; close
     setBusy(true); setError("");
     try {
       const id = name.trim();
-      const paths = threadFileList(files);
-      await workspace.actions.run("create_thread", { name: id, ...(label.trim() === "" ? {} : { label: label.trim() }), ...(purpose.trim() === "" ? {} : { purpose: purpose.trim() }), ...(paths.length === 0 ? {} : { files: paths }), ...(model.trim() === "" ? {} : { model: model.trim() }), ...(compaction ? { compaction: true } : {}) });
+      const pinned = threadPinList(pins);
+      await workspace.actions.run("create_thread", { name: id, ...(label.trim() === "" ? {} : { label: label.trim() }), ...(purpose.trim() === "" ? {} : { purpose: purpose.trim() }), ...(pinned.length === 0 ? {} : { pins: pinned }), ...(model.trim() === "" ? {} : { model: model.trim() }), ...(compaction ? { compaction: true } : {}) });
       await workspace.openThread(id);
       navigate({ view: "chat" });
       close();
@@ -69,7 +69,7 @@ export function NewThreadDialog({ character, close }: { character: string; close
       <details className="disclosure"><summary>More options</summary>
         <div className="form">
           <label className="field"><span>Model <span className="muted">(optional)</span></span><input className="input mono" placeholder={`${character}’s default`} value={model} onChange={(event) => setModel(event.target.value)} /></label>
-          <label className="field"><span>Files in the prompt <span className="muted">(optional, one per line)</span></span><textarea className="input textarea mono" rows={3} placeholder={"stories/lighthouse.md\n[[lighthouse/]]"} value={files} onChange={(event) => setFiles(event.target.value)} /></label>
+          <label className="field"><span>Pinned in the prompt <span className="muted">(optional, one per line)</span></span><textarea className="input textarea mono" rows={3} wrap="off" placeholder={"stories/lighthouse.md\n!git log --oneline -5\n[[lighthouse/]]"} value={pins} onChange={(event) => setPins(event.target.value)} /></label>
           <WhenLongField compaction={compaction} setCompaction={setCompaction} />
         </div>
       </details>

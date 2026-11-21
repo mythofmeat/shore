@@ -2674,7 +2674,7 @@ wire_types! {
         #[serde(default, skip_serializing_if = "Option::is_none")]
         pub purpose: Option<String>,
         #[serde(default, skip_serializing_if = "Option::is_none")]
-        pub files: Option<Vec<String>>,
+        pub pins: Option<Vec<String>>,
         #[serde(default, skip_serializing_if = "Option::is_none")]
         pub model: Option<String>,
         #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -2705,10 +2705,10 @@ wire_types! {
     pub struct WorkspaceFileListing { pub files: Vec<String> }
 
     #[serde(deny_unknown_fields)]
-    pub struct ThreadFilesArgs {
+    pub struct ThreadPinsArgs {
         pub name: String,
         #[serde(default, skip_serializing_if = "Option::is_none")]
-        pub files: Option<Vec<String>>,
+        pub pins: Option<Vec<String>>,
     }
 
     #[serde(deny_unknown_fields)]
@@ -2850,7 +2850,7 @@ wire_types! {
         pub purpose: Option<String>,
         #[serde(default, skip_serializing_if = "Option::is_none")]
         #[ts(optional)]
-        pub files: Option<Vec<String>>,
+        pub pins: Option<Vec<String>>,
         pub created_at: String,
         #[serde(default, skip_serializing_if = "Option::is_none")]
         #[ts(optional)]
@@ -3115,7 +3115,7 @@ operations! {
     SetHomeThread: "thread_home" (NamedOperationArgs) => ThreadListing,
     LabelThread: "thread_label" (ThreadLabelArgs) => ThreadListing,
     SetThreadPurpose: "thread_purpose" (ThreadPurposeArgs) => ThreadListing,
-    SetThreadFiles: "thread_files" (ThreadFilesArgs) => ThreadListing,
+    SetThreadPins: "thread_pins" (ThreadPinsArgs) => ThreadListing,
     LockThread: "thread_lock" (ThreadLockArgs) => ThreadListing,
     SetThreadCompaction: "thread_compaction" (ThreadCompactionArgs) => ThreadListing,
     MoveThread: "thread_move" (ThreadMoveArgs) => ThreadListing,
