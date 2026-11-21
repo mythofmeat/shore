@@ -159,7 +159,7 @@ describe("a command pin", () => {
     await createThread(dirs.data, "frank", "story", NOW, { pins: [full("w"), full("x"), full("y"), full("z")] });
 
     const shown = await system();
-    for (const letter of ["w", "x", "y"]) expect(shown).toContain(`${"$"} ${full(letter).slice(1)}\n\n${letter.repeat(32 * 1024)}\n\n## `);
+    for (const letter of ["w", "x", "y"]) expect(shown).toContain(`$ ${full(letter).slice(1)}\n\n${letter.repeat(32 * 1024)}\n\n## `);
     expect(shown).toEndWith(`## $ ${full("z").slice(1)}\n\n${"z".repeat(32 * 1024)}`);
   });
 
