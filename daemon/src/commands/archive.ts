@@ -477,7 +477,6 @@ async function stageCharacter(
     if (bytes > limits.bytes || entries > limits.entries) throw invalidRequest("Character exceeds browser archive processing limits");
   };
   const admit = async (path: string): Promise<boolean> => {
-    if (limits === undefined) return true;
     const entry = await lstat(path);
     count(entry.isFile() ? "file" : entry.isDirectory() ? "directory" : "other", entry.size);
     return true;
@@ -525,13 +524,11 @@ async function stageCharacter(
   const blobs = imageBlobDir(dirs.cache, character);
   if (await exists(blobs)) await cp(blobs, join(stage, "media", "blobs"), { ...copyOptions(), filter: admit });
   exportUnifiedDatabase(databasePath(dirs.data), character, join(stage, "shore.db"), limits === undefined ? undefined : limits.bytes - bytes);
-  if (cachedImages.size > 0) {
-    const staged = new Database(join(stage, "shore.db"));
-    try {
-      staged.transaction(() => repointActiveImages(staged, character, cachedImages))();
-    } finally {
-      staged.close();
-    }
+  const staged = new Database(join(stage, "shore.db"));
+  try {
+    staged.transaction(() => repointActiveImages(staged, character, cachedImages))();
+  } finally {
+    staged.close();
   }
   const manifest: Manifest = {
     format: FORMAT,

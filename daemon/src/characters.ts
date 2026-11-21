@@ -598,7 +598,6 @@ export class CharacterRegistry {
         throw CharacterError.notFound(requested, this.#available);
       }
       this.#selected = requested;
-      return requested;
     }
     if (this.#available.length === 0) {
       throw CharacterError.noneAvailable(this.#configDir);

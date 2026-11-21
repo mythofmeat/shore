@@ -306,7 +306,7 @@ describe("removing providers", () => {
     expect(() => removeProvider(w.ctx, { provider: "openrouter" })).toThrow("chat.model (openrouter:anthropic/claude)");
   });
 
-  test("what uses a provider is every config, character overlay, character's pick, live thread and default pick that names it, each once", async () => {
+  test("what uses a provider is every config, character overlay, character's pick, live thread and default pick that names it, each once, and anything that can't be read", async () => {
     const w = await world('[chat]\nmodel = "x:y"\n\n[triggers]\nmodel = "openrouter:t"\n\n[providers.openrouter]\ndiscover = true\n');
     const configDir = w.session.config.dirs.config;
     const data = w.session.config.dirs.data;
@@ -336,13 +336,14 @@ describe("removing providers", () => {
       "ada's model (openrouter:m)",
       "ada's thread story (openrouter:s)",
       "bo's image.model (openrouter:i)",
+      "cy's config, which can't be read",
       "cy's thread lamp (openrouter:c)",
       "dee's model preferences, which can't be read",
       "dee's thread ring (openrouter:r)",
       "the default model (openrouter:d)",
     ]);
     await writeFile(globalPreferencesPath(data), "[selected\n");
-    expect(providerUsers(ctx, "openrouter").slice(-3)).toEqual(["cy's thread lamp (openrouter:c)", "dee's model preferences, which can't be read", "dee's thread ring (openrouter:r)"]);
+    expect(providerUsers(ctx, "openrouter").slice(-3)).toEqual(["dee's model preferences, which can't be read", "dee's thread ring (openrouter:r)", "the default model preferences, which can't be read"]);
   });
 
   test("a provider only sub-agents run on is still in use", async () => {

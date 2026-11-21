@@ -89,14 +89,8 @@ export async function pendingDeferredEditPaths(
 ): Promise<string[]> {
   const queue = readCharacterState(characterDataDir, stateFile(thread, QUEUE_FILE)) ?? "";
   const paths = new Set<string>();
-  for (const line of queue.split("\n")) {
-    let entry: unknown;
-    try {
-      entry = JSON.parse(line);
-    } catch {
-      continue;
-    }
-    const path = (entry as { path?: unknown } | null)?.path;
+  for (const line of queue.split("\n").filter((queued) => queued !== "")) {
+    const path = (JSON.parse(line) as { path?: unknown } | null)?.path;
     if (typeof path === "string") paths.add(path);
   }
   return [...paths].sort();

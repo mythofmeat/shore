@@ -13,6 +13,7 @@ import {
 import { initializeDatabase } from "../src/storage/database.ts";
 import { readCharacterState, writeCharacterState } from "../src/storage/store.ts";
 import { CharacterWorkspace } from "../src/tools/character_workspace.ts";
+import { outcomeOf } from "./support/outcome.ts";
 import { testTmp } from "./support/tmp.ts";
 
 async function character(): Promise<{ dir: string; workspace: string }> {
@@ -26,7 +27,7 @@ async function character(): Promise<{ dir: string; workspace: string }> {
 }
 
 describe("the edits waiting for a prompt reload", () => {
-  test("are each queued path once, sorted, per thread, with lines that aren't a queued path passed over", async () => {
+  test("are each queued path once, sorted, per thread, with entries that name no path passed over and a queue that isn't JSON lines refused", async () => {
     const { dir } = await character();
     await queueDeferredEdit(dir, "notes/MAP.md", "story");
     await queueDeferredEdit(dir, "SOUL.md", "story");
@@ -34,8 +35,10 @@ describe("the edits waiting for a prompt reload", () => {
     expect(await pendingDeferredEditPaths(dir, "story")).toEqual(["SOUL.md", "notes/MAP.md"]);
     expect(await pendingDeferredEditPaths(dir)).toEqual([]);
 
-    writeCharacterState(dir, "deferred_edits.jsonl", ['{"path":"USER.md"}', "", "not json", "null", "5", '{"path":3}', '{"other":"x"}', '{"path":"USER.md"}'].join("\n"));
+    writeCharacterState(dir, "deferred_edits.jsonl", ['{"path":"USER.md"}', "", "null", "5", '{"path":3}', '{"other":"x"}', '{"path":"USER.md"}', ""].join("\n"));
     expect(await pendingDeferredEditPaths(dir)).toEqual(["USER.md"]);
+    writeCharacterState(dir, "deferred_edits.jsonl", '{"path":"USER.md"}\nnot json\n');
+    expect(await outcomeOf(pendingDeferredEditPaths(dir))).toThrow(SyntaxError);
   });
 });
 

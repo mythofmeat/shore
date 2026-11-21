@@ -512,12 +512,8 @@ export async function configReload(ctx: ConfigContext, args: OperationInput<"con
 
   const restart = restartRequiredChanges(ctx.runtime.globalConfig?.() ?? ctx.config, fresh);
   const character = ctx.characterName;
-  const characterDataDir = character === undefined ? undefined : join(ctx.config.dirs.data, character);
-  const changed = characterDataDir === undefined || character === undefined ? [] : await changedPromptFiles(
-    characterDataDir,
-    characterWorkspace(fresh, character),
-    ctx.thread,
-  );
+  const scope = character === undefined ? undefined : { character, dataDir: join(ctx.config.dirs.data, character), workspace: characterWorkspace(fresh, character) };
+  const changed = scope === undefined ? [] : await changedPromptFiles(scope.dataDir, scope.workspace, ctx.thread);
 
   if (!apply) {
     return {
@@ -531,17 +527,13 @@ export async function configReload(ctx: ConfigContext, args: OperationInput<"con
 
   let promptsRefreshed = false;
   if (refreshPrompts) {
-    if (character === undefined || characterDataDir === undefined) throw invalidRequest("Refreshing prompts requires a character context");
+    if (scope === undefined) throw invalidRequest("Refreshing prompts requires a character context");
     try {
-      await applyDeferredEdits(
-        characterDataDir,
-        characterWorkspace(fresh, character),
-        ctx.thread,
-      );
+      await applyDeferredEdits(scope.dataDir, scope.workspace, ctx.thread);
     } catch (e) {
       throw internalError(`Failed to refresh active prompt snapshot: ${message(e)}`);
     }
-    ctx.runtime.notifyPromptSnapshotRefreshed(character);
+    ctx.runtime.notifyPromptSnapshotRefreshed(scope.character);
     promptsRefreshed = true;
   }
 

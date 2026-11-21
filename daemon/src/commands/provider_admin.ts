@@ -430,16 +430,14 @@ export function providerUsers(ctx: ProviderAdminContext, name: string): string[]
   const globalRefs = modelRefs(global);
   for (const [where, ref] of globalRefs) if (uses(global, ref)) users.push(`${where} (${String(ref)})`);
   for (const character of discoverCharacters(global.dirs.config)) {
-    let own: LoadedConfig | undefined;
+    let own = global;
     try {
-      own = loadCharacterConfig(global, character, () => {});
+      own = loadCharacterConfig(global, character, () => {}) ?? global;
     } catch {
-      own = undefined;
+      users.push(`${character}'s config, which can't be read`);
     }
-    if (own !== undefined) {
-      for (const [where, ref] of modelRefs(own)) {
-        if (ref !== globalRefs.find(([w]) => w === where)?.[1] && uses(own, ref)) users.push(`${character}'s ${where} (${String(ref)})`);
-      }
+    for (const [where, ref] of modelRefs(own)) {
+      if (ref !== globalRefs.find(([w]) => w === where)?.[1] && uses(own, ref)) users.push(`${character}'s ${where} (${String(ref)})`);
     }
     try {
       const prefs = loadPreferences(characterPreferencesPath(global.dirs.data, character));
@@ -450,14 +448,14 @@ export function providerUsers(ctx: ProviderAdminContext, name: string): string[]
       users.push(`${character}'s model preferences, which can't be read`);
     }
     for (const thread of ctx.threads?.listThreads(character) ?? []) {
-      if (thread.archived !== true && uses(own ?? global, thread.chat_model)) users.push(`${character}'s thread ${thread.id} (${String(thread.chat_model)})`);
+      if (thread.archived !== true && uses(own, thread.chat_model)) users.push(`${character}'s thread ${thread.id} (${String(thread.chat_model)})`);
     }
   }
   try {
     const prefs = loadPreferences(globalPreferencesPath(global.dirs.data));
     if (prefs.selected.provider === name) users.push(`the default model (${name}:${String(prefs.selected.modelId)})`);
   } catch {
-    return users;
+    users.push("the default model preferences, which can't be read");
   }
   return users;
 }

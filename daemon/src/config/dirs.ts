@@ -218,11 +218,7 @@ export function discoverCharacters(config: string): string[] {
 }
 
 function isDirectory(path: string): boolean {
-  try {
-    return statSync(path).isDirectory();
-  } catch {
-    return false;
-  }
+  return statSync(path, { throwIfNoEntry: false })?.isDirectory() === true;
 }
 
 function readdirOrEmpty(dir: string): string[] {
