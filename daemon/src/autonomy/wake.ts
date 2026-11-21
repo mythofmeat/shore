@@ -287,7 +287,7 @@ export async function runWake(character: string, config: LoadedConfig, wake: Wak
       await threadDigest(engine, digestWords("this thread"), record.through, userName, timeZone),
       record.stopped === undefined ? undefined : wakeStopNote(record.stopped, userName, timeZone),
       await lastWroteNote(config.dirs.data, character, index, thread, userName, nowMs).catch(() => undefined),
-      status === undefined || status.status === "" ? undefined : presenceText(status, nowMs, `${userName}'s`),
+      status === undefined || status.statuses.length === 0 ? undefined : presenceText(status, nowMs, `${userName}'s`),
       seal === undefined ? sealedListNote(sealedThreads(characterDir), timeZone) : undefined,
       ...setOff,
     ].filter((part) => part !== undefined).join("\n\n"));

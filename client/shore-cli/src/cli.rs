@@ -457,16 +457,24 @@ pub(crate) enum CliCommand {
         json: bool,
     },
 
-    /// Show the status the character sees for you, set it, or clear it
+    /// Show the statuses your characters see for you, and turn them on or off
     #[command(display_order = 7)]
     Presence {
-        /// The status to set: one of the statuses in your config's presence.statuses
-        #[arg(add = values(Completes::Statuses))]
-        status: Option<String>,
+        /// Statuses to turn on, new or used before; one already on keeps its time
+        #[arg(value_name = "STATUS", add = values(Completes::Statuses))]
+        on: Vec<String>,
 
-        /// Clear the status
-        #[arg(long, conflicts_with = "status")]
+        /// A status to turn off; repeat it for more
+        #[arg(long, value_name = "STATUS", add = values(Completes::StatusesOn))]
+        off: Vec<String>,
+
+        /// Turn every status off, apart from any this command turns on
+        #[arg(long)]
         clear: bool,
+
+        /// A status to stop offering, for a typo; repeat it for more
+        #[arg(long, value_name = "STATUS", add = values(Completes::Statuses))]
+        forget: Vec<String>,
 
         /// Output raw JSON
         #[arg(long)]
@@ -2791,12 +2799,17 @@ pub(crate) fn to_swp_command(
         CliCommand::Trace { .. } => trace_to_swp(cmd),
 
         CliCommand::Status { .. } => operation_to_swp::<ReadStatus>(EmptyOperationArgs {}),
-        CliCommand::Presence { status, clear, .. } => operation_to_swp::<Presence>(PresenceArgs {
-            status: if *clear {
-                Some(String::new())
-            } else {
-                status.clone()
-            },
+        CliCommand::Presence {
+            on,
+            off,
+            clear,
+            forget,
+            ..
+        } => operation_to_swp::<Presence>(PresenceArgs {
+            on: on.clone(),
+            off: off.clone(),
+            clear: *clear,
+            forget: forget.clone(),
         }),
 
         CliCommand::Debug { subcommand: None } => None,
@@ -3713,12 +3726,30 @@ mod tests {
             (&["status"], Some(("status", json!({})))),
             (&["presence"], Some(("presence", json!({})))),
             (
-                &["presence", "at work"],
-                Some(("presence", json!({"status": "at work"}))),
+                &["presence", "at work", "in bed"],
+                Some(("presence", json!({"on": ["at work", "in bed"]}))),
             ),
             (
                 &["presence", "--clear"],
-                Some(("presence", json!({"status": ""}))),
+                Some(("presence", json!({"clear": true}))),
+            ),
+            (
+                &[
+                    "presence",
+                    "in bed",
+                    "--off",
+                    "on the couch",
+                    "--off",
+                    "out",
+                ],
+                Some((
+                    "presence",
+                    json!({"on": ["in bed"], "off": ["on the couch", "out"]}),
+                )),
+            ),
+            (
+                &["presence", "--forget", "slep"],
+                Some(("presence", json!({"forget": ["slep"]}))),
             ),
             (
                 &["trace", "errors", "-n", "5"],

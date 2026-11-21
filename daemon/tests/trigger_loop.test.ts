@@ -22,6 +22,8 @@ interface World {
   lastUserAt: number | undefined;
   checks: Record<string, CheckOutcome | Error>;
   ran: [name: string, limitMs: number][];
+  statuses: string[];
+  handed: [name: string, statusesSeen: readonly string[] | undefined][];
   woke: TriggerFiring[];
   triggers: CharacterTriggers;
   at: (minutes: number) => Promise<void>;
@@ -39,6 +41,8 @@ async function world(file: string | undefined, dir?: string): Promise<World> {
     lastUserAt: undefined,
     checks: {},
     ran: [],
+    statuses: [],
+    handed: [],
     woke: [],
   } as unknown as World;
   w.restart = () => {
@@ -49,12 +53,14 @@ async function world(file: string | undefined, dir?: string): Promise<World> {
       settings: () => w.settings,
       dormant: () => w.dormant,
       lastUserAt: () => w.lastUserAt,
+      statuses: () => [...w.statuses],
       readFile: async () => {
         if (w.unreadable) throw new Error("permission denied");
         return w.file;
       },
-      runCheck: async (trigger, limitMs) => {
+      runCheck: async (trigger, limitMs, statusesSeen) => {
         w.ran.push([trigger.name, limitMs]);
+        w.handed.push([trigger.name, statusesSeen]);
         const outcome = w.checks[trigger.name] ?? { kind: "quiet" };
         if (outcome instanceof Error) throw outcome;
         return outcome;
@@ -394,6 +400,43 @@ test("a trigger for a status change waits for one, and for its own cooldown, wit
   await off.at(1);
   await off.at(2);
   expect(off.woke).toEqual([]);
+});
+
+test("a check for a status change is handed the statuses on when its trigger last came due or was first seen, so changes during a cooldown or while triggers were off add up, and no other check is handed any", async () => {
+  const w = await world('[status]\nwhen = "status_changed"\ncheck = "x"\n\n[lamp]\nevery = "1h"\ncheck = "y"\n');
+  w.checks["status"] = { kind: "fired", output: "changed" };
+  w.statuses = ["home"];
+  await w.at(0);
+  w.statuses = ["home", "sick"];
+  await w.triggers.statusChanged();
+  w.statuses = ["home", "sick", "in bed"];
+  await w.triggers.statusChanged();
+  await w.at(1);
+  expect(w.handed).toEqual([["status", ["home"]]]);
+
+  w.statuses = ["in bed"];
+  await w.triggers.statusChanged();
+  await w.at(30);
+  expect(w.handed).toHaveLength(1);
+  w.restart();
+  await w.at(61);
+  expect(w.handed).toEqual([["status", ["home"]], ["status", ["home", "sick", "in bed"]], ["lamp", undefined]]);
+
+  w.settings = { ...w.settings, enabled: false };
+  w.statuses = [];
+  await w.triggers.statusChanged();
+  w.settings = { ...w.settings, enabled: true };
+  w.statuses = ["out"];
+  await w.triggers.statusChanged();
+  await w.at(122);
+  expect(w.handed.slice(3)).toEqual([["status", ["in bed"]], ["lamp", undefined]]);
+
+  for (const [kept, handed] of [[["home", 5, null], ["home"]], ["home", ["out"]]] as const) {
+    writeCharacterState(w.dir, "triggers.json", JSON.stringify({ records: { status: { since: T0, fired: 0, pending: true, statusesSeen: kept } } }));
+    w.handed.length = 0;
+    await w.at(200);
+    expect(w.handed.filter(([name]) => name === "status")).toEqual([["status", handed]]);
+  }
 });
 
 test("a follower fires after the trigger it names: at the next look when that one doesn't wake, and after its wake is finished when it woke the character", async () => {

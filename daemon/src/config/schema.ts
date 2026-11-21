@@ -254,7 +254,6 @@ function describeOption(path: readonly string[]): string {
     allow_compaction: "Allow compaction to exceed this budget's ceiling.",
     warn_fractions: "Budget fractions that trigger warnings (0.9 means 90%).",
     pace_warn_fractions: "Pacing fractions that trigger warnings.",
-    statuses: "The statuses you can set for yourself with shore presence, in the order they are offered. Your characters see the one that is set, with how long ago you set it. Defaults to asleep, busy and away.",
     like_tags: "Reasons you can give in one click when you like a reply, in the order they are offered. A written reason can go with them. Empty by default, which offers none.",
     dislike_tags: "Reasons you can give in one click when you dislike a reply or regenerate one with a reason, in the order they are offered. A written reason can go with them. Defaults to didn't look hard enough, out of character, too long and repetitive.",
     push_topic: "ntfy topic a message the character sends with `push` goes to, on the server in notifications.url. Give it a topic of its own, apart from notifications.topic. Unset means the character can't push.",

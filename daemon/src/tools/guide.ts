@@ -48,9 +48,8 @@ function either(holds: boolean, whenTrue: string, whenFalse: string): [string, s
 }
 
 export function guideValues(config: LoadedConfig, userName: string): Map<string, string> {
-  const { notifications, presence, triggers: limits } = config.app;
+  const { notifications, triggers: limits } = config.app;
   const triggers = triggerSettings(config.app);
-  const statuses = presence.statuses.map((status) => `\`${status}\``).join(", ");
   return new Map([
     ["user", userName],
     either(triggers.enabled, "triggers_on", "triggers_off"),
@@ -70,7 +69,6 @@ export function guideValues(config: LoadedConfig, userName: string): Map<string,
     either(notifications.push_topic !== "", "push_on", "push_off"),
     ["push_every", notifications.push_every.toString()],
     ["push_chars", count(PUSH_CHARS)],
-    statuses === "" ? ["no_statuses", "yes"] : ["statuses", statuses],
   ]);
 }
 

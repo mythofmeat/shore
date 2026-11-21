@@ -92,7 +92,7 @@ test("the tool takes a topic and nothing else, and its description names every t
 test("no page leaves a value unfilled, whatever the settings and whichever tools are on", async () => {
   const worlds = [
     await guideWith(),
-    await guideWith(`[triggers]\nenabled = true\noff = ["mail"]\n\n[presence]\nstatuses = []\n\n[notifications]\npush_topic = "eve-phone"\n`),
+    await guideWith(`[triggers]\nenabled = true\noff = ["mail"]\n\n[notifications]\npush_topic = "eve-phone"\n`),
     await guideWith("", ["guide"]),
   ];
   for (const guide of worlds) {
@@ -127,6 +127,7 @@ test("the guide's example file does what the guide says of it: a check that wake
     settings: () => ({ enabled: true, checks: true, wakeCooldownMs: HOUR, checkLimitMs: 60_000, maxWakeLimitMs: 2 * HOUR, off: [] }),
     dormant: () => false,
     lastUserAt: () => world.lastUserAt,
+    statuses: () => [],
     readFile: async () => fenced(page, "toml")[0],
     runCheck: async () => world.mail,
     wake: (firing) => { woke.push(firing); },
@@ -199,29 +200,30 @@ test("every setting the guide writes out in passing is one the trigger parser ac
   expect(refused).toEqual([]);
 });
 
-test("the guide is enough to write a check that reacts to one status: it names the variable, says what a cleared status leaves in it, and its example does just that", async () => {
+test("the guide is enough to write a check that reacts to one status going on: it names the variables, and its example wakes for that status only when it goes on", async () => {
   const page = await (await guideWith())("triggers");
-  expect(page).toContain("- `SHORE_USER_STATUS`: eve's status, exactly as they set it.");
-  expect(page).toContain("`SHORE_USER_STATUS` and `SHORE_USER_STATUS_SET_AT` are both empty when eve has cleared their status or never set one.");
-  expect(page).toContain("A status is always one from eve's own list, which is now: `asleep`, `busy`, `away`.");
+  expect(page).toContain("- `SHORE_USER_STATUSES`: the statuses eve has on, one per line, oldest first, each exactly as they wrote it.");
+  expect(page).toContain("- `SHORE_USER_STATUSES_ADDED`: for a `status_changed` trigger, the statuses turned on since it last came due, one per line.");
+  expect(page).toContain("`SHORE_USER_STATUSES` is empty while eve has no status on, and the last two are empty for every other kind of trigger.");
   expect(page).toContain("Since any exit but 0 is a failure, write a test as an `if`.");
 
   const example = fenced(page, "toml").map((block) => parseTriggers(block, HOUR).triggers).flat().find((trigger) => trigger.name === "gone-to-bed");
   expect(example?.when).toEqual({ kind: "event", event: "status_changed", afterMs: 0 });
   const dir = await mkdtemp(testTmp("shore-guide-check-"));
-  const told = async (status: { status: string; set_at: string } | undefined): Promise<CheckOutcome> => await runCheck({
+  const at = new Date(T0 - HOUR).toISOString();
+  const told = async (on: string[], before: string[] | undefined): Promise<CheckOutcome> => await runCheck({
     workspace: new CharacterWorkspace(dir),
     character: "ada",
     trigger: "gone-to-bed",
     command: example?.check ?? "",
-    ...checkFacts(T0, { lastUserAt: T0 - HOUR, lastSeenAt: T0 - HOUR, status }, undefined),
+    ...checkFacts(T0, { lastUserAt: T0 - HOUR, lastSeenAt: T0 - HOUR, statuses: on.map((status) => ({ status, set_at: at })), statusesSeen: before }, undefined),
     limitMs: 30_000,
   });
-  const at = new Date(T0 - HOUR).toISOString();
-  expect(await told({ status: "asleep", set_at: at })).toEqual({ kind: "fired", output: "They have gone to bed." });
-  expect(await told({ status: "busy", set_at: at })).toEqual({ kind: "quiet" });
-  expect(await told({ status: "", set_at: at })).toEqual({ kind: "quiet" });
-  expect(await told(undefined)).toEqual({ kind: "quiet" });
+  expect(await told(["home", "asleep"], ["home"])).toEqual({ kind: "fired", output: "They have gone to bed." });
+  expect(await told(["asleep"], ["home", "asleep"])).toEqual({ kind: "quiet" });
+  expect(await told(["home", "asleep in the car"], ["home"])).toEqual({ kind: "quiet" });
+  expect(await told(["home"], ["home", "asleep"])).toEqual({ kind: "quiet" });
+  expect(await told(["asleep"], undefined)).toEqual({ kind: "quiet" });
 });
 
 function shape(value: unknown): unknown {
@@ -232,11 +234,11 @@ function shape(value: unknown): unknown {
 
 test("the guide lists every variable a check is handed, and its example of the JSON on stdin has the shape of what arrives", async () => {
   const page = await (await guideWith())("triggers");
-  const status = { status: "asleep", set_at: new Date(T0).toISOString() };
-  const handed = checkFacts(T0, { lastUserAt: T0, lastSeenAt: T0, status }, { messages: 1, share_of_messages_by_local_hour: [1], median_secs_between_sessions: 60 });
+  const statuses = [{ status: "asleep", set_at: new Date(T0).toISOString() }];
+  const handed = checkFacts(T0, { lastUserAt: T0, lastSeenAt: T0, statuses, statusesSeen: ["on the couch"] }, { messages: 1, share_of_messages_by_local_hour: [1], median_secs_between_sessions: 60 });
   const listed = [...page.matchAll(/^- `(SHORE_[A-Z_]+)`: \S/gm)].map((match) => match[1] ?? "");
   expect(listed).toEqual([
-    "SHORE_TRIGGER", "SHORE_NOW", "SHORE_USER_LAST_MESSAGE_AT", "SHORE_USER_QUIET_SECS", "SHORE_USER_LAST_SEEN_AT", "SHORE_USER_STATUS", "SHORE_USER_STATUS_SET_AT",
+    "SHORE_TRIGGER", "SHORE_NOW", "SHORE_USER_LAST_MESSAGE_AT", "SHORE_USER_QUIET_SECS", "SHORE_USER_LAST_SEEN_AT", "SHORE_USER_STATUSES", "SHORE_USER_STATUSES_ADDED", "SHORE_USER_STATUSES_REMOVED",
   ]);
   expect([...listed].sort()).toEqual([...Object.keys(handed.env), "SHORE_TRIGGER"].sort());
   expect([...new Set(page.match(/SHORE_[A-Z_]+/g))].sort()).toEqual([...listed].sort());
@@ -245,7 +247,7 @@ test("the guide lists every variable a check is handed, and its example of the J
   expect(examples).toHaveLength(1);
   expect(shape(examples[0])).toEqual(shape(handed.facts));
   expect(examples.map((example) => example.activity.share_of_messages_by_local_hour.length)).toEqual([24]);
-  expect(page).toContain("with `null` where a variable would be empty");
+  expect(page).toContain("with `null` where a variable would be empty and `[]` where a list would be, along with when each status went on");
 });
 
 test("the guide states each thing a character could otherwise only learn by trying", async () => {
@@ -334,7 +336,7 @@ test("the guide says a wake starts fresh in whichever thread it runs, and what i
   const wakes = await guide("wakes");
   expect(wakes).toContain("A wake is a turn of your own: Shore starts it, not a message from eve. Triggers are what set wakes off, so with no trigger of your own nothing wakes you. Every wake starts fresh, with none of an earlier one in front of it.");
   expect(wakes).toContain("- What was said in its thread since your last wake there that finished: eve's messages, your replies, and what your wakes sent.\n");
-  expect(wakes).toContain("- Where and how long ago eve last wrote to you.\n- eve's status, while one is set.\n- The label and opening time of each sealed thread you have.");
+  expect(wakes).toContain("- Where and how long ago eve last wrote to you.\n- eve's statuses, while any is on.\n- The label and opening time of each sealed thread you have.");
   expect(wakes).toContain("- A line for each thing that set it off: the trigger and its reason, or the thread you handed over from and the reason you gave.");
   expect(wakes).toContain("- The thread's own conversation, or what earlier wakes did there. The thread keeps its conversation, and `chat_logs` finds it. Your wakes thread keeps what earlier wakes did, and `chat_logs` finds that only when `thread` names your wakes thread.");
   expect(wakes).toContain("- A wake's own working, in what it is shown of a thread.");
@@ -399,13 +401,11 @@ test("a limit the user changed in their config is the limit the guide shows", as
   const guide = await guideWith([
     "[triggers]", "enabled = true", "max_idle_wakes = 5", 'idle_timeout = "3d"', "max_wrap_up_rounds = 2", 'wake_cooldown = "3h"', 'check_time_limit = "4s"', 'max_wake_limit = "5h"', "",
     "[notifications]", 'push_topic = "eve-phone"', 'push_every = "12h"', "",
-    "[presence]", 'statuses = ["out sailing"]', "",
   ].join("\n"));
   const triggers = await guide("triggers");
   expect(triggers).toContain("It is still running after 4s: it is stopped");
   expect(triggers).toContain("A trigger that wakes you has a cooldown of 3h unless it sets its own.");
   expect(triggers).toContain("30m if you leave it out, and never more than 5h, which is eve's ceiling.");
-  expect(triggers).toContain("which is now: `out sailing`.");
 
   const wakes = await guide("wakes");
   expect(wakes).toContain("with 2 more rounds of tool use to finish in.");
@@ -415,7 +415,6 @@ test("a limit the user changed in their config is the limit the guide shows", as
   const messages = await guide("messages");
   expect(messages).toContain("- eve allows one push every 12h. A message that asks for one sooner is refused whole, and the refusal says when the next is allowed. Sent again without `push`, it is posted all the same.");
   expect(messages).not.toContain("hasn't given Shore a topic");
-  expect(messages).toContain("They pick it from their own list, which is now: `out sailing`.");
 });
 
 test("the guide says whether the character's triggers are switched on, which is the one switch for all of them", async () => {
@@ -439,14 +438,19 @@ test("the guide says that a check needs the bash tool when the character lacks i
   expect(await without("triggers")).toContain("so a check that stays quiet costs nothing. eve hasn't given you `bash`, and without it a trigger with a `check` doesn't run. `list_triggers` lists it as not running.");
 });
 
-test("without a push topic or any statuses the guide says pushes are refused and no status can be set", async () => {
-  const guide = await guideWith("[presence]\nstatuses = []\n");
-  const messages = await guide("messages");
+test("without a push topic the guide says pushes are refused", async () => {
+  const messages = await (await guideWith())("messages");
   expect(messages).toContain("- eve hasn't given Shore a topic to send pushes to, so a message that asks for one is refused for now. It is their setting `push_topic` under `[notifications]`.");
   expect(messages).not.toContain("allows one push every");
-  expect(messages).toContain("Their list of statuses is empty now, so they can't set one.");
-  expect(messages).not.toContain("which is now:");
-  expect(await guide("triggers")).toContain("eve's list of statuses is empty now, so they can't set one.");
+});
+
+test("the guide says statuses are any words, several at once, and how they are shown in a conversation, at a wake and in a check", async () => {
+  const messages = await (await guideWith())("messages");
+  expect(messages).toContain("eve can turn statuses on to tell you what they are doing, several at once, and turn each one off again on its own. A status is any words they type, or one they have used before.");
+  expect(messages).toContain('every status that is on, oldest first, with how long it has been on: `[Their status: "home" for 5 hours, "on the couch" for 2 hours]`');
+  expect(messages).toContain("`[Their status was cleared 30 minutes ago.]`");
+  expect(messages).toContain("- At the start of a wake, while any is on.\n- In a check, as `SHORE_USER_STATUSES`, one per line.");
+  expect(messages).toContain('A trigger with `when = "status_changed"` fires when eve turns one on or off.');
 });
 
 test("a page ends by naming the tools on it that the user hasn't turned on, and says nothing when the character has them all", async () => {

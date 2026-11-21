@@ -27,7 +27,7 @@ export function characterVoice(userName: string): TriggerVoice {
   return {
     wakes: "wakes you",
     neverWakes: "never wakes you",
-    statusChanges: `when ${userName} changes their status`,
+    statusChanges: `when ${userName} turns a status on or off`,
     quietFor: `when ${userName} has been quiet for`,
     switchedOff: `switched off by ${userName}`,
   };
@@ -37,7 +37,7 @@ export function userVoice(character: string): TriggerVoice {
   return {
     wakes: `wakes ${character}`,
     neverWakes: `never wakes ${character}`,
-    statusChanges: "when you change your status",
+    statusChanges: "when you turn a status on or off",
     quietFor: "when you have been quiet for",
     switchedOff: "switched off by you",
   };

@@ -1477,18 +1477,28 @@ wire_types! {
     #[serde(deny_unknown_fields)]
     #[derive(Default)]
     pub struct PresenceArgs {
-        #[serde(default, skip_serializing_if = "Option::is_none")]
-        pub status: Option<String>,
+        #[serde(default, skip_serializing_if = "Vec::is_empty")]
+        #[ts(as = "Option<Vec<String>>", optional)]
+        pub on: Vec<String>,
+        #[serde(default, skip_serializing_if = "Vec::is_empty")]
+        #[ts(as = "Option<Vec<String>>", optional)]
+        pub off: Vec<String>,
+        #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+        #[ts(as = "Option<bool>", optional)]
+        pub clear: bool,
+        #[serde(default, skip_serializing_if = "Vec::is_empty")]
+        #[ts(as = "Option<Vec<String>>", optional)]
+        pub forget: Vec<String>,
+    }
+
+    pub struct PresenceStatus {
+        pub status: String,
+        pub set_at: String,
     }
 
     pub struct PresenceResult {
-        #[serde(default, skip_serializing_if = "Option::is_none")]
-        #[ts(optional)]
-        pub status: Option<String>,
-        #[serde(default, skip_serializing_if = "Option::is_none")]
-        #[ts(optional)]
-        pub set_at: Option<String>,
-        pub choices: Vec<String>,
+        pub statuses: Vec<PresenceStatus>,
+        pub history: Vec<String>,
     }
 
     #[serde(rename_all = "snake_case")]

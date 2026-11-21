@@ -811,25 +811,37 @@ fn print_command_output_fallback(name: &str, data: &serde_json::Value) {
 }
 
 pub(crate) fn presence_text(data: &serde_json::Value) -> String {
-    if let Some(status) = data["status"].as_str() {
-        return format!(
-            "Your status is \"{status}\", set {}.",
-            super::autonomy::format_local_timestamp(data["set_at"].as_str().unwrap_or("?"))
-        );
-    }
-    let choices: Vec<&str> = data["choices"]
+    let on: Vec<(&str, &str)> = data["statuses"]
+        .as_array()
+        .into_iter()
+        .flatten()
+        .filter_map(|status| Some((status["status"].as_str()?, status["set_at"].as_str()?)))
+        .collect();
+    let used: Vec<&str> = data["history"]
         .as_array()
         .into_iter()
         .flatten()
         .filter_map(serde_json::Value::as_str)
+        .filter(|name| !on.iter().any(|(status, _)| status == name))
         .collect();
-    if choices.is_empty() {
-        "You have no status set.".to_owned()
+    let now = if on.is_empty() {
+        "No status is on.".to_owned()
     } else {
-        format!(
-            "You have no status set. You can set one of: {}.",
-            choices.join(", ")
-        )
+        let told: Vec<String> = on
+            .iter()
+            .map(|(status, at)| {
+                format!(
+                    "\"{status}\" since {}",
+                    super::autonomy::format_local_timestamp(at)
+                )
+            })
+            .collect();
+        format!("On: {}.", told.join(", "))
+    };
+    if used.is_empty() {
+        now
+    } else {
+        format!("{now}\nUsed before: {}.", used.join(", "))
     }
 }
 

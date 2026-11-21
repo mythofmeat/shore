@@ -15,7 +15,6 @@ import {
   toolGrants,
   TOOLS_NOW_PART_OF,
   validateCompaction,
-  validatePresence,
   validateMarks,
   validateTriggers,
   validateImages,
@@ -470,8 +469,6 @@ function validateConfig(
 
   const triggers = validateTriggers(app.triggers);
   if (triggers !== undefined) throw validationError(triggers);
-  const presence = validatePresence(app.presence);
-  if (presence !== undefined) throw validationError(presence);
   const marks = validateMarks(app.marks);
   if (marks !== undefined) throw validationError(marks);
 
