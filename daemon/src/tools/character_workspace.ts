@@ -1,6 +1,6 @@
 import { spawn, type ChildProcess, type ChildProcessWithoutNullStreams } from "node:child_process";
 
-import { defaultToolsConfig, defaultTriggersConfig, type ToolsConfig, type TriggersConfig } from "../config/app.ts";
+import { defaultToolsConfig, defaultTriggersConfig, promptWorkspaceFiles, type ToolsConfig, type TriggersConfig } from "../config/app.ts";
 import { characterWorkspaceDir } from "../config/dirs.ts";
 import { loadCharacterConfig, type LoadedConfig } from "../config/loader.ts";
 import { shoreLog } from "../log.ts";
@@ -78,10 +78,12 @@ function withChanges(base: NodeJS.ProcessEnv, changes: CharacterRunOptions["env"
 export class CharacterWorkspace {
   readonly dir: string;
   readonly tools: CharacterTools;
+  readonly promptFiles: readonly string[];
 
-  constructor(dir: string, tools: CharacterTools = NO_USER) {
+  constructor(dir: string, tools: CharacterTools = NO_USER, promptFiles: readonly string[] = []) {
     this.dir = dir;
     this.tools = tools;
+    this.promptFiles = promptFiles;
   }
 
   get isolated(): boolean {
@@ -164,29 +166,40 @@ export function closeWorkspaceHelpers(): void {
   helpers.clear();
 }
 
-const toolsCache = new WeakMap<LoadedConfig, Map<string, CharacterTools>>();
-
-function toolsOnDisk(config: LoadedConfig, name: string): CharacterTools {
-  const { tools, triggers } = (loadCharacterConfig(config, name, () => {}) ?? config).app;
-  return toolsFrom(tools, triggers);
+interface CharacterSetup {
+  tools: CharacterTools;
+  promptFiles: readonly string[];
 }
 
-export function characterToolsFor(config: LoadedConfig, name: string): CharacterTools {
-  let byName = toolsCache.get(config);
+const setupCache = new WeakMap<LoadedConfig, Map<string, CharacterSetup>>();
+
+function setupOnDisk(config: LoadedConfig, name: string): CharacterSetup {
+  const { tools, triggers, prompt } = (loadCharacterConfig(config, name, () => {}) ?? config).app;
+  return { tools: toolsFrom(tools, triggers), promptFiles: promptWorkspaceFiles(prompt) };
+}
+
+function characterSetup(config: LoadedConfig, name: string): CharacterSetup {
+  let byName = setupCache.get(config);
   if (byName === undefined) {
     byName = new Map();
-    toolsCache.set(config, byName);
+    setupCache.set(config, byName);
   }
   const cached = byName.get(name);
   if (cached !== undefined) return cached;
-  const found = toolsOnDisk(config, name);
+  const found = setupOnDisk(config, name);
   byName.set(name, found);
   return found;
 }
 
+export function characterToolsFor(config: LoadedConfig, name: string): CharacterTools {
+  return characterSetup(config, name).tools;
+}
+
 export function characterWorkspace(config: LoadedConfig, name: string, options: { fresh?: boolean } = {}): CharacterWorkspace {
+  const setup = options.fresh === true ? setupOnDisk(config, name) : characterSetup(config, name);
   return new CharacterWorkspace(
     characterWorkspaceDir(config.dirs.config, name, config.dirs.workspace),
-    options.fresh === true ? toolsOnDisk(config, name) : characterToolsFor(config, name),
+    setup.tools,
+    setup.promptFiles,
   );
 }

@@ -19,7 +19,7 @@ import { deriveContentFromBlocks, isToolResultOnly } from "./message_store.ts";
 import type { Message } from "./types.ts";
 import { forgetThreadSessions } from "../llm/providers/agent_sessions.ts";
 import { archiveAndRetain } from "../memory/compaction/archive.ts";
-import { normalizePromptVisiblePath, normalizeWorkspacePath, pathComponents, WORKSPACE_LINK } from "../tools/workspace_path.ts";
+import { normalizeWorkspacePath, pathComponents, WORKSPACE_LINK } from "../tools/workspace_path.ts";
 
 export const MAX_THREAD_ID_LENGTH = 64;
 
@@ -442,9 +442,6 @@ function filePin(raw: string): string {
   if (path.startsWith(COMMAND_PIN)) {
     throw new ThreadError("invalid_pins", `${path} can't be pinned, because a pin that starts with ${COMMAND_PIN} is a command`);
   }
-  if (normalizePromptVisiblePath(path) !== undefined) {
-    throw new ThreadError("invalid_pins", `${path} is already in every thread's prompt`);
-  }
   return path;
 }
 
@@ -469,7 +466,11 @@ export function refuseCommandPins(pins: readonly string[], kept: readonly string
 
 export type LocateFiles = (files: string[]) => Promise<{ paths: string[]; problems: string[] }>;
 
-export async function resolveThreadPins(pins: readonly string[], locate: LocateFiles): Promise<string[]> {
+export async function resolveThreadPins(
+  pins: readonly string[],
+  locate: LocateFiles,
+  promptFiles: readonly string[],
+): Promise<string[]> {
   const requested: string[] = [];
   const problems: string[] = [];
   for (const pin of pins) {
@@ -486,6 +487,9 @@ export async function resolveThreadPins(pins: readonly string[], locate: LocateF
   }
   const located = await locate(requested.filter((pin) => !pin.startsWith(COMMAND_PIN)));
   problems.push(...located.problems);
+  for (const path of located.paths) {
+    if (promptFiles.includes(filePin(path))) problems.push(`${path} is already in every thread's prompt`);
+  }
   if (problems.length > 0) {
     throw new ThreadError(
       "invalid_pins",

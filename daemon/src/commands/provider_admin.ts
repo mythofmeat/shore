@@ -429,7 +429,7 @@ export function providerUsers(ctx: ProviderAdminContext, name: string): string[]
   const uses = (config: LoadedConfig, ref: string | undefined) => modelProvider(config, ref) === name;
   const globalRefs = modelRefs(global);
   for (const [where, ref] of globalRefs) if (uses(global, ref)) users.push(`${where} (${String(ref)})`);
-  for (const character of discoverCharacters(global.dirs.config, global.dirs.workspace)) {
+  for (const character of discoverCharacters(global.dirs.config)) {
     let own: LoadedConfig | undefined;
     try {
       own = loadCharacterConfig(global, character, () => {});

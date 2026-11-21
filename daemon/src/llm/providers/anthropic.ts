@@ -34,7 +34,6 @@ import {
   type CachePlacement,
 } from "../../cache/forensics.ts";
 import { recordExtraThinkingDrops, replayableMessages } from "../replay.ts";
-import { cacheBoundaryIndex } from "../system_boundary.ts";
 import {
   assistantTurnStart,
   messageBreakpoints,
@@ -347,9 +346,8 @@ function tsDefaultPlacement(
   messages: MessageParam[],
   system: SystemContent,
 ): { msgBp: number[]; sysBp: number[] } {
-  const sysIdx = cacheBoundaryIndex(system);
   return {
-    sysBp: sysIdx >= 0 ? [sysIdx] : [],
+    sysBp: system.length > 0 ? [system.length - 1] : [],
     msgBp: tsMessageBreakpoints(messages),
   };
 }

@@ -286,29 +286,6 @@ describe("the adapter's schedule, against the modelled cache", () => {
     expect(m.lastBreakpoints.length).toBeLessThanOrEqual(4);
   });
 
-  test("a churning memory_index block leaves the system prefix readable", async () => {
-    const m = await mock();
-    const messages = [user("first"), assistant("answer"), user("second")];
-    const withIndex = (index: string) => [
-      { text: "You are a test.", label: "system" },
-      { text: index, label: "memory_index" },
-    ];
-
-    await turn(request(m.url, messages, { system: withIndex("index rev 1") }));
-    await turn(request(m.url, messages, { system: withIndex("index rev 1") }));
-    const steady = m.lastUsage.cache_read_input_tokens;
-    expect(steady).toBeGreaterThan(0);
-
-    await turn(request(m.url, messages, { system: withIndex("index rev 2 — totally different content") }));
-    const afterChurn = m.lastUsage.cache_read_input_tokens;
-
-    const systemAnchor = m.lastBreakpoints.find((b) => b.where === "system");
-    expect(systemAnchor).toBeDefined();
-    expect(afterChurn).toBe(required(systemAnchor).prefixTokens);
-    expect(afterChurn).toBeGreaterThan(0);
-    expect(afterChurn).toBeLessThan(steady);
-  });
-
   test("across three turns, each read equals every write before it", async () => {
     const m = await mock();
     const messages: WireMessage[] = [user("Say the word: one")];

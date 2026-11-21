@@ -2,7 +2,7 @@ Run a command in a fresh, non-interactive Bash shell (pipefail enabled) on the d
 
 Returns the exit status, stdout, and stderr. A result that is too long has its middle left out, on line breaks, with a note there saying how much is missing; send long output to a file and read it in parts. Shore's configured tool timeout applies, and cancellation stops the command's process group. A command that times out returns what it printed before it was stopped. Changes made before an error, timeout, or cancellation are not rolled back.
 
-Git commits are authored with your character identity. Changes to SOUL.md, USER.md, TOOLS.md and MEMORY.md in the workspace are queued for prompt reload.
+Git commits are authored with your character identity. Changes to workspace files that are part of your prompt are queued for prompt reload.
 
 There is no sandbox beyond that user's permissions: the working directory is only a default, and commands can reach the network and any files the user can access. As the daemon's user, they can also reach the daemon's environment and files; a user of your own cannot, and gets only the environment variables the operator passes on. In Docker, the container and its mounts define the rest.
 

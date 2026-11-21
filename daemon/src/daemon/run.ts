@@ -320,10 +320,6 @@ export async function startDaemon(options: DaemonOptions): Promise<RunningDaemon
           configDir: loaded.dirs.config,
           reload: async (changedPaths) =>
             await runtime.snapshotGate.withActivity(async () => await reloadConfig(changedPaths)),
-          knownCharacter: (name) => runtime.registry.hasCharacter(name),
-          ...(loaded.dirs.workspace === undefined
-            ? {}
-            : { workspaceDir: loaded.dirs.workspace }),
           ...(log === undefined ? {} : { log }),
         });
     teardown.push(["config watcher", async () => await watcher?.stop()]);

@@ -1,8 +1,8 @@
 import { expect, test } from "bun:test";
-import { mkdir, mkdtemp, readFile, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 
-import { defaultAppConfig } from "../src/config/app.ts";
+import type { PromptPart } from "../src/config/app.ts";
 import { characterDataDir } from "../src/config/dirs.ts";
 import { findEffectiveModel } from "../src/config/effective_catalog.ts";
 import type { LoadedConfig } from "../src/config/loader.ts";
@@ -14,7 +14,9 @@ import { NO_PRIOR_CONTEXT } from "../src/engine/segments.ts";
 import type { Message } from "../src/engine/types.ts";
 import { buildChatShapeRequestFromDisk } from "../src/handler/context.ts";
 import { hostZone } from "../src/ledger/zoned.ts";
+import { outcomeOf } from "./support/outcome.ts";
 import { testTmp } from "./support/tmp.ts";
+import { promptedAppConfig } from "./support/prompt_list.ts";
 
 const KEY_ENV = "SHORE_CONTEXT_TEST_KEY";
 const AT = Date.UTC(2026, 9, 30, 12);
@@ -23,11 +25,20 @@ function said(text: string): Message {
   return { msg_id: "m_1", role: "user", content: text, images: [], content_blocks: [{ type: "text", text }], alternatives: [], timestamp: new Date(AT).toISOString() };
 }
 
-async function world(): Promise<{ workspace: string; sent: (messages: Message[], options?: { activeConversation?: boolean; timeZone?: string }) => Promise<string> }> {
+interface World {
+  configDir: string;
+  workspace: string;
+  sent: (messages: Message[], options?: { activeConversation?: boolean; timeZone?: string }) => Promise<string>;
+  system: () => Promise<string[]>;
+}
+
+async function world(prompt?: PromptPart[]): Promise<World> {
   const root = await mkdtemp(testTmp("shore-context-"));
-  const app = defaultAppConfig();
+  const app = promptedAppConfig();
+  if (prompt !== undefined) app.prompt = prompt;
   app.chat.model = "fixture";
   app.chat.user_timestamps = "always";
+  app.chat.display_name = "eve";
   app.tools.enabled = [];
   const models = emptyCatalog();
   models.chat.set("chat.fixture", {
@@ -39,11 +50,14 @@ async function world(): Promise<{ workspace: string; sent: (messages: Message[],
     dirs: { config: join(root, "config"), data: join(root, "data"), cache: join(root, "cache"), runtime: join(root, "runtime") },
   };
   const resolved = findEffectiveModel(configView(config), config.dirs.cache, "fixture", true);
+  const built = async (messages: Message[], options = {}) => (await buildChatShapeRequestFromDisk(
+    "ada", characterDataDir(config.dirs.data, "ada"), config, resolved, messages, NO_PRIOR_CONTEXT, { ...options, env: { [KEY_ENV]: "key" } },
+  )).request;
   return {
+    configDir: config.dirs.config,
     workspace: join(config.dirs.config, "characters", "ada", "workspace"),
-    sent: async (messages, options = {}) => JSON.stringify((await buildChatShapeRequestFromDisk(
-      "ada", characterDataDir(config.dirs.data, "ada"), config, resolved, messages, NO_PRIOR_CONTEXT, { ...options, env: { [KEY_ENV]: "key" } },
-    )).request),
+    sent: async (messages, options = {}) => JSON.stringify(await built(messages, options)),
+    system: async () => ((await built([said("hello")])).system ?? []).map((block) => block.text),
   };
 }
 
@@ -64,10 +78,40 @@ test("a conversation under way keeps the workspace files it started with, and on
   expect(await sent([hello], { activeConversation: false })).toContain("Ada, third draft.");
 });
 
-test("a fresh conversation sets the workspace up, with the default tool notes, before reading it", async () => {
-  const { workspace, sent } = await world();
-  await sent([]);
-  expect((await readFile(join(workspace, "TOOLS.md"), "utf8")).length).toBeGreaterThan(0);
+test("the system prompt is the listed parts in the listed order: config files as templates, and workspace files under any name as written", async () => {
+  const { configDir, workspace, system } = await world([
+    { workspace: "notes/MAP.md" },
+    { file: "prompts/opening.md" },
+    { workspace: "SOUL.md" },
+    { file: "prompts/closing.md" },
+    { workspace: "absent.md" },
+  ]);
+  await mkdir(join(configDir, "prompts"), { recursive: true });
+  await writeFile(join(configDir, "prompts", "opening.md"), "You are {{char}}, with {{user}}.");
+  await writeFile(join(configDir, "prompts", "closing.md"), "That is all.");
+  await mkdir(join(workspace, "notes"), { recursive: true });
+  await writeFile(join(workspace, "notes", "MAP.md"), "- {{char}}'s places");
+  await writeFile(join(workspace, "SOUL.md"), "Ada.");
+
+  expect(await system()).toEqual(["- {{char}}'s places", "You are ada, with eve.", "Ada.", "That is all."]);
+  expect(await readdir(workspace)).toEqual(["SOUL.md", "notes"]);
+});
+
+test("a listed config file that can't be read stops the request and names the path", async () => {
+  const { configDir, system } = await world([{ file: "prompts/gone.md" }]);
+  expect(await outcomeOf(system())).toThrow(`prompt file "prompts/gone.md" could not be read at ${join(configDir, "prompts", "gone.md")}`);
+});
+
+test("a config with no prompt list stops the request rather than sending no system prompt", async () => {
+  const { system } = await world([]);
+  expect(await outcomeOf(system())).toThrow("the config has no [[prompt]] list");
+});
+
+test("the system_prompt part is the model's system_prompt file, and is left out when none is set", async () => {
+  const { configDir, system } = await world([{ shore: "system_prompt" }, { file: "after.md" }]);
+  await mkdir(configDir, { recursive: true });
+  await writeFile(join(configDir, "after.md"), "After.");
+  expect(await system()).toEqual(["After."]);
 });
 
 test("the times on the user's messages are given in the zone asked for", async () => {

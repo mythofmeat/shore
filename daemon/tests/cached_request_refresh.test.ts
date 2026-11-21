@@ -6,7 +6,7 @@ import { KeepaliveService } from "../src/cache/keepalive.ts";
 import { LastRequestCache, type KeepaliveReprime } from "../src/cache/last_request.ts";
 import { CachedRequestRefresher } from "../src/cache/refresh.ts";
 import { TurnAutonomyBridge } from "../src/autonomy/registration.ts";
-import { defaultAppConfig } from "../src/config/app.ts";
+
 import type { LoadedConfig } from "../src/config/loader.ts";
 import { emptyCatalog } from "../src/config/models.ts";
 import { ProviderRegistry } from "../src/config/providers.ts";
@@ -25,6 +25,7 @@ import { restoreTestEnv, setTestEnv } from "./support/env.ts";
 import { eventsForResponse } from "./support/stream.ts";
 import { testTmp } from "./support/tmp.ts";
 import { until } from "./support/until.ts";
+import { promptedAppConfig } from "./support/prompt_list.ts";
 
 const KEY_ENV = "SHORE_CACHE_REFRESH_KEY";
 
@@ -33,7 +34,7 @@ afterAll(restoreTestEnv);
 async function withAda(check: (config: LoadedConfig, env: Record<string, string>) => Promise<void>): Promise<void> {
   setTestEnv(KEY_ENV, "fixture-key");
   const root = await mkdtemp(testTmp("shore-cache-refresh-"));
-  const app = defaultAppConfig();
+  const app = promptedAppConfig();
   app.chat.model = "fixture";
   const models = emptyCatalog();
   models.chat.set("chat.fixture", {

@@ -2834,7 +2834,7 @@
     },
     {
       "path": "shore character delete",
-      "about": "Delete a character for good: its workspace (SOUL.md and memory), its\nconfig, its threads and data, its search indexes, and its rows in the\nhistory and usage databases. Nothing is recoverable afterwards unless\nyou pass --archive.",
+      "about": "Delete a character for good: its workspace, its\nconfig, its threads and data, its search indexes, and its rows in the\nhistory and usage databases. Nothing is recoverable afterwards unless\nyou pass --archive.",
       "long_about": null,
       "hidden": false,
       "aliases": [],
@@ -3430,7 +3430,7 @@
     },
     {
       "path": "shore thread pins",
-      "about": "Set what is pinned to a thread's prompt, next to MEMORY.md: workspace files, and the output of shell commands",
+      "about": "Set what is pinned to a thread's prompt: workspace files, and the output of shell commands",
       "long_about": null,
       "hidden": false,
       "aliases": [],

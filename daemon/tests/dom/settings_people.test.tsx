@@ -6,7 +6,7 @@ import { acting, button, click, mount, type } from "./dom.ts";
 const app = useApp();
 
 const details = (extra: Record<string, unknown> = {}) => ({
-  name: "ada", active: true, config_dir: "/cfg/ada", workspace_dir: "/ws/ada", has_definition: true, definition_preview: "You are Ada.", bootstrap_files: ["A.md", "B.md"],
+  name: "ada", active: true, config_dir: "/cfg/ada", workspace_dir: "/ws/ada", prompt_files: ["A.md", "B.md"],
   has_config_override: true, pending_deferred_edits: ["C.md"], data_dir: "/data/ada", has_data: true, ...extra,
 });
 
@@ -73,8 +73,9 @@ describe("the characters page", () => {
     expect(options()).toEqual([["Aada", "false", "character-card "], ["Bboactive", "true", "character-card on"]]);
     await acting(() => Bun.sleep(5));
     const facts = () => [...view.host.querySelectorAll(".kv-row")].map((row) => `${row.querySelector("dt")?.textContent ?? ""}: ${row.querySelector("dd")?.textContent ?? ""}`);
-    expect(facts()).toEqual(["Definition: Set", "Configuration: Has its own overrides", "Workspace: /ws/ada", "Config folder: /cfg/ada", "Data folder: /data/ada", "Bootstrap files: A.md, B.md", "Pending edits: C.md"]);
-    expect(view.host.querySelector("pre.readout")?.textContent).toBe("You are Ada.");
+    expect(facts()).toEqual(["Configuration: Has its own overrides", "Workspace: /ws/ada", "Config folder: /cfg/ada", "Data folder: /data/ada", "Prompt files: A.md, B.md", "Pending edits: C.md"]);
+    expect([...view.host.querySelectorAll(".kv-row dd")].map((dd) => dd.className)).toEqual(["", "mono", "mono", "mono", "mono", "mono"]);
+    expect(view.host.querySelector(".settings-description")?.textContent).toBe("Characters on this daemon, one for each folder in the config folder’s characters folder. What their prompt is made of is the [[prompt]] list in the configuration.");
     expect(view.host.querySelector(".settings-section:nth-of-type(2) h2")?.textContent).toBe("bo");
     expect(() => button(view.host, "Open threads"), "the active character is already open").toThrow();
     await click(view.host.querySelector("[role=option]"));
@@ -92,11 +93,12 @@ describe("the characters page", () => {
     const waiting = await mount(<CharactersPage state={snapshot} />);
     expect(waiting.host.querySelector("[aria-label='Loading character']")).not.toBeNull();
     await waiting.unmount();
-    app.answer((request) => request["name"] === "character_info" ? details({ has_definition: false, has_config_override: false, has_data: false, bootstrap_files: [], pending_deferred_edits: [], definition_preview: null }) : undefined);
+    app.answer((request) => request["name"] === "character_info" ? details({ has_config_override: false, has_data: false, prompt_files: [], pending_deferred_edits: [] }) : undefined);
     const view = await mount(<CharactersPage state={snapshot} />);
     await acting(() => Bun.sleep(5));
-    expect([...view.host.querySelectorAll(".kv-row dd")].map((dd) => dd.textContent)).toEqual(["Not written yet", "Uses the shared configuration", "/ws/ada", "/cfg/ada", "No data yet"]);
-    expect([view.host.querySelector("pre.readout"), view.host.querySelector(".tag")]).toEqual([null, null]);
+    expect([...view.host.querySelectorAll(".kv-row dd")].map((dd) => dd.textContent)).toEqual(["Uses the shared configuration", "/ws/ada", "/cfg/ada", "No data yet", "None in the workspace"]);
+    expect(view.host.querySelectorAll(".kv-row dd")[4]?.className).toBe("");
+    expect(view.host.querySelector(".tag")).toBeNull();
     app.answer((request) => { if (request["name"] === "character_info") throw new Error("no such character"); return undefined; });
     const failing = await mount(<CharactersPage state={snapshot} />);
     await acting(() => Bun.sleep(5));

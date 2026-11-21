@@ -8,7 +8,7 @@ import { commandCatalogue } from "../src/commands/registry.ts";
 import { operationPolicy } from "../src/operations/policy.ts";
 import { required } from "../src/util/required.ts";
 import { CommandError } from "../src/commands/errors.ts";
-import { defaultAppConfig } from "../src/config/app.ts";
+
 import { archiveKey, characterDataDir } from "../src/config/dirs.ts";
 import type { LoadedConfig } from "../src/config/loader.ts";
 import { emptyCatalog } from "../src/config/models.ts";
@@ -30,6 +30,7 @@ import * as files from "../src/storage/files.ts";
 import { threadFile, writeDurable } from "../src/storage/files.ts";
 import { rejectionOf } from "./support/outcome.ts";
 import { testTmp } from "./support/tmp.ts";
+import { promptedAppConfig } from "./support/prompt_list.ts";
 
 const datas: string[] = [];
 afterEach(async () => {
@@ -53,7 +54,7 @@ async function world(threads = HOME_ONLY): Promise<{ config: LoadedConfig; data:
     mkdirSync(join(data, "ada", "threads", thread), { recursive: true });
     writeDurable(threadFile(data, "ada", thread, "active.jsonl"), messages.map((message) => `${JSON.stringify(message)}\n`).join(""));
   }
-  const app = defaultAppConfig();
+  const app = promptedAppConfig();
   app.compaction.keep_recent_turns = 0;
   const config: LoadedConfig = {
     app, models: emptyCatalog(), providers: ProviderRegistry.empty(), rawTable: undefined,

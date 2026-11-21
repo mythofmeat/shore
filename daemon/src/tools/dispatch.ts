@@ -25,7 +25,6 @@ import { handleWakeInThread, type WakeHandOff, type WakeInThreadRequest } from "
 import type { EditThreadRequest } from "./edit_thread.ts";
 import type { FetchLike } from "./web.ts";
 import type { ToolInput } from "./workspace.ts";
-import { normalizeProtectedPath, normalizePromptVisiblePath } from "./workspace_path.ts";
 import { McpCancelled } from "../mcp/client.ts";
 import type { ImagesConfig, SubagentConfig, ToolsConfig } from "../config/app.ts";
 import type { Message } from "../engine/types.ts";
@@ -93,27 +92,6 @@ export interface ToolContext {
   signal?: AbortSignal;
   fetchImpl?: FetchLike;
   lookupImpl?: (hostname: string) => Promise<string[]>;
-}
-
-export async function annotateDeferredEdit(
-  path: string,
-  result: unknown,
-  ctx: Pick<ToolContext, "deferEdit">,
-): Promise<void> {
-  const deferredPath = normalizePromptVisiblePath(path);
-  if (deferredPath === undefined) return;
-
-  await ctx.deferEdit?.(path);
-
-  if (typeof result !== "object" || result === null || Array.isArray(result)) return;
-  const obj = result as Record<string, unknown>;
-  obj["prompt_visible_file"] = true;
-  if (normalizeProtectedPath(path) !== undefined) {
-    obj["protected_file"] = true;
-  }
-  obj["deferred_until_compaction"] = true;
-  obj["deferred_path"] = deferredPath;
-  obj["prompt_reload_required"] = true;
 }
 
 export function deferEditTo(

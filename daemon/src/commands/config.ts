@@ -270,7 +270,7 @@ function valueSources(ctx: ConfigContext): ConfigSources {
     image_models: sorted(ctx.config.models.imageGeneration.keys()),
     tools: sorted(ALL_TOOLS.map((t) => t.name)),
     subagents: sorted(ctx.config.app.subagents.agents.keys()),
-    characters: sorted(discoverCharacters(ctx.config.dirs.config, ctx.config.dirs.workspace)),
+    characters: sorted(discoverCharacters(ctx.config.dirs.config)),
     providers: sorted(ctx.config.providers.entries().map(([name]) => name)),
   };
 }
@@ -502,7 +502,7 @@ export async function configReload(ctx: ConfigContext, args: OperationInput<"con
     throw invalidRequest(`Config error: ${message(e)}`);
   }
 
-  for (const name of discoverCharacters(fresh.dirs.config, fresh.dirs.workspace)) {
+  for (const name of discoverCharacters(fresh.dirs.config)) {
     try {
       loadCharacterConfig(fresh, name);
     } catch (e) {

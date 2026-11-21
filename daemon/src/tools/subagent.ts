@@ -1,7 +1,7 @@
 import { MAIN_THREAD } from "../config/dirs.ts";
 import { loadPromptFileFromWorkspace } from "../memory/deferred_edits.ts";
 import { CharacterWorkspace } from "./character_workspace.ts";
-import { normalizePromptVisiblePath, resolvePath } from "./workspace_path";
+import { promptFileAt, resolvePath } from "./workspace_path";
 import { wallClockMarker } from "../engine/prompt.ts";
 import { hostZone } from "../ledger/zoned.ts";
 import type { ContentBlock, Message } from "../engine/types";
@@ -97,7 +97,7 @@ async function readPromptFile(path: string, ctx: MacroContext): Promise<string> 
   }
 
   const workspace = ctx.workspace ?? new CharacterWorkspace(ctx.workspaceDir);
-  const visible = normalizePromptVisiblePath(path);
+  const visible = promptFileAt(workspace.promptFiles, path);
   if (visible !== undefined) {
     const thread = ctx.thread ?? MAIN_THREAD;
     return (await loadPromptFileFromWorkspace(ctx.characterDataDir, workspace, visible, thread)) ?? "";
