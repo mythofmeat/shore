@@ -1409,16 +1409,12 @@ async fn handle_create_character(
     )
     .await?;
 
-    let workspace = data.workspace_dir;
-    cli_out!("Created character scaffold: {workspace}");
-
-    for (file, purpose) in SCAFFOLD_GUIDE {
-        let created = data.created_files.iter().any(|created| created == file);
-        if created {
-            cli_out!("  {file:<10} {purpose}");
-        }
-    }
-    cli_out!("Switch to it with: shore character {name}");
+    cli_out!("Created {name}");
+    cli_out!("  config     {}", data.config_dir);
+    cli_out!("  workspace  {}", data.workspace_dir);
+    cli_out!(
+        "Its prompt is the [[prompt]] list in config. Switch to it with: shore character {name}"
+    );
     Ok(())
 }
 
@@ -1479,9 +1475,7 @@ fn confirm_delete_character(name: &str) -> Result<bool, Box<dyn std::error::Erro
         )
         .into());
     }
-    cli_err!(
-        "Deleting {name} removes, on the daemon host: its workspace (SOUL.md, USER.md, memory),"
-    );
+    cli_err!("Deleting {name} removes, on the daemon host: its workspace,");
     cli_err!("its config and avatar, its threads and data, its search indexes, and its rows in");
     cli_err!("the history and usage databases. This cannot be undone.");
     cli_err!("Type the character name to confirm:");
@@ -1508,12 +1502,6 @@ fn forget_deleted_character(name: &str) {
         cli_err!("SHORE_CHARACTER still names {name} in this shell — unset it");
     }
 }
-
-const SCAFFOLD_GUIDE: &[(&str, &str)] = &[
-    ("SOUL.md", "who the character is"),
-    ("USER.md", "who you are, to them"),
-    ("TOOLS.md", "extra guidance on using tools"),
-];
 
 async fn handle_list_characters(
     conn: &mut SWPConnection,

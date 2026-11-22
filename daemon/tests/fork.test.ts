@@ -3,7 +3,9 @@ import { existsSync } from "node:fs";
 import { mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 
+import { CharacterRegistry } from "../src/characters.ts";
 import { MAIN_THREAD, archiveKey, characterDataDir } from "../src/config/dirs.ts";
+import { loadConfig } from "../src/config/loader.ts";
 import { FORK_MARKER_FILE, forkThread, recoverForks } from "../src/engine/fork.ts";
 import { HISTORY_DB_FILE, HistoryStore } from "../src/engine/history_store.ts";
 import { MessageStore } from "../src/engine/message_store.ts";
@@ -164,6 +166,19 @@ describe("recovering an interrupted fork", () => {
     expect(await threadIds(root)).toEqual(["main", "spin"]);
     expect((await MessageStore.load(threadFile(root, "ada", "spin", "active.jsonl"))).messages()).toHaveLength(2);
     expect(await recoverForks(root, "ada")).toEqual([]);
+  });
+
+  test("a fork left half done is finished when the daemon next starts", async () => {
+    const root = await character({ main: ["q", "a"] });
+    expect(await outcomeOf(forkThread(root, "ada", "main", "spin", { now: () => NOW, failAfter: "publish" }))).toThrow(/injected/);
+    const configDir = join(root, "..", `config-${crypto.randomUUID()}`);
+    await mkdir(join(configDir, "characters", "ada"), { recursive: true });
+    await writeFile(join(configDir, "config.toml"), "\n");
+
+    await CharacterRegistry.create(configDir, root, loadConfig(join(configDir, "config.toml"), { onWarn: () => {} }));
+
+    expect(existsSync(join(root, "ada", "threads", "spin", FORK_MARKER_FILE))).toBe(false);
+    expect(await threadIds(root)).toEqual(["main", "spin"]);
   });
 
   test("rolling back an unfinished fork removes its prompt snapshot, stored messages and provenance, and leaves the source alone", async () => {

@@ -4,7 +4,7 @@ import { mkdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 
 import { lastWroteNote } from "../src/autonomy/wake.ts";
-import { defaultAppConfig } from "../src/config/app.ts";
+
 import { chatLogMessageId } from "../src/browser/chat/transcript.ts";
 import { CharacterRegistry } from "../src/characters.ts";
 import { segments } from "../src/commands/segments.ts";
@@ -32,6 +32,7 @@ import type { SidecarRequest } from "../src/llm/types.ts";
 import { outcomeOf } from "./support/outcome.ts";
 import { reliabilityGeneration } from "./support/reliability_generation.ts";
 import { testTmp } from "./support/tmp.ts";
+import { promptedAppConfig } from "./support/prompt_list.ts";
 
 const NOW = "2026-11-01T10:00:00Z";
 
@@ -58,7 +59,7 @@ async function setup(): Promise<LoadedConfig> {
   for (const dir of Object.values(dirs)) await mkdir(dir, { recursive: true });
   await mkdir(join(dirs.data, "frank"), { recursive: true });
   initializeDatabase(dirs.data);
-  return { app: defaultAppConfig(), models: emptyCatalog(), providers: ProviderRegistry.empty(), dirs, rawTable: undefined };
+  return { app: promptedAppConfig(), models: emptyCatalog(), providers: ProviderRegistry.empty(), dirs, rawTable: undefined };
 }
 
 const resolved = {
@@ -101,7 +102,17 @@ describe("a thread's pinned files", () => {
     for (const files of [["../secrets.md"], ["notes/../../secrets.md"]]) {
       expect(await outcomeOf(createThread(config.dirs.data, "frank", "story", NOW, { pins: files }))).toThrow("leaves the workspace");
     }
-    expect(await outcomeOf(createThread(config.dirs.data, "frank", "story", NOW, { pins: ["SOUL.md"] }))).toThrow("already in every thread's prompt");
+  });
+
+  test("a file the prompt list already sends, however it is named in the pin, is refused, and any other file can be pinned", async () => {
+    const config = await setup();
+    config.app.prompt = [{ workspace: "notes/MAP.md" }];
+    const registry = await registryWith(config, { "notes/MAP.md": "- places" });
+    for (const pins of [["notes/MAP.md"], ["./workspace/notes/MAP.md"], ["[[MAP]]"]]) {
+      expect(await outcomeOf(registry.createThread("frank", "story", { pins }))).toThrow("notes/MAP.md is already in every thread's prompt");
+    }
+    await registry.createThread("frank", "story", { pins: ["SOUL.md"] });
+    expect(registry.listThreads("frank").find((thread) => thread.id === "story")?.pins).toEqual(["SOUL.md"]);
   });
 
   test("stay as they were when the thread started until a refresh, so the cached prompt doesn't change mid-conversation", async () => {
@@ -379,6 +390,7 @@ describe("coming back to a side thread", () => {
     const prompt = assemblePrompt({
       character_name: "frank",
       display_name: "sam",
+      sections: [],
       has_prior_context: false,
       messages,
       user_timestamp_mode: "auto",
@@ -490,6 +502,7 @@ describe("a history trimmed to fit", () => {
     const keptAfter = (dropped: Message) => assemblePrompt({
       character_name: "frank",
       display_name: "sam",
+      sections: [],
       has_prior_context: false,
       messages: [dropped, message("u2", "back", "2026-11-01T12:00:00Z"), message("a2", "hello again", "2026-11-01T12:01:00Z")],
       max_context_tokens: 40_000,
@@ -506,6 +519,7 @@ describe("a history trimmed to fit", () => {
     const prompt = assemblePrompt({
       character_name: "frank",
       display_name: "sam",
+      sections: [],
       has_prior_context: true,
       archived_last_at: "2026-11-01T06:00:00Z",
       messages: [message("u1", "back", "2026-11-01T09:00:00Z"), message("a1", "hello again", "2026-11-01T09:01:00Z")],

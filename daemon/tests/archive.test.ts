@@ -3,7 +3,7 @@ import { readFile } from "./support/stored_files.ts";
 import { Database } from "bun:sqlite";
 import { existsSync } from "node:fs";
 import { describe, expect, test } from "bun:test";
-import { access, mkdir, mkdtemp, readdir, rename, rm, stat, writeFile, symlink } from "node:fs/promises";
+import { access, lstat, mkdir, mkdtemp, readdir, readlink, rename, rm, stat, utimes, writeFile, symlink } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { create, extract, Header, Parser } from "tar";
@@ -15,6 +15,7 @@ import { HistoryStore } from "../src/engine/history_store.ts";
 import type { Message } from "../src/engine/types.ts";
 import { Ledger } from "../src/ledger/store.ts";
 import { freezeDatabase } from "../src/storage/frozen_database.ts";
+import { imageBlobDir } from "../src/storage/image_blobs.ts";
 import { outcomeOf } from "./support/outcome.ts";
 import { StandInWorkspace } from "./support/stand_in_workspace.ts";
 
@@ -538,22 +539,102 @@ async function archiveEntries(archive: string): Promise<{ count: number; bytes: 
 }
 
 describe("archive checks", () => {
+  test("an export keeps file times and links in the config, workspace and data folders, brings the picture blobs, and says in its manifest what it holds", async () => {
+    const dirs = await root("faithful");
+    await seedCharacter(dirs, "ada", "hello");
+    const old = new Date("2001-02-03T04:05:06Z");
+    const folders = { config: join(dirs.config, "characters", "ada"), workspace: join(dirs.workspace as string, "ada"), data: join(dirs.data, "ada") };
+    for (const folder of Object.values(folders)) {
+      await writeFile(join(folder, "old.txt"), "old");
+      await utimes(join(folder, "old.txt"), old, old);
+      await symlink("old.txt", join(folder, "link"));
+    }
+    await mkdir(imageBlobDir(dirs.cache, "ada"), { recursive: true });
+    await writeFile(join(imageBlobDir(dirs.cache, "ada"), "ab12.png"), "blob");
+    const output = join(dirs.runtime, "ada.tar");
+    await exportCharacter(context(dirs, new Set(["ada"])), { character: "ada", output });
+    const unpacked = await mkdtemp(join(dirs.runtime, "unpacked-"));
+    await extract({ file: output, cwd: unpacked });
+
+    for (const folder of Object.keys(folders)) {
+      expect((await stat(join(unpacked, folder, "old.txt"))).mtime.toISOString()).toBe(old.toISOString());
+      expect(await readlink(join(unpacked, folder, "link"))).toBe("old.txt");
+    }
+    expect(await readFile(join(unpacked, "media", "blobs", "ab12.png"), "utf8")).toBe("blob");
+    const manifest = await readFile(join(unpacked, "manifest.json"), "utf8");
+    expect(manifest).toBe(`${JSON.stringify(JSON.parse(manifest), null, 2)}\n`);
+    expect((JSON.parse(manifest) as { contents: unknown }).contents).toEqual({
+      config: true, workspace: true, data: true, history: true, ledger: true, call_diagnostics: true, external_memory_bank: false,
+    });
+  });
+
+  test("a character with no data folder yet exports an empty one, and imports from it", async () => {
+    const dirs = await root("no-data");
+    await mkdir(join(dirs.config, "characters", "ada"), { recursive: true });
+    await mkdir(join(dirs.workspace as string, "ada"), { recursive: true });
+    const output = join(dirs.runtime, "ada.tar");
+    await exportCharacter(context(dirs, new Set(["ada"])), { character: "ada", output });
+    const unpacked = await mkdtemp(join(dirs.runtime, "unpacked-"));
+    await extract({ file: output, cwd: unpacked });
+    expect(await readdir(join(unpacked, "data"))).toEqual([]);
+    const manifest = JSON.parse(await readFile(join(unpacked, "manifest.json"), "utf8")) as { contents: { config: boolean; data: boolean } };
+    expect([manifest.contents.config, manifest.contents.data]).toEqual([false, false]);
+  });
+
+  test("browser limits allow an export exactly at the entry and byte limits, and say which part went over", async () => {
+    const dirs = await root("export-limits");
+    await seedCharacter(dirs, "ada", "limits");
+    const output = join(dirs.runtime, "ada.tar");
+    await exportCharacter(context(dirs, new Set(["ada"])), { character: "ada", output });
+    const unpacked = await mkdtemp(join(dirs.runtime, "unpacked-"));
+    await extract({ file: output, cwd: unpacked });
+    const database = (await stat(join(unpacked, "shore.db"))).size;
+    let entries = 0;
+    let bytes = 0;
+    for (const folder of [join(dirs.config, "characters", "ada"), join(dirs.workspace as string, "ada"), join(dirs.data, "ada")]) {
+      entries += 1;
+      for (const path of await readdir(folder, { recursive: true })) {
+        const entry = await lstat(join(folder, path));
+        entries += 1;
+        if (entry.isFile()) bytes += entry.size;
+      }
+    }
+    const attempt = async (limits: { bytes: number; entries: number }) => {
+      const temporaryDirectory = await mkdtemp(join(dirs.runtime, "limits-"));
+      return await outcomeOf(exportCharacter({ ...context(dirs, new Set(["ada"])), limits: { ...limits, temporaryDirectory } }, { character: "ada", output: join(temporaryDirectory, "ada.tar") }));
+    };
+    expect((await attempt({ entries, bytes: bytes + database }))()).toMatchObject({ character: "ada" });
+    expect(await attempt({ entries: entries - 1, bytes: bytes + database })).toThrow("Character exceeds browser archive processing limits");
+    expect(await attempt({ entries, bytes: bytes + database - 1 })).toThrow("Database snapshot exceeds the browser archive processing limit");
+    expect(await attempt({ entries, bytes })).toThrow("Database snapshot exceeds the browser archive processing limit");
+    expect(await attempt({ entries, bytes: bytes - 1 })).toThrow("Character exceeds browser archive processing limits");
+  });
+
+  test("a character whose config folder is gone by the time it is exported is refused with that folder named", async () => {
+    const dirs = await root("vanished");
+    await seedCharacter(dirs, "ada", "hello");
+    await rm(join(dirs.config, "characters", "ada"), { recursive: true });
+    const output = join(dirs.runtime, "ada.tar");
+    expect(await outcomeOf(exportCharacter(context(dirs, new Set(["ada"])), { character: "ada", output })))
+      .toThrow(`Character disappeared during export: ${join(dirs.config, "characters", "ada")}`);
+  });
+
   test("an archive that isn't a readable Shore character is refused with what is wrong with it", async () => {
     const dirs = await root("manifests");
     const ctx = context(dirs, new Set());
     const manifest = (fields: Record<string, unknown>): string => JSON.stringify({ format: "shore-character", version: 2, character: "ada", source_data: "/srv/data", ...fields });
     const cases: Array<[Record<string, string>, string]> = [
-      [{ "workspace/SOUL.md": "x" }, "Not a readable Shore character archive: "],
+      [{ "workspace/notes.md": "x" }, "Not a readable Shore character archive: "],
       [{ "manifest.json": "{not json" }, "Not a readable Shore character archive: "],
       [{ "manifest.json": "[]" }, "Unsupported or malformed Shore character archive"],
       [{ "manifest.json": manifest({ format: "other" }) }, "Unsupported or malformed Shore character archive"],
       [{ "manifest.json": manifest({ version: 1 }) }, "Unsupported or malformed Shore character archive"],
       [{ "manifest.json": manifest({ character: "a/b" }) }, "Archive has an invalid character name"],
       [{ "manifest.json": manifest({ character: 5 }) }, "Archive has an invalid character name"],
-      [{ "manifest.json": manifest({}) }, "Archive has no workspace/SOUL.md"],
-      [{ "manifest.json": manifest({}), "workspace/SOUL.md": "x" }, "Archive has no shore.db"],
-      [{ "manifest.json": manifest({ source_data: "relative" }), "workspace/SOUL.md": "x", "shore.db": "" }, "Archive has an invalid source data directory"],
-      [{ "manifest.json": manifest({ source_data: 7 }), "workspace/SOUL.md": "x", "shore.db": "" }, "Archive has an invalid source data directory"],
+      [{ "manifest.json": manifest({}) }, "Archive has no workspace"],
+      [{ "manifest.json": manifest({}), "workspace/notes.md": "x" }, "Archive has no shore.db"],
+      [{ "manifest.json": manifest({ source_data: "relative" }), "workspace/notes.md": "x", "shore.db": "" }, "Archive has an invalid source data directory"],
+      [{ "manifest.json": manifest({ source_data: 7 }), "workspace/notes.md": "x", "shore.db": "" }, "Archive has an invalid source data directory"],
     ];
     for (const [files, refusal] of cases) {
       const failure = await outcomeOf(importCharacter(ctx, { archive: await packed(dirs, files) }));

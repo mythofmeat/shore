@@ -6,21 +6,18 @@ import { shoreLog } from "../log.ts";
 import type { LoadedConfig } from "../config/loader.ts";
 import { resolveDisplayName } from "../config/app.ts";
 import { anyToolEnabled } from "../config/app.ts";
-import { SOUL_FILE, TOOLS_FILE, USER_FILE } from "../config/dirs.ts";
 import {
   resolvedReasoningReplay,
   toRequestModel,
   type ResolvedModel,
 } from "../config/models.ts";
-import { assemblePrompt, type AssembledPrompt, type ThreadPrompt } from "../engine/prompt.ts";
+import { assemblePrompt, type AssembledPrompt, type PromptSection, type ThreadPrompt } from "../engine/prompt.ts";
 import { homeThread, readThreadsIndexIn, threadRecord } from "../engine/threads.ts";
 import type { PriorContext } from "../engine/segments.ts";
 import type { Message } from "../engine/types.ts";
 import {
   ensureActivePromptSnapshot,
-  ensureCharacterWorkspace,
   loadPromptFile,
-  loadMemoryIndex,
   loadThreadPins,
   resetActivePromptSnapshot,
 } from "../memory/deferred_edits.ts";
@@ -54,22 +51,38 @@ export interface PreparedChatContext {
   prompt: AssembledPrompt;
 }
 
+async function configFile(config: LoadedConfig, file: string, setting: string): Promise<string> {
+  const path = resolve(config.dirs.config, file);
+  try {
+    return await readFile(path, "utf8");
+  } catch (e) {
+    throw new Error(`${setting} could not be read at ${path}: ${(e as Error).message}`, { cause: e });
+  }
+}
+
 export async function loadSystemPrompt(
   config: LoadedConfig,
   resolved: ResolvedModel,
 ): Promise<string | undefined> {
   const configured = resolved.systemPrompt ?? config.app.chat.system_prompt;
   if (configured === undefined) return undefined;
-  const path = resolve(config.dirs.config, configured);
-  try {
-    return await readFile(path, "utf8");
-  } catch (e) {
-    throw new Error(
-      `system_prompt "${configured}" for ${resolved.qualifiedName} could not be read at ${path}: ` +
-        (e instanceof Error ? e.message : String(e)),
-      { cause: e },
-    );
+  return await configFile(config, configured, `system_prompt "${configured}" for ${resolved.qualifiedName}`);
+}
+
+async function promptSections(
+  config: LoadedConfig,
+  resolved: ResolvedModel,
+  workspaceFile: (path: string) => Promise<string | undefined>,
+): Promise<PromptSection[]> {
+  if (config.app.prompt.length === 0) {
+    throw new Error("the config has no [[prompt]] list, so there is no system prompt: add [[prompt]] parts to config.toml");
   }
+  return await Promise.all(config.app.prompt.map(async (part): Promise<PromptSection> => {
+    if ("file" in part) return { label: part.file, text: await configFile(config, part.file, `prompt file "${part.file}"`), template: true };
+    if ("workspace" in part) return { label: part.workspace, text: await workspaceFile(part.workspace), template: false };
+    if (part.shore === "system_prompt") return { label: "system_prompt", text: await loadSystemPrompt(config, resolved), template: true };
+    return { shore: part.shore };
+  }));
 }
 
 async function threadPrompt(
@@ -115,37 +128,23 @@ export async function prepareChatContext(
   } else {
     try {
       await resetActivePromptSnapshot(characterDataDir, params.thread);
-      await ensureCharacterWorkspace(workspace);
     } catch (e) {
-      shoreLog.warn(`shore: failed to prepare character workspace for ${character}: ${String(e)}`);
+      shoreLog.warn(`shore: failed to reset the prompt snapshot for ${character}: ${String(e)}`);
     }
   }
 
-  const promptFile = async (name: string) => await loadPromptFile(
+  const sections = await promptSections(config, resolved, async (path) => await loadPromptFile(
     characterDataDir,
     workspace,
-    name,
+    path,
     params.thread,
-  );
-  const characterDefinition = await promptFile(SOUL_FILE);
-  const userDefinition = await promptFile(USER_FILE);
-  const systemPrompt = await loadSystemPrompt(config, resolved);
-  const toolsGuidance = await promptFile(TOOLS_FILE);
-  const memoryIndex = await loadMemoryIndex(
-    characterDataDir,
-    workspace,
-    params.thread,
-  );
+  ));
 
   const promptParams = {
     thread: await threadPrompt(characterDataDir, workspace, params.thread),
     character_name: character,
     display_name: displayName,
-    system_prompt: systemPrompt,
-    tools_guidance: toolsGuidance,
-    character_definition: characterDefinition,
-    user_definition: userDefinition,
-    memory_index: memoryIndex,
+    sections,
     has_prior_context: params.prior.archived,
     archived_last_at: params.prior.lastAt,
     messages: withoutWakeWorking(messages),

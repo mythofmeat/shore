@@ -5,6 +5,7 @@ import { join } from "node:path";
 import { startMockAnthropic } from "../src/testing/mock_anthropic.ts";
 import { testTmp } from "./support/tmp.ts";
 import { until } from "./support/until.ts";
+import { PROMPT_LIST_TOML } from "./support/prompt_list.ts";
 
 const DAEMON_DIR = join(import.meta.dir, "..");
 const TOKEN = "compiled-daemon-token";
@@ -33,6 +34,7 @@ test("a compiled daemon started away from daemon/ answers through the Claude Cod
   };
   await Promise.all(Object.values(dirs).map((dir) => mkdir(dir, { recursive: true })));
   await mkdir(join(dirs.workspace, "ada"));
+  await mkdir(join(dirs.config, "characters", "ada"), { recursive: true });
   await writeFile(join(dirs.workspace, "ada", "SOUL.md"), "You are Ada. Reply briefly.\n");
   await writeFile(join(dirs.claude, ".credentials.json"), JSON.stringify({
     claudeAiOauth: { accessToken: "test-access", expiresAt: Date.now() + 3_600_000, scopes: ["user:inference"], subscriptionType: "pro" },
@@ -41,7 +43,7 @@ test("a compiled daemon started away from daemon/ answers through the Claude Cod
   await writeFile(join(dirs.config, "config.toml"), [
     "[providers.subscription]", 'sdk = "claude_agent"', `base_url = ${JSON.stringify(mock.url)}`,
     "[chat]", 'model = "subscription:claude-sonnet-4-6"',
-    "[tools]", 'enabled = ["bash"]', "",
+    "[tools]", 'enabled = ["bash"]', "", PROMPT_LIST_TOML,
   ].join("\n"));
 
   const daemon = Bun.spawn([join(bin, "shore-daemon")], {

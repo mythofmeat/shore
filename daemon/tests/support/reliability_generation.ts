@@ -1,7 +1,7 @@
 import { mkdtemp, mkdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { testTmp } from "./tmp.ts";
-import { defaultAppConfig } from "../../src/config/app.ts";
+
 import { emptyCatalog } from "../../src/config/models.ts";
 import { ProviderRegistry } from "../../src/config/providers.ts";
 import type { LoadedConfig } from "../../src/config/loader.ts";
@@ -9,11 +9,12 @@ import { ConversationEngine } from "../../src/engine/conversation.ts";
 import { generationEngine, runGeneration, type GenerationDeps } from "../../src/handler/generation.ts";
 import type { SidecarProvider } from "../../src/llm/types.ts";
 import type { ServerMessage } from "../../src/protocol/ServerMessage.ts";
+import { promptedAppConfig } from "./prompt_list.ts";
 
 export async function reliabilityGeneration(provider: SidecarProvider, thread = "main") {
   const root = await mkdtemp(testTmp("reliability-"));
   const config: LoadedConfig = {
-    app: defaultAppConfig(), models: emptyCatalog(), providers: ProviderRegistry.empty(),
+    app: promptedAppConfig(), models: emptyCatalog(), providers: ProviderRegistry.empty(),
     dirs: { config: join(root, "config"), data: join(root, "data"), cache: join(root, "cache"), runtime: join(root, "runtime") },
     rawTable: undefined,
   };

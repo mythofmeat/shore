@@ -217,8 +217,17 @@ const USER_DESCRIPTIONS: Record<string, string> = {
   mcp: "Unix user this stdio server runs as: a name, uid or uid:gid. Unset runs it as the daemon's user. The daemon needs CAP_SETUID and CAP_SETGID.",
 };
 
+const PROMPT_DESCRIPTIONS: Record<string, string> = {
+  prompt: "The parts of the system prompt, in the order they are sent. Each part takes one of file, workspace or shore. A character's own list replaces this one. Without a list a reply fails.",
+  file: "File in the config directory, relative to it; the character can't read it. A template ({{char}}, {{user}}), read fresh on every request; a missing file is an error.",
+  workspace: "File in the character's workspace, relative to its root; the character can read and edit it. Sent as written. It is held as it was when the conversation started, and an edit reaches the prompt after a long pause or a compaction. A missing or empty file is left out.",
+  shore: "A part Shore writes: system_prompt is the file the model's system_prompt setting names, thread says which side thread this is, and thread_pins is what is pinned to that thread. The thread parts are only in side threads.",
+};
+
 function describeOption(path: readonly string[]): string {
   const leaf = path.at(-1) ?? "configuration";
+  const prompt = path[0] === "prompt" ? PROMPT_DESCRIPTIONS[leaf] : undefined;
+  if (prompt !== undefined) return prompt;
   const plan = path[0] === "plan_limits" ? PLAN_LIMIT_DESCRIPTIONS[leaf] : undefined;
   if (plan !== undefined) return plan;
   const triggers = path[0] === "triggers" ? TRIGGER_DESCRIPTIONS[leaf] : undefined;
@@ -244,7 +253,7 @@ function describeOption(path: readonly string[]): string {
     spend_period: "Window for spend_limit_usd: hour, day, week or month (the default).",
     reasoning_budget_tokens: "Maximum reasoning token budget, where supported by the model SDK.",
     max_tool_rounds: "Maximum model/tool iterations; positive integer.",
-    system_prompt: "Markdown file opening the system prompt, relative to the config directory. A chat model's own setting wins over its provider's, which wins over chat.system_prompt; with none set, the built-in prompt is used. Read fresh on every request.",
+    system_prompt: "Markdown file, relative to the config directory, sent where the prompt list has shore = \"system_prompt\". A chat model's own setting wins over its provider's, which wins over chat.system_prompt; with none set, that part is left out. A template, read fresh on every request.",
     max_inline_image_bytes: "Total prepared (resized) image bytes sent to the model per tool result; defaults to 5 MiB. Zero disables inline images.",
     pass_env: "Environment variables of the daemon's that a character with its own tools.user gets. It gets no others besides its locale and time zone.",
     no_new_privs: "Whether a character with its own tools.user runs its commands under no_new_privs, which stops sudo and other setuid programs from raising privileges. True by default; false only takes effect when the daemon itself runs without NoNewPrivileges.",

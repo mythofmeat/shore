@@ -91,3 +91,28 @@ describe("a section that holds named tables beside its settings", () => {
     expect([on('[tools]\nenabled = ["bash"]\n'), on('[tools]\nmcp = ["search"]\n'), on('[subagents]\nenabled = ["scout"]\n'), on('[tools]\ntimeout = "1m"\n')]).toEqual([true, true, true, false]);
   });
 });
+
+describe("the prompt list", () => {
+  test("keeps its parts in order, each as the one thing it names, with workspace paths made plain", () => {
+    expect((parsed('[[prompt]]\nshore = "system_prompt"\n[[prompt]]\nworkspace = "./workspace/notes//MAP.md"\n[[prompt]]\nfile = "prompts/x.md"\n') as { prompt: unknown }).prompt)
+      .toEqual([{ shore: "system_prompt" }, { workspace: "notes/MAP.md" }, { file: "prompts/x.md" }]);
+  });
+
+  test("refuses a part with none or two of file, workspace and shore, a workspace path that leaves the workspace or is empty, and a wrong type", () => {
+    const refusal = (toml: string): unknown => {
+      const result = parseAppConfig(parseToml(toml));
+      return "err" in result ? { err: result.err, at: (result as { at?: unknown }).at } : "parsed";
+    };
+    const exactlyOne = { err: "a prompt part takes exactly one of `file`, `workspace` or `shore`", at: ["prompt", 0] };
+    expect(refusal("[[prompt]]\n")).toEqual(exactlyOne);
+    expect(refusal('[[prompt]]\nfile = "a.md"\nworkspace = "b.md"\n')).toEqual(exactlyOne);
+    for (const path of ["../outside.md", "notes/../../outside.md", "./"]) {
+      expect(refusal(`[[prompt]]\nworkspace = "${path}"\n`)).toEqual({ err: `\`${path}\` is not a path inside the workspace`, at: ["prompt", 0, "workspace"] });
+    }
+    expect(refusal("[[prompt]]\nworkspace = 3\n")).toEqual({ err: "invalid type: integer `3`, expected string", at: ["prompt", 0, "workspace"] });
+    expect(refusal("[[prompt]]\nfile = 3\n")).toEqual({ err: "invalid type: integer `3`, expected string", at: ["prompt", 0, "file"] });
+    expect(refusal('[[prompt]]\nshore = "memory"\n')).toEqual({ err: "unknown variant `memory`, expected one of `system_prompt`, `thread`, `thread_pins`", at: ["prompt", 0, "shore"] });
+    expect(refusal('[[prompt]]\nfile = "a.md"\nwhen = "home"\n')).toEqual({ err: "unknown field `when`, expected one of `file`, `workspace`, `shore`", at: ["prompt", 0] });
+  });
+
+});

@@ -6,7 +6,8 @@ import { join } from "node:path";
 import { renderTemplate } from "../src/engine/prompt";
 import { expandPromptMacros, subagentToolSubset, type RegisteredTool } from "../src/tools/subagent";
 import { ALL_TOOLS } from "../src/tools/registry";
-import { PathError, normalizePromptVisiblePath, resolvePath, resolveRoots } from "../src/tools/workspace_path";
+import { PathError, promptFileAt, resolvePath, resolveRoots } from "../src/tools/workspace_path";
+import { CharacterWorkspace } from "../src/tools/character_workspace.ts";
 import type { ContentBlock, Message, Role } from "../src/engine/types";
 
 interface Layout {
@@ -225,12 +226,14 @@ describe("expansion is terminal", () => {
     }
   });
 
-  test("the snapshot lookup key can only ever be a known filename", async () => {
-    expect(normalizePromptVisiblePath("../SOUL.md")).toBeUndefined();
+  test("the snapshot lookup key can only ever be a listed prompt file", async () => {
+    expect(promptFileAt(["SOUL.md"], "../SOUL.md")).toBeUndefined();
+    expect(promptFileAt(["SOUL.md"], "./workspace/SOUL.md")).toBe("SOUL.md");
     expect(
       await expandPromptMacros("[{{file: ../SOUL.md}}]", {
         characterDataDir: withSnapshot.data,
         workspaceDir: withSnapshot.ws,
+        workspace: new CharacterWorkspace(withSnapshot.ws, undefined, ["SOUL.md"]),
         history: [],
         charName: "C",
         userName: "U",
@@ -258,8 +261,10 @@ describe("subagentToolSubset", () => {
 describe("pulling a file into a prompt", () => {
   const ctx = (layout: Layout, warn?: (path: string, why: string) => void) => ({ characterDataDir: layout.data, workspaceDir: layout.ws, history: [], charName: "C", userName: "U", ...(warn === undefined ? {} : { warn }) });
 
-  test("a prompt file comes from the snapshot the conversation started with, not the workspace", async () => {
-    expect(await expandPromptMacros("{{file: SOUL.md}}", ctx(withSnapshot))).toBe("SNAPSHOT SOUL");
+  test("a file the prompt list names comes from the snapshot the conversation started with, and any other from the workspace", async () => {
+    const listing = (promptFiles: string[]) => ({ ...ctx(withSnapshot), workspace: new CharacterWorkspace(withSnapshot.ws, undefined, promptFiles) });
+    expect(await expandPromptMacros("{{file: SOUL.md}}", listing(["SOUL.md"]))).toBe("SNAPSHOT SOUL");
+    expect(await expandPromptMacros("{{file: SOUL.md}}", listing(["MEMORY.md"]))).toBe("WORKSPACE SOUL");
   });
 
   test("a missing file expands to nothing and says it couldn't be read; a refused path gives the reason", async () => {

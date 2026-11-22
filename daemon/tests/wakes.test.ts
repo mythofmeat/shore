@@ -6,7 +6,7 @@ import { dirname, join } from "node:path";
 
 import { registrationFor, TurnAutonomyBridge } from "../src/autonomy/registration.ts";
 import { rebuildRequestFromDisk } from "../src/cache/rebuild.ts";
-import { defaultAppConfig, type AppConfig } from "../src/config/app.ts";
+import { type AppConfig } from "../src/config/app.ts";
 import { ConfigDuration } from "../src/config/duration.ts";
 import type { LoadedConfig } from "../src/config/loader.ts";
 import { emptyCatalog } from "../src/config/models.ts";
@@ -46,6 +46,7 @@ import { restoreTestEnv, setTestEnv, unsetTestEnv } from "./support/env.ts";
 import { NO_MCP } from "./support/rebuild.ts";
 import { outcomeOf, rejectionOf } from "./support/outcome.ts";
 import { testTmp } from "./support/tmp.ts";
+import { promptedAppConfig } from "./support/prompt_list.ts";
 
 const MINUTE = 60_000;
 const T0 = Date.UTC(2026, 9, 30, 12);
@@ -182,7 +183,7 @@ async function withCharacter(run: (h: Harness) => Promise<void>, configure?: (ap
   setTestEnv(KEY_ENV, "fixture-key");
   if (kept === undefined) at(0);
   const root = kept ?? await mkdtemp(testTmp("shore-wakes-"));
-  const app = defaultAppConfig();
+  const app = promptedAppConfig();
   app.chat.model = "fixture";
   app.chat.max_retries = 0;
   app.compaction.enabled = false;

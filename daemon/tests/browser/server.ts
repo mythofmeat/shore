@@ -12,6 +12,7 @@ import { toolFixture } from "../support/tool_fixture.ts";
 import { seedUsageFixture, USAGE_FIXTURE_CONFIG } from "../support/usage_fixture.ts";
 import { sizedImage } from "../support/sized_image.ts";
 import { SQUARE_WEBM_16X16_ONE_SECOND, STRIP_WEBM_64X16_ONE_SECOND } from "../support/tiny_videos.ts";
+import { PROMPT_LIST_TOML } from "../support/prompt_list.ts";
 
 answerPricingCatalogsWithNoModels();
 const root = await mkdtemp(join(tmpdir(), "shore-gui-test-"));
@@ -70,7 +71,7 @@ enabled = true
 bind_addr = ${JSON.stringify(process.env["SHORE_BROWSER_WEB_BIND"] ?? "127.0.0.1:0")}
 ${process.env["SHORE_BROWSER_USAGE_SEED"] === "true" ? USAGE_FIXTURE_CONFIG : ""}
 ${process.env["SHORE_BROWSER_CALM_BUDGET"] === "true" ? '[[budgets]]\nname = "Quiet"\nperiod = "month"\ncost_usd = 10\nwarn_fractions = [0.5]\ncharacter = "quiet"\n' : ""}
-`);
+${PROMPT_LIST_TOML}`);
 const PICTURE = (await sizedImage(48, 32)).toString("base64");
 let generation = 0;
 const answered = new Set<string>();

@@ -188,7 +188,7 @@ fn render_character_info(data: &serde_json::Value) -> String {
         }
     }
     if let Some(prompts) = data
-        .get("prompt_overrides")
+        .get("prompt_files")
         .and_then(serde_json::Value::as_array)
     {
         let names = prompts
@@ -196,15 +196,8 @@ fn render_character_info(data: &serde_json::Value) -> String {
             .filter_map(serde_json::Value::as_str)
             .collect::<Vec<_>>();
         if !names.is_empty() {
-            lines.push(format!("Prompt overrides: {}", names.join(", ")));
+            lines.push(format!("Prompt files: {}", names.join(", ")));
         }
-    }
-    if let Some(preview) = data
-        .get("definition_preview")
-        .and_then(serde_json::Value::as_str)
-        .filter(|preview| !preview.is_empty())
-    {
-        lines.push(format!("\n{preview}"));
     }
     lines.join("\n")
 }
@@ -620,6 +613,30 @@ mod tests {
                 "{input}: {shown}"
             );
         }
+    }
+
+    #[test]
+    fn character_info_names_the_prompt_files_in_the_workspace_and_only_when_there_are_some() {
+        let details = |files: serde_json::Value| {
+            json!({
+                "name": "ada", "active": true, "config_dir": "/cfg/ada", "workspace_dir": "/ws/ada",
+                "prompt_files": files, "has_config_override": false, "pending_deferred_edits": [],
+                "data_dir": "/data/ada", "has_data": true
+            })
+        };
+        assert_eq!(
+            super::render("character info", "character_info", &details(json!(["SOUL.md", "notes/MAP.md"])), "ada"),
+            Some("Character: ada\nActive: yes\nConfig: /cfg/ada\nData: /data/ada\nPrompt files: SOUL.md, notes/MAP.md".to_owned())
+        );
+        assert_eq!(
+            super::render(
+                "character info",
+                "character_info",
+                &details(json!([])),
+                "ada"
+            ),
+            Some("Character: ada\nActive: yes\nConfig: /cfg/ada\nData: /data/ada".to_owned())
+        );
     }
 
     #[test]

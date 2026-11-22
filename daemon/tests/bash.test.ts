@@ -1,9 +1,12 @@
 import { describe, expect, test } from "bun:test";
-import { mkdtemp, readFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { dispatchTool, dispatchWithinDeadline, windowToolResult, withResultCeiling, type ToolContext } from "../src/tools/dispatch.ts";
+import { withPromptChanges } from "../src/tools/bash.ts";
+import { rejectionOf } from "./support/outcome.ts";
 import { runToolUse, type ToolExecution } from "../src/tools/execute.ts";
+import { CharacterWorkspace } from "../src/tools/character_workspace.ts";
 import { BUILTIN_TOOL_SCHEMAS } from "./support/builtin_tool_schemas.ts";
 import type { ServerMessage } from "../src/protocol/ServerMessage.ts";
 
@@ -76,16 +79,17 @@ describe("bash on Shore's tool surface", () => {
     expect(await Bun.file(join(ctx.workspaceDir, "marker")).exists()).toBe(false);
   });
 
-  test("timeout kills descendants and queues edits made before cancellation", async () => {
+  test("timeout kills descendants and queues the edits to listed prompt files made before cancellation", async () => {
     const { ctx } = await world();
+    ctx.workspace = new CharacterWorkspace(ctx.workspaceDir, undefined, ["notes/MAP.md"]);
     const queued: string[] = [];
     ctx.deferEdit = (path) => { queued.push(path); };
     expect(await failure(dispatchWithinDeadline("bash", {
-      command: "printf partial > MEMORY.md; (trap '' TERM; sleep 1; printf leaked > leaked.txt) & wait",
+      command: "mkdir notes; printf partial > notes/MAP.md; printf other > MEMORY.md; (trap '' TERM; sleep 1; printf leaked > leaked.txt) & wait",
     }, ctx, 150))).toContain("timed out");
     await Bun.sleep(1100);
-    expect(await readFile(join(ctx.workspaceDir, "MEMORY.md"), "utf8")).toBe("partial");
-    expect(queued).toEqual(["MEMORY.md"]);
+    expect(await readFile(join(ctx.workspaceDir, "notes", "MAP.md"), "utf8")).toBe("partial");
+    expect(queued).toEqual(["notes/MAP.md"]);
     expect(await Bun.file(join(ctx.workspaceDir, "leaked.txt")).exists()).toBe(false);
   });
 
@@ -187,5 +191,64 @@ describe("bash on Shore's tool surface", () => {
     expect(await stopped("echo one; echo")).toBe("timed out after 0s and was cancelled\nOutput before it was stopped:\none\n");
     expect(await stopped("echo two >&2")).toBe("timed out after 0s and was cancelled\nOutput before it was stopped:\nstderr:\ntwo");
     expect(await stopped("true")).toBe("timed out after 0s and was cancelled\nIt printed nothing before it was stopped.");
+  });
+});
+
+describe("a file tool that changes a workspace file the prompt lists", () => {
+  test("edit and apply_patch queue the prompt reload and say so, for a listed file under any name and for no other", async () => {
+    const { ctx } = await world();
+    ctx.workspace = new CharacterWorkspace(ctx.workspaceDir, undefined, ["notes/MAP.md"]);
+    await mkdir(join(ctx.workspaceDir, "notes"), { recursive: true });
+    await writeFile(join(ctx.workspaceDir, "notes", "MAP.md"), "old map\n");
+    await writeFile(join(ctx.workspaceDir, "MEMORY.md"), "old memory\n");
+    const queued: string[] = [];
+    ctx.deferEdit = (path) => { queued.push(path); };
+
+    expect(await dispatchTool("edit", { file_path: "notes/MAP.md", old_string: "old", new_string: "new" }, ctx))
+      .toBe(`${join(ctx.workspaceDir, "notes", "MAP.md")}: replaced 1 exact occurrence\nPrompt reload queued: notes/MAP.md.`);
+    expect(await dispatchTool("edit", { file_path: "MEMORY.md", old_string: "old", new_string: "new" }, ctx))
+      .toBe(`${join(ctx.workspaceDir, "MEMORY.md")}: replaced 1 exact occurrence`);
+    expect(await dispatchTool("apply_patch", { patch: "*** Begin Patch\n*** Update File: notes/MAP.md\n@@\n-new map\n+newer map\n*** End Patch" }, ctx))
+      .toMatchObject({ exit_code: 0, prompt_files_changed: ["notes/MAP.md"] });
+    expect(await dispatchTool("apply_patch", { patch: "*** Begin Patch\n*** Update File: MEMORY.md\n@@\n-new memory\n+newer memory\n*** End Patch" }, ctx))
+      .not.toHaveProperty("prompt_files_changed");
+    expect(queued).toEqual(["notes/MAP.md", "notes/MAP.md"]);
+  });
+
+  test("a patch that fails part way still queues and reports the listed file it changed first", async () => {
+    const { ctx } = await world();
+    ctx.workspace = new CharacterWorkspace(ctx.workspaceDir, undefined, ["MAP.md"]);
+    await mkdir(ctx.workspaceDir, { recursive: true });
+    await writeFile(join(ctx.workspaceDir, "MAP.md"), "old\n");
+    const queued: string[] = [];
+    ctx.deferEdit = (path) => { queued.push(path); };
+
+    const patched = await dispatchTool("apply_patch", { patch: "*** Begin Patch\n*** Update File: MAP.md\n@@\n-old\n+new\n*** Update File: absent.md\n@@\n-x\n+y\n*** End Patch" }, ctx);
+    expect(patched).toMatchObject({ prompt_files_changed: ["MAP.md"] });
+    expect(patched).not.toMatchObject({ exit_code: 0 });
+    expect(queued).toEqual(["MAP.md"]);
+  });
+});
+
+describe("reading the listed prompt files around a write", () => {
+  function failingReads(dir: string, error: { message: string; code?: string }): CharacterWorkspace {
+    const workspace = new CharacterWorkspace(dir, undefined, ["MAP.md"]);
+    const call = workspace.call.bind(workspace);
+    const failing = async (op: string, args: unknown, signal?: AbortSignal): Promise<unknown> =>
+      op === "readFiles" ? [{ error }] : await call(op as never, args as never, signal);
+    return Object.assign(workspace, { call: failing as CharacterWorkspace["call"] });
+  }
+
+  test("a read that fails for any reason but the file being missing or unreadable stops the write, with its code when it has one", async () => {
+    const { ctx } = await world();
+    let wrote = false;
+    const write = async () => { wrote = true; return "done"; };
+    const coded = await rejectionOf(withPromptChanges(failingReads(ctx.workspaceDir, { message: "disk on fire", code: "EIO" }), write));
+    expect(coded).toBeInstanceOf(Error);
+    expect([(coded as Error).message, (coded as NodeJS.ErrnoException).code]).toEqual(["disk on fire", "EIO"]);
+    const bare = await rejectionOf(withPromptChanges(failingReads(ctx.workspaceDir, { message: "no reason given" }), write));
+    expect([(bare as Error).message, Object.hasOwn(bare as object, "code")]).toEqual(["no reason given", false]);
+    expect(wrote).toBe(false);
+    expect(await withPromptChanges(failingReads(ctx.workspaceDir, { message: "gone", code: "ENOENT" }), write)).toBe("done");
   });
 });

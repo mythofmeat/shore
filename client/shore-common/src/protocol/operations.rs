@@ -2799,7 +2799,6 @@ wire_types! {
         pub character: String,
         pub workspace_dir: String,
         pub config_dir: String,
-        pub created_files: Vec<String>,
     }
 
     pub struct CharacterDetails {
@@ -2807,9 +2806,7 @@ wire_types! {
         pub active: bool,
         pub config_dir: String,
         pub workspace_dir: String,
-        pub has_definition: bool,
-        pub definition_preview: Option<String>,
-        pub bootstrap_files: Vec<String>,
+        pub prompt_files: Vec<String>,
         pub has_config_override: bool,
         pub pending_deferred_edits: Vec<String>,
         pub data_dir: String,

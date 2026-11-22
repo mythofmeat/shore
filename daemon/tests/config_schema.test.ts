@@ -368,3 +368,13 @@ test("a setting is described by what its section says of it, a user by the secti
   expect(described("usage.timezone")).toBe("timezone for usage.");
   expect(described("notifications.push_every_sound")).toBeUndefined();
 });
+
+test("the prompt list and each kind of part are described as parts of the prompt, apart from a subagent's prompt", () => {
+  const entries = configSchema({ instancesAt: (path) => path === "subagents" ? ["notes"] : [] });
+  const described = (key: string): string | undefined => entries.find((entry) => entry.key === key)?.description;
+  expect(described("prompt")).toStartWith("The parts of the system prompt, in the order they are sent.");
+  expect(described('prompt."<index>".file')).toStartWith("File in the config directory, relative to it; the character can't read it.");
+  expect(described('prompt."<index>".workspace')).toStartWith("File in the character's workspace, relative to its root;");
+  expect(described('prompt."<index>".shore')).toStartWith("A part Shore writes: system_prompt is the file");
+  expect(described("subagents.notes.prompt")).toBe("prompt for subagents.");
+});

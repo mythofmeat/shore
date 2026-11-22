@@ -4,7 +4,7 @@ import { afterEach, describe, expect, test } from "bun:test";
 import { mkdtemp, mkdir } from "node:fs/promises";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
-import { defaultAppConfig, type AppConfig } from "../src/config/app.ts";
+import { type AppConfig } from "../src/config/app.ts";
 import { emptyCatalog, type ResolvedModel } from "../src/config/models.ts";
 import { ProviderRegistry } from "../src/config/providers.ts";
 import type { LoadedConfig } from "../src/config/loader.ts";
@@ -17,6 +17,7 @@ import { consumeStream } from "../src/llm/stream.ts";
 import type { SidecarRequest, StreamEvent } from "../src/llm/types.ts";
 import { startMockAnthropic, type MockAnthropic } from "../src/testing/mock_anthropic.ts";
 import { setTestEnv } from "./support/env.ts";
+import { promptedAppConfig } from "./support/prompt_list.ts";
 
 type Reply = NonNullable<NonNullable<Parameters<typeof startMockAnthropic>[0]>["script"]>;
 
@@ -61,7 +62,7 @@ async function loadedConfig(root: string): Promise<LoadedConfig> {
   for (const d of Object.values(dirs)) await mkdir(d, { recursive: true });
   await mkdir(join(dirs.data, "frank"), { recursive: true });
 
-  const app: AppConfig = defaultAppConfig();
+  const app: AppConfig = promptedAppConfig();
   app.chat.model = "fixture";
   return {
     app,

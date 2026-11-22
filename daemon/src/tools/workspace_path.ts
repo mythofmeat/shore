@@ -12,10 +12,6 @@ export class PathError extends Error {
 
 export const WORKSPACE_LINK = /^(!?)\[\[([^[\]\n]*)\]\]$/;
 
-const PROTECTED_PATHS = ["SOUL.md", "USER.md", "TOOLS.md"] as const;
-
-const MEMORY_INDEX_DEFERRED_PATH = "MEMORY.md";
-
 export function resolveRoots(workspaceDir: string, relativeRaw: string): [string, string] {
   if (workspaceDir === "") throw new PathError("invalid args: workspace not configured");
 
@@ -103,15 +99,7 @@ export function normalizeWorkspacePath(path: string): string {
   return normalized;
 }
 
-export function normalizeProtectedPath(path: string): string | undefined {
-  const normalized = normalizeWorkspacePath(path);
-  return (PROTECTED_PATHS as readonly string[]).includes(normalized) ? normalized : undefined;
-}
-
-export function normalizePromptVisiblePath(path: string): string | undefined {
-  const normalized = normalizeWorkspacePath(path);
-  const protectedName = normalizeProtectedPath(normalized);
-  if (protectedName !== undefined) return protectedName;
-  if (normalized === MEMORY_INDEX_DEFERRED_PATH) return MEMORY_INDEX_DEFERRED_PATH;
-  return undefined;
+export function promptFileAt(promptFiles: readonly string[], path: string): string | undefined {
+  const normalized = pathComponents(normalizeWorkspacePath(path)).join("/");
+  return promptFiles.includes(normalized) ? normalized : undefined;
 }

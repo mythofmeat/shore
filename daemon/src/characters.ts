@@ -1,11 +1,10 @@
 import { shoreLog } from "./log.ts";
 
 import {
+  characterConfigDir,
   characterDataDir,
-  characterWorkspaceFile,
   threadDataDir,
   discoverCharacters,
-  SOUL_FILE,
 } from "./config/dirs.ts";
 import { toolEnabled } from "./config/app.ts";
 import { ConfigError, loadCharacterConfig, type LoadedConfig } from "./config/loader.ts";
@@ -50,7 +49,6 @@ import {
   type ThreadsIndex,
 } from "./engine/threads.ts";
 import {
-  ensureCharacterWorkspace,
   resetActivePromptSnapshotIfEmpty,
 } from "./memory/deferred_edits.ts";
 import { characterWorkspace } from "./tools/character_workspace.ts";
@@ -85,12 +83,11 @@ export class CharacterError extends Error {
     );
   }
 
-  static noneAvailable(configDir: string, workspaceRoot?: string): CharacterError {
-    const soul = characterWorkspaceFile(configDir, "<name>", SOUL_FILE, workspaceRoot);
+  static noneAvailable(configDir: string): CharacterError {
     return new CharacterError(
       "none_available",
-      `no characters available — create one at ${soul}, ` +
-        "or run: shore character --new <name>",
+      `no characters available — create a folder for one at ${characterConfigDir(configDir, "<name>")}, ` +
+        "or run: shore character new <name>",
     );
   }
 
@@ -162,14 +159,15 @@ export class CharacterRegistry {
   }
 
   async #scan(): Promise<string[]> {
-    const found = discoverCharacters(this.#configDir, this.#workspaceRoot());
+    const found = discoverCharacters(this.#configDir);
     for (const name of found) {
       try {
         await recoverForks(this.#dataDir, name);
         const index = await this.#withThreadIndex(name, async () =>
           this.#remember(name, await ensureThreads(this.#dataDir, name, new Date().toISOString())),
         );
-        await ensureCharacterWorkspace(characterWorkspace(this.#globalConfig, name));
+        const workspace = characterWorkspace(this.#globalConfig, name);
+        await workspace.call("mkdir", { path: workspace.dir });
         await resetActivePromptSnapshotIfEmpty(
           characterDataDir(this.#dataDir, name),
           threadDataDir(this.#dataDir, name, homeThread(index)),
@@ -320,7 +318,7 @@ export class CharacterRegistry {
   async #threadPins(name: string, pins: readonly string[], signal?: AbortSignal): Promise<string[]> {
     const workspace = characterWorkspace(this.#globalConfig, name);
     return await resolveThreadPins(pins, async (requested) =>
-      await workspace.call("locateFiles", { workspaceDir: workspace.dir, files: requested }, signal));
+      await workspace.call("locateFiles", { workspaceDir: workspace.dir, files: requested }, signal), workspace.promptFiles);
   }
 
   async archiveThread(
@@ -536,10 +534,6 @@ export class CharacterRegistry {
     return index;
   }
 
-  #workspaceRoot(): string | undefined {
-    return this.#globalConfig.dirs.workspace;
-  }
-
   effectiveConfig(name: string): LoadedConfig {
     if (!this.#charConfigs.has(name)) {
       try {
@@ -604,10 +598,9 @@ export class CharacterRegistry {
         throw CharacterError.notFound(requested, this.#available);
       }
       this.#selected = requested;
-      return requested;
     }
     if (this.#available.length === 0) {
-      throw CharacterError.noneAvailable(this.#configDir, this.#workspaceRoot());
+      throw CharacterError.noneAvailable(this.#configDir);
     }
     const held = this.selectedCharacter();
     if (held !== undefined) return held;

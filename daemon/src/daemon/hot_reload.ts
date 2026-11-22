@@ -1,7 +1,7 @@
 import { watch, type FSWatcher } from "node:fs";
 import { isAbsolute, resolve, sep } from "node:path";
 
-import { CHARACTER_WORKSPACE_DIR, SOUL_FILE } from "../config/dirs.ts";
+import { CHARACTER_WORKSPACE_DIR } from "../config/dirs.ts";
 
 const DEBOUNCE_MS = 500;
 
@@ -40,8 +40,6 @@ export interface ConfigWatcherOptions {
   readonly configPath: string;
   readonly configDir: string;
   readonly reload: (changedPaths: readonly string[]) => Promise<void>;
-  readonly knownCharacter?: ((name: string) => boolean) | undefined;
-  readonly workspaceDir?: string | undefined;
   readonly log?: {
     info?: (msg: string, fields?: Record<string, unknown>) => void;
     warn?: (msg: string, fields?: Record<string, unknown>) => void;
@@ -63,8 +61,6 @@ export function startConfigWatcher(
   let inFlight: Promise<void> = Promise.resolve();
 
   const fire = () => {
-    timer = undefined;
-    if (stopped || pending.size === 0) return;
     const changedPaths = [...pending].sort();
     pending.clear();
     inFlight = inFlight.then(async () => {
@@ -108,25 +104,13 @@ export function startConfigWatcher(
   };
 
   const watcher = start(options.configDir, (path) =>
-    pathTriggersReload(options.configDir, options.configPath, path, options.knownCharacter),
+    pathTriggersReload(options.configDir, options.configPath, path),
   );
   if (watcher === undefined) return undefined;
-
-  const workspaceWatcher =
-    options.workspaceDir === undefined
-      ? undefined
-      : start(options.workspaceDir, (path) =>
-          workspacePathTriggersReload(
-            options.workspaceDir as string,
-            path,
-            options.knownCharacter,
-          ),
-        );
 
   options.log?.info?.("Config hot reload watcher started", {
     config_path: options.configPath,
     config_dir: options.configDir,
-    ...(options.workspaceDir === undefined ? {} : { workspace_dir: options.workspaceDir }),
   });
 
   return {
@@ -134,36 +118,16 @@ export function startConfigWatcher(
       stopped = true;
       if (timer !== undefined) clock.clear(timer);
       watcher.close();
-      workspaceWatcher?.close();
       await inFlight;
       options.log?.info?.("Config hot reload watcher stopped");
     },
   };
 }
 
-export function workspacePathTriggersReload(
-  workspaceDirIn: string,
-  pathIn: string,
-  knownCharacter?: ((name: string) => boolean),
-): boolean {
-  const relative = stripPrefix(absolutize(workspaceDirIn), absolutize(pathIn));
-  if (relative === undefined) return false;
-  const parts = relative.split(sep).filter((part) => part !== "" && part !== ".");
-  const name = parts[0];
-  return (
-    parts.length === 2 &&
-    parts[1] === SOUL_FILE &&
-    name !== undefined &&
-    knownCharacter !== undefined &&
-    !knownCharacter(name)
-  );
-}
-
 export function pathTriggersReload(
   configDirIn: string,
   configPathIn: string,
   pathIn: string,
-  knownCharacter?: ((name: string) => boolean),
 ): boolean {
   const configDir = absolutize(configDirIn);
   const configPath = absolutize(configPathIn);
@@ -177,29 +141,13 @@ export function pathTriggersReload(
   const first = parts[0];
   if (first === undefined) return false;
 
-  if (first === "characters" && parts[2] === CHARACTER_WORKSPACE_DIR) {
-    const name = parts[1];
-    return (
-      parts.length === 4 &&
-      parts[3] === SOUL_FILE &&
-      name !== undefined &&
-      knownCharacter !== undefined &&
-      !knownCharacter(name)
-    );
-  }
+  if (first === "characters" && parts[2] === CHARACTER_WORKSPACE_DIR) return false;
 
   if (parts.length === 1 && first === ".env") return true;
 
   if (first === "conf.d") return parts.length === 1 || hasTomlExtension(path);
 
-  if (first === "characters") {
-    if (parts.length === 1) return true;
-    if (parts.length === 2) return true;
-    if (parts.length === 3 && (parts[2] === "config.toml" || parts[2] === "character.md")) {
-      return true;
-    }
-    return hasTomlExtension(path);
-  }
+  if (first === "characters" && (parts.length <= 2 || (parts.length === 3 && parts[2] === "character.md"))) return true;
 
   return hasTomlExtension(path);
 }

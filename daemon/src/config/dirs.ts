@@ -4,9 +4,6 @@ import { tmpdir, userInfo } from "node:os";
 import { compareByCodePoint } from "../util/sort.ts";
 
 export const CHARACTER_WORKSPACE_DIR = "workspace";
-export const SOUL_FILE = "SOUL.md";
-export const USER_FILE = "USER.md";
-export const TOOLS_FILE = "TOOLS.md";
 const MEMORY_DIR = "memory";
 
 const ACTIVE_JSONL_FILE = "active.jsonl";
@@ -128,7 +125,7 @@ export function rustJoin(base: string, ...parts: string[]): string {
 export const pluginsDir = (data: string): string => rustJoin(data, PLUGINS_DIR);
 
 export function isUsableCharacterName(name: string): boolean {
-  if (name === "" || name === "." || name === "..") return false;
+  if (name === "" || name.startsWith(".")) return false;
   return !/[/\\\0]/.test(name);
 }
 
@@ -213,11 +210,15 @@ export function readOrUndefined(path: string): string | undefined {
   }
 }
 
-export function discoverCharacters(config: string, workspaceDir?: string): string[] {
-  const root = workspaceDir ?? rustJoin(config, "characters");
+export function discoverCharacters(config: string): string[] {
+  const root = rustJoin(config, "characters");
   return readdirOrEmpty(root).filter(name =>
-    isUsableCharacterName(name) && pathExists(characterWorkspaceFile(config, name, SOUL_FILE, workspaceDir)),
+    isUsableCharacterName(name) && isDirectory(rustJoin(root, name)),
   ).sort(compareByCodePoint);
+}
+
+function isDirectory(path: string): boolean {
+  return statSync(path, { throwIfNoEntry: false })?.isDirectory() === true;
 }
 
 function readdirOrEmpty(dir: string): string[] {

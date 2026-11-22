@@ -4,7 +4,7 @@ import { join } from "node:path";
 
 import { CharacterRegistry } from "../src/characters.ts";
 import { threadLock } from "../src/commands/threads.ts";
-import { defaultAppConfig } from "../src/config/app.ts";
+
 import type { LoadedConfig } from "../src/config/loader.ts";
 import { emptyCatalog, type ResolvedModel } from "../src/config/models.ts";
 import { ProviderRegistry } from "../src/config/providers.ts";
@@ -23,6 +23,7 @@ import { handleListThreads } from "../src/tools/list_threads.ts";
 import { startThreadRequest } from "../src/tools/start_thread.ts";
 import { outcomeOf, rejectionOf } from "./support/outcome.ts";
 import { testTmp } from "./support/tmp.ts";
+import { promptedAppConfig } from "./support/prompt_list.ts";
 
 const NOW = "2026-11-01T10:00:00Z";
 
@@ -52,7 +53,7 @@ async function setup(files: Record<string, string>) {
   const dirs = { config: join(root, "config"), data: join(root, "data"), cache: join(root, "cache"), runtime: join(root, "run") };
   for (const dir of Object.values(dirs)) await mkdir(dir, { recursive: true });
   initializeDatabase(dirs.data);
-  const app = defaultAppConfig();
+  const app = promptedAppConfig();
   app.chat.display_name = "Sam";
   const config: LoadedConfig = { app, models: emptyCatalog(), providers: ProviderRegistry.empty(), dirs, rawTable: undefined };
   const workspace = characterWorkspace(config, "frank").dir;

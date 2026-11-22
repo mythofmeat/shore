@@ -1,18 +1,12 @@
-import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { mkdirSync, readFileSync } from "node:fs";
 
 import {
-  SOUL_FILE,
-  TOOLS_FILE,
-  USER_FILE,
   characterConfigDir,
   characterDataDir,
-  characterWorkspaceDir,
-  characterWorkspaceFile,
   discoverCharacters,
   isFile,
   isUsableCharacterName,
   pathExists,
-  readOrUndefined,
   rustJoin,
 } from "../config/dirs.ts";
 import { pendingDeferredEditPaths } from "../memory/deferred_edits.ts";
@@ -59,27 +53,19 @@ export function characterMetadata(configDir: string, name: string): CharacterInf
 export function listCharacters(
   configDir: string,
   active?: string,
-  workspaceRoot?: string,
 ): CharacterListing {
   const characters = active === undefined ? [] : [characterMetadata(configDir, active)];
-  for (const name of discoverCharacters(configDir, workspaceRoot)) {
+  for (const name of discoverCharacters(configDir)) {
     if (name !== active) characters.push(characterMetadata(configDir, name));
   }
   return { characters };
 }
 
-export const listCharactersStandalone = (
-  configDir: string,
-  workspaceRoot?: string,
-): CharacterListing => listCharacters(configDir, undefined, workspaceRoot);
-
-const PREVIEW_CHARS = 500;
-
 export interface CharacterInfoContext {
   configDir: string;
   dataDir: string;
   active: string;
-  workspaceRoot?: string | undefined;
+  workspaceFor: (name: string) => CharacterWorkspace;
 }
 
 export async function characterInfo(ctx: CharacterInfoContext, args: Args): Promise<CharacterDetails> {
@@ -88,19 +74,10 @@ export async function characterInfo(ctx: CharacterInfoContext, args: Args): Prom
   requireUsableCharacterName(name);
 
   const charDir = characterConfigDir(ctx.configDir, name);
-  const workspaceDir = characterWorkspaceDir(ctx.configDir, name, ctx.workspaceRoot);
-  if (!pathExists(charDir) && !pathExists(workspaceDir) && name !== ctx.active) {
+  if (!pathExists(charDir) && name !== ctx.active) {
     throw notFound(`Character not found: ${name}`);
   }
-
-  const definitionPath = characterWorkspaceFile(
-    ctx.configDir,
-    name,
-    SOUL_FILE,
-    ctx.workspaceRoot,
-  );
-  const hasDefinition = pathExists(definitionPath);
-  const definition = hasDefinition ? readOrUndefined(definitionPath) : undefined;
+  const workspace = ctx.workspaceFor(name);
 
   const dataDir = characterDataDir(ctx.dataDir, name);
   const pending = await pendingDeferredEditPaths(dataDir).catch(() => []);
@@ -109,30 +86,14 @@ export async function characterInfo(ctx: CharacterInfoContext, args: Args): Prom
     name,
     active: name === ctx.active,
     config_dir: charDir,
-    workspace_dir: workspaceDir,
-    has_definition: hasDefinition,
-    definition_preview:
-      definition === undefined ? null : Array.from(definition).slice(0, PREVIEW_CHARS).join(""),
-    bootstrap_files: [SOUL_FILE, USER_FILE, TOOLS_FILE].filter((file) =>
-      pathExists(characterWorkspaceFile(ctx.configDir, name, file, ctx.workspaceRoot)),
-    ),
+    workspace_dir: workspace.dir,
+    prompt_files: workspace.promptFiles.filter((file) => pathExists(rustJoin(workspace.dir, file))),
     has_config_override: pathExists(rustJoin(charDir, "config.toml")),
     pending_deferred_edits: pending,
     data_dir: dataDir,
     has_data: pathExists(dataDir),
   };
 }
-
-
-const soulTemplate = (name: string): string => `You are ${name}.\n`;
-
-const scaffoldedFiles = (
-  name: string,
-): readonly (readonly [file: string, content: string])[] => [
-  [SOUL_FILE, soulTemplate(name)],
-  [USER_FILE, ""],
-  [TOOLS_FILE, ""],
-];
 
 function requestedCharacterName(args: Args): string {
   const name = asStr(args["name"]);
@@ -143,46 +104,15 @@ function requestedCharacterName(args: Args): string {
   return name;
 }
 
-export function createCharacter(
+export async function createCharacter(
   configDir: string,
   args: Args,
-  workspaceRoot?: string,
-): CharacterCreated {
-  const name = requestedCharacterName(args);
-
-  const workspaceDir = characterWorkspaceDir(configDir, name, workspaceRoot);
-  if (pathExists(rustJoin(workspaceDir, SOUL_FILE))) {
-    throw invalidRequest(`Character '${name}' already exists at ${workspaceDir}`);
-  }
-
-  mkdirSync(workspaceDir, { recursive: true });
-  const created: string[] = [];
-  for (const [file, content] of scaffoldedFiles(name)) {
-    const path = rustJoin(workspaceDir, file);
-    if (pathExists(path)) continue;
-    writeFileSync(path, content);
-    created.push(file);
-  }
-
-  return {
-    character: name,
-    workspace_dir: workspaceDir,
-    config_dir: characterConfigDir(configDir, name),
-    created_files: created,
-  };
-}
-
-export async function createCharacterAs(
-  configDir: string,
-  args: Args,
-  workspaceRoot: string | undefined,
   workspaceFor: (name: string) => CharacterWorkspace,
 ): Promise<CharacterCreated> {
   const name = requestedCharacterName(args);
+  const charDir = characterConfigDir(configDir, name);
+  if (pathExists(charDir)) throw invalidRequest(`Character '${name}' already exists at ${charDir}`);
   const workspace = workspaceFor(name);
-  if (!workspace.isolated) return createCharacter(configDir, args, workspaceRoot);
-  const [soul = false] = await workspace.call("exists", { paths: [rustJoin(workspace.dir, SOUL_FILE)] });
-  if (soul) throw invalidRequest(`Character '${name}' already exists at ${workspace.dir}`);
   try {
     await workspace.call("mkdir", { path: workspace.dir });
   } catch (error) {
@@ -191,17 +121,8 @@ export async function createCharacterAs(
         `(${error instanceof Error ? error.message : String(error)}): create that folder owned by them first`,
     );
   }
-  const created: string[] = [];
-  for (const [file, content] of scaffoldedFiles(name)) {
-    const data = Buffer.from(content, "utf8").toString("base64");
-    if (await workspace.call("createFile", { path: rustJoin(workspace.dir, file), data })) created.push(file);
-  }
-  return {
-    character: name,
-    workspace_dir: workspace.dir,
-    config_dir: characterConfigDir(configDir, name),
-    created_files: created,
-  };
+  mkdirSync(charDir, { recursive: true });
+  return { character: name, workspace_dir: workspace.dir, config_dir: charDir };
 }
 
 export type CharacterSwitch = CharacterSelection;
@@ -210,7 +131,6 @@ export function switchCharacter(
   configDir: string,
   active: string | undefined,
   args: Args,
-  workspaceRoot?: string,
 ): CharacterSwitch {
   const name = asStr(args["name"]);
   if (name === undefined) throw invalidRequest("Missing required argument: name");
@@ -218,7 +138,7 @@ export function switchCharacter(
 
   if (name === active) return { character: name, changed: false };
 
-  if (!discoverCharacters(configDir, workspaceRoot).includes(name)) {
+  if (!discoverCharacters(configDir).includes(name)) {
     throw notFound(`Character not found: ${name}`);
   }
   return { character: name, changed: true };

@@ -16,11 +16,12 @@ import type {
 } from "../src/llm/types.ts";
 import type { BudgetBlock, UsageConfig } from "../src/ledger/budget.ts";
 import { freshLedger, openLedger } from "./support/ledger_fixture.ts";
-import { defaultAppConfig, newUsageBudget, type UsageBudgetConfig } from "../src/config/app.ts";
+import { newUsageBudget, type UsageBudgetConfig } from "../src/config/app.ts";
 import { emptyCatalog, type ResolvedModel } from "../src/config/models.ts";
 import { ProviderRegistry } from "../src/config/providers.ts";
 import type { LoadedConfig } from "../src/config/loader.ts";
 import { ConversationEngine } from "../src/engine/conversation.ts";
+import { promptedAppConfig } from "./support/prompt_list.ts";
 import {
   generationEngine,
   runGeneration,
@@ -226,7 +227,7 @@ async function chatConfig(root: string, spareKey: boolean): Promise<LoadedConfig
   };
   for (const d of Object.values(dirs)) await mkdir(d, { recursive: true });
 
-  const app = defaultAppConfig();
+  const app = promptedAppConfig();
   app.tools.enabled = [];
   app.chat.model = "gpt-test";
 

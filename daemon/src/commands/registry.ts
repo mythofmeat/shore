@@ -20,7 +20,7 @@ import { assertContractBindings } from "../operations/contracts.ts";
 import { defineOperation, discoverOperations, type OperationPresentation, type OperationRegistry } from "../operations/registry.ts";
 import type { CommandDeps, CommandSession } from "./dispatch.ts";
 import { internalError, invalidRequest } from "./errors.ts";
-import { characterInfo, createCharacterAs, listCharacters, switchCharacter } from "./navigation.ts";
+import { characterInfo, createCharacter, listCharacters, switchCharacter } from "./navigation.ts";
 import { archiveThread, forkThread, listThreads, markRead, newThread, switchThread, threadCompaction, threadFolderCreate, threadFolderDelete, threadFolderMove, threadFolderRename, threadFolderSort, threadHome, threadLabel, threadLock, threadModel, threadMove, threadPins, threadPurpose, threadSort } from "./threads.ts";
 import { archiveWithSignal, threadContext, threadListingContext } from "./thread_context.ts";
 import { alt, deleteMessages, edit, get, historyPage, injectSystem, listAlternatives, log } from "./conversation.ts";
@@ -391,13 +391,12 @@ export const commandOperations: OperationRegistry<CommandOperationContext> = {
     (context, args) => injectSystem(engineOf(context), args)),
   list_characters: register("list_characters", {
     ...characterPresentation, label: "Browse characters", fields: {},
-  }, ({ session, engine }) => listCharacters(session.config.dirs.config, engine?.characterName, session.config.dirs.workspace)),
+  }, ({ session, engine }) => listCharacters(session.config.dirs.config, engine?.characterName)),
   create_character: register("create_character", {
     ...characterPresentation, label: "Create character", effects: ["workspace_write"],
     fields: { name: { label: "Character name" } },
   }, ({ session, deps }, args) => {
-    const creating = createCharacterAs(session.config.dirs.config, args, session.config.dirs.workspace,
-      (name) => characterWorkspace(session.config, name, { fresh: true }));
+    const creating = createCharacter(session.config.dirs.config, args, (name) => characterWorkspace(session.config, name));
     return deps.onCharacterCreated === undefined
       ? creating
       : creating.then(async (result) => {
@@ -408,7 +407,7 @@ export const commandOperations: OperationRegistry<CommandOperationContext> = {
   switch_character: register("switch_character", {
     ...characterPresentation, label: "Select character", scope: "selection", effects: ["selection"],
     fields: { name: { label: "Character", choices: "characters" } },
-  }, ({ session, engine }, args) => switchCharacter(session.config.dirs.config, engine?.characterName ?? session.characterName, args, session.config.dirs.workspace)),
+  }, ({ session, engine }, args) => switchCharacter(session.config.dirs.config, engine?.characterName ?? session.characterName, args)),
   character_info: register("character_info", {
     ...characterPresentation, label: "Inspect character", scope: "character",
     fields: { name: { label: "Character", choices: "characters", hint: "Omit for the selected character" } },
@@ -416,7 +415,7 @@ export const commandOperations: OperationRegistry<CommandOperationContext> = {
     configDir: context.session.config.dirs.config,
     dataDir: context.session.dataDir,
     active: engineOf(context).characterName,
-    workspaceRoot: context.session.config.dirs.workspace,
+    workspaceFor: (name) => characterWorkspace(context.session.config, name),
   }, args)),
   list_threads: register("list_threads", {
     ...threadPresentation, label: "Browse threads", fields: {},

@@ -38,7 +38,7 @@ describe("deleting a character", () => {
       join(dirs.workspace as string, "ada"),
     ]);
     for (const path of result.removed) expect(existsSync(path)).toBe(false);
-    expect(discoverCharacters(dirs.config, dirs.workspace)).toEqual(["bea"]);
+    expect(discoverCharacters(dirs.config)).toEqual(["bea"]);
 
     const history = new Database(join(dirs.data, "shore.db"), { readonly: true });
     expect(
@@ -102,11 +102,11 @@ describe("deleting a character", () => {
     })) as { archive: string };
 
     expect(result.archive).toBe(output);
-    expect(discoverCharacters(dirs.config, dirs.workspace)).toEqual([]);
+    expect(discoverCharacters(dirs.config)).toEqual([]);
 
     const restored = await root("restored");
     await importCharacter(context(restored, new Set(), []), { archive: output });
-    expect(discoverCharacters(restored.config, restored.workspace)).toEqual(["ada"]);
+    expect(discoverCharacters(restored.config)).toEqual(["ada"]);
   });
 
   test("a backup that cannot be written stops the deletion", async () => {

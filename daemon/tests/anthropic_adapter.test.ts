@@ -365,12 +365,20 @@ describe("placing cache markers", () => {
       { role: "user", content: [{ type: "text", text: "c" }] },
       { role: "assistant", content: "plain" },
     ];
-    expect(placeContinuationBreakpoints(messages, system, [{ text: "s1", label: "memory_index" }], "")).toEqual({ msgBp: [], sysBp: [] });
+    expect(placeContinuationBreakpoints(messages, system, [{ text: "s1", label: "SOUL.md" }], "")).toEqual({ msgBp: [], sysBp: [] });
     expect(marked(messages)).toEqual([[false], [true], [false], []]);
-    const placed = placeContinuationBreakpoints(messages, system, [{ text: "s1", label: "memory_index" }], "5m");
-    expect(placed).toEqual({ msgBp: [0, 2, 3], sysBp: [] });
+    expect(system.map((b) => "cache_control" in b)).toEqual([true]);
+    const placed = placeContinuationBreakpoints(messages, system, [{ text: "s1", label: "SOUL.md" }], "5m");
+    expect(placed).toEqual({ msgBp: [0, 2, 3], sysBp: [0] });
     expect(marked(messages)).toEqual([[true], [false], [true], []]);
-    expect(system.map((b) => "cache_control" in b)).toEqual([false]);
+  });
+
+  test("the system prompt's marker goes on its last block, and a request with no system prompt gets none", () => {
+    const messages: Param[] = [{ role: "user", content: [{ type: "text", text: "a" }] }];
+    const system: Sys[] = [{ type: "text", text: "one" }, { type: "text", text: "two" }];
+    expect(placeContinuationBreakpoints(messages, system, [{ text: "one", label: "SOUL.md" }, { text: "two", label: "MAP.md" }], "5m").sysBp).toEqual([1]);
+    expect(system.map((b) => "cache_control" in b)).toEqual([false, true]);
+    expect(placeContinuationBreakpoints([{ role: "user", content: [{ type: "text", text: "a" }] }], [], [], "5m").sysBp).toEqual([]);
   });
 
   test("the request plan reports how many markers were asked for and where they went", () => {

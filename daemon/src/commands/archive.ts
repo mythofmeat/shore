@@ -16,7 +16,6 @@ import { create, extract, type Unpack } from "tar";
 import type { ShoreDirs } from "../config/dirs.ts";
 import { withCurrentNames } from "../config/old_sections.ts";
 import {
-  SOUL_FILE,
   characterCacheDir,
   characterConfigDir,
   characterDataDir,
@@ -478,7 +477,6 @@ async function stageCharacter(
     if (bytes > limits.bytes || entries > limits.entries) throw invalidRequest("Character exceeds browser archive processing limits");
   };
   const admit = async (path: string): Promise<boolean> => {
-    if (limits === undefined) return true;
     const entry = await lstat(path);
     count(entry.isFile() ? "file" : entry.isDirectory() ? "directory" : "other", entry.size);
     return true;
@@ -488,23 +486,16 @@ async function stageCharacter(
   const dataSource = characterDataDir(dirs.data, character);
   const workspaceInConfig = dirs.workspace === undefined;
 
-  const [soul = false] = workspace === undefined
-    ? [await exists(join(workspaceSource, SOUL_FILE))]
-    : await workspace.call("exists", { paths: [join(workspaceSource, SOUL_FILE)] });
-  if (!soul) {
-    throw invalidRequest(`Character definition disappeared during export: ${workspaceSource}`);
+  if (!await exists(configSource)) {
+    throw invalidRequest(`Character disappeared during export: ${configSource}`);
   }
-  if (await exists(configSource)) {
-    const excluded = resolve(configSource, "workspace");
-    await cp(configSource, join(stage, "config"), {
-      recursive: true,
-      preserveTimestamps: true,
-      verbatimSymlinks: true,
-      filter: async (source) => (!workspaceInConfig || resolve(source) !== excluded) && await admit(source),
-    });
-  } else {
-    await mkdir(join(stage, "config"));
-  }
+  const excluded = resolve(configSource, "workspace");
+  await cp(configSource, join(stage, "config"), {
+    recursive: true,
+    preserveTimestamps: true,
+    verbatimSymlinks: true,
+    filter: async (source) => (!workspaceInConfig || resolve(source) !== excluded) && await admit(source),
+  });
   if (workspace === undefined) {
     await cp(workspaceSource, join(stage, "workspace"), {
       filter: admit,
@@ -533,13 +524,11 @@ async function stageCharacter(
   const blobs = imageBlobDir(dirs.cache, character);
   if (await exists(blobs)) await cp(blobs, join(stage, "media", "blobs"), { ...copyOptions(), filter: admit });
   exportUnifiedDatabase(databasePath(dirs.data), character, join(stage, "shore.db"), limits === undefined ? undefined : limits.bytes - bytes);
-  if (cachedImages.size > 0) {
-    const staged = new Database(join(stage, "shore.db"));
-    try {
-      staged.transaction(() => repointActiveImages(staged, character, cachedImages))();
-    } finally {
-      staged.close();
-    }
+  const staged = new Database(join(stage, "shore.db"));
+  try {
+    staged.transaction(() => repointActiveImages(staged, character, cachedImages))();
+  } finally {
+    staged.close();
   }
   const manifest: Manifest = {
     format: FORMAT,
@@ -626,10 +615,7 @@ async function readManifest(stage: string): Promise<Manifest> {
   if (typeof character !== "string" || !isUsableCharacterName(character)) {
     throw invalidRequest("Archive has an invalid character name");
   }
-  if (!await exists(join(stage, "workspace", SOUL_FILE))) {
-    throw invalidRequest(`Archive has no workspace/${SOUL_FILE}`);
-  }
-  for (const file of ["shore.db"]) {
+  for (const file of ["workspace", "shore.db"]) {
     if (!await exists(join(stage, file))) throw invalidRequest(`Archive has no ${file}`);
   }
   if (typeof value["source_data"] !== "string" || !isAbsolute(value["source_data"])) {

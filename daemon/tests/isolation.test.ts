@@ -271,7 +271,8 @@ describe.skipIf(!READY)("a character whose tools run as its own user", () => {
   });
 
   test("keeps a prompt file linked to the daemon's secrets out of the prompt, and can still replace it", async () => {
-    const workspace = await freshWorkspace();
+    const fresh = await freshWorkspace();
+    const workspace = new CharacterWorkspace(fresh.dir, fresh.tools, ["SOUL.md"]);
     const data = join(await privateDir("isolation-prompt"), "ada");
     await bash(workspace, `ln -s '${SECRET}' SOUL.md`);
     expect(await loadPromptFileFromWorkspace(data, workspace, "SOUL.md")).toBeUndefined();
@@ -593,6 +594,7 @@ async function startDaemonProcess(env: Record<string, string> = {}) {
   await character.call("createFile", { path: join(character.dir, "SOUL.md"), data: Buffer.from("You are Ada.\n").toString("base64") });
   const base = await privateDir("isolation-daemon");
   await mkdir(join(base, "config"));
+  await mkdir(join(base, "config", "characters", "ada"), { recursive: true });
   await writeFile(join(base, "config", "config.toml"), `[tools]\nuser = ${JSON.stringify(USER)}\n`);
   const daemon = Bun.spawn([process.execPath, join(import.meta.dir, "..", "src", "daemon", "main.ts")], {
     env: {
