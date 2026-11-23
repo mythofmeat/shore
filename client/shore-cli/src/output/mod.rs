@@ -228,3 +228,25 @@ pub(crate) fn parse_timestamp(ts: &str) -> Option<DateTime<Local>> {
         .map(|dt| dt.with_timezone(&Local))
         .ok()
 }
+
+#[cfg(test)]
+mod tests {
+    use super::color_for_stream;
+
+    #[test]
+    fn no_color_always_wins_and_force_color_colours_a_pipe() {
+        assert!(
+            color_for_stream(false, false, true),
+            "a terminal is coloured"
+        );
+        assert!(!color_for_stream(false, false, false), "a pipe is not");
+        assert!(
+            color_for_stream(false, true, false),
+            "unless colour is forced"
+        );
+        assert!(
+            !color_for_stream(true, true, true),
+            "and NO_COLOR beats both"
+        );
+    }
+}

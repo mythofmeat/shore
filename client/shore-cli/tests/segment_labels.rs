@@ -110,3 +110,39 @@ fn auto_cant_be_given_with_a_label_and_replace_and_model_need_auto() {
         assert!(frames.is_empty(), "{args:?}: {frames:?}");
     }
 }
+
+#[test]
+fn find_lists_every_copy_of_each_message_and_says_when_there_is_none() {
+    let (output, frames) = asked(
+        json!({
+            "character": "ada",
+            "found": [
+                { "msg_id": "m_1", "copies": [
+                    { "thread": "main", "segment": 2, "excluded": false },
+                    { "thread": "story", "segment": 4, "excluded": true },
+                ]},
+                { "msg_id": "m_22", "copies": [{ "thread": "main", "segment": null, "excluded": false }] },
+                { "msg_id": "m_3", "copies": [] },
+            ]
+        }),
+        &["segments", "find", "m_1", "m_22", "m_3"],
+    );
+    assert!(output.status.success(), "{output:?}");
+    assert_eq!(
+        sent(&frames),
+        [(
+            Some("segments"),
+            Some(&json!({ "action": "find", "msg_ids": ["m_1", "m_22", "m_3"] }))
+        )]
+    );
+    assert_eq!(
+        printed(&output),
+        [
+            "m_1   main segment 2",
+            "      story segment 4, excluded",
+            "m_22  main, not archived",
+            "m_3   not found",
+        ]
+        .join("\n")
+    );
+}

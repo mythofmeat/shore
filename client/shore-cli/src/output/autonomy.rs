@@ -276,6 +276,33 @@ mod tests {
     }
 
     #[test]
+    fn last_active_counts_in_the_largest_two_units_that_fit() {
+        let last_active = |seconds: i64| {
+            rows(&json!({ "seconds_since_user": seconds, "state": "Dormant" }))
+                .first()
+                .cloned()
+                .unwrap_or_default()
+        };
+        for (seconds, shown) in [
+            (0, "0s"),
+            (59, "59s"),
+            (60, "1m"),
+            (3599, "59m"),
+            (3600, "1h 0m"),
+            (86_399, "23h 59m"),
+            (86_400, "1d 0h"),
+            (90_061, "1d 1h"),
+            (-61, "-1m"),
+        ] {
+            assert_eq!(
+                last_active(seconds),
+                format!("last active {shown} ago"),
+                "{seconds} seconds"
+            );
+        }
+    }
+
+    #[test]
     fn an_active_character_shows_how_many_wakes_it_has_left_before_going_dormant() {
         let active = json!({ "state": "Active", "wakes_without_user": 1, "dormant_after_wakes": 3, "recent_events": [] });
         assert_eq!(rows(&active), ["wakes 2 of 3 left before going dormant"]);

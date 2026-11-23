@@ -162,3 +162,62 @@ fn floor_char_boundary(s: &str, max: usize) -> usize {
 fn spaces(count: usize) -> String {
     " ".repeat(count)
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn json_output_reads_as_indented_lines_and_anything_else_as_it_came() {
+        assert_eq!(format_tool_output("plain text\n\n"), "plain text");
+        assert_eq!(
+            format_tool_output(
+                r#"{"path":"notes.md","empty":"","files":["a.md","b.md"],"hits":[{"n":1},2],"match":{"line":3,"text":"hi\nthere"},"none":null,"blank":{},"nothing":[]}"#
+            ),
+            [
+                "path: notes.md",
+                "empty: \"\"",
+                "files: [a.md, b.md]",
+                "hits:",
+                "  -",
+                "    n: 1",
+                "  - 2",
+                "match:",
+                "  line: 3",
+                "  text:",
+                "    hi",
+                "    there",
+                "none: null",
+                "blank: {}",
+                "nothing: []",
+            ]
+            .join("\n")
+        );
+        assert_eq!(format_tool_output("[1, true]"), "[1, true]");
+        assert_eq!(format_tool_output(r#""one\ntwo""#), "one\ntwo");
+        assert_eq!(format_tool_output("{}"), "{}");
+    }
+
+    #[test]
+    fn output_over_the_limit_is_cut_at_a_character_and_says_how_long_it_was() {
+        assert_eq!(format_tool_output_with_limit("abcdef", Some(6)), "abcdef");
+        assert_eq!(
+            format_tool_output_with_limit("abcdef", Some(4)),
+            "abcd\n... truncated, 6 bytes total"
+        );
+        assert_eq!(
+            format_tool_output_with_limit("\u{e9}\u{e9}", Some(3)),
+            "\u{e9}\n... truncated, 4 bytes total"
+        );
+        assert_eq!(format_tool_output_with_limit("abcdef", None), "abcdef");
+    }
+
+    #[test]
+    fn tool_input_leaves_out_an_empty_object_and_is_cut_like_output() {
+        assert_eq!(format_tool_input(&serde_json::json!({})), None);
+        assert_eq!(
+            format_tool_input_with_limit(&serde_json::json!({ "query": "cache" }), Some(5)),
+            Some("query\n... truncated, 12 bytes total".to_owned())
+        );
+    }
+}

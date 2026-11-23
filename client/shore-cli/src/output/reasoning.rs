@@ -99,3 +99,17 @@ pub(crate) fn reflow_reasoning(text: &str) -> String {
 pub(crate) fn settled_reasoning(text: &str) -> String {
     reflow_reasoning(text).trim_end_matches('\n').to_owned()
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn a_line_broken_mid_sentence_is_joined_and_paragraphs_and_lists_keep_their_breaks() {
+        assert_eq!(
+            reflow_reasoning("Thinking about\n the cache\n.\r\n\r\nNext:\n - check"),
+            "Thinking about the cache.\n\nNext:\n - check"
+        );
+        assert_eq!(settled_reasoning("Done.\n\n"), "Done.");
+    }
+}
