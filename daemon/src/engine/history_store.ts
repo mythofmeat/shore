@@ -647,13 +647,6 @@ export class HistoryStore {
   }
 
   readSegmentDisplayRange(character: string, idx: number, start: number, end: number): HistoryDisplaySlice {
-    const metrics: HistoryReadMetrics = {
-      segments_read: 0,
-      rows_read: 0,
-      decoded_body_bytes: 0,
-    };
-    if (end <= start) return { messages: [], metrics };
-
     const rows = this.#db
       .query(
         `SELECT m.id, m.msg_id, m.role, m.timestamp, m.provider_key, m.model, m.origin,
@@ -666,8 +659,7 @@ export class HistoryStore {
       )
       .all(character, idx, start, end) as MessageRow[];
 
-    metrics.rows_read = rows.length;
-    metrics.segments_read = rows.length === 0 ? 0 : 1;
+    const metrics: HistoryReadMetrics = { segments_read: rows.length === 0 ? 0 : 1, rows_read: rows.length, decoded_body_bytes: 0 };
     return { messages: this.#messagesFromRows(rows, character, metrics), metrics };
   }
 

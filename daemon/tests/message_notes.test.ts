@@ -382,7 +382,7 @@ test("a character's picture sent back as a tool's result goes into the user's me
   expect(sent.map(({ msg_id, notes }) => [msg_id, notes.map(({ place }) => place)])).toEqual([["a1", ["before"]], ["u1", []], ["a2", []], ["a3", []], ["a4", []]]);
 });
 
-test("an archived message keeps what it was written with: its model and key, its version, its notes and a single other attempt", async () => {
+test("an archived message keeps what it was written with: its model and key, its version, its notes, a single other attempt, and a count of attempts it holds none of", async () => {
   const { engine, data } = await engineWith([said("u1", "user", "hello", 0)]);
   const reply = said("a1", "assistant", "hi", 1, {
     provider_key: "anthropic", model: "claude-lamp",
@@ -390,6 +390,7 @@ test("an archived message keeps what it was written with: its model and key, its
     alt_index: 0, alt_count: 1,
   });
   await engine.appendMessage(reply);
+  await engine.appendMessage(said("a2", "assistant", "more", 2, { alt_index: 1, alt_count: 2 }));
   await engine.saveNotes([{ msg_id: "a1", notes: [{ place: "end", text: "[sent an image]" }] }]);
   const stored = required(engine.messages()[1]);
   const threadDir = join(data, "ada", "threads", "main");
@@ -400,6 +401,21 @@ test("an archived message keeps what it was written with: its model and key, its
   expect(archived).toMatchObject({ provider_key: "anthropic", model: "claude-lamp", alt_index: 0, alt_count: 1, notes: [{ place: "end", text: "[sent an image]" }] });
   expect(archived.version).toBe(required(stored.version));
   expect(archived.alternatives?.map((alternative) => alternative.content)).toEqual(["hi"]);
+  expect((await engine.segments().readSegment(0))[2]).toMatchObject({ msg_id: "a2", alt_index: 1, alt_count: 2 });
+});
+
+test("an archived page says how much it read to show itself, and a page with nothing in it reads nothing", async () => {
+  const { engine, data } = await engineWith([said("u1", "user", "hello", 0), said("a1", "assistant", "hi", 1)]);
+  const threadDir = join(data, "ada", "threads", "main");
+  await archiveAndRetain(threadDir, { dbPath: join(data, HISTORY_DB_FILE), archiveKey: "ada" }, 0, readDurable(join(threadDir, "active.jsonl")));
+  await engine.reload();
+
+  const body = (text: string): number => Buffer.byteLength(JSON.stringify([{ type: "text", text }]));
+  const page = required(engine.displayHistoryPage(0, undefined, { kind: "count", value: 10 }));
+  expect(page.messages.map((message) => message.msg_id)).toEqual(["u1", "a1"]);
+  expect(page.metrics).toMatchObject({ segments_read: 1, rows_read: 2, decoded_body_bytes: body("hello") + body("hi") });
+  const empty = required(engine.displayHistoryPage(0, 0, { kind: "count", value: 10 }));
+  expect([empty.messages, empty.metrics]).toEqual([[], { segments_read: 0, rows_read: 0, decoded_body_bytes: 0, page_bytes: 2 }]);
 });
 
 test("a new history file reclaims space as it goes and lets readers in while it writes", async () => {
