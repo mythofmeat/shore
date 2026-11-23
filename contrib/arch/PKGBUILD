@@ -26,9 +26,8 @@ build() {
 }
 
 package_shore-cli() {
-    pkgdesc="Persistent AI character engine — CLI and terminal chat client"
+    pkgdesc="Persistent AI character engine — command-line client"
     depends=('gcc-libs' 'glibc')
-    optdepends=('wl-clipboard: ctrl+v image paste from clipboard (Wayland)' 'yazi: image picker')
 
     cd "$srcdir/$pkgbase/" || exit
     install -Dm644 "./LICENSE-MIT" \
