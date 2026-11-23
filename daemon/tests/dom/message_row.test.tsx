@@ -163,3 +163,47 @@ test("the shortcut to edit the last message opens only the user's last message, 
   await editLast();
   expect(editing(moved.host)).toBe(false);
 });
+
+const NOTED: Message["notes"] = [
+  { place: "before", text: "[earlier conversation not shown]" },
+  { place: "start", text: '[Their status: "tired" for 2 hours]' },
+  { place: "start", text: "[3 hours later · Monday 2026-11-23 · 9:41 PM]" },
+  { place: "instead", text: "[wake]\n\nRead this instead." },
+  { place: "end", text: "[sent an image]" },
+  { place: "after", text: "Write it again." },
+];
+
+const notesOf = (host: HTMLElement) => [...host.querySelectorAll(".message-notes")].map((group) => [...group.querySelectorAll(".message-note")].map((note) => [note.getAttribute("data-place"), note.textContent]));
+
+test("what Shore put with a message for the model is shown word for word where the model reads it, with words read in its place marked so, until notes are turned off", async () => {
+  const noted = await row({ ...asked(), notes: NOTED });
+  expect(notesOf(noted)).toEqual([
+    [["before", "[earlier conversation not shown]"]],
+    [["start", '[Their status: "tired" for 2 hours]'], ["start", "[3 hours later · Monday 2026-11-23 · 9:41 PM]"], ["instead", "Read in its place[wake]\n\nRead this instead."]],
+    [["end", "[sent an image]"], ["after", "Write it again."]],
+  ]);
+  const main = [...(noted.querySelector(".message-main")?.children ?? [])].map((child) => child.className);
+  expect(main.slice(0, 5)).toEqual(["message-notes", "message-meta", "message-notes", "message-body", "message-notes"]);
+  expect(noted.querySelector(".message-notes")?.getAttribute("aria-label")).toBe("Notes for the model");
+  expect(noted.querySelector(".message-body")?.textContent).toBe("And then?");
+
+  expect(notesOf(await row({ ...asked(), notes: NOTED }, false, { display: { notes: "off" } }))).toEqual([]);
+  expect(notesOf(await row(asked()))).toEqual([]);
+  expect(notesOf(await row({ ...asked(), notes: [{ place: "end", text: "[sent an image]" }] }))).toEqual([[["end", "[sent an image]"]]]);
+});
+
+test("a wake's opening, a line Shore left and a note in the thread show their notes under their own words, and none when notes are off", async () => {
+  const read = [{ place: "start" as const, text: "[noon]" }, { place: "instead" as const, text: "[wake]\n\nThe whole opening." }];
+  const wake = await row(message({ origin: "autonomous", content: '[wake]\n\n[Your trigger "show" fired.]', notes: read }));
+  expect(notesOf(wake)).toEqual([[["start", "[noon]"], ["instead", "Read in its place[wake]\n\nThe whole opening."]]]);
+  expect(wake.querySelector("details .message-notes")).not.toBeNull();
+  expect(notesOf(await row(message({ origin: "autonomous", content: '[wake]\n\n[Your trigger "show" fired.]', notes: read }), false, { display: { notes: "off" } }))).toEqual([]);
+
+  const kept = [{ place: "instead" as const, text: "[Your working in this wake isn't shown here: 2 tool calls.]" }];
+  const line = await row(message({ role: "system", origin: "autonomous", content: 'This wake\'s working is in "Wakes": 2 tool calls.', notes: kept }));
+  expect(line.querySelector("div.system-note .message-notes .message-note")?.textContent).toBe("Read in its place[Your working in this wake isn't shown here: 2 tool calls.]");
+
+  const left = await row(message({ role: "system", content: "Compacted.", notes: [{ place: "before", text: "[wake]" }] }));
+  expect(notesOf(left)).toEqual([[["before", "[wake]"]]]);
+  expect(left.querySelector("div.system-note")?.textContent).toBe("Compacted.[wake]");
+});

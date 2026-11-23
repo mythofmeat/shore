@@ -210,6 +210,28 @@
   display: flex;
 }
 
+.message-notes {
+  display: grid;
+  gap: 4px;
+  margin: 6px 0;
+}
+
+.message-note {
+  margin: 0;
+  padding-left: 10px;
+  border-left: 2px dotted var(--line-3);
+  color: var(--text-3);
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.message-note-label {
+  display: block;
+  font-style: italic;
+}
+
 .message-metadata {
   margin-top: 8px;
   color: var(--text-3);

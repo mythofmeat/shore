@@ -187,7 +187,7 @@ const EVERYWHERE = {
   "shore.theme": "fog", "shore.font-size": "large", "shore.stream": "false", "shore.enter-sends": "false", "shore.vim-mode": "true",
   "shore.folders.collapsed": JSON.stringify({ ada: ["work"] }),
   "shore.view.v1.timestamps": "off", "shore.view.v1.thinking": "off", "shore.view.v1.tools": "off", "shore.view.v1.subagent": "off", "shore.view.v1.compaction": "off",
-  "shore.view.v1.images": "off", "shore.view.v1.metadata": "on", "shore.view.v1.usage": "always", "shore.view.v1.budget": "pace",
+  "shore.view.v1.images": "off", "shore.view.v1.metadata": "on", "shore.view.v1.usage": "always", "shore.view.v1.budget": "pace", "shore.view.v1.notes": "off",
 };
 const PER_BROWSER = { "shore.notify": "true", "shore.sidebar": "false", "shore.settings-page": "usage" };
 
@@ -205,7 +205,7 @@ describe("settings the daemon keeps", () => {
     expect(keptSettings.lists).toBe(1);
     expect(Object.fromEntries(Object.keys({ ...EVERYWHERE, ...PER_BROWSER }).map((key) => [key, localStorage.getItem(key)]))).toEqual({ ...EVERYWHERE, ...PER_BROWSER });
     expect([state.themes.getSnapshot(), document.documentElement.dataset["theme"], state.fontSizes.getSnapshot(), vim.current()[0]]).toEqual(["fog", "fog", "large", true]);
-    expect(state.display.getSnapshot().values).toEqual({ timestamps: "off", thinking: "off", tools: "off", subagent: "off", compaction: "off", images: "off", metadata: "on", usage: "always", budget: "pace" });
+    expect(state.display.getSnapshot().values).toEqual({ timestamps: "off", thinking: "off", tools: "off", subagent: "off", compaction: "off", images: "off", metadata: "on", usage: "always", budget: "pace", notes: "off" });
     expect([state.streamReplies(), state.enterSends(), state.notifier.getSnapshot().enabled, [...state.collapsedFolders.of("ada")]]).toEqual([false, false, true, ["work"]]);
     expect(keptSettings.saves).toEqual([]);
     await vim.unmount();

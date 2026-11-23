@@ -48,7 +48,7 @@ describe("the appearance page", () => {
     const state = app.state();
     const view = await mount(<AppearancePage state={state.workspace.getSnapshot()} />);
     const labels = [...view.host.querySelectorAll("[role=switch]")].map((item) => item.getAttribute("aria-label"));
-    expect(labels).toEqual(["Stream replies", "Timestamps", "Reasoning", "Tool calls and results", "Subagent activity", "Inline images", "Message metadata", "Compaction activity", "Notify when unfocused"]);
+    expect(labels).toEqual(["Stream replies", "Timestamps", "Reasoning", "Tool calls and results", "Subagent activity", "Inline images", "Message metadata", "Notes for the model", "Compaction activity", "Notify when unfocused"]);
     expect([checked(view.host, "Stream replies"), checked(view.host, "Message metadata"), checked(view.host, "Timestamps")]).toEqual(["true", "false", "true"]);
     await click(view.host.querySelector("[aria-label='Stream replies']"));
     await click(view.host.querySelector("[aria-label='Message metadata']"));
