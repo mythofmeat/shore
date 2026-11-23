@@ -3,6 +3,7 @@ import type { Message } from "../protocol/Message.ts";
 import type { SendImage } from "../protocol/SendImage.ts";
 import { isVideoFile } from "../engine/embeds.ts";
 import type { LiveTurn } from "./workspace.ts";
+import { replySaved } from "./chat/transcript.ts";
 import { MAX_LIVE_MEDIA_CHARS, recentItems } from "./live_limits.ts";
 
 export const MAX_LIVE_IMAGES = 128;
@@ -77,7 +78,7 @@ export function conversationImages(messages: readonly Message[], streams: readon
       ...message.images.flatMap((image, index) => image.path === "" ? [] : [{ id: `message:${message.msg_id}:image:${String(index)}`, caption: image.caption ?? image.name ?? (image.path.split(/[\\/]/).at(-1) || "Attached image"), data: image.data, mime: undefined, ...(typeof image.embed === "string" ? { full: pictureUrl(image.path), ...(isVideoFile(image.path) ? { video: true } : {}) } : {}) }]),
       ...inline(message.content_blocks, `message:${message.msg_id}:block`),
     ]),
-    ...streams.filter((stream) => !(stream.final && messages.some((message) => message.msg_id === stream.msgId))).flatMap((stream) => inline(stream.blocks, `stream:${stream.key}`)),
+    ...streams.filter((stream) => !replySaved(stream, messages)).flatMap((stream) => inline(stream.blocks, `stream:${stream.key}`)),
     ...liveImages.filter((image) => !storedPaths.has(image.path)).map((image) => ({ id: `live:${image.path}`, caption: image.caption ?? (image.path.split(/[\\/]/).at(-1) || "Live image"), data: image.data, mime: undefined })),
   ];
 }
