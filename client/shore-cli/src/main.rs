@@ -32,7 +32,6 @@ mod run;
 mod skew;
 mod state;
 mod terminal_images;
-mod tui;
 
 use std::process::ExitCode;
 
@@ -101,8 +100,9 @@ fn main() -> ExitCode {
                 command,
             ))
             .map(|()| ExitCode::SUCCESS),
-        None => rt
-            .block_on(tui::run(cli.addr, cli.character, cli.thread))
+        None => cli::grouped_command()
+            .print_help()
+            .map(|()| ExitCode::SUCCESS)
             .map_err(Into::into),
     };
     match outcome.and_then(|code| output::finish_stdout().map(|()| code).map_err(Into::into)) {

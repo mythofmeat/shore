@@ -1,6 +1,4 @@
 use std::fmt;
-use std::io::{Read, Write};
-use std::time::{Duration, Instant};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ImageProtocol {
@@ -29,93 +27,6 @@ pub fn detect_protocol() -> Option<ImageProtocol> {
         has_env_prefix("GHOSTTY_"),
         std::env::var("KITTY_WINDOW_ID").ok().is_some(),
     )
-}
-
-pub fn detect_protocol_probe() -> Option<ImageProtocol> {
-    let env_result = detect_protocol();
-    if env_result.is_some() || std::env::var("SHORE_IMAGES").is_ok() {
-        return env_result;
-    }
-
-    if probe_kitty_graphics() {
-        return Some(ImageProtocol::Kitty);
-    }
-
-    None
-}
-
-fn probe_kitty_graphics() -> bool {
-    let Ok(mut tty) = std::fs::OpenOptions::new()
-        .read(true)
-        .write(true)
-        .open("/dev/tty")
-    else {
-        return false;
-    };
-
-    let query = b"\x1b_Gi=31,s=1,v=1,a=q,t=d,f=24;AAAA\x1b\\";
-    if tty.write_all(query).is_err() {
-        return false;
-    }
-    if tty.flush().is_err() {
-        return false;
-    }
-
-    let now = Instant::now();
-    let deadline = now.checked_add(Duration::from_millis(200)).unwrap_or(now);
-    let mut response = Vec::with_capacity(64);
-    loop {
-        let remaining = deadline.saturating_duration_since(Instant::now());
-        if remaining.is_zero() {
-            break;
-        }
-        let mut buf = [0_u8; 64];
-        let n = read_with_timeout(&mut tty, &mut buf, remaining);
-        if n == 0 {
-            break;
-        }
-        let Some(chunk) = buf.get(..n) else {
-            return false;
-        };
-        response.extend_from_slice(chunk);
-        if response.windows(2).any(|w| w == b"\x1b\\") {
-            break;
-        }
-    }
-
-    let text = std::str::from_utf8(&response).unwrap_or("");
-    text.contains("OK")
-}
-
-#[cfg(unix)]
-#[expect(
-    unsafe_code,
-    reason = "terminal protocol probing needs libc::poll on the tty fd"
-)]
-fn read_with_timeout(file: &mut std::fs::File, buf: &mut [u8], timeout: Duration) -> usize {
-    use std::os::unix::io::AsRawFd;
-
-    let fd = file.as_raw_fd();
-    let timeout_ms = i32::try_from(timeout.as_millis()).unwrap_or(i32::MAX);
-
-    let mut pfd = libc::pollfd {
-        fd,
-        events: libc::POLLIN,
-        revents: 0,
-    };
-
-    // SAFETY: `pfd` points to one initialized pollfd, `fd` comes from the live
-    let ready = unsafe { libc::poll(&raw mut pfd, 1, timeout_ms) };
-    if ready <= 0 {
-        return 0;
-    }
-
-    file.read(buf).unwrap_or(0)
-}
-
-#[cfg(not(unix))]
-fn read_with_timeout(_file: &mut std::fs::File, _buf: &mut [u8], _timeout: Duration) -> usize {
-    0
 }
 
 pub fn detect_protocol_from_env(
@@ -155,4 +66,70 @@ pub fn detect_protocol_from_env(
     }
 
     None
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn shore_images_decides_and_otherwise_the_terminal_says_which_protocol_it_speaks() {
+        let cases = [
+            (
+                (Some("KITTY"), None, None, false, false),
+                Some(ImageProtocol::Kitty),
+            ),
+            (
+                (Some("iterm"), None, None, false, false),
+                Some(ImageProtocol::Iterm2),
+            ),
+            (
+                (Some("iTerm2"), None, None, false, false),
+                Some(ImageProtocol::Iterm2),
+            ),
+            ((Some("none"), Some("kitty"), None, true, true), None),
+            (
+                (None, Some("iTerm.app"), None, false, false),
+                Some(ImageProtocol::Iterm2),
+            ),
+            (
+                (None, Some("ghostty"), None, false, false),
+                Some(ImageProtocol::Kitty),
+            ),
+            (
+                (None, Some("Kitty"), None, false, false),
+                Some(ImageProtocol::Kitty),
+            ),
+            (
+                (None, Some("vscode"), None, true, false),
+                Some(ImageProtocol::Kitty),
+            ),
+            ((None, None, None, false, true), Some(ImageProtocol::Kitty)),
+            (
+                (None, Some("vscode"), Some("xterm-Kitty"), false, false),
+                Some(ImageProtocol::Kitty),
+            ),
+            (
+                (None, None, Some("xterm-ghostty"), false, false),
+                Some(ImageProtocol::Kitty),
+            ),
+            (
+                (None, Some("vscode"), Some("xterm-256color"), false, false),
+                None,
+            ),
+        ];
+        for ((shore_images, program, term, ghostty, kitty), expected) in cases {
+            assert_eq!(
+                detect_protocol_from_env(shore_images, program, term, ghostty, kitty),
+                expected,
+                "SHORE_IMAGES={shore_images:?} TERM_PROGRAM={program:?} TERM={term:?} ghostty={ghostty} kitty={kitty}"
+            );
+        }
+    }
+
+    #[test]
+    fn the_protocols_are_named_as_shore_images_spells_them() {
+        assert_eq!(ImageProtocol::Kitty.to_string(), "kitty");
+        assert_eq!(ImageProtocol::Iterm2.to_string(), "iterm2");
+    }
 }

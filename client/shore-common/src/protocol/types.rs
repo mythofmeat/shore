@@ -456,4 +456,35 @@ mod tests {
             ThinkingSignature::OpenrouterDetails("not-really".into())
         );
     }
+
+    #[test]
+    fn only_an_embedded_mp4_or_webm_is_a_video() {
+        let picture = |path: &str, embed: Option<&str>| ImageRef {
+            path: path.to_owned(),
+            embed: embed.map(str::to_owned),
+            ..ImageRef::default()
+        };
+        assert!(picture("clips/sea.MP4", Some("sea")).is_video());
+        assert!(picture("clips/sea.webm", Some("sea")).is_video());
+        assert!(
+            !picture("clips/sea.mp4", None).is_video(),
+            "a picture sent as a file is not an embed"
+        );
+        assert!(!picture("clips/sea.png", Some("sea")).is_video());
+        assert!(!is_video_file("sea.mp4.png"));
+    }
+
+    #[test]
+    fn a_tool_result_reads_as_its_text_or_as_the_text_of_its_blocks() {
+        assert_eq!(ToolResultContent::from(" done ").display_text(), " done ");
+        let blocks = ToolResultContent::Blocks(vec![
+            ContentBlock::Text {
+                text: " first ".to_owned(),
+            },
+            ContentBlock::Text {
+                text: "second".to_owned(),
+            },
+        ]);
+        assert_eq!(blocks.display_text(), "first\nsecond");
+    }
 }

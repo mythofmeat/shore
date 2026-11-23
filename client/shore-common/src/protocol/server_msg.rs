@@ -469,4 +469,19 @@ mod tests {
         let msg: ServerMessage = serde_json::from_str(json).expect("ping must parse");
         assert!(matches!(msg, ServerMessage::Ping(_)));
     }
+
+    #[test]
+    fn a_frame_names_the_subagent_and_task_it_came_from_and_the_main_agent_names_neither() {
+        let parse = |json: &str| -> ServerMessage {
+            serde_json::from_str(json).expect("the frame must parse")
+        };
+        let delegated =
+            parse(r#"{"type":"stream_chunk","text":"hi","subagent":"memory","task_id":"toolu_1"}"#);
+        assert_eq!(
+            (delegated.subagent(), delegated.task_id()),
+            (Some("memory"), Some("toolu_1"))
+        );
+        let own = parse(r#"{"type":"stream_chunk","text":"hi"}"#);
+        assert_eq!((own.subagent(), own.task_id()), (None, None));
+    }
 }

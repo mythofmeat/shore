@@ -154,10 +154,10 @@ export function UsagePage({ state }: { state: ChromeSnapshot }) {
           </select>
         </SettingRow>
         <SettingRow label={VIEW_CONTROLS.budget.label} description="Which budget the chip follows, and whether it tracks the cap or the pace.">
-          <select className="select" aria-label="Budget" value={focus.name ?? ""} onChange={(event) => { try { display.change("budget", event.target.value === "" ? focus.scope : focus.scope === "auto" ? event.target.value : `${event.target.value}:${focus.scope}`, budgetNames); } catch (error) { toasts.show(String(error), "error"); } }}>
+          <select className="select" aria-label="Budget" value={focus.name ?? ""} onChange={(event) => { try { display.change("budget", event.target.value === "" ? focus.scope : focus.scope === "auto" ? event.target.value : `${event.target.value}:${focus.scope}`); } catch (error) { toasts.show(String(error), "error"); } }}>
             <option value="">Most used</option>{budgetNames.map((name) => <option key={name} value={name}>{name}</option>)}
           </select>
-          <select className="select" aria-label="Budget measure" value={focus.scope} onChange={(event) => display.change("budget", focus.name === null ? event.target.value : event.target.value === "auto" ? focus.name : `${focus.name}:${event.target.value}`, budgetNames)}>
+          <select className="select" aria-label="Budget measure" value={focus.scope} onChange={(event) => display.change("budget", focus.name === null ? event.target.value : event.target.value === "auto" ? focus.name : `${focus.name}:${event.target.value}`)}>
             <option value="auto">Whichever is higher</option><option value="cap">Spending cap</option><option value="pace">Pace</option>
           </select>
         </SettingRow>

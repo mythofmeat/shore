@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 
-import { DisplayPreferences, PREFERENCE_STORAGE_KEY, VIEW_KEYS, budgetFocus, cycleView, defaultViews, readViews, viewValue } from "../src/browser/preferences.ts";
+import { DisplayPreferences, PREFERENCE_STORAGE_KEY, VIEW_KEYS, budgetFocus, defaultViews, readViews, viewValue } from "../src/browser/preferences.ts";
 
 function storage(initial: Record<string, string> = {}) {
   const values = new Map(Object.entries(initial));
@@ -29,22 +29,20 @@ describe("the budget readout", () => {
 });
 
 describe("display choices", () => {
-  test("take only their own values, never toggle as a value, and a budget readout takes a budget too", () => {
-    expect(viewValue("thinking", "off")).toBe(true);
-    expect(viewValue("thinking", "toggle")).toBe(false);
-    expect(viewValue("thinking", "maybe")).toBe(false);
+  test("take only their own values, and a budget readout takes a budget too", () => {
+    const switches = ["timestamps", "thinking", "tools", "subagent", "compaction", "images", "metadata", "notes"] as const;
+    expect(switches.map((key) => [viewValue(key, "on"), viewValue(key, "off"), viewValue(key, "maybe")])).toEqual(switches.map(() => [true, true, false]));
+    expect(["off", "always", "warn", "on", "monthly"].map((value) => viewValue("usage", value))).toEqual([true, true, true, false, false]);
     expect(viewValue("budget", "pace")).toBe(true);
     expect(viewValue("budget", "monthly:cap")).toBe(true);
     expect(viewValue("budget", "monthly:weekly")).toBe(false);
-    expect(viewValue("usage", "monthly")).toBe(false);
   });
 
   test("the notes Shore put with each message for the model are a switch of the web UI's own, shown until it is turned off", () => {
-    expect([viewValue("notes", "on"), viewValue("notes", "off"), viewValue("notes", "toggle"), viewValue("notes", "always")]).toEqual([true, true, false, false]);
-    expect([cycleView("notes", "on"), cycleView("notes", "off")]).toEqual(["off", "on"]);
+    expect([viewValue("notes", "on"), viewValue("notes", "off"), viewValue("notes", "always")]).toEqual([true, true, false]);
     expect(readViews(storage({ [stored("notes")]: "off" })).notes).toBe("off");
     const saved = storage();
-    new DisplayPreferences(saved).change("notes", "toggle");
+    new DisplayPreferences(saved).change("notes", "off");
     expect(saved.values.get(stored("notes"))).toBe("off");
   });
 
@@ -55,28 +53,18 @@ describe("display choices", () => {
     expect(readViews(storage({ "shore.reasoning": "false", [stored("thinking")]: "on", [stored("metadata")]: "on" }))).toMatchObject({ thinking: "on", metadata: "on" });
     expect(() => readViews(storage({ [stored("images")]: "sometimes" }))).toThrow("Saved display preference is invalid: images");
   });
-
-  test("toggle through their own values in order, a budget readout through budgets when there are several", () => {
-    expect(cycleView("thinking", "on")).toBe("off");
-    expect(cycleView("thinking", "off")).toBe("on");
-    expect(cycleView("thinking", "lost"), "from anything unknown, the first").toBe("on");
-    expect(cycleView("budget", "auto", ["only"])).toBe("cap");
-    expect(cycleView("budget", "pace", ["only"]), "one budget is not worth naming").toBe("auto");
-    expect(cycleView("budget", "pace", ["monthly", "daily"])).toBe("monthly");
-    expect(cycleView("budget", "daily", ["monthly", "daily"])).toBe("auto");
-  });
 });
 
 describe("the display preferences of a tab", () => {
-  test("change and save each choice, cycling on toggle, and refuse a value that does not fit", () => {
+  test("change and save each choice, and refuse a value that does not fit", () => {
     const saved = storage();
     const preferences = new DisplayPreferences(saved);
     let heard = 0;
     const stop = preferences.subscribe(() => { heard += 1; });
-    preferences.change("thinking", "toggle");
+    preferences.change("thinking", "off");
     expect(preferences.option("thinking")).toBe("off");
     expect(saved.values.get(stored("thinking"))).toBe("off");
-    preferences.change("budget", "toggle", ["monthly", "daily"]);
+    preferences.change("budget", "cap");
     expect(preferences.option("budget")).toBe("cap");
     preferences.change("budget", "daily");
     expect(saved.values.get(stored("budget"))).toBe("daily");

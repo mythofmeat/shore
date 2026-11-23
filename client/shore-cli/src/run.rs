@@ -67,8 +67,8 @@ pub(crate) async fn execute(
         version: false,
         command: Some(cli_command),
     };
-    if let Some(result) = try_handle_local_only(&cli).await {
-        return result;
+    if matches!(&cli.command, Some(CliCommand::Config { path: true, .. })) {
+        return print_config_path(&cli).await;
     }
     let provider_plan = match cli.command.as_ref() {
         Some(CliCommand::Provider {
@@ -293,11 +293,6 @@ pub(crate) async fn execute(
             };
             apply_model_change(&mut conn, command_ref, change, cli.thread.as_deref()).await?;
         }
-        refused @ (CliCommand::View { .. } | CliCommand::Ui { .. }) => {
-            return Err(tui_only_refusal(refused)
-                .unwrap_or_else(|| "this command only applies inside `shore tui`".to_owned())
-                .into());
-        }
         compact @ CliCommand::Compact { json: false, .. } => {
             handle_compact(&mut conn, compact, cli.character.as_deref()).await?;
         }
@@ -384,11 +379,9 @@ pub(crate) fn wants_json(other: &CliCommand) -> bool {
             command,
             MsgCommand::Edit { json: true, .. } | MsgCommand::Delete { json: true, .. }
         ),
-        CliCommand::Log { .. }
-        | CliCommand::Status { .. }
-        | CliCommand::Completions { .. }
-        | CliCommand::View { .. }
-        | CliCommand::Ui { .. } => false,
+        CliCommand::Log { .. } | CliCommand::Status { .. } | CliCommand::Completions { .. } => {
+            false
+        }
     }
 }
 
@@ -1253,8 +1246,6 @@ fn reads_the_selected_thread(command: &CliCommand) -> bool {
         | CliCommand::Debug { .. }
         | CliCommand::Export { .. }
         | CliCommand::Import { .. }
-        | CliCommand::View { .. }
-        | CliCommand::Ui { .. }
         | CliCommand::Completions { .. } => false,
     }
 }
@@ -1293,35 +1284,6 @@ fn report_unresolved_thread(
     Box::new(ReportedError::new(format!(
         "no thread named {requested:?} for {character}"
     )))
-}
-
-async fn try_handle_local_only(cli: &Cli) -> Option<Result<(), Box<dyn std::error::Error>>> {
-    if matches!(&cli.command, Some(CliCommand::Config { path: true, .. })) {
-        return Some(print_config_path(cli).await);
-    }
-    if let Some(command) = &cli.command
-        && let Some(message) = tui_only_refusal(command)
-    {
-        return Some(Err(message.into()));
-    }
-    None
-}
-
-#[expect(
-    clippy::wildcard_enum_match_arm,
-    reason = "every command except these two is a normal daemon-backed command"
-)]
-pub(crate) fn tui_only_refusal(command: &CliCommand) -> Option<String> {
-    match command {
-        CliCommand::View { key, .. } => Some(format!(
-            "`view {}` changes what the TUI draws, so it only applies inside `shore tui`",
-            key.as_str()
-        )),
-        CliCommand::Ui { .. } => {
-            Some("`ui` drives a running TUI; run it from inside `shore tui`".to_owned())
-        }
-        _ => None,
-    }
 }
 
 async fn handle_switch_character(
