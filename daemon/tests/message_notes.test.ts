@@ -79,20 +79,31 @@ test("each note Shore puts at the start of a user's message is recorded word for
   ]);
 });
 
-test("a time line is recorded only where it went into the message, not for a tool's result it could not be put on", async () => {
+test("a time line is recorded on the message it went into, which is the next with words of its own when a tool's result or a picture sent alone came first", async () => {
   const call: ContentBlock = { type: "tool_use", id: "t1", name: "read", input: {} };
   const result: ContentBlock = { type: "tool_result", tool_use_id: "t1", content: "done" };
+  const omitted = "[image omitted: cat.png — no longer cached]";
   const { wire, sent } = await request([
     said("u1", "user", "hello", 0),
     said("a1", "assistant", [{ type: "text", text: "Let me look." }, call], 1),
-    said("r1", "user", [result], 2),
-  ], { user_timestamp_mode: "always" });
+    said("r1", "user", [result], 61),
+    said("u2", "user", [], 61, { images: [{ path: "/nowhere/cat.png" }] }),
+    said("u3", "user", "thanks", 62),
+  ], { has_prior_context: true });
 
-  expect(texts(wire[2])).toEqual(["<tool_result>"]);
+  expect(wire.map(texts)).toEqual([
+    ["[Friday 2026-10-30 · 12:00 PM]\n\nhello"],
+    ["Let me look.", "<tool_use>"],
+    ["<tool_result>"],
+    [omitted],
+    ["[Friday 2026-10-30 · 1:02 PM]\n\nthanks"],
+  ]);
   expect(sent).toEqual([
     { msg_id: "u1", notes: [start("[Friday 2026-10-30 · 12:00 PM]")] },
     { msg_id: "a1", notes: [] },
     { msg_id: "r1", notes: [] },
+    { msg_id: "u2", notes: [start(omitted)] },
+    { msg_id: "u3", notes: [start("[Friday 2026-10-30 · 1:02 PM]")] },
   ]);
 });
 

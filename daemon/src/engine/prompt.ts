@@ -424,7 +424,6 @@ function trimMessages(
   const before = dropped > 0 ? required(messages[dropped - 1]).timestamp : archivedLastAt;
   let prevMs = before === undefined ? undefined : parseRfc3339(before);
   let lastMarkerMs: number | undefined;
-  let firstUserPending = true;
   let unsent: ImageRef[] = [];
   const result: { pm: PromptMessage; source: PromptSource }[] = [];
   const noticed = (pm: PromptMessage, notes: MessageNote[]): PromptMessage => {
@@ -442,29 +441,25 @@ function trimMessages(
     const notes: MessageNote[] = [];
 
     if (wake) result.push(addedTurn(noticed(syntheticUserTurn(wakeMarker(currentMs, mode, timeZone)), [])));
-    if (pm.role === "user" && !isToolLoopMessage(pm.role, pm.content_blocks)) noticed(pm, notes);
+    const written = pm.role === "user" && !isToolLoopMessage(pm.role, pm.content_blocks);
+    if (written) noticed(pm, notes);
 
-    if (pm.role === "user" && currentMs !== undefined) {
+    const first = pm.content_blocks[0];
+    if (written && currentMs !== undefined && first?.type === "text") {
       const gap = prevMs === undefined ? undefined : gapSeconds(prevMs, currentMs);
-
       const bigGap = gap !== undefined && gap >= TIME_GAP_THRESHOLD_SECS;
-      const hourlyTick = lastMarkerMs !== undefined && gapSeconds(lastMarkerMs, currentMs) >= HOURLY_MARKER_INTERVAL_SECS;
-      const due = bigGap || hourlyTick || (firstUserPending && lostContext);
+      const due = bigGap || (lastMarkerMs === undefined ? lostContext : gapSeconds(lastMarkerMs, currentMs) >= HOURLY_MARKER_INTERVAL_SECS);
 
       if (mode === "always" || (mode === "auto" && due)) {
         const marker = formatTimeMarker(gap, currentMs, timeZone, elsewhere);
         pm.content = `${marker}\n\n${pm.content}`;
-        const first = pm.content_blocks[0];
-        if (first !== undefined && first.type === "text") {
-          pm.content_blocks = [
-            { type: "text", text: `${marker}\n\n${first.text}` },
-            ...pm.content_blocks.slice(1),
-          ];
-          notes.unshift({ place: "start", text: marker });
-        }
+        pm.content_blocks = [
+          { type: "text", text: `${marker}\n\n${first.text}` },
+          ...pm.content_blocks.slice(1),
+        ];
+        notes.unshift({ place: "start", text: marker });
         lastMarkerMs = currentMs;
       }
-      firstUserPending = false;
     }
 
     if (presence !== undefined && currentMs !== undefined) {

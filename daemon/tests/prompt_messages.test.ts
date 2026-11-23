@@ -137,7 +137,7 @@ test("with times always shown every message of the user's says when it was, on i
     ["<tool_result>"],
     ["hi"],
   ]);
-  expect(built.map((message) => message.content)).toEqual(["[Friday 2026-10-30 · 12:00 PM]\n\nhelloagain", "Let me look.", "[Friday 2026-10-30 · 12:02 PM]\n\n", "hi"]);
+  expect(built.map((message) => message.content)).toEqual(["[Friday 2026-10-30 · 12:00 PM]\n\nhelloagain", "Let me look.", "", "hi"]);
 });
 
 test("with times never shown no message says when it was, however long the gap", () => {
@@ -170,6 +170,40 @@ test("left to Shore, a time is shown after half an hour's gap, once an hour has 
     ["user", "six"],
   ]);
   expect(shown(steady.slice(0, 2), auto)).toEqual([["user", "one"], ["user", "two"]]);
+});
+
+test("a time goes only on a message with words to put it on, so a tool's result or a picture sent alone leaves the hour's time for the next one that has them", () => {
+  const auto = { user_timestamp_mode: "auto" as const, has_prior_context: true };
+  expect(shown([
+    said("user", "start", 0),
+    said("assistant", [call], 1),
+    said("user", [result], 61),
+    said("assistant", "Done.", 61),
+    said("user", "later", 62),
+    said("assistant", "Good.", 63),
+    said("user", "soon", 90),
+  ], auto)).toEqual([
+    ["user", "[Friday 2026-10-30 · 12:00 PM]\n\nstart"],
+    ["assistant", "<tool_use>"],
+    ["user", "<tool_result>"],
+    ["assistant", "Done."],
+    ["user", "[Friday 2026-10-30 · 1:02 PM]\n\nlater"],
+    ["assistant", "Good."],
+    ["user", "soon"],
+  ]);
+  expect(shown([said("user", "start", 0), said("assistant", "Look.", 40), said("user", [], 61, { images: [{ path: "/nowhere/cat.png" }] }), said("user", "that's mine", 62)], auto)).toEqual([
+    ["user", "[Friday 2026-10-30 · 12:00 PM]\n\nstart"],
+    ["assistant", "Look."],
+    ["user", ""],
+    ["user", "[Friday 2026-10-30 · 1:02 PM]\n\nthat's mine"],
+  ]);
+  expect(shown([said("assistant", [{ type: "text", text: "Let me look." }, call], 0), said("user", [result], 1), said("assistant", "Found it.", 2), said("user", "thanks", 3)], auto)).toEqual([
+    ["user", "[earlier conversation not shown]"],
+    ["assistant", "Let me look.|<tool_use>"],
+    ["user", "<tool_result>"],
+    ["assistant", "Found it."],
+    ["user", "[Friday 2026-10-30 · 12:03 PM]\n\nthanks"],
+  ]);
 });
 
 test("what was cut or archived before the first message shown still counts for how long it has been, and one message cut is enough to say that earlier conversation isn't shown", () => {
