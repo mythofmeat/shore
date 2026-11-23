@@ -3306,6 +3306,12 @@
                   "type": "null"
                 }
               ]
+            },
+            "notes": {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/MessageNote"
+              }
             }
           },
           "required": [
@@ -3587,6 +3593,31 @@
             "user_input",
             "assistant_reply",
             "autonomous"
+          ]
+        },
+        "MessageNote": {
+          "type": "object",
+          "properties": {
+            "place": {
+              "$ref": "#/$defs/NotePlace"
+            },
+            "text": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "place",
+            "text"
+          ]
+        },
+        "NotePlace": {
+          "type": "string",
+          "enum": [
+            "before",
+            "start",
+            "instead",
+            "end",
+            "after"
           ]
         },
         "SegmentChanged": {
@@ -6017,6 +6048,12 @@
                   "type": "null"
                 }
               ]
+            },
+            "notes": {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/MessageNote"
+              }
             }
           },
           "required": [
@@ -6298,6 +6335,31 @@
             "user_input",
             "assistant_reply",
             "autonomous"
+          ]
+        },
+        "MessageNote": {
+          "type": "object",
+          "properties": {
+            "place": {
+              "$ref": "#/$defs/NotePlace"
+            },
+            "text": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "place",
+            "text"
+          ]
+        },
+        "NotePlace": {
+          "type": "string",
+          "enum": [
+            "before",
+            "start",
+            "instead",
+            "end",
+            "after"
           ]
         }
       }
@@ -14868,6 +14930,12 @@
                   "type": "null"
                 }
               ]
+            },
+            "notes": {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/MessageNote"
+              }
             }
           },
           "required": [
@@ -15149,6 +15217,31 @@
             "user_input",
             "assistant_reply",
             "autonomous"
+          ]
+        },
+        "MessageNote": {
+          "type": "object",
+          "properties": {
+            "place": {
+              "$ref": "#/$defs/NotePlace"
+            },
+            "text": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "place",
+            "text"
+          ]
+        },
+        "NotePlace": {
+          "type": "string",
+          "enum": [
+            "before",
+            "start",
+            "instead",
+            "end",
+            "after"
           ]
         },
         "SegmentSummary": {
@@ -15423,6 +15516,12 @@
                   "type": "null"
                 }
               ]
+            },
+            "notes": {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/MessageNote"
+              }
             }
           },
           "required": [
@@ -15706,6 +15805,31 @@
             "autonomous"
           ]
         },
+        "MessageNote": {
+          "type": "object",
+          "properties": {
+            "place": {
+              "$ref": "#/$defs/NotePlace"
+            },
+            "text": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "place",
+            "text"
+          ]
+        },
+        "NotePlace": {
+          "type": "string",
+          "enum": [
+            "before",
+            "start",
+            "instead",
+            "end",
+            "after"
+          ]
+        },
         "SegmentSummary": {
           "type": "object",
           "properties": {
@@ -15881,6 +16005,12 @@
               "type": "null"
             }
           ]
+        },
+        "notes": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/MessageNote"
+          }
         }
       },
       "required": [
@@ -16162,6 +16292,31 @@
             "user_input",
             "assistant_reply",
             "autonomous"
+          ]
+        },
+        "MessageNote": {
+          "type": "object",
+          "properties": {
+            "place": {
+              "$ref": "#/$defs/NotePlace"
+            },
+            "text": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "place",
+            "text"
+          ]
+        },
+        "NotePlace": {
+          "type": "string",
+          "enum": [
+            "before",
+            "start",
+            "instead",
+            "end",
+            "after"
           ]
         }
       }

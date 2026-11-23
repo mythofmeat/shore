@@ -45,6 +45,7 @@ import { eventsForResponse } from "./support/stream.ts";
 import { restoreTestEnv, setTestEnv, unsetTestEnv } from "./support/env.ts";
 import { NO_MCP } from "./support/rebuild.ts";
 import { outcomeOf, rejectionOf } from "./support/outcome.ts";
+import { required } from "../src/util/required.ts";
 import { testTmp } from "./support/tmp.ts";
 import { promptedAppConfig } from "./support/prompt_list.ts";
 
@@ -386,6 +387,39 @@ test("a wake in home leaves there how it opened, a line saying where its working
     expect(next.messages.flatMap((message) => message.content).filter((block) => block.type === "tool_use" || block.type === "tool_result")).toEqual([]);
     expect((await thread("main")).filter((message) => message.role === "user" && message.origin === "autonomous")).toHaveLength(2);
   });
+});
+
+test("what Shore puts with each message for the model is saved on it and reaches clients: a reply's notes on what it was sent, and a wake's whole opening on the opener kept with its working", async () => {
+  await withCharacter(async ({ script, say, wakeNow, thread, shown }) => {
+    await say("the keeper's name is Mara");
+    const noon = "[Friday 2026-10-30 · 12:00 PM]";
+    expect(turnsOf(script.replies[0])).toEqual([["user", `${noon}\n\nthe keeper's name is Mara`]]);
+    expect((await thread("main")).map((message) => message.notes)).toEqual([[{ place: "start", text: noon }], undefined]);
+    await shown("main", (message) => message.notes !== undefined);
+
+    at(10);
+    await wakeNow();
+    const opened = required((await thread("wakes"))[0]);
+    const [[, read] = ["", ""]] = turnsOf(script.wakes[0]);
+    const woke = "[Friday 2026-10-30 · 12:10 PM]";
+    expect(read).toStartWith(`${woke}\n\n[wake]\n\nThe last of what was said in this thread:`);
+    expect(read).toContain("the keeper's name is Mara");
+    expect(opened.content).not.toContain("the keeper's name is Mara");
+    expect(opened.notes).toEqual([{ place: "start", text: woke }, { place: "instead", text: read.slice(woke.length + 2) }]);
+    await shown("wakes", (message) => message.notes !== undefined);
+
+    at(20);
+    await say("she keeps a cat too");
+    expect((await thread("main")).map((message) => message.notes)).toEqual([
+      [{ place: "start", text: noon }],
+      undefined,
+      [{ place: "start", text: woke }],
+      [{ place: "instead", text: '[Your working in this wake is in your thread "wakes", not here: 2 tool calls.]' }],
+      [{ place: "before", text: "[wake · Friday 2026-10-30 · 12:10 PM]" }],
+      [{ place: "start", text: "[Friday 2026-10-30 · 12:20 PM]" }],
+      undefined,
+    ]);
+  }, (app) => { app.chat.user_timestamps = "always"; });
 });
 
 test("a wake's chat logs hold what is still in its own thread's conversation, since a wake isn't shown it, while a reply there searches only the other threads", async () => {
@@ -3629,6 +3663,25 @@ test("a sealed thread is kept out of the user's thread list and the character's 
     await writeFile(join(data, "ada", "sealed"), "in the way");
     expect(await answered({ name: "box", label: "A", sealed_until: "2026-11-02 08:00" })).toStartWith(`io: nothing was sealed, because the folder for its files, ${join(data, "ada", "sealed", "box")}, could not be made: mkdir:`);
     expect(runtime.registry.sealedThreads("ada").map((sealed) => sealed.id)).toEqual(["gift", "b"]);
+  }, sealing);
+});
+
+test("a wake in a sealed thread, whose working stays there, saves what it opened with on the opener there", async () => {
+  await withCharacter(async (h) => {
+    const { runtime, script, wakeNow } = h;
+    await sealsGift(h);
+    script.beatTool = { name: "wake_in_thread", input: { thread: "gift", reason: "Start on it." } };
+    at(20);
+    await wakeNow();
+    script.wakes.length = 0;
+    at(21);
+    await runtime.autonomy.runDue();
+
+    const [[, read] = ["", ""]] = turnsOf(script.wakes[0]);
+    const opener = required((await runtime.registry.sealedEngine("ada", "gift"))?.messages()[0]);
+    expect(read).toContain("[This thread is sealed until Saturday 2026-10-31 · 8:00 AM.");
+    expect(opener.content).not.toContain("Nothing has been said in this thread yet.");
+    expect(opener.notes).toEqual([{ place: "instead", text: read }]);
   }, sealing);
 });
 

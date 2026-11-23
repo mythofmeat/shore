@@ -31,6 +31,13 @@ export type ContentBlock =
     }
   | { type: "image"; source: { type: "base64"; media_type: string; data: string } };
 
+export type NotePlace = "before" | "start" | "instead" | "end" | "after";
+
+export interface MessageNote {
+  place: NotePlace;
+  text: string;
+}
+
 export interface MessageAlternative {
   content: string;
   images: ImageRef[];
@@ -61,4 +68,5 @@ export interface Message {
   wake_running?: { started_at: string; thread?: string | undefined };
   presence?: { statuses: { status: string; set_at: string }[]; changed_at: string };
   shown_later?: string;
+  notes?: MessageNote[];
 }

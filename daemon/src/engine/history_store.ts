@@ -17,6 +17,7 @@ import type {
   ImageRef,
   Message,
   MessageAlternative,
+  MessageNote,
   MessageOrigin,
 } from "./types.ts";
 
@@ -92,7 +93,8 @@ CREATE TABLE IF NOT EXISTS history_messages (
     display_seq  INTEGER,
     is_user_turn INTEGER NOT NULL,
     version      TEXT,
-    attempt      TEXT
+    attempt      TEXT,
+    notes        TEXT
 );
 
 CREATE UNIQUE INDEX IF NOT EXISTS idx_history_messages_slot
@@ -192,6 +194,7 @@ interface BodyRow {
 
 interface MessageRow extends BodyRow {
   id: number;
+  notes: string | null;
   msg_id: string;
   role: Message["role"];
   origin: MessageOrigin | null;
@@ -233,6 +236,7 @@ export class HistoryStore {
              PRAGMA busy_timeout = 5000;`);
     db.run(HISTORY_SCHEMA);
     addAttemptColumns(db);
+    addNotesColumn(db);
     dropRowCounts(db);
   }
 
@@ -609,7 +613,7 @@ export class HistoryStore {
     const rows = this.#db
       .query(
         `SELECT id, msg_id, role, timestamp, provider_key, model, origin, segment,
-                alt_index, alt_count, images, blocks_hash, version, attempt
+                alt_index, alt_count, images, blocks_hash, version, attempt, notes
          FROM history_messages
          WHERE character = ?1 AND segment = ?2
            AND EXISTS (
@@ -627,7 +631,7 @@ export class HistoryStore {
     const rows = this.#db
       .query(
         `SELECT id, msg_id, role, timestamp, provider_key, model, origin, segment, ordinal,
-                alt_index, alt_count, images, blocks_hash, version, attempt
+                alt_index, alt_count, images, blocks_hash, version, attempt, notes
          FROM history_messages
          WHERE character = ?1 AND segment = ?2
            AND ordinal IN (SELECT value FROM json_each(?3))
@@ -653,7 +657,7 @@ export class HistoryStore {
     const rows = this.#db
       .query(
         `SELECT m.id, m.msg_id, m.role, m.timestamp, m.provider_key, m.model, m.origin,
-                m.segment, m.alt_index, m.alt_count, m.images, m.blocks_hash, m.version, m.attempt
+                m.segment, m.alt_index, m.alt_count, m.images, m.blocks_hash, m.version, m.attempt, m.notes
          FROM history_messages m
          JOIN history_segments s ON s.character = m.character AND s.idx = m.segment
          WHERE m.character = ?1 AND m.segment = ?2 AND s.committed = 1
@@ -690,6 +694,7 @@ export class HistoryStore {
       if (row.origin !== null) message.origin = row.origin;
       if (row.version !== null) message.version = row.version;
       if (row.attempt !== null) message.attempt = row.attempt;
+      if (row.notes !== null) message.notes = JSON.parse(row.notes) as MessageNote[];
 
       const altRows = altQuery.all(row.id) as BodyRow[];
       if (altRows.length > 0) {
@@ -707,8 +712,8 @@ export class HistoryStore {
         `INSERT INTO history_messages
              (character, segment, ordinal, msg_id, role, timestamp,
               provider_key, model, origin, alt_index, alt_count, images, blocks_hash,
-              display_kind, display_seq, is_user_turn, version, attempt)
-         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, NULL, ?15, ?16, ?17)`,
+              display_kind, display_seq, is_user_turn, version, attempt, notes)
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, NULL, ?15, ?16, ?17, ?18)`,
       )
       .run(
         character,
@@ -728,6 +733,7 @@ export class HistoryStore {
         message.role === "user" && kind !== DISPLAY_TOOL_RESULT ? 1 : 0,
         versionOf(message) ?? null,
         message.attempt ?? null,
+        message.notes === undefined ? null : JSON.stringify(message.notes),
       );
 
     if (message.alternatives === undefined || message.alternatives.length === 0) return;
@@ -965,6 +971,11 @@ function addAttemptColumns(db: Database): void {
     const columns = db.query(`PRAGMA table_info(${table})`).all() as { name: string }[];
     if (!columns.some((column) => column.name === "attempt")) db.run(`ALTER TABLE ${table} ADD COLUMN attempt TEXT`);
   }
+}
+
+function addNotesColumn(db: Database): void {
+  const columns = db.query("PRAGMA table_info(history_messages)").all() as { name: string }[];
+  if (!columns.some((column) => column.name === "notes")) db.run("ALTER TABLE history_messages ADD COLUMN notes TEXT");
 }
 
 function dropRowCounts(db: Database): void {

@@ -21,6 +21,7 @@ import type { Message } from "../engine/types.ts";
 import { buildRequestWithResolvedKey, type BuiltRequest } from "../llm/request.ts";
 import type { McpRegistry } from "../tools/mcp_registry.ts";
 import { prepareChatContext } from "./context.ts";
+import type { SentMessage } from "./wire_messages.ts";
 
 export interface SetupEngine {
   readonly thread?: string;
@@ -104,6 +105,7 @@ export interface BuildGenerationRequestParams {
 
 export interface GenerationRequest extends BuiltRequest {
   messageBudget: number;
+  sent: SentMessage[];
 }
 
 export async function buildGenerationRequest(
@@ -137,5 +139,6 @@ export async function buildGenerationRequest(
       replay: resolvedReasoningReplay(resolved, config.app.chat.reasoning_replay),
     }),
     messageBudget: prepared.prompt.messageBudget,
+    sent: prepared.sent,
   };
 }
