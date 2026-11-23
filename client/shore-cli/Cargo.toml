@@ -5,7 +5,7 @@ publish.workspace = true
 edition.workspace = true
 license.workspace = true
 repository.workspace = true
-description = "Command-line and terminal UI client (`shore`) for the Silvershore daemon."
+description = "Command-line client (`shore`) for the Silvershore daemon."
 
 [[bin]]
 name = "shore"
@@ -25,11 +25,7 @@ chrono = "0.4"
 crossterm = "0.29"
 base64 = "0.23"
 tempfile = "3"
-ratatui = { version = "0.30", features = ["unstable-rendered-line-info"] }
-pulldown-cmark = { version = "0.13.6", default-features = false }
-unicode-width = "0.2"
 libc = "0.2"
-image = { version = "0.25", default-features = false, features = ["jpeg", "png", "webp"] }
 shlex = "2"
 sha2 = "0.11.1"
 tar = { version = "0.4.46", default-features = false }

@@ -20,12 +20,10 @@ BuildRequires:  unzip
 Persistent AI character engine.
 
 %package -n shore-cli
-Summary:        Persistent AI character engine — CLI and terminal chat client
-Recommends:     wl-clipboard
-Suggests:       yazi
+Summary:        Persistent AI character engine — command-line client
 
 %description -n shore-cli
-The shore command and its terminal chat client.
+The shore command-line client.
 
 %package -n shore-desktop
 Summary:        Persistent AI character engine — desktop app for the daemon's browser client

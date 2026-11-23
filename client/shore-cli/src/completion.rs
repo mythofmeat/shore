@@ -14,7 +14,7 @@ use shore_common::protocol::types::{ContentBlock, Message, Role};
 use shore_common::swp_client::{SWPConnection, ServerAddr};
 use shore_common::token::TokenSource;
 
-use crate::cli::{BackgroundTarget, Cli, ProviderTarget, ViewKey, leading_flag_named};
+use crate::cli::{BackgroundTarget, Cli, ProviderTarget, leading_flag_named};
 use crate::state;
 
 const COMPLETE_VAR: &str = "SHORE_COMPLETE";
@@ -25,7 +25,6 @@ const RECENT_MESSAGES: usize = 20;
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) enum Completes {
     AltSelectors,
-    BoundKeys,
     CallTypes,
     Calls,
     Characters,
@@ -35,7 +34,6 @@ pub(crate) enum Completes {
     Credentials,
     FavoriteModels,
     Folders,
-    ImageTargets,
     LimitOff,
     MarkTags,
     MessageRefs,
@@ -46,7 +44,6 @@ pub(crate) enum Completes {
     Providers,
     Sdks,
     Sections,
-    SegmentSteps,
     Segments,
     SettingKeys,
     SettingValues,
@@ -61,19 +58,13 @@ pub(crate) enum Completes {
     UsageModels,
     UsagePeriods,
     UsageProviders,
-    ViewValues,
     WorkspaceFiles,
 }
 
 impl Completes {
     fn sources(self) -> &'static [Source] {
         match self {
-            Self::AltSelectors
-            | Self::BoundKeys
-            | Self::ImageTargets
-            | Self::LimitOff
-            | Self::UsagePeriods
-            | Self::ViewValues => &[],
+            Self::AltSelectors | Self::LimitOff | Self::UsagePeriods => &[],
             Self::CallTypes => &[Source::UsageCallTypes],
             Self::Calls => &[Source::Calls],
             Self::Characters => &[Source::Characters],
@@ -87,7 +78,7 @@ impl Completes {
             Self::ProviderSettingValues => &[Source::Config, Source::Presets],
             Self::ProviderSettings => &[Source::Config],
             Self::Sections => &[Source::Status],
-            Self::SegmentSteps | Self::Segments => &[Source::Segments],
+            Self::Segments => &[Source::Segments],
             Self::SettingKeys | Self::SettingValues => &[Source::Settings],
             Self::Statuses | Self::StatusesOn => &[Source::Presence],
             Self::SubagentRuns => &[Source::SubagentRuns],
@@ -101,7 +92,7 @@ impl Completes {
     }
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) enum Source {
     Calls,
     Characters,
@@ -127,35 +118,7 @@ pub(crate) enum Source {
 }
 
 impl Source {
-    pub(crate) const LOADED_WITH_THE_PALETTE: [Self; 7] = [
-        Self::Models,
-        Self::Threads,
-        Self::Providers,
-        Self::Status,
-        Self::Tools,
-        Self::Config,
-        Self::Settings,
-    ];
-
-    const fn loads_on_demand(self) -> bool {
-        matches!(
-            self,
-            Self::Calls
-                | Self::Marks
-                | Self::Presence
-                | Self::Presets
-                | Self::Segments
-                | Self::SubagentRuns
-                | Self::ToolParameters
-                | Self::UsageApiKeys
-                | Self::UsageCallTypes
-                | Self::UsageModels
-                | Self::UsageProviders
-                | Self::WorkspaceFiles
-        )
-    }
-
-    pub(crate) fn request(self, line: Option<&Line>) -> Option<(&'static str, Json)> {
+    pub(crate) fn request(self, line: &Line) -> Option<(&'static str, Json)> {
         let usage = |group_by: &str| ("usage", json!({ "last": "all", "group_by": group_by }));
         Some(match self {
             Self::Characters | Self::History => return None,
@@ -167,14 +130,11 @@ impl Source {
             Self::Presets => ("provider_presets", json!({})),
             Self::Providers => ("list_providers", json!({})),
             Self::Segments => ("segments", json!({})),
-            Self::Settings => (
-                "model_settings",
-                line.map_or_else(|| json!({}), Line::settings_target),
-            ),
+            Self::Settings => ("model_settings", line.settings_target()),
             Self::Status => ("status", json!({})),
             Self::SubagentRuns => ("subagent_trace", json!({ "count": 10 })),
             Self::Threads => ("list_threads", json!({})),
-            Self::ToolParameters => return line.and_then(Line::debug_tool).map(described_tool),
+            Self::ToolParameters => return line.debug_tool().map(described_tool),
             Self::WorkspaceFiles => ("workspace_files", json!({})),
             Self::Tools => ("tools", json!({})),
             Self::UsageApiKeys => usage("api_key"),
@@ -268,19 +228,12 @@ pub(crate) struct PaletteCatalog {
     pub usage_api_keys: Vec<PaletteValue>,
     pub usage_models: Vec<PaletteValue>,
     pub call_types: Vec<PaletteValue>,
-    pub normal_keys: Vec<PaletteValue>,
-    pub global_keys: Vec<PaletteValue>,
-    pub budget_names: Vec<PaletteValue>,
     pub workspace_files: Vec<PaletteValue>,
     pub statuses: Vec<PaletteValue>,
     pub statuses_on: Vec<PaletteValue>,
     like_tags: Vec<PaletteValue>,
     dislike_tags: Vec<PaletteValue>,
     tool_arguments: Vec<PaletteValue>,
-    arguments_of: Option<String>,
-    arguments_wanted: Option<String>,
-    loaded: BTreeSet<Source>,
-    needed: BTreeSet<Source>,
 }
 
 impl PaletteCatalog {
@@ -319,55 +272,6 @@ impl PaletteCatalog {
             Source::UsageModels => self.usage_models = usage_values(data, true),
             Source::UsageProviders => self.usage_providers = usage_values(data, false),
         }
-        let _newly_loaded = self.loaded.insert(source);
-    }
-
-    pub(crate) fn mark_loaded(&mut self, source: Source) {
-        let _newly_loaded = self.loaded.insert(source);
-    }
-
-    pub(crate) fn forget_daemon_values(&mut self) {
-        let keep = Self {
-            models: std::mem::take(&mut self.models),
-            favorite_models: std::mem::take(&mut self.favorite_models),
-            characters: std::mem::take(&mut self.characters),
-            setting_keys: std::mem::take(&mut self.setting_keys),
-            setting_values: std::mem::take(&mut self.setting_values),
-            message_refs: std::mem::take(&mut self.message_refs),
-            normal_keys: std::mem::take(&mut self.normal_keys),
-            global_keys: std::mem::take(&mut self.global_keys),
-            budget_names: std::mem::take(&mut self.budget_names),
-            ..Self::default()
-        };
-        *self = keep;
-    }
-
-    pub(crate) fn forget_on_demand_values(&mut self) {
-        self.loaded.retain(|source| !source.loads_on_demand());
-        self.arguments_of = None;
-    }
-
-    pub(crate) fn palette_request(&mut self, source: Source) -> Option<(&'static str, Json)> {
-        if source != Source::ToolParameters {
-            return source.request(None);
-        }
-        let tool = self.arguments_wanted.take()?;
-        let request = described_tool(&tool);
-        self.tool_arguments.clear();
-        self.arguments_of = Some(tool);
-        Some(request)
-    }
-
-    fn holds(&self, source: Source, line: &Line) -> bool {
-        if source == Source::ToolParameters {
-            line.debug_tool().is_none() || self.arguments_of.as_deref() == line.debug_tool()
-        } else {
-            self.loaded.contains(&source)
-        }
-    }
-
-    pub(crate) fn absorb_folders(&mut self, data: &Json) {
-        self.folders = folder_values(data);
     }
 
     fn absorb_config(&mut self, data: &Json) {
@@ -558,25 +462,10 @@ impl PaletteCatalog {
             .map_or_else(Vec::new, |(_, credentials)| credentials.clone())
     }
 
-    fn view_values(&self, key: ViewKey) -> Vec<PaletteValue> {
-        let mut values = plain_values(key.values());
-        if key == ViewKey::Budget {
-            values.extend(self.budget_names.iter().cloned());
-        }
-        values
-    }
-
     fn values(&self, kind: Completes, line: &Line) -> Vec<PaletteValue> {
         match kind {
             Completes::AltSelectors => {
                 plain_values(&["list", "prev", "next", "first", "last", "1", "2", "3"])
-            }
-            Completes::BoundKeys => {
-                if line.is_set(&["ui", "unbind"], "global") {
-                    self.global_keys.clone()
-                } else {
-                    self.normal_keys.clone()
-                }
             }
             Completes::CallTypes => self.call_types.clone(),
             Completes::Calls => self.calls.clone(),
@@ -591,7 +480,6 @@ impl PaletteCatalog {
                 .map_or_else(Vec::new, |provider| self.credentials_of(provider)),
             Completes::FavoriteModels => self.favorite_models.clone(),
             Completes::Folders => self.folders.clone(),
-            Completes::ImageTargets => plain_values(&["paste", "clear"]),
             Completes::LimitOff => plain_values(&["off"]),
             Completes::MarkTags => {
                 if line.at(&["msg", "like"]).is_some() {
@@ -619,11 +507,6 @@ impl PaletteCatalog {
             Completes::Providers => self.providers.clone(),
             Completes::Sdks => self.sdks.clone(),
             Completes::Sections => self.status_sections.clone(),
-            Completes::SegmentSteps => {
-                let mut steps = plain_values(&["older", "newer", "current"]);
-                steps.extend(self.segments.iter().cloned());
-                steps
-            }
             Completes::Segments => self.segments.clone(),
             Completes::SettingKeys => self.setting_keys.clone(),
             Completes::SettingValues => line
@@ -649,9 +532,6 @@ impl PaletteCatalog {
             Completes::UsageModels => self.usage_models.clone(),
             Completes::UsagePeriods => plain_values(&["today", "week", "month", "all"]),
             Completes::UsageProviders => self.usage_providers.clone(),
-            Completes::ViewValues => line
-                .view_key()
-                .map_or_else(Vec::new, |key| self.view_values(key)),
             Completes::WorkspaceFiles => self.workspace_files.clone(),
             Completes::Statuses => self.statuses.clone(),
             Completes::StatusesOn => self.statuses_on.clone(),
@@ -892,12 +772,6 @@ impl Line {
             .map(String::as_str)
     }
 
-    fn is_set(&self, path: &[&str], id: &str) -> bool {
-        self.at(path)
-            .and_then(|matches| matches.try_get_one::<bool>(id).ok().flatten().copied())
-            .unwrap_or(false)
-    }
-
     fn provider(&self) -> Option<&str> {
         self.provider.as_deref()
     }
@@ -921,14 +795,6 @@ impl Line {
     fn provider_setting(&self) -> Option<&str> {
         let provider = self.provider()?;
         self.text(&["provider", provider, "set"], "setting")
-    }
-
-    fn view_key(&self) -> Option<ViewKey> {
-        self.at(&["view"])?
-            .try_get_one::<ViewKey>("key")
-            .ok()
-            .flatten()
-            .copied()
     }
 
     fn settings_target(&self) -> Json {
@@ -1075,14 +941,6 @@ fn fit_flags_to_cursor(
     edit_at(command, path, &edit)
 }
 
-fn out_of_reach_of_shells(command: Command) -> Command {
-    ["view", "ui"].into_iter().fold(command, |tree, name| {
-        tree.mut_subcommand(name, |subcommand| {
-            subcommand.name(format!("--tui-only-{name}"))
-        })
-    })
-}
-
 fn hide_flags(command: Command) -> Command {
     command
         .mut_args(|arg| {
@@ -1107,24 +965,11 @@ struct Session {
 
 impl Session {
     fn load(&mut self, kind: Completes) {
+        let Some(daemon) = self.daemon.as_mut() else {
+            return;
+        };
         for &source in kind.sources() {
-            if self.catalog.holds(source, &self.line) {
-                continue;
-            }
-            let tool = self.line.debug_tool().map(str::to_owned);
-            match self.daemon.as_mut() {
-                Some(daemon) => {
-                    daemon.load(source, &self.line, &mut self.catalog);
-                    self.catalog.mark_loaded(source);
-                }
-                None if source.loads_on_demand() => {
-                    let _newly_needed = self.catalog.needed.insert(source);
-                    if source == Source::ToolParameters {
-                        self.catalog.arguments_wanted = tool;
-                    }
-                }
-                None => {}
-            }
+            daemon.load(source, &self.line, &mut self.catalog);
         }
     }
 }
@@ -1161,7 +1006,7 @@ impl Daemon {
             return;
         }
         self.connect(&addr, character, thread, catalog);
-        let Some((name, args)) = source.request(Some(line)) else {
+        let Some((name, args)) = source.request(line) else {
             return;
         };
         if let Some(data) = self.ask(name, args) {
@@ -1276,20 +1121,33 @@ fn shell_words() -> (Vec<String>, String) {
 
 fn shell_command() -> Command {
     let (before, current) = shell_words();
-    let command = grammar(&before);
-    let line = Line::parse(&command, &before);
+    completing(
+        &before,
+        &current,
+        PaletteCatalog::default(),
+        Some(Daemon::new()),
+    )
+}
+
+fn completing(
+    before: &[String],
+    current: &str,
+    catalog: PaletteCatalog,
+    daemon: Option<Daemon>,
+) -> Command {
+    let command = grammar(before);
+    let line = Line::parse(&command, before);
     let path = line.subcommand_path();
     SESSION.set(Some(Session {
         line,
-        catalog: PaletteCatalog::default(),
-        daemon: Some(Daemon::new()),
+        catalog,
+        daemon,
     }));
-    let fitted = fit_flags_to_cursor(command, &path, before.last().map(String::as_str), &current);
-    let reachable = out_of_reach_of_shells(fitted);
+    let fitted = fit_flags_to_cursor(command, &path, before.last().map(String::as_str), current);
     if current.starts_with('-') {
-        reachable
+        fitted
     } else {
-        hide_flags(reachable)
+        hide_flags(fitted)
     }
 }
 
@@ -1315,155 +1173,6 @@ fn registration_script(shell: Shell) -> String {
 
 pub(crate) fn print_completions(shell: Shell) {
     cli_write!("{}", registration_script(shell));
-}
-
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub(crate) struct PaletteCandidate {
-    pub replacement: String,
-    pub help: Option<String>,
-}
-
-#[derive(Clone, Debug, Default, PartialEq, Eq)]
-pub(crate) struct PaletteCompletions {
-    pub candidates: Vec<PaletteCandidate>,
-    pub header: Option<String>,
-    pub needed: Vec<Source>,
-}
-
-fn palette_command(words: &[String]) -> Command {
-    let mut command = grammar(words)
-        .mut_arg("character", |argument| argument.hide(true))
-        .mut_arg("addr", |argument| argument.hide(true))
-        .mut_arg("help", |argument| argument.hide(true))
-        .mut_arg("version", |argument| argument.hide(true))
-        .mut_subcommand("completions", |subcommand| subcommand.hide(true))
-        .mut_subcommand("view", |subcommand| subcommand.hide(false))
-        .mut_subcommand("ui", |subcommand| subcommand.hide(false));
-
-    for local in [
-        Command::new("cancel").about("Stop the current generation"),
-        Command::new("help").about("Show TUI keyboard shortcuts"),
-        Command::new("image")
-            .about("Manage images attached to the next message")
-            .subcommand(Command::new("clear").about("Remove pending image attachments")),
-    ] {
-        command = command.subcommand(local);
-    }
-    command
-}
-
-struct OpenWord {
-    start: usize,
-    quote: Option<char>,
-    escaping: bool,
-}
-
-fn open_word(input: &str) -> OpenWord {
-    let mut word = OpenWord {
-        start: 0,
-        quote: None,
-        escaping: false,
-    };
-    for (index, ch) in input.char_indices() {
-        if word.escaping {
-            word.escaping = false;
-            continue;
-        }
-        match ch {
-            '\\' if word.quote != Some('\'') => word.escaping = true,
-            '\'' | '"' if word.quote == Some(ch) => word.quote = None,
-            '\'' | '"' if word.quote.is_none() => word.quote = Some(ch),
-            _ if ch.is_whitespace() && word.quote.is_none() => {
-                word.start = index.saturating_add(ch.len_utf8());
-            }
-            _ => {}
-        }
-    }
-    word
-}
-
-fn completion_argv(input: &str) -> (Vec<OsString>, usize) {
-    let open = open_word(input);
-    let typed = input
-        .strip_suffix('\\')
-        .filter(|_| open.escaping)
-        .unwrap_or(input);
-    let begins_a_word = open.start == typed.len();
-    let mut closed = typed.to_owned();
-    closed.extend(open.quote);
-    let mut words = shlex::split(&closed).unwrap_or_default();
-    if begins_a_word {
-        words.push(String::new());
-    }
-    let mut argv = vec![OsString::from(BIN)];
-    argv.extend(words.into_iter().map(OsString::from));
-    let target = argv.len().saturating_sub(1);
-    (argv, target)
-}
-
-fn completion_prefix(input: &str) -> &str {
-    input.get(..open_word(input).start).unwrap_or_default()
-}
-
-fn palette_spelling(value: &str) -> Option<String> {
-    let needs_no_quotes = |ch: char| ch.is_alphanumeric() || "_-./:@%+=,".contains(ch);
-    if !value.is_empty() && value.chars().all(needs_no_quotes) {
-        return Some(value.to_owned());
-    }
-    shlex::try_quote(value).ok().map(Into::into)
-}
-
-pub(crate) fn palette_completions(input: &str, catalog: &mut PaletteCatalog) -> PaletteCompletions {
-    let (argv, target) = completion_argv(input);
-    let prefix = completion_prefix(input);
-    let lossy = |word: &OsString| word.to_string_lossy().into_owned();
-    let before = argv
-        .get(1..target)
-        .unwrap_or_default()
-        .iter()
-        .map(lossy)
-        .collect::<Vec<_>>();
-    let current = argv.get(target).map(lossy).unwrap_or_default();
-
-    let command = palette_command(&before);
-    let line = Line::parse(&command, &before);
-    let path = line.subcommand_path();
-    catalog.needed.clear();
-    SESSION.set(Some(Session {
-        line,
-        catalog: std::mem::take(catalog),
-        daemon: None,
-    }));
-    let mut fitted =
-        fit_flags_to_cursor(command, &path, before.last().map(String::as_str), &current);
-    let completed = clap_complete::engine::complete(&mut fitted, argv, target, None);
-    if let Some(session) = SESSION.take() {
-        *catalog = session.catalog;
-    }
-    let needed = std::mem::take(&mut catalog.needed).into_iter().collect();
-    let mut candidates = completed
-        .unwrap_or_default()
-        .into_iter()
-        .filter_map(|candidate| {
-            let value = candidate.get_value().to_str()?;
-            if matches!(value, "-h" | "--help" | "-V" | "--version") {
-                return None;
-            }
-            let quoted = palette_spelling(value)?;
-            Some(PaletteCandidate {
-                replacement: format!("{prefix}{quoted}"),
-                help: candidate.get_help().map(ToString::to_string),
-            })
-        })
-        .collect::<Vec<_>>();
-    let mut seen = std::collections::HashSet::new();
-    candidates.retain(|candidate| seen.insert(candidate.replacement.clone()));
-
-    PaletteCompletions {
-        header: (!candidates.is_empty()).then(|| "command, option, or value".to_owned()),
-        candidates,
-        needed,
-    }
 }
 
 #[cfg(test)]
@@ -1547,19 +1256,37 @@ mod tests {
         catalog
     }
 
-    fn offered(input: &str) -> Vec<String> {
-        let prefix = completion_prefix(input).to_owned();
-        palette_completions(input, &mut filled_catalog())
-            .candidates
+    fn completed(input: &str, catalog: PaletteCatalog) -> Vec<(String, Option<String>)> {
+        let mut before = input
+            .split_whitespace()
+            .map(str::to_owned)
+            .collect::<Vec<_>>();
+        let current = if input.ends_with(' ') {
+            String::new()
+        } else {
+            before.pop().unwrap_or_default()
+        };
+        let mut command = completing(&before, &current, catalog, None);
+        let mut argv = vec![OsString::from(BIN)];
+        argv.extend(before.iter().map(OsString::from));
+        argv.push(OsString::from(current));
+        let cursor = argv.len().saturating_sub(1);
+        clap_complete::engine::complete(&mut command, argv, cursor, None)
+            .unwrap_or_default()
             .into_iter()
             .map(|candidate| {
-                candidate
-                    .replacement
-                    .strip_prefix(prefix.as_str())
-                    .unwrap_or(&candidate.replacement)
-                    .to_owned()
+                (
+                    candidate.get_value().to_string_lossy().into_owned(),
+                    candidate.get_help().map(ToString::to_string),
+                )
             })
-            .filter(|value| !value.starts_with("--"))
+            .collect()
+    }
+
+    fn offered(input: &str) -> Vec<String> {
+        offered_with_help(input, &filled_catalog())
+            .into_iter()
+            .map(|(value, _)| value)
             .collect()
     }
 
@@ -1571,10 +1298,10 @@ mod tests {
                 &["models", "refresh", "add", "anthropic", "openrouter"],
             ),
             ("provider open", &["openrouter"]),
-            ("presence ", &["asleep", "busy", "'in bed'"]),
+            ("presence ", &["asleep", "busy", "in bed"]),
             ("presence b", &["busy"]),
             ("presence --off ", &["asleep"]),
-            ("presence --forget i", &["'in bed'"]),
+            ("presence --forget i", &["in bed"]),
             (
                 "provider openrouter ",
                 &[
@@ -1633,9 +1360,6 @@ mod tests {
             ("usage --model ", &["opus"]),
             ("usage --last ", &["today", "week", "month", "all"]),
             ("status --section ", &["tokens"]),
-            ("view compaction ", &["on", "off", "toggle"]),
-            ("view usage ", &["off", "always", "warn", "toggle"]),
-            ("ui segment ", &["older", "newer", "current", "2", "1"]),
             ("msg like --tag ", &["warm"]),
             ("msg like 3 --tag warm --tag ", &["warm"]),
             ("msg dislike --tag ", &["flat", "long"]),
@@ -1653,56 +1377,13 @@ mod tests {
             ["sonnet", "opus"],
             "`--background all` is refused, so the next word is the model"
         );
-        let forms = palette_completions("model use --b", &mut filled_catalog())
-            .candidates
+        let forms = completed("model use --b", filled_catalog())
             .into_iter()
-            .map(|candidate| candidate.replacement)
+            .map(|(value, _)| value)
             .collect::<Vec<_>>();
         assert!(
             forms.iter().any(|form| form.contains("--background=wake")),
             "the spelled-out form is offered with the flag: {forms:?}"
-        );
-    }
-
-    #[test]
-    fn a_palette_lookup_is_asked_for_once_and_only_where_it_is_used() {
-        let mut catalog = PaletteCatalog::default();
-        assert!(
-            palette_completions("provider openrouter auth ", &mut catalog)
-                .needed
-                .is_empty(),
-            "nothing on-demand is requested for a line that does not use it"
-        );
-        assert_eq!(
-            palette_completions("segments show ", &mut catalog).needed,
-            [Source::Segments],
-            "reaching the argument asks for its values"
-        );
-        catalog.absorb(Source::Segments, &json!({ "segments": [] }));
-        assert!(
-            palette_completions("segments show ", &mut catalog)
-                .needed
-                .is_empty(),
-            "an answer, even an empty one, is not asked for again"
-        );
-        catalog.forget_on_demand_values();
-        assert_eq!(
-            palette_completions("segments show ", &mut catalog).needed,
-            [Source::Segments],
-            "reopening the palette refreshes values that go stale"
-        );
-    }
-
-    #[test]
-    fn reason_tags_are_asked_for_without_any_reply_so_a_thread_with_none_still_has_them() {
-        let mut catalog = PaletteCatalog::default();
-        assert_eq!(
-            palette_completions("msg dislike --tag ", &mut catalog).needed,
-            [Source::Marks]
-        );
-        assert_eq!(
-            catalog.palette_request(Source::Marks),
-            Some(("marks", json!({ "refs": [] })))
         );
     }
 
@@ -1718,7 +1399,7 @@ mod tests {
             ]}),
         );
         assert_eq!(
-            offered_with_help("log --segment ", &mut catalog),
+            offered_with_help("log --segment ", &catalog),
             described(&[
                 ("3", Some("30 turns")),
                 ("2", Some("the storm")),
@@ -1741,48 +1422,34 @@ mod tests {
 
     #[test]
     fn a_tool_lookup_can_only_ever_describe_the_tool() {
-        let mut catalog = PaletteCatalog::default();
-        let asked = palette_completions("debug tool bash ", &mut catalog).needed;
-        assert_eq!(asked, [Source::ToolParameters]);
-        let (name, args) = catalog
-            .palette_request(Source::ToolParameters)
-            .expect("the line names a tool");
-        assert_eq!(name, "run_tool");
+        let lookup = |typed: &[&str]| {
+            let words = typed.iter().map(ToString::to_string).collect::<Vec<_>>();
+            Source::ToolParameters.request(&Line::parse(&grammar(&words), &words))
+        };
         assert_eq!(
-            args,
-            json!({ "tool": "bash", "describe": true }),
+            lookup(&["debug", "tool", "bash"]),
+            Some(("run_tool", json!({ "tool": "bash", "describe": true }))),
             "a keystroke must never be able to run the tool"
         );
-        assert!(
-            palette_completions("debug tool bash ", &mut catalog)
-                .needed
-                .is_empty(),
-            "an answer in flight or an error is not asked for again"
-        );
         assert_eq!(
-            palette_completions("debug tool read ", &mut catalog).needed,
-            [Source::ToolParameters],
-            "another tool has other arguments"
+            lookup(&["debug", "tool", "read", "path=x"]),
+            Some(("run_tool", json!({ "tool": "read", "describe": true })))
         );
+        assert_eq!(lookup(&["debug", "tool"]), None, "no tool, nothing to ask");
     }
 
     #[test]
     fn tool_arguments_lead_with_the_required_and_drop_those_already_given() {
         let mut catalog = PaletteCatalog::default();
-        _ = palette_completions("debug tool search ", &mut catalog);
-        _ = catalog.palette_request(Source::ToolParameters);
         catalog.absorb(Source::ToolParameters, &described_search());
-        let offered_here = |input: &str, loaded: &mut PaletteCatalog| {
-            let prefix = completion_prefix(input).to_owned();
-            palette_completions(input, loaded)
-                .candidates
+        let offered_here = |input: &str, loaded: &PaletteCatalog| {
+            offered_with_help(input, loaded)
                 .into_iter()
-                .map(|candidate| candidate.replacement.replacen(&prefix, "", 1))
-                .filter(|value| !value.starts_with("--"))
+                .map(|(value, _)| value)
                 .collect::<Vec<_>>()
         };
         assert_eq!(
-            offered_here("debug tool search ", &mut catalog),
+            offered_here("debug tool search ", &catalog),
             [
                 "query=",
                 "limit=",
@@ -1793,7 +1460,7 @@ mod tests {
             ],
         );
         assert_eq!(
-            offered_here("debug tool search query=cache ", &mut catalog),
+            offered_here("debug tool search query=cache ", &catalog),
             [
                 "limit=",
                 "mode=hybrid",
@@ -1803,7 +1470,7 @@ mod tests {
             ],
         );
         assert_eq!(
-            offered_here("debug tool search query=cache mode=", &mut catalog),
+            offered_here("debug tool search query=cache mode=", &catalog),
             ["mode=hybrid", "mode=lexical"],
         );
     }
@@ -1829,22 +1496,9 @@ mod tests {
         }
     }
 
-    fn offered_with_help(
-        input: &str,
-        catalog: &mut PaletteCatalog,
-    ) -> Vec<(String, Option<String>)> {
-        let prefix = completion_prefix(input).to_owned();
-        palette_completions(input, catalog)
-            .candidates
+    fn offered_with_help(input: &str, catalog: &PaletteCatalog) -> Vec<(String, Option<String>)> {
+        completed(input, catalog.clone())
             .into_iter()
-            .map(|candidate| {
-                let value = candidate
-                    .replacement
-                    .strip_prefix(prefix.as_str())
-                    .unwrap_or(&candidate.replacement)
-                    .to_owned();
-                (value, candidate.help)
-            })
             .filter(|(value, _)| !value.starts_with("--"))
             .collect()
     }
@@ -2007,284 +1661,20 @@ mod tests {
             ("usage --api-key ", &[("default", Some("anthropic"))]),
             (
                 "usage --provider ",
-                &[("'my provider'", None), ("anthropic", None)],
+                &[("my provider", None), ("anthropic", None)],
             ),
             (
                 "usage --call-type ",
-                &[("message", None), ("'tool loop'", None)],
+                &[("message", None), ("tool loop", None)],
             ),
         ];
-        let mut catalog = daemon_catalog();
+        let catalog = daemon_catalog();
         for (input, expected) in cases {
             assert_eq!(
-                offered_with_help(input, &mut catalog),
+                offered_with_help(input, &catalog),
                 described(expected),
                 "completing {input:?}"
             );
         }
-    }
-
-    #[test]
-    fn a_budget_readout_also_offers_the_configured_budget_names() {
-        let mut catalog = PaletteCatalog {
-            budget_names: plain_values(&["monthly"]),
-            ..PaletteCatalog::default()
-        };
-        assert_eq!(
-            offered("view budget ").len(),
-            ViewKey::Budget.values().len(),
-            "with no names known, only the fixed readouts"
-        );
-        let budget = offered_with_help("view budget ", &mut catalog);
-        assert_eq!(
-            budget
-                .iter()
-                .map(|(value, _)| value.as_str())
-                .collect::<Vec<_>>(),
-            ["auto", "cap", "pace", "toggle", "monthly"]
-        );
-        let usage = offered_with_help("view usage ", &mut catalog);
-        assert_eq!(
-            usage
-                .iter()
-                .map(|(value, _)| value.as_str())
-                .collect::<Vec<_>>(),
-            ["off", "always", "warn", "toggle"],
-            "other readouts take no budget name"
-        );
-    }
-
-    #[test]
-    fn forgetting_one_daemon_keeps_what_the_tui_tracks_itself() {
-        let mut catalog = filled_catalog();
-        catalog.setting_keys = plain_values(&["temperature"]);
-        let _previous = catalog
-            .setting_values
-            .insert("temperature".to_owned(), plain_values(&["0.7"]));
-        catalog.message_refs = plain_values(&["m_1"]);
-        catalog.normal_keys = plain_values(&["j"]);
-        catalog.global_keys = plain_values(&["ctrl-c"]);
-        catalog.budget_names = plain_values(&["monthly"]);
-        catalog.forget_daemon_values();
-        let values = |input: &str, forgotten: &mut PaletteCatalog| {
-            offered_with_help(input, forgotten)
-                .into_iter()
-                .map(|(value, _)| value)
-                .collect::<Vec<_>>()
-        };
-        let kept: &[(&str, &[&str])] = &[
-            ("model fav ", &["sonnet", "opus"]),
-            ("model unfav ", &["opus"]),
-            ("export ", &["alice", "bob"]),
-            ("model setting ", &["temperature"]),
-            ("model setting temperature ", &["0.7"]),
-            ("msg edit ", &["last", "-1", "-2", "-3", "m_1"]),
-            ("ui unbind ", &["j"]),
-            ("ui unbind --global ", &["ctrl-c"]),
-            (
-                "view budget ",
-                &["auto", "cap", "pace", "toggle", "monthly"],
-            ),
-        ];
-        for (input, expected) in kept {
-            assert_eq!(&values(input, &mut catalog), expected, "kept for {input:?}");
-        }
-        for input in [
-            "thread lock ",
-            "provider openrouter auth ",
-            "segments show ",
-        ] {
-            assert!(
-                values(input, &mut catalog).is_empty(),
-                "{input:?} had the old daemon's values"
-            );
-        }
-    }
-
-    #[test]
-    fn a_source_marked_loaded_is_not_asked_for_again() {
-        let mut catalog = PaletteCatalog::default();
-        assert_eq!(
-            palette_completions("segments show ", &mut catalog).needed,
-            [Source::Segments]
-        );
-        catalog.mark_loaded(Source::Segments);
-        assert!(
-            palette_completions("segments show ", &mut catalog)
-                .needed
-                .is_empty()
-        );
-    }
-
-    #[test]
-    fn the_palette_heads_its_list_only_when_there_is_something_to_pick() {
-        let mut catalog = filled_catalog();
-        assert_eq!(
-            palette_completions("thread lock ", &mut catalog)
-                .header
-                .as_deref(),
-            Some("command, option, or value")
-        );
-        let nothing = palette_completions("thread lock zzz", &mut catalog);
-        assert!(nothing.candidates.is_empty());
-        assert_eq!(nothing.header, None);
-    }
-
-    #[test]
-    fn a_completion_keeps_what_was_typed_before_the_word_it_completes() {
-        let cases: &[(&str, &str)] = &[
-            (
-                "thread move \"my story\" --folder f",
-                "thread move \"my story\" --folder ",
-            ),
-            (
-                "thread move 'my story' --folder f",
-                "thread move 'my story' --folder ",
-            ),
-            (
-                "thread move my\\ story --folder f",
-                "thread move my\\ story --folder ",
-            ),
-            (
-                "thread move \"it's\" --folder f",
-                "thread move \"it's\" --folder ",
-            ),
-            (
-                "thread move 'a\\' --folder f",
-                "thread move 'a\\' --folder ",
-            ),
-            (
-                "thread move \"a\\\" b\" --folder f",
-                "thread move \"a\\\" b\" --folder ",
-            ),
-        ];
-        for (input, kept) in cases {
-            assert_eq!(completion_prefix(input), *kept, "completing {input:?}");
-            let replaced = palette_completions(input, &mut filled_catalog())
-                .candidates
-                .into_iter()
-                .map(|candidate| candidate.replacement)
-                .collect::<Vec<_>>();
-            assert_eq!(replaced, [format!("{kept}fiction")], "completing {input:?}");
-        }
-    }
-
-    #[test]
-    fn a_quoted_word_is_replaced_from_where_its_quote_opened() {
-        for input in [
-            "thread move story --folder \"my st\"",
-            "thread move story --folder 'my st'",
-        ] {
-            let mut catalog = PaletteCatalog {
-                folders: plain_values(&["my stories"]),
-                ..PaletteCatalog::default()
-            };
-            let replaced = palette_completions(input, &mut catalog)
-                .candidates
-                .into_iter()
-                .map(|candidate| candidate.replacement)
-                .collect::<Vec<_>>();
-            assert_eq!(
-                replaced,
-                ["thread move story --folder 'my stories'"],
-                "completing {input:?}"
-            );
-        }
-    }
-
-    #[test]
-    fn a_word_still_being_typed_completes_as_if_its_quote_were_closed() {
-        for input in [
-            "thread move story --folder \"my st",
-            "thread move story --folder 'my st",
-            "thread move story --folder \"my",
-            "thread move story --folder \"my ",
-            "thread move story --folder 'my ",
-            "thread move story --folder \"",
-            "thread move story --folder \"my\\",
-            "thread move story --folder my\\ ",
-            "thread move story --folder my\\",
-            "thread move story --folder \\",
-        ] {
-            let mut catalog = PaletteCatalog {
-                folders: plain_values(&["my stories"]),
-                ..PaletteCatalog::default()
-            };
-            let replaced = palette_completions(input, &mut catalog)
-                .candidates
-                .into_iter()
-                .map(|candidate| candidate.replacement)
-                .collect::<Vec<_>>();
-            assert_eq!(
-                replaced,
-                ["thread move story --folder 'my stories'"],
-                "completing {input:?}"
-            );
-        }
-    }
-
-    #[test]
-    fn a_quote_inside_the_other_kind_of_quote_is_part_of_the_word() {
-        for (input, folders, completed) in [
-            (
-                "thread move story --folder \"it's m",
-                &["it's mine", "its mine"][..],
-                "thread move story --folder \"it's mine\"",
-            ),
-            (
-                "thread move story --folder 'say \"h",
-                &["say \"hi\"", "say hi"][..],
-                "thread move story --folder 'say \"hi\"'",
-            ),
-            (
-                "thread move story --folder 'a\\",
-                &["a\\b", "ab"][..],
-                "thread move story --folder \"a\\\\b\"",
-            ),
-        ] {
-            let mut catalog = PaletteCatalog {
-                folders: plain_values(folders),
-                ..PaletteCatalog::default()
-            };
-            let replaced = palette_completions(input, &mut catalog)
-                .candidates
-                .into_iter()
-                .map(|candidate| candidate.replacement)
-                .collect::<Vec<_>>();
-            assert_eq!(replaced, [completed], "completing {input:?}");
-        }
-    }
-
-    #[test]
-    fn the_folders_a_thread_listing_names_are_offered_for_a_folder() {
-        let mut catalog = PaletteCatalog::default();
-        catalog.absorb_folders(&json!({ "folders": [{ "name": "fiction" }, { "name": "work" }] }));
-        let offered = palette_completions("thread move story --folder ", &mut catalog)
-            .candidates
-            .into_iter()
-            .map(|candidate| candidate.replacement)
-            .collect::<Vec<_>>();
-        assert_eq!(
-            offered,
-            [
-                "thread move story --folder fiction",
-                "thread move story --folder work"
-            ]
-        );
-    }
-
-    #[test]
-    fn a_shell_is_never_offered_tui_only_commands() {
-        let command = out_of_reach_of_shells(grammar(&[]));
-        assert!(command.find_subcommand("view").is_none());
-        assert!(command.find_subcommand("ui").is_none());
-        assert!(
-            command.find_subcommand("thread").is_some(),
-            "every other command stays within reach"
-        );
-        assert!(
-            palette_command(&[]).find_subcommand("view").is_some(),
-            "the TUI keeps them"
-        );
     }
 }

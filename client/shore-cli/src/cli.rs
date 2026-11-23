@@ -1,5 +1,5 @@
 use crate::completion::{Completes, provider_names, values};
-use clap::{Args, CommandFactory, FromArgMatches, Parser, Subcommand, ValueEnum};
+use clap::{Args, Parser, Subcommand, ValueEnum};
 use clap_complete::Shell;
 use shore_common::protocol::operations::{
     ActivateSession, BackgroundModelTarget, CallLogArgs, CancelCompaction, CheckConfiguration,
@@ -592,30 +592,6 @@ pub(crate) enum CliCommand {
         json: bool,
     },
 
-    /// Turn a TUI display element on or off. Only meaningful inside `shore tui`
-    ///
-    /// Hidden from the terminal's help and shell completions because this
-    /// process has no screen to change; `palette_command` un-hides it.
-    #[command(hide = true)]
-    View {
-        /// Which display element to change
-        key: ViewKey,
-
-        /// New state. Defaults to `toggle`; `usage` and `budget` take their own values
-        #[arg(add = values(Completes::ViewValues))]
-        value: Option<String>,
-    },
-
-    /// Drive the running TUI: scroll, panels, pickers, palettes. Only
-    /// meaningful inside `shore tui`
-    ///
-    /// Hidden alongside `view`, and un-hidden the same way.
-    #[command(hide = true)]
-    Ui {
-        #[command(subcommand)]
-        command: UiCommand,
-    },
-
     /// Generate shell completions
     #[command(display_order = 12)]
     Completions {
@@ -820,220 +796,6 @@ pub(crate) enum SegmentsCommand {
         index: u32,
         note: Option<String>,
     },
-}
-
-/// Display elements `shore view` can change. Every one of these persists into
-/// the TUI's preferences file.
-#[derive(ValueEnum, Clone, Copy, Debug, PartialEq, Eq)]
-pub(crate) enum ViewKey {
-    /// Message timestamps
-    Timestamps,
-    /// Reasoning and thinking blocks
-    Thinking,
-    /// Tool calls and their results
-    Tools,
-    /// Nested sub-agent tool activity
-    Subagent,
-    /// The compaction pass's own reasoning and tool calls
-    Compaction,
-    /// Inline images
-    Images,
-    /// Per-message metadata line
-    Metadata,
-    /// Token usage readout: off, always, warn, or toggle
-    Usage,
-    /// Budget readout: auto, cap, pace, a budget name, or toggle
-    Budget,
-}
-
-impl ViewKey {
-    pub(crate) fn as_str(self) -> &'static str {
-        match self {
-            ViewKey::Timestamps => "timestamps",
-            ViewKey::Thinking => "thinking",
-            ViewKey::Tools => "tools",
-            ViewKey::Subagent => "subagent",
-            ViewKey::Compaction => "compaction",
-            ViewKey::Images => "images",
-            ViewKey::Metadata => "metadata",
-            ViewKey::Usage => "usage",
-            ViewKey::Budget => "budget",
-        }
-    }
-
-    /// Completes this key accepts, for completion and for the error text when a
-    /// value does not parse. `budget` also takes any configured budget name,
-    /// which only the running daemon knows.
-    pub(crate) fn values(self) -> &'static [&'static str] {
-        match self {
-            ViewKey::Usage => &["off", "always", "warn", "toggle"],
-            ViewKey::Budget => &["auto", "cap", "pace", "toggle"],
-            ViewKey::Timestamps
-            | ViewKey::Thinking
-            | ViewKey::Tools
-            | ViewKey::Subagent
-            | ViewKey::Compaction
-            | ViewKey::Images
-            | ViewKey::Metadata => &["on", "off", "toggle"],
-        }
-    }
-}
-
-/// Actions that only exist while a TUI is on screen. These never reach the
-/// daemon; `to_swp_command` returns `None` for all of them.
-#[derive(Subcommand, Debug, Clone, PartialEq, Eq)]
-pub(crate) enum UiCommand {
-    /// Leave normal mode and start typing
-    Insert {
-        /// Put the cursor at the start of the input
-        #[arg(long, conflicts_with = "end")]
-        home: bool,
-
-        /// Put the cursor at the end of the input
-        #[arg(long)]
-        end: bool,
-    },
-
-    /// Leave insert mode
-    Normal,
-
-    /// Move the transcript viewport
-    Scroll {
-        /// Which way to move
-        direction: ScrollDirection,
-
-        /// How many lines, for `up` and `down`. Defaults to 1
-        amount: Option<u16>,
-    },
-
-    /// Show an archived conversation segment, or go back to the current context
-    Segment {
-        /// `older` or `newer` to step from what is shown, `current` to go
-        /// back, or a segment number to jump to
-        #[arg(value_parser = segment_target, add = values(Completes::SegmentSteps))]
-        target: SegmentTarget,
-    },
-
-    /// Switch to another thread, in the order the thread menu lists them
-    Thread {
-        /// `next` or `previous` to step through the threads, or `unread` to
-        /// open the next one with messages you haven't seen
-        target: ThreadStep,
-    },
-
-    /// Open the fullscreen image viewer on the nearest image
-    Images,
-
-    /// Open the sub-agent panel
-    Subagents,
-
-    /// Open the current input in $EDITOR
-    Editor,
-
-    /// Attach, paste, or drop images queued for the next message
-    Image {
-        /// `paste` to take one from the clipboard, `clear` to drop the queue, a
-        /// file path to attach it, or nothing to open the picker. A file
-        /// actually named `paste` or `clear` has to go through the picker
-        #[arg(add = values(Completes::ImageTargets))]
-        target: Option<String>,
-    },
-
-    /// Stop the in-flight response, if there is one
-    Cancel,
-
-    /// Abandon a `msg edit` that is loaded in the input box, including one
-    /// whose fetch is still in flight
-    EditCancel,
-
-    /// Show the key and command reference
-    Help,
-
-    /// Open a command palette
-    Palette {
-        /// Which palette to open
-        scope: PaletteScope,
-    },
-
-    /// Reopen the output of the last command you ran
-    Output,
-
-    /// Bind a key to a command and save it to `tui.toml`
-    ///
-    /// The command is anything the `:` prompt takes, so `ui bind q "ui quit"`
-    /// and typing `ui quit` do the same thing. Write modifiers as `ctrl+`,
-    /// `alt+` and `shift+`; a shifted letter is just its capital.
-    Bind {
-        /// Key to bind, such as `q`, `ctrl+g` or `shift+f`
-        key: String,
-
-        /// Command to run, quoted if it has spaces
-        #[arg(required = true, allow_hyphen_values = true)]
-        command: Vec<String>,
-
-        /// Bind in every mode, including while typing, rather than normal mode
-        #[arg(long)]
-        global: bool,
-    },
-
-    /// Remove a key binding and save `tui.toml`
-    Unbind {
-        /// Key to free up
-        #[arg(add = values(Completes::BoundKeys))]
-        key: String,
-
-        /// Free it from the every-mode bindings rather than normal mode
-        #[arg(long)]
-        global: bool,
-    },
-
-    /// Leave the TUI
-    Quit,
-}
-
-#[derive(ValueEnum, Clone, Copy, Debug, PartialEq, Eq)]
-pub(crate) enum ThreadStep {
-    Next,
-    Previous,
-    Unread,
-}
-
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub(crate) enum SegmentTarget {
-    Older,
-    Newer,
-    Current,
-    Index(u32),
-}
-
-fn segment_target(raw: &str) -> Result<SegmentTarget, String> {
-    match raw {
-        "older" => Ok(SegmentTarget::Older),
-        "newer" => Ok(SegmentTarget::Newer),
-        "current" => Ok(SegmentTarget::Current),
-        number => number.parse().map(SegmentTarget::Index).map_err(|_| {
-            format!("expected older, newer, current or a segment number, not {raw:?}")
-        }),
-    }
-}
-
-#[derive(ValueEnum, Clone, Copy, Debug, PartialEq, Eq)]
-pub(crate) enum ScrollDirection {
-    Up,
-    Down,
-    Top,
-    Bottom,
-}
-
-#[derive(ValueEnum, Clone, Copy, Debug, Default, PartialEq, Eq)]
-pub(crate) enum PaletteScope {
-    /// Every command, typed
-    #[default]
-    Full,
-    /// The curated conversation shortcuts
-    Shortcuts,
-    /// The settings browser
-    Config,
 }
 
 /// Background task to retarget `shore model setting` at. Wakes are the only
@@ -2507,78 +2269,6 @@ fn grouped_names() -> impl Iterator<Item = &'static str> {
         .flat_map(|(_, names)| names.iter().copied())
 }
 
-/// Whether `input` is a whole command or only the start of one.
-///
-/// A `/` shortcut is allowed to name a command that still needs an argument,
-/// like `msg edit`: choosing it should load the line for the user to finish.
-/// A command that is simply wrong is still an error.
-pub(crate) fn palette_command_needs_more_input(input: &str) -> Result<bool, String> {
-    let Some(words) = shlex::split(input) else {
-        return Err("unclosed quote in command".to_owned());
-    };
-    let argv = std::iter::once("shore".to_owned())
-        .chain(words)
-        .collect::<Vec<_>>();
-    if let Some(problem) = flag_problem(&argv)
-        && let Some(message) = target_problem_message(&problem)
-    {
-        return Err(message);
-    }
-    match Cli::try_parse_from(argv) {
-        Ok(parsed) => {
-            if parsed.command.is_some() {
-                Ok(false)
-            } else {
-                Err("missing command".to_owned())
-            }
-        }
-        Err(error)
-            if matches!(
-                error.kind(),
-                clap::error::ErrorKind::MissingRequiredArgument
-                    | clap::error::ErrorKind::MissingSubcommand
-            ) =>
-        {
-            Ok(true)
-        }
-        Err(error) => Err(error.to_string()),
-    }
-}
-
-pub(crate) fn parse_palette_command(input: &str) -> Result<CliCommand, String> {
-    let Some(words) = shlex::split(input) else {
-        return Err("unclosed quote in command".to_owned());
-    };
-    let argv = std::iter::once("shore".to_owned())
-        .chain(words)
-        .collect::<Vec<_>>();
-    if let Some(problem) = flag_problem(&argv)
-        && let Some(message) = target_problem_message(&problem)
-    {
-        return Err(message);
-    }
-    let matches = Cli::command()
-        .try_get_matches_from(argv)
-        .map_err(|error| error.to_string())?;
-    if ["addr", "character", "thread"]
-        .iter()
-        .any(|name| matches.value_source(name) == Some(clap::parser::ValueSource::CommandLine))
-    {
-        return Err("the TUI is already attached to a daemon and conversation; use `character use` or `thread use` to switch".to_owned());
-    }
-    let parsed = Cli::from_arg_matches(&matches).map_err(|error| error.to_string())?;
-    parsed.command.ok_or_else(|| "missing command".to_owned())
-}
-
-fn target_problem_message(problem: &FlagProblem) -> Option<String> {
-    let FlagProblem::NeedsEquals(flag, value) = problem else {
-        return None;
-    };
-    Some(format!(
-        "{flag} takes its value with an =; write {flag}={value}. Bare {flag} means all of them"
-    ))
-}
-
 fn render_command_groups(base: &clap::Command) -> String {
     let width = COMMAND_GROUPS
         .iter()
@@ -2665,8 +2355,6 @@ pub(crate) fn to_swp_command(
     use serde_json::json;
     match cmd {
         CliCommand::Completions { .. }
-        | CliCommand::View { .. }
-        | CliCommand::Ui { .. }
         | CliCommand::Config {
             path: true,
             check: false,
@@ -3419,7 +3107,7 @@ mod provider_key_tests {
 
 #[cfg(test)]
 mod tests {
-    use clap::Parser;
+    use clap::{CommandFactory as _, FromArgMatches as _, Parser};
 
     use super::*;
 
