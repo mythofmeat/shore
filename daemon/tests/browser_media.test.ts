@@ -43,11 +43,12 @@ describe("the conversation's picture gallery", () => {
       ]),
       message("m_2", [picture("lamp-data"), picture("live-data")]),
     ];
-    const stream = { ...liveTurn("s", "r_1", null), blocks: [picture("streaming")] };
-    const saved = { ...liveTurn("old", "r_0", null), final: true, msgId: "m_2", blocks: [picture("saved-stream")] };
-    const unsaved = { ...liveTurn("late", "r_2", null), final: true, msgId: "m_9", blocks: [picture("unsaved-stream")] };
+    const stream = { ...liveTurn("s", "r_1", null, "m_2"), blocks: [picture("streaming")] };
+    const saved = { ...liveTurn("old", "r_0", null, "m_2"), final: true, msgId: "m_2", blocks: [picture("saved-stream")] };
+    const unsaved = { ...liveTurn("late", "r_2", null, "m_2"), final: true, msgId: "m_9", blocks: [picture("unsaved-stream")] };
+    const answered = { ...liveTurn("answered", "r_3", null, "m_1"), blocks: [picture("answered-stream")] };
     const live = [{ path: "/data/media/ada/sent/abc.png", data: "stored" }, { path: "/tmp/live.png", data: "live-data" }, { path: "/tmp/", caption: null }];
-    const gallery = conversationImages(messages, [stream, saved, unsaved], live);
+    const gallery = conversationImages(messages, [stream, saved, unsaved, answered], live);
     expect(gallery.map((item) => [item.id, item.caption, item.data, item.full ?? null, item.video ?? false])).toEqual([
       ["message:m_1:image:0", "lamp.png", "lamp-data", "/api/pictures/abc.png", false],
       ["message:m_1:image:2", "cat.jpg", undefined, null, false],
@@ -62,6 +63,7 @@ describe("the conversation's picture gallery", () => {
       ["live:/tmp/", "Live image", undefined, null, false],
     ]);
     expect(gallery.some((item) => item.data === "saved-stream"), "a finished stream already saved shows as its message").toBe(false);
+    expect(gallery.some((item) => item.data === "answered-stream"), "a stream whose finished reply was saved before its end shows as its message").toBe(false);
     expect(gallery.find((item) => item.id === "message:m_1:block:0")?.mime).toBe("image/png");
   });
 

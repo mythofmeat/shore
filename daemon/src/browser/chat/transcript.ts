@@ -212,8 +212,20 @@ export function swipeState(message: Pick<Message, "alt_index" | "alt_count">): S
   return { position, count, canPrevious: position > 1, atLast: position >= count };
 }
 
-export function visibleStreams<T extends { subagent: string | null; final: boolean; msgId: string | null; rid: string | null }>(streams: readonly T[], messages: readonly Pick<Message, "msg_id">[], active: ReadonlySet<string>): T[] {
-  return streams.filter((stream) => stream.subagent === null && (!stream.final || (!messages.some((message) => message.msg_id === stream.msgId) && stream.rid !== null && active.has(stream.rid))));
+export interface StreamReply { msgId: string | null; after?: string | undefined }
+
+const awaitsTools = (message: Message): boolean => {
+  const last = message.content_blocks.at(-1)?.type;
+  return last === "tool_use" || last === "tool_result";
+};
+
+export function replySaved(stream: StreamReply, messages: readonly Message[]): boolean {
+  const newest = messages.at(-1);
+  return messages.some((message) => message.msg_id === stream.msgId) || (newest?.role === "assistant" && newest.msg_id !== stream.after && !awaitsTools(newest));
+}
+
+export function visibleStreams<T extends StreamReply & { subagent: string | null; final: boolean; rid: string | null }>(streams: readonly T[], messages: readonly Message[], active: ReadonlySet<string>): T[] {
+  return streams.filter((stream) => stream.subagent === null && !replySaved(stream, messages) && (!stream.final || (stream.rid !== null && active.has(stream.rid))));
 }
 
 const realUserTurn = (message: Message): boolean => message.role === "user" && !(message.content_blocks.length > 0 && message.content_blocks.every((block) => block.type === "tool_result"));

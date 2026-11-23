@@ -731,3 +731,49 @@ test("a reply cut short by a restart says so in its thread and carries on at a c
   await expect(offer).toHaveCount(0);
   await finish();
 });
+
+test("a reply stays one row from its first frame to its saved message when the end of its stream comes late", async ({ page }) => {
+  const finish = await watchPage(page);
+  let holding = false;
+  let late: (string | Buffer)[] | undefined;
+  let browser: WebSocketRoute | undefined;
+  let saved = 0;
+  await page.routeWebSocket(/\/api\/swp$/, (socket) => {
+    browser = socket;
+    const server = socket.connectToServer();
+    server.onMessage((frame) => {
+      const message = JSON.parse(frame.toString()) as { type?: unknown; role?: unknown; is_final?: unknown; subagent?: unknown };
+      if (holding && late === undefined && message.type === "stream_end" && message.is_final === true && (message.subagent ?? null) === null) late = [];
+      if (late !== undefined) { late.push(frame); return; }
+      socket.send(frame);
+      if (message.type === "new_message" && message.role === "assistant") saved += 1;
+    });
+  });
+  await signIn(page);
+  await createCharacter(page, "stray");
+  const rows = page.locator("article.message.assistant");
+  const settled = page.locator("article.message.assistant:not(.streaming)");
+  const answer = async (start: () => Promise<void>, text: string, count: number) => {
+    holding = true;
+    const before = saved;
+    await start();
+    await expect.poll(() => saved).toBe(before + 1);
+    await expect.poll(() => late?.length ?? 0).toBeGreaterThan(0);
+    await expect(settled).toHaveCount(count);
+    await expect(settled.last()).toContainText(text);
+    await expect(rows).toHaveCount(count);
+    await expect(page.getByText(text, { exact: true })).toHaveCount(1);
+    holding = false;
+    for (const frame of late?.splice(0) ?? []) browser?.send(frame);
+    late = undefined;
+    await expect(page.getByRole("button", { name: "Send", exact: true })).toBeVisible();
+    await expect(rows).toHaveCount(count);
+    await expect(page.getByText(text, { exact: true })).toHaveCount(1);
+  };
+
+  await answer(() => page.getByRole("button", { name: "Continue the reply" }).click(), "Answer 1: ", 1);
+  const box = page.getByLabel("Message", { exact: true });
+  await answer(async () => { await box.fill("A plain question"); await box.press("Enter"); }, "Answer 2: A plain question", 2);
+  await answer(async () => { await box.fill("Run the tool loop fixture"); await box.press("Enter"); }, "Found both notes.", 3);
+  await finish();
+});

@@ -28,8 +28,8 @@ export function inspectableRequest(request: Extract<ConnectionUpdate, { kind: "u
 }
 
 export interface LiveRound { reasoning: string; text: string; tools: string[] }
-export interface LiveTurn { key: string; rid: string | null; subagent: string | null; text: string; reasoning: string; blocks: ContentBlock[]; tools: string[]; round: LiveRound; final: boolean; msgId: string | null; metadata: StreamMetadata | null; previewLimited?: boolean; replaces?: string[] }
-export const liveTurn = (key: string, rid: string | null, subagent: string | null): LiveTurn => ({ key, rid, subagent, text: "", reasoning: "", blocks: [], tools: [], round: { reasoning: "", text: "", tools: [] }, final: false, msgId: null, metadata: null });
+export interface LiveTurn { key: string; rid: string | null; subagent: string | null; text: string; reasoning: string; blocks: ContentBlock[]; tools: string[]; round: LiveRound; final: boolean; msgId: string | null; after: string | undefined; metadata: StreamMetadata | null; previewLimited?: boolean; replaces?: string[] }
+export const liveTurn = (key: string, rid: string | null, subagent: string | null, after?: string): LiveTurn => ({ key, rid, subagent, after, text: "", reasoning: "", blocks: [], tools: [], round: { reasoning: "", text: "", tools: [] }, final: false, msgId: null, metadata: null });
 export interface Activity { id: number; type: string; data: unknown; previewLimited: boolean }
 export interface SegmentView { segment: SegmentSummary; previous: SegmentSummary | null; next: SegmentSummary | null; messages: Message[]; before: number; hasEarlier: boolean; seenLive: string | null }
 export const SEGMENT_PAGE_TURNS = 32;
@@ -233,7 +233,7 @@ export class Workspace {
   #stream(message: Extract<ServerMessage, { type: "stream_start" | "stream_chunk" | "stream_end" | "tool_call" | "tool_result" }>): void {
     const manual = this.actions.pendingOperation(message.rid) === "run_tool";
     const key = JSON.stringify([message.rid ?? null, message.subagent ?? null, message.task_id ?? null]);
-    const current: LiveTurn = this.#state.streams.find((stream) => stream.key === key) ?? liveTurn(key, message.rid ?? null, message.subagent ?? null);
+    const current: LiveTurn = this.#state.streams.find((stream) => stream.key === key) ?? liveTurn(key, message.rid ?? null, message.subagent ?? null, this.#state.messages.at(-1)?.msg_id);
     const next = { ...current };
     let media = this.#state.media;
     let mediaLimited = this.#state.mediaLimited;

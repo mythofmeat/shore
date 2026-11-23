@@ -498,13 +498,28 @@ describe("live replies", () => {
     const [main, sub] = link.state().streams;
     expect(main).toEqual({
       key: JSON.stringify(["r_1", null, null]), rid: "r_1", subagent: null, text: "Hello again", reasoning: "hmm", tools: ["t_1"], round: { reasoning: "", text: " again", tools: [] },
-      final: false, msgId: null, metadata: null, previewLimited: false, blocks: [{ type: "tool_use", id: "t_1", name: "read", input: { path: "t_1" } }],
+      final: false, msgId: null, after: "m_2", metadata: null, previewLimited: false, blocks: [{ type: "tool_use", id: "t_1", name: "read", input: { path: "t_1" } }],
     });
     expect(sub).toMatchObject({ key: JSON.stringify(["r_1", "memory", "k"]), rid: "r_1", subagent: "memory", text: "sub" });
     link.frame(chunk(null, "no request"));
     expect(link.state().streams.at(-1)).toMatchObject({ key: JSON.stringify([null, null, null]), rid: null });
     link.frame(chunk("r_1", "more thought", "thinking"));
     expect(link.state().streams.at(-1)?.round).toEqual({ reasoning: "more thought", text: " again", tools: [] });
+  });
+
+  test("a reply remembers the message that was newest when its first frame came, so a reply saved after it can take its place", async () => {
+    const link = rig();
+    link.frame(history({ messages: [message("m_1"), message("m_2"), message("m_3", { role: "user" })] }));
+    await settle();
+    link.frame(chunk("r_1", "Hel"));
+    link.frame(history({ revision: 2, delta: { base_revision: 1, after: "m_3" }, messages: [message("m_4", { content_blocks: [{ type: "text", text: "Hello" }] })] }));
+    link.frame(chunk("r_1", "lo"));
+    expect(link.state().streams.map((stream) => [stream.rid, stream.after, stream.text])).toEqual([["r_1", "m_3", "Hello"]]);
+    const empty = rig();
+    empty.frame(history());
+    await settle();
+    empty.frame(chunk("r_2", "first"));
+    expect(empty.state().streams.map((stream) => [stream.rid, stream.after])).toEqual([["r_2", undefined]]);
   });
 
   test("a reply's end sets its text, id and metadata, and keeps its blocks unless the end brings its own", async () => {

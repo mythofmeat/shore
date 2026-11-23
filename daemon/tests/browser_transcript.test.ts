@@ -21,6 +21,7 @@ import {
   optimisticRegenReplaces,
   regenReplaces,
   replyBlocks,
+  replySaved,
   savedPart,
   segmentDetail,
   segmentName,
@@ -236,8 +237,31 @@ describe("a reply still arriving", () => {
     const helper = { subagent: "memory", final: false, msgId: null, rid: "r_3" };
     const orphan = { subagent: null, final: true, msgId: "m_4", rid: null };
     expect(visibleStreams([live, done, helper, orphan], [], new Set(["r_2"]))).toEqual([live, done]);
-    expect(visibleStreams([live, done], [{ msg_id: "m_3" }], new Set(["r_2"]))).toEqual([live]);
+    expect(visibleStreams([{ ...live, after: "m_3" }, done], [message("m_3", "assistant", [text("saved")])], new Set(["r_2"]))).toEqual([{ ...live, after: "m_3" }]);
     expect(visibleStreams([done], [], new Set()), "no longer awaited").toEqual([]);
+  });
+
+  test("a reply's row goes as soon as its finished reply is saved, before its stream ends", () => {
+    const asked = message("m_1", "user", [text("hi")]);
+    const live = { subagent: null, final: false, msgId: null, rid: "r_1", after: "m_1" };
+    const answered = [asked, message("m_2", "assistant", [thinking("hm"), text("hello")])];
+    expect(replySaved(live, answered)).toBe(true);
+    expect(visibleStreams([live], answered, new Set(["r_1"]))).toEqual([]);
+    expect(replySaved(live, [asked, message("m_2", "assistant", [toolUse("t_1"), toolResult("t_1", "ok"), text("found it")])]), "a tool loop's finished reply").toBe(true);
+    expect(replySaved(live, [asked, message("m_2", "system", [text("a note")])])).toBe(false);
+    expect(replySaved(live, [message("m_0", "assistant", [text("earlier")]), asked])).toBe(false);
+    expect(replySaved(live, [])).toBe(false);
+  });
+
+  test("a saved tool round, or the reply that was newest when the stream started, keeps the stream's row", () => {
+    const asked = message("m_1", "user", [text("hi")]);
+    const live = { subagent: null, final: false, msgId: null, rid: "r_1", after: "m_1" };
+    expect(replySaved(live, [asked, message("m_2", "assistant", [thinking("hm"), text("let me look"), toolUse("t_1")])]), "waiting on its tool").toBe(false);
+    expect(replySaved(live, [asked, message("m_2", "assistant", [text("let me look"), toolUse("t_1"), toolResult("t_1", "ok")])]), "waiting on the next round").toBe(false);
+    const earlier = [asked, message("m_2", "assistant", [text("the reply being redone")])];
+    const again = { ...live, after: "m_2" };
+    expect(replySaved(again, earlier)).toBe(false);
+    expect(visibleStreams([again], earlier, new Set(["r_1"]))).toEqual([again]);
   });
 
   test("a regeneration replaces everything after the last real user turn", () => {
