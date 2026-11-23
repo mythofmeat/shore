@@ -5,7 +5,7 @@ import { access, chmod, mkdir, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 
 import { HISTORY_DB_FILE, HistoryStore } from "../src/engine/history_store.ts";
-import { SegmentReader } from "../src/engine/segments.ts";
+import { SegmentReader, threadArchive } from "../src/engine/segments.ts";
 import type { Message } from "../src/engine/types.ts";
 import { bookPathIn, readBook, sessionKey, SESSION_BOOK_VERSION, writeBook, type SessionRecord } from "../src/llm/providers/agent_sessions.ts";
 import { archiveAndRetain } from "../src/memory/compaction/archive.ts";
@@ -71,6 +71,7 @@ test("pending compactions are hidden and recover from either side of the active-
 
   const aborted = store.beginCompaction("ada", entry, messages, "before\n", "after\n");
   expect(store.segmentCount("ada")).toBe(0);
+  expect(store.userTurnTimes("ada")).toEqual([]);
   expect(store.segmentDisplayBounds("ada", aborted)).toBeUndefined();
   expect(store.segmentTurnCount("ada", aborted)).toBe(0);
   store.recoverPending("ada", "before\n");
@@ -83,7 +84,20 @@ test("pending compactions are hidden and recover from either side of the active-
   expect(store.readSegment("ada", committed)).toEqual(messages);
   expect(store.segmentDisplayBounds("ada", committed)).toEqual({ start: 0, end: 1 });
   expect(store.segmentTurnCount("ada", committed)).toBe(1);
+  expect(store.userTurnTimes("ada")).toEqual(["2026-08-13T10:00:00+10:00"]);
   store.close();
+});
+
+test("a thread's archive is opened only where one exists, so a character without any reads as having no user turns", async () => {
+  const dataDir = testTmp(`thread-archive-${crypto.randomUUID()}`);
+  await mkdir(dataDir, { recursive: true });
+  const archive = await threadArchive(dataDir, "ada", "side");
+  try {
+    expect(archive.userTurnTimes()).toEqual([]);
+  } finally {
+    archive.close();
+  }
+  expect(fs.existsSync(join(dataDir, HISTORY_DB_FILE))).toBe(false);
 });
 
 test("a finished compaction is kept, an aborted one leaves no stored bodies behind, and either is harmless twice", async () => {
