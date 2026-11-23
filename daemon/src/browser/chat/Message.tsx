@@ -3,6 +3,8 @@ import type { CharacterAvatar } from "../../protocol/CharacterAvatar.ts";
 import type { AlternativeListing } from "../../protocol/AlternativeListing.ts";
 import type { Message } from "../../protocol/Message.ts";
 import type { MessageCopy } from "../../protocol/MessageCopy.ts";
+import type { MessageNote } from "../../protocol/MessageNote.ts";
+import type { NotePlace } from "../../protocol/NotePlace.ts";
 import type { StreamMetadata } from "../../protocol/StreamMetadata.ts";
 import type { ViewValues } from "../preferences.ts";
 import { copyText } from "../clipboard.ts";
@@ -264,10 +266,23 @@ function Swipe({ message, last, busy, scope }: { message: Message; last: boolean
   </div>;
 }
 
-function SystemNote({ text, carryOn, busy }: { text: string; carryOn: boolean; busy: boolean }) {
+const EVERY_PLACE: readonly NotePlace[] = ["before", "start", "instead", "end", "after"];
+
+function Notes({ notes, places }: { notes: readonly MessageNote[]; places: readonly NotePlace[] }) {
+  const shown = notes.filter((note) => places.includes(note.place));
+  return shown.length === 0 ? null : <div className="message-notes" aria-label="Notes for the model">
+    {shown.map((note, index) => <p key={index} className="message-note" data-place={note.place}>
+      {note.place === "instead" ? <span className="message-note-label">Read in its place</span> : null}
+      {note.text}
+    </p>)}
+  </div>;
+}
+
+function SystemNote({ text, carryOn, busy, notes }: { text: string; carryOn: boolean; busy: boolean; notes: readonly MessageNote[] }) {
   const resume = () => { void conversation.continueReply(streamReplies()).catch((error: unknown) => toasts.show(errorText(error), "error")); };
   return <div className="system-note">
     <Markdown text={text} />
+    <Notes notes={notes} places={EVERY_PLACE} />
     {carryOn ? <button type="button" className="button" disabled={busy} onClick={resume}>Continue the reply</button> : null}
   </div>;
 }
@@ -290,6 +305,7 @@ export const MessageRow = memo(function MessageRow({ message, character, avatar,
     return () => removeEventListener("shore:edit-last", edit);
   }, [lastUser]);
   const assistant = message.role === "assistant";
+  const notes = display.notes === "on" ? message.notes ?? [] : [];
   const copy = () => { void copyText(message.content).then(() => toasts.show("Copied")).catch((error: unknown) => toasts.show(errorText(error), "error")); };
   const regenerate = (choice = {}) => { void conversation.regenerate(choice, streamReplies()).catch((error: unknown) => toasts.show(errorText(error), "error")); };
   const reply = last ? assistant ? { label: "Regenerate", icon: "regenerate" as const } : { label: "Generate reply", icon: "send" as const } : undefined;
@@ -299,16 +315,17 @@ export const MessageRow = memo(function MessageRow({ message, character, avatar,
   ] : [];
   if (message.origin === "autonomous" && !assistant) {
     const opener = message.role === "user" ? OPENER.exec(message.content) ?? undefined : undefined;
-    if (opener === undefined && truncatedLine(message.content) === message.content.trim()) return <div className="system-note"><Markdown text={message.content} /></div>;
+    if (opener === undefined && truncatedLine(message.content) === message.content.trim()) return <div className="system-note"><Markdown text={message.content} /><Notes notes={notes} places={EVERY_PLACE} /></div>;
     const when = timeLabel(message.timestamp);
     const wake = opener?.[1] === undefined ? "Wake" : `Wake in ${opener[1]}`;
     const summary = opener === undefined ? truncatedLine(message.content) : when === "" ? wake : `${wake} · ${when}`;
     return <details className="system-note wake-note">
       <summary>{summary}</summary>
       <Markdown text={opener === undefined ? message.content : message.content.slice(opener[0].length).trim()} />
+      <Notes notes={notes} places={EVERY_PLACE} />
     </details>;
   }
-  if (message.role === "system") return <SystemNote text={message.content} carryOn={last && !readOnly && message.content === INTERRUPTED_REPLY_NOTE} busy={busy} />;
+  if (message.role === "system") return <SystemNote text={message.content} carryOn={last && !readOnly && message.content === INTERRUPTED_REPLY_NOTE} busy={busy} notes={notes} />;
   const actions: MenuItem[] = readOnly ? [{ label: "Copy", icon: "copy", onSelect: copy }] : [
     { label: "Copy", icon: "copy", onSelect: copy },
     { label: "Edit", icon: "edit", onSelect: () => setMode("edit") },
@@ -331,13 +348,16 @@ export const MessageRow = memo(function MessageRow({ message, character, avatar,
     </div> : null}
     {assistant ? <Avatar name={character} avatar={avatar} size={mobile ? 32 : 36} /> : <UserAvatar size={mobile ? 32 : 36} />}
     <div className="message-main">
+      <Notes notes={notes} places={["before"]} />
       <div className="message-meta">
         <span className="message-name">{assistant ? character : "You"}</span>
         {message.origin === "autonomous" ? <span className="tag">unprompted</span> : null}
         {time === "" ? null : <time dateTime={message.timestamp}>{time}</time>}
         {mobile && mode === "view" ? <span className="message-menu"><Menu label="Message actions" items={actions} /></span> : null}
       </div>
+      <Notes notes={notes} places={["start", "instead"]} />
       {mode === "edit" ? <EditBox message={message} done={() => setMode("view")} /> : <div className="message-body" ref={body}><MessageBody message={message} display={display} openImage={openImage} embeds={assistant} /></div>}
+      <Notes notes={notes} places={["end", "after"]} />
       {meta === "" ? null : <div className="message-metadata">{meta}</div>}
       {assistant && mode === "view" ? <>
         <MarkChips message={message} attempt={shown} position={position} />

@@ -39,8 +39,17 @@ describe("display choices", () => {
     expect(viewValue("usage", "monthly")).toBe(false);
   });
 
+  test("the notes Shore put with each message for the model are a switch of the web UI's own, shown until it is turned off", () => {
+    expect([viewValue("notes", "on"), viewValue("notes", "off"), viewValue("notes", "toggle"), viewValue("notes", "always")]).toEqual([true, true, false, false]);
+    expect([cycleView("notes", "on"), cycleView("notes", "off")]).toEqual(["off", "on"]);
+    expect(readViews(storage({ [stored("notes")]: "off" })).notes).toBe("off");
+    const saved = storage();
+    new DisplayPreferences(saved).change("notes", "toggle");
+    expect(saved.values.get(stored("notes"))).toBe("off");
+  });
+
   test("start from their defaults, honour the two old switches, and refuse a broken saved value", () => {
-    expect(defaultViews()).toEqual({ timestamps: "on", thinking: "on", tools: "on", subagent: "on", compaction: "on", images: "on", metadata: "off", usage: "off", budget: "auto" });
+    expect(defaultViews()).toEqual({ timestamps: "on", thinking: "on", tools: "on", subagent: "on", compaction: "on", images: "on", metadata: "off", usage: "off", budget: "auto", notes: "on" });
     expect(readViews(storage({ "shore.reasoning": "false", "shore.tools": "false" }))).toMatchObject({ thinking: "off", tools: "off" });
     expect(readViews(storage({ "shore.reasoning": "true", "shore.tools": "yes" }))).toMatchObject({ thinking: "on", tools: "on" });
     expect(readViews(storage({ "shore.reasoning": "false", [stored("thinking")]: "on", [stored("metadata")]: "on" }))).toMatchObject({ thinking: "on", metadata: "on" });

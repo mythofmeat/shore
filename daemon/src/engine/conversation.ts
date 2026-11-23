@@ -1,3 +1,4 @@
+import { required } from "../util/required.ts";
 import { outsideConversation, registerConversation, withConversation } from "./lifecycle.ts";
 import { threadFile } from "../storage/files.ts";
 
@@ -14,7 +15,7 @@ import { toolLoopGroups, mergeToolLoopMessages } from "./merge";
 import { MessageNotFound, MessageStore, type AltSelection, type PendingAlt } from "./message_store";
 import { attemptsIn, forgetAttempts, newAttemptId, replyIn, type Reply } from "./marks.ts";
 import { SegmentReader, presentSegment, type SegmentRecord } from "./segments";
-import type { Message } from "./types";
+import type { Message, MessageNote } from "./types";
 import type { SegmentSummary } from "../protocol/SegmentSummary.ts";
 import { imageDataFor, embedMessagesImageData } from "./wire_images";
 
@@ -236,6 +237,24 @@ export class ConversationEngine {
   async appendMessage(msg: Message): Promise<void> {
     return await withConversation(this.#conversationDir, "update", async () => {
       await this.#messages.append(msg);
+      this.#advanceRevision();
+      this.#broadcastDelta();
+    });
+  }
+
+  async saveNotes(sent: readonly { msg_id: string; notes: MessageNote[] }[]): Promise<void> {
+    return await withConversation(this.#conversationDir, "update", async () => {
+      const first = await this.#messages.setNotes(sent);
+      if (first === undefined) return;
+      const messages = this.#messages.messages();
+      let anchor: string | null = null;
+      for (const group of toolLoopGroups(messages)) {
+        const start = messages.indexOf(required(group[0]));
+        if (start > first) break;
+        this.#tailStart = start;
+        this.#tailAnchor = anchor;
+        anchor = required(mergeToolLoopMessages(group)[0]).msg_id;
+      }
       this.#advanceRevision();
       this.#broadcastDelta();
     });

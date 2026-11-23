@@ -744,6 +744,12 @@
                     "type": "null"
                   }
                 ]
+              },
+              "notes": {
+                "type": "array",
+                "items": {
+                  "$ref": "#/$defs/MessageNote"
+                }
               }
             },
             "required": [
@@ -1025,6 +1031,31 @@
               "user_input",
               "assistant_reply",
               "autonomous"
+            ]
+          },
+          "MessageNote": {
+            "type": "object",
+            "properties": {
+              "place": {
+                "$ref": "#/$defs/NotePlace"
+              },
+              "text": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "place",
+              "text"
+            ]
+          },
+          "NotePlace": {
+            "type": "string",
+            "enum": [
+              "before",
+              "start",
+              "instead",
+              "end",
+              "after"
             ]
           },
           "SegmentSummary": {
@@ -1548,6 +1579,12 @@
                     "type": "null"
                   }
                 ]
+              },
+              "notes": {
+                "type": "array",
+                "items": {
+                  "$ref": "#/$defs/MessageNote"
+                }
               }
             },
             "required": [
@@ -2365,6 +2402,12 @@
                     "type": "null"
                   }
                 ]
+              },
+              "notes": {
+                "type": "array",
+                "items": {
+                  "$ref": "#/$defs/MessageNote"
+                }
               }
             },
             "required": [
@@ -2646,6 +2689,31 @@
               "user_input",
               "assistant_reply",
               "autonomous"
+            ]
+          },
+          "MessageNote": {
+            "type": "object",
+            "properties": {
+              "place": {
+                "$ref": "#/$defs/NotePlace"
+              },
+              "text": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "place",
+              "text"
+            ]
+          },
+          "NotePlace": {
+            "type": "string",
+            "enum": [
+              "before",
+              "start",
+              "instead",
+              "end",
+              "after"
             ]
           },
           "SegmentSummary": {
@@ -3169,6 +3237,12 @@
                     "type": "null"
                   }
                 ]
+              },
+              "notes": {
+                "type": "array",
+                "items": {
+                  "$ref": "#/$defs/MessageNote"
+                }
               }
             },
             "required": [
@@ -3946,10 +4020,11 @@
     "McpStatusEntry": "{ name: string, transport: McpTransportKind | null, state: McpConnectionState, connected_tools: number, last_error: string | null, next_retry_at: string | null, }",
     "McpStatusReport": "{ configured: number, connected: number, unavailable: number, servers: Array<McpStatusEntry>, }",
     "McpTransportKind": "\"stdio\" | \"http\"",
-    "Message": "{ msg_id: string, role: Role, content: string, images: Array<ImageRef>, content_blocks: Array<ContentBlock>, alt_index?: number | null, alt_count?: number | null, alternatives?: Array<MessageAlternative>, timestamp: string, provider_key?: string | null, model?: string | null, origin?: MessageOrigin | null, }",
+    "Message": "{ msg_id: string, role: Role, content: string, images: Array<ImageRef>, content_blocks: Array<ContentBlock>, alt_index?: number | null, alt_count?: number | null, alternatives?: Array<MessageAlternative>, timestamp: string, provider_key?: string | null, model?: string | null, origin?: MessageOrigin | null, notes?: Array<MessageNote>, }",
     "MessageAlternative": "{ content: string, images: Array<ImageRef>, content_blocks: Array<ContentBlock>, timestamp: string, provider_key?: string | null, model?: string | null, }",
     "MessageCopy": "{ thread: string, segment: number | null, excluded: boolean, }",
     "MessageEdited": "{ ref: string, edited: boolean, }",
+    "MessageNote": "{ place: NotePlace, text: string, }",
     "MessageOrigin": "\"user_input\" | \"assistant_reply\" | \"autonomous\"",
     "MessageReferences": "string | Array<string>",
     "MessagesDeleted": "{ deleted: Array<string>, workspace?: WorkspaceRewind, }",
@@ -3982,8 +4057,9 @@
     "NanoGptSubscriptionState": "{ version: 1, fetched_at: string, active: boolean, state: NanoGptAccountState, weeklyInputTokens?: NanoGptWeeklyInputTokens, routing?: NanoGptRouting, }",
     "NanoGptWeeklyInputTokens": "{ used: number, remaining: number, limit: number, resetAt: string, }",
     "NestedToolCall": "{ tool: string, subagent: string | null, ok: boolean, input: string, output: string, }",
-    "NewMessage": "{ revision: number, character?: string | null, thread?: string | null, rid?: string | null, msg_id: string, role: Role, content: string, images: Array<ImageRef>, content_blocks: Array<ContentBlock>, alt_index?: number | null, alt_count?: number | null, alternatives?: Array<MessageAlternative>, timestamp: string, provider_key?: string | null, model?: string | null, origin?: MessageOrigin | null, }",
+    "NewMessage": "{ revision: number, character?: string | null, thread?: string | null, rid?: string | null, msg_id: string, role: Role, content: string, images: Array<ImageRef>, content_blocks: Array<ContentBlock>, alt_index?: number | null, alt_count?: number | null, alternatives?: Array<MessageAlternative>, timestamp: string, provider_key?: string | null, model?: string | null, origin?: MessageOrigin | null, notes?: Array<MessageNote>, }",
     "NextWakeReport": "{ trigger: string, at: string, }",
+    "NotePlace": "\"before\" | \"start\" | \"instead\" | \"end\" | \"after\"",
     "OperationCatalogue": "{ operations: Array<OperationDescriptor>, requests: Array<OperationDescriptor>, }",
     "OperationCategory": "\"Application\" | \"Characters\" | \"Threads\" | \"Conversation\" | \"Providers\" | \"Configuration\" | \"Models\" | \"Diagnostics\" | \"Memory\" | \"Tools\" | \"Usage\"",
     "OperationChoices": "\"characters\" | \"threads\" | \"models\" | \"providers\" | \"config_keys\" | \"subagents\" | \"model_settings\" | \"tools\"",

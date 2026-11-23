@@ -1,16 +1,31 @@
 import { existsSync } from "node:fs";
 import { basename } from "node:path";
 
-import type { ImageRef, ContentBlock } from "../engine/types.ts";
+import type { ImageRef, ContentBlock, MessageNote } from "../engine/types.ts";
 import { isToolResultOnly } from "../engine/message_store.ts";
 import { pictureFileLabel } from "../engine/picture_files.ts";
-import type { AssembledPrompt, PromptMessage } from "../engine/prompt.ts";
+import type { AssembledPrompt, PromptMessage, PromptSource } from "../engine/prompt.ts";
 import { imageLabel, omissionNotice } from "../llm/images.ts";
 import type { Sdk, SystemBlock, WireMessage } from "../llm/types.ts";
 import { EVICTED_IMAGE } from "../storage/image_blobs.ts";
 import { encodeImageBlock } from "./images.ts";
 
 export type AssistantImageMode = "tool_pair" | "text_standin";
+
+export interface SentMessage {
+  msg_id: string;
+  notes: MessageNote[];
+}
+
+const NOTE_ORDER: readonly MessageNote["place"][] = ["before", "start", "instead", "end", "after"];
+
+export function inReadingOrder(notes: readonly MessageNote[]): MessageNote[] {
+  return [...notes].sort((a, b) => NOTE_ORDER.indexOf(a.place) - NOTE_ORDER.indexOf(b.place));
+}
+
+function textsOf(blocks: readonly ContentBlock[]): string[] {
+  return blocks.flatMap((block) => block.type === "text" ? [block.text] : []);
+}
 
 const TOOL_PAIR_SDKS: readonly Sdk[] = ["anthropic", "claude_agent"];
 
@@ -105,16 +120,33 @@ async function renderMessageContent(
 }
 
 export async function buildLlmMessages(
-  prompt: Pick<AssembledPrompt, "system" | "messages">,
+  prompt: Pick<AssembledPrompt, "system" | "messages"> & { sources?: readonly PromptSource[] },
   mode: AssistantImageMode,
-): Promise<{ messages: WireMessage[]; system: SystemBlock[] }> {
+): Promise<{ messages: WireMessage[]; system: SystemBlock[]; sent: SentMessage[] }> {
   const messages: WireMessage[] = [];
+  const sent: SentMessage[] = [];
   let pending: ContentBlock[] = [];
+  let added: string[] = [];
 
-  for (const m of prompt.messages) {
+  for (const [index, m] of prompt.messages.entries()) {
     const rendered = await renderMessageContent(m, mode);
     if (rendered === undefined) {
       continue;
+    }
+    const source = prompt.sources?.[index];
+    if (source?.msg_id === undefined) added.push(...textsOf(rendered.content));
+    else {
+      const own = new Set(m.content_blocks);
+      const place = m.role === "assistant" ? "end" : "start";
+      sent.push({
+        msg_id: source.msg_id,
+        notes: inReadingOrder([
+          ...added.map((text): MessageNote => ({ place: "before", text })),
+          ...textsOf(rendered.content.filter((block) => !own.has(block))).map((text): MessageNote => ({ place, text })),
+          ...source.notes,
+        ]),
+      });
+      added = [];
     }
 
     let content = rendered.content;
@@ -138,8 +170,9 @@ export async function buildLlmMessages(
   }
 
   if (pending.length > 0) messages.push({ role: "user", content: pending });
+  sent.at(-1)?.notes.push(...added.map((text): MessageNote => ({ place: "after", text })));
 
   const system: SystemBlock[] = prompt.system.map((b) => ({ text: b.content, label: b.label }));
 
-  return { messages, system };
+  return { messages, system, sent };
 }

@@ -12,7 +12,7 @@ import {
 } from "./alt_audit.ts";
 import { backupBeforeWrite, quarantineLines } from "./backup.ts";
 import { mergeToolLoopMessages, toolLoopGroups } from "./merge";
-import type { ContentBlock, ImageRef, Message, MessageAlternative } from "./types";
+import type { ContentBlock, ImageRef, Message, MessageAlternative, MessageNote } from "./types";
 import { alternativeVersionOf, isRealUserTurn, newMessageVersion, versionOf } from "./versions.ts";
 
 export class MessageNotFound extends Error {
@@ -165,6 +165,7 @@ function serializeForStorage(msg: Message): string {
   if (msg.wake_running !== undefined) ordered.push(["wake_running", msg.wake_running]);
   if (msg.presence !== undefined) ordered.push(["presence", msg.presence]);
   if (msg.shown_later !== undefined) ordered.push(["shown_later", msg.shown_later]);
+  if (msg.notes !== undefined) ordered.push(["notes", msg.notes]);
 
   const contentAt = 2;
   ordered[contentAt] = required(ordered.pop());
@@ -440,6 +441,25 @@ export class MessageStore {
         version: newMessageVersion(),
       });
       return changed(missing.length);
+    });
+  }
+
+  async setNotes(sent: readonly { msg_id: string; notes: MessageNote[] }[]): Promise<number | undefined> {
+    return await this.#enqueue(async () => {
+      const at = new Map(this.#messages.map((message, index) => [message.msg_id, index]));
+      let first: number | undefined;
+      for (const { msg_id, notes } of sent) {
+        const index = at.get(msg_id);
+        if (index === undefined) continue;
+        const { notes: saved = [], ...msg } = required(this.#messages[index]);
+        if (JSON.stringify(saved) === JSON.stringify(notes)) continue;
+        const noted: Message = notes.length === 0 ? msg : { ...msg, notes: structuredClone(notes) };
+        this.#prepareRows();
+        updateDurableLine(this.#file, index, `${serializeForStorage(noted)}\n`);
+        this.#messages[index] = noted;
+        first = Math.min(first ?? index, index);
+      }
+      return first;
     });
   }
 

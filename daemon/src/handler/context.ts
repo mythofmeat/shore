@@ -29,7 +29,7 @@ import { toCredentialsEntry } from "../config/providers.ts";
 import { characterWorkspace } from "../tools/character_workspace.ts";
 import { assembleToolSurface, renderToolDefs, subagentToolDefs } from "../tools/registry.ts";
 import { withoutWakeWorking } from "../autonomy/wake_working.ts";
-import { assistantImageModeForRequest, buildLlmMessages } from "./wire_messages.ts";
+import { assistantImageModeForRequest, buildLlmMessages, inReadingOrder, type SentMessage } from "./wire_messages.ts";
 
 export interface PrepareChatContextParams {
   thread?: string;
@@ -49,6 +49,18 @@ export interface PreparedChatContext {
   system: SystemBlock[];
   toolDefs: ToolDefinition[] | undefined;
   prompt: AssembledPrompt;
+  sent: SentMessage[];
+}
+
+function readInstead(stored: readonly Message[], seen: readonly Message[], sent: readonly SentMessage[]): SentMessage[] {
+  const own = new Map(stored.map((message) => [message.msg_id, message]));
+  const replaced = new Map(seen.filter((message) => own.get(message.msg_id) !== message).map((message) => [message.msg_id, message]));
+  return sent.map(({ msg_id, notes }) => {
+    const read = replaced.get(msg_id);
+    if (read === undefined) return { msg_id, notes };
+    const text = read.content_blocks.flatMap((block) => block.type === "text" ? [block.text] : []).join("\n\n");
+    return { msg_id, notes: inReadingOrder([...notes, { place: "instead", text }]) };
+  });
 }
 
 async function configFile(config: LoadedConfig, file: string, setting: string): Promise<string> {
@@ -133,6 +145,7 @@ export async function prepareChatContext(
     }
   }
 
+  const seen = withoutWakeWorking(messages);
   const sections = await promptSections(config, resolved, async (path) => await loadPromptFile(
     characterDataDir,
     workspace,
@@ -147,7 +160,7 @@ export async function prepareChatContext(
     sections,
     has_prior_context: params.prior.archived,
     archived_last_at: params.prior.lastAt,
-    messages: withoutWakeWorking(messages),
+    messages: seen,
     max_context_tokens: resolved.maxContextTokens,
     max_output_tokens: resolved.maxOutputTokens,
     user_timestamp_mode: config.app.chat.user_timestamps,
@@ -160,7 +173,7 @@ export async function prepareChatContext(
 
   const toolsAvailable = anyToolEnabled(config.app) || mcpToolDefs.length > 0;
 
-  const { messages: llmMessages, system } = await buildLlmMessages(
+  const { messages: llmMessages, system, sent } = await buildLlmMessages(
     prompt,
     assistantImageModeForRequest(resolved.sdk, toolsAvailable),
   );
@@ -178,7 +191,7 @@ export async function prepareChatContext(
       )
     : undefined;
 
-  return { llmMessages, system, toolDefs, prompt };
+  return { llmMessages, system, toolDefs, prompt, sent: readInstead(messages, seen, sent) };
 }
 
 export async function buildChatShapeRequestFromDisk(
@@ -195,7 +208,7 @@ export async function buildChatShapeRequestFromDisk(
     activeConversation?: boolean;
     env?: NodeJS.ProcessEnv;
   } = {},
-): Promise<BuiltRequest & { messageBudget: number }> {
+): Promise<BuiltRequest & { messageBudget: number; sent: SentMessage[] }> {
   const prepared = await prepareChatContext({
     ...(options.thread === undefined ? {} : { thread: options.thread }),
     character,
@@ -228,5 +241,6 @@ export async function buildChatShapeRequestFromDisk(
       options.env,
     ),
     messageBudget: prepared.prompt.messageBudget,
+    sent: prepared.sent,
   };
 }

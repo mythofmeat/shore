@@ -2,7 +2,7 @@ import { required } from "../util/required.ts";
 
 import threadTemplate from "../../prompts/engine/thread.md" with { type: "text" };
 import { hostZone, naiveInZone, partsOf } from "../ledger/zoned";
-import type { ContentBlock, ImageRef, Message, Role } from "./types";
+import type { ContentBlock, ImageRef, Message, MessageNote, Role } from "./types";
 import { estimateTokens, withSafetyMargin } from "./tokens.ts";
 import { unsentNotice } from "./embeds.ts";
 import { base64ImageDimensions, fileImageDimensions } from "../llm/image_dimensions.ts";
@@ -50,9 +50,15 @@ export interface PromptMessage {
   model?: string;
 }
 
+export interface PromptSource {
+  msg_id: string | undefined;
+  notes: MessageNote[];
+}
+
 export interface AssembledPrompt {
   system: SystemBlock[];
   messages: PromptMessage[];
+  sources: PromptSource[];
   messageBudget: number;
 }
 
@@ -93,18 +99,20 @@ export function assemblePrompt(
 
   const system = buildSystemBlocks(params, timeZone);
   const availableForMessages = availableMessageTokens(system, maxContext, maxOutput);
+  const trimmed = trimMessages(
+    params.messages,
+    availableForMessages,
+    params.has_prior_context,
+    params.archived_last_at,
+    params.user_timestamp_mode,
+    timeZone,
+    params.image_tier ?? HIGH_RESOLUTION_IMAGE_TIER,
+  );
 
   return {
     system,
-    messages: trimMessages(
-      params.messages,
-      availableForMessages,
-      params.has_prior_context,
-      params.archived_last_at,
-      params.user_timestamp_mode,
-      timeZone,
-      params.image_tier ?? HIGH_RESOLUTION_IMAGE_TIER,
-    ),
+    messages: trimmed.map(({ pm }) => pm),
+    sources: trimmed.map(({ source }) => source),
     messageBudget: availableForMessages,
   };
 }
@@ -378,8 +386,8 @@ function trimMessages(
   mode: UserTimestampMode,
   timeZone: string,
   imageTier: ImageTier,
-): PromptMessage[] {
-  const selected: { pm: PromptMessage; ts: string; wake: boolean; elsewhere: Message["last_elsewhere"]; running: Message["wake_running"]; presence: Message["presence"] }[] = [];
+): { pm: PromptMessage; source: PromptSource }[] {
+  const selected: { pm: PromptMessage; id: string; ts: string; wake: boolean; elsewhere: Message["last_elsewhere"]; running: Message["wake_running"]; presence: Message["presence"] }[] = [];
   let usedTokens = 0;
 
   for (let i = messages.length - 1; i >= 0; i--) {
@@ -396,6 +404,7 @@ function trimMessages(
         ...(msg.provider_key !== undefined ? { provider_key: msg.provider_key } : {}),
         ...(msg.model !== undefined ? { model: msg.model } : {}),
       },
+      id: msg.msg_id,
       ts: msg.timestamp,
       wake: msg.role === "assistant" && msg.origin === "autonomous",
       elsewhere: msg.last_elsewhere,
@@ -415,68 +424,72 @@ function trimMessages(
   const before = dropped > 0 ? required(messages[dropped - 1]).timestamp : archivedLastAt;
   let prevMs = before === undefined ? undefined : parseRfc3339(before);
   let lastMarkerMs: number | undefined;
-  let firstUserPending = true;
   let unsent: ImageRef[] = [];
-  const result: PromptMessage[] = [];
-  const noticed = (pm: PromptMessage): PromptMessage => {
+  const result: { pm: PromptMessage; source: PromptSource }[] = [];
+  const noticed = (pm: PromptMessage, notes: MessageNote[]): PromptMessage => {
     const notice = unsentNotice(unsent);
     unsent = [];
     if (notice === undefined) return pm;
     pm.content = `${notice}\n\n${pm.content}`;
     pm.content_blocks = [{ type: "text", text: notice }, ...pm.content_blocks];
+    notes.unshift({ place: "start", text: notice });
     return pm;
   };
 
-  for (const { pm, ts, wake, elsewhere, running, presence } of selected) {
+  for (const { pm, id, ts, wake, elsewhere, running, presence } of selected) {
     const currentMs = parseRfc3339(ts);
+    const notes: MessageNote[] = [];
 
-    if (wake) result.push(noticed(syntheticUserTurn(wakeMarker(currentMs, mode, timeZone))));
-    if (pm.role === "user" && !isToolLoopMessage(pm.role, pm.content_blocks)) noticed(pm);
+    if (wake) result.push(addedTurn(noticed(syntheticUserTurn(wakeMarker(currentMs, mode, timeZone)), [])));
+    const written = pm.role === "user" && !isToolLoopMessage(pm.role, pm.content_blocks);
+    if (written) noticed(pm, notes);
 
-    if (pm.role === "user" && currentMs !== undefined) {
+    const first = pm.content_blocks[0];
+    if (written && currentMs !== undefined && first?.type === "text") {
       const gap = prevMs === undefined ? undefined : gapSeconds(prevMs, currentMs);
-
       const bigGap = gap !== undefined && gap >= TIME_GAP_THRESHOLD_SECS;
-      const hourlyTick = lastMarkerMs !== undefined && gapSeconds(lastMarkerMs, currentMs) >= HOURLY_MARKER_INTERVAL_SECS;
-      const due = bigGap || hourlyTick || (firstUserPending && lostContext);
+      const due = bigGap || (lastMarkerMs === undefined ? lostContext : gapSeconds(lastMarkerMs, currentMs) >= HOURLY_MARKER_INTERVAL_SECS);
 
       if (mode === "always" || (mode === "auto" && due)) {
         const marker = formatTimeMarker(gap, currentMs, timeZone, elsewhere);
         pm.content = `${marker}\n\n${pm.content}`;
-        const first = pm.content_blocks[0];
-        if (first !== undefined && first.type === "text") {
-          pm.content_blocks = [
-            { type: "text", text: `${marker}\n\n${first.text}` },
-            ...pm.content_blocks.slice(1),
-          ];
-        }
+        pm.content_blocks = [
+          { type: "text", text: `${marker}\n\n${first.text}` },
+          ...pm.content_blocks.slice(1),
+        ];
+        notes.unshift({ place: "start", text: marker });
         lastMarkerMs = currentMs;
       }
-      firstUserPending = false;
     }
 
     if (presence !== undefined && currentMs !== undefined) {
       const text = presenceText(presence, currentMs, "Their");
       pm.content = `${text}\n\n${pm.content}`;
       pm.content_blocks = [{ type: "text", text }, ...pm.content_blocks];
+      notes.unshift({ place: "start", text });
     }
 
     if (running !== undefined) {
       const text = wakeRunningText(running, timeZone);
       pm.content = `${text}\n\n${pm.content}`;
       pm.content_blocks = [{ type: "text", text }, ...pm.content_blocks];
+      notes.unshift({ place: "start", text });
     }
 
     if (currentMs !== undefined) prevMs = currentMs;
     if (pm.role === "assistant") unsent.push(...pm.images);
-    result.push(pm);
+    result.push({ pm, source: { msg_id: id, notes } });
   }
 
-  if (result.find((m) => m.role !== "system")?.role === "assistant") {
-    result.unshift(syntheticUserTurn(lostContext ? EARLIER_CONVERSATION_NOT_SHOWN : THREAD_OPENED_BY_YOU));
+  if (result.find(({ pm }) => pm.role !== "system")?.pm.role === "assistant") {
+    result.unshift(addedTurn(syntheticUserTurn(lostContext ? EARLIER_CONVERSATION_NOT_SHOWN : THREAD_OPENED_BY_YOU)));
   }
 
   return result;
+}
+
+function addedTurn(pm: PromptMessage): { pm: PromptMessage; source: PromptSource } {
+  return { pm, source: { msg_id: undefined, notes: [] } };
 }
 
 function syntheticUserTurn(text: string): PromptMessage {

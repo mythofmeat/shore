@@ -1,6 +1,8 @@
 import { VIEW_PREFERENCES } from "./preferences.generated.ts";
 
-export type ViewKey = keyof typeof VIEW_PREFERENCES;
+const VIEW_OPTIONS = { ...VIEW_PREFERENCES, notes: ["on", "off", "toggle"] } as const;
+
+export type ViewKey = keyof typeof VIEW_OPTIONS;
 export type ViewValues = Record<ViewKey, string>;
 export const VIEW_CONTROLS = {
   timestamps: { label: "Timestamps", initial: "on" },
@@ -10,10 +12,11 @@ export const VIEW_CONTROLS = {
   compaction: { label: "Compaction activity", initial: "on" },
   images: { label: "Inline images", initial: "on" },
   metadata: { label: "Message metadata", initial: "off" },
+  notes: { label: "Notes for the model", initial: "on" },
   usage: { label: "Usage display", initial: "off" },
   budget: { label: "Budget focus", initial: "auto" },
 } satisfies Record<ViewKey, { label: string; initial: string }>;
-export const VIEW_KEYS = Object.keys(VIEW_PREFERENCES) as ViewKey[];
+export const VIEW_KEYS = Object.keys(VIEW_OPTIONS) as ViewKey[];
 export const PREFERENCE_STORAGE_KEY = "shore.view.v1";
 export type BudgetScope = "auto" | "cap" | "pace";
 
@@ -34,7 +37,7 @@ export function budgetFocus(value: string): { name: string | null; scope: Budget
 
 export function viewValue(key: ViewKey, value: string): boolean {
   if (value === "toggle") return false;
-  if ((VIEW_PREFERENCES[key] as readonly string[]).includes(value)) return true;
+  if ((VIEW_OPTIONS[key] as readonly string[]).includes(value)) return true;
   if (key !== "budget") return false;
   try { budgetFocus(value); return true; } catch { return false; }
 }
@@ -58,7 +61,7 @@ export function readViews(storage: Pick<Storage, "getItem">): ViewValues {
 }
 
 export function cycleView(key: ViewKey, current: string, budgets: readonly string[] = []): string {
-  const choices: string[] = VIEW_PREFERENCES[key].filter((value) => value !== "toggle");
+  const choices: string[] = VIEW_OPTIONS[key].filter((value) => value !== "toggle");
   if (key === "budget" && budgets.length > 1) choices.push(...budgets);
   return choices[(choices.indexOf(current) + 1) % choices.length] ?? VIEW_CONTROLS[key].initial;
 }

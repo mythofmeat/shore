@@ -12,8 +12,10 @@ import { agoPhrase, estimateHistoryTokens, formatWallClock, nearMessageBudget, p
 import { sealedThreads, type SealedThread } from "../engine/sealed_list.ts";
 import { NO_PRIOR_CONTEXT } from "../engine/segments.ts";
 import { homeThread, isWakeOpener, readThreadsIndex, threadActivities, threadActivityNow, type ThreadsIndex } from "../engine/threads.ts";
-import type { Message } from "../engine/types.ts";
+import type { Message, MessageNote } from "../engine/types.ts";
 import { buildChatShapeRequestFromDisk } from "../handler/context.ts";
+import { inReadingOrder, type SentMessage } from "../handler/wire_messages.ts";
+import { required } from "../util/required.ts";
 import { cacheTtlSecs, thinkingEnabled } from "../handler/generation.ts";
 import { pictureProblems, type PictureSender } from "../handler/pictures.ts";
 import type { ToolConversation } from "../handler/tool_context.ts";
@@ -58,6 +60,7 @@ export interface WakeEngine extends ThreadReader {
   userTurnCount(): number;
   reload(): Promise<void>;
   recoverInterruptedToolLoop(reason: string): Promise<number>;
+  saveNotes(sent: readonly SentMessage[]): Promise<void>;
 }
 
 export interface Wake {
@@ -72,7 +75,7 @@ export interface SealedWake {
 }
 
 export interface WorkingLog {
-  engine: Pick<WakeEngine, "thread" | "appendMessage" | "messages" | "reload" | "recoverInterruptedToolLoop">;
+  engine: Pick<WakeEngine, "thread" | "appendMessage" | "messages" | "reload" | "recoverInterruptedToolLoop" | "saveNotes">;
   label: string;
 }
 
@@ -192,9 +195,10 @@ export function roundMessage(round: LoopRound, request: SidecarRequest, deps: Pi
   };
 }
 
-async function keepWorking(log: WorkingLog, message: Message): Promise<void> {
+async function keepWorking(log: WorkingLog, message: Message, notes?: MessageNote[]): Promise<void> {
   try {
     await log.engine.appendMessage(message);
+    if (notes !== undefined) await log.engine.saveNotes([{ msg_id: message.msg_id, notes }]);
   } catch (error) {
     shoreLog.warn(`shore: could not keep a wake's working in "${log.engine.thread}": ${String(error)}`);
   }
@@ -324,10 +328,13 @@ export async function runWake(character: string, config: LoadedConfig, wake: Wak
     }
 
     const later = [WAKE_OPENER, ...fired].join("\n\n");
-    if (log === undefined) await engine.appendMessage({ ...opener([WAKE_OPENER, ...setOff].join("\n\n")), shown_later: later });
-    else {
+    const read = inReadingOrder([...required(built.sent.find((sent) => sent.msg_id === id)).notes, { place: "instead", text: shown.content }]);
+    if (log === undefined) {
+      await engine.appendMessage({ ...opener([WAKE_OPENER, ...setOff].join("\n\n")), shown_later: later });
+      await engine.saveNotes([{ msg_id: id, notes: read }]);
+    } else {
       await engine.appendMessage(opener(later));
-      await keepWorking(log, { ...opener([`[wake in "${thread}"]`, ...setOff].join("\n\n")), msg_id: newId() });
+      await keepWorking(log, { ...opener([`[wake in "${thread}"]`, ...setOff].join("\n\n")), msg_id: newId() }, read);
     }
     const working: Message[] = [];
     const conversation = { thread, conversation: [shown] };

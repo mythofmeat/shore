@@ -142,5 +142,10 @@ function mergeGroup(group: Message[]): Message {
 }
 
 export function mergeToolLoopMessages(messages: Message[]): Message[] {
-  return toolLoopGroups(messages).map(mergeGroup);
+  return toolLoopGroups(messages).map((group) => withGroupNotes(mergeGroup(group), group));
+}
+
+function withGroupNotes(merged: Message, group: readonly Message[]): Message {
+  const notes = group.flatMap((message) => message.notes ?? []);
+  return notes.length === 0 ? merged : { ...merged, notes };
 }

@@ -209,6 +209,28 @@ pub struct Message {
     pub model: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub origin: Option<MessageOrigin>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub notes: Vec<MessageNote>,
+}
+
+#[derive(
+    Serialize, Deserialize, Debug, Clone, Copy, PartialEq, Eq, schemars::JsonSchema, ts_rs::TS,
+)]
+#[ts(export, export_to = "../../../daemon/src/protocol/")]
+#[serde(rename_all = "snake_case")]
+pub enum NotePlace {
+    Before,
+    Start,
+    Instead,
+    End,
+    After,
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq, schemars::JsonSchema, ts_rs::TS)]
+#[ts(export, export_to = "../../../daemon/src/protocol/")]
+pub struct MessageNote {
+    pub place: NotePlace,
+    pub text: String,
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq, schemars::JsonSchema, ts_rs::TS)]

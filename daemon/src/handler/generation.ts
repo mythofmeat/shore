@@ -41,7 +41,8 @@ import { canArchiveTurns } from "../memory/compaction/plan.ts";
 import { toolPhase } from "../tools/execute.ts";
 import { toolLimitsFrom, type ToolContext, type ToolLimitsView } from "../tools/dispatch.ts";
 import { buildToolContext, type ToolContextDeps } from "./tool_context.ts";
-import { planAttempt, withAttemptNote, type AttemptEngine } from "./attempts.ts";
+import type { SentMessage } from "./wire_messages.ts";
+import { planAttempt, withAttemptNote, withAttemptNoted, type AttemptEngine } from "./attempts.ts";
 import { recordAttempt } from "../engine/marks.ts";
 import {
   buildGenerationRequest,
@@ -84,6 +85,7 @@ import { sentPicturesDir } from "../storage/sent_pictures.ts";
 
 export interface GenerationEngine extends TurnEngine, PersistEngine, SetupEngine, AttemptEngine {
   readonly thread: string;
+  saveNotes(sent: readonly SentMessage[]): Promise<void>;
 }
 
 export function generationEngine(engine: ConversationEngine): GenerationEngine {
@@ -101,6 +103,7 @@ export function generationEngine(engine: ConversationEngine): GenerationEngine {
     messagesAfterLastUserTurn: () => engine.messagesAfterLastUserTurn(),
     attemptOf: (msgId, index) => engine.attemptOf(msgId, index),
     reload: () => engine.reload(),
+    saveNotes: (sent) => engine.saveNotes(sent),
   };
 }
 
@@ -350,6 +353,8 @@ async function runGenerationCore(
           ? {}
           : { options: built.request.provider_options })), attempt: plan.attempt },
     };
+
+    await engine.saveNotes(withAttemptNoted(built.sent, plan.note));
 
     const subagentHistory: Message[] = [...engine.messages()].slice(-MAX_HISTORY_MESSAGES);
 

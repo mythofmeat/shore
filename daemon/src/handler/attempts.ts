@@ -6,6 +6,7 @@ import { marksOf, newAttemptId, replyOf, setMark, type AttemptAsked, type Attemp
 import { renderTemplate } from "../engine/prompt.ts";
 import type { Message } from "../engine/types.ts";
 import type { WireMessage } from "../llm/types.ts";
+import type { SentMessage } from "./wire_messages.ts";
 import { required } from "../util/required.ts";
 import type { RegenChoice } from "./router.ts";
 import { CommandError } from "../commands/errors.ts";
@@ -99,6 +100,12 @@ function markLine(mark: Mark, user: string): string {
 
 function reasonText(tags: readonly string[], reason: string | null): string {
   return [...tags, ...(reason === null ? [] : [reason])].join("; ");
+}
+
+export function withAttemptNoted(sent: readonly SentMessage[], note: string | undefined): SentMessage[] {
+  const last = sent.at(-1);
+  if (note === undefined || last === undefined) return [...sent];
+  return [...sent.slice(0, -1), { msg_id: last.msg_id, notes: [...last.notes, { place: "after", text: note }] }];
 }
 
 export function withAttemptNote(messages: readonly WireMessage[], note: string | undefined): WireMessage[] {
