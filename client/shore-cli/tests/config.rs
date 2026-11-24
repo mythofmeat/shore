@@ -88,31 +88,18 @@ fn texts() -> serde_json::Value {
                 shipped: &str| {
         json!({ "name": name, "place": place, "owner": owner, "required": required, "wording": wording, "shipped": shipped, "file": null, "error": null, "values": [] })
     };
-    let mut time = text(
-        "time",
-        "Before a user's message.",
-        "yours",
-        false,
-        Some("[now: {{now}}]\nand then"),
-        "[{{now}}]",
-    );
-    time["file"] = json!("/srv/config/texts/time.md");
-    time["values"] = json!([{ "name": "now", "about": "the time" }]);
-    let mut label = text(
-        "label",
-        "The request for a label.",
-        "yours",
-        true,
-        None,
-        "Label this.",
-    );
-    label["file"] = json!("/srv/config/gone.md");
-    label["error"] = json!("text \"label\" could not be read at /srv/config/gone.md: no such file");
     json!({ "texts": [
-        time,
+        {
+            "name": "time", "place": "Before a user's message.", "owner": "yours", "required": false,
+            "wording": "[now: {{now}}]\nand then", "shipped": "[{{now}}]", "file": "/srv/config/texts/time.md", "error": null,
+            "values": [{ "name": "now", "about": "the time" }],
+        },
         text("status", "The user's statuses.", "off", false, None, "[Their status: {{statuses}}]"),
         text("opened_by_you", "A user turn put first.", "shore", true, Some("[this conversation starts with your message]"), "[this conversation starts with your message]"),
-        label,
+        {
+            "name": "label", "place": "The request for a label.", "owner": "yours", "required": true, "wording": null, "shipped": "Label this.",
+            "file": "/srv/config/gone.md", "error": "text \"label\" could not be read at /srv/config/gone.md: no such file", "values": [],
+        },
         text("line_cut", "After a line read cuts short.", "fixed", true, Some("[line cut]"), "[line cut]"),
         text("cli_identity", "The CLI's first line.", "cli", false, Some("You are a Claude agent."), "You are a Claude agent."),
     ]})
