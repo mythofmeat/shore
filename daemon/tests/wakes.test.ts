@@ -4035,3 +4035,20 @@ test("with every text Shore writes pointed at a marker, a reply carrying every k
   });
   expect([...new Set(mismatched)]).toEqual([]);
 });
+
+test("a wake whose text the user pointed at a file that can't be read is skipped before anything is sent or written, and the log says which and why", async () => {
+  await withCharacter(async ({ runtime, script, say, wakeNow, thread, data, reload }) => {
+    await say("hello");
+    const before = await thread("main");
+    runtime.config.app.texts = { wake: "texts/gone.md" };
+    await reload();
+    at(10);
+    await wakeNow();
+    expect(script.wakes).toHaveLength(0);
+    expect(await thread("main")).toEqual(before);
+    const missing = join(dirname(data), "config", "texts", "gone.md");
+    expect(runtime.autonomy.log("ada", 10).map((event) => [event.kind, event.detail]).at(-1)).toEqual([
+      "call_failed", `Wake skipped: text "wake" could not be read at ${missing}: ENOENT: no such file or directory, open '${missing}'`,
+    ]);
+  });
+});

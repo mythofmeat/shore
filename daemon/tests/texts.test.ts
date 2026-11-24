@@ -8,6 +8,7 @@ import { listTexts } from "../src/texts/listing.ts";
 import { parameterText, shippedText, TEXT_SPECS, toolText } from "../src/texts/registry.ts";
 import { renderTemplate } from "../src/texts/template.ts";
 import { Texts } from "../src/texts/texts.ts";
+import { ALL_TOOLS, renderedTools } from "../src/tools/registry.ts";
 import { required } from "../src/util/required.ts";
 import { testTmp } from "./support/tmp.ts";
 
@@ -135,4 +136,12 @@ test("each text's key in config says where the text goes, and whether it can be 
 test("a tool's text and each of its parameters' texts are named after the tool and the parameter", () => {
   expect([toolText("read"), parameterText("read", "file_path")]).toEqual(["tool_read", "tool_read_file_path"]);
   expect(required(TEXT_SPECS.get("tool_read_file_path")).where).toBe("The description of the file_path parameter of read.");
+});
+
+test("a parameter's text switched off leaves that parameter undescribed, and a description goes ahead of the parameter's default", async () => {
+  const one = (texts: Texts, name: string): Record<string, Record<string, unknown>> =>
+    required(renderedTools(texts, ALL_TOOLS.filter((tool) => tool.name === name), {})[0]).input_schema["properties"] as Record<string, Record<string, unknown>>;
+  expect(Object.keys(required(one(new Texts(), "activity_heatmap")["days"]))).toEqual(["type", "description", "default"]);
+  const read = one(new Texts({ tool_read_file_path: false }), "read");
+  expect([Object.keys(required(read["file_path"])), Object.keys(required(read["offset"]))]).toEqual([["type", "minLength"], ["type", "minimum", "description"]]);
 });
