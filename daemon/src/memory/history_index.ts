@@ -10,6 +10,7 @@ import { isAutonomousNote } from "../engine/threads.ts";
 import { pictureText } from "../engine/embeds.ts";
 import { pictureFileLabel } from "../engine/picture_files.ts";
 import type { Message } from "../engine/types.ts";
+import { letOthersRun } from "../util/let_others_run.ts";
 import { versionOf } from "../engine/versions.ts";
 
 export const HISTORY_INDEX_FILE = "chat_logs.db";
@@ -138,10 +139,6 @@ function compareKeys(a: string, b: string): number {
 }
 
 const ATTACHMENT_STAMP = /^\d{8}_\d{6}_/;
-
-async function letOthersRun(): Promise<void> {
-  await new Promise<void>((resolve) => { setImmediate(resolve); });
-}
 
 function shownPictures(message: Message): { label: string; path: string }[] {
   if (message.role !== "user" || isToolResultOnly(message)) return [];

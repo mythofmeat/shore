@@ -4,6 +4,7 @@ import { claudeConfigDirs } from "../ledger/plan_limits.ts";
 import { shoreLog } from "../log.ts";
 import type { SnapshotGate } from "../snapshot_gate.ts";
 import { databasePath, openStorage, pack, unpack } from "./store.ts";
+import { letOthersRun } from "../util/let_others_run.ts";
 
 export const DIAGNOSTIC_RETENTION_MS = 30 * 24 * 3_600_000;
 const SWEEP_INTERVAL_MS = 24 * 3_600_000;
@@ -15,16 +16,16 @@ export interface RetentionStats {
   unreadableTraces: number;
 }
 
-export function pruneDiagnostics(data: string, nowMs = Date.now()): RetentionStats {
+export async function pruneDiagnostics(data: string, nowMs = Date.now(), stop?: AbortSignal): Promise<RetentionStats> {
   const cutoff = new Date(nowMs - DIAGNOSTIC_RETENTION_MS);
   const cutoffIso = cutoff.toISOString();
   openStorage(data).close();
   const store = CallStore.open(databasePath(data));
   const db = store.database;
   try {
-    return db.transaction(() => {
+    const found = db.transaction(() => {
       const stats: RetentionStats = {
-        captures: store.expireBefore(cutoff),
+        captures: 0,
         wakeEvents: db.query("DELETE FROM events WHERE kind = 'wake' AND julianday(timestamp) < julianday(?1)").run(cutoffIso).changes,
         subagentTraces: 0,
         unreadableTraces: 0,
@@ -55,20 +56,26 @@ export function pruneDiagnostics(data: string, nowMs = Date.now()): RetentionSta
       }
       return stats;
     })();
+    const steps = store.expireInSteps(cutoff, found);
+    while (steps.next().done !== true) {
+      await letOthersRun();
+      if (stop?.aborted === true) break;
+    }
+    return found;
   } finally { store.close(); }
 }
 
 export function startDiagnosticRetention(data: string, gate: SnapshotGate, intervalMs = SWEEP_INTERVAL_MS): { stop(): void } {
-  let stopped = false;
+  const stopping = new AbortController();
   let running = false;
   const sweep = async () => {
-    if (stopped || running) return;
+    if (stopping.signal.aborted || running) return;
     running = true;
     try {
       await gate.withActivity(async () => {
-        if (stopped) return;
-        const stats = pruneDiagnostics(data);
-        const sdkSessions = pruneSdkSessions(data, Date.now(), claudeConfigDirs());
+        if (stopping.signal.aborted) return;
+        const stats = await pruneDiagnostics(data, Date.now(), stopping.signal);
+        const sdkSessions = await pruneSdkSessions(data, Date.now(), claudeConfigDirs(), stopping.signal);
         if (sdkSessions > 0) shoreLog.info(`shore: diagnostic retention removed ${sdkSessions} retired SDK sessions and their transcript copies`);
         if (stats.captures + stats.wakeEvents + stats.subagentTraces > 0) {
           shoreLog.info(`shore: diagnostic retention removed ${stats.captures} captures and ${stats.wakeEvents} wake events; retained results for ${stats.subagentTraces} expired subagent traces`);
@@ -82,5 +89,5 @@ export function startDiagnosticRetention(data: string, gate: SnapshotGate, inter
   void sweep();
   const timer = setInterval(() => void sweep(), intervalMs);
   timer.unref?.();
-  return { stop: () => { stopped = true; clearInterval(timer); } };
+  return { stop: () => { stopping.abort(); clearInterval(timer); } };
 }

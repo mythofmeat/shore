@@ -3,7 +3,8 @@ import { existsSync, readdirSync, rmSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
 import { shoreLog } from "../../log.ts";
-import { pack, unpack, withStorage } from "../../storage/store.ts";
+import { openStorage, pack, unpack } from "../../storage/store.ts";
+import { letOthersRun } from "../../util/let_others_run.ts";
 import type { SessionBook, SessionRecord } from "./agent_sessions.ts";
 
 const RETIRED_PREFIX = "sdk_retired/";
@@ -47,12 +48,19 @@ function removeLocalSession(sessionId: string, configDir: string): void {
   }
 }
 
-export function pruneSdkSessions(data: string, nowMs: number, configDirs: readonly string[] = [process.env.CLAUDE_CONFIG_DIR ?? join(homedir(), ".claude")]): number {
-  return withStorage(data, db => {
-    const book: SessionBook = {};
-    const records = db.query("SELECT path, content FROM state_files WHERE path GLOB 'sdk_sessions/*'").all() as { path: string; content: Uint8Array }[];
-    for (const row of records) book[row.path] = JSON.parse(unpack(row.content)) as SessionRecord;
-    const active = sessionReferences(book);
+function sessionsInUse(db: Database): Map<string, string> {
+  const book: SessionBook = {};
+  const records = db.query("SELECT path, content FROM state_files WHERE path GLOB 'sdk_sessions/*'").all() as { path: string; content: Uint8Array }[];
+  for (const row of records) book[row.path] = JSON.parse(unpack(row.content)) as SessionRecord;
+  return sessionReferences(book);
+}
+
+export async function pruneSdkSessions(data: string, nowMs: number, configDirs: readonly string[] = [process.env.CLAUDE_CONFIG_DIR ?? join(homedir(), ".claude")], stop?: AbortSignal): Promise<number> {
+  const stopped = (): boolean => stop?.aborted === true;
+  if (stopped()) return 0;
+  const db = openStorage(data);
+  try {
+    let active = sessionsInUse(db);
     for (const id of active.keys()) db.query("DELETE FROM state_files WHERE path = ?1").run(RETIRED_PREFIX + Buffer.from(id).toString("base64url"));
     const transcripts = db.query("SELECT path, character FROM state_files WHERE path GLOB 'sdk_transcripts/*'").all() as { path: string; character: string }[];
     const paths = new Map<string, string[]>();
@@ -69,6 +77,9 @@ export function pruneSdkSessions(data: string, nowMs: number, configDirs: readon
     let removed = 0;
     const retired = db.query("SELECT path, content FROM state_files WHERE path GLOB 'sdk_retired/*'").all() as { path: string; content: Uint8Array }[];
     for (const row of retired) {
+      await letOthersRun();
+      if (stopped()) break;
+      active = sessionsInUse(db);
       try {
         const record = JSON.parse(unpack(row.content)) as { sessionId: string; retiredAt: number };
         if (typeof record.sessionId !== "string" || !Number.isFinite(record.retiredAt) || active.has(record.sessionId) || record.retiredAt >= cutoffMs) continue;
@@ -83,5 +94,7 @@ export function pruneSdkSessions(data: string, nowMs: number, configDirs: readon
       }
     }
     return removed;
-  });
+  } finally {
+    db.close();
+  }
 }
