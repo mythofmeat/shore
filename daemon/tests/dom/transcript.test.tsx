@@ -280,6 +280,33 @@ test("Load earlier asks for the page before the oldest message shown", async () 
   expect([served.asked.at(-1), view.ids()]).toEqual([{ segment: 5, before: 7, turns: 32 }, ["s_1", "s_3"]]);
 });
 
+test("a segment that fits on its first page loads earlier pages from the top at once, without waiting for more rows", async () => {
+  const timers = heldTimers();
+  const served = pages({ first: { messages: Array.from({ length: 23 }, (_, index) => message(`f_${String(index)}`, index % 2 === 0 ? "user" : "assistant")), segment: segment(9), more: true } });
+  await acting(async () => { await app.state().workspace.openSegment(9); });
+  const view = await transcript();
+  const node = measure(view.log(), { height: 1000, client: 400, top: 500 });
+  await node.scroll(10);
+  expect([view.ids().length, served.asked.at(-1), timers.held()]).toEqual([23, { segment: 9, before: 7, turns: 32 }, 0]);
+});
+
+test("once an earlier page is in place, later changes don't jump back to where loading began", async () => {
+  const timers = heldTimers();
+  pages({ first: { messages: [message("g_3", "user")], segment: segment(10), more: true }, 7: { messages: [message("g_1", "user")], segment: segment(10) } });
+  await history([message("m_1", "user")]);
+  const view = await transcript();
+  await acting(async () => { await app.state().workspace.openSegment(10); });
+  await settle();
+  const node = measure(view.log(), { height: 1000, client: 400, top: 500 });
+  await node.scroll(119);
+  await settle();
+  expect([view.ids(), node.size.top, timers.held()], "the clean-up is still to come").toEqual([["g_1", "g_3"], 119, 1]);
+  await node.scroll(400);
+  node.size.height = 1500;
+  await click(button(view.host, "Back to current"));
+  expect([view.ids(), node.size.top]).toEqual([["m_1"], 400]);
+});
+
 test("the live thread never loads a segment's earlier pages, however far up it scrolls", async () => {
   const served = pages({});
   await history(talk(4));
@@ -290,6 +317,10 @@ test("the live thread never loads a segment's earlier pages, however far up it s
 });
 
 test("a picture opens full size and closes again", async () => {
+  const { display } = app.state();
+  const shown = display.getSnapshot().values.images;
+  display.change("images", "on");
+  app.restores.push(() => { display.change("images", shown); });
   await history([message("m_1", "assistant", { content: "look", content_blocks: [{ type: "text", text: "look" }], images: [{ path: "/p.png", data: "iVBORw0KGgo=", caption: "a lamp" }] })]);
   const view = await transcript();
   await click(view.host.querySelector(".images button, .image-thumb, button.thumb"));
