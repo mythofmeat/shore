@@ -5,7 +5,7 @@ import { join } from "node:path";
 import { loadConfig } from "../src/config/loader.ts";
 import { configSchema } from "../src/config/schema.ts";
 import { listTexts } from "../src/texts/listing.ts";
-import { shippedText, TEXT_SPECS } from "../src/texts/registry.ts";
+import { parameterText, shippedText, TEXT_SPECS, toolText } from "../src/texts/registry.ts";
 import { renderTemplate } from "../src/texts/template.ts";
 import { Texts } from "../src/texts/texts.ts";
 import { required } from "../src/util/required.ts";
@@ -123,10 +123,16 @@ test("the list names every text with whose wording is in use, a file of the user
   expect(row("cli_nudges").wording).toContain("Your tool call was malformed and could not be parsed. Please retry.");
 });
 
-test("each text's key in config says where the text goes, and whether it can be switched off", () => {
-  const entries = configSchema({ instancesAt: () => [] });
+test("each text's key in config says where the text goes, and whether it can be switched off, and no other key takes a text's description", () => {
+  const entries = configSchema({ instancesAt: (path) => path === "mcp" ? ["time"] : [] });
   const described = (key: string): string | undefined => entries.find((entry) => entry.key === key)?.description;
   expect(described("texts.time")).toBe(required(TEXT_SPECS.get("time")).where);
   expect(described("texts.label")).toBe(`${required(TEXT_SPECS.get("label")).where} It can't be switched off.`);
   expect(described("texts.thread")).toBe(required(TEXT_SPECS.get("thread")).where);
+  expect(described("mcp.time.command")).toBe("command for mcp.");
+});
+
+test("a tool's text and each of its parameters' texts are named after the tool and the parameter", () => {
+  expect([toolText("read"), parameterText("read", "file_path")]).toEqual(["tool_read", "tool_read_file_path"]);
+  expect(required(TEXT_SPECS.get("tool_read_file_path")).where).toBe("The description of the file_path parameter of read.");
 });

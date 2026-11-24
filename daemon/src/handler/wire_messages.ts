@@ -100,7 +100,7 @@ async function renderMessageContent(
   texts: Texts,
 ): Promise<{ content: ContentBlock[]; owedToolResults: ContentBlock[] } | undefined> {
   const images = m.images.filter((image) => image.embed === undefined);
-  const reroute = m.role === "assistant" && images.length > 0;
+  const reroute = m.role === "assistant";
   const imageRender = reroute ? await renderAssistantImages(images, mode, texts) : undefined;
   const turnImages = reroute || isToolResultOnly(m) ? [] : images;
 

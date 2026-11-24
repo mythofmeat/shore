@@ -1,6 +1,6 @@
 import { expect, test } from "bun:test";
 
-import { assemblePrompt, type PromptParams, type PromptSection } from "../src/engine/prompt.ts";
+import { assemblePrompt, lengthPhrase, type PromptParams, type PromptSection } from "../src/engine/prompt.ts";
 import type { ContentBlock, Message } from "../src/engine/types.ts";
 import { Texts } from "../src/texts/texts.ts";
 
@@ -270,4 +270,8 @@ test("the time line names the thread the user was last in only when that time ca
     "[2 hours later · Friday 2026-10-30 · 2:00 PM · last in garden about an hour ago]",
     "[2 hours later · Friday 2026-10-30 · 2:00 PM · last in garden a minute ago]",
   ]);
+});
+
+test("a length of time is told in whole minutes under an hour, never less than a minute", () => {
+  expect([0, 29, 90, 3_540].map(lengthPhrase)).toEqual(["a minute", "a minute", "2 minutes", "59 minutes"]);
 });
