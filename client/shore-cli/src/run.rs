@@ -355,6 +355,7 @@ pub(crate) fn wants_json(other: &CliCommand) -> bool {
                     subcommand,
                     Some(
                         crate::cli::ConfigCommand::Tools { json: true }
+                            | crate::cli::ConfigCommand::Texts { json: true, .. }
                             | crate::cli::ConfigCommand::Get { json: true, .. }
                             | crate::cli::ConfigCommand::Set { json: true, .. }
                             | crate::cli::ConfigCommand::Keys { json: true, .. }
@@ -517,6 +518,8 @@ async fn handle_generic_swp_command(
         output::config::print_check(&data);
     } else if name == "tools" {
         output::tools::print(&data);
+    } else if name == "texts" {
+        output::texts::print(&data, texts_name(other))?;
     } else if let Some(render) = catalog_render(name) {
         render(&data);
     } else if let Some(view) = usage_view(other) {
@@ -538,6 +541,17 @@ pub(crate) fn validate_registered_output(
         serde_json::from_value(serde_json::json!({ "name": name, "data": data }))
             .map_err(|error| crate::skew::UnreadableResult::new(name, error))?;
     Ok(())
+}
+
+pub(crate) fn texts_name(other: &CliCommand) -> Option<&str> {
+    let CliCommand::Config {
+        subcommand: Some(crate::cli::ConfigCommand::Texts { name, .. }),
+        ..
+    } = other
+    else {
+        return None;
+    };
+    name.as_deref()
 }
 
 pub(crate) fn config_keys_filter(other: &CliCommand) -> Option<&str> {

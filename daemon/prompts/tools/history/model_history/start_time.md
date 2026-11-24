@@ -1,0 +1,1 @@
+Inclusive lower bound on when a model was used. Omit to start from the earliest recorded call. RFC3339 timestamp with seconds and an explicit UTC offset or `Z`, for example 2026-05-13T09:00:00+10:00. The offset is interpreted as written.

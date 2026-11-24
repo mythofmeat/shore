@@ -82,6 +82,7 @@ import { schemasFrom } from "../tools/validate.ts";
 import { pruneTurns, redoTurns, replyVersions, undoTurns, WorkspaceRecorder, workspaceTurnsFor } from "../tools/workspace_turns.ts";
 import { characterWorkspace } from "../tools/character_workspace.ts";
 import { sentPicturesDir } from "../storage/sent_pictures.ts";
+import { Texts } from "../texts/texts.ts";
 
 export interface GenerationEngine extends TurnEngine, PersistEngine, SetupEngine, AttemptEngine {
   readonly thread: string;
@@ -245,6 +246,7 @@ async function runGenerationCore(
     tags: config.app.marks.dislike_tags,
     user: resolveDisplayName(config.app.chat),
     now: now(),
+    texts: Texts.of(config),
   });
   const noteAttempt = (): void => {
     recordAttempt(scope, { attempt: plan.attempt, asked: plan.asked, replaces: plan.replaces, at: now() });
@@ -445,7 +447,7 @@ async function runGenerationCore(
 
   const compaction = config.app.compaction;
   const active = engine.messages();
-  const crowded = nearMessageBudget(withoutWakeWorking(active), built.messageBudget, imageTierForModel(resolved.modelId)) &&
+  const crowded = nearMessageBudget(withoutWakeWorking(Texts.of(config), active), built.messageBudget, imageTierForModel(resolved.modelId)) &&
     canArchiveTurns(active, compaction.keep_recent_turns);
   if (deps.registry.listThreads(charName).find((thread) => thread.id === engine.thread)?.compaction === false) {
     if (crowded) await archiveTrimmedTurns(deps.dataDir, engine, charName, workspace, compaction.keep_recent_turns, now, deps.compaction);

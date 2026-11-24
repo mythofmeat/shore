@@ -4,6 +4,7 @@ import { asCharacterWorkspace, type CharacterWorkspace } from "./character_works
 import { InvalidArgs, ToolIoError } from "./errors.ts";
 import type { ProcessStreams } from "./process.ts";
 import { characterGitIdentity, type ToolInput } from "./workspace.ts";
+import type { Texts } from "../texts/texts.ts";
 
 export interface BashResult {
   workdir: string;
@@ -104,6 +105,7 @@ export async function handleBash(
 }
 
 export async function withPromptChanges(
+  texts: Texts,
   target: string | CharacterWorkspace,
   write: () => Promise<unknown>,
   deferEdit?: (path: string) => Promise<void> | void,
@@ -119,6 +121,9 @@ export async function withPromptChanges(
     changed = await changedPromptFiles(workspace, root, before, deferEdit);
   }
   if (changed.length === 0) return value;
-  if (typeof value === "string") return `${value}\nPrompt reload queued: ${changed.join(", ")}.`;
+  if (typeof value === "string") {
+    const note = texts.render("prompt_reload", { files: changed.join(", ") });
+    return note === undefined ? value : `${value}\n${note}`;
+  }
   return { ...(value as Record<string, unknown>), prompt_files_changed: changed };
 }

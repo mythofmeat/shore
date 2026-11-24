@@ -1,0 +1,1 @@
+[This thread is sealed until {{opens}}. {{user}} can't see it, or anything you do or send here, until then, and your other threads are shown only its label, "{{label}}". What you send here waits in the thread for them. Keep what you make for it in {{folder}}, which is outside your workspace.]

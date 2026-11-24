@@ -8,6 +8,8 @@ import type { Message } from "../src/engine/types.ts";
 import { readState, writeState } from "../src/storage/store.ts";
 import { rejectionOf } from "./support/outcome.ts";
 import { testTmp } from "./support/tmp.ts";
+import { Texts } from "../src/texts/texts.ts";
+import { required } from "../src/util/required.ts";
 
 const MINUTE = 60_000;
 const HOUR = 60 * MINUTE;
@@ -173,12 +175,12 @@ test("statuses are told oldest first, each with how long it has been on, and a c
     status("home", at - 129_600_000), status("not feeling great", at - 64_800_000), status("on the couch", at - 5_400_000),
     status("in bed", at - HOUR), status("reading", at - 10 * MINUTE), status("tea", at - MINUTE), status("just now", at), status("soon", at + HOUR),
   ];
-  expect(presenceText({ statuses, changed_at: iso(at) }, at, "Their")).toBe(
+  expect(presenceText(new Texts(), { statuses, changed_at: iso(at) }, at)).toBe(
     '[Their status: "home" for 2 days, "not feeling great" for about a day, "on the couch" for 2 hours, "in bed" for about an hour, "reading" for 10 minutes, "tea" for a minute, "just now" for a minute, "soon" for a minute]',
   );
-  expect(presenceText({ statuses: [status("home", T0), status("sick", T0 + 5 * HOUR)], changed_at: AT }, T0 + 7 * HOUR, "eve's")).toBe('[eve\'s status: "home" for 7 hours, "sick" for 2 hours]');
-  expect(presenceText({ statuses: [], changed_at: AT }, T0 + 2 * 24 * HOUR, "Their")).toBe("[Their status was cleared 2 days ago.]");
-  expect(presenceText({ statuses: [], changed_at: AT }, T0 + 30 * MINUTE, "Their")).toBe("[Their status was cleared 30 minutes ago.]");
+  expect(presenceText(new Texts(), { statuses: [status("home", T0), status("sick", T0 + 5 * HOUR)], changed_at: AT }, T0 + 7 * HOUR)).toBe('[Their status: "home" for 7 hours, "sick" for 2 hours]');
+  expect(presenceText(new Texts(), { statuses: [], changed_at: AT }, T0 + 2 * 24 * HOUR)).toBe("[Their status was cleared 2 days ago.]");
+  expect(presenceText(new Texts(), { statuses: [], changed_at: AT }, T0 + 30 * MINUTE)).toBe("[Their status was cleared 30 minutes ago.]");
 });
 
 function said(id: string, text: string, at: number, extra: Partial<Message> = {}): Message {
@@ -188,7 +190,7 @@ function said(id: string, text: string, at: number, extra: Partial<Message> = {}
 test("a message that arrived with changed statuses says so right above what the user wrote, after a running wake", () => {
   const home: Presence = { statuses: [status("home", T0)], changed_at: AT };
   const running = { started_at: iso(T0 + HOUR) };
-  const prompt = assemblePrompt({
+  const prompt = assemblePrompt({ texts: new Texts(),
     character_name: "ada", display_name: "eve", has_prior_context: false, user_timestamp_mode: "never", sections: [],
     messages: [
       said("m1", "good morning", T0 + HOUR, { presence: home }),
@@ -199,7 +201,7 @@ test("a message that arrived with changed statuses says so right above what the 
 
   expect(prompt.messages.map((message) => message.content_blocks.map((block) => block.type === "text" ? block.text : ""))).toEqual([
     ['[Their status: "home" for about an hour]', "good morning"],
-    [wakeRunningText(running, "UTC"), "[Their status was cleared 30 minutes ago.]", "still there?"],
+    [required(wakeRunningText(new Texts(), running, "UTC")), "[Their status was cleared 30 minutes ago.]", "still there?"],
     ["and now"],
   ]);
   expect(prompt.messages[0]?.content).toBe('[Their status: "home" for about an hour]\n\ngood morning');

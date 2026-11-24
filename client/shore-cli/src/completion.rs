@@ -51,6 +51,7 @@ pub(crate) enum Completes {
     StatusesOn,
     SubagentRuns,
     Subagents,
+    Texts,
     Threads,
     ToolArguments,
     Tools,
@@ -82,6 +83,7 @@ impl Completes {
             Self::SettingKeys | Self::SettingValues => &[Source::Settings],
             Self::Statuses | Self::StatusesOn => &[Source::Presence],
             Self::SubagentRuns => &[Source::SubagentRuns],
+            Self::Texts => &[Source::Texts],
             Self::Subagents | Self::Tools => &[Source::Tools],
             Self::UsageApiKeys => &[Source::UsageApiKeys],
             Self::UsageModels => &[Source::UsageModels],
@@ -107,6 +109,7 @@ pub(crate) enum Source {
     Settings,
     Status,
     SubagentRuns,
+    Texts,
     Threads,
     ToolParameters,
     Tools,
@@ -133,6 +136,7 @@ impl Source {
             Self::Settings => ("model_settings", line.settings_target()),
             Self::Status => ("status", json!({})),
             Self::SubagentRuns => ("subagent_trace", json!({ "count": 10 })),
+            Self::Texts => ("texts", json!({})),
             Self::Threads => ("list_threads", json!({})),
             Self::ToolParameters => return line.debug_tool().map(described_tool),
             Self::WorkspaceFiles => ("workspace_files", json!({})),
@@ -229,6 +233,7 @@ pub(crate) struct PaletteCatalog {
     pub usage_models: Vec<PaletteValue>,
     pub call_types: Vec<PaletteValue>,
     pub workspace_files: Vec<PaletteValue>,
+    pub texts: Vec<PaletteValue>,
     pub statuses: Vec<PaletteValue>,
     pub statuses_on: Vec<PaletteValue>,
     like_tags: Vec<PaletteValue>,
@@ -267,6 +272,7 @@ impl PaletteCatalog {
             Source::ToolParameters => self.tool_arguments = tool_argument_values(data),
             Source::Tools => self.absorb_tools(data),
             Source::WorkspaceFiles => self.workspace_files = named_values(data, "files"),
+            Source::Texts => self.texts = text_values(data),
             Source::UsageApiKeys => self.usage_api_keys = usage_values(data, true),
             Source::UsageCallTypes => self.call_types = usage_values(data, false),
             Source::UsageModels => self.usage_models = usage_values(data, true),
@@ -515,6 +521,7 @@ impl PaletteCatalog {
                 .unwrap_or_default(),
             Completes::SubagentRuns => self.subagent_runs.clone(),
             Completes::Subagents => self.subagents.clone(),
+            Completes::Texts => self.texts.clone(),
             Completes::Threads => self.threads.clone(),
             Completes::ToolArguments => {
                 let used = line.used_tool_arguments();
@@ -563,6 +570,17 @@ fn named_values(data: &Json, array: &str) -> Vec<PaletteValue> {
     rows(data, array)
         .filter_map(Json::as_str)
         .map(PaletteValue::plain)
+        .collect()
+}
+
+fn text_values(data: &Json) -> Vec<PaletteValue> {
+    rows(data, "texts")
+        .filter_map(|item| {
+            Some(PaletteValue::described(
+                text(item, "name")?,
+                text(item, "place").map(str::to_owned),
+            ))
+        })
         .collect()
 }
 
@@ -1586,6 +1604,10 @@ mod tests {
             Source::UsageCallTypes,
             &json!({ "summary": [{ "group": "message" }, { "group": "tool loop" }] }),
         );
+        catalog.absorb(
+            Source::Texts,
+            &json!({ "texts": [{ "name": "time", "place": "Before a user's message." }, { "name": "wake" }, { "place": "no name" }] }),
+        );
         catalog
     }
 
@@ -1638,6 +1660,10 @@ mod tests {
             (
                 "debug subagent ",
                 &[("memory", Some("Searches memory")), ("music", None)],
+            ),
+            (
+                "config texts ",
+                &[("time", Some("Before a user's message.")), ("wake", None)],
             ),
             (
                 "model setting ",

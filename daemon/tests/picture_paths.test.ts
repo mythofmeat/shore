@@ -20,6 +20,7 @@ import { carryToolMedia } from "../src/tools/media.ts";
 import { closePictureFolder, openPictureFolder, sharePictureFolders } from "../src/tools/picture_access.ts";
 import { noisePng } from "./support/test_images.ts";
 import { testTmp } from "./support/tmp.ts";
+import { Texts } from "../src/texts/texts.ts";
 
 async function world() {
   const root = testTmp(`picture-paths-${crypto.randomUUID()}`);
@@ -29,6 +30,7 @@ async function world() {
   await mkdir(workspaceDir, { recursive: true });
   await mkdir(data, { recursive: true });
   const ctx: ToolContext = {
+    texts: new Texts(),
     workspaceDir, characterName: "ada", characterDataDir: join(data, "ada"), imageDir: join(root, "media"), cacheDir: cache,
     conversationDir: join(data, "ada", "threads", "main"), historyDbPath: join(data, "shore.db"), configDir: root,
   };
@@ -53,7 +55,7 @@ async function world() {
 }
 
 async function shownAs(message: Message): Promise<string[]> {
-  const { messages } = await buildLlmMessages({ system: [], messages: [message] }, "text_standin");
+  const { messages } = await buildLlmMessages({ system: [], messages: [message] }, "text_standin", new Texts());
   return (messages[0]?.content ?? []).map((block) => block.type === "text" ? block.text : block.type);
 }
 
@@ -234,4 +236,33 @@ test("starting up closes every character's cache folder, and says so when a tool
   } finally {
     warned.mockRestore();
   }
+});
+
+test("a picture is marked as just used each time a request carries it, so the image cache keeps it", async () => {
+  const { send } = await world();
+  const message = await send(Buffer.from(await noisePng(4, 4, 9)));
+  const file = message.images[0]?.path ?? "";
+  const long = new Date("2020-01-01T00:00:00Z");
+  fs.utimesSync(file, long, long);
+  await shownAs(message);
+  expect(statSync(file).mtimeMs).toBeGreaterThan(long.getTime() + 1_000);
+});
+
+test("pictures the character sent go back to a model that takes tools as its own generate_image calls, with the caption where there is one", async () => {
+  const { root } = await world();
+  const lamp = join(root, "lamp.png");
+  const door = join(root, "door.png");
+  await writeFile(lamp, Buffer.from(await noisePng(4, 4, 3)));
+  await writeFile(door, Buffer.from(await noisePng(4, 4, 4)));
+  const reply: Message = {
+    msg_id: "a1", role: "assistant", content: "Here.", images: [{ path: lamp, caption: "a lamp" }, { path: door, caption: "  " }],
+    content_blocks: [{ type: "text", text: "Here." }], timestamp: "2026-11-12T09:00:00+11:00",
+  };
+  const { messages } = await buildLlmMessages({ system: [], messages: [reply] }, "tool_pair", new Texts());
+  const shape = (blocks: readonly ContentBlock[] | undefined): unknown[] => (blocks ?? []).map((block) =>
+    block.type === "tool_use" ? ["tool_use", block.name, block.input] : block.type === "tool_result" ? ["tool_result", typeof block.content === "string" ? block.content : block.content.map((inner) => inner.type === "text" ? inner.text : inner.type)] : [block.type]);
+  expect(messages.map((message) => [message.role, shape(message.content)])).toEqual([
+    ["assistant", [["text"], ["tool_use", "generate_image", { caption: "a lamp" }], ["tool_use", "generate_image", {}]]],
+    ["user", [["tool_result", ["image", "a lamp"]], ["tool_result", ["image"]]]],
+  ]);
 });

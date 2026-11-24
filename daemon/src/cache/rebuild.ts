@@ -20,11 +20,8 @@ import { priorContext } from "../memory/compaction/archive.ts";
 import { homeThreadOf, threadChatModel } from "../engine/threads.ts";
 import type { McpRegistry } from "../tools/mcp_registry.ts";
 import type { ToolConversation } from "../handler/tool_context.ts";
+import { Texts } from "../texts/texts.ts";
 
-
-export const IDLE_ANCHOR_TEXT =
-  "[Resuming after an extended idle period — the earlier " +
-  "conversation has been archived to memory.]";
 
 export function historyIsBetweenTurns(messages: readonly Message[]): boolean {
   return messages.at(-1)?.role === "assistant";
@@ -33,7 +30,7 @@ export function historyIsBetweenTurns(messages: readonly Message[]): boolean {
 export function wakeRebuildMessages(
   character: string,
   messages: readonly Message[],
-  anchor: () => Message = () => idleAnchorMessage(),
+  anchor: () => Message,
 ): Message[] | undefined {
   const hasUserTurn = messages.some((m) => m.role === "user" && !isToolResultOnly(m));
 
@@ -61,15 +58,17 @@ export function wakeRebuildMessages(
 }
 
 export function idleAnchorMessage(
+  texts: Texts,
   newId: () => string = () => `m_${randomUUID()}`,
   now: () => string = () => new Date().toISOString(),
 ): Message {
+  const text = texts.always("idle_resume");
   return {
     msg_id: newId(),
     role: "user",
-    content: IDLE_ANCHOR_TEXT,
+    content: text,
     images: [],
-    content_blocks: [{ type: "text", text: IDLE_ANCHOR_TEXT }],
+    content_blocks: [{ type: "text", text }],
     alternatives: [],
     timestamp: now(),
   };
@@ -105,6 +104,7 @@ export async function rebuildRequestFromDisk(
 
   const selected = wakeRebuildMessages(character, store.messages(), () =>
     idleAnchorMessage(
+      Texts.of(config),
       deps.newId ?? (() => `m_${randomUUID()}`),
       deps.now ?? (() => new Date().toISOString()),
     ),

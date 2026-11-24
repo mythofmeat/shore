@@ -5,6 +5,7 @@ import { firedBy } from "../src/autonomy/runner.ts";
 import { wakeStoppedNote, wakeWrapUpText, wrapUpMsFor } from "../src/autonomy/wake.ts";
 import { dispatchTool, type ToolContext } from "../src/tools/dispatch.ts";
 import { handleWakeInThread, wakeInThreadRequest } from "../src/tools/wake_in_thread.ts";
+import { Texts } from "../src/texts/texts.ts";
 
 const MINUTE = 60_000;
 const T0 = Date.UTC(2026, 9, 30, 12);
@@ -31,21 +32,21 @@ test("a length of time is spelled in the largest unit that fits it evenly, down 
 });
 
 test("a wake's wrap-up nudge says how long is left, how many rounds, and that the next wake starts fresh", () => {
-  expect(wakeWrapUpText(4 * MINUTE, 3, "eve")).toBe(
+  expect(wakeWrapUpText(new Texts(), 4 * MINUTE, 3, "eve")).toBe(
     "[System nudge: this wake stops in about 4 minutes or after 3 more rounds, counting this one, whichever comes first. " +
     "Wrap up now. Your next wake starts fresh, so whatever it will need has to be in a file before this one stops, " +
     "and nothing reaches eve unless you send it.]",
   );
-  expect(wakeWrapUpText(30_000, 1, "eve")).toStartWith("[System nudge: this wake stops in less than a minute or after this round, whichever comes first. ");
+  expect(wakeWrapUpText(new Texts(), 30_000, 1, "eve")).toStartWith("[System nudge: this wake stops in less than a minute or after this round, whichever comes first. ");
 });
 
 test("a wake that is stopped, or fails, is told why in its thread", () => {
-  expect(wakeStoppedNote({ why: "interrupted" }, "eve", 30 * MINUTE)).toBe(
+  expect(wakeStoppedNote(new Texts(), { why: "interrupted" }, "eve", 30 * MINUTE)).toBe(
     "[eve wrote here while this wake was running, so Shore stopped it here for you to answer them. Once they have been quiet in this thread for 10 minutes, Shore wakes you here again to pick it up.]",
   );
-  expect(wakeStoppedNote({ why: "time" }, "eve", 90 * MINUTE)).toBe("[This wake reached its limit of 90 minutes, and Shore stopped it here.]");
-  expect(wakeStoppedNote({ why: "rounds" }, "eve", 90 * MINUTE)).toBe("[This wake used up its rounds of tool use, and Shore stopped it here.]");
-  expect(wakeStoppedNote({ why: "failed", error: "usage limit reached" }, "eve", 90 * MINUTE)).toBe('[This wake failed here, before it had finished, with this error: "usage limit reached".]');
+  expect(wakeStoppedNote(new Texts(), { why: "time" }, "eve", 90 * MINUTE)).toBe("[This wake reached its limit of 90 minutes, and Shore stopped it here.]");
+  expect(wakeStoppedNote(new Texts(), { why: "rounds" }, "eve", 90 * MINUTE)).toBe("[This wake used up its rounds of tool use, and Shore stopped it here.]");
+  expect(wakeStoppedNote(new Texts(), { why: "failed", error: "usage limit reached" }, "eve", 90 * MINUTE)).toBe('[This wake failed here, before it had finished, with this error: "usage limit reached".]');
 });
 
 test("a wake says what set it off: its triggers, the turn that handed it over, a seal, or a start by hand", () => {
@@ -62,8 +63,8 @@ test("a wake says what set it off: its triggers, the turn that handed it over, a
   expect(firedBy([byHand])).toBe("a start by hand");
   expect(firedBy([seal])).toBe("its seal coming off");
   expect(firedBy([lamp, byHand, seal, asked])).toBe('trigger "lamp" and a start by hand and a hand-off from "main" and its seal coming off');
-  expect(triggerFiredNote(show, "UTC")).toBe('[Your trigger "show" fired at Friday 2026-10-30 · 12:00 PM: The show.]');
-  expect(triggerFiredNote(handed, "UTC")).toBe('[You asked for this wake from "own-time" at Friday 2026-10-30 · 12:01 PM: Carry on.]');
+  expect(triggerFiredNote(new Texts(), show, "UTC")).toBe('[Your trigger "show" fired at Friday 2026-10-30 · 12:00 PM: The show.]');
+  expect(triggerFiredNote(new Texts(), handed, "UTC")).toBe('[You asked for this wake from "own-time" at Friday 2026-10-30 · 12:01 PM: Carry on.]');
 });
 
 test("a hand-off needs a thread's id and a reason, and takes a limit of a minute or more", () => {
@@ -121,6 +122,7 @@ test("a hand-off into a thread where one is already waiting is refused with what
 test("a dry run doesn't hand a wake over, start a thread or call an outside tool, and still lets the character read", async () => {
   const asked: unknown[] = [];
   const ctx: ToolContext = {
+    texts: new Texts(),
     workspaceDir: "/nowhere", characterName: "ada", characterDataDir: "/nowhere", imageDir: "/nowhere", conversationDir: "/nowhere",
     historyDbPath: "/nowhere/shore.db", configDir: "/nowhere", dryRun: true, thread: "main",
     wakeInThread: (request) => {

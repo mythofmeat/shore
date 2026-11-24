@@ -10,6 +10,7 @@ import { ToolIoError } from "../tools/errors.ts";
 import type { StartThreadRequest } from "../tools/start_thread.ts";
 import { emitNewMessageEvent } from "./persistence.ts";
 import { pictureProblems, sendPictures, type PictureSender } from "./pictures.ts";
+import { Texts } from "../texts/texts.ts";
 
 export interface ThreadStarter {
   registry: CharacterRegistry;
@@ -19,11 +20,12 @@ export interface ThreadStarter {
 
 export async function startCharacterThread(starter: ThreadStarter, character: string, request: StartThreadRequest): Promise<void> {
   const { registry, emitEvent } = starter;
-  const pictures: PictureSender = { workspace: characterWorkspace(registry.effectiveConfig(character), character), dir: sentPicturesDir(starter.dataDir, character) };
+  const config = registry.effectiveConfig(character);
+  const pictures: PictureSender = { workspace: characterWorkspace(config, character), dir: sentPicturesDir(starter.dataDir, character) };
   if (request.opening !== undefined) {
     const problems = await pictureProblems([request.opening], pictures.workspace);
     if (problems.length > 0) {
-      throw new ToolIoError(`not started: these pictures in the opening could not be sent:\n${problems.map((problem) => `- ${problem}`).join("\n")}\nStart it again with the names fixed.`);
+      throw new ToolIoError(Texts.of(config).always("start_refused", { pictures: problems.map((problem) => `- ${problem}`).join("\n") }));
     }
   }
   await registry.createThread(character, request.name, {

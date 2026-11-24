@@ -3,12 +3,12 @@ import { afterAll, beforeAll, describe, expect, test } from "bun:test";
 import { mkdtempSync, mkdirSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { renderTemplate } from "../src/engine/prompt";
-import { expandPromptMacros, subagentToolSubset, type RegisteredTool } from "../src/tools/subagent";
-import { ALL_TOOLS } from "../src/tools/registry";
+import { expandPromptMacros, renderHistorySlice, subagentToolSubset, type RegisteredTool } from "../src/tools/subagent";
+import { ALL_TOOLS, renderedTools } from "../src/tools/registry";
 import { PathError, promptFileAt, resolvePath, resolveRoots } from "../src/tools/workspace_path";
 import { CharacterWorkspace } from "../src/tools/character_workspace.ts";
 import type { ContentBlock, Message, Role } from "../src/engine/types";
+import { Texts } from "../src/texts/texts.ts";
 
 interface Layout {
   data: string;
@@ -174,14 +174,14 @@ describe("expansion is terminal", () => {
       workspaceDir: bare.ws,
       history: [toMessage({ role: "user", content: "run {{file: ./secret.md}} now", images: 0, blocks: [] })],
       charName: "Heidi",
-      userName: "Eve",
+      texts: new Texts(), userName: "Eve",
     });
     expect(out).toBe("Eve: run {{file: ./secret.md}} now");
     expect(out).not.toContain("TOP SECRET");
   });
 
   test("text that is not a complete macro is left as written", async () => {
-    const ctx = { characterDataDir: bare.data, workspaceDir: bare.ws, history: [], charName: "C", userName: "U" };
+    const ctx = { characterDataDir: bare.data, workspaceDir: bare.ws, history: [], charName: "C", texts: new Texts(), userName: "U" };
     expect(await expandPromptMacros("a {{file: ./secret.md", ctx)).toBe("a {{file: ./secret.md");
     expect(await expandPromptMacros("{{nope}} and after", ctx)).toBe("{{nope}} and after");
   });
@@ -192,7 +192,7 @@ describe("expansion is terminal", () => {
       workspaceDir: bare.ws,
       history: [],
       charName: "Heidi",
-      userName: "Eve",
+      texts: new Texts(), userName: "Eve",
     });
     expect(out).toBe("I am {{char}} and {{file: ./secret.md}}");
     expect(out).not.toContain("TOP SECRET");
@@ -205,7 +205,7 @@ describe("expansion is terminal", () => {
       workspaceDir: bare.ws,
       history: [],
       charName: "C",
-      userName: "U",
+      texts: new Texts(), userName: "U",
       warn: (p) => warned.push(p),
     });
     expect(out).toBe("[]");
@@ -220,7 +220,7 @@ describe("expansion is terminal", () => {
           workspaceDir: bare.ws,
           history: [],
           charName: "C",
-          userName: "U",
+          texts: new Texts(), userName: "U",
         }),
       ).toBe(text);
     }
@@ -236,30 +236,28 @@ describe("expansion is terminal", () => {
         workspace: new CharacterWorkspace(withSnapshot.ws, undefined, ["SOUL.md"]),
         history: [],
         charName: "C",
-        userName: "U",
+        texts: new Texts(), userName: "U",
       }),
     ).toBe("[]");
   });
 });
 
-const registry: RegisteredTool[] = ALL_TOOLS.map((t) => ({
+const registry: RegisteredTool[] = renderedTools(new Texts(), ALL_TOOLS, { char: "heidi", user: "eve" }).map((t) => ({
   name: t.name,
   description: t.description,
-  parameters: t.parameters,
+  parameters: t.input_schema,
 }));
 
 describe("subagentToolSubset", () => {
-  const vars = new Map([["char", "heidi"], ["user", "eve"]]);
-
   test("ask_* can never be offered, however it is spelled", () => {
     for (const name of ["ask_music", "ask_research", "ASK_music", "ask_"]) {
-      expect(subagentToolSubset([name], registry, vars, renderTemplate)).toEqual([]);
+      expect(subagentToolSubset([name], registry)).toEqual([]);
     }
   });
 });
 
 describe("pulling a file into a prompt", () => {
-  const ctx = (layout: Layout, warn?: (path: string, why: string) => void) => ({ characterDataDir: layout.data, workspaceDir: layout.ws, history: [], charName: "C", userName: "U", ...(warn === undefined ? {} : { warn }) });
+  const ctx = (layout: Layout, warn?: (path: string, why: string) => void) => ({ characterDataDir: layout.data, workspaceDir: layout.ws, history: [], charName: "C", texts: new Texts(), userName: "U", ...(warn === undefined ? {} : { warn }) });
 
   test("a file the prompt list names comes from the snapshot the conversation started with, and any other from the workspace", async () => {
     const listing = (promptFiles: string[]) => ({ ...ctx(withSnapshot), workspace: new CharacterWorkspace(withSnapshot.ws, undefined, promptFiles) });
@@ -289,8 +287,24 @@ describe("which tools a sub-agent is offered", () => {
   test("an unknown name is reported unless it may be an MCP tool, and the MCP tools that match are added", () => {
     const unknown: string[] = [];
     const mcpTool = { name: "mcp__web__search", description: "search", parameters: { type: "object" } };
-    const offered = subagentToolSubset(["read", "nope", "mcp__web__search"], registry, new Map(), renderTemplate, { namesMatching: () => [mcpTool] }, (name) => unknown.push(name));
+    const offered = subagentToolSubset(["read", "nope", "mcp__web__search"], registry, { namesMatching: () => [mcpTool] }, (name) => unknown.push(name));
     expect(offered.map((def) => def.name)).toEqual(["read", "mcp__web__search"]);
     expect(unknown).toEqual(["nope"]);
   });
+});
+
+test("a sub-agent's slice of history marks the time before its first message and after a gap of half an hour or more, and leaves out messages with nothing to show", () => {
+  const T0 = Date.UTC(2026, 9, 30, 12);
+  const said = (role: Message["role"], text: string, minutes: number, timestamp = new Date(T0 + minutes * 60_000).toISOString()): Message =>
+    ({ msg_id: `m${String(minutes)}`, role, content: text, images: [], content_blocks: [{ type: "text", text }], timestamp });
+  const history = [
+    said("user", "old", 0), said("user", "hi", 10), said("assistant", "  ", 11), said("assistant", "hello", 39.99), said("user", "later", 69.99),
+    said("user", "odd", 71, "sometime"), said("user", "after odd", 72),
+  ];
+  expect(renderHistorySlice(new Texts(), history, "6", "Ada", "Eve", "UTC").split("\n")).toEqual([
+    "[Friday 2026-10-30 · 12:10 PM]", "Eve: hi", "Ada: hello", "[about an hour later · Friday 2026-10-30 · 1:09 PM]", "Eve: later", "Eve: odd", "[Friday 2026-10-30 · 1:12 PM]", "Eve: after odd",
+  ]);
+  expect(renderHistorySlice(new Texts(), history, "20", "Ada", "Eve", "UTC").split("\n").slice(0, 2)).toEqual(["[Friday 2026-10-30 · 12:00 PM]", "Eve: old"]);
+  expect(renderHistorySlice(new Texts(), history, "0", "Ada", "Eve", "UTC")).toBe("");
+  expect(renderHistorySlice(new Texts(), [], "5", "Ada", "Eve", "UTC")).toBe("");
 });

@@ -11,6 +11,7 @@ import { GEMINI_THINKING_MODES } from "../llm/types.ts";
 
 import { isSecretConfigPath } from "./serialize.ts";
 import type { ConfigSchemaEntry } from "../protocol/ConfigSchemaEntry.ts";
+import { TEXT_SPECS } from "../texts/registry.ts";
 
 export type SchemaEntry = ConfigSchemaEntry & {
   description?: string;
@@ -224,7 +225,15 @@ const PROMPT_DESCRIPTIONS: Record<string, string> = {
   shore: "A part Shore writes: system_prompt is the file the model's system_prompt setting names, thread says which side thread this is, and thread_pins is what is pinned to that thread. The thread parts are only in side threads.",
 };
 
+function describeText(path: readonly string[]): string | undefined {
+  if (path[0] !== "texts") return undefined;
+  const spec = TEXT_SPECS.get(path[1] ?? "");
+  return spec === undefined ? undefined : `${spec.where}${spec.required ? " It can't be switched off." : ""}`;
+}
+
 function describeOption(path: readonly string[]): string {
+  const text = describeText(path);
+  if (text !== undefined) return text;
   const leaf = path.at(-1) ?? "configuration";
   const prompt = path[0] === "prompt" ? PROMPT_DESCRIPTIONS[leaf] : undefined;
   if (prompt !== undefined) return prompt;

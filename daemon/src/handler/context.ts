@@ -30,6 +30,7 @@ import { characterWorkspace } from "../tools/character_workspace.ts";
 import { assembleToolSurface, renderToolDefs, subagentToolDefs } from "../tools/registry.ts";
 import { withoutWakeWorking } from "../autonomy/wake_working.ts";
 import { assistantImageModeForRequest, buildLlmMessages, inReadingOrder, type SentMessage } from "./wire_messages.ts";
+import { Texts } from "../texts/texts.ts";
 
 export interface PrepareChatContextParams {
   thread?: string;
@@ -98,6 +99,7 @@ async function promptSections(
 }
 
 async function threadPrompt(
+  texts: Texts,
   characterDataDir: string,
   workspace: CharacterWorkspace,
   thread: string | undefined,
@@ -115,7 +117,7 @@ async function threadPrompt(
     started_by_you: record.created_by === "character",
     label: record.label,
     purpose: record.purpose,
-    pins: await loadThreadPins(characterDataDir, workspace, record.id, record.pins ?? []),
+    pins: await loadThreadPins(texts, characterDataDir, workspace, record.id, record.pins ?? []),
   };
 }
 
@@ -145,7 +147,8 @@ export async function prepareChatContext(
     }
   }
 
-  const seen = withoutWakeWorking(messages);
+  const texts = Texts.of(config);
+  const seen = withoutWakeWorking(texts, messages);
   const sections = await promptSections(config, resolved, async (path) => await loadPromptFile(
     characterDataDir,
     workspace,
@@ -154,7 +157,7 @@ export async function prepareChatContext(
   ));
 
   const promptParams = {
-    thread: await threadPrompt(characterDataDir, workspace, params.thread),
+    thread: await threadPrompt(texts, characterDataDir, workspace, params.thread),
     character_name: character,
     display_name: displayName,
     sections,
@@ -165,6 +168,7 @@ export async function prepareChatContext(
     max_output_tokens: resolved.maxOutputTokens,
     user_timestamp_mode: config.app.chat.user_timestamps,
     image_tier: imageTierForModel(resolved.modelId),
+    texts,
   };
   const prompt =
     params.timeZone === undefined
@@ -176,12 +180,14 @@ export async function prepareChatContext(
   const { messages: llmMessages, system, sent } = await buildLlmMessages(
     prompt,
     assistantImageModeForRequest(resolved.sdk, toolsAvailable),
+    texts,
   );
 
   const toolDefs = toolsAvailable
     ? assembleToolSurface(
-        renderToolDefs(config.app.tools, character, displayName),
+        renderToolDefs(texts, config.app.tools, character, displayName),
         subagentToolDefs(
+          texts,
           config.app.subagents.agents,
           config.app.subagents.enabled,
           character,

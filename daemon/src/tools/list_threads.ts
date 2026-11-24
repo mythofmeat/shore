@@ -5,8 +5,10 @@ import { folderOf } from "../engine/thread_layout.ts";
 import { defaultThreadsIndex, homeThread, readThreadsIndex, threadActivities, wakesThread, type ThreadActivity, type ThreadRecord } from "../engine/threads.ts";
 import { agoPhrase, formatWallClock } from "../engine/prompt.ts";
 import { hostZone } from "../ledger/zoned.ts";
+import type { Texts } from "../texts/texts.ts";
 
 export interface ListThreadsOptions {
+  texts: Texts;
   dataDir: string;
   character: string;
   thread?: string;
@@ -63,6 +65,6 @@ export async function handleListThreads(options: ListThreadsOptions): Promise<st
     ...[folderOf(index, record.id)].flatMap((folder) => folder === undefined ? [] : [`in the folder "${folder}"`]),
   ], options, zone, nowMs));
   const where = current === home ? `You're in it.` : `You're in "${current}"${sealedHere === undefined ? "" : ", which is sealed"}.`;
-  const kept = sealedListNote(sealed, zone);
+  const kept = sealedListNote(options.texts, sealed, zone);
   return [`Your home thread is "${home}". ${where}`, ...shown, ...(kept === undefined ? [] : [kept])].join("\n\n");
 }

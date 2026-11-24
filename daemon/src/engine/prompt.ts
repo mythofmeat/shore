@@ -1,20 +1,17 @@
 import { required } from "../util/required.ts";
 
-import threadTemplate from "../../prompts/engine/thread.md" with { type: "text" };
 import { hostZone, naiveInZone, partsOf } from "../ledger/zoned";
 import type { ContentBlock, ImageRef, Message, MessageNote, Role } from "./types";
 import { estimateTokens, withSafetyMargin } from "./tokens.ts";
-import { unsentNotice } from "./embeds.ts";
+import type { Sent } from "./embeds.ts";
 import { base64ImageDimensions, fileImageDimensions } from "../llm/image_dimensions.ts";
 import { HIGH_RESOLUTION_IMAGE_TIER, imageTokens, sentImageTokens, type ImageTier } from "../llm/image_tokens.ts";
 import { findModelCopy } from "../llm/images.ts";
 import { isToolResultOnly } from "./message_store.ts";
 import { pinnedCommand } from "./threads.ts";
 import { DEFAULT_MAX_CONTEXT_TOKENS, DEFAULT_MAX_OUTPUT_TOKENS } from "../config/model_defaults.ts";
-
-export const EARLIER_CONVERSATION_NOT_SHOWN = "[earlier conversation not shown]";
-
-export const THREAD_OPENED_BY_YOU = "[this conversation starts with your message]";
+import { renderTemplate } from "../texts/template.ts";
+import type { Texts } from "../texts/texts.ts";
 
 export const COMPACT_BEFORE_TRIM_FRACTION = 0.9;
 
@@ -28,11 +25,6 @@ const EIGHTEEN_HOURS_SECS = 64_800;
 const THIRTY_SIX_HOURS_SECS = 129_600;
 const SECS_PER_HOUR = 3_600;
 const SECS_PER_DAY = 86_400;
-
-const THREAD_TEMPLATE = threadTemplate.trimEnd();
-
-const THREAD_PINS_HEADER =
-  "Files and command output pinned to this thread's prompt. Changes show up here after a long pause in this thread, or after it compacts; commands run again then.";
 
 export type UserTimestampMode = "never" | "always" | "auto";
 
@@ -88,6 +80,7 @@ export interface PromptParams {
   max_output_tokens?: number | undefined;
   user_timestamp_mode: UserTimestampMode;
   image_tier?: ImageTier | undefined;
+  texts: Texts;
 }
 
 export function assemblePrompt(
@@ -100,6 +93,7 @@ export function assemblePrompt(
   const system = buildSystemBlocks(params, timeZone);
   const availableForMessages = availableMessageTokens(system, maxContext, maxOutput);
   const trimmed = trimMessages(
+    params.texts,
     params.messages,
     availableForMessages,
     params.has_prior_context,
@@ -117,29 +111,29 @@ export function assemblePrompt(
   };
 }
 
-function threadBlock(thread: ThreadPrompt, vars: ReadonlyMap<string, string>, timeZone: string): string {
+function threadBlock(texts: Texts, thread: ThreadPrompt, vars: ReadonlyMap<string, string>, timeZone: string): string | undefined {
   const created = Date.parse(thread.created_at);
   const started = Number.isNaN(created) ? thread.created_at : required(formatWallClock(created, timeZone).split(" · ")[0]);
-  return renderTemplate(THREAD_TEMPLATE, new Map([
-    ...vars,
-    ["thread", thread.id],
-    ["home", thread.home],
-    ["started", started],
-    ["starter", thread.started_by_you ? "you" : vars.get("user") ?? ""],
-    ["label", thread.label ?? ""],
-    ["purpose", thread.purpose ?? ""],
-  ])).trim();
+  return texts.render("thread", {
+    user: vars.get("user"),
+    char: vars.get("char"),
+    thread: thread.id,
+    home: thread.home,
+    started,
+    starter: thread.started_by_you ? "you" : vars.get("user"),
+    label: thread.label,
+    purpose: thread.purpose,
+  })?.trim();
 }
 
-function pinSection(pin: string, content: string | undefined): string {
+function pinSection(texts: Texts, pin: string, content: string | undefined): string | undefined {
   const command = pinnedCommand(pin);
-  const shown = content?.trimEnd() ?? "";
-  if (command !== undefined) return `## $ ${command}\n\n${shown === "" ? "(This command hasn't run yet.)" : shown}`;
-  return `## ${pin}\n\n${shown === "" ? "(This file is empty or isn't in the workspace.)" : shown}`;
+  const shown = content?.trimEnd();
+  return command === undefined ? texts.render("pinned_file", { path: pin, content: shown }) : texts.render("pinned_command", { command, output: shown });
 }
 
-function threadPinsBlock(pins: ThreadPrompt["pins"]): string {
-  return [THREAD_PINS_HEADER, ...pins.map(({ pin, content }) => pinSection(pin, content))].join("\n\n");
+function threadPinsBlock(texts: Texts, pins: ThreadPrompt["pins"]): string {
+  return [texts.render("thread_pins"), ...pins.map(({ pin, content }) => pinSection(texts, pin, content))].filter((part) => part !== undefined).join("\n\n");
 }
 
 function buildSystemBlocks(params: PromptParams, timeZone: string): SystemBlock[] {
@@ -158,8 +152,8 @@ function buildSystemBlocks(params: PromptParams, timeZone: string): SystemBlock[
     }
     const thread = params.thread;
     if (thread === undefined) return [];
-    if (section.shore === "thread") return [{ label: "thread", content: threadBlock(thread, vars, timeZone) }];
-    return thread.pins.length === 0 ? [] : [{ label: "thread_pins", content: threadPinsBlock(thread.pins) }];
+    const content = section.shore === "thread" ? threadBlock(params.texts, thread, vars, timeZone) : thread.pins.length === 0 ? undefined : threadPinsBlock(params.texts, thread.pins);
+    return content === undefined || content === "" ? [] : [{ label: section.shore, content }];
   });
 }
 
@@ -170,36 +164,6 @@ function availableMessageTokens(
 ): number {
   const systemTokens = estimateTokens(system.map((b) => b.content).join("\n"));
   return withSafetyMargin(Math.max(0, maxContext - maxOutput - systemTokens));
-}
-
-export function renderTemplate(template: string, vars: Map<string, string>): string {
-  let result = template;
-
-  for (;;) {
-    const ifStart = result.indexOf("{{#if ");
-    if (ifStart === -1) break;
-
-    const nameStart = ifStart + "{{#if ".length;
-    const nameEnd = result.indexOf("}}", nameStart);
-    if (nameEnd === -1) break;
-
-    const name = result.slice(nameStart, nameEnd).trim();
-    const openTagEnd = nameEnd + 2;
-
-    const closePos = result.indexOf("{{/if}}", openTagEnd);
-    if (closePos === -1) break;
-
-    const blockContent = result.slice(openTagEnd, closePos);
-    const after = result.slice(closePos + "{{/if}}".length);
-
-    const value = vars.get(name);
-    result =
-      value !== undefined && value !== ""
-        ? result.slice(0, ifStart) + blockContent.split(`{{${name}}}`).join(value) + after
-        : result.slice(0, ifStart) + after;
-  }
-
-  return result.replace(/\{\{([^{}]*)\}\}/g, (tag, name: string) => vars.get(name) ?? tag);
 }
 
 export function stripOneTrailingNewline(raw: string): string {
@@ -277,16 +241,16 @@ const WEEKDAYS = [
 
 const pad2 = (n: number): string => String(n).padStart(2, "0");
 
-function relativeGapPhrase(gapSecs: number): string {
-  if (gapSecs < ONE_AND_HALF_HOURS_SECS) return "about an hour later";
+function gapPhrase(gapSecs: number): string {
+  if (gapSecs < ONE_AND_HALF_HOURS_SECS) return "about an hour";
   if (gapSecs < EIGHTEEN_HOURS_SECS) {
-    return `${Math.round(gapSecs / SECS_PER_HOUR)} hours later`;
+    return `${Math.round(gapSecs / SECS_PER_HOUR)} hours`;
   }
-  if (gapSecs < THIRTY_SIX_HOURS_SECS) return "about a day later";
-  return `${Math.round(gapSecs / SECS_PER_DAY)} days later`;
+  if (gapSecs < THIRTY_SIX_HOURS_SECS) return "about a day";
+  return `${Math.round(gapSecs / SECS_PER_DAY)} days`;
 }
 
-function lengthPhrase(gapSecs: number): string {
+export function lengthPhrase(gapSecs: number): string {
   if (gapSecs < SECS_PER_HOUR) {
     const minutes = Math.max(1, Math.round(gapSecs / 60));
     return minutes === 1 ? "a minute" : `${String(minutes)} minutes`;
@@ -301,35 +265,37 @@ export function agoPhrase(gapSecs: number): string {
   return `${lengthPhrase(gapSecs)} ago`;
 }
 
-function lastElsewherePhrase(elsewhere: Message["last_elsewhere"], instantMs: number): string | undefined {
+function lastElsewhere(elsewhere: Message["last_elsewhere"], instantMs: number): { last_thread: string; last_length: string } | undefined {
   if (elsewhere === undefined) return undefined;
   const at = parseRfc3339(elsewhere.at);
   if (at === undefined) return undefined;
-  return `last in ${elsewhere.thread} ${agoPhrase(Math.max(0, gapSeconds(at, instantMs)))}`;
+  return { last_thread: elsewhere.thread, last_length: lengthPhrase(gapSeconds(at, instantMs)) };
 }
 
 function formatTimeMarker(
+  texts: Texts,
   gapSecs: number | undefined,
   instantMs: number,
   timeZone: string,
-  lastElsewhere?: Message["last_elsewhere"],
-): string {
-  const timeStr = formatWallClock(instantMs, timeZone);
-  if (gapSecs === undefined || gapSecs < TIME_GAP_THRESHOLD_SECS) return `[${timeStr}]`;
-  const elsewhere = lastElsewherePhrase(lastElsewhere, instantMs);
-  return `[${relativeGapPhrase(gapSecs)} · ${timeStr}${elsewhere === undefined ? "" : ` · ${elsewhere}`}]`;
+  elsewhere?: Message["last_elsewhere"],
+): string | undefined {
+  const now = formatWallClock(instantMs, timeZone);
+  if (gapSecs === undefined || gapSecs < TIME_GAP_THRESHOLD_SECS) return texts.render("time", { now });
+  return texts.render("time_later", { gap: gapPhrase(gapSecs), now, ...lastElsewhere(elsewhere, instantMs) });
 }
 
-export function presenceText(presence: NonNullable<Message["presence"]>, at: number, whose: string): string {
-  const since = (instant: string): number => gapSeconds(Date.parse(instant), at);
-  if (presence.statuses.length === 0) return `[${whose} status was cleared ${agoPhrase(since(presence.changed_at))}.]`;
-  return `[${whose} status: ${presence.statuses.map((status) => `"${status.status}" for ${lengthPhrase(since(status.set_at))}`).join(", ")}]`;
+export function statusesText(texts: Texts, presence: NonNullable<Message["presence"]>, at: number): string {
+  return presence.statuses.flatMap((status) => texts.render("status_item", { status: status.status, length: lengthPhrase(gapSeconds(Date.parse(status.set_at), at)) }) ?? []).join(", ");
 }
 
-export function wakeRunningText(running: NonNullable<Message["wake_running"]>, timeZone: string): string {
+export function presenceText(texts: Texts, presence: NonNullable<Message["presence"]>, at: number): string | undefined {
+  if (presence.statuses.length === 0) return texts.render("status_cleared", { length: lengthPhrase(gapSeconds(Date.parse(presence.changed_at), at)) });
+  return texts.render("status", { statuses: statusesText(texts, presence, at) });
+}
+
+export function wakeRunningText(texts: Texts, running: NonNullable<Message["wake_running"]>, timeZone: string): string | undefined {
   const since = formatWallClock(Date.parse(running.started_at), timeZone);
-  const where = running.thread === undefined ? "your own-time thread" : `"${running.thread}"`;
-  return `[A wake of yours in ${where} has been running since ${since}. It can't see this conversation. It is only told that a message arrived.]`;
+  return running.thread === undefined ? texts.render("wake_running_own_time", { since }) : texts.render("wake_running", { thread: running.thread, since });
 }
 
 export function formatWallClock(instantMs: number, timeZone: string): string {
@@ -343,6 +309,7 @@ export function formatWallClock(instantMs: number, timeZone: string): string {
 }
 
 export function wallClockMarker(
+  texts: Texts,
   previousTimestamp: string | undefined,
   timestamp: string,
   timeZone: string,
@@ -350,9 +317,9 @@ export function wallClockMarker(
   const currentMs = parseRfc3339(timestamp);
   if (currentMs === undefined) return undefined;
   const prevMs = previousTimestamp === undefined ? undefined : parseRfc3339(previousTimestamp);
-  if (prevMs === undefined) return formatTimeMarker(undefined, currentMs, timeZone);
+  if (prevMs === undefined) return formatTimeMarker(texts, undefined, currentMs, timeZone);
   const gap = gapSeconds(prevMs, currentMs);
-  return gap < TIME_GAP_THRESHOLD_SECS ? undefined : formatTimeMarker(gap, currentMs, timeZone);
+  return gap < TIME_GAP_THRESHOLD_SECS ? undefined : formatTimeMarker(texts, gap, currentMs, timeZone);
 }
 
 function gapSeconds(fromMs: number, toMs: number): number {
@@ -379,6 +346,7 @@ function isToolLoopMessage(role: Role, blocks: ContentBlock[]): boolean {
 }
 
 function trimMessages(
+  texts: Texts,
   messages: Message[],
   tokenBudget: number,
   hasPriorContext: boolean,
@@ -427,7 +395,7 @@ function trimMessages(
   let unsent: ImageRef[] = [];
   const result: { pm: PromptMessage; source: PromptSource }[] = [];
   const noticed = (pm: PromptMessage, notes: MessageNote[]): PromptMessage => {
-    const notice = unsentNotice(unsent);
+    const notice = unsentNotice(texts, unsent);
     unsent = [];
     if (notice === undefined) return pm;
     pm.content = `${notice}\n\n${pm.content}`;
@@ -440,7 +408,7 @@ function trimMessages(
     const currentMs = parseRfc3339(ts);
     const notes: MessageNote[] = [];
 
-    if (wake) result.push(addedTurn(noticed(syntheticUserTurn(wakeMarker(currentMs, mode, timeZone)), [])));
+    if (wake) result.push(addedTurn(noticed(syntheticUserTurn(wakeMarker(texts, currentMs, mode, timeZone)), [])));
     const written = pm.role === "user" && !isToolLoopMessage(pm.role, pm.content_blocks);
     if (written) noticed(pm, notes);
 
@@ -450,8 +418,8 @@ function trimMessages(
       const bigGap = gap !== undefined && gap >= TIME_GAP_THRESHOLD_SECS;
       const due = bigGap || (lastMarkerMs === undefined ? lostContext : gapSeconds(lastMarkerMs, currentMs) >= HOURLY_MARKER_INTERVAL_SECS);
 
-      if (mode === "always" || (mode === "auto" && due)) {
-        const marker = formatTimeMarker(gap, currentMs, timeZone, elsewhere);
+      const marker = mode === "always" || (mode === "auto" && due) ? formatTimeMarker(texts, gap, currentMs, timeZone, elsewhere) : undefined;
+      if (marker !== undefined) {
         pm.content = `${marker}\n\n${pm.content}`;
         pm.content_blocks = [
           { type: "text", text: `${marker}\n\n${first.text}` },
@@ -462,19 +430,14 @@ function trimMessages(
       }
     }
 
-    if (presence !== undefined && currentMs !== undefined) {
-      const text = presenceText(presence, currentMs, "Their");
+    const lead = (text: string | undefined): void => {
+      if (text === undefined) return;
       pm.content = `${text}\n\n${pm.content}`;
       pm.content_blocks = [{ type: "text", text }, ...pm.content_blocks];
       notes.unshift({ place: "start", text });
-    }
-
-    if (running !== undefined) {
-      const text = wakeRunningText(running, timeZone);
-      pm.content = `${text}\n\n${pm.content}`;
-      pm.content_blocks = [{ type: "text", text }, ...pm.content_blocks];
-      notes.unshift({ place: "start", text });
-    }
+    };
+    lead(presence === undefined || currentMs === undefined ? undefined : presenceText(texts, presence, currentMs));
+    lead(running === undefined ? undefined : wakeRunningText(texts, running, timeZone));
 
     if (currentMs !== undefined) prevMs = currentMs;
     if (pm.role === "assistant") unsent.push(...pm.images);
@@ -482,10 +445,16 @@ function trimMessages(
   }
 
   if (result.find(({ pm }) => pm.role !== "system")?.pm.role === "assistant") {
-    result.unshift(addedTurn(syntheticUserTurn(lostContext ? EARLIER_CONVERSATION_NOT_SHOWN : THREAD_OPENED_BY_YOU)));
+    result.unshift(addedTurn(syntheticUserTurn(texts.always(lostContext ? "earlier_not_shown" : "opened_by_you"))));
   }
 
   return result;
+}
+
+export function unsentNotice(texts: Texts, images: readonly Sent[]): string | undefined {
+  const problems = [...new Set(images.flatMap((image) => typeof image.embed === "string" && typeof image.problem === "string" ? [`${image.embed}: ${image.problem}`] : []))];
+  if (problems.length === 0) return undefined;
+  return texts.render("pictures_not_sent", { pictures: problems.map((problem) => `- ${problem}`).join("\n") });
 }
 
 function addedTurn(pm: PromptMessage): { pm: PromptMessage; source: PromptSource } {
@@ -496,8 +465,6 @@ function syntheticUserTurn(text: string): PromptMessage {
   return { role: "user", content: text, images: [], content_blocks: [{ type: "text", text }] };
 }
 
-export function wakeMarker(instantMs: number | undefined, mode: UserTimestampMode, timeZone: string): string {
-  return mode === "never" || instantMs === undefined
-    ? "[wake]"
-    : `[wake · ${formatWallClock(instantMs, timeZone)}]`;
+export function wakeMarker(texts: Texts, instantMs: number | undefined, mode: UserTimestampMode, timeZone: string): string {
+  return texts.always("wake_turn", { at: mode === "never" || instantMs === undefined ? undefined : formatWallClock(instantMs, timeZone) });
 }

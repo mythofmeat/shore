@@ -28,6 +28,7 @@ import type { StartThreadRequest } from "../tools/start_thread.ts";
 import type { WakeHandOff, WakeInThreadRequest } from "../tools/wake_in_thread.ts";
 import type { EditThreadRequest } from "../tools/edit_thread.ts";
 import type { ThreadRecord } from "../engine/threads.ts";
+import { Texts } from "../texts/texts.ts";
 
 export interface ToolConversation {
   thread: string;
@@ -92,7 +93,9 @@ export async function buildToolContext(
   const subagentsConfigured = config.app.subagents.agents.size > 0;
   const userName = resolveDisplayName(config.app.chat);
 
+  const texts = Texts.of(config);
   const ctx: ToolContext = {
+    texts,
     thread: deps.thread ?? MAIN_THREAD,
     conversation: deps.conversation ?? [],
     ...(deps.fresh === undefined ? {} : { fresh: deps.fresh }),
@@ -110,7 +113,7 @@ export async function buildToolContext(
     configDir,
     historyIndexPath: historyIndexPath(config.dirs.cache, charName),
     userName,
-    guide: (input) => readGuide(input, guideValues(config, userName), ALL_TOOLS.map((tool) => ({ name: tool.name, enabled: toolEnabled(config.app.tools, tool.name) }))),
+    guide: (input) => readGuide(texts, input, guideValues(config, userName), ALL_TOOLS.map((tool) => ({ name: tool.name, enabled: toolEnabled(config.app.tools, tool.name) }))),
     ...("ok" in imageGen ? { imageGenConfig: imageGen.ok } : {}),
     ...(deps.imageGenerator === undefined ? {} : { imageGenerator: deps.imageGenerator }),
     ...(deps.modelHistoryQuery === undefined ? {} : { modelHistoryQuery: deps.modelHistoryQuery }),

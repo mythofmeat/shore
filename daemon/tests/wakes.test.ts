@@ -48,6 +48,9 @@ import { outcomeOf, rejectionOf } from "./support/outcome.ts";
 import { required } from "../src/util/required.ts";
 import { testTmp } from "./support/tmp.ts";
 import { promptedAppConfig } from "./support/prompt_list.ts";
+import { Texts } from "../src/texts/texts.ts";
+import { parameterText, TEXT_SPECS, TEXTS, toolText, type TextSpec } from "../src/texts/registry.ts";
+import { ALL_TOOLS } from "../src/tools/registry.ts";
 
 const MINUTE = 60_000;
 const T0 = Date.UTC(2026, 9, 30, 12);
@@ -973,7 +976,7 @@ test("a wake is told once, at its next step, that the user wrote in another thre
       held.release.resolve();
       await ticking;
 
-      const note = userWroteNote(T0 + (minutes + 1) * MINUTE, "User", hostZone());
+      const note = required(userWroteNote(new Texts(), T0 + (minutes + 1) * MINUTE, "User", hostZone()));
       expect(script.wakes).toHaveLength(3);
       expect(textOf(script.wakes[0] as SidecarRequest)).not.toContain("has just written to you");
       expect(textOf(script.wakes[1] as SidecarRequest)).toEndWith(note);
@@ -985,7 +988,7 @@ test("a wake is told once, at its next step, that the user wrote in another thre
 
 test("a message sent while a wake runs tells that turn a wake is running, where and since when, once in each thread, and the note stays with the message", async () => {
   const started = new Date(T0 + 20 * MINUTE).toISOString();
-  const running = wakeRunningText({ started_at: started, thread: "main" }, hostZone());
+  const running = required(wakeRunningText(new Texts(), { started_at: started, thread: "main" }, hostZone()));
   let root = "";
   await withCharacter(async ({ runtime, script, data, say, wakeNow, thread }) => {
     root = dirname(data);
@@ -1092,13 +1095,13 @@ test("starting a wake by hand answers that it is queued, and making a character 
 
 test("each side is told about the other in these words, with the thread the wake is in, and a note kept from when there was an own-time thread still reads as it did", () => {
   const started = new Date(T0).toISOString();
-  expect(wakeRunningText({ started_at: started }, "UTC")).toBe(
+  expect(required(wakeRunningText(new Texts(), { started_at: started }, "UTC"))).toBe(
     "[A wake of yours in your own-time thread has been running since Friday 2026-10-30 · 12:00 PM. It can't see this conversation. It is only told that a message arrived.]",
   );
-  expect(wakeRunningText({ started_at: started, thread: "ring" }, "UTC")).toBe(
+  expect(required(wakeRunningText(new Texts(), { started_at: started, thread: "ring" }, "UTC"))).toBe(
     '[A wake of yours in "ring" has been running since Friday 2026-10-30 · 12:00 PM. It can\'t see this conversation. It is only told that a message arrived.]',
   );
-  expect(userWroteNote(T0 + MINUTE, "eve", "UTC")).toBe(
+  expect(required(userWroteNote(new Texts(), T0 + MINUTE, "eve", "UTC"))).toBe(
     "[eve has just written to you, at Friday 2026-10-30 · 12:01 PM, while this wake is running. " +
     "Another turn of you is answering them, and it knows this wake is running.]",
   );
@@ -1123,7 +1126,7 @@ test("a trigger that names no thread wakes the character in home with what it sa
     await runtime.autonomy.runDue();
     expect(script.wakes).toHaveLength(2);
     const woken = textOf(script.wakes[0] as SidecarRequest);
-    expect(woken).toContain(`in this thread.]\n\n${triggerFiredNote(tide, hostZone())}\n\n${triggerFiredNote(lamp, hostZone())}\n\n[Current time: `);
+    expect(woken).toContain(`in this thread.]\n\n${required(triggerFiredNote(new Texts(), tide, hostZone()))}\n\n${required(triggerFiredNote(new Texts(), lamp, hostZone()))}\n\n[Current time: `);
     expect(events()).toEqual(['Woken in "main" by a start by hand', 'Woken in "main" by trigger "tide-table", "lamp"']);
 
     script.wakes.length = 0;
@@ -1295,7 +1298,7 @@ test("a trigger that fires during a wake in its thread is handed to that wake at
 
     expect(script.wakes).toHaveLength(3);
     expect(textOf(script.wakes[1] as SidecarRequest)).toEndWith(
-      `${triggerFiredNote(tide, hostZone())}\n\n${userWroteNote(T0 + 12 * MINUTE, "User", hostZone())}\n\n${triggerFiredNote(lamp, hostZone())}`,
+      `${required(triggerFiredNote(new Texts(), tide, hostZone()))}\n\n${required(userWroteNote(new Texts(), T0 + 12 * MINUTE, "User", hostZone()))}\n\n${required(triggerFiredNote(new Texts(), lamp, hostZone()))}`,
     );
     expect(times(textOf(script.wakes[2] as SidecarRequest), "Your trigger")).toBe(2);
 
@@ -1308,13 +1311,13 @@ test("a trigger that fires during a wake in its thread is handed to that wake at
 
 test("what set a wake off is told in these words, and nothing new means no note", () => {
   const tide = { name: "tide-table", reason: "the tide is out", at: T0 + MINUTE };
-  expect(triggerFiredNote(tide, "UTC")).toBe('[Your trigger "tide-table" fired at Friday 2026-10-30 · 12:01 PM: the tide is out]');
-  expect(triggerFiredNote({ name: "", byHand: true, reason: "", at: T0 }, "UTC")).toBe("[This wake was started by hand at Friday 2026-10-30 · 12:00 PM, from Shore's command line or its settings.]");
-  expect(triggerFiredNote({ name: "", from: "main", reason: "Tell part two.", at: T0, thread: "ring" }, "UTC")).toBe('[You asked for this wake from "main" at Friday 2026-10-30 · 12:00 PM: Tell part two.]');
-  expect(triggerFiredNote({ name: "", seal: true, reason: "It is open.", at: T0, thread: "gift" }, "UTC")).toBe("[The seal on this thread came off at Friday 2026-10-30 · 12:00 PM. It is open.]");
-  expect(wakeNewsNote([], "eve", "UTC")).toBeUndefined();
-  expect(wakeNewsNote([{ kind: "user_wrote", at: T0 }, { kind: "trigger", firing: tide }], "eve", "UTC")).toBe(
-    `${userWroteNote(T0, "eve", "UTC")}\n\n${triggerFiredNote(tide, "UTC")}`,
+  expect(required(triggerFiredNote(new Texts(), tide, "UTC"))).toBe('[Your trigger "tide-table" fired at Friday 2026-10-30 · 12:01 PM: the tide is out]');
+  expect(required(triggerFiredNote(new Texts(), { name: "", byHand: true, reason: "", at: T0 }, "UTC"))).toBe("[This wake was started by hand at Friday 2026-10-30 · 12:00 PM, from Shore's command line or its settings.]");
+  expect(required(triggerFiredNote(new Texts(), { name: "", from: "main", reason: "Tell part two.", at: T0, thread: "ring" }, "UTC"))).toBe('[You asked for this wake from "main" at Friday 2026-10-30 · 12:00 PM: Tell part two.]');
+  expect(required(triggerFiredNote(new Texts(), { name: "", seal: true, reason: "It is open.", at: T0, thread: "gift" }, "UTC"))).toBe("[The seal on this thread came off at Friday 2026-10-30 · 12:00 PM. It is open.]");
+  expect(wakeNewsNote(new Texts(), [], "eve", "UTC")).toBeUndefined();
+  expect(required(wakeNewsNote(new Texts(), [{ kind: "user_wrote", at: T0 }, { kind: "trigger", firing: tide }], "eve", "UTC"))).toBe(
+    `${required(userWroteNote(new Texts(), T0, "eve", "UTC"))}\n\n${required(triggerFiredNote(new Texts(), tide, "UTC"))}`,
   );
 });
 
@@ -2631,7 +2634,7 @@ test("a wake in a thread takes in what fires for that thread while it runs, leav
     expect(runtime.autonomy.wakeFor("ada", fired("show", 10, "ring"))).toBe("queued");
     let waking = runtime.autonomy.runDue();
     await held.started.promise;
-    expect(turnsOf(script.wakes[0])).toEqual([["user", wakeShown("12:10 PM", ["Nothing has been said in this thread yet.", wroteLast("10 minutes ago", 'your home thread "main"')], [triggerFiredNote(fired("show", 10), zone)])]]);
+    expect(turnsOf(script.wakes[0])).toEqual([["user", wakeShown("12:10 PM", ["Nothing has been said in this thread yet.", wroteLast("10 minutes ago", 'your home thread "main"')], [required(triggerFiredNote(new Texts(), fired("show", 10), zone))])]]);
     at(11);
     expect(runtime.autonomy.wakeFor("ada", fired("encore", 11, "ring"))).toBe("handed");
     expect(runtime.autonomy.wakeFor("ada", fired("lamp", 11))).toBe("queued");
@@ -2641,7 +2644,7 @@ test("a wake in a thread takes in what fires for that thread while it runs, leav
     await waking;
     expect(where()).toEqual(["ring", "ring", "ring"]);
     expect(textOf(script.wakes[1] as SidecarRequest)).toEndWith(
-      `${triggerFiredNote(fired("encore", 11), zone)}\n\n[User has just written to you, at Friday 2026-10-30 · 12:11 PM, while this wake is running. Another turn of you is answering them, and it knows this wake is running.]`,
+      `${required(triggerFiredNote(new Texts(), fired("encore", 11), zone))}\n\n[User has just written to you, at Friday 2026-10-30 · 12:11 PM, while this wake is running. Another turn of you is answering them, and it knows this wake is running.]`,
     );
     expect(textOf(script.replies.at(-1) as SidecarRequest)).toEndWith(
       `[A wake of yours in "ring" has been running since Friday 2026-10-30 · 12:10 PM. It can't see this conversation. It is only told that a message arrived.]\nis the lamp lit?`,
@@ -2651,9 +2654,9 @@ test("a wake in a thread takes in what fires for that thread while it runs, leav
     at(12);
     await runtime.autonomy.runDue();
     expect(where().slice(3)).toEqual(["main", "main", "garden", "garden"]);
-    expect(textOf(script.wakes[3] as SidecarRequest)).toContain(triggerFiredNote(fired("lamp", 11), zone));
+    expect(textOf(script.wakes[3] as SidecarRequest)).toContain(required(triggerFiredNote(new Texts(), fired("lamp", 11), zone)));
     expect(textOf(script.wakes[3] as SidecarRequest)).not.toContain("beans");
-    expect(setOffBy(turnsOf(script.wakes[5]).at(-1)?.[1])).toEqual([triggerFiredNote(fired("beans", 11), zone)]);
+    expect(setOffBy(turnsOf(script.wakes[5]).at(-1)?.[1])).toEqual([required(triggerFiredNote(new Texts(), fired("beans", 11), zone))]);
 
     script.wakes.length = 0;
     held = hold();
@@ -2686,8 +2689,8 @@ test("a wake in a thread takes in what fires for that thread while it runs, leav
     expect(pickUp).toContain("[Your last wake here was stopped for User's message at Friday 2026-10-30 · 12:41 PM, after 1 round, before it had finished.");
     expect(setOffBy(pickUp)).toEqual([
       '[You asked for this wake from "main" at Friday 2026-10-30 · 12:41 PM:  is due]',
-      triggerFiredNote(fired("encore", 41), zone),
-      triggerFiredNote(fired("show", 45), zone),
+      required(triggerFiredNote(new Texts(), fired("encore", 41), zone)),
+      required(triggerFiredNote(new Texts(), fired("show", 45), zone)),
     ]);
     expect(runtime.autonomy.log("ada", 100).filter((event) => event.kind === "tick_fired").at(-1)?.detail).toBe('Woken in "ring" by trigger "encore", "show" and a hand-off from "main"');
   });
@@ -3908,4 +3911,144 @@ test("a message is counted once in the character's activity record, whether it i
     await regenerate("main");
     expect(counted(runtime)).toBe(5);
   }, undefined, root);
+});
+
+const MARKED = TEXTS.filter((spec) => !spec.fixed);
+
+function declared(spec: TextSpec): string[] {
+  return Object.keys(spec.values).filter((value) => value !== "<tool>");
+}
+
+function marker(spec: TextSpec): string {
+  return `⟦${spec.name}${declared(spec).map((value) => `{{#if ${value}}}|${value}={{${value}}}{{/if}}`).join("")}⟧`;
+}
+
+function leftOver(text: string, theirs: readonly string[]): string {
+  let left = text;
+  for (let before = ""; before !== left;) {
+    before = left;
+    left = left.replace(/⟦[^⟦⟧]*⟧/g, "");
+  }
+  for (const words of theirs) left = left.split(words).join("");
+  return left.trim();
+}
+
+function requestTexts(request: SidecarRequest): string[] {
+  const inner = (content: unknown): string[] => typeof content === "string" ? [content]
+    : Array.isArray(content) ? content.flatMap((block: { type: string; text?: string }) => block.type === "text" ? [block.text ?? ""] : []) : [];
+  const described = (schema: unknown): string[] => {
+    if (typeof schema !== "object" || schema === null) return [];
+    return Object.entries(schema).flatMap(([key, value]) => key === "description" && typeof value === "string" ? [value] : described(value));
+  };
+  return [
+    ...(request.system ?? []).map((block) => block.text),
+    ...request.messages.flatMap((message) => message.content.flatMap((block) => block.type === "text" ? [block.text] : block.type === "tool_result" ? inner(block.content) : [])),
+    ...(request.tools ?? []).flatMap((tool) => [tool.description, ...described(tool.input_schema)]),
+  ];
+}
+
+test("with every text Shore writes pointed at a marker, a reply carrying every kind of note and a wake hold nothing of Shore's but the markers, and each text is given the values the list names", async () => {
+  const watching = spyOn(Texts.prototype, "render");
+  const rendered: Parameters<Texts["render"]>[] = [];
+  const enabled = ALL_TOOLS.map((tool) => tool.name);
+  try {
+    await withCharacter(async ({ runtime, script, data, workspace, say, thread }) => {
+      const config = join(dirname(data), "config");
+      await mkdir(join(config, "texts"), { recursive: true });
+      for (const spec of MARKED) await writeFile(join(config, "texts", `${spec.name}.md`), `${marker(spec)}\n`);
+      await writeFile(join(workspace, "notes.md"), "The fox is called Rue.");
+      await writeFile(join(workspace, "lamp.png"), await sizedImage(8, 8));
+      await writeFile(join(workspace, "TRIGGERS.toml"), SHOW);
+      await runtime.registry.createThread("ada", "ring", { label: "The ring", purpose: "A story in parts", pins: ["notes.md"] });
+      const engine = await runtime.registry.getOrCreate("ada", "main");
+      const message = (id: string, role: Message["role"], text: string, minutes: number, extra: Partial<Message> = {}): Message => ({
+        msg_id: id, role, content: text, images: [], content_blocks: text === "" ? [] : [{ type: "text", text }], alternatives: [], timestamp: new Date(T0 + minutes * MINUTE).toISOString(), ...extra,
+      });
+      for (const each of [
+        message("a0", "assistant", "I was waiting for you.", 0),
+        message("u1", "user", "here is the lamp", 1, { images: [{ path: join(workspace, "lamp.png") }, { path: join(workspace, "gone.png") }], presence: { statuses: [{ status: "home", set_at: new Date(T0).toISOString() }], changed_at: new Date(T0).toISOString() } }),
+        message("a1", "assistant", "It glows: ![[nowhere.png]]", 2, { images: [{ path: "", embed: "![[nowhere.png]]", problem: "no picture matches" }, { path: join(workspace, "drawn.png"), caption: "a drawing" }] }),
+        message("w1", "assistant", "I lit it while you were away.", 50, { origin: "autonomous" }),
+        message("u2", "user", "thank you", 120, { wake_running: { started_at: new Date(T0 + 110 * MINUTE).toISOString(), thread: "ring" }, last_elsewhere: { thread: "garden", at: new Date(T0 + 100 * MINUTE).toISOString() }, presence: { statuses: [], changed_at: new Date(T0 + 115 * MINUTE).toISOString() } }),
+        message("a2", "assistant", "You're welcome.", 121),
+        message("u3", "user", "one from before", 122, { wake_running: { started_at: new Date(T0 + 110 * MINUTE).toISOString() } }),
+        message("a3", "assistant", "I remember.", 123),
+      ]) await engine.appendMessage(each);
+      at(124);
+      await say("tell me a story in parts", "ring");
+      await runtime.triggers.tick();
+      await say("go on");
+      script.again = 1;
+      script.aside = "Let me look.";
+      script.sends = undefined;
+      changePresence(data, { on: ["reading"] }, T0 + 130 * MINUTE);
+      const held = hold();
+      script.beatHeld = held;
+      const waking = fires(runtime, 135);
+      await held.started.promise;
+      at(136);
+      const asking = say("wait, what is the fox called?", "ring");
+      held.release.resolve();
+      await waking;
+      await asking;
+      at(150);
+      await runtime.autonomy.runDue();
+
+      const theirs = [
+        "here is the lamp", "thank you", "one from before", "tell me a story in parts", "go on", "wait, what is the fox called?",
+        "I was waiting for you.", "It glows: ![[nowhere.png]]", "I lit it while you were away.", "You're welcome.", "I remember.",
+        "reply to: tell me a story in parts", "reply to: go on", "reply to: wait, what is the fox called?", "reply to: thank you", "reply to: one from before",
+        "Let me look.", "Done.", `${join(workspace, "SOUL.md")}: lines 1–1\n1\tAda\nEnd of file.`, SOUL_READ, "Ada",
+      ].sort((a, b) => b.length - a.length);
+      const requests = [...script.replies, ...script.wakes];
+      expect(script.wakes.length).toBeGreaterThanOrEqual(2);
+      expect(requests.flatMap((request) => requestTexts(request).filter((text) => leftOver(text, theirs) !== ""))).toEqual([]);
+      expect((await thread("ring")).flatMap((each) => each.role === "system" ? [leftOver(each.shown_later ?? each.content, [])] : [])).toEqual(["", "", ""]);
+    }, (app) => {
+      withTriggers(app);
+      app.tools.enabled = enabled;
+      app.chat.user_timestamps = "always";
+      app.texts = Object.fromEntries(MARKED.map((spec) => [spec.name, `texts/${spec.name}.md`]));
+    });
+  } finally {
+    rendered.push(...watching.mock.calls);
+    watching.mockRestore();
+  }
+  const given = new Map<string, Set<string>[]>();
+  for (const [name, values = {}] of rendered) given.set(name, [...given.get(name) ?? [], new Set(Object.keys(values))]);
+
+  const toolTexts = ALL_TOOLS.flatMap((tool) => [toolText(tool.name), ...Object.keys((tool.parameters as { properties: Record<string, unknown> }).properties).map((parameter) => parameterText(tool.name, parameter))]);
+  expect([...given.keys()].filter((name) => !toolTexts.includes(name)).sort()).toEqual([
+    "digest_first", "digest_user", "digest_you", "fired_trigger", "last_wake_interrupted", "last_wrote_here", "last_wrote_home",
+    "opened_by_you", "picture", "picture_gone", "pictures_not_sent", "pinned_file", "sent_picture", "status", "status_cleared", "status_item",
+    "stopped_interrupted", "thread", "thread_pins", "time", "time_later", "wake", "wake_opener", "wake_opener_kept", "wake_running", "wake_running_own_time",
+    "wake_status", "wake_turn", "working_kept", "working_kept_unfinished",
+  ].sort());
+  expect(toolTexts.filter((name) => !given.has(name))).toEqual([]);
+  const mismatched = [...given].flatMap(([name, calls]) => {
+    const spec = required(TEXT_SPECS.get(name));
+    return calls.flatMap((keys) => {
+      const extra = [...keys].filter((key) => !declared(spec).includes(key) && !(name.startsWith("tool_") && enabled.includes(key)));
+      const missing = declared(spec).filter((key) => !keys.has(key));
+      return extra.length === 0 && missing.length === 0 ? [] : [`${name}: given ${extra.join(", ") || "nothing extra"}, not given ${missing.join(", ") || "nothing"}`];
+    });
+  });
+  expect([...new Set(mismatched)]).toEqual([]);
+});
+
+test("a wake whose text the user pointed at a file that can't be read is skipped before anything is sent or written, and the log says which and why", async () => {
+  await withCharacter(async ({ runtime, script, say, wakeNow, thread, data, reload }) => {
+    await say("hello");
+    const before = await thread("main");
+    runtime.config.app.texts = { wake: "texts/gone.md" };
+    await reload();
+    at(10);
+    await wakeNow();
+    expect(script.wakes).toHaveLength(0);
+    expect(await thread("main")).toEqual(before);
+    const missing = join(dirname(data), "config", "texts", "gone.md");
+    expect(runtime.autonomy.log("ada", 10).map((event) => [event.kind, event.detail]).at(-1)).toEqual([
+      "call_failed", `Wake skipped: text "wake" could not be read at ${missing}: ENOENT: no such file or directory, open '${missing}'`,
+    ]);
+  });
 });

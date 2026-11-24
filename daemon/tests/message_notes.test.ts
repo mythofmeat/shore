@@ -29,6 +29,7 @@ import { promptedAppConfig } from "./support/prompt_list.ts";
 import { noisePng } from "./support/test_images.ts";
 import { required } from "../src/util/required.ts";
 import { testTmp } from "./support/tmp.ts";
+import { Texts } from "../src/texts/texts.ts";
 
 const MINUTE = 60_000;
 const T0 = Date.UTC(2026, 9, 30, 12);
@@ -50,8 +51,8 @@ function said(id: string, role: Message["role"], words: string | ContentBlock[],
 }
 
 async function request(messages: Message[], over: Partial<PromptParams> = {}, mode: AssistantImageMode = "text_standin"): Promise<{ wire: WireMessage[]; sent: SentMessage[] }> {
-  const prompt = assemblePrompt({ character_name: "ada", display_name: "eve", has_prior_context: false, user_timestamp_mode: "auto", sections: [], messages, ...over }, "UTC");
-  const { messages: wire, sent } = await buildLlmMessages(prompt, mode);
+  const prompt = assemblePrompt({ character_name: "ada", display_name: "eve", has_prior_context: false, user_timestamp_mode: "auto", sections: [], messages, texts: new Texts(), ...over }, "UTC");
+  const { messages: wire, sent } = await buildLlmMessages(prompt, mode, new Texts());
   return { wire, sent };
 }
 

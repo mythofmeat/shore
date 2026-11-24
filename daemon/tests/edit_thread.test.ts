@@ -24,6 +24,7 @@ import { startThreadRequest } from "../src/tools/start_thread.ts";
 import { outcomeOf, rejectionOf } from "./support/outcome.ts";
 import { testTmp } from "./support/tmp.ts";
 import { promptedAppConfig } from "./support/prompt_list.ts";
+import { Texts } from "../src/texts/texts.ts";
 
 const NOW = "2026-11-01T10:00:00Z";
 
@@ -135,7 +136,7 @@ describe("the character editing a thread", () => {
     expect(await outcomeOf(edit({ name: "story", purpose: "Mine now" })))
       .toThrow('Nothing changed: Sam locked the thread "story", so its label, purpose and pins change only when Sam changes them.');
     expect((await stored("story"))?.purpose).toBe("A story.");
-    expect(await handleListThreads({ dataDir: dirs.data, character: "frank", userName: "Sam", timeZone: "UTC", now: () => Date.parse(NOW) }))
+    expect(await handleListThreads({ texts: new Texts(), dataDir: dirs.data, character: "frank", userName: "Sam", timeZone: "UTC", now: () => Date.parse(NOW) }))
       .toContain('story "Lighthouse" (locked) · compaction off');
 
     await registry.setThreadPurpose("frank", "story", "Sam's call");

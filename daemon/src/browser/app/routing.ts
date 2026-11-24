@@ -3,6 +3,7 @@ export const SETTINGS_PAGES = [
   { id: "characters", label: "Characters", group: "Chat" },
   { id: "appearance", label: "Appearance", group: "Chat" },
   { id: "keyboard", label: "Keyboard shortcuts", group: "Chat" },
+  { id: "texts", label: "Texts for the model", group: "Chat" },
   { id: "providers", label: "Providers", group: "Daemon" },
   { id: "usage", label: "Usage & budgets", group: "Daemon" },
   { id: "configuration", label: "Configuration", group: "Daemon" },

@@ -2,6 +2,7 @@ import { expect, test } from "bun:test";
 
 import { withoutWakeWorking } from "../src/autonomy/wake_working.ts";
 import type { ContentBlock, Message } from "../src/engine/types.ts";
+import { Texts } from "../src/texts/texts.ts";
 
 const T0 = Date.UTC(2026, 9, 30, 12);
 
@@ -29,7 +30,7 @@ function result(id: string, content = "done"): ContentBlock {
 }
 
 function shown(messages: readonly Message[]): [role: string, text: string][] {
-  return withoutWakeWorking(messages).map((message) => [
+  return withoutWakeWorking(new Texts(), messages).map((message) => [
     message.role,
     message.content_blocks.map((block) => block.type === "text" ? block.text : `<${block.type}>`).join("|"),
   ]);
@@ -59,7 +60,7 @@ test("a wake that finished is seen later as how it opened, a line counting its t
     ["user", [result("r3")]],
     ["assistant", "Then it rained."],
   );
-  const seen = withoutWakeWorking(stored);
+  const seen = withoutWakeWorking(new Texts(), stored);
 
   expect(seen.slice(0, 6)).toEqual(stored.slice(0, 6));
   expect(seen[6]).toEqual({
@@ -183,7 +184,7 @@ test("a wake's opener is seen later as what set the wake off, without the wake's
     ["user", "[wake]\n\n[Your trigger \"show\" fired again.]"],
     ["system", "[Your working in this wake isn't shown here: 0 tool calls.]"],
   ]);
-  const later = withoutWakeWorking(stored)[2];
+  const later = withoutWakeWorking(new Texts(), stored)[2];
   expect([later?.content, later?.msg_id, later?.origin, later?.timestamp]).toEqual(["[wake]\n\n[Your trigger \"show\" fired again.]", opener.msg_id, "autonomous", opener.timestamp]);
   expect(stored[4]?.content).toBe(opener.content);
 });
@@ -200,12 +201,12 @@ test("everything outside a wake is sent as it is stored: a reply's own tool roun
     ["system", "[A note in a reply.]", "autonomous"],
     ["assistant", [{ type: "thinking", thinking: "Hello.", signature: "s2" }, { type: "text", text: "hello to you" }]],
   );
-  expect(withoutWakeWorking(opensPartway)).toEqual(opensPartway);
-  expect(withoutWakeWorking([])).toEqual([]);
+  expect(withoutWakeWorking(new Texts(), opensPartway)).toEqual(opensPartway);
+  expect(withoutWakeWorking(new Texts(), [])).toEqual([]);
 
   const onlyOpened = thread(
     ["user", "[heartbeat]\n\nNothing has been said.", "autonomous"],
     ["system", "[Current time: noon]", "autonomous"],
   );
-  expect(withoutWakeWorking(onlyOpened)).toEqual(onlyOpened);
+  expect(withoutWakeWorking(new Texts(), onlyOpened)).toEqual(onlyOpened);
 });

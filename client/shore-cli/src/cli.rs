@@ -8,7 +8,7 @@ use shore_common::protocol::operations::{
     EditMessage, EditMessageArgs, EmptyOperationArgs, ExecuteTool, FavoriteModel,
     FavoriteModelArgs, GetMessage, GetMessageArgs, InjectSystem, InjectSystemArgs, InspectCalls,
     InspectModel, InspectSegments, ListMarks, ListMarksArgs, ListModels, ListModelsArgs,
-    ListProviderModels, ListProviders, MarkArgs, MarkKind, MarkReply, MessageReferences,
+    ListProviderModels, ListProviders, ListTexts, MarkArgs, MarkKind, MarkReply, MessageReferences,
     ModelInfoArgs, ModelPreferenceScope, ModelSettings, ModelSettingsArgs, Operation,
     PingKeepalive, Presence, PresenceArgs, ProviderArgs, ProviderModelsArgs, ReadErrorLog,
     ReadStatus, ReadSubagentTraces, ReadTranscript, ReadWakeLog, RefreshAllProviderModels,
@@ -2143,6 +2143,20 @@ pub(crate) enum ConfigCommand {
         #[arg(long)]
         json: bool,
     },
+
+    /// List every text Shore writes for a model: its name, whose wording is
+    /// in use, and where it goes. With a name, show that text's wording, the
+    /// values it is given, and Shore's own wording when yours replaces it.
+    /// Point a name at a file of your own under [texts] in config.toml.
+    Texts {
+        /// The text to show in full
+        #[arg(add = values(Completes::Texts))]
+        name: Option<String>,
+
+        /// Output raw JSON
+        #[arg(long)]
+        json: bool,
+    },
 }
 
 #[derive(Subcommand, Debug)]
@@ -2592,6 +2606,10 @@ pub(crate) fn to_swp_command(
             subcommand: Some(ConfigCommand::Tools { .. }),
             ..
         } => operation_to_swp::<ToolAccessListing>(EmptyOperationArgs {}),
+        CliCommand::Config {
+            subcommand: Some(ConfigCommand::Texts { .. }),
+            ..
+        } => operation_to_swp::<ListTexts>(EmptyOperationArgs {}),
         CliCommand::Config {
             subcommand: Some(ConfigCommand::Keys { .. }),
             ..

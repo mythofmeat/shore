@@ -7,13 +7,14 @@ import { truncateSummary } from "../notifications.ts";
 import type { ServerMessage } from "../protocol/ServerMessage.ts";
 import { toolLimitsFrom } from "../tools/dispatch.ts";
 import { runToolUse, type ToolExecution } from "../tools/execute.ts";
-import { ALL_TOOLS, renderToolSchema, SUBAGENT_INPUT_SCHEMA, toolTemplateVars } from "../tools/registry.ts";
+import { ALL_TOOLS, renderedTools, SUBAGENT_INPUT_SCHEMA, subagentInputSchema, toolTemplateVars } from "../tools/registry.ts";
 import {
   CompiledToolSchema,
   compileToolSchema,
   type ToolSchemas,
 } from "../tools/validate.ts";
-import { renderTemplate } from "../engine/prompt.ts";
+import { renderTemplate } from "../texts/template.ts";
+import { Texts } from "../texts/texts.ts";
 import { invalidRequest } from "./errors.ts";
 import type { Args } from "./navigation.ts";
 import type { OperationInput } from "../operations/types.ts";
@@ -184,6 +185,7 @@ export function describeTool(character: string, ctx: RunToolContext, args: Opera
   const { tool } = parseRunToolArgs(args);
   const cfg = ctx.config.app.tools;
   const vars = toolTemplateVars(cfg, character, resolveDisplayName(ctx.config.app.chat));
+  const texts = Texts.of(ctx.config);
   const seen = (kind: ToolKind, enabled: boolean, description: string, schema: Record<string, unknown>): ToolDescription => ({
     mode: "tool_definition",
     tool,
@@ -201,7 +203,7 @@ export function describeTool(character: string, ctx: RunToolContext, args: Opera
       "subagent",
       subagentEnabled(ctx.config.app.subagents, agent),
       renderTemplate(sub.description, vars),
-      compileToolSchema(tool, SUBAGENT_INPUT_SCHEMA).schema,
+      compileToolSchema(tool, subagentInputSchema(texts)).schema,
     );
   }
 
@@ -217,14 +219,9 @@ export function describeTool(character: string, ctx: RunToolContext, args: Opera
     );
   }
 
-  const def = ALL_TOOLS.find((t) => t.name === tool);
+  const [def] = renderedTools(texts, ALL_TOOLS.filter((t) => t.name === tool), Object.fromEntries(vars));
   if (def === undefined) throw invalidRequest(unknownBuiltin(tool));
-  return seen(
-    "builtin",
-    toolEnabled(cfg, tool),
-    renderTemplate(def.description, vars),
-    compileToolSchema(tool, renderToolSchema(def.parameters, vars)).schema,
-  );
+  return seen("builtin", toolEnabled(cfg, tool), def.description, compileToolSchema(tool, def.input_schema).schema);
 }
 
 export async function runTool(

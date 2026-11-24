@@ -1,0 +1,1 @@
+[Your working in this wake isn't shown here: {{calls}}{{#if last_call}}, ending with `{{last_call}}`{{/if}}. It ended before you had finished.{{#if last_words}} The last thing you wrote in it: "{{last_words}}"{{/if}}]

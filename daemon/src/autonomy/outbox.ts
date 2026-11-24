@@ -12,6 +12,7 @@ import { ToolIoError } from "../tools/errors.ts";
 import type { SendMessage, SendMessageRequest } from "../tools/send_message.ts";
 import type { PushOutcome, PushRefusal } from "./push.ts";
 import { buildAutonomousMessage, type ImageRef } from "./wake_shape.ts";
+import type { Texts } from "../texts/texts.ts";
 
 export interface Outgoing {
   text: string;
@@ -34,6 +35,7 @@ export interface OutboxSetup {
   threads: () => Promise<ReachableThreads>;
   pictureProblems: (text: string) => Promise<string[]>;
   pushRefusal: () => PushRefusal | undefined;
+  texts: Texts;
 }
 
 export class Outbox {
@@ -53,7 +55,7 @@ export class Outbox {
     const thread = await this.#threadFor(request);
     const problems = await this.#setup.pictureProblems(request.text);
     if (problems.length > 0) {
-      throw new ToolIoError(`not sent: these pictures in it could not be sent:\n${problems.map((problem) => `- ${problem}`).join("\n")}\nSend it again with the names fixed.`);
+      throw new ToolIoError(this.#setup.texts.always("send_refused", { pictures: problems.map((problem) => `- ${problem}`).join("\n") }));
     }
     if (request.push) this.#checkPush();
     this.#waiting.push({ text: request.text, thread, push: request.push });

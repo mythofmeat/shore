@@ -12,6 +12,7 @@ import { characterWorkspace } from "../src/tools/character_workspace.ts";
 import { outcomeOf } from "./support/outcome.ts";
 import { modelInfo, modelSettings, resetModel, setModelSetting, switchModel } from "../src/commands/models.ts";
 import { describeTool, resolveTool, type RunToolContext } from "../src/commands/run_tool.ts";
+import { Texts } from "../src/texts/texts.ts";
 import { loadConfig } from "../src/config/loader.ts";
 import { shoreLog } from "../src/log.ts";
 import { characterPreferencesPath, globalPreferencesPath } from "../src/config/preferences.ts";
@@ -303,6 +304,26 @@ describe("sub-agents in the model and tool commands", () => {
     expect(Object.keys(described.input_schema["properties"] ?? {})).toEqual(["query"]);
     expect(describeTool("Ada", run, { tool: "ask_idle" })).toMatchObject({ enabled: false, description: "rests" });
     expect(() => describeTool("Ada", run, { tool: "ask_ghost" })).toThrow("There is no sub-agent named 'ghost'. Configured: idle, scout");
+  });
+
+  test("a built-in or MCP tool is looked up with the description the character gets, the user's wording included, whether it is on, and what it takes", async () => {
+    const w = await build(undefined, TOML);
+    const loaded = w.ctx.config;
+    await writeFile(join(loaded.dirs.config, "read.md"), "Read a file for {{user}}.\n");
+    const mcp = [
+      { full_name: "mcp__web__fetch", description: "Fetches a page", input_schema: { type: "object", properties: { url: { type: "string" } } } },
+      { full_name: "mcp__web__bare", input_schema: { type: "object", properties: {} } },
+    ];
+    const tuned = { ...loaded, app: { ...loaded.app, texts: { tool_read: "read.md" }, chat: { ...loaded.app.chat, display_name: "Eve" }, tools: { ...loaded.app.tools, enabled: ["read", "mcp__web__fetch"] } } };
+    const run = { config: tuned, mcpTools: () => mcp } as unknown as RunToolContext;
+    const read = describeTool("Ada", run, { tool: "read" });
+    expect([read.kind, read.enabled, read.description]).toEqual(["builtin", true, "Read a file for Eve."]);
+    expect((read.input_schema["properties"] as Record<string, { description?: string }>)["file_path"]?.description).toBe(new Texts().render("tool_read_file_path"));
+    expect([describeTool("Ada", run, { tool: "edit" }).enabled, describeTool("Ada", run, { tool: "edit" }).kind]).toEqual([false, "builtin"]);
+    expect(describeTool("Ada", run, { tool: "mcp__web__fetch" })).toMatchObject({ kind: "mcp", enabled: true, description: "Fetches a page" });
+    expect(describeTool("Ada", run, { tool: "mcp__web__bare" })).toMatchObject({ kind: "mcp", enabled: false, description: "" });
+    expect(() => describeTool("Ada", run, { tool: "nope" })).toThrow("There is no tool named 'nope'. Built-in tools: read, edit, ");
+    expect(() => describeTool("Ada", run, { tool: "mcp__web__gone" })).toThrow("There is no MCP tool named 'mcp__web__gone'. Connected: mcp__web__fetch, mcp__web__bare");
   });
 });
 

@@ -1,6 +1,7 @@
 import { spawn } from "node:child_process";
 
 import { shoreLog } from "../log.ts";
+import { shippedText } from "../texts/registry.ts";
 
 const INHERITED_GIT_LOCATION_VARS: readonly string[] = [
   "GIT_DIR",
@@ -100,6 +101,6 @@ function boundedProcessOutput() {
       chunks.push(kept);
       bytes += kept.length;
     },
-    text: () => Buffer.concat(chunks).toString("utf8") + (truncated ? "\n[process output truncated]" : ""),
+    text: () => Buffer.concat(chunks).toString("utf8") + (truncated ? `\n${shippedText("output_cut")}` : ""),
   };
 }

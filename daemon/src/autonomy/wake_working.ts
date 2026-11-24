@@ -3,6 +3,7 @@ import { isWakeOpener } from "../engine/threads.ts";
 import type { Message } from "../engine/types.ts";
 import { required } from "../util/required.ts";
 import { cutLastWords } from "./wake_record.ts";
+import type { Texts } from "../texts/texts.ts";
 
 function startsTurn(message: Message): boolean {
   return message.role === "user" && !isToolResultOnly(message);
@@ -24,20 +25,22 @@ function callCount(calls: readonly string[]): string {
   return calls.length === 1 ? "1 tool call" : `${String(calls.length)} tool calls`;
 }
 
-function workingNote(working: readonly Message[], where = "isn't shown here"): string {
+function workingNote(texts: Texts, working: readonly Message[], kept?: string): string {
   const calls = working.flatMap(toolCalls);
-  const count = callCount(calls);
   const final = working.at(-1);
-  if (final?.role === "assistant" && toolCalls(final).length === 0) return `[Your working in this wake ${where}: ${count}.]`;
-  const lastCall = calls.at(-1);
+  const finished = final?.role === "assistant" && toolCalls(final).length === 0;
   const lastWords = working.filter((message) => message.role === "assistant").map(words).findLast((text) => text !== "");
-  return `[Your working in this wake ${where}: ${count}${lastCall === undefined ? "" : `, ending with \`${lastCall}\``}. ` +
-    `It ended before you had finished.${lastWords === undefined ? "" : ` The last thing you wrote in it: "${cutLastWords(lastWords)}"`}]`;
+  return texts.always(`${kept === undefined ? "working_here" : "working_kept"}${finished ? "" : "_unfinished"}`, {
+    thread: kept,
+    calls: callCount(calls),
+    last_call: calls.at(-1),
+    last_words: lastWords === undefined ? undefined : cutLastWords(lastWords),
+  });
 }
 
-function standIn(working: readonly Message[]): Message[] {
+function standIn(texts: Texts, working: readonly Message[]): Message[] {
   const last = required(working.at(-1));
-  const text = workingNote(working);
+  const text = workingNote(texts, working);
   return [{
     msg_id: last.msg_id,
     role: "system",
@@ -54,26 +57,26 @@ function seenLater(message: Message): Message {
   return text === undefined ? message : { ...message, content: text, content_blocks: [{ type: "text", text }] };
 }
 
-function wakeSeenLater(wake: readonly Message[]): Message[] {
+function wakeSeenLater(texts: Texts, wake: readonly Message[]): Message[] {
   const first = wake.findIndex(isRound);
   const last = wake.findLastIndex(isRound);
   if (last === -1) return [required(wake[0]), ...wake.slice(1).map(seenLater)];
   return [
     seenLater(required(wake[0])),
     ...wake.slice(1, first),
-    ...standIn(wake.slice(first, last + 1)),
+    ...standIn(texts, wake.slice(first, last + 1)),
     ...wake.slice(last + 1),
   ];
 }
 
-export function withoutWakeWorking(messages: readonly Message[]): Message[] {
+export function withoutWakeWorking(texts: Texts, messages: readonly Message[]): Message[] {
   const turns: Message[][] = [];
   for (const message of messages) {
     const turn = turns.at(-1);
     if (turn === undefined || startsTurn(message)) turns.push([message]);
     else turn.push(message);
   }
-  return turns.flatMap((turn) => isWakeOpener(required(turn[0])) ? wakeSeenLater(turn) : turn);
+  return turns.flatMap((turn) => isWakeOpener(required(turn[0])) ? wakeSeenLater(texts, turn) : turn);
 }
 
 export interface KeptWorking {
@@ -81,9 +84,9 @@ export interface KeptWorking {
   label: string;
 }
 
-export function keptWorkingSummary(working: readonly Message[], kept: KeptWorking, at: Pick<Message, "msg_id" | "timestamp">): Message | undefined {
+export function keptWorkingSummary(texts: Texts, working: readonly Message[], kept: KeptWorking, at: Pick<Message, "msg_id" | "timestamp">): Message | undefined {
   if (!working.some((message) => message.role === "assistant")) return undefined;
-  const later = workingNote(working, `is in your thread "${kept.id}", not here`);
+  const later = workingNote(texts, working, kept.id);
   const shown = `This wake's working is in "${kept.label}": ${callCount(working.flatMap(toolCalls))}.`;
   return {
     msg_id: at.msg_id,

@@ -5,6 +5,7 @@ import { promptFileAt, resolvePath } from "./workspace_path";
 import { wallClockMarker } from "../engine/prompt.ts";
 import { hostZone } from "../ledger/zoned.ts";
 import type { ContentBlock, Message } from "../engine/types";
+import type { Texts } from "../texts/texts.ts";
 
 export const MAX_HISTORY_MESSAGES = 100;
 
@@ -18,6 +19,7 @@ export interface MacroContext {
   history: readonly Message[];
   charName: string;
   userName: string;
+  texts: Texts;
   warn?: MacroWarn;
 }
 
@@ -71,6 +73,7 @@ export async function expandPromptMacros(text: string, ctx: MacroContext): Promi
       out += await readPromptFile(inner.slice("file:".length).trim(), ctx);
     } else if (inner.startsWith("active_history:")) {
       out += renderHistorySlice(
+        ctx.texts,
         ctx.history,
         inner.slice("active_history:".length).trim(),
         ctx.charName,
@@ -113,6 +116,7 @@ async function readPromptFile(path: string, ctx: MacroContext): Promise<string> 
 }
 
 export function renderHistorySlice(
+  texts: Texts,
   history: readonly Message[],
   arg: string,
   charName: string,
@@ -120,15 +124,13 @@ export function renderHistorySlice(
   timeZone: string = hostZone(),
 ): string {
   const n = Math.min(parseCount(arg), MAX_HISTORY_MESSAGES);
-  if (n === 0 || history.length === 0) return "";
-
   const start = Math.max(0, history.length - n);
   const lines: string[] = [];
   let previousTimestamp: string | undefined;
   for (const msg of history.slice(start)) {
     const text = messageDisplayText(msg);
     if (text.trim() === "") continue;
-    const marker = wallClockMarker(previousTimestamp, msg.timestamp, timeZone);
+    const marker = wallClockMarker(texts, previousTimestamp, msg.timestamp, timeZone);
     if (marker !== undefined) lines.push(marker);
     previousTimestamp = msg.timestamp;
     lines.push(`${speakerLabel(msg.role, charName, userName)}: ${text}`);
@@ -189,8 +191,6 @@ export interface McpMatcher {
 export function subagentToolSubset(
   allowed: readonly string[],
   registry: readonly RegisteredTool[],
-  vars: Map<string, string>,
-  renderTemplate: (template: string, vars: Map<string, string>) => string,
   mcp?: McpMatcher,
   onUnknown?: (name: string) => void,
 ): ToolDefinition[] {
@@ -204,7 +204,7 @@ export function subagentToolSubset(
     }
     defs.push({
       name: def.name,
-      description: renderTemplate(def.description, vars),
+      description: def.description,
       parameters: def.parameters,
     });
   }

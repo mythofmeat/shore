@@ -9,7 +9,7 @@ import {
   resolveSubagentModelSettings,
 } from "../config/preferences.ts";
 import { resolvedReasoningReplay, toRequestModel } from "../config/models.ts";
-import { renderTemplate } from "../engine/prompt.ts";
+import { renderTemplate } from "../texts/template.ts";
 import type { Message } from "../engine/types.ts";
 import { credentialEntry } from "../handler/tool_context.ts";
 import type { CallRecorder } from "../llm/capture.ts";
@@ -34,7 +34,7 @@ import {
 import { toolPhase } from "./execute.ts";
 import { imageLimitsFor } from "../llm/prepare_images.ts";
 import type { McpRegistry, McpToolDef } from "./mcp_registry.ts";
-import { ALL_TOOLS } from "./registry.ts";
+import { ALL_TOOLS, renderedTools } from "./registry.ts";
 import {
   expandPromptMacros,
   MAX_HISTORY_MESSAGES,
@@ -44,6 +44,7 @@ import {
 } from "./subagent.ts";
 import { appendSubagentTrace } from "./subagent_trace.ts";
 import { schemasFrom } from "./validate.ts";
+import { Texts } from "../texts/texts.ts";
 
 const TAGGED_FRAMES = new Set([
   "stream_start",
@@ -103,13 +104,9 @@ export async function runSubagent(
 
   const resolved = resolveSubagentModelSettings(config.dirs.data, charName, name, catalogModel);
 
-  const provider = deps.providers[resolved.sdk];
-  if (provider === undefined) {
-    throw new InvalidArgs(`unsupported sdk: ${resolved.sdk}`);
-  }
-
   const displayName = resolveDisplayName(config.app.chat, deps.env);
   const vars = templateVars(charName, displayName);
+  const texts = Texts.of(config);
 
   const systemText = await expandPromptMacros(renderTemplate(spec.prompt, vars), {
     thread: deps.ctx.thread ?? MAIN_THREAD,
@@ -119,14 +116,13 @@ export async function runSubagent(
     history: (deps.conversation ?? deps.ctx.conversation ?? []).slice(-MAX_HISTORY_MESSAGES),
     charName,
     userName: displayName,
+    texts,
   });
 
   const mcp = deps.mcpRegistry;
   const subset = subagentToolSubset(
     spec.tools,
-    ALL_TOOLS,
-    vars,
-    renderTemplate,
+    renderedTools(texts, ALL_TOOLS, Object.fromEntries(vars)).map((t) => ({ name: t.name, description: t.description, parameters: t.input_schema })),
     mcp === undefined
       ? undefined
       : {
@@ -168,7 +164,6 @@ export async function runSubagent(
       character: charName,
       thread: deps.ctx.thread ?? MAIN_THREAD,
       call_type: "subagent",
-      ...(built.api_key_name === undefined ? {} : { api_key_name: built.api_key_name }),
       thinking_enabled: built.request.provider_options?.thinking_enabled === true,
       usage: usageConfigView(config.app),
       ...(deps.rid === undefined ? {} : { rid: deps.rid }),

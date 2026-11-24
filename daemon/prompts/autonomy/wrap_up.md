@@ -1,0 +1,1 @@
+[System nudge: this wake stops in {{time_left}} or {{#if last_round}}after this round{{else}}after {{rounds}} more rounds, counting this one{{/if}}, whichever comes first. Wrap up now. Your next wake starts fresh, so whatever it will need has to be in a file before this one stops, and nothing reaches {{user}} unless you send it.]

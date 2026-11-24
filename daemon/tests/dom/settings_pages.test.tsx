@@ -106,7 +106,7 @@ describe("the settings screen", () => {
     const view = await mount(<Settings state={state.workspace.getSnapshot()} page="keyboard" sidebarOpen toggleSidebar={() => {}} />);
     const groups = [...view.host.querySelectorAll(".settings-nav-group")];
     expect(groups.map((group) => [group.getAttribute("aria-label"), [...group.querySelectorAll("button")].map((item) => item.textContent)])).toEqual([
-      ["Chat", ["Models", "Characters", "Appearance", "Keyboard shortcuts"]],
+      ["Chat", ["Models", "Characters", "Appearance", "Keyboard shortcuts", "Texts for the model"]],
       ["Daemon", ["Providers", "Usage & budgets", "Configuration", "Devices"]],
       ["Advanced", ["Segments", "Diagnostics", "Traces & call log", "Tool runner", "Character archives", "Debug"]],
     ]);

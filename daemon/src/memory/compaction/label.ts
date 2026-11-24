@@ -1,8 +1,7 @@
-import labelPromptRaw from "../../../prompts/memory/compaction/label.md" with { type: "text" };
 import { join } from "node:path";
 
 import { resolveDisplayName, toolGrants } from "../../config/app.ts";
-import { MAIN_THREAD, archiveKey, resolvePromptTemplate } from "../../config/dirs.ts";
+import { MAIN_THREAD, archiveKey } from "../../config/dirs.ts";
 import { findEffectiveModel } from "../../config/effective_catalog.ts";
 import type { LoadedConfig } from "../../config/loader.ts";
 import { toRequestModel } from "../../config/models.ts";
@@ -19,11 +18,8 @@ import { required } from "../../util/required.ts";
 import { rustLines } from "../lines.ts";
 import type { SegmentArchiveHook } from "./archive.ts";
 import { RealCompactionLlm } from "./llm.ts";
-import { buildFinalMessage } from "./manager.ts";
-import { stripOneTrailingNewline } from "../../engine/prompt.ts";
 import { effectiveConfig, resolveChatRequest, type CompactionRunDeps } from "./run.ts";
-
-export const DEFAULT_LABEL_PROMPT: string = stripOneTrailingNewline(labelPromptRaw);
+import { Texts } from "../../texts/texts.ts";
 
 export const SEGMENT_LABEL_CHARS = 160;
 
@@ -65,8 +61,8 @@ export async function prepareLabelCall(
     ...(deps.env === undefined ? {} : { env: deps.env }),
     ...(entry === undefined ? {} : { providerEntry: credentialEntry(entry) }),
   });
-  const template = resolvePromptTemplate(effective.dirs.config, character, "label.md") ?? DEFAULT_LABEL_PROMPT;
-  const request = llm.buildInitialRequest(buildFinalMessage(template, character, resolveDisplayName(effective.app.chat)).trim(), chatRequest);
+  const prompt = Texts.of(effective).always("label", { char: character, user: resolveDisplayName(effective.app.chat) }).trim();
+  const request = llm.buildInitialRequest(prompt, chatRequest);
   return async () => {
     const reply = await llm.generate(request, { messages: [], runTool: () => Promise.reject(new ToolLoopStop()), recordTurn: () => {} });
     return reply.finish_reason === "tool_use" ? undefined : labelFromReply(reply.content);

@@ -10,6 +10,7 @@ import { toolPhase, type ToolExecution } from "../src/tools/execute.ts";
 import { BUILTIN_TOOL_SCHEMAS } from "./support/builtin_tool_schemas.ts";
 import { noisePng } from "./support/test_images.ts";
 import { testTmp } from "./support/tmp.ts";
+import { Texts } from "../src/texts/texts.ts";
 
 async function world() {
   const root = testTmp(`tool-images-${crypto.randomUUID()}`);
@@ -19,6 +20,7 @@ async function world() {
   await mkdir(workspaceDir, { recursive: true });
   await mkdir(data, { recursive: true });
   const ctx: ToolContext = {
+    texts: new Texts(),
     workspaceDir, characterName: "ada", characterDataDir: join(data, "ada"), imageDir: join(root, "media"), cacheDir: cache,
     conversationDir: join(data, "ada", "threads", "main"), historyDbPath: join(data, "shore.db"), configDir: root,
   };

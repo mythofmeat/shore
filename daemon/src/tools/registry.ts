@@ -1,25 +1,13 @@
-import editDesc from "../../prompts/tools/workspace/edit.md" with { type: "text" };
-import patchDesc from "../../prompts/tools/workspace/apply_patch.md" with { type: "text" };
-import { renderTemplate, stripOneTrailingNewline } from "../engine/prompt.ts";
+import { parameterText, toolText } from "../texts/registry.ts";
+import { renderTemplate } from "../texts/template.ts";
+import type { Texts, TextValues } from "../texts/texts.ts";
 import { compareByCodePoint } from "../util/sort.ts";
 import type { ToolDefinition } from "../llm/types.ts";
 import { toolPatternMatches } from "../config/app.ts";
 
-import bashDesc from "../../prompts/tools/bash.md" with { type: "text" };
-import activityHeatmapDesc from "../../prompts/tools/activity/activity_heatmap.md" with { type: "text" };
-import listTriggersDesc from "../../prompts/tools/autonomy/list_triggers.md" with { type: "text" };
-import wakeInThreadDesc from "../../prompts/tools/autonomy/wake_in_thread.md" with { type: "text" };
-import sendMessageDesc from "../../prompts/tools/autonomy/send_message.md" with { type: "text" };
-import guideDesc from "../../prompts/tools/guide.md" with { type: "text" };
-import threadsDesc from "../../prompts/tools/threads/threads.md" with { type: "text" };
-import modelHistoryDesc from "../../prompts/tools/history/model_history.md" with { type: "text" };
-import chatLogsDesc from "../../prompts/tools/history/chat_logs.md" with { type: "text" };
-import generateImageDesc from "../../prompts/tools/images/generate_image.md" with { type: "text" };
-import readDesc from "../../prompts/tools/workspace/read.md" with { type: "text" };
 
 export interface ToolDef {
   name: string;
-  description: string;
   parameters: Record<string, unknown>;
 }
 
@@ -31,23 +19,18 @@ export interface SubagentConfigView {
   description: string;
 }
 
-const TIME_BOUND_FORMAT =
-  "RFC3339 timestamp with seconds and an explicit UTC offset or `Z`, for example 2026-05-13T09:00:00+10:00. The offset is interpreted as written.";
 
-const CHAT_LOG_TIME =
-  "A local date (2026-03-01), a local time (2026-03-01T21:30), or an RFC3339 timestamp.";
 
 export const ALL_TOOLS: readonly ToolDef[] = Object.freeze([
   {
     name: "read",
-    description: stripOneTrailingNewline(readDesc),
     parameters: {
       type: "object",
       properties: {
-        file_path: { type: "string", minLength: 1, description: "File to read. Absolute, relative to the workspace root, or a [[link]] copied from a Markdown file." },
-        offset: { type: "integer", minimum: 1, description: "First text line to return, numbered from 1. Default 1. Not accepted for images." },
-        limit: { type: "integer", minimum: 1, maximum: 2000, description: "Maximum text lines to return. Default 2000, maximum 2000. The result character budget can shorten the page." },
-        original: { type: "boolean", description: "Send an image file at the full resolution the model accepts instead of the reduced copy. Default false. Image files only." },
+        file_path: { type: "string", minLength: 1 },
+        offset: { type: "integer", minimum: 1 },
+        limit: { type: "integer", minimum: 1, maximum: 2000 },
+        original: { type: "boolean" },
       },
       required: ["file_path"],
       additionalProperties: false,
@@ -55,14 +38,13 @@ export const ALL_TOOLS: readonly ToolDef[] = Object.freeze([
   },
   {
     name: "edit",
-    description: stripOneTrailingNewline(editDesc),
     parameters: {
       type: "object",
       properties: {
-        file_path: { type: "string", minLength: 1, description: "Existing UTF-8 file. Absolute, or relative to the workspace root." },
-        old_string: { type: "string", minLength: 1, description: "Exact text to replace, including whitespace and line endings." },
-        new_string: { type: "string", description: "Replacement text. Empty string deletes the matched text." },
-        replace_all: { type: "boolean", description: "Replace all non-overlapping exact occurrences. Default false requires a unique match." },
+        file_path: { type: "string", minLength: 1 },
+        old_string: { type: "string", minLength: 1 },
+        new_string: { type: "string" },
+        replace_all: { type: "boolean" },
       },
       required: ["file_path", "old_string", "new_string"],
       additionalProperties: false,
@@ -70,28 +52,24 @@ export const ALL_TOOLS: readonly ToolDef[] = Object.freeze([
   },
   {
     name: "apply_patch",
-    description: stripOneTrailingNewline(patchDesc),
     parameters: {
       type: "object",
-      properties: { patch: { type: "string", minLength: 1, description: "Codex patch starting with *** Begin Patch and ending with *** End Patch." } },
+      properties: { patch: { type: "string", minLength: 1 } },
       required: ["patch"],
       additionalProperties: false,
     },
   },
   {
     name: "bash",
-    description: stripOneTrailingNewline(bashDesc),
     parameters: {
       type: "object",
       properties: {
         command: {
           type: "string",
           minLength: 1,
-          description: "Bash command or script to execute. May span multiple lines.",
         },
         workdir: {
           type: "string",
-          description: "Working directory. Relative paths resolve from the workspace root; absolute paths are accepted. Defaults to the workspace root.",
         },
       },
       required: ["command"],
@@ -100,21 +78,17 @@ export const ALL_TOOLS: readonly ToolDef[] = Object.freeze([
   },
   {
     name: "generate_image",
-    description: stripOneTrailingNewline(generateImageDesc),
     parameters: {
       type: "object",
       properties: {
         prompt: {
           type: "string",
-          description: "Description of the image to generate: subject, mood, composition, and style.",
         },
         size: {
           type: "string",
-          description: "Requested dimensions as WIDTHxHEIGHT, for example '1024x1024'. Omit to use the configured default size. Which sizes work depends on the configured image model.",
         },
         caption: {
           type: "string",
-          description: "Optional caption sent with the image. Omit to send the image without one.",
         },
       },
       required: ["prompt"],
@@ -122,13 +96,11 @@ export const ALL_TOOLS: readonly ToolDef[] = Object.freeze([
   },
   {
     name: "activity_heatmap",
-    description: stripOneTrailingNewline(activityHeatmapDesc),
     parameters: {
       type: "object",
       properties: {
         days: {
           type: "integer",
-          description: "Number of most recent days to include, as a positive integer. Default 30. Up to 90 days are retained; larger values return what exists.",
           default: 30,
         },
       },
@@ -136,29 +108,27 @@ export const ALL_TOOLS: readonly ToolDef[] = Object.freeze([
   },
   {
     name: "chat_logs",
-    description: stripOneTrailingNewline(chatLogsDesc),
     parameters: {
       type: "object",
       properties: {
-        action: { type: "string", enum: ["search", "read", "list"], description: "`search` finds messages by their words. `read` reads conversations in order. `list` shows your archived conversations with their labels." },
-        query: { type: "string", description: "For `search`: an FTS5 query, or the text to find when `match` is `substring`." },
+        action: { type: "string", enum: ["search", "read", "list"] },
+        query: { type: "string" },
         match: {
           type: "string",
           enum: ["words", "substring"],
-          description: "For `search`: `words` (default) reads `query` as FTS5. `substring` finds it anywhere, inside words too.",
         },
-        sort: { type: "string", enum: ["best", "oldest", "newest"], description: "For `search`: order of hits. Default `best`." },
-        speaker: { type: "string", description: "For `search`: only this speaker: `user`, `character`, or either name." },
-        all_time: { type: "boolean", description: "For `search`: search the whole archive, not just the last 6 months. Ignored with `start` or `end`." },
-        limit: { type: "integer", description: "For `search` and `list`: hits or conversations per page. Default 10, at most 50." },
-        around: { type: "string", description: "For `read`: a message id from `search`." },
-        before: { type: "integer", description: "For `read`: messages to show before `around`. Default 3." },
-        after: { type: "integer", description: "For `read`: messages to show after `around`. Default 3." },
-        overview: { type: "string", description: "For `read`: a local date such as 2026-03-01, to list that day's conversations." },
-        thread: { type: "string", description: "A thread's id, such as `main`. `search` looks only there, and `list` shows only its conversations. A `start`/`end` read is of that thread, `main` by default; with `around` it picks the copy in that thread." },
-        start: { type: "string", description: `Inclusive start of what to search, or where to read from. ${CHAT_LOG_TIME}` },
-        end: { type: "string", description: `Inclusive end of what to search or read. ${CHAT_LOG_TIME}` },
-        offset: { type: "integer", description: "Hits to skip in a `search`, messages to skip in a `start`/`end` read, or conversations to skip in a `list`, to get the next page." },
+        sort: { type: "string", enum: ["best", "oldest", "newest"] },
+        speaker: { type: "string" },
+        all_time: { type: "boolean" },
+        limit: { type: "integer" },
+        around: { type: "string" },
+        before: { type: "integer" },
+        after: { type: "integer" },
+        overview: { type: "string" },
+        thread: { type: "string" },
+        start: { type: "string" },
+        end: { type: "string" },
+        offset: { type: "integer" },
       },
       required: ["action"],
       additionalProperties: false,
@@ -166,17 +136,14 @@ export const ALL_TOOLS: readonly ToolDef[] = Object.freeze([
   },
   {
     name: "model_history",
-    description: stripOneTrailingNewline(modelHistoryDesc),
     parameters: {
       type: "object",
       properties: {
         start_time: {
           type: "string",
-          description: `Inclusive lower bound on when a model was used. Omit to start from the earliest recorded call. ${TIME_BOUND_FORMAT}`,
         },
         end_time: {
           type: "string",
-          description: `Inclusive upper bound on when a model was used. Omit to include everything up to now. ${TIME_BOUND_FORMAT}`,
         },
       },
       required: [],
@@ -184,18 +151,17 @@ export const ALL_TOOLS: readonly ToolDef[] = Object.freeze([
   },
   {
     name: "threads",
-    description: stripOneTrailingNewline(threadsDesc),
     parameters: {
       type: "object",
       properties: {
-        action: { type: "string", enum: ["list", "start", "edit"], description: "`list` your threads, `start` a new one, or `edit` a side thread." },
-        name: { type: "string", minLength: 1, maxLength: 64, description: "For `start`, the new thread's id: letters, digits, dot, dash or underscore, starting with a letter or digit, such as `lighthouse`. For `edit`, the id of the side thread to change, as `list` shows it." },
-        label: { type: "string", description: "The name shown in the thread list, such as `The lighthouse story`. `start` needs one; for a sealed thread it is all your other turns see of it. In an `edit`, an empty string clears it." },
-        purpose: { type: "string", description: "A line or two on what the thread is for. In an `edit`, an empty string clears it." },
-        pins: { type: "array", items: { type: "string" }, description: "What to keep in the thread's prompt. A workspace file is given as a path relative to the workspace root, or as a link like `[[notes]]` or `[[lighthouse/]]`. A pin starting with `!` is a shell command instead, such as `!git log --oneline -5`: it runs in your workspace when the thread's prompt is refreshed, and its output is kept there. In an `edit` this is the thread's whole new list, and an empty list clears it." },
-        opening: { type: "string", description: "For `start`: your first message in the new thread." },
-        folder: { type: "string", description: "For `start`: folder in the thread list to put the thread in, such as `Projects`. It is made if there isn't one by that name." },
-        sealed_until: { type: "string", description: 'For `start`: makes the thread a sealed one. The local date and 24-hour time the seal comes off, like "2026-12-24 08:00".' },
+        action: { type: "string", enum: ["list", "start", "edit"] },
+        name: { type: "string", minLength: 1, maxLength: 64 },
+        label: { type: "string" },
+        purpose: { type: "string" },
+        pins: { type: "array", items: { type: "string" } },
+        opening: { type: "string" },
+        folder: { type: "string" },
+        sealed_until: { type: "string" },
       },
       required: ["action"],
       additionalProperties: false,
@@ -203,7 +169,6 @@ export const ALL_TOOLS: readonly ToolDef[] = Object.freeze([
   },
   {
     name: "list_triggers",
-    description: stripOneTrailingNewline(listTriggersDesc),
     parameters: {
       type: "object",
       properties: {},
@@ -212,14 +177,13 @@ export const ALL_TOOLS: readonly ToolDef[] = Object.freeze([
   },
   {
     name: "wake_in_thread",
-    description: stripOneTrailingNewline(wakeInThreadDesc),
     parameters: {
       type: "object",
       properties: {
-        thread: { type: "string", minLength: 1, maxLength: 64, description: "Id of the thread to be woken in, as `threads` lists it." },
-        reason: { type: "string", minLength: 1, description: "What the wake is for. Shown to you when it starts." },
-        limit: { type: "string", description: 'How long the wake may run, like "45m" or "2h". Defaults to 30 minutes.' },
-        overwrite: { type: "boolean", description: "Put this wake in the place of one you already asked for in that thread and that hasn't started. Without it, a second request is refused." },
+        thread: { type: "string", minLength: 1, maxLength: 64 },
+        reason: { type: "string", minLength: 1 },
+        limit: { type: "string" },
+        overwrite: { type: "boolean" },
       },
       required: ["thread", "reason"],
       additionalProperties: false,
@@ -227,13 +191,12 @@ export const ALL_TOOLS: readonly ToolDef[] = Object.freeze([
   },
   {
     name: "send_message",
-    description: stripOneTrailingNewline(sendMessageDesc),
     parameters: {
       type: "object",
       properties: {
-        text: { type: "string", minLength: 1, description: "What to say to {{user}}." },
-        thread: { type: "string", minLength: 1, maxLength: 64, description: "Id of the thread to post it in, as `threads` lists it. A wake's own thread when left out. From a conversation it has to name another thread." },
-        push: { type: "boolean", description: "Also send it to {{user}}'s phone as a notification. Default false." },
+        text: { type: "string", minLength: 1 },
+        thread: { type: "string", minLength: 1, maxLength: 64 },
+        push: { type: "boolean" },
       },
       required: ["text"],
       additionalProperties: false,
@@ -241,11 +204,10 @@ export const ALL_TOOLS: readonly ToolDef[] = Object.freeze([
   },
   {
     name: "guide",
-    description: stripOneTrailingNewline(guideDesc),
     parameters: {
       type: "object",
       properties: {
-        topic: { type: "string", description: "The topic to read, by the name the list gives it. Leave it out for the list." },
+        topic: { type: "string" },
       },
       additionalProperties: false,
     },
@@ -276,39 +238,47 @@ export function toolTemplateVars(cfg: ToolsConfigView, charName: string, userNam
   return vars;
 }
 
-export function renderToolSchema(parameters: Record<string, unknown>, vars: Map<string, string>): Record<string, unknown> {
-  const rendered = Object.entries(parameters["properties"] as Record<string, Record<string, unknown>>).map(([name, schema]) => {
-    const description = schema["description"];
-    return [name, typeof description === "string" ? { ...schema, description: renderTemplate(description, vars) } : schema];
-  });
+function described(schema: Record<string, unknown>, description: string | undefined): Record<string, unknown> {
+  if (description === undefined) return schema;
+  const { default: fallback, ...rest } = schema;
+  return fallback === undefined ? { ...rest, description } : { ...rest, description, default: fallback };
+}
+
+export function renderToolSchema(texts: Texts, tool: string, parameters: Record<string, unknown>, values: TextValues): Record<string, unknown> {
+  const rendered = Object.entries(parameters["properties"] as Record<string, Record<string, unknown>>).map(([name, schema]) =>
+    [name, described(schema, texts.render(parameterText(tool, name), values))]);
   return { ...parameters, properties: Object.fromEntries(rendered) };
 }
 
+export function renderedTools(texts: Texts, tools: readonly ToolDef[], values: TextValues): ToolDefinition[] {
+  return tools.map((t) => ({
+    name: t.name,
+    description: texts.render(toolText(t.name), values) ?? "",
+    input_schema: renderToolSchema(texts, t.name, t.parameters, values),
+  }));
+}
+
 export function renderToolDefs(
+  texts: Texts,
   cfg: ToolsConfigView,
   charName: string,
   userName: string,
 ): ToolDefinition[] {
-  const vars = toolTemplateVars(cfg, charName, userName);
-  return availableTools(cfg).map((t) => ({
-    name: t.name,
-    description: renderTemplate(t.description, vars),
-    input_schema: renderToolSchema(t.parameters, vars),
-  }));
+  return renderedTools(texts, availableTools(cfg), Object.fromEntries(toolTemplateVars(cfg, charName, userName)));
 }
 
 export const SUBAGENT_INPUT_SCHEMA: Record<string, unknown> = Object.freeze({
   type: "object",
-  properties: {
-    query: {
-      type: "string",
-      description: "Natural-language request for this sub-agent.",
-    },
-  },
+  properties: { query: { type: "string" } },
   required: ["query"],
 });
 
+export function subagentInputSchema(texts: Texts): Record<string, unknown> {
+  return renderToolSchema(texts, "ask", SUBAGENT_INPUT_SCHEMA, {});
+}
+
 export function subagentToolDefs(
+  texts: Texts,
   subagents: ReadonlyMap<string, SubagentConfigView>,
   enabled: readonly string[],
   charName: string,
@@ -321,7 +291,7 @@ export function subagentToolDefs(
     .map((name) => ({
       name: `ask_${name}`,
       description: renderTemplate((subagents.get(name) as SubagentConfigView).description, vars),
-      input_schema: SUBAGENT_INPUT_SCHEMA,
+      input_schema: subagentInputSchema(texts),
     }));
 }
 

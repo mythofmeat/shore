@@ -1,6 +1,7 @@
 import { formatWallClock } from "../engine/prompt.ts";
 import type { ContentBlock } from "../engine/types.ts";
 import type { TriggerFiring, WakeNews } from "./runner.ts";
+import type { Texts } from "../texts/texts.ts";
 
 export type WireRole = "user" | "assistant" | "system";
 
@@ -17,9 +18,8 @@ export function timeLeftPhrase(ms: number): string {
   return minutes === 1 ? "about a minute" : `about ${String(minutes)} minutes`;
 }
 
-export function userWroteNote(at: number, userName: string, timeZone: string): string {
-  return `[${userName} has just written to you, at ${formatWallClock(at, timeZone)}, while this wake is running. ` +
-    "Another turn of you is answering them, and it knows this wake is running.]";
+export function userWroteNote(texts: Texts, at: number, userName: string, timeZone: string): string | undefined {
+  return texts.render("user_wrote", { user: userName, at: formatWallClock(at, timeZone) });
 }
 
 export function spanPhrase(ms: number): string {
@@ -29,17 +29,17 @@ export function spanPhrase(ms: number): string {
   return secs % 3600 === 0 ? counted(secs / 3600, "hour") : counted(Math.trunc(secs / 60), "minute");
 }
 
-export function triggerFiredNote(firing: TriggerFiring, timeZone: string): string {
-  const when = formatWallClock(firing.at, timeZone);
-  if (firing.byHand === true) return `[This wake was started by hand at ${when}, from Shore's command line or its settings.]`;
-  if (firing.seal === true) return `[The seal on this thread came off at ${when}. ${firing.reason}]`;
+export function triggerFiredNote(texts: Texts, firing: TriggerFiring, timeZone: string): string | undefined {
+  const at = formatWallClock(firing.at, timeZone);
+  if (firing.byHand === true) return texts.render("fired_by_hand", { at });
+  if (firing.seal === true) return texts.render("fired_seal", { at, reason: firing.reason });
   return firing.from === undefined
-    ? `[Your trigger "${firing.name}" fired at ${when}: ${firing.reason}]`
-    : `[You asked for this wake from "${firing.from}" at ${when}: ${firing.reason}]`;
+    ? texts.render("fired_trigger", { trigger: firing.name, at, reason: firing.reason })
+    : texts.render("fired_asked", { from: firing.from, at, reason: firing.reason });
 }
 
-export function wakeNewsNote(news: readonly WakeNews[], userName: string, timeZone: string): string | undefined {
-  const notes = news.map((item) => item.kind === "trigger" ? triggerFiredNote(item.firing, timeZone) : userWroteNote(item.at, userName, timeZone));
+export function wakeNewsNote(texts: Texts, news: readonly WakeNews[], userName: string, timeZone: string): string | undefined {
+  const notes = news.flatMap((item) => (item.kind === "trigger" ? triggerFiredNote(texts, item.firing, timeZone) : userWroteNote(texts, item.at, userName, timeZone)) ?? []);
   return notes.length === 0 ? undefined : notes.join("\n\n");
 }
 

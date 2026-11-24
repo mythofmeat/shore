@@ -13,6 +13,7 @@ import type { SubagentTurn } from "./generation.ts";
 import { emitNewMessageEvent } from "./persistence.ts";
 import { pictureProblems } from "./pictures.ts";
 import type { ToolContextDeps } from "./tool_context.ts";
+import { Texts } from "../texts/texts.ts";
 
 export interface ReplyMessages {
   send: SendMessage;
@@ -35,6 +36,7 @@ export function replyMessages(a: ToolAssembly, character: string, turn: Subagent
     threads: async () => await reachableThreads(dataDir, character),
     pictureProblems: async (text) => await pictureProblems([text], workspace, turn.signal),
     pushRefusal: () => pushRefusal(characterDir, { topic: config.app.notifications.push_topic, everyMs: config.app.notifications.push_every.asMillis() }, Date.now()),
+    texts: Texts.of(config),
   });
   return {
     send: outbox.send,

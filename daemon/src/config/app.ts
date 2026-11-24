@@ -7,6 +7,8 @@ import { DEFAULT_MAX_INLINE_IMAGE_BYTES } from "../tools/media.ts";
 import { DEFAULT_IMAGE_CACHE_BYTES } from "../storage/image_cache.ts";
 import { parseToolsUser } from "../tools/character_user.ts";
 import { normalizeWorkspacePath, pathComponents } from "../tools/workspace_path.ts";
+import { TEXTS as TEXT_LIST } from "../texts/registry.ts";
+import type { TextSetting } from "../texts/texts.ts";
 import {
   API_MAX_IMAGE_EDGE,
   DEFAULT_IMAGE_SETTINGS,
@@ -1192,10 +1194,32 @@ export function promptWorkspaceFiles(parts: readonly PromptPart[]): string[] {
   return [...new Set(parts.flatMap((part) => "workspace" in part ? [part.workspace] : []))];
 }
 
+const readTextOrOff: Reader<TextSetting> = typed(
+  (v) => (typeof v === "string" || v === false ? { ok: v } : { err: invalidType(v, "a file path, or false to switch it off") }),
+  { kind: "string" },
+);
+
+const readNeededText: Reader<TextSetting> = typed(
+  (v) => (typeof v === "string" ? { ok: v } : { err: `${invalidType(v, "a file path")}; this text can't be switched off` }),
+  { kind: "string" },
+);
+
+const readFixedText: Reader<TextSetting> = typed(
+  () => ({ err: "this text can't be replaced yet" }),
+  { kind: "string" },
+);
+
+const TEXTS: StructSpec<Record<string, TextSetting | undefined>> = {
+  name: "Texts",
+  make: () => ({}),
+  fields: Object.fromEntries(TEXT_LIST.map((spec) => [spec.name, spec.fixed ? readFixedText : spec.required ? readNeededText : readTextOrOff])),
+};
+
 export interface AppConfig {
   daemon: DaemonConfig;
   chat: ChatConfig;
   prompt: PromptPart[];
+  texts: Record<string, TextSetting | undefined>;
   image: ImageConfig;
   images: ImagesConfig;
   triggers: TriggersConfig;
@@ -1215,6 +1239,7 @@ export const defaultAppConfig = (): AppConfig => ({
   daemon: defaultDaemonConfig(),
   chat: defaultChatConfig(),
   prompt: [],
+  texts: {},
   image: IMAGE.make(),
   images: defaultImagesConfig(),
   triggers: defaultTriggersConfig(),
@@ -1238,6 +1263,7 @@ const APP: StructSpec<AppConfig> = {
     daemon: struct(DAEMON),
     chat: struct(CHAT),
     prompt: readSeq(readPromptPart),
+    texts: struct(TEXTS),
     image: struct(IMAGE),
     images: struct(IMAGES),
     triggers: struct(TRIGGERS),
