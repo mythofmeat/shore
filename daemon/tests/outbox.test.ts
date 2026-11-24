@@ -88,6 +88,10 @@ test("a message with a picture that can't be found is refused with each one name
   );
   expect(box.waiting).toEqual([]);
   expect(await box.send({ text: "No pictures.", push: false })).toBe("It will be posted in this thread when this wake ends.");
+  const one = outbox({ pictureProblems: async () => ["![[lamp.png]]: no file by that name"] });
+  expect(await refused(one.send({ text: "Look: ![[lamp.png]]", push: false }))).toBe(
+    "io: not sent: these pictures in it could not be sent:\n- ![[lamp.png]]: no file by that name\nSend it again with the names fixed.",
+  );
 });
 
 test("a push is refused whole when none is set up, when one went too lately, or when the turn already has one", async () => {
