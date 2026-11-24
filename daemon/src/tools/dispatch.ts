@@ -354,9 +354,6 @@ export function windowToolResult(texts: Texts, output: string, maxChars: number)
   };
 }
 
-export function truncateToolResult(texts: Texts, output: string, maxChars: number): string {
-  return windowToolResult(texts, output, maxChars).output;
-}
 
 const CANCEL_GRACE_MS = 2_000;
 

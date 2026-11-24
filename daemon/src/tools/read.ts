@@ -11,8 +11,6 @@ import { byteSize, MAX_THREAD_PIN_BYTES, MAX_THREAD_PINS_BYTES, threadFileText }
 import { linkedFile, namedFile, workspaceNames, type WorkspaceNames } from "./workspace_names.ts";
 import { WORKSPACE_LINK } from "./workspace_path.ts";
 import { defaultImagesConfig, imageSettingsFor, type ImagesConfig } from "../config/app.ts";
-import { shippedText } from "../texts/registry.ts";
-import { renderTemplate } from "../texts/template.ts";
 
 const MAX_READ_LINES = 2000;
 const MAX_READ_LINE_CHARS = 2000;
@@ -209,7 +207,7 @@ async function readText(file: FileHandle, path: string, offset: number, limit: n
   const lineLimit = Math.min(MAX_READ_LINE_CHARS, Math.max(1, budget - 80));
   const emit = (newline: boolean): boolean => {
     if (number < offset) return true;
-    const rendered = `${number}\t${line.replace(/\r$/, "")}${lineChars > lineLimit ? ` ${renderTemplate(shippedText("line_cut"), new Map([["limit", String(lineLimit)]]))}` : ""}`;
+    const rendered = `${number}\t${line.replace(/\r$/, "")}${lineChars > lineLimit ? ` [line truncated after ${lineLimit} characters]` : ""}`;
     const length = Array.from(rendered).length + 1;
     if (lines.length > 0 && (lines.length >= limit || outputChars + length > budget)) return false;
     lines.push(rendered);

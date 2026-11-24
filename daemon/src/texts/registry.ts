@@ -105,7 +105,6 @@ import tools__images__generate_image__caption from "../../prompts/tools/images/g
 import tools__images__generate_image__generate_image from "../../prompts/tools/images/generate_image/generate_image.md" with { type: "text" };
 import tools__images__generate_image__prompt from "../../prompts/tools/images/generate_image/prompt.md" with { type: "text" };
 import tools__images__generate_image__size from "../../prompts/tools/images/generate_image/size.md" with { type: "text" };
-import tools__results__line_cut from "../../prompts/tools/results/line_cut.md" with { type: "text" };
 import tools__results__output_cut from "../../prompts/tools/results/output_cut.md" with { type: "text" };
 import tools__results__patch_failed from "../../prompts/tools/results/patch_failed.md" with { type: "text" };
 import tools__results__prompt_reload from "../../prompts/tools/results/prompt_reload.md" with { type: "text" };
@@ -300,7 +299,6 @@ export const OTHER_TEXTS: readonly TextSpec[] = [
   must("label", memory__compaction__label, "The request for a segment's label, after the segment's conversation.", { user: "the user's name" }),
   must("idle_resume", engine__idle_resume, "The user turn of a request rebuilt to keep the cache warm, when the conversation has none."),
   fixed("output_cut", tools__results__output_cut, "After a command's output that was too long: bash's, a pinned command's or a trigger check's. It can't be replaced yet."),
-  fixed("line_cut", tools__results__line_cut, "After a line read cuts short. It can't be replaced yet.", { limit: "how many characters it shows of a line" }),
 ];
 
 const GUIDE_VALUES = { user: "the user's name", tools_off: "the tools a topic names that are off" };

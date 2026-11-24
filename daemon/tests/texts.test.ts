@@ -98,7 +98,7 @@ test("config points a text at a file or switches it off, and refuses a name Shor
   expect(await refused('[texts]\nnope = "x.md"\n')).toBe("<dir>/config.toml: unknown field `texts.nope`");
   expect(await refused("[texts]\nearlier_not_shown = false\n")).toBe("<dir>/config.toml: texts.earlier_not_shown: invalid type: boolean `false`, expected a file path; this text can't be switched off");
   expect(await refused("[texts]\ntime = 3\n")).toBe("<dir>/config.toml: texts.time: invalid type: integer `3`, expected a file path, or false to switch it off");
-  expect(await refused('[texts]\nline_cut = "x.md"\n')).toBe("<dir>/config.toml: texts.line_cut: this text can't be replaced yet");
+  expect(await refused('[texts]\noutput_cut = "x.md"\n')).toBe("<dir>/config.toml: texts.output_cut: this text can't be replaced yet");
 });
 
 test("the list names every text with whose wording is in use, a file of the user's that can't be read with why, and the CLI's own texts", async () => {
@@ -113,7 +113,7 @@ test("the list names every text with whose wording is in use, a file of the user
   expect([row("status").owner, row("status").wording, row("status").shipped]).toEqual(["off", null, "[Their status: {{statuses}}]"]);
   expect([row("label").owner, row("label").wording, row("label").required, row("label").error]).toEqual(["yours", null, true, `text "label" could not be read at ${join(dir, "gone.md")}: ENOENT: no such file or directory, open '${join(dir, "gone.md")}'`]);
   expect([row("wake").owner, row("wake").wording === row("wake").shipped, row("wake").file]).toEqual(["shore", true, null]);
-  expect([row("line_cut").owner, row("line_cut").wording, row("line_cut").values]).toEqual(["fixed", "[line truncated after {{limit}} characters]", [{ name: "limit", about: "how many characters it shows of a line" }]]);
+  expect([row("output_cut").owner, row("output_cut").wording, row("output_cut").values]).toEqual(["fixed", "[process output truncated]", []]);
   const { place, ...identity } = row("cli_identity");
   expect(place).toStartWith("The first line of the system prompt on claude_agent.");
   expect(identity).toEqual({
