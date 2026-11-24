@@ -3948,12 +3948,8 @@ function requestTexts(request: SidecarRequest): string[] {
 }
 
 test("with every text Shore writes pointed at a marker, a reply carrying every kind of note and a wake hold nothing of Shore's but the markers, and each text is given the values the list names", async () => {
-  const given = new Map<string, Set<string>[]>();
-  const render = Texts.prototype.render;
-  const watching = spyOn(Texts.prototype, "render").mockImplementation(function (this: Texts, name: string, values: Readonly<Record<string, string | undefined>> = {}) {
-    given.set(name, [...given.get(name) ?? [], new Set(Object.keys(values))]);
-    return render.call(this, name, values);
-  });
+  const watching = spyOn(Texts.prototype, "render");
+  const rendered: Parameters<Texts["render"]>[] = [];
   const enabled = ALL_TOOLS.map((tool) => tool.name);
   try {
     await withCharacter(async ({ runtime, script, data, workspace, say, thread }) => {
@@ -4015,8 +4011,11 @@ test("with every text Shore writes pointed at a marker, a reply carrying every k
       app.texts = Object.fromEntries(MARKED.map((spec) => [spec.name, `texts/${spec.name}.md`]));
     });
   } finally {
+    rendered.push(...watching.mock.calls);
     watching.mockRestore();
   }
+  const given = new Map<string, Set<string>[]>();
+  for (const [name, values = {}] of rendered) given.set(name, [...given.get(name) ?? [], new Set(Object.keys(values))]);
 
   const toolTexts = ALL_TOOLS.flatMap((tool) => [toolText(tool.name), ...Object.keys((tool.parameters as { properties: Record<string, unknown> }).properties).map((parameter) => parameterText(tool.name, parameter))]);
   expect([...given.keys()].filter((name) => !toolTexts.includes(name)).sort()).toEqual([

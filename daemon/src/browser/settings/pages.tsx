@@ -12,12 +12,13 @@ import { KeyboardPage } from "./Keyboard.tsx";
 import { SegmentsPage } from "./Segments.tsx";
 import { ModelsPage } from "./Models.tsx";
 import { ProvidersPage } from "./Providers.tsx";
+import { TextsPage } from "./Texts.tsx";
 import { ToolsPage } from "./Tools.tsx";
 import { TracesPage } from "./Traces.tsx";
 import { UsagePage } from "./Usage.tsx";
 
 export const SETTINGS_PAGE_VIEWS: Record<SettingsPage, ComponentType<{ state: ChromeSnapshot }>> = {
-  models: ModelsPage, characters: CharactersPage, appearance: AppearancePage, keyboard: KeyboardPage,
+  models: ModelsPage, characters: CharactersPage, appearance: AppearancePage, keyboard: KeyboardPage, texts: TextsPage,
   providers: ProvidersPage, usage: UsagePage, configuration: ConfigurationPage, devices: DevicesPage,
   segments: SegmentsPage, diagnostics: DiagnosticsPage, traces: TracesPage, tools: ToolsPage, archives: ArchivesPage, debug: DebugPage,
 };
