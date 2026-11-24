@@ -3,7 +3,7 @@ import { afterAll, beforeAll, describe, expect, test } from "bun:test";
 import { mkdtempSync, mkdirSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { expandPromptMacros, subagentToolSubset, type RegisteredTool } from "../src/tools/subagent";
+import { expandPromptMacros, renderHistorySlice, subagentToolSubset, type RegisteredTool } from "../src/tools/subagent";
 import { ALL_TOOLS, renderedTools } from "../src/tools/registry";
 import { PathError, promptFileAt, resolvePath, resolveRoots } from "../src/tools/workspace_path";
 import { CharacterWorkspace } from "../src/tools/character_workspace.ts";
@@ -291,4 +291,20 @@ describe("which tools a sub-agent is offered", () => {
     expect(offered.map((def) => def.name)).toEqual(["read", "mcp__web__search"]);
     expect(unknown).toEqual(["nope"]);
   });
+});
+
+test("a sub-agent's slice of history marks the time before its first message and after a gap of half an hour or more, and leaves out messages with nothing to show", () => {
+  const T0 = Date.UTC(2026, 9, 30, 12);
+  const said = (role: Message["role"], text: string, minutes: number, timestamp = new Date(T0 + minutes * 60_000).toISOString()): Message =>
+    ({ msg_id: `m${String(minutes)}`, role, content: text, images: [], content_blocks: [{ type: "text", text }], timestamp });
+  const history = [
+    said("user", "old", 0), said("user", "hi", 10), said("assistant", "  ", 11), said("assistant", "hello", 39.99), said("user", "later", 69.99),
+    said("user", "odd", 71, "sometime"), said("user", "after odd", 72),
+  ];
+  expect(renderHistorySlice(new Texts(), history, "6", "Ada", "Eve", "UTC").split("\n")).toEqual([
+    "[Friday 2026-10-30 · 12:10 PM]", "Eve: hi", "Ada: hello", "[about an hour later · Friday 2026-10-30 · 1:09 PM]", "Eve: later", "Eve: odd", "[Friday 2026-10-30 · 1:12 PM]", "Eve: after odd",
+  ]);
+  expect(renderHistorySlice(new Texts(), history, "20", "Ada", "Eve", "UTC").split("\n").slice(0, 2)).toEqual(["[Friday 2026-10-30 · 12:00 PM]", "Eve: old"]);
+  expect(renderHistorySlice(new Texts(), history, "0", "Ada", "Eve", "UTC")).toBe("");
+  expect(renderHistorySlice(new Texts(), [], "5", "Ada", "Eve", "UTC")).toBe("");
 });

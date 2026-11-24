@@ -1,10 +1,13 @@
 import { expect, test } from "bun:test";
+import { mkdtemp, writeFile } from "node:fs/promises";
+import { join } from "node:path";
 
 import { threadDigest, type ThreadReader } from "../src/autonomy/thread_digest.ts";
 import { NO_PRIOR_CONTEXT } from "../src/engine/segments.ts";
 import type { ContentBlock, Message } from "../src/engine/types.ts";
 import { Texts } from "../src/texts/texts.ts";
 import { required } from "../src/util/required.ts";
+import { testTmp } from "./support/tmp.ts";
 
 const MINUTE = 60_000;
 const T0 = Date.UTC(2026, 9, 30, 12);
@@ -130,4 +133,39 @@ test("what was archived is read back only as far as it is needed, newest first, 
   const lost = required(await threadDigest(new Texts(), thread([user(20, "late")], [[user(1, "one")], [user(2, "two")], [user(3, "three")], []].map((each, index) => index === 3 ? undefined : each) as Message[][], reads), undefined, "eve", "UTC"));
   expect(reads).toEqual([3, 2, 1]);
   expect(lost.split("\n\n").slice(1).map((entry) => entry.split("\n")[1])).toEqual(["two", "three", "late"]);
+});
+
+async function bare(...lines: [name: string, wording: string][]): Promise<Texts> {
+  const dir = await mkdtemp(testTmp("digest-texts-"));
+  for (const [name, wording] of lines) await writeFile(join(dir, `${name}.md`), `${wording}\n`);
+  return new Texts(Object.fromEntries(lines.map(([name]) => [name, `${name}.md`])), dir);
+}
+
+test("a wake is shown at most forty messages and as many as fit in 24,000 characters, newest first kept, and says how many earlier ones it leaves out", async () => {
+  const texts = await bare(["digest_user", "{{text}}"], ["digest_since", "since"], ["digest_left_out", "<{{count}}{{#if one}} one{{/if}}>"]);
+  const said = (count: number, size: number): Message[] => Array.from({ length: count }, (_, index) => user(1 + index / 100, String(index % 10).repeat(size)));
+  const parts = async (messages: Message[]): Promise<string[]> => required(await threadDigest(texts, thread(messages), T0, "eve", "UTC")).split("\n\n");
+  const forty = said(41, 1);
+  expect(await parts(forty)).toEqual(["since", "<1 one>", ...forty.slice(1).map((each) => each.content)]);
+  const fits = said(6, 4_000);
+  expect(await parts(fits)).toEqual(["since", ...fits.map((each) => each.content)]);
+  const over = said(8, 4_000);
+  expect(await parts(over)).toEqual(["since", "<2>", ...over.slice(2).map((each) => each.content)]);
+});
+
+test("a message longer than 4,000 characters is cut there and says so, and one of exactly 4,000 is kept whole", async () => {
+  const texts = await bare(["digest_user", "{{text}}"], ["digest_first", "first"]);
+  const whole = "w".repeat(3_999) + "!";
+  expect(await threadDigest(texts, thread([user(1, whole)]), undefined, "eve", "UTC")).toBe(`first\n\n${whole}`);
+  expect(await threadDigest(texts, thread([user(1, `${whole}x`)]), undefined, "eve", "UTC")).toBe(`first\n\n${whole}… [cut]`);
+  const plain = await bare(["digest_user", "{{text}}"], ["digest_first", "first"], ["digest_cut", ""]);
+  expect(await threadDigest(plain, thread([user(1, `${whole}x`)]), undefined, "eve", "UTC")).toBe(`first\n\n${whole}`);
+});
+
+test("a speaker switched off leaves their messages out of what a wake is shown, and with everything off it is shown nothing", async () => {
+  const quiet = await bare(["digest_you", ""], ["digest_first", "first"]);
+  expect(await threadDigest(quiet, thread([user(1, "hello"), reply(2, "hi")]), undefined, "eve", "UTC")).toBe(`first\n\neve · ${at("12:01 PM")}\nhello`);
+  const silent = new Texts({ digest_first: false, digest_user: false }, "");
+  expect(await threadDigest(silent, thread([user(1, "hello")]), undefined, "eve", "UTC")).toBeUndefined();
+  expect(await threadDigest(new Texts({ digest_nothing_yet: false }, ""), thread([]), undefined, "eve", "UTC")).toBeUndefined();
 });

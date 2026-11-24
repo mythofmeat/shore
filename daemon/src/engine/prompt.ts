@@ -269,7 +269,7 @@ function lastElsewhere(elsewhere: Message["last_elsewhere"], instantMs: number):
   if (elsewhere === undefined) return undefined;
   const at = parseRfc3339(elsewhere.at);
   if (at === undefined) return undefined;
-  return { last_thread: elsewhere.thread, last_length: lengthPhrase(Math.max(0, gapSeconds(at, instantMs))) };
+  return { last_thread: elsewhere.thread, last_length: lengthPhrase(gapSeconds(at, instantMs)) };
 }
 
 function formatTimeMarker(

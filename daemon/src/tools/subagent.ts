@@ -124,8 +124,6 @@ export function renderHistorySlice(
   timeZone: string = hostZone(),
 ): string {
   const n = Math.min(parseCount(arg), MAX_HISTORY_MESSAGES);
-  if (n === 0 || history.length === 0) return "";
-
   const start = Math.max(0, history.length - n);
   const lines: string[] = [];
   let previousTimestamp: string | undefined;

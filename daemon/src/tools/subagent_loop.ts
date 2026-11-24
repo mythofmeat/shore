@@ -104,11 +104,6 @@ export async function runSubagent(
 
   const resolved = resolveSubagentModelSettings(config.dirs.data, charName, name, catalogModel);
 
-  const provider = deps.providers[resolved.sdk];
-  if (provider === undefined) {
-    throw new InvalidArgs(`unsupported sdk: ${resolved.sdk}`);
-  }
-
   const displayName = resolveDisplayName(config.app.chat, deps.env);
   const vars = templateVars(charName, displayName);
   const texts = Texts.of(config);
@@ -169,7 +164,6 @@ export async function runSubagent(
       character: charName,
       thread: deps.ctx.thread ?? MAIN_THREAD,
       call_type: "subagent",
-      ...(built.api_key_name === undefined ? {} : { api_key_name: built.api_key_name }),
       thinking_enabled: built.request.provider_options?.thinking_enabled === true,
       usage: usageConfigView(config.app),
       ...(deps.rid === undefined ? {} : { rid: deps.rid }),

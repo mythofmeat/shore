@@ -2,7 +2,8 @@ import { describe, expect, test } from "bun:test";
 
 import { parseToolArgs } from "../src/llm/tool_args.ts";
 import { executeToolUse, type ToolExecution } from "../src/tools/execute.ts";
-import { schemasFrom } from "../src/tools/validate.ts";
+import { schemasFrom, schemaViolation } from "../src/tools/validate.ts";
+import { BUILTIN_TOOL_SCHEMAS } from "./support/builtin_tool_schemas.ts";
 import type { ToolContext } from "../src/tools/dispatch.ts";
 import type { ServerMessage } from "../src/protocol/ServerMessage.ts";
 
@@ -78,4 +79,26 @@ describe("executeToolUse", () => {
     expect((block as { content: string }).content).toContain("`path`");
     expect((block as { content: string }).content).toContain("string");
   });
+});
+
+test("each built-in tool takes its bounded arguments up to their bounds and refuses them one past", () => {
+  const takes = (tool: string, input: Record<string, unknown>): boolean => schemaViolation(BUILTIN_TOOL_SCHEMAS.get(tool), input) === undefined;
+  const long = (n: number): string => "a".repeat(n);
+  const edit = { file_path: "a", old_string: "a", new_string: "" };
+  expect([
+    takes("read", { file_path: "a", offset: 1, limit: 1 }), takes("read", { file_path: "a", limit: 2000 }),
+    takes("read", { file_path: "" }), takes("read", { file_path: "a", offset: 0 }), takes("read", { file_path: "a", limit: 0 }), takes("read", { file_path: "a", limit: 2001 }),
+  ]).toEqual([true, true, false, false, false, false]);
+  expect([takes("edit", edit), takes("edit", { ...edit, file_path: "" }), takes("edit", { ...edit, old_string: "" })]).toEqual([true, false, false]);
+  expect([takes("apply_patch", { patch: "a" }), takes("apply_patch", { patch: "" })]).toEqual([true, false]);
+  expect([takes("threads", { action: "list", name: "a" }), takes("threads", { action: "list", name: long(64) }), takes("threads", { action: "list", name: "" }), takes("threads", { action: "list", name: long(65) })])
+    .toEqual([true, true, false, false]);
+  expect([
+    takes("wake_in_thread", { thread: "a", reason: "a" }), takes("wake_in_thread", { thread: long(64), reason: "a" }),
+    takes("wake_in_thread", { thread: "", reason: "a" }), takes("wake_in_thread", { thread: long(65), reason: "a" }), takes("wake_in_thread", { thread: "a", reason: "" }),
+  ]).toEqual([true, true, false, false, false]);
+  expect([
+    takes("send_message", { text: "a", thread: "a" }), takes("send_message", { text: "a", thread: long(64) }),
+    takes("send_message", { text: "" }), takes("send_message", { text: "a", thread: "" }), takes("send_message", { text: "a", thread: long(65) }),
+  ]).toEqual([true, true, false, false, false]);
 });

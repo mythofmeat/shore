@@ -276,6 +276,17 @@ describe("an own-time thread kept from an older Shore, in the character's list o
     expect(listed).toHaveLength(3);
   });
 
+  test("lists the home thread first wherever it sits in the index, the others in the index's order, and says which are locked", async () => {
+    const config = await setup();
+    const data = config.dirs.data;
+    await writeThreadsIndex(data, "frank", {
+      version: 1, home: "harbor",
+      threads: [{ id: "main", created_at: NOW, compaction: true }, { id: "pier", created_at: NOW, compaction: true, locked: true }, { id: "harbor", created_at: NOW, compaction: true }],
+    });
+    const listed = (await handleListThreads({ texts: new Texts(), dataDir: data, character: "frank", userName: "sam", timeZone: "UTC", now: () => Date.parse(NOW) })).split("\n\n");
+    expect(listed.slice(1).map((thread) => thread.split("\n")[0])).toEqual(["harbor (home, you're here) · compaction on", "main · compaction on", "pier (locked) · compaction on"]);
+  });
+
   test("says how long ago the user last wrote in each thread, counted to the second and never as less than a minute", async () => {
     const config = await setup();
     const data = config.dirs.data;

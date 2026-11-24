@@ -86,11 +86,9 @@ export async function threadDigest(
   if (messages.length === 0) return texts.render(since === undefined ? "digest_nothing_yet" : "digest_nothing_since");
   const shown: string[] = [];
   let used = 0;
-  for (let index = messages.length - 1; index >= 0 && shown.length < DIGEST_MAX_MESSAGES; index -= 1) {
-    const message = messages[index];
-    if (message === undefined) continue;
+  for (const message of messages.toReversed()) {
     const text = entry(texts, message, userName, timeZone) ?? "";
-    if (shown.length > 0 && used + text.length > DIGEST_MAX_CHARS) break;
+    if (shown.length === DIGEST_MAX_MESSAGES || used + text.length > DIGEST_MAX_CHARS) break;
     shown.unshift(text);
     used += text.length;
   }

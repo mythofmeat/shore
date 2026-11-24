@@ -247,3 +247,27 @@ test("the system prompt has a block for each listed part that has something in i
   expect(prompt([said("user", "hi", 0)], { sections }).system.map((block) => block.label)).toEqual(["MAP.md", "system_prompt"]);
   expect(prompt([said("user", "hi", 0)], { sections, thread: { ...thread, pins: [] } }).system.map((block) => block.label)).toEqual(["MAP.md", "system_prompt", "thread"]);
 });
+
+test("the time line after a gap says how long in rough words, turning over at an hour and a half, eighteen hours and a day and a half", () => {
+  const gapOf = (minutes: number): string | undefined => shown([said("user", "before", 0), said("user", "after", minutes)], { user_timestamp_mode: "always" }).at(-1)?.[1].split("]")[0];
+  expect([29.99, 30, 89.99, 90, 1_079.99, 1_080, 1_440, 2_159.99, 2_160].map(gapOf)).toEqual([
+    "[Friday 2026-10-30 · 12:29 PM",
+    "[about an hour later · Friday 2026-10-30 · 12:30 PM",
+    "[about an hour later · Friday 2026-10-30 · 1:29 PM",
+    "[2 hours later · Friday 2026-10-30 · 1:30 PM",
+    "[18 hours later · Saturday 2026-10-31 · 5:59 AM",
+    "[about a day later · Saturday 2026-10-31 · 6:00 AM",
+    "[about a day later · Saturday 2026-10-31 · 12:00 PM",
+    "[about a day later · Saturday 2026-10-31 · 11:59 PM",
+    "[2 days later · Sunday 2026-11-01 · 12:00 AM",
+  ]);
+});
+
+test("the time line names the thread the user was last in only when that time can be read, and a time after the message reads as a minute ago", () => {
+  const back = (at: string): string | undefined => shown([said("user", "before", 0), said("user", "back", 120, { last_elsewhere: { thread: "garden", at } })], { user_timestamp_mode: "always" }).at(-1)?.[1].split("\n")[0];
+  expect([back("sometime"), back(new Date(T0 + 60 * MINUTE).toISOString()), back(new Date(T0 + 130 * MINUTE).toISOString())]).toEqual([
+    "[2 hours later · Friday 2026-10-30 · 2:00 PM]",
+    "[2 hours later · Friday 2026-10-30 · 2:00 PM · last in garden about an hour ago]",
+    "[2 hours later · Friday 2026-10-30 · 2:00 PM · last in garden a minute ago]",
+  ]);
+});
