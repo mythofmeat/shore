@@ -416,6 +416,19 @@ export class HistoryStore {
     return row?.timestamp;
   }
 
+  userTurnTimes(character: string): string[] {
+    const rows = this.#db
+      .query(
+        `SELECT m.timestamp
+         FROM history_messages m
+         JOIN history_segments s ON s.character = m.character AND s.idx = m.segment
+         WHERE m.character = ?1 AND s.committed = 1 AND m.is_user_turn = 1
+           AND (m.origin IS NULL OR m.origin <> 'autonomous')`,
+      )
+      .values(character) as [string][];
+    return rows.map(([timestamp]) => timestamp);
+  }
+
   archiveDigest(character: string): string {
     const row = this.#db
       .query("SELECT revision FROM history_archive_revision WHERE character = ?1")

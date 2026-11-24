@@ -136,9 +136,17 @@ export class SegmentReader {
     return required(this.history).stampAttempt(this.character, msgId, ordinal, shown, attempt);
   }
 
+  userTurnTimes(): string[] {
+    return this.history?.userTurnTimes(this.character) ?? [];
+  }
+
   close(): void {
     this.history?.close();
   }
+}
+
+export async function threadArchive(dataDir: string, character: string, thread: string): Promise<SegmentReader> {
+  return await SegmentReader.load(conversationRef(dataDir, character, thread, false));
 }
 
 async function openHistory(ref: ConversationRef): Promise<HistoryStore | undefined> {
