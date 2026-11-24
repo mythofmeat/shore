@@ -2,20 +2,19 @@ use crate::completion::{Completes, provider_names, values};
 use clap::{Args, Parser, Subcommand, ValueEnum};
 use clap_complete::Shell;
 use shore_common::protocol::operations::{
-    ActivateSession, BackgroundModelTarget, CallLogArgs, CancelCompaction, CheckConfiguration,
-    CompactArgs, CompactConversation, ConfigArgs, Configuration, ConfigurationSchema,
-    ConversationLog, ConversationLogArgs, DeleteMessages, DeleteMessagesArgs, DiagnosticCountArgs,
-    EditMessage, EditMessageArgs, EmptyOperationArgs, ExecuteTool, FavoriteModel,
-    FavoriteModelArgs, GetMessage, GetMessageArgs, InjectSystem, InjectSystemArgs, InspectCalls,
-    InspectModel, InspectSegments, ListMarks, ListMarksArgs, ListModels, ListModelsArgs,
-    ListProviderModels, ListProviders, ListTexts, MarkArgs, MarkKind, MarkReply, MessageReferences,
-    ModelInfoArgs, ModelPreferenceScope, ModelSettings, ModelSettingsArgs, Operation,
-    PingKeepalive, Presence, PresenceArgs, ProviderArgs, ProviderModelsArgs, ReadErrorLog,
-    ReadStatus, ReadSubagentTraces, ReadTranscript, ReadWakeLog, RefreshAllProviderModels,
-    RefreshProviderModels, ResetModel, ResetModelArgs, RunToolArgs, SegmentAction, SegmentsArgs,
-    SetActive, SetDormant, SetModelSetting, SetModelSettingArgs, StartWake, SubagentTraceArgs,
-    SwitchModel, SwitchModelArgs, ToolAccessListing, TranscriptArgs, TranscriptSource, UnmarkArgs,
-    UnmarkReply, WatchCompaction,
+    ActivateSession, BackgroundModelTarget, CallLogArgs, CheckConfiguration, CompactArgs,
+    CompactConversation, ConfigArgs, Configuration, ConfigurationSchema, ConversationLog,
+    ConversationLogArgs, DeleteMessages, DeleteMessagesArgs, DiagnosticCountArgs, EditMessage,
+    EditMessageArgs, EmptyOperationArgs, ExecuteTool, FavoriteModel, FavoriteModelArgs, GetMessage,
+    GetMessageArgs, InjectSystem, InjectSystemArgs, InspectCalls, InspectModel, InspectSegments,
+    ListMarks, ListMarksArgs, ListModels, ListModelsArgs, ListProviderModels, ListProviders,
+    ListTexts, MarkArgs, MarkKind, MarkReply, MessageReferences, ModelInfoArgs,
+    ModelPreferenceScope, ModelSettings, ModelSettingsArgs, Operation, PingKeepalive, Presence,
+    PresenceArgs, ProviderArgs, ProviderModelsArgs, ReadErrorLog, ReadStatus, ReadSubagentTraces,
+    ReadTranscript, ReadWakeLog, RefreshAllProviderModels, RefreshProviderModels, ResetModel,
+    ResetModelArgs, RunToolArgs, SegmentAction, SegmentsArgs, SetActive, SetDormant,
+    SetModelSetting, SetModelSettingArgs, StartWake, SubagentTraceArgs, SwitchModel,
+    SwitchModelArgs, ToolAccessListing, TranscriptArgs, TranscriptSource, UnmarkArgs, UnmarkReply,
 };
 use shore_common::protocol::types::Role;
 use std::collections::BTreeMap;
@@ -84,10 +83,8 @@ pub(crate) enum FlagProblem {
     NeedsEquals(&'static str, String),
 }
 
-const TARGET_TAKES_EQUALS: [(&str, &[&str]); 2] = [
-    ("--background", &["all", "wake", "compaction"]),
-    ("--subagent", &["all"]),
-];
+const TARGET_TAKES_EQUALS: [(&str, &[&str]); 2] =
+    [("--background", &["all", "wake"]), ("--subagent", &["all"])];
 
 fn target_taking_equals(spelled: &str) -> Option<&'static str> {
     TARGET_TAKES_EQUALS
@@ -340,16 +337,7 @@ pub(crate) enum CliCommand {
     Compact {
         /// How many recent user turns to leave in the conversation. Everything
         /// older is archived. 0 keeps none of it.
-        #[arg(conflicts_with_all = ["watch", "cancel"])]
         keep_turns: Option<u32>,
-
-        /// Show the compaction running now, if any, until it ends.
-        #[arg(long, conflicts_with = "cancel")]
-        watch: bool,
-
-        /// Stop the compaction running now, if any.
-        #[arg(long)]
-        cancel: bool,
 
         /// Output raw JSON
         #[arg(long)]
@@ -2917,21 +2905,9 @@ fn provider_to_swp(cmd: &CliCommand) -> Option<(&'static str, serde_json::Value)
 }
 
 fn compact_to_swp(cmd: &CliCommand) -> Option<(&'static str, serde_json::Value)> {
-    let CliCommand::Compact {
-        keep_turns,
-        watch,
-        cancel,
-        ..
-    } = cmd
-    else {
+    let CliCommand::Compact { keep_turns, .. } = cmd else {
         return None;
     };
-    if *watch {
-        return operation_to_swp::<WatchCompaction>(EmptyOperationArgs {});
-    }
-    if *cancel {
-        return operation_to_swp::<CancelCompaction>(EmptyOperationArgs {});
-    }
     operation_to_swp::<CompactConversation>(CompactArgs {
         dry_run: None,
         keep_turns: keep_turns.map(u64::from),

@@ -71,7 +71,7 @@ export class InProcessAutonomyExecutor implements AutonomyExecutor {
       return await runWake(character, config, { thread: wake.thread, fired: wake.fired, limitMs: wake.limitMs }, {
         rebuild: this.#deps.rebuild,
         interrupted: wake.interrupted,
-        compaction: this.#threadCompaction(config),
+        compaction: this.#threadCompaction(),
         ...(this.#deps.env === undefined ? {} : { env: this.#deps.env }),
         news: (wrappingUp) => hooks.news(wrappingUp),
         newsHeard: () => { hooks.newsHeard(); },
@@ -130,7 +130,6 @@ export class InProcessAutonomyExecutor implements AutonomyExecutor {
         config,
         cache: this.#deps.cache,
         rebuild: this.#deps.rebuild,
-        run: this.#compactionDeps(config),
         engine: this.#engineReloader(),
       });
     });
@@ -211,8 +210,8 @@ export class InProcessAutonomyExecutor implements AutonomyExecutor {
     return await (this.#deps.runActivity?.(foreground) ?? foreground());
   }
 
-  #threadCompaction(config: LoadedConfig): CompactionRunner {
-    const runner = compactionRunner({ ...this.#compactionDeps(config), cache: this.#deps.cache, rebuild: this.#deps.rebuild });
+  #threadCompaction(): CompactionRunner {
+    const runner = compactionRunner({ ...this.#compactionDeps(), cache: this.#deps.cache, rebuild: this.#deps.rebuild });
     return {
       ...runner,
       run: async (character, effective, thread) => {
@@ -239,13 +238,11 @@ export class InProcessAutonomyExecutor implements AutonomyExecutor {
     };
   }
 
-  #compactionDeps(config: LoadedConfig): {
+  #compactionDeps(): {
     env?: NodeJS.ProcessEnv;
-    generate: CompactionGenerate;
     tools?: ToolContextDeps;
   } {
     return {
-      generate: compactionGenerate(this.#generateDeps(config)),
       ...(this.#deps.env === undefined ? {} : { env: this.#deps.env }),
       ...(this.#deps.tools === undefined ? {} : { tools: this.#deps.tools }),
     };
@@ -287,9 +284,9 @@ export type CompactionGenerate = (
   signal?: AbortSignal,
 ) => Promise<GenerateResponse>;
 
-export function compactionGenerate(deps: GenerateDeps, { foreground = false, callType = "compaction" }: { foreground?: boolean; callType?: "compaction" | "label" } = {}): CompactionGenerate {
+export function compactionGenerate(deps: GenerateDeps, { foreground = false }: { foreground?: boolean } = {}): CompactionGenerate {
   return async (request, model, character, sink, tools, options, signal) => {
-    labelAccountedCall(request, deps.config, character, callType, foreground);
+    labelAccountedCall(request, deps.config, character, "label", foreground);
     const { response, fallbacks } = await generateViaStream(
       request,
       { providerKey: model.provider_key, apiKeyEnv: model.api_key_env },

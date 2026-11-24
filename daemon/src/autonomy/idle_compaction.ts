@@ -2,17 +2,13 @@ import { homeThreadOf } from "../engine/threads.ts";
 import type { CompactionCompletion } from "../memory/compaction/background.ts";
 import { shoreLog } from "../log.ts";
 
-import { runCompaction, type CompactionRunDeps } from "../memory/compaction/run.ts";
+import { runCompaction } from "../memory/compaction/run.ts";
 import { repoint, type PostArchiveDeps } from "./post_archive.ts";
 import type { AutonomyActionResult } from "./runner.ts";
 
-export interface IdleCompactionDeps extends PostArchiveDeps {
-  run?: Omit<CompactionRunDeps, "config">;
-}
-
 export async function runIdleCompaction(
   character: string,
-  deps: IdleCompactionDeps,
+  deps: PostArchiveDeps,
 ): Promise<AutonomyActionResult> {
   const selected = await homeThreadOf(deps.config.dirs.data, character);
   shoreLog.info(`shore: autonomy tick: running idle-triggered compaction for ${character}`);

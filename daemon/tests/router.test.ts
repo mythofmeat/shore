@@ -383,38 +383,35 @@ describe("per-session routing queues", () => {
     expect(started).toEqual(["thread_label", "list_threads"]);
   });
 
-  test("a model refresh over the network and a stopping compaction leave the tab free to switch threads", async () => {
+  test("a model refresh over the network and a compaction leave the tab free to switch threads", async () => {
     const { dispatch, gate, started } = gatedDispatch();
     const { handler, frames } = harness(["ada"], 1, undefined, dispatch, reads);
 
-    for (const name of ["refresh_all_provider_models", "compact_cancel", "switch_thread"]) {
+    for (const name of ["refresh_all_provider_models", "compact", "switch_thread"]) {
       handler.enqueueRouted({ kind: "command", cmd: command(name), meta: browserTab() });
     }
     gate("switch_thread").resolve();
     await settle();
 
-    expect(started).toEqual(["refresh_all_provider_models", "compact_cancel", "switch_thread"]);
+    expect(started).toEqual(["refresh_all_provider_models", "compact", "switch_thread"]);
     expect(names(required(frames.get(1)))).toEqual(["switch_thread"]);
 
     gate("refresh_all_provider_models").resolve();
-    gate("compact_cancel").resolve();
+    gate("compact").resolve();
     await handler.drain();
   });
 
-  test("stopping a reply in a browser tab leaves a compaction and its watcher running, and a client without request tracking can still stop one", async () => {
+  test("stopping a reply in a browser tab leaves a compaction running, and a client without request tracking can still stop one", async () => {
     const { dispatch, gate, signals } = gatedDispatch();
     const { handler } = harness(["ada"], 1, undefined, dispatch, reads);
     const stop: RoutedMessage = { kind: "engine", msg: { type: "cancel" }, meta: browserTab() };
 
     handler.enqueueRouted({ kind: "command", cmd: command("compact"), meta: browserTab() });
-    handler.enqueueRouted({ kind: "command", cmd: command("compact_watch"), meta: browserTab() });
     await settle();
     handler.enqueueRouted(stop);
     await settle();
     expect(signals.get("compact")?.aborted).toBe(false);
-    expect(signals.get("compact_watch")?.aborted).toBe(false);
     gate("compact").resolve();
-    gate("compact_watch").resolve();
     await handler.drain();
 
     const old = gatedDispatch();

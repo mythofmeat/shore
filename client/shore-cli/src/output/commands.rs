@@ -48,7 +48,6 @@ pub(crate) fn format_command(name: &str, data: &serde_json::Value) {
         "refresh_provider_models" => print_provider_refresh(data),
         "refresh_all_provider_models" => print_provider_refresh_all(data),
         "compact" => print_compact_result(data),
-        "compact_watch" | "compact_cancel" => print_compaction_watch(data),
         "segments" => print_segments(data),
         "config_reload" => print_config_reload(data),
         "edit" => print_edit_confirmation(data),
@@ -1544,12 +1543,6 @@ fn print_compact_result(data: &serde_json::Value) {
     write_compact_result(&mut out, data, term_width());
 }
 
-fn print_compaction_watch(data: &serde_json::Value) {
-    let stdout = crate::output::stdout();
-    let mut out = stdout.lock();
-    super::compaction::write_watch_result(&mut out, data, term_width());
-}
-
 fn string_list(data: &serde_json::Value, key: &str) -> Vec<String> {
     data[key]
         .as_array()
@@ -1562,35 +1555,7 @@ fn string_list(data: &serde_json::Value, key: &str) -> Vec<String> {
         .unwrap_or_default()
 }
 
-pub(crate) fn pause_reason_text(data: &serde_json::Value) -> String {
-    let reason = data["reason"].as_str().unwrap_or("unknown");
-    let detail = data["detail"].as_str().filter(|d| !d.is_empty());
-    if reason == "workspace_conflict" {
-        return match detail {
-            Some(path) => format!("{path} changed since the pass wrote it"),
-            None => "memory files changed since the pass wrote them".to_owned(),
-        };
-    }
-    if reason == "cancelled" {
-        return detail.unwrap_or("cancelled").to_owned();
-    }
-    if reason == "refusal" {
-        return detail.unwrap_or("the model refused to go on").to_owned();
-    }
-    let named = match reason {
-        "source_conflict" => "the conversation changed since the pass started",
-        "iteration_limit" => "hit its tool-round ceiling",
-        "budget" => "blocked by a usage limit",
-        "provider" => "the model provider failed",
-        other => other,
-    };
-    match detail {
-        Some(extra) => format!("{named} ({extra})"),
-        None => named.to_owned(),
-    }
-}
-
-pub(crate) fn write_compact_result<W: Write>(out: &mut W, data: &serde_json::Value, width: usize) {
+fn write_compact_result<W: Write>(out: &mut W, data: &serde_json::Value, width: usize) {
     let dry = data["dry_run"].as_bool().unwrap_or(false);
     write_section_header(out, "Compaction", if dry { "dry run" } else { "" }, width);
     write_row(out, "Character", data["character"].as_str().unwrap_or("?"));

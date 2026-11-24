@@ -64,7 +64,6 @@ import type { ModelSummary } from "../protocol/ModelSummary.ts";
 import type { SavedModelSetting as OverviewSetting } from "../protocol/SavedModelSetting.ts";
 import type { ModelOverviewRole as OverviewRole } from "../protocol/ModelOverviewRole.ts";
 import type { ModelSettingsOverview } from "../protocol/ModelSettingsOverview.ts";
-import type { BackgroundModelTarget } from "../protocol/BackgroundModelTarget.ts";
 import type { ModelSettingsDetail } from "../protocol/ModelSettingsDetail.ts";
 type Args = OperationInput<"model_info">;
 
@@ -138,7 +137,7 @@ function resolveActiveModel(ctx: ModelsContext): ResolvedModel {
 }
 
 function backgroundTask(selector: string): BackgroundTask {
-  if (selector === "wake") return selector;
+  if (selector === "all" || selector === "wake") return "wake";
   throw invalidRequest(`unknown background task: ${selector}; expected all or wake`);
 }
 
@@ -161,30 +160,13 @@ function backgroundTargetModel(ctx: ModelsContext, task: BackgroundTask): Resolv
 }
 
 function backgroundSettingTarget(ctx: ModelsContext, selector: string): SettingTarget {
-  if (selector !== "all") {
-    const task = backgroundTask(selector);
-    return { kind: "background", tasks: [task], model: backgroundTargetModel(ctx, task) };
-  }
-
-  const resolved = BACKGROUND_TASKS.map(
-    (task) => [task, backgroundTargetModel(ctx, task)] as const,
-  );
-  const [head] = resolved;
-  const first = required(head)[1];
-  const same = resolved.every(
-    ([, m]) => m.providerKey === first.providerKey && m.modelId === first.modelId,
-  );
-  if (same) return { kind: "background", tasks: BACKGROUND_TASKS, model: first };
-
-  const mapping = resolved.map(([task, m]) => `${task} → ${m.qualifiedName}`).join(", ");
-  throw invalidRequest(
-    `background tasks use different models (${mapping}); target a specific task instead of \`all\``,
-  );
+  const task = backgroundTask(selector);
+  return { kind: "background", task, model: backgroundTargetModel(ctx, task) };
 }
 
 type SettingTarget =
   | { kind: "model"; model: ResolvedModel }
-  | { kind: "background"; tasks: readonly BackgroundTask[]; model: ResolvedModel }
+  | { kind: "background"; task: BackgroundTask; model: ResolvedModel }
   | { kind: "subagent"; subagent: string; model: ResolvedModel }
   | { kind: "subagent_model"; model: ResolvedModel };
 
@@ -296,16 +278,14 @@ function chatRole(ctx: ModelsContext): ModelRole {
   return { role: "chat", model: null, source: null };
 }
 
-interface ChatInheritance { thread: ModelRole; home: ModelRole }
+const BACKGROUND_MODEL_KEYS: Readonly<Record<BackgroundTask, string>> = { wake: "triggers.model" };
 
-const backgroundModelKey = (task: BackgroundTask): string => `${task === "wake" ? "triggers" : task}.model`;
-
-function backgroundRole(ctx: ModelsContext, task: BackgroundTask, inherits?: ChatInheritance): ModelRole {
+function backgroundRole(ctx: ModelsContext, task: BackgroundTask, home?: ModelRole): ModelRole {
   const perTask = resolveBackgroundModelName(ctx.config.app, task);
   if (perTask !== undefined) {
-    return { role: task, model: qualify(ctx, perTask), source: backgroundModelKey(task) };
+    return { role: task, model: qualify(ctx, perTask), source: BACKGROUND_MODEL_KEYS[task] };
   }
-  const chat = inherits?.home ?? homeChatRole(ctx);
+  const chat = home ?? homeChatRole(ctx);
   return { role: task, model: chat.model, source: chat.model === null ? null : "inherits chat" };
 }
 
@@ -347,12 +327,11 @@ function imagesRole(ctx: ModelsContext): ModelRole {
 }
 
 export function modelRoles(ctx: ModelsContext): ModelRole[] {
-  const chat = chatRole(ctx);
   const inherited = inheritedChatRole(ctx);
-  const inherits = { thread: chat, home: homeChatRole(ctx, inherited) };
+  const home = homeChatRole(ctx, inherited);
   return [
-    chat,
-    ...BACKGROUND_TASKS.map((task) => backgroundRole(ctx, task, inherits)),
+    chatRole(ctx),
+    ...BACKGROUND_TASKS.map((task) => backgroundRole(ctx, task, home)),
     subagentRole(ctx, inherited),
     imagesRole(ctx),
   ];
@@ -536,11 +515,6 @@ function loadPreferencesFor(
   }
 }
 
-const backgroundKeys = (selector: string): string[] =>
-  selector === "all"
-    ? BACKGROUND_TASKS.map(backgroundModelKey)
-    : [backgroundModelKey(backgroundTask(selector))];
-
 function configContext(ctx: ModelsContext): ConfigContext {
   if (ctx.configPath === undefined || ctx.runtime === undefined) {
     throw internalError("background model changes need a config-backed session");
@@ -548,7 +522,7 @@ function configContext(ctx: ModelsContext): ConfigContext {
   return ctx as ConfigContext & { configPath: string; runtime: ConfigRuntime };
 }
 
-function pinBackgroundModel(ctx: ModelsContext, selector: string, args: OperationInput<"switch_model">): OperationResult<"switch_model"> & { config_keys?: readonly string[] } {
+function pinBackgroundModel(ctx: ModelsContext, selector: string, args: OperationInput<"switch_model">): OperationResult<"switch_model"> {
   const name = asName(args["name"]);
   if (name === undefined) throw invalidRequest("missing model name");
 
@@ -556,10 +530,8 @@ function pinBackgroundModel(ctx: ModelsContext, selector: string, args: Operatio
   const resolved = resolve(ctx, name, includeHidden);
   const config = configContext(ctx);
 
-  const keys = backgroundKeys(selector);
-  const key = keys[0] as string;
+  const key = BACKGROUND_MODEL_KEYS[backgroundTask(selector)];
   const written = setConfigKey(config, key, resolved.qualifiedName);
-  for (const other of keys.slice(1)) setConfigKey(config, other, resolved.qualifiedName);
 
   return {
     target: "role",
@@ -570,7 +542,6 @@ function pinBackgroundModel(ctx: ModelsContext, selector: string, args: Operatio
     changed: true,
     role: selector === "all" ? "background" : selector,
     config_key: key,
-    config_keys: keys,
     cleared: [],
     file: written.file,
     restart_required: written.restart_required,
@@ -579,30 +550,19 @@ function pinBackgroundModel(ctx: ModelsContext, selector: string, args: Operatio
 
 function unpinBackgroundModel(ctx: ModelsContext, selector: string): OperationResult<"reset_model"> {
   const config = configContext(ctx);
-  const keys = backgroundKeys(selector);
-
-  const cleared: string[] = [];
-  let file: string | undefined;
-  for (const key of keys) {
-    const removed = clearConfigKey(config, key);
-    file = removed.file;
-    if (removed.action === "removed") cleared.push(key);
-  }
-
-  const tasks = selector === "all" ? BACKGROUND_TASKS : [backgroundTask(selector)];
-  const roles = tasks.map((task) => backgroundRole(ctx, task));
-  const [first] = roles as [ModelRole, ...ModelRole[]];
-  const shared = roles.every((role) => role.model === first.model && role.source === first.source);
-
+  const task = backgroundTask(selector);
+  const key = BACKGROUND_MODEL_KEYS[task];
+  const removed = clearConfigKey(config, key);
+  const role = backgroundRole(ctx, task);
   return {
     target: "role",
-    active: shared ? first.model : null,
+    active: role.model,
     role: selector === "all" ? "background" : selector,
-    cleared,
-    source: shared ? first.source : null,
-    file: file ?? null,
-    reset_to: shared ? first.source ?? "config default" : "per-task defaults",
-    roles,
+    cleared: removed.action === "removed" ? [key] : [],
+    source: role.source,
+    file: removed.file,
+    reset_to: role.source ?? "config default",
+    roles: [role],
   };
 }
 
@@ -783,8 +743,8 @@ export function setModelSetting(ctx: ModelsContext, args: OperationInput<"set_mo
   const sdk = sdkFromWire(current.sdk ?? model.sdk) ?? model.sdk;
   const failure = capabilityCheck(sdk, key, value, model.support, model.modelId);
   if (failure !== undefined) throw failure;
-  if (key === "sdk" && value === "gemini") {
-    const error = nanogptTransportError(model.providerKey, value);
+  if (key === "sdk") {
+    const error = nanogptTransportError(model.providerKey, value as Sdk);
     if (error !== undefined) throw invalidRequest(error);
   }
   const warning = keepaliveWarningAfter(sdk, model.modelId, current, key, value);
@@ -798,7 +758,7 @@ export function setModelSetting(ctx: ModelsContext, args: OperationInput<"set_mo
   const modelKey = preferenceKey(model.providerKey, model.modelId);
   switch (target.kind) {
     case "background":
-      for (const task of target.tasks) write(prefs.background, task);
+      write(prefs.background, target.task);
       break;
     case "subagent":
       write(prefs.subagents, target.subagent);
@@ -821,7 +781,7 @@ export function setModelSetting(ctx: ModelsContext, args: OperationInput<"set_mo
     provider: model.providerKey,
     model_id: model.modelId,
     ...targetJson(target),
-    ...(target.kind === "background" ? { background_task: backgroundSelector(target.tasks) } : {}),
+    ...(target.kind === "background" ? { background_task: target.task } : {}),
     key,
     value,
     ...(warning === undefined ? {} : { warning }),
@@ -845,10 +805,6 @@ function keepaliveWarningAfter(
     ? current.cacheTtl
     : "value" in parsedTtl && typeof parsedTtl.value === "string" ? parsedTtl.value : undefined;
   return keepaliveTtlWarning(sdk, modelId, ttl, cadence.ok.interval.asMillis());
-}
-
-function backgroundSelector(tasks: readonly BackgroundTask[]): BackgroundModelTarget {
-  return tasks.length === 1 ? required(tasks[0]) : "all";
 }
 
 function targetJson(target: SettingTarget): Pick<ModelSettingsDetail, "subagent" | "applies_to"> {
@@ -900,7 +856,7 @@ function preferenceEntryFor(
     case "subagent_model":
       return subagentModelPreference(prefs, target.model.providerKey, target.model.modelId);
     case "background":
-      return backgroundPreference(prefs, required(target.tasks[0]));
+      return backgroundPreference(prefs, target.task);
     case "model":
       return modelPreference(prefs, target.model.providerKey, target.model.modelId);
   }
@@ -913,10 +869,10 @@ function targetSampler(
 ): SamplerSettings {
   const { model } = target;
   switch (target.kind) {
+    case "background":
+      return resolveBackgroundSampler(global, charPrefs, target.task, model.providerKey, model.modelId, model);
     case "model":
       return resolveSamplerSettings(global, charPrefs, model.providerKey, model.modelId, model);
-    case "background":
-      return resolveBackgroundSampler(global, charPrefs, required(target.tasks[0]), model.providerKey, model.modelId, model);
     case "subagent":
     case "subagent_model":
       return resolveSubagentSampler(global, charPrefs, target.kind === "subagent" ? target.subagent : undefined,
@@ -931,10 +887,10 @@ function targetScopes(
 ): SamplerScopes {
   const { model } = target;
   switch (target.kind) {
+    case "background":
+      return resolveBackgroundScopes(global, charPrefs, target.task, model.providerKey, model.modelId, model);
     case "model":
       return resolveSamplerScopes(global, charPrefs, model.providerKey, model.modelId, model);
-    case "background":
-      return resolveBackgroundScopes(global, charPrefs, required(target.tasks[0]), model.providerKey, model.modelId, model);
     case "subagent":
     case "subagent_model":
       return resolveSubagentScopes(global, charPrefs, target.kind === "subagent" ? target.subagent : undefined,
@@ -966,7 +922,7 @@ function savedSettingsFor(
 function overviewSlots(ctx: ModelsContext): OverviewSlot[] {
   const chat = chatRole(ctx);
   const characterChat = inheritedChatRole(ctx);
-  const inherits = { thread: chat, home: homeChatRole(ctx, characterChat) };
+  const home = homeChatRole(ctx, characterChat);
   const slots: OverviewSlot[] = [
     {
       role: "chat",
@@ -980,8 +936,8 @@ function overviewSlots(ctx: ModelsContext): OverviewSlot[] {
     slots.push({
       role: task,
       flag: `--background=${task}`,
-      source: backgroundRole(ctx, task, inherits).source,
-      resolve: () => ({ kind: "background", tasks: [task], model: backgroundTargetModel(ctx, task) }),
+      source: backgroundRole(ctx, task, home).source,
+      resolve: () => ({ kind: "background", task, model: backgroundTargetModel(ctx, task) }),
     });
   }
 
@@ -1070,24 +1026,6 @@ function withPreferences(ctx: ModelsContext): ModelsContext & { preferences: rea
     : loadPreferencesFor(ctx.dataDir, ctx.characterName)) };
 }
 
-function requireAgreeingTasks(
-  target: SettingTarget,
-  global: ModelPreferences,
-  charPrefs: ModelPreferences | undefined,
-): void {
-  if (target.kind !== "background" || target.tasks.length < 2) return;
-  const saved = (task: BackgroundTask): string =>
-    JSON.stringify([global, charPrefs].map((prefs) => {
-      const entry = prefs === undefined ? undefined : backgroundPreference(prefs, task);
-      return entry === undefined ? null : samplerJson(entry.sampler);
-    }));
-  const [first, ...rest] = target.tasks.map(saved);
-  if (rest.every((each) => each === first)) return;
-  throw invalidRequest(
-    `background tasks have different settings (${target.tasks.join(", ")}); target a specific task instead of \`all\``,
-  );
-}
-
 function modelSettingsDetail(ctx: ModelsContext, args: OperationInput<"model_settings">, selected?: SettingTarget): ModelSettingsDetail {
   const only = requestedKey(ctx, args);
   const prepared = withPreferences(ctx);
@@ -1097,7 +1035,6 @@ function modelSettingsDetail(ctx: ModelsContext, args: OperationInput<"model_set
   const [global, savedCharacter] = prepared.preferences;
   const charPrefs = character === undefined ? undefined : savedCharacter;
 
-  requireAgreeingTasks(target, global, charPrefs);
   const sampler = targetSampler(target, global, charPrefs);
   const scopes = targetScopes(target, global, charPrefs);
   const saved = (prefs: ModelPreferences | undefined): Record<string, unknown> | null => {

@@ -1,6 +1,4 @@
 import type { CompactionReport } from "../../protocol/CompactionReport.ts";
-import type { CompactionPassEnd } from "../../protocol/CompactionPassEnd.ts";
-import type { CompactionWatchResult } from "../../protocol/CompactionWatchResult.ts";
 import type { ContentBlock } from "../../protocol/ContentBlock.ts";
 import type { Message } from "../../protocol/Message.ts";
 import type { MessageCopy } from "../../protocol/MessageCopy.ts";
@@ -239,36 +237,6 @@ export function regenReplaces(messages: readonly Message[], visible: readonly { 
   return [...new Set(pendingRegen ? [...listed, ...optimisticRegenReplaces(messages)] : listed)];
 }
 
-export function compactionPhase(activity: readonly { id: number; type: string; data: unknown }[]): string | null {
-  let phase: string | null = null;
-  for (const item of activity) {
-    const fields = item.data !== null && typeof item.data === "object" ? item.data as { phase?: unknown; name?: unknown; rid?: unknown } : {};
-    if (item.type === "phase" && (fields.rid ?? null) === null && typeof fields.phase === "string" && fields.phase.startsWith("compacting")) phase = fields.phase;
-    if (item.type === "command_output" && (fields.name === "compact" || fields.name === "compact_watch" || fields.name === "compact_cancel")) phase = null;
-  }
-  if (phase === null) return null;
-  const round = /round (\d+)/.exec(phase)?.[1];
-  return round === undefined || round === "1" ? "Compacting context…" : `Compacting context (round ${round})…`;
-}
-
-export function compactionWatchSummary(result: CompactionWatchResult): string {
-  if (result.pass === null) return "No compaction is running.";
-  const outcome = passSummary(result.pass);
-  return result.state === "idle" ? `No compaction is running. The last one ended at ${new Date(result.pass.ended_at).toLocaleTimeString()}: ${outcome}` : outcome;
-}
-
-function passSummary(pass: CompactionPassEnd): string {
-  if (pass.error !== null) return `Compaction failed: ${pass.error}.`;
-  return pass.report === null ? "There was nothing to compact." : compactionSummary(pass.report);
-}
-
 export function compactionSummary(report: CompactionReport): string {
-  switch (report.status) {
-    case "compacted": return `Summarized ${String(report.compacted_turns)} turns and kept the last ${String(report.retained_turns)}.`;
-    case "rotated": return `Archived ${String(report.compacted_turns)} turns and kept the last ${String(report.retained_turns)}.`;
-    case "dry_run": return `Compaction would summarize ${String(report.compacted_turns)} turns and write ${String(report.would_write_files)} memory files.`;
-    case "truncated": return `Compaction stopped early after summarizing ${String(report.compacted_turns)} turns; ${String(report.truncated_turns)} turns were left as they were.`;
-    case "paused": return `Compaction paused: ${report.detail ?? report.reason}.${report.resume_at === null ? "" : ` It resumes at ${new Date(report.resume_at).toLocaleTimeString()}.`}`;
-    case "segment": return `Wrote memory from archived segment ${String(report.segment)} (${String(report.compacted_turns)} turns, ${String(report.memory_files_written.length)} files).`;
-  }
+  return `Archived ${String(report.compacted_turns)} turns and kept the last ${String(report.retained_turns)}.`;
 }

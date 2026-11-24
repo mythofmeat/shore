@@ -876,15 +876,6 @@ pub(crate) fn write_thread_list<W: Write>(out: &mut W, data: &Value) {
     if !empty_folders.is_empty() {
         note(out, &format!("empty folders: {}", empty_folders.join(", ")));
     }
-    if let Some(compaction) = data.get("compaction") {
-        note(
-            out,
-            &format!(
-                "{} is compacting; `shore compact --watch` follows it",
-                text(compaction, "thread")
-            ),
-        );
-    }
     note(
         out,
         "a wake runs in home, unless its trigger names another thread",

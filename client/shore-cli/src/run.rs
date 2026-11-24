@@ -3,7 +3,7 @@ use shore_common::protocol::operations::{
     DeleteCharacter, DeleteCharacterArgs, EmptyOperationArgs, GetMessage, GetMessageArgs,
     NamedOperationArgs, Operation, OperationResponse, PinThreadModel, ReadStatus,
     ReloadConfiguration, ResetModel, ResetModelArgs, SwitchCharacter, SwitchModel, SwitchModelArgs,
-    SwitchThread, SwitchThreadArgs, ThreadModelArgs, WatchCompaction, is_registered_operation,
+    SwitchThread, SwitchThreadArgs, ThreadModelArgs, is_registered_operation,
 };
 use std::io::{self, IsTerminal, Read as _};
 use std::path::{Path, PathBuf};
@@ -293,9 +293,6 @@ pub(crate) async fn execute(
             };
             apply_model_change(&mut conn, command_ref, change, cli.thread.as_deref()).await?;
         }
-        compact @ CliCommand::Compact { json: false, .. } => {
-            handle_compact(&mut conn, compact, cli.character.as_deref()).await?;
-        }
         CliCommand::Provider { .. } if provider_plan.is_some() => {
             if let Some((plan, json)) = provider_plan {
                 crate::providers::run(&mut conn, plan, json).await?;
@@ -382,87 +379,6 @@ pub(crate) fn wants_json(other: &CliCommand) -> bool {
         ),
         CliCommand::Log { .. } | CliCommand::Status { .. } | CliCommand::Completions { .. } => {
             false
-        }
-    }
-}
-
-async fn handle_compact(
-    conn: &mut SWPConnection,
-    cmd: &CliCommand,
-    character: Option<&str>,
-) -> Result<(), Box<dyn std::error::Error>> {
-    let Some((name, args)) = crate::cli::to_swp_command(cmd, character) else {
-        return Err("compact must map to an SWP command".into());
-    };
-    _ = conn.send_command(name, args).await?;
-    let watching = name == WatchCompaction::NAME;
-    if watching {
-        output::print_notice(
-            "Ctrl-C stops watching; the compaction keeps running. `shore compact --cancel` stops it.",
-        );
-    }
-    output::reset_chunk_state();
-    let received = tokio::select! {
-        data = recv_compaction_stream(conn) => data,
-        _ = tokio::signal::ctrl_c(), if watching => {
-            output::end_live_output();
-            output::print_notice(
-                "Stopped watching. The compaction is still running: `shore compact --watch` follows it again.",
-            );
-            return Ok(());
-        }
-    };
-    output::end_live_output();
-    let data = received?;
-    validate_registered_output(name, &data)?;
-    output::format_command(name, &data);
-    Ok(())
-}
-
-async fn recv_compaction_stream(
-    conn: &mut SWPConnection,
-) -> Result<serde_json::Value, Box<dyn std::error::Error>> {
-    loop {
-        let msg = conn.recv().await?;
-        if !conn.matches_last_request(&msg) {
-            continue;
-        }
-        match &msg {
-            ServerMessage::CommandOutput(co) => return Ok(co.data.clone()),
-            ServerMessage::Error(err) => {
-                output::end_live_output();
-                output::print_server_error(
-                    serde_json::to_string(&err.code)
-                        .unwrap_or_default()
-                        .trim_matches('"'),
-                    &err.message,
-                );
-                return Err(ReportedError::new(err.message.clone()).into());
-            }
-            ServerMessage::StreamChunk(chunk) => output::print_chunk(chunk),
-            ServerMessage::ToolCall(call) => output::print_tool_call(call),
-            ServerMessage::ToolResult(result) => output::print_tool_result(result),
-            ServerMessage::Phase(phase) => output::print_phase_header(phase),
-            ServerMessage::ProviderWarning(_) | ServerMessage::ProviderFallbackWarning(_) => {
-                output::print_warning_frame(&msg);
-            }
-            ServerMessage::ConfigWarning(w) => output::print_config_warning(w),
-            ServerMessage::Hello(_)
-            | ServerMessage::History(_)
-            | ServerMessage::Shutdown(_)
-            | ServerMessage::Ping(_)
-            | ServerMessage::StreamStart(_)
-            | ServerMessage::StreamEnd(_)
-            | ServerMessage::NewMessage(_)
-            | ServerMessage::SendImage(_)
-            | ServerMessage::CacheWarning(_)
-            | ServerMessage::UsageWarning(_)
-            | ServerMessage::PlanLimitWarning(_)
-            | ServerMessage::RequestAccepted(_)
-            | ServerMessage::RequestFinished(_)
-            | ServerMessage::ThreadsChanged(_)
-            | ServerMessage::ThreadUnread(_)
-            | ServerMessage::Unknown => {}
         }
     }
 }

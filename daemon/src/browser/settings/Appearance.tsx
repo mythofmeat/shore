@@ -16,7 +16,6 @@ const TOGGLES: readonly { key: ViewKey; description: string }[] = [
   { key: "images", description: "Show images attached to messages and returned by tools." },
   { key: "metadata", description: "Show the model, token counts and timing under replies." },
   { key: "notes", description: "Show the words Shore put with each message for the model, such as the time, your status, and what a wake opened with." },
-  { key: "compaction", description: "Show a notice while the thread is being compacted." },
 ];
 
 const NOTIFY_DESCRIPTION = "When this tab isn’t focused, show a desktop notification and a count in the tab title for new replies, messages sent from wakes, and errors.";

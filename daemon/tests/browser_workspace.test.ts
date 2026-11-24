@@ -170,7 +170,7 @@ describe("the workspace", () => {
     link.setStatus("signed_out");
     expect(link.state()).toMatchObject({
       error: "", messages: [], metadata: {}, config: {}, media: [], mediaLimited: false, activity: [], operations: [], requests: [], threads: [], characters: [], uncertain: [],
-      previousSegment: null, segmentView: null, opening: null, folders: [], manualOrder: false, compaction: null, status: "signed_out",
+      previousSegment: null, segmentView: null, opening: null, folders: [], manualOrder: false, status: "signed_out",
     });
   });
 
@@ -229,19 +229,18 @@ describe("the workspace", () => {
   test("with no character selected there are no threads to list", async () => {
     const link = rig();
     link.workspace.noteThreads([thread("main")]);
-    link.workspace.applyThreadListing(listing([thread("main")], { folders: [{ name: "f" }], manual_order: true, compaction: { thread: "main", trigger: "idle", started_at: "x" } }));
+    link.workspace.applyThreadListing(listing([thread("main")], { folders: [{ name: "f" }], manual_order: true }));
     await link.workspace.refreshThreads();
     expect(link.named("list_threads")).toHaveLength(0);
-    expect(link.state()).toMatchObject({ threads: [], folders: [], manualOrder: false, compaction: null });
+    expect(link.state()).toMatchObject({ threads: [], folders: [], manualOrder: false });
   });
 
-  test("a thread listing brings folders, manual order and a running compaction, and defaults each", () => {
+  test("a thread listing brings folders and manual order, and defaults each", () => {
     const link = rig();
-    const compaction = { thread: "main", trigger: "idle", started_at: "x" } as const;
-    link.workspace.applyThreadListing(listing([thread("main")], { folders: [{ name: "f" }], manual_order: true, compaction }));
-    expect(link.state()).toMatchObject({ threads: [thread("main")], folders: [{ name: "f" }], manualOrder: true, compaction });
+    link.workspace.applyThreadListing(listing([thread("main")], { folders: [{ name: "f" }], manual_order: true }));
+    expect(link.state()).toMatchObject({ threads: [thread("main")], folders: [{ name: "f" }], manualOrder: true });
     link.workspace.applyThreadListing(listing([thread("main")], { manual_order: false }));
-    expect(link.state()).toMatchObject({ folders: [], manualOrder: false, compaction: null });
+    expect(link.state()).toMatchObject({ folders: [], manualOrder: false });
   });
 
   test("unread counts that arrive while a listing is on its way are kept over the listing's older counts", async () => {
@@ -482,7 +481,7 @@ describe("new messages", () => {
   });
 });
 
-async function pending(link: ReturnType<typeof rig>, name: "run_tool" | "compact" | "compact_watch"): Promise<string> {
+async function pending(link: ReturnType<typeof rig>, name: "run_tool" | "compact"): Promise<string> {
   const input = name === "run_tool" ? { tool: "read" } : {};
   void link.workspace.actions.run(name, input as never).catch(() => undefined);
   await settle();
@@ -624,19 +623,6 @@ describe("live replies", () => {
     expect(link.state().media.at(-1)).toMatchObject({ path: "/sent.png", manual: true });
     link.frame({ type: "request_finished", rid, outcome: "completed" });
     expect(link.state().streams).toHaveLength(0);
-  });
-
-  test("a compaction pass's frames are neither live replies nor activity", async () => {
-    for (const name of ["compact", "compact_watch"] as const) {
-      const link = await opened({ [name]: null });
-      const rid = await pending(link, name);
-      const before = link.state().activity.length;
-      for (const frame of [chunk(rid, "summary"), called(rid, "t_1"), answered(rid, "t_1"), ended(rid, "done"), { type: "phase", rid, phase: "compacting" }]) link.frame(frame);
-      expect(link.state().streams, name).toHaveLength(0);
-      expect(link.state().activity, name).toHaveLength(before);
-      link.frame({ type: "phase", rid: "r_other", phase: "x" });
-      expect(link.state().activity, name).toHaveLength(before + 1);
-    }
   });
 
   test("pictures from tool results join the live pictures, keeping what the same call had", async () => {

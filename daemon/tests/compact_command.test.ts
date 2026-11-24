@@ -3,7 +3,8 @@ import { mkdirSync } from "node:fs";
 import { mkdtemp } from "node:fs/promises";
 import { join } from "node:path";
 
-import { cancelCompaction, compact, watchCompaction, type CompactContext } from "../src/commands/compact.ts";
+import { compact, type CompactContext } from "../src/commands/compact.ts";
+import { runIdleCompaction } from "../src/autonomy/idle_compaction.ts";
 import { commandCatalogue } from "../src/commands/registry.ts";
 import { operationPolicy } from "../src/operations/policy.ts";
 import { required } from "../src/util/required.ts";
@@ -78,7 +79,7 @@ function command(config: LoadedConfig, told: string[] = []): CompactContext {
   return {
     config,
     autonomy: { onCompactionComplete: (character, retained) => { told.push(`${character} kept ${String(retained)}`); } },
-    run: { generate: () => Promise.reject(new Error("an archive asks no model")) },
+    run: {},
   };
 }
 
@@ -89,13 +90,23 @@ describe("compacting from a command", () => {
     const w = await world({ main: TALK, side: TALK });
     const told: string[] = [];
     expect(await compact(engine("side"), command(w.config, told), { keep_turns: 1 })).toEqual({
-      status: "rotated", character: "ada", dry_run: false, memory_files_written: [], compacted_turns: 1, retained_turns: 1,
+      status: "rotated", character: "ada", dry_run: false, compacted_turns: 1, retained_turns: 1,
     });
     expect([w.archived("side"), w.archived("main"), told]).toEqual([1, 0, []]);
     expect(await compact(engine("main"), command(w.config, told), { keep_turns: 1, dry_run: true })).toMatchObject({ dry_run: true, compacted_turns: 1 });
     expect([w.archived("main"), told]).toEqual([0, []]);
     await compact(engine(), command(w.config, told), {});
     expect([w.archived("main"), told]).toEqual([1, ["ada kept 0"]]);
+  });
+
+  test("re-points the cached request only when it archived the home thread", async () => {
+    const w = await world({ main: TALK, side: TALK });
+    const repointed: string[] = [];
+    const ctx = { ...command(w.config), repoint: async (character: string) => { repointed.push(character); } };
+    await compact(engine("side"), ctx, { keep_turns: 1 });
+    expect(repointed).toEqual([]);
+    await compact(engine("main"), ctx, { keep_turns: 1 });
+    expect(repointed).toEqual(["ada"]);
   });
 
   test("says when there is nothing to compact, nothing to archive, or another compaction holds the character", async () => {
@@ -156,12 +167,6 @@ describe("compacting from a command", () => {
     expect(operationPolicy(operation, { dry_run: true })).toMatchObject({ effects: ["read"], confirmation: "none" });
     expect([operationPolicy(operation, { dry_run: false }).confirmation, operationPolicy(operation, {}).confirmation]).toEqual(["archive", "archive"]);
   });
-
-  test("watching or stopping a compaction always finds none running", () => {
-    expect([watchCompaction("ada", { config: {} as LoadedConfig }), cancelCompaction("ada", { config: {} as LoadedConfig })]).toEqual([
-      { character: "ada", state: "idle", pass: null }, { character: "ada", state: "idle", pass: null },
-    ]);
-  });
 });
 
 describe("an archive", () => {
@@ -211,26 +216,32 @@ describe("an archive after a turn", () => {
     return { calls, fake: fake as unknown as LastRequestCache };
   }
   const rebuild = { mcpRegistry: { toolDefsFiltered: () => [] } } as RebuildDeps;
-  const generate = () => Promise.reject(new Error("an archive asks no model"));
 
   test("rebuilds the cached request from disk when it archived home, with the keys it was given, and leaves it alone for another thread", async () => {
     const w = await world({ main: TALK, side: TALK });
     const withEnv = cache();
-    await compactionRunner({ generate, cache: withEnv.fake, rebuild, env: { KEY: "set" } }).run("ada", w.config, "side");
+    await compactionRunner({ cache: withEnv.fake, rebuild, env: { KEY: "set" } }).run("ada", w.config, "side");
     expect(withEnv.calls).toEqual([]);
-    await compactionRunner({ generate, cache: withEnv.fake, rebuild, env: { KEY: "set" } }).run("ada", w.config, "main");
+    await compactionRunner({ cache: withEnv.fake, rebuild, env: { KEY: "set" } }).run("ada", w.config, "main");
     expect(withEnv.calls).toEqual([["invalidate", "ada", "compaction"], ["reprime", "ada", { KEY: "set" }]]);
     const without = cache();
     const v = await world();
-    await compactionRunner({ generate, cache: without.fake, rebuild }).run("ada", v.config, undefined);
+    await compactionRunner({ cache: without.fake, rebuild }).run("ada", v.config, undefined);
     expect(without.calls).toEqual([["invalidate", "ada", "compaction"], ["reprime", "ada", "no env"]]);
+  });
+
+  test("an idle archive of home says how many turns it kept, and rebuilds the cached request", async () => {
+    const w = await world({ main: TALK });
+    const repointed = cache();
+    expect(await runIdleCompaction("ada", { config: w.config, cache: repointed.fake, rebuild })).toEqual({ turnCount: 0, events: [] });
+    expect(repointed.calls).toEqual([["invalidate", "ada", "idle_compaction"], ["reprime", "ada", "no env"]]);
   });
 
   test("with no cached request to keep, archives without trying to rebuild one", async () => {
     const w = await world();
     const warned = spyOn(shoreLog, "warn");
     try {
-      expect(await compactionRunner({ generate, rebuild }).run("ada", w.config, "main")).toEqual({ kind: "completed", retained: 0 });
+      expect(await compactionRunner({ rebuild }).run("ada", w.config, "main")).toEqual({ kind: "completed", retained: 0 });
       expect(warned.mock.calls.map(([line]) => String(line)).filter((line) => line.includes("repoint"))).toEqual([]);
     } finally {
       warned.mockRestore();

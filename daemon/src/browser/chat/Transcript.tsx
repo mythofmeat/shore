@@ -1,4 +1,4 @@
-import { startTransition, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { startTransition, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type UIEvent } from "react";
 import type { Message } from "../../protocol/Message.ts";
 import type { SegmentSummary } from "../../protocol/SegmentSummary.ts";
 import { liveTurn, type LiveTurn, type SegmentView, type WorkspaceSnapshot } from "../workspace.ts";
@@ -10,10 +10,9 @@ import { Markdown } from "../markdown.tsx";
 import { FullPicture } from "../pictures.tsx";
 import { conversation, perform, replyMarks, useActiveRequests, useDisplay, useWorkspace, workspace } from "../app/state.ts";
 import { markScope } from "./marks.tsx";
-import { openCompactionView } from "../app/intents.ts";
 import { navigate } from "../app/route.ts";
 import { ImageThumb, MessageBody, MessageRow, type OpenImage } from "./Message.tsx";
-import { compactionPhase, regenReplaces, replyBlocks, savedPart, segmentDetail, segmentName, transcriptItems, visibleStreams } from "./transcript.ts";
+import { regenReplaces, replyBlocks, savedPart, segmentDetail, segmentName, transcriptItems, visibleStreams } from "./transcript.ts";
 
 const FIRST_ROWS = 24;
 const MORE_ROWS = 32;
@@ -118,7 +117,7 @@ export function Transcript({ character, mobile, readOnly }: { character: string;
   const follow = useRef(true);
   const [away, setAway] = useState(false);
   const [image, setImage] = useState<{ source: string; caption: string }>();
-  const anchor = useRef<{ height: number; top: number; first: string | undefined } | null>(null);
+  const anchor = useRef<{ height: number; top: number; messages: readonly Message[] } | null>(null);
   const [loading, setLoading] = useState(false);
   const live = view === null;
   const streams = live ? visibleStreams(state.streams, state.messages, active) : [];
@@ -126,7 +125,6 @@ export function Transcript({ character, mobile, readOnly }: { character: string;
   const replaced = live ? regenReplaces(state.messages, streams, conversation.pendingRegens(scope).length > 0).join("\n") : "";
   const visibleMessages = view?.messages ?? state.messages;
   const shown = useMemo(() => {
-    if (replaced === "") return visibleMessages;
     const hidden = new Set(replaced.split("\n"));
     return visibleMessages.filter((message) => !hidden.has(message.msg_id));
   }, [replaced, visibleMessages]);
@@ -138,57 +136,50 @@ export function Transcript({ character, mobile, readOnly }: { character: string;
   }, [shown, streaming]);
   const [rowLimit, setRowLimit] = useState(FIRST_ROWS);
   useEffect(() => {
-    if (rowLimit === Infinity) return;
     if (items.length <= rowLimit) { setRowLimit(Infinity); return; }
     const timer = setTimeout(() => { startTransition(() => { setRowLimit((limit) => limit + MORE_ROWS); }); }, 0);
     return () => clearTimeout(timer);
   }, [rowLimit, items.length]);
-  const rows = items.length > rowLimit ? items.slice(-rowLimit) : items;
+  const rows = items.slice(-rowLimit);
   const markable = rows.flatMap((item) => item.kind === "message" && item.message.role === "assistant" ? [item.message] : []);
   useEffect(() => { replyMarks.want(markScope(state.character, state.thread), markable); });
   const lastUser = live ? state.messages.findLast((message) => message.role === "user")?.msg_id : undefined;
   const waiting = live && streams.length === 0 ? conversation.awaitingStream(scope) : undefined;
   const info = state.characters.find((item) => item.name === character);
-  const compacting = !live || display.compaction === "off" ? null : compactionPhase(state.activity);
   const openImage = useCallback<OpenImage>((source, caption) => setImage({ source, caption }), []);
-  const loadEarlier = () => {
+  const loadEarlier = (segment: SegmentView) => {
     const node = scroller.current;
-    if (node === null || loading || view === null || !view.hasEarlier || !ready) return;
-    anchor.current = { height: node.scrollHeight, top: node.scrollTop, first: view.messages[0]?.msg_id };
+    if (node === null || loading || !ready) return;
+    anchor.current = { height: node.scrollHeight, top: node.scrollTop, messages: segment.messages };
     setLoading(true);
-    perform(async () => { try { await workspace.loadEarlierInSegment(); } finally { setLoading(false); setTimeout(() => { anchor.current = null; }, 0); } });
+    perform(async () => { try { await workspace.loadEarlierInSegment(); } finally { setLoading(false); setTimeout(() => { anchor.current = null; }); } });
   };
   useLayoutEffect(() => {
     const node = scroller.current;
-    if (node === null) return;
     const saved = anchor.current;
-    if (saved !== null && saved.first !== visibleMessages[0]?.msg_id) {
+    if (node !== null && saved !== null && saved.messages !== visibleMessages) {
       node.scrollTop = saved.top + (node.scrollHeight - saved.height);
       anchor.current = null;
-      return;
-    }
-    if (follow.current) node.scrollTop = node.scrollHeight;
+    } else if (node !== null && follow.current) node.scrollTop = node.scrollHeight;
   }, [visibleMessages, state.streams, state.media, rows.length]);
-  const onScroll = () => {
-    const node = scroller.current;
-    if (node === null) return;
+  const onScroll = (event: UIEvent<HTMLDivElement>) => {
+    const node = event.currentTarget;
     const atBottom = node.scrollHeight - node.scrollTop - node.clientHeight < 80;
     follow.current = atBottom;
     setAway(!atBottom);
-    if (node.scrollTop < 120 && view !== null && view.hasEarlier && rowLimit === Infinity) loadEarlier();
+    if (node.scrollTop < 120 && view !== null && view.hasEarlier && rowLimit === Infinity) loadEarlier(view);
   };
   const jump = () => {
     const node = scroller.current;
-    if (node === null) return;
     follow.current = true; setAway(false);
-    node.scrollTo({ top: node.scrollHeight, behavior: "smooth" });
+    if (node !== null) node.scrollTo({ top: node.scrollHeight, behavior: "smooth" });
   };
   return <div className="transcript-wrap" data-opening={state.opening !== null} aria-busy={state.opening !== null}>
     {view === null ? null : <SegmentBanner view={view} state={state} />}
     <div className="transcript" ref={scroller} onScroll={onScroll} tabIndex={-1} role="log" aria-label={view === null ? `Thread with ${character}` : `${segmentName(view.segment)} with ${character}`} aria-live="off">
       <div className="transcript-column">
         {view === null ? <ContextStart previous={state.previousSegment} ready={ready} />
-          : view.hasEarlier ? <div className="load-earlier">{loading ? <Spinner label="Loading earlier messages" /> : <button type="button" className="button ghost" onClick={loadEarlier}>Load earlier messages</button>}</div>
+          : view.hasEarlier ? <div className="load-earlier">{loading ? <Spinner label="Loading earlier messages" /> : <button type="button" className="button ghost" onClick={() => loadEarlier(view)}>Load earlier messages</button>}</div>
             : view.previous === null ? <div className="divider" role="separator">Start of the thread</div> : <SegmentLink lead="Before this:" segment={view.previous} ready={ready} />}
         {view === null && state.messages.length === 0 && streams.length === 0 && waiting === undefined ? ready ? <EmptyConversation character={character} state={state} /> : <div className="empty"><Spinner label="Loading conversation" /></div> : null}
         {rows.map((item) => {
@@ -200,7 +191,6 @@ export function Transcript({ character, mobile, readOnly }: { character: string;
         })}
         {streams.map((stream, index) => <StreamingMessage key={stream.key} stream={stream} saved={savedParts[index]} character={character} state={state} openImage={openImage} mobile={mobile} />)}
         {waiting === undefined ? null : <StreamingMessage stream={liveTurn(waiting, waiting, null)} saved={undefined} character={character} state={state} openImage={openImage} mobile={mobile} />}
-        {compacting === null ? null : <div className="divider context" role="status"><button type="button" className="divider-action" title="Show the compaction" onClick={openCompactionView}><span className="spinner" aria-hidden="true" />{compacting}</button></div>}
         {view === null ? null : <SegmentLink lead="After this:" segment={view.next} ready={ready} />}
         {state.uncertain.map((item) => <div key={item.rid} className="notice-card" role="alert">
           <Icon name="alert" size={16} /><span>The connection dropped while a request was in flight. Shore keeps working on it, and this notice clears when it finishes.</span>

@@ -853,127 +853,18 @@ wire_types! {
     #[serde(untagged)]
     pub enum SegmentsResult { Listing(SegmentsListing), Inspection(Box<SegmentInspection>), Changed(Box<SegmentChanged>), Found(SegmentsFound) }
 
-    pub struct CompactionPreviewFile {
-        pub path: String,
-        pub content_preview: String,
-    }
-
     #[serde(tag = "status", rename_all = "snake_case")]
     pub enum CompactionReport {
-        Compacted {
-            character: String,
-            compacted_turns: usize,
-            retained_turns: usize,
-            memory_files_written: Vec<String>,
-            new_conversation_id: String,
-            tool_rounds: usize,
-            tools_called: Vec<String>,
-        },
         Rotated {
             character: String,
             compacted_turns: usize,
             retained_turns: usize,
             dry_run: bool,
-            memory_files_written: Vec<String>,
-        },
-        DryRun {
-            character: String,
-            compacted_turns: usize,
-            retained_turns: usize,
-            would_write_files: usize,
-            file_ops_preview: Vec<CompactionPreviewFile>,
-            tool_rounds: usize,
-            tools_called: Vec<String>,
-        },
-        Truncated {
-            character: String,
-            compacted_turns: usize,
-            tool_rounds: usize,
-            tools_called: Vec<String>,
-            truncated_turns: usize,
-            partial_writes: Vec<String>,
-        },
-        Segment {
-            character: String,
-            #[ts(type = "number")]
-            segment: u64,
-            compacted_turns: usize,
-            memory_files_written: Vec<String>,
-            tool_rounds: usize,
-            tools_called: Vec<String>,
-        },
-        Paused {
-            character: String,
-            compacted_turns: usize,
-            checkpoint_id: String,
-            tool_rounds: usize,
-            tools_called: Vec<String>,
-            reason: String,
-            #[serde(deserialize_with = "deserialize_nullable")]
-            detail: Option<String>,
-            #[serde(deserialize_with = "deserialize_nullable")]
-            resume_at: Option<String>,
         },
     }
 
     #[serde(rename_all = "snake_case")]
-    pub enum CompactionTrigger { Manual, Idle, Turn, DeepArchive }
-
-    pub struct CompactionPassEnd {
-        pub thread: String,
-        pub trigger: CompactionTrigger,
-        pub started_at: String,
-        pub ended_at: String,
-        #[serde(deserialize_with = "deserialize_nullable")]
-        pub report: Option<CompactionReport>,
-        #[serde(deserialize_with = "deserialize_nullable")]
-        pub error: Option<String>,
-    }
-
-    pub struct CompactionPassProgress {
-        pub thread: String,
-        pub trigger: CompactionTrigger,
-        pub started_at: String,
-        #[serde(deserialize_with = "deserialize_nullable")]
-        pub phase: Option<String>,
-        #[serde(deserialize_with = "deserialize_nullable")]
-        pub last_tool: Option<String>,
-    }
-
-    pub struct CompactionCheckpointStatus {
-        pub thread: String,
-        pub checkpoint_id: String,
-        pub reason: String,
-        #[serde(deserialize_with = "deserialize_nullable")]
-        pub detail: Option<String>,
-        #[serde(deserialize_with = "deserialize_nullable")]
-        pub resume_at: Option<String>,
-        pub tool_rounds: usize,
-        pub compacted_turns: usize,
-        pub updated_at: String,
-    }
-
-    pub struct CompactionStatusReport {
-        #[serde(deserialize_with = "deserialize_nullable")]
-        pub running: Option<CompactionPassProgress>,
-        #[serde(deserialize_with = "deserialize_nullable")]
-        pub paused: Option<CompactionCheckpointStatus>,
-        #[serde(deserialize_with = "deserialize_nullable")]
-        pub last: Option<CompactionPassEnd>,
-    }
-
-    #[serde(rename_all = "snake_case")]
-    pub enum CompactionWatchState { Finished, Cancelled, Idle }
-
-    pub struct CompactionWatchResult {
-        pub character: String,
-        pub state: CompactionWatchState,
-        #[serde(deserialize_with = "deserialize_nullable")]
-        pub pass: Option<CompactionPassEnd>,
-    }
-
-    #[serde(rename_all = "snake_case")]
-    pub enum RunningWorkKind { Message, Wake, Compaction }
+    pub enum RunningWorkKind { Message, Wake }
 
     pub struct RunningWork {
         pub kind: RunningWorkKind,
@@ -1249,9 +1140,6 @@ wire_types! {
         #[serde(default, skip_serializing_if = "Option::is_none")]
         #[ts(optional)]
         pub mcp: Option<McpStatusReport>,
-        #[serde(default, skip_serializing_if = "Option::is_none")]
-        #[ts(optional)]
-        pub compaction: Option<CompactionStatusReport>,
         #[serde(default, skip_serializing_if = "Option::is_none")]
         #[ts(optional)]
         pub running: Option<RunningStatusReport>,
@@ -2929,21 +2817,6 @@ wire_types! {
         pub last_active: Option<String>,
     }
 
-    pub struct RunningCompaction {
-        pub thread: String,
-        pub trigger: CompactionTrigger,
-        pub started_at: String,
-        #[serde(default, skip_serializing_if = "Option::is_none")]
-        #[ts(optional, type = "number")]
-        pub turns: Option<u64>,
-        #[serde(default, skip_serializing_if = "Option::is_none")]
-        #[ts(optional)]
-        pub first_at: Option<String>,
-        #[serde(default, skip_serializing_if = "Option::is_none")]
-        #[ts(optional)]
-        pub last_at: Option<String>,
-    }
-
     pub struct ThreadFolderView {
         pub name: String,
         #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -2962,9 +2835,6 @@ wire_types! {
         #[serde(default, skip_serializing_if = "Option::is_none")]
         #[ts(optional)]
         pub manual_order: Option<bool>,
-        #[serde(default, skip_serializing_if = "Option::is_none")]
-        #[ts(optional)]
-        pub compaction: Option<RunningCompaction>,
         #[serde(default, skip_serializing_if = "Option::is_none")]
         #[ts(optional)]
         pub invalidated: Option<CacheInvalidation>,
@@ -3073,8 +2943,6 @@ operations! {
     UsageReport: "usage" (UsageArgs) => UsageResult,
     ExecuteTool: "run_tool" (RunToolArgs) => RunToolResult,
     CompactConversation: "compact" (CompactArgs) => CompactionReport,
-    WatchCompaction: "compact_watch" (EmptyOperationArgs) => CompactionWatchResult,
-    CancelCompaction: "compact_cancel" (EmptyOperationArgs) => CompactionWatchResult,
     InspectSegments: "segments" (SegmentsArgs) => SegmentsResult,
     ReadStatus: "status" (EmptyOperationArgs) => StatusReport,
     ReadErrorLog: "error_log" (DiagnosticCountArgs) => ErrorLogResult,

@@ -1584,55 +1584,6 @@ button.swipe-count:hover:not(:disabled) {
   border-width: 1.5px;
 }
 
-.divider-action {
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-  padding: 2px 8px;
-  border: 0;
-  border-radius: var(--radius-sm);
-  background: transparent;
-  color: inherit;
-  font: inherit;
-  text-decoration: underline;
-  text-decoration-color: var(--line-3);
-  text-underline-offset: 3px;
-  cursor: pointer;
-}
-
-.divider-action:hover {
-  color: var(--text);
-}
-
-.compaction-facts {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(130px, 1fr));
-  gap: 8px 16px;
-  margin: 0 0 12px;
-}
-
-.compaction-facts dt {
-  color: var(--text-3);
-  font-size: var(--text-xs);
-}
-
-.compaction-facts dd {
-  margin: 2px 0 0;
-  font-size: var(--text-md);
-}
-
-.compaction-log {
-  max-height: min(52vh, 620px);
-  overflow-y: auto;
-  padding: 10px 12px;
-  border: 1px solid var(--line-2);
-  border-radius: var(--radius);
-}
-
-.shell[data-layout="mobile"] .compaction-log {
-  max-height: 34vh;
-}
-
 .dialog-footer-gap {
   flex: 1;
 }
