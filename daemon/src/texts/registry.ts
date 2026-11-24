@@ -356,7 +356,7 @@ export function parameterText(tool: string, parameter: string): string {
 
 export const TOOL_TEXTS: readonly TextSpec[] = Object.entries(TOOL_TEXTS_SHIPPED).flatMap(([tool, { description, parameters }]) => [
   text(toolText(tool), description, `The description of the ${tool} tool.`, TOOL_VALUES),
-  ...Object.entries(parameters).map(([parameter, shipped]) => text(parameterText(tool, parameter), shipped, `The description of ${tool}'s ${parameter} parameter.`, TOOL_VALUES)),
+  ...Object.entries(parameters).map(([parameter, shipped]) => text(parameterText(tool, parameter), shipped, `The description of the ${parameter} parameter of ${tool}.`, TOOL_VALUES)),
 ]);
 
 export const TEXTS: readonly TextSpec[] = [...MESSAGE_TEXTS, ...SYSTEM_TEXTS, ...WAKE_TEXTS, ...TOOL_TEXTS, ...OTHER_TEXTS, ...GUIDE_TEXTS];
