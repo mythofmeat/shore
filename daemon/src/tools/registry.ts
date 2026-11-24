@@ -239,7 +239,9 @@ export function toolTemplateVars(cfg: ToolsConfigView, charName: string, userNam
 }
 
 function described(schema: Record<string, unknown>, description: string | undefined): Record<string, unknown> {
-  return description === undefined ? schema : { ...schema, description };
+  if (description === undefined) return schema;
+  const { default: fallback, ...rest } = schema;
+  return fallback === undefined ? { ...rest, description } : { ...rest, description, default: fallback };
 }
 
 export function renderToolSchema(texts: Texts, tool: string, parameters: Record<string, unknown>, values: TextValues): Record<string, unknown> {

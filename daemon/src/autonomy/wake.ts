@@ -225,6 +225,13 @@ export async function runWake(character: string, config: LoadedConfig, wake: Wak
       note("call_failed", "Wake skipped: no chat model resolves");
       return { events };
     }
+    let texts: Texts;
+    try {
+      texts = Texts.of(config);
+    } catch (error) {
+      note("call_failed", `Wake skipped: ${(error as Error).message}`);
+      return { events };
+    }
     const resolved = applyBackgroundSettings(config.dirs.data, character, "wake", chat);
     const configured = backgroundTaskModel(config, character);
     const maxToolRounds = (configured ?? resolved).maxToolRounds;
@@ -241,7 +248,6 @@ export async function runWake(character: string, config: LoadedConfig, wake: Wak
         shoreLog.warn(`shore: could not refresh the prompt files of ${character}/${thread} before a wake: ${String(error)}`);
       }
     }
-    const texts = Texts.of(config);
     const rendered = texts.render("wake", {
       now: formatWallClock(nowMs, timeZone),
       user: userName,

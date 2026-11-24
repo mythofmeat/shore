@@ -17,24 +17,38 @@ export interface TextsSource {
   dirs: { config: string };
 }
 
-function specOf(name: string): TextSpec {
+export function textSpec(name: string): TextSpec {
   const spec = TEXT_SPECS.get(name);
   if (spec === undefined) throw new Error(`Shore has no text named "${name}"`);
   return spec;
 }
 
-function withoutOneNewline(raw: string): string {
+export function readTextFile(name: string, path: string): string {
+  let raw: string;
+  try {
+    raw = readFileSync(path, "utf8");
+  } catch (error) {
+    throw new Error(`text "${name}" could not be read at ${path}: ${(error as Error).message}`, { cause: error });
+  }
   return raw.endsWith("\n") ? raw.slice(0, -1) : raw;
 }
 
 export class Texts {
-  readonly #settings: TextSettings;
-  readonly #configDir: string;
-  readonly #read = new Map<string, string>();
+  readonly #wording = new Map<string, string | undefined>();
+  readonly #files = new Map<string, string>();
 
   constructor(settings: TextSettings = {}, configDir = "") {
-    this.#settings = settings;
-    this.#configDir = configDir;
+    for (const [name, setting] of Object.entries(settings)) {
+      if (setting === undefined) continue;
+      textSpec(name);
+      if (setting === false) {
+        this.#wording.set(name, undefined);
+        continue;
+      }
+      const path = resolve(configDir, setting);
+      this.#files.set(name, path);
+      this.#wording.set(name, readTextFile(name, path));
+    }
   }
 
   static of(source: TextsSource): Texts {
@@ -42,32 +56,18 @@ export class Texts {
   }
 
   whose(name: string): Whose {
-    const setting = this.#settings[specOf(name).name];
-    return setting === undefined ? "shore" : setting === false ? "off" : "yours";
+    textSpec(name);
+    if (this.#files.has(name)) return "yours";
+    return this.#wording.has(name) ? "off" : "shore";
   }
 
   file(name: string): string | undefined {
-    const setting = this.#settings[specOf(name).name];
-    return typeof setting === "string" ? resolve(this.#configDir, setting) : undefined;
+    return this.#files.get(name);
   }
 
   wording(name: string): string | undefined {
-    const spec = specOf(name);
-    const setting = this.#settings[name];
-    if (setting === undefined) return spec.shipped;
-    if (setting === false) return undefined;
-    const kept = this.#read.get(name);
-    if (kept !== undefined) return kept;
-    const path = resolve(this.#configDir, setting);
-    let raw: string;
-    try {
-      raw = readFileSync(path, "utf8");
-    } catch (error) {
-      throw new Error(`text "${name}" could not be read at ${path}: ${(error as Error).message}`, { cause: error });
-    }
-    const wording = withoutOneNewline(raw);
-    this.#read.set(name, wording);
-    return wording;
+    const spec = textSpec(name);
+    return this.#wording.has(name) ? this.#wording.get(name) : spec.shipped;
   }
 
   render(name: string, values: TextValues = {}): string | undefined {
@@ -75,12 +75,13 @@ export class Texts {
     if (wording === undefined) return undefined;
     const vars = new Map<string, string>();
     for (const [key, value] of Object.entries(values)) vars.set(key, value ?? "");
-    return renderTemplate(wording, vars);
+    const rendered = renderTemplate(wording, vars);
+    return rendered.trim() === "" ? undefined : rendered;
   }
 
   always(name: string, values: TextValues = {}): string {
     const rendered = this.render(name, values);
-    if (rendered === undefined) throw new Error(`text "${name}" can't be switched off`);
+    if (rendered === undefined) throw new Error(`text "${name}" came out empty, and Shore can't leave it out`);
     return rendered;
   }
 }
