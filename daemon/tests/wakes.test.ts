@@ -49,6 +49,8 @@ import { required } from "../src/util/required.ts";
 import { testTmp } from "./support/tmp.ts";
 import { promptedAppConfig } from "./support/prompt_list.ts";
 import { Texts } from "../src/texts/texts.ts";
+import { parameterText, TEXT_SPECS, TEXTS, toolText, type TextSpec } from "../src/texts/registry.ts";
+import { ALL_TOOLS } from "../src/tools/registry.ts";
 
 const MINUTE = 60_000;
 const T0 = Date.UTC(2026, 9, 30, 12);
@@ -3909,4 +3911,128 @@ test("a message is counted once in the character's activity record, whether it i
     await regenerate("main");
     expect(counted(runtime)).toBe(5);
   }, undefined, root);
+});
+
+const MARKED = TEXTS.filter((spec) => !spec.fixed);
+
+function declared(spec: TextSpec): string[] {
+  return Object.keys(spec.values).filter((value) => value !== "<tool>");
+}
+
+function marker(spec: TextSpec): string {
+  return `⟦${spec.name}${declared(spec).map((value) => `{{#if ${value}}}|${value}={{${value}}}{{/if}}`).join("")}⟧`;
+}
+
+function leftOver(text: string, theirs: readonly string[]): string {
+  let left = text;
+  for (let before = ""; before !== left;) {
+    before = left;
+    left = left.replace(/⟦[^⟦⟧]*⟧/g, "");
+  }
+  for (const words of theirs) left = left.split(words).join("");
+  return left.trim();
+}
+
+function requestTexts(request: SidecarRequest): string[] {
+  const inner = (content: unknown): string[] => typeof content === "string" ? [content]
+    : Array.isArray(content) ? content.flatMap((block: { type: string; text?: string }) => block.type === "text" ? [block.text ?? ""] : []) : [];
+  const described = (schema: unknown): string[] => {
+    if (typeof schema !== "object" || schema === null) return [];
+    return Object.entries(schema).flatMap(([key, value]) => key === "description" && typeof value === "string" ? [value] : described(value));
+  };
+  return [
+    ...(request.system ?? []).map((block) => block.text),
+    ...request.messages.flatMap((message) => message.content.flatMap((block) => block.type === "text" ? [block.text] : block.type === "tool_result" ? inner(block.content) : [])),
+    ...(request.tools ?? []).flatMap((tool) => [tool.description, ...described(tool.input_schema)]),
+  ];
+}
+
+test("with every text Shore writes pointed at a marker, a reply carrying every kind of note and a wake hold nothing of Shore's but the markers, and each text is given the values the list names", async () => {
+  const given = new Map<string, Set<string>[]>();
+  const render = Texts.prototype.render;
+  const watching = spyOn(Texts.prototype, "render").mockImplementation(function (this: Texts, name: string, values: Readonly<Record<string, string | undefined>> = {}) {
+    given.set(name, [...given.get(name) ?? [], new Set(Object.keys(values))]);
+    return render.call(this, name, values);
+  });
+  const enabled = ALL_TOOLS.map((tool) => tool.name);
+  try {
+    await withCharacter(async ({ runtime, script, data, workspace, say, thread }) => {
+      const config = join(dirname(data), "config");
+      await mkdir(join(config, "texts"), { recursive: true });
+      for (const spec of MARKED) await writeFile(join(config, "texts", `${spec.name}.md`), `${marker(spec)}\n`);
+      await writeFile(join(workspace, "notes.md"), "The fox is called Rue.");
+      await writeFile(join(workspace, "lamp.png"), await sizedImage(8, 8));
+      await writeFile(join(workspace, "TRIGGERS.toml"), SHOW);
+      await runtime.registry.createThread("ada", "ring", { label: "The ring", purpose: "A story in parts", pins: ["notes.md"] });
+      const engine = await runtime.registry.getOrCreate("ada", "main");
+      const message = (id: string, role: Message["role"], text: string, minutes: number, extra: Partial<Message> = {}): Message => ({
+        msg_id: id, role, content: text, images: [], content_blocks: text === "" ? [] : [{ type: "text", text }], alternatives: [], timestamp: new Date(T0 + minutes * MINUTE).toISOString(), ...extra,
+      });
+      for (const each of [
+        message("a0", "assistant", "I was waiting for you.", 0),
+        message("u1", "user", "here is the lamp", 1, { images: [{ path: join(workspace, "lamp.png") }, { path: join(workspace, "gone.png") }], presence: { statuses: [{ status: "home", set_at: new Date(T0).toISOString() }], changed_at: new Date(T0).toISOString() } }),
+        message("a1", "assistant", "It glows: ![[nowhere.png]]", 2, { images: [{ path: "", embed: "![[nowhere.png]]", problem: "no picture matches" }, { path: join(workspace, "drawn.png"), caption: "a drawing" }] }),
+        message("w1", "assistant", "I lit it while you were away.", 50, { origin: "autonomous" }),
+        message("u2", "user", "thank you", 120, { wake_running: { started_at: new Date(T0 + 110 * MINUTE).toISOString(), thread: "ring" }, last_elsewhere: { thread: "garden", at: new Date(T0 + 100 * MINUTE).toISOString() }, presence: { statuses: [], changed_at: new Date(T0 + 115 * MINUTE).toISOString() } }),
+        message("a2", "assistant", "You're welcome.", 121),
+        message("u3", "user", "one from before", 122, { wake_running: { started_at: new Date(T0 + 110 * MINUTE).toISOString() } }),
+        message("a3", "assistant", "I remember.", 123),
+      ]) await engine.appendMessage(each);
+      at(124);
+      await say("tell me a story in parts", "ring");
+      await runtime.triggers.tick();
+      await say("go on");
+      script.again = 1;
+      script.aside = "Let me look.";
+      script.sends = undefined;
+      changePresence(data, { on: ["reading"] }, T0 + 130 * MINUTE);
+      const held = hold();
+      script.beatHeld = held;
+      const waking = fires(runtime, 135);
+      await held.started.promise;
+      at(136);
+      const asking = say("wait, what is the fox called?", "ring");
+      held.release.resolve();
+      await waking;
+      await asking;
+      at(150);
+      await runtime.autonomy.runDue();
+
+      const theirs = [
+        "here is the lamp", "thank you", "one from before", "tell me a story in parts", "go on", "wait, what is the fox called?",
+        "I was waiting for you.", "It glows: ![[nowhere.png]]", "I lit it while you were away.", "You're welcome.", "I remember.",
+        "reply to: tell me a story in parts", "reply to: go on", "reply to: wait, what is the fox called?", "reply to: thank you", "reply to: one from before",
+        "Let me look.", "Done.", `${join(workspace, "SOUL.md")}: lines 1–1\n1\tAda\nEnd of file.`, SOUL_READ, "Ada",
+      ].sort((a, b) => b.length - a.length);
+      const requests = [...script.replies, ...script.wakes];
+      expect(script.wakes.length).toBeGreaterThanOrEqual(2);
+      expect(requests.flatMap((request) => requestTexts(request).filter((text) => leftOver(text, theirs) !== ""))).toEqual([]);
+      expect((await thread("ring")).flatMap((each) => each.role === "system" ? [leftOver(each.shown_later ?? each.content, [])] : [])).toEqual(["", "", ""]);
+    }, (app) => {
+      withTriggers(app);
+      app.tools.enabled = enabled;
+      app.chat.user_timestamps = "always";
+      app.texts = Object.fromEntries(MARKED.map((spec) => [spec.name, `texts/${spec.name}.md`]));
+    });
+  } finally {
+    watching.mockRestore();
+  }
+
+  const toolTexts = ALL_TOOLS.flatMap((tool) => [toolText(tool.name), ...Object.keys((tool.parameters as { properties: Record<string, unknown> }).properties).map((parameter) => parameterText(tool.name, parameter))]);
+  expect([...given.keys()].filter((name) => !toolTexts.includes(name)).sort()).toEqual([
+    "digest_first", "digest_user", "digest_you", "fired_trigger", "last_wake_interrupted", "last_wrote_here", "last_wrote_home",
+    "opened_by_you", "picture", "picture_gone", "pictures_not_sent", "pinned_file", "sent_picture", "status", "status_cleared", "status_item",
+    "stopped_interrupted", "thread", "thread_pins", "time", "time_later", "wake", "wake_opener", "wake_opener_kept", "wake_running", "wake_running_own_time",
+    "wake_status", "wake_turn", "working_kept", "working_kept_unfinished",
+  ].sort());
+  expect(toolTexts.filter((name) => !given.has(name))).toEqual([]);
+  const mismatched = [...given].flatMap(([name, calls]) => {
+    const spec = required(TEXT_SPECS.get(name));
+    return calls.flatMap((keys) => {
+      const extra = [...keys].filter((key) => !declared(spec).includes(key) && !(name.startsWith("tool_") && enabled.includes(key)));
+      const missing = declared(spec).filter((key) => !keys.has(key));
+      return extra.length === 0 && missing.length === 0 ? [] : [`${name}: given ${extra.join(", ") || "nothing extra"}, not given ${missing.join(", ") || "nothing"}`];
+    });
+  });
+  expect([...new Set(mismatched)]).toEqual([]);
 });

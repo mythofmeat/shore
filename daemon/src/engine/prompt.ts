@@ -115,7 +115,8 @@ function threadBlock(texts: Texts, thread: ThreadPrompt, vars: ReadonlyMap<strin
   const created = Date.parse(thread.created_at);
   const started = Number.isNaN(created) ? thread.created_at : required(formatWallClock(created, timeZone).split(" · ")[0]);
   return texts.render("thread", {
-    ...Object.fromEntries(vars),
+    user: vars.get("user"),
+    char: vars.get("char"),
     thread: thread.id,
     home: thread.home,
     started,

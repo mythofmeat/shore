@@ -107,12 +107,16 @@ export function wakeWrapUpText(texts: Texts, msLeft: number, rounds: number, use
 }
 
 export function wakeStoppedNote(texts: Texts, ending: WakeEnding, userName: string, limitMs: number): string | undefined {
-  return texts.render(`stopped_${ending.why}`, {
-    user: userName,
-    quiet: spanPhrase(WAKE_QUIET_MS),
-    limit: spanPhrase(limitMs),
-    error: ending.why === "failed" ? ending.error : undefined,
-  });
+  switch (ending.why) {
+    case "interrupted":
+      return texts.render("stopped_interrupted", { user: userName, quiet: spanPhrase(WAKE_QUIET_MS) });
+    case "time":
+      return texts.render("stopped_time", { limit: spanPhrase(limitMs) });
+    case "rounds":
+      return texts.render("stopped_rounds");
+    case "failed":
+      return texts.render("stopped_failed", { error: ending.error });
+  }
 }
 
 export function leadingWakeTurns(messages: readonly Message[]): number {

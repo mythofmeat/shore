@@ -209,6 +209,8 @@ export const MESSAGE_TEXTS: readonly TextSpec[] = [
 
 export const SYSTEM_TEXTS: readonly TextSpec[] = [
   text("thread", engine__thread, "The system prompt's thread part, in a side thread.", {
+    user: "the user's name",
+    char: "the character's name",
     thread: "the thread's id",
     home: "the home thread's id",
     started: "the day it was started",
@@ -237,7 +239,9 @@ const WAKE_VALUES = {
   send_message: "set when send_message is on",
 };
 
-const SPEAKER = { at: `when it was said: ${WHEN}`, text: "what was said" };
+const LAST_WROTE = { user: "the user's name", length: `how long ago: ${LENGTH}`, thread: "the thread they wrote in", label: "its label, when it has one" };
+
+const SPEAKER = { user: "the user's name", at: `when it was said: ${WHEN}`, text: "what was said" };
 
 export const WAKE_TEXTS: readonly TextSpec[] = [
   must("wake_opener", autonomy__wake_opener, "The first line of a wake's opening."),
@@ -247,7 +251,7 @@ export const WAKE_TEXTS: readonly TextSpec[] = [
   text("digest_nothing_yet", autonomy__digest_nothing_yet, "In place of the last of what was said, when nothing has been said in the thread."),
   text("digest_nothing_since", autonomy__digest_nothing_since, "In place of what was said since its last wake, when nothing has."),
   text("digest_left_out", autonomy__digest_left_out, "When earlier messages don't fit in what a wake is shown of its thread.", { count: "how many", one: "set when there is one" }),
-  text("digest_user", autonomy__digest_user, "A message of the user's in what a wake is shown of its thread.", { user: "the user's name", ...SPEAKER }),
+  text("digest_user", autonomy__digest_user, "A message of the user's in what a wake is shown of its thread.", SPEAKER),
   text("digest_you", autonomy__digest_you, "A message of the character's in what a wake is shown of its thread.", SPEAKER),
   text("digest_you_wake", autonomy__digest_you_wake, "A message the character sent from a wake, in what a wake is shown of its thread.", SPEAKER),
   text("digest_cut", autonomy__digest_cut, "A long message cut short in what a wake is shown of its thread.", { text: "its first 4,000 characters" }),
@@ -255,9 +259,9 @@ export const WAKE_TEXTS: readonly TextSpec[] = [
   text("last_wake_rounds", autonomy__last_wake_rounds, "The same, when it used up its rounds of tool use.", LAST_WAKE),
   text("last_wake_interrupted", autonomy__last_wake_interrupted, "The same, when the user's message stopped it.", LAST_WAKE),
   text("last_wake_failed", autonomy__last_wake_failed, "The same, when it failed.", { error: "the error", ...LAST_WAKE }),
-  text("last_wrote_here", autonomy__last_wrote_here, "In a wake's opening, when the user last wrote in the wake's thread.", { user: "the user's name", length: `how long ago: ${LENGTH}` }),
-  text("last_wrote_home", autonomy__last_wrote_home, "The same, when they last wrote in the home thread.", { user: "the user's name", length: `how long ago: ${LENGTH}`, thread: "the home thread" }),
-  text("last_wrote_side", autonomy__last_wrote_side, "The same, when they last wrote in another side thread.", { user: "the user's name", length: `how long ago: ${LENGTH}`, thread: "that thread", label: "its label, when it has one" }),
+  text("last_wrote_here", autonomy__last_wrote_here, "In a wake's opening, when the user last wrote in the wake's thread.", LAST_WROTE),
+  text("last_wrote_home", autonomy__last_wrote_home, "The same, when they last wrote in the home thread.", LAST_WROTE),
+  text("last_wrote_side", autonomy__last_wrote_side, "The same, when they last wrote in another side thread.", LAST_WROTE),
   text("wake_status", autonomy__wake_status, "In a wake's opening, while any of the user's statuses is on.", { user: "the user's name", ...STATUS }),
   text("sealed_list", autonomy__sealed_list, "In a wake's opening outside a sealed thread, while the character has sealed threads.", { threads: "a line for each, as sealed_list_thread has it" }),
   text("sealed_list_thread", autonomy__sealed_list_thread, "One sealed thread in sealed_list.", { thread: "its id", label: "its label", opens: "when the seal comes off" }),
@@ -342,7 +346,7 @@ const TOOL_TEXTS_SHIPPED: Readonly<Record<string, { description: string; paramet
   guide: { description: tools__guide__guide, parameters: { topic: tools__guide__topic } },
 };
 
-const TOOL_VALUES = { user: "the user's name", char: "the character's name", "<tool>": "a tool's own name, such as {{read}}, while that tool is on" };
+const TOOL_VALUES = { user: "the user's name", char: "the character's name", character_name: "the character's name", "<tool>": "a tool's own name, such as {{read}}, while that tool is on" };
 
 export function toolText(tool: string): string {
   return `tool_${tool}`;
