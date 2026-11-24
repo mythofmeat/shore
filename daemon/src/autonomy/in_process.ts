@@ -19,7 +19,7 @@ import type { Message } from "../engine/types.ts";
 import { generate, generateViaStream } from "../llm/generate.ts";
 import type { FrameSink } from "../llm/stream.ts";
 import type { GenerateDeps } from "../llm/generate.ts";
-import type { ToolLoopOptions, GenerateResponse, SidecarProvider, SidecarRequest, ToolDefinition } from "../llm/types.ts";
+import type { GenerateResponse, SidecarProvider, SidecarRequest, ToolDefinition } from "../llm/types.ts";
 import type { ToolContextDeps } from "../handler/tool_context.ts";
 import { buildToolContext } from "../handler/tool_context.ts";
 import { toolLimitsFrom } from "../tools/dispatch.ts";
@@ -71,7 +71,7 @@ export class InProcessAutonomyExecutor implements AutonomyExecutor {
       return await runWake(character, config, { thread: wake.thread, fired: wake.fired, limitMs: wake.limitMs }, {
         rebuild: this.#deps.rebuild,
         interrupted: wake.interrupted,
-        compaction: this.#threadCompaction(config),
+        compaction: this.#threadCompaction(),
         ...(this.#deps.env === undefined ? {} : { env: this.#deps.env }),
         news: (wrappingUp) => hooks.news(wrappingUp),
         newsHeard: () => { hooks.newsHeard(); },
@@ -117,20 +117,13 @@ export class InProcessAutonomyExecutor implements AutonomyExecutor {
     });
   }
 
-  async runCompaction(character: string, reason: CompactionReason): Promise<AutonomyActionResult> {
+  async runCompaction(character: string, _reason: CompactionReason): Promise<AutonomyActionResult> {
     return await this.#withForeground(async () => {
-      if (reason !== "idle") {
-        return {
-          events: [],
-          failed: `compaction reason ${reason} is not the autonomy loop's to run`,
-        };
-      }
       const config = this.#deps.registry.effectiveConfig(character);
       return await runIdleCompaction(character, {
         config,
         cache: this.#deps.cache,
         rebuild: this.#deps.rebuild,
-        run: this.#compactionDeps(config),
         engine: this.#engineReloader(),
       });
     });
@@ -211,8 +204,8 @@ export class InProcessAutonomyExecutor implements AutonomyExecutor {
     return await (this.#deps.runActivity?.(foreground) ?? foreground());
   }
 
-  #threadCompaction(config: LoadedConfig): CompactionRunner {
-    const runner = compactionRunner({ ...this.#compactionDeps(config), cache: this.#deps.cache, rebuild: this.#deps.rebuild });
+  #threadCompaction(): CompactionRunner {
+    const runner = compactionRunner({ cache: this.#deps.cache, rebuild: this.#deps.rebuild });
     return {
       ...runner,
       run: async (character, effective, thread) => {
@@ -236,18 +229,6 @@ export class InProcessAutonomyExecutor implements AutonomyExecutor {
       providers: this.#deps.providers,
       config,
       ...(this.#deps.env === undefined ? {} : { env: this.#deps.env }),
-    };
-  }
-
-  #compactionDeps(config: LoadedConfig): {
-    env?: NodeJS.ProcessEnv;
-    generate: CompactionGenerate;
-    tools?: ToolContextDeps;
-  } {
-    return {
-      generate: compactionGenerate(this.#generateDeps(config)),
-      ...(this.#deps.env === undefined ? {} : { env: this.#deps.env }),
-      ...(this.#deps.tools === undefined ? {} : { tools: this.#deps.tools }),
     };
   }
 }
@@ -283,18 +264,16 @@ export type CompactionGenerate = (
   character: string,
   sink?: FrameSink,
   tools?: ToolPhase,
-  options?: ToolLoopOptions,
-  signal?: AbortSignal,
 ) => Promise<GenerateResponse>;
 
-export function compactionGenerate(deps: GenerateDeps, { foreground = false, callType = "compaction" }: { foreground?: boolean; callType?: "compaction" | "label" } = {}): CompactionGenerate {
-  return async (request, model, character, sink, tools, options, signal) => {
-    labelAccountedCall(request, deps.config, character, callType, foreground);
+export function compactionGenerate(deps: GenerateDeps, { foreground = false }: { foreground?: boolean } = {}): CompactionGenerate {
+  return async (request, model, character, _sink, tools) => {
+    labelAccountedCall(request, deps.config, character, "label", foreground);
     const { response, fallbacks } = await generateViaStream(
       request,
       { providerKey: model.provider_key, apiKeyEnv: model.api_key_env },
       deps,
-      { ...(sink === undefined ? {} : { sink }), ...(tools === undefined ? {} : { tools }), ...(options === undefined ? {} : { toolLoop: options }), ...(signal === undefined ? {} : { signal }) },
+      tools === undefined ? {} : { tools },
     );
     for (const event of fallbacks) {
       shoreLog.warn(

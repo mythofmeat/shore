@@ -201,11 +201,6 @@ export function chatCompactionRunner(a: GenerationAssembly): GenerationDeps["com
   const { runtime } = a;
   const runner = compactionRunner({
     ...(a.env === undefined ? {} : { env: a.env }),
-    generate: compactionGenerate({
-      providers: a.providers,
-      config: runtime.config,
-      ...(a.env === undefined ? {} : { env: a.env }),
-    }),
     cache: runtime.cache,
     rebuild: { mcpRegistry: runtime.mcp.current },
     tools: runtimeToolDeps(a),
@@ -224,7 +219,7 @@ export function labelNewSegments(a: GenerationAssembly): { stop: () => void; set
       providers: a.providers,
       config: runtime.config,
       ...(a.env === undefined ? {} : { env: a.env }),
-    }, { callType: "label" }),
+    }),
     tools: runtimeToolDeps(a),
     ...(a.env === undefined ? {} : { env: a.env }),
   }));
@@ -674,18 +669,13 @@ function commandDeps(a: CommandAssembly): CommandDeps {
     compaction: {
       run: {
         ...(a.env === undefined ? {} : { env: a.env }),
-        generate: compactionGenerate({
-          providers: a.providers,
-          config: runtime.config,
-          ...(a.env === undefined ? {} : { env: a.env }),
-        }, { foreground: true }),
         tools: runtimeToolDeps(a),
       },
       label: compactionGenerate({
         providers: a.providers,
         config: runtime.config,
         ...(a.env === undefined ? {} : { env: a.env }),
-      }, { foreground: true, callType: "label" }),
+      }, { foreground: true }),
       repoint: async (character, config) => {
         runtime.cache.invalidate(character, "compaction");
         await runtime.cache.reprimeFromDisk(character, config.dirs.data, config, {

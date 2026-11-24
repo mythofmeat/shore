@@ -430,47 +430,6 @@ pub(crate) fn print_stream_start(regen: bool) {
     _ = out.flush();
 }
 
-pub(crate) fn print_phase_header(phase: &Phase) {
-    let stdout = crate::output::stdout();
-    let mut out = stdout.lock();
-    phase_header_to(&mut out, &mut lock_chunk_state(), phase);
-    let _ignored = out.flush();
-}
-
-fn phase_header_to(out: &mut impl Write, state: &mut ChunkState, phase: &Phase) {
-    flush_thinking(out, state);
-    begin_block(out, state, true);
-    state.was_thinking = false;
-    write_sigil_header(out, SIGIL_SUBAGENT, &phase.phase, COLOR_SUBAGENT);
-    state.at_line_start = true;
-}
-
-pub(crate) fn end_live_output() {
-    let stdout = crate::output::stdout();
-    let mut out = stdout.lock();
-    end_live_output_to(&mut out, &mut lock_chunk_state());
-    let _ignored = out.flush();
-}
-
-fn end_live_output_to(out: &mut impl Write, state: &mut ChunkState) {
-    flush_thinking(out, state);
-    if state.has_emitted {
-        if !state.at_line_start {
-            let _ignored = writeln!(out);
-        }
-        let _ignored = writeln!(out);
-    }
-    *state = ChunkState::INITIAL;
-}
-
-pub(crate) fn print_notice(text: &str) {
-    let stdout = crate::output::stdout();
-    let mut out = stdout.lock();
-    paint(&mut out, Tone::Muted, text);
-    _ = writeln!(out);
-    _ = out.flush();
-}
-
 pub(crate) fn print_phase(phase: &Phase) {
     let stdout = crate::output::stdout();
     let mut out = stdout.lock();

@@ -17,13 +17,13 @@ import { shoreLog } from "../../log.ts";
 import { required } from "../../util/required.ts";
 import { rustLines } from "../lines.ts";
 import type { SegmentArchiveHook } from "./archive.ts";
-import { RealCompactionLlm } from "./llm.ts";
+import { RealCompactionLlm, type RealCompactionLlmOptions } from "./llm.ts";
 import { effectiveConfig, resolveChatRequest, type CompactionRunDeps } from "./run.ts";
 import { Texts } from "../../texts/texts.ts";
 
 export const SEGMENT_LABEL_CHARS = 160;
 
-export type SegmentLabelDeps = Pick<CompactionRunDeps, "config" | "generate" | "tools" | "env">;
+export type SegmentLabelDeps = Pick<CompactionRunDeps, "config" | "tools" | "env"> & Pick<RealCompactionLlmOptions, "generate">;
 
 export function labelFromReply(reply: string): string | undefined {
   const line = reply.split("\n").map((each) => each.trim()).find((each) => each !== "");

@@ -7,9 +7,8 @@ import { Settings } from "../settings/Settings.tsx";
 import { NewCharacterDialog, NewThreadDialog } from "../sidebar/dialogs.tsx";
 import { Toasts, toasts } from "../ui/toast.tsx";
 import { useEscape, useMediaQuery, useStoredFlag } from "../ui/hooks.ts";
-import { CompactionDialog } from "../chat/CompactionView.tsx";
 import { FolderDialogs, ThreadDialogs } from "../chat/thread_dialogs.tsx";
-import { COMPACTION_VIEW_EVENT, FOLDER_DIALOG_EVENT, THREAD_DIALOG_EVENT, type FolderDialogRequest, type ThreadDialogRequest } from "./intents.ts";
+import { FOLDER_DIALOG_EVENT, THREAD_DIALOG_EVENT, type FolderDialogRequest, type ThreadDialogRequest } from "./intents.ts";
 import { Palette } from "./Palette.tsx";
 import { navigate, openSettings, useRoute } from "./route.ts";
 import { adjacent, globalAction, nextUnread } from "./shortcuts.ts";
@@ -23,23 +22,19 @@ export function Shell({ state }: { state: ChromeSnapshot }) {
   const [dialog, setDialog] = useState<"character" | "thread" | "palette" | null>(null);
   const [threadDialog, setThreadDialog] = useState<ThreadDialogRequest | null>(null);
   const [folderDialog, setFolderDialog] = useState<FolderDialogRequest | null>(null);
-  const [compactionView, setCompactionView] = useState(false);
   const collapsed = useCollapsedFolders(state.character);
   const { unread } = useNotifications();
   useEffect(() => {
     const open = (event: Event) => { setThreadDialog((event as CustomEvent<ThreadDialogRequest>).detail); };
     const openFolder = (event: Event) => { setFolderDialog((event as CustomEvent<FolderDialogRequest>).detail); };
     addEventListener(THREAD_DIALOG_EVENT, open);
-    const openCompaction = () => { setCompactionView(true); };
     addEventListener(FOLDER_DIALOG_EVENT, openFolder);
-    addEventListener(COMPACTION_VIEW_EVENT, openCompaction);
-    return () => { removeEventListener(THREAD_DIALOG_EVENT, open); removeEventListener(FOLDER_DIALOG_EVENT, openFolder); removeEventListener(COMPACTION_VIEW_EVENT, openCompaction); };
+    return () => { removeEventListener(THREAD_DIALOG_EVENT, open); removeEventListener(FOLDER_DIALOG_EVENT, openFolder); };
   }, []);
   const open = mobile ? drawer : expanded;
   const closeDrawer = useCallback(() => setDrawer(false), []);
-  useEscape(mobile && drawer, closeDrawer);
-  useEffect(() => { if (!mobile) setDrawer(false); }, [mobile]);
-  useEffect(() => { setDrawer(false); }, [state.character, state.thread]);
+  useEscape(drawer, closeDrawer);
+  useEffect(() => { setDrawer(false); }, [mobile, state.character, state.thread]);
   useEffect(() => {
     if (state.error === "") return;
     toasts.show(state.error, "error");
@@ -100,7 +95,6 @@ export function Shell({ state }: { state: ChromeSnapshot }) {
     {dialog === "palette" ? <Palette state={state} close={() => setDialog(null)} newThread={() => setDialog("thread")} newCharacter={() => setDialog("character")} /> : null}
     {threadDialog === null ? null : <ThreadDialogs state={state} request={threadDialog} close={() => setThreadDialog(null)} />}
     {folderDialog === null ? null : <FolderDialogs request={folderDialog} close={() => setFolderDialog(null)} />}
-    {compactionView && state.character !== null ? <CompactionDialog state={state} close={() => setCompactionView(false)} /> : null}
     <Toasts />
   </div>;
 }

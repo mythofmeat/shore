@@ -10,7 +10,7 @@ import { initializeDatabase } from "../src/storage/database.ts";
 import { writeDurable } from "../src/storage/files.ts";
 import { characterWorkspace } from "../src/tools/character_workspace.ts";
 import { outcomeOf } from "./support/outcome.ts";
-import { modelInfo, modelSettings, resetModel, setModelSetting, switchModel } from "../src/commands/models.ts";
+import { listModels, modelInfo, modelSettings, resetModel, setModelSetting, switchModel } from "../src/commands/models.ts";
 import { describeTool, resolveTool, type RunToolContext } from "../src/commands/run_tool.ts";
 import { Texts } from "../src/texts/texts.ts";
 import { loadConfig } from "../src/config/loader.ts";
@@ -18,6 +18,7 @@ import { shoreLog } from "../src/log.ts";
 import { characterPreferencesPath, globalPreferencesPath } from "../src/config/preferences.ts";
 import type { ModelSettingsDetail } from "../src/protocol/ModelSettingsDetail.ts";
 import { testTmp } from "./support/tmp.ts";
+import { CACHE_VERSION, cachePath, writeCache } from "../src/llm/discovery.ts";
 
 interface World {
   root: string;
@@ -686,5 +687,110 @@ describe("reloading the config", () => {
     await mkdir(join(failing.workspace, "SOUL.md"));
     expect(await outcomeOf(configReload(failing.ctx, { apply: true, refresh_prompts: true }))).toThrow("Failed to refresh active prompt snapshot: ");
     expect(failing.calls).toEqual([]);
+  });
+});
+
+describe("the models and settings for wakes and sub-agents", () => {
+  const TOML = [
+    "[chat]", 'model = "anthropic:claude-x"',
+    "[subagents]", 'enabled = ["scout"]', "[subagents.scout]", 'description = "d"', 'prompt = "p"', "[subagents.idle]", 'description = "r"', 'prompt = "r"', 'model = "anthropic:claude-y"',
+    "[providers.anthropic]", 'api_key_env = "K"', "discover = true", 'ignore_models = ["claude-z"]', "[providers.nanogpt]", 'api_key_env = "K"',
+    '[chat."anthropic:claude-x"]', "max_output_tokens = 4000", '[chat."anthropic:claude-y"]', "max_output_tokens = 4000", '[chat."nanogpt:m-1"]', "max_output_tokens = 100", "",
+  ].join("\n");
+  const world = async (character: string | null = "ada", pins: string[] = []) => {
+    const w = await build(character ?? undefined, [...pins, TOML].join("\n"));
+    await writeCache(cachePath(w.ctx.config.dirs.cache, "anthropic"), {
+      version: CACHE_VERSION, provider_key: "anthropic", fetched_at: "2026-11-24T00:00:00Z",
+      models: [{ provider_key: "anthropic", model_id: "claude-z", sdk: "anthropic", discovered_at: "2026-11-24T00:00:00Z" }],
+    });
+    return { w, models: { ...w.ctx, dataDir: w.ctx.config.dirs.data } };
+  };
+  const NO_KEEPALIVE = "cache_keepalive is not shorter than this model's 5m cache TTL, so each ping will land after the cache has already expired";
+  const CLAUDE_X = { model: "anthropic:claude-x", provider: "anthropic", model_id: "claude-x" };
+
+  test("pinning wakes to a model writes triggers.model, all means wakes, and a model has to be named", async () => {
+    const { w, models } = await world();
+    const pinned: ReturnType<typeof switchModel> = { target: "role", active: "anthropic:claude-y", qualified_name: "anthropic:claude-y", provider: "anthropic", model_id: "claude-y", changed: true, role: "wake", config_key: "triggers.model", cleared: [], file: w.ctx.configPath, restart_required: [] };
+    expect(switchModel(models, { background_task: "wake", name: "anthropic:claude-y" })).toEqual(pinned);
+    expect(Bun.TOML.parse(readFileSync(w.ctx.configPath, "utf8"))).toMatchObject({ triggers: { model: "anthropic:claude-y" } });
+    expect(switchModel(models, { background_task: "all", name: "anthropic:claude-x" })).toMatchObject({ role: "background", active: "anthropic:claude-x", config_key: "triggers.model" });
+    expect(Bun.TOML.parse(readFileSync(w.ctx.configPath, "utf8"))).toMatchObject({ triggers: { model: "anthropic:claude-x" } });
+    expect(() => switchModel(models, { background_task: "wake" })).toThrow("missing model name");
+    expect(() => switchModel(models, { background_task: "wake", name: "anthropic:claude-z" }), "a model the provider's ignore_models hides").toThrow('model "anthropic:claude-z" is hidden by providers.anthropic.ignore_models');
+    expect(switchModel(models, { background_task: "wake", name: "anthropic:claude-z", include_hidden: true })).toMatchObject({ active: "anthropic:claude-z" });
+  });
+
+  test("a setting needs a key and a scope that is character or global", async () => {
+    const { models } = await world();
+    expect(() => setModelSetting(models, {} as Parameters<typeof setModelSetting>[1])).toThrow("missing key");
+    expect(() => setModelSetting(models, { key: "max_tool_rounds", value: 3, scope: "elsewhere" as never })).toThrow('scope must be "character" or "global", got "elsewhere"');
+  });
+
+  test("a character's setting is judged with the global settings beside it, and warns when the keepalive can't outlast the cache", async () => {
+    const { models } = await world();
+    const named = { name: "anthropic:claude-x" };
+    expect(setModelSetting(models, { ...named, key: "cache_ttl", value: "5m", scope: "character" }), "no keepalive is set").toEqual({ changed: true, scope: "character", ...CLAUDE_X, key: "cache_ttl", value: "5m" });
+    expect(setModelSetting(models, { ...named, key: "cache_keepalive", value: "50m", scope: "global" }), "the character's TTL isn't the global one").toEqual({ changed: true, scope: "global", ...CLAUDE_X, key: "cache_keepalive", value: "50m" });
+    expect(setModelSetting(models, { ...named, key: "cache_ttl", value: "5m", scope: "character" }), "the global keepalive").toEqual({ changed: true, scope: "character", ...CLAUDE_X, key: "cache_ttl", value: "5m", warning: NO_KEEPALIVE });
+    expect(setModelSetting(models, { ...named, key: "cache_keepalive", value: "off", scope: "global" })).toEqual({ changed: true, scope: "global", ...CLAUDE_X, key: "cache_keepalive", value: "off" });
+    expect(setModelSetting(models, { ...named, key: "cache_ttl", value: "5m", scope: "character" }), "keepalives are off for every character").toEqual({ changed: true, scope: "character", ...CLAUDE_X, key: "cache_ttl", value: "5m" });
+
+    const own = await world();
+    expect(setModelSetting(own.models, { key: "cache_keepalive", value: "55m", background_task: "wake" })).toEqual({ changed: true, scope: "character", ...CLAUDE_X, background_task: "wake", key: "cache_keepalive", value: "55m" });
+    expect(setModelSetting(own.models, { key: "cache_ttl", value: "5m", background_task: "wake" })).toMatchObject({ warning: NO_KEEPALIVE });
+    const wake = modelSettings(own.models, { background_task: "wake" }) as ModelSettingsDetail;
+    expect([wake.effective_sampler.cache_ttl, wake.effective_sampler.cache_keepalive, wake.saved_character?.cache_keepalive, wake.scopes.cache_ttl, wake.scopes.cache_keepalive]).toEqual(["5m", "55m", "55m", "character_background", "character_background"]);
+  });
+
+  test("a setting for one sub-agent, or for every sub-agent on a model, is kept in its own section, and clearing it drops the section", async () => {
+    const { models } = await world();
+    expect(setModelSetting(models, { key: "max_tool_rounds", value: 3, subagent: "scout" })).toEqual({ changed: true, scope: "character", ...CLAUDE_X, subagent: "scout", key: "max_tool_rounds", value: 3 });
+    expect(setModelSetting(models, { key: "max_tool_rounds", value: 4, subagent: "all" })).toEqual({ changed: true, scope: "character", ...CLAUDE_X, subagent: "all", applies_to: "every sub-agent on this model", key: "max_tool_rounds", value: 4 });
+    const saved = () => readFileSync(characterPreferencesPath(models.dataDir, "ada"), "utf8");
+    expect([saved().includes('[subagents."scout"]\nmax_tool_rounds = 3\n'), saved().includes('[subagent_models."anthropic:claude-x"]\nmax_tool_rounds = 4\n'), saved().includes("[models.")]).toEqual([true, true, false]);
+    const chat = modelSettings(models, {}) as ModelSettingsDetail;
+    expect([chat.effective_sampler.max_tool_rounds, chat.scopes.max_tool_rounds], "the chat model keeps its own").toEqual([null, null]);
+    const detail = (subagent: string) => modelSettings(models, { subagent }) as ModelSettingsDetail;
+    expect([detail("scout").effective_sampler.max_tool_rounds, detail("scout").saved_character?.max_tool_rounds, detail("scout").saved_global, detail("scout").scopes.max_tool_rounds]).toEqual([3, 3, null, "character_subagent"]);
+    expect([detail("all").effective_sampler.max_tool_rounds, detail("all").saved_character?.max_tool_rounds, detail("all").scopes.max_tool_rounds]).toEqual([4, 4, "character_subagent_model"]);
+    setModelSetting(models, { key: "max_tool_rounds", value: null, subagent: "scout" });
+    expect([saved().includes("[subagents."), saved().includes("[subagent_models.")]).toEqual([false, true]);
+    expect(detail("scout").effective_sampler.max_tool_rounds, "back to every sub-agent's").toBe(4);
+  });
+
+  test("NanoGPT models can't be switched to the native Gemini API", async () => {
+    const { models } = await world();
+    expect(() => setModelSetting(models, { key: "sdk", value: "gemini", name: "nanogpt:m-1" })).toThrow('NanoGPT does not expose the native Gemini API; use sdk = "nanogpt" for Gemini models (OpenAI-compatible chat completions)');
+    expect(setModelSetting(models, { key: "sdk", value: "nanogpt", name: "nanogpt:m-1" })).toMatchObject({ changed: true, model: "nanogpt:m-1", key: "sdk" });
+  });
+
+  test("the overview lists each role with its model, where it comes from and what was set for it", async () => {
+    const { models } = await world();
+    setModelSetting(models, { key: "max_tool_rounds", value: 2, background_task: "wake" });
+    setModelSetting(models, { key: "max_tool_rounds", value: 3, subagent: "scout" });
+    expect(modelSettings(models, { overview: true })).toEqual({
+      overview: true, character: "ada", inherited_count: 1,
+      roles: [
+        { role: "chat", flag: "--chat", model: "anthropic:claude-x", source: "character", inherited: false, settings: [], error: null },
+        { role: "wake", flag: "--background=wake", model: "anthropic:claude-x", source: "inherits chat", inherited: true, settings: [{ key: "max_tool_rounds", value: 2, scope: "character" }], error: null },
+        { role: "sub-agent: idle", flag: "--subagent=idle", model: "anthropic:claude-y", source: "subagents.idle.model", inherited: false, settings: [], error: null },
+        { role: "sub-agent: scout", flag: "--subagent=scout", model: "anthropic:claude-x", source: "inherits sub-agents", inherited: true, settings: [{ key: "max_tool_rounds", value: 3, scope: "character" }], error: null },
+      ],
+    });
+  });
+
+  test("wakes pinned to a model of their own are listed with it, beside the chat model", async () => {
+    const { models } = await world("ada", ["[triggers]", 'model = "anthropic:claude-y"']);
+    expect(listModels(models, {}).roles).toEqual([
+      { role: "chat", model: "anthropic:claude-x", source: "character" },
+      { role: "wake", model: "anthropic:claude-y", source: "triggers.model" },
+      { role: "sub-agents", model: "anthropic:claude-x", source: "inherits chat · 1 override" },
+      { role: "images", model: null, source: null },
+    ]);
+  });
+
+  test("with no character chosen there are no character settings to show", async () => {
+    const { models } = await world(null);
+    expect((modelSettings(models, {}) as ModelSettingsDetail).saved_character).toBeNull();
   });
 });

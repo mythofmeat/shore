@@ -1,6 +1,4 @@
-export type CompactionReason =
-  | "max_turns"
-  | "idle";
+export type CompactionReason = "idle";
 
 export interface TickInputs {
   readonly compactionEnabled: boolean;

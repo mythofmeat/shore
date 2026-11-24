@@ -1,5 +1,5 @@
 import { afterAll, afterEach, beforeAll, describe, expect, spyOn, test } from "bun:test";
-import { LISTING, connect, forgetKeptSettings, keptSettings, replace, type Answer } from "./daemon.ts";
+import { connect, forgetKeptSettings, keptSettings, replace, type Answer } from "./daemon.ts";
 import { acting, blockStorage, renderHook, useDom } from "./dom.ts";
 
 useDom("http://shore.test:7340/workspace/ada/story");
@@ -52,7 +52,7 @@ describe("the app's state", () => {
     }
   });
 
-  test("shows each streamed piece on the next animation frame, and keeps the compaction pass's to its frames too", async () => {
+  test("shows each streamed piece on the next animation frame", async () => {
     const frames: (() => void)[] = [];
     swap(globalThis, "requestAnimationFrame", (callback: () => void) => { frames.push(callback); return frames.length; });
     const state = await load();
@@ -67,46 +67,6 @@ describe("the app's state", () => {
     expect(heard).toBe(1);
     expect(state.workspace.getSnapshot().streams.at(-1)?.text).toBe("hello");
 
-    state.compactionWatch.open("ada", { thread: "story", trigger: "idle", started_at: "2026-11-10T00:00:00Z" });
-    await Bun.sleep(5);
-    const watch = socket.sent.find((request) => request["name"] === "compact_watch");
-    expect(watch).toMatchObject({ type: "command", args: {} });
-    let watched = 0;
-    state.compactionWatch.subscribe(() => { watched += 1; });
-    socket.receive({ type: "stream_chunk", rid: watch?.["rid"], text: "summary", content_type: "text" });
-    expect(watched).toBe(0);
-    expect(frames).toHaveLength(1);
-    frames.shift()?.();
-    expect(watched).toBe(1);
-    expect(state.compactionWatch.getSnapshot()?.blocks).toEqual([{ type: "text", text: "summary" }]);
-  });
-
-  test("stopping a compaction asks the daemon, and a reconnection replays an interrupted watch", async () => {
-    const state = await load();
-    const socket = await connected(state, (request) => {
-      if (request["name"] === "compact_cancel") return { character: "ada", state: "idle", pass: null };
-      if (request["name"] === "list_threads") return LISTING;
-      if (request["name"] === "discover_operations") return { operations: [], requests: [] };
-      if (request["name"] === "list_characters") return { characters: [] };
-      return undefined;
-    });
-    state.compactionWatch.open("ada", { thread: "story", trigger: "idle", started_at: "2026-11-10T00:00:00Z" });
-    expect(await state.compactionWatch.stop()).toBe("No compaction is running.");
-    expect(socket.sent.map((request) => request["name"])).toContain("compact_cancel");
-    expect(state.compactionWatch.getSnapshot()?.running).toBe(false);
-    const fresh = await load();
-    fresh.compactionWatch.open("ada", { thread: "story", trigger: "idle", started_at: "2026-11-10T00:00:00Z" });
-    await Bun.sleep(5);
-    expect(fresh.compactionWatch.getSnapshot()?.interrupted, "with no connection the watch cannot start").toBe(true);
-    let watched = 0;
-    const leave = fresh.compactionWatch.subscribe(() => { watched += 1; });
-    fresh.workspace.connection.stop();
-    await Bun.sleep(5);
-    expect(watched, "only a ready connection restarts the watch").toBe(0);
-    leave();
-    const freshSocket = await connected(fresh);
-    expect(fresh.compactionWatch.getSnapshot()?.interrupted).toBe(false);
-    expect(freshSocket.sent.some((request) => request["name"] === "compact_watch"), "it was watched again once ready").toBe(true);
   });
 
   test("notifies about replies while connected, and marks them read when the page gets focus", async () => {
@@ -186,7 +146,7 @@ describe("the app's state", () => {
 const EVERYWHERE = {
   "shore.theme": "fog", "shore.font-size": "large", "shore.stream": "false", "shore.enter-sends": "false", "shore.vim-mode": "true",
   "shore.folders.collapsed": JSON.stringify({ ada: ["work"] }),
-  "shore.view.v1.timestamps": "off", "shore.view.v1.thinking": "off", "shore.view.v1.tools": "off", "shore.view.v1.subagent": "off", "shore.view.v1.compaction": "off",
+  "shore.view.v1.timestamps": "off", "shore.view.v1.thinking": "off", "shore.view.v1.tools": "off", "shore.view.v1.subagent": "off",
   "shore.view.v1.images": "off", "shore.view.v1.metadata": "on", "shore.view.v1.usage": "always", "shore.view.v1.budget": "pace", "shore.view.v1.notes": "off",
 };
 const PER_BROWSER = { "shore.notify": "true", "shore.sidebar": "false", "shore.settings-page": "usage" };
@@ -205,7 +165,7 @@ describe("settings the daemon keeps", () => {
     expect(keptSettings.lists).toBe(1);
     expect(Object.fromEntries(Object.keys({ ...EVERYWHERE, ...PER_BROWSER }).map((key) => [key, localStorage.getItem(key)]))).toEqual({ ...EVERYWHERE, ...PER_BROWSER });
     expect([state.themes.getSnapshot(), document.documentElement.dataset["theme"], state.fontSizes.getSnapshot(), vim.current()[0]]).toEqual(["fog", "fog", "large", true]);
-    expect(state.display.getSnapshot().values).toEqual({ timestamps: "off", thinking: "off", tools: "off", subagent: "off", compaction: "off", images: "off", metadata: "on", usage: "always", budget: "pace", notes: "off" });
+    expect(state.display.getSnapshot().values).toEqual({ timestamps: "off", thinking: "off", tools: "off", subagent: "off", images: "off", metadata: "on", usage: "always", budget: "pace", notes: "off" });
     expect([state.streamReplies(), state.enterSends(), state.notifier.getSnapshot().enabled, [...state.collapsedFolders.of("ada")]]).toEqual([false, false, true, ["work"]]);
     expect(keptSettings.saves).toEqual([]);
     await vim.unmount();
@@ -359,9 +319,9 @@ describe("the app's hooks", () => {
     const hook = await renderHook(() => ({
       workspace: state.useWorkspace(), chrome: state.useChrome(), status: state.useWorkspaceValue((snapshot) => snapshot.status),
       theme: state.useTheme(), size: state.useFontSize(), notifications: state.useNotifications(), display: state.useDisplay(),
-      active: state.useActiveRequests(), busy: state.useConversationActive({ character: "ada", thread: "story" }), compaction: state.useCompactionRecord(), folders: state.useCollapsedFolders("ada"),
+      active: state.useActiveRequests(), busy: state.useConversationActive({ character: "ada", thread: "story" }), folders: state.useCollapsedFolders("ada"),
     }), undefined);
-    expect(hook.current()).toMatchObject({ status: "idle", theme: "default", size: "default", notifications: { unread: 0 }, compaction: null, busy: false });
+    expect(hook.current()).toMatchObject({ status: "idle", theme: "default", size: "default", notifications: { unread: 0 }, busy: false });
     expect(hook.current().workspace).toBe(state.workspace.getSnapshot());
     expect(hook.current().display).toBe(state.display.getSnapshot().values);
     expect(hook.current().active).toBe(state.conversation.getSnapshot());

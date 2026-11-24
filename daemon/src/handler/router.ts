@@ -144,7 +144,7 @@ export interface MessageHandlerDeps {
 
 export { sanitiseRid } from "../swp/admission.ts";
 
-const UNQUEUED_COMMANDS: ReadonlySet<string> = new Set(["compact", "compact_watch", "compact_cancel"]);
+const UNQUEUED_COMMANDS: ReadonlySet<string> = new Set(["compact"]);
 
 const SLOW_INDEPENDENT_COMMANDS: ReadonlySet<string> = new Set([
   "refresh_provider_models",

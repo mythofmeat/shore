@@ -334,10 +334,12 @@ test("a wake started by hand while a reply in home is still generating waits for
 });
 
 test("a wake in home leaves there how it opened, a line saying where its working went and what it sent, its working goes to the wakes thread for the user to read, and the next one starts fresh with only what was said there since", async () => {
-  await withCharacter(async ({ script, say, wakeNow, thread }) => {
+  await withCharacter(async ({ script, say, wakeNow, thread, events }) => {
     await say("the keeper's name is Mara");
     at(10);
     await wakeNow();
+    const wakesListed = () => events.filter((event) => event.type === "threads_changed" && event.thread === "wakes");
+    expect(wakesListed(), "the clients are told of the wakes thread the first wake made").toEqual([{ type: "threads_changed", character: "ada", thread: "wakes" }]);
 
     const started = byHand("12:10 PM");
     const kept = (await thread("main")).slice(2);
@@ -389,6 +391,7 @@ test("a wake in home leaves there how it opened, a line saying where its working
     expect(textOf(next)).not.toContain("Done.");
     expect(next.messages.flatMap((message) => message.content).filter((block) => block.type === "tool_use" || block.type === "tool_result")).toEqual([]);
     expect((await thread("main")).filter((message) => message.role === "user" && message.origin === "autonomous")).toHaveLength(2);
+    expect(wakesListed(), "the next wake finds it there").toHaveLength(1);
   });
 });
 

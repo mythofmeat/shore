@@ -1,7 +1,6 @@
 import { useSyncExternalStore } from "react";
 import { BrowserConnection } from "../connection.ts";
 import { chromeOf } from "../chrome.ts";
-import { CompactionWatch, type PassRecord } from "../chat/compaction_watch.ts";
 import { ConversationRequests, type ConversationScope } from "../chat/requests.ts";
 import { ReadMarks } from "../chat/read_marks.ts";
 import { ReplyMarkStore } from "../chat/reply_marks.ts";
@@ -114,16 +113,6 @@ export function useActiveRequests(): ReadonlySet<string> {
 export function useConversationActive(scope: ConversationScope): boolean {
   useActiveRequests();
   return conversation.activeIn(scope);
-}
-
-export const compactionWatch = new CompactionWatch({
-  watch: async (observe) => await workspace.actions.run("compact_watch", {}, { observe }),
-  stop: async () => await workspace.actions.run("compact_cancel", {}),
-}, (callback) => { requestAnimationFrame(callback); });
-workspace.connection.subscribe((update) => { if (update.kind === "status" && update.status === "ready") compactionWatch.reconnected(); });
-
-export function useCompactionRecord(): PassRecord | null {
-  return useSyncExternalStore(compactionWatch.subscribe, compactionWatch.getSnapshot);
 }
 
 export function streamReplies(): boolean {

@@ -730,38 +730,6 @@
             "properties": {
               "name": {
                 "type": "string",
-                "const": "compact_watch"
-              },
-              "data": {
-                "$ref": "#/$defs/CompactionWatchResult"
-              }
-            },
-            "required": [
-              "name",
-              "data"
-            ]
-          },
-          {
-            "type": "object",
-            "properties": {
-              "name": {
-                "type": "string",
-                "const": "compact_cancel"
-              },
-              "data": {
-                "$ref": "#/$defs/CompactionWatchResult"
-              }
-            },
-            "required": [
-              "name",
-              "data"
-            ]
-          },
-          {
-            "type": "object",
-            "properties": {
-              "name": {
-                "type": "string",
                 "const": "segments"
               },
               "data": {
@@ -3617,58 +3585,6 @@
             "properties": {
               "status": {
                 "type": "string",
-                "const": "compacted"
-              },
-              "character": {
-                "type": "string"
-              },
-              "compacted_turns": {
-                "type": "integer",
-                "format": "uint",
-                "minimum": 0
-              },
-              "retained_turns": {
-                "type": "integer",
-                "format": "uint",
-                "minimum": 0
-              },
-              "memory_files_written": {
-                "type": "array",
-                "items": {
-                  "type": "string"
-                }
-              },
-              "new_conversation_id": {
-                "type": "string"
-              },
-              "tool_rounds": {
-                "type": "integer",
-                "format": "uint",
-                "minimum": 0
-              },
-              "tools_called": {
-                "type": "array",
-                "items": {
-                  "type": "string"
-                }
-              }
-            },
-            "required": [
-              "status",
-              "character",
-              "compacted_turns",
-              "retained_turns",
-              "memory_files_written",
-              "new_conversation_id",
-              "tool_rounds",
-              "tools_called"
-            ]
-          },
-          {
-            "type": "object",
-            "properties": {
-              "status": {
-                "type": "string",
                 "const": "rotated"
               },
               "character": {
@@ -3686,12 +3602,6 @@
               },
               "dry_run": {
                 "type": "boolean"
-              },
-              "memory_files_written": {
-                "type": "array",
-                "items": {
-                  "type": "string"
-                }
               }
             },
             "required": [
@@ -3699,316 +3609,9 @@
               "character",
               "compacted_turns",
               "retained_turns",
-              "dry_run",
-              "memory_files_written"
-            ]
-          },
-          {
-            "type": "object",
-            "properties": {
-              "status": {
-                "type": "string",
-                "const": "dry_run"
-              },
-              "character": {
-                "type": "string"
-              },
-              "compacted_turns": {
-                "type": "integer",
-                "format": "uint",
-                "minimum": 0
-              },
-              "retained_turns": {
-                "type": "integer",
-                "format": "uint",
-                "minimum": 0
-              },
-              "would_write_files": {
-                "type": "integer",
-                "format": "uint",
-                "minimum": 0
-              },
-              "file_ops_preview": {
-                "type": "array",
-                "items": {
-                  "$ref": "#/$defs/CompactionPreviewFile"
-                }
-              },
-              "tool_rounds": {
-                "type": "integer",
-                "format": "uint",
-                "minimum": 0
-              },
-              "tools_called": {
-                "type": "array",
-                "items": {
-                  "type": "string"
-                }
-              }
-            },
-            "required": [
-              "status",
-              "character",
-              "compacted_turns",
-              "retained_turns",
-              "would_write_files",
-              "file_ops_preview",
-              "tool_rounds",
-              "tools_called"
-            ]
-          },
-          {
-            "type": "object",
-            "properties": {
-              "status": {
-                "type": "string",
-                "const": "truncated"
-              },
-              "character": {
-                "type": "string"
-              },
-              "compacted_turns": {
-                "type": "integer",
-                "format": "uint",
-                "minimum": 0
-              },
-              "tool_rounds": {
-                "type": "integer",
-                "format": "uint",
-                "minimum": 0
-              },
-              "tools_called": {
-                "type": "array",
-                "items": {
-                  "type": "string"
-                }
-              },
-              "truncated_turns": {
-                "type": "integer",
-                "format": "uint",
-                "minimum": 0
-              },
-              "partial_writes": {
-                "type": "array",
-                "items": {
-                  "type": "string"
-                }
-              }
-            },
-            "required": [
-              "status",
-              "character",
-              "compacted_turns",
-              "tool_rounds",
-              "tools_called",
-              "truncated_turns",
-              "partial_writes"
-            ]
-          },
-          {
-            "type": "object",
-            "properties": {
-              "status": {
-                "type": "string",
-                "const": "segment"
-              },
-              "character": {
-                "type": "string"
-              },
-              "segment": {
-                "type": "integer",
-                "format": "uint64",
-                "minimum": 0
-              },
-              "compacted_turns": {
-                "type": "integer",
-                "format": "uint",
-                "minimum": 0
-              },
-              "memory_files_written": {
-                "type": "array",
-                "items": {
-                  "type": "string"
-                }
-              },
-              "tool_rounds": {
-                "type": "integer",
-                "format": "uint",
-                "minimum": 0
-              },
-              "tools_called": {
-                "type": "array",
-                "items": {
-                  "type": "string"
-                }
-              }
-            },
-            "required": [
-              "status",
-              "character",
-              "segment",
-              "compacted_turns",
-              "memory_files_written",
-              "tool_rounds",
-              "tools_called"
-            ]
-          },
-          {
-            "type": "object",
-            "properties": {
-              "status": {
-                "type": "string",
-                "const": "paused"
-              },
-              "character": {
-                "type": "string"
-              },
-              "compacted_turns": {
-                "type": "integer",
-                "format": "uint",
-                "minimum": 0
-              },
-              "checkpoint_id": {
-                "type": "string"
-              },
-              "tool_rounds": {
-                "type": "integer",
-                "format": "uint",
-                "minimum": 0
-              },
-              "tools_called": {
-                "type": "array",
-                "items": {
-                  "type": "string"
-                }
-              },
-              "reason": {
-                "type": "string"
-              },
-              "detail": {
-                "type": [
-                  "string",
-                  "null"
-                ]
-              },
-              "resume_at": {
-                "type": [
-                  "string",
-                  "null"
-                ]
-              }
-            },
-            "required": [
-              "status",
-              "character",
-              "compacted_turns",
-              "checkpoint_id",
-              "tool_rounds",
-              "tools_called",
-              "reason",
-              "detail",
-              "resume_at"
+              "dry_run"
             ]
           }
-        ]
-      },
-      "CompactionPreviewFile": {
-        "type": "object",
-        "properties": {
-          "path": {
-            "type": "string"
-          },
-          "content_preview": {
-            "type": "string"
-          }
-        },
-        "required": [
-          "path",
-          "content_preview"
-        ]
-      },
-      "CompactionWatchResult": {
-        "type": "object",
-        "properties": {
-          "character": {
-            "type": "string"
-          },
-          "state": {
-            "$ref": "#/$defs/CompactionWatchState"
-          },
-          "pass": {
-            "anyOf": [
-              {
-                "$ref": "#/$defs/CompactionPassEnd"
-              },
-              {
-                "type": "null"
-              }
-            ]
-          }
-        },
-        "required": [
-          "character",
-          "state",
-          "pass"
-        ]
-      },
-      "CompactionWatchState": {
-        "type": "string",
-        "enum": [
-          "finished",
-          "cancelled",
-          "idle"
-        ]
-      },
-      "CompactionPassEnd": {
-        "type": "object",
-        "properties": {
-          "thread": {
-            "type": "string"
-          },
-          "trigger": {
-            "$ref": "#/$defs/CompactionTrigger"
-          },
-          "started_at": {
-            "type": "string"
-          },
-          "ended_at": {
-            "type": "string"
-          },
-          "report": {
-            "anyOf": [
-              {
-                "$ref": "#/$defs/CompactionReport"
-              },
-              {
-                "type": "null"
-              }
-            ]
-          },
-          "error": {
-            "type": [
-              "string",
-              "null"
-            ]
-          }
-        },
-        "required": [
-          "thread",
-          "trigger",
-          "started_at",
-          "ended_at",
-          "report",
-          "error"
-        ]
-      },
-      "CompactionTrigger": {
-        "type": "string",
-        "enum": [
-          "manual",
-          "idle",
-          "turn",
-          "deep_archive"
         ]
       },
       "SegmentsResult": {
@@ -4691,16 +4294,6 @@
               }
             ]
           },
-          "compaction": {
-            "anyOf": [
-              {
-                "$ref": "#/$defs/CompactionStatusReport"
-              },
-              {
-                "type": "null"
-              }
-            ]
-          },
           "running": {
             "anyOf": [
               {
@@ -5164,128 +4757,6 @@
           "invalid"
         ]
       },
-      "CompactionStatusReport": {
-        "type": "object",
-        "properties": {
-          "running": {
-            "anyOf": [
-              {
-                "$ref": "#/$defs/CompactionPassProgress"
-              },
-              {
-                "type": "null"
-              }
-            ]
-          },
-          "paused": {
-            "anyOf": [
-              {
-                "$ref": "#/$defs/CompactionCheckpointStatus"
-              },
-              {
-                "type": "null"
-              }
-            ]
-          },
-          "last": {
-            "anyOf": [
-              {
-                "$ref": "#/$defs/CompactionPassEnd"
-              },
-              {
-                "type": "null"
-              }
-            ]
-          }
-        },
-        "required": [
-          "running",
-          "paused",
-          "last"
-        ]
-      },
-      "CompactionPassProgress": {
-        "type": "object",
-        "properties": {
-          "thread": {
-            "type": "string"
-          },
-          "trigger": {
-            "$ref": "#/$defs/CompactionTrigger"
-          },
-          "started_at": {
-            "type": "string"
-          },
-          "phase": {
-            "type": [
-              "string",
-              "null"
-            ]
-          },
-          "last_tool": {
-            "type": [
-              "string",
-              "null"
-            ]
-          }
-        },
-        "required": [
-          "thread",
-          "trigger",
-          "started_at",
-          "phase",
-          "last_tool"
-        ]
-      },
-      "CompactionCheckpointStatus": {
-        "type": "object",
-        "properties": {
-          "thread": {
-            "type": "string"
-          },
-          "checkpoint_id": {
-            "type": "string"
-          },
-          "reason": {
-            "type": "string"
-          },
-          "detail": {
-            "type": [
-              "string",
-              "null"
-            ]
-          },
-          "resume_at": {
-            "type": [
-              "string",
-              "null"
-            ]
-          },
-          "tool_rounds": {
-            "type": "integer",
-            "format": "uint",
-            "minimum": 0
-          },
-          "compacted_turns": {
-            "type": "integer",
-            "format": "uint",
-            "minimum": 0
-          },
-          "updated_at": {
-            "type": "string"
-          }
-        },
-        "required": [
-          "thread",
-          "checkpoint_id",
-          "reason",
-          "detail",
-          "resume_at",
-          "tool_rounds",
-          "compacted_turns",
-          "updated_at"
-        ]
-      },
       "RunningStatusReport": {
         "type": "object",
         "properties": {
@@ -5347,8 +4818,7 @@
         "type": "string",
         "enum": [
           "message",
-          "wake",
-          "compaction"
+          "wake"
         ]
       },
       "ShutdownWindow": {
@@ -10033,16 +9503,6 @@
               "null"
             ]
           },
-          "compaction": {
-            "anyOf": [
-              {
-                "$ref": "#/$defs/RunningCompaction"
-              },
-              {
-                "type": "null"
-              }
-            ]
-          },
           "invalidated": {
             "anyOf": [
               {
@@ -10227,45 +9687,6 @@
           "name"
         ]
       },
-      "RunningCompaction": {
-        "type": "object",
-        "properties": {
-          "thread": {
-            "type": "string"
-          },
-          "trigger": {
-            "$ref": "#/$defs/CompactionTrigger"
-          },
-          "started_at": {
-            "type": "string"
-          },
-          "turns": {
-            "type": [
-              "integer",
-              "null"
-            ],
-            "format": "uint64",
-            "minimum": 0
-          },
-          "first_at": {
-            "type": [
-              "string",
-              "null"
-            ]
-          },
-          "last_at": {
-            "type": [
-              "string",
-              "null"
-            ]
-          }
-        },
-        "required": [
-          "thread",
-          "trigger",
-          "started_at"
-        ]
-      },
       "CacheInvalidation": {
         "type": "object",
         "properties": {
@@ -10357,16 +9778,6 @@
             "type": [
               "boolean",
               "null"
-            ]
-          },
-          "compaction": {
-            "anyOf": [
-              {
-                "$ref": "#/$defs/RunningCompaction"
-              },
-              {
-                "type": "null"
-              }
             ]
           },
           "invalidated": {
@@ -10796,38 +10207,6 @@
             "properties": {
               "name": {
                 "type": "string",
-                "const": "compact_watch"
-              },
-              "data": {
-                "$ref": "#/$defs/CompactionWatchResult"
-              }
-            },
-            "required": [
-              "name",
-              "data"
-            ]
-          },
-          {
-            "type": "object",
-            "properties": {
-              "name": {
-                "type": "string",
-                "const": "compact_cancel"
-              },
-              "data": {
-                "$ref": "#/$defs/CompactionWatchResult"
-              }
-            },
-            "required": [
-              "name",
-              "data"
-            ]
-          },
-          {
-            "type": "object",
-            "properties": {
-              "name": {
-                "type": "string",
                 "const": "segments"
               },
               "data": {
@@ -13683,58 +13062,6 @@
             "properties": {
               "status": {
                 "type": "string",
-                "const": "compacted"
-              },
-              "character": {
-                "type": "string"
-              },
-              "compacted_turns": {
-                "type": "integer",
-                "format": "uint",
-                "minimum": 0
-              },
-              "retained_turns": {
-                "type": "integer",
-                "format": "uint",
-                "minimum": 0
-              },
-              "memory_files_written": {
-                "type": "array",
-                "items": {
-                  "type": "string"
-                }
-              },
-              "new_conversation_id": {
-                "type": "string"
-              },
-              "tool_rounds": {
-                "type": "integer",
-                "format": "uint",
-                "minimum": 0
-              },
-              "tools_called": {
-                "type": "array",
-                "items": {
-                  "type": "string"
-                }
-              }
-            },
-            "required": [
-              "status",
-              "character",
-              "compacted_turns",
-              "retained_turns",
-              "memory_files_written",
-              "new_conversation_id",
-              "tool_rounds",
-              "tools_called"
-            ]
-          },
-          {
-            "type": "object",
-            "properties": {
-              "status": {
-                "type": "string",
                 "const": "rotated"
               },
               "character": {
@@ -13752,12 +13079,6 @@
               },
               "dry_run": {
                 "type": "boolean"
-              },
-              "memory_files_written": {
-                "type": "array",
-                "items": {
-                  "type": "string"
-                }
               }
             },
             "required": [
@@ -13765,316 +13086,9 @@
               "character",
               "compacted_turns",
               "retained_turns",
-              "dry_run",
-              "memory_files_written"
-            ]
-          },
-          {
-            "type": "object",
-            "properties": {
-              "status": {
-                "type": "string",
-                "const": "dry_run"
-              },
-              "character": {
-                "type": "string"
-              },
-              "compacted_turns": {
-                "type": "integer",
-                "format": "uint",
-                "minimum": 0
-              },
-              "retained_turns": {
-                "type": "integer",
-                "format": "uint",
-                "minimum": 0
-              },
-              "would_write_files": {
-                "type": "integer",
-                "format": "uint",
-                "minimum": 0
-              },
-              "file_ops_preview": {
-                "type": "array",
-                "items": {
-                  "$ref": "#/$defs/CompactionPreviewFile"
-                }
-              },
-              "tool_rounds": {
-                "type": "integer",
-                "format": "uint",
-                "minimum": 0
-              },
-              "tools_called": {
-                "type": "array",
-                "items": {
-                  "type": "string"
-                }
-              }
-            },
-            "required": [
-              "status",
-              "character",
-              "compacted_turns",
-              "retained_turns",
-              "would_write_files",
-              "file_ops_preview",
-              "tool_rounds",
-              "tools_called"
-            ]
-          },
-          {
-            "type": "object",
-            "properties": {
-              "status": {
-                "type": "string",
-                "const": "truncated"
-              },
-              "character": {
-                "type": "string"
-              },
-              "compacted_turns": {
-                "type": "integer",
-                "format": "uint",
-                "minimum": 0
-              },
-              "tool_rounds": {
-                "type": "integer",
-                "format": "uint",
-                "minimum": 0
-              },
-              "tools_called": {
-                "type": "array",
-                "items": {
-                  "type": "string"
-                }
-              },
-              "truncated_turns": {
-                "type": "integer",
-                "format": "uint",
-                "minimum": 0
-              },
-              "partial_writes": {
-                "type": "array",
-                "items": {
-                  "type": "string"
-                }
-              }
-            },
-            "required": [
-              "status",
-              "character",
-              "compacted_turns",
-              "tool_rounds",
-              "tools_called",
-              "truncated_turns",
-              "partial_writes"
-            ]
-          },
-          {
-            "type": "object",
-            "properties": {
-              "status": {
-                "type": "string",
-                "const": "segment"
-              },
-              "character": {
-                "type": "string"
-              },
-              "segment": {
-                "type": "integer",
-                "format": "uint64",
-                "minimum": 0
-              },
-              "compacted_turns": {
-                "type": "integer",
-                "format": "uint",
-                "minimum": 0
-              },
-              "memory_files_written": {
-                "type": "array",
-                "items": {
-                  "type": "string"
-                }
-              },
-              "tool_rounds": {
-                "type": "integer",
-                "format": "uint",
-                "minimum": 0
-              },
-              "tools_called": {
-                "type": "array",
-                "items": {
-                  "type": "string"
-                }
-              }
-            },
-            "required": [
-              "status",
-              "character",
-              "segment",
-              "compacted_turns",
-              "memory_files_written",
-              "tool_rounds",
-              "tools_called"
-            ]
-          },
-          {
-            "type": "object",
-            "properties": {
-              "status": {
-                "type": "string",
-                "const": "paused"
-              },
-              "character": {
-                "type": "string"
-              },
-              "compacted_turns": {
-                "type": "integer",
-                "format": "uint",
-                "minimum": 0
-              },
-              "checkpoint_id": {
-                "type": "string"
-              },
-              "tool_rounds": {
-                "type": "integer",
-                "format": "uint",
-                "minimum": 0
-              },
-              "tools_called": {
-                "type": "array",
-                "items": {
-                  "type": "string"
-                }
-              },
-              "reason": {
-                "type": "string"
-              },
-              "detail": {
-                "type": [
-                  "string",
-                  "null"
-                ]
-              },
-              "resume_at": {
-                "type": [
-                  "string",
-                  "null"
-                ]
-              }
-            },
-            "required": [
-              "status",
-              "character",
-              "compacted_turns",
-              "checkpoint_id",
-              "tool_rounds",
-              "tools_called",
-              "reason",
-              "detail",
-              "resume_at"
+              "dry_run"
             ]
           }
-        ]
-      },
-      "CompactionPreviewFile": {
-        "type": "object",
-        "properties": {
-          "path": {
-            "type": "string"
-          },
-          "content_preview": {
-            "type": "string"
-          }
-        },
-        "required": [
-          "path",
-          "content_preview"
-        ]
-      },
-      "CompactionWatchResult": {
-        "type": "object",
-        "properties": {
-          "character": {
-            "type": "string"
-          },
-          "state": {
-            "$ref": "#/$defs/CompactionWatchState"
-          },
-          "pass": {
-            "anyOf": [
-              {
-                "$ref": "#/$defs/CompactionPassEnd"
-              },
-              {
-                "type": "null"
-              }
-            ]
-          }
-        },
-        "required": [
-          "character",
-          "state",
-          "pass"
-        ]
-      },
-      "CompactionWatchState": {
-        "type": "string",
-        "enum": [
-          "finished",
-          "cancelled",
-          "idle"
-        ]
-      },
-      "CompactionPassEnd": {
-        "type": "object",
-        "properties": {
-          "thread": {
-            "type": "string"
-          },
-          "trigger": {
-            "$ref": "#/$defs/CompactionTrigger"
-          },
-          "started_at": {
-            "type": "string"
-          },
-          "ended_at": {
-            "type": "string"
-          },
-          "report": {
-            "anyOf": [
-              {
-                "$ref": "#/$defs/CompactionReport"
-              },
-              {
-                "type": "null"
-              }
-            ]
-          },
-          "error": {
-            "type": [
-              "string",
-              "null"
-            ]
-          }
-        },
-        "required": [
-          "thread",
-          "trigger",
-          "started_at",
-          "ended_at",
-          "report",
-          "error"
-        ]
-      },
-      "CompactionTrigger": {
-        "type": "string",
-        "enum": [
-          "manual",
-          "idle",
-          "turn",
-          "deep_archive"
         ]
       },
       "SegmentsResult": {
@@ -14757,16 +13771,6 @@
               }
             ]
           },
-          "compaction": {
-            "anyOf": [
-              {
-                "$ref": "#/$defs/CompactionStatusReport"
-              },
-              {
-                "type": "null"
-              }
-            ]
-          },
           "running": {
             "anyOf": [
               {
@@ -15230,128 +14234,6 @@
           "invalid"
         ]
       },
-      "CompactionStatusReport": {
-        "type": "object",
-        "properties": {
-          "running": {
-            "anyOf": [
-              {
-                "$ref": "#/$defs/CompactionPassProgress"
-              },
-              {
-                "type": "null"
-              }
-            ]
-          },
-          "paused": {
-            "anyOf": [
-              {
-                "$ref": "#/$defs/CompactionCheckpointStatus"
-              },
-              {
-                "type": "null"
-              }
-            ]
-          },
-          "last": {
-            "anyOf": [
-              {
-                "$ref": "#/$defs/CompactionPassEnd"
-              },
-              {
-                "type": "null"
-              }
-            ]
-          }
-        },
-        "required": [
-          "running",
-          "paused",
-          "last"
-        ]
-      },
-      "CompactionPassProgress": {
-        "type": "object",
-        "properties": {
-          "thread": {
-            "type": "string"
-          },
-          "trigger": {
-            "$ref": "#/$defs/CompactionTrigger"
-          },
-          "started_at": {
-            "type": "string"
-          },
-          "phase": {
-            "type": [
-              "string",
-              "null"
-            ]
-          },
-          "last_tool": {
-            "type": [
-              "string",
-              "null"
-            ]
-          }
-        },
-        "required": [
-          "thread",
-          "trigger",
-          "started_at",
-          "phase",
-          "last_tool"
-        ]
-      },
-      "CompactionCheckpointStatus": {
-        "type": "object",
-        "properties": {
-          "thread": {
-            "type": "string"
-          },
-          "checkpoint_id": {
-            "type": "string"
-          },
-          "reason": {
-            "type": "string"
-          },
-          "detail": {
-            "type": [
-              "string",
-              "null"
-            ]
-          },
-          "resume_at": {
-            "type": [
-              "string",
-              "null"
-            ]
-          },
-          "tool_rounds": {
-            "type": "integer",
-            "format": "uint",
-            "minimum": 0
-          },
-          "compacted_turns": {
-            "type": "integer",
-            "format": "uint",
-            "minimum": 0
-          },
-          "updated_at": {
-            "type": "string"
-          }
-        },
-        "required": [
-          "thread",
-          "checkpoint_id",
-          "reason",
-          "detail",
-          "resume_at",
-          "tool_rounds",
-          "compacted_turns",
-          "updated_at"
-        ]
-      },
       "RunningStatusReport": {
         "type": "object",
         "properties": {
@@ -15413,8 +14295,7 @@
         "type": "string",
         "enum": [
           "message",
-          "wake",
-          "compaction"
+          "wake"
         ]
       },
       "ShutdownWindow": {
@@ -20099,16 +18980,6 @@
               "null"
             ]
           },
-          "compaction": {
-            "anyOf": [
-              {
-                "$ref": "#/$defs/RunningCompaction"
-              },
-              {
-                "type": "null"
-              }
-            ]
-          },
           "invalidated": {
             "anyOf": [
               {
@@ -20293,45 +19164,6 @@
           "name"
         ]
       },
-      "RunningCompaction": {
-        "type": "object",
-        "properties": {
-          "thread": {
-            "type": "string"
-          },
-          "trigger": {
-            "$ref": "#/$defs/CompactionTrigger"
-          },
-          "started_at": {
-            "type": "string"
-          },
-          "turns": {
-            "type": [
-              "integer",
-              "null"
-            ],
-            "format": "uint64",
-            "minimum": 0
-          },
-          "first_at": {
-            "type": [
-              "string",
-              "null"
-            ]
-          },
-          "last_at": {
-            "type": [
-              "string",
-              "null"
-            ]
-          }
-        },
-        "required": [
-          "thread",
-          "trigger",
-          "started_at"
-        ]
-      },
       "CacheInvalidation": {
         "type": "object",
         "properties": {
@@ -20423,16 +19255,6 @@
             "type": [
               "boolean",
               "null"
-            ]
-          },
-          "compaction": {
-            "anyOf": [
-              {
-                "$ref": "#/$defs/RunningCompaction"
-              },
-              {
-                "type": "null"
-              }
             ]
           },
           "invalidated": {

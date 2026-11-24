@@ -80,7 +80,6 @@ export class CacheTracker {
   #lastToolLoopCacheRead = 0;
   #ttlSecs: number;
   readonly #keepaliveWindows = new Map<string, number>();
-  #ttlExpiredSinceWarm = false;
 
   #keepaliveMissedModel: ModelIdentity | undefined;
   #lastActivityTs: number | undefined;
@@ -135,10 +134,7 @@ export class CacheTracker {
     if (obs.call_type === "compaction") {
       this.#state = "cold";
       this.#lastCacheRead = 0;
-      this.#clearToolLoopBaseline();
-      this.#ttlExpiredSinceWarm = false;
       this.#updateMetadata(obsTs, identity, obs.thinking_enabled, obs.tool_surface);
-      this.#lastCallType = obs.call_type;
       this.#keepaliveMissedModel = undefined;
       return { state: this.#state, anomaly: undefined };
     }
@@ -149,17 +145,12 @@ export class CacheTracker {
     if (this.#lastModel !== undefined && !sameModel(this.#lastModel, identity)) {
       this.#state = "cold";
       this.#lastCacheRead = 0;
-      this.#clearToolLoopBaseline();
-      this.#ttlExpiredSinceWarm = false;
     }
 
-    if (this.#state === "warm" && this.#lastTs !== undefined && obsTs !== undefined) {
-      if (secondsBetween(obsTs, this.#lastTs) > this.#ttlSecs) {
-        this.#state = "cold";
-        this.#lastCacheRead = 0;
-        this.#clearToolLoopBaseline();
-        this.#ttlExpiredSinceWarm = true;
-      }
+    const ttlExpired = this.#state === "warm" && this.#lastTs !== undefined && obsTs !== undefined && secondsBetween(obsTs, this.#lastTs) > this.#ttlSecs;
+    if (ttlExpired) {
+      this.#state = "cold";
+      this.#lastCacheRead = 0;
     }
 
     if (
@@ -169,8 +160,6 @@ export class CacheTracker {
     ) {
       this.#state = "cold";
       this.#lastCacheRead = 0;
-      this.#clearToolLoopBaseline();
-      this.#ttlExpiredSinceWarm = false;
     }
 
     if (
@@ -181,8 +170,6 @@ export class CacheTracker {
     ) {
       this.#state = "cold";
       this.#lastCacheRead = 0;
-      this.#clearToolLoopBaseline();
-      this.#ttlExpiredSinceWarm = false;
     }
 
     let anomaly: Anomaly | undefined;
@@ -192,8 +179,7 @@ export class CacheTracker {
       this.#state = "warm";
     }
 
-    if (this.#ttlExpiredSinceWarm) {
-      this.#ttlExpiredSinceWarm = false;
+    if (ttlExpired) {
       if (obs.call_type !== "keepalive") {
         const withinKeepaliveWindow =
           maxIdleSecs > 0 && (this.#lastActivityTs !== undefined && obsTs !== undefined
@@ -222,9 +208,7 @@ export class CacheTracker {
       sameModel(this.#keepaliveMissedModel, identity) &&
       obs.cache_read_tokens > 0 &&
       obs.call_type !== "wake" &&
-      obs.call_type !== "wake_tool_loop" &&
-      obs.call_type !== "dreaming" &&
-      obs.call_type !== "dreaming_tool_loop"
+      obs.call_type !== "wake_tool_loop"
     ) {
       this.#keepaliveMissedModel = undefined;
     }
@@ -238,7 +222,6 @@ export class CacheTracker {
       }
     } else if (!skipNormalCacheReadComparison) {
       this.#lastCacheRead = obs.cache_read_tokens;
-      this.#clearToolLoopBaseline();
     }
 
     this.#updateMetadata(obsTs, identity, obs.thinking_enabled, obs.tool_surface);

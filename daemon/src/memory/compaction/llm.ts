@@ -47,8 +47,6 @@ export interface RealCompactionLlmOptions {
   generate: LedgerGenerate;
   cacheDir: string;
   env?: NodeJS.ProcessEnv | undefined;
-  emit?: FrameSink | undefined;
-  signal?: AbortSignal | undefined;
 }
 
 export class RealCompactionLlm {
@@ -124,10 +122,9 @@ export class RealCompactionLlm {
       request,
       this.#opts.model,
       this.#opts.character,
-      this.#opts.emit,
+      undefined,
       tools,
       options,
-      this.#opts.signal,
     );
   }
 
@@ -138,7 +135,6 @@ export class RealCompactionLlm {
     shoreLog.warn(
       `shore: dropped ${String(stripped)} image(s) from the compaction request because ${reason}`,
     );
-    this.#opts.emit?.({ type: "provider_warning", message: `${reason}; ${stripped} image(s) omitted from this compaction request. Original images remain in history.` });
     return { ...request, messages };
   }
 }

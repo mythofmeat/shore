@@ -4,9 +4,9 @@ import { shoreLog } from "../log.ts";
 
 import type { LoadedConfig } from "../config/loader.ts";
 import { runCompactionPass, type CompactionRunDeps } from "../memory/compaction/run.ts";
+import type { SegmentLabelDeps } from "../memory/compaction/label.ts";
 import { CompactionError, type CompactionOutcome } from "../memory/compaction/types.ts";
 import { CommandError, invalidRequest } from "./errors.ts";
-import type { FrameSink } from "../llm/stream.ts";
 import type { OperationInput, OperationResult } from "../operations/types.ts";
 type Args = OperationInput<"compact">;
 
@@ -24,7 +24,7 @@ export interface CompactContext {
   config: LoadedConfig;
   autonomy: CompactAutonomy;
   run: Omit<CompactionRunDeps, "config">;
-  label?: CompactionRunDeps["generate"];
+  label?: SegmentLabelDeps["generate"];
   repoint?: (character: string, config: LoadedConfig) => Promise<void>;
 }
 
@@ -71,24 +71,9 @@ export async function compact(
     status: "rotated",
     character,
     dry_run: outcome.dryRun,
-    memory_files_written: [],
     compacted_turns: outcome.compactedTurns,
     retained_turns: outcome.retainedTurns,
   };
-}
-
-export interface CompactionWatchContext {
-  config: LoadedConfig;
-  emit?: FrameSink | undefined;
-  signal?: AbortSignal | undefined;
-}
-
-export function watchCompaction(character: string, _ctx: CompactionWatchContext): OperationResult<"compact_watch"> {
-  return { character, state: "idle", pass: null };
-}
-
-export function cancelCompaction(character: string, _ctx: CompactionWatchContext): OperationResult<"compact_cancel"> {
-  return { character, state: "idle", pass: null };
 }
 
 async function completeCompaction(

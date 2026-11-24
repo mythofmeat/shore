@@ -1,7 +1,5 @@
 import { describe, expect, test } from "bun:test";
 
-import type { CompactionPassEnd } from "../src/protocol/CompactionPassEnd.ts";
-import type { CompactionReport } from "../src/protocol/CompactionReport.ts";
 import type { ContentBlock } from "../src/protocol/ContentBlock.ts";
 import type { Message } from "../src/protocol/Message.ts";
 import type { SegmentSummary } from "../src/protocol/SegmentSummary.ts";
@@ -10,9 +8,7 @@ import {
   blockViews,
   bodyItems,
   chatLogMessageId,
-  compactionPhase,
   compactionSummary,
-  compactionWatchSummary,
   dayLabel,
   formatToolInput,
   isChatLogTool,
@@ -276,51 +272,6 @@ describe("a reply still arriving", () => {
   });
 });
 
-describe("compaction", () => {
-  test("a compaction in progress reads by its round until a compaction command answers after it", () => {
-    const phase = (id: number, value: string, rid: string | null = null) => ({ id, type: "phase", data: { phase: value, rid } });
-    const output = (id: number, name: string) => ({ id, type: "command_output", data: { name } });
-    expect(compactionPhase([])).toBeNull();
-    expect(compactionPhase([phase(1, "compacting context round 1")])).toBe("Compacting context…");
-    expect(compactionPhase([phase(1, "compacting context round 3")])).toBe("Compacting context (round 3)…");
-    expect(compactionPhase([phase(1, "compacting")])).toBe("Compacting context…");
-    expect(compactionPhase([phase(1, "compacting"), phase(2, "thinking")])).toBe("Compacting context…");
-    expect(compactionPhase([phase(1, "compacting", "r_1")])).toBeNull();
-    for (const name of ["compact", "compact_watch", "compact_cancel"]) expect(compactionPhase([phase(1, "compacting"), output(2, name)])).toBeNull();
-    expect(compactionPhase([output(1, "compact"), phase(2, "compacting")])).toBe("Compacting context…");
-    expect(compactionPhase([phase(1, "compacting"), output(2, "status")])).toBe("Compacting context…");
-    expect(compactionPhase([{ id: 1, type: "phase", data: "compacting" }, { id: 2, type: "phase", data: { phase: 7 } }])).toBeNull();
-    expect(compactionPhase([phase(1, "compacting"), { id: 2, type: "phase", data: null }, { id: 3, type: "command_output", data: null }]), "nothing to read in an empty frame").toBe("Compacting context…");
-    expect(compactionPhase([phase(1, "compacting"), output(2, "compact"), phase(3, "compacting round 2")]), "a new pass after the last ended").toBe("Compacting context (round 2)…");
-  });
-
-  const counts = { character: "ada", compacted_turns: 4, tool_rounds: 1, tools_called: [] };
-  const reports: [CompactionReport, string][] = [
-    [{ status: "compacted", ...counts, retained_turns: 1, memory_files_written: [], new_conversation_id: "c" }, "Summarized 4 turns and kept the last 1."],
-    [{ status: "rotated", ...counts, retained_turns: 1, dry_run: false, memory_files_written: [] }, "Archived 4 turns and kept the last 1."],
-    [{ status: "dry_run", ...counts, retained_turns: 1, would_write_files: 3, file_ops_preview: [] }, "Compaction would summarize 4 turns and write 3 memory files."],
-    [{ status: "truncated", ...counts, truncated_turns: 2, partial_writes: [] }, "Compaction stopped early after summarizing 4 turns; 2 turns were left as they were."],
-    [{ status: "segment", ...counts, segment: 6, memory_files_written: ["a.md", "b.md"] }, "Wrote memory from archived segment 6 (4 turns, 2 files)."],
-    [{ status: "paused", ...counts, checkpoint_id: "k", reason: "budget", detail: null, resume_at: null }, "Compaction paused: budget."],
-    [{ status: "paused", ...counts, checkpoint_id: "k", reason: "budget", detail: "monthly budget reached", resume_at: null }, "Compaction paused: monthly budget reached."],
-  ];
-
-  test("each compaction outcome is told in a sentence", () => {
-    for (const [report, sentence] of reports) expect(compactionSummary(report)).toBe(sentence);
-    const resumeAt = "2026-11-10T12:00:00Z";
-    expect(compactionSummary({ status: "paused", ...counts, checkpoint_id: "k", reason: "budget", detail: null, resume_at: resumeAt }))
-      .toBe(`Compaction paused: budget. It resumes at ${new Date(resumeAt).toLocaleTimeString()}.`);
-  });
-
-  test("watching a compaction says whether one runs and how the last one ended", () => {
-    const pass = (overrides: Partial<CompactionPassEnd>): CompactionPassEnd => ({
-      thread: "main", trigger: "manual", started_at: "2026-11-10T09:00:00Z", ended_at: "2026-11-10T09:05:00Z", report: null, error: null, ...overrides,
-    });
-    expect(compactionWatchSummary({ character: "ada", state: "finished", pass: null })).toBe("No compaction is running.");
-    const report = reports[0]?.[0] ?? null;
-    expect(compactionWatchSummary({ character: "ada", state: "finished", pass: pass({ report }) })).toBe("Summarized 4 turns and kept the last 1.");
-    expect(compactionWatchSummary({ character: "ada", state: "finished", pass: pass({ error: "provider down" }) })).toBe("Compaction failed: provider down.");
-    expect(compactionWatchSummary({ character: "ada", state: "idle", pass: pass({}) }))
-      .toBe(`No compaction is running. The last one ended at ${new Date("2026-11-10T09:05:00Z").toLocaleTimeString()}: There was nothing to compact.`);
-  });
+test("an archive is told in a sentence", () => {
+  expect(compactionSummary({ status: "rotated", character: "ada", compacted_turns: 4, retained_turns: 1, dry_run: false })).toBe("Archived 4 turns and kept the last 1.");
 });

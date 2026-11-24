@@ -27,7 +27,6 @@ import { applyDeferredEdits } from "../deferred_edits.ts";
 import type { CompactionRunner } from "../../handler/turn.ts";
 import { conversationManager, priorContext } from "./archive.ts";
 import { type CompactionCompletion, alongsidePasses, handleCompactionOutcome, loadMessagesForCompaction } from "./background.ts";
-import type { RealCompactionLlmOptions } from "./llm.ts";
 import { tryBeginCompaction } from "./manager.ts";
 import { CompactionError, type CompactionOutcome } from "./types.ts";
 import { countTurns, openArchivalCommit, readLiveSource, resolveArchivalPlan, type ArchivalPlan } from "./plan.ts";
@@ -35,7 +34,6 @@ import { countTurns, openArchivalCommit, readLiveSource, resolveArchivalPlan, ty
 export interface CompactionRunDeps {
   env?: NodeJS.ProcessEnv;
   config: LoadedConfig;
-  generate: RealCompactionLlmOptions["generate"];
   notify?: (title: string, body: string) => void;
   tools?: ToolContextDeps;
   now?: () => string;

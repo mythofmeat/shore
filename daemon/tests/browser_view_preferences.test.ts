@@ -30,7 +30,7 @@ describe("the budget readout", () => {
 
 describe("display choices", () => {
   test("take only their own values, and a budget readout takes a budget too", () => {
-    const switches = ["timestamps", "thinking", "tools", "subagent", "compaction", "images", "metadata", "notes"] as const;
+    const switches = ["timestamps", "thinking", "tools", "subagent", "images", "metadata", "notes"] as const;
     expect(switches.map((key) => [viewValue(key, "on"), viewValue(key, "off"), viewValue(key, "maybe")])).toEqual(switches.map(() => [true, true, false]));
     expect(["off", "always", "warn", "on", "monthly"].map((value) => viewValue("usage", value))).toEqual([true, true, true, false, false]);
     expect(viewValue("budget", "pace")).toBe(true);
@@ -47,7 +47,8 @@ describe("display choices", () => {
   });
 
   test("start from their defaults, honour the two old switches, and refuse a broken saved value", () => {
-    expect(defaultViews()).toEqual({ timestamps: "on", thinking: "on", tools: "on", subagent: "on", compaction: "on", images: "on", metadata: "off", usage: "off", budget: "auto", notes: "on" });
+    expect(defaultViews()).toEqual({ timestamps: "on", thinking: "on", tools: "on", subagent: "on", images: "on", metadata: "off", usage: "off", budget: "auto", notes: "on" });
+    expect(readViews(storage({ [stored("compaction")]: "off" })), "the retired compaction switch is left where it was saved").toEqual(defaultViews());
     expect(readViews(storage({ "shore.reasoning": "false", "shore.tools": "false" }))).toMatchObject({ thinking: "off", tools: "off" });
     expect(readViews(storage({ "shore.reasoning": "true", "shore.tools": "yes" }))).toMatchObject({ thinking: "on", tools: "on" });
     expect(readViews(storage({ "shore.reasoning": "false", [stored("thinking")]: "on", [stored("metadata")]: "on" }))).toMatchObject({ thinking: "on", metadata: "on" });
