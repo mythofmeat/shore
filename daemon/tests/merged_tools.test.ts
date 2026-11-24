@@ -16,6 +16,7 @@ import { renderToolDefs } from "../src/tools/registry.ts";
 import { schemasFrom, type ToolSchemas } from "../src/tools/validate.ts";
 import type { EditThreadRequest } from "../src/tools/edit_thread.ts";
 import type { StartThreadRequest } from "../src/tools/start_thread.ts";
+import { Texts } from "../src/texts/texts.ts";
 
 afterEach(closeStorageConnections);
 
@@ -49,6 +50,7 @@ function threadTools(dryRun = false): { ctx: ToolContext; asked: unknown[] } {
   initializeDatabase(data);
   const asked: unknown[] = [];
   const ctx: ToolContext = {
+    texts: new Texts(),
     workspaceDir: data, characterName: "ada", characterDataDir: join(data, "ada"), imageDir: data, conversationDir: data,
     historyDbPath: join(data, HISTORY_DB_FILE), configDir: data, thread: "main", userName: "eve", dryRun,
     startThread: async (request: StartThreadRequest) => { asked.push(["start", request]); },
@@ -118,7 +120,7 @@ test("a dry run lists threads but starts, seals and edits none", async () => {
 });
 
 test("a call under one of the six old names isn't run, and is told which tool it is part of now when the character has that tool", () => {
-  const offered = (...names: string[]) => schemasFrom(renderToolDefs({ enabled: names }, "ada", "eve"));
+  const offered = (...names: string[]) => schemasFrom(renderToolDefs(new Texts(), { enabled: names }, "ada", "eve"));
   const rejected = (name: string, schemas: ToolSchemas | undefined) => argumentRejection({ id: "t1", name, input: {} }, schemas);
   const both = offered("threads", "chat_logs", "read");
   for (const [was, now] of [["list_threads", "threads"], ["start_thread", "threads"], ["start_sealed_thread", "threads"], ["edit_thread", "threads"], ["search_chat_logs", "chat_logs"], ["read_chat_logs", "chat_logs"]] as const) {
@@ -151,7 +153,7 @@ test("send_message takes what to say, a thread's id and whether to push, and can
   expect(asked).toEqual([{ text: "The lamp is lit.", push: false }, { text: "Hello.", thread: "garden", push: true }, { text: "Hello.", push: false }, { text: "Hello.", push: true }]);
   asked.length = 1;
 
-  const schemas = schemasFrom(renderToolDefs({ enabled: ["send_message"] }, "ada", "eve"));
+  const schemas = schemasFrom(renderToolDefs(new Texts(), { enabled: ["send_message"] }, "ada", "eve"));
   const rejected = (input: Record<string, unknown>) => argumentRejection({ id: "t1", name: "send_message", input }, schemas);
   expect(rejected({ text: "!" })).toBeUndefined();
   expect(rejected({ text: "Hello.", thread: "g" })).toBeUndefined();

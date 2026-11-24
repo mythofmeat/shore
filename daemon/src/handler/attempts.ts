@@ -1,9 +1,7 @@
-import regenerateTemplate from "../../prompts/engine/regenerate.md" with { type: "text" };
-
 import type { MarkTagList } from "../config/app.ts";
 import { mergeToolLoopMessages } from "../engine/merge.ts";
 import { marksOf, newAttemptId, replyOf, setMark, type AttemptAsked, type AttemptScope, type Mark } from "../engine/marks.ts";
-import { renderTemplate } from "../engine/prompt.ts";
+import type { Texts } from "../texts/texts.ts";
 import type { Message } from "../engine/types.ts";
 import type { WireMessage } from "../llm/types.ts";
 import type { SentMessage } from "./wire_messages.ts";
@@ -27,6 +25,7 @@ export interface AttemptSettings {
   tags: readonly string[];
   user: string;
   now: string;
+  texts: Texts;
 }
 
 export class NothingToReplaceError extends CommandError {
@@ -71,15 +70,13 @@ export async function planAttempt(
     const id = ids[index];
     return [attemptBlock(candidate.index + 1, candidate.shown, candidate.text, id === undefined ? [] : marks.get(id) ?? [], settings.user)];
   });
-  const why = choice.kind === "with_reason" ? reasonText(tags, choice.reason ?? null) : "";
-  const texts = { reason: why, attempts: attempts.join("\n\n") };
-  const note = renderTemplate(regenerateTemplate, new Map([
-    ["user", settings.user],
-    ["take", choice.kind === "another_take" ? "yes" : ""],
-    ["reason", why === "" ? "" : "\uE000reason\uE000"],
-    ["attempts", "\uE000attempts\uE000"],
-  ])).trim().replace(/\uE000(reason|attempts)\uE000/g, (_marker, name: keyof typeof texts) => texts[name]);
-  return { attempt, asked: choice.kind, replaces, note };
+  const note = settings.texts.render("regenerate", {
+    user: settings.user,
+    take: choice.kind === "another_take" ? "yes" : undefined,
+    reason: choice.kind === "with_reason" ? reasonText(tags, choice.reason ?? null) : undefined,
+    attempts: attempts.join("\n\n"),
+  })?.trim();
+  return { attempt, asked: choice.kind, replaces, ...(note === undefined ? {} : { note }) };
 }
 
 function attemptBlock(position: number, shown: boolean, text: string, marks: readonly Mark[], user: string): string {

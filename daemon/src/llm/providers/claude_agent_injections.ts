@@ -3,12 +3,13 @@ import type { Server } from "bun";
 import { shoreLog } from "../../log.ts";
 import { outsideWireScope, recordWireNote, withWireScope, type WireScope } from "../wire_capture.ts";
 import { restoredToolNames, restoringToolNames, withBareToolNames, type WireNames } from "./claude_agent_wire_names.ts";
+import { shippedText } from "../../texts/registry.ts";
 
 const ANTHROPIC_API = "https://api.anthropic.com";
 const REMINDER = "<system-reminder>";
 const IMAGE_SOURCE = /^\[Image:? source: [^\]\n]*\]$/;
 const CLI_PLACEHOLDERS = new Set(["No response requested.", "(no content)"]);
-export const RESUME_PROMPT = "[Carry on from the tool results above.]";
+export const RESUME_PROMPT = shippedText("carry_on");
 const CLI_INTERRUPTIONS = new Set(["[Request interrupted by user]", "[Request interrupted by user for tool use]"]);
 const SAFETY_STOP = "Your response above was stopped by a safety classifier \u2014 this is not a tool or API error. " +
   "The rest of it was withheld, and tool calls in it that had not finished did not run. Do not produce that content again, even reworded.";

@@ -15,6 +15,7 @@ import { ALL_TOOLS, renderToolDefs } from "../src/tools/registry.ts";
 import { BUILTIN_TOOL_SCHEMAS } from "./support/builtin_tool_schemas.ts";
 import { rejectionOf } from "./support/outcome.ts";
 import { testTmp } from "./support/tmp.ts";
+import { Texts } from "../src/texts/texts.ts";
 
 const HOUR = 3_600_000;
 const T0 = Date.UTC(2026, 9, 30, 12);
@@ -70,6 +71,7 @@ test("a topic the guide doesn't have is refused with the ones it does, and so is
   });
 
   const bare: ToolContext = {
+    texts: new Texts(),
     workspaceDir: "/nowhere", characterName: "ada", characterDataDir: "/nowhere", imageDir: "/nowhere", conversationDir: "/nowhere",
     historyDbPath: "/nowhere/shore.db", configDir: "/nowhere",
   };
@@ -84,7 +86,7 @@ test("the tool takes a topic and nothing else, and its description names every t
   expect(schema?.validate({ topic: 3 })).toBe(false);
   expect(schema?.validate({ topic: "wakes", depth: "full" })).toBe(false);
 
-  const described = renderToolDefs({ enabled: ["guide"] }, "Ada", "eve").find((def) => def.name === "guide")?.description ?? "";
+  const described = renderToolDefs(new Texts(), { enabled: ["guide"] }, "Ada", "eve").find((def) => def.name === "guide")?.description ?? "";
   expect(described).not.toContain("\n");
   expect([...described.matchAll(/`([a-z]+)`/g)].map((match) => match[1])).toEqual(["topic", ...TOPICS]);
 });
@@ -388,7 +390,7 @@ test("the guide says how far back the count of messages goes, and leaves what a 
   const messages = await guide("messages");
   expect(messages).toContain("`push` on `send_message` also sends the message to eve's phone as a notification, so it reaches them when they don't have Shore open. When something is worth a push is between you and eve. Shore only limits how often.");
   expect(messages).not.toContain("for nothing else");
-  const send = renderToolDefs({ enabled: ["send_message"] }, "Ada", "eve").find((def) => def.name === "send_message")?.description;
+  const send = renderToolDefs(new Texts(), { enabled: ["send_message"] }, "Ada", "eve").find((def) => def.name === "send_message")?.description;
   expect(send).toBe(
     "Send eve a message. From a wake, where nothing you write reaches them otherwise, it is posted in the thread the wake runs in, or in the one `thread` names. " +
     "In a conversation your reply is already the message, so there it is only for saying something in another thread. It is delivered when the turn ends, and each call in a turn is its own message. " +
@@ -468,7 +470,7 @@ test("a page ends by naming the tools on it that the user hasn't turned on, and 
 
 test("the tools are described in fewer characters than before there was a guide, and each tool the guide covers points to its page only while the character has the guide", () => {
   const offered = (names: readonly string[]): { name: string; description: string }[] =>
-    renderToolDefs({ enabled: [...names] }, "Ada", "User");
+    renderToolDefs(new Texts(), { enabled: [...names] }, "Ada", "User");
   const withGuide = offered(EVERY_TOOL);
   expect(withGuide.reduce((total, def) => total + def.description.length, 0)).toBeLessThan(19_223);
 

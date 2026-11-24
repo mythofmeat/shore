@@ -1,0 +1,1 @@
+A thread's id, such as `main`. `search` looks only there, and `list` shows only its conversations. A `start`/`end` read is of that thread, `main` by default; with `around` it picks the copy in that thread.

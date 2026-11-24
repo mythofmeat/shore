@@ -10,6 +10,7 @@ import type { Message } from "../src/engine/types.ts";
 import { initializeDatabase } from "../src/storage/database.ts";
 import { closeStorageConnections } from "../src/storage/store.ts";
 import { CharacterWorkspace } from "../src/tools/character_workspace.ts";
+import { Texts } from "../src/texts/texts.ts";
 
 afterEach(closeStorageConnections);
 
@@ -25,6 +26,7 @@ function outbox(over: Partial<OutboxSetup> = {}): Outbox {
     threads: async () => ({ open: ["main", "garden", "wakes"], wakes: "wakes", sealed: ["gift"] }),
     pictureProblems: async () => [],
     pushRefusal: () => undefined,
+    texts: new Texts(),
     ...over,
   });
 }

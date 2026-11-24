@@ -3,12 +3,11 @@ import { basename } from "node:path";
 
 import type { ImageRef, ContentBlock, MessageNote } from "../engine/types.ts";
 import { isToolResultOnly } from "../engine/message_store.ts";
-import { pictureFileLabel } from "../engine/picture_files.ts";
 import type { AssembledPrompt, PromptMessage, PromptSource } from "../engine/prompt.ts";
-import { imageLabel, omissionNotice } from "../llm/images.ts";
+import { imageLabel } from "../llm/images.ts";
 import type { Sdk, SystemBlock, WireMessage } from "../llm/types.ts";
-import { EVICTED_IMAGE } from "../storage/image_blobs.ts";
 import { encodeImageBlock } from "./images.ts";
+import type { Texts } from "../texts/texts.ts";
 
 export type AssistantImageMode = "tool_pair" | "text_standin";
 
@@ -61,6 +60,7 @@ function usableCaption(img: ImageRef): string | undefined {
 async function renderAssistantImages(
   images: readonly ImageRef[],
   mode: AssistantImageMode,
+  texts: Texts,
 ): Promise<AssistantImageRender> {
   const render: AssistantImageRender = { assistantBlocks: [], toolResults: [] };
 
@@ -74,7 +74,7 @@ async function renderAssistantImages(
     if (source === undefined) {
       render.assistantBlocks.push({
         type: "text",
-        text: caption === undefined ? "[sent an image]" : `[sent an image: ${caption}]`,
+        text: texts.always("sent_picture", { caption }),
       });
       continue;
     }
@@ -97,19 +97,21 @@ async function renderAssistantImages(
 async function renderMessageContent(
   m: PromptMessage,
   mode: AssistantImageMode,
+  texts: Texts,
 ): Promise<{ content: ContentBlock[]; owedToolResults: ContentBlock[] } | undefined> {
   const images = m.images.filter((image) => image.embed === undefined);
   const reroute = m.role === "assistant" && images.length > 0;
-  const imageRender = reroute ? await renderAssistantImages(images, mode) : undefined;
+  const imageRender = reroute ? await renderAssistantImages(images, mode, texts) : undefined;
   const turnImages = reroute || isToolResultOnly(m) ? [] : images;
 
   let content: ContentBlock[] = [];
   for (const img of turnImages) {
     const source = await encodeImageBlock(img, true);
     const kept = existsSync(img.path);
-    if (source !== undefined && kept) content.push({ type: "text", text: pictureFileLabel(img.path) });
+    const label = source !== undefined && kept ? texts.render("picture", { path: img.path }) : undefined;
+    if (label !== undefined) content.push({ type: "text", text: label });
     if (source !== undefined) content.push({ type: "image", source });
-    else if (!kept) content.push({ type: "text", text: omissionNotice(imageLabel(img), EVICTED_IMAGE) });
+    else if (!kept) content.push({ type: "text", text: texts.always("picture_gone", { name: imageLabel(img) }) });
   }
   content.push(...m.content_blocks.filter((block) => !(block.type === "text" && block.text.trim() === "")));
 
@@ -122,6 +124,7 @@ async function renderMessageContent(
 export async function buildLlmMessages(
   prompt: Pick<AssembledPrompt, "system" | "messages"> & { sources?: readonly PromptSource[] },
   mode: AssistantImageMode,
+  texts: Texts,
 ): Promise<{ messages: WireMessage[]; system: SystemBlock[]; sent: SentMessage[] }> {
   const messages: WireMessage[] = [];
   const sent: SentMessage[] = [];
@@ -129,7 +132,7 @@ export async function buildLlmMessages(
   let added: string[] = [];
 
   for (const [index, m] of prompt.messages.entries()) {
-    const rendered = await renderMessageContent(m, mode);
+    const rendered = await renderMessageContent(m, mode, texts);
     if (rendered === undefined) {
       continue;
     }

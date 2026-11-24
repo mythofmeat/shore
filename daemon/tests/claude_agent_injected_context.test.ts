@@ -16,6 +16,7 @@ import type { ContentBlock } from "../src/engine/types.ts";
 import { toolResultText, type WireMessage } from "../src/llm/types.ts";
 import { toolPhase } from "../src/tools/execute.ts";
 import { noisePng } from "./support/test_images.ts";
+import { Texts } from "../src/texts/texts.ts";
 
 const EMAIL = "someone.private@example.com";
 const SDK_IDENTITY = "You are a Claude agent, built on Anthropic's Claude Agent SDK.";
@@ -151,6 +152,7 @@ test("a long tool result reaches the model as Shore made it, whole or cut once, 
   };
   const phase = toolPhase({
     ctx: {
+      texts: new Texts(),
       workspaceDir: workspace, characterName: "heidi", characterDataDir: dir,
       imageDir: dir, conversationDir: dir, historyDbPath: join(dir, "history.db"), configDir: dir,
     },

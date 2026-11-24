@@ -125,16 +125,17 @@ export async function runToolUse(
     const value = record !== undefined && writesWorkspace(toolUse.name) ? await record(dispatch) : await dispatch();
     payload = toolMediaOf(value);
     okValue = payload === undefined ? value : payload.value;
-    rawOutput = joinLines([formatToolOutput(toolUse.name, okValue), ...(payload?.extra ?? [])]);
+    rawOutput = joinLines([formatToolOutput(exec.ctx.texts, toolUse.name, okValue), ...(payload?.extra ?? [])]);
     isError = ["bash", "apply_patch"].includes(toolUse.name) && (okValue as BashResult).exit_code !== 0;
   } catch (e) {
     rawOutput = e instanceof Error ? e.message : String(e);
-    if (toolUse.name === "apply_patch") rawOutput += "\nNative patches apply sequentially; earlier changes may remain after failure or cancellation. Inspect affected files before retrying.";
+    const patchNote = toolUse.name === "apply_patch" ? exec.ctx.texts.render("patch_failed") : undefined;
+    if (patchNote !== undefined) rawOutput += `\n${patchNote}`;
     isError = true;
   }
   const dispatchMs = clock() - startedAt;
 
-  const windowed = windowToolResult(rawOutput, maxResultChars);
+  const windowed = windowToolResult(exec.ctx.texts, rawOutput, maxResultChars);
   const attached = await attachToolMedia(payload, exec, toolUse);
   isError ||= attached.failed;
   const content = toolResultContent(windowed, [...(payload?.notes ?? []), ...attached.notes], attached.placed);

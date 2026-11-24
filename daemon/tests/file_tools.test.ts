@@ -8,6 +8,7 @@ import { MAX_READ_IMAGE_BYTES } from "../src/tools/read_image.ts";
 import { renderToolDefs } from "../src/tools/registry.ts";
 import { BUILTIN_TOOL_SCHEMAS } from "./support/builtin_tool_schemas.ts";
 import { toolResultText } from "../src/llm/types.ts";
+import { Texts } from "../src/texts/texts.ts";
 
 const PNG = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==";
 
@@ -16,6 +17,7 @@ async function world() {
   const workspaceDir = join(root, "workspace");
   await mkdir(workspaceDir);
   const ctx: ToolContext = {
+    texts: new Texts(),
     workspaceDir, characterName: "Ada", characterDataDir: root, imageDir: join(root, "images"), cacheDir: join(root, "cache"),
     conversationDir: root, historyDbPath: join(root, "history.db"), configDir: root,
   };
@@ -135,5 +137,5 @@ test("tools enforce availability, dry run and host permissions", async () => {
     } finally { await chmod(path, 0o600); }
   }
   expect(await readFile(path, "utf8")).toBe("old");
-  expect(renderToolDefs({ enabled: ["edit", "apply_patch"] }, "Ada", "User").map((d) => d.name).sort()).toEqual(["apply_patch", "edit"]);
+  expect(renderToolDefs(new Texts(), { enabled: ["edit", "apply_patch"] }, "Ada", "User").map((d) => d.name).sort()).toEqual(["apply_patch", "edit"]);
 });

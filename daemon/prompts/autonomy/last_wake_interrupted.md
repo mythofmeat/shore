@@ -1,0 +1,1 @@
+[Your last wake here was stopped for {{user}}'s message at {{at}}, after {{rounds}}, before it had finished. {{#if sent}}The message it had already written was still sent to {{user}}.{{else}}Nothing from it was sent to {{user}}.{{/if}}{{#if last}} The last thing it wrote: "{{last}}"{{/if}} Whatever it had already changed with its tools is still in place.]

@@ -116,11 +116,6 @@ export function embedName(embed: Embed): string {
   return embed.target.split(/[\\/]/).filter((part) => part !== "").at(-1) ?? embed.target;
 }
 
-export function unsentNotice(images: readonly Sent[]): string | undefined {
-  const problems = [...new Set(images.flatMap((image) => typeof image.embed === "string" && typeof image.problem === "string" ? [`${image.embed}: ${image.problem}`] : []))];
-  if (problems.length === 0) return undefined;
-  return `[These pictures in your last message were not sent, so only their names were shown:\n${problems.map((problem) => `- ${problem}`).join("\n")}\nSend a picture again in a new message if you meant to show it.]`;
-}
 
 export function pictureText(text: string, images: readonly Sent[]): string {
   const sent = images.filter((image) => typeof image.embed === "string");

@@ -161,15 +161,17 @@ test("archiving a conversation asks the chat's model for a label with the chat's
   });
 });
 
-test("a character's own label.md is the message the label is asked for with", async () => {
+test("the label text pointed at the user's own file is the message the label is asked for with", async () => {
   await world(async ({ command, settled, of }) => {
     await command("compact", { keep_turns: 0 });
     await settled();
     expect(of("label").map((request) => textOf(request).at(-1))).toEqual(["Name this talk between ada and Mara."]);
-  }, undefined, async (workspace) => {
-    const prompts = join(workspace, "..", "prompts");
-    await mkdir(prompts, { recursive: true });
-    await writeFile(join(prompts, "label.md"), "Name this talk between {{char}} and {{user}}.\n");
+  }, (app) => {
+    app.texts = { label: "texts/label.md" };
+  }, async (workspace) => {
+    const texts = join(workspace, "..", "..", "..", "texts");
+    await mkdir(texts, { recursive: true });
+    await writeFile(join(texts, "label.md"), "Name this talk between {{char}} and {{user}}.\n");
   });
 });
 

@@ -13,6 +13,7 @@ import { asCharacterWorkspace, type CharacterWorkspace } from "../tools/characte
 import { cutToBytes, MAX_THREAD_PINS_BYTES, byteSize, threadFilePromptText } from "../tools/thread_file_text.ts";
 import { pinnedCommandText } from "../tools/pinned_command.ts";
 import { localRfc3339 } from "../util/time.ts";
+import type { Texts } from "../texts/texts.ts";
 
 const QUEUE_FILE = "deferred_edits.jsonl";
 
@@ -173,6 +174,7 @@ export interface ThreadPin {
 }
 
 export async function loadThreadPins(
+  texts: Texts,
   characterDataDir: string,
   workspace: CharacterWorkspace,
   thread: string,
@@ -185,19 +187,19 @@ export async function loadThreadPins(
   let room = MAX_THREAD_PINS_BYTES;
   return pins.map((pin, at) => {
     const content = contents[at];
-    const fitted = content === undefined ? undefined : fitThreadPin(pin, content, room);
+    const fitted = content === undefined ? undefined : fitThreadPin(texts, pin, content, room);
     room = fitted === content ? room - Buffer.byteLength(content ?? "", "utf8") : 0;
     return { pin, content: fitted };
   });
 }
 
-function fitThreadPin(pin: string, content: string, room: number): string {
+function fitThreadPin(texts: Texts, pin: string, content: string, room: number): string {
   if (Buffer.byteLength(content, "utf8") <= room) return content;
-  const together = `a thread's pins can be at most ${byteSize(MAX_THREAD_PINS_BYTES)} together`;
+  const values = { limit: byteSize(MAX_THREAD_PINS_BYTES), path: pinnedCommand(pin) === undefined ? pin : undefined };
   const head = cutToBytes(content, room).trimEnd();
-  const file = pinnedCommand(pin) === undefined;
-  if (head === "") return file ? `(Left out: ${together}. \`read\` ${pin} to see it.)` : `(Left out: ${together}.)`;
-  return file ? `${head}\n\n[Cut: ${together}; \`read\` ${pin} for the rest.]` : `${head}\n\n[Cut: ${together}.]`;
+  if (head === "") return texts.render("pin_left_out", values) ?? "";
+  const cut = texts.render("pin_cut", values);
+  return cut === undefined ? head : `${head}\n\n${cut}`;
 }
 
 export async function forkPromptState(

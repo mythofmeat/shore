@@ -33,6 +33,7 @@ import { outcomeOf } from "./support/outcome.ts";
 import { reliabilityGeneration } from "./support/reliability_generation.ts";
 import { testTmp } from "./support/tmp.ts";
 import { promptedAppConfig } from "./support/prompt_list.ts";
+import { Texts } from "../src/texts/texts.ts";
 
 const NOW = "2026-11-01T10:00:00Z";
 
@@ -236,7 +237,7 @@ describe("listing threads", () => {
       created_by: "character",
     });
     writeDurable(threadFile(data, "frank", "lighthouse", "active.jsonl"), serializeMessages([message("u1", "chapter two?", "2026-11-01T09:57:00Z")]));
-    const listed = await handleListThreads({
+    const listed = await handleListThreads({ texts: new Texts(),
       dataDir: data,
       character: "frank",
       thread: "lighthouse",
@@ -264,7 +265,7 @@ describe("an own-time thread kept from an older Shore, in the character's list o
       version: 1 as const, home: "main", heartbeat: "own-time",
       threads: [{ id: "main", created_at: NOW, compaction: true }, { id: "own-time", label: "Own time", created_at: NOW, compaction: false }],
     } as ThreadsIndex);
-    const listed = (await handleListThreads({ dataDir: data, character: "frank", userName: "sam", timeZone: "UTC", now: () => Date.parse(NOW) })).split("\n\n");
+    const listed = (await handleListThreads({ texts: new Texts(), dataDir: data, character: "frank", userName: "sam", timeZone: "UTC", now: () => Date.parse(NOW) })).split("\n\n");
     expect(listed[0]).toBe('Your home thread is "main". You\'re in it.');
     expect(listed[1]).toStartWith("main (home, you're here) · compaction on\n  started by sam on ");
     expect(listed[2]).toBe([
@@ -283,7 +284,7 @@ describe("an own-time thread kept from an older Shore, in the character's list o
     const nowMs = Date.parse("2026-11-02T06:50:00Z");
     writeDurable(threadFile(data, "frank", "harbor", "active.jsonl"), serializeMessages([message("u1", "fish market tomorrow", "2026-11-02T05:20:00Z")]));
     writeDurable(threadFile(data, "frank", "pier", "active.jsonl"), serializeMessages([message("u2", "see you there", "2026-11-02T06:50:30Z")]));
-    const listed = await handleListThreads({ dataDir: data, character: "frank", userName: "sam", timeZone: "UTC", now: () => nowMs });
+    const listed = await handleListThreads({ texts: new Texts(), dataDir: data, character: "frank", userName: "sam", timeZone: "UTC", now: () => nowMs });
     expect(listed).toContain("  sam last wrote here Monday 2026-11-02 · 5:20 AM, 2 hours ago");
     expect(listed).toContain("  sam last wrote here Monday 2026-11-02 · 6:50 AM, a minute ago");
   });
@@ -305,7 +306,7 @@ describe("a thread whose messages were archived", () => {
     ], 1);
     const nowMs = Date.parse(at(2, "06:50"));
 
-    const listed = await handleListThreads({ dataDir: data, character: "frank", userName: "sam", timeZone: "UTC", now: () => nowMs });
+    const listed = await handleListThreads({ texts: new Texts(), dataDir: data, character: "frank", userName: "sam", timeZone: "UTC", now: () => nowMs });
     expect(listed).toContain([
       "main (home, you're here) · compaction on",
       "  started by sam on Sunday 2026-11-01 · 10:00 AM",
@@ -317,18 +318,18 @@ describe("a thread whose messages were archived", () => {
       "  sam last wrote here Sunday 2026-11-01 · 5:58 PM, 13 hours ago",
     ].join("\n"));
     const index = await readThreadsIndex(data, "frank");
-    expect(await lastWroteNote(data, "frank", index, "harbor", "sam", nowMs)).toBe('[sam last wrote to you 5 hours ago, in your home thread "main".]');
-    expect(await lastWroteNote(data, "frank", index, "main", "sam", nowMs)).toBe("[sam last wrote to you 5 hours ago, in this thread.]");
-    expect(await lastWroteNote(data, "frank", undefined, "main", "sam", nowMs)).toBeUndefined();
+    expect(await lastWroteNote(new Texts(), data, "frank", index, "harbor", "sam", nowMs)).toBe('[sam last wrote to you 5 hours ago, in your home thread "main".]');
+    expect(await lastWroteNote(new Texts(), data, "frank", index, "main", "sam", nowMs)).toBe("[sam last wrote to you 5 hours ago, in this thread.]");
+    expect(await lastWroteNote(new Texts(), data, "frank", undefined, "main", "sam", nowMs)).toBeUndefined();
 
     await archive(data, "lighthouse", [message("u4", "one more page", at(2, "05:00")), message("a4", "just one", at(2, "05:01"))]);
-    expect(await lastWroteNote(data, "frank", index, "main", "sam", nowMs)).toBe(
+    expect(await lastWroteNote(new Texts(), data, "frank", index, "main", "sam", nowMs)).toBe(
       '[sam last wrote to you 2 hours ago, in the side thread "lighthouse" (The lighthouse), which isn\'t shown here.]',
     );
-    expect(await lastWroteNote(data, "frank", index, "harbor", "sam", nowMs)).toBe(
+    expect(await lastWroteNote(new Texts(), data, "frank", index, "harbor", "sam", nowMs)).toBe(
       '[sam last wrote to you 2 hours ago, in the side thread "lighthouse" (The lighthouse), which isn\'t shown here.]',
     );
-    expect(await lastWroteNote(data, "frank", index, "lighthouse", "sam", nowMs)).toBe("[sam last wrote to you 2 hours ago, in this thread.]");
+    expect(await lastWroteNote(new Texts(), data, "frank", index, "lighthouse", "sam", nowMs)).toBe("[sam last wrote to you 2 hours ago, in this thread.]");
   });
 
   test("a wake's note on where the user last wrote is left out until they have written, counts the time to the second, and names the thread made first when two were written in at once", async () => {
@@ -337,14 +338,14 @@ describe("a thread whose messages were archived", () => {
     await createThread(data, "frank", "harbor", NOW);
     const index = await readThreadsIndex(data, "frank");
     const nowMs = Date.parse("2026-11-02T06:50:00Z");
-    expect(await lastWroteNote(data, "frank", index, "main", "sam", nowMs)).toBeUndefined();
+    expect(await lastWroteNote(new Texts(), data, "frank", index, "main", "sam", nowMs)).toBeUndefined();
 
     writeDurable(threadFile(data, "frank", "harbor", "active.jsonl"), serializeMessages([message("u1", "fish market tomorrow", "2026-11-02T05:20:00Z")]));
-    expect(await lastWroteNote(data, "frank", index, "main", "sam", nowMs)).toBe('[sam last wrote to you 2 hours ago, in the side thread "harbor", which isn\'t shown here.]');
-    expect(await lastWroteNote(data, "frank", index, "main", "sam", nowMs - 1000)).toBe('[sam last wrote to you about an hour ago, in the side thread "harbor", which isn\'t shown here.]');
+    expect(await lastWroteNote(new Texts(), data, "frank", index, "main", "sam", nowMs)).toBe('[sam last wrote to you 2 hours ago, in the side thread "harbor", which isn\'t shown here.]');
+    expect(await lastWroteNote(new Texts(), data, "frank", index, "main", "sam", nowMs - 1000)).toBe('[sam last wrote to you about an hour ago, in the side thread "harbor", which isn\'t shown here.]');
 
     writeDurable(threadFile(data, "frank", "main", "active.jsonl"), serializeMessages([message("u2", "goodnight", "2026-11-02T05:20:00Z")]));
-    expect(await lastWroteNote(data, "frank", index, "harbor", "sam", nowMs)).toBe('[sam last wrote to you 2 hours ago, in your home thread "main".]');
+    expect(await lastWroteNote(new Texts(), data, "frank", index, "harbor", "sam", nowMs)).toBe('[sam last wrote to you 2 hours ago, in your home thread "main".]');
   });
 });
 
@@ -387,7 +388,7 @@ describe("coming back to a side thread", () => {
       message("a1", "done", "2026-10-11T09:01:00Z"),
       message("u2", "back", "2026-11-01T09:00:00Z", { last_elsewhere: { thread: "main", at: "2026-11-01T07:00:00Z" } }),
     ];
-    const prompt = assemblePrompt({
+    const prompt = assemblePrompt({ texts: new Texts(),
       character_name: "frank",
       display_name: "sam",
       sections: [],
@@ -499,7 +500,7 @@ describe("coming back after a compaction that kept nothing", () => {
 
 describe("a history trimmed to fit", () => {
   test("measures the first message kept from the one dropped just before it, and says the time even when that was minutes earlier", () => {
-    const keptAfter = (dropped: Message) => assemblePrompt({
+    const keptAfter = (dropped: Message) => assemblePrompt({ texts: new Texts(),
       character_name: "frank",
       display_name: "sam",
       sections: [],
@@ -516,7 +517,7 @@ describe("a history trimmed to fit", () => {
   });
 
   test("with nothing dropped, measures the first message from the newest archived one", () => {
-    const prompt = assemblePrompt({
+    const prompt = assemblePrompt({ texts: new Texts(),
       character_name: "frank",
       display_name: "sam",
       sections: [],

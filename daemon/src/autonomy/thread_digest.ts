@@ -4,6 +4,7 @@ import { isAutonomousNote } from "../engine/threads.ts";
 import type { PriorContext } from "../engine/segments.ts";
 import type { Message } from "../engine/types.ts";
 import { messageText } from "../memory/history_index.ts";
+import type { Texts } from "../texts/texts.ts";
 
 export interface ThreadReader {
   messages(): readonly Message[];
@@ -15,22 +16,6 @@ const DIGEST_MAX_MESSAGES = 40;
 const DIGEST_MAX_CHARS = 24_000;
 const DIGEST_MESSAGE_CHARS = 4_000;
 const SEGMENTS_READ = 3;
-
-export interface DigestWords {
-  nothingYet: string;
-  nothingSince: string;
-  first: string;
-  since: string;
-}
-
-export function digestWords(where: string): DigestWords {
-  return {
-    nothingYet: `Nothing has been said in ${where} yet.`,
-    nothingSince: `Nothing has been said in ${where} since your last wake here.`,
-    first: `The last of what was said in ${where}:`,
-    since: `What was said in ${where} since your last wake here:`,
-  };
-}
 
 function spoken(message: Message): string | undefined {
   if (message.role === "system" || isToolResultOnly(message) || isAutonomousNote(message)) return undefined;
@@ -77,38 +62,40 @@ async function saidIn(thread: ThreadReader, since: number | undefined): Promise<
   return since === undefined ? found.slice(-FIRST_WAKE_MESSAGES) : found;
 }
 
-function cut(text: string): string {
+function cut(texts: Texts, text: string): string {
   const chars = Array.from(text);
-  return chars.length <= DIGEST_MESSAGE_CHARS ? text : `${chars.slice(0, DIGEST_MESSAGE_CHARS).join("")}… [cut]`;
+  if (chars.length <= DIGEST_MESSAGE_CHARS) return text;
+  const head = chars.slice(0, DIGEST_MESSAGE_CHARS).join("");
+  return texts.render("digest_cut", { text: head }) ?? head;
 }
 
-function entry(message: Message, userName: string, timeZone: string): string {
-  const speaker = message.role === "user" ? userName : message.origin === "autonomous" ? "you, in a wake" : "you";
+function entry(texts: Texts, message: Message, userName: string, timeZone: string): string | undefined {
+  const speaker = message.role === "user" ? "digest_user" : message.origin === "autonomous" ? "digest_you_wake" : "digest_you";
   const at = timeOf(message);
-  const when = Number.isNaN(at) ? "" : ` · ${formatWallClock(at, timeZone)}`;
-  return `${speaker}${when}\n${cut(spoken(message) ?? "")}`;
+  return texts.render(speaker, { user: userName, at: Number.isNaN(at) ? undefined : formatWallClock(at, timeZone), text: cut(texts, spoken(message) ?? "") });
 }
 
 export async function threadDigest(
+  texts: Texts,
   thread: ThreadReader,
-  words: DigestWords,
   since: number | undefined,
   userName: string,
   timeZone: string,
-): Promise<string> {
+): Promise<string | undefined> {
   const messages = await saidIn(thread, since);
-  if (messages.length === 0) return since === undefined ? words.nothingYet : words.nothingSince;
+  if (messages.length === 0) return texts.render(since === undefined ? "digest_nothing_yet" : "digest_nothing_since");
   const shown: string[] = [];
   let used = 0;
   for (let index = messages.length - 1; index >= 0 && shown.length < DIGEST_MAX_MESSAGES; index -= 1) {
     const message = messages[index];
     if (message === undefined) continue;
-    const text = entry(message, userName, timeZone);
+    const text = entry(texts, message, userName, timeZone) ?? "";
     if (shown.length > 0 && used + text.length > DIGEST_MAX_CHARS) break;
     shown.unshift(text);
     used += text.length;
   }
   const left = messages.length - shown.length;
-  const omitted = left === 0 ? [] : [`(${String(left)} earlier ${left === 1 ? "message isn't" : "messages aren't"} shown.)`];
-  return [since === undefined ? words.first : words.since, ...omitted, ...shown].join("\n\n");
+  const omitted = left === 0 ? undefined : texts.render("digest_left_out", { count: String(left), one: left === 1 ? "yes" : undefined });
+  const parts = [texts.render(since === undefined ? "digest_first" : "digest_since"), omitted, ...shown].filter((part) => part !== undefined && part !== "");
+  return parts.length === 0 ? undefined : parts.join("\n\n");
 }

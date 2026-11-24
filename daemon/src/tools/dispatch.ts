@@ -30,8 +30,10 @@ import type { ImagesConfig, SubagentConfig, ToolsConfig } from "../config/app.ts
 import type { Message } from "../engine/types.ts";
 import type { NewSealedThread } from "../engine/sealed.ts";
 import type { ThreadRecord } from "../engine/threads.ts";
+import type { Texts } from "../texts/texts.ts";
 
 export interface ToolContext {
+  texts: Texts;
   thread?: string;
   conversation?: readonly Message[];
   fresh?: boolean;
@@ -145,7 +147,7 @@ export async function dispatchTool(
       }, ctx.signal));
     case "edit":
     case "apply_patch": {
-      const write = () => withPromptChanges(workspace,
+      const write = () => withPromptChanges(ctx.texts, workspace,
         () => name === "edit" ? workspace.call("edit", { input: args, workspaceDir: ctx.workspaceDir }, ctx.signal) : handleApplyPatch(args, workspace, ctx.signal), ctx.deferEdit);
       return await (ctx.trackWorkspaceWrite?.(name, input, write) ?? write());
     }
@@ -180,6 +182,7 @@ export async function dispatchTool(
     case "threads":
       return await handleThreads(args, {
         list: {
+          texts: ctx.texts,
           dataDir: dirname(ctx.historyDbPath),
           character: ctx.characterName,
           userName: ctx.userName ?? "the user",
@@ -311,7 +314,7 @@ function count(n: number): string {
   return n.toLocaleString("en-US");
 }
 
-export function windowToolResult(output: string, maxChars: number): ToolResultWindow {
+export function windowToolResult(texts: Texts, output: string, maxChars: number): ToolResultWindow {
   const chars = Array.from(output);
   if (maxChars === 0 || chars.length <= maxChars) {
     return {
@@ -331,20 +334,19 @@ export function windowToolResult(output: string, maxChars: number): ToolResultWi
   const elided = chars.slice(headChars, tailStart);
   const wholeLines = chars[headChars - 1] === "\n" && (tailChars === 0 || chars[tailStart - 1] === "\n");
   const lines = elided.filter((char) => char === "\n").length;
-  const missing = `${count(elided.length)} of its ${count(chars.length)} characters`;
-  const size = wholeLines ? `${missing}, ${count(lines)} line${lines === 1 ? "" : "s"}` : `${missing}; the cut falls inside a line`;
-  const shown = tailChars > 0
-    ? `the first ${count(headChars)} characters are above this note and the last ${count(tailChars)} are below it`
-    : `only the first ${count(headChars)} characters are shown`;
-  const marker =
-    `[tool_result truncated: this result was too long, so ${tailChars > 0 ? "its middle" : "its end"} is left out here: ` +
-    `${size}. Nothing else is missing: ${shown}. To see the rest, narrow the call to a more specific ` +
-    `path, pattern or range, or write the output to a file and read it in parts.]`;
+  const marker = texts.render("result_cut", {
+    tail: tailChars > 0 ? count(tailChars) : undefined,
+    left_out: count(elided.length),
+    total: count(chars.length),
+    lines: wholeLines ? `${count(lines)} line${lines === 1 ? "" : "s"}` : undefined,
+    head: count(headChars),
+  });
   const head = chars.slice(0, headChars).join("").replace(/\n$/, "");
   const tail = chars.slice(tailStart).join("");
+  const parts = [head, marker, ...(tailChars > 0 ? [tail] : [])].filter((part) => part !== undefined);
 
   return {
-    output: tailChars > 0 ? `${head}\n\n${marker}\n\n${tail}` : `${head}\n\n${marker}`,
+    output: parts.join("\n\n"),
     truncated: true,
     originalChars: chars.length,
     headChars,
@@ -352,8 +354,8 @@ export function windowToolResult(output: string, maxChars: number): ToolResultWi
   };
 }
 
-export function truncateToolResult(output: string, maxChars: number): string {
-  return windowToolResult(output, maxChars).output;
+export function truncateToolResult(texts: Texts, output: string, maxChars: number): string {
+  return windowToolResult(texts, output, maxChars).output;
 }
 
 const CANCEL_GRACE_MS = 2_000;

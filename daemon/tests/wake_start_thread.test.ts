@@ -6,6 +6,7 @@ import type { ServerMessage } from "../src/protocol/ServerMessage.ts";
 import { eventsForResponse } from "./support/stream.ts";
 import { afterFirstChat } from "./support/chat_world.ts";
 import { restoreTestEnv } from "./support/env.ts";
+import { Texts } from "../src/texts/texts.ts";
 
 const KEY_ENV = "SHORE_WAKE_START_THREAD_KEY";
 
@@ -108,7 +109,7 @@ test("a thread started with a folder goes in that folder of the user's thread li
     const index = await readThreadsIndex(config.dirs.data, "ada");
     expect(index?.folders).toEqual([{ name: "Projects", threads: ["lighthouse", "harbor"] }, { name: "Stories", threads: ["pier"] }]);
     expect(index?.threads.map((thread) => thread.id)).toEqual(["main", "wakes", "lighthouse", "harbor", "pier"]);
-    const listed = await handleListThreads({ dataDir: config.dirs.data, character: "ada", userName: "peggy", timeZone: "UTC" });
+    const listed = await handleListThreads({ texts: new Texts(), dataDir: config.dirs.data, character: "ada", userName: "peggy", timeZone: "UTC" });
     expect(listed).toContain('harbor "harbor" (in the folder "Projects") · compaction on');
     expect(listed).toContain('pier "pier" (in the folder "Stories") · compaction on');
     expect(listed).toContain("main (home, you're here) · compaction on");

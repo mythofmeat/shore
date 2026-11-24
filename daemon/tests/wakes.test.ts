@@ -48,6 +48,7 @@ import { outcomeOf, rejectionOf } from "./support/outcome.ts";
 import { required } from "../src/util/required.ts";
 import { testTmp } from "./support/tmp.ts";
 import { promptedAppConfig } from "./support/prompt_list.ts";
+import { Texts } from "../src/texts/texts.ts";
 
 const MINUTE = 60_000;
 const T0 = Date.UTC(2026, 9, 30, 12);
@@ -973,7 +974,7 @@ test("a wake is told once, at its next step, that the user wrote in another thre
       held.release.resolve();
       await ticking;
 
-      const note = userWroteNote(T0 + (minutes + 1) * MINUTE, "User", hostZone());
+      const note = required(userWroteNote(new Texts(), T0 + (minutes + 1) * MINUTE, "User", hostZone()));
       expect(script.wakes).toHaveLength(3);
       expect(textOf(script.wakes[0] as SidecarRequest)).not.toContain("has just written to you");
       expect(textOf(script.wakes[1] as SidecarRequest)).toEndWith(note);
@@ -985,7 +986,7 @@ test("a wake is told once, at its next step, that the user wrote in another thre
 
 test("a message sent while a wake runs tells that turn a wake is running, where and since when, once in each thread, and the note stays with the message", async () => {
   const started = new Date(T0 + 20 * MINUTE).toISOString();
-  const running = wakeRunningText({ started_at: started, thread: "main" }, hostZone());
+  const running = required(wakeRunningText(new Texts(), { started_at: started, thread: "main" }, hostZone()));
   let root = "";
   await withCharacter(async ({ runtime, script, data, say, wakeNow, thread }) => {
     root = dirname(data);
@@ -1092,13 +1093,13 @@ test("starting a wake by hand answers that it is queued, and making a character 
 
 test("each side is told about the other in these words, with the thread the wake is in, and a note kept from when there was an own-time thread still reads as it did", () => {
   const started = new Date(T0).toISOString();
-  expect(wakeRunningText({ started_at: started }, "UTC")).toBe(
+  expect(required(wakeRunningText(new Texts(), { started_at: started }, "UTC"))).toBe(
     "[A wake of yours in your own-time thread has been running since Friday 2026-10-30 · 12:00 PM. It can't see this conversation. It is only told that a message arrived.]",
   );
-  expect(wakeRunningText({ started_at: started, thread: "ring" }, "UTC")).toBe(
+  expect(required(wakeRunningText(new Texts(), { started_at: started, thread: "ring" }, "UTC"))).toBe(
     '[A wake of yours in "ring" has been running since Friday 2026-10-30 · 12:00 PM. It can\'t see this conversation. It is only told that a message arrived.]',
   );
-  expect(userWroteNote(T0 + MINUTE, "eve", "UTC")).toBe(
+  expect(required(userWroteNote(new Texts(), T0 + MINUTE, "eve", "UTC"))).toBe(
     "[eve has just written to you, at Friday 2026-10-30 · 12:01 PM, while this wake is running. " +
     "Another turn of you is answering them, and it knows this wake is running.]",
   );
@@ -1123,7 +1124,7 @@ test("a trigger that names no thread wakes the character in home with what it sa
     await runtime.autonomy.runDue();
     expect(script.wakes).toHaveLength(2);
     const woken = textOf(script.wakes[0] as SidecarRequest);
-    expect(woken).toContain(`in this thread.]\n\n${triggerFiredNote(tide, hostZone())}\n\n${triggerFiredNote(lamp, hostZone())}\n\n[Current time: `);
+    expect(woken).toContain(`in this thread.]\n\n${required(triggerFiredNote(new Texts(), tide, hostZone()))}\n\n${required(triggerFiredNote(new Texts(), lamp, hostZone()))}\n\n[Current time: `);
     expect(events()).toEqual(['Woken in "main" by a start by hand', 'Woken in "main" by trigger "tide-table", "lamp"']);
 
     script.wakes.length = 0;
@@ -1295,7 +1296,7 @@ test("a trigger that fires during a wake in its thread is handed to that wake at
 
     expect(script.wakes).toHaveLength(3);
     expect(textOf(script.wakes[1] as SidecarRequest)).toEndWith(
-      `${triggerFiredNote(tide, hostZone())}\n\n${userWroteNote(T0 + 12 * MINUTE, "User", hostZone())}\n\n${triggerFiredNote(lamp, hostZone())}`,
+      `${required(triggerFiredNote(new Texts(), tide, hostZone()))}\n\n${required(userWroteNote(new Texts(), T0 + 12 * MINUTE, "User", hostZone()))}\n\n${required(triggerFiredNote(new Texts(), lamp, hostZone()))}`,
     );
     expect(times(textOf(script.wakes[2] as SidecarRequest), "Your trigger")).toBe(2);
 
@@ -1308,13 +1309,13 @@ test("a trigger that fires during a wake in its thread is handed to that wake at
 
 test("what set a wake off is told in these words, and nothing new means no note", () => {
   const tide = { name: "tide-table", reason: "the tide is out", at: T0 + MINUTE };
-  expect(triggerFiredNote(tide, "UTC")).toBe('[Your trigger "tide-table" fired at Friday 2026-10-30 · 12:01 PM: the tide is out]');
-  expect(triggerFiredNote({ name: "", byHand: true, reason: "", at: T0 }, "UTC")).toBe("[This wake was started by hand at Friday 2026-10-30 · 12:00 PM, from Shore's command line or its settings.]");
-  expect(triggerFiredNote({ name: "", from: "main", reason: "Tell part two.", at: T0, thread: "ring" }, "UTC")).toBe('[You asked for this wake from "main" at Friday 2026-10-30 · 12:00 PM: Tell part two.]');
-  expect(triggerFiredNote({ name: "", seal: true, reason: "It is open.", at: T0, thread: "gift" }, "UTC")).toBe("[The seal on this thread came off at Friday 2026-10-30 · 12:00 PM. It is open.]");
-  expect(wakeNewsNote([], "eve", "UTC")).toBeUndefined();
-  expect(wakeNewsNote([{ kind: "user_wrote", at: T0 }, { kind: "trigger", firing: tide }], "eve", "UTC")).toBe(
-    `${userWroteNote(T0, "eve", "UTC")}\n\n${triggerFiredNote(tide, "UTC")}`,
+  expect(required(triggerFiredNote(new Texts(), tide, "UTC"))).toBe('[Your trigger "tide-table" fired at Friday 2026-10-30 · 12:01 PM: the tide is out]');
+  expect(required(triggerFiredNote(new Texts(), { name: "", byHand: true, reason: "", at: T0 }, "UTC"))).toBe("[This wake was started by hand at Friday 2026-10-30 · 12:00 PM, from Shore's command line or its settings.]");
+  expect(required(triggerFiredNote(new Texts(), { name: "", from: "main", reason: "Tell part two.", at: T0, thread: "ring" }, "UTC"))).toBe('[You asked for this wake from "main" at Friday 2026-10-30 · 12:00 PM: Tell part two.]');
+  expect(required(triggerFiredNote(new Texts(), { name: "", seal: true, reason: "It is open.", at: T0, thread: "gift" }, "UTC"))).toBe("[The seal on this thread came off at Friday 2026-10-30 · 12:00 PM. It is open.]");
+  expect(wakeNewsNote(new Texts(), [], "eve", "UTC")).toBeUndefined();
+  expect(required(wakeNewsNote(new Texts(), [{ kind: "user_wrote", at: T0 }, { kind: "trigger", firing: tide }], "eve", "UTC"))).toBe(
+    `${required(userWroteNote(new Texts(), T0, "eve", "UTC"))}\n\n${required(triggerFiredNote(new Texts(), tide, "UTC"))}`,
   );
 });
 
@@ -2631,7 +2632,7 @@ test("a wake in a thread takes in what fires for that thread while it runs, leav
     expect(runtime.autonomy.wakeFor("ada", fired("show", 10, "ring"))).toBe("queued");
     let waking = runtime.autonomy.runDue();
     await held.started.promise;
-    expect(turnsOf(script.wakes[0])).toEqual([["user", wakeShown("12:10 PM", ["Nothing has been said in this thread yet.", wroteLast("10 minutes ago", 'your home thread "main"')], [triggerFiredNote(fired("show", 10), zone)])]]);
+    expect(turnsOf(script.wakes[0])).toEqual([["user", wakeShown("12:10 PM", ["Nothing has been said in this thread yet.", wroteLast("10 minutes ago", 'your home thread "main"')], [required(triggerFiredNote(new Texts(), fired("show", 10), zone))])]]);
     at(11);
     expect(runtime.autonomy.wakeFor("ada", fired("encore", 11, "ring"))).toBe("handed");
     expect(runtime.autonomy.wakeFor("ada", fired("lamp", 11))).toBe("queued");
@@ -2641,7 +2642,7 @@ test("a wake in a thread takes in what fires for that thread while it runs, leav
     await waking;
     expect(where()).toEqual(["ring", "ring", "ring"]);
     expect(textOf(script.wakes[1] as SidecarRequest)).toEndWith(
-      `${triggerFiredNote(fired("encore", 11), zone)}\n\n[User has just written to you, at Friday 2026-10-30 · 12:11 PM, while this wake is running. Another turn of you is answering them, and it knows this wake is running.]`,
+      `${required(triggerFiredNote(new Texts(), fired("encore", 11), zone))}\n\n[User has just written to you, at Friday 2026-10-30 · 12:11 PM, while this wake is running. Another turn of you is answering them, and it knows this wake is running.]`,
     );
     expect(textOf(script.replies.at(-1) as SidecarRequest)).toEndWith(
       `[A wake of yours in "ring" has been running since Friday 2026-10-30 · 12:10 PM. It can't see this conversation. It is only told that a message arrived.]\nis the lamp lit?`,
@@ -2651,9 +2652,9 @@ test("a wake in a thread takes in what fires for that thread while it runs, leav
     at(12);
     await runtime.autonomy.runDue();
     expect(where().slice(3)).toEqual(["main", "main", "garden", "garden"]);
-    expect(textOf(script.wakes[3] as SidecarRequest)).toContain(triggerFiredNote(fired("lamp", 11), zone));
+    expect(textOf(script.wakes[3] as SidecarRequest)).toContain(required(triggerFiredNote(new Texts(), fired("lamp", 11), zone)));
     expect(textOf(script.wakes[3] as SidecarRequest)).not.toContain("beans");
-    expect(setOffBy(turnsOf(script.wakes[5]).at(-1)?.[1])).toEqual([triggerFiredNote(fired("beans", 11), zone)]);
+    expect(setOffBy(turnsOf(script.wakes[5]).at(-1)?.[1])).toEqual([required(triggerFiredNote(new Texts(), fired("beans", 11), zone))]);
 
     script.wakes.length = 0;
     held = hold();
@@ -2686,8 +2687,8 @@ test("a wake in a thread takes in what fires for that thread while it runs, leav
     expect(pickUp).toContain("[Your last wake here was stopped for User's message at Friday 2026-10-30 · 12:41 PM, after 1 round, before it had finished.");
     expect(setOffBy(pickUp)).toEqual([
       '[You asked for this wake from "main" at Friday 2026-10-30 · 12:41 PM:  is due]',
-      triggerFiredNote(fired("encore", 41), zone),
-      triggerFiredNote(fired("show", 45), zone),
+      required(triggerFiredNote(new Texts(), fired("encore", 41), zone)),
+      required(triggerFiredNote(new Texts(), fired("show", 45), zone)),
     ]);
     expect(runtime.autonomy.log("ada", 100).filter((event) => event.kind === "tick_fired").at(-1)?.detail).toBe('Woken in "ring" by trigger "encore", "show" and a hand-off from "main"');
   });

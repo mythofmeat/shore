@@ -5,6 +5,7 @@ import { truncateSummary } from "../notifications.ts";
 import { readCharacterState, writeCharacterState } from "../storage/store.ts";
 import type { BackgroundLoopResult, LoopRound } from "./background_loop.ts";
 import { spanPhrase } from "./wake_shape.ts";
+import type { Texts } from "../texts/texts.ts";
 
 export const LAST_WORDS_CHARS = 1500;
 
@@ -89,16 +90,14 @@ export function recordWakeEnd(characterDir: string, thread: string, before: Wake
   keepWakeRecord(characterDir, thread, { ...(before.through === undefined ? {} : { through: before.through }), stopped });
 }
 
-export function wakeStopNote(stop: WakeStop, userName: string, timeZone: string): string {
-  const rounds = stop.rounds === 1 ? "1 round" : `${String(stop.rounds)} rounds`;
-  const why = {
-    time: `reached its limit of ${spanPhrase(stop.limitMs)} and was stopped`,
-    rounds: "used up its rounds of tool use and was stopped",
-    interrupted: `was stopped for ${userName}'s message`,
-    failed: "failed",
-  }[stop.why];
-  const error = stop.why === "failed" ? `, with this error: "${stop.error}"` : "";
-  const sent = stop.sent ? `The message it had already written was still sent to ${userName}.` : `Nothing from it was sent to ${userName}.`;
-  const last = stop.last === "" ? "" : ` The last thing it wrote: "${stop.last}"`;
-  return `[Your last wake here ${why} at ${formatWallClock(stop.at, timeZone)}, after ${rounds}, before it had finished${error}. ${sent}${last} Whatever it had already changed with its tools is still in place.]`;
+export function wakeStopNote(texts: Texts, stop: WakeStop, userName: string, timeZone: string): string | undefined {
+  return texts.render(`last_wake_${stop.why}`, {
+    limit: spanPhrase(stop.limitMs),
+    at: formatWallClock(stop.at, timeZone),
+    rounds: stop.rounds === 1 ? "1 round" : `${String(stop.rounds)} rounds`,
+    sent: stop.sent ? "yes" : undefined,
+    user: userName,
+    last: stop.last,
+    error: stop.why === "failed" ? stop.error : undefined,
+  });
 }

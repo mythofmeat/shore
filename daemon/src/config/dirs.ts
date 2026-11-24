@@ -1,4 +1,4 @@
-import { readdirSync, readFileSync, statSync } from "node:fs";
+import { readdirSync, statSync } from "node:fs";
 import { tmpdir, userInfo } from "node:os";
 
 import { compareByCodePoint } from "../util/sort.ts";
@@ -202,13 +202,6 @@ export function pathExists(path: string): boolean {
   }
 }
 
-export function readOrUndefined(path: string): string | undefined {
-  try {
-    return readFileSync(path, "utf8");
-  } catch {
-    return undefined;
-  }
-}
 
 export function discoverCharacters(config: string): string[] {
   const root = rustJoin(config, "characters");
@@ -229,14 +222,4 @@ function readdirOrEmpty(dir: string): string[] {
   }
 }
 
-export function resolvePromptTemplate(
-  config: string,
-  characterName: string,
-  templateName: string,
-): string | undefined {
-  return (
-    readOrUndefined(
-      rustJoin(characterConfigDir(config, characterName), "prompts", templateName),
-    ) ?? readOrUndefined(rustJoin(config, "prompts", templateName))
-  );
-}
+

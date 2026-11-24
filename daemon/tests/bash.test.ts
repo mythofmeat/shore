@@ -9,6 +9,7 @@ import { runToolUse, type ToolExecution } from "../src/tools/execute.ts";
 import { CharacterWorkspace } from "../src/tools/character_workspace.ts";
 import { BUILTIN_TOOL_SCHEMAS } from "./support/builtin_tool_schemas.ts";
 import type { ServerMessage } from "../src/protocol/ServerMessage.ts";
+import { Texts } from "../src/texts/texts.ts";
 
 async function failure(work: Promise<unknown>): Promise<string> {
   try { await work; } catch (error) { return String(error); }
@@ -19,6 +20,7 @@ async function world() {
   const root = await mkdtemp(join(tmpdir(), "shore-bash-"));
   const workspaceDir = join(root, "workspace");
   const ctx: ToolContext = {
+    texts: new Texts(),
     workspaceDir, characterName: "Juniper Vale", characterDataDir: root,
     imageDir: root, conversationDir: root, historyDbPath: join(root, "history.db"), configDir: root,
   };
@@ -132,7 +134,7 @@ describe("bash on Shore's tool surface", () => {
       `To see the rest, narrow the call to a more specific path, pattern or range, or write the output to a file and read it in parts.]`;
     const both = (head: number, tail: number) => `the first ${String(head)} characters are above this note and the last ${String(tail)} are below it`;
     const inside = (gone: number, all: number) => `${String(gone)} of its ${String(all)} characters; the cut falls inside a line`;
-    const cut = (text: string, max = 10) => windowToolResult(text, max).output;
+    const cut = (text: string, max = 10) => windowToolResult(new Texts(), text, max).output;
 
     expect(cut("x".repeat(100))).toBe(`xxxxxx\n\n${note(inside(90, 100), both(6, 4))}\n\nxxxx`);
     expect(cut(`abc\n${"x".repeat(96)}`)).toBe(`abc\n\n${note(inside(92, 100), both(4, 4))}\n\nxxxx`);
@@ -150,9 +152,9 @@ describe("bash on Shore's tool surface", () => {
     expect(cut("a\nbbbbbbbb", 3)).toBe(`a\n\n${note(inside(7, 10), both(2, 1))}\n\nb`);
     expect(cut("😀".repeat(20))).toBe(`${"😀".repeat(6)}\n\n${note(inside(10, 20), both(6, 4))}\n\n${"😀".repeat(4)}`);
 
-    expect(windowToolResult("0123456789", 10)).toEqual({ output: "0123456789", truncated: false, originalChars: 10, headChars: 10, tailChars: 0 });
-    expect(windowToolResult("x".repeat(100), 0).output).toBe("x".repeat(100));
-    expect(windowToolResult("x".repeat(100), 10)).toMatchObject({ truncated: true, originalChars: 100, headChars: 6, tailChars: 4 });
+    expect(windowToolResult(new Texts(), "0123456789", 10)).toEqual({ output: "0123456789", truncated: false, originalChars: 10, headChars: 10, tailChars: 0 });
+    expect(windowToolResult(new Texts(), "x".repeat(100), 0).output).toBe("x".repeat(100));
+    expect(windowToolResult(new Texts(), "x".repeat(100), 10)).toMatchObject({ truncated: true, originalChars: 100, headChars: 6, tailChars: 4 });
   });
 
   test("a provider's own ceiling replaces a larger or absent limit, so the result is cut once", async () => {
@@ -243,12 +245,12 @@ describe("reading the listed prompt files around a write", () => {
     const { ctx } = await world();
     let wrote = false;
     const write = async () => { wrote = true; return "done"; };
-    const coded = await rejectionOf(withPromptChanges(failingReads(ctx.workspaceDir, { message: "disk on fire", code: "EIO" }), write));
+    const coded = await rejectionOf(withPromptChanges(new Texts(), failingReads(ctx.workspaceDir, { message: "disk on fire", code: "EIO" }), write));
     expect(coded).toBeInstanceOf(Error);
     expect([(coded as Error).message, (coded as NodeJS.ErrnoException).code]).toEqual(["disk on fire", "EIO"]);
-    const bare = await rejectionOf(withPromptChanges(failingReads(ctx.workspaceDir, { message: "no reason given" }), write));
+    const bare = await rejectionOf(withPromptChanges(new Texts(), failingReads(ctx.workspaceDir, { message: "no reason given" }), write));
     expect([(bare as Error).message, Object.hasOwn(bare as object, "code")]).toEqual(["no reason given", false]);
     expect(wrote).toBe(false);
-    expect(await withPromptChanges(failingReads(ctx.workspaceDir, { message: "gone", code: "ENOENT" }), write)).toBe("done");
+    expect(await withPromptChanges(new Texts(), failingReads(ctx.workspaceDir, { message: "gone", code: "ENOENT" }), write)).toBe("done");
   });
 });

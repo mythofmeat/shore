@@ -2,6 +2,7 @@ import { expect, test } from "bun:test";
 
 import { assemblePrompt, type PromptParams, type PromptSection } from "../src/engine/prompt.ts";
 import type { ContentBlock, Message } from "../src/engine/types.ts";
+import { Texts } from "../src/texts/texts.ts";
 
 const MINUTE = 60_000;
 const T0 = Date.UTC(2026, 9, 30, 12);
@@ -21,7 +22,7 @@ function said(role: Message["role"], words: string | ContentBlock[], minutes: nu
 }
 
 function prompt(messages: Message[], over: Partial<PromptParams> = {}): ReturnType<typeof assemblePrompt> {
-  return assemblePrompt({ character_name: "ada", display_name: "eve", has_prior_context: false, user_timestamp_mode: "never", sections: [], messages, ...over }, "UTC");
+  return assemblePrompt({ character_name: "ada", display_name: "eve", has_prior_context: false, user_timestamp_mode: "never", sections: [], messages, texts: new Texts(), ...over }, "UTC");
 }
 
 function shown(messages: Message[], over: Partial<PromptParams> = {}): [role: string, text: string][] {

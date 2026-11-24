@@ -7,6 +7,7 @@ import { cutLastWords, keepWakeRecord, recordWakeEnd, stopOf, wakeRecord, wakeSt
 import { deleteThreadState } from "../src/storage/files.ts";
 import { writeCharacterState } from "../src/storage/store.ts";
 import { testTmp } from "./support/tmp.ts";
+import { Texts } from "../src/texts/texts.ts";
 
 const MINUTE = 60_000;
 const T0 = Date.UTC(2026, 9, 30, 12);
@@ -97,20 +98,20 @@ test("a wake whose model call failed records that it failed, with the error, and
 
 test("the next wake is told how the last one was stopped, in these words", () => {
   const stop: WakeStop = { at: T0 + 30 * MINUTE, why: "time", limitMs: 30 * MINUTE, rounds: 4, sent: false, last: "" };
-  expect(wakeStopNote(stop, "eve", "UTC")).toBe(
+  expect(wakeStopNote(new Texts(), stop, "eve", "UTC")).toBe(
     "[Your last wake here reached its limit of 30 minutes and was stopped at Friday 2026-10-30 · 12:30 PM, after 4 rounds, before it had finished. " +
     "Nothing from it was sent to eve. Whatever it had already changed with its tools is still in place.]",
   );
-  expect(wakeStopNote({ ...stop, why: "rounds", rounds: 1, sent: true, last: "Now the lamp." }, "eve", "UTC")).toBe(
+  expect(wakeStopNote(new Texts(), { ...stop, why: "rounds", rounds: 1, sent: true, last: "Now the lamp." }, "eve", "UTC")).toBe(
     "[Your last wake here used up its rounds of tool use and was stopped at Friday 2026-10-30 · 12:30 PM, after 1 round, before it had finished. " +
     'The message it had already written was still sent to eve. The last thing it wrote: "Now the lamp." Whatever it had already changed with its tools is still in place.]',
   );
-  expect(wakeStopNote({ ...stop, why: "interrupted", limitMs: 2 * 60 * MINUTE, rounds: 0 }, "eve", "UTC")).toBe(
+  expect(wakeStopNote(new Texts(), { ...stop, why: "interrupted", limitMs: 2 * 60 * MINUTE, rounds: 0 }, "eve", "UTC")).toBe(
     "[Your last wake here was stopped for eve's message at Friday 2026-10-30 · 12:30 PM, after 0 rounds, before it had finished. " +
     "Nothing from it was sent to eve. Whatever it had already changed with its tools is still in place.]",
   );
-  expect(wakeStopNote({ ...stop, limitMs: 2 * 60 * MINUTE }, "eve", "UTC")).toStartWith("[Your last wake here reached its limit of 2 hours and was stopped at ");
-  expect(wakeStopNote({ ...stop, why: "failed", error: "usage limit reached", rounds: 73, last: "Half done." }, "eve", "UTC")).toBe(
+  expect(wakeStopNote(new Texts(), { ...stop, limitMs: 2 * 60 * MINUTE }, "eve", "UTC")).toStartWith("[Your last wake here reached its limit of 2 hours and was stopped at ");
+  expect(wakeStopNote(new Texts(), { ...stop, why: "failed", error: "usage limit reached", rounds: 73, last: "Half done." }, "eve", "UTC")).toBe(
     '[Your last wake here failed at Friday 2026-10-30 · 12:30 PM, after 73 rounds, before it had finished, with this error: "usage limit reached". ' +
     'Nothing from it was sent to eve. The last thing it wrote: "Half done." Whatever it had already changed with its tools is still in place.]',
   );

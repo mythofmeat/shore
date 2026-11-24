@@ -30,6 +30,7 @@ import { outcomeOf, rejectionOf } from "./support/outcome.ts";
 import { testTmp } from "./support/tmp.ts";
 import { required } from "../src/util/required.ts";
 import { promptedAppConfig } from "./support/prompt_list.ts";
+import { Texts } from "../src/texts/texts.ts";
 
 const NOW = "2026-11-21T10:00:00Z";
 
@@ -167,6 +168,7 @@ describe("a command pin", () => {
 
   test("that hasn't run yet says so rather than calling itself a missing file", () => {
     const { system } = assemblePrompt({
+      texts: new Texts(),
       thread: { id: "story", home: "main", created_at: NOW, started_by_you: false, pins: [{ pin: "!date", content: undefined }, { pin: "notes.md", content: undefined }] },
       character_name: "frank",
       display_name: "Sam",

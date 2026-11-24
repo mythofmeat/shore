@@ -17,6 +17,7 @@ import { writeCharacterState } from "../src/storage/store.ts";
 import { handleListThreads } from "../src/tools/list_threads.ts";
 import { handleStartSealedThread, sealedThreadRequest } from "../src/tools/start_sealed_thread.ts";
 import { testTmp } from "./support/tmp.ts";
+import { Texts } from "../src/texts/texts.ts";
 
 const HOUR = 3_600_000;
 const T0 = Date.UTC(2026, 9, 30, 12);
@@ -105,17 +106,17 @@ test("a damaged list of sealed threads is read as far as it makes sense", async 
 test("the character's other turns are told of a sealed thread only its name, its label and when it opens", () => {
   const gift = { id: "gift", label: "Something for you", unseal_at: "2026-10-31T08:00:00.000Z", created_at: "2026-10-30T12:00:00.000Z" };
   const later = { id: "later", label: "Later", unseal_at: "2026-12-24T18:30:00.000Z", created_at: "2026-10-30T12:00:00.000Z" };
-  expect(sealedListNote([], "UTC")).toBeUndefined();
-  expect(sealedListNote([gift, later], "UTC")).toBe(
+  expect(sealedListNote(new Texts(), [], "UTC")).toBeUndefined();
+  expect(sealedListNote(new Texts(), [gift, later], "UTC")).toBe(
     "[Your sealed threads. Only a wake inside one can see what is in it, and `wake_in_thread` takes you there.\n" +
     '- `gift` "Something for you", opens Saturday 2026-10-31 · 8:00 AM\n- `later` "Later", opens Thursday 2026-12-24 · 6:30 PM]',
   );
-  expect(sealedWakeNote(gift, "/home/ada/sealed/gift", "eve", "UTC")).toBe(
+  expect(sealedWakeNote(new Texts(), gift, "/home/ada/sealed/gift", "eve", "UTC")).toBe(
     '[This thread is sealed until Saturday 2026-10-31 · 8:00 AM. eve can\'t see it, or anything you do or send here, until then, and your other threads are shown only its label, "Something for you". ' +
     "What you send here waits in the thread for them. Keep what you make for it in /home/ada/sealed/gift, which is outside your workspace.]",
   );
   const opened = { name: "", reason: "eve can see it now.", at: T0, thread: "gift", seal: true };
-  expect(triggerFiredNote(opened, "UTC")).toBe("[The seal on this thread came off at Friday 2026-10-30 · 12:00 PM. eve can see it now.]");
+  expect(triggerFiredNote(new Texts(), opened, "UTC")).toBe("[The seal on this thread came off at Friday 2026-10-30 · 12:00 PM. eve can see it now.]");
   expect(firedBy([opened])).toBe("its seal coming off");
   expect(firedBy([{ name: "show", reason: "r", at: T0, thread: "gift" }, { name: "", reason: "r", at: T0, thread: "gift", from: "main" }, opened])).toBe(
     'trigger "show" and a hand-off from "main" and its seal coming off',
@@ -156,14 +157,14 @@ test("the tool that seals a thread needs a name, a label and a local time to ope
 test("from inside a sealed thread the list of threads says where the character is, and marks no other thread as that place", async () => {
   const { data } = await world();
   await sealThread(data, "ada", { id: "gift", label: "Something for you", unsealAt: T0 + HOUR }, T0);
-  const listed = await handleListThreads({ dataDir: data, character: "ada", thread: "gift", userName: "eve", timeZone: "UTC", now: () => T0 });
+  const listed = await handleListThreads({ texts: new Texts(), dataDir: data, character: "ada", thread: "gift", userName: "eve", timeZone: "UTC", now: () => T0 });
   expect(listed).toStartWith('Your home thread is "main". You\'re in "gift", which is sealed.\n\nmain (home) · compaction on');
   expect(listed).not.toContain("you're here");
   expect(listed).toEndWith('- `gift` "Something for you", opens Friday 2026-10-30 · 1:00 PM]');
-  const elsewhere = await handleListThreads({ dataDir: data, character: "ada", thread: "ring", userName: "eve", timeZone: "UTC", now: () => T0 });
+  const elsewhere = await handleListThreads({ texts: new Texts(), dataDir: data, character: "ada", thread: "ring", userName: "eve", timeZone: "UTC", now: () => T0 });
   expect(elsewhere).toStartWith('Your home thread is "main". You\'re in "ring".\n\n');
   expect(elsewhere).toContain("ring (you're here) · compaction off");
-  const nowhere = await handleListThreads({ dataDir: data, character: "ada", thread: "ghost", userName: "eve", timeZone: "UTC", now: () => T0 });
+  const nowhere = await handleListThreads({ texts: new Texts(), dataDir: data, character: "ada", thread: "ghost", userName: "eve", timeZone: "UTC", now: () => T0 });
   expect(nowhere).toStartWith('Your home thread is "main". You\'re in it.\n\nmain (home, you\'re here) · compaction on');
 });
 

@@ -36,6 +36,7 @@ import { ensureWorkspaceGitRepo, gitCommitAll, gitHead } from "../src/tools/work
 import { redoTurns, restorePaths, undoTurns, WorkspaceRecorder, workspaceChanges, workspaceTree, type WorkspaceTurns } from "../src/tools/workspace_turns.ts";
 import { setTestEnv } from "./support/env.ts";
 import { testTmp } from "./support/tmp.ts";
+import { Texts } from "../src/texts/texts.ts";
 
 const ROOT = process.env["SHORE_ISOLATION_ROOT"] ?? "";
 const USER = process.env["SHORE_ISOLATION_USER"] ?? "";
@@ -70,6 +71,7 @@ async function freshWorkspace(passEnv: string[] = [], root = join(ROOT, "workspa
 async function context(workspace: CharacterWorkspace): Promise<ToolContext> {
   const data = await privateDir("isolation-data");
   return {
+    texts: new Texts(),
     workspaceDir: workspace.dir, workspace, characterName: "Ada", characterDataDir: join(data, "ada"),
     imageDir: data, conversationDir: data, historyDbPath: join(data, "shore.db"), configDir: data,
   };
@@ -190,7 +192,7 @@ describe.skipIf(!READY)("a character whose tools run as its own user", () => {
 
     await sharePictureFolders(config, [USER, OTHER, "cal"]);
 
-    const { messages } = await buildLlmMessages({ system: [], messages: [own] }, "text_standin");
+    const { messages } = await buildLlmMessages({ system: [], messages: [own] }, "text_standin", new Texts());
     const shown = messages[0]?.content.flatMap((block) => block.type === "text" ? [/^\[picture: (.+)\]$/.exec(block.text)?.[1] ?? ""] : []).find((path) => path !== "") ?? "";
     expect(shown).toBe(own.images[0]?.path ?? "none");
     const workspace = await freshWorkspace();

@@ -1,34 +1,15 @@
-import indexText from "../../prompts/guide/index.md" with { type: "text" };
-import messagesText from "../../prompts/guide/messages.md" with { type: "text" };
-import threadsText from "../../prompts/guide/threads.md" with { type: "text" };
-import toolsOffText from "../../prompts/guide/tools_off.md" with { type: "text" };
-import triggersText from "../../prompts/guide/triggers.md" with { type: "text" };
-import wakesText from "../../prompts/guide/wakes.md" with { type: "text" };
-
 import { PUSH_CHARS } from "../autonomy/push.ts";
 import { DEFAULT_WAKE_LIMIT_MS, WAKE_QUIET_MS } from "../autonomy/runner.ts";
 import { CHECK_ERROR_CHARS, CHECK_OUTPUT_CHARS } from "../autonomy/trigger_check.ts";
 import { triggerSettings } from "../autonomy/trigger_service.ts";
 import { ConfigDuration } from "../config/duration.ts";
 import type { LoadedConfig } from "../config/loader.ts";
-import { renderTemplate } from "../engine/prompt.ts";
+import { renderTemplate } from "../texts/template.ts";
 import { InvalidArgs } from "./errors.ts";
 import { byteSize, MAX_THREAD_PIN_BYTES, MAX_THREAD_PINS_BYTES } from "./thread_file_text.ts";
+import type { Texts } from "../texts/texts.ts";
 
 const GUIDE_TOPICS = ["triggers", "wakes", "threads", "messages"] as const;
-
-type GuideTopic = (typeof GUIDE_TOPICS)[number];
-
-const TOPIC_TEXT: Record<GuideTopic, string> = {
-  triggers: triggersText.trimEnd(),
-  wakes: wakesText.trimEnd(),
-  threads: threadsText.trimEnd(),
-  messages: messagesText.trimEnd(),
-};
-
-const INDEX = indexText.trimEnd();
-
-const TOOLS_OFF = toolsOffText.trimEnd();
 
 export interface GuideTool {
   name: string;
@@ -72,13 +53,17 @@ export function guideValues(config: LoadedConfig, userName: string): Map<string,
   ]);
 }
 
-export function readGuide(input: Record<string, unknown>, values: ReadonlyMap<string, string>, tools: readonly GuideTool[]): string {
+function guideText(texts: Texts, name: string): string {
+  return texts.wording(name) ?? "";
+}
+
+export function readGuide(texts: Texts, input: Record<string, unknown>, values: ReadonlyMap<string, string>, tools: readonly GuideTool[]): string {
   const asked = typeof input["topic"] === "string" ? input["topic"].trim() : "";
   const vars = new Map([...values, ...tools.map((tool): [string, string] => [tool.name, tool.name])]);
-  if (asked === "") return renderTemplate(INDEX, vars);
+  if (asked === "") return renderTemplate(guideText(texts, "guide_index"), vars);
   const topic = GUIDE_TOPICS.find((each) => each === asked);
   if (topic === undefined) throw new InvalidArgs(`there is no topic ${JSON.stringify(asked)}; the topics are ${GUIDE_TOPICS.join(", ")}`);
-  const text = TOPIC_TEXT[topic];
+  const text = guideText(texts, `guide_${topic}`);
   const off = tools.filter((tool) => !tool.enabled && text.includes(`{{${tool.name}}}`)).map((tool) => `\`${tool.name}\``).join(", ");
-  return renderTemplate(off === "" ? text : `${text}\n\n${TOOLS_OFF}`, new Map([...vars, ["tools_off", off]]));
+  return renderTemplate(off === "" ? text : `${text}\n\n${guideText(texts, "guide_tools_off")}`, new Map([...vars, ["tools_off", off]]));
 }

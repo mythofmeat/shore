@@ -1,6 +1,8 @@
 import { expect, test } from "bun:test";
 
-import { embedName, embedsIn, pictureText, splitText, unsentNotice } from "../src/engine/embeds.ts";
+import { embedName, embedsIn, pictureText, splitText } from "../src/engine/embeds.ts";
+import { unsentNotice } from "../src/engine/prompt.ts";
+import { Texts } from "../src/texts/texts.ts";
 
 test("a message's picture embeds are its wikilink and local Markdown images, in the order written", () => {
   const text = [
@@ -71,8 +73,8 @@ test("the notice lists each unsent picture once", () => {
   const unsent = { path: "", embed: "![[gone]]", problem: "no picture matches; did you mean ![[gone2.png]]?" };
   const sent = { path: "/x.png", embed: "![[ok]]", name: "ok.png" };
   const attached = { path: "/y.png", embed: undefined };
-  expect(unsentNotice([sent])).toBeUndefined();
-  expect(unsentNotice([unsent, unsent, sent, attached])).toBe(
+  expect(unsentNotice(new Texts(), [sent])).toBeUndefined();
+  expect(unsentNotice(new Texts(), [unsent, unsent, sent, attached])).toBe(
     "[These pictures in your last message were not sent, so only their names were shown:\n- ![[gone]]: no picture matches; did you mean ![[gone2.png]]?\nSend a picture again in a new message if you meant to show it.]",
   );
 });

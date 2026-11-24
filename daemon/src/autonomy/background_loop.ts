@@ -47,7 +47,7 @@ export interface BackgroundLoopDeps {
   persist?: (round: LoopRound) => Promise<void>;
   timeLimitMs: number;
   wrapUpMs: number;
-  wrapUpText: (msLeft: number, rounds: number) => string;
+  wrapUpText: (msLeft: number, rounds: number) => string | undefined;
   callTypes: readonly [string, string];
   name: string;
   interrupted?: () => boolean;
@@ -145,8 +145,10 @@ export async function runBackgroundLoop(
       if (!nudgeDue) return;
       wrapUpEnd = iteration + deps.wrapUpGrace;
       const nudge = deps.wrapUpText(left, deps.wrapUpGrace);
-      appendWrapUpNudge(call.messages, nudge);
-      await deps.persist?.({ role: "system", blocks: [{ type: "text", text: nudge }] });
+      if (nudge !== undefined) {
+        appendWrapUpNudge(call.messages, nudge);
+        await deps.persist?.({ role: "system", blocks: [{ type: "text", text: nudge }] });
+      }
       deps.note(`Wrap-up nudge on round ${String(iteration)}, with ${timeLeftPhrase(left)} left`);
     },
     onTurn: (turn) => {

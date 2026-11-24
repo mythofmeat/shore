@@ -1,14 +1,13 @@
-import wakeTemplateRaw from "../../prompts/autonomy/wake.md" with { type: "text" };
-
 import type { RebuildDeps } from "../cache/rebuild.ts";
 import { resolveDisplayName, toolEnabled, toolGrants } from "../config/app.ts";
-import { characterDataDir, resolvePromptTemplate, threadDataDir } from "../config/dirs.ts";
+import { characterDataDir, threadDataDir } from "../config/dirs.ts";
 import { findEffectiveModel } from "../config/effective_catalog.ts";
 import type { LoadedConfig } from "../config/loader.ts";
 import { applyBackgroundSettings, configView, resolveChatModelForCharacter } from "../config/preferences.ts";
 import { withConversation } from "../engine/lifecycle.ts";
 import { deriveContentFromBlocks, isToolResultOnly } from "../engine/message_store.ts";
-import { agoPhrase, estimateHistoryTokens, formatWallClock, nearMessageBudget, presenceText, renderTemplate } from "../engine/prompt.ts";
+import { estimateHistoryTokens, formatWallClock, lengthPhrase, nearMessageBudget, statusesText } from "../engine/prompt.ts";
+import { Texts } from "../texts/texts.ts";
 import { sealedThreads, type SealedThread } from "../engine/sealed_list.ts";
 import { NO_PRIOR_CONTEXT } from "../engine/segments.ts";
 import { homeThread, isWakeOpener, readThreadsIndex, threadActivities, threadActivityNow, type ThreadsIndex } from "../engine/threads.ts";
@@ -39,18 +38,14 @@ import { runBackgroundLoop, type BackgroundLoopDeps, type BackgroundLoopResult, 
 import { presence } from "./presence.ts";
 import { WAKE_QUIET_MS, type TriggerFiring, type WakeNews, type WakeResult } from "./runner.ts";
 import { sealedListNote, sealedWakeNote } from "./sealed_notes.ts";
-import { digestWords, threadDigest, type ThreadReader } from "./thread_digest.ts";
+import { threadDigest, type ThreadReader } from "./thread_digest.ts";
 import { Outbox, postElsewhere, postMessage, reachableThreads, sendingsHere } from "./outbox.ts";
 import { pushRefusal, type PushOutcome } from "./push.ts";
 import { spanPhrase, timeLeftPhrase, triggerFiredNote, wakeNewsNote } from "./wake_shape.ts";
 import { recordWakeEnd, stopOf, wakeRecord, wakeStopNote, WakeWords, type WakeEnding } from "./wake_record.ts";
 import { keptWorkingSummary, withoutWakeWorking } from "./wake_working.ts";
 
-export const WAKE_OPENER = "[wake]";
-
 const LONGEST_WRAP_UP_MS = 15 * 60_000;
-
-const DEFAULT_WAKE_TEMPLATE = wakeTemplateRaw.trimEnd();
 
 export interface WakeEngine extends ThreadReader {
   readonly thread: string;
@@ -107,25 +102,17 @@ export function wrapUpMsFor(limitMs: number): number {
   return Math.min(LONGEST_WRAP_UP_MS, Math.floor(limitMs / 6));
 }
 
-export function wakeWrapUpText(msLeft: number, rounds: number, userName: string): string {
-  const stop = rounds === 1 ? "after this round" : `after ${String(rounds)} more rounds, counting this one`;
-  return `[System nudge: this wake stops in ${timeLeftPhrase(msLeft)} or ${stop}, whichever comes first. ` +
-    "Wrap up now. Your next wake starts fresh, so whatever it will need has to be in a file before this one stops, " +
-    `and nothing reaches ${userName} unless you send it.]`;
+export function wakeWrapUpText(texts: Texts, msLeft: number, rounds: number, userName: string): string | undefined {
+  return texts.render("wrap_up", { time_left: timeLeftPhrase(msLeft), last_round: rounds === 1 ? "yes" : undefined, rounds: String(rounds), user: userName });
 }
 
-export function wakeStoppedNote(ending: WakeEnding, userName: string, limitMs: number): string {
-  switch (ending.why) {
-    case "interrupted":
-      return `[${userName} wrote here while this wake was running, so Shore stopped it here for you to answer them. ` +
-        `Once they have been quiet in this thread for ${spanPhrase(WAKE_QUIET_MS)}, Shore wakes you here again to pick it up.]`;
-    case "time":
-      return `[This wake reached its limit of ${spanPhrase(limitMs)}, and Shore stopped it here.]`;
-    case "rounds":
-      return "[This wake used up its rounds of tool use, and Shore stopped it here.]";
-    case "failed":
-      return `[This wake failed here, before it had finished, with this error: "${ending.error}".]`;
-  }
+export function wakeStoppedNote(texts: Texts, ending: WakeEnding, userName: string, limitMs: number): string | undefined {
+  return texts.render(`stopped_${ending.why}`, {
+    user: userName,
+    quiet: spanPhrase(WAKE_QUIET_MS),
+    limit: spanPhrase(limitMs),
+    error: ending.why === "failed" ? ending.error : undefined,
+  });
 }
 
 export function leadingWakeTurns(messages: readonly Message[]): number {
@@ -135,6 +122,7 @@ export function leadingWakeTurns(messages: readonly Message[]): number {
 }
 
 export async function lastWroteNote(
+  texts: Texts,
   dataDir: string,
   character: string,
   index: ThreadsIndex | undefined,
@@ -152,11 +140,8 @@ export async function lastWroteNote(
     latest = { id: thread.id, label: thread.label, at };
   }
   if (latest === undefined) return undefined;
-  const ago = agoPhrase((nowMs - latest.at) / 1000);
-  if (latest.id === here) return `[${userName} last wrote to you ${ago}, in this thread.]`;
-  if (latest.id === home) return `[${userName} last wrote to you ${ago}, in your home thread "${home}".]`;
-  const name = latest.label === undefined ? `"${latest.id}"` : `"${latest.id}" (${latest.label})`;
-  return `[${userName} last wrote to you ${ago}, in the side thread ${name}, which isn't shown here.]`;
+  const values = { user: userName, length: lengthPhrase((nowMs - latest.at) / 1000), thread: latest.id, label: latest.label };
+  return texts.render(latest.id === here ? "last_wrote_here" : latest.id === home ? "last_wrote_home" : "last_wrote_side", values);
 }
 
 function noteFailure(character: string, round: number, failure: unknown, note: Note): void {
@@ -256,24 +241,25 @@ export async function runWake(character: string, config: LoadedConfig, wake: Wak
         shoreLog.warn(`shore: could not refresh the prompt files of ${character}/${thread} before a wake: ${String(error)}`);
       }
     }
-    const rendered = renderTemplate(resolvePromptTemplate(config.dirs.config, character, "wake.md") ?? DEFAULT_WAKE_TEMPLATE, new Map([
-      ["now", formatWallClock(nowMs, timeZone)],
-      ["user", userName],
-      ["thread", thread],
-      ["home", home],
-      ["time_limit", spanPhrase(wake.limitMs)],
-      ["wrap_up_after", spanPhrase(wake.limitMs - wrapUpMs)],
-      ["max_rounds", maxToolRounds === undefined ? "" : String(maxToolRounds)],
-      ["resume_after", spanPhrase(WAKE_QUIET_MS)],
-      ["working_thread", log?.engine.thread ?? ""],
-      ["working_here", log === undefined ? "yes" : ""],
-      ["send_message", toolEnabled(config.app.tools, "send_message") ? "yes" : ""],
-    ]));
+    const texts = Texts.of(config);
+    const rendered = texts.render("wake", {
+      now: formatWallClock(nowMs, timeZone),
+      user: userName,
+      thread,
+      home,
+      time_limit: spanPhrase(wake.limitMs),
+      wrap_up_after: spanPhrase(wake.limitMs - wrapUpMs),
+      max_rounds: maxToolRounds === undefined ? undefined : String(maxToolRounds),
+      resume_after: spanPhrase(WAKE_QUIET_MS),
+      working_thread: log?.engine.thread,
+      working_here: log === undefined ? "yes" : undefined,
+      send_message: toolEnabled(config.app.tools, "send_message") ? "yes" : undefined,
+    });
     const record = wakeRecord(characterDir, thread);
     const status = presence(config.dirs.data);
-    const fired = wake.fired.map((firing) => triggerFiredNote(firing, timeZone));
+    const fired = wake.fired.flatMap((firing) => triggerFiredNote(texts, firing, timeZone) ?? []);
     const setOffBy = [...new Set(wake.fired.map((firing) => firing.name).filter((name) => name !== ""))].join(", ");
-    const setOff = [...fired, ...(seal === undefined ? [] : [sealedWakeNote(seal.sealed, seal.filesDir, userName, timeZone)]), rendered];
+    const setOff = [...fired, seal === undefined ? undefined : sealedWakeNote(texts, seal.sealed, seal.filesDir, userName, timeZone), rendered].filter((part) => part !== undefined);
     const newId = deps.newId ?? (() => `m_${crypto.randomUUID()}`);
     const id = newId();
     const opener = (text: string): Message => ({
@@ -287,12 +273,12 @@ export async function runWake(character: string, config: LoadedConfig, wake: Wak
       timestamp: new Date(nowMs).toISOString(),
     });
     const shown = opener([
-      WAKE_OPENER,
-      await threadDigest(engine, digestWords("this thread"), record.through, userName, timeZone),
-      record.stopped === undefined ? undefined : wakeStopNote(record.stopped, userName, timeZone),
-      await lastWroteNote(config.dirs.data, character, index, thread, userName, nowMs).catch(() => undefined),
-      status === undefined || status.statuses.length === 0 ? undefined : presenceText(status, nowMs, `${userName}'s`),
-      seal === undefined ? sealedListNote(sealedThreads(characterDir), timeZone) : undefined,
+      texts.always("wake_opener"),
+      await threadDigest(texts, engine, record.through, userName, timeZone),
+      record.stopped === undefined ? undefined : wakeStopNote(texts, record.stopped, userName, timeZone),
+      await lastWroteNote(texts, config.dirs.data, character, index, thread, userName, nowMs).catch(() => undefined),
+      status === undefined || status.statuses.length === 0 ? undefined : texts.render("wake_status", { user: userName, statuses: statusesText(texts, status, nowMs) }),
+      seal === undefined ? sealedListNote(texts, sealedThreads(characterDir), timeZone) : undefined,
       ...setOff,
     ].filter((part) => part !== undefined).join("\n\n"));
 
@@ -327,14 +313,14 @@ export async function runWake(character: string, config: LoadedConfig, wake: Wak
       return { events };
     }
 
-    const later = [WAKE_OPENER, ...fired].join("\n\n");
+    const later = [texts.always("wake_opener"), ...fired].join("\n\n");
     const read = inReadingOrder([...required(built.sent.find((sent) => sent.msg_id === id)).notes, { place: "instead", text: shown.content }]);
     if (log === undefined) {
-      await engine.appendMessage({ ...opener([WAKE_OPENER, ...setOff].join("\n\n")), shown_later: later });
+      await engine.appendMessage({ ...opener([texts.always("wake_opener"), ...setOff].join("\n\n")), shown_later: later });
       await engine.saveNotes([{ msg_id: id, notes: read }]);
     } else {
       await engine.appendMessage(opener(later));
-      await keepWorking(log, { ...opener([`[wake in "${thread}"]`, ...setOff].join("\n\n")), msg_id: newId() }, read);
+      await keepWorking(log, { ...opener([texts.always("wake_opener_kept", { thread }), ...setOff].join("\n\n")), msg_id: newId() }, read);
     }
     const working: Message[] = [];
     const conversation = { thread, conversation: [shown] };
@@ -352,6 +338,7 @@ export async function runWake(character: string, config: LoadedConfig, wake: Wak
       threads: async () => await reachableThreads(config.dirs.data, character),
       pictureProblems: async (text) => await pictureProblems([text], workspace, signal),
       pushRefusal: () => pushRefusal(characterDir, { topic: config.app.notifications.push_topic, everyMs: config.app.notifications.push_every.asMillis() }, deps.now?.() ?? Date.now()),
+      texts,
     });
     const loop = await runBackgroundLoop(request, {
       ...(heard.recordTranscript === undefined ? {} : { recordTranscript: heard.recordTranscript }),
@@ -377,17 +364,17 @@ export async function runWake(character: string, config: LoadedConfig, wake: Wak
       maxToolRounds,
       timeLimitMs: wake.limitMs,
       wrapUpMs,
-      wrapUpText: (msLeft, rounds) => wakeWrapUpText(msLeft, rounds, userName),
+      wrapUpText: (msLeft, rounds) => wakeWrapUpText(texts, msLeft, rounds, userName),
       note: (detail) => note("tool_use", detail),
-      news: (wrappingUp) => wakeNewsNote(deps.news?.(wrappingUp) ?? [], userName, timeZone),
+      news: (wrappingUp) => wakeNewsNote(texts, deps.news?.(wrappingUp) ?? [], userName, timeZone),
     });
 
     if (signal.aborted) {
       note("call_failed", `Wake in "${thread}" stopped: the thread was changed while it ran`);
       return { events };
     }
-    if (loop.failedRound !== undefined) await (log?.engine ?? engine).recoverInterruptedToolLoop("The wake ended before this tool returned a result.");
-    const kept = log === undefined ? undefined : keptWorkingSummary(working, { id: log.engine.thread, label: log.label }, {
+    if (loop.failedRound !== undefined) await (log?.engine ?? engine).recoverInterruptedToolLoop(texts.always("tool_cut_off"));
+    const kept = log === undefined ? undefined : keptWorkingSummary(texts, working, { id: log.engine.thread, label: log.label }, {
       msg_id: newId(),
       timestamp: (deps.nowIso ?? (() => new Date().toISOString()))(),
     });
@@ -400,9 +387,12 @@ export async function runWake(character: string, config: LoadedConfig, wake: Wak
           ? `Wake in "${thread}" stopped for ${userName}'s message`
           : `Wake in "${thread}" ${ending.why === "time" ? `reached its limit of ${spanPhrase(wake.limitMs)}` : "used up its rounds"} and was stopped`);
       }
-      const why = roundMessage({ role: "system", blocks: [{ type: "text", text: wakeStoppedNote(ending, userName, wake.limitMs) }] }, request, deps);
-      await engine.appendMessage(why);
-      if (log !== undefined) await keepWorking(log, { ...why, msg_id: newId() });
+      const stoppedNote = wakeStoppedNote(texts, ending, userName, wake.limitMs);
+      if (stoppedNote !== undefined) {
+        const why = roundMessage({ role: "system", blocks: [{ type: "text", text: stoppedNote }] }, request, deps);
+        await engine.appendMessage(why);
+        if (log !== undefined) await keepWorking(log, { ...why, msg_id: newId() });
+      }
     }
     const waiting = stopped === "interrupted" ? [] : outbox.waiting;
     const here = waiting.filter((each) => each.thread === thread);
@@ -437,7 +427,7 @@ export async function runWake(character: string, config: LoadedConfig, wake: Wak
     }
     if (runner === undefined || thread === home) return { events };
     const active = engine.messages();
-    const measured = withoutWakeWorking(active);
+    const measured = withoutWakeWorking(texts, active);
     const crowded = nearMessageBudget(measured, built.messageBudget, tier) && canArchiveTurns(active, settings.keep_recent_turns);
     const trim = async (keep: number): Promise<void> => {
       await archiveTrimmedTurns(config.dirs.data, engine, character, workspace, keep, () => new Date().toISOString(), runner);

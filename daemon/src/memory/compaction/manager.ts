@@ -56,21 +56,4 @@ export async function beginCompaction(
   return guardFor(key);
 }
 
-const IF_RECAP = "{{#if recap}}";
-const END_IF = "{{/if}}";
 
-export function buildFinalMessage(
-  template: string,
-  charName: string,
-  userName: string,
-): string {
-  let out = template.replaceAll("{{char}}", charName).replaceAll("{{user}}", userName);
-  for (;;) {
-    const ifStart = out.indexOf(IF_RECAP);
-    if (ifStart < 0) break;
-    const endIf = out.indexOf(END_IF, ifStart);
-    if (endIf < 0) break;
-    out = out.slice(0, ifStart) + out.slice(endIf + END_IF.length);
-  }
-  return out.replaceAll("{{recap}}", "");
-}

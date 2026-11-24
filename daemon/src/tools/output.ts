@@ -2,6 +2,7 @@ import type { BashResult } from "./bash.ts";
 import type { HeatmapResult } from "./activity.ts";
 import type { ModelHistoryResult } from "./model_history.ts";
 import { payloadText } from "./media.ts";
+import type { Texts } from "../texts/texts.ts";
 
 function oneLine(value: string): string {
   return value.replace(/\r/g, "\\r").replace(/\n/g, "\\n").replace(/\t/g, "\\t");
@@ -37,7 +38,7 @@ function modelHistoryText(value: ModelHistoryResult): string {
   return lines.join("\n");
 }
 
-export function formatToolOutput(name: string, value: unknown): string {
+export function formatToolOutput(texts: Texts, name: string, value: unknown): string {
   if (value === null || typeof value !== "object" || Array.isArray(value)) return payloadText(value);
   switch (name) {
     case "bash": {
@@ -45,9 +46,8 @@ export function formatToolOutput(name: string, value: unknown): string {
       const lines = [`bash: exit ${result.exit_code ?? "terminated by signal"}`, `workdir: ${oneLine(result.workdir)}`];
       if (result.stdout) lines.push(result.stdout.replace(/\n$/, ""));
       if (result.stderr) lines.push(`stderr:\n${result.stderr.replace(/\n$/, "")}`);
-      if (result.prompt_files_changed.length > 0) {
-        lines.push(`Prompt reload queued: ${result.prompt_files_changed.join(", ")}.`);
-      }
+      const reload = result.prompt_files_changed.length > 0 ? texts.render("prompt_reload", { files: result.prompt_files_changed.join(", ") }) : undefined;
+      if (reload !== undefined) lines.push(reload);
       return lines.join("\n");
     }
     case "activity_heatmap":

@@ -20,6 +20,7 @@ import { carryToolMedia } from "../src/tools/media.ts";
 import { closePictureFolder, openPictureFolder, sharePictureFolders } from "../src/tools/picture_access.ts";
 import { noisePng } from "./support/test_images.ts";
 import { testTmp } from "./support/tmp.ts";
+import { Texts } from "../src/texts/texts.ts";
 
 async function world() {
   const root = testTmp(`picture-paths-${crypto.randomUUID()}`);
@@ -29,6 +30,7 @@ async function world() {
   await mkdir(workspaceDir, { recursive: true });
   await mkdir(data, { recursive: true });
   const ctx: ToolContext = {
+    texts: new Texts(),
     workspaceDir, characterName: "ada", characterDataDir: join(data, "ada"), imageDir: join(root, "media"), cacheDir: cache,
     conversationDir: join(data, "ada", "threads", "main"), historyDbPath: join(data, "shore.db"), configDir: root,
   };
@@ -53,7 +55,7 @@ async function world() {
 }
 
 async function shownAs(message: Message): Promise<string[]> {
-  const { messages } = await buildLlmMessages({ system: [], messages: [message] }, "text_standin");
+  const { messages } = await buildLlmMessages({ system: [], messages: [message] }, "text_standin", new Texts());
   return (messages[0]?.content ?? []).map((block) => block.type === "text" ? block.text : block.type);
 }
 

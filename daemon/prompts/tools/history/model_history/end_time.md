@@ -1,0 +1,1 @@
+Inclusive upper bound on when a model was used. Omit to include everything up to now. RFC3339 timestamp with seconds and an explicit UTC offset or `Z`, for example 2026-05-13T09:00:00+10:00. The offset is interpreted as written.

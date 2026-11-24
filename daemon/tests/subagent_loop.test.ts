@@ -15,6 +15,7 @@ import type {
   SidecarRequest,
   StreamEvent,
 } from "../src/llm/types.ts";
+import { Texts } from "../src/texts/texts.ts";
 
 const KEY_ENV = "SHORE_SUBAGENT_TEST_KEY";
 
@@ -75,6 +76,7 @@ async function configWith(
 
 function contextIn(root: string): ToolContext {
   return {
+    texts: new Texts(),
     imageDir: join(root, "images"),
     workspaceDir: join(root, "config", "characters", "ada", "workspace"),
     characterDataDir: join(root, "data", "ada"),
