@@ -96,6 +96,7 @@ CREATE TABLE IF NOT EXISTS capture_payloads (
 `;
 
 const HASH_BYTES = 16;
+const SWEEP_STEP = 256;
 const BLOB_RAW_UNDER = 256;
 const MAX_PAYLOAD_BYTES = 33_554_432;
 
@@ -636,16 +637,20 @@ export class CallStore {
     return removed;
   }
 
-  expireBefore(cutoff: Date): number {
+  *expireInSteps(cutoff: Date, expired: { captures: number }): Generator<void, void> {
     const cutoffUnix = unixSeconds(cutoff);
-    return this.#db.transaction(() => {
-      let removed = 0;
-      for (const table of ["capture_calls", "capture_transcripts", "capture_http_calls"]) {
-        removed += this.#changes(`DELETE FROM ${table} WHERE ts_unix < ?1`, cutoffUnix);
-      }
-      if (removed > 0) this.#collectGarbage();
-      return removed;
-    })();
+    for (const table of ["capture_calls", "capture_transcripts", "capture_http_calls"]) {
+      yield* this.#inSteps(() => {
+        const removed = this.#changes(
+          `DELETE FROM ${table} WHERE id IN (SELECT id FROM ${table} WHERE ts_unix < ?1 LIMIT ?2)`,
+          cutoffUnix,
+          SWEEP_STEP,
+        );
+        expired.captures += removed;
+        return removed;
+      });
+    }
+    if (expired.captures > 0) yield* this.#garbageSteps();
   }
 
   blobCount(): number {
@@ -685,26 +690,103 @@ export class CallStore {
   }
 
   #collectGarbage(): void {
-    this.#changes(
-      `DELETE FROM capture_payloads WHERE id NOT IN (
-           SELECT request_payload_id FROM capture_calls WHERE request_payload_id IS NOT NULL
-           UNION SELECT response_payload_id FROM capture_calls WHERE response_payload_id IS NOT NULL
-           UNION SELECT request_payload_id FROM capture_http_calls WHERE request_payload_id IS NOT NULL
-           UNION SELECT response_payload_id FROM capture_http_calls WHERE response_payload_id IS NOT NULL
-       )`,
-    );
+    Array.from(this.#garbageSteps());
+  }
 
-    this.#db.run("CREATE TEMP TABLE IF NOT EXISTS live_hashes (hash TEXT PRIMARY KEY)");
-    this.#db.run("DELETE FROM live_hashes");
-    const remember = this.#db.query("INSERT OR IGNORE INTO live_hashes (hash) VALUES (?1)");
-    for (const row of this.#db.query("SELECT manifest FROM capture_payloads").iterate() as Iterable<Row>) {
-      const manifest = row["manifest"];
-      if (!(manifest instanceof Uint8Array)) continue;
-      for (const hash of unpackManifest(zstdDecompressSync(manifest))) remember.run(hash);
+  *#garbageSteps(): Generator<void, void> {
+    const referenced = new Set<unknown>();
+    const scannedRows = new Map<string, number>();
+    for (const table of ["capture_calls", "capture_http_calls"]) {
+      let after = 0;
+      yield* this.#inSteps(() => {
+        const rows = this.#db
+          .query(`SELECT id, request_payload_id, response_payload_id FROM ${table} WHERE id > ?1 ORDER BY id LIMIT ?2`)
+          .all(after, SWEEP_STEP) as Row[];
+        for (const row of rows) {
+          after = int(row["id"]);
+          referenced.add(row["request_payload_id"]).add(row["response_payload_id"]);
+        }
+        return rows.length;
+      });
+      scannedRows.set(table, after);
     }
-    this.#changes("DELETE FROM capture_blobs WHERE hash NOT IN (SELECT hash FROM live_hashes)");
-    this.#db.run("DELETE FROM live_hashes");
-    this.#db.run("PRAGMA incremental_vacuum;");
+
+    const used = new Set<string>();
+    const markUsed = (manifest: unknown): void => {
+      for (const hash of unpackManifest(zstdDecompressSync(manifest as Uint8Array))) used.add(hash);
+    };
+    const orphans = new Set<unknown>();
+    let scanned = 0;
+    yield* this.#inSteps(() => {
+      const rows = this.#db
+        .query("SELECT id, manifest FROM capture_payloads WHERE id > ?1 ORDER BY id LIMIT ?2")
+        .all(scanned, SWEEP_STEP) as Row[];
+      for (const row of rows) {
+        scanned = int(row["id"]);
+        if (referenced.has(scanned)) markUsed(row["manifest"]);
+        else orphans.add(scanned);
+      }
+      return rows.length;
+    });
+
+    const unused: string[] = [];
+    let lastHash = "";
+    yield* this.#inSteps(() => {
+      const rows = this.#db
+        .query("SELECT hash FROM capture_blobs WHERE hash > ?1 ORDER BY hash LIMIT ?2")
+        .all(lastHash, SWEEP_STEP) as Row[];
+      for (const row of rows) {
+        lastHash = String(row["hash"]);
+        if (!used.has(lastHash)) unused.push(lastHash);
+      }
+      return rows.length;
+    });
+
+    const catchUp = (): void => {
+      for (const [table, after] of scannedRows) {
+        for (const row of this.#db.query(`SELECT request_payload_id, response_payload_id FROM ${table} WHERE id > ?1`).all(after) as Row[]) {
+          for (const id of [row["request_payload_id"], row["response_payload_id"]]) {
+            if (!orphans.delete(id)) continue;
+            markUsed((this.#db.query("SELECT manifest FROM capture_payloads WHERE id = ?1").get(id as number) as Row)["manifest"]);
+          }
+        }
+      }
+      for (const row of this.#db.query("SELECT manifest FROM capture_payloads WHERE id > ?1").all(scanned) as Row[]) markUsed(row["manifest"]);
+    };
+    yield* this.#inSteps(() => this.#db.transaction(() => {
+      catchUp();
+      const batch = Array.from(orphans).slice(0, SWEEP_STEP);
+      for (const id of batch) {
+        orphans.delete(id);
+        this.#db.query("DELETE FROM capture_payloads WHERE id = ?1").run(id as number);
+      }
+      return batch.length;
+    }).immediate());
+    yield* this.#inSteps(() => this.#db.transaction(() => {
+      catchUp();
+      const batch = unused.splice(0, SWEEP_STEP);
+      for (const hash of batch) {
+        if (!used.has(hash)) this.#db.query("DELETE FROM capture_blobs WHERE hash = ?1").run(hash);
+      }
+      return batch.length;
+    }).immediate());
+    yield* this.#inSteps(() => {
+      const free = this.#freePages();
+      this.#db.run(`PRAGMA incremental_vacuum(${SWEEP_STEP})`);
+      return free - this.#freePages();
+    });
+  }
+
+  *#inSteps(step: () => number): Generator<void, void> {
+    for (;;) {
+      const done = step();
+      yield;
+      if (done < SWEEP_STEP) return;
+    }
+  }
+
+  #freePages(): number {
+    return int((this.#db.query("PRAGMA freelist_count").get() as Row)["freelist_count"]);
   }
 
   #changes(sql: string, ...values: (string | number | null)[]): number {
