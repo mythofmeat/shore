@@ -3,13 +3,12 @@ import type { Server } from "bun";
 import { shoreLog } from "../../log.ts";
 import { outsideWireScope, recordWireNote, withWireScope, type WireScope } from "../wire_capture.ts";
 import { restoredToolNames, restoringToolNames, withBareToolNames, type WireNames } from "./claude_agent_wire_names.ts";
-import { shippedText } from "../../texts/registry.ts";
 
 const ANTHROPIC_API = "https://api.anthropic.com";
 const REMINDER = "<system-reminder>";
 const IMAGE_SOURCE = /^\[Image:? source: [^\]\n]*\]$/;
 const CLI_PLACEHOLDERS = new Set(["No response requested.", "(no content)"]);
-export const RESUME_PROMPT = shippedText("carry_on");
+export const RESUME_PROMPT = "[Carry on from the tool results above.]";
 const CLI_INTERRUPTIONS = new Set(["[Request interrupted by user]", "[Request interrupted by user for tool use]"]);
 const SAFETY_STOP = "Your response above was stopped by a safety classifier \u2014 this is not a tool or API error. " +
   "The rest of it was withheld, and tool calls in it that had not finished did not run. Do not produce that content again, even reworded.";
@@ -27,6 +26,17 @@ const CLI_NUDGES = new Set([
   "Your response above was cut off mid-stream and only your next message is delivered. " +
     "Write the complete response again from the start \u2014 no apology, no mention of the cut-off.",
 ]);
+const CLI_IDENTITY = "You are a Claude agent, built on Anthropic's Claude Agent SDK.";
+
+export const CLI_TEXTS: readonly { name: string; place: string; wording: string }[] = [
+  { name: "cli_identity", place: "The first line of the system prompt on claude_agent. The CLI writes it and Shore leaves it in, because subscription turns are refused without it.", wording: CLI_IDENTITY },
+  { name: "cli_reminders", place: "Blocks the CLI adds to a user's turn, with the account's email, MEMORY.md or CLAUDE.md, and system messages about the machine it runs on. Shore takes them out before the model reads them.", wording: `${REMINDER} …` },
+  { name: "cli_image_sources", place: "A note the CLI adds after a picture, naming its file. Shore takes it out before the model reads it.", wording: "[Image: source: <path>]" },
+  { name: "cli_placeholders", place: "Replies the CLI puts in where a turn had none. Shore takes them out before the model reads them.", wording: [...CLI_PLACEHOLDERS].join("\n") },
+  { name: "cli_interruptions", place: "Turns the CLI adds where a reply was stopped. Shore takes them out before the model reads them.", wording: [...CLI_INTERRUPTIONS].join("\n") },
+  { name: "cli_nudges", place: "Notes the CLI adds when a reply failed, was cut off or was stopped. Shore takes them out before the model reads them.", wording: [...CLI_NUDGES].join("\n\n") },
+];
+
 const ROUTE_KEY = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
 const ROUTE_TTL_MS = 24 * 60 * 60 * 1000;
 const FILTERED_PATH = /\/v1\/messages(\/count_tokens)?$/;

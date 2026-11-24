@@ -78,3 +78,94 @@ fn config_toml_all_prints_the_defaults_too() {
         .join("\n")
     );
 }
+
+fn texts() -> serde_json::Value {
+    let text = |name: &str,
+                place: &str,
+                owner: &str,
+                required: bool,
+                wording: Option<&str>,
+                shipped: &str| {
+        json!({ "name": name, "place": place, "owner": owner, "required": required, "wording": wording, "shipped": shipped, "file": null, "error": null, "values": [] })
+    };
+    let mut time = text(
+        "time",
+        "Before a user's message.",
+        "yours",
+        false,
+        Some("[now: {{now}}]\nand then"),
+        "[{{now}}]",
+    );
+    time["file"] = json!("/srv/config/texts/time.md");
+    time["values"] = json!([{ "name": "now", "about": "the time" }]);
+    let mut label = text(
+        "label",
+        "The request for a label.",
+        "yours",
+        true,
+        None,
+        "Label this.",
+    );
+    label["file"] = json!("/srv/config/gone.md");
+    label["error"] = json!("text \"label\" could not be read at /srv/config/gone.md: no such file");
+    json!({ "texts": [
+        time,
+        text("status", "The user's statuses.", "off", false, None, "[Their status: {{statuses}}]"),
+        text("opened_by_you", "A user turn put first.", "shore", true, Some("[this conversation starts with your message]"), "[this conversation starts with your message]"),
+        label,
+        text("line_cut", "After a line read cuts short.", "fixed", true, Some("[line cut]"), "[line cut]"),
+        text("cli_identity", "The CLI's first line.", "cli", false, Some("You are a Claude agent."), "You are a Claude agent."),
+    ]})
+}
+
+#[test]
+fn config_texts_lists_every_text_with_whose_wording_is_in_use_and_where_it_goes() {
+    let (output, frames) = asked(texts(), &["config", "texts"]);
+    assert!(output.status.success(), "{output:?}");
+    assert_eq!(
+        printed(&output),
+        "time           yours           Before a user's message.\n  status         off             The user's statuses.\n  opened_by_you  Shore's         A user turn put first.\n  label          yours           The request for a label.\n  line_cut       Shore's, fixed  After a line read cuts short.\n  cli_identity   the CLI's       The CLI's first line."
+    );
+    assert_eq!(sent(&frames), [(Some("texts"), Some(&json!({})))]);
+}
+
+#[test]
+fn config_texts_with_a_name_shows_the_wording_in_use_the_values_it_is_given_and_shores_beside_yours()
+ {
+    let (output, _frames) = asked(texts(), &["config", "texts", "time"]);
+    assert!(output.status.success(), "{output:?}");
+    assert_eq!(
+        printed(&output),
+        "── time · yours ────────────────────────────────────────────────────────────────\n  where    Before a user's message.\n  file     /srv/config/texts/time.md\n  {{now}}  the time\n\n  wording in use:\n    [now: {{now}}]\n    and then\n\n  Shore's wording:\n    [{{now}}]"
+    );
+    let (same, _same_asked) = asked(texts(), &["config", "texts", "opened_by_you"]);
+    assert_eq!(
+        printed(&same),
+        "── opened_by_you · Shore's ─────────────────────────────────────────────────────\n  where   A user turn put first.\n  needed  yes, it can't be switched off\n\n  wording in use:\n    [this conversation starts with your message]"
+    );
+    let (broken, _broken_asked) = asked(texts(), &["config", "texts", "label"]);
+    assert_eq!(
+        printed(&broken),
+        "── label · yours ───────────────────────────────────────────────────────────────\n  where   The request for a label.\n  file    /srv/config/gone.md\n  error   text \"label\" could not be read at /srv/config/gone.md: no such file\n  needed  yes, it can't be switched off\n\n  wording in use:\n    (none)\n\n  Shore's wording:\n    Label this."
+    );
+    let (off, _off_asked) = asked(texts(), &["config", "texts", "status"]);
+    assert_eq!(
+        printed(&off),
+        "── status · off ────────────────────────────────────────────────────────────────\n  where  The user's statuses.\n\n  wording in use:\n    (none)\n\n  Shore's wording:\n    [Their status: {{statuses}}]"
+    );
+}
+
+#[test]
+fn config_texts_refuses_a_name_it_has_no_text_for_and_gives_the_list_as_json() {
+    let (output, _frames) = asked(texts(), &["config", "texts", "nope"]);
+    assert!(!output.status.success(), "{output:?}");
+    assert_eq!(
+        String::from_utf8_lossy(&output.stderr).trim(),
+        "error: there is no text named \"nope\"; `shore config texts` lists them"
+    );
+    let (raw, _raw_asked) = asked(texts(), &["config", "texts", "--json"]);
+    assert_eq!(
+        serde_json::from_str::<serde_json::Value>(&printed(&raw)).ok(),
+        Some(texts())
+    );
+}

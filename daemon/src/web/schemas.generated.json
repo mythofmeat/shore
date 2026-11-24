@@ -1178,6 +1178,22 @@
             "properties": {
               "name": {
                 "type": "string",
+                "const": "texts"
+              },
+              "data": {
+                "$ref": "#/$defs/TextListing"
+              }
+            },
+            "required": [
+              "name",
+              "data"
+            ]
+          },
+          {
+            "type": "object",
+            "properties": {
+              "name": {
+                "type": "string",
                 "const": "list_providers"
               },
               "data": {
@@ -8377,6 +8393,100 @@
           "enabled",
           "tools",
           "model"
+        ]
+      },
+      "TextListing": {
+        "type": "object",
+        "properties": {
+          "texts": {
+            "type": "array",
+            "items": {
+              "$ref": "#/$defs/TextEntry"
+            }
+          }
+        },
+        "required": [
+          "texts"
+        ]
+      },
+      "TextEntry": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "place": {
+            "type": "string"
+          },
+          "owner": {
+            "$ref": "#/$defs/TextOwner"
+          },
+          "required": {
+            "type": "boolean"
+          },
+          "wording": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "shipped": {
+            "type": "string"
+          },
+          "file": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "error": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "values": {
+            "type": "array",
+            "items": {
+              "$ref": "#/$defs/TextValue"
+            }
+          }
+        },
+        "required": [
+          "name",
+          "place",
+          "owner",
+          "required",
+          "wording",
+          "shipped",
+          "file",
+          "error",
+          "values"
+        ]
+      },
+      "TextOwner": {
+        "type": "string",
+        "enum": [
+          "shore",
+          "yours",
+          "off",
+          "fixed",
+          "cli"
+        ]
+      },
+      "TextValue": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "about": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "name",
+          "about"
         ]
       },
       "ProviderListing": {
@@ -11134,6 +11244,22 @@
             "properties": {
               "name": {
                 "type": "string",
+                "const": "texts"
+              },
+              "data": {
+                "$ref": "#/$defs/TextListing"
+              }
+            },
+            "required": [
+              "name",
+              "data"
+            ]
+          },
+          {
+            "type": "object",
+            "properties": {
+              "name": {
+                "type": "string",
                 "const": "list_providers"
               },
               "data": {
@@ -18333,6 +18459,100 @@
           "enabled",
           "tools",
           "model"
+        ]
+      },
+      "TextListing": {
+        "type": "object",
+        "properties": {
+          "texts": {
+            "type": "array",
+            "items": {
+              "$ref": "#/$defs/TextEntry"
+            }
+          }
+        },
+        "required": [
+          "texts"
+        ]
+      },
+      "TextEntry": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "place": {
+            "type": "string"
+          },
+          "owner": {
+            "$ref": "#/$defs/TextOwner"
+          },
+          "required": {
+            "type": "boolean"
+          },
+          "wording": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "shipped": {
+            "type": "string"
+          },
+          "file": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "error": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "values": {
+            "type": "array",
+            "items": {
+              "$ref": "#/$defs/TextValue"
+            }
+          }
+        },
+        "required": [
+          "name",
+          "place",
+          "owner",
+          "required",
+          "wording",
+          "shipped",
+          "file",
+          "error",
+          "values"
+        ]
+      },
+      "TextOwner": {
+        "type": "string",
+        "enum": [
+          "shore",
+          "yours",
+          "off",
+          "fixed",
+          "cli"
+        ]
+      },
+      "TextValue": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "about": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "name",
+          "about"
         ]
       },
       "ProviderListing": {

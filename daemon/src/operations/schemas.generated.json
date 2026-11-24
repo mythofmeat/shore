@@ -9212,6 +9212,113 @@
     }
   },
   {
+    "name": "texts",
+    "input": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "title": "EmptyOperationArgs",
+      "type": "object",
+      "additionalProperties": false
+    },
+    "output": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "title": "TextListing",
+      "type": "object",
+      "properties": {
+        "texts": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/TextEntry"
+          }
+        }
+      },
+      "required": [
+        "texts"
+      ],
+      "$defs": {
+        "TextEntry": {
+          "type": "object",
+          "properties": {
+            "name": {
+              "type": "string"
+            },
+            "place": {
+              "type": "string"
+            },
+            "owner": {
+              "$ref": "#/$defs/TextOwner"
+            },
+            "required": {
+              "type": "boolean"
+            },
+            "wording": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "shipped": {
+              "type": "string"
+            },
+            "file": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "error": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "values": {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/TextValue"
+              }
+            }
+          },
+          "required": [
+            "name",
+            "place",
+            "owner",
+            "required",
+            "wording",
+            "shipped",
+            "file",
+            "error",
+            "values"
+          ]
+        },
+        "TextOwner": {
+          "type": "string",
+          "enum": [
+            "shore",
+            "yours",
+            "off",
+            "fixed",
+            "cli"
+          ]
+        },
+        "TextValue": {
+          "type": "object",
+          "properties": {
+            "name": {
+              "type": "string"
+            },
+            "about": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "name",
+            "about"
+          ]
+        }
+      }
+    }
+  },
+  {
     "name": "list_providers",
     "input": {
       "$schema": "https://json-schema.org/draft/2020-12/schema",

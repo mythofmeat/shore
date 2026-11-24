@@ -1199,10 +1199,20 @@ const readTextOrOff: Reader<TextSetting> = typed(
   { kind: "string" },
 );
 
+const readNeededText: Reader<TextSetting> = typed(
+  (v) => (typeof v === "string" ? { ok: v } : { err: `${invalidType(v, "a file path")}; this text can't be switched off` }),
+  { kind: "string" },
+);
+
+const readFixedText: Reader<TextSetting> = typed(
+  () => ({ err: "this text can't be replaced yet" }),
+  { kind: "string" },
+);
+
 const TEXTS: StructSpec<Record<string, TextSetting | undefined>> = {
   name: "Texts",
   make: () => ({}),
-  fields: Object.fromEntries(TEXT_LIST.filter((spec) => !spec.fixed).map((spec) => [spec.name, spec.required ? readString : readTextOrOff])),
+  fields: Object.fromEntries(TEXT_LIST.map((spec) => [spec.name, spec.fixed ? readFixedText : spec.required ? readNeededText : readTextOrOff])),
 };
 
 export interface AppConfig {

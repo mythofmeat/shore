@@ -32,7 +32,6 @@ import autonomy__wake_opener_kept from "../../prompts/autonomy/wake_opener_kept.
 import autonomy__wake_opener from "../../prompts/autonomy/wake_opener.md" with { type: "text" };
 import autonomy__wake_status from "../../prompts/autonomy/wake_status.md" with { type: "text" };
 import autonomy__wrap_up from "../../prompts/autonomy/wrap_up.md" with { type: "text" };
-import engine__carry_on from "../../prompts/engine/carry_on.md" with { type: "text" };
 import engine__idle_resume from "../../prompts/engine/idle_resume.md" with { type: "text" };
 import engine__pin_cut from "../../prompts/engine/pin_cut.md" with { type: "text" };
 import engine__pin_left_out from "../../prompts/engine/pin_left_out.md" with { type: "text" };
@@ -300,7 +299,6 @@ export const OTHER_TEXTS: readonly TextSpec[] = [
   must("tool_ask_query", tools__subagent__query, "The description of an ask_<subagent> tool's query parameter."),
   must("label", memory__compaction__label, "The request for a segment's label, after the segment's conversation.", { user: "the user's name" }),
   must("idle_resume", engine__idle_resume, "The user turn of a request rebuilt to keep the cache warm, when the conversation has none."),
-  fixed("carry_on", engine__carry_on, "On claude_agent, the prompt that sends tool results on to the CLI. Shore's filter for what the CLI adds looks for it word for word, so it can't be replaced yet."),
   fixed("output_cut", tools__results__output_cut, "After a command's output that was too long: bash's, a pinned command's or a trigger check's. It can't be replaced yet."),
   fixed("line_cut", tools__results__line_cut, "After a line read cuts short. It can't be replaced yet.", { limit: "how many characters it shows of a line" }),
 ];

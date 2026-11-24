@@ -2018,6 +2018,28 @@ wire_types! {
     }
     pub struct ToolAccessResult { pub tools: Vec<ToolAccess>, pub subagents: Vec<SubagentAccess>, pub mcp: Vec<String>, pub warnings: Vec<String> }
 
+    #[serde(rename_all = "snake_case")]
+    pub enum TextOwner { Shore, Yours, Off, Fixed, Cli }
+
+    pub struct TextValue { pub name: String, pub about: String }
+
+    pub struct TextEntry {
+        pub name: String,
+        pub place: String,
+        pub owner: TextOwner,
+        pub required: bool,
+        #[serde(deserialize_with = "deserialize_nullable")]
+        pub wording: Option<String>,
+        pub shipped: String,
+        #[serde(deserialize_with = "deserialize_nullable")]
+        pub file: Option<String>,
+        #[serde(deserialize_with = "deserialize_nullable")]
+        pub error: Option<String>,
+        pub values: Vec<TextValue>,
+    }
+
+    pub struct TextListing { pub texts: Vec<TextEntry> }
+
     #[serde(deny_unknown_fields)]
     pub struct ProviderArgs { pub provider: String }
 
@@ -3079,6 +3101,7 @@ operations! {
     ConfigurationSchema: "config_schema" (EmptyOperationArgs) => ConfigSchemaResult,
     ReloadConfiguration: "config_reload" (ConfigReloadArgs) => ConfigReloadResult,
     ToolAccessListing: "tools" (EmptyOperationArgs) => ToolAccessResult,
+    ListTexts: "texts" (EmptyOperationArgs) => TextListing,
     ListProviders: "list_providers" (EmptyOperationArgs) => ProviderListing,
     ListProviderModels: "list_provider_models" (ProviderModelsArgs) => ProviderModelListing,
     RefreshProviderModels: "refresh_provider_models" (ProviderArgs) => ProviderRefreshed,
