@@ -25,7 +25,7 @@ import {
 } from "../config/toml_edit.ts";
 import { classifyCredentialFailure, defaultApiKeyEnv, isKeylessSdk } from "../llm/credentials.ts";
 import { credentialStanding, forgetCredentialStanding, noteCredentialStanding } from "../llm/credential_standing.ts";
-import { cachePath, discoverAnthropic, discoverOpenAiCompatible, describeDiscoveryError, readCacheSync, type DiscoveryResult } from "../llm/discovery.ts";
+import { cachePath, discoverAnthropic, discoverGemini, discoverOpenAiCompatible, describeDiscoveryError, readCacheSync, type DiscoveryResult } from "../llm/discovery.ts";
 import { fetchNanoGptSubscription } from "../llm/nanogpt_subscription.ts";
 import { isNanoGptProvider } from "../llm/providers/nanogpt_config.ts";
 import { defaultBaseUrl } from "../llm/request.ts";
@@ -564,22 +564,16 @@ async function fetchJson(url: string, headers: Record<string, string>, fetchImpl
 export async function checkKey(provider: string, entry: ProviderEntry, secret: string, fetchImpl: typeof fetch = fetch): Promise<Check> {
   const sdk = sdkOf(provider, entry);
   const baseUrl = entry.baseUrl ?? defaultBaseUrl(provider);
-  if (sdk === "gemini" && baseUrl === undefined) {
-    const reply = await fetchJson("https://generativelanguage.googleapis.com/v1beta/models?pageSize=1000", { "x-goog-api-key": secret }, fetchImpl);
-    if ("error" in reply) return { standing: "not_checked", detail: `couldn't check: ${reply.error}`, models: null, conclusive: false };
-    if (reply.status >= 400) return fromDiscovery(provider, { err: { kind: "http_status", provider, status: reply.status, body: reply.body } }, () => 0);
-    const models = (JSON.parse(reply.body) as { models?: unknown[] }).models?.length ?? 0;
-    return { standing: "works", detail: `${String(models)} models`, models, conclusive: true };
-  }
+  if (sdk === "gemini") return fromDiscovery(provider, await discoverGemini(provider, baseUrl, secret, fetchImpl), (list) => list.length);
   if (baseUrl === undefined) return { standing: "not_checked", detail: "not checked: this provider has no endpoint shore can ask", models: null, conclusive: false };
   if (sdk === "openrouter") {
     const reply = await fetchJson(`${baseUrl.replace(/\/+$/, "")}/key`, { authorization: `Bearer ${secret}` }, fetchImpl);
     if ("error" in reply) return { standing: "not_checked", detail: `couldn't check: ${reply.error}`, models: null, conclusive: false };
-    if (reply.status >= 400) return fromDiscovery(provider, { err: { kind: "http_status", provider, status: reply.status, body: reply.body } }, () => 0);
+    if (reply.status >= 400) return fromDiscovery(provider, { err: { kind: "http_status", provider, status: reply.status, body: reply.body } }, (list: unknown[]) => list.length);
   }
   if (isNanoGptProvider(provider) || sdk === "nanogpt") {
     const usage = await fetchNanoGptSubscription(baseUrl, secret, fetchImpl);
-    if ("err" in usage) return fromDiscovery(provider, usage, () => 0);
+    if ("err" in usage) return fromDiscovery(provider, usage, (list: unknown[]) => list.length);
   }
   const models = sdk === "anthropic"
     ? await discoverAnthropic(provider, baseUrl, secret, fetchImpl)

@@ -18,6 +18,8 @@ export const REFRESH_INTERVAL_MS = 24 * 60 * 60 * 1000;
 
 const ANTHROPIC_VERSION = "2023-06-01";
 
+const GEMINI_API_URL = "https://generativelanguage.googleapis.com";
+
 const MAX_LOG_BODY_BYTES = 512;
 
 export interface DiscoveredModelSupport {
@@ -424,6 +426,59 @@ export async function discoverAnthropic(
   );
 }
 
+export async function discoverGemini(
+  providerKey: string,
+  baseUrl: string | undefined,
+  apiKey: string,
+  fetchImpl: typeof fetch = fetch,
+): Promise<DiscoveryResult<DiscoveredModel[]>> {
+  const url = `${trimTrailingSlashes(baseUrl ?? GEMINI_API_URL)}/v1beta/models?pageSize=1000`;
+  const body = await fetchBody(providerKey, url, fetchImpl, { accept: "application/json", "x-goog-api-key": apiKey });
+  return "err" in body ? body : parseGeminiModels(providerKey, baseUrl, body.ok);
+}
+
+function parseGeminiModels(
+  providerKey: string,
+  baseUrl: string | undefined,
+  body: string,
+  now: string = toRfc3339(Date.now()),
+): DiscoveryResult<DiscoveredModel[]> {
+  let models: unknown;
+  try {
+    models = (JSON.parse(body) as { models?: unknown }).models;
+  } catch (e) {
+    return { err: { kind: "parse", provider: providerKey, message: String(e) } };
+  }
+  if (!Array.isArray(models)) {
+    return { err: { kind: "parse", provider: providerKey, message: "`models` is not an array" } };
+  }
+  return { ok: models.flatMap((raw: unknown) => geminiModel(providerKey, baseUrl, raw, now) ?? []) };
+}
+
+function geminiModel(
+  providerKey: string,
+  baseUrl: string | undefined,
+  raw: unknown,
+  now: string,
+): DiscoveredModel | undefined {
+  const r = (raw ?? {}) as Record<string, unknown>;
+  const methods = r.supportedGenerationMethods;
+  if (typeof r.name !== "string" || !Array.isArray(methods) || !methods.includes("generateContent")) return undefined;
+  return {
+    provider_key: providerKey,
+    model_id: r.name.replace(/^models\//, ""),
+    ...maybe("display_name", str(r.displayName)),
+    sdk: "gemini",
+    ...maybe("base_url", baseUrl),
+    ...maybe("description", str(r.description)),
+    ...maybe("context_length", unsignedInt(r.inputTokenLimit)),
+    ...maybe("max_output_tokens", unsignedInt(r.outputTokenLimit)),
+    ...maybe("supports_reasoning", typeof r.thinking === "boolean" ? r.thinking : undefined),
+    raw_provider_metadata: raw,
+    discovered_at: now,
+  };
+}
+
 async function fetchModels(
   providerKey: string,
   baseUrl: string,
@@ -432,6 +487,16 @@ async function fetchModels(
   fetchImpl: typeof fetch,
   headers: Record<string, string>,
 ): Promise<DiscoveryResult<DiscoveredModel[]>> {
+  const body = await fetchBody(providerKey, url, fetchImpl, headers);
+  return "err" in body ? body : parseModelsResponse(providerKey, baseUrl, sdk, body.ok);
+}
+
+async function fetchBody(
+  providerKey: string,
+  url: string,
+  fetchImpl: typeof fetch,
+  headers: Record<string, string>,
+): Promise<DiscoveryResult<string>> {
   let resp: Response;
   let body: string;
   try {
@@ -452,7 +517,7 @@ async function fetchModels(
     };
   }
 
-  return parseModelsResponse(providerKey, baseUrl, sdk, body);
+  return { ok: body };
 }
 
 export function buildModelsUrl(baseUrl: string, providerKey?: string): string {
