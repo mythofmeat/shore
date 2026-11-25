@@ -2,6 +2,7 @@ import {
   cachePath,
   describeDiscoveryError,
   discoverAnthropic,
+  discoverGemini,
   discoverOpenAiCompatible,
   readCacheSync,
   writeCache,
@@ -114,15 +115,16 @@ async function discoverProviderModels(
 ): Promise<DiscoveryResult<DiscoveredModel[]>> {
   const sdk = entry.sdk ?? defaultSdk(provider);
   if (sdk === "claude_agent") return await discoverClaudeAgent(provider, baseUrl, runClaudeAgentQuery);
-  if (baseUrl === undefined) {
-    throw invalidRequest(
-      `provider ${JSON.stringify(provider)} has no base_url; required for provider discovery`,
-    );
-  }
   if (key === undefined) {
     throw providerError(
       `provider ${JSON.stringify(provider)} has no API key configured ` +
         `(no enabled key's env var is set)`,
+    );
+  }
+  if (sdk === "gemini") return await discoverGemini(provider, baseUrl, key, fetchImpl);
+  if (baseUrl === undefined) {
+    throw invalidRequest(
+      `provider ${JSON.stringify(provider)} has no base_url; required for provider discovery`,
     );
   }
   return sdk === "anthropic"

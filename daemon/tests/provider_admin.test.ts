@@ -31,17 +31,24 @@ const SECRET = "sk-or-v1-0123456789abcdefWXYZ";
 
 interface World { ctx: ProviderAdminContext; session: ConfigContext; configPath: string; seen: string[] }
 
-function provider(status = 200, models = 2): { fetchImpl: typeof fetch; seen: string[] } {
+type Answer = (url: URL) => Response | Promise<Response>;
+
+const roster = (models = 2): Response => Response.json({ data: Array.from({ length: models }, (_, i) => ({ id: `m${String(i)}` })) });
+
+function provider(status = 200, answer?: Answer): { fetchImpl: typeof fetch; seen: string[] } {
   const seen: string[] = [];
   const fetchImpl = (async (input: string | URL | Request, init?: RequestInit) => {
-    seen.push(`${input instanceof Request ? input.url : input.toString()} ${new Headers(init?.headers).get("authorization") ?? ""}`);
+    const url = new URL(input instanceof Request ? input.url : input.toString());
+    const headers = new Headers(init?.headers);
+    seen.push(`${url.toString()} ${headers.get("authorization") ?? headers.get("x-api-key") ?? headers.get("x-goog-api-key") ?? ""}`);
+    if (answer !== undefined) return await answer(url);
     if (status !== 200) return new Response(JSON.stringify({ error: { message: "invalid api key" } }), { status });
-    return new Response(JSON.stringify({ data: Array.from({ length: models }, (_, i) => ({ id: `m${String(i)}` })) }), { status: 200 });
+    return roster();
   }) as typeof fetch;
   return { fetchImpl, seen };
 }
 
-async function world(toml: string, options: { confidential?: boolean; status?: number; env?: Record<string, string> } = {}): Promise<World> {
+async function world(toml: string, options: { confidential?: boolean; status?: number; answer?: Answer; env?: Record<string, string> } = {}): Promise<World> {
   const root = await mkdtemp(testTmp("shore-provider-admin-"));
   const configPath = join(root, "config", "config.toml");
   await mkdir(join(root, "config"), { recursive: true });
@@ -58,7 +65,7 @@ async function world(toml: string, options: { confidential?: boolean; status?: n
     config: loaded, configPath, characterName: undefined, activeModel: undefined, env,
     runtime: { reloadRuntimeConfig: () => {}, adoptGlobalConfig: () => {}, notifyPromptSnapshotRefreshed: () => {} },
   };
-  const { fetchImpl, seen } = provider(options.status ?? 200);
+  const { fetchImpl, seen } = provider(options.status ?? 200, options.answer);
   return { ctx: { config: session, fetchImpl, confidential: options.confidential ?? true }, session, configPath, seen };
 }
 
@@ -115,6 +122,43 @@ describe("keys", () => {
     expect(JSON.stringify(listProviderStatuses(w.ctx))).not.toContain(SECRET);
     expect(JSON.stringify(config(w.session, {}))).not.toContain(SECRET);
     expect(usedKey(w, "openrouter")).toBe(SECRET);
+  });
+
+  test("a key is checked against the endpoint its provider answers on, and only a clear answer is remembered", async () => {
+    const at = (path: string, reply: () => Response): Answer => (url) => (url.pathname.endsWith(path) ? reply() : roster());
+    const gemini = { models: [
+      { name: "models/gemini-3-pro", supportedGenerationMethods: ["generateContent"] },
+      { name: "models/text-embedding-004", supportedGenerationMethods: ["embedContent"] },
+    ] };
+    const keyed = (url: string): string => `${url} ${SECRET}`;
+    const bearer = (url: string): string => `${url} Bearer ${SECRET}`;
+    const nano = '[providers.mygpt]\nsdk = "nanogpt"\nbase_url = "https://nano.example/api/v1"\n';
+    const unsaved = "; the key wasn't saved. Skipping the check (--no-check) saves it";
+    const rows: [string, string, Answer, string, string[], (string | null)[] | null][] = [
+      ["[providers.gemini]\n", "gemini", () => Response.json(gemini), "works · 1 models",
+        [keyed("https://generativelanguage.googleapis.com/v1beta/models?pageSize=1000")], ["1 models"]],
+      ["[providers.anthropic]\n", "anthropic", () => roster(), "works · 2 models", [keyed("https://api.anthropic.com/v1/models")], ["2 models"]],
+      ["[providers.openrouter]\n", "openrouter", at("/key", () => { throw new Error("connection reset"); }),
+        `couldn't check: connection reset${unsaved} without asking`, [bearer("https://openrouter.ai/api/v1/key")], null],
+      ["[providers.openrouter]\n", "openrouter", at("/key", () => Response.json({}, { status: 400 })),
+        `couldn't check: provider openrouter: discovery HTTP 400${unsaved} without asking`, [bearer("https://openrouter.ai/api/v1/key")], null],
+      [nano, "mygpt", at("/usage", () => Response.json({ active: true, state: "active" })), "works · 2 models",
+        [bearer("https://nano.example/api/subscription/v1/usage"), bearer("https://nano.example/api/v1/models")], ["2 models"]],
+      [nano, "mygpt", at("/usage", () => Response.json({}, { status: 401 })), `mygpt rejected: HTTP 401${unsaved} anyway`,
+        [bearer("https://nano.example/api/subscription/v1/usage")], null],
+      ['[providers.bare]\nsdk = "openai"\n', "bare", () => roster(), "not checked · not checked: this provider has no endpoint shore can ask", [], [null]],
+    ];
+    const outcomes: unknown[] = [];
+    for (const [toml, name, answer] of rows) {
+      const w = await world(toml, { answer });
+      try {
+        const added = await addCredential(w.ctx, { provider: name, name: "work", secret: SECRET });
+        outcomes.push([added.message.slice(added.message.indexOf(" · ") + 3), w.seen, added.provider.credentials.map((c) => c.detail)]);
+      } catch (e) {
+        outcomes.push([e instanceof Error ? e.message : String(e), w.seen, null]);
+      }
+    }
+    expect(outcomes).toEqual(rows.map(([, , , said, seen, details]) => [said, seen, details]));
   });
 
   test("a key the provider rejects is not saved", async () => {
