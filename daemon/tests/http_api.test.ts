@@ -247,7 +247,8 @@ describe("what else a signed-in device can do", () => {
     const heard = () => text.split("\n").slice(0, -1).map((line) => JSON.parse(line) as Record<string, unknown>);
     const replied = () => heard().some((frame) => frame["type"] === "new_message" && frame["role"] === "assistant" && frame["content"] === "heard you");
     expect((await post(place, "/api/op/message?character=ada", TOKEN, { text: "hello", stream: true })).status).toBe(200);
-    for (let next = await reader.read(); !replied(); next = await reader.read()) {
+    while (!replied()) {
+      const next = await reader.read();
       if (next.done) throw new Error(`the events ended first: ${text}`);
       text += next.value;
     }
