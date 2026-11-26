@@ -58,7 +58,7 @@ import {
   type PersistEngine,
 } from "./persistence.ts";
 import type { GenerationParams, RunGeneration } from "./router.ts";
-import { homeThreadOf, isWakeOpener, threadActivities, threadModelOf, type ThreadRecord } from "../engine/threads.ts";
+import { homeThreadOf, isWakeOpener, threadActivities, threadModelOf, threadsTheCharacterSees, type ThreadRecord } from "../engine/threads.ts";
 import { liveThread } from "./commands.ts";
 import {
   appendUserTurn,
@@ -113,6 +113,7 @@ export interface GenerationRegistry {
   effectiveConfig(name: string): LoadedConfig;
   listThreads(name: string): readonly ThreadRecord[];
   wakesThread?(name: string): string | undefined;
+  resumeThread?(name: string, thread: string): Promise<void>;
 }
 
 interface GenerationDiagnostics {
@@ -201,6 +202,10 @@ export async function runGeneration(
     params.charName, liveThread(deps.registry, params.charName, params.meta.session.selectedThread),
   );
   if (engine.thread === deps.registry.wakesThread?.(params.charName)) throw new WakesThreadError(params.charName, engine.thread);
+  if (deps.registry.listThreads(params.charName).some((thread) => thread.id === engine.thread && thread.on_hold === true)) {
+    await deps.registry.resumeThread?.(params.charName, engine.thread);
+    deps.emitEvent({ type: "threads_changed", character: params.charName, thread: engine.thread });
+  }
   deps.userActiveIn?.(params.charName, engine.thread);
   return await withConversation(threadDataDir(deps.dataDir, params.charName, engine.thread), "turn", async (signal) => {
   params = { ...params, signal };
@@ -503,7 +508,7 @@ async function sideThreadLastUser(
   afterMs: number,
   beforeMs: number,
 ): Promise<Message["last_elsewhere"]> {
-  const sides = deps.registry.listThreads(charName).map((thread) => thread.id).filter((id) => id !== home);
+  const sides = threadsTheCharacterSees(deps.registry.listThreads(charName)).map((thread) => thread.id).filter((id) => id !== home);
   let latest: { thread: string; at: string; ms: number } | undefined;
   for (const [thread, activity] of await threadActivities(deps.dataDir, charName, sides)) {
     const at = activity.last_user;

@@ -88,6 +88,31 @@ test("a shut folder counts its threads' unread messages and still shows the open
   expect([view.names(), view.badge("A")]).toEqual([["story", "A", "old"], "3"]);
 });
 
+test("threads on hold sit in a group of their own after the new-thread button; shut, it counts their unread messages and still shows the open one", async () => {
+  const threads = [HOME, thread("side"), thread("paused", { on_hold: true, unread: 2, folder: "A" }), thread("stalled", { on_hold: true, unread: 1, last_active: "2026-11-05T00:00:00Z" })];
+  const view = await sidebar({ threads, folders: [{ name: "A" }] });
+  expect(view.names()).toEqual(["story", "side", "A", "On hold", "stalled", "paused"]);
+  const list = [...view.host.querySelectorAll(".sidebar-threads > *")];
+  expect(list.slice(-2).map((each) => each.getAttribute("aria-label") ?? each.textContent)).toEqual(["New thread", "On hold"]);
+  expect([view.badge("On hold"), view.badge("stalled"), view.badge("paused")]).toEqual([null, "1", "2"]);
+  await click(view.named("On hold")?.querySelector("button.folder"));
+  expect([view.names(), view.badge("On hold")]).toEqual([["story", "side", "A", "On hold"], "3"]);
+  await view.rerender({ thread: "paused" });
+  expect([view.names(), view.badge("On hold")]).toEqual([["story", "side", "A", "On hold", "paused"], "1"]);
+});
+
+test("a thread on hold can't be dragged out of its group, and nothing can be dropped on one", async () => {
+  const view = await sidebar({ threads: [HOME, thread("side"), thread("paused", { on_hold: true })] });
+  const started = (row: Element | undefined) => {
+    const event = new Event("dragstart", { bubbles: true, cancelable: true });
+    Object.defineProperty(event, "dataTransfer", { value: new DataTransfer() });
+    row?.dispatchEvent(event);
+    return event.defaultPrevented;
+  };
+  expect([started(view.named("side")), started(view.named("paused"))]).toEqual([false, true]);
+  expect([(await dragOnto(view.named("side"), "paused"))[0], (await dragOnto(view.named("paused"), "side"))[0]]).toEqual([true, false]);
+});
+
 test("the thread opening is marked busy, unless it is already the one shown", async () => {
   const view = await sidebar({ threads: [HOME, thread("side")], opening: { character: "ada", thread: "side" } });
   expect([view.named("side")?.querySelector(".sidebar-item")?.getAttribute("aria-busy"), view.named("story")?.querySelector(".sidebar-item")?.getAttribute("aria-busy")]).toEqual(["true", "false"]);

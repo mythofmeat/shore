@@ -132,6 +132,22 @@ describe("thread actions", () => {
     expect(toasts()).toEqual([["read failed", "error"]]);
   });
 
+  test("putting a thread on hold or resuming it shows the daemon's listing, or relists with the reason", async () => {
+    const { actions, state, toasts } = await load();
+    state.workspace.applyThreadListing({ ...LISTING, threads });
+    const held = { ...LISTING, threads: [story, { ...side, on_hold: true }] };
+    answer = (request) => request["name"] === "thread_hold" ? held : catalogue(request);
+    const before = socket.sent.length;
+    await actions.holdThread(side, true);
+    expect(sentSince(before)).toMatchObject([{ name: "thread_hold", args: { name: "side", on_hold: true } }]);
+    expect(state.workspace.getSnapshot().threads.find((thread) => thread.id === "side")?.on_hold).toBe(true);
+    answer = (request) => { if (request["name"] === "thread_hold") throw new Error("hold failed"); return catalogue(request); };
+    const failed = socket.sent.length;
+    await actions.holdThread(side, false);
+    expect(sentSince(failed)).toMatchObject([{ name: "thread_hold", args: { name: "side", on_hold: false } }, { name: "list_threads" }]);
+    expect(toasts()).toEqual([["hold failed", "error"]]);
+  });
+
   test("moving a thread shows the move at once and then the daemon's listing, or relists with the reason", async () => {
     const { actions, state, toasts } = await load();
     state.workspace.applyThreadListing({ ...LISTING, threads, folders: [{ name: "work" }] });

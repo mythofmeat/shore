@@ -1,4 +1,6 @@
 import { expect, test } from "bun:test";
+import { mkdtemp } from "node:fs/promises";
+import { join } from "node:path";
 
 import { spanPhrase, triggerFiredNote } from "../src/autonomy/wake_shape.ts";
 import { firedBy } from "../src/autonomy/runner.ts";
@@ -6,6 +8,8 @@ import { wakeStoppedNote, wakeWrapUpText, wrapUpMsFor } from "../src/autonomy/wa
 import { dispatchTool, type ToolContext } from "../src/tools/dispatch.ts";
 import { handleWakeInThread, wakeInThreadRequest } from "../src/tools/wake_in_thread.ts";
 import { Texts } from "../src/texts/texts.ts";
+import { createThread } from "../src/engine/threads.ts";
+import { testTmp } from "./support/tmp.ts";
 
 const MINUTE = 60_000;
 const T0 = Date.UTC(2026, 9, 30, 12);
@@ -121,10 +125,12 @@ test("a hand-off into a thread where one is already waiting is refused with what
 
 test("a dry run doesn't hand a wake over, start a thread or call an outside tool, and still lets the character read", async () => {
   const asked: unknown[] = [];
+  const data = await mkdtemp(testTmp("shore-wake-texts-"));
+  await createThread(data, "ada", "ring", "2026-11-01T00:00:00Z");
   const ctx: ToolContext = {
     texts: new Texts(),
     workspaceDir: "/nowhere", characterName: "ada", characterDataDir: "/nowhere", imageDir: "/nowhere", conversationDir: "/nowhere",
-    historyDbPath: "/nowhere/shore.db", configDir: "/nowhere", dryRun: true, thread: "main",
+    historyDbPath: join(data, "shore.db"), configDir: "/nowhere", dryRun: true, thread: "main",
     wakeInThread: (request) => {
       asked.push(request);
       return { kind: "queued", limitMs: undefined };

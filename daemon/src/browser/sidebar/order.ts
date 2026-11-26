@@ -2,7 +2,9 @@ import type { ThreadFolderView } from "../../protocol/ThreadFolderView.ts";
 import type { ThreadView } from "../../protocol/ThreadView.ts";
 
 export interface FolderSection { name: string; byActivity: boolean; threads: ThreadView[] }
-export interface ThreadSections { pinned: ThreadView[]; loose: ThreadView[]; folders: FolderSection[] }
+export interface ThreadSections { pinned: ThreadView[]; loose: ThreadView[]; folders: FolderSection[]; held: ThreadView[] }
+
+export const HELD_GROUP = "\u0000on hold";
 
 function pinned(thread: ThreadView): boolean {
   return thread.home;
@@ -20,22 +22,25 @@ function sectionOrder(a: ThreadView, b: ThreadView): number {
 
 export function threadSections(threads: readonly ThreadView[], folders: readonly ThreadFolderView[] = []): ThreadSections {
   const named = new Set(folders.map((folder) => folder.name));
-  const free = threads.filter((thread) => !pinned(thread));
+  const held = threads.filter((thread) => thread.on_hold === true);
+  const free = threads.filter((thread) => !pinned(thread) && thread.on_hold !== true);
   return {
     pinned: threads.filter(pinned).sort((a, b) => Number(b.home) - Number(a.home)),
     loose: free.filter((thread) => thread.folder === undefined || !named.has(thread.folder)).sort(sectionOrder),
     folders: folders.map((folder) => ({ name: folder.name, byActivity: folder.by_activity === true, threads: free.filter((thread) => thread.folder === folder.name).sort(sectionOrder) })),
+    held: held.sort((a, b) => recency(b).localeCompare(recency(a))),
   };
 }
 
 export function sortThreads(threads: readonly ThreadView[], folders: readonly ThreadFolderView[] = []): ThreadView[] {
   const sections = threadSections(threads, folders);
-  return [...sections.pinned, ...sections.loose, ...sections.folders.flatMap((folder) => folder.threads)];
+  return [...sections.pinned, ...sections.loose, ...sections.folders.flatMap((folder) => folder.threads), ...sections.held];
 }
 
 export function threadsOnScreen(threads: readonly ThreadView[], folders: readonly ThreadFolderView[], collapsed: ReadonlySet<string>, current: string | null): ThreadView[] {
   const sections = threadSections(threads, folders);
-  return [...sections.pinned, ...sections.loose, ...sections.folders.flatMap((folder) => collapsed.has(folder.name) ? folder.threads.filter((thread) => thread.id === current) : folder.threads)];
+  const shown = (name: string, group: readonly ThreadView[]) => collapsed.has(name) ? group.filter((thread) => thread.id === current) : group;
+  return [...sections.pinned, ...sections.loose, ...sections.folders.flatMap((folder) => shown(folder.name, folder.threads)), ...shown(HELD_GROUP, sections.held)];
 }
 
 export function moveInThreads(threads: readonly ThreadView[], folders: readonly ThreadFolderView[], id: string, move: { folder?: string; before?: string }): ThreadView[] {

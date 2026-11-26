@@ -2402,6 +2402,138 @@ function handOff(...names: string[]): (app: AppConfig) => void {
   };
 }
 
+function listedThread(output: ServerMessage, id: string): unknown {
+  return (output as unknown as { data: ThreadListing }).data.threads.find((each) => each.id === id);
+}
+
+test("the user puts any thread but home and the wakes thread on hold and resumes it in its folder, and making a thread on hold home resumes it", async () => {
+  await withCharacter(async ({ runtime, command }) => {
+    await runtime.registry.createThread("ada", "garden");
+    await runtime.registry.ensureWakesThread("ada");
+    await command("thread_folder_create", { name: "Outside" });
+    await command("thread_move", { name: "garden", folder: "Outside" });
+
+    expect(listedThread(await command("thread_hold", { name: "garden", on_hold: true }), "garden")).toMatchObject({ on_hold: true, folder: "Outside" });
+    const resumed = listedThread(await command("thread_hold", { name: "garden", on_hold: false }), "garden");
+    expect(resumed).toMatchObject({ folder: "Outside" });
+    expect(resumed).not.toHaveProperty("on_hold");
+    await command("thread_hold", { name: "garden", on_hold: true });
+    const home = listedThread(await command("thread_home", { name: "garden" }), "garden");
+    expect(home).toMatchObject({ home: true });
+    expect(home).not.toHaveProperty("on_hold");
+    await command("thread_home", { name: "main" });
+
+    expect(await command("thread_hold", { name: "main", on_hold: true })).toMatchObject({ type: "error", message: 'thread "main" is the home thread for ada, so it can\'t be put on hold' });
+    expect(await command("thread_hold", { name: "wakes", on_hold: true })).toMatchObject({ type: "error", message: 'thread "wakes" is where Shore keeps ada\'s working from wakes, so it can\'t be put on hold' });
+    expect(await command("thread_hold", { name: "nowhere", on_hold: true })).toMatchObject({ type: "error", code: "not_found" });
+    expect(await command("thread_hold", { name: "garden", on_hold: "yes" })).toMatchObject({ type: "error", message: "/on_hold must be boolean" });
+    expect(await command("thread_hold", { name: "main", on_hold: false }), "resuming a thread that was never on hold changes nothing").toMatchObject({ type: "command_output" });
+    expect(await command("thread_hold", { name: "wakes", on_hold: false })).toMatchObject({ type: "command_output" });
+    expect(runtime.registry.listThreads("ada").map((record) => [record.id, record.on_hold ?? false])).toEqual([["main", false], ["garden", false], ["wakes", false]]);
+  });
+});
+
+test("the character can't see a thread on hold: her list leaves it out, and a message, a hand-off, an edit or a new thread of its name is refused, until the user writes there and brings it back for every client", async () => {
+  await withCharacter(async ({ runtime, script, say, thread, command, fromReplies }) => {
+    await runtime.registry.createThread("ada", "garden", { label: "Beans" });
+    await say("hello");
+    await command("thread_hold", { name: "garden", on_hold: true });
+    const answer = async (name: string, input: Record<string, unknown>) => {
+      script.replyTool = { name, input };
+      await say("go on");
+      return lastToolResult(await thread("main"));
+    };
+    expect((await answer("threads", { action: "list" }))?.text).not.toContain("garden");
+    expect(await answer("send_message", { text: "The beans are up.", thread: "garden" })).toEqual({ text: 'io: you have no thread "garden" to send it in; `threads` lists the ones you have', failed: true });
+    expect(await answer("wake_in_thread", { thread: "garden", reason: "Water them." })).toEqual({ text: 'io: you have no thread "garden" to be woken in; `threads` lists the ones you have', failed: true });
+    expect(await answer("threads", { action: "edit", name: "garden", label: "Peas" })).toEqual({ text: 'io: no thread "garden" for ada', failed: true });
+    expect(await answer("threads", { action: "start", name: "garden", label: "Peas" })).toEqual({ text: 'io: Not started: peggy has a thread named "garden" on hold, so that name is taken. Choose another.', failed: true });
+    expect(await answer("threads", { action: "start", name: "garden", label: "Peas", sealed_until: "2026-12-24 08:00" })).toEqual({ text: 'io: Not started: peggy has a thread named "garden" on hold, so that name is taken. Choose another.', failed: true });
+    expect(runtime.registry.listThreads("ada").find((record) => record.id === "garden")).toMatchObject({ label: "Beans", on_hold: true });
+    expect(fromReplies.filter((event) => event.type === "threads_changed"), "a reply in a thread that isn't on hold changes no thread").toEqual([]);
+
+    fromReplies.length = 0;
+    await say("back to the beans", "garden");
+    expect(runtime.registry.listThreads("ada").find((record) => record.id === "garden")).not.toHaveProperty("on_hold");
+    expect(fromReplies.filter((event) => event.type === "threads_changed")).toEqual([{ type: "threads_changed", character: "ada", thread: "garden" }]);
+    expect((await answer("threads", { action: "list" }))?.text).toContain('garden "Beans"');
+  }, handOff("threads"));
+});
+
+test("coming back home, the note on where the user was counts side-thread messages after home's last one and up to this one, and at a tie names the thread made first", async () => {
+  await withCharacter(async ({ runtime, say, thread }) => {
+    await runtime.registry.createThread("ada", "garden");
+    await runtime.registry.createThread("ada", "study");
+    await runtime.registry.createThread("ada", "harbor");
+    const elsewhere = async () => (await thread("main")).at(-2)?.last_elsewhere;
+    await say("hello");
+    await say("at the same moment", "garden");
+    at(200);
+    await say("back");
+    expect(await elsewhere()).toBeUndefined();
+    at(205);
+    await say("the book is open", "study");
+    await say("the boats are in", "harbor");
+    at(400);
+    await say("back again");
+    expect(await elsewhere()).toEqual({ thread: "study", at: new Date(T0 + 205 * MINUTE).toISOString() });
+    at(600);
+    await say("the peas too", "garden");
+    await say("and again");
+    expect(await elsewhere()).toEqual({ thread: "garden", at: new Date(T0 + 600 * MINUTE).toISOString() });
+  });
+});
+
+test("coming back home, the note on where the user was in between passes over a thread on hold for the newest one the character can see", async () => {
+  await withCharacter(async ({ runtime, say, thread, command }) => {
+    await runtime.registry.createThread("ada", "study");
+    await runtime.registry.createThread("ada", "garden");
+    await say("hello");
+    at(1);
+    await say("the book is open", "study");
+    at(2);
+    await say("the beans are up", "garden");
+    await command("thread_hold", { name: "garden", on_hold: true });
+    at(200);
+    await say("back again");
+    expect((await thread("main")).at(-2)?.last_elsewhere).toEqual({ thread: "study", at: new Date(T0 + MINUTE).toISOString() });
+  });
+});
+
+test("a trigger that names a thread on hold wakes nobody and doesn't count toward going dormant, and the log says why, until the thread is resumed", async () => {
+  await withCharacter(async ({ runtime, script, workspace, command, say }) => {
+    await runtime.registry.createThread("ada", "ring");
+    await writeFile(join(workspace, "TRIGGERS.toml"), SHOW);
+    await say("hello");
+    await command("thread_hold", { name: "ring", on_hold: true });
+    script.sends = undefined; script.closing = "Done.";
+    await runtime.triggers.tick();
+    await fires(runtime, 11);
+    await fires(runtime, 80);
+    expect(script.wakes).toEqual([]);
+    expect(runtime.autonomy.status("ada")).toMatchObject({ state: "Active", wakes_without_user: 0 });
+    expect(runtime.autonomy.log("ada", 100).filter((event) => event.kind === "call_failed").map((event) => event.detail)).toEqual(['Wake skipped: "ring" is on hold', 'Wake skipped: "ring" is on hold']);
+    await command("thread_hold", { name: "ring", on_hold: false });
+    await fires(runtime, 150);
+    expect([...new Set(script.wakes.map((request) => request.context?.thread))]).toEqual(["ring"]);
+  }, withTriggers);
+});
+
+test("a wake handed to a thread that the user then puts on hold is skipped when it comes due, and the log says why", async () => {
+  await withCharacter(async ({ runtime, script, say, command }) => {
+    await runtime.registry.createThread("ada", "garden");
+    await say("hello");
+    script.replyTool = { name: "wake_in_thread", input: { thread: "garden", reason: "Water them." } };
+    await say("off you go");
+    await command("thread_hold", { name: "garden", on_hold: true });
+    script.sends = undefined; script.closing = "Done.";
+    at(20);
+    await runtime.autonomy.runDue();
+    expect(script.wakes).toEqual([]);
+    expect(runtime.autonomy.log("ada", 100).filter((event) => event.kind === "call_failed").map((event) => event.detail)).toEqual(['Wake skipped: "garden" is on hold']);
+  }, handOff());
+});
+
 test("from a wake in home the character hands off into another thread, and is woken there next with its reason and the limit it asked for, held to the user's ceiling", async () => {
   await withCharacter(async ({ runtime, script, say, wakeNow, thread }) => {
     await runtime.registry.createThread("ada", "ring");

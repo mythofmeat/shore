@@ -82,6 +82,12 @@ export interface ThreadRegistry {
     locked: boolean,
     signal?: AbortSignal,
   ): Promise<ThreadsIndex>;
+  setThreadOnHold(
+    character: string,
+    id: string,
+    onHold: boolean,
+    signal?: AbortSignal,
+  ): Promise<ThreadsIndex>;
   setThreadCompaction(
     character: string,
     id: string,
@@ -250,6 +256,15 @@ export async function threadLock(ctx: ThreadContext, args: Args): Promise<Thread
   if (typeof locked !== "boolean") throw invalidRequest("locked must be true or false");
   try {
     return listing(ctx, await ctx.registry.setThreadLocked(ctx.character, id, locked, ctx.signal));
+  } catch (e) {
+    throw threadCommandError(e);
+  }
+}
+
+export async function threadHold(ctx: ThreadContext, args: Args): Promise<ThreadListing> {
+  const id = requiredId(args);
+  try {
+    return listing(ctx, await ctx.registry.setThreadOnHold(ctx.character, id, args["on_hold"] === true, ctx.signal));
   } catch (e) {
     throw threadCommandError(e);
   }

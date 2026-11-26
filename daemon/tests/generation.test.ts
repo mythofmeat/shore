@@ -21,6 +21,7 @@ import { sentPicturesDir } from "../src/storage/sent_pictures.ts";
 import { CharacterWorkspace } from "../src/tools/character_workspace.ts";
 import { sizedImage } from "./support/sized_image.ts";
 import { testTmp } from "./support/tmp.ts";
+import { createThread } from "../src/engine/threads.ts";
 import { recordedTurns, WorkspaceRecorder, workspaceTurnsFor, type WorkspaceTurns } from "../src/tools/workspace_turns.ts";
 import { outcomeOf } from "./support/outcome.ts";
 import { until } from "./support/until.ts";
@@ -97,6 +98,7 @@ interface Turn {
   tools?: string[];
   toolRound?: ContentBlock[];
   seed?: (turns: WorkspaceTurns) => Promise<void>;
+  sideThreads?: string[];
   during?: (turns: WorkspaceTurns) => Promise<void>;
   compaction?: GenerationDeps["compaction"];
   thread?: string;
@@ -132,6 +134,7 @@ async function runTurn(turn: Turn): Promise<{ error?: string; dataDir: string }>
   await mkdir(workspace, { recursive: true });
   await writeFile(join(workspace, "SOUL.md"), "ada system prompt");
   await mkdir(join(config.dirs.data, "ada", "threads", "main"), { recursive: true });
+  for (const id of turn.sideThreads ?? []) await createThread(config.dirs.data, "ada", id, "2026-01-01T00:00:00Z");
   const turns = workspaceTurnsFor(config.dirs, "ada");
   await turn.seed?.(turns);
   if (turn.history.length > 0) {
@@ -434,7 +437,7 @@ describe("a reply's turn", () => {
     const handed: (string | undefined)[] = [];
     const from: string[] = [];
     const run = await runTurn({
-      history: [], regen: false, thread: "ring", events: answered,
+      history: [], regen: false, thread: "ring", events: answered, sideThreads: ["ring", "garden"],
       tools: ["wake_in_thread"],
       toolRound: [{ type: "tool_use", id: "tool_hand", name: "wake_in_thread", input: { thread: "garden", reason: "Carry on." } }],
       adjust: (generation) => {

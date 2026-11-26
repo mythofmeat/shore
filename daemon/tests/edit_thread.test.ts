@@ -20,7 +20,7 @@ import { characterWorkspace } from "../src/tools/character_workspace.ts";
 import { dispatchTool } from "../src/tools/dispatch.ts";
 import { editThreadRequest, handleEditThread } from "../src/tools/edit_thread.ts";
 import { handleListThreads } from "../src/tools/list_threads.ts";
-import { startThreadRequest } from "../src/tools/start_thread.ts";
+import { handleStartThread, startThreadRequest } from "../src/tools/start_thread.ts";
 import { outcomeOf, rejectionOf } from "./support/outcome.ts";
 import { testTmp } from "./support/tmp.ts";
 import { promptedAppConfig } from "./support/prompt_list.ts";
@@ -179,9 +179,11 @@ describe("what the threads tool is given", () => {
     }
   });
 
-  test("an edit where threads can't be edited says so, and a failure that isn't about the thread is passed on as it is", async () => {
+  test("an edit or a new thread where threads can't be changed says so, and a failure that isn't about the thread is passed on as it is", async () => {
     expect(await outcomeOf(handleEditThread({ name: "story", label: "Lighthouse" }, undefined, "Sam"))).toThrow("threads can't be edited from here");
+    expect(await outcomeOf(handleStartThread({ name: "story", label: "Lighthouse" }, undefined, "Sam"))).toThrow("threads can't be started from here");
     const failure = new Error("the disk is full");
     expect(await rejectionOf(handleEditThread({ name: "story", label: "Lighthouse" }, async () => await Promise.reject(failure), "Sam"))).toBe(failure);
+    expect(await rejectionOf(handleStartThread({ name: "story", label: "Lighthouse" }, async () => await Promise.reject(failure), "Sam"))).toBe(failure);
   });
 });

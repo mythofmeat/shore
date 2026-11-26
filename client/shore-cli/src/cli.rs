@@ -1277,6 +1277,20 @@ pub(crate) enum ThreadCommand {
         name: String,
     },
 
+    /// Put a thread on hold: the character no longer sees it, and no wake runs in it. Writing in it resumes it
+    Hold {
+        /// Thread id
+        #[arg(add = values(Completes::Threads))]
+        name: String,
+    },
+
+    /// Resume a thread on hold, so the character sees it again
+    Resume {
+        /// Thread id
+        #[arg(add = values(Completes::Threads))]
+        name: String,
+    },
+
     /// Choose whether a thread compacts or trims when it gets long
     ///
     /// A thread that compacts has its older turns archived at the
@@ -2448,6 +2462,12 @@ pub(crate) fn to_swp_command(
             ThreadCommand::Unlock { name } => {
                 Some(("thread_lock", json!({ "name": name, "locked": false })))
             }
+            ThreadCommand::Hold { name } => {
+                Some(("thread_hold", json!({ "name": name, "on_hold": true })))
+            }
+            ThreadCommand::Resume { name } => {
+                Some(("thread_hold", json!({ "name": name, "on_hold": false })))
+            }
             ThreadCommand::Compaction { name, mode } => Some((
                 "thread_compaction",
                 json!({ "name": name, "compaction": mode == "on" }),
@@ -3374,6 +3394,20 @@ mod tests {
                 Some((
                     "thread_lock",
                     json!({"name": "lighthouse", "locked": false}),
+                )),
+            ),
+            (
+                &["thread", "hold", "lighthouse"],
+                Some((
+                    "thread_hold",
+                    json!({"name": "lighthouse", "on_hold": true}),
+                )),
+            ),
+            (
+                &["thread", "resume", "lighthouse"],
+                Some((
+                    "thread_hold",
+                    json!({"name": "lighthouse", "on_hold": false}),
                 )),
             ),
             (

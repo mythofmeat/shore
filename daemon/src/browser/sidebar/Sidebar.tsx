@@ -1,19 +1,19 @@
-import { useState } from "react";
+import { useState, type ReactNode } from "react";
 import type { ChromeSnapshot } from "../workspace.ts";
 import type { ThreadView } from "../../protocol/ThreadView.ts";
 import { Avatar } from "../ui/avatar.tsx";
 import { IconButton, PointMenu, type MenuItem } from "../ui/controls.tsx";
 import { Icon } from "../ui/icons.tsx";
 import { navigate, openSettings } from "../app/route.ts";
-import { conversation, errorText, perform, useActiveRequests, useCollapsedFolders, workspace } from "../app/state.ts";
+import { collapsedFolders, conversation, errorText, perform, useActiveRequests, useCollapsedFolders, workspace } from "../app/state.ts";
 import { openFolderDialog } from "../app/intents.ts";
 import { moveThreadTo } from "../chat/actions.ts";
 import { toasts } from "../ui/toast.tsx";
 import { FolderRow } from "./FolderRow.tsx";
 import { PresenceStore, StatusPicker } from "./StatusPicker.tsx";
-import { threadSections } from "./order.ts";
+import { HELD_GROUP, threadSections } from "./order.ts";
 import { useRowMenu } from "./row_menu.ts";
-import { THREAD_DRAG_TYPE, ThreadRow, type ThreadNeighbours } from "./ThreadRow.tsx";
+import { THREAD_DRAG_TYPE, ThreadRow, UnreadBadge, type ThreadNeighbours } from "./ThreadRow.tsx";
 
 export function threadLabel(thread: Pick<ThreadView, "id" | "label">): string {
   return thread.label !== undefined && thread.label !== "" ? thread.label : thread.id;
@@ -52,6 +52,22 @@ function ThreadList({ state, shownThread, ready, select, newThread }: { state: C
       </div>;
     })}
     <button type="button" className="sidebar-item thread muted" disabled={!ready} onClick={newThread}><Icon name="plus" size={14} /><span className="sidebar-name">New thread</span></button>
+    {sections.held.length === 0 ? null : <HeldGroup character={character} shut={collapsed.has(HELD_GROUP)} unread={sections.held.reduce((total, thread) => total + unreadOf(thread), 0)}>
+      {(collapsed.has(HELD_GROUP) ? sections.held.filter((thread) => thread.id === state.thread) : sections.held).map((thread) => row(thread, [], true))}
+    </HeldGroup>}
+  </div>;
+}
+
+function HeldGroup({ character, shut, unread, children }: { character: string; shut: boolean; unread: number; children: ReactNode }) {
+  return <div className="thread-folder" role="group" aria-label="On hold"
+    onDragStartCapture={(event) => { event.preventDefault(); }} onDragOverCapture={(event) => { event.stopPropagation(); }}>
+    <div className="thread-row folder-row">
+      <button type="button" className="sidebar-item thread folder" aria-expanded={!shut} onClick={() => collapsedFolders.toggle(character, HELD_GROUP)}>
+        <Icon name={shut ? "chevronRight" : "chevronDown"} size={14} /><span className="sidebar-name">On hold</span>
+        {shut && unread > 0 ? <UnreadBadge count={unread} /> : null}
+      </button>
+    </div>
+    {children}
   </div>;
 }
 

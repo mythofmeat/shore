@@ -4,6 +4,7 @@ import type { NewSealedThread } from "../engine/sealed.ts";
 import { isValidThreadId, MAX_THREAD_ID_LENGTH, ThreadError } from "../engine/threads.ts";
 import { asNaive, resolveInZone } from "../ledger/zoned.ts";
 import { InvalidArgs, ToolIoError } from "./errors.ts";
+import { startRefusal } from "./start_thread.ts";
 
 export interface StartedSealedThread {
   unsealAt: string;
@@ -34,7 +35,7 @@ export async function handleStartSealedThread(
   try {
     started = await seal(request);
   } catch (e) {
-    if (e instanceof ThreadError) throw new ToolIoError(e.message);
+    if (e instanceof ThreadError) throw startRefusal(e, request.id, userName);
     throw e;
   }
   const opens = formatWallClock(Date.parse(started.unsealAt), timeZone);
