@@ -6,7 +6,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { browserName } from "../src/web/auth.ts";
 import { required } from "../src/util/required.ts";
-import { bearerToken, DEVICES_FILE, DeviceStore, principalName, principalOwner, SignInRequests } from "../src/web/devices.ts";
+import { bearerToken, deviceName, DEVICES_FILE, DeviceStore, principalName, principalOwner, SignInRequests } from "../src/web/devices.ts";
 
 const dataDir = () => mkdtempSync(join(tmpdir(), "shore-devices-"));
 const stored = (dir: string) => JSON.parse(readFileSync(join(dir, DEVICES_FILE), "utf8")) as { devices: { last_used_at?: number }[] };
@@ -16,7 +16,7 @@ describe("the device store", () => {
     const dir = dataDir();
     const store = new DeviceStore(dir);
     expect(store.list()).toEqual([]);
-    const { device, token } = store.create("cli", "  desktop  ", undefined, 1_000);
+    const { device, token } = store.create("cli", "desktop", undefined, 1_000);
     expect(device).toEqual({ id: device.id, kind: "cli", name: "desktop", createdAt: 1_000, lastUsedAt: undefined, operations: undefined });
     expect(token).toMatch(/^shore_[A-Za-z0-9_-]{43}$/);
     expect(store.authenticate("shore_not-it")).toBeUndefined();
@@ -102,11 +102,9 @@ describe("the device store", () => {
     expect(store.authenticate(gone.token)).toBeUndefined();
   });
 
-  test("refuses a name that is blank, too long or holds a control character", () => {
-    const store = new DeviceStore(dataDir());
-    for (const name of ["", "   ", "x".repeat(65), "a\nb", "a\u007Fb"]) expect(() => store.create("cli", name)).toThrow("1 to 64 characters");
-    expect(store.create("cli", "x".repeat(64)).device.name).toHaveLength(64);
-    expect(store.list()).toHaveLength(1);
+  test("a device's name is trimmed, and one that is blank, too long or holds a control character won't do", () => {
+    expect(["", "   ", "x".repeat(65), "a\nb", "a\u007Fb", "a\u001Fb"].map(deviceName)).toEqual([undefined, undefined, undefined, undefined, undefined, undefined]);
+    expect([deviceName("  desktop  "), deviceName("x".repeat(64))?.length, deviceName("a\u0020b")]).toEqual(["desktop", 64, "a b"]);
   });
 
   test("a file that doesn't hold device sign-ins stops the daemon rather than forgetting them", () => {
@@ -152,8 +150,6 @@ describe("devices waiting to sign in", () => {
     expect(requests.poll(pending?.id ?? "", "secret", 1_000)).toBeUndefined();
     expect(requests.pending(1_000)).toEqual([]);
     expect(requests.start("laptop", "secret", 1_000)).toBeDefined();
-    requests.clear();
-    expect(requests.pending(1_000)).toEqual([]);
   });
 
   test("each of starting, listing and asking forgets the ones that have expired", () => {

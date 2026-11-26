@@ -102,3 +102,8 @@ export async function readSmallJson(request: Request, limit: number): Promise<un
   }
   return JSON.parse(Buffer.concat(chunks).toString("utf8")) as unknown;
 }
+
+export function checked<T>(valid: (value: unknown) => value is T, value: unknown, what: string): T {
+  if (!valid(value)) throw new Error(`Invalid ${what}`);
+  return value;
+}

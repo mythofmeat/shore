@@ -52,13 +52,11 @@ export function principalName(principal: Principal): string {
   return principal.kind === "device" ? principal.device.name : "The daemon's own token";
 }
 
-export class DeviceNameError extends Error {}
+export const DEVICE_NAME_RULE = "Give the device a name of 1 to 64 characters, without control characters";
 
-export function deviceName(raw: string): string {
+export function deviceName(raw: string): string | undefined {
   const name = raw.trim();
-  if (name === "" || name.length > 64 || Array.from(name, (character) => character.charCodeAt(0)).some((code) => code < 32 || code === 127)) {
-    throw new DeviceNameError("Give the device a name of 1 to 64 characters, without control characters");
-  }
+  if (name === "" || name.length > 64 || Array.from(name, (character) => character.charCodeAt(0)).some((code) => code < 32 || code === 127)) return undefined;
   return name;
 }
 
@@ -115,7 +113,7 @@ export class DeviceStore {
   create(kind: DeviceKind, name: string, operations?: readonly string[], now = Date.now()): { device: Device; token: string } {
     const token = `shore_${randomBytes(32).toString("base64url")}`;
     const device: StoredDevice = {
-      id: crypto.randomUUID(), kind, name: deviceName(name), created_at: now, digest: sessionDigest(token),
+      id: crypto.randomUUID(), kind, name, created_at: now, digest: sessionDigest(token),
       ...(operations === undefined ? {} : { operations: [...new Set(operations)].sort() }),
     };
     this.#devices.push(device);
@@ -172,7 +170,7 @@ export class SignInRequests {
     let code: string;
     do code = Array.from({ length: CODE_LENGTH }, () => CODE_ALPHABET[randomInt(CODE_ALPHABET.length)]).join("");
     while (taken.has(code));
-    const request: PendingSignIn = { id: crypto.randomUUID(), code, name: deviceName(name), secret: sessionDigest(secret), expiresAt: now + this.lifetime };
+    const request: PendingSignIn = { id: crypto.randomUUID(), code, name, secret: sessionDigest(secret), expiresAt: now + this.lifetime };
     this.#requests.set(request.id, request);
     return { id: request.id, code, expires_at: request.expiresAt };
   }
@@ -200,5 +198,4 @@ export class SignInRequests {
     return request.decision ? { allowed: request.name } : "denied";
   }
 
-  clear(): void { this.#requests.clear(); }
 }

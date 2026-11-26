@@ -1,4 +1,5 @@
-import { afterEach, describe, expect, test } from "bun:test";
+import { afterEach, describe, expect, spyOn, test } from "bun:test";
+import * as fs from "node:fs";
 import { mkdir, mkdtemp, readFile, writeFile } from "node:fs/promises";
 import { statSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -117,11 +118,60 @@ describe("running an operation over HTTP", () => {
 
   test("a key can't be made for nothing, for an operation that doesn't exist, or for one that only a connection can run", async () => {
     const place = await daemon();
-    for (const operations of [[], ["no_such_operation"], ["switch_thread"]]) {
-      const refused = await post(place, "/api/devices/automation", TOKEN, { name: "Phone", operations });
-      expect(refused.status).toBe(400);
+    const refusals: [unknown, string][] = [
+      [{ name: "Phone", operations: [] }, "Choose at least one operation the key may run"],
+      [{ name: "Phone", operations: ["no_such_operation", "presence"] }, "A key can't run no_such_operation"],
+      [{ name: "Phone", operations: ["switch_thread"] }, "A key can't run switch_thread"],
+      [{ name: " ", operations: ["presence"] }, "Give the device a name of 1 to 64 characters, without control characters"],
+      [{ name: "Phone" }, "Name the key and list the operations it may run"],
+    ];
+    for (const [body, message] of refusals) {
+      const refused = await post(place, "/api/devices/automation", TOKEN, body);
+      expect([refused.status, await refused.json()]).toEqual([400, { code: "invalid_request", message }]);
     }
-    expect((await post(place, "/api/devices/automation", TOKEN, { name: " ", operations: ["presence"] })).status).toBe(400);
+  });
+
+  test("signing a device out or deciding on one needs to say which, and an unknown one is not found", async () => {
+    const place = await daemon();
+    const answers = [
+      [await post(place, "/api/devices/revoke", TOKEN, {}), 400, "Say which device to sign out"],
+      [await post(place, "/api/devices/revoke", TOKEN, { id: "nobody" }), 404, "No device has that id"],
+      [await post(place, "/api/devices/decide", TOKEN, { code: "AAAA" }), 400, "Give the code the other device shows, and whether to let it in"],
+    ] as const;
+    for (const [answer, status, message] of answers) expect([answer.status, await answer.json()]).toEqual([status, { code: answer.status === 404 ? "not_found" : "invalid_request", message }]);
+  });
+
+  test("the device list marks only the asker as this one, and leaves out when a device was used until it has been", async () => {
+    const place = await daemon();
+    const key = await automationKey(place, ["presence"]);
+    const listed = async (credential: string) => (await (await post(place, "/api/devices/list", credential)).json() as { devices: Record<string, unknown>[] }).devices;
+    const byOwner = await listed(TOKEN);
+    expect(byOwner).toEqual([{ id: key.id, kind: "automation", name: "Phone", created_at: byOwner[0]?.["created_at"], operations: ["presence"], current: false }]);
+    expect((await post(place, "/api/op/presence", key.token, {})).status).toBe(200);
+    const after = (await listed(TOKEN))[0];
+    expect([typeof after?.["last_used_at"], after?.["current"]]).toEqual(["number", false]);
+    const signed = await post(place, "/api/login-code", TOKEN);
+    const { code } = await signed.json() as { code: string };
+    const login = await fetch(`${place.origin}/api/login`, { method: "POST", headers: { origin: place.origin, "content-type": "application/json" }, body: JSON.stringify({ token: code }) });
+    const cookie = login.headers.get("set-cookie")?.split(";", 1)[0] ?? "";
+    const browser = (await listed(TOKEN)).find((device) => device["kind"] === "browser");
+    expect(browser?.["current"], "the owner's token is not that browser").toBe(false);
+    const own = await (await fetch(`${place.origin}/api/devices/list`, { method: "POST", headers: { origin: place.origin, cookie } })).json() as { devices: Record<string, unknown>[] };
+    expect(own.devices.map((device) => [device["kind"], device["current"]])).toEqual([["browser", true], ["automation", false]]);
+  });
+
+  test("the sign-in code page is for POST, and a device asking anything else is told the endpoint is unknown", async () => {
+    const place = await daemon();
+    const asked = await fetch(`${place.origin}/api/login-code`, { headers: { authorization: `Bearer ${TOKEN}` } });
+    expect([asked.status, await asked.json()]).toEqual([404, { code: "not_found", message: "Unknown endpoint for a signed-in device" }]);
+  });
+
+  test("a device holds at most four uploads at once", async () => {
+    const place = await daemon();
+    const upload = () => fetch(`${place.origin}/api/transfers`, { method: "POST", body: "x", headers: { authorization: `Bearer ${TOKEN}`, "content-type": "application/octet-stream" } });
+    for (let held = 0; held < 4; held += 1) expect((await upload()).status).toBe(200);
+    const refused = await upload();
+    expect([refused.status, await refused.json()]).toEqual([400, { code: "invalid_request", message: "A device may hold at most 4 archive transfers; download or use one, or wait a quarter of an hour" }]);
   });
 
   test("a command's answer is its result, and a failure is its code and message under the matching HTTP status", async () => {
@@ -341,6 +391,30 @@ describe("signing in a CLI from a device that's already in", () => {
     const refused = await post(place, `/api/sign-in/${pending.id}`, undefined, { secret });
     expect(refused.status).toBe(403);
     expect((await post(place, `/api/sign-in/${pending.id}`, undefined, { secret })).status).toBe(404);
+  });
+
+  test("a sign-in needs a name that will do and a secret of 32 characters or more, and asks only the endpoints there are", async () => {
+    const place = await daemon();
+    const answers: [Response, number, string][] = [
+      [await start(place, "desktop", "s".repeat(31)), 400, "Name this device and send a secret of at least 32 characters"],
+      [await post(place, "/api/sign-in", undefined, { secret }), 400, "Name this device and send a secret of at least 32 characters"],
+      [await start(place, "  "), 400, "Give the device a name of 1 to 64 characters, without control characters"],
+      [await post(place, "/api/sign-in/not-a-sign-in", undefined, { secret }), 404, "Unknown sign-in endpoint"],
+      [await post(place, `/api/sign-in/${crypto.randomUUID()}`, undefined, {}), 400, "Send the secret this sign-in started with"],
+      [await post(place, "/api/sign-in", undefined, { name: "x".repeat(70_000), secret }), 413, "Request body is too large"],
+    ];
+    for (const [answer, status, message] of answers) expect([answer.status, await answer.json()]).toEqual([status, { code: status === 404 ? "not_found" : "invalid_request", message }]);
+    expect((await start(place, "desktop", "s".repeat(32))).status).toBe(200);
+  });
+
+  test("a sign-in the daemon can't record is answered as such, and the CLI may ask again", async () => {
+    const place = await daemon();
+    const pending = await (await start(place)).json() as { id: string; code: string };
+    expect((await post(place, "/api/devices/decide", TOKEN, { code: pending.code, allow: true })).status).toBe(204);
+    const renaming = spyOn(fs, "renameSync").mockImplementation(() => { throw new Error("the disk said no"); });
+    let refused: Response;
+    try { refused = await post(place, `/api/sign-in/${pending.id}`, undefined, { secret }); } finally { renaming.mockRestore(); }
+    expect([refused.status, await refused.json()]).toEqual([503, { code: "unavailable", message: "The daemon couldn’t record this sign-in" }]);
   });
 
   test("only a few devices can wait at once, a short secret is refused, and an automation key can't let anyone in", async () => {

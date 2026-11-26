@@ -1,5 +1,5 @@
-import { until } from "./support/until.ts";
-import { afterEach, describe, expect, test } from "bun:test";
+import { until, untilAsync } from "./support/until.ts";
+import { afterEach, describe, expect, spyOn, test } from "bun:test";
 import { readFileSync } from "node:fs";
 import { hostname, tmpdir } from "node:os";
 import { type WebLoginCode } from "../src/protocol/WebLoginCode.ts";
@@ -14,8 +14,10 @@ import { type HandshakeProvider } from "../src/swp/handshake.ts";
 import { Server } from "../src/swp/server.ts";
 import { isControlRoutedMessage, type ControlRoutedMessage, type RoutedMessage } from "../src/swp/session.ts";
 import { WEB_CONTRACT, WEB_SUBPROTOCOL } from "../src/web/contract.ts";
-import { LoginCodes, WebSessions, type WebSession } from "../src/web/auth.ts";
-import { WEB_LIMITS } from "../src/web/policy.ts";
+import { LoginCodes, LoginFailures, WebSessions, type WebSession } from "../src/web/auth.ts";
+import { checked, WEB_LIMITS } from "../src/web/policy.ts";
+import { RequestHistory } from "../src/web/requests.ts";
+import { validWebLoginCode } from "../src/web/contracts.ts";
 import { startWebServer, type WebServerOptions } from "../src/web/server.ts";
 import { outcomeOf } from "./support/outcome.ts";
 import { mkdir, mkdtemp, readFile, readdir, rm, stat, writeFile, chmod, symlink } from "node:fs/promises";
@@ -28,6 +30,7 @@ import { validWebArchiveInfo, validWebArchiveList } from "../src/web/contracts.t
 import { findSentPicture, sentPicturesDir } from "../src/storage/sent_pictures.ts";
 import { sizedImage } from "./support/sized_image.ts";
 import { testTmp } from "./support/tmp.ts";
+import { required } from "../src/util/required.ts";
 
 const cleanups: (() => Promise<unknown> | void)[] = [];
 afterEach(async () => { for (const cleanup of cleanups.splice(0).reverse()) await cleanup(); });
@@ -142,7 +145,9 @@ describe("browser authentication boundary", () => {
 
   test("HTTPS proxy configuration allows direct HTTP access with working cookies and logout for each", async () => {
     const origin = "https://shore.example";
-    const f = await fixture({ config: { ...defaultWebConfig(), enabled: true, bind_addr: "127.0.0.1:0", public_origin: origin } }); f.web.activate();
+    const picture = join(await mkdtemp(join(tmpdir(), "shore-picture-")), "p.png");
+    await writeFile(picture, "png bytes");
+    const f = await fixture({ config: { ...defaultWebConfig(), enabled: true, bind_addr: "127.0.0.1:0", public_origin: origin }, picture: (file) => file === "p.png" ? picture : undefined }); f.web.activate();
     const target = `http://127.0.0.1:${String(f.web.port)}`;
     const rewritten = await fetch(`${target}/api/login`, { method: "POST", headers: { origin, "content-type": "application/json" }, body: JSON.stringify({ token: await f.code() }) });
     expect(rewritten.status).toBe(200);
@@ -159,6 +164,7 @@ describe("browser authentication boundary", () => {
       const cookie = login.headers.get("set-cookie")?.split(";", 1)[0];
       if (cookie === undefined) throw new Error("Missing browser cookie");
       expect((await fetch(`${target}/api/session`, { method: "POST", headers: { ...headers, cookie } })).status).toBe(200);
+      expect((await fetch(`${target}/api/pictures/p.png`, { headers: { ...headers, cookie } })).status, "pictures read either cookie").toBe(200);
       const browser = connectBrowser(target, cookie, WEB_SUBPROTOCOL, { headers });
       await browser.attach();
       expect(await browser.frame("history")).toMatchObject({ selected_character: "ada" });
@@ -574,6 +580,8 @@ test("signed-in pages can load a sent picture without an Origin header, and nobo
 
   const shown = await picture(basename(kept));
   expect(shown.status).toBe(200);
+  const headed = await fetch(`${web.origin}/api/pictures/${basename(kept)}`, { method: "HEAD", headers: { cookie } });
+  expect([headed.status, headed.headers.get("content-type"), await headed.text()]).toEqual([200, "image/png", ""]);
   expect(shown.headers.get("content-type")).toBe("image/png");
   expect(shown.headers.get("cache-control")).toBe("private, max-age=31536000, immutable");
   expect(Buffer.from(await shown.arrayBuffer())).toEqual(bytes);
@@ -595,4 +603,193 @@ test("signed-in pages can load a sent picture without an Origin header, and nobo
   expect(probe.headers.get("content-type")).toBe("video/mp4");
   expect(await probe.text()).toBe("01");
   expect((await picture(video, { range: "bytes=0-1" })).status).toBe(401);
+});
+
+describe("what the page itself is served", () => {
+  test("the page and its assets come with their type, assets are cached for good, the page is not, and a HEAD has no body", async () => {
+    const f = await fixture(); f.web.activate();
+    const page = await fetch(`${f.web.origin}/workspace/ada/story`);
+    const html = await page.text();
+    expect([page.status, page.headers.get("content-type"), page.headers.get("cache-control")]).toEqual([200, "text/html; charset=utf-8", "no-store"]);
+    const script = required(/src="(\/assets\/[^"]+\.js)"/.exec(html)?.[1]);
+    const asset = await fetch(`${f.web.origin}${script}`);
+    expect([asset.status, asset.headers.get("content-type"), asset.headers.get("cache-control"), (await asset.text()).length > 0]).toEqual([200, "text/javascript; charset=utf-8", "public, max-age=31536000, immutable", true]);
+    const headed = await fetch(`${f.web.origin}/`, { method: "HEAD" });
+    expect([headed.status, headed.headers.get("content-type"), await headed.text()]).toEqual([200, "text/html; charset=utf-8", ""]);
+  });
+
+});
+
+describe("signing a browser in", () => {
+  test("too many failed attempts from one place are refused for a minute from the first, and a success forgets them", () => {
+    const failures = new LoginFailures(2, 2);
+    expect(failures.refused("a", 0)).toBe(false);
+    failures.failed("a", 0);
+    failures.failed("a", 10_000);
+    expect([failures.refused("a", 59_999), failures.refused("b", 59_999)]).toEqual([true, false]);
+    expect(failures.refused("a", 60_000)).toBe(false);
+    failures.failed("a", 60_000);
+    failures.succeeded("a");
+    failures.failed("a", 60_001);
+    expect(failures.refused("a", 60_002)).toBe(false);
+  });
+
+  test("keeps failures for a bounded number of places, letting the oldest go first", () => {
+    const failures = new LoginFailures(1);
+    for (let place = 0; place < 4096; place += 1) failures.failed(`place ${String(place)}`, 0);
+    expect([failures.refused("place 0", 1), failures.refused("place 4095", 1)]).toEqual([true, true]);
+    failures.failed("place 4096", 1);
+    expect([failures.refused("place 0", 2), failures.refused("place 1", 2), failures.refused("place 4096", 2)]).toEqual([false, true, true]);
+    failures.failed("place 1", 3);
+    expect(failures.refused("place 2", 4), "a place already counted takes nobody's room").toBe(true);
+  });
+
+  test("a response the daemon makes is checked against its contract before it goes out", () => {
+    expect(checked(validWebLoginCode, { code: "c", expires_at: 1 }, "code")).toEqual({ code: "c", expires_at: 1 });
+    expect(() => checked(validWebLoginCode, { code: 1 }, "browser sign-in code response")).toThrow("Invalid browser sign-in code response");
+  });
+
+  test("signing in again from a browser already signed in ends its old sign-in, and renewing hands the cookie back", async () => {
+    const f = await fixture(); f.web.activate();
+    const first = await f.login();
+    const again = await f.api("/api/login", first.cookie, { token: await f.code() });
+    const second = again.headers.get("set-cookie")?.split(";", 1)[0] ?? "";
+    expect((await f.api("/api/session", first.cookie)).status).toBe(401);
+    const renewed = await f.api("/api/session", second);
+    expect([renewed.status, renewed.headers.get("set-cookie")?.split(";", 1)[0]]).toEqual([200, second]);
+  });
+
+  test("a sign-in still arriving when the daemon stops is told the daemon is stopping", async () => {
+    const f = await fixture(); f.web.activate();
+    const token = await f.code();
+    let rest = (): void => {};
+    const body = new ReadableStream<Uint8Array>({ start(output) {
+      output.enqueue(new TextEncoder().encode('{"token":'));
+      rest = () => { output.enqueue(new TextEncoder().encode(JSON.stringify(token) + "}")); output.close(); };
+    } });
+    const answer = fetch(`${f.web.origin}/api/login`, { method: "POST", body, duplex: "half", headers: { origin: f.web.origin, "content-type": "application/json" } });
+    await Bun.sleep(50);
+    const stopping = f.web.stop();
+    rest();
+    const refused = await answer;
+    expect([refused.status, await refused.json()]).toEqual([503, { code: "unavailable", message: "The daemon is stopping" }]);
+    await stopping;
+  });
+
+  test("only as many sign-ins can be under way at once as the daemon takes connections, and each one ends its count", async () => {
+    const f = await fixture({ config: { ...defaultWebConfig(), enabled: true, bind_addr: "127.0.0.1:0", max_connections: 1 } }); f.web.activate();
+    expect((await f.api("/api/login", "", { token: "wrong" })).status).toBe(401);
+    const holding = new AbortController();
+    const held = fetch(`${f.web.origin}/api/login`, {
+      method: "POST", signal: holding.signal, headers: { origin: f.web.origin, "content-type": "application/json" },
+      body: new ReadableStream({ start(output) { output.enqueue(new TextEncoder().encode('{"tok')); } }), duplex: "half",
+    }).catch(() => undefined);
+    await Bun.sleep(50);
+    const refused = await f.api("/api/login", "", { token: "wrong" });
+    expect([refused.status, await refused.json()]).toEqual([429, { code: "too_many_requests", message: "Too many sign-in attempts; try again later" }]);
+    holding.abort();
+    await held;
+    await untilAsync(async () => (await f.api("/api/login", "", { token: "wrong" })).status === 401, "the held sign-in to end its count");
+  });
+});
+
+describe("a browser's request history over HTTP", () => {
+  test("lists what the browser asked, dismisses an outcome once it is over, and says why it can't otherwise", async () => {
+    const f = await fixture(); f.web.activate();
+    const { cookie } = await f.login();
+    const listed = await f.api("/api/requests/list", cookie);
+    const history = await listed.json() as { requests: unknown[]; max_records: number; max_result_bytes: number };
+    expect([listed.status, history.requests, typeof history.max_records, typeof history.max_result_bytes]).toEqual([200, [], "number", "number"]);
+    const unknown = await f.api("/api/requests/nothing-here", cookie);
+    expect([unknown.status, await unknown.json()]).toEqual([404, { code: "not_found", message: "Unknown request history endpoint" }]);
+    const missing = await f.api(`/api/requests/${crypto.randomUUID()}/acknowledge`, cookie);
+    expect([missing.status, await missing.json()]).toEqual([404, { code: "not_found", message: "Request outcome missing or expired" }]);
+    const browser = connectBrowser(f.web.origin, cookie);
+    await browser.attach();
+    const rid = crypto.randomUUID();
+    browser.send({ type: "message", rid, text: "hello" });
+    await until(() => f.routed.some((route) => route.kind === "engine" && route.meta.rid === rid), "the request to reach the daemon");
+    const record = required((await (await f.api("/api/requests/list", cookie)).json() as { requests: { id: string; rid: string }[] }).requests.find((entry) => entry.rid === rid));
+    const running = await f.api(`/api/requests/${record.id}/acknowledge`, cookie);
+    expect([running.status, await running.json()]).toEqual([409, { code: "invalid_request", message: "Wait for this request to finish before dismissing it" }]);
+    const route = required(f.routed.find((entry) => entry.kind === "engine" && entry.meta.rid === rid));
+    if (route.kind !== "engine") throw new Error("not a message");
+    await f.finish(route.meta.session.sessionId, { type: "request_finished", rid, outcome: "completed" });
+    await browser.frame("request_finished", rid);
+    const done = await f.api(`/api/requests/${record.id}/acknowledge`, cookie);
+    expect([done.status, await done.text()]).toEqual([204, ""]);
+    const broken = spyOn(RequestHistory.prototype, "acknowledge").mockImplementation(() => { throw new Error("the disk is gone"); });
+    try {
+      const unavailable = await f.api(`/api/requests/${record.id}/acknowledge`, cookie);
+      expect([unavailable.status, await unavailable.json()]).toEqual([503, { code: "unavailable", message: "Request recovery storage is unavailable; retain unreviewed outcomes and try again" }]);
+    } finally { broken.mockRestore(); }
+    const fetched = await fetch(`${f.web.origin}/api/requests/list`, { headers: { origin: f.web.origin, cookie } });
+    expect([fetched.status, await fetched.json()]).toEqual([404, { code: "not_found", message: "Unknown browser endpoint" }]);
+  });
+});
+
+describe("a browser's socket", () => {
+  test("is limited to the daemon's connections, answers in the page's protocol, needs an upgrade, and lets go when closed", async () => {
+    const f = await fixture({ config: { ...defaultWebConfig(), enabled: true, bind_addr: "127.0.0.1:0", max_connections: 1 } }); f.web.activate();
+    const { cookie } = await f.login();
+    const plain = await fetch(`${f.web.origin}/api/swp`, { headers: { origin: f.web.origin, cookie, "sec-websocket-protocol": WEB_SUBPROTOCOL } });
+    expect([plain.status, await plain.json()]).toEqual([400, { code: "invalid_request", message: "Expected a WebSocket upgrade" }]);
+    const browser = connectBrowser(f.web.origin, cookie);
+    await browser.attach();
+    expect(browser.socket.protocol).toBe(WEB_SUBPROTOCOL);
+    const second = await fetch(`${f.web.origin}/api/swp`, { headers: { origin: f.web.origin, cookie, "sec-websocket-protocol": WEB_SUBPROTOCOL, upgrade: "websocket", connection: "Upgrade", "sec-websocket-key": "dGhlIHNhbXBsZSBub25jZQ==", "sec-websocket-version": "13" } });
+    expect([second.status, await second.json()]).toEqual([429, { code: "too_many_requests", message: "Browser connection limit reached" }]);
+    await browser.close();
+    await until(() => f.controls.some((control) => control.kind === "session_disconnected"), "the closed socket to let go");
+  });
+});
+
+describe("a request that fails inside the daemon", () => {
+  test("a body too large is refused, and anything else is the daemon's own failure, for a browser and for a device alike", async () => {
+    const f = await fixture(); f.web.activate();
+    const { cookie } = await f.login();
+    const big = { name: "x".repeat(70_000), operations: ["presence"] };
+    const asBrowser = await f.api("/api/devices/automation", cookie, big);
+    const asDevice = await fetch(`${f.web.address}/api/devices/automation`, { method: "POST", body: JSON.stringify(big), headers: { authorization: `Bearer ${TOKEN}`, "content-type": "application/json" } });
+    for (const answer of [asBrowser, asDevice]) expect([answer.status, await answer.json()]).toEqual([413, { code: "invalid_request", message: "Request body is too large" }]);
+    const failing = spyOn(LoginCodes.prototype, "create").mockImplementation(() => { throw new Error("no randomness left"); });
+    try {
+      const browserCode = await f.api("/api/login-code", cookie);
+      const deviceCode = await fetch(`${f.web.address}/api/login-code`, { method: "POST", headers: { authorization: `Bearer ${TOKEN}` } });
+      for (const answer of [browserCode, deviceCode]) expect([answer.status, await answer.json()]).toEqual([503, { code: "unavailable", message: "The daemon couldn’t complete this request" }]);
+    } finally { failing.mockRestore(); }
+    const reading = spyOn(WebSessions.prototype, "read").mockImplementation(() => { throw new Error("the cookie jar broke"); });
+    try {
+      const broken = await fetch(`${f.web.origin}/api/pictures/p.png`, { headers: { cookie } });
+      expect([broken.status, await broken.json()]).toEqual([500, { code: "unavailable", message: "Browser transport error" }]);
+    } finally { reading.mockRestore(); }
+  });
+
+  test("a daemon that keeps no sign-ins or transfers says so", async () => {
+    const f = await fixture(); f.web.activate();
+    const asked = [
+      await fetch(`${f.web.address}/api/sign-in`, { method: "POST", body: JSON.stringify({ name: "desk", secret: "s".repeat(40) }), headers: { "content-type": "application/json" } }),
+      await fetch(`${f.web.address}/api/devices/automation`, { method: "POST", body: JSON.stringify({ name: "desk", operations: ["presence"] }), headers: { authorization: `Bearer ${TOKEN}`, "content-type": "application/json" } }),
+    ];
+    for (const answer of asked) expect([answer.status, await answer.json()]).toEqual([503, { code: "unavailable", message: "This daemon keeps no device sign-ins" }]);
+    const transfers = [
+      await fetch(`${f.web.address}/api/transfers/${crypto.randomUUID()}`, { headers: { authorization: `Bearer ${TOKEN}` } }),
+      await fetch(`${f.web.address}/api/transfers`, { method: "POST", body: "x", headers: { authorization: `Bearer ${TOKEN}`, "content-type": "application/octet-stream" } }),
+    ];
+    for (const answer of transfers) expect([answer.status, await answer.json()]).toEqual([503, { code: "unavailable", message: "This daemon keeps no archive transfers" }]);
+  });
+});
+
+describe("stopping the web listener", () => {
+  test("stopping twice is one stop, and a device still following is let go once the grace is up", async () => {
+    const f = await fixture(); f.web.activate();
+    const events = await fetch(`${f.web.address}/api/events`, { headers: { authorization: `Bearer ${TOKEN}` } });
+    const reader = required(events.body).getReader();
+    await reader.read();
+    const stopping = f.web.stop();
+    expect(f.web.stop()).toBe(stopping);
+    await stopping;
+    const ended = await Promise.race([(async () => { try { for (let next = await reader.read(); !next.done; next = await reader.read()); } catch { return "cut off"; } return "ended"; })(), Bun.sleep(1_500).then(() => "still open")]);
+    expect(ended).not.toBe("still open");
+  });
 });

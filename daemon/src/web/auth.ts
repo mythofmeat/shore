@@ -188,6 +188,27 @@ export class LoginCodes {
     this.#codes.delete(id);
     return expiresAt !== undefined && expiresAt > Date.now();
   }
+}
 
-  clear(): void { this.#codes.clear(); }
+export class LoginFailures {
+  readonly #failures = new Map<string, { start: number; count: number }>();
+
+  constructor(readonly perMinute: number, readonly clients = 4096) {}
+
+  refused(client: string, now = Date.now()): boolean {
+    for (const [known, failure] of this.#failures) if (now - failure.start >= 60_000) this.#failures.delete(known);
+    return (this.#failures.get(client)?.count ?? 0) >= this.perMinute;
+  }
+
+  failed(client: string, now = Date.now()): void {
+    const failure = this.#failures.get(client) ?? { start: now, count: 0 };
+    failure.count += 1;
+    if (!this.#failures.has(client) && this.#failures.size >= this.clients) {
+      const oldest = this.#failures.keys().next().value;
+      if (oldest !== undefined) this.#failures.delete(oldest);
+    }
+    this.#failures.set(client, failure);
+  }
+
+  succeeded(client: string): void { this.#failures.delete(client); }
 }

@@ -1,6 +1,6 @@
 import { readFileSync } from "node:fs";
+import { required } from "../util/required.ts";
 import type { WebConfig } from "../config/app.ts";
-import type { WebLoginCode } from "../protocol/WebLoginCode.ts";
 import type { WebProblem } from "../protocol/WebProblem.ts";
 import type { WebSessionInfo } from "../protocol/WebSessionInfo.ts";
 import type { ArchiveSpool } from "../commands/archive_spool.ts";
@@ -9,12 +9,12 @@ import type { WebTransfer } from "../protocol/WebTransfer.ts";
 import type { Server } from "../swp/server.ts";
 import type { WebDevice } from "../protocol/WebDevice.ts";
 import type { WebDeviceList } from "../protocol/WebDeviceList.ts";
-import { browserName, LoginCodes, WebSessions, type WebSession } from "./auth.ts";
+import { browserName, LoginCodes, LoginFailures, WebSessions, type WebSession } from "./auth.ts";
 import { WEB_CONTRACT, WEB_PROTOCOL, WEB_SUBPROTOCOL } from "./contract.ts";
 import { validWebLogin, validWebLoginCode, validWebProblem, validWebSession, validWebArchiveExport, validWebArchiveInfo, validWebArchiveList, validWebRequestList, validWebPreferences, validWebAutomationKey, validWebDeviceChoice, validWebDeviceList, validWebNewDevice, validWebSignInDecision, validWebSignInPoll, validWebSignInStart } from "./contracts.ts";
-import { bearerToken, DeviceNameError, DeviceStore, principalName, principalOwner, SignInRequests, type Principal } from "./devices.ts";
+import { bearerToken, DEVICE_NAME_RULE, deviceName, DeviceStore, principalName, principalOwner, SignInRequests, type Principal } from "./devices.ts";
 import { commandRefusal, CONNECTION_ONLY_OPERATIONS, eventResponse, operationExists, operationResponse, refused } from "./operations.ts";
-import { DAEMON_VERSION, pageOrigin, readSmallJson, securityHeaders, webBinding, WebBodyTooLarge, WEB_LIMITS } from "./policy.ts";
+import { checked, DAEMON_VERSION, pageOrigin, readSmallJson, securityHeaders, webBinding, WebBodyTooLarge, WEB_LIMITS } from "./policy.ts";
 import { socketState, WebSocketPeers, type WebSocketState } from "./socket.ts";
 import { browserAssets } from "./assets.generated.ts";
 
@@ -81,7 +81,7 @@ export function startWebServer(options: WebServerOptions): RunningWebServer {
   let closeSessions: (() => void) | undefined;
   let active = false;
   let stopping: Promise<void> | undefined;
-  const loginFailures = new Map<string, { start: number; count: number }>();
+  const loginFailures = new LoginFailures(WEB_LIMITS.loginAttemptsPerMinute);
   const codes = new LoginCodes(options.loginCodeMs ?? WEB_LIMITS.loginCodeMs, WEB_LIMITS.loginCodes);
   let loginRequests = 0;
   let archives: ArchiveTransfers;
@@ -101,9 +101,7 @@ export function startWebServer(options: WebServerOptions): RunningWebServer {
       ...(device.operations === undefined ? {} : { operations: [...device.operations] }),
       current: principal.kind === "device" && principal.device.id === device.id,
     }));
-    const list: WebDeviceList = { devices: [...browsers, ...others], requests: signIns.pending() };
-    if (!validWebDeviceList(list)) throw new Error("Invalid device list");
-    return list;
+    return checked(validWebDeviceList, { devices: [...browsers, ...others], requests: signIns.pending() }, "device list");
   };
 
   const signIn = async (request: Request, url: URL): Promise<Response> => {
@@ -112,11 +110,9 @@ export function startWebServer(options: WebServerOptions): RunningWebServer {
     const body = await jsonBody(request);
     if (url.pathname === "/api/sign-in") {
       if (!validWebSignInStart(body) || body.secret.length < 32) return problem(400, "invalid_request", "Name this device and send a secret of at least 32 characters");
-      let pending;
-      try { pending = signIns.start(body.name, body.secret); } catch (error) {
-        if (error instanceof DeviceNameError) return problem(400, "invalid_request", error.message);
-        throw error;
-      }
+      const name = deviceName(body.name);
+      if (name === undefined) return problem(400, "invalid_request", DEVICE_NAME_RULE);
+      const pending = signIns.start(name, body.secret);
       if (pending === undefined) return problem(429, "too_many_requests", "Too many devices are waiting to sign in; approve or refuse them, or wait five minutes");
       return Response.json(pending, { headers: securityHeaders() });
     }
@@ -176,9 +172,7 @@ export function startWebServer(options: WebServerOptions): RunningWebServer {
     if (request.method !== "POST") return undefined;
     if (url.pathname === "/api/login-code") {
       const created = codes.create();
-      const body: WebLoginCode = { code: created.code, expires_at: created.expiresAt };
-      if (!validWebLoginCode(body)) throw new Error("Invalid browser sign-in code response");
-      return Response.json(body, { headers: securityHeaders() });
+      return Response.json(checked(validWebLoginCode, { code: created.code, expires_at: created.expiresAt }, "browser sign-in code response"), { headers: securityHeaders() });
     }
     if (url.pathname === "/api/devices/list") return Response.json(deviceList(principal), { headers: securityHeaders() });
     if (url.pathname === "/api/devices/automation") {
@@ -187,15 +181,11 @@ export function startWebServer(options: WebServerOptions): RunningWebServer {
       const unknown = body.operations.filter((name) => !operationExists(name) || CONNECTION_ONLY_OPERATIONS.has(name));
       if (body.operations.length === 0 || unknown.length > 0) return problem(400, "invalid_request", unknown.length > 0 ? `A key can't run ${unknown.join(", ")}` : "Choose at least one operation the key may run");
       if (devices === undefined) return problem(503, "unavailable", "This daemon keeps no device sign-ins");
-      let created;
-      try { created = devices.create("automation", body.name, body.operations); } catch (error) {
-        if (error instanceof DeviceNameError) return problem(400, "invalid_request", error.message);
-        throw error;
-      }
+      const name = deviceName(body.name);
+      if (name === undefined) return problem(400, "invalid_request", DEVICE_NAME_RULE);
+      const created = devices.create("automation", name, body.operations);
       const device = deviceList(principal).devices.find((entry) => entry.id === created.device.id);
-      const answer = { device, token: created.token };
-      if (!validWebNewDevice(answer)) throw new Error("Invalid automation key response");
-      return Response.json(answer, { headers: securityHeaders() });
+      return Response.json(checked(validWebNewDevice, { device, token: created.token }, "automation key response"), { headers: securityHeaders() });
     }
     if (url.pathname === "/api/devices/revoke") {
       const body = await jsonBody(request);
@@ -218,9 +208,7 @@ export function startWebServer(options: WebServerOptions): RunningWebServer {
     port: binding.port,
     idleTimeout: 10,
     maxRequestBodySize: Number.MAX_SAFE_INTEGER,
-    ...(config.tls_cert === undefined || config.tls_key === undefined ? {} : {
-      tls: { cert: readFileSync(config.tls_cert), key: readFileSync(config.tls_key) },
-    }),
+    ...(config.tls_cert === undefined ? {} : { tls: { cert: readFileSync(config.tls_cert), key: readFileSync(required(config.tls_key)) } }),
     async fetch(request, http) {
       const url = new URL(request.url);
       if (!active) return problem(503, "unavailable", "The daemon is not ready");
@@ -262,8 +250,6 @@ export function startWebServer(options: WebServerOptions): RunningWebServer {
       const secureCookie = page.origin.startsWith("https:");
 
       if (url.pathname === "/api/login" && request.method === "POST") {
-        const now = Date.now();
-        for (const [client, failure] of loginFailures) if (now - failure.start >= 60_000) loginFailures.delete(client);
         const client = http.requestIP(request)?.address ?? "unknown";
         if (loginRequests >= config.max_connections) {
           return problem(429, "too_many_requests", "Too many sign-in attempts; try again later");
@@ -275,21 +261,15 @@ export function startWebServer(options: WebServerOptions): RunningWebServer {
             return problem(400, "invalid_request", "Supply a token to sign in");
           }
           if (!codes.redeem(body.token)) {
-            const failures = loginFailures.get(client) ?? { start: now, count: 0 };
-            if (failures.count >= WEB_LIMITS.loginAttemptsPerMinute) return problem(429, "too_many_requests", "Too many sign-in attempts; try again later");
-            failures.count += 1;
-            if (!loginFailures.has(client) && loginFailures.size >= 4096) {
-              const oldest = loginFailures.keys().next().value;
-              if (oldest !== undefined) loginFailures.delete(oldest);
-            }
-            loginFailures.set(client, failures);
+            if (loginFailures.refused(client)) return problem(429, "too_many_requests", "Too many sign-in attempts; try again later");
+            loginFailures.failed(client);
             return problem(401, "unauthorized", "The token was rejected");
           }
-          loginFailures.delete(client);
+          loginFailures.succeeded(client);
           const previous = sessions.read(request, secureCookie);
           if (previous !== undefined) sessions.revoke(previous);
           const session = sessions.create(browserName(request.headers.get("user-agent")));
-          if (session === undefined) return problem(429, "too_many_requests", "Browser session limit reached");
+          if (session === undefined) return problem(503, "unavailable", "The daemon is stopping");
           const headers = securityHeaders();
           headers.set("set-cookie", sessions.cookie(session, secureCookie));
           return Response.json(sessionInfo(session, config.max_queued_bytes), { headers });
@@ -306,9 +286,7 @@ export function startWebServer(options: WebServerOptions): RunningWebServer {
       if (url.pathname.startsWith("/api/requests") && request.method === "POST") {
         try {
           if (url.pathname === "/api/requests/list") {
-            const result = requests.list(session);
-            if (!validWebRequestList(result)) throw new Error("Invalid request history");
-            return Response.json(result, { headers: securityHeaders() });
+            return Response.json(checked(validWebRequestList, requests.list(session), "request history"), { headers: securityHeaders() });
           }
           const match = /^\/api\/requests\/([a-f0-9-]{36})\/acknowledge$/.exec(url.pathname);
           if (match?.[1] === undefined) return problem(404, "not_found", "Unknown request history endpoint");
@@ -322,9 +300,7 @@ export function startWebServer(options: WebServerOptions): RunningWebServer {
       if (url.pathname.startsWith("/api/archives") && request.method === "POST") {
         try {
           if (url.pathname === "/api/archives/list") {
-            const result = archives.list(session);
-            if (!validWebArchiveList(result)) throw new Error("Invalid archive list");
-            return Response.json(result, { headers: securityHeaders() });
+            return Response.json(checked(validWebArchiveList, archives.list(session), "archive list"), { headers: securityHeaders() });
           }
           const match = /^\/api\/archives\/([a-f0-9-]{36})\/(status|import|download|remove)$/.exec(url.pathname);
           if (match?.[1] !== undefined && match[2] === "download") { http.timeout(request, 0); return await archives.download(session, match[1], request); }
@@ -338,8 +314,8 @@ export function startWebServer(options: WebServerOptions): RunningWebServer {
           } else if (match?.[1] !== undefined && match[2] === "status") result = archives.get(session, match[1]);
           else if (match?.[1] !== undefined && match[2] === "import") result = archives.import(session, match[1]);
           else return problem(404, "not_found", "Unknown archive transfer endpoint");
-          if (!validWebArchiveInfo(result)) throw new Error("Invalid archive transfer response");
-          return Response.json(result, { status: result.phase === "importing" || result.phase === "exporting" ? 202 : 200, headers: securityHeaders() });
+          const info = checked(validWebArchiveInfo, result, "archive transfer response");
+          return Response.json(info, { status: info.phase === "importing" || info.phase === "exporting" ? 202 : 200, headers: securityHeaders() });
         } catch (error) {
           if (error instanceof WebBodyTooLarge) return problem(413, "invalid_request", error.message);
           if (error instanceof ArchiveTransferError) return problem(error.status, error.status === 404 ? "not_found" : error.status === 429 ? "too_many_requests" : error.status === 401 ? "unauthorized" : "invalid_request", error.message);
@@ -404,7 +380,7 @@ export function startWebServer(options: WebServerOptions): RunningWebServer {
     recovery = options.recovery === undefined ? undefined : new WebRecovery(options.recovery, origin);
     sessions = new WebSessions(origin, config.max_connections * 2, options.sessionLifetimeMs ?? config.session_lifetime.asMillis(), recovery);
     closeSessions = () => sessions.close();
-    archives = new ArchiveTransfers(options.server, () => active && stopping === undefined, options.archiveLimits, recovery);
+    archives = new ArchiveTransfers(options.server, () => active, options.archiveLimits, recovery);
     archives.restore(sessions);
     requests = new RequestHistory(recovery);
     requests.restore(sessions);
@@ -420,8 +396,6 @@ export function startWebServer(options: WebServerOptions): RunningWebServer {
     stop() {
       if (stopping !== undefined) return stopping;
       active = false;
-      codes.clear();
-      signIns.clear();
       const drained = Promise.all([peers.stop(), archives.close()]);
       sessions.close();
       stopping = (async () => {
