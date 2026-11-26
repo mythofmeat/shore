@@ -173,8 +173,11 @@ test("Add a file lists the workspace's files to search, marks the ones already p
   await type(picker?.querySelector("input[type=search]"), "nowhere");
   expect([options(), more()]).toEqual([[], "No files match."]);
   await type(picker?.querySelector("input[type=search]"), "lamp");
+  const box = field(document.body, "Pinned in the prompt") as HTMLTextAreaElement;
+  expect(document.activeElement === box).toBe(false);
   await click(picker?.querySelector("[role=option]"));
-  expect([dialog("Pin a file"), (field(document.body, "Pinned in the prompt") as HTMLTextAreaElement).value]).toEqual([undefined, "notes/plan.md\nnotes/Lamp.md"]);
+  expect([dialog("Pin a file"), box.value]).toEqual([undefined, "notes/plan.md\nnotes/Lamp.md"]);
+  expect([document.activeElement === box, box.selectionStart, box.selectionEnd]).toEqual([true, box.value.length, box.value.length]);
   await view.unmount();
 });
 

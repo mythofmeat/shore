@@ -27,6 +27,10 @@ fn prompt() -> serde_json::Value {
 fn thread_prompt_shows_each_part_of_the_system_prompt_and_what_each_pin_shows() {
     let (output, frames) = asked(prompt(), &["thread", "prompt", "story"]);
     assert!(output.status.success(), "{output:?}");
+    assert!(
+        String::from_utf8_lossy(&output.stdout).starts_with("── SOUL.md"),
+        "{output:?}"
+    );
     assert_eq!(
         printed(&output),
         "── SOUL.md · changed in the workspace since; --refresh shows the new version ────────\n  Frank keeps the lighthouse.\n  He writes at night.\n\n── thread_pins ─────────────────────────────────────────────────────────────────\n  Pinned here.\n\n  ## notes/plan.md\n\n  Chapter three.\n\n── pins ────────────────────────────────────────────────────────────────────────\n  notes/plan.md          14 B  changed in the workspace since; --refresh shows the new version\n  stories/long.md        32.5 KB, cut: past what a thread's pins can take together\n  stories/longer.md      1 KB, left out: past what a thread's pins can take together\n  notes/gone.md          empty, or not in the workspace\n  !git log --oneline -5  hasn't run yet; it runs with the next message"

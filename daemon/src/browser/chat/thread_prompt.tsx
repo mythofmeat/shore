@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState, type ReactNode } from "react";
+import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import type { ThreadPinStatus } from "../../protocol/ThreadPinStatus.ts";
 import type { ThreadPromptView } from "../../protocol/ThreadPromptView.ts";
 import type { ThreadView } from "../../protocol/ThreadView.ts";
@@ -75,15 +75,24 @@ function FilePicker({ pinned, pick, close }: { pinned: readonly string[]; pick: 
 
 export function PinsField({ value, change, note, hint, children }: { value: string; change: (value: string) => void; note: string; hint?: string; children?: ReactNode }) {
   const [picking, setPicking] = useState(false);
+  const [picked, setPicked] = useState(0);
+  const box = useRef<HTMLTextAreaElement>(null);
   const pinned = threadPinList(value);
+  useEffect(() => {
+    const field = box.current;
+    if (picked === 0 || field === null) return;
+    field.focus();
+    field.setSelectionRange(field.value.length, field.value.length);
+    field.scrollTop = field.scrollHeight;
+  }, [picked]);
   return <>
-    <label className="field"><span>Pinned in the prompt <span className="muted">({note})</span></span><textarea className="input textarea mono" rows={3} wrap="off" placeholder={"stories/lighthouse.md\n!git log --oneline -5\n[[lighthouse/]]"} value={value} onChange={(event) => change(event.target.value)} /></label>
+    <label className="field"><span>Pinned in the prompt <span className="muted">({note})</span></span><textarea ref={box} className="input textarea mono" rows={3} wrap="off" placeholder={"stories/lighthouse.md\n!git log --oneline -5\n[[lighthouse/]]"} value={value} onChange={(event) => change(event.target.value)} /></label>
     {hint === undefined ? null : <p className="form-hint">{hint}</p>}
     <div className="pin-actions">
       <button type="button" className="button" onClick={() => setPicking(true)}>Add a file…</button>
       {children}
     </div>
-    {picking ? <FilePicker pinned={pinned} close={() => setPicking(false)} pick={(file) => change([...pinned, file].join("\n"))} /> : null}
+    {picking ? <FilePicker pinned={pinned} close={() => setPicking(false)} pick={(file) => { change([...pinned, file].join("\n")); setPicked((count) => count + 1); }} /> : null}
   </>;
 }
 
