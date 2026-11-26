@@ -18,7 +18,7 @@ import { LoginCodes, LoginFailures, WebSessions, type WebSession } from "../src/
 import { checked, WEB_LIMITS } from "../src/web/policy.ts";
 import { RequestHistory } from "../src/web/requests.ts";
 import { validWebLoginCode } from "../src/web/contracts.ts";
-import { startWebServer, type WebServerOptions } from "../src/web/server.ts";
+import { startWebServer, statusProblem, type WebServerOptions } from "../src/web/server.ts";
 import { outcomeOf } from "./support/outcome.ts";
 import { mkdir, mkdtemp, readFile, readdir, rm, stat, writeFile, chmod, symlink } from "node:fs/promises";
 import { dirname, join, basename } from "node:path";
@@ -31,6 +31,7 @@ import { findSentPicture, sentPicturesDir } from "../src/storage/sent_pictures.t
 import { sizedImage } from "./support/sized_image.ts";
 import { testTmp } from "./support/tmp.ts";
 import { required } from "../src/util/required.ts";
+import { handlesUnder } from "./support/handles.ts";
 
 const cleanups: (() => Promise<unknown> | void)[] = [];
 afterEach(async () => { for (const cleanup of cleanups.splice(0).reverse()) await cleanup(); });
@@ -547,6 +548,92 @@ test("HTTP archive endpoints authenticate and enforce origin before attaching a 
   expect(f.count()).toBe(1);
   expect((await post("/logout", cookie)).status).toBe(204);
   expect((await post(`/archives/${info.id}/status`, cookie)).status).toBe(401);
+});
+
+test("a refusal's code follows its status: signed out, not found and too many have their own, and anything else is an invalid request", async () => {
+  const answers = await Promise.all([401, 404, 429, 409, 413].map(async (status) => { const answer = statusProblem(status, "why"); return [answer.status, await answer.json()]; }));
+  expect(answers).toEqual([
+    [401, { code: "unauthorized", message: "why" }], [404, { code: "not_found", message: "why" }], [429, { code: "too_many_requests", message: "why" }],
+    [409, { code: "invalid_request", message: "why" }], [413, { code: "invalid_request", message: "why" }],
+  ]);
+});
+
+test("an archive goes the whole way over HTTP: exported, downloaded, removed, with exact refusals for what it can't do", async () => {
+  const f = await archiveFixture();
+  const web = startWebServer({ server: f.server, authenticate: (token) => token === "archive-token", config: { ...defaultWebConfig(), enabled: true, bind_addr: "127.0.0.1:0" }, archiveLimits: { uploadBytes: 8192 } });
+  cleanups.push(() => web.stop()); web.activate();
+  const post = (path: string, cookie: string, body: NonNullable<RequestInit["body"]> = "{}", headers: Record<string, string> = {}) => fetch(`${web.origin}/api${path}`, { method: "POST", body, headers: { cookie, origin: web.origin, "content-type": "application/json", ...headers } });
+  const { code } = await (await fetch(`${web.origin}/api/login-code`, { method: "POST", headers: { authorization: "Bearer archive-token" } })).json() as WebLoginCode;
+  const cookie = (await post("/login", "", JSON.stringify({ token: code }))).headers.get("set-cookie")?.split(";")[0] ?? "";
+  const exporting = await post("/archives/export", cookie, '{"character":"ada"}');
+  const info = await exporting.json() as { id: string; phase: string };
+  expect([exporting.status, info.phase]).toEqual([202, "exporting"]);
+  await f.finish(await f.next());
+  await untilAsync(async () => ((await (await post(`/archives/${info.id}/status`, cookie)).json()) as { phase: string }).phase === "ready", "the export to be ready");
+  const downloaded = await post(`/archives/${info.id}/download`, cookie);
+  expect([downloaded.status, await downloaded.text()]).toEqual([200, "download archive"]);
+  const uploaded = await (await post("/archives", cookie, "local archive bytes", { "content-type": "application/octet-stream", "x-shore-filename": "picked.tar.gz" })).json() as { id: string };
+  const removed = await post(`/archives/${uploaded.id}/remove`, cookie);
+  expect([removed.status, await removed.text()]).toEqual([204, ""]);
+  const refusals: [Response, number, string, string][] = [
+    [await post(`/archives/${uploaded.id}/status`, cookie), 404, "not_found", "Archive transfer is missing or expired"],
+    [await post(`/archives/${uploaded.id}/sideways`, cookie), 404, "not_found", "Unknown archive transfer endpoint"],
+    [await post("/archives", cookie, "x".repeat(8193), { "content-type": "application/octet-stream" }), 413, "invalid_request", "Archive exceeds the upload size limit"],
+    [await post("/archives/export", cookie, JSON.stringify({ character: "x".repeat(5000) })), 413, "invalid_request", "Request body is too large"],
+  ];
+  for (const [answer, status, problemCode, message] of refusals) expect([answer.status, await answer.json()]).toEqual([status, { code: problemCode, message }]);
+  const broken = spyOn(ArchiveTransfers.prototype, "list").mockImplementation(() => { throw new Error("the records are gone"); });
+  try {
+    const failed = await post("/archives/list", cookie);
+    expect([failed.status, await failed.json()]).toEqual([400, { code: "invalid_request", message: "Archive transfer could not be completed" }]);
+  } finally { broken.mockRestore(); }
+});
+
+async function freePort(): Promise<number> {
+  const probe = Bun.serve({ port: 0, hostname: "127.0.0.1", fetch: () => new Response() });
+  const port = probe.port ?? 0;
+  await probe.stop(true);
+  return port;
+}
+
+function recoveringServer(recovery: WebRecoveryOptions, port: number, sessionLifetimeMs = 60_000) {
+  const swp = new Server({ handshake: { hello: async () => ({ characters: [{ name: "ada" }] }), history: async (selectedCharacter) => ({ messages: [], previousSegment: null, config: {}, selectedCharacter, selectedThread: "main", revision: 0 }), select: async (character) => ({ character, thread: null }) } });
+  const web = startWebServer({ server: swp, authenticate: (token) => token === "recovery-token", config: { ...defaultWebConfig(), enabled: true, bind_addr: `127.0.0.1:${String(port)}` }, recovery, sessionLifetimeMs });
+  web.activate();
+  return { swp, web, post: (path: string, cookie: string, body: NonNullable<RequestInit["body"]> = "{}", headers: Record<string, string> = {}) => fetch(`${web.origin}/api${path}`, { method: "POST", body, headers: { cookie, origin: web.origin, "content-type": "application/json", ...headers } }) };
+}
+
+test("a daemon that restarts keeps its browsers signed in and remembers their archive transfers", async () => {
+  const recovery = await recoveryOptions();
+  const port = await freePort();
+  const first = recoveringServer(recovery, port);
+  const { code } = await (await fetch(`${first.web.origin}/api/login-code`, { method: "POST", headers: { authorization: "Bearer recovery-token" } })).json() as WebLoginCode;
+  const cookie = (await first.post("/login", "", JSON.stringify({ token: code }))).headers.get("set-cookie")?.split(";")[0] ?? "";
+  const uploaded = await (await first.post("/archives", cookie, "local archive bytes", { "content-type": "application/octet-stream", "x-shore-filename": "picked.tar.gz" })).json() as { id: string };
+  await first.web.stop(); first.swp.stop();
+  const second = recoveringServer(recovery, port);
+  cleanups.push(async () => { await second.web.stop(); second.swp.stop(); });
+  expect((await second.post("/session", cookie)).status).toBe(200);
+  const listed = await (await second.post("/archives/list", cookie)).json() as { archives: { id: string; phase: string }[] };
+  expect(listed.archives.map((archive) => [archive.id, archive.phase])).toEqual([[uploaded.id, "failed"]]);
+});
+
+test("a listener that fails to start lets go of its port, its stored sign-ins and its recovery store, and says why", async () => {
+  const recovery = await recoveryOptions();
+  const port = await freePort();
+  const first = recoveringServer(recovery, port, 300);
+  const { code } = await (await fetch(`${first.web.origin}/api/login-code`, { method: "POST", headers: { authorization: "Bearer recovery-token" } })).json() as WebLoginCode;
+  expect((await first.post("/login", "", JSON.stringify({ token: code }))).status).toBe(200);
+  await first.web.stop(); first.swp.stop();
+  const restoring = spyOn(ArchiveTransfers.prototype, "restore").mockImplementation(() => { throw new Error("the archive records are unreadable"); });
+  try {
+    expect(() => recoveringServer(recovery, port, 300)).toThrow("the archive records are unreadable");
+  } finally { restoring.mockRestore(); }
+  await Bun.sleep(400);
+  expect([handlesUnder(recovery.dataDir), handlesUnder(recovery.cacheDir)]).toEqual([0, 0]);
+  const again = Bun.serve({ port, hostname: "127.0.0.1", fetch: () => new Response("free") });
+  expect(await (await fetch(`http://127.0.0.1:${String(port)}/`)).text()).toBe("free");
+  await again.stop(true);
 });
 
 async function workspace(): Promise<{ root: string; dir: string; data: string }> {

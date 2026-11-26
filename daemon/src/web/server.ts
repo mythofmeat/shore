@@ -53,6 +53,12 @@ function problem(status: number, code: WebProblem["code"], message: string): Res
   return Response.json(body, { status, headers: securityHeaders() });
 }
 
+const STATUS_CODES: Readonly<Record<number, WebProblem["code"]>> = { 401: "unauthorized", 404: "not_found", 429: "too_many_requests" };
+
+export function statusProblem(status: number, message: string): Response {
+  return problem(status, STATUS_CODES[status] ?? "invalid_request", message);
+}
+
 const OWNER: Principal = { kind: "owner" };
 
 async function jsonBody(request: Request): Promise<unknown> {
@@ -293,7 +299,7 @@ export function startWebServer(options: WebServerOptions): RunningWebServer {
           requests.acknowledge(session, match[1]);
           return new Response(null, { status: 204, headers: securityHeaders() });
         } catch (error) {
-          if (error instanceof RequestHistoryError) return problem(error.status, error.status === 404 ? "not_found" : "invalid_request", error.message);
+          if (error instanceof RequestHistoryError) return statusProblem(error.status, error.message);
           return problem(503, "unavailable", "Request recovery storage is unavailable; retain unreviewed outcomes and try again");
         }
       }
@@ -318,7 +324,7 @@ export function startWebServer(options: WebServerOptions): RunningWebServer {
           return Response.json(info, { status: info.phase === "importing" || info.phase === "exporting" ? 202 : 200, headers: securityHeaders() });
         } catch (error) {
           if (error instanceof WebBodyTooLarge) return problem(413, "invalid_request", error.message);
-          if (error instanceof ArchiveTransferError) return problem(error.status, error.status === 404 ? "not_found" : error.status === 429 ? "too_many_requests" : error.status === 401 ? "unauthorized" : "invalid_request", error.message);
+          if (error instanceof ArchiveTransferError) return statusProblem(error.status, error.message);
           return problem(400, "invalid_request", "Archive transfer could not be completed");
         }
       }
