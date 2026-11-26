@@ -3,7 +3,7 @@ import { afterEach, expect, test } from "bun:test";
 import type { Message } from "../../src/protocol/Message.ts";
 import type { SegmentSummary } from "../../src/protocol/SegmentSummary.ts";
 import { useApp } from "./app.ts";
-import { FakeSocket, HELLO, replace } from "./daemon.ts";
+import { daemonRequests, FakeSocket, HELLO, replace } from "./daemon.ts";
 import { acting, button, click, mount } from "./dom.ts";
 
 const app = useApp();
@@ -379,10 +379,12 @@ test("after an earlier page fails to load, going back to the thread doesn't jump
   expect([view.ids(), node.size.top]).toEqual([["m_1", "m_2"], 119]);
 });
 
-test("a request in flight when the connection dropped is listed until dismissed, and waiting for the daemon shows a spinner", async () => {
+test("a request in flight when the connection dropped is listed once the daemon says it is still running, until dismissed, and waiting for the daemon shows a spinner", async () => {
   const { conversation, workspace } = app.state();
   await acting(() => { void conversation.submit("message", { text: "lost" }).catch(() => undefined); });
   await settle();
+  const rid = FakeSocket.opened.at(-1)?.sent.findLast((request) => request["type"] === "message")?.["rid"];
+  if (typeof rid !== "string") throw new Error("the message was not sent");
   const served = pages({ first: { messages: [message("s_3", "user")], segment: segment(8), more: true } });
   const view = await transcript();
   await history([]);
@@ -400,7 +402,13 @@ test("a request in flight when the connection dropped is listed until dismissed,
   const socket = FakeSocket.opened.at(-1);
   await acting(() => { socket?.fire("open"); socket?.receive(HELLO); });
   await settle(20);
+  expect(view.host.querySelector(".notice-card"), "nothing is claimed in flight before the daemon is asked").toBeNull();
+  daemonRequests.push({ id: "lost", rid, operation: "message", label: "Send message", character: "ada", thread: "story", started_at: Date.now(), expires_at: Date.now() + 60_000, phase: "running", result_omitted: false });
+  await acting(() => { socket?.receive({ type: "history", messages: [], config: {}, revision: 1, selected_character: "ada", selected_thread: "story" }); });
+  await settle(20);
+  daemonRequests.splice(0);
   const notice = view.host.querySelector(".notice-card");
+  expect(notice?.querySelector(":scope > span")?.textContent).toBe("The connection dropped while a request was in flight. Shore keeps working on it, and this notice clears when it finishes.");
   const { Icon } = await import("../../src/browser/ui/icons.tsx");
   const alert = await mount(<Icon name="alert" size={16} />);
   expect(notice?.querySelector("svg")?.outerHTML).toBe(alert.host.innerHTML);

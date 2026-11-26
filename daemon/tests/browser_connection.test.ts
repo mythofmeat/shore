@@ -294,6 +294,90 @@ describe("staying connected", () => {
     link.connection.stop();
   });
 
+  test("after a sleep, the old socket is given up on before anything is written to it, and reconnected at once", async () => {
+    jest.useFakeTimers();
+    setSystemTime(new Date("2026-11-10T00:00:00Z"));
+    const link = await ready();
+    const before = link.connection.submit(MESSAGE, "r_before");
+    const lost = before.finished.then(() => "", (reason: unknown) => (reason as Error).name);
+    setSystemTime(new Date(Date.now() + 89_999));
+    expect(link.connection.live()).toBe(true);
+    setSystemTime(new Date(Date.now() + 1));
+    expect(() => link.connection.submit(MESSAGE, "r_after")).toThrow("Wait for Shore to reconnect before sending");
+    expect(link.socket.frames().map((frame) => (frame as { type: string; rid?: string }).rid ?? (frame as { type: string }).type)).toEqual(["hello", "r_before"]);
+    expect([link.statuses().at(-1), link.socket.closed]).toEqual(["reconnecting: This page was asleep; reconnecting", true]);
+    expect(await lost).toBe("InterruptedRequestError");
+    expect(link.connection.live()).toBe(false);
+    jest.advanceTimersByTime(0);
+    await settle();
+    expect(link.sockets, "it reconnects at once rather than after the retry delay").toHaveLength(2);
+  });
+
+  test("a Stop pressed after a sleep is not written to the old socket either", async () => {
+    jest.useFakeTimers();
+    setSystemTime(new Date("2026-11-10T00:00:00Z"));
+    const link = await ready();
+    setSystemTime(new Date(Date.now() + 90_000));
+    expect(() => link.connection.cancel()).toThrow("Cancellation needs an active connection");
+    expect(link.socket.frames().map((frame) => (frame as { type: string }).type)).toEqual(["hello"]);
+    expect([link.statuses().at(-1), link.socket.closed]).toEqual(["reconnecting: This page was asleep; reconnecting", true]);
+    link.connection.stop();
+  });
+
+  test("a page that hears from the daemon was awake, however late its own timer runs", async () => {
+    jest.useFakeTimers();
+    setSystemTime(new Date("2026-11-10T00:00:00Z"));
+    const link = await ready({ retryDelayMs: HOUR });
+    setSystemTime(new Date(Date.now() + 60_000));
+    link.socket.receive({ type: "ping" });
+    setSystemTime(new Date(Date.now() + 59_999));
+    jest.advanceTimersByTime(30_000);
+    expect(link.connection.status, "the timer ran 150 s after the last, but the daemon was heard 90 s before it").toBe("ready");
+    link.connection.stop();
+  });
+
+  test("a page that keeps running stays connected however quiet the daemon is, and a page whose timers stopped finds out on its own", async () => {
+    jest.useFakeTimers();
+    setSystemTime(new Date("2026-11-10T00:00:00Z"));
+    const link = await ready({ retryDelayMs: HOUR });
+    jest.advanceTimersByTime(6 * HOUR);
+    expect(link.connection.status).toBe("ready");
+    setSystemTime(new Date(Date.now() + 30_000));
+    jest.advanceTimersByTime(30_000);
+    expect(link.connection.status, "a tick a minute apart is throttling, not sleep").toBe("ready");
+    const seen = link.statuses().length;
+    setSystemTime(new Date(Date.now() + 59_999));
+    jest.advanceTimersByTime(30_000);
+    expect(link.connection.status).toBe("ready");
+    setSystemTime(new Date(Date.now() + 60_000));
+    jest.advanceTimersByTime(30_000);
+    expect(link.statuses().slice(seen)[0]).toBe("reconnecting: This page was asleep; reconnecting");
+    const quiet = await ready({ retryDelayMs: HOUR });
+    quiet.connection.stop();
+    link.connection.stop();
+    expect(jest.getTimerCount(), "a stopped connection keeps no watch").toBe(0);
+  });
+
+  test("a request made while the lost ones are reported is refused, and the connection reconnects once", async () => {
+    jest.useFakeTimers();
+    setSystemTime(new Date("2026-11-10T00:00:00Z"));
+    const link = await ready();
+    link.connection.submit(MESSAGE, "r_1");
+    const refused: string[] = [];
+    link.connection.subscribe((update) => {
+      if (update.kind !== "uncertain") return;
+      try { link.connection.submit(MESSAGE, "r_2"); } catch (error) { refused.push((error as Error).message); }
+    });
+    const sessions = () => link.calls.filter((call) => call.path === "/api/session").length;
+    const asked = sessions();
+    setSystemTime(new Date(Date.now() + 90_000));
+    expect(link.connection.live()).toBe(false);
+    expect(refused).toEqual(["Wait for Shore to reconnect before sending"]);
+    jest.advanceTimersByTime(0);
+    await settle();
+    expect(sessions() - asked).toBe(1);
+  });
+
   test("the session is renewed halfway to its expiry, kept between a second and twelve hours, and retried a minute after a failure", async () => {
     jest.useFakeTimers();
     setSystemTime(new Date("2026-11-10T00:00:00Z"));

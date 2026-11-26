@@ -24,6 +24,8 @@ interface Daemon {
   failures: unknown[];
   held: PresenceResult;
   broken: Error | undefined;
+  connected: boolean;
+  live: () => boolean;
   ask: (args: PresenceArgs) => Promise<PresenceResult>;
   failed: (error: unknown) => void;
 }
@@ -34,6 +36,8 @@ function daemon(history: string[], on: [string, number][] = []): Daemon {
     failures: [],
     held: { statuses: on.map(([status, minutes]) => ({ status, set_at: ago(minutes) })), history },
     broken: undefined,
+    connected: true,
+    live: () => d.connected,
     ask: async (args) => {
       d.asked.push(args);
       if (d.broken !== undefined) throw d.broken;
@@ -70,7 +74,7 @@ test("the picker asks for the statuses once the page is connected, and with none
   setSystemTime(new Date(NOW));
   const { StatusPicker, PresenceStore } = await picker();
   const d = daemon(["asleep", "at work"]);
-  const store = new PresenceStore(d.ask, d.failed);
+  const store = new PresenceStore(d.ask, d.failed, d.live);
   const view = await mount(<StatusPicker ready={false} store={store} />);
   expect(d.asked).toEqual([]);
   expect(view.host.innerHTML).toBe("");
@@ -94,7 +98,7 @@ test("a typed status goes on when it is entered, trimmed, the field empties, and
   setSystemTime(new Date(NOW));
   const { StatusPicker, PresenceStore } = await picker();
   const d = daemon([]);
-  const view = await mount(<StatusPicker ready store={new PresenceStore(d.ask, d.failed)} />);
+  const view = await mount(<StatusPicker ready store={new PresenceStore(d.ask, d.failed, d.live)} />);
   expect(view.host.querySelector(".status-history")).toBeNull();
   await acting(() => { trigger(view.host)?.click(); });
   expect(view.host.querySelector(".status-history"), "nothing has been used yet").toBeNull();
@@ -121,7 +125,7 @@ test("each status on shows how long it has been on and can be turned off alone, 
   setSystemTime(new Date(NOW));
   const { StatusPicker, PresenceStore } = await picker();
   const d = daemon(["home", "sick", "out"], [["home", 300], ["sick", 26 * 60], ["out", 59]]);
-  const view = await mount(<StatusPicker ready store={new PresenceStore(d.ask, d.failed)} />);
+  const view = await mount(<StatusPicker ready store={new PresenceStore(d.ask, d.failed, d.live)} />);
   await acting(() => { trigger(view.host)?.click(); });
   expect(chips(view.host)).toEqual([["home", "5h"], ["sick", "1d"], ["out", "59m"]]);
   expect(used(view.host), "the ones on aren't offered again").toEqual([]);
@@ -144,7 +148,7 @@ test("the ones used before are narrowed to those holding what is typed, whatever
   setSystemTime(new Date(NOW));
   const { StatusPicker, PresenceStore } = await picker();
   const d = daemon(["in bed", "reading a book", "Bedtime story", "out"], [["out", 10]]);
-  const view = await mount(<StatusPicker ready store={new PresenceStore(d.ask, d.failed)} />);
+  const view = await mount(<StatusPicker ready store={new PresenceStore(d.ask, d.failed, d.live)} />);
   await acting(() => { trigger(view.host)?.click(); });
   await type(field(view.host), " BED");
   expect(used(view.host)).toEqual(["in bed", "Bedtime story"]);
@@ -168,7 +172,7 @@ test("Escape closes the panel and goes back to its button, a press outside close
   const d = daemon(["asleep"]);
   const outside = document.createElement("div");
   document.body.append(outside);
-  const view = await mount(<StatusPicker ready store={new PresenceStore(d.ask, d.failed)} />);
+  const view = await mount(<StatusPicker ready store={new PresenceStore(d.ask, d.failed, d.live)} />);
   let heard = 0;
   const count = () => { heard += 1; };
   document.addEventListener("keydown", count);
@@ -198,7 +202,7 @@ test("the panel listens for presses outside only while it is open, and stops whe
   restores.push(() => { added.mockRestore(); removed.mockRestore(); });
   const presses = (spy: typeof added) => spy.mock.calls.filter(([kind]) => kind === "pointerdown").map(([, listener]) => listener);
   const d = daemon(["asleep"]);
-  const view = await mount(<StatusPicker ready store={new PresenceStore(d.ask, d.failed)} />);
+  const view = await mount(<StatusPicker ready store={new PresenceStore(d.ask, d.failed, d.live)} />);
   expect(presses(added)).toEqual([]);
   await acting(() => { trigger(view.host)?.click(); });
   expect(presses(added)).toHaveLength(1);
@@ -220,12 +224,16 @@ test("how long a status has been on is shown in whole minutes, hours or days, an
 test("the picker asks again when the window gets focus, so a status set from another client shows, and stops once it is gone", async () => {
   const { StatusPicker, PresenceStore } = await picker();
   const d = daemon(["asleep"]);
-  const store = new PresenceStore(d.ask, d.failed);
+  const store = new PresenceStore(d.ask, d.failed, d.live);
   const view = await mount(<StatusPicker ready store={store} />);
   d.held = { statuses: [{ status: "asleep", set_at: ago(30) }], history: ["asleep"] };
   await acting(() => { window.dispatchEvent(new Event("focus")); });
   expect(d.asked).toEqual([{}, {}]);
   expect(trigger(view.host)?.textContent).toBe("asleep");
+  d.connected = false;
+  await acting(() => { window.dispatchEvent(new Event("focus")); });
+  expect([d.asked.length, d.failures], "focus on a connection that has gone quiet asks nothing, so nothing fails").toEqual([2, []]);
+  d.connected = true;
 
   await view.update(<StatusPicker ready={false} store={store} />);
   await acting(() => { window.dispatchEvent(new Event("focus")); });
@@ -238,7 +246,7 @@ test("the picker asks again when the window gets focus, so a status set from ano
 test("a status the daemon refuses is reported and the picker keeps showing what it had", async () => {
   const { StatusPicker, PresenceStore } = await picker();
   const d = daemon(["asleep"], [["asleep", 5]]);
-  const view = await mount(<StatusPicker ready store={new PresenceStore(d.ask, d.failed)} />);
+  const view = await mount(<StatusPicker ready store={new PresenceStore(d.ask, d.failed, d.live)} />);
   d.broken = new Error("\"\" can't be a status");
   await acting(() => { trigger(view.host)?.click(); });
   await type(field(view.host), "z");
@@ -250,7 +258,7 @@ test("a status the daemon refuses is reported and the picker keeps showing what 
 test("the statuses are kept between openings of the sidebar, so the row is there at once and while the page is offline", async () => {
   const { StatusPicker, PresenceStore } = await picker();
   const d = daemon(["at work"], [["at work", 5]]);
-  const store = new PresenceStore(d.ask, d.failed);
+  const store = new PresenceStore(d.ask, d.failed, d.live);
   const first = await mount(<StatusPicker ready store={store} />);
   expect(trigger(first.host)?.textContent).toBe("at work");
   await first.unmount();
@@ -264,7 +272,7 @@ test("the kept statuses tell whoever is listening about each answer from the dae
   setSystemTime(new Date(NOW));
   const { PresenceStore } = await picker();
   const d = daemon([]);
-  const store = new PresenceStore(d.ask, d.failed);
+  const store = new PresenceStore(d.ask, d.failed, d.live);
   let heard = 0;
   const leave = store.subscribe(() => { heard += 1; });
   expect(store.getSnapshot()).toBeNull();

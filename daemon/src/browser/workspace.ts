@@ -15,12 +15,18 @@ import type { ThreadUnread } from "../protocol/ThreadUnread.ts";
 import type { ThreadFolderView } from "../protocol/ThreadFolderView.ts";
 import type { ThreadListing } from "../protocol/ThreadListing.ts";
 import type { ThreadView } from "../protocol/ThreadView.ts";
+import type { WebRequestList } from "../protocol/WebRequestList.ts";
 import { BrowserConnection, type ConnectionUpdate } from "./connection.ts";
 import { OperationClient } from "./operations.ts";
+import { changesState } from "../operations/policy.ts";
 
 const SECRET_ARGS: Readonly<Record<string, string>> = { config: "value", add_credential: "secret", update_credential: "secret", finish_sign_in: "code" };
 
-export function inspectableRequest(request: Extract<ConnectionUpdate, { kind: "uncertain" }>["request"]): Extract<ConnectionUpdate, { kind: "uncertain" }>["request"] {
+type Interrupted = Extract<ConnectionUpdate, { kind: "uncertain" }>;
+export type UncertainRequest = Interrupted & { phase: "checking" | "running" | "lost" };
+const FAILED_IN_FLIGHT = "A request that was in flight when the connection dropped failed.";
+
+export function inspectableRequest(request: Interrupted["request"]): Interrupted["request"] {
   const secret = request.type === "command" ? SECRET_ARGS[request.name] : undefined;
   if (request.type !== "command" || secret === undefined || typeof request.args !== "object" || request.args === null || Array.isArray(request.args)) return request;
   return { ...request, args: { ...request.args, ...(Object.hasOwn(request.args, secret) ? { [secret]: "<redacted>" } : {}) } };
@@ -36,7 +42,7 @@ export interface WorkspaceSnapshot {
   characters: CharacterInfo[]; threads: ThreadView[]; operations: OperationDescriptor[]; requests: OperationDescriptor[];
   messages: Message[]; metadata: Record<string, StreamMetadata>; streams: LiveTurn[]; media: LiveImage[]; mediaLimited: boolean; activity: Activity[];
   config: unknown; error: string; status: string; detail: string;
-  character: string | null; thread: string | null; previousSegment: SegmentSummary | null; segmentView: SegmentView | null; uncertain: Extract<ConnectionUpdate, { kind: "uncertain" }>[];
+  character: string | null; thread: string | null; previousSegment: SegmentSummary | null; segmentView: SegmentView | null; uncertain: UncertainRequest[];
   opening: OpeningTarget | null; folders: ThreadFolderView[]; manualOrder: boolean; spendingRequestsFinished: number;
 }
 
@@ -99,7 +105,7 @@ export class Workspace {
   #loadingEarlier = false;
   #unread = new Map<string, ThreadUnread>();
   #state: WorkspaceSnapshot = { characters: [], threads: [], operations: [], requests: [], messages: [], metadata: {}, streams: [], media: [], mediaLimited: false, activity: [], config: {}, error: "", status: "idle", detail: "", character: null, thread: null, previousSegment: null, segmentView: null, uncertain: [], opening: null, folders: [], manualOrder: false, spendingRequestsFinished: 0 };
-  constructor(readonly connection: BrowserConnection, frame: FrameScheduler = (callback) => { callback(); }) {
+  constructor(readonly connection: BrowserConnection, readonly listRequests: () => Promise<WebRequestList>, frame: FrameScheduler = (callback) => { callback(); }) {
     this.#frame = frame;
     this.actions = new OperationClient(connection);
     connection.subscribe((update) => this.#receive(update));
@@ -171,6 +177,24 @@ export class Workspace {
   #activity(type: string, data: unknown): void {
     const preview = inspectionPreview(data);
     this.#patch({ activity: [...this.#state.activity.slice(-99), { id: ++this.#eventId, type, data: preview, previewLimited: preview !== data }] });
+  }
+  async #settleInterrupted(): Promise<void> {
+    if (this.#state.uncertain.length === 0) return;
+    const generation = this.connection.generation;
+    const listing = await this.listRequests().catch(() => undefined);
+    if (generation === this.connection.generation) this.#patch({ uncertain: this.#state.uncertain.flatMap((item) => this.#settled(item, listing)) });
+  }
+  #settled(item: UncertainRequest, listing: WebRequestList | undefined): UncertainRequest[] {
+    const record = listing?.requests.find((request) => request.rid === item.rid);
+    if (record?.phase === "failed") this.report(record.error?.message ?? FAILED_IN_FLIGHT);
+    if (record?.phase === "uncertain") return [{ ...item, phase: "lost" }];
+    if (listing === undefined) return [{ ...item, phase: item.phase === "lost" ? "lost" : "running" }];
+    return record?.phase === "running" ? [{ ...item, phase: "running" }] : [];
+  }
+  #couldChange(request: Interrupted["request"]): boolean {
+    const command = request.type === "command" ? request : undefined;
+    const operation = this.#state.operations.find((item) => item.name === command?.name);
+    return operation === undefined || changesState(operation, { ...(command?.args as Record<string, unknown>) });
   }
   async refreshNavigation(): Promise<void> {
     const generation = {};
@@ -292,12 +316,15 @@ export class Workspace {
       if (update.status === "signed_out") this.#segmentEpoch = {};
       this.#patch({ status: update.status, detail: update.detail, streams: update.status === "ready" ? this.#state.streams : [], ...(update.status === "signed_out" ? { error: "", messages: [], metadata: {}, config: {}, media: [], mediaLimited: false, activity: [], operations: [], requests: [], threads: [], characters: [], uncertain: [], previousSegment: null, segmentView: null, opening: null, folders: [], manualOrder: false } : {}) });
       if (update.status === "ready") void this.refreshNavigation();
+      if (update.status === "ready" || update.status === "error" || update.status === "reload_required") void this.#settleInterrupted();
       return;
     }
     if (update.kind === "future") this.#activity(`Future event: ${update.message.type}`, update.message);
-    else if (update.kind === "uncertain") {
-      this.#patch({ uncertain: [...this.#state.uncertain, { ...update, request: inspectableRequest(update.request) }], media: this.#state.media.filter((image) => image.rid !== update.rid || image.manual === true) });
-    } else this.#message(update.message);
+    else if (update.kind === "uncertain") this.#patch({
+      uncertain: this.#couldChange(update.request) ? [...this.#state.uncertain, { ...update, request: inspectableRequest(update.request), phase: "checking" }] : this.#state.uncertain,
+      media: this.#state.media.filter((image) => image.rid !== update.rid || image.manual === true),
+    });
+    else this.#message(update.message);
   }
   #message(message: ServerMessage): void {
     switch (message.type) {
@@ -337,7 +364,7 @@ export class Workspace {
         if (message.outcome !== "completed" || this.actions.pendingOperation(message.rid) === "run_tool") this.#patch({ streams: this.#state.streams.filter((stream) => stream.rid !== message.rid) });
         if (this.#state.uncertain.some((item) => item.rid === message.rid)) {
           this.acknowledge(message.rid);
-          if (message.outcome === "failed") this.report(message.error?.message ?? "A request that was in flight when the connection dropped failed.");
+          if (message.outcome === "failed") this.report(message.error?.message ?? FAILED_IN_FLIGHT);
         }
         if (this.#couldSpend(message.rid)) this.#patch({ spendingRequestsFinished: this.#state.spendingRequestsFinished + 1 });
         this.#activity(message.type, message); return;

@@ -7,12 +7,13 @@ import { Icon } from "../ui/icons.tsx";
 export class PresenceStore {
   #held: PresenceResult | null = null;
   readonly #listeners = new Set<() => void>();
-  constructor(readonly ask: (args: PresenceArgs) => Promise<PresenceResult>, readonly failed: (error: unknown) => void) {}
+  constructor(readonly ask: (args: PresenceArgs) => Promise<PresenceResult>, readonly failed: (error: unknown) => void, readonly live: () => boolean) {}
   subscribe = (listener: () => void): (() => void) => { this.#listeners.add(listener); return () => { this.#listeners.delete(listener); }; };
   getSnapshot = (): PresenceResult | null => this.#held;
   load = (args: PresenceArgs): void => {
     this.ask(args).then((held) => { this.#held = held; for (const listener of this.#listeners) listener(); }).catch(this.failed);
   };
+  refresh = (): void => { if (this.live()) this.load({}); };
 }
 
 const MINUTE = 60_000;
@@ -33,10 +34,9 @@ export function StatusPicker({ ready, store }: { ready: boolean; store: Presence
   const field = useRef<HTMLInputElement>(null);
   useEffect(() => {
     if (!ready) return;
-    const refresh = () => { store.load({}); };
-    refresh();
-    window.addEventListener("focus", refresh);
-    return () => { window.removeEventListener("focus", refresh); };
+    store.refresh();
+    window.addEventListener("focus", store.refresh);
+    return () => { window.removeEventListener("focus", store.refresh); };
   }, [ready, store]);
   useEffect(() => {
     if (!open) return;

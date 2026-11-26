@@ -1,6 +1,7 @@
 import type { BrowserConnection } from "../connection.ts";
 import type { RequestFinished } from "../../protocol/RequestFinished.ts";
 import { conversationRequest } from "../request_forms.ts";
+import { toasts } from "../ui/toast.tsx";
 
 export interface ConversationScope { character: string | null; thread: string | null }
 export interface RegenChoice { anotherTake?: boolean; reason?: string; tags?: readonly string[] }
@@ -62,5 +63,7 @@ export class ConversationRequests {
     const result = await this.submit("message", { text: "", stream, images: [] });
     if (result.outcome !== "completed") throw new Error(result.error?.message ?? (result.outcome === "cancelled" ? "The reply was stopped" : "The reply didn't finish"));
   }
-  cancel(): void { this.connection.cancel(); }
+  cancel(): void {
+    try { this.connection.cancel(); } catch { toasts.show("Shore was reconnecting, so the reply wasn't stopped. Try again in a moment.", "error"); }
+  }
 }

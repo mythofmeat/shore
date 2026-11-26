@@ -44,6 +44,9 @@ export interface BrowserConnectionOptions {
   handshakeTimeoutMs?: number;
 }
 
+const TICK_MS = 30_000;
+const ASLEEP_MS = 90_000;
+
 export class BrowserConnection {
   readonly #options: BrowserConnectionOptions;
   readonly #listeners = new Set<(update: ConnectionUpdate) => void>();
@@ -57,6 +60,8 @@ export class BrowserConnection {
   #timer: ReturnType<typeof setTimeout> | undefined;
   #handshake: ReturnType<typeof setTimeout> | undefined;
   #renewal: ReturnType<typeof setTimeout> | undefined;
+  #tick: ReturnType<typeof setTimeout> | undefined;
+  #ran!: number;
   #generation = 0;
   #retries = 0;
   #wanted = false;
@@ -148,11 +153,13 @@ export class BrowserConnection {
     clearTimeout(this.#timer);
     clearTimeout(this.#handshake);
     clearTimeout(this.#renewal);
+    clearTimeout(this.#tick);
     this.#abort?.abort();
     this.#socket?.close();
     const interrupted = [...this.#pending];
     this.#pending.clear();
     this.#pendingBytes = 0;
+    this.#status = status;
     for (const [rid, pending] of interrupted) {
       pending.reject(new InterruptedRequestError(rid));
       this.#emit({ kind: "uncertain", rid, request: pending.request, selection: pending.selection });
@@ -230,6 +237,7 @@ export class BrowserConnection {
   }
 
   #receive(text: string): void {
+    this.#ran = Date.now();
     const parsed = parseServerFrame(text);
     if (parsed.kind === "invalid") { this.#lost("error", parsed.reason); return; }
     if (parsed.kind === "future") { this.#emit(parsed); return; }
@@ -246,7 +254,7 @@ export class BrowserConnection {
       this.#sync.observe(message);
       const generation = this.#generation;
       this.#emit({ kind: "frame", message });
-      if (generation === this.#generation) this.#setStatus("ready");
+      if (generation === this.#generation) { this.#watch(); this.#setStatus("ready"); }
       return;
     }
     const decision = this.#sync.observe(message);
@@ -263,10 +271,19 @@ export class BrowserConnection {
     this.#emit({ kind: "frame", message });
   }
 
+  live(): boolean {
+    if (this.#status === "ready" && Date.now() - this.#ran >= ASLEEP_MS) this.#lost("reconnecting", "This page was asleep; reconnecting", true);
+    return this.#status === "ready";
+  }
+
+  #watch(): void {
+    this.#tick = setTimeout(() => { if (this.live()) { this.#ran = Date.now(); this.#watch(); } }, TICK_MS);
+  }
+
   submit(request: BrowserRequest, rid = randomUUID()): { rid: string; finished: Promise<RequestFinished> } {
     const socket = this.#socket;
     const session = this.#session;
-    if (session === undefined || this.#status !== "ready" || socket === undefined) throw new Error("Wait for Shore to reconnect before sending");
+    if (session === undefined || !this.live() || socket === undefined) throw new Error("Wait for Shore to reconnect before sending");
     if (this.#pending.size >= Math.min(session.max_pending_requests, 32)) throw new Error("Wait for a pending request to finish");
     if (!validClientMessage(request)) throw new Error("Invalid conversation request fields");
     if (this.#pending.has(rid)) throw new Error("This request is already in flight");
@@ -285,7 +302,7 @@ export class BrowserConnection {
   }
 
   cancel(): void {
-    if (this.#status !== "ready" || this.#socket === undefined) throw new Error("Cancellation needs an active connection");
+    if (!this.live() || this.#socket === undefined) throw new Error("Cancellation needs an active connection");
     this.#socket.send(JSON.stringify({ type: "cancel" } satisfies ClientMessage));
   }
 }
