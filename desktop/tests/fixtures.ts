@@ -88,6 +88,7 @@ export const test = base.extend<{ profile: string; launch: (options?: LaunchOpti
 });
 
 export async function signIn(page: Page): Promise<void> {
+  await expect(page.getByLabel("Sign-in code or link")).toBeVisible();
   const created = await fetch(`http://127.0.0.1:${new URL(page.url()).port}/api/login-code`, { method: "POST", headers: { authorization: `Bearer ${TOKEN}` } });
   expect(created.status).toBe(200);
   await page.getByLabel("Sign-in code or link").fill(((await created.json()) as { code: string }).code);
