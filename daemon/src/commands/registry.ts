@@ -56,8 +56,9 @@ function threadPromptContext(context: CommandOperationContext): ThreadPromptCont
     config: session.config,
     dataDir: session.dataDir,
     character,
+    home: registry.homeThread(character),
     threads: registry.listThreads(character),
-    refreshed: (name) => session.runtime.notifyPromptSnapshotRefreshed(name),
+    now: context.deps.now ?? Date.now,
   };
 }
 

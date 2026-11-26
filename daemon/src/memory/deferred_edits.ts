@@ -212,8 +212,9 @@ export async function previewThreadPins(
   workspace: CharacterWorkspace,
   thread: string,
   pins: readonly string[],
+  refreshing: boolean,
 ): Promise<PinPreview[]> {
-  const snapshot = await activePromptSnapshotExists(characterDataDir, thread);
+  const snapshot = !refreshing && await activePromptSnapshotExists(characterDataDir, thread);
   const found = await Promise.all(pins.map(async (pin): Promise<PreviewedFile> => {
     const copy = snapshot ? pinCopy(characterDataDir, thread, pin) : undefined;
     if (pinnedCommand(pin) !== undefined) return { content: copy, changed: false };
@@ -227,8 +228,9 @@ export async function previewPromptFile(
   workspace: CharacterWorkspace,
   name: string,
   thread: string,
+  refreshing: boolean,
 ): Promise<PreviewedFile> {
-  const snapshot = await activePromptSnapshotExists(characterDataDir, thread);
+  const snapshot = !refreshing && await activePromptSnapshotExists(characterDataDir, thread);
   const copy = snapshot ? readCharacterState(characterDataDir, stateFile(thread, `active_prompt/${name}`)) : undefined;
   return previewed(copy?.trim() === "" ? undefined : copy, await effectiveContent(workspace, name), copy !== undefined);
 }

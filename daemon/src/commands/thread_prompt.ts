@@ -3,9 +3,10 @@ import type { LoadedConfig } from "../config/loader.ts";
 import { characterDataDir } from "../config/dirs.ts";
 import { findEffectiveModel } from "../config/effective_catalog.ts";
 import { configView, resolveActiveModelAndOverlay } from "../config/preferences.ts";
-import { threadModelOf, type ThreadRecord } from "../engine/threads.ts";
+import { threadActivityNow, threadModelOf, type ThreadRecord } from "../engine/threads.ts";
 import { previewThreadPrompt } from "../handler/context.ts";
 import { resolveGenerationModel } from "../handler/setup.ts";
+import { cacheTtlSecs } from "../llm/request.ts";
 import { applyDeferredEdits } from "../memory/deferred_edits.ts";
 import { characterWorkspace } from "../tools/character_workspace.ts";
 import { invalidRequest, notFound } from "./errors.ts";
@@ -15,8 +16,9 @@ export interface ThreadPromptContext {
   config: LoadedConfig;
   dataDir: string;
   character: string;
+  home: string;
   threads: readonly ThreadRecord[];
-  refreshed: (character: string) => void;
+  now: () => number;
 }
 
 function namedThread(ctx: ThreadPromptContext, args: Args): string {
@@ -33,12 +35,15 @@ async function view(ctx: ThreadPromptContext, thread: string): Promise<ThreadPro
     findEffectiveModel,
     threadModelOf(ctx.threads, thread),
   );
+  const resolved = resolveGenerationModel(model, ctx.config, overlay);
+  const lastActive = Date.parse(threadActivityNow(ctx.dataDir, ctx.character, thread).last_active ?? "");
   const preview = await previewThreadPrompt({
     character: ctx.character,
     characterDataDir: characterDataDir(ctx.dataDir, ctx.character),
     config: ctx.config,
-    resolved: resolveGenerationModel(model, ctx.config, overlay),
+    resolved,
     thread,
+    refreshing: thread !== ctx.home && ctx.now() - lastActive >= cacheTtlSecs(resolved) * 1000,
   });
   return {
     thread,
@@ -54,6 +59,5 @@ export async function threadPrompt(ctx: ThreadPromptContext, args: Args): Promis
 export async function refreshThreadPrompt(ctx: ThreadPromptContext, args: Args): Promise<ThreadPromptView> {
   const thread = namedThread(ctx, args);
   await applyDeferredEdits(characterDataDir(ctx.dataDir, ctx.character), characterWorkspace(ctx.config, ctx.character), thread);
-  ctx.refreshed(ctx.character);
   return await view(ctx, thread);
 }

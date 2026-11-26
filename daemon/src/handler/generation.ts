@@ -5,7 +5,7 @@ import type { RunningWake } from "../autonomy/runner.ts";
 import { withoutWakeWorking } from "../autonomy/wake_working.ts";
 import { characterDataDir, threadDataDir } from "../config/dirs.ts";
 import { isToolResultOnly } from "../engine/message_store.ts";
-import { parseDurationMs } from "../llm/request.ts";
+import { cacheTtlSecs } from "../llm/request.ts";
 import { keepaliveWindowSecs } from "../config/keepalive.ts";
 
 import type { LoadedConfig } from "../config/loader.ts";
@@ -472,14 +472,8 @@ function wakeNotTold(running: RunningWake | undefined, here: string, active: rea
   return { started_at: startedAt, thread: running.thread };
 }
 
-const DEFAULT_CACHE_TTL_SECS = 3_600;
 const MARKED_GAP_SECS = 1_800;
 const HOME_SEGMENTS_SEARCHED = 3;
-
-export function cacheTtlSecs(resolved: ResolvedModel): number {
-  const ms = resolved.cacheTtl === undefined ? undefined : parseDurationMs(resolved.cacheTtl);
-  return ms === undefined ? DEFAULT_CACHE_TTL_SECS : ms / 1000;
-}
 
 function lastUserAt(messages: readonly Message[]): string | undefined {
   for (let i = messages.length - 1; i >= 0; i -= 1) {

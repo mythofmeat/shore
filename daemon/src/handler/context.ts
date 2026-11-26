@@ -138,19 +138,19 @@ export async function previewThreadPrompt(params: {
   config: LoadedConfig;
   resolved: ResolvedModel;
   thread: string;
-  timeZone?: string;
+  refreshing: boolean;
 }): Promise<ThreadPromptPreview> {
-  const { character, characterDataDir, config, thread } = params;
+  const { character, characterDataDir, config, thread, refreshing } = params;
   const workspace = characterWorkspace(config, character);
   const texts = Texts.of(config);
   const changed = new Set<string>();
   const sections = await promptSections(config, params.resolved, async (path) => {
-    const file = await previewPromptFile(characterDataDir, workspace, path, thread);
+    const file = await previewPromptFile(characterDataDir, workspace, path, thread, refreshing);
     if (file.changed) changed.add(path);
     return file.content;
   });
-  const prompt = await threadPrompt(texts, characterDataDir, workspace, thread, previewThreadPins);
-  const system = buildSystemBlocks({ thread: prompt, character_name: character, display_name: resolveDisplayName(config.app.chat), sections, texts }, params.timeZone);
+  const prompt = await threadPrompt(texts, characterDataDir, workspace, thread, async (...args) => await previewThreadPins(...args, refreshing));
+  const system = buildSystemBlocks({ thread: prompt, character_name: character, display_name: resolveDisplayName(config.app.chat), sections, texts });
   return { system, changed, pins: prompt?.pins ?? [] };
 }
 
