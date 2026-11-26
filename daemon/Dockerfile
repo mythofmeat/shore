@@ -1,6 +1,6 @@
-FROM rust:alpine AS patch-builder
-RUN apk add --no-cache openssl-dev openssl-libs-static pkgconf
-COPY --from=oven/bun:alpine /usr/local/bin/bun /usr/local/bin/bun
+FROM rust:slim AS patch-builder
+RUN apt-get update && apt-get install -y --no-install-recommends libssl-dev pkg-config
+COPY --from=oven/bun:debian /usr/local/bin/bun /usr/local/bin/bun
 WORKDIR /build/daemon
 COPY daemon/scripts/build_patch.ts scripts/build_patch.ts
 COPY daemon/vendor/codex-apply-patch vendor/codex-apply-patch
@@ -19,7 +19,7 @@ COPY daemon/scripts scripts
 COPY daemon/src src
 RUN bun run build:daemon
 
-FROM debian:stable
+FROM debian:testing
 RUN apt-get update && apt-get upgrade -y
 
 ###################

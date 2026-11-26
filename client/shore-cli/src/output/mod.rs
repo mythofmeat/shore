@@ -9,6 +9,7 @@ pub(crate) mod spinner;
 pub(crate) mod status;
 pub(crate) mod styling;
 pub(crate) mod texts;
+pub(crate) mod thread_prompt;
 pub(crate) mod tools;
 pub(crate) mod transcript;
 pub(crate) mod triggers;

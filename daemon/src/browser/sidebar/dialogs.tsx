@@ -3,10 +3,7 @@ import { Dialog } from "../ui/controls.tsx";
 import { toasts } from "../ui/toast.tsx";
 import { navigate } from "../app/route.ts";
 import { workspace } from "../app/state.ts";
-
-export function threadPinList(text: string): string[] {
-  return text.split("\n").map((line) => line.trim()).filter((line) => line !== "");
-}
+import { PinsField, threadPinList } from "../chat/thread_prompt.tsx";
 
 export function WhenLongField({ compaction, setCompaction }: { compaction: boolean; setCompaction: (compaction: boolean) => void }) {
   return <label className="field"><span>Older turns are archived</span><select className="select" value={compaction ? "compact" : "trim"} onChange={(event) => setCompaction(event.target.value === "compact")}><option value="trim">Only when the context fills up</option><option value="compact">At the compaction limits</option></select></label>;
@@ -69,7 +66,7 @@ export function NewThreadDialog({ character, close }: { character: string; close
       <details className="disclosure"><summary>More options</summary>
         <div className="form">
           <label className="field"><span>Model <span className="muted">(optional)</span></span><input className="input mono" placeholder={`${character}’s default`} value={model} onChange={(event) => setModel(event.target.value)} /></label>
-          <label className="field"><span>Pinned in the prompt <span className="muted">(optional, one per line)</span></span><textarea className="input textarea mono" rows={3} wrap="off" placeholder={"stories/lighthouse.md\n!git log --oneline -5\n[[lighthouse/]]"} value={pins} onChange={(event) => setPins(event.target.value)} /></label>
+          <PinsField value={pins} change={setPins} note="optional, one per line" />
           <WhenLongField compaction={compaction} setCompaction={setCompaction} />
         </div>
       </details>

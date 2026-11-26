@@ -222,7 +222,7 @@ const PROMPT_DESCRIPTIONS: Record<string, string> = {
   prompt: "The parts of the system prompt, in the order they are sent. Each part takes one of file, workspace or shore. A character's own list replaces this one. Without a list a reply fails.",
   file: "File in the config directory, relative to it; the character can't read it. A template ({{char}}, {{user}}), read fresh on every request; a missing file is an error.",
   workspace: "File in the character's workspace, relative to its root; the character can read and edit it. Sent as written. It is held as it was when the conversation started, and an edit reaches the prompt after a long pause or a compaction. A missing or empty file is left out.",
-  shore: "A part Shore writes: system_prompt is the file the model's system_prompt setting names, thread says which side thread this is, and thread_pins is what is pinned to that thread. The thread parts are only in side threads.",
+  shore: "A part Shore writes: system_prompt is the file the model's system_prompt setting names, thread says which side thread this is, and thread_pins is what is pinned to that thread. thread is only in side threads; thread_pins is in any thread with pins, home included.",
 };
 
 function describeText(path: readonly string[]): string | undefined {

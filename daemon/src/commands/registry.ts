@@ -23,6 +23,7 @@ import { internalError, invalidRequest } from "./errors.ts";
 import { characterInfo, createCharacter, listCharacters, switchCharacter } from "./navigation.ts";
 import { archiveThread, forkThread, listThreads, markRead, newThread, switchThread, threadCompaction, threadFolderCreate, threadFolderDelete, threadFolderMove, threadFolderRename, threadFolderSort, threadHome, threadLabel, threadLock, threadModel, threadMove, threadPins, threadPurpose, threadSort } from "./threads.ts";
 import { archiveWithSignal, threadContext, threadListingContext } from "./thread_context.ts";
+import { refreshThreadPrompt, threadPrompt, type ThreadPromptContext } from "./thread_prompt.ts";
 import { alt, deleteMessages, edit, get, historyPage, injectSystem, listAlternatives, log } from "./conversation.ts";
 import { listMarks, mark, unmark, type MarkContext } from "./marks.ts";
 import { workspaceTurnsFor, type WorkspaceTurns } from "../tools/workspace_turns.ts";
@@ -46,6 +47,19 @@ const LEDGER_UNAVAILABLE = "provider error: usage reports need a ledger on disk;
 function engineOf(context: CommandOperationContext): ConversationEngine {
   if (context.engine === undefined) throw invalidRequest("This operation requires a character");
   return context.engine;
+}
+
+function threadPromptContext(context: CommandOperationContext): ThreadPromptContext {
+  const { session } = context;
+  const { registry, character } = threadContext(context.deps, engineOf(context));
+  return {
+    config: session.config,
+    dataDir: session.dataDir,
+    character,
+    home: registry.homeThread(character),
+    threads: registry.listThreads(character),
+    now: context.deps.now ?? Date.now,
+  };
 }
 
 function workspaceTurnsOf(context: CommandOperationContext): WorkspaceTurns {
@@ -466,6 +480,13 @@ export const commandOperations: OperationRegistry<CommandOperationContext> = {
     ...threadPresentation, label: "Set thread pins", effects: ["history_write"],
     fields: { name: threadName, pins: { label: "Pinned in the prompt", hint: "Workspace paths, [[links]] or !commands; leave empty to clear" } },
   }, async (context, args) => threadPins(await threadListingContext(context.deps, engineOf(context), context.session), args)),
+  thread_prompt: register("thread_prompt", {
+    ...threadPresentation, label: "Show thread prompt", fields: { name: threadName },
+  }, async (context, args) => threadPrompt(threadPromptContext(context), args)),
+  thread_prompt_refresh: register("thread_prompt_refresh", {
+    ...threadPresentation, label: "Refresh thread prompt", effects: ["history_write"],
+    fields: { name: threadName },
+  }, async (context, args) => refreshThreadPrompt(threadPromptContext(context), args)),
   thread_lock: register("thread_lock", {
     ...threadPresentation, label: "Lock thread", effects: ["history_write"],
     fields: { name: threadName, locked: { label: "Locked", hint: "Only you change a locked thread's label, purpose and pins; the character can't" } },
@@ -545,7 +566,7 @@ export function runRegisteredOperation<N extends OperationName>(
 }
 
 const THREAD_CHANGES: ReadonlySet<string> = new Set([
-  "create_thread", "fork_thread", "thread_home", "thread_label", "thread_purpose", "thread_pins", "thread_lock", "thread_compaction", "thread_model",
+  "create_thread", "fork_thread", "thread_home", "thread_label", "thread_purpose", "thread_pins", "thread_prompt", "thread_prompt_refresh", "thread_lock", "thread_compaction", "thread_model",
   "thread_move", "thread_sort", "thread_folder_create", "thread_folder_rename", "thread_folder_delete", "thread_folder_move", "thread_folder_sort",
 ]);
 

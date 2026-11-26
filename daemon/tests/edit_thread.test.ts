@@ -121,7 +121,7 @@ describe("the character editing a thread", () => {
   test("the home thread and a thread that doesn't exist are refused, and the result says why", async () => {
     const { edit, stored } = await setup({});
     const home = await stored("main");
-    expect(await outcomeOf(edit({ name: "main", label: "Home", purpose: "Everything" }))).toThrow(`thread "main" is the home thread for frank, and the home thread's prompt shows no purpose or pins`);
+    expect(await outcomeOf(edit({ name: "main", label: "Home", purpose: "Everything" }))).toThrow(`thread "main" is the home thread for frank, so only the user changes its label and pins, and its prompt shows no purpose`);
     expect(await outcomeOf(edit({ name: "nowhere", label: "Somewhere" }))).toThrow(`no thread "nowhere" for frank`);
     expect(await stored("main")).toEqual(home);
     expect(await stored("nowhere")).toBeUndefined();
@@ -156,7 +156,7 @@ describe("the character editing a thread", () => {
     expect(await outcomeOf(edit({ name: "story", pins: ["stories/missing.md"] })))
       .toThrow('Nothing changed: Sam locked the thread "story", so its label, purpose and pins change only when Sam changes them.');
     expect(await outcomeOf(edit({ name: "main", pins: ["stories/missing.md"] })))
-      .toThrow(`thread "main" is the home thread for frank, and the home thread's prompt shows no purpose or pins`);
+      .toThrow(`thread "main" is the home thread for frank, so only the user changes its label and pins, and its prompt shows no purpose`);
   });
 });
 

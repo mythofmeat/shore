@@ -229,6 +229,10 @@ pub(crate) async fn execute(
             handle_thread_command(&mut conn, command_ref, false, *json).await?;
             forget_archived_thread(&display_character, name);
         }
+        CliCommand::Thread {
+            subcommand: Some(crate::cli::ThreadCommand::Prompt { .. }),
+            ..
+        } => handle_generic_swp_command(&mut conn, command_ref, cli.character.as_deref()).await?,
         CliCommand::Thread { subcommand, json } => {
             handle_thread_command(&mut conn, command_ref, subcommand.is_none(), *json).await?;
         }
@@ -445,6 +449,8 @@ async fn handle_generic_swp_command(
         output::tools::print(&data);
     } else if name == "texts" {
         output::texts::print(&data, texts_name(other))?;
+    } else if name == "thread_prompt" || name == "thread_prompt_refresh" {
+        output::thread_prompt::print(&data)?;
     } else if let Some(render) = catalog_render(name) {
         render(&data);
     } else if let Some(view) = usage_view(other) {

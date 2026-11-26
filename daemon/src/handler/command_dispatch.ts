@@ -92,6 +92,8 @@ async function annotations(
     case "archive_thread":
       await afterArchiveThread(args, ctx);
       return undefined;
+    case "thread_prompt_refresh":
+      return afterThreadPromptRefresh(args, ctx);
     default:
       return undefined;
   }
@@ -245,6 +247,11 @@ async function showHomeToMovedViewers(viewers: readonly number[], home: string, 
     });
     if (sessionId !== ctx.sessionId) ctx.router.reportMove(sessionId);
   }
+}
+
+function afterThreadPromptRefresh(args: unknown, ctx: DispatchContext): undefined {
+  const refreshed = isRecord(args) ? args["name"] : undefined;
+  if (typeof refreshed === "string" && ctx.runtime.warmThread(ctx.character) === refreshed) ctx.runtime.refreshCachedRequest(ctx.character, "prompt_reload", refreshed);
 }
 
 function afterThreadModelChange(

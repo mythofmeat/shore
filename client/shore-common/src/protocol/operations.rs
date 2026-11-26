@@ -2592,6 +2592,15 @@ wire_types! {
 
     pub struct WorkspaceFileListing { pub files: Vec<String> }
 
+    #[serde(rename_all = "snake_case")]
+    pub enum PinShown { Whole, Cut, LeftOut, Nothing }
+
+    pub struct ThreadPinStatus { pub pin: String, pub bytes: usize, pub shown: PinShown, pub changed: bool }
+
+    pub struct ThreadPromptPart { pub label: String, pub text: String, pub changed: bool }
+
+    pub struct ThreadPromptView { pub thread: String, pub parts: Vec<ThreadPromptPart>, pub pins: Vec<ThreadPinStatus> }
+
     #[serde(deny_unknown_fields)]
     pub struct ThreadPinsArgs {
         pub name: String,
@@ -2980,6 +2989,8 @@ operations! {
     LabelThread: "thread_label" (ThreadLabelArgs) => ThreadListing,
     SetThreadPurpose: "thread_purpose" (ThreadPurposeArgs) => ThreadListing,
     SetThreadPins: "thread_pins" (ThreadPinsArgs) => ThreadListing,
+    ShowThreadPrompt: "thread_prompt" (NamedOperationArgs) => ThreadPromptView,
+    RefreshThreadPrompt: "thread_prompt_refresh" (NamedOperationArgs) => ThreadPromptView,
     LockThread: "thread_lock" (ThreadLockArgs) => ThreadListing,
     SetThreadCompaction: "thread_compaction" (ThreadCompactionArgs) => ThreadListing,
     MoveThread: "thread_move" (ThreadMoveArgs) => ThreadListing,
