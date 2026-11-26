@@ -53,7 +53,7 @@ function ThreadList({ state, shownThread, ready, select, newThread }: { state: C
     })}
     <button type="button" className="sidebar-item thread muted" disabled={!ready} onClick={newThread}><Icon name="plus" size={14} /><span className="sidebar-name">New thread</span></button>
     {sections.held.length === 0 ? null : <HeldGroup character={character} shut={collapsed.has(HELD_GROUP)} unread={sections.held.reduce((total, thread) => total + unreadOf(thread), 0)}>
-      {(collapsed.has(HELD_GROUP) ? sections.held.filter((thread) => thread.id === state.thread) : sections.held).map((thread) => row(thread, [], true))}
+      {(collapsed.has(HELD_GROUP) ? sections.held.filter((thread) => thread.id === state.thread) : sections.held).map((thread) => row(thread, sections.held.map((each) => each.id), true))}
     </HeldGroup>}
   </div>;
 }

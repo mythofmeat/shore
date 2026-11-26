@@ -1,6 +1,7 @@
 import { expect, spyOn, test } from "bun:test";
 
 import type { ThreadView } from "../../src/protocol/ThreadView.ts";
+import type { ThreadNeighbours } from "../../src/browser/sidebar/ThreadRow.tsx";
 import { HOLD, useApp } from "./app.ts";
 import { LISTING } from "./daemon.ts";
 import { acting, button, click, mount, type } from "./dom.ts";
@@ -61,6 +62,31 @@ test("a side thread's options put it on hold and a thread on hold's resume it, o
   }
   await settle();
   expect(asked(since, "thread_hold")).toEqual([{ name: "side", on_hold: true }, { name: "side", on_hold: false }]);
+});
+
+test("a thread's options wait for the daemon; mark as read needs an unread message, a move needs somewhere to go, and home can't be archived", async () => {
+  app.answer(answered("thread_move"));
+  const { threadMenuItems } = await import("../../src/browser/sidebar/ThreadRow.tsx");
+  const free: ThreadNeighbours = { up: "above", down: "below", atEnd: false, byActivity: false };
+  const shown = (thread: ThreadView, ready: boolean, neighbours = free) => threadMenuItems(thread, ready, neighbours).flatMap((item) => item === "separator" ? [] : [[item.label, item.disabled ?? false, item.danger ?? false]]);
+  const UNREAD = { ...SIDE, unread: 1 };
+  expect(shown(UNREAD, true)).toEqual([
+    ["Thread settings…", false, false], ["Fork…", false, false], ["Mark as read", false, false], ["Put on hold", false, false], ["Make home", false, false],
+    ["Move up", false, false], ["Move down", false, false], ["Move to folder…", false, false], ["Archive…", false, true],
+  ]);
+  expect(shown(UNREAD, false).filter(([, disabled]) => disabled !== true)).toEqual([]);
+  const markable = (unread: number | undefined) => shown(unread === undefined ? SIDE : { ...SIDE, unread }, true).find(([label]) => label === "Mark as read")?.[1];
+  expect([markable(undefined), markable(0), markable(1), markable(2)]).toEqual([true, true, false, false]);
+  expect(shown(SIDE, true, { up: undefined, down: undefined, atEnd: true, byActivity: false }).filter(([label]) => label === "Move up" || label === "Move down")).toEqual([["Move up", true, false], ["Move down", true, false]]);
+  expect(shown(HOME, true).at(-1)).toEqual(["Archive…", true, true]);
+
+  const since = app.socket().sent.length;
+  for (const label of ["Move up", "Move down"]) {
+    const item = threadMenuItems(SIDE, true, free).find((each) => each !== "separator" && each.label === label);
+    if (item !== undefined && item !== "separator") await acting(() => { item.onSelect(); });
+  }
+  await settle();
+  expect(asked(since, "thread_move")).toEqual([{ name: "side", before: "above" }, { name: "side", before: "below" }]);
 });
 
 test("an unread count reads 99+ past 99, and tells a screen reader one message or how many", async () => {

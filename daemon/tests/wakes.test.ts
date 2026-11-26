@@ -2460,11 +2460,12 @@ test("the character can't see a thread on hold: her list leaves it out, and a me
   }, handOff("threads"));
 });
 
-test("coming back home, the note on where the user was counts side-thread messages after home's last one and up to this one, and at a tie names the thread made first", async () => {
+test("coming back home, the note on where the user was counts side-thread messages after home's last one and up to this one, passes over a thread they never wrote in, and at a tie names the thread made first", async () => {
   await withCharacter(async ({ runtime, say, thread }) => {
     await runtime.registry.createThread("ada", "garden");
     await runtime.registry.createThread("ada", "study");
     await runtime.registry.createThread("ada", "harbor");
+    await runtime.registry.createThread("ada", "attic");
     const elsewhere = async () => (await thread("main")).at(-2)?.last_elsewhere;
     await say("hello");
     await say("at the same moment", "garden");

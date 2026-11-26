@@ -25,7 +25,7 @@ export function threadSections(threads: readonly ThreadView[], folders: readonly
   const held = threads.filter((thread) => thread.on_hold === true);
   const free = threads.filter((thread) => !pinned(thread) && thread.on_hold !== true);
   return {
-    pinned: threads.filter(pinned).sort((a, b) => Number(b.home) - Number(a.home)),
+    pinned: threads.filter(pinned),
     loose: free.filter((thread) => thread.folder === undefined || !named.has(thread.folder)).sort(sectionOrder),
     folders: folders.map((folder) => ({ name: folder.name, byActivity: folder.by_activity === true, threads: free.filter((thread) => thread.folder === folder.name).sort(sectionOrder) })),
     held: held.sort((a, b) => recency(b).localeCompare(recency(a))),

@@ -512,8 +512,9 @@ async function sideThreadLastUser(
   let latest: { thread: string; at: string; ms: number } | undefined;
   for (const [thread, activity] of await threadActivities(deps.dataDir, charName, sides)) {
     const at = activity.last_user;
-    const ms = at === undefined ? Number.NaN : Date.parse(at);
-    if (at === undefined || Number.isNaN(ms) || ms <= afterMs || ms > beforeMs || (latest !== undefined && ms <= latest.ms)) continue;
+    if (at === undefined) continue;
+    const ms = Date.parse(at);
+    if (ms <= afterMs || ms > beforeMs || (latest !== undefined && ms <= latest.ms)) continue;
     latest = { thread, at, ms };
   }
   return latest === undefined ? undefined : { thread: latest.thread, at: latest.at };
