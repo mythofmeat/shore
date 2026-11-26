@@ -176,6 +176,12 @@ describe("what runs after a thread command", () => {
     expect([calls, changed]).toEqual([[["ada", "model_change", "main"]], []]);
   });
 
+  test("reading a config key leaves the cached request alone", async () => {
+    const { context, calls, changed } = dispatched("side");
+    expect(await afterCommand("config", { key: "chat.model" }, { key: "chat.model", value: "fixture" }, context)).toEqual({ key: "chat.model", value: "fixture" });
+    expect([calls, changed]).toEqual([[], []]);
+  });
+
   test("archiving the thread the keepalive warms moves the cached request home, and nothing else", async () => {
     const { context, calls, changed } = dispatched("side");
     expect(await afterCommand("archive_thread", { name: "side" }, { character: "ada" }, context)).toEqual({ character: "ada" });
