@@ -60,6 +60,7 @@ test("a thread's settings show each saved pin as its next message sends it: its 
   const view = await settings(SIDE);
 
   expect(asked(since, "thread_prompt")).toEqual([{ name: "side" }]);
+  expect([...document.body.querySelectorAll("dialog")].map((item) => item.querySelector("h2")?.textContent)).toEqual(["Thread settings"]);
   const saved = document.body.querySelector("[aria-label='Saved pins']");
   expect(saved?.closest(".field")?.querySelector("span")?.textContent).toBe("Saved pins, as the next message sends them");
   expect(rows(saved ?? undefined)).toEqual([
@@ -151,7 +152,7 @@ test("saving changed pins says what was pinned, as the daemon stored it, and sav
 });
 
 test("Add a file lists the workspace's files to search, marks the ones already pinned, and adds the one picked to the list", async () => {
-  const files = ["SOUL.md", "notes/plan.md", "notes/Lamp.md", ...Array.from({ length: 120 }, (_, at) => `days/day-${String(at).padStart(3, "0")}.md`)];
+  const files = ["SOUL.md", "notes/plan.md", "notes/Lamp.md", ...Array.from({ length: 100 }, (_, at) => `days/day-${String(at).padStart(3, "0")}.md`)];
   app.answer((request) => {
     if (request["name"] === "thread_prompt") return VIEW;
     if (request["name"] === "workspace_files") return { files };
@@ -165,7 +166,11 @@ test("Add a file lists the workspace's files to search, marks the ones already p
   const more = () => picker?.querySelector("p.picker-empty")?.textContent;
   expect(options()).toHaveLength(100);
   expect(options().slice(0, 3)).toEqual([["SOUL.md", "false", false], ["notes/plan.md", "true", true], ["notes/Lamp.md", "false", false]]);
-  expect(more()).toBe("23 more; type to narrow the list.");
+  expect(more()).toBe("3 more; type to narrow the list.");
+  const ticked = [...(picker?.querySelectorAll("[role=option]") ?? [])].map((option) => option.querySelector("svg.picker-check")?.getAttribute("width") ?? null);
+  expect([picker?.querySelector(".picker-search svg")?.getAttribute("width"), ticked.slice(0, 3), ticked.filter((width) => width !== null)]).toEqual(["16", [null, "16", null], ["16"]]);
+  await type(picker?.querySelector("input[type=search]"), "days/");
+  expect([options().length, more()]).toEqual([100, undefined]);
   expect(picker?.querySelector(".form-text")?.textContent).toBe("Hidden files, pictures and videos aren’t listed. Any path, [[link]] or !command can still be typed into the list.");
 
   await type(picker?.querySelector("input[type=search]"), " LAMP ");
@@ -284,6 +289,14 @@ test("Refresh now refreshes the thread's prompt and shows it again, says why it 
   await click(button(dialog("Prompt for “The lighthouse”") ?? document.body, "Refresh now"));
   await settle();
   expect(dialog("Prompt for “The lighthouse”")?.querySelector(".prompt-refresh [role=alert]")?.textContent).toBe("the workspace helper is down");
+  app.answer((request) => {
+    if (request["name"] === "thread_prompt_refresh") return fresh;
+    if (request["name"] === "thread_prompt") return VIEW;
+    return undefined;
+  });
+  await click(button(dialog("Prompt for “The lighthouse”") ?? document.body, "Refresh now"));
+  await settle();
+  expect(dialog("Prompt for “The lighthouse”")?.querySelector(".prompt-refresh [role=alert]")).toBeNull();
   await failing.unmount();
 
   app.answer((request) => {

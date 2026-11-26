@@ -186,12 +186,16 @@ describe("a thread's prompt", () => {
       talking();
       await sent();
       await writeFile(join(workspace, "notes", "plan.md"), "Chapter four.");
+      await writeFile(join(workspace, "SOUL.md"), "Frank sails.");
 
       clock.now = Date.parse(NOW) + quiet * 60_000 - 1;
-      expect((await view()).pins.map(({ bytes, shown, changed }) => [bytes, shown, changed])).toEqual([[19, "whole", true], [7, "whole", false]]);
+      const waiting = await view();
+      expect(waiting.pins.map(({ bytes, shown, changed }) => [bytes, shown, changed])).toEqual([[19, "whole", true], [7, "whole", false]]);
+      expect(waiting.parts.find(({ label }) => label === "SOUL.md")).toEqual({ label: "SOUL.md", text: "Frank keeps the lighthouse.", changed: true });
       clock.now += 1;
       const refreshing = await view();
       expect(refreshing.pins.map(({ bytes, shown, changed }) => [bytes, shown, changed])).toEqual([[13, "whole", false], [0, "nothing", false]]);
+      expect(refreshing.parts.find(({ label }) => label === "SOUL.md")).toEqual({ label: "SOUL.md", text: "Frank sails.", changed: false });
       expect(refreshing.parts.at(-1)?.text).toBe(`${SIDE_HEADER}\n\n## notes/plan.md\n\nChapter four.\n\n## $ echo printed\n\n(This command hasn't run yet.)`);
     }
   });

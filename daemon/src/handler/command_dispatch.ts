@@ -93,8 +93,7 @@ async function annotations(
       await afterArchiveThread(args, ctx);
       return undefined;
     case "thread_prompt_refresh":
-      afterThreadPromptRefresh(args, ctx);
-      return undefined;
+      return afterThreadPromptRefresh(args, ctx);
     default:
       return undefined;
   }
@@ -250,7 +249,7 @@ async function showHomeToMovedViewers(viewers: readonly number[], home: string, 
   }
 }
 
-function afterThreadPromptRefresh(args: unknown, ctx: DispatchContext): void {
+function afterThreadPromptRefresh(args: unknown, ctx: DispatchContext): undefined {
   const refreshed = isRecord(args) ? args["name"] : undefined;
   if (typeof refreshed === "string" && ctx.runtime.warmThread(ctx.character) === refreshed) ctx.runtime.refreshCachedRequest(ctx.character, "prompt_reload", refreshed);
 }

@@ -155,6 +155,34 @@ describe("archiving the thread a session is on", () => {
   });
 });
 
+describe("what runs after a thread command", () => {
+  const dispatched = (warm: string) => {
+    const calls: unknown[][] = [];
+    const changed: unknown[][] = [];
+    const context = {
+      character: "ada", sessionId: 1, rid: "after", router: new SessionRouter(),
+      runtime: {
+        homeThread: () => "main", warmThread: () => warm,
+        refreshCachedRequest: (...args: unknown[]) => { calls.push(args); },
+        threadsChanged: (...args: unknown[]) => { changed.push(args); },
+      },
+    } as unknown as DispatchContext;
+    return { context, calls, changed };
+  };
+
+  test("choosing a model for the thread being talked in rebuilds its cached request and says so", async () => {
+    const { context, calls, changed } = dispatched("side");
+    expect(await afterCommand("thread_model", { name: "main" }, { character: "ada" }, context)).toEqual({ character: "ada", invalidated: { cached_request: true } });
+    expect([calls, changed]).toEqual([[["ada", "model_change", "main"]], []]);
+  });
+
+  test("archiving the thread the keepalive warms moves the cached request home, and nothing else", async () => {
+    const { context, calls, changed } = dispatched("side");
+    expect(await afterCommand("archive_thread", { name: "side" }, { character: "ada" }, context)).toEqual({ character: "ada" });
+    expect([calls, changed]).toEqual([[["ada", "thread_change", "main"]], [["ada", "side"]]]);
+  });
+});
+
 describe("routed messages", () => {
 
   test("a cancel ends the running generation with a cancelled stream_end", async () => {
