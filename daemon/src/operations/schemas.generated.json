@@ -18133,6 +18133,204 @@
     }
   },
   {
+    "name": "thread_prompt",
+    "input": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "title": "NamedOperationArgs",
+      "type": "object",
+      "properties": {
+        "name": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "name"
+      ]
+    },
+    "output": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "title": "ThreadPromptView",
+      "type": "object",
+      "properties": {
+        "thread": {
+          "type": "string"
+        },
+        "parts": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/ThreadPromptPart"
+          }
+        },
+        "pins": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/ThreadPinStatus"
+          }
+        }
+      },
+      "required": [
+        "thread",
+        "parts",
+        "pins"
+      ],
+      "$defs": {
+        "ThreadPromptPart": {
+          "type": "object",
+          "properties": {
+            "label": {
+              "type": "string"
+            },
+            "text": {
+              "type": "string"
+            },
+            "changed": {
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "label",
+            "text",
+            "changed"
+          ]
+        },
+        "ThreadPinStatus": {
+          "type": "object",
+          "properties": {
+            "pin": {
+              "type": "string"
+            },
+            "bytes": {
+              "type": "integer",
+              "format": "uint",
+              "minimum": 0
+            },
+            "shown": {
+              "$ref": "#/$defs/PinShown"
+            },
+            "changed": {
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "pin",
+            "bytes",
+            "shown",
+            "changed"
+          ]
+        },
+        "PinShown": {
+          "type": "string",
+          "enum": [
+            "whole",
+            "cut",
+            "left_out",
+            "nothing"
+          ]
+        }
+      }
+    }
+  },
+  {
+    "name": "thread_prompt_refresh",
+    "input": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "title": "NamedOperationArgs",
+      "type": "object",
+      "properties": {
+        "name": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "name"
+      ]
+    },
+    "output": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "title": "ThreadPromptView",
+      "type": "object",
+      "properties": {
+        "thread": {
+          "type": "string"
+        },
+        "parts": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/ThreadPromptPart"
+          }
+        },
+        "pins": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/ThreadPinStatus"
+          }
+        }
+      },
+      "required": [
+        "thread",
+        "parts",
+        "pins"
+      ],
+      "$defs": {
+        "ThreadPromptPart": {
+          "type": "object",
+          "properties": {
+            "label": {
+              "type": "string"
+            },
+            "text": {
+              "type": "string"
+            },
+            "changed": {
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "label",
+            "text",
+            "changed"
+          ]
+        },
+        "ThreadPinStatus": {
+          "type": "object",
+          "properties": {
+            "pin": {
+              "type": "string"
+            },
+            "bytes": {
+              "type": "integer",
+              "format": "uint",
+              "minimum": 0
+            },
+            "shown": {
+              "$ref": "#/$defs/PinShown"
+            },
+            "changed": {
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "pin",
+            "bytes",
+            "shown",
+            "changed"
+          ]
+        },
+        "PinShown": {
+          "type": "string",
+          "enum": [
+            "whole",
+            "cut",
+            "left_out",
+            "nothing"
+          ]
+        }
+      }
+    }
+  },
+  {
     "name": "thread_lock",
     "input": {
       "$schema": "https://json-schema.org/draft/2020-12/schema",

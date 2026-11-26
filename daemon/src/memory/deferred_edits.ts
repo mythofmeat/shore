@@ -14,6 +14,8 @@ import { cutToBytes, MAX_THREAD_PINS_BYTES, byteSize, threadFilePromptText } fro
 import { pinnedCommandText } from "../tools/pinned_command.ts";
 import { localRfc3339 } from "../util/time.ts";
 import type { Texts } from "../texts/texts.ts";
+import type { PinShown } from "../protocol/PinShown.ts";
+import { required } from "../util/required.ts";
 
 const QUEUE_FILE = "deferred_edits.jsonl";
 
@@ -173,33 +175,89 @@ export interface ThreadPin {
   content: string | undefined;
 }
 
+export interface FittedPin extends ThreadPin {
+  bytes: number;
+  shown: PinShown;
+}
+
+export interface PinPreview extends FittedPin {
+  changed: boolean;
+}
+
+export interface PreviewedFile {
+  content: string | undefined;
+  changed: boolean;
+}
+
+const pinCopy = (characterDataDir: string, thread: string, pin: string): string | undefined =>
+  readCharacterState(characterDataDir, stateFile(thread, `active_prompt/${THREAD_PINS_DIR}/${pin}`));
+
 export async function loadThreadPins(
   texts: Texts,
   characterDataDir: string,
   workspace: CharacterWorkspace,
   thread: string,
   pins: readonly string[],
-): Promise<ThreadPin[]> {
+): Promise<FittedPin[]> {
   const snapshot = await activePromptSnapshotExists(characterDataDir, thread);
   const contents = await Promise.all(pins.map(async (pin) => snapshot
-    ? readCharacterState(characterDataDir, stateFile(thread, `active_prompt/${THREAD_PINS_DIR}/${pin}`))
+    ? pinCopy(characterDataDir, thread, pin)
     : await pinContent(characterDataDir, workspace, pin)));
+  return fitThreadPins(texts, pins, contents);
+}
+
+export async function previewThreadPins(
+  texts: Texts,
+  characterDataDir: string,
+  workspace: CharacterWorkspace,
+  thread: string,
+  pins: readonly string[],
+  refreshing: boolean,
+): Promise<PinPreview[]> {
+  const snapshot = !refreshing && await activePromptSnapshotExists(characterDataDir, thread);
+  const found = await Promise.all(pins.map(async (pin): Promise<PreviewedFile> => {
+    const copy = snapshot ? pinCopy(characterDataDir, thread, pin) : undefined;
+    if (pinnedCommand(pin) !== undefined) return { content: copy, changed: false };
+    return previewed(copy, await threadFileContent(workspace, pin), copy !== undefined);
+  }));
+  return fitThreadPins(texts, pins, found.map(({ content }) => content)).map((fitted, at) => ({ ...fitted, changed: required(found[at]).changed }));
+}
+
+export async function previewPromptFile(
+  characterDataDir: string,
+  workspace: CharacterWorkspace,
+  name: string,
+  thread: string,
+  refreshing: boolean,
+): Promise<PreviewedFile> {
+  const snapshot = !refreshing && await activePromptSnapshotExists(characterDataDir, thread);
+  const copy = snapshot ? readCharacterState(characterDataDir, stateFile(thread, `active_prompt/${name}`)) : undefined;
+  return previewed(copy?.trim() === "" ? undefined : copy, await effectiveContent(workspace, name), copy !== undefined);
+}
+
+function previewed(copy: string | undefined, live: string | undefined, kept: boolean): PreviewedFile {
+  return kept ? { content: copy, changed: copy !== live } : { content: live, changed: false };
+}
+
+function fitThreadPins(texts: Texts, pins: readonly string[], contents: readonly (string | undefined)[]): FittedPin[] {
   let room = MAX_THREAD_PINS_BYTES;
   return pins.map((pin, at) => {
     const content = contents[at];
-    const fitted = content === undefined ? undefined : fitThreadPin(texts, pin, content, room);
-    room = fitted === content ? room - Buffer.byteLength(content ?? "", "utf8") : 0;
-    return { pin, content: fitted };
+    if (content === undefined) return { pin, content, bytes: 0, shown: "nothing" };
+    const bytes = Buffer.byteLength(content, "utf8");
+    const fitted = fitThreadPin(texts, pin, content, bytes, room);
+    room = fitted.shown === "whole" ? room - bytes : 0;
+    return { pin, bytes, ...fitted };
   });
 }
 
-function fitThreadPin(texts: Texts, pin: string, content: string, room: number): string {
-  if (Buffer.byteLength(content, "utf8") <= room) return content;
+function fitThreadPin(texts: Texts, pin: string, content: string, bytes: number, room: number): { content: string; shown: PinShown } {
+  if (bytes <= room) return { content, shown: "whole" };
   const values = { limit: byteSize(MAX_THREAD_PINS_BYTES), path: pinnedCommand(pin) === undefined ? pin : undefined };
   const head = cutToBytes(content, room).trimEnd();
-  if (head === "") return texts.render("pin_left_out", values) ?? "";
+  if (head === "") return { content: texts.render("pin_left_out", values) ?? "", shown: "left_out" };
   const cut = texts.render("pin_cut", values);
-  return cut === undefined ? head : `${head}\n\n${cut}`;
+  return { content: cut === undefined ? head : `${head}\n\n${cut}`, shown: "cut" };
 }
 
 export async function forkPromptState(

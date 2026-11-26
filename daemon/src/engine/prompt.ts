@@ -132,11 +132,14 @@ function pinSection(texts: Texts, pin: string, content: string | undefined): str
   return command === undefined ? texts.render("pinned_file", { path: pin, content: shown }) : texts.render("pinned_command", { command, output: shown });
 }
 
-function threadPinsBlock(texts: Texts, pins: ThreadPrompt["pins"]): string {
-  return [texts.render("thread_pins"), ...pins.map(({ pin, content }) => pinSection(texts, pin, content))].filter((part) => part !== undefined).join("\n\n");
+function threadPinsBlock(texts: Texts, thread: ThreadPrompt): string {
+  const heading = texts.render("thread_pins", { home: thread.id === thread.home ? "yes" : undefined });
+  return [heading, ...thread.pins.map(({ pin, content }) => pinSection(texts, pin, content))].filter((part) => part !== undefined).join("\n\n");
 }
 
-function buildSystemBlocks(params: PromptParams, timeZone: string): SystemBlock[] {
+export type SystemParams = Pick<PromptParams, "thread" | "character_name" | "display_name" | "sections" | "texts">;
+
+export function buildSystemBlocks(params: SystemParams, timeZone: string = hostZone()): SystemBlock[] {
   const vars = new Map<string, string>([
     ["char", params.character_name],
     ["character_name", params.character_name],
@@ -152,7 +155,9 @@ function buildSystemBlocks(params: PromptParams, timeZone: string): SystemBlock[
     }
     const thread = params.thread;
     if (thread === undefined) return [];
-    const content = section.shore === "thread" ? threadBlock(params.texts, thread, vars, timeZone) : thread.pins.length === 0 ? undefined : threadPinsBlock(params.texts, thread.pins);
+    const content = section.shore === "thread"
+      ? thread.id === thread.home ? undefined : threadBlock(params.texts, thread, vars, timeZone)
+      : thread.pins.length === 0 ? undefined : threadPinsBlock(params.texts, thread);
     return content === undefined || content === "" ? [] : [{ label: section.shore, content }];
   });
 }

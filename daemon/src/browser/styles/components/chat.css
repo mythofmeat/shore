@@ -1399,7 +1399,7 @@ button.chip:hover {
   line-height: 1.5;
 }
 
-.textarea {
+.input.textarea {
   height: auto;
   padding: 10px 12px;
   line-height: 1.5;
@@ -1592,4 +1592,73 @@ button.swipe-count:hover:not(:disabled) {
   justify-content: flex-start;
   width: 100%;
   text-align: left;
+}
+
+.pin-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.pin-status {
+  display: flex;
+  flex-direction: column;
+  margin: 0;
+  padding: 0;
+  border: 1px solid var(--line-2);
+  border-radius: var(--radius-md);
+  list-style: none;
+}
+
+.pin-status-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 2px 12px;
+  padding: 8px 12px;
+}
+
+.pin-status-row + .pin-status-row {
+  border-top: 1px solid var(--line);
+}
+
+.pin-path {
+  min-width: 0;
+  color: var(--text-body);
+  font-size: var(--text-sm);
+  overflow-wrap: anywhere;
+}
+
+.pin-state {
+  margin-left: auto;
+  color: var(--text-2);
+  font-size: var(--text-sm);
+}
+
+.pin-state.warn {
+  color: var(--accent);
+}
+
+.pin-state.danger {
+  color: var(--danger);
+}
+
+.pin-state.quiet {
+  color: var(--text-3);
+}
+
+.prompt-part .tag {
+  margin-left: 8px;
+}
+
+.prompt-refresh {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 8px;
+}
+
+.prompt-refresh .form-hint {
+  align-self: stretch;
+  margin: 0;
 }

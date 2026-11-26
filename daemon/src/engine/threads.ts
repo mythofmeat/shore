@@ -613,6 +613,9 @@ export async function setThreadPurpose(
   purpose: string | undefined,
   now: string,
 ): Promise<ThreadsIndex> {
+  if (purpose !== undefined && id === homeThread(await readThreadsIndex(data, character))) {
+    throw new ThreadError("is_home", `thread ${JSON.stringify(id)} is the home thread for ${character}, and the home thread's prompt shows no purpose`);
+  }
   return await setThreadField(data, character, id, "purpose", purpose, now);
 }
 
@@ -675,7 +678,7 @@ export function requireEditableByCharacter(index: ThreadsIndex, character: strin
   if (record.id === homeThread(index)) {
     throw new ThreadError(
       "is_home",
-      `thread ${JSON.stringify(id)} is the home thread for ${character}, and the home thread's prompt shows no purpose or pins`,
+      `thread ${JSON.stringify(id)} is the home thread for ${character}, so only the user changes its label and pins, and its prompt shows no purpose`,
     );
   }
   if (record.locked === true) {
