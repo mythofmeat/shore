@@ -315,7 +315,7 @@ export class Server {
 
   stopped(): Promise<void> {
     const signal = this.#stopController.signal;
-    return signal.aborted ? Promise.resolve() : new Promise((resolve) => { signal.addEventListener("abort", () => { resolve(); }, { once: true }); });
+    return signal.aborted ? Promise.resolve() : new Promise((resolve) => { signal.addEventListener("abort", () => { resolve(); }); });
   }
 
   stop(): void {

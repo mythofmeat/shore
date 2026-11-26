@@ -8,7 +8,9 @@ import { resolvedReasoningReplay } from "../src/config/models.ts";
 import { ProviderRegistry } from "../src/config/providers.ts";
 import { restartRequiredChanges } from "../src/config/restart.ts";
 import { attemptMatrixBridge, unusableReason } from "../src/connections/matrix/start.ts";
-import { resolveWebConfig } from "../src/daemon/startup.ts";
+import { resolveStartup, resolveWebConfig, StartupError } from "../src/daemon/startup.ts";
+import { defaultWebConfig } from "../src/config/app.ts";
+import { ConfigDuration } from "../src/config/duration.ts";
 import { shoreLog } from "../src/log.ts";
 import type { ToolContext } from "../src/tools/dispatch.ts";
 import { buildToolContext } from "../src/handler/tool_context.ts";
@@ -604,4 +606,35 @@ test("a value of the wrong type is refused naming its key as written, in a named
   await writeFile(join(root, "characters", "ada", "config.toml"), "[tools]\nmax_result_chars = \"lots\"\n");
   const global = await load("");
   expect(() => loadCharacterConfig(global, "ada")).toThrow('tools.max_result_chars: invalid type: string "lots", expected integer');
+});
+
+test("the web listener is on by default at 127.0.0.1:7340, takes 16 connections and 32 MiB a connection, and signs browsers in for 30 days", async () => {
+  expect(defaultWebConfig()).toEqual({
+    enabled: true, bind_addr: "127.0.0.1:7340", public_origin: undefined, tls_cert: undefined, tls_key: undefined,
+    max_connections: 16, max_queued_bytes: 33_554_432, session_lifetime: ConfigDuration.fromSecs(2_592_000),
+  });
+  const dir = await mkdtemp(testTmp("shore-daemon-defaults-"));
+  const path = join(dir, "config.toml");
+  await writeFile(path, "");
+  expect(loadConfig(path, { env: { XDG_CONFIG_HOME: dir, XDG_DATA_HOME: join(dir, "data"), XDG_CACHE_HOME: join(dir, "cache") }, onWarn: () => {} }).app.daemon.shutdown_grace).toEqual(ConfigDuration.fromSecs(1_740));
+});
+
+test("an address that won't do says which setting gave it and why", () => {
+  expect(() => resolveWebConfig(defaultWebConfig(), {}, "nowhere")).toThrow('Invalid --addr "nowhere": daemon.web.bind_addr must be host:port');
+  expect(() => resolveWebConfig(defaultWebConfig(), { SHORE_WEB_ADDR: "nowhere" })).toThrow('Invalid SHORE_WEB_ADDR "nowhere": daemon.web.bind_addr must be host:port');
+});
+
+test("a daemon that can't read its config or make its token says which, and why", async () => {
+  const dir = await mkdtemp(testTmp("shore-daemon-startup-"));
+  const env = { XDG_CONFIG_HOME: join(dir, "xdg"), XDG_DATA_HOME: join(dir, "data"), XDG_CACHE_HOME: join(dir, "cache"), XDG_RUNTIME_DIR: join(dir, "run"), HOME: dir };
+  const broken = join(dir, "broken.toml");
+  await writeFile(broken, "[chat\n");
+  const failure = (run: () => unknown): StartupError => { try { run(); } catch (error) { if (error instanceof StartupError) return error; throw error; } throw new Error("it started"); };
+  const unreadable = failure(() => resolveStartup({ config: broken }, env));
+  expect([unreadable.kind, unreadable.message.startsWith(`Failed to load Shore config from ${broken}: `)]).toEqual(["load_config", true]);
+  const fine = join(dir, "config", "config.toml");
+  await mkdir(join(dir, "config", "token"), { recursive: true });
+  await writeFile(fine, "");
+  const tokenless = failure(() => resolveStartup({ config: fine }, env));
+  expect([tokenless.kind, tokenless.message.startsWith("shore has no token and could not create one at ")]).toEqual(["token", true]);
 });

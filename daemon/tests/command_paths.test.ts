@@ -3,6 +3,8 @@ import { expect, spyOn, test } from "bun:test";
 import { TurnAutonomyBridge } from "../src/autonomy/registration.ts";
 import * as registry from "../src/commands/registry.ts";
 import type { CommandOperationContext } from "../src/commands/registry.ts";
+import type { CommandDeps } from "../src/commands/dispatch.ts";
+import { credentialStanding } from "../src/llm/credential_standing.ts";
 import { Diagnostics } from "../src/diagnostics.ts";
 import { dispatchCommand } from "../src/handler/commands.ts";
 import { buildCommandPathDeps } from "../src/handler/deps.ts";
@@ -26,12 +28,13 @@ function provider(): SidecarProvider {
 
 type Dispatch = (name: string, args?: unknown, session?: Partial<SessionMeta>) => Promise<ServerMessage>;
 
-async function world(run: (dispatch: Dispatch, runtime: ShoreRuntime) => Promise<void>): Promise<void> {
+async function world(run: (dispatch: Dispatch, runtime: ShoreRuntime) => Promise<void>, commands: Partial<CommandDeps> = {}): Promise<void> {
   await afterFirstChat({ name: "command-paths", keyEnv: KEY_ENV, provider: provider(), tools: ["read"] }, async ({ runtime }) => {
-    const deps = buildCommandPathDeps({
+    const built = buildCommandPathDeps({
       runtime, autonomy: new TurnAutonomyBridge(runtime.autonomy), diagnostics: new Diagnostics(), router: new SessionRouter(),
       handshake: DEFAULT_HANDSHAKE, providers: runtime.providers, env: { [KEY_ENV]: "fixture-key" },
     });
+    const deps = { ...built, commands: { ...built.commands, ...commands } };
     const dispatch: Dispatch = async (name, args = {}, session = {}) => await dispatchCommand(deps, { name, args }, {
       session: { sessionId: 1, clientId: 1, clientType: "test", clientName: "test", capabilities: [], selectedCharacter: "ada", selectedThread: "main", ...session },
       rid: "r", kind: "command",
@@ -97,4 +100,19 @@ test("an archive command is handed its device as owner and the session's archive
     expect(handed.slice(0, 2).map((context) => [context.deps.archive?.owner, context.deps.archive?.limits])).toEqual([["device-1", { bytes: 5, entries: 2 }], ["session-1", undefined]]);
     expect(handed.at(-1)?.session.env).toEqual({ [KEY_ENV]: "fixture-key" });
   });
+});
+
+test("a provider command checks keys with the fetch it is given and dates what it learns by the clock it is given", async () => {
+  const asked: string[] = [];
+  const fetchImpl = (async (input: string | URL | Request) => {
+    asked.push(input instanceof Request ? input.url : input.toString());
+    return await Promise.resolve(Response.json({ data: [{ id: "claude-fixture" }] }));
+  }) as typeof fetch;
+  const at = Date.UTC(2026, 10, 27, 9, 0, 0);
+  await world(async (dispatch) => {
+    expect((await dispatch("list_providers", {}, { selectedCharacter: null })).type).toBe("command_output");
+    expect((await dispatch("add_provider", { name: "openrouter" }, { selectedCharacter: null })).type).toBe("command_output");
+    const added = await dispatch("add_credential", { provider: "openrouter", name: "work", secret: "sk-or-v1-0123456789abcdefWXYZ" }, { selectedCharacter: null });
+    expect([added.type, asked.length > 0, credentialStanding("openrouter", "work")?.checked_at]).toEqual(["command_output", true, new Date(at).toISOString()]);
+  }, { fetchImpl, now: () => at });
 });

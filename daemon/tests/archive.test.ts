@@ -838,3 +838,11 @@ describe("a character whose tools run as its own user", () => {
     expect(failing.workspaceOf("ada").calls).toEqual(["entries", "clear"]);
   });
 });
+
+test("an archive transfer needs both the spool and the device it belongs to", async () => {
+  const dirs = await root("no-spool");
+  const spool = new ArchiveSpool(join(dirs.cache, "archive-transfers"));
+  for (const ctx of [context(dirs, new Set()), { ...context(dirs, new Set()), spool }, { ...context(dirs, new Set()), owner: "desktop" }]) {
+    expect(await outcomeOf(importArchive(ctx, { transfer: crypto.randomUUID() }))).toThrow("Archive transfers are unavailable here");
+  }
+});

@@ -1016,11 +1016,13 @@ describe("a daemon that fails to start", () => {
   test("on a port already in use leaves its data directory free for the next start", async () => {
     const place = await layout();
     const taken = await listening();
+    const { log, lines } = recorder();
     try {
-      expect((await refused({ argv: ["--config", place.configPath, "--addr", `127.0.0.1:${taken.port}`], env: place.env, providers: {}, instancesPath: place.instancesPath })).kind).toBe("server_run");
+      expect((await refused({ argv: ["--config", place.configPath, "--addr", `127.0.0.1:${taken.port}`], env: place.env, providers: {}, instancesPath: place.instancesPath, log })).kind).toBe("server_run");
     } finally {
       await taken.close();
     }
+    expect(lines).toContain("Server shutting down");
     expect((await start(place)).web?.port).toBeGreaterThan(0);
   });
 
@@ -1043,8 +1045,9 @@ describe("a daemon that fails to start", () => {
     const place = await layout(`[daemon.web]\nenabled = true\nbind_addr = "127.0.0.1:0"\n`);
     await writeFile(join(place.root, "a-file"), "");
     const before = listeningPorts();
-    const failure = await refused({ argv: ["--config", place.configPath, "--addr", "127.0.0.1:0"], env: place.env, providers: {}, instancesPath: join(place.root, "a-file", "instances.json") });
-    expect(failure.kind).toBe("register_instance");
+    const { log, lines } = recorder();
+    const failure = await refused({ argv: ["--config", place.configPath, "--addr", "127.0.0.1:0"], env: place.env, providers: {}, instancesPath: join(place.root, "a-file", "instances.json"), log });
+    expect([failure.kind, lines.includes("Server shutting down")]).toEqual(["register_instance", true]);
     expect(openedSince(before)).toEqual([]);
     expect((await start(place)).web?.port).toBeGreaterThan(0);
   });
@@ -1095,7 +1098,7 @@ describe("a daemon's teardown", () => {
     expect([failure.kind, failure.message]).toEqual(["server_run", expect.stringContaining("no bridge today") as string]);
     expect(openedSince(before)).toEqual([]);
     expect(await instances(place)).toEqual([]);
-    expect(["Auto-discovery loop stopped", "Config hot reload watcher stopped", "Unregistered daemon instance"].filter((line) => !lines.includes(line))).toEqual([]);
+    expect(["Auto-discovery loop stopped", "Config hot reload watcher stopped", "Unregistered daemon instance", "Server shutting down"].filter((line) => !lines.includes(line))).toEqual([]);
     expect((await start(place)).web?.port).toBeGreaterThan(0);
   });
 

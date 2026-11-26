@@ -1,6 +1,7 @@
 import { until, untilAsync } from "./support/until.ts";
-import { afterEach, describe, expect, spyOn, test } from "bun:test";
+import { afterEach, describe, expect, setSystemTime, spyOn, test } from "bun:test";
 import { readFileSync } from "node:fs";
+import { createHash } from "node:crypto";
 import { hostname, tmpdir } from "node:os";
 import { type WebLoginCode } from "../src/protocol/WebLoginCode.ts";
 import { type WebProblem } from "../src/protocol/WebProblem.ts";
@@ -634,6 +635,49 @@ test("a listener that fails to start lets go of its port, its stored sign-ins an
   const again = Bun.serve({ port, hostname: "127.0.0.1", fetch: () => new Response("free") });
   expect(await (await fetch(`http://127.0.0.1:${String(port)}/`)).text()).toBe("free");
   await again.stop(true);
+});
+
+test("a sign-in store names its cookie after its origin, secures it for HTTPS, and keeps from before only what fits, is well formed and hasn't run out", async () => {
+  const named = (url: string) => `shore_web_${createHash("sha256").update(url).digest("hex").slice(0, 12)}`;
+  const plain = new WebSessions("http://127.0.0.1:7430", 4, 60_000);
+  const secure = new WebSessions("https://shore.example", 4, 60_000);
+  cleanups.push(() => { plain.close(); secure.close(); });
+  expect(plain.cookie(required(plain.create())).split("=", 1)[0]).toBe(named("http://127.0.0.1:7430"));
+  const secured = secure.cookie(required(secure.create()));
+  expect([secured.split("=", 1)[0], secured.includes("; Secure")]).toEqual([`__Host-${named("https://shore.example")}`, true]);
+  const config = await recoveryOptions();
+  const recovery = new WebRecovery(config, origin);
+  cleanups.push(() => { recovery.close(); });
+  const now = Date.now() + 10_000;
+  const keep = (id: string, expiresAt: number) => { recovery.saveSession({ id, expires_at: expiresAt, name: "Browser", created_at: now, last_used_at: now }); };
+  keep("d".repeat(64), now); keep("not a digest", now + 500); keep("a".repeat(64), now + 1_000); keep("b".repeat(64), now + 2_000); keep("c".repeat(64), now + 3_000); keep("e".repeat(64), Number.MAX_SAFE_INTEGER + 2);
+  setSystemTime(new Date(now));
+  try {
+    const restored = new WebSessions(origin, 2, 60_000, recovery);
+    cleanups.push(() => { restored.close(); });
+    expect([restored.list().map((session) => session.id), recovery.sessions().map((session) => session.id)]).toEqual([["a".repeat(64), "b".repeat(64)], ["a".repeat(64), "b".repeat(64)]]);
+  } finally { setSystemTime(); }
+});
+
+test("an archive whose outcome the daemon can't vouch for says so, and one the daemon refused says why", async () => {
+  const f = await archiveFixture(); const a = owner();
+  const outcomes: [string, string, string][] = [];
+  for (const scenario of ["failed", "cancelled", "missing", "duplicate", "wrong-name"]) {
+    const info = await f.transfers.upload(a.session, upload());
+    f.transfers.import(a.session, info.id);
+    await f.finish(await f.next(), scenario);
+    await until(() => !["importing"].includes(f.transfers.get(a.session, info.id).phase), "the import to settle");
+    const settled = f.transfers.get(a.session, info.id);
+    outcomes.push([scenario, settled.phase, settled.error ?? ""]);
+    if (settled.phase !== "uncertain") await f.transfers.remove(a.session, info.id);
+  }
+  expect(outcomes).toEqual([
+    ["failed", "failed", "Refusing to overwrite existing character"],
+    ["cancelled", "uncertain", "Archive outcome could not be confirmed; inspect the character list before trying again"],
+    ["missing", "uncertain", "Archive outcome could not be confirmed; inspect the character list before trying again"],
+    ["duplicate", "uncertain", "Unexpected archive response"],
+    ["wrong-name", "uncertain", "Unexpected archive response"],
+  ]);
 });
 
 async function workspace(): Promise<{ root: string; dir: string; data: string }> {

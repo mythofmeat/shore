@@ -2,7 +2,7 @@ import { afterEach, describe, expect, test } from "bun:test";
 
 import type { ClientMessage } from "../src/protocol/ClientMessage.ts";
 import type { ServerMessage } from "../src/protocol/ServerMessage.ts";
-import type { HistorySnapshot } from "../src/swp/handshake.ts";
+import { DEFAULT_HANDSHAKE, type HistorySnapshot } from "../src/swp/handshake.ts";
 import { Server, type LocalClientOptions, type LocalPeer } from "../src/swp/server.ts";
 import type { RoutedMessage } from "../src/swp/session.ts";
 import { rejectionOf } from "./support/outcome.ts";
@@ -310,4 +310,18 @@ describe("what a local peer asks", () => {
     await until(() => w.routed.some((m) => m.kind === "engine"), "the cancel to be routed");
     expect(order).toEqual(["before, 0 routed"]);
   });
+});
+
+test("a server stops once, however often it is told, and says so once", async () => {
+  const said: string[] = [];
+  const server = new Server({ log: { info: (message) => { said.push(message); } } });
+  const stopped = server.stopped();
+  server.stop();
+  server.stop();
+  await stopped;
+  expect(said.filter((line) => line === "Server shutting down")).toEqual(["Server shutting down"]);
+});
+
+test("the default handshake has no history and no thread", async () => {
+  expect(await DEFAULT_HANDSHAKE.history("ada", "main")).toEqual({ messages: [], previousSegment: null, config: {}, selectedCharacter: "ada", selectedThread: null, revision: 0 });
 });
