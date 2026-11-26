@@ -55,8 +55,9 @@ export async function handleListThreads(options: ListThreadsOptions): Promise<st
   const sealed = sealedThreads(characterDataDir(options.dataDir, options.character));
   const sealedHere = sealed.find((thread) => thread.id === options.thread)?.id;
   const current = sealedHere ?? (index.threads.some((thread) => thread.id === options.thread) ? options.thread ?? home : home);
-  const activity = await threadActivities(options.dataDir, options.character, index.threads.map((thread) => thread.id));
-  const threads = [...index.threads].sort((a, b) => Number(b.id === home) - Number(a.id === home));
+  const seen = index.threads.filter((thread) => thread.on_hold !== true || thread.id === current);
+  const activity = await threadActivities(options.dataDir, options.character, seen.map((thread) => thread.id));
+  const threads = [...seen].sort((a, b) => Number(b.id === home) - Number(a.id === home));
   const shown = threads.map((record) => described(record, activity.get(record.id), [
     ...(record.id === home ? ["home"] : []),
     ...(record.id === current ? ["you're here"] : []),

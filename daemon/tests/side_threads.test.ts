@@ -30,6 +30,7 @@ import { handleChatLogs, handleReadChatLogs, handleSearchChatLogs } from "../src
 import { handleListThreads } from "../src/tools/list_threads.ts";
 import type { SidecarRequest } from "../src/llm/types.ts";
 import { outcomeOf } from "./support/outcome.ts";
+import { required } from "../src/util/required.ts";
 import { reliabilityGeneration } from "./support/reliability_generation.ts";
 import { testTmp } from "./support/tmp.ts";
 import { promptedAppConfig } from "./support/prompt_list.ts";
@@ -287,6 +288,19 @@ describe("an own-time thread kept from an older Shore, in the character's list o
     expect(listed.slice(1).map((thread) => thread.split("\n")[0])).toEqual(["harbor (home, you're here) · compaction on", "main · compaction on", "pier (locked) · compaction on"]);
   });
 
+  test("leaves out a thread the user put on hold, unless it is the one she's calling from", async () => {
+    const config = await setup();
+    const data = config.dirs.data;
+    await writeThreadsIndex(data, "frank", {
+      version: 1, home: "main",
+      threads: [{ id: "main", created_at: NOW, compaction: true }, { id: "pier", created_at: NOW, compaction: true, on_hold: true }, { id: "harbor", created_at: NOW, compaction: true }],
+    });
+    const heads = async (thread?: string) => (await handleListThreads({ texts: new Texts(), dataDir: data, character: "frank", userName: "sam", timeZone: "UTC", now: () => Date.parse(NOW), ...(thread === undefined ? {} : { thread }) }))
+      .split("\n\n").slice(1).map((each) => each.split("\n")[0]);
+    expect(await heads()).toEqual(["main (home, you're here) · compaction on", "harbor · compaction on"]);
+    expect(await heads("pier")).toEqual(["main (home) · compaction on", "pier (you're here) · compaction on", "harbor · compaction on"]);
+  });
+
   test("says how long ago the user last wrote in each thread, counted to the second and never as less than a minute", async () => {
     const config = await setup();
     const data = config.dirs.data;
@@ -357,6 +371,19 @@ describe("a thread whose messages were archived", () => {
 
     writeDurable(threadFile(data, "frank", "main", "active.jsonl"), serializeMessages([message("u2", "goodnight", "2026-11-02T05:20:00Z")]));
     expect(await lastWroteNote(new Texts(), data, "frank", index, "harbor", "sam", nowMs)).toBe('[sam last wrote to you 2 hours ago, in your home thread "main".]');
+  });
+
+  test("a wake's note on where the user last wrote passes over a thread on hold for the newest one she can see", async () => {
+    const config = await setup();
+    const data = config.dirs.data;
+    await createThread(data, "frank", "harbor", NOW);
+    writeDurable(threadFile(data, "frank", "main", "active.jsonl"), serializeMessages([message("u1", "goodnight", "2026-11-02T04:20:00Z")]));
+    writeDurable(threadFile(data, "frank", "harbor", "active.jsonl"), serializeMessages([message("u2", "fish market tomorrow", "2026-11-02T05:20:00Z")]));
+    const index = required(await readThreadsIndex(data, "frank"));
+    const held: ThreadsIndex = { ...index, threads: index.threads.map((thread) => thread.id === "harbor" ? { ...thread, on_hold: true } : thread) };
+    const nowMs = Date.parse("2026-11-02T06:50:00Z");
+    expect(await lastWroteNote(new Texts(), data, "frank", index, "main", "sam", nowMs)).toBe('[sam last wrote to you 2 hours ago, in the side thread "harbor", which isn\'t shown here.]');
+    expect(await lastWroteNote(new Texts(), data, "frank", held, "main", "sam", nowMs)).toBe("[sam last wrote to you 3 hours ago, in this thread.]");
   });
 });
 

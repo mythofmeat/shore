@@ -15948,6 +15948,12 @@
                 "null"
               ]
             },
+            "on_hold": {
+              "type": [
+                "boolean",
+                "null"
+              ]
+            },
             "folder": {
               "type": [
                 "string",
@@ -16328,6 +16334,12 @@
                 "null"
               ]
             },
+            "on_hold": {
+              "type": [
+                "boolean",
+                "null"
+              ]
+            },
             "folder": {
               "type": [
                 "string",
@@ -16572,6 +16584,12 @@
               "type": "boolean"
             },
             "locked": {
+              "type": [
+                "boolean",
+                "null"
+              ]
+            },
+            "on_hold": {
               "type": [
                 "boolean",
                 "null"
@@ -16840,6 +16858,12 @@
               "type": "boolean"
             },
             "locked": {
+              "type": [
+                "boolean",
+                "null"
+              ]
+            },
+            "on_hold": {
               "type": [
                 "boolean",
                 "null"
@@ -17142,6 +17166,12 @@
                 "null"
               ]
             },
+            "on_hold": {
+              "type": [
+                "boolean",
+                "null"
+              ]
+            },
             "folder": {
               "type": [
                 "string",
@@ -17392,6 +17422,12 @@
               "type": "boolean"
             },
             "locked": {
+              "type": [
+                "boolean",
+                "null"
+              ]
+            },
+            "on_hold": {
               "type": [
                 "boolean",
                 "null"
@@ -17652,6 +17688,12 @@
                 "null"
               ]
             },
+            "on_hold": {
+              "type": [
+                "boolean",
+                "null"
+              ]
+            },
             "folder": {
               "type": [
                 "string",
@@ -17905,6 +17947,12 @@
               "type": "boolean"
             },
             "locked": {
+              "type": [
+                "boolean",
+                "null"
+              ]
+            },
+            "on_hold": {
               "type": [
                 "boolean",
                 "null"
@@ -18361,6 +18409,271 @@
                 "null"
               ]
             },
+            "on_hold": {
+              "type": [
+                "boolean",
+                "null"
+              ]
+            },
+            "folder": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "position": {
+              "type": [
+                "integer",
+                "null"
+              ],
+              "format": "uint64",
+              "minimum": 0
+            },
+            "home": {
+              "type": "boolean"
+            },
+            "wakes": {
+              "type": [
+                "boolean",
+                "null"
+              ]
+            },
+            "current": {
+              "type": "boolean"
+            },
+            "turns": {
+              "type": [
+                "integer",
+                "null"
+              ],
+              "format": "uint64",
+              "minimum": 0
+            },
+            "unread": {
+              "type": [
+                "integer",
+                "null"
+              ],
+              "format": "uint64",
+              "minimum": 0
+            },
+            "warm": {
+              "type": [
+                "boolean",
+                "null"
+              ]
+            },
+            "forked_from": {
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/ThreadForkOrigin"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            }
+          },
+          "required": [
+            "id",
+            "created_at",
+            "compaction",
+            "home",
+            "current"
+          ]
+        },
+        "ThreadForkOrigin": {
+          "type": "object",
+          "properties": {
+            "fork_id": {
+              "type": "string"
+            },
+            "source": {
+              "type": "string"
+            },
+            "created_at": {
+              "type": "string"
+            },
+            "turns": {
+              "type": "integer",
+              "format": "uint64",
+              "minimum": 0
+            }
+          },
+          "required": [
+            "fork_id",
+            "source",
+            "created_at",
+            "turns"
+          ]
+        },
+        "ThreadFolderView": {
+          "type": "object",
+          "properties": {
+            "name": {
+              "type": "string"
+            },
+            "by_activity": {
+              "type": [
+                "boolean",
+                "null"
+              ]
+            }
+          },
+          "required": [
+            "name"
+          ]
+        },
+        "CacheInvalidation": {
+          "type": "object",
+          "properties": {
+            "cached_request": {
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "cached_request"
+          ]
+        }
+      }
+    }
+  },
+  {
+    "name": "thread_hold",
+    "input": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "title": "ThreadHoldArgs",
+      "type": "object",
+      "properties": {
+        "name": {
+          "type": "string"
+        },
+        "on_hold": {
+          "type": "boolean"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "name",
+        "on_hold"
+      ]
+    },
+    "output": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "title": "ThreadListing",
+      "type": "object",
+      "properties": {
+        "character": {
+          "type": "string"
+        },
+        "threads": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/ThreadView"
+          }
+        },
+        "home": {
+          "type": "string"
+        },
+        "current": {
+          "type": "string"
+        },
+        "folders": {
+          "type": [
+            "array",
+            "null"
+          ],
+          "items": {
+            "$ref": "#/$defs/ThreadFolderView"
+          }
+        },
+        "manual_order": {
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "invalidated": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/CacheInvalidation"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "required": [
+        "character",
+        "threads",
+        "home",
+        "current"
+      ],
+      "$defs": {
+        "ThreadView": {
+          "type": "object",
+          "properties": {
+            "id": {
+              "type": "string"
+            },
+            "label": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "purpose": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "pins": {
+              "type": [
+                "array",
+                "null"
+              ],
+              "items": {
+                "type": "string"
+              }
+            },
+            "created_at": {
+              "type": "string"
+            },
+            "created_by": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "last_active": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "chat_model": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "compaction": {
+              "type": "boolean"
+            },
+            "locked": {
+              "type": [
+                "boolean",
+                "null"
+              ]
+            },
+            "on_hold": {
+              "type": [
+                "boolean",
+                "null"
+              ]
+            },
             "folder": {
               "type": [
                 "string",
@@ -18609,6 +18922,12 @@
               "type": "boolean"
             },
             "locked": {
+              "type": [
+                "boolean",
+                "null"
+              ]
+            },
+            "on_hold": {
               "type": [
                 "boolean",
                 "null"
@@ -18875,6 +19194,12 @@
                 "null"
               ]
             },
+            "on_hold": {
+              "type": [
+                "boolean",
+                "null"
+              ]
+            },
             "folder": {
               "type": [
                 "string",
@@ -19124,6 +19449,12 @@
                 "null"
               ]
             },
+            "on_hold": {
+              "type": [
+                "boolean",
+                "null"
+              ]
+            },
             "folder": {
               "type": [
                 "string",
@@ -19368,6 +19699,12 @@
               "type": "boolean"
             },
             "locked": {
+              "type": [
+                "boolean",
+                "null"
+              ]
+            },
+            "on_hold": {
               "type": [
                 "boolean",
                 "null"
@@ -19626,6 +19963,12 @@
                 "null"
               ]
             },
+            "on_hold": {
+              "type": [
+                "boolean",
+                "null"
+              ]
+            },
             "folder": {
               "type": [
                 "string",
@@ -19870,6 +20213,12 @@
               "type": "boolean"
             },
             "locked": {
+              "type": [
+                "boolean",
+                "null"
+              ]
+            },
+            "on_hold": {
               "type": [
                 "boolean",
                 "null"
@@ -20130,6 +20479,12 @@
                 "null"
               ]
             },
+            "on_hold": {
+              "type": [
+                "boolean",
+                "null"
+              ]
+            },
             "folder": {
               "type": [
                 "string",
@@ -20378,6 +20733,12 @@
               "type": "boolean"
             },
             "locked": {
+              "type": [
+                "boolean",
+                "null"
+              ]
+            },
+            "on_hold": {
               "type": [
                 "boolean",
                 "null"
@@ -20633,6 +20994,12 @@
               "type": "boolean"
             },
             "locked": {
+              "type": [
+                "boolean",
+                "null"
+              ]
+            },
+            "on_hold": {
               "type": [
                 "boolean",
                 "null"

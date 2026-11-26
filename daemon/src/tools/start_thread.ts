@@ -47,6 +47,11 @@ export function startThreadRequest(input: Record<string, unknown>): StartThreadR
   };
 }
 
+export function startRefusal(e: ThreadError, name: unknown, userName: string): ToolIoError {
+  if (e.kind !== "on_hold") return new ToolIoError(e.message);
+  return new ToolIoError(`Not started: ${userName} has a thread named ${JSON.stringify(name)} on hold, so that name is taken. Choose another.`);
+}
+
 export async function handleStartThread(
   input: Record<string, unknown>,
   start: ((request: StartThreadRequest) => Promise<void>) | undefined,
@@ -58,7 +63,7 @@ export async function handleStartThread(
     request = startThreadRequest(input);
     await start(request);
   } catch (e) {
-    if (e instanceof ThreadError) throw new ToolIoError(e.message);
+    if (e instanceof ThreadError) throw startRefusal(e, input["name"], userName);
     throw e;
   }
   const opened = request.opening === undefined ? "" : " Your opening message is waiting there.";

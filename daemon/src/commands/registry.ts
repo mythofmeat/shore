@@ -21,7 +21,7 @@ import { defineOperation, discoverOperations, type OperationPresentation, type O
 import type { CommandDeps, CommandSession } from "./dispatch.ts";
 import { internalError, invalidRequest } from "./errors.ts";
 import { characterInfo, createCharacter, listCharacters, switchCharacter } from "./navigation.ts";
-import { archiveThread, forkThread, listThreads, markRead, newThread, switchThread, threadCompaction, threadFolderCreate, threadFolderDelete, threadFolderMove, threadFolderRename, threadFolderSort, threadHome, threadLabel, threadLock, threadModel, threadMove, threadPins, threadPurpose, threadSort } from "./threads.ts";
+import { archiveThread, forkThread, listThreads, markRead, newThread, switchThread, threadCompaction, threadFolderCreate, threadFolderDelete, threadFolderMove, threadFolderRename, threadFolderSort, threadHold, threadHome, threadLabel, threadLock, threadModel, threadMove, threadPins, threadPurpose, threadSort } from "./threads.ts";
 import { archiveWithSignal, threadContext, threadListingContext } from "./thread_context.ts";
 import { refreshThreadPrompt, threadPrompt, type ThreadPromptContext } from "./thread_prompt.ts";
 import { alt, deleteMessages, edit, get, historyPage, injectSystem, listAlternatives, log } from "./conversation.ts";
@@ -491,6 +491,10 @@ export const commandOperations: OperationRegistry<CommandOperationContext> = {
     ...threadPresentation, label: "Lock thread", effects: ["history_write"],
     fields: { name: threadName, locked: { label: "Locked", hint: "Only you change a locked thread's label, purpose and pins; the character can't" } },
   }, async (context, args) => threadLock(await threadListingContext(context.deps, engineOf(context), context.session), args)),
+  thread_hold: register("thread_hold", {
+    ...threadPresentation, label: "Put a thread on hold", effects: ["history_write"],
+    fields: { name: threadName, on_hold: { label: "On hold", hint: "The character doesn't see a thread on hold, and no wake runs in it; writing in it resumes it" } },
+  }, async (context, args) => threadHold(await threadListingContext(context.deps, engineOf(context), context.session), args)),
   thread_compaction: register("thread_compaction", {
     ...threadPresentation, label: "Set whether a thread compacts", effects: ["history_write"],
     fields: { name: threadName, compaction: { label: "Compact", hint: "On: older turns are archived at the compaction limits. Off: only when the thread nearly fills the model's context" } },
@@ -566,7 +570,7 @@ export function runRegisteredOperation<N extends OperationName>(
 }
 
 const THREAD_CHANGES: ReadonlySet<string> = new Set([
-  "create_thread", "fork_thread", "thread_home", "thread_label", "thread_purpose", "thread_pins", "thread_prompt", "thread_prompt_refresh", "thread_lock", "thread_compaction", "thread_model",
+  "create_thread", "fork_thread", "thread_home", "thread_label", "thread_purpose", "thread_pins", "thread_prompt", "thread_prompt_refresh", "thread_lock", "thread_hold", "thread_compaction", "thread_model",
   "thread_move", "thread_sort", "thread_folder_create", "thread_folder_rename", "thread_folder_delete", "thread_folder_move", "thread_folder_sort",
 ]);
 

@@ -1882,6 +1882,22 @@
             "properties": {
               "name": {
                 "type": "string",
+                "const": "thread_hold"
+              },
+              "data": {
+                "$ref": "#/$defs/ThreadListing"
+              }
+            },
+            "required": [
+              "name",
+              "data"
+            ]
+          },
+          {
+            "type": "object",
+            "properties": {
+              "name": {
+                "type": "string",
                 "const": "thread_compaction"
               },
               "data": {
@@ -9533,6 +9549,12 @@
             "type": "boolean"
           },
           "locked": {
+            "type": [
+              "boolean",
+              "null"
+            ]
+          },
+          "on_hold": {
             "type": [
               "boolean",
               "null"
@@ -11397,6 +11419,22 @@
             "properties": {
               "name": {
                 "type": "string",
+                "const": "thread_hold"
+              },
+              "data": {
+                "$ref": "#/$defs/ThreadListing"
+              }
+            },
+            "required": [
+              "name",
+              "data"
+            ]
+          },
+          {
+            "type": "object",
+            "properties": {
+              "name": {
+                "type": "string",
                 "const": "thread_compaction"
               },
               "data": {
@@ -19048,6 +19086,12 @@
             "type": "boolean"
           },
           "locked": {
+            "type": [
+              "boolean",
+              "null"
+            ]
+          },
+          "on_hold": {
             "type": [
               "boolean",
               "null"

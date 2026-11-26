@@ -61,6 +61,10 @@ export class InProcessAutonomyExecutor implements AutonomyExecutor {
     return this.#deps.registry.homeThread(character);
   }
 
+  onHold(character: string, thread: string | undefined): boolean {
+    return this.#deps.registry.listThreads(character).some((record) => record.id === thread && record.on_hold === true);
+  }
+
   async runWake(character: string, wake: WakeRun, hooks: WakeHooks): Promise<WakeResult> {
     return await this.#withForeground(async () => {
       const config = this.#deps.registry.effectiveConfig(character);

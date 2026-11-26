@@ -88,6 +88,49 @@ test("a shut folder counts its threads' unread messages and still shows the open
   expect([view.names(), view.badge("A")]).toEqual([["story", "A", "old"], "3"]);
 });
 
+test("threads on hold sit in a group of their own after the new-thread button; shut, it counts their unread messages and still shows the open one", async () => {
+  const threads = [HOME, thread("side"), thread("paused", { on_hold: true, unread: 2, folder: "A" }), thread("stalled", { on_hold: true, unread: 1, last_active: "2026-11-05T00:00:00Z" })];
+  const view = await sidebar({ threads, folders: [{ name: "A" }] });
+  expect(view.names()).toEqual(["story", "side", "A", "On hold", "stalled", "paused"]);
+  const list = [...view.host.querySelectorAll(".sidebar-threads > *")];
+  expect(list.slice(-2).map((each) => each.getAttribute("aria-label") ?? each.textContent)).toEqual(["New thread", "On hold"]);
+  expect([view.badge("On hold"), view.badge("stalled"), view.badge("paused")]).toEqual([null, "1", "2"]);
+  await click(view.named("On hold")?.querySelector("button.folder"));
+  expect([view.names(), view.badge("On hold")]).toEqual([["story", "side", "A", "On hold"], "3"]);
+  await view.rerender({ thread: "paused" });
+  expect([view.names(), view.badge("On hold")]).toEqual([["story", "side", "A", "On hold", "paused"], "1"]);
+});
+
+test("the group of threads on hold says whether it is open with its chevron, shut shows no count when nothing is unread, and its threads keep to the order they were last active in", async () => {
+  const { Icon } = await import("../../src/browser/ui/icons.tsx");
+  const chevron = async (name: "chevronDown" | "chevronRight") => {
+    const drawn = await mount(<Icon name={name} size={14} />);
+    const html = drawn.host.innerHTML;
+    await drawn.unmount();
+    return html;
+  };
+  const view = await sidebar({ threads: [HOME, thread("stalled", { on_hold: true, last_active: "2026-11-05T00:00:00Z" }), thread("paused", { on_hold: true })], manualOrder: true });
+  const toggle = () => view.named("On hold")?.querySelector("button.folder");
+  const shows = () => [toggle()?.getAttribute("aria-expanded"), toggle()?.querySelector("svg")?.outerHTML, view.badge("On hold")];
+  expect(shows()).toEqual(["true", await chevron("chevronDown"), null]);
+  const moves = (await view.menu("Options for paused")).filter((item) => item.textContent.startsWith("Move ") && !item.textContent.includes("folder")).map((item) => [item.textContent, item.disabled]);
+  expect(moves).toEqual([["Move up", true], ["Move down", true]]);
+  await click(toggle());
+  expect(shows()).toEqual(["false", await chevron("chevronRight"), null]);
+});
+
+test("a thread on hold can't be dragged out of its group, and nothing can be dropped on one", async () => {
+  const view = await sidebar({ threads: [HOME, thread("side"), thread("paused", { on_hold: true })] });
+  const started = (row: Element | undefined) => {
+    const event = new Event("dragstart", { bubbles: true, cancelable: true });
+    Object.defineProperty(event, "dataTransfer", { value: new DataTransfer() });
+    row?.dispatchEvent(event);
+    return event.defaultPrevented;
+  };
+  expect([started(view.named("side")), started(view.named("paused"))]).toEqual([false, true]);
+  expect([(await dragOnto(view.named("side"), "paused"))[0], (await dragOnto(view.named("paused"), "side"))[0]]).toEqual([true, false]);
+});
+
 test("the thread opening is marked busy, unless it is already the one shown", async () => {
   const view = await sidebar({ threads: [HOME, thread("side")], opening: { character: "ada", thread: "side" } });
   expect([view.named("side")?.querySelector(".sidebar-item")?.getAttribute("aria-busy"), view.named("story")?.querySelector(".sidebar-item")?.getAttribute("aria-busy")]).toEqual(["true", "false"]);

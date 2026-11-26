@@ -7,7 +7,7 @@ import { ConnectionBanner } from "../app/banner.tsx";
 import { threadLabel } from "../sidebar/Sidebar.tsx";
 import { conversation, errorText, readMarks, streamReplies, useConversationActive, useWorkspaceValue, workspace } from "../app/state.ts";
 import { toasts } from "../ui/toast.tsx";
-import { makeHome } from "./actions.ts";
+import { holdThread, makeHome } from "./actions.ts";
 import { BudgetChip } from "./budget.tsx";
 import { GalleryDialog } from "./gallery.tsx";
 import { Composer } from "./Composer.tsx";
@@ -92,10 +92,13 @@ export function Chat({ state, sidebarOpen, toggleSidebar, mobile }: { state: Chr
       document.removeEventListener("visibilitychange", readMarks.check);
     };
   }, []);
-  const kept = state.threads.find((thread) => thread.id === state.thread)?.wakes === true;
+  const open = state.threads.find((thread) => thread.id === state.thread);
+  const kept = open?.wakes === true;
   return <>
     <ChatTopbar state={state} sidebarOpen={sidebarOpen} toggleSidebar={toggleSidebar} mobile={mobile} />
     <ConnectionBanner state={state} />
+    {open?.on_hold === true ? <div className="banner" role="status">{`On hold. ${state.character ?? ""} doesn't see this thread, and no wake runs in it. Writing here resumes it.`}
+      <button type="button" className="button" disabled={state.status !== "ready"} onClick={() => void holdThread(open, false)}>Resume</button></div> : null}
     {state.character === null ? <NoCharacter state={state} /> : <>
       <Transcript key={`${state.character}/${state.thread ?? ""}/${String(state.segmentView?.segment.index ?? "current")}`} character={state.character} mobile={mobile} readOnly={kept} />
       {kept

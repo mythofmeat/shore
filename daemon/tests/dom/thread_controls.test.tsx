@@ -1,6 +1,7 @@
-import { expect, test } from "bun:test";
+import { expect, spyOn, test } from "bun:test";
 
 import type { ThreadView } from "../../src/protocol/ThreadView.ts";
+import type { ThreadNeighbours } from "../../src/browser/sidebar/ThreadRow.tsx";
 import { HOLD, useApp } from "./app.ts";
 import { LISTING } from "./daemon.ts";
 import { acting, button, click, mount, type } from "./dom.ts";
@@ -27,7 +28,7 @@ test("the home thread's row shows a house and stays where it is, and any other t
   const neighbours = { up: undefined, down: undefined, atEnd: true, byActivity: false };
   const offered = (thread: ThreadView) => threadMenuItems(thread, true, neighbours).flatMap((item) => item === "separator" ? [] : [item.label]);
   expect(offered(HOME)).toEqual(["Thread settings…", "Fork…", "Mark as read", "Archive…"]);
-  expect(offered(SIDE)).toEqual(["Thread settings…", "Fork…", "Mark as read", "Make home", "Move up", "Move down", "Move to folder…", "Archive…"]);
+  expect(offered(SIDE)).toEqual(["Thread settings…", "Fork…", "Mark as read", "Put on hold", "Make home", "Move up", "Move down", "Move to folder…", "Archive…"]);
 
   const icon = async (name: "home" | "chat") => {
     const drawn = await mount(<Icon name={name} size={14} />);
@@ -43,6 +44,126 @@ test("the home thread's row shows a house and stays where it is, and any other t
   };
   expect(await row(HOME)).toEqual(["false", await icon("home")]);
   expect(await row(SIDE)).toEqual(["true", await icon("chat")]);
+});
+
+test("a side thread's options put it on hold and a thread on hold's resume it, once the daemon is ready, while home and the wakes thread offer neither", async () => {
+  app.answer(answered("thread_hold"));
+  const { holdItem } = await import("../../src/browser/sidebar/ThreadRow.tsx");
+  const HELD = { ...SIDE, on_hold: true };
+  const WAKES = { ...SIDE, id: "wakes", wakes: true };
+  const items = (thread: ThreadView, ready: boolean) => holdItem(thread, ready).flatMap((item) => item === "separator" ? [] : [[item.label, item.icon, item.disabled]]);
+  expect([items(HOME, true), items(WAKES, true)]).toEqual([[], []]);
+  expect([items(SIDE, true), items(SIDE, false)]).toEqual([[["Put on hold", "pause", false]], [["Put on hold", "pause", true]]]);
+  expect([items(HELD, true), items(HELD, false)]).toEqual([[["Resume", "play", false]], [["Resume", "play", true]]]);
+  const since = app.socket().sent.length;
+  for (const thread of [SIDE, HELD]) {
+    const item = holdItem(thread, true)[0];
+    if (item !== undefined && item !== "separator") await acting(() => { item.onSelect(); });
+  }
+  await settle();
+  expect(asked(since, "thread_hold")).toEqual([{ name: "side", on_hold: true }, { name: "side", on_hold: false }]);
+});
+
+test("a thread's options wait for the daemon; mark as read needs an unread message, a move needs somewhere to go, and home can't be archived", async () => {
+  app.answer(answered("thread_move"));
+  const { threadMenuItems } = await import("../../src/browser/sidebar/ThreadRow.tsx");
+  const free: ThreadNeighbours = { up: "above", down: "below", atEnd: false, byActivity: false };
+  const shown = (thread: ThreadView, ready: boolean, neighbours = free) => threadMenuItems(thread, ready, neighbours).flatMap((item) => item === "separator" ? [] : [[item.label, item.disabled ?? false, item.danger ?? false]]);
+  const UNREAD = { ...SIDE, unread: 1 };
+  expect(shown(UNREAD, true)).toEqual([
+    ["Thread settings…", false, false], ["Fork…", false, false], ["Mark as read", false, false], ["Put on hold", false, false], ["Make home", false, false],
+    ["Move up", false, false], ["Move down", false, false], ["Move to folder…", false, false], ["Archive…", false, true],
+  ]);
+  expect(shown(UNREAD, false).filter(([, disabled]) => disabled !== true)).toEqual([]);
+  const markable = (unread: number | undefined) => shown(unread === undefined ? SIDE : { ...SIDE, unread }, true).find(([label]) => label === "Mark as read")?.[1];
+  expect([markable(undefined), markable(0), markable(1), markable(2)]).toEqual([true, true, false, false]);
+  expect(shown(SIDE, true, { up: undefined, down: undefined, atEnd: true, byActivity: false }).filter(([label]) => label === "Move up" || label === "Move down")).toEqual([["Move up", true, false], ["Move down", true, false]]);
+  expect(shown(HOME, true).at(-1)).toEqual(["Archive…", true, true]);
+
+  const since = app.socket().sent.length;
+  for (const label of ["Move up", "Move down"]) {
+    const item = threadMenuItems(SIDE, true, free).find((each) => each !== "separator" && each.label === label);
+    if (item !== undefined && item !== "separator") await acting(() => { item.onSelect(); });
+  }
+  await settle();
+  expect(asked(since, "thread_move")).toEqual([{ name: "side", before: "above" }, { name: "side", before: "below" }]);
+});
+
+test("an unread count reads 99+ past 99, and tells a screen reader one message or how many", async () => {
+  const { UnreadBadge } = await import("../../src/browser/sidebar/ThreadRow.tsx");
+  const shown = async (count: number) => {
+    const view = await mount(<UnreadBadge count={count} />);
+    const text = view.host.textContent;
+    await view.unmount();
+    return text;
+  };
+  expect([await shown(1), await shown(2), await shown(99), await shown(100)]).toEqual([
+    "1(1 unread message)", "2(2 unread messages)", "99(99 unread messages)", "99+(100 unread messages)",
+  ]);
+});
+
+test("the open thread is marked read when it opens, when the window gets focus, when the page is shown and when a reply comes in, but only with the window focused and never once the chat is closed", async () => {
+  const { Chat } = await import("../../src/browser/chat/Chat.tsx");
+  const { chromeOf } = await import("../../src/browser/chrome.ts");
+  const { workspace } = app.state();
+  let focused = true;
+  const focus = spyOn(document, "hasFocus").mockImplementation(() => focused);
+  app.restores.push(() => focus.mockRestore());
+  const minute = (n: number) => `2026-11-26T10:${String(n).padStart(2, "0")}:00Z`;
+  const reply = async (n: number) => {
+    const messages = Array.from({ length: n }, (_, at) => ({ msg_id: `m${String(at)}`, role: "assistant", content: "hi", content_blocks: [], timestamp: minute(at), images: [] }));
+    await acting(() => { app.socket().receive({ type: "history", messages, config: {}, revision: 2, selected_character: "ada", selected_thread: "story" }); });
+  };
+  const since = app.socket().sent.length;
+  const marked = () => asked(since, "mark_thread_read").map((args) => (args as { through: string }).through);
+  await acting(() => { workspace.applyThreadListing({ ...LISTING, threads: LISTING.threads.map((thread) => ({ ...thread, unread: 1 })) }); });
+  focused = false;
+  await reply(1);
+  focused = true;
+  const view = await mount(<Chat state={chromeOf(undefined, workspace.getSnapshot())} sidebarOpen toggleSidebar={() => {}} mobile={false} />);
+  await settle();
+  expect(marked()).toEqual([minute(0)]);
+  focused = false;
+  await reply(2);
+  expect(marked(), "a reply while the window has no focus stays unread").toEqual([minute(0)]);
+  focused = true;
+  await acting(() => { window.dispatchEvent(new Event("focus")); });
+  focused = false;
+  await reply(3);
+  focused = true;
+  await acting(() => { document.dispatchEvent(new Event("visibilitychange")); });
+  await reply(4);
+  expect(marked()).toEqual([minute(0), minute(1), minute(2), minute(3)]);
+  await view.unmount();
+  await reply(5);
+  await acting(() => { window.dispatchEvent(new Event("focus")); document.dispatchEvent(new Event("visibilitychange")); });
+  expect(marked(), "nothing is marked once the chat is closed").toEqual([minute(0), minute(1), minute(2), minute(3)]);
+});
+
+test("a thread on hold says so above its transcript, with a button that resumes it once the daemon is ready", async () => {
+  app.answer(answered("thread_hold"));
+  const { Chat } = await import("../../src/browser/chat/Chat.tsx");
+  const { chromeOf } = await import("../../src/browser/chrome.ts");
+  const chrome = chromeOf(undefined, app.state().workspace.getSnapshot());
+  const banner = async (state: typeof chrome) => {
+    const view = await mount(<Chat state={state} sidebarOpen toggleSidebar={() => {}} mobile={false} />);
+    await settle();
+    return { view, shown: [...view.host.querySelectorAll(".banner")].map((each) => [each.textContent, each.querySelector("button")?.disabled]) };
+  };
+  const plain = await banner({ ...chrome, character: "ada", thread: "side", threads: [HOME, SIDE] });
+  expect(plain.shown).toEqual([]);
+  await plain.view.unmount();
+  const held = { ...chrome, character: "ada", thread: "side", threads: [HOME, { ...SIDE, on_hold: true }] };
+  const waiting = await banner({ ...held, status: "connecting" });
+  expect(waiting.shown.at(-1)).toEqual(["On hold. ada doesn't see this thread, and no wake runs in it. Writing here resumes it.Resume", true]);
+  await waiting.view.unmount();
+  const ready = await banner({ ...held, status: "ready" });
+  expect(ready.shown).toEqual([["On hold. ada doesn't see this thread, and no wake runs in it. Writing here resumes it.Resume", false]]);
+  const since = app.socket().sent.length;
+  await click(button(ready.view.host, "Resume"));
+  await settle();
+  expect(asked(since, "thread_hold")).toEqual([{ name: "side", on_hold: false }]);
+  await ready.view.unmount();
 });
 
 test("a thread's settings show whether it compacts or trims when it gets long, and saving a change sends it", async () => {

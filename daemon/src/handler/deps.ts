@@ -120,6 +120,7 @@ export function generationRegistry(registry: CharacterRegistry): GenerationRegis
     effectiveConfig: (name) => registry.effectiveConfig(name),
     listThreads: (name) => registry.listThreads(name),
     wakesThread: (name) => registry.wakesThread(name),
+    resumeThread: async (name, thread) => { await registry.setThreadOnHold(name, thread, false); },
   };
 }
 

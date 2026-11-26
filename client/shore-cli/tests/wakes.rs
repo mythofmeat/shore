@@ -134,6 +134,33 @@ fn the_thread_list_marks_home_and_says_where_a_wake_runs() {
 }
 
 #[test]
+fn the_thread_list_marks_a_thread_on_hold_and_says_how_it_comes_back() {
+    let (output, _frames) = asked(
+        json!({
+            "character": "ada",
+            "threads": [
+                {"id": "main", "created_at": "2026-11-21T00:00:00Z", "compaction": true, "home": true, "current": true, "turns": 2},
+                {"id": "tale", "created_at": "2026-11-21T00:00:00Z", "compaction": false, "home": false, "current": false, "turns": 3, "on_hold": true},
+            ],
+            "home": "main", "current": "main",
+        }),
+        &["thread"],
+    );
+    assert_eq!(
+        lines(&output).get(1..),
+        Some(
+            &[
+                "* main home \u{00b7} 2 turns \u{00b7} compacts".to_owned(),
+                "tale 3 turns \u{00b7} trims \u{00b7} on hold".to_owned(),
+                "a wake runs in home, unless its trigger names another thread".to_owned(),
+                "the character doesn't see a thread on hold; writing in it, or `shore thread resume`, brings it back"
+                    .to_owned(),
+            ][..]
+        )
+    );
+}
+
+#[test]
 fn the_thread_list_counts_each_threads_pins_and_says_what_a_lock_keeps() {
     let thread = |id: &str, pins: &[&str], locked: bool| {
         json!({
