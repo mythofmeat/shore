@@ -1021,6 +1021,26 @@ describe("a request that fails inside the daemon", () => {
 });
 
 describe("stopping the web listener", () => {
+  test("a stopped listener leaves no browser sign-in waiting to run out on the store it closed", async () => {
+    const recovery = await recoveryOptions();
+    const listener = recoveringServer(recovery, await freePort(), 300);
+    const { code } = await (await fetch(`${listener.web.origin}/api/login-code`, { method: "POST", headers: { authorization: "Bearer recovery-token" } })).json() as WebLoginCode;
+    expect((await listener.post("/login", "", JSON.stringify({ token: code }))).status).toBe(200);
+    await listener.web.stop(); listener.swp.stop();
+    await Bun.sleep(400);
+    expect([handlesUnder(recovery.dataDir), handlesUnder(recovery.cacheDir)]).toEqual([0, 0]);
+  });
+
+  test("stopping waits for its browsers to be let go, however long their requests take to drain", async () => {
+    const f = await fixture({ drainTimeoutMs: 2_600 }); f.web.activate();
+    const browser = connectBrowser(f.web.origin, (await f.login()).cookie);
+    await browser.attach();
+    browser.send({ type: "command", rid: crypto.randomUUID(), name: "status", args: {} });
+    await until(() => f.routed.some((route) => route.kind === "command"), "the request to reach the daemon");
+    await f.web.stop();
+    expect(f.controls.some((control) => control.kind === "session_disconnected")).toBe(true);
+  });
+
   test("stopping twice is one stop, and a device still following is let go once the grace is up", async () => {
     const f = await fixture(); f.web.activate();
     const events = await fetch(`${f.web.address}/api/events`, { headers: { authorization: `Bearer ${TOKEN}` } });

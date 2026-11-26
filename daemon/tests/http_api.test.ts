@@ -160,6 +160,14 @@ describe("running an operation over HTTP", () => {
     expect(own.devices.map((device) => [device["kind"], device["current"]])).toEqual([["browser", true], ["automation", false]]);
   });
 
+  test("hello takes a character or thread given empty as none given", async () => {
+    const place = await daemon();
+    const hello = async (query: string) => await (await fetch(`${place.origin}/api/hello${query}`, { headers: { authorization: `Bearer ${TOKEN}` } })).json() as Record<string, unknown>;
+    const plain = await hello("");
+    expect(await hello("?character=&thread=")).toEqual(plain);
+    expect([plain["selected_character"], (await hello("?character=bo"))["selected_character"]]).toEqual([undefined, "bo"]);
+  });
+
   test("the sign-in code page is for POST, and a device asking anything else is told the endpoint is unknown", async () => {
     const place = await daemon();
     const asked = await fetch(`${place.origin}/api/login-code`, { headers: { authorization: `Bearer ${TOKEN}` } });
