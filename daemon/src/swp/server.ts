@@ -96,6 +96,8 @@ export interface LocalClientOptions {
   readonly confidential?: boolean;
   readonly character?: string | null | undefined;
   readonly thread?: string | undefined;
+  readonly history?: boolean;
+  readonly broadcasts?: boolean;
   readonly onLag?: (skipped: number) => void;
   readonly signal?: AbortSignal;
   readonly prepareMessage?: (message: ServerMessage) => ServerMessage;
@@ -107,7 +109,7 @@ export interface LocalClientOptions {
 export interface LocalPeer {
   readonly session: SessionMeta;
   readonly characters: readonly CharacterInfo[];
-  readonly history: HistorySnapshot;
+  readonly history: HistorySnapshot | undefined;
   send(msg: ClientMessage, beforeDispatch?: () => void): Promise<void>;
   events(): AsyncGenerator<ServerMessage, void>;
   detach(): Promise<void>;
@@ -220,11 +222,11 @@ export class Server {
     const signal = AbortSignal.any([this.#stopController.signal, ...(options.signal === undefined ? [] : [options.signal])]);
     const provider = this.#handshake ?? DEFAULT_HANDSHAKE;
     const hello = await whileAttached(provider.hello(), signal);
-    const requested = options.character ?? null;
-    const history = await whileAttached(provider.history(
-      options.character === null ? null : resolveHandshakeCharacter(requested, hello.characters),
-      options.thread ?? null,
-    ), signal);
+    const character = options.character === null ? null : resolveHandshakeCharacter(options.character ?? null, hello.characters);
+    const history = options.history === false ? undefined : await whileAttached(provider.history(character, options.thread ?? null), signal);
+    const selection = history === undefined
+      ? await whileAttached(provider.select(character, options.thread ?? null), signal)
+      : { character: history.selectedCharacter, thread: history.selectedThread };
     signal.throwIfAborted();
 
     const clientId = this.#nextId;
@@ -237,20 +239,20 @@ export class Server {
       clientName: options.clientName,
       capabilities,
       confidential: options.confidential === true,
-      character: history.selectedCharacter,
-      thread: history.selectedThread,
+      character: selection.character,
+      thread: selection.thread,
     };
 
     const inbox = new Inbox(limits);
     const media = new HistoryMediaDelivery();
-    const subscription = this.#events.subscribe(limits, this.#queuedFor(clientId));
+    const subscription = options.broadcasts === false ? undefined : this.#events.subscribe(limits, this.#queuedFor(clientId));
     let detached = false;
     let detachment: Promise<void> | undefined;
     const detach = (): Promise<void> => {
       if (detachment !== undefined) return detachment;
       detached = true;
       inbox.close(true);
-      subscription.unsubscribe();
+      subscription?.unsubscribe();
       this.#router.unregisterSession(clientId);
       this.#config.log?.info?.("Local client detached", { client_id: clientId });
       detachment = this.#route({ kind: "session_disconnected", sessionId: clientId });
@@ -273,9 +275,9 @@ export class Server {
       deliver(msg, catchUp);
     });
     signal.addEventListener("abort", aborted);
-    deliver(historyMessage(history), true);
+    if (history !== undefined) deliver(historyMessage(history), true);
 
-    void (async () => {
+    if (subscription !== undefined) void (async () => {
       for (let result = await subscription.recv(); result.kind !== "closed"; result = await subscription.recv()) {
         if (result.kind === "lagged") {
           options.onLag?.(result.skipped);

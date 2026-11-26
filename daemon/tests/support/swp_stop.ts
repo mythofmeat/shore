@@ -7,6 +7,7 @@ const server = new Server({
   authenticate: () => true,
   handshake: {
     hello: () => Promise.resolve({ characters: [{ name: "ada" }] }),
+    select: (character) => Promise.resolve({ character, thread: null }),
     history: (selected) => Promise.resolve({ messages: [], previousSegment: null, config: {}, selectedCharacter: selected, selectedThread: null, revision: 1 }),
   },
 });

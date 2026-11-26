@@ -10,9 +10,96 @@ const details = (extra: Record<string, unknown> = {}) => ({
   has_config_override: true, pending_deferred_edits: ["C.md"], data_dir: "/data/ada", has_data: true, ...extra,
 });
 
+const NOW = new Date("2026-11-10T00:00:00Z").getTime();
+const devices = (requests: { code: string; name: string; expires_at: number }[] = []) => ({
+  devices: [
+    { id: "b1", kind: "browser" as const, name: "Firefox on Linux", created_at: 0, last_used_at: NOW - 30_000, expires_at: NOW + 1, current: true },
+    { id: "c1", kind: "cli" as const, name: "desktop", created_at: 0, last_used_at: NOW - 3 * 3_600_000, current: false },
+    { id: "k1", kind: "automation" as const, name: "Phone", created_at: 0, operations: ["presence", "status"], current: false },
+  ],
+  requests,
+});
+
+function stubDevices(list = devices()) {
+  const connection = app.state().workspace.connection;
+  const listed = spyOn(connection, "devices").mockImplementation(async () => await Promise.resolve(list));
+  const decided = spyOn(connection, "decideSignIn").mockImplementation(async () => { await Promise.resolve(); });
+  const revoked = spyOn(connection, "revokeDevice").mockImplementation(async () => { await Promise.resolve(); });
+  const made = spyOn(connection, "automationKey").mockImplementation(async (name, operations) => await Promise.resolve({
+    device: { id: "k2", kind: "automation" as const, name, created_at: NOW, operations: [...operations], current: false }, token: "shore_secret-key",
+  }));
+  app.restores.push(() => { listed.mockRestore(); decided.mockRestore(); revoked.mockRestore(); made.mockRestore(); });
+  return { listed, decided, revoked, made };
+}
+
 describe("the devices page", () => {
+  test("lists every signed-in device with what it is and when it was last used, and signs one out", async () => {
+    const { DevicesPage } = await import("../../src/browser/settings/Devices.tsx");
+    jest.useFakeTimers();
+    app.restores.push(() => { jest.useRealTimers(); });
+    jest.setSystemTime(NOW);
+    const stub = stubDevices();
+    const view = await mount(<DevicesPage state={app.state().workspace.getSnapshot()} />);
+    await acting(() => Promise.resolve());
+    const rows = [...view.host.querySelectorAll(".setting-row")].map((row) => [row.querySelector(".setting-label")?.textContent, row.querySelector(".setting-description")?.textContent]);
+    expect(rows).toEqual([
+      ["Firefox on Linux · this one", "Browser · used just now"],
+      ["desktop", "Command line · used 3 h ago"],
+      ["Phone", "Automation key for presence, status · not used yet"],
+    ]);
+    await click(view.host.querySelectorAll(".setting-row button")[1]);
+    await acting(() => Promise.resolve());
+    expect(stub.revoked.mock.calls).toEqual([["c1"]]);
+    const before = stub.listed.mock.calls.length;
+    await acting(() => { jest.advanceTimersByTime(5_000); });
+    expect(stub.listed.mock.calls.length).toBeGreaterThan(before);
+    await view.unmount();
+  });
+
+  test("lets a waiting command line in, or refuses it, by the code it shows", async () => {
+    const { DevicesPage } = await import("../../src/browser/settings/Devices.tsx");
+    jest.useFakeTimers();
+    app.restores.push(() => { jest.useRealTimers(); });
+    jest.setSystemTime(NOW);
+    const stub = stubDevices(devices([{ code: "4F7K", name: "laptop", expires_at: NOW + 65_000 }, { code: "ZZ22", name: "stranger", expires_at: NOW + 5_000 }]));
+    const view = await mount(<DevicesPage state={app.state().workspace.getSnapshot()} />);
+    await acting(() => Promise.resolve());
+    const waiting = view.host.querySelector(".settings-section");
+    expect(waiting?.textContent).toContain("laptop 4F7K");
+    expect(waiting?.textContent).toContain("Expires in 1:05");
+    await click(button(waiting ?? view.host, "Allow"));
+    await click([...(waiting?.querySelectorAll("button") ?? [])].filter((item) => item.textContent === "Refuse")[1]);
+    await acting(() => Promise.resolve());
+    expect(stub.decided.mock.calls).toEqual([["4F7K", true], ["ZZ22", false]]);
+    await view.unmount();
+  });
+
+  test("makes an automation key for the ticked operations and shows it once, with how to use it", async () => {
+    const { DevicesPage } = await import("../../src/browser/settings/Devices.tsx");
+    const stub = stubDevices();
+    const snapshot = { ...app.state().workspace.getSnapshot(), operations: [
+      { name: "presence", label: "Your status" }, { name: "switch_thread", label: "Switch thread" }, { name: "status", label: "Status" },
+    ] as never, requests: [{ name: "message", label: "Send message" }] as never };
+    const view = await mount(<DevicesPage state={snapshot} />);
+    const make = button(view.host, "Make key");
+    expect(make.disabled).toBe(true);
+    const labels = [...view.host.querySelectorAll(".key-operations label")].map((label) => label.textContent);
+    expect(labels).toEqual(["Send message message", "Your status presence", "Status status"]);
+    await type(view.host.querySelector("input[placeholder='Phone shortcuts']"), "Phone");
+    expect(make.disabled, "a key needs an operation").toBe(true);
+    await click(view.host.querySelectorAll(".key-operations input")[1]);
+    await click(button(view.host, "Make key"));
+    await acting(() => Promise.resolve());
+    expect(stub.made.mock.calls).toEqual([["Phone", ["presence"]]]);
+    expect(view.host.querySelector(".key-example")?.textContent).toBe("curl -X POST http://shore.test:7340/api/op/presence \\\n  -H \"Authorization: Bearer shore_secret-key\" \\\n  -H \"Content-Type: application/json\" -d '{}'");
+    await click(button(view.host, "Done"));
+    expect(view.host.querySelector(".key-example")).toBeNull();
+    await view.unmount();
+  });
+
   test("starts from this page's address, says which addresses won't do, and remembers what was typed", async () => {
     const { DevicesPage } = await import("../../src/browser/settings/Devices.tsx");
+    stubDevices({ devices: [], requests: [] });
     const view = await mount(<DevicesPage state={app.state().workspace.getSnapshot()} />);
     const input = view.host.querySelector("input");
     const show = button(view.host, "Show sign-in code");
@@ -22,7 +109,7 @@ describe("the devices page", () => {
     await type(input, "   ");
     expect(view.host.querySelector("[role=alert]"), "nothing typed is not wrong").toBeNull();
     await type(input, "localhost:7340");
-    expect(view.host.querySelector(".setting-description")?.textContent).toBe("http://localhost:7340 only reaches this computer. Enter an address the other device can reach, such as this computer’s network or tailnet name.");
+    expect(view.host.querySelector(".rows.padded .setting-description")?.textContent).toBe("http://localhost:7340 only reaches this computer. Enter an address the other device can reach, such as this computer’s network or tailnet name.");
     expect(localStorage.getItem("shore.device-address")).toBe("localhost:7340");
     await type(input, "desktop.lan");
     expect(view.host.textContent).not.toContain("only reaches this computer");
@@ -39,6 +126,7 @@ describe("the devices page", () => {
     app.restores.push(() => { jest.useRealTimers(); });
     const start = new Date("2026-11-10T00:00:00Z").getTime();
     jest.setSystemTime(start);
+    stubDevices({ devices: [], requests: [] });
     const codes = spyOn(app.state().workspace.connection, "loginCode").mockImplementation(async () => await Promise.resolve({ code: "c0de", expires_at: Date.now() + 65_000 }));
     const written: string[] = [];
     Object.defineProperty(navigator, "clipboard", { configurable: true, value: { writeText: async (text: string) => { await Promise.resolve(); written.push(text); } } });

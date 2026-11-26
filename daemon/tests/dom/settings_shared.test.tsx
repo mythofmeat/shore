@@ -1,4 +1,4 @@
-import { describe, expect, spyOn, test } from "bun:test";
+import { describe, expect, jest, spyOn, test } from "bun:test";
 
 import { HOLD, useApp } from "./app.ts";
 import { acting, button, click, mount, renderHook } from "./dom.ts";
@@ -205,6 +205,46 @@ describe("pages and banners", () => {
     }
     await click(button(view.host, "Retry now"));
     expect(reconnects).toHaveBeenCalledTimes(1);
+  });
+
+  test("a command line waiting to sign in is shown wherever the page is, until it is let in or refused, and only while the page is seen", async () => {
+    const { SignInRequestBanner } = await import("../../src/browser/app/banner.tsx");
+    const { toasts } = await import("../../src/browser/ui/toast.tsx");
+    jest.useFakeTimers();
+    const connection = app.state().workspace.connection;
+    let requests = [{ code: "4F7K", name: "laptop", expires_at: Date.now() + 60_000 }, { code: "ZZ22", name: "desktop", expires_at: Date.now() + 60_000 }];
+    const listed = spyOn(connection, "devices").mockImplementation(async () => await Promise.resolve({ devices: [], requests }));
+    const decided = spyOn(connection, "decideSignIn").mockImplementation(async (code) => { await Promise.resolve(); if (code === "ZZ22") throw new Error("No device is waiting with the code ZZ22"); });
+    const shown = spyOn(toasts, "show");
+    let visibility = "visible";
+    Object.defineProperty(document, "visibilityState", { configurable: true, get: () => visibility });
+    app.restores.push(() => { jest.useRealTimers(); listed.mockRestore(); decided.mockRestore(); shown.mockRestore(); Reflect.deleteProperty(document, "visibilityState"); });
+    const snapshot = app.state().workspace.getSnapshot();
+    const view = await mount(<SignInRequestBanner state={{ ...snapshot, status: "reconnecting" }} />);
+    expect([view.host.innerHTML, listed.mock.calls.length]).toEqual(["", 0]);
+    await view.update(<SignInRequestBanner state={{ ...snapshot, status: "ready" }} />);
+    await acting(() => Promise.resolve());
+    expect([...view.host.querySelectorAll("[role=alert] span")].map((item) => item.textContent)).toEqual([
+      "A command line on laptop wants to sign in, showing the code 4F7K.", "A command line on desktop wants to sign in, showing the code ZZ22.",
+    ]);
+    await click(button(view.host, "Allow"));
+    await acting(() => Promise.resolve());
+    expect([decided.mock.calls, shown.mock.calls.at(-1), view.host.querySelectorAll("[role=alert]").length]).toEqual([[["4F7K", true]], ["Signed in"], 1]);
+    await click(button(view.host, "Refuse"));
+    await acting(() => Promise.resolve());
+    expect([decided.mock.calls.at(-1), shown.mock.calls.at(-1), view.host.querySelectorAll("[role=alert]").length]).toEqual([["ZZ22", false], ["No device is waiting with the code ZZ22", "error"], 1]);
+    visibility = "hidden";
+    const before = listed.mock.calls.length;
+    await acting(() => { jest.advanceTimersByTime(5_000); });
+    expect(listed.mock.calls.length).toBe(before);
+    requests = [];
+    visibility = "visible";
+    await acting(() => { document.dispatchEvent(new Event("visibilitychange")); });
+    await acting(() => Promise.resolve());
+    expect([listed.mock.calls.length, view.host.innerHTML]).toEqual([before + 1, ""]);
+    await view.unmount();
+    await acting(() => { jest.advanceTimersByTime(5_000); });
+    expect(listed.mock.calls.length).toBe(before + 1);
   });
 
   test("the keyboard page lists the shortcuts as the switches set them, and keeps the switches", async () => {

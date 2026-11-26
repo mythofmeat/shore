@@ -278,6 +278,7 @@ describe("handleConnection", () => {
         authenticate: OPEN,
         handshake: {
           hello: () => Promise.resolve({ characters: [{ name: "alice" }] }),
+          select: (character) => Promise.resolve({ character, thread: null }),
           history: (selected) =>
             Promise.resolve({
               messages: [],
@@ -368,6 +369,7 @@ async function fixture(characters: string[] = ["ada", "bee"]) {
     authenticate: () => true,
     handshake: {
       hello: () => Promise.resolve({ characters: characters.map((name) => ({ name })) }),
+      select: (character) => Promise.resolve({ character, thread: null }),
       history: (selected) =>
         Promise.resolve({
           messages: [],
@@ -622,6 +624,7 @@ describe("stopping", () => {
       authenticate: () => true,
       handshake: {
         hello: () => Promise.resolve({ characters: [{ name: "ada" }] }),
+        select: (character) => Promise.resolve({ character, thread: null }),
         history: history ?? ((selected) => Promise.resolve({ messages: [], previousSegment: null, config: {}, selectedCharacter: selected, selectedThread: null, revision: 1 })),
       },
       log,

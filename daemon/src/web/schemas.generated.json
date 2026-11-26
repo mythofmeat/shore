@@ -19414,5 +19414,315 @@
     "required": [
       "values"
     ]
+  },
+  "device_list": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "title": "WebDeviceList",
+    "type": "object",
+    "properties": {
+      "devices": {
+        "type": "array",
+        "items": {
+          "$ref": "#/$defs/WebDevice"
+        }
+      },
+      "requests": {
+        "type": "array",
+        "items": {
+          "$ref": "#/$defs/WebSignInRequest"
+        }
+      }
+    },
+    "required": [
+      "devices",
+      "requests"
+    ],
+    "$defs": {
+      "WebDevice": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "kind": {
+            "$ref": "#/$defs/WebDeviceKind"
+          },
+          "name": {
+            "type": "string"
+          },
+          "created_at": {
+            "type": "integer",
+            "format": "uint64",
+            "minimum": 0
+          },
+          "last_used_at": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "uint64",
+            "minimum": 0
+          },
+          "expires_at": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "uint64",
+            "minimum": 0
+          },
+          "operations": {
+            "type": [
+              "array",
+              "null"
+            ],
+            "items": {
+              "type": "string"
+            }
+          },
+          "current": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "id",
+          "kind",
+          "name",
+          "created_at",
+          "current"
+        ]
+      },
+      "WebDeviceKind": {
+        "type": "string",
+        "enum": [
+          "browser",
+          "cli",
+          "automation"
+        ]
+      },
+      "WebSignInRequest": {
+        "type": "object",
+        "properties": {
+          "code": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "expires_at": {
+            "type": "integer",
+            "format": "uint64",
+            "minimum": 0
+          }
+        },
+        "required": [
+          "code",
+          "name",
+          "expires_at"
+        ]
+      }
+    }
+  },
+  "automation_key": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "title": "WebAutomationKey",
+    "type": "object",
+    "properties": {
+      "name": {
+        "type": "string"
+      },
+      "operations": {
+        "type": "array",
+        "items": {
+          "type": "string"
+        }
+      }
+    },
+    "additionalProperties": false,
+    "required": [
+      "name",
+      "operations"
+    ]
+  },
+  "new_device": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "title": "WebNewDevice",
+    "type": "object",
+    "properties": {
+      "device": {
+        "$ref": "#/$defs/WebDevice"
+      },
+      "token": {
+        "type": "string"
+      }
+    },
+    "required": [
+      "device",
+      "token"
+    ],
+    "$defs": {
+      "WebDevice": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "kind": {
+            "$ref": "#/$defs/WebDeviceKind"
+          },
+          "name": {
+            "type": "string"
+          },
+          "created_at": {
+            "type": "integer",
+            "format": "uint64",
+            "minimum": 0
+          },
+          "last_used_at": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "uint64",
+            "minimum": 0
+          },
+          "expires_at": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "uint64",
+            "minimum": 0
+          },
+          "operations": {
+            "type": [
+              "array",
+              "null"
+            ],
+            "items": {
+              "type": "string"
+            }
+          },
+          "current": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "id",
+          "kind",
+          "name",
+          "created_at",
+          "current"
+        ]
+      },
+      "WebDeviceKind": {
+        "type": "string",
+        "enum": [
+          "browser",
+          "cli",
+          "automation"
+        ]
+      }
+    }
+  },
+  "device_choice": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "title": "WebDeviceChoice",
+    "type": "object",
+    "properties": {
+      "id": {
+        "type": "string"
+      }
+    },
+    "additionalProperties": false,
+    "required": [
+      "id"
+    ]
+  },
+  "sign_in_start": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "title": "WebSignInStart",
+    "type": "object",
+    "properties": {
+      "name": {
+        "type": "string"
+      },
+      "secret": {
+        "type": "string"
+      }
+    },
+    "additionalProperties": false,
+    "required": [
+      "name",
+      "secret"
+    ]
+  },
+  "sign_in_pending": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "title": "WebSignInPending",
+    "type": "object",
+    "properties": {
+      "id": {
+        "type": "string"
+      },
+      "code": {
+        "type": "string"
+      },
+      "expires_at": {
+        "type": "integer",
+        "format": "uint64",
+        "minimum": 0
+      }
+    },
+    "required": [
+      "id",
+      "code",
+      "expires_at"
+    ]
+  },
+  "sign_in_poll": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "title": "WebSignInPoll",
+    "type": "object",
+    "properties": {
+      "secret": {
+        "type": "string"
+      }
+    },
+    "additionalProperties": false,
+    "required": [
+      "secret"
+    ]
+  },
+  "sign_in_granted": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "title": "WebSignInGranted",
+    "type": "object",
+    "properties": {
+      "token": {
+        "type": "string"
+      }
+    },
+    "required": [
+      "token"
+    ]
+  },
+  "sign_in_decision": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "title": "WebSignInDecision",
+    "type": "object",
+    "properties": {
+      "code": {
+        "type": "string"
+      },
+      "allow": {
+        "type": "boolean"
+      }
+    },
+    "additionalProperties": false,
+    "required": [
+      "code",
+      "allow"
+    ]
   }
 }

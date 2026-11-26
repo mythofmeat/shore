@@ -198,8 +198,8 @@ describe("what the daemon keeps on disk for browsers", () => {
     const root = mkdtempSync(join(tmpdir(), "shore-sign-in-restart-"));
     const options = { cacheDir: join(root, "cache"), dataDir: root, token: "t" };
     const first = new WebRecovery(options, ORIGIN);
-    first.saveSession("live", Date.now() + 60_000);
-    first.saveSession("stale", Date.now() - 1);
+    first.saveSession({ id: "live", expires_at: Date.now() + 60_000, name: "Firefox on Linux", created_at: 1, last_used_at: 2 });
+    first.saveSession({ id: "stale", expires_at: Date.now() - 1, name: "Browser", created_at: 1, last_used_at: 1 });
     first.close();
     const second = new WebRecovery(options, ORIGIN);
     expect(second.sessions().map((session) => session.id)).toEqual(["live"]);
@@ -209,16 +209,23 @@ describe("what the daemon keeps on disk for browsers", () => {
     moved.close();
   });
 
-  test("a store written by an earlier daemon keeps its sessions while the origin and token stay the same", () => {
+  test("a store written by an earlier daemon keeps its sessions while the origin and token stay the same, named as a browser", () => {
     const root = mkdtempSync(join(tmpdir(), "shore-sign-in-upgrade-"));
     const options = { cacheDir: join(root, "cache"), dataDir: root, token: "t" };
-    new WebRecovery(options, ORIGIN).close();
-    const db = new Database(join(options.cacheDir, "web", sessionDigest(root), "recovery.sqlite"));
-    db.query("UPDATE identity SET fingerprint = ?").run(sessionDigest(JSON.stringify([1, ORIGIN, "t"])));
-    db.query("INSERT INTO sessions VALUES (?, ?)").run("kept", Date.now() + 60_000);
+    const directory = join(options.cacheDir, "web", sessionDigest(realpathSync(root)));
+    mkdirSync(directory, { recursive: true, mode: 0o700 });
+    const db = new Database(join(directory, "recovery.sqlite"));
+    db.run(`CREATE TABLE identity (id INTEGER PRIMARY KEY CHECK(id = 1), fingerprint TEXT NOT NULL);
+      CREATE TABLE sessions (id TEXT PRIMARY KEY, expires_at INTEGER NOT NULL);`);
+    db.query("INSERT INTO identity VALUES (1, ?)").run(sessionDigest(JSON.stringify([1, ORIGIN, "t"])));
+    const expires = Date.now() + 60_000;
+    db.query("INSERT INTO sessions VALUES (?, ?)").run("kept", expires);
     db.close();
     const upgraded = new WebRecovery(options, ORIGIN);
-    expect(upgraded.sessions().map((session) => session.id)).toEqual(["kept"]);
+    expect(upgraded.sessions()).toEqual([{ id: "kept", expires_at: expires, name: "Browser", created_at: 0, last_used_at: 0 }]);
+    upgraded.saveSession({ id: "new", expires_at: expires + 1, name: "Firefox on Linux", created_at: 5, last_used_at: 6 });
+    upgraded.touchSession("new", 9);
+    expect(upgraded.sessions().at(-1)).toEqual({ id: "new", expires_at: expires + 1, name: "Firefox on Linux", created_at: 5, last_used_at: 9 });
     upgraded.close();
   });
 

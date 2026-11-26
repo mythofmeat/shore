@@ -6,7 +6,7 @@ import { useMediaQuery } from "../ui/hooks.ts";
 import { navigate, SETTINGS_PAGES, type SettingsPage } from "../app/route.ts";
 import { workspace } from "../app/state.ts";
 import { Form, useSubmit } from "../chat/dialogs.tsx";
-import { ConnectionBanner } from "../app/banner.tsx";
+import { ConnectionBanner, SignInRequestBanner } from "../app/banner.tsx";
 import { SETTINGS_PAGE_VIEWS } from "./pages.tsx";
 
 const GROUPS = ["Chat", "Daemon", "Advanced"] as const;
@@ -42,6 +42,7 @@ export function Settings({ state, page, sidebarOpen, toggleSidebar }: { state: C
       <div className="topbar-title"><span className="topbar-name">Settings</span>{narrow ? <><span className="topbar-separator">/</span><span className="topbar-thread">{label}</span></> : null}</div>
     </header> : null}
     <ConnectionBanner state={state} />
+    <SignInRequestBanner state={state} />
     <div className="settings-body">
       {narrow ? <details className="settings-nav-mobile"><summary>{label}<Icon name="chevronDown" size={14} /></summary>{nav}</details> : nav}
       <main className="settings-content" aria-label={label}>

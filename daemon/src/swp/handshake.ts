@@ -7,7 +7,7 @@ import { firstChatModel } from "../config/models.ts";
 import { configView, resolveChatModelForCharacter } from "../config/preferences.ts";
 import type { ConversationEngine } from "../engine/conversation.ts";
 import { threadModelOf, type ThreadRecord } from "../engine/threads.ts";
-import type { HandshakeProvider, HelloSnapshot, HistorySnapshot } from "./connection";
+import type { HandshakeProvider, HelloSnapshot, HistorySnapshot, Selection } from "./connection";
 
 export interface HandshakeRegistry {
   availableCharacters(): readonly string[];
@@ -36,7 +36,13 @@ export function buildHandshakeProvider(registry: HandshakeRegistry): HandshakePr
     hello: () => Promise.resolve(helloSnapshot(registry)),
     history: async (selectedCharacter, selectedThread) =>
       await buildSessionHistorySnapshot(registry, selectedCharacter, selectedThread ?? null),
+    select: async (character, thread) => await resolveSelection(registry, character, thread),
   };
+}
+
+async function resolveSelection(registry: HandshakeRegistry, character: string | null, thread: string | null): Promise<Selection> {
+  const engine = character === null ? undefined : await engineIfCharacterExists(registry, character, liveThread(registry, character, thread));
+  return engine === undefined ? { character: null, thread: null } : { character, thread: engine.thread };
 }
 
 export function helloSnapshot(registry: HandshakeRegistry): HelloSnapshot {

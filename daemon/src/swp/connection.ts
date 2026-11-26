@@ -44,9 +44,15 @@ export interface HistorySnapshot {
   readonly revision: number;
 }
 
+export interface Selection {
+  readonly character: string | null;
+  readonly thread: string | null;
+}
+
 export interface HandshakeProvider {
   hello(): Promise<HelloSnapshot>;
   history(selectedCharacter: string | null, selectedThread?: string | null): Promise<HistorySnapshot>;
+  select(character: string | null, thread: string | null): Promise<Selection>;
 }
 
 export const DEFAULT_HANDSHAKE: HandshakeProvider = {
@@ -60,6 +66,7 @@ export const DEFAULT_HANDSHAKE: HandshakeProvider = {
       selectedThread: null,
       revision: 0,
     }),
+  select: (character) => Promise.resolve({ character, thread: null }),
 };
 
 export interface Duplex {

@@ -40,6 +40,7 @@ async function fixture(options: Partial<Omit<WebServerOptions, "server" | "authe
     addr: "127.0.0.1:0", serverName: "web-test", authenticate: (token) => tokenMatches(TOKEN, token),
     handshake: provider ?? {
       hello: async () => ({ characters: [{ name: "ada" }, { name: "bo" }] }),
+      select: (character) => Promise.resolve({ character, thread: null }),
       history: async (selected, thread) => {
         histories += 1;
         return { messages: [], previousSegment: null, config: {}, selectedCharacter: selected, selectedThread: thread ?? "main", revision: 0 };
@@ -407,7 +408,7 @@ type CommandRoute = Extract<RoutedMessage, { kind: "command" }>;
 
 function owner() {
   const controller = new AbortController();
-  const session: WebSession = { id: crypto.randomUUID(), expiresAt: Date.now() + 60_000, signal: controller.signal };
+  const session: WebSession = { id: crypto.randomUUID(), name: "Browser", createdAt: Date.now(), lastUsedAt: Date.now(), expiresAt: Date.now() + 60_000, signal: controller.signal };
   return { session, controller };
 }
 
@@ -423,7 +424,7 @@ function upload(body: NonNullable<RequestInit["body"]> = "archive bytes", header
 
 async function archiveFixture(limits: Partial<ArchiveTransferLimits> = {}, singleCharacter = false) {
   const server = new Server({ addr: "127.0.0.1:0", serverName: "archive-test", authenticate: () => true,
-    handshake: { hello: async () => ({ characters: singleCharacter ? [{ name: "ada" }] : [] }), history: async (selectedCharacter) => ({ messages: [], previousSegment: null, config: {}, selectedCharacter, selectedThread: null, revision: 0 }) },
+    handshake: { hello: async () => ({ characters: singleCharacter ? [{ name: "ada" }] : [] }), history: async (selectedCharacter) => ({ messages: [], previousSegment: null, config: {}, selectedCharacter, selectedThread: null, revision: 0 }), select: async (character) => ({ character, thread: null }) },
   });
   const commands: CommandRoute[] = [];
   await server.bind();
@@ -553,7 +554,7 @@ test("signed-in pages can load a sent picture without an Origin header, and nobo
   await writeFile(kept, bytes);
   const swp = new Server({
     addr: "127.0.0.1:0", serverName: "picture-test", authenticate: (token) => tokenMatches("token", token),
-    handshake: { hello: async () => ({ characters: [] }), history: async () => ({ messages: [], previousSegment: null, config: {}, selectedCharacter: null, selectedThread: "main", revision: 0 }) },
+    handshake: { hello: async () => ({ characters: [] }), history: async () => ({ messages: [], previousSegment: null, config: {}, selectedCharacter: null, selectedThread: "main", revision: 0 }), select: async (character) => ({ character, thread: null }) },
   });
   await swp.bind();
   const served = swp.serve();

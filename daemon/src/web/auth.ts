@@ -4,17 +4,40 @@ import { required } from "../util/required.ts";
 import { sessionDigest, type WebRecovery } from "./recovery.ts";
 
 const MAX_TIMER_MS = 2 ** 31 - 1;
+const LAST_USED_WRITE_MS = 60_000;
 
 export interface WebSession {
   readonly id: string;
+  readonly name: string;
+  readonly createdAt: number;
   readonly expiresAt: number;
+  readonly lastUsedAt: number;
   readonly signal: AbortSignal;
 }
 
 interface StoredSession extends WebSession {
   expiresAt: number;
+  lastUsedAt: number;
+  written: number;
   controller: AbortController;
   timer?: ReturnType<typeof setTimeout>;
+}
+
+export interface SavedSession {
+  readonly id: string;
+  readonly expires_at: number;
+  readonly name: string;
+  readonly created_at: number;
+  readonly last_used_at: number;
+}
+
+export function browserName(userAgent: string | null): string {
+  const agent = userAgent ?? "";
+  const browser = [["Edg/", "Edge"], ["Electron/", "Shore app"], ["Firefox/", "Firefox"], ["Chrome/", "Chrome"], ["Safari/", "Safari"]]
+    .find(([mark]) => agent.includes(mark ?? ""))?.[1] ?? "Browser";
+  const platform = [["iPhone", "iPhone"], ["iPad", "iPad"], ["Android", "Android"], ["Mac OS X", "macOS"], ["Windows", "Windows"], ["Linux", "Linux"]]
+    .find(([mark]) => agent.includes(mark ?? ""))?.[1];
+  return platform === undefined ? browser : `${browser} on ${platform}`;
 }
 
 export class WebSessions {
@@ -32,7 +55,7 @@ export class WebSessions {
     this.#capacity = capacity;
     this.#lifetime = lifetime;
     for (const saved of recovery?.sessions() ?? []) {
-      if (this.#sessions.size < capacity && /^[a-f0-9]{64}$/.test(saved.id) && Number.isSafeInteger(saved.expires_at) && saved.expires_at > Date.now()) this.#restore(saved.id, saved.expires_at);
+      if (this.#sessions.size < capacity && /^[a-f0-9]{64}$/.test(saved.id) && Number.isSafeInteger(saved.expires_at) && saved.expires_at > Date.now()) this.#restore(saved);
       else recovery?.revokeSession(saved.id);
     }
   }
@@ -42,9 +65,20 @@ export class WebSessions {
     return token === null || token === undefined || !/^[A-Za-z0-9_-]{43}$/.test(token) ? undefined : token;
   }
 
-  read(request: Request, secure = this.#secure): WebSession | undefined {
+  read(request: Request, secure = this.#secure, now = Date.now()): WebSession | undefined {
     const token = this.#presented(request, secure);
-    return token === undefined ? undefined : this.get(sessionDigest(token));
+    const session = token === undefined ? undefined : this.#sessions.get(sessionDigest(token));
+    if (session === undefined || this.get(session.id) === undefined) return undefined;
+    session.lastUsedAt = now;
+    if (now - session.written >= LAST_USED_WRITE_MS) {
+      this.recovery?.touchSession(session.id, now);
+      session.written = now;
+    }
+    return session;
+  }
+
+  list(): readonly WebSession[] {
+    return [...this.#sessions.values()].filter((session) => this.get(session.id) !== undefined);
   }
 
   get(id: string): WebSession | undefined {
@@ -56,15 +90,14 @@ export class WebSessions {
     return session;
   }
 
-  create(): WebSession | undefined {
+  create(name = "Browser", now = Date.now()): WebSession | undefined {
     if (this.#closed || this.#capacity < 1) return undefined;
     const token = randomBytes(32).toString("base64url");
-    const id = sessionDigest(token);
-    const expiresAt = Date.now() + this.#lifetime;
-    this.recovery?.saveSession(id, expiresAt);
+    const saved: SavedSession = { id: sessionDigest(token), expires_at: now + this.#lifetime, name, created_at: now, last_used_at: now };
+    this.recovery?.saveSession(saved);
     while (this.#sessions.size >= this.#capacity) this.revoke(required(this.#sessions.values().next().value));
-    this.#cookies.set(id, token);
-    return this.#restore(id, expiresAt);
+    this.#cookies.set(saved.id, token);
+    return this.#restore(saved);
   }
 
   renew(session: WebSession, request: Request, secure = this.#secure): string {
@@ -79,11 +112,14 @@ export class WebSessions {
     return this.#cookie(token, expiresAt, secure);
   }
 
-  #restore(id: string, expiresAt: number): WebSession {
+  #restore(saved: SavedSession): WebSession {
     const controller = new AbortController();
-    const session: StoredSession = { id, controller, signal: controller.signal, expiresAt };
+    const session: StoredSession = {
+      id: saved.id, name: saved.name, createdAt: saved.created_at, expiresAt: saved.expires_at, lastUsedAt: saved.last_used_at,
+      written: saved.last_used_at, controller, signal: controller.signal,
+    };
     this.#arm(session);
-    this.#sessions.set(id, session);
+    this.#sessions.set(saved.id, session);
     return session;
   }
 

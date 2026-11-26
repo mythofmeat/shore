@@ -22,6 +22,7 @@ interface World {
   readonly routed: RoutedMessage[];
   readonly logged: string[];
   readonly fetched: (readonly [string | null, string | null | undefined])[];
+  readonly selected: (readonly [string | null, string | null])[];
   hold(): () => void;
   attach(options?: Partial<LocalClientOptions>): Promise<LocalPeer>;
   kinds(sessionId: number): string[];
@@ -30,12 +31,14 @@ interface World {
 async function world(history: (character: string | null, thread?: string | null) => Promise<HistorySnapshot> = (character, thread) => Promise.resolve(snapshot(character, thread))): Promise<World> {
   const logged: string[] = [];
   const fetched: (readonly [string | null, string | null | undefined])[] = [];
+  const selected: (readonly [string | null, string | null])[] = [];
   let held: Promise<void> | undefined;
   const server = new Server({
     addr: "127.0.0.1:0", serverName: "local-peers", authenticate: () => false,
     log: { info: (message) => logged.push(message), warn: (message) => logged.push(message), error: (message) => logged.push(message) },
     handshake: {
       hello: () => Promise.resolve({ characters: [{ name: "ada" }, { name: "bo" }] }),
+      select: (character, thread) => { selected.push([character, thread]); return Promise.resolve({ character, thread: thread === null ? null : `${thread}-resolved` }); },
       history: async (character, thread) => {
         fetched.push([character, thread]);
         if (held !== undefined) await held;
@@ -49,7 +52,7 @@ async function world(history: (character: string | null, thread?: string | null)
   const routing = (async () => { for await (const message of server.routes()) routed.push(message); })();
   cleanups.push(async () => { server.stop(); await served; await routing; });
   return {
-    server, routed, logged, fetched,
+    server, routed, logged, fetched, selected,
     hold: () => {
       let release = (): void => {};
       held = new Promise<void>((resolve) => { release = resolve; });
@@ -92,6 +95,23 @@ describe("a local peer attaching", () => {
     expect(await take(kept, 1)).toEqual([{ type: "history", messages: [], config: "fresh", selected_thread: "main", selected_character: "ada", revision: 0 }]);
     await until(() => w.kinds(kept.session.sessionId).includes("session_connected"), "the peer to be announced");
     expect(w.kinds(plain.session.sessionId)).toEqual(["session_connected"]);
+  });
+
+  test("for one request, skips the history snapshot and every broadcast, and hears only what is sent to its session", async () => {
+    const w = await world();
+    const peer = await w.attach({ history: false, broadcasts: false, character: "bo", thread: "garden" });
+    expect(w.fetched).toEqual([]);
+    expect(w.selected).toEqual([["bo", "garden"]]);
+    expect(peer.history).toBeUndefined();
+    expect(peer.session).toMatchObject({ selectedCharacter: "bo", selectedThread: "garden-resolved" });
+    w.server.broadcast({ type: "ping" });
+    await Bun.sleep(20);
+    await w.server.sessionRouter.sendToSession(peer.session.sessionId, chunk("only you"));
+    expect(await take(peer, 1)).toEqual([chunk("only you")]);
+    await peer.detach();
+    const characterless = await w.attach({ history: false, character: null });
+    expect(w.selected.at(-1)).toEqual([null, "main"]);
+    expect(characterless.session.selectedCharacter).toBeNull();
   });
 
   test("with live limits, needs a positive whole number of messages and bytes", async () => {
