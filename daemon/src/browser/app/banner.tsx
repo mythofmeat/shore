@@ -16,17 +16,15 @@ const SIGN_IN_POLL_MS = 5_000;
 function SignInRequestBanner() {
   const [requests, setRequests] = useState<WebSignInRequest[]>([]);
   useEffect(() => {
-    let stopped = false;
     const check = () => {
       if (document.visibilityState !== "visible") return;
-      workspace.connection.devices().then((list) => { if (!stopped) setRequests(list.requests); }, () => {});
+      workspace.connection.devices().then((list) => { setRequests(list.requests); }, () => {});
     };
     check();
     const timer = setInterval(check, SIGN_IN_POLL_MS);
     document.addEventListener("visibilitychange", check);
-    return () => { stopped = true; clearInterval(timer); document.removeEventListener("visibilitychange", check); };
+    return () => { clearInterval(timer); document.removeEventListener("visibilitychange", check); };
   }, []);
-  if (requests.length === 0) return null;
   const decide = (code: string, allow: boolean) => {
     workspace.connection.decideSignIn(code, allow).then(() => { setRequests((current) => current.filter((request) => request.code !== code)); toasts.show(allow ? "Signed in" : "Refused"); },
       (failure: unknown) => { toasts.show(failure instanceof Error ? failure.message : String(failure), "error"); });

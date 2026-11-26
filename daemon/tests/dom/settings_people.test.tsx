@@ -149,6 +149,151 @@ describe("the devices page", () => {
     await view.unmount();
     localStorage.clear();
   });
+
+  test("says when a device was last used in minutes, hours or as a date, and counts down to the second", async () => {
+    const { countdown, lastUsed } = await import("../../src/browser/settings/Devices.tsx");
+    const at = NOW - 1;
+    expect([undefined, 0].map((when) => lastUsed(when, NOW))).toEqual(["not used yet", "not used yet"]);
+    expect([59_999, 60_000, 3_599_999, 3_600_000, 86_399_999, 86_400_000].map((ago) => lastUsed(at, at + ago))).toEqual([
+      "used just now", "used 1 min ago", "used 59 min ago", "used 1 h ago", "used 23 h ago", `used ${new Date(at).toLocaleDateString()}`,
+    ]);
+    expect([-1_000, 0, 59_000, 60_000, 60_001, 65_000].map(countdown)).toEqual(["0:00", "0:00", "0:59", "1:00", "1:01", "1:05"]);
+  });
+
+  test("shows the waiting section only while a command line waits, even a single one", async () => {
+    const { DevicesPage } = await import("../../src/browser/settings/Devices.tsx");
+    stubDevices(devices());
+    const none = await mount(<DevicesPage state={app.state().workspace.getSnapshot()} />);
+    await acting(() => Promise.resolve());
+    expect([...none.host.querySelectorAll("h2")].map((title) => title.textContent)).not.toContain("Waiting to sign in");
+    await none.unmount();
+    app.restores.splice(0).reverse().forEach((restore) => { restore(); });
+    stubDevices(devices([{ code: "4F7K", name: "laptop", expires_at: Date.now() + 60_000 }]));
+    const one = await mount(<DevicesPage state={app.state().workspace.getSnapshot()} />);
+    await acting(() => Promise.resolve());
+    expect([...one.host.querySelectorAll("h2")].map((title) => title.textContent)).toContain("Waiting to sign in");
+    await one.unmount();
+  });
+
+  test("looks again at once after letting a device in, refusing one or signing one out, and says which it did", async () => {
+    const { DevicesPage } = await import("../../src/browser/settings/Devices.tsx");
+    const { toasts } = await import("../../src/browser/ui/toast.tsx");
+    const stub = stubDevices(devices([{ code: "4F7K", name: "laptop", expires_at: Date.now() + 60_000 }, { code: "ZZ22", name: "stranger", expires_at: Date.now() + 60_000 }]));
+    const shown = spyOn(toasts, "show");
+    app.restores.push(() => { shown.mockRestore(); });
+    const view = await mount(<DevicesPage state={app.state().workspace.getSnapshot()} />);
+    await acting(() => Promise.resolve());
+    const waiting = view.host.querySelector(".settings-section") ?? view.host;
+    let before = stub.listed.mock.calls.length;
+    await click(button(waiting, "Allow"));
+    await acting(() => Promise.resolve());
+    expect([stub.listed.mock.calls.length, shown.mock.calls.at(-1)]).toEqual([before + 1, ["Signed in"]]);
+    before = stub.listed.mock.calls.length;
+    await click(button(waiting, "Refuse"));
+    await acting(() => Promise.resolve());
+    expect([stub.listed.mock.calls.length, shown.mock.calls.at(-1)]).toEqual([before + 1, ["Refused"]]);
+    before = stub.listed.mock.calls.length;
+    const rows = [...view.host.querySelectorAll(".setting-row")].filter((row) => row.querySelector(".setting-label")?.textContent === "desktop");
+    await click(button(rows[0] ?? view.host, "Sign out"));
+    await acting(() => Promise.resolve());
+    expect([stub.listed.mock.calls.length, shown.mock.calls.at(-1)]).toEqual([before + 1, ["desktop is signed out"]]);
+    await view.unmount();
+  });
+
+  test("a list that can't be read says why until one can, and each new list is timed from when it came", async () => {
+    const { DevicesPage } = await import("../../src/browser/settings/Devices.tsx");
+    jest.useFakeTimers();
+    app.restores.push(() => { jest.useRealTimers(); });
+    jest.setSystemTime(NOW);
+    const answers: (() => Promise<unknown>)[] = [async () => { await Promise.resolve(); throw new Error("Keys can't list devices"); }, async () => { await Promise.resolve(); throw "plainly not"; }];
+    const list = { devices: [{ id: "c1", kind: "cli" as const, name: "desktop", created_at: 0, last_used_at: NOW, current: false }], requests: [] };
+    const listed = spyOn(app.state().workspace.connection, "devices").mockImplementation(async () => await ((answers.shift() ?? (async () => await Promise.resolve(list)))() as Promise<typeof list>));
+    app.restores.push(() => { listed.mockRestore(); });
+    const view = await mount(<DevicesPage state={app.state().workspace.getSnapshot()} />);
+    await acting(() => Promise.resolve());
+    expect(view.host.querySelector("[role=alert]")?.textContent).toBe("Keys can't list devices");
+    await acting(() => { jest.advanceTimersByTime(5_000); });
+    await acting(() => Promise.resolve());
+    expect(view.host.querySelector("[role=alert]")?.textContent).toBe("plainly not");
+    jest.setSystemTime(NOW + 2 * 3_600_000);
+    await acting(() => { jest.advanceTimersByTime(5_000); });
+    await acting(() => Promise.resolve());
+    expect([view.host.querySelector("[role=alert]"), view.host.querySelector(".setting-row .setting-description")?.textContent]).toEqual([null, "Command line · used 2 h ago"]);
+    await view.unmount();
+    const after = listed.mock.calls.length;
+    await acting(() => { jest.advanceTimersByTime(20_000); });
+    expect(listed.mock.calls.length).toBe(after);
+  });
+
+  test("making a key takes the ticked operations, waits while it works, starts over after, and copies the key", async () => {
+    const { DevicesPage } = await import("../../src/browser/settings/Devices.tsx");
+    const { toasts } = await import("../../src/browser/ui/toast.tsx");
+    const stub = stubDevices();
+    let release = (): void => {};
+    stub.made.mockImplementation(async (name, operations) => {
+      await new Promise<void>((resolve) => { release = resolve; });
+      return { device: { id: "k2", kind: "automation" as const, name, created_at: NOW, operations: [...operations], current: false }, token: "shore_secret-key" };
+    });
+    const written: string[] = [];
+    Object.defineProperty(navigator, "clipboard", { configurable: true, value: { writeText: async (text: string) => { await Promise.resolve(); written.push(text); } } });
+    const shown = spyOn(toasts, "show");
+    app.restores.push(() => { shown.mockRestore(); Reflect.deleteProperty(navigator, "clipboard"); });
+    const snapshot = { ...app.state().workspace.getSnapshot(), operations: [{ name: "presence", label: "Your status" }, { name: "status", label: "Status" }, { name: "usage", label: "Usage" }] as never, requests: [] as never };
+    const view = await mount(<DevicesPage state={snapshot} />);
+    const boxes = () => [...view.host.querySelectorAll<HTMLInputElement>(".key-operations input")];
+    const nameField = () => view.host.querySelector<HTMLInputElement>("input[placeholder='Phone shortcuts']");
+    await type(nameField(), "   ");
+    await click(boxes()[0]);
+    expect(button(view.host, "Make key").disabled, "a blank name is no name").toBe(true);
+    await type(nameField(), "Phone");
+    await click(boxes()[1]);
+    await click(boxes()[2]);
+    await click(boxes()[2]);
+    const listedBefore = stub.listed.mock.calls.length;
+    await click(button(view.host, "Make key"));
+    expect(button(view.host, "Make key").disabled, "busy while the key is made").toBe(true);
+    release();
+    await acting(() => Promise.resolve());
+    await acting(() => Promise.resolve());
+    expect(stub.made.mock.calls).toEqual([["Phone", ["presence", "status"]]]);
+    expect([nameField()?.value, boxes().map((box) => box.checked), stub.listed.mock.calls.length > listedBefore]).toEqual(["", [false, false, false], true]);
+    expect(view.host.querySelector(".key-example")?.textContent).toStartWith("curl -X POST http://shore.test:7340/api/op/presence ");
+    await click(button(view.host, "Copy key"));
+    await acting(() => Promise.resolve());
+    expect([written, shown.mock.calls.at(-1)]).toEqual([["shore_secret-key"], ["Key copied"]]);
+    await view.unmount();
+  });
+
+  test("ticks a second only while a code is shown, from the moment it was shown, and a code is over at its expiry", async () => {
+    const { DevicesPage } = await import("../../src/browser/settings/Devices.tsx");
+    jest.useFakeTimers();
+    app.restores.push(() => { jest.useRealTimers(); });
+    jest.setSystemTime(NOW);
+    stubDevices({ devices: [], requests: [] });
+    const codes = spyOn(app.state().workspace.connection, "loginCode").mockImplementation(async () => await Promise.resolve({ code: "c0de", expires_at: Date.now() + 300_000 }));
+    const set = spyOn(globalThis, "setInterval");
+    const cleared = spyOn(globalThis, "clearInterval");
+    app.restores.push(() => { codes.mockRestore(); set.mockRestore(); cleared.mockRestore(); });
+    const view = await mount(<DevicesPage state={app.state().workspace.getSnapshot()} />);
+    const input = view.host.querySelector("input");
+    expect([input?.getAttribute("spellcheck"), view.host.textContent?.includes("That code expired")]).toEqual(["false", false]);
+    await type(input, "desktop.lan");
+    expect(set.mock.calls.filter((call) => call[1] === 1000)).toEqual([]);
+    jest.setSystemTime(NOW + 600_000);
+    await click(button(view.host, "Show sign-in code"));
+    await acting(() => Promise.resolve());
+    expect(view.host.textContent).toContain("Expires in 5:00");
+    const ticker = set.mock.results[set.mock.calls.findIndex((call) => call[1] === 1000)]?.value as ReturnType<typeof setInterval>;
+    await type(input, "not a place/with/path");
+    expect([view.host.querySelector(".login-code-link"), view.host.textContent?.includes("That code expired")]).toEqual([null, false]);
+    await type(input, "desktop.lan");
+    jest.setSystemTime(NOW + 900_000);
+    await acting(() => { jest.advanceTimersByTime(1000); });
+    expect([view.host.querySelector(".login-code-link"), view.host.textContent?.includes("That code expired. Show a new one.")]).toEqual([null, true]);
+    await view.unmount();
+    expect(cleared).toHaveBeenCalledWith(ticker);
+    localStorage.clear();
+  });
 });
 
 describe("the characters page", () => {

@@ -16,7 +16,7 @@ const ADDRESS_KEY = "shore.device-address";
 const ADDRESS_HINT = "Enter an address such as my-computer:7340 or https://my-computer.example.";
 const KINDS: Record<WebDevice["kind"], string> = { browser: "Browser", cli: "Command line", automation: "Automation key" };
 
-function countdown(ms: number): string {
+export function countdown(ms: number): string {
   const seconds = Math.max(0, Math.ceil(ms / 1000));
   return `${String(Math.floor(seconds / 60))}:${String(seconds % 60).padStart(2, "0")}`;
 }
@@ -47,8 +47,8 @@ function SignInCode() {
     return () => { clearInterval(timer); };
   }, [code]);
   const origin = deviceOrigin(address);
-  const remaining = code === undefined ? 0 : code.expires_at - now;
-  const link = origin === undefined || code === undefined || remaining <= 0 ? undefined : loginLink(origin, code.code);
+  const live = code !== undefined && code.expires_at > now ? code : undefined;
+  const shown = origin === undefined || live === undefined ? undefined : { link: loginLink(origin, live.code), left: live.expires_at - now };
   const show = () => void run(async () => { const created = await workspace.connection.loginCode(); setNow(Date.now()); setCode(created); return undefined; });
   return <SettingsSection title="Sign in a browser" description="Open this on the phone or computer to sign in. Each code works once and expires after five minutes.">
     <div className="rows padded">
@@ -59,15 +59,15 @@ function SignInCode() {
       {address.trim() !== "" && origin === undefined ? <p className="form-error" role="alert">{ADDRESS_HINT}</p> : null}
       {origin !== undefined && loopbackOrigin(origin) ? <p className="setting-description">{origin} only reaches this computer. Enter an address the other device can reach, such as this computer’s network or tailnet name.</p> : null}
       <div className="actions-row tight"><button type="button" className="button primary" disabled={busy || origin === undefined} onClick={show}>{code === undefined ? "Show sign-in code" : "New code"}</button></div>
-      {link !== undefined ? <div className="login-code">
-        <QrCode text={link} label="Sign-in code" />
+      {shown !== undefined ? <div className="login-code">
+        <QrCode text={shown.link} label="Sign-in code" />
         <div className="login-code-text">
           <p className="setting-description">Scan this with the other device’s camera, or open the link there.</p>
-          <code className="login-code-link">{link}</code>
-          <div className="actions-row tight"><button type="button" className="button" onClick={() => void run(async () => { await copyText(link); return "Link copied"; })}>Copy link</button></div>
-          <p className="setting-description">Expires in {countdown(remaining)}</p>
+          <code className="login-code-link">{shown.link}</code>
+          <div className="actions-row tight"><button type="button" className="button" onClick={() => void run(async () => { await copyText(shown.link); return "Link copied"; })}>Copy link</button></div>
+          <p className="setting-description">Expires in {countdown(shown.left)}</p>
         </div>
-      </div> : code !== undefined && remaining <= 0 ? <p className="setting-description">That code expired. Show a new one.</p> : null}
+      </div> : code !== undefined && live === undefined ? <p className="setting-description">That code expired. Show a new one.</p> : null}
     </div>
   </SettingsSection>;
 }

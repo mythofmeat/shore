@@ -233,6 +233,11 @@ describe("pages and banners", () => {
     await click(button(view.host, "Refuse"));
     await acting(() => Promise.resolve());
     expect([decided.mock.calls.at(-1), shown.mock.calls.at(-1), view.host.querySelectorAll("[role=alert]").length]).toEqual([["ZZ22", false], ["No device is waiting with the code ZZ22", "error"], 1]);
+    const looked = listed.mock.calls.length;
+    await acting(() => { jest.advanceTimersByTime(4_999); });
+    expect(listed.mock.calls.length, "it looks every five seconds").toBe(looked);
+    await acting(() => { jest.advanceTimersByTime(1); });
+    expect(listed.mock.calls.length).toBe(looked + 1);
     visibility = "hidden";
     const before = listed.mock.calls.length;
     await acting(() => { jest.advanceTimersByTime(5_000); });
@@ -271,6 +276,24 @@ describe("pages and banners", () => {
     expect([view.host.querySelector("[role=alert]"), field?.value]).toEqual([null, ""]);
     await view.update(<SignIn detail="The token was rejected" />);
     expect(view.host.querySelector("[role=alert]")?.textContent).toBe("The token was rejected");
+    await view.unmount();
+  });
+
+  test("the sign-in page stays on the page, waits while it connects, and leaves the code to be read as typed", async () => {
+    const { SignIn } = await import("../../src/browser/app/SignIn.tsx");
+    let release = (): void => {};
+    const signIn = spyOn(app.state().workspace.connection, "signIn").mockImplementation(async () => { await new Promise<void>((resolve) => { release = resolve; }); });
+    app.restores.push(() => { signIn.mockRestore(); });
+    const view = await mount(<SignIn detail="Connection stopped" />);
+    const field = view.host.querySelector("input");
+    expect(field?.getAttribute("spellcheck")).toBe("false");
+    await type(field, "4F7K");
+    const submitted = new Event("submit", { bubbles: true, cancelable: true });
+    await acting(() => { view.host.querySelector("form")?.dispatchEvent(submitted); });
+    expect([submitted.defaultPrevented, button(view.host, "Connecting…").disabled]).toEqual([true, true]);
+    release();
+    await acting(() => Promise.resolve());
+    expect(button(view.host, "Connect").disabled).toBe(true);
     await view.unmount();
   });
 

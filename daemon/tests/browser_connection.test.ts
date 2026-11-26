@@ -772,9 +772,10 @@ describe("signing in and out", () => {
         const link = rig(options);
         await link.connection.signIn("secret");
         await link.connection.loginCode().catch(() => undefined);
+        await link.connection.devices().catch(() => undefined);
         await link.connection.signOut();
       }
-      expect(timeouts.mock.calls.map(([delay]) => delay)).toEqual([10_000, 10_000, 10_000, 250, 250, 250]);
+      expect(timeouts.mock.calls.map(([delay]) => delay)).toEqual([10_000, 10_000, 10_000, 10_000, 250, 250, 250, 250]);
     } finally {
       timeouts.mockRestore();
     }
