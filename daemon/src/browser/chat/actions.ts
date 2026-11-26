@@ -34,6 +34,15 @@ export async function makeHome(thread: Pick<ThreadView, "id" | "label">): Promis
   }
 }
 
+export async function holdThread(thread: Pick<ThreadView, "id">, onHold: boolean): Promise<void> {
+  try {
+    workspace.applyThreadListing(await workspace.actions.run("thread_hold", { name: thread.id, on_hold: onHold }));
+  } catch (error) {
+    await workspace.refreshThreads();
+    toasts.show(errorText(error), "error");
+  }
+}
+
 export async function markRead(thread: Pick<ThreadView, "id">): Promise<void> {
   try {
     workspace.noteThreadRead(thread.id);

@@ -2,7 +2,7 @@ import { characterDataDir } from "../config/dirs.ts";
 import { pictureText } from "../engine/embeds.ts";
 import { formatWallClock } from "../engine/prompt.ts";
 import { sealedThreads } from "../engine/sealed_list.ts";
-import { homeThread, readThreadsIndex, wakesThread } from "../engine/threads.ts";
+import { homeThread, readThreadsIndex, threadsTheCharacterSees, wakesThread } from "../engine/threads.ts";
 import type { Message } from "../engine/types.ts";
 import { newMessageVersion } from "../engine/versions.ts";
 import { firstSentPicture, sendPictures, type PictureSender } from "../handler/pictures.ts";
@@ -94,7 +94,7 @@ export class Outbox {
 export async function reachableThreads(dataDir: string, character: string): Promise<ReachableThreads> {
   const index = await readThreadsIndex(dataDir, character);
   return {
-    open: index?.threads.map((each) => each.id) ?? [homeThread(index)],
+    open: index === undefined ? [homeThread(index)] : threadsTheCharacterSees(index.threads).map((each) => each.id),
     wakes: wakesThread(index),
     sealed: sealedThreads(characterDataDir(dataDir, character)).map((each) => each.id),
   };

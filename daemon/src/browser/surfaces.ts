@@ -20,7 +20,7 @@ export const SURFACES: Readonly<Record<string, Tier>> = {
     "compact", "compact.keep_turns",
     "list_characters", "create_character", "create_character.name",
     "list_threads", "create_thread", "create_thread.name", "create_thread.label", "create_thread.model", "create_thread.compaction", "create_thread.purpose", "create_thread.pins",
-    "thread_label", "thread_label.name", "thread_label.label", "thread_purpose", "thread_purpose.name", "thread_purpose.purpose", "thread_pins", "thread_pins.name", "thread_pins.pins", "thread_prompt", "thread_prompt.name", "thread_prompt_refresh", "thread_prompt_refresh.name", "thread_lock", "thread_lock.name", "thread_lock.locked", "thread_compaction", "thread_compaction.name", "thread_compaction.compaction",
+    "thread_label", "thread_label.name", "thread_label.label", "thread_purpose", "thread_purpose.name", "thread_purpose.purpose", "thread_pins", "thread_pins.name", "thread_pins.pins", "thread_prompt", "thread_prompt.name", "thread_prompt_refresh", "thread_prompt_refresh.name", "thread_lock", "thread_lock.name", "thread_lock.locked", "thread_hold", "thread_hold.name", "thread_hold.on_hold", "thread_compaction", "thread_compaction.name", "thread_compaction.compaction",
     "thread_move", "thread_move.name", "thread_move.folder", "thread_move.before", "thread_sort", "thread_sort.by_activity",
     "thread_folder_create", "thread_folder_create.name", "thread_folder_rename", "thread_folder_rename.name", "thread_folder_rename.to",
     "thread_folder_delete", "thread_folder_delete.name", "thread_folder_move", "thread_folder_move.name", "thread_folder_move.before", "thread_folder_sort", "thread_folder_sort.name", "thread_folder_sort.by_activity",

@@ -38,6 +38,7 @@ import {
   setThreadCompaction,
   setThreadLocked,
   setThreadModel,
+  setThreadOnHold,
   setThreadPurpose,
   threadRecord,
   ThreadError,
@@ -457,6 +458,23 @@ export class CharacterRegistry {
         this.#remember(
           name,
           await setThreadLocked(this.#dataDir, name, id, locked, new Date().toISOString()),
+        ),
+      signal,
+    );
+  }
+
+  async setThreadOnHold(
+    name: string,
+    id: string,
+    onHold: boolean,
+    signal?: AbortSignal,
+  ): Promise<ThreadsIndex> {
+    return await this.#withThreadIndex(
+      name,
+      async () =>
+        this.#remember(
+          name,
+          await setThreadOnHold(this.#dataDir, name, id, onHold, new Date().toISOString()),
         ),
       signal,
     );

@@ -27,7 +27,7 @@ export const MAX_THREAD_PINS = 20;
 
 const THREAD_ID = /^[A-Za-z0-9][A-Za-z0-9._-]*$/;
 
-export type ThreadErrorKind = "invalid_id" | "invalid_pins" | "invalid_folder" | "invalid_seal" | "exists" | "not_found" | "is_home" | "is_wakes" | "is_pinned" | "locked";
+export type ThreadErrorKind = "invalid_id" | "invalid_pins" | "invalid_folder" | "invalid_seal" | "exists" | "not_found" | "is_home" | "is_wakes" | "is_pinned" | "locked" | "on_hold";
 
 export class ThreadError extends Error {
   constructor(
@@ -70,6 +70,7 @@ export interface ThreadRecord {
   chat_model?: string;
   compaction: boolean;
   locked?: true;
+  on_hold?: true;
   forked_from?: ThreadForkOrigin;
 }
 
@@ -102,6 +103,16 @@ export function defaultThreadsIndex(now: string): ThreadsIndex {
 
 export function threadRecord(index: ThreadsIndex, id: string): ThreadRecord | undefined {
   return index.threads.find((t) => t.id === id);
+}
+
+export function threadsTheCharacterSees<T extends Pick<ThreadRecord, "on_hold">>(records: readonly T[]): T[] {
+  return records.filter((record) => record.on_hold !== true);
+}
+
+export function requireNameFree(index: ThreadsIndex, character: string, id: string): void {
+  const taken = threadRecord(index, id);
+  if (taken?.on_hold === true) throw new ThreadError("on_hold", `thread ${JSON.stringify(id)} already exists for ${character}, on hold`);
+  if (taken !== undefined) throw new ThreadError("exists", `thread ${JSON.stringify(id)} already exists for ${character}`);
 }
 
 export function threadModelOf(
@@ -509,9 +520,7 @@ export async function createThread(
 ): Promise<ThreadsIndex> {
   assertThreadId(id);
   const index = await ensureThreads(data, character, now);
-  if (threadRecord(index, id) !== undefined) {
-    throw new ThreadError("exists", `thread ${JSON.stringify(id)} already exists for ${character}`);
-  }
+  requireNameFree(index, character, id);
   const pins = options.pins === undefined ? [] : threadPins(options.pins);
   await mkdir(threadDataDir(data, character, id), { recursive: true });
   const record: ThreadRecord = {
@@ -566,16 +575,16 @@ export async function setHomeThread(
   now: string,
 ): Promise<ThreadsIndex> {
   const index = await ensureThreads(data, character, now);
-  requireThread(index, character, id);
+  const record = requireThread(index, character, id);
   if (id === wakesThread(index)) {
     throw new ThreadError("is_wakes", `thread ${JSON.stringify(id)} is where Shore keeps ${character}'s working from wakes, so it can't be home`);
   }
-  const next: ThreadsIndex = { ...index, home: id };
+  const next: ThreadsIndex = { ...replaceThread(index, withSetting(record, "on_hold", undefined)), home: id };
   await writeThreadsIndex(data, character, next);
   return next;
 }
 
-type ThreadSetting = "label" | "purpose" | "pins" | "chat_model" | "locked";
+type ThreadSetting = "label" | "purpose" | "pins" | "chat_model" | "locked" | "on_hold";
 
 function withSetting<K extends ThreadSetting>(record: ThreadRecord, key: K, value: ThreadRecord[K] | undefined): ThreadRecord {
   const { [key]: _dropped, ...rest } = record;
@@ -650,6 +659,23 @@ export async function setThreadLocked(
   return await setThreadField(data, character, id, "locked", locked ? true : undefined, now);
 }
 
+export async function setThreadOnHold(
+  data: string,
+  character: string,
+  id: string,
+  onHold: boolean,
+  now: string,
+): Promise<ThreadsIndex> {
+  const index = await ensureThreads(data, character, now);
+  if (onHold && id === homeThread(index)) {
+    throw new ThreadError("is_home", `thread ${JSON.stringify(id)} is the home thread for ${character}, so it can't be put on hold`);
+  }
+  if (onHold && id === wakesThread(index)) {
+    throw new ThreadError("is_wakes", `thread ${JSON.stringify(id)} is where Shore keeps ${character}'s working from wakes, so it can't be put on hold`);
+  }
+  return await setThreadField(data, character, id, "on_hold", onHold ? true : undefined, now);
+}
+
 export async function setThreadCompaction(
   data: string,
   character: string,
@@ -675,6 +701,7 @@ export interface ThreadEdit {
 
 export function requireEditableByCharacter(index: ThreadsIndex, character: string, id: string): ThreadRecord {
   const record = requireThread(index, character, id);
+  if (record.on_hold === true) throw new ThreadError("not_found", `no thread ${JSON.stringify(id)} for ${character}`);
   if (record.id === homeThread(index)) {
     throw new ThreadError(
       "is_home",

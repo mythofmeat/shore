@@ -806,6 +806,9 @@ fn thread_facts(row: &Value) -> String {
     if flag(row, "locked") {
         parts.push("locked".to_owned());
     }
+    if flag(row, "on_hold") {
+        parts.push("on hold".to_owned());
+    }
     parts.join(" \u{b7} ")
 }
 
@@ -890,6 +893,12 @@ pub(crate) fn write_thread_list<W: Write>(out: &mut W, data: &Value) {
         note(
             out,
             "a locked thread's label, purpose and pins change only when you change them",
+        );
+    }
+    if threads.iter().any(|thread| flag(thread, "on_hold")) {
+        note(
+            out,
+            "the character doesn't see a thread on hold; writing in it, or `shore thread resume`, brings it back",
         );
     }
 }

@@ -2,7 +2,7 @@ import { mkdir } from "node:fs/promises";
 
 import { characterDataDir, threadDataDir } from "../config/dirs.ts";
 import { keepSealedThreads, sealedThreads, type SealedThread } from "./sealed_list.ts";
-import { assertThreadId, createThread, ensureThreads, readThreadsIndex, startReadMarkBefore, ThreadError, threadRecord, type ThreadsIndex } from "./threads.ts";
+import { assertThreadId, createThread, ensureThreads, readThreadsIndex, requireNameFree, startReadMarkBefore, ThreadError, threadRecord, type ThreadsIndex } from "./threads.ts";
 
 export interface NewSealedThread {
   id: string;
@@ -19,7 +19,8 @@ export async function sealThread(data: string, character: string, request: NewSe
   const created = new Date(now).toISOString();
   const index = await ensureThreads(data, character, created);
   const sealed = sealedThreads(characterDir);
-  if (threadRecord(index, request.id) !== undefined || sealed.some((each) => each.id === request.id)) {
+  requireNameFree(index, character, request.id);
+  if (sealed.some((each) => each.id === request.id)) {
     throw new ThreadError("exists", `thread ${JSON.stringify(request.id)} already exists for ${character}`);
   }
   await mkdir(threadDataDir(data, character, request.id), { recursive: true });

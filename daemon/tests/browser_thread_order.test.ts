@@ -2,7 +2,7 @@ import { describe, expect, test } from "bun:test";
 
 import type { ConfigSchemaEntry } from "../src/protocol/ConfigSchemaEntry.ts";
 import type { ThreadView } from "../src/protocol/ThreadView.ts";
-import { moveInThreads, sortThreads, threadSections, threadsOnScreen } from "../src/browser/sidebar/order.ts";
+import { HELD_GROUP, moveInThreads, sortThreads, threadSections, threadsOnScreen } from "../src/browser/sidebar/order.ts";
 import { assertSettingsCoverage, configAt, settingControl, settingText } from "../src/browser/settings_forms.ts";
 
 function thread(id: string, overrides: Partial<ThreadView> = {}): ThreadView {
@@ -40,6 +40,21 @@ describe("the sidebar's thread order", () => {
   test("a collapsed folder hides its threads except the one open", () => {
     expect(ids(threadsOnScreen(threads, folders, new Set(["work"]), "placed1"))).toEqual(["main", "busy", "orphan", "old", "pinned", "placed1", "story"]);
     expect(ids(threadsOnScreen(threads, folders, new Set(["work", "fiction"]), null))).toEqual(["main", "busy", "orphan", "old", "pinned"]);
+  });
+
+  test("threads on hold leave their sections for one of their own at the end, most recently active first, which shuts like a folder", () => {
+    const held = [
+      ...threads,
+      thread("paused", { folder: "work", position: 0, on_hold: true, created_at: "2026-11-02T00:00:00Z" }),
+      thread("stalled", { on_hold: true, last_active: "2026-11-08T00:00:00Z" }),
+    ];
+    const sections = threadSections(held, folders);
+    expect([ids(sections.loose), ids(sections.folders[0]?.threads ?? []), ids(sections.held)]).toEqual([
+      ["busy", "orphan", "old", "pinned"], ["unplaced", "placed1", "placed2"], ["stalled", "paused"],
+    ]);
+    expect(ids(sortThreads(held, folders)).slice(-3)).toEqual(["story", "stalled", "paused"]);
+    expect(ids(threadsOnScreen(held, folders, new Set(), null)).slice(-3)).toEqual(["story", "stalled", "paused"]);
+    expect(ids(threadsOnScreen(held, folders, new Set([HELD_GROUP]), "paused")).slice(-2)).toEqual(["story", "paused"]);
   });
 
   test("moving a thread places it before another, or last, in its new section, renumbering only that section", () => {

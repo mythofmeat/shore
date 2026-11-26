@@ -10,7 +10,7 @@ import { estimateHistoryTokens, formatWallClock, lengthPhrase, nearMessageBudget
 import { Texts } from "../texts/texts.ts";
 import { sealedThreads, type SealedThread } from "../engine/sealed_list.ts";
 import { NO_PRIOR_CONTEXT } from "../engine/segments.ts";
-import { homeThread, isWakeOpener, readThreadsIndex, threadActivities, threadActivityNow, type ThreadsIndex } from "../engine/threads.ts";
+import { homeThread, isWakeOpener, readThreadsIndex, threadActivities, threadActivityNow, threadsTheCharacterSees, type ThreadsIndex } from "../engine/threads.ts";
 import type { Message, MessageNote } from "../engine/types.ts";
 import { buildChatShapeRequestFromDisk } from "../handler/context.ts";
 import { inReadingOrder, type SentMessage } from "../handler/wire_messages.ts";
@@ -139,7 +139,7 @@ export async function lastWroteNote(
   const home = homeThread(index);
   const activity = await threadActivities(dataDir, character, index.threads.map((thread) => thread.id));
   let latest: { id: string; label: string | undefined; at: number } | undefined;
-  for (const thread of index.threads) {
+  for (const thread of threadsTheCharacterSees(index.threads)) {
     const at = Date.parse(activity.get(thread.id)?.last_user ?? "");
     if (Number.isNaN(at) || (latest !== undefined && at <= latest.at)) continue;
     latest = { id: thread.id, label: thread.label, at };
@@ -220,6 +220,10 @@ export async function runWake(character: string, config: LoadedConfig, wake: Wak
   const result = await withConversation(threadDataDir(config.dirs.data, character, thread), "turn", async (signal): Promise<WakeResult> => {
     const index = await readThreadsIndex(config.dirs.data, character);
     const home = homeThread(index);
+    if (index?.threads.some((each) => each.id === thread && each.on_hold === true) === true) {
+      note("call_failed", `Wake skipped: "${thread}" is on hold`);
+      return { events };
+    }
     const chat = resolveChatModelForCharacter(
       configView(config),
       character,

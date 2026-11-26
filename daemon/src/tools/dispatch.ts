@@ -21,6 +21,7 @@ import type { StartedSealedThread } from "./start_sealed_thread.ts";
 import type { StartThreadRequest } from "./start_thread.ts";
 import { handleSendMessage, type SendMessage } from "./send_message.ts";
 import { handleThreads } from "./threads.ts";
+import { reachableThreads } from "../autonomy/outbox.ts";
 import { handleWakeInThread, type WakeHandOff, type WakeInThreadRequest } from "./wake_in_thread.ts";
 import type { EditThreadRequest } from "./edit_thread.ts";
 import type { FetchLike } from "./web.ts";
@@ -198,8 +199,11 @@ export async function dispatchTool(
     case "list_triggers":
       return handleListTriggers(ctx.triggers?.(), ctx.userName ?? "the user");
 
-    case "wake_in_thread":
-      return handleWakeInThread(args, ctx.thread, ctx.wakeInThread, ctx.userName ?? "the user");
+    case "wake_in_thread": {
+      const handOff = ctx.wakeInThread;
+      const reach = await reachableThreads(dirname(ctx.historyDbPath), ctx.characterName);
+      return handleWakeInThread(args, ctx.thread, handOff === undefined ? undefined : (request): WakeHandOff => [...reach.open, ...reach.sealed].includes(request.thread) ? handOff(request) : { kind: "no_thread" }, ctx.userName ?? "the user");
+    }
 
     case "send_message":
       return await handleSendMessage(args, ctx.sendMessage);

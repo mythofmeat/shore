@@ -1,7 +1,7 @@
 import { useState, type DragEvent } from "react";
 import type { ThreadView } from "../../protocol/ThreadView.ts";
 import { openThreadDialog } from "../app/intents.ts";
-import { markRead, makeHome, moveThreadTo } from "../chat/actions.ts";
+import { holdThread, markRead, makeHome, moveThreadTo } from "../chat/actions.ts";
 import { IconButton, PointMenu, type MenuItem } from "../ui/controls.tsx";
 import { Icon } from "../ui/icons.tsx";
 import { useRowMenu } from "./row_menu.ts";
@@ -10,12 +10,19 @@ export const THREAD_DRAG_TYPE = "application/x-shore-thread";
 
 const TOUCH_ONLY = typeof matchMedia === "function" && matchMedia("(hover: none)").matches;
 
+export function holdItem(thread: ThreadView, ready: boolean): MenuItem[] {
+  if (thread.on_hold === true) return [{ label: "Resume", icon: "play", onSelect: () => void holdThread(thread, false), disabled: !ready }];
+  if (thread.home || thread.wakes === true) return [];
+  return [{ label: "Put on hold", icon: "pause", onSelect: () => void holdThread(thread, true), disabled: !ready }];
+}
+
 export function threadMenuItems(thread: ThreadView, ready: boolean, neighbours: ThreadNeighbours): MenuItem[] {
   const movable = !thread.home;
   return [
     { label: "Thread settings…", icon: "settings", onSelect: () => openThreadDialog("settings", thread.id), disabled: !ready },
     { label: "Fork…", icon: "branch", onSelect: () => openThreadDialog("fork", thread.id), disabled: !ready },
     { label: "Mark as read", icon: "check", onSelect: () => void markRead(thread), disabled: !ready || (thread.unread ?? 0) === 0 },
+    ...holdItem(thread, ready),
     ...(movable ? [
       { label: "Make home", icon: "home" as const, onSelect: () => void makeHome(thread), disabled: !ready },
       "separator" as const,
@@ -30,7 +37,7 @@ export function threadMenuItems(thread: ThreadView, ready: boolean, neighbours: 
 
 export interface ThreadNeighbours { up: string | undefined; down: string | undefined; atEnd: boolean; byActivity: boolean }
 
-function UnreadBadge({ count }: { count: number }) {
+export function UnreadBadge({ count }: { count: number }) {
   return <span className="sidebar-unread">
     <span aria-hidden="true">{count > 99 ? "99+" : String(count)}</span>
     <span className="sr-only">{count === 1 ? "(1 unread message)" : `(${String(count)} unread messages)`}</span>

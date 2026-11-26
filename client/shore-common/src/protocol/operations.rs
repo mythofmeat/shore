@@ -2647,6 +2647,12 @@ wire_types! {
     }
 
     #[serde(deny_unknown_fields)]
+    pub struct ThreadHoldArgs {
+        pub name: String,
+        pub on_hold: bool,
+    }
+
+    #[serde(deny_unknown_fields)]
     pub struct ThreadMoveArgs {
         pub name: String,
         #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -2791,6 +2797,9 @@ wire_types! {
         #[serde(default, skip_serializing_if = "Option::is_none")]
         #[ts(optional)]
         pub locked: Option<bool>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        #[ts(optional)]
+        pub on_hold: Option<bool>,
         #[serde(default, skip_serializing_if = "Option::is_none")]
         #[ts(optional)]
         pub folder: Option<String>,
@@ -3026,6 +3035,7 @@ operations! {
     ShowThreadPrompt: "thread_prompt" (NamedOperationArgs) => ThreadPromptView,
     RefreshThreadPrompt: "thread_prompt_refresh" (NamedOperationArgs) => ThreadPromptView,
     LockThread: "thread_lock" (ThreadLockArgs) => ThreadListing,
+    HoldThread: "thread_hold" (ThreadHoldArgs) => ThreadListing,
     SetThreadCompaction: "thread_compaction" (ThreadCompactionArgs) => ThreadListing,
     MoveThread: "thread_move" (ThreadMoveArgs) => ThreadListing,
     SortThreads: "thread_sort" (ThreadSortArgs) => ThreadListing,
