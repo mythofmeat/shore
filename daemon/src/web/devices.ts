@@ -1,5 +1,5 @@
 import { randomBytes, randomInt } from "node:crypto";
-import { chmodSync, mkdirSync, readFileSync, renameSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, readFileSync, renameSync, rmSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import type { WebSignInPending } from "../protocol/WebSignInPending.ts";
 import type { WebSignInRequest } from "../protocol/WebSignInRequest.ts";
@@ -128,7 +128,6 @@ export class DeviceStore {
     if (at === -1) return false;
     const [removed] = this.#devices.splice(at, 1);
     try { this.#save(); } catch (error) { if (removed !== undefined) this.#devices.splice(at, 0, removed); throw error; }
-    this.#written.delete(id);
     return true;
   }
 
@@ -137,7 +136,6 @@ export class DeviceStore {
     const temporary = join(dirname(this.path), `.${crypto.randomUUID()}.tmp`);
     try {
       writeFileSync(temporary, `${JSON.stringify({ version: 1, devices: this.#devices }, null, 2)}\n`, { mode: 0o600 });
-      chmodSync(temporary, 0o600);
       renameSync(temporary, this.path);
     } catch (error) {
       rmSync(temporary, { force: true });
