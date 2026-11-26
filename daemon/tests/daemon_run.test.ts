@@ -1059,7 +1059,7 @@ describe("a daemon's teardown", () => {
     const stopped: string[] = [];
     const clocks = spyOn(runtimeModule, "startRuntimeClocks").mockImplementation((runtime, intervals) => {
       const started = realClocks(runtime, intervals);
-      return { stop: () => { stopped.push("clocks"); started.stop(); } };
+      return { stop: async () => { stopped.push("clocks"); await started.stop(); } };
     });
     const bridge = spyOn(matrixModule, "superviseMatrixBridge").mockImplementation((options) => {
       const started = realBridge(options);

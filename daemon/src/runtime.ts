@@ -326,7 +326,7 @@ export interface RuntimeClockIntervals {
 export function startRuntimeClocks(
   runtime: ShoreRuntime,
   intervals: RuntimeClockIntervals = {},
-): { stop: () => void } {
+): { stop: () => Promise<void> } {
   setCallObserver((ctx, model, callType, req, usage) => {
     runtime.keepalive.observe(
       ctx.character,
@@ -347,13 +347,12 @@ export function startRuntimeClocks(
   );
 
   return {
-    stop: () => {
+    stop: async () => {
       keepaliveTimer.stop();
       autonomyTimer.stop();
       triggerTimer.stop();
-      costBackfill.stop();
-      retention.stop();
       setCallObserver(undefined);
+      await Promise.all([costBackfill.stop(), retention.stop()]);
     },
   };
 }
@@ -609,11 +608,9 @@ export function applySubscriptionProviders(registry: CharacterRegistry): void {
   setNanoGptSubscriptionCacheDir(config.dirs.cache);
 }
 
-function startCostBackfill(ledgerPath: string, gate?: SnapshotGate): { stop: () => void } {
-  let running = false;
+function startCostBackfill(ledgerPath: string, gate?: SnapshotGate): { stop: () => Promise<void> } {
+  let running: Promise<void> | undefined;
   const sweep = async () => {
-    if (running) return;
-    running = true;
     try {
       const result = await (gate?.withActivity(async () => await backfillLedgerCosts(ledgerPath)) ??
         backfillLedgerCosts(ledgerPath));
@@ -624,13 +621,15 @@ function startCostBackfill(ledgerPath: string, gate?: SnapshotGate): { stop: () 
       }
     } catch (e) {
       shoreLog.warn(`shore: ledger cost backfill failed: ${String(e)}`);
-    } finally {
-      running = false;
     }
   };
+  const due = (): void => {
+    if (running !== undefined) return;
+    running = sweep().finally(() => { running = undefined; });
+  };
 
-  void sweep();
-  const timer = setInterval(() => void sweep(), COST_BACKFILL_MS);
+  due();
+  const timer = setInterval(due, COST_BACKFILL_MS);
   timer.unref?.();
-  return { stop: () => clearInterval(timer) };
+  return { stop: async () => { clearInterval(timer); await running; } };
 }

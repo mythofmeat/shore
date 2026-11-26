@@ -1555,6 +1555,7 @@ test("the runtime's clocks look at the triggers every thirty seconds until they 
     let looked = 0;
     runtime.triggers.tick = async () => { looked += 1; };
     jest.useFakeTimers();
+    let stopping: Promise<void> | undefined;
     try {
       const clocks = startRuntimeClocks(runtime);
       jest.advanceTimersByTime(29_999);
@@ -1563,12 +1564,13 @@ test("the runtime's clocks look at the triggers every thirty seconds until they 
       expect(looked).toBe(1);
       jest.advanceTimersByTime(30_000);
       expect(looked).toBe(2);
-      clocks.stop();
+      stopping = clocks.stop();
       jest.advanceTimersByTime(90_000);
       expect(looked).toBe(2);
     } finally {
       jest.useRealTimers();
     }
+    await stopping;
   });
 });
 

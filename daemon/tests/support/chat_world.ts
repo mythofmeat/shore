@@ -36,7 +36,7 @@ export interface ChatWorldOptions {
   model?: Partial<ResolvedModel>;
   tune?: (app: AppConfig, models: ModelCatalog) => void;
   prepare?: (workspace: string) => Promise<void> | void;
-  started?: (runtime: ChatRuntime) => () => void;
+  started?: (runtime: ChatRuntime) => () => Promise<void> | void;
   emitEvent?: (event: ServerMessage) => void;
 }
 
@@ -92,7 +92,7 @@ export async function afterFirstChat(options: ChatWorldOptions, run: (world: Cha
     await say("hello");
     await run({ root, config, workspace, runtime, say });
   } finally {
-    stop?.();
+    await stop?.();
     await runtime.autonomy.shutdown();
     await runtime.shutdown();
   }
