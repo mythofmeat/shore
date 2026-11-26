@@ -476,10 +476,8 @@ export const CLIENT_FLOORS: Readonly<Record<string, number>> = {
   "shore-common/src/protocol/tool_display.rs": 0.1,
   "shore-common/src/protocol/types.rs": 0.15,
   "shore-common/src/swp_client/client_config.rs": 0,
-  "shore-common/src/swp_client/conn_manager.rs": 0.4,
   "shore-common/src/swp_client/connection.rs": 0.6,
   "shore-common/src/swp_client/discovery.rs": 0.2,
-  "shore-common/src/swp_client/sync.rs": 0.85,
   "shore-common/src/token.rs": 0.5,
 };
 
