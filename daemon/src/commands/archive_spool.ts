@@ -17,7 +17,7 @@ export interface SpoolEntry {
 interface Transfer extends SpoolEntry {
   readonly direction: "download" | "upload";
   readonly bytes: number;
-  touched: number;
+  readonly touched: number;
 }
 
 export class ArchiveSpool {
@@ -59,7 +59,7 @@ export class ArchiveSpool {
       } finally { await file.close(); }
       if (bytes === 0) throw invalidRequest("An upload needs at least one byte");
     } catch (error) {
-      await rm(entry.directory, { recursive: true, force: true });
+      await rm(entry.directory, { recursive: true });
       throw error;
     }
     this.publish(entry, "upload", bytes);
@@ -75,15 +75,19 @@ export class ArchiveSpool {
     const stream = new ReadableStream<Uint8Array>({
       pull: async (output) => {
         try {
-          if (offset >= transfer.bytes) { await finish(); output.close(); return; }
-          const chunk = Buffer.alloc(Math.min(READ_BYTES, transfer.bytes - offset));
-          const file = await open(transfer.file, "r");
-          try {
-            const { bytesRead } = await file.read(chunk, 0, chunk.length, offset);
-            if (bytesRead === 0) throw new Error("Archive ended before its recorded size");
-            offset += bytesRead;
-            output.enqueue(chunk.subarray(0, bytesRead));
-          } finally { await file.close(); }
+          if (offset >= transfer.bytes) {
+            await finish();
+            output.close();
+          } else {
+            const chunk = Buffer.alloc(Math.min(READ_BYTES, transfer.bytes - offset));
+            const file = await open(transfer.file, "r");
+            try {
+              const { bytesRead } = await file.read(chunk, 0, chunk.length, offset);
+              if (bytesRead === 0) throw new Error("Archive ended before its recorded size");
+              offset += bytesRead;
+              output.enqueue(chunk.subarray(0, bytesRead));
+            } finally { await file.close(); }
+          }
         } catch (error) {
           await finish();
           output.error(error);
@@ -116,7 +120,6 @@ export class ArchiveSpool {
   #owned(owner: string, id: string, direction: Transfer["direction"]): Transfer {
     const transfer = this.#transfers.get(id);
     if (transfer?.owner !== owner || transfer.direction !== direction) throw notFound(`No ${direction} transfer ${id} for this device`);
-    transfer.touched = Date.now();
     return transfer;
   }
 

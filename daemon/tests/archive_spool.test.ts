@@ -1,5 +1,5 @@
-import { describe, expect, jest, test } from "bun:test";
-import { mkdtempSync, readdirSync, truncateSync } from "node:fs";
+import { describe, expect, jest, setSystemTime, spyOn, test } from "bun:test";
+import { mkdirSync, mkdtempSync, readdirSync, rmSync, statSync, truncateSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { ArchiveSpool } from "../src/commands/archive_spool.ts";
@@ -80,6 +80,67 @@ describe("the archive spool", () => {
     truncateSync(join(directory, shortId, "archive.tar"), 0);
     expect(await outcomeOf(new Response(spool.send("laptop", shortId).stream).arrayBuffer())).toThrow("Archive ended before its recorded size");
     expect(readdirSync(directory)).toEqual([]);
+  });
+
+  test("starts from an empty folder of its own, making any missing parents, readable by its owner alone", async () => {
+    const left = place();
+    mkdirSync(join(left, "old"), { recursive: true });
+    writeFileSync(join(left, "old", "archive.tar"), "from the last run");
+    const upload = await new ArchiveSpool(left).receive("laptop", new Blob(["x"]).stream());
+    expect(readdirSync(left)).toEqual([upload.transfer]);
+    const directory = join(place(), "deeper", "still");
+    const kept = await new ArchiveSpool(directory).receive("laptop", new Blob(["x"]).stream());
+    expect([directory, join(directory, kept.transfer), join(directory, kept.transfer, "archive.tar")].map((path) => statSync(path).mode & 0o777)).toEqual([0o700, 0o700, 0o600]);
+  });
+
+  test("a transfer is swept once it has sat idle longer than a quarter of an hour, and not a moment before", async () => {
+    const directory = place();
+    const spool = new ArchiveSpool(directory);
+    try {
+      setSystemTime(new Date(1_000_000));
+      await spool.receive("laptop", new Blob(["x"]).stream());
+      setSystemTime(new Date(1_000_000 + 15 * 60_000));
+      await spool.sweep();
+      expect(readdirSync(directory)).toHaveLength(1);
+      setSystemTime(new Date(1_000_001 + 15 * 60_000));
+      await spool.sweep();
+      expect(readdirSync(directory)).toEqual([]);
+    } finally { setSystemTime(); }
+  });
+
+  test("stops its minute sweeper once the last transfer is collected, whichever way it goes", async () => {
+    const set = spyOn(globalThis, "setInterval");
+    const cleared = spyOn(globalThis, "clearInterval");
+    try {
+      const spool = new ArchiveSpool(place());
+      const sweeper = () => set.mock.results[set.mock.calls.findLastIndex((call) => call[1] === 60_000)]?.value as ReturnType<typeof setInterval>;
+      const upload = await spool.receive("laptop", new Blob(["x"]).stream());
+      spool.claim("laptop", upload.transfer);
+      expect(cleared).toHaveBeenCalledWith(sweeper());
+      cleared.mockClear();
+      spool.send("laptop", await spooledDownload(spool, "laptop", bytes(5)));
+      expect(cleared).toHaveBeenCalledWith(sweeper());
+    } finally {
+      set.mockRestore();
+      cleared.mockRestore();
+    }
+  });
+
+  test("a download stops at the size its archive was recorded at", async () => {
+    const spool = new ArchiveSpool(place());
+    const content = bytes(2 * 1024 * 1024);
+    const entry = await spool.reserve("laptop");
+    await Bun.write(entry.file, content);
+    spool.publish(entry, "download", 1024 * 1024 + 512 * 1024);
+    expect(new Uint8Array(await new Response(spool.send("laptop", entry.id).stream).arrayBuffer())).toEqual(content.subarray(0, 1024 * 1024 + 512 * 1024));
+  });
+
+  test("a download whose archive has gone fails with the missing archive", async () => {
+    const directory = place();
+    const spool = new ArchiveSpool(directory);
+    const id = await spooledDownload(spool, "laptop", bytes(10));
+    rmSync(join(directory, id), { recursive: true });
+    expect(await outcomeOf(new Response(spool.send("laptop", id).stream).arrayBuffer())).toThrow("archive.tar");
   });
 
   test("sweeps by itself once a minute while it holds anything, and a transfer left idle goes", async () => {
