@@ -11,7 +11,7 @@ import {
   toRequestModel,
   type ResolvedModel,
 } from "../config/models.ts";
-import { assemblePrompt, type AssembledPrompt, type PromptSection, type ThreadPrompt } from "../engine/prompt.ts";
+import { assemblePrompt, buildSystemBlocks, type AssembledPrompt, type PromptSection, type ThreadPrompt } from "../engine/prompt.ts";
 import { homeThread, readThreadsIndexIn, threadRecord } from "../engine/threads.ts";
 import type { PriorContext } from "../engine/segments.ts";
 import type { Message } from "../engine/types.ts";
@@ -19,7 +19,11 @@ import {
   ensureActivePromptSnapshot,
   loadPromptFile,
   loadThreadPins,
+  previewPromptFile,
+  previewThreadPins,
   resetActivePromptSnapshot,
+  type PinPreview,
+  type ThreadPin,
 } from "../memory/deferred_edits.ts";
 import type { CharacterWorkspace } from "../tools/character_workspace.ts";
 import { buildRequestWithProviderKeys, type BuiltRequest } from "../llm/request.ts";
@@ -98,27 +102,56 @@ async function promptSections(
   }));
 }
 
-async function threadPrompt(
+type PinLoader<P extends ThreadPin> = (texts: Texts, characterDataDir: string, workspace: CharacterWorkspace, thread: string, pins: readonly string[]) => Promise<P[]>;
+
+async function threadPrompt<P extends ThreadPin>(
   texts: Texts,
   characterDataDir: string,
   workspace: CharacterWorkspace,
   thread: string | undefined,
-): Promise<ThreadPrompt | undefined> {
+  loadPins: PinLoader<P>,
+): Promise<(ThreadPrompt & { pins: P[] }) | undefined> {
   if (thread === undefined) return undefined;
   const index = await readThreadsIndexIn(characterDataDir);
-  if (index === undefined) return undefined;
-  const home = homeThread(index);
-  const record = threadRecord(index, thread);
-  if (record === undefined || record.id === home) return undefined;
+  const record = index === undefined ? undefined : threadRecord(index, thread);
+  if (record === undefined) return undefined;
   return {
     id: record.id,
-    home,
+    home: homeThread(index),
     created_at: record.created_at,
     started_by_you: record.created_by === "character",
     label: record.label,
     purpose: record.purpose,
-    pins: await loadThreadPins(texts, characterDataDir, workspace, record.id, record.pins ?? []),
+    pins: await loadPins(texts, characterDataDir, workspace, record.id, record.pins ?? []),
   };
+}
+
+export interface ThreadPromptPreview {
+  system: AssembledPrompt["system"];
+  changed: ReadonlySet<string>;
+  pins: PinPreview[];
+}
+
+export async function previewThreadPrompt(params: {
+  character: string;
+  characterDataDir: string;
+  config: LoadedConfig;
+  resolved: ResolvedModel;
+  thread: string;
+  timeZone?: string;
+}): Promise<ThreadPromptPreview> {
+  const { character, characterDataDir, config, thread } = params;
+  const workspace = characterWorkspace(config, character);
+  const texts = Texts.of(config);
+  const changed = new Set<string>();
+  const sections = await promptSections(config, params.resolved, async (path) => {
+    const file = await previewPromptFile(characterDataDir, workspace, path, thread);
+    if (file.changed) changed.add(path);
+    return file.content;
+  });
+  const prompt = await threadPrompt(texts, characterDataDir, workspace, thread, previewThreadPins);
+  const system = buildSystemBlocks({ thread: prompt, character_name: character, display_name: resolveDisplayName(config.app.chat), sections, texts }, params.timeZone);
+  return { system, changed, pins: prompt?.pins ?? [] };
 }
 
 export async function prepareChatContext(
@@ -157,7 +190,7 @@ export async function prepareChatContext(
   ));
 
   const promptParams = {
-    thread: await threadPrompt(texts, characterDataDir, workspace, params.thread),
+    thread: await threadPrompt(texts, characterDataDir, workspace, params.thread, loadThreadPins),
     character_name: character,
     display_name: displayName,
     sections,
