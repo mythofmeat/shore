@@ -3,7 +3,7 @@ import { CONVERSATION_DIALOG_EVENT, openThreadDialog } from "../app/intents.ts";
 import type { ChromeSnapshot } from "../workspace.ts";
 import { Avatar } from "../ui/avatar.tsx";
 import { IconButton, Menu, type MenuItem } from "../ui/controls.tsx";
-import { ConnectionBanner, SignInRequestBanner } from "../app/banner.tsx";
+import { ConnectionBanner } from "../app/banner.tsx";
 import { threadLabel } from "../sidebar/Sidebar.tsx";
 import { conversation, errorText, readMarks, streamReplies, useConversationActive, useWorkspaceValue, workspace } from "../app/state.ts";
 import { toasts } from "../ui/toast.tsx";
@@ -96,7 +96,6 @@ export function Chat({ state, sidebarOpen, toggleSidebar, mobile }: { state: Chr
   return <>
     <ChatTopbar state={state} sidebarOpen={sidebarOpen} toggleSidebar={toggleSidebar} mobile={mobile} />
     <ConnectionBanner state={state} />
-    <SignInRequestBanner state={state} />
     {state.character === null ? <NoCharacter state={state} /> : <>
       <Transcript key={`${state.character}/${state.thread ?? ""}/${String(state.segmentView?.segment.index ?? "current")}`} character={state.character} mobile={mobile} readOnly={kept} />
       {kept

@@ -204,7 +204,7 @@ const provider: SidecarProvider = {
 };
 
 try {
-  const daemon = await startDaemon({ argv: ["--config", configPath, "--addr", "127.0.0.1:0"], env: {
+  const daemon = await startDaemon({ argv: ["--config", configPath], env: {
     XDG_CONFIG_HOME: join(root, "config-home"), XDG_DATA_HOME: join(root, "data"), XDG_CACHE_HOME: join(root, "cache"), XDG_RUNTIME_DIR: join(root, "runtime"),
     SHORE_TOKEN: "browser-test-token", SHORE_BROWSER_KEY: "test-key",
   }, providers: { anthropic: provider }, instancesPath: join(root, "instances.json"), watchConfig: false, autoDiscovery: false });
@@ -215,7 +215,7 @@ try {
   process.once("SIGTERM", () => { daemon.stop(); });
   process.once("SIGINT", () => { daemon.stop(); });
   if (daemon.web === undefined) throw new Error("Browser fixture did not start its web listener");
-  console.log(`SHORE_BROWSER_READY ${daemon.web.origin} ${String(daemon.port)}`);
+  console.log(`SHORE_BROWSER_READY ${daemon.web.origin}`);
   await daemon.done;
 } finally {
   await discovery.stop(true);

@@ -650,38 +650,6 @@
             "properties": {
               "name": {
                 "type": "string",
-                "const": "read_transfer"
-              },
-              "data": {
-                "$ref": "#/$defs/TransferChunk"
-              }
-            },
-            "required": [
-              "name",
-              "data"
-            ]
-          },
-          {
-            "type": "object",
-            "properties": {
-              "name": {
-                "type": "string",
-                "const": "write_transfer"
-              },
-              "data": {
-                "$ref": "#/$defs/TransferWritten"
-              }
-            },
-            "required": [
-              "name",
-              "data"
-            ]
-          },
-          {
-            "type": "object",
-            "properties": {
-              "name": {
-                "type": "string",
                 "const": "usage"
               },
               "data": {
@@ -2231,46 +2199,6 @@
           "skipped",
           "restored",
           "kept"
-        ]
-      },
-      "TransferChunk": {
-        "type": "object",
-        "properties": {
-          "data": {
-            "type": "string"
-          },
-          "offset": {
-            "type": "integer",
-            "format": "uint",
-            "minimum": 0
-          },
-          "bytes": {
-            "type": "integer",
-            "format": "uint",
-            "minimum": 0
-          }
-        },
-        "required": [
-          "data",
-          "offset",
-          "bytes"
-        ]
-      },
-      "TransferWritten": {
-        "type": "object",
-        "properties": {
-          "transfer": {
-            "type": "string"
-          },
-          "bytes": {
-            "type": "integer",
-            "format": "uint",
-            "minimum": 0
-          }
-        },
-        "required": [
-          "transfer",
-          "bytes"
         ]
       },
       "UsageResult": {
@@ -10127,38 +10055,6 @@
             "properties": {
               "name": {
                 "type": "string",
-                "const": "read_transfer"
-              },
-              "data": {
-                "$ref": "#/$defs/TransferChunk"
-              }
-            },
-            "required": [
-              "name",
-              "data"
-            ]
-          },
-          {
-            "type": "object",
-            "properties": {
-              "name": {
-                "type": "string",
-                "const": "write_transfer"
-              },
-              "data": {
-                "$ref": "#/$defs/TransferWritten"
-              }
-            },
-            "required": [
-              "name",
-              "data"
-            ]
-          },
-          {
-            "type": "object",
-            "properties": {
-              "name": {
-                "type": "string",
                 "const": "usage"
               },
               "data": {
@@ -11708,46 +11604,6 @@
           "skipped",
           "restored",
           "kept"
-        ]
-      },
-      "TransferChunk": {
-        "type": "object",
-        "properties": {
-          "data": {
-            "type": "string"
-          },
-          "offset": {
-            "type": "integer",
-            "format": "uint",
-            "minimum": 0
-          },
-          "bytes": {
-            "type": "integer",
-            "format": "uint",
-            "minimum": 0
-          }
-        },
-        "required": [
-          "data",
-          "offset",
-          "bytes"
-        ]
-      },
-      "TransferWritten": {
-        "type": "object",
-        "properties": {
-          "transfer": {
-            "type": "string"
-          },
-          "bytes": {
-            "type": "integer",
-            "format": "uint",
-            "minimum": 0
-          }
-        },
-        "required": [
-          "transfer",
-          "bytes"
         ]
       },
       "UsageResult": {
@@ -19723,6 +19579,99 @@
     "required": [
       "code",
       "allow"
+    ]
+  },
+  "hello": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "title": "WebHello",
+    "type": "object",
+    "properties": {
+      "server_name": {
+        "type": "string"
+      },
+      "server_version": {
+        "type": "string"
+      },
+      "characters": {
+        "type": "array",
+        "items": {
+          "$ref": "#/$defs/CharacterInfo"
+        }
+      },
+      "selected_character": {
+        "type": [
+          "string",
+          "null"
+        ]
+      },
+      "selected_thread": {
+        "type": [
+          "string",
+          "null"
+        ]
+      }
+    },
+    "required": [
+      "server_name",
+      "server_version",
+      "characters"
+    ],
+    "$defs": {
+      "CharacterInfo": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "avatar": {
+            "anyOf": [
+              {
+                "$ref": "#/$defs/CharacterAvatar"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "name"
+        ]
+      },
+      "CharacterAvatar": {
+        "type": "object",
+        "properties": {
+          "mime_type": {
+            "type": "string"
+          },
+          "data": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "mime_type",
+          "data"
+        ]
+      }
+    }
+  },
+  "transfer": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "title": "WebTransfer",
+    "type": "object",
+    "properties": {
+      "transfer": {
+        "type": "string"
+      },
+      "bytes": {
+        "type": "integer",
+        "format": "uint64",
+        "minimum": 0
+      }
+    },
+    "required": [
+      "transfer",
+      "bytes"
     ]
   }
 }

@@ -8,7 +8,7 @@ import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { create, extract, Header, Parser } from "tar";
 
-import { deleteCharacter, exportBackup, exportCharacter, importArchive, importCharacter, readTransfer, writeTransfer, type ArchiveContext } from "../src/commands/archive.ts";
+import { deleteCharacter, exportBackup, exportCharacter, importArchive, importCharacter, type ArchiveContext } from "../src/commands/archive.ts";
 import { ArchiveSpool } from "../src/commands/archive_spool.ts";
 import { characterCacheDir, type ShoreDirs } from "../src/config/dirs.ts";
 import { HistoryStore } from "../src/engine/history_store.ts";
@@ -239,19 +239,19 @@ describe("character archives", () => {
     restored.close();
   });
 
-  test("a download spooled for one connection travels in chunks and lands through another's upload", async () => {
+  test("a download spooled for one device is that device's alone, goes once, and lands through another's upload", async () => {
     const source = await root("spooled-source"); await seedCharacter(source, "ada", "spooled history");
-    const sending = spooling(source, new Set(["ada"]), 1);
+    const sending = spooling(source, new Set(["ada"]), "laptop");
     const exported = await exportCharacter(sending, { character: "ada" });
     if (exported.transfer === undefined) throw new Error("A spooled export names its transfer");
-    expect(await outcomeOf(readTransfer({ ...sending, owner: 2 }, { transfer: exported.transfer, offset: 0 }))).toThrow("No download transfer");
+    expect(() => sending.spool?.send("phone", exported.transfer ?? "")).toThrow("No download transfer");
     const bytes = await download(sending, exported.transfer);
     expect(bytes.length).toBe(exported.bytes);
     expect(bytes.length).toBeGreaterThan(4096);
-    expect(await outcomeOf(readTransfer(sending, { transfer: exported.transfer, offset: 0 }))).toThrow("No download transfer");
+    expect(() => sending.spool?.send("laptop", exported.transfer ?? "")).toThrow("No download transfer");
 
     const target = await root("spooled-target");
-    const receiving = spooling(target, new Set(), 3);
+    const receiving = spooling(target, new Set(), "desktop");
     expect(await importArchive(receiving, { transfer: await uploaded(receiving, bytes) }))
       .toEqual({ characters: ["ada"], skipped: [], restored: [], kept: [] });
     expect(await readFile(join(target.workspace as string, "ada", "SOUL.md"), "utf8")).toBe("You are ada.\n");
@@ -267,13 +267,13 @@ describe("character archives", () => {
     await writeFile(join(source.config, "conf.d", "10-own-time.toml"), '[heartbeat]\nenabled = true\nmin_interval = "4h"\nmax_idle_turns = 9\n');
     await writeFile(join(source.config, "conf.d", "notes.txt"), "[heartbeat]\nenabled = true\n");
     await mkdir(join(source.data, "preferences")); await writeFile(join(source.data, "preferences", "models.toml"), "favorites = []\n");
-    const sending = spooling(source, new Set(["ada", "bea"]), 1);
+    const sending = spooling(source, new Set(["ada", "bea"]), "laptop");
     const backup = await exportBackup(sending);
     expect(backup.characters).toEqual(["ada", "bea"]);
 
     const target = await root("backup-target"); await seedCharacter(target, "bea", "bea already here");
     await writeFile(join(target.config, "config.toml"), "[chat]\nmodel = \"openai:kept\"\n");
-    const receiving = spooling(target, new Set(["bea"]), 2);
+    const receiving = spooling(target, new Set(["bea"]), "desktop");
     expect(await importArchive(receiving, { transfer: await uploaded(receiving, await download(sending, backup.transfer)) })).toEqual({
       characters: ["ada"], skipped: ["bea"], restored: ["config/conf.d/10-own-time.toml", "config/conf.d/notes.txt", "config/prompts/style.md", "data/preferences/models.toml"], kept: ["config/config.toml"],
     });
@@ -291,7 +291,7 @@ describe("character archives", () => {
   test("a backup leaves stored provider keys out unless asked, and importing it says so", async () => {
     const source = await root("secrets-source"); await seedCharacter(source, "ada", "ada history");
     await writeFile(join(source.data, "provider_secrets.json"), JSON.stringify({ version: 1, providers: { openrouter: { work: "sk-or-v1-secretvalue1234" } } }), { mode: 0o600 });
-    const sending = spooling(source, new Set(["ada"]), 1);
+    const sending = spooling(source, new Set(["ada"]), "laptop");
     const plain = await exportBackup(sending);
     const plainTar = await tarEntries(await download(sending, plain.transfer));
     expect(plainTar.has("data/provider_secrets.json")).toBe(false);
@@ -299,7 +299,7 @@ describe("character archives", () => {
     expect(plain.secrets_left_out).toBe(true);
 
     const target = await root("secrets-target");
-    const receiving = spooling(target, new Set(), 2);
+    const receiving = spooling(target, new Set(), "desktop");
     expect(await importArchive(receiving, { transfer: await uploaded(receiving, plainTar.size === 0 ? Buffer.alloc(0) : await download(sending, (await exportBackup(sending)).transfer)) }))
       .toMatchObject({ characters: ["ada"], secrets_left_out: true });
     expect(existsSync(join(target.data, "provider_secrets.json"))).toBe(false);
@@ -307,7 +307,7 @@ describe("character archives", () => {
     const withKeys = await exportBackup(sending, { include_secrets: true });
     expect(withKeys.secrets_left_out).toBeUndefined();
     const other = await root("secrets-included");
-    const restoring = spooling(other, new Set(), 3);
+    const restoring = spooling(other, new Set(), "phone");
     const imported = await importArchive(restoring, { transfer: await uploaded(restoring, await download(sending, withKeys.transfer)) });
     expect(imported.restored).toContain("data/provider_secrets.json");
     expect(imported.secrets_left_out).toBeUndefined();
@@ -321,7 +321,7 @@ describe("character archives", () => {
     padding.run("CREATE TABLE padding (data BLOB)");
     for (let i = 0; i < 48; i++) padding.query("INSERT INTO padding VALUES (?1)").run(crypto.getRandomValues(new Uint8Array(65536)));
     padding.close();
-    const sending = spooling(source, new Set(["ada"]), 1);
+    const sending = spooling(source, new Set(["ada"]), "laptop");
     const full = await tarEntries(await download(sending, (await exportBackup(sending)).transfer));
     for (const path of ["workspace/ada/SOUL.md", "workspace/ada/notes.md", "data/shore.db", "manifest.json"]) expect(full.has(path)).toBe(true);
 
@@ -389,7 +389,7 @@ describe("character archives", () => {
     const backup = join(source.runtime, "shore-backup.tar.gz");
     await create({ cwd: stage, file: backup, gzip: true, portable: true }, ["manifest.json", "config", "data", "characters"]);
     const target = await root("gzip-backup-target");
-    const receiving = spooling(target, new Set(), 2);
+    const receiving = spooling(target, new Set(), "desktop");
     expect(await importArchive(receiving, { transfer: await uploaded(receiving, await readFile(backup)) }))
       .toEqual({ characters: ["ada"], skipped: [], restored: ["config/config.toml"], kept: [] });
     expect(await readFile(join(target.config, "config.toml"), "utf8")).toBe("[triggers]\nenabled = true\n");
@@ -398,35 +398,33 @@ describe("character archives", () => {
     finally { history.close(); }
   });
 
-  test("transfers whose connection is gone are removed", async () => {
+  test("transfers left alone for their idle time are removed, and one that is used again is not", async () => {
     const dirs = await root("swept"); await seedCharacter(dirs, "ada", "history");
-    let connected = true;
-    const spool = new ArchiveSpool(join(dirs.cache, "archive-transfers"), () => connected);
-    const ctx = { ...context(dirs, new Set(["ada"])), spool, owner: 1 };
+    const spool = new ArchiveSpool(join(dirs.cache, "archive-transfers"), 200);
+    const ctx = { ...context(dirs, new Set(["ada"])), spool, owner: "laptop" };
+    const kept = await spool.receive("laptop", new Blob(["kept"]).stream());
     await exportCharacter(ctx, { character: "ada" });
-    const upload = await writeTransfer(ctx, { data: Buffer.from("partial").toString("base64") });
-    expect(await readdir(join(dirs.cache, "archive-transfers"))).toHaveLength(2);
+    const upload = await spool.receive("laptop", new Blob(["partial"]).stream());
+    expect(await readdir(join(dirs.cache, "archive-transfers"))).toHaveLength(3);
     await spool.sweep();
-    expect(await readdir(join(dirs.cache, "archive-transfers"))).toHaveLength(2);
-    connected = false;
+    expect(await readdir(join(dirs.cache, "archive-transfers"))).toHaveLength(3);
+    await Bun.sleep(120);
+    spool.claim("laptop", kept.transfer);
+    await Bun.sleep(120);
     await spool.sweep();
-    expect(await readdir(join(dirs.cache, "archive-transfers"))).toEqual([]);
+    expect(await readdir(join(dirs.cache, "archive-transfers"))).toHaveLength(1);
     expect(await outcomeOf(importArchive(ctx, { transfer: upload.transfer }))).toThrow("No upload transfer");
   });
 });
 
-function spooling(dirs: ShoreDirs, characters: Set<string>, owner: number): ArchiveContext {
-  return { ...context(dirs, characters), spool: new ArchiveSpool(join(dirs.cache, "archive-transfers"), () => true, 4096), owner };
+function spooling(dirs: ShoreDirs, characters: Set<string>, owner: string): ArchiveContext {
+  return { ...context(dirs, characters), spool: new ArchiveSpool(join(dirs.cache, "archive-transfers")), owner };
 }
 
 async function download(ctx: ArchiveContext, transfer: string): Promise<Buffer> {
-  const parts: Buffer[] = [];
-  for (let offset = 0, total = 1; offset < total;) {
-    const chunk = await readTransfer(ctx, { transfer, offset });
-    const bytes = Buffer.from(chunk.data, "base64");
-    parts.push(bytes); offset += bytes.length; total = chunk.bytes;
-  }
-  return Buffer.concat(parts);
+  const sent = ctx.spool?.send(ctx.owner ?? "", transfer);
+  if (sent === undefined) throw new Error("This context has no spool");
+  return Buffer.from(await new Response(sent.stream).arrayBuffer());
 }
 
 async function tarEntries(bytes: Buffer): Promise<Map<string, Buffer>> {
@@ -444,13 +442,9 @@ async function tarEntries(bytes: Buffer): Promise<Map<string, Buffer>> {
 }
 
 async function uploaded(ctx: ArchiveContext, bytes: Buffer): Promise<string> {
-  let transfer: string | undefined;
-  for (let offset = 0; offset < bytes.length; offset += 4096) {
-    const data = bytes.subarray(offset, offset + 4096).toString("base64");
-    transfer = (await writeTransfer(ctx, transfer === undefined ? { data } : { transfer, data })).transfer;
-  }
-  if (transfer === undefined) throw new Error("Nothing to upload");
-  return transfer;
+  const received = await ctx.spool?.receive(ctx.owner ?? "", new Blob([bytes]).stream());
+  if (received === undefined) throw new Error("This context has no spool");
+  return received.transfer;
 }
 
 async function root(name: string): Promise<ShoreDirs> {

@@ -792,6 +792,42 @@ describe("signing in and out", () => {
   });
 });
 
+describe("managing devices from the page", () => {
+  const device = { id: "c1", kind: "cli" as const, name: "desk", created_at: 1, current: false };
+
+  test("lists devices, lets one in or turns it away, signs one out and makes a key, each checked", async () => {
+    const link = rig();
+    link.answer("/api/devices/list", () => Response.json({ devices: [device], requests: [] }), () => Response.json({ devices: "nope" }), () => problem(403, "Keys can't list devices"), () => problem(500));
+    link.answer("/api/devices/decide", () => new Response(null, { status: 204 }), () => problem(404, "No device is waiting with the code ZZZZ"), () => problem(500), () => problem(500));
+    link.answer("/api/devices/revoke", () => new Response(null, { status: 204 }), () => problem(500));
+    link.answer("/api/devices/automation", () => Response.json({ device: { ...device, kind: "automation", operations: ["presence"] }, token: "shore_k" }), () => Response.json({ token: 5 }), () => problem(400, "Choose at least one operation the key may run"));
+    const failure = async (work: () => Promise<unknown>) => await work().then(() => "", (error: unknown) => (error as Error).message);
+
+    expect(await link.connection.devices()).toEqual({ devices: [device], requests: [] });
+    expect(await failure(() => link.connection.devices())).toBe("The daemon sent an unexpected device list. Reload the page.");
+    expect(await failure(() => link.connection.devices())).toBe("Keys can't list devices");
+    expect(await failure(() => link.connection.devices())).toBe("Could not list the signed-in devices");
+
+    await link.connection.decideSignIn("4F7K", true);
+    expect(await failure(() => link.connection.decideSignIn("ZZZZ", true))).toBe("No device is waiting with the code ZZZZ");
+    expect(await failure(() => link.connection.decideSignIn("4F7K", true))).toBe("Could not let that device in");
+    expect(await failure(() => link.connection.decideSignIn("4F7K", false))).toBe("Could not refuse that device");
+
+    await link.connection.revokeDevice("c1");
+    expect(await failure(() => link.connection.revokeDevice("c1"))).toBe("Could not sign that device out");
+
+    expect(await link.connection.automationKey("Phone", ["presence"])).toEqual({ device: { ...device, kind: "automation", operations: ["presence"] }, token: "shore_k" });
+    expect(await failure(() => link.connection.automationKey("Phone", ["presence"]))).toBe("The daemon sent an unexpected key. Reload the page.");
+    expect(await failure(() => link.connection.automationKey("Phone", []))).toBe("Choose at least one operation the key may run");
+
+    const sent = (path: string) => link.calls.filter((call) => call.path === path).map((call) => JSON.parse(typeof call.init.body === "string" ? call.init.body : "null") as unknown);
+    expect(sent("/api/devices/decide")).toEqual([{ code: "4F7K", allow: true }, { code: "ZZZZ", allow: true }, { code: "4F7K", allow: true }, { code: "4F7K", allow: false }]);
+    expect(sent("/api/devices/revoke")).toEqual([{ id: "c1" }, { id: "c1" }]);
+    expect(sent("/api/devices/automation")[0]).toEqual({ name: "Phone", operations: ["presence"] });
+    expect(link.calls.every((call) => call.init.signal instanceof AbortSignal && call.init.method === "POST")).toBe(true);
+  });
+});
+
 describe("what a connection keeps between attempts", () => {
   test("a refresh asked for before any connection starts as a first one, and a refresh after stopping connects again", async () => {
     jest.useFakeTimers();

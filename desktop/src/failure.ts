@@ -3,7 +3,7 @@ export interface Failure { title: string; detail: string }
 const UNREACHABLE: Failure = { title: "The daemon's host didn't answer", detail: "Check your network connection, VPN or Tailscale." };
 const NOT_SHORE: Failure = {
   title: "Something answered, but not Shore's browser listener",
-  detail: "Check the port and scheme. The browser client listens on [daemon.web] bind_addr (port 7340 unless changed) and uses https:// only when tls_cert is set. Port 7320 is the CLI's.",
+  detail: "Check the port and scheme. The browser client listens on [daemon.web] bind_addr (port 7340 unless changed) and uses https:// only when tls_cert is set.",
 };
 
 export function describeLoadFailure(error: string): Failure {

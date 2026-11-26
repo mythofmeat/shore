@@ -4,7 +4,7 @@ import type { ServerWebSocket } from "bun";
 import type { ClientMessage } from "../protocol/ClientMessage.ts";
 import type { ServerMessage } from "../protocol/ServerMessage.ts";
 import { admitClientMessage, sanitiseRid } from "../swp/admission.ts";
-import { SWP_V1 } from "../swp/connection.ts";
+import { SWP_V1 } from "../swp/handshake.ts";
 import { decodeClientMessage, rustTrim } from "../swp/framing.ts";
 import type { LocalPeer, Server } from "../swp/server.ts";
 import { REQUEST_LIFECYCLE_CAPABILITY, sessionMetaOf } from "../swp/session.ts";
@@ -20,7 +20,6 @@ interface PendingRequest {
 
 export interface WebSocketState {
   readonly auth: WebSession;
-  readonly confidential: boolean;
   readonly abort: AbortController;
   readonly pending: Map<string, PendingRequest>;
   phase: "hello" | "attaching" | "ready" | "closed";
@@ -35,8 +34,8 @@ export interface WebSocketState {
   controls: number;
 }
 
-export const socketState = (auth: WebSession, confidential = false): WebSocketState => ({
-  auth, confidential, abort: new AbortController(), pending: new Map(), phase: "hello",
+export const socketState = (auth: WebSession): WebSocketState => ({
+  auth, abort: new AbortController(), pending: new Map(), phase: "hello",
   windowStart: Date.now(), requests: 0, bytesInWindow: 0, pendingBytes: 0, controls: 0,
 });
 
@@ -166,7 +165,7 @@ export class WebSocketPeers {
     const state = socket.data;
     try {
       const peer = await this.#server.attachLocal({
-        clientType: "web", clientName: hello.client_name, confidential: state.confidential, capabilities: [...new Set([...hello.capabilities, REQUEST_LIFECYCLE_CAPABILITY])],
+        clientType: "web", clientName: hello.client_name, owner: state.auth.id, capabilities: [...new Set([...hello.capabilities, REQUEST_LIFECYCLE_CAPABILITY])],
         ...(hello.character === null || hello.character === undefined ? {} : { character: hello.character }),
         ...(hello.thread === null || hello.thread === undefined ? {} : { thread: hello.thread }),
         signal: state.abort.signal,

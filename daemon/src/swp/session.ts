@@ -20,7 +20,7 @@ export interface ClientInfo {
   readonly clientType: string;
   readonly clientName: string;
   readonly capabilities: readonly string[];
-  readonly confidential?: boolean;
+  readonly owner?: string;
   character: string | null;
   thread: string | null;
 }
@@ -32,7 +32,7 @@ export interface SessionMeta {
   readonly clientType: string;
   readonly clientName: string;
   readonly capabilities: readonly string[];
-  readonly confidential?: boolean;
+  readonly owner?: string;
   readonly selectedCharacter: string | null;
   readonly selectedThread: string | null;
 }
@@ -72,7 +72,7 @@ export function sessionMetaOf(client: ClientInfo): SessionMeta {
     clientType: client.clientType,
     clientName: client.clientName,
     capabilities: [...client.capabilities],
-    confidential: client.confidential === true,
+    ...(client.owner === undefined ? {} : { owner: client.owner }),
     selectedCharacter: client.character,
     selectedThread: client.thread,
   };

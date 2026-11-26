@@ -1,4 +1,5 @@
 import type { ArchiveLimits } from "../commands/archive.ts";
+import { CommandError } from "../commands/errors.ts";
 import { operationSchema } from "../operations/contracts.ts";
 import { coreRequests } from "../operations/requests.ts";
 import type { ClientMessage } from "../protocol/ClientMessage.ts";
@@ -9,7 +10,7 @@ import { AdmissionError, admitClientMessage } from "../swp/admission.ts";
 import { MULTIMODAL_TOOL_RESULTS } from "../swp/content_projection.ts";
 import { decodeClientMessage, WireError } from "../swp/framing.ts";
 import { encodeServerMessage } from "../swp/outbound.ts";
-import type { Server } from "../swp/server.ts";
+import type { LocalPeer, Server } from "../swp/server.ts";
 import { REQUEST_LIFECYCLE_CAPABILITY } from "../swp/session.ts";
 import { readSmallJson, securityHeaders, WebBodyTooLarge, WEB_LIMITS } from "./policy.ts";
 
@@ -18,6 +19,7 @@ export type OneOffMessage = Exclude<ClientMessage, { type: "hello" }>;
 export interface OneOffRequest {
   readonly message: OneOffMessage;
   readonly clientName: string;
+  readonly owner?: string;
   readonly character?: string | null | undefined;
   readonly thread?: string | undefined;
   readonly signal: AbortSignal;
@@ -39,6 +41,7 @@ export async function* runRequest(server: Server, request: OneOffRequest): Async
   const signal = AbortSignal.any([request.signal, abort.signal]);
   const peer = await server.attachLocal({
     clientType: "http", clientName: request.clientName, history: false, broadcasts: false, signal,
+    ...(request.owner === undefined ? {} : { owner: request.owner }),
     capabilities: [REQUEST_LIFECYCLE_CAPABILITY, MULTIMODAL_TOOL_RESULTS],
     ...(request.character === undefined ? {} : { character: request.character }),
     ...(request.thread === undefined ? {} : { thread: request.thread }),
@@ -74,7 +77,12 @@ function failure(error: ProtocolError): Response {
   return Response.json(body, { status: STATUS[code], headers: securityHeaders() });
 }
 
-const refused = (code: ErrorCode, message: string): Response => failure({ code, message });
+export const refused = (code: ErrorCode, message: string): Response => failure({ code, message });
+
+export function commandRefusal(error: unknown): Response {
+  if (error instanceof CommandError) return refused(error.code, error.message);
+  throw error;
+}
 
 function wantsStream(request: Request): boolean {
   return (request.headers.get("accept") ?? "").split(",").some((type) => type.split(";")[0]?.trim() === STREAM_TYPE);
@@ -99,6 +107,7 @@ export interface OperationCall {
   readonly server: Server;
   readonly name: string;
   readonly clientName: string;
+  readonly owner: string;
   readonly queuedBytes: number;
   readonly holdOpen: () => void;
 }
@@ -111,19 +120,74 @@ export async function operationResponse(request: Request, call: OperationCall): 
   try { args = await argumentsOf(request); } catch (error) {
     return refused("invalid_request", error instanceof WebBodyTooLarge ? error.message : "Send the operation's arguments as a JSON object");
   }
+  const rid = `http-${crypto.randomUUID()}`;
   let message: OneOffMessage;
-  try { message = requestMessage(name, args, `http-${crypto.randomUUID()}`); } catch (error) {
+  try { message = requestMessage(name, args, rid); } catch (error) {
     if (error instanceof AdmissionError || error instanceof WireError) return refused("invalid_request", error.message);
     throw error;
   }
   const url = new URL(request.url);
-  const selected = (key: string): string | undefined => { const value = url.searchParams.get(key); return value === null || value === "" ? undefined : value; };
   const controller = new AbortController();
   const signal = AbortSignal.any([request.signal, controller.signal]);
   const frames = runRequest(call.server, {
-    message, clientName: call.clientName, character: selected("character"), thread: selected("thread"), signal, queuedBytes: call.queuedBytes,
+    message, clientName: call.clientName, owner: call.owner, character: selected(url, "character"), thread: selected(url, "thread"), signal, queuedBytes: call.queuedBytes,
   });
-  return wantsStream(request) ? streamed(frames, controller) : await answered(name, frames);
+  const response = wantsStream(request) ? streamed(frames, controller) : await answered(name, frames);
+  if (message.type !== "cancel") response.headers.set("shore-request", rid);
+  return response;
+}
+
+function selected(url: URL, key: string): string | undefined {
+  const value = url.searchParams.get(key);
+  return value === null || value === "" ? undefined : value;
+}
+
+const line = (message: ServerMessage): Uint8Array => new TextEncoder().encode(`${encodeServerMessage(message).text}\n`);
+
+export interface EventCall {
+  readonly server: Server;
+  readonly clientName: string;
+  readonly owner: string;
+  readonly queuedBytes: number;
+  readonly holdOpen: () => void;
+}
+
+export async function eventResponse(request: Request, call: EventCall): Promise<Response> {
+  call.holdOpen();
+  const url = new URL(request.url);
+  const controller = new AbortController();
+  let behind = false;
+  let peer: LocalPeer;
+  try {
+    peer = await call.server.attachLocal({
+      clientType: "http", clientName: call.clientName, owner: call.owner, history: false,
+      capabilities: ["streaming", "history-deltas", MULTIMODAL_TOOL_RESULTS], signal: AbortSignal.any([request.signal, controller.signal]),
+      character: selected(url, "character"), thread: selected(url, "thread"),
+      outboundLimits: { messages: WEB_LIMITS.queuedMessages, bytes: call.queuedBytes, coalesceStreams: true, onOverflow: () => { behind = true; } },
+    });
+  } catch {
+    return refused("busy", "The daemon is stopping");
+  }
+  const events = peer.events();
+  let ping: ReturnType<typeof setInterval> | undefined;
+  const end = async () => { clearInterval(ping); controller.abort(); await peer.detach(); };
+  const stream = new ReadableStream<Uint8Array>({
+    start(output) {
+      output.enqueue(line({ type: "ping" }));
+      ping = setInterval(() => { output.enqueue(line({ type: "ping" })); }, PING_MS);
+    },
+    async pull(output) {
+      const next = await events.next();
+      if (!next.done) { output.enqueue(line(next.value)); return; }
+      output.enqueue(line(behind ? { type: "error", code: "busy", message: "This reader fell behind the daemon's events; follow again" } : { type: "shutdown" }));
+      output.close();
+      await end();
+    },
+    cancel: end,
+  });
+  const headers = securityHeaders();
+  headers.set("content-type", STREAM_TYPE);
+  return new Response(stream, { headers });
 }
 
 function streamed(frames: AsyncGenerator<ServerMessage, void>, controller: AbortController): Response {

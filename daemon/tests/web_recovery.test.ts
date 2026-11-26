@@ -26,7 +26,7 @@ async function recoveryOptions(): Promise<WebRecoveryOptions> {
 function start(config: WebRecoveryOptions) {
   const recovery = new WebRecovery(config, origin);
   const sessions = new WebSessions(origin, 4, 60_000, recovery);
-  const server = new Server({ addr: "127.0.0.1:0", serverName: "recovery", authenticate: () => true });
+  const server = new Server();
   const transfers = new ArchiveTransfers(server, () => true, {}, recovery);
   transfers.restore(sessions);
   const requests = new RequestHistory(recovery);

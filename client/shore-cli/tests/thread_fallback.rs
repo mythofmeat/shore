@@ -1,106 +1,37 @@
 #![cfg(test)]
 
-use std::io::{BufRead, BufReader, Write};
-use std::net::{TcpListener, TcpStream};
+mod support;
+
 use std::path::Path;
-use std::process::{Command, Output};
-use std::time::{Duration, Instant};
+use std::process::Output;
 
 use serde_json::{Value, json};
 
-fn undo_the_nonblocking_mode_macos_copies_from_the_listener(stream: &TcpStream) {
-    stream.set_nonblocking(false).unwrap();
-}
+use support::{StandIn, shore_in};
 
-fn send(stream: &mut TcpStream, message: Value) {
-    writeln!(stream, "{message}").unwrap();
-}
-
-fn serve(stream: TcpStream, requested: &str, selected: &str, runs_command: bool) {
-    undo_the_nonblocking_mode_macos_copies_from_the_listener(&stream);
-    stream
-        .set_read_timeout(Some(Duration::from_secs(10)))
-        .unwrap();
-    let mut reader = BufReader::new(stream);
-    send(
-        reader.get_mut(),
-        json!({
-            "type": "hello", "v": 1, "server_name": "test", "characters": []
-        }),
-    );
-    let mut line = String::new();
-    let _read = reader.read_line(&mut line).unwrap();
-    let hello: Value = serde_json::from_str(&line).unwrap();
-    assert_eq!(hello.get("thread").and_then(Value::as_str), Some(requested));
-    send(
-        reader.get_mut(),
-        json!({
-            "type": "history", "messages": [], "config": {},
-            "selected_character": "heidi", "selected_thread": selected
-        }),
-    );
-    line.clear();
-    let _read_command = reader.read_line(&mut line).unwrap();
-    if runs_command {
-        let command: Value = serde_json::from_str(&line).unwrap();
-        assert_eq!(command.get("name").and_then(Value::as_str), Some("log"));
-        send(
-            reader.get_mut(),
-            json!({
-                "type": "command_output", "name": "log", "rid": command.get("rid"),
-                "data": {"messages": [], "selected_thread": selected, "cursor": 0,
-                    "next_before": 0, "has_more_before": false, "total_turns": 0,
-                    "segment": null, "previous_segment": null, "next_segment": null}
-            }),
-        );
-    } else {
-        assert!(
-            line.is_empty(),
-            "no command should run on the rejected connection"
-        );
-    }
-}
-
-fn run(
-    data: &Path,
-    env_thread: Option<&str>,
-    flag_thread: Option<&str>,
-    connections: Vec<(&'static str, &'static str, bool)>,
-) -> Output {
-    let listener = TcpListener::bind("127.0.0.1:0").unwrap();
-    listener.set_nonblocking(true).unwrap();
-    let addr = listener.local_addr().unwrap();
-    let server = std::thread::spawn(move || {
-        let started = Instant::now();
-        let mut workers = Vec::new();
-        for (requested, selected, runs_command) in connections {
-            let stream = loop {
-                match listener.accept() {
-                    Ok((stream, _)) => break stream,
-                    Err(e) if e.kind() == std::io::ErrorKind::WouldBlock => {
-                        assert!(
-                            started.elapsed() < Duration::from_secs(10),
-                            "client did not connect"
-                        );
-                        std::thread::sleep(Duration::from_millis(10));
-                    }
-                    Err(e) => panic!("accept failed: {e}"),
-                }
-            };
-            workers.push(std::thread::spawn(move || {
-                serve(stream, requested, selected, runs_command);
-            }));
+fn run(data: &Path, env_thread: Option<&str>, flag_thread: Option<&str>) -> (Output, Vec<Value>) {
+    let daemon = StandIn::start(&["heidi"], None, |hello, frame| {
+        if frame["type"] == "hello" {
+            return vec![json!({
+                "type": "history", "selected_character": "heidi", "selected_thread": "home",
+            })];
         }
-        for worker in workers {
-            worker.join().unwrap();
-        }
+        assert_eq!(
+            hello["thread"], "home",
+            "a command runs in the thread the daemon serves"
+        );
+        vec![json!({
+            "type": "command_output", "name": "log", "rid": frame["rid"],
+            "data": {"messages": [], "selected_thread": "home", "cursor": 0,
+                "next_before": 0, "has_more_before": false, "total_turns": 0,
+                "segment": null, "previous_segment": null, "next_segment": null}
+        })]
     });
-    let mut command = Command::new(env!("CARGO_BIN_EXE_shore"));
+    let home = tempfile::tempdir().unwrap();
+    let mut command = shore_in(home.path(), &daemon.addr);
     let _configured = command
         .env("SHORE_DATA_DIR", data)
-        .env("SHORE_TOKEN", "test-token")
-        .env_remove("SHORE_THREAD")
-        .args(["--addr", &addr.to_string(), "--character", "heidi"]);
+        .args(["--character", "heidi"]);
     if let Some(thread) = env_thread {
         let _env = command.env("SHORE_THREAD", thread);
     }
@@ -108,8 +39,15 @@ fn run(
         let _flag = command.args(["--thread", thread]);
     }
     let output = command.args(["log", "--json"]).output().unwrap();
-    server.join().unwrap();
-    output
+    let asked = daemon
+        .frames()
+        .iter()
+        .map(|frame| match frame["type"].as_str() {
+            Some("hello") => json!(["hello", frame["thread"]]),
+            _ => json!(["command", frame["name"]]),
+        })
+        .collect();
+    (output, asked)
 }
 
 fn save(data: &Path, thread: &str) {
@@ -125,13 +63,16 @@ fn saved(data: &Path) -> String {
 fn stale_environment_and_saved_threads_fall_back_to_home() {
     let data = tempfile::tempdir().unwrap();
     save(data.path(), "work");
-    let output = run(
-        data.path(),
-        Some("eval"),
-        None,
-        vec![("eval", "home", false), ("work", "home", true)],
+    let (output, asked) = run(data.path(), Some("eval"), None);
+    assert!(output.status.success(), "{output:?}");
+    assert_eq!(
+        asked,
+        [
+            json!(["hello", "eval"]),
+            json!(["hello", "work"]),
+            json!(["command", "log"])
+        ]
     );
-    assert!(output.status.success());
     assert_eq!(saved(data.path()), "home");
 }
 
@@ -139,13 +80,9 @@ fn stale_environment_and_saved_threads_fall_back_to_home() {
 fn explicit_missing_thread_is_refused_even_when_it_matches_the_environment() {
     let data = tempfile::tempdir().unwrap();
     save(data.path(), "work");
-    let output = run(
-        data.path(),
-        Some("eval"),
-        Some("eval"),
-        vec![("eval", "home", false)],
-    );
+    let (output, asked) = run(data.path(), Some("eval"), Some("eval"));
     assert!(!output.status.success());
+    assert_eq!(asked, [json!(["hello", "eval"])], "no command runs");
     assert_eq!(saved(data.path()), "work");
     assert!(String::from_utf8_lossy(&output.stderr).contains("you asked for it with --thread"));
 }

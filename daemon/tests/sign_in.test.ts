@@ -65,6 +65,32 @@ describe("a browser session", () => {
     sessions.close();
   });
 
+  test("knows its name and when it was made and last used, writing that down at most once a minute", () => {
+    const touched: Array<[string, number]> = [];
+    const saved: unknown[] = [];
+    const recovery = { sessions: () => [], saveSession: (session: unknown) => saved.push(session), revokeSession: () => {}, touchSession: (id: string, at: number) => touched.push([id, at]) };
+    const sessions = new WebSessions(ORIGIN, 4, 600_000, recovery as never);
+    const session = sessions.create("Firefox on Linux", 1_000);
+    const other = sessions.create();
+    if (session === undefined || other === undefined) throw new Error("no session");
+    expect(saved[0]).toEqual({ id: session.id, expires_at: 601_000, name: "Firefox on Linux", created_at: 1_000, last_used_at: 1_000 });
+    expect(other.name).toBe("Browser");
+    const cookie = requestWith(cookieOf(sessions, session));
+    setSystemTime(new Date(2_000));
+    expect(sessions.read(cookie, undefined, 2_000)?.lastUsedAt).toBe(2_000);
+    expect(sessions.read(cookie, undefined, 60_999)?.lastUsedAt).toBe(60_999);
+    expect(touched).toEqual([]);
+    expect(sessions.read(cookie, undefined, 61_000)?.lastUsedAt).toBe(61_000);
+    expect(touched).toEqual([[session.id, 61_000]]);
+    expect(sessions.read(cookie, undefined, 100_000)?.lastUsedAt).toBe(100_000);
+    expect(touched).toHaveLength(1);
+    expect(sessions.list().map((listed) => listed.name)).toEqual(["Firefox on Linux", "Browser"]);
+    setSystemTime(new Date(other.expiresAt));
+    expect(sessions.list().map((listed) => listed.id)).toEqual([]);
+    setSystemTime();
+    sessions.close();
+  });
+
   test("is refused once it has expired, even when its timer has not fired", () => {
     const sessions = new WebSessions(ORIGIN, 4, 60_000);
     const session = sessions.create();

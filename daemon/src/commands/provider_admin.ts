@@ -48,7 +48,6 @@ export interface ProviderAdminContext {
   fetchImpl?: typeof fetch;
   ledgerPath?: string | undefined;
   threads?: { listThreads(character: string): readonly { id: string; chat_model?: string; archived?: boolean }[] } | undefined;
-  confidential: boolean;
   now?: () => number;
 }
 
@@ -581,15 +580,6 @@ export async function checkKey(provider: string, entry: ProviderEntry, secret: s
   return fromDiscovery(provider, models, (list) => list.length);
 }
 
-function requireConfidential(ctx: ProviderAdminContext, allow: boolean | undefined): void {
-  if (ctx.confidential || allow === true) return;
-  throw invalidRequest(
-    "this connection to the daemon is neither on this machine nor encrypted, so the key would cross the network as plain text. " +
-      "Set it in the daemon's environment and add it with --env, connect over https or from the daemon's host, " +
-      "or pass --allow-unencrypted if the network between you is private (a VPN such as Tailscale)",
-  );
-}
-
 function cleanSecret(raw: string): string {
   const secret = raw.trim();
   if (secret === "") throw invalidRequest("the key is empty");
@@ -616,7 +606,6 @@ export async function addCredential(ctx: ProviderAdminContext, args: OperationIn
   let secret: string | undefined;
   let env: string | undefined;
   if (args.secret !== undefined) {
-    requireConfidential(ctx, args.allow_unencrypted);
     secret = cleanSecret(args.secret);
   } else {
     env = (args.env ?? "").trim();
@@ -689,7 +678,6 @@ export async function updateCredential(ctx: ProviderAdminContext, args: Operatio
   let check: Check | undefined;
   if (args.secret !== undefined) {
     if (!key.stored) throw invalidRequest(`"${key.name}" reads ${key.apiKeyEnv} from the daemon's environment; change it there, or remove it and add the key itself`);
-    requireConfidential(ctx, args.allow_unencrypted);
     replacement = cleanSecret(args.secret);
     if (args.no_check !== true) {
       check = await checkKey(name, entry, replacement, ctx.fetchImpl);

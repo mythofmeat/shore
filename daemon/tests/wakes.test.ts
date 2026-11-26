@@ -38,7 +38,7 @@ import { insertEvent, withStorage } from "../src/storage/store.ts";
 import { characterWorkspace } from "../src/tools/character_workspace.ts";
 import * as execute from "../src/tools/execute.ts";
 import { recordedTurns, replyVersions, workspaceTurnsFor } from "../src/tools/workspace_turns.ts";
-import { DEFAULT_HANDSHAKE } from "../src/swp/connection.ts";
+import { DEFAULT_HANDSHAKE } from "../src/swp/handshake.ts";
 import { SessionRouter } from "../src/swp/session.ts";
 import { sizedImage } from "./support/sized_image.ts";
 import { eventsForResponse } from "./support/stream.ts";

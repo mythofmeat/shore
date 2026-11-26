@@ -1,4 +1,7 @@
 import type { WebConfig } from "../config/app.ts";
+import { version as DAEMON_VERSION } from "../../package.json";
+
+export { DAEMON_VERSION };
 
 export const WEB_LIMITS = {
   loginBytes: 4096,
@@ -13,6 +16,7 @@ export const WEB_LIMITS = {
   signInRequests: 4,
   handshakeTimeoutMs: 10_000,
   drainTimeoutMs: 10_000,
+  finishOnStopMs: 2_000,
 } as const;
 
 export function webBinding(config: WebConfig): { hostname: string; port: number; secure: boolean } {
@@ -66,6 +70,7 @@ export function securityHeaders(): Headers {
     "cross-origin-resource-policy": "same-origin",
     "x-frame-options": "DENY",
     "permissions-policy": "camera=(), microphone=(), geolocation=()",
+    "shore-version": DAEMON_VERSION,
   });
 }
 

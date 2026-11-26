@@ -3,21 +3,23 @@ import type { WebConfig } from "../config/app.ts";
 import type { WebLoginCode } from "../protocol/WebLoginCode.ts";
 import type { WebProblem } from "../protocol/WebProblem.ts";
 import type { WebSessionInfo } from "../protocol/WebSessionInfo.ts";
+import type { ArchiveSpool } from "../commands/archive_spool.ts";
+import type { WebHello } from "../protocol/WebHello.ts";
+import type { WebTransfer } from "../protocol/WebTransfer.ts";
 import type { Server } from "../swp/server.ts";
-import { isLoopbackAddress } from "../swp/session.ts";
 import type { WebDevice } from "../protocol/WebDevice.ts";
 import type { WebDeviceList } from "../protocol/WebDeviceList.ts";
 import { browserName, LoginCodes, WebSessions, type WebSession } from "./auth.ts";
 import { WEB_CONTRACT, WEB_PROTOCOL, WEB_SUBPROTOCOL } from "./contract.ts";
 import { validWebLogin, validWebLoginCode, validWebProblem, validWebSession, validWebArchiveExport, validWebArchiveInfo, validWebArchiveList, validWebRequestList, validWebPreferences, validWebAutomationKey, validWebDeviceChoice, validWebDeviceList, validWebNewDevice, validWebSignInDecision, validWebSignInPoll, validWebSignInStart } from "./contracts.ts";
-import { bearerToken, DeviceNameError, DeviceStore, principalName, SignInRequests, type Principal } from "./devices.ts";
-import { CONNECTION_ONLY_OPERATIONS, operationExists, operationResponse } from "./operations.ts";
-import { pageOrigin, readSmallJson, securityHeaders, webBinding, WebBodyTooLarge, WEB_LIMITS } from "./policy.ts";
+import { bearerToken, DeviceNameError, DeviceStore, principalName, principalOwner, SignInRequests, type Principal } from "./devices.ts";
+import { commandRefusal, CONNECTION_ONLY_OPERATIONS, eventResponse, operationExists, operationResponse, refused } from "./operations.ts";
+import { DAEMON_VERSION, pageOrigin, readSmallJson, securityHeaders, webBinding, WebBodyTooLarge, WEB_LIMITS } from "./policy.ts";
 import { socketState, WebSocketPeers, type WebSocketState } from "./socket.ts";
 import { browserAssets } from "./assets.generated.ts";
 
 const servedAssets = new Map(Object.entries(browserAssets).map(([path, asset]) => [path, { type: asset.type, body: asset.encoding === "base64" ? Buffer.from(asset.body, "base64") : asset.body }]));
-import { ArchiveTransfers, ArchiveTransferError, ARCHIVE_TRANSFER_LIMITS, type ArchiveTransferLimits } from "./archives.ts";
+import { ArchiveTransfers, ArchiveTransferError, type ArchiveTransferLimits } from "./archives.ts";
 import { WebRecovery, type WebRecoveryOptions } from "./recovery.ts";
 import { RequestHistory, RequestHistoryError } from "./requests.ts";
 import { PreferenceError, PreferenceStore, PREFERENCE_LIMITS } from "./preferences.ts";
@@ -34,10 +36,12 @@ export interface WebServerOptions {
   readonly recovery?: WebRecoveryOptions;
   readonly picture?: (file: string) => string | undefined;
   readonly dataDir?: string;
+  readonly transfers?: ArchiveSpool;
 }
 
 export interface RunningWebServer {
   readonly origin: string;
+  readonly address: string;
   readonly port: number;
   activate(): void;
   stop(): Promise<void>;
@@ -128,17 +132,47 @@ export function startWebServer(options: WebServerOptions): RunningWebServer {
   };
 
   const shared = async (request: Request, url: URL, http: Bun.Server<WebSocketState>, principal: Principal): Promise<Response | undefined> => {
+    const owner = principalOwner(principal);
+    const holdOpen = () => { http.timeout(request, 0); };
     const operation = /^\/api\/op\/([A-Za-z0-9_]+)$/.exec(url.pathname)?.[1];
     if (operation !== undefined && request.method === "POST") {
       if (!operationExists(operation)) return problem(404, "not_found", `There is no operation named ${operation}`);
       const allowed = principal.kind === "device" ? principal.device.operations : undefined;
       if (allowed !== undefined && !allowed.includes(operation)) return problem(403, "forbidden", `This key may run only ${allowed.join(", ")}`);
-      return await operationResponse(request, {
-        server: options.server, name: operation, clientName: principalName(principal), queuedBytes: config.max_queued_bytes,
-        holdOpen: () => { http.timeout(request, 0); },
-      });
+      return await operationResponse(request, { server: options.server, name: operation, clientName: principalName(principal), owner, queuedBytes: config.max_queued_bytes, holdOpen });
     }
     if (principal.kind === "device" && principal.device.operations !== undefined) return problem(403, "forbidden", "An automation key can only run the operations it was given");
+    if (url.pathname === "/api/hello" && request.method === "GET") {
+      const chosen = (key: string) => { const value = url.searchParams.get(key); return value === null || value === "" ? undefined : value; };
+      const selection = await options.server.selection(chosen("character"), chosen("thread"));
+      const hello: WebHello = {
+        server_name: "shore-daemon", server_version: DAEMON_VERSION, characters: [...selection.characters],
+        ...(selection.character === null ? {} : { selected_character: selection.character }),
+        ...(selection.thread === null ? {} : { selected_thread: selection.thread }),
+      };
+      return Response.json(hello, { headers: securityHeaders() });
+    }
+    if (url.pathname === "/api/events" && request.method === "GET") {
+      return await eventResponse(request, { server: options.server, clientName: principalName(principal), owner, queuedBytes: config.max_queued_bytes, holdOpen });
+    }
+    const transfer = /^\/api\/transfers\/([a-f0-9-]{36})$/.exec(url.pathname)?.[1];
+    if (transfer !== undefined && request.method === "GET") {
+      if (options.transfers === undefined) return problem(503, "unavailable", "This daemon keeps no archive transfers");
+      let sent;
+      try { sent = options.transfers.send(owner, transfer); } catch (error) { return commandRefusal(error); }
+      holdOpen();
+      const headers = securityHeaders();
+      headers.set("content-type", "application/x-tar");
+      return new Response(sent.stream, { headers });
+    }
+    if (url.pathname === "/api/transfers" && request.method === "POST") {
+      if (options.transfers === undefined) return problem(503, "unavailable", "This daemon keeps no archive transfers");
+      if (request.headers.get("content-type") !== "application/octet-stream" || request.body === null) return refused("invalid_request", "Send the archive's bytes as application/octet-stream");
+      holdOpen();
+      let received: WebTransfer;
+      try { received = await options.transfers.receive(owner, request.body); } catch (error) { return commandRefusal(error); }
+      return Response.json(received, { headers: securityHeaders() });
+    }
     if (request.method !== "POST") return undefined;
     if (url.pathname === "/api/login-code") {
       const created = codes.create();
@@ -183,7 +217,7 @@ export function startWebServer(options: WebServerOptions): RunningWebServer {
     hostname: binding.hostname,
     port: binding.port,
     idleTimeout: 10,
-    maxRequestBodySize: options.archiveLimits?.uploadBytes ?? ARCHIVE_TRANSFER_LIMITS.uploadBytes,
+    maxRequestBodySize: Number.MAX_SAFE_INTEGER,
     ...(config.tls_cert === undefined || config.tls_key === undefined ? {} : {
       tls: { cert: readFileSync(config.tls_cert), key: readFileSync(config.tls_key) },
     }),
@@ -240,7 +274,7 @@ export function startWebServer(options: WebServerOptions): RunningWebServer {
           if (!validWebLogin(body)) {
             return problem(400, "invalid_request", "Supply a token to sign in");
           }
-          if (!options.authenticate(body.token) && !codes.redeem(body.token)) {
+          if (!codes.redeem(body.token)) {
             const failures = loginFailures.get(client) ?? { start: now, count: 0 };
             if (failures.count >= WEB_LIMITS.loginAttemptsPerMinute) return problem(429, "too_many_requests", "Too many sign-in attempts; try again later");
             failures.count += 1;
@@ -343,8 +377,7 @@ export function startWebServer(options: WebServerOptions): RunningWebServer {
         }
         const headers = securityHeaders();
         headers.set("sec-websocket-protocol", WEB_SUBPROTOCOL);
-        const confidential = secureCookie || isLoopbackAddress(http.requestIP(request)?.address);
-        return http.upgrade(request, { data: socketState(session, confidential), headers })
+        return http.upgrade(request, { data: socketState(session), headers })
           ? undefined : problem(400, "invalid_request", "Expected a WebSocket upgrade");
       }
       try { return await shared(request, url, http, { kind: "browser", session }) ?? problem(404, "not_found", "Unknown browser endpoint"); } catch (error) {
@@ -381,6 +414,7 @@ export function startWebServer(options: WebServerOptions): RunningWebServer {
   } catch (error) { closeSessions?.(); recovery?.close(); void server.stop(true); throw error; }
   return {
     origin,
+    address: server.url.origin,
     port: server.port ?? binding.port,
     activate() { if (stopping === undefined) active = true; },
     stop() {
@@ -391,6 +425,8 @@ export function startWebServer(options: WebServerOptions): RunningWebServer {
       const drained = Promise.all([peers.stop(), archives.close()]);
       sessions.close();
       stopping = (async () => {
+        const finished = server.stop(false);
+        await Promise.race([finished, Bun.sleep(WEB_LIMITS.finishOnStopMs)]);
         await server.stop(true);
         await drained;
         recovery?.close();

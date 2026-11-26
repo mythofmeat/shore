@@ -48,7 +48,7 @@ function provider(status = 200, answer?: Answer): { fetchImpl: typeof fetch; see
   return { fetchImpl, seen };
 }
 
-async function world(toml: string, options: { confidential?: boolean; status?: number; answer?: Answer; env?: Record<string, string> } = {}): Promise<World> {
+async function world(toml: string, options: { status?: number; answer?: Answer; env?: Record<string, string> } = {}): Promise<World> {
   const root = await mkdtemp(testTmp("shore-provider-admin-"));
   const configPath = join(root, "config", "config.toml");
   await mkdir(join(root, "config"), { recursive: true });
@@ -66,7 +66,7 @@ async function world(toml: string, options: { confidential?: boolean; status?: n
     runtime: { reloadRuntimeConfig: () => {}, adoptGlobalConfig: () => {}, notifyPromptSnapshotRefreshed: () => {} },
   };
   const { fetchImpl, seen } = provider(options.status ?? 200, options.answer);
-  return { ctx: { config: session, fetchImpl, confidential: options.confidential ?? true }, session, configPath, seen };
+  return { ctx: { config: session, fetchImpl }, session, configPath, seen };
 }
 
 const usedKey = (w: World, name: string): string | undefined => {
@@ -168,15 +168,6 @@ describe("keys", () => {
     expect(await outcomeOf(stat(join(w.session.config.dirs.data, "provider_secrets.json")))).toThrow();
     const unchecked = await addCredential(w.ctx, { provider: "openrouter", name: "work", secret: SECRET, no_check: true });
     expect(unchecked.provider.credentials[0]?.standing).toBe("not_checked");
-  });
-
-  test("a key won't cross a connection that is neither local nor encrypted unless the user says the network is private", async () => {
-    const w = await world("[providers.openrouter]\ndiscover = true\n", { confidential: false });
-    expect(await outcomeOf(addCredential(w.ctx, { provider: "openrouter", secret: SECRET }))).toThrow("neither on this machine nor encrypted");
-    const env = await addCredential(w.ctx, { provider: "openrouter", name: "ci", env: "OPENROUTER_CI_KEY", no_check: true });
-    expect(env.provider.credentials[0]).toMatchObject({ name: "ci", kind: "env", env: "OPENROUTER_CI_KEY", standing: "missing" });
-    const allowed = await addCredential(w.ctx, { provider: "openrouter", name: "work", secret: SECRET, allow_unencrypted: true });
-    expect(allowed.provider.credentials.map((c) => c.name)).toEqual(["ci", "work"]);
   });
 
   test("a second key keeps the environment key first, and order, pin and removal all change which key calls use", async () => {

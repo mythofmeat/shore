@@ -2,7 +2,7 @@ import { afterEach, describe, expect, test } from "bun:test";
 
 import type { ClientMessage } from "../src/protocol/ClientMessage.ts";
 import type { ServerMessage } from "../src/protocol/ServerMessage.ts";
-import type { HistorySnapshot } from "../src/swp/connection.ts";
+import type { HistorySnapshot } from "../src/swp/handshake.ts";
 import { Server, type LocalClientOptions, type LocalPeer } from "../src/swp/server.ts";
 import type { RoutedMessage } from "../src/swp/session.ts";
 import { rejectionOf } from "./support/outcome.ts";
@@ -34,7 +34,6 @@ async function world(history: (character: string | null, thread?: string | null)
   const selected: (readonly [string | null, string | null])[] = [];
   let held: Promise<void> | undefined;
   const server = new Server({
-    addr: "127.0.0.1:0", serverName: "local-peers", authenticate: () => false,
     log: { info: (message) => logged.push(message), warn: (message) => logged.push(message), error: (message) => logged.push(message) },
     handshake: {
       hello: () => Promise.resolve({ characters: [{ name: "ada" }, { name: "bo" }] }),
@@ -46,11 +45,9 @@ async function world(history: (character: string | null, thread?: string | null)
       },
     },
   });
-  await server.bind();
-  const served = server.serve();
   const routed: RoutedMessage[] = [];
   const routing = (async () => { for await (const message of server.routes()) routed.push(message); })();
-  cleanups.push(async () => { server.stop(); await served; await routing; });
+  cleanups.push(async () => { server.stop(); await routing; });
   return {
     server, routed, logged, fetched, selected,
     hold: () => {
@@ -87,10 +84,10 @@ describe("a local peer attaching", () => {
   test("gets back its session as asked for, is announced, and hears its history first", async () => {
     const w = await world();
     const archiveLimits = { bytes: 10, entries: 2, temporaryDirectory: "/nowhere" };
-    const kept = await w.attach({ confidential: true, archiveLimits });
+    const kept = await w.attach({ owner: "laptop", archiveLimits });
     const plain = await w.attach({ character: "bo" });
-    expect(kept.session).toMatchObject({ confidential: true, archiveLimits, selectedCharacter: "ada", selectedThread: "main" });
-    expect(plain.session.confidential).toBe(false);
+    expect(kept.session).toMatchObject({ owner: "laptop", archiveLimits, selectedCharacter: "ada", selectedThread: "main" });
+    expect("owner" in plain.session).toBe(false);
     expect("archiveLimits" in plain.session).toBe(false);
     expect(await take(kept, 1)).toEqual([{ type: "history", messages: [], config: "fresh", selected_thread: "main", selected_character: "ada", revision: 0 }]);
     await until(() => w.kinds(kept.session.sessionId).includes("session_connected"), "the peer to be announced");

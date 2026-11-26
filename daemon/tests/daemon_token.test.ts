@@ -1,6 +1,5 @@
 import { afterEach, describe, expect, test } from "bun:test";
 import { mkdirSync, mkdtempSync, chmodSync, readFileSync, statSync, writeFileSync } from "node:fs";
-import { connect } from "node:net";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
@@ -11,8 +10,6 @@ import {
   TOKEN_ENV,
   TOKEN_FILE,
 } from "../src/config/token.ts";
-import { Server } from "../src/swp/server.ts";
-import { until } from "./support/until.ts";
 
 const cleanups: Array<() => void> = [];
 afterEach(() => {
@@ -103,120 +100,6 @@ describe("comparing", () => {
 
   test("surrounding whitespace is not part of the secret", () => {
     expect(tokenMatches("abc", " abc\n")).toBe(true);
-  });
-});
-
-async function helloWith(
-  port: number,
-  token: string | undefined,
-): Promise<Record<string, unknown>[]> {
-  const socket = connect({ host: "127.0.0.1", port, noDelay: true });
-  const frames: Record<string, unknown>[] = [];
-  try {
-    await new Promise<void>((resolve, reject) => {
-      socket.once("connect", resolve);
-      socket.once("error", reject);
-    });
-    const done = new Promise<void>((resolve) => {
-      let buffered = "";
-      socket.on("data", (chunk: Buffer) => {
-        buffered += chunk.toString("utf8");
-        for (;;) {
-          const at = buffered.indexOf("\n");
-          if (at === -1) break;
-          frames.push(JSON.parse(buffered.slice(0, at)) as Record<string, unknown>);
-          buffered = buffered.slice(at + 1);
-        }
-      });
-      socket.once("close", () => resolve());
-      socket.once("error", () => resolve());
-    });
-    socket.write(
-      `${JSON.stringify({
-        type: "hello",
-        client_type: "tui",
-        client_name: "test",
-        capabilities: [],
-        ...(token === undefined ? {} : { token }),
-      })}\n`,
-    );
-    await Promise.race([done, waitFor(() => frames.some((f) => f.type === "history"))]);
-    return frames;
-  } finally {
-    socket.destroy();
-  }
-}
-
-async function waitFor(done: () => boolean): Promise<void> {
-  await until(done, "the expected frames");
-}
-
-async function serving(): Promise<{ port: number; stop: () => Promise<void> }> {
-  const server = new Server({
-    addr: "127.0.0.1:0",
-    serverName: "shore-test",
-    authenticate: (presented) => tokenMatches("secret", presented),
-  });
-  const { port } = await server.bind();
-  const running = server.serve();
-  return {
-    port,
-    stop: async () => {
-      server.stop();
-      await running;
-    },
-  };
-}
-
-describe("the handshake", () => {
-  test("the right token gets a session", async () => {
-    const { port, stop } = await serving();
-    try {
-      const frames = await helloWith(port, "secret");
-      expect(frames.map((f) => f.type)).toEqual(["hello", "history"]);
-    } finally {
-      await stop();
-    }
-  });
-
-  test("a wrong token gets an unauthorized error and no history", async () => {
-    const { port, stop } = await serving();
-    try {
-      const frames = await helloWith(port, "wrong");
-      const types = frames.map((f) => f.type);
-      expect(types).toContain("error");
-      expect(types).not.toContain("history");
-
-      const error = frames.find((f) => f.type === "error");
-      expect(error?.code).toBe("unauthorized");
-      expect(String(error?.message)).toContain(TOKEN_ENV);
-    } finally {
-      await stop();
-    }
-  });
-
-  test("no token at all is refused, and told which case it is", async () => {
-    const { port, stop } = await serving();
-    try {
-      const frames = await helloWith(port, undefined);
-      const error = frames.find((f) => f.type === "error");
-      expect(error?.code).toBe("unauthorized");
-      expect(String(error?.message)).toContain("sent no token");
-      expect(frames.map((f) => f.type)).not.toContain("history");
-    } finally {
-      await stop();
-    }
-  });
-
-  test("an empty token is refused like a missing one", async () => {
-    const { port, stop } = await serving();
-    try {
-      const frames = await helloWith(port, "");
-      expect(frames.find((f) => f.type === "error")?.code).toBe("unauthorized");
-      expect(frames.map((f) => f.type)).not.toContain("history");
-    } finally {
-      await stop();
-    }
   });
 });
 

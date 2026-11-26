@@ -10,7 +10,7 @@ import { BrowserSocket } from "./support/browser.ts";
 import { browserConnection } from "./support/browser_connection.ts";
 import { type ServerMessage } from "../src/protocol/ServerMessage.ts";
 import { type WebSessionInfo } from "../src/protocol/WebSessionInfo.ts";
-import { type HandshakeProvider } from "../src/swp/connection.ts";
+import { type HandshakeProvider } from "../src/swp/handshake.ts";
 import { Server } from "../src/swp/server.ts";
 import { isControlRoutedMessage, type ControlRoutedMessage, type RoutedMessage } from "../src/swp/session.ts";
 import { WEB_CONTRACT, WEB_SUBPROTOCOL } from "../src/web/contract.ts";
@@ -37,7 +37,6 @@ const TOKEN = "web-transport-test-token";
 async function fixture(options: Partial<Omit<WebServerOptions, "server" | "authenticate">> = {}, provider?: HandshakeProvider) {
   let histories = 0;
   const swp = new Server({
-    addr: "127.0.0.1:0", serverName: "web-test", authenticate: (token) => tokenMatches(TOKEN, token),
     handshake: provider ?? {
       hello: async () => ({ characters: [{ name: "ada" }, { name: "bo" }] }),
       select: (character) => Promise.resolve({ character, thread: null }),
@@ -47,8 +46,6 @@ async function fixture(options: Partial<Omit<WebServerOptions, "server" | "authe
       },
     },
   });
-  await swp.bind();
-  const served = swp.serve();
   const routed: RoutedMessage[] = [];
   const controls: ControlRoutedMessage[] = [];
   const routing = (async () => {
@@ -61,15 +58,23 @@ async function fixture(options: Partial<Omit<WebServerOptions, "server" | "authe
     server: swp, authenticate: (token) => tokenMatches(TOKEN, token),
     config: { ...defaultWebConfig(), enabled: true, bind_addr: "127.0.0.1:0" }, ...options,
   });
-  cleanups.push(async () => { await web.stop(); swp.stop(); await Promise.all([served, routing]); });
+  cleanups.push(async () => { await web.stop(); swp.stop(); await routing; });
   const api = (path: string, cookie = "", body: unknown = {}, headers: Record<string, string> = {}) =>
     fetch(`${web.origin}${path}`, {
       method: "POST", body: JSON.stringify(body),
       headers: { origin: web.origin, "content-type": "application/json", cookie, ...headers },
       ...(options.config?.tls_cert === undefined ? {} : { tls: { ca: readFileSync(options.config.tls_cert) } }),
     });
+  const code = async (): Promise<string> => {
+    const created = await fetch(`${web.address}/api/login-code`, {
+      method: "POST", headers: { authorization: `Bearer ${TOKEN}` },
+      ...(options.config?.tls_cert === undefined ? {} : { tls: { ca: readFileSync(options.config.tls_cert) } }),
+    });
+    expect(created.status).toBe(200);
+    return (await created.json() as WebLoginCode).code;
+  };
   const login = async () => {
-    const response = await api("/api/login", "", { token: TOKEN });
+    const response = await api("/api/login", "", { token: await code() });
     expect(response.status).toBe(200);
     const cookie = response.headers.get("set-cookie")?.split(";", 1)[0];
     if (cookie === undefined) throw new Error("No session cookie");
@@ -79,7 +84,7 @@ async function fixture(options: Partial<Omit<WebServerOptions, "server" | "authe
     swp.sessionRouter.reportRequest(session, message);
     await swp.sessionRouter.sendToSession(session, message);
   };
-  return { swp, web, routed, controls, api, login, finish, histories: () => histories };
+  return { swp, web, routed, controls, api, code, login, finish, histories: () => histories };
 }
 
 function connectBrowser(origin: string, cookie: string, protocol = WEB_SUBPROTOCOL, options?: ConstructorParameters<typeof BrowserSocket>[3]): BrowserSocket {
@@ -97,7 +102,7 @@ describe("browser authentication boundary", () => {
       expect((await fetch(`${target}/workspace`, { headers: { host } })).status).toBe(200);
       expect((await fetch(`${target}/api/session`, { method: "POST", headers: { host, origin } })).status).toBe(401);
       expect((await fetch(`${target}/api/login`, { method: "POST", headers: { host, origin, "content-type": "application/json" }, body: JSON.stringify({ token: "wrong" }) })).status).toBe(401);
-      const login = await fetch(`${target}/api/login`, { method: "POST", headers: { host, origin, "content-type": "application/json" }, body: JSON.stringify({ token: TOKEN }) });
+      const login = await fetch(`${target}/api/login`, { method: "POST", headers: { host, origin, "content-type": "application/json" }, body: JSON.stringify({ token: await f.code() }) });
       expect(login.status).toBe(200);
       expect(login.headers.get("set-cookie")).not.toContain("Secure");
       const cookie = login.headers.get("set-cookie")?.split(";", 1)[0];
@@ -117,7 +122,7 @@ describe("browser authentication boundary", () => {
     const f = await fixture(); f.web.activate();
     for (const origin of ["https://shore.test-tailnet.ts.net:8443", "https://shore.test-tailnet.ts.net"]) {
       const headers = { host: new URL(origin).host, origin };
-      const login = await fetch(`${f.web.origin}/api/login`, { method: "POST", headers: { ...headers, "content-type": "application/json" }, body: JSON.stringify({ token: TOKEN }) });
+      const login = await fetch(`${f.web.origin}/api/login`, { method: "POST", headers: { ...headers, "content-type": "application/json" }, body: JSON.stringify({ token: await f.code() }) });
       expect(login.status).toBe(200);
       expect(login.headers.get("set-cookie")).toStartWith("__Host-shore_web_");
       expect(login.headers.get("set-cookie")).toContain("Secure");
@@ -139,7 +144,7 @@ describe("browser authentication boundary", () => {
     const origin = "https://shore.example";
     const f = await fixture({ config: { ...defaultWebConfig(), enabled: true, bind_addr: "127.0.0.1:0", public_origin: origin } }); f.web.activate();
     const target = `http://127.0.0.1:${String(f.web.port)}`;
-    const rewritten = await fetch(`${target}/api/login`, { method: "POST", headers: { origin, "content-type": "application/json" }, body: JSON.stringify({ token: TOKEN }) });
+    const rewritten = await fetch(`${target}/api/login`, { method: "POST", headers: { origin, "content-type": "application/json" }, body: JSON.stringify({ token: await f.code() }) });
     expect(rewritten.status).toBe(200);
     expect(rewritten.headers.get("set-cookie")).toStartWith("__Host-shore_web_");
     for (const accessOrigin of [origin, target, "http://shore.test-tailnet.ts.net:17340"]) {
@@ -147,7 +152,7 @@ describe("browser authentication boundary", () => {
       const secure = accessOrigin.startsWith("https:");
       expect((await fetch(`${target}/workspace`, { headers })).status).toBe(200);
       expect((await fetch(`${target}/api/session`, { method: "POST", headers })).status).toBe(401);
-      const login = await fetch(`${target}/api/login`, { method: "POST", headers: { ...headers, "content-type": "application/json" }, body: JSON.stringify({ token: TOKEN }) });
+      const login = await fetch(`${target}/api/login`, { method: "POST", headers: { ...headers, "content-type": "application/json" }, body: JSON.stringify({ token: await f.code() }) });
       expect(login.status).toBe(200);
       expect(login.headers.get("set-cookie")?.includes("Secure")).toBe(secure);
       expect(login.headers.get("set-cookie")?.startsWith("__Host-")).toBe(secure);
@@ -198,13 +203,13 @@ describe("browser authentication boundary", () => {
   test("session storage and repeated failed sign-ins are bounded", async () => {
     const f = await fixture({ config: { ...defaultWebConfig(), enabled: true, bind_addr: "127.0.0.1:0", max_connections: 1 } }); f.web.activate();
     const first = await f.login(); await f.login();
-    expect((await f.api("/api/login", "", { token: TOKEN })).status).toBe(200);
+    expect((await f.api("/api/login", "", { token: await f.code() })).status).toBe(200);
     expect((await f.api("/api/session", first.cookie)).status).toBe(401);
     for (let i = 0; i < WEB_LIMITS.loginAttemptsPerMinute; i += 1) {
       expect((await f.api("/api/login", "", { token: "wrong" })).status).toBe(401);
     }
     expect((await f.api("/api/login", "", { token: "wrong" })).status).toBe(429);
-    expect((await f.api("/api/login", "", { token: TOKEN })).status).toBe(200);
+    expect((await f.api("/api/login", "", { token: await f.code() })).status).toBe(200);
     expect(f.histories()).toBe(0);
   });
 
@@ -214,6 +219,7 @@ describe("browser authentication boundary", () => {
     f.web.activate();
     expect((await f.api("/api/session")).status).toBe(401);
     expect((await f.api("/api/login", "", { token: "wrong" })).status).toBe(401);
+    expect((await f.api("/api/login", "", { token: TOKEN })).status, "the daemon's own token signs a browser in no longer").toBe(401);
     const denied = connectBrowser(f.web.origin, "");
     expect(await outcomeOf(denied.opened)).toThrow("rejected");
     await denied.closed;
@@ -342,7 +348,7 @@ async function recoveryOptions(): Promise<WebRecoveryOptions> {
 function open(config: WebRecoveryOptions, url = origin, capacity = 4, lifetime = 60_000) {
   const recovery = new WebRecovery(config, url);
   const sessions = new WebSessions(url, capacity, lifetime, recovery);
-  const server = new Server({ addr: "127.0.0.1:0", serverName: "recovery", authenticate: () => true });
+  const server = new Server();
   const transfers = new ArchiveTransfers(server, () => true, {}, recovery);
   transfers.restore(sessions);
   let closed = false;
@@ -423,16 +429,14 @@ function upload(body: NonNullable<RequestInit["body"]> = "archive bytes", header
 }
 
 async function archiveFixture(limits: Partial<ArchiveTransferLimits> = {}, singleCharacter = false) {
-  const server = new Server({ addr: "127.0.0.1:0", serverName: "archive-test", authenticate: () => true,
+  const server = new Server({
     handshake: { hello: async () => ({ characters: singleCharacter ? [{ name: "ada" }] : [] }), history: async (selectedCharacter) => ({ messages: [], previousSegment: null, config: {}, selectedCharacter, selectedThread: null, revision: 0 }), select: async (character) => ({ character, thread: null }) },
   });
   const commands: CommandRoute[] = [];
-  await server.bind();
-  const served = server.serve();
   let count = 0;
   const routing = (async () => { for await (const route of server.routes()) if (route.kind === "command") { commands.push(route); count += 1; } })();
   const transfers = new ArchiveTransfers(server, () => true, limits);
-  cleanups.push(async () => { await transfers.close(); server.stop(); await Promise.all([served, routing]); });
+  cleanups.push(async () => { await transfers.close(); server.stop(); await routing; });
   const next = async () => { await until(() => commands.length > 0, "the archive transfer to settle"); const command = commands.shift(); if (command === undefined) throw new Error("Missing archive command"); return command; };
   const finish = async (route: CommandRoute, scenario = "completed", contents: Uint8Array = new TextEncoder().encode("download archive")) => {
     const name = route.cmd.name;
@@ -506,7 +510,8 @@ test("HTTP archive endpoints authenticate and enforce origin before attaching a 
   cleanups.push(() => web.stop()); web.activate();
   const post = (path: string, cookie = "", body: NonNullable<RequestInit["body"]> = "{}", headers: Record<string, string> = {}) => fetch(`${web.origin}/api${path}`, { method: "POST", body, headers: { cookie, origin: web.origin, "content-type": "application/json", ...headers } });
   const login = async () => {
-    const response = await post("/login", "", JSON.stringify({ token: "archive-token" }));
+    const { code } = await (await fetch(`${web.origin}/api/login-code`, { method: "POST", headers: { authorization: "Bearer archive-token" } })).json() as WebLoginCode;
+    const response = await post("/login", "", JSON.stringify({ token: code }));
     expect(response.status).toBe(200); const cookie = response.headers.get("set-cookie")?.split(";").at(0);
     if (cookie === undefined) throw new Error("Missing archive session cookie"); return cookie;
   };
@@ -553,19 +558,17 @@ test("signed-in pages can load a sent picture without an Origin header, and nobo
   await mkdir(sentPicturesDir(data, "qifei"), { recursive: true });
   await writeFile(kept, bytes);
   const swp = new Server({
-    addr: "127.0.0.1:0", serverName: "picture-test", authenticate: (token) => tokenMatches("token", token),
     handshake: { hello: async () => ({ characters: [] }), history: async () => ({ messages: [], previousSegment: null, config: {}, selectedCharacter: null, selectedThread: "main", revision: 0 }), select: async (character) => ({ character, thread: null }) },
   });
-  await swp.bind();
-  const served = swp.serve();
   const web = startWebServer({
     server: swp, authenticate: (token) => tokenMatches("token", token),
     config: { ...defaultWebConfig(), enabled: true, bind_addr: "127.0.0.1:0" },
     picture: (file) => findSentPicture(data, file),
   });
   web.activate();
-  cleanups.push(async () => { await web.stop(); swp.stop(); await served; });
-  const login = await fetch(`${web.origin}/api/login`, { method: "POST", headers: { origin: web.origin, "content-type": "application/json" }, body: JSON.stringify({ token: "token" }) });
+  cleanups.push(async () => { await web.stop(); swp.stop(); });
+  const { code } = await (await fetch(`${web.origin}/api/login-code`, { method: "POST", headers: { authorization: "Bearer token" } })).json() as WebLoginCode;
+  const login = await fetch(`${web.origin}/api/login`, { method: "POST", headers: { origin: web.origin, "content-type": "application/json" }, body: JSON.stringify({ token: code }) });
   const cookie = login.headers.get("set-cookie")?.split(";", 1)[0] ?? "";
   const picture = (file: string, headers?: Record<string, string>) => fetch(`${web.origin}/api/pictures/${file}`, { headers: headers ?? { cookie } });
 

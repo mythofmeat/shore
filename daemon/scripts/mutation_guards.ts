@@ -314,7 +314,6 @@ export const DAEMON_FLOORS: Readonly<Record<string, number>> = {
   "src/storage/tar_writer.ts": 0.45,
   "src/swp/admission.ts": 0.75,
   "src/swp/broadcast.ts": 0.45,
-  "src/swp/connection.ts": 0.45,
   "src/swp/content_projection.ts": 0.1,
   "src/swp/framing.ts": 0.65,
   "src/swp/handshake.ts": 0.15,

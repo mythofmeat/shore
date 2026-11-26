@@ -264,6 +264,28 @@ pub struct WebSignInDecision {
     pub allow: bool,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema, ts_rs::TS)]
+#[ts(export, export_to = "../../../daemon/src/protocol/")]
+pub struct WebHello {
+    pub server_name: String,
+    pub server_version: String,
+    pub characters: Vec<crate::protocol::types::CharacterInfo>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[ts(optional)]
+    pub selected_character: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[ts(optional)]
+    pub selected_thread: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema, ts_rs::TS)]
+#[ts(export, export_to = "../../../daemon/src/protocol/")]
+pub struct WebTransfer {
+    pub transfer: String,
+    #[ts(type = "number")]
+    pub bytes: u64,
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -291,6 +313,8 @@ mod tests {
             "sign_in_poll": SchemaSettings::draft2020_12().for_deserialize().into_generator().into_root_schema_for::<WebSignInPoll>(),
             "sign_in_granted": SchemaSettings::draft2020_12().for_serialize().into_generator().into_root_schema_for::<WebSignInGranted>(),
             "sign_in_decision": SchemaSettings::draft2020_12().for_deserialize().into_generator().into_root_schema_for::<WebSignInDecision>(),
+            "hello": SchemaSettings::draft2020_12().for_serialize().into_generator().into_root_schema_for::<WebHello>(),
+            "transfer": SchemaSettings::draft2020_12().for_serialize().into_generator().into_root_schema_for::<WebTransfer>(),
         });
         let target = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
             .join("../../daemon/src/web/schemas.generated.json");

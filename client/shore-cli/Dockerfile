@@ -11,5 +11,5 @@ FROM alpine:latest
 COPY --from=builder /usr/local/bin/shore /usr/local/bin/shore
 RUN adduser -D -u 1000 shore
 USER shore
-ENV SHORE_ADDR=shore-daemon:7320
+ENV SHORE_ADDR=http://shore-daemon:7340
 ENTRYPOINT ["shore"]

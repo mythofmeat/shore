@@ -5,7 +5,7 @@ import type { ChromeSnapshot } from "../workspace.ts";
 import { workspace } from "./state.ts";
 
 export function ConnectionBanner({ state }: { state: ChromeSnapshot }) {
-  if (state.status === "ready") return null;
+  if (state.status === "ready") return <SignInRequestBanner />;
   if (state.status === "reload_required") return <div className="banner" role="status">Shore was updated. <button type="button" className="button" onClick={() => location.reload()}>Reload</button></div>;
   return <div className="banner" role="status">{state.status === "error" ? state.detail || "Can’t reach the daemon." : "Reconnecting…"}
     <button type="button" className="button" onClick={() => workspace.connection.reconnect()}>Retry now</button></div>;
@@ -13,11 +13,9 @@ export function ConnectionBanner({ state }: { state: ChromeSnapshot }) {
 
 const SIGN_IN_POLL_MS = 5_000;
 
-export function SignInRequestBanner({ state }: { state: ChromeSnapshot }) {
+function SignInRequestBanner() {
   const [requests, setRequests] = useState<WebSignInRequest[]>([]);
-  const ready = state.status === "ready";
   useEffect(() => {
-    if (!ready) return;
     let stopped = false;
     const check = () => {
       if (document.visibilityState !== "visible") return;
@@ -27,8 +25,8 @@ export function SignInRequestBanner({ state }: { state: ChromeSnapshot }) {
     const timer = setInterval(check, SIGN_IN_POLL_MS);
     document.addEventListener("visibilitychange", check);
     return () => { stopped = true; clearInterval(timer); document.removeEventListener("visibilitychange", check); };
-  }, [ready]);
-  if (!ready || requests.length === 0) return null;
+  }, []);
+  if (requests.length === 0) return null;
   const decide = (code: string, allow: boolean) => {
     workspace.connection.decideSignIn(code, allow).then(() => { setRequests((current) => current.filter((request) => request.code !== code)); toasts.show(allow ? "Signed in" : "Refused"); },
       (failure: unknown) => { toasts.show(failure instanceof Error ? failure.message : String(failure), "error"); });

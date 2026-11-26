@@ -1,360 +1,12 @@
-import { describe, expect, test, afterEach, jest } from "bun:test";
-import { connect as openSocket, type Socket } from "node:net";
-import { join } from "node:path";
+import { describe, expect, test, afterEach } from "bun:test";
 import { type ClientMessage } from "../src/protocol/ClientMessage";
-import { WireError, WireReader, MAX_PRE_AUTH_WIRE_MESSAGE_SIZE, type ByteSink } from "../src/swp/framing";
+import { decodeClientMessage, rustTrim, WireError } from "../src/swp/framing";
 import { type ServerMessage } from "../src/protocol/ServerMessage";
-import { Broadcast } from "../src/swp/broadcast";
-import { handleConnection, messageLoop, type ConnectionContext, type Logger, type PingClock } from "../src/swp/connection";
-import { SessionRouter, type RoutedMessage, type SessionMeta } from "../src/swp/session";
+import { type RoutedMessage } from "../src/swp/session";
 import { Server } from "../src/swp/server.ts";
 import { eventMatchesSession } from "../src/swp/routing.ts";
 import { MAX_MARK_TAGS } from "../src/swp/limits.ts";
 import { MAX_TOTAL_ATTACHMENT_BYTES, AdmissionError, admitCapabilities, admitClientMessage, MAX_ATTACHMENTS, MAX_ATTACHMENT_BYTES, MAX_CAPABILITIES } from "../src/swp/admission.ts";
-import { rejectionOf } from "./support/outcome.ts";
-
-type Read = { ok: ClientMessage } | { eof: true } | { err: string };
-
-async function* once(bytes: Uint8Array): AsyncGenerator<Uint8Array> {
-  if (bytes.length > 0) yield bytes;
-}
-
-async function* byteAtATime(bytes: Uint8Array): AsyncGenerator<Uint8Array> {
-  for (const b of bytes) yield new Uint8Array([b]);
-}
-
-async function readAll(source: AsyncIterable<Uint8Array>, maxMessageSize?: number): Promise<Read[]> {
-  const reader = new WireReader(source, maxMessageSize);
-  const out: Read[] = [];
-  for (;;) {
-    try {
-      const msg = await reader.readMessage();
-      if (msg === null) {
-        out.push({ eof: true });
-        return out;
-      }
-      out.push({ ok: msg });
-    } catch (e) {
-      if (!(e instanceof WireError)) throw e;
-      out.push({ err: e.message });
-      return out;
-    }
-    if (out.length > 16) return out;
-  }
-}
-
-const bytes = (text: string): Uint8Array => new TextEncoder().encode(text);
-const CANCEL = '{"type":"cancel"}';
-
-const CASES: { name: string; input: Uint8Array; reads: ("cancel" | "eof" | "err")[] }[] = [
-  { name: "one frame", input: bytes(`${CANCEL}\n`), reads: ["cancel", "eof"] },
-  { name: "two frames in one buffer", input: bytes(`${CANCEL}\n${CANCEL}\n`), reads: ["cancel", "cancel", "eof"] },
-  { name: "clean eof, nothing buffered", input: bytes(""), reads: ["eof"] },
-  { name: "an unterminated final frame is still parsed", input: bytes(CANCEL), reads: ["cancel", "eof"] },
-  { name: "a crlf terminator", input: bytes(`${CANCEL}\r\n`), reads: ["cancel", "eof"] },
-  { name: "surrounding spaces are trimmed", input: bytes(`   ${CANCEL}   \n`), reads: ["cancel", "eof"] },
-  { name: "a bare newline is an error", input: bytes("\n"), reads: ["err"] },
-  { name: "invalid utf-8 is an error", input: Uint8Array.from([0xff, 0xfe, 0x0a]), reads: ["err"] },
-  { name: "json that is not a client message is an error", input: bytes('{"type":"nope"}\n'), reads: ["err"] },
-  { name: "unknown fields are ignored", input: bytes('{"type":"cancel","extra":1}\n'), reads: ["cancel", "eof"] },
-];
-
-describe("framing", () => {
-  test("a frame that isn't UTF-8, or isn't JSON, says which", async () => {
-    expect(await readAll(once(Uint8Array.from([0xff, 0xfe, 0x0a])))).toEqual([{ err: "Frame is not valid UTF-8" }]);
-    const [notJson] = await readAll(once(bytes("{oops\n")));
-    expect(notJson).toMatchObject({ err: expect.stringMatching(/^Frame is not valid JSON: /) as unknown as string });
-  });
-
-  test("once its source has ended, the reader says so again without asking the source", async () => {
-    let ended = false;
-    let sent = false;
-    const source: AsyncIterable<Uint8Array> = {
-      [Symbol.asyncIterator]: () => ({
-        next: (): Promise<IteratorResult<Uint8Array>> => {
-          if (ended) return Promise.reject(new Error("asked again after the end"));
-          if (!sent) {
-            sent = true;
-            return Promise.resolve({ done: false, value: bytes(`${CANCEL}\n`) });
-          }
-          ended = true;
-          return Promise.resolve({ done: true, value: undefined });
-        },
-      }),
-    };
-    const reader = new WireReader(source);
-    expect(await reader.readMessage()).toMatchObject({ type: "cancel" });
-    expect(await reader.readMessage()).toBeNull();
-    expect(await reader.readMessage()).toBeNull();
-  });
-
-  for (const c of CASES) {
-    test(c.name, async () => {
-      const reads = await readAll(once(c.input));
-      expect(reads.map((r) => ("ok" in r ? r.ok.type : "eof" in r ? "eof" : "err"))).toEqual(c.reads);
-    });
-
-    test(`${c.name}, one byte per chunk`, async () => {
-      expect(await readAll(byteAtATime(c.input))).toEqual(await readAll(once(c.input)));
-    });
-  }
-
-  test("a message frame keeps its fields and fills its defaults", async () => {
-    expect(await readAll(once(bytes('{"type":"message","rid":"r1","text":"hi","stream":true}\n')))).toEqual([
-      { ok: { type: "message", rid: "r1", text: "hi", stream: true, images: [], image_data: [] } as ClientMessage },
-      { eof: true },
-    ]);
-  });
-
-  test("a frame over the size limit is refused, terminated or not", async () => {
-    const limit = 64;
-    const over = "a".repeat(limit);
-    expect(await readAll(once(bytes(`${over}\n`)), limit)).toEqual([{ err: "Message exceeds maximum size" }]);
-    expect(await readAll(once(bytes(`${over}a`)), limit)).toEqual([{ err: "Message exceeds maximum size" }]);
-    const atLimit = await readAll(once(bytes(`${"a".repeat(limit - 1)}\n`)), limit);
-    expect(atLimit).toHaveLength(1);
-    expect(atLimit[0]).not.toEqual({ err: "Message exceeds maximum size" });
-  });
-});
-
-const OPEN = (): boolean => true;
-
-const SESSION: SessionMeta = {
-  clientId: 1,
-  sessionId: 1,
-  clientType: "tui",
-  clientName: "t",
-  capabilities: [],
-  selectedCharacter: "alice",
-  selectedThread: null,
-};
-
-function controlledSource(): {
-  source: AsyncIterable<Uint8Array>;
-  send: (line: string) => void;
-  close: () => void;
-} {
-  const queue: Uint8Array[] = [];
-  let wake: (() => void) | null = null;
-  let closed = false;
-  const bump = () => {
-    const w = wake;
-    wake = null;
-    w?.();
-  };
-  return {
-    source: {
-      async *[Symbol.asyncIterator]() {
-        for (;;) {
-          const next = queue.shift();
-          if (next !== undefined) {
-            yield next;
-            continue;
-          }
-          if (closed) return;
-          await new Promise<void>((resolve) => {
-            wake = resolve;
-          });
-        }
-      },
-    },
-    send: (line) => {
-      queue.push(new TextEncoder().encode(line));
-      bump();
-    },
-    close: () => {
-      closed = true;
-      bump();
-    },
-  };
-}
-
-function collectingSink(): { sink: ByteSink; frames: () => ServerMessage[] } {
-  const parts: string[] = [];
-  return {
-    sink: { write: (b) => void parts.push(new TextDecoder().decode(b)) },
-    frames: () =>
-      parts
-        .join("")
-        .split("\n")
-        .filter((l) => l.length > 0)
-        .map((l) => JSON.parse(l) as ServerMessage),
-  };
-}
-
-interface LoopHarness {
-  readonly ctx: ConnectionContext;
-  readonly reader: WireReader;
-  readonly sink: ByteSink;
-  readonly frames: () => ServerMessage[];
-  readonly routed: RoutedMessage[];
-  readonly bus: Broadcast;
-  readonly send: (line: string) => void;
-  readonly close: () => void;
-  readonly shutdown: () => void;
-}
-
-type RecvResultLike =
-  | { kind: "message"; msg: ServerMessage }
-  | { kind: "lagged"; skipped: number }
-  | { kind: "closed" };
-
-interface Subscriptionish {
-  recv(): Promise<RecvResultLike>;
-  unsubscribe(): void;
-}
-
-function harness(
-  pingIntervalMs = 3_600_000,
-  events?: Subscriptionish,
-  pingClock?: PingClock,
-): LoopHarness {
-  const { source, send, close } = controlledSource();
-  const { sink, frames } = collectingSink();
-  const bus = new Broadcast(4);
-  const router = new SessionRouter();
-  router.registerSession(
-    { id: 1, clientType: "tui", clientName: "t", capabilities: [], character: "alice", thread: null },
-    async (m) => {
-      await Promise.resolve();
-      void m;
-    },
-  );
-  const routed: RoutedMessage[] = [];
-  let shutdown!: () => void;
-  const shutdownSignal = new Promise<void>((resolve) => {
-    shutdown = resolve;
-  });
-
-  return {
-    ctx: {
-      clientId: 1,
-      serverName: "shore-test",
-      router,
-      events: (events ?? bus.subscribe()) as never,
-      handshake: null as never,
-      authenticate: OPEN,
-      route: async (m) => void routed.push(m),
-      shutdown: shutdownSignal,
-      pingIntervalMs,
-      ...(pingClock === undefined ? {} : { pingClock }),
-    },
-    reader: new WireReader(source),
-    sink,
-    frames,
-    routed,
-    bus,
-    send,
-    close,
-    shutdown,
-  };
-}
-
-describe("handleConnection", () => {
-  function connect(opts: { slowSink?: boolean } = {}) {
-    const { source, send, close } = controlledSource();
-    const chars: string[] = [];
-    const output: ByteSink = opts.slowSink === true
-      ? {
-          write: async (b) => {
-            for (const ch of new TextDecoder().decode(b)) {
-              await Promise.resolve();
-              chars.push(ch);
-            }
-          },
-        }
-      : { write: (b) => void chars.push(new TextDecoder().decode(b)) };
-
-    const router = new SessionRouter();
-    const bus = new Broadcast(16);
-    const routed: RoutedMessage[] = [];
-    const done = handleConnection(
-      { input: source, output },
-      {
-        clientId: 1,
-        serverName: "shore-test",
-        router,
-        events: bus.subscribe(),
-        authenticate: OPEN,
-        handshake: {
-          hello: () => Promise.resolve({ characters: [{ name: "alice" }] }),
-          select: (character) => Promise.resolve({ character, thread: null }),
-          history: (selected) =>
-            Promise.resolve({
-              messages: [],
-              previousSegment: null,
-              config: {},
-              selectedCharacter: selected,
-              selectedThread: null,
-              revision: 1,
-            }),
-        },
-        route: async (m) => void routed.push(m),
-        shutdown: new Promise<void>(() => {}),
-        pingIntervalMs: 3_600_000,
-      },
-    );
-    const lines = () => chars.join("").split("\n").filter((l) => l.length > 0);
-    return { done, send, close, router, bus, routed, lines };
-  }
-
-  test("the small pre-auth limit becomes the normal limit only after authentication", async () => {
-    const rejected = connect();
-    rejected.send(
-      `${JSON.stringify({
-        type: "hello",
-        client_type: "tui",
-        client_name: "x".repeat(MAX_PRE_AUTH_WIRE_MESSAGE_SIZE),
-      })}\n`,
-    );
-    await rejected.done.catch(() => {});
-    expect(rejected.router.sessions()).toEqual([]);
-
-    const accepted = connect();
-    accepted.send('{"type":"hello","client_type":"tui","client_name":"t"}\n');
-    for (let i = 0; i < 2000 && accepted.router.sessions().length === 0; i += 1) {
-      await Promise.resolve();
-    }
-    accepted.send(
-      `${JSON.stringify({
-        type: "message",
-        text: "x".repeat(MAX_PRE_AUTH_WIRE_MESSAGE_SIZE),
-        stream: false,
-        images: [],
-        image_data: [],
-      })}\n`,
-    );
-    for (let i = 0; i < 100 && accepted.routed.length === 0; i += 1) await Promise.resolve();
-    accepted.close();
-    await accepted.done;
-    expect(accepted.routed.some((r) => r.kind === "engine")).toBe(true);
-  });
-});
-
-describe("message loop", () => {
-
-  test("a structurally invalid post-auth frame gets an invalid-request response", async () => {
-    const h = harness();
-    const done = messageLoop(h.reader, h.sink, SESSION, h.ctx);
-    h.send('{"type":"message","text":"hello","images":[42]}\n');
-    for (let i = 0; i < 20; i += 1) await Promise.resolve();
-
-    expect(h.frames()).toEqual([
-      {
-        type: "error",
-        code: "invalid_request",
-        message: 'Frame field "images" element 1 is not a string',
-      },
-    ]);
-    expect(h.routed).toEqual([]);
-
-    h.send('{"type":"cancel"}\n');
-    for (let i = 0; i < 20; i += 1) await Promise.resolve();
-    expect(h.routed.map((r) => r.kind)).toEqual(["engine"]);
-    h.shutdown();
-    await done;
-  });
-});
 
 const cleanups: (() => Promise<void>)[] = [];
 
@@ -364,9 +16,6 @@ afterEach(async () => {
 
 async function fixture(characters: string[] = ["ada", "bee"]) {
   const server = new Server({
-    addr: "127.0.0.1:0",
-    serverName: "shore-test",
-    authenticate: () => true,
     handshake: {
       hello: () => Promise.resolve({ characters: characters.map((name) => ({ name })) }),
       select: (character) => Promise.resolve({ character, thread: null }),
@@ -381,8 +30,6 @@ async function fixture(characters: string[] = ["ada", "bee"]) {
         }),
     },
   });
-  const { host, port } = await server.bind();
-  const running = server.serve();
 
   const routed: RoutedMessage[] = [];
   const routing = (async () => {
@@ -391,10 +38,10 @@ async function fixture(characters: string[] = ["ada", "bee"]) {
 
   cleanups.push(async () => {
     server.stop();
-    await Promise.allSettled([running, routing]);
+    await routing;
   });
 
-  return { server, routed, addr: `${host}:${port}` };
+  return { server, routed };
 }
 
 describe("what the peer sends", () => {
@@ -574,13 +221,7 @@ describe("client request admission", () => {
 });
 
 describe("wire array decoding", () => {
-  async function decode(value: unknown) {
-    const line = new TextEncoder().encode(`${JSON.stringify(value)}\n`);
-    async function* source() {
-      yield line;
-    }
-    return await new WireReader(source()).readMessage();
-  }
+  const decode = (value: unknown): ClientMessage => decodeClientMessage(value);
 
   for (const [label, value] of [
     ["non-array images", { ...message(), images: "shot.png" }],
@@ -593,160 +234,35 @@ describe("wire array decoding", () => {
     ["non-string regeneration tag", { type: "regen", stream: true, tags: [42] }],
     ["non-boolean another take", { type: "regen", stream: true, another_take: "yes" }],
   ] as const) {
-    test(`rejects ${label}`, async () => {
-      expect(await rejectionOf(decode(value))).toBeInstanceOf(WireError);
+    test(`rejects ${label}`, () => {
+      expect(() => decode(value)).toThrow(WireError);
     });
   }
 
-  test("a regeneration keeps what it was given and nothing it wasn't, and an older client's guidance is its reason", async () => {
-    expect(await decode({ type: "regen", stream: true })).toEqual({ type: "regen", stream: true });
-    expect(await decode({ type: "regen", stream: true, another_take: true, reason: "shorter", tags: ["too long"] }))
+  test("a regeneration keeps what it was given and nothing it wasn't, and an older client's guidance is its reason", () => {
+    expect(decode({ type: "regen", stream: true })).toEqual({ type: "regen", stream: true });
+    expect(decode({ type: "regen", stream: true, another_take: true, reason: "shorter", tags: ["too long"] }))
       .toEqual({ type: "regen", stream: true, another_take: true, reason: "shorter", tags: ["too long"] });
-    expect(await decode({ type: "regen", stream: false, guidance: "warmer" })).toEqual({ type: "regen", stream: false, reason: "warmer" });
-  });
-});
-
-describe("stopping", () => {
-  const GRACE_MS = 2_000;
-  const immediate = (): Promise<void> => new Promise((resolve) => {
-    setImmediate(resolve);
+    expect(decode({ type: "regen", stream: false, guidance: "warmer" })).toEqual({ type: "regen", stream: false, reason: "warmer" });
   });
 
-  async function stoppable(history?: () => Promise<never>) {
-    const logged: [string, string, Record<string, unknown> | undefined][] = [];
-    const log: Logger = {
-      info: (msg, fields) => logged.push(["info", msg, fields]),
-      warn: (msg, fields) => logged.push(["warn", msg, fields]),
-    };
-    const server = new Server({
-      addr: "127.0.0.1:0",
-      serverName: "shore-test",
-      authenticate: () => true,
-      handshake: {
-        hello: () => Promise.resolve({ characters: [{ name: "ada" }] }),
-        select: (character) => Promise.resolve({ character, thread: null }),
-        history: history ?? ((selected) => Promise.resolve({ messages: [], previousSegment: null, config: {}, selectedCharacter: selected, selectedThread: null, revision: 1 })),
-      },
-      log,
-    });
-    const { port } = await server.bind();
-    const running = server.serve();
-    const routed: RoutedMessage[] = [];
-    const routing = (async () => {
-      for await (const each of server.routes()) routed.push(each);
-    })();
-    const open = async (): Promise<{ socket: Socket; frames: string[]; closed: () => boolean; hungUp: Promise<void> }> => {
-      const socket = openSocket({ host: "127.0.0.1", port });
-      const frames: string[] = [];
-      let closed = false;
-      const hungUp = new Promise<void>((resolve) => {
-        socket.once("close", () => {
-          closed = true;
-          resolve();
-        });
-      });
-      const greeted = new Promise<void>((resolve) => {
-        socket.once("data", () => resolve());
-      });
-      socket.on("data", (chunk: Buffer) => frames.push(chunk.toString("utf8")));
-      await greeted;
-      return { socket, frames, closed: () => closed, hungUp };
-    };
-    const warnings = () => logged.filter(([level]) => level === "warn").map(([, msg, fields]) => [msg, fields]);
-    cleanups.push(async () => {
-      jest.useRealTimers();
-      server.stop();
-      await Promise.allSettled([running, routing]);
-    });
-    return { server, running, routing, routed, open, logged, warnings };
-  }
-
-  test("a client that never says hello is hung up on exactly when the grace runs out, and only clients still open are counted", async () => {
-    const { server, running, open, logged, warnings } = await stoppable();
-    const gone = await open();
-    gone.socket.destroy();
-    while (!logged.some(([, msg]) => msg === "Client closed before hello")) await immediate();
-    const silent = await open();
-    jest.useFakeTimers();
-    server.stop();
-    while (!logged.some(([, msg]) => msg === "Server shutting down")) await immediate();
-    jest.advanceTimersByTime(GRACE_MS - 1);
-    for (let turn = 0; turn < 20; turn += 1) await immediate();
-    expect(silent.closed()).toBe(false);
-    jest.advanceTimersByTime(1);
-    await silent.hungUp;
-    await running;
-    expect(warnings()).toEqual([["Hanging up on clients that didn't finish", { clients: 1 }]]);
+  test("a message keeps its fields and fills its defaults, and fields the daemon doesn't know are ignored", () => {
+    expect(decode({ type: "message", rid: "r1", text: "hi", stream: true })).toEqual({ type: "message", rid: "r1", text: "hi", stream: true, images: [], image_data: [] });
+    expect(decode({ type: "cancel", extra: 1 })).toEqual({ type: "cancel" });
+    expect(decode({ type: "command", rid: "r2", name: "status" })).toEqual({ type: "command", rid: "r2", name: "status", args: null });
   });
 
-  test("a client stuck behind a write it can't take is hung up on, and its disconnect reaches the routes before they end", async () => {
-    const { server, running, routing, routed, open, logged } = await stoppable();
-    const stuck = await open();
-    stuck.socket.write(`${JSON.stringify({ type: "hello", client_type: "tui", client_name: "test", capabilities: [], character: "ada" })}\n`);
-    while (!stuck.frames.join("").includes('"type":"history"')) await immediate();
-    while (!routed.some((each) => each.kind === "session_connected")) await immediate();
-    stuck.socket.pause();
-    server.broadcast({ type: "error", code: "internal_error", message: "x".repeat(32 << 20) });
-    await immediate();
-    jest.useFakeTimers();
-    server.stop();
-    while (!logged.some(([, msg]) => msg === "Server shutting down")) await immediate();
-    jest.advanceTimersByTime(GRACE_MS);
-    await running;
-    await routing;
-    expect(routed.map((each) => each.kind)).toEqual(["session_connected", "session_disconnected"]);
+  test("anything but an object naming a known message type is refused, and says why", () => {
+    expect(() => decode([])).toThrow("Frame is not a JSON object");
+    expect(() => decode(null)).toThrow("Frame is not a JSON object");
+    expect(() => decode({ type: "nope" })).toThrow('Unknown client message type "nope"');
+    expect(() => decode({ type: "message", stream: true })).toThrow('Frame is missing required field "text"');
+    expect(() => decode({ type: "message", text: 1, stream: true })).toThrow('Frame field "text" is not a string');
+    expect(() => decode({ type: "message", text: "", stream: true, absence_seconds: "1" })).toThrow('Frame field "absence_seconds" is not a number');
   });
 
-  test("a client whose handler is stuck on something besides its socket is given up on after a second grace, and the server still stops", async () => {
-    let asked = false;
-    const { server, running, open, logged, warnings } = await stoppable(() => {
-      asked = true;
-      return new Promise<never>(() => {});
-    });
-    const stuck = await open();
-    stuck.socket.write(`${JSON.stringify({ type: "hello", client_type: "tui", client_name: "test", capabilities: [], character: "ada" })}\n`);
-    while (!asked) await immediate();
-    jest.useFakeTimers();
-    server.stop();
-    while (!logged.some(([, msg]) => msg === "Server shutting down")) await immediate();
-    jest.advanceTimersByTime(GRACE_MS);
-    await stuck.hungUp;
-    while (warnings().length === 0) await immediate();
-    jest.advanceTimersByTime(GRACE_MS - 1);
-    for (let turn = 0; turn < 20; turn += 1) await immediate();
-    expect(warnings()).toEqual([["Hanging up on clients that didn't finish", { clients: 1 }]]);
-    jest.advanceTimersByTime(1);
-    await running;
-    expect(warnings()).toEqual([
-      ["Hanging up on clients that didn't finish", { clients: 1 }],
-      ["Stopped with client handlers still running", { handlers: 1 }],
-    ]);
-  });
-
-  test("a server whose clients all finish in time hangs up on no one", async () => {
-    const { server, running, open, warnings } = await stoppable();
-    const client = await open();
-    client.socket.write(`${JSON.stringify({ type: "hello", client_type: "tui", client_name: "test", capabilities: [] })}\n`);
-    while (!client.frames.join("").includes('"type":"history"')) await immediate();
-    jest.useFakeTimers();
-    server.stop();
-    await running;
-    await client.hungUp;
-    expect(client.frames.join("")).toContain('"type":"shutdown"');
-    expect(warnings()).toEqual([]);
-  });
-
-  test("a server whose clients all finish in time leaves nothing behind to keep its process running", async () => {
-    const child = Bun.spawn([process.execPath, join(import.meta.dir, "support", "swp_stop.ts")], { stdout: "pipe", stderr: "pipe" });
-    const reader = child.stdout.getReader();
-    let said = "";
-    while (!said.includes("stopped\n")) {
-      const { done, value } = await reader.read();
-      if (done) break;
-      said += new TextDecoder().decode(value);
-    }
-    const stoppedAt = performance.now();
-    expect([await child.exited, said]).toEqual([0, "stopped\n"]);
-    expect(performance.now() - stoppedAt).toBeLessThan(GRACE_MS / 2);
+  test("text around a frame is trimmed the way the Rust client trims it", () => {
+    expect(rustTrim("\u00A0 {\"type\":\"cancel\"}\r\n")).toBe('{"type":"cancel"}');
+    expect(rustTrim("a b")).toBe("a b");
   });
 });

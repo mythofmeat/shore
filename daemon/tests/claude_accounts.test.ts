@@ -27,7 +27,7 @@ import { resetAtIn } from "../src/llm/errors.ts";
 import { runGeneration } from "../src/llm/generate.ts";
 import { ClaudeAgentProvider } from "../src/llm/providers/claude_agent.ts";
 import { createRuntime } from "../src/runtime.ts";
-import { DEFAULT_HANDSHAKE } from "../src/swp/connection.ts";
+import { DEFAULT_HANDSHAKE } from "../src/swp/handshake.ts";
 import { SessionRouter } from "../src/swp/session.ts";
 import type { SidecarRequest, WireMessage } from "../src/llm/types.ts";
 import { startMockAnthropic, type AnthropicRequestRecord, type MockAnthropic } from "../src/testing/mock_anthropic.ts";

@@ -16,7 +16,7 @@ import type { GenerateResponse, SidecarProvider, SidecarRequest } from "../src/l
 import { shoreLog } from "../src/log.ts";
 import { labelFromReply } from "../src/memory/compaction/label.ts";
 import { readDurable } from "../src/storage/files.ts";
-import { DEFAULT_HANDSHAKE } from "../src/swp/connection.ts";
+import { DEFAULT_HANDSHAKE } from "../src/swp/handshake.ts";
 import { SessionRouter } from "../src/swp/session.ts";
 import { afterFirstChat, type ChatWorld } from "./support/chat_world.ts";
 import { restoreTestEnv, unsetTestEnv } from "./support/env.ts";

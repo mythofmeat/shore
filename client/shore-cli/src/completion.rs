@@ -9,7 +9,7 @@ use clap_complete::env::Shells;
 use clap_complete::{CompleteEnv, Shell};
 use serde_json::{Value as Json, json};
 use shore_common::protocol::operations::ModelSettingsArgs;
-use shore_common::protocol::server_msg::{History, ServerMessage};
+use shore_common::protocol::server_msg::ServerMessage;
 use shore_common::protocol::types::{ContentBlock, Message, Role};
 use shore_common::swp_client::{SWPConnection, ServerAddr};
 use shore_common::token::TokenSource;
@@ -124,7 +124,8 @@ impl Source {
     pub(crate) fn request(self, line: &Line) -> Option<(&'static str, Json)> {
         let usage = |group_by: &str| ("usage", json!({ "last": "all", "group_by": group_by }));
         Some(match self {
-            Self::Characters | Self::History => return None,
+            Self::Characters => return None,
+            Self::History => ("log", json!({ "count": RECENT_MESSAGES })),
             Self::Calls => ("call_log", json!({ "count": 20 })),
             Self::Config => ("config_schema", json!({})),
             Self::Marks => ("marks", json!({ "refs": [] })),
@@ -244,7 +245,8 @@ pub(crate) struct PaletteCatalog {
 impl PaletteCatalog {
     pub(crate) fn absorb(&mut self, source: Source, data: &Json) {
         match source {
-            Source::Characters | Source::History => {}
+            Source::Characters => {}
+            Source::History => self.absorb_history(data),
             Source::Calls => self.calls = call_values(data),
             Source::Config => self.absorb_config(data),
             Source::Marks => {
@@ -400,9 +402,13 @@ impl PaletteCatalog {
         self.tools = tools;
     }
 
-    fn absorb_history(&mut self, history: &History) {
-        self.message_refs = history
-            .messages
+    fn absorb_history(&mut self, data: &Json) {
+        let messages: Vec<Message> = data
+            .get("messages")
+            .cloned()
+            .and_then(|listed| serde_json::from_value(listed).ok())
+            .unwrap_or_default();
+        self.message_refs = messages
             .iter()
             .rev()
             .take(RECENT_MESSAGES)
@@ -1019,29 +1025,12 @@ impl Daemon {
         let Some(addr) = found_addr else {
             return;
         };
-        if source == Source::Characters {
-            self.load_characters(&addr, catalog);
-            return;
-        }
         self.connect(&addr, character, thread, catalog);
         let Some((name, args)) = source.request(line) else {
             return;
         };
         if let Some(data) = self.ask(name, args) {
             catalog.absorb(source, &data);
-        }
-    }
-
-    fn load_characters(&self, addr: &ServerAddr, catalog: &mut PaletteCatalog) {
-        let Some(runtime) = self.runtime.as_ref() else {
-            return;
-        };
-        if let Ok(hello) = runtime.block_on(SWPConnection::probe(addr, LOOKUP_DEADLINE)) {
-            catalog.characters = hello
-                .characters
-                .into_iter()
-                .map(|character| PaletteValue::plain(character.name))
-                .collect();
         }
     }
 
@@ -1073,8 +1062,12 @@ impl Daemon {
             .await
         });
         match connected {
-            Ok(Ok((connection, _hello, history))) => {
-                catalog.absorb_history(&history);
+            Ok(Ok((connection, hello, _history))) => {
+                catalog.characters = hello
+                    .characters
+                    .into_iter()
+                    .map(|served| PaletteValue::plain(served.name))
+                    .collect();
                 self.connection = Some(connection);
             }
             Ok(Err(_)) | Err(_) => self.connect_failed = true,

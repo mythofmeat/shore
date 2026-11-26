@@ -42,6 +42,11 @@ export function bearerToken(request: Request): string | undefined {
   return header === null ? undefined : /^Bearer +(\S+) *$/i.exec(header)?.[1];
 }
 
+export function principalOwner(principal: Principal): string {
+  if (principal.kind === "browser") return principal.session.id;
+  return principal.kind === "device" ? principal.device.id : "owner";
+}
+
 export function principalName(principal: Principal): string {
   if (principal.kind === "browser") return principal.session.name;
   return principal.kind === "device" ? principal.device.name : "The daemon's own token";

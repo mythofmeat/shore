@@ -1,53 +1,194 @@
-use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader, BufWriter};
-use tokio::net::TcpStream;
-use tracing::{debug, error, trace, warn};
+use futures_util::StreamExt as _;
+use serde::Deserialize;
+use tracing::{debug, trace, warn};
 
-use crate::protocol::client_msg::{ClientHello, ClientMessage};
-use crate::protocol::error::ErrorCode;
-use crate::protocol::server_msg::{Error as ServerError, History, ServerHello, ServerMessage};
+use crate::protocol::client_msg::ClientMessage;
+use crate::protocol::server_msg::{History, ServerHello, ServerMessage};
+use crate::protocol::web::{WebHello, WebTransfer};
 use crate::protocol::{MAX_WIRE_MESSAGE_SIZE, SWP_V1};
 
 use crate::swp_client::error::{ClientError, Result};
 use crate::token::TokenSource;
 
-const HANDSHAKE_DEADLINE: std::time::Duration = std::time::Duration::from_secs(10);
+const HELLO_DEADLINE: std::time::Duration = std::time::Duration::from_secs(10);
+const STREAM_TYPE: &str = "application/x-ndjson";
+const UPLOAD_CHUNK: usize = 1_048_576;
+pub const DEFAULT_WEB_PORT: u16 = 7340;
 
 #[derive(Debug, Clone)]
 pub struct ServerAddr(pub String);
 
-trait AsyncReadWrite: tokio::io::AsyncRead + tokio::io::AsyncWrite + Send + Unpin {}
-impl<T: tokio::io::AsyncRead + tokio::io::AsyncWrite + Send + Unpin> AsyncReadWrite for T {}
+impl ServerAddr {
+    pub fn base_url(&self) -> String {
+        let trimmed = self.0.trim().trim_end_matches('/');
+        if trimmed.starts_with("http://") || trimmed.starts_with("https://") {
+            trimmed.to_owned()
+        } else {
+            format!("http://{trimmed}")
+        }
+    }
 
-pub struct SWPConnection {
-    reader: BufReader<Box<dyn AsyncReadWrite>>,
-    read_pending: Vec<u8>,
-    last_request: Option<(Option<String>, Option<String>)>,
-    writer: BufWriter<Box<dyn AsyncReadWrite>>,
+    pub fn origin(&self) -> String {
+        let base = self.base_url();
+        reqwest::Url::parse(&base).map_or(base, |url| url.origin().ascii_serialization())
+    }
 }
 
-impl std::fmt::Debug for SWPConnection {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.debug_struct("SWPConnection").finish_non_exhaustive()
+#[derive(Debug)]
+struct FrameStream {
+    response: reqwest::Response,
+    pending: Vec<u8>,
+    ended: bool,
+    limit: usize,
+}
+
+fn utf8(bytes: Vec<u8>) -> Result<String> {
+    String::from_utf8(bytes)
+        .map_err(|e| ClientError::Protocol(format!("server sent invalid UTF-8 framing: {e}")))
+}
+
+impl FrameStream {
+    fn new(response: reqwest::Response) -> Self {
+        Self::bounded(response, MAX_WIRE_MESSAGE_SIZE)
     }
+
+    fn bounded(response: reqwest::Response, limit: usize) -> Self {
+        Self {
+            response,
+            pending: Vec::new(),
+            ended: false,
+            limit,
+        }
+    }
+
+    async fn next_line(&mut self) -> Result<Option<String>> {
+        loop {
+            if let Some(at) = self.pending.iter().position(|&byte| byte == b'\n') {
+                let text = utf8(self.pending.drain(..=at).collect())?;
+                if text.trim().is_empty() {
+                    continue;
+                }
+                return Ok(Some(text));
+            }
+            if self.ended {
+                if self.pending.iter().all(u8::is_ascii_whitespace) {
+                    return Ok(None);
+                }
+                return utf8(std::mem::take(&mut self.pending)).map(Some);
+            }
+            match self.response.chunk().await.map_err(transport)? {
+                Some(bytes) => {
+                    let total = self.pending.len().checked_add(bytes.len());
+                    if total.is_none_or(|size| size > self.limit) {
+                        return Err(ClientError::Protocol(format!(
+                            "server message exceeds maximum size of {} bytes",
+                            self.limit
+                        )));
+                    }
+                    self.pending.extend_from_slice(&bytes);
+                }
+                None => self.ended = true,
+            }
+        }
+    }
+}
+
+#[derive(Debug, Deserialize)]
+struct Problem {
+    code: String,
+    message: String,
+    #[serde(default)]
+    retry_after_ms: Option<u64>,
+}
+
+fn transport(error: reqwest::Error) -> ClientError {
+    if error.is_connect() {
+        let place = error.url().map_or_else(String::new, |url| {
+            format!("{} ", url.origin().ascii_serialization())
+        });
+        ClientError::Connect(format!(
+            "nothing answered at {place}({error}). The CLI talks to the daemon's web listener, port {DEFAULT_WEB_PORT} unless changed; the old TCP port 7320 is gone"
+        ))
+    } else if error.is_timeout() {
+        ClientError::Timeout {
+            message: error.to_string(),
+            retry_after_ms: None,
+        }
+    } else {
+        ClientError::Connect(error.to_string())
+    }
+}
+
+async fn refusal(response: reqwest::Response, origin: &str) -> ClientError {
+    let status = response.status();
+    let text = response.text().await.unwrap_or_default();
+    let Ok(problem) = serde_json::from_str::<Problem>(&text) else {
+        return ClientError::Refused(format!("the daemon answered HTTP {status}"));
+    };
+    match problem.code.as_str() {
+        "unauthorized" => ClientError::Unauthorized(format!(
+            "{}. Sign in with `shore sign-in {origin}`",
+            problem.message.trim_end_matches('.')
+        )),
+        "provider_error" => ClientError::Provider {
+            message: problem.message,
+            retry_after_ms: problem.retry_after_ms,
+        },
+        "timeout" => ClientError::Timeout {
+            message: problem.message,
+            retry_after_ms: problem.retry_after_ms,
+        },
+        _ => ClientError::Refused(problem.message),
+    }
+}
+
+fn http_client() -> Result<reqwest::Client> {
+    reqwest::Client::builder()
+        .user_agent(concat!("shore/", env!("CARGO_PKG_VERSION")))
+        .build()
+        .map_err(|e| ClientError::Connect(e.to_string()))
+}
+
+fn version_of(response: &reqwest::Response) -> Option<String> {
+    response
+        .headers()
+        .get("shore-version")
+        .and_then(|value| value.to_str().ok())
+        .map(str::to_owned)
+}
+
+fn selection(character: Option<&String>, thread: Option<&String>) -> Vec<(&'static str, String)> {
+    let mut query = Vec::new();
+    if let Some(name) = character.filter(|name| !name.is_empty()) {
+        query.push(("character", name.clone()));
+    }
+    if let Some(name) = thread.filter(|name| !name.is_empty()) {
+        query.push(("thread", name.clone()));
+    }
+    query
+}
+
+fn hello_deadline() -> ClientError {
+    ClientError::Timeout {
+        message: "the daemon did not answer in time".into(),
+        retry_after_ms: None,
+    }
+}
+
+#[derive(Debug)]
+pub struct SWPConnection {
+    http: reqwest::Client,
+    base: String,
+    origin: String,
+    token: String,
+    character: Option<String>,
+    thread: Option<String>,
+    request: Option<FrameStream>,
+    events: Option<FrameStream>,
+    last_command: Option<String>,
 }
 
 impl SWPConnection {
-    async fn open(addr: &ServerAddr) -> Result<Self> {
-        debug!(addr = %addr.0, "connecting via tcp");
-        let stream = TcpStream::connect(&addr.0).await.map_err(|e| {
-            error!(addr = %addr.0, error = %e, "tcp connect failed");
-            ClientError::Connect(format!("tcp:{}: {e}", addr.0))
-        })?;
-        let (r, w) = stream.into_split();
-        debug!(addr = %addr.0, "tcp connected");
-        Ok(Self {
-            reader: BufReader::new(Box::new(tokio::io::join(r, tokio::io::sink()))),
-            read_pending: Vec::new(),
-            last_request: None,
-            writer: BufWriter::new(Box::new(tokio::io::join(tokio::io::empty(), w))),
-        })
-    }
-
     pub async fn connect<T: Into<String>, N: Into<String>>(
         addr: &ServerAddr,
         client_type: T,
@@ -60,240 +201,212 @@ impl SWPConnection {
 
     pub async fn connect_in_thread<T: Into<String>, N: Into<String>>(
         addr: &ServerAddr,
-        client_type: T,
-        client_name: N,
+        _client_type: T,
+        _client_name: N,
         character: Option<String>,
         thread: Option<String>,
         token: &TokenSource,
     ) -> Result<(Self, ServerHello, History)> {
-        tokio::time::timeout(HANDSHAKE_DEADLINE, async {
-            let mut conn = Self::open(addr).await?;
-            let (server_hello, history) = conn
-                .do_handshake(
-                    client_type.into(),
-                    client_name.into(),
-                    character,
-                    thread,
-                    token.resolve(Some(&addr.0)),
-                )
-                .await?;
-            Ok((conn, server_hello, history))
-        })
-        .await
-        .map_err(|_| ClientError::Timeout {
-            message: "connection handshake timed out".into(),
-            retry_after_ms: None,
-        })?
+        let base = addr.base_url();
+        let origin = addr.origin();
+        let credential = token
+            .resolve(&origin)
+            .map_err(|e| ClientError::Unauthorized(e.to_string()))?;
+        let http = http_client()?;
+        debug!(base = %base, character = ?character, thread = ?thread, "asking the daemon who it serves");
+        let asked = http
+            .get(format!("{base}/api/hello"))
+            .query(&selection(character.as_ref(), thread.as_ref()))
+            .bearer_auth(&credential)
+            .send();
+        let response = tokio::time::timeout(HELLO_DEADLINE, asked)
+            .await
+            .map_err(|_| hello_deadline())?
+            .map_err(transport)?;
+        super::daemon_version::note_daemon_version(version_of(&response).as_deref());
+        if !response.status().is_success() {
+            return Err(refusal(response, &origin).await);
+        }
+        let hello: WebHello = response.json().await.map_err(|e| {
+            ClientError::Protocol(format!("the daemon's hello could not be read: {e}"))
+        })?;
+        let history = History {
+            delta: None,
+            rid: None,
+            messages: Vec::new(),
+            previous_segment: None,
+            config: serde_json::json!({}),
+            selected_character: hello.selected_character.clone(),
+            selected_thread: hello.selected_thread.clone(),
+            revision: 0,
+        };
+        let server_hello = ServerHello {
+            v: SWP_V1,
+            server_name: hello.server_name,
+            server_version: Some(hello.server_version),
+            characters: hello.characters,
+        };
+        let conn = Self {
+            http,
+            base,
+            origin,
+            token: credential,
+            character: hello.selected_character,
+            thread: hello.selected_thread,
+            request: None,
+            events: None,
+            last_command: None,
+        };
+        Ok((conn, server_hello, history))
     }
 
     pub async fn probe(addr: &ServerAddr, deadline: std::time::Duration) -> Result<ServerHello> {
-        tokio::time::timeout(deadline, async {
-            let mut conn = Self::open(addr).await?;
-            conn.recv_server_hello().await
-        })
-        .await
-        .map_err(|_| ClientError::Timeout {
-            message: "daemon did not say hello in time".into(),
-            retry_after_ms: None,
-        })?
-    }
-
-    async fn do_handshake(
-        &mut self,
-        client_type: String,
-        client_name: String,
-        character: Option<String>,
-        thread: Option<String>,
-        token_lookup: std::result::Result<String, crate::token::TokenError>,
-    ) -> Result<(ServerHello, History)> {
-        debug!(client_type = %client_type, client_name = %client_name, character = ?character, thread = ?thread, "starting SWP handshake");
-
-        let token = token_lookup.map_err(|e| ClientError::Unauthorized(e.to_string()))?;
-
-        let server_hello = self.recv_server_hello().await?;
-
-        let hello = ClientMessage::Hello(ClientHello {
-            client_type,
-            client_name,
-            capabilities: vec![
-                "streaming".into(),
-                "history-deltas".into(),
-                "multimodal-tool-results".into(),
-            ],
-            character,
-            thread,
-            token: Some(token),
-        });
-        self.send(&hello).await?;
-        debug!("sent client hello");
-
-        let history = self.recv_history().await?;
-
-        debug!("SWP handshake complete");
-        Ok((server_hello, history))
-    }
-
-    async fn recv_server_hello(&mut self) -> Result<ServerHello> {
-        let server_hello = loop {
-            match self.recv().await? {
-                ServerMessage::Hello(h) => {
-                    if h.v != SWP_V1 {
-                        error!(
-                            server_version = h.v,
-                            expected = SWP_V1,
-                            "protocol version mismatch"
-                        );
-                        return Err(ClientError::Protocol(format!(
-                            "unsupported protocol version: {} (expected {})",
-                            h.v, SWP_V1
-                        )));
-                    }
-                    debug!(
-                        server_name = %h.server_name,
-                        characters = h.characters.len(),
-                        "received server hello"
-                    );
-                    super::daemon_version::note_daemon_version(h.server_version.as_deref());
-                    break h;
-                }
-                ServerMessage::Unknown
-                | ServerMessage::ThreadsChanged(_)
-                | ServerMessage::ThreadUnread(_) => {
-                    debug!("skipping unknown frame during handshake");
-                }
-                other @ (ServerMessage::History(_)
-                | ServerMessage::Shutdown(_)
-                | ServerMessage::Ping(_)
-                | ServerMessage::CommandOutput(_)
-                | ServerMessage::Error(_)
-                | ServerMessage::StreamStart(_)
-                | ServerMessage::StreamChunk(_)
-                | ServerMessage::StreamEnd(_)
-                | ServerMessage::Phase(_)
-                | ServerMessage::NewMessage(_)
-                | ServerMessage::ToolCall(_)
-                | ServerMessage::ToolResult(_)
-                | ServerMessage::SendImage(_)
-                | ServerMessage::CacheWarning(_)
-                | ServerMessage::ProviderWarning(_)
-                | ServerMessage::ProviderFallbackWarning(_)
-                | ServerMessage::UsageWarning(_)
-                | ServerMessage::PlanLimitWarning(_)
-                | ServerMessage::ConfigWarning(_)
-                | ServerMessage::RequestAccepted(_)
-                | ServerMessage::RequestFinished(_)) => {
-                    error!("expected server hello, got unexpected message");
-                    return Err(ClientError::Protocol(format!(
-                        "expected server hello, got: {other:?}"
-                    )));
-                }
-            }
+        let base = addr.base_url();
+        let asked = http_client()?.get(format!("{base}/api/hello")).send();
+        let response = tokio::time::timeout(deadline, asked)
+            .await
+            .map_err(|_| hello_deadline())?
+            .map_err(transport)?;
+        let Some(version) = version_of(&response) else {
+            return Err(ClientError::Protocol(format!(
+                "something answered at {base}, but it isn't a Shore daemon"
+            )));
         };
-        Ok(server_hello)
-    }
-
-    async fn recv_history(&mut self) -> Result<History> {
-        let history = loop {
-            match self.recv().await? {
-                ServerMessage::History(h) => {
-                    debug!(message_count = h.messages.len(), "received history");
-                    break h;
-                }
-                ServerMessage::Unknown
-                | ServerMessage::ThreadsChanged(_)
-                | ServerMessage::ThreadUnread(_) => {
-                    debug!("skipping unknown frame during handshake");
-                }
-                ServerMessage::Error(e) => {
-                    error!(code = ?e.code, "daemon refused the handshake");
-                    return Err(client_error_from_server(e));
-                }
-                other @ (ServerMessage::Hello(_)
-                | ServerMessage::Shutdown(_)
-                | ServerMessage::Ping(_)
-                | ServerMessage::CommandOutput(_)
-                | ServerMessage::StreamStart(_)
-                | ServerMessage::StreamChunk(_)
-                | ServerMessage::StreamEnd(_)
-                | ServerMessage::Phase(_)
-                | ServerMessage::NewMessage(_)
-                | ServerMessage::ToolCall(_)
-                | ServerMessage::ToolResult(_)
-                | ServerMessage::SendImage(_)
-                | ServerMessage::CacheWarning(_)
-                | ServerMessage::ProviderWarning(_)
-                | ServerMessage::ProviderFallbackWarning(_)
-                | ServerMessage::UsageWarning(_)
-                | ServerMessage::PlanLimitWarning(_)
-                | ServerMessage::ConfigWarning(_)
-                | ServerMessage::RequestAccepted(_)
-                | ServerMessage::RequestFinished(_)) => {
-                    error!("expected history, got unexpected message");
-                    return Err(ClientError::Protocol(format!(
-                        "expected history, got: {other:?}"
-                    )));
-                }
-            }
-        };
-        Ok(history)
-    }
-
-    pub async fn send(&mut self, msg: &ClientMessage) -> Result<()> {
-        let line = serde_json::to_string(msg).map_err(|e| {
-            error!(error = %e, "failed to serialize client message");
-            ClientError::Serialize(e)
-        })?;
-        trace!(bytes = line.len(), "sending message");
-        tokio::time::timeout(std::time::Duration::from_secs(10), async {
-            self.writer
-                .write_all(line.as_bytes())
-                .await
-                .map_err(ClientError::Io)?;
-            self.writer
-                .write_all(b"\n")
-                .await
-                .map_err(ClientError::Io)?;
-            self.writer.flush().await.map_err(ClientError::Io)?;
-            Ok::<(), ClientError>(())
+        super::daemon_version::note_daemon_version(Some(&version));
+        Ok(ServerHello {
+            v: SWP_V1,
+            server_name: "shore-daemon".into(),
+            server_version: Some(version),
+            characters: Vec::new(),
         })
-        .await
-        .map_err(|_| ClientError::Timeout {
-            message: "connection write timed out".into(),
-            retry_after_ms: None,
-        })??;
-        match msg {
-            ClientMessage::Command(command) => {
-                self.last_request = Some((command.rid.clone(), Some(command.name.clone())));
-            }
-            ClientMessage::Message(message) => {
-                self.last_request = Some((message.rid.clone(), None))
-            }
-            ClientMessage::Regen(regen) => self.last_request = Some((regen.rid.clone(), None)),
-            ClientMessage::Hello(_) | ClientMessage::Cancel(_) => {}
+    }
+
+    pub fn origin(&self) -> &str {
+        &self.origin
+    }
+
+    pub async fn hello(&self, character: Option<&str>, thread: Option<&str>) -> Result<WebHello> {
+        let chosen = selection(
+            character.map(str::to_owned).as_ref(),
+            thread.map(str::to_owned).as_ref(),
+        );
+        let response = self
+            .http
+            .get(self.url("/api/hello"))
+            .query(&chosen)
+            .bearer_auth(&self.token)
+            .send()
+            .await
+            .map_err(transport)?;
+        self.checked(response).await?.json().await.map_err(|e| {
+            ClientError::Protocol(format!("the daemon's hello could not be read: {e}"))
+        })
+    }
+
+    fn url(&self, path: &str) -> String {
+        format!("{}{path}", self.base)
+    }
+
+    async fn checked(&self, response: reqwest::Response) -> Result<reqwest::Response> {
+        if response.status().is_success() {
+            Ok(response)
+        } else {
+            Err(refusal(response, &self.origin).await)
         }
+    }
+
+    pub async fn send(&mut self, msg: &ClientMessage) -> Result<Option<String>> {
+        let (name, body) = match msg {
+            ClientMessage::Hello(_) => {
+                return Err(ClientError::Protocol("a request can't be a hello".into()));
+            }
+            ClientMessage::Command(command) => (
+                command.name.clone(),
+                if command.args.is_null() {
+                    serde_json::json!({})
+                } else {
+                    command.args.clone()
+                },
+            ),
+            ClientMessage::Message(_) | ClientMessage::Regen(_) | ClientMessage::Cancel(_) => {
+                let mut value = serde_json::to_value(msg).map_err(ClientError::Serialize)?;
+                let kind = value
+                    .get("type")
+                    .and_then(serde_json::Value::as_str)
+                    .unwrap_or_default()
+                    .to_owned();
+                if let Some(fields) = value.as_object_mut() {
+                    _ = fields.remove("type");
+                    _ = fields.remove("rid");
+                }
+                (kind, value)
+            }
+        };
+        trace!(operation = %name, "sending request");
+        let sent = self
+            .http
+            .post(self.url(&format!("/api/op/{name}")))
+            .query(&selection(self.character.as_ref(), self.thread.as_ref()))
+            .bearer_auth(&self.token)
+            .header(reqwest::header::ACCEPT, STREAM_TYPE)
+            .json(&body)
+            .send()
+            .await
+            .map_err(transport)?;
+        let response = self.checked(sent).await?;
+        self.last_command = match msg {
+            ClientMessage::Command(command) => Some(command.name.clone()),
+            ClientMessage::Hello(_)
+            | ClientMessage::Message(_)
+            | ClientMessage::Regen(_)
+            | ClientMessage::Cancel(_) => None,
+        };
+        let rid = response
+            .headers()
+            .get("shore-request")
+            .and_then(|value| value.to_str().ok())
+            .map(str::to_owned);
+        self.request = Some(FrameStream::new(response));
+        Ok(rid)
+    }
+
+    pub async fn follow(&mut self) -> Result<()> {
+        let response = self
+            .http
+            .get(self.url("/api/events"))
+            .query(&selection(self.character.as_ref(), self.thread.as_ref()))
+            .bearer_auth(&self.token)
+            .send()
+            .await
+            .map_err(transport)?;
+        self.events = Some(FrameStream::new(self.checked(response).await?));
         Ok(())
     }
 
     pub fn matches_last_request(&self, response: &ServerMessage) -> bool {
-        let Some((rid, name)) = &self.last_request else {
-            return response.request_id().is_none();
+        let ServerMessage::CommandOutput(output) = response else {
+            return true;
         };
-        if rid.as_deref() != response.request_id() {
-            return false;
-        }
-        if let ServerMessage::CommandOutput(output) = response {
-            return name.as_deref() == Some(output.name.as_str());
-        }
-        true
+        self.last_command.as_deref() == Some(output.name.as_str())
     }
 
     pub async fn recv(&mut self) -> Result<ServerMessage> {
-        let line = read_json_line_bounded(
-            &mut self.reader,
-            &mut self.read_pending,
-            MAX_WIRE_MESSAGE_SIZE,
-        )
-        .await?;
+        let line = 'read: {
+            if let Some(stream) = self.request.as_mut() {
+                if let Some(line) = stream.next_line().await? {
+                    break 'read line;
+                }
+                self.request = None;
+            }
+            let Some(stream) = self.events.as_mut() else {
+                return Err(ClientError::Disconnected);
+            };
+            if let Some(line) = stream.next_line().await? {
+                break 'read line;
+            }
+            self.events = None;
+            return Err(ClientError::Disconnected);
+        };
         let msg: ServerMessage = serde_json::from_str(line.trim()).map_err(|e| {
             warn!(error = %e, raw_len = line.len(), "failed to deserialize server message");
             ClientError::Deserialize(e)
@@ -315,17 +428,15 @@ impl SWPConnection {
             .map(|path| read_image_upload(path))
             .collect::<Result<Vec<_>>>()?;
 
-        let rid = Some(request_id());
         let msg = ClientMessage::Message(ClientMessageBody {
-            rid: rid.clone(),
+            rid: None,
             text: text.into(),
             stream,
             images,
             image_data,
             absence_seconds: None,
         });
-        self.send(&msg).await?;
-        Ok(rid)
+        self.send(&msg).await
     }
 
     pub async fn send_regen(
@@ -336,26 +447,22 @@ impl SWPConnection {
         tags: Vec<String>,
     ) -> Result<Option<String>> {
         use crate::protocol::client_msg::Regen;
-        let rid = Some(request_id());
         let msg = ClientMessage::Regen(Regen {
-            rid: rid.clone(),
+            rid: None,
             stream,
             another_take,
             reason,
             tags,
         });
-        self.send(&msg).await?;
-        Ok(rid)
+        self.send(&msg).await
     }
 
     pub async fn send_operation<O: crate::protocol::operations::Operation>(
         &mut self,
         input: O::Input,
     ) -> Result<Option<String>> {
-        let rid = Some(request_id());
-        let command = O::command(input, rid.clone()).map_err(ClientError::Serialize)?;
-        self.send(&ClientMessage::Command(command)).await?;
-        Ok(rid)
+        let command = O::command(input, None).map_err(ClientError::Serialize)?;
+        self.send(&ClientMessage::Command(command)).await
     }
 
     pub async fn send_command<N: Into<String>>(
@@ -364,33 +471,95 @@ impl SWPConnection {
         args: serde_json::Value,
     ) -> Result<Option<String>> {
         use crate::protocol::client_msg::Command;
-        let rid = Some(request_id());
         let msg = ClientMessage::Command(Command {
-            rid: rid.clone(),
+            rid: None,
             name: name.into(),
             args,
         });
-        self.send(&msg).await?;
-        Ok(rid)
+        self.send(&msg).await
     }
-}
 
-fn client_error_from_server(error: ServerError) -> ClientError {
-    match error.code {
-        ErrorCode::Unauthorized => ClientError::Unauthorized(error.message),
-        ErrorCode::ProviderError => ClientError::Provider {
-            message: error.message,
-            retry_after_ms: error.retry_after_ms,
-        },
-        ErrorCode::Timeout => ClientError::Timeout {
-            message: error.message,
-            retry_after_ms: error.retry_after_ms,
-        },
-        ErrorCode::ProtocolError
-        | ErrorCode::InvalidRequest
-        | ErrorCode::NotFound
-        | ErrorCode::Busy
-        | ErrorCode::InternalError => ClientError::Protocol(error.message),
+    pub async fn post_web<T: serde::de::DeserializeOwned>(
+        &self,
+        path: &str,
+        body: &serde_json::Value,
+    ) -> Result<Option<T>> {
+        let sent = self
+            .http
+            .post(self.url(path))
+            .bearer_auth(&self.token)
+            .json(body)
+            .send()
+            .await
+            .map_err(transport)?;
+        let response = self.checked(sent).await?;
+        if response.status() == reqwest::StatusCode::NO_CONTENT {
+            return Ok(None);
+        }
+        response.json().await.map(Some).map_err(|e| {
+            ClientError::Protocol(format!(
+                "the daemon's answer to {path} could not be read: {e}"
+            ))
+        })
+    }
+
+    pub async fn upload<R: std::io::Read + Send + 'static>(
+        &self,
+        mut source: R,
+        mut progress: Box<dyn FnMut(usize) + Send>,
+    ) -> Result<WebTransfer> {
+        let chunks = futures_util::stream::unfold(Some(0_usize), move |state| {
+            let mut buffer = vec![0_u8; UPLOAD_CHUNK];
+            let next = state.and_then(|sent| match source.read(&mut buffer) {
+                Ok(0) => None,
+                Ok(read) => {
+                    buffer.truncate(read);
+                    let total = sent.saturating_add(read);
+                    progress(total);
+                    Some((Ok::<_, std::io::Error>(buffer), Some(total)))
+                }
+                Err(error) => Some((Err(error), None)),
+            });
+            std::future::ready(next)
+        });
+        let response = self
+            .http
+            .post(self.url("/api/transfers"))
+            .bearer_auth(&self.token)
+            .header(reqwest::header::CONTENT_TYPE, "application/octet-stream")
+            .body(reqwest::Body::wrap_stream(chunks))
+            .send()
+            .await
+            .map_err(transport)?;
+        self.checked(response).await?.json().await.map_err(|e| {
+            ClientError::Protocol(format!(
+                "the daemon's answer to an upload could not be read: {e}"
+            ))
+        })
+    }
+
+    pub async fn download<W: std::io::Write, F: FnMut(usize)>(
+        &self,
+        transfer: &str,
+        target: &mut W,
+        mut progress: F,
+    ) -> Result<usize> {
+        let response = self
+            .http
+            .get(self.url(&format!("/api/transfers/{transfer}")))
+            .bearer_auth(&self.token)
+            .send()
+            .await
+            .map_err(transport)?;
+        let mut body = self.checked(response).await?.bytes_stream();
+        let mut received = 0_usize;
+        while let Some(chunk) = body.next().await {
+            let bytes = chunk.map_err(transport)?;
+            target.write_all(&bytes).map_err(ClientError::Io)?;
+            received = received.saturating_add(bytes.len());
+            progress(received);
+        }
+        Ok(received)
     }
 }
 
@@ -413,239 +582,200 @@ pub fn read_image_upload(path: &str) -> Result<crate::protocol::client_msg::Imag
     })
 }
 
-impl SWPConnection {
-    pub fn from_raw_stream<S>(stream: S) -> Self
-    where
-        S: tokio::io::AsyncRead + tokio::io::AsyncWrite + Send + Unpin + 'static,
-    {
-        let (r, w) = tokio::io::split(stream);
-        Self {
-            reader: BufReader::new(Box::new(tokio::io::join(r, tokio::io::sink()))),
-            read_pending: Vec::new(),
-            last_request: None,
-            writer: BufWriter::new(Box::new(tokio::io::join(tokio::io::empty(), w))),
-        }
-    }
-
-    pub async fn connect_raw<S, T: Into<String>, N: Into<String>>(
-        stream: S,
-        client_type: T,
-        client_name: N,
-        character: Option<String>,
-        token: &TokenSource,
-    ) -> Result<(Self, ServerHello, History)>
-    where
-        S: tokio::io::AsyncRead + tokio::io::AsyncWrite + Send + Unpin + 'static,
-    {
-        let mut conn = Self::from_raw_stream(stream);
-        let (server_hello, history) = conn
-            .do_handshake(
-                client_type.into(),
-                client_name.into(),
-                character,
-                None,
-                token.resolve(None),
-            )
-            .await?;
-        Ok((conn, server_hello, history))
-    }
-}
-
-async fn read_json_line_bounded<R>(
-    reader: &mut BufReader<R>,
-    pending: &mut Vec<u8>,
-    limit: usize,
-) -> Result<String>
-where
-    R: tokio::io::AsyncRead + Unpin,
-{
-    loop {
-        let buf = reader.fill_buf().await.map_err(ClientError::Io)?;
-        if buf.is_empty() {
-            if pending.is_empty() {
-                debug!("EOF on connection — disconnected");
-                return Err(ClientError::Disconnected);
-            }
-            break;
-        }
-
-        let (consume, done) = match buf.iter().position(|&b| b == b'\n') {
-            Some(pos) => match pos.checked_add(1) {
-                Some(consume) => (consume, true),
-                None => {
-                    return Err(ClientError::Protocol(
-                        "server message length exceeds addressable memory".into(),
-                    ));
-                }
-            },
-            None => (buf.len(), false),
-        };
-
-        let Some(total_len) = pending.len().checked_add(consume) else {
-            return Err(ClientError::Protocol(format!(
-                "server message exceeds maximum size of {limit} bytes"
-            )));
-        };
-
-        if total_len > limit {
-            return Err(ClientError::Protocol(format!(
-                "server message exceeds maximum size of {limit} bytes"
-            )));
-        }
-
-        let Some(chunk) = buf.get(..consume) else {
-            return Err(ClientError::Protocol(
-                "server message framing exceeded read buffer".into(),
-            ));
-        };
-        pending.extend_from_slice(chunk);
-        reader.consume(consume);
-        if done {
-            break;
-        }
-    }
-
-    String::from_utf8(std::mem::take(pending))
-        .map_err(|e| ClientError::Protocol(format!("server sent invalid UTF-8 framing: {e}")))
-}
-
-pub fn request_id() -> String {
-    use std::sync::atomic::{AtomicU64, Ordering};
-    use std::time::{SystemTime, UNIX_EPOCH};
-    static COUNTER: AtomicU64 = AtomicU64::new(0);
-
-    let nanos = SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .unwrap_or_default()
-        .as_nanos();
-    let seq = COUNTER.fetch_add(1, Ordering::Relaxed);
-    format!("rid_{nanos:016x}_{seq:04x}")
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
-    use tokio::io::{AsyncBufReadExt, AsyncReadExt};
-    use tokio::time::{Duration, timeout};
+
+    fn response(status: u16, chunks: Vec<&'static str>) -> reqwest::Response {
+        let body = reqwest::Body::wrap_stream(futures_util::stream::iter(
+            chunks
+                .into_iter()
+                .map(|chunk| Ok::<_, std::io::Error>(chunk.as_bytes().to_vec())),
+        ));
+        reqwest::Response::from(http::Response::builder().status(status).body(body).unwrap())
+    }
+
+    #[test]
+    fn an_address_without_a_scheme_means_http_and_its_origin_drops_a_default_port() {
+        let base = |given: &str| ServerAddr(given.into()).base_url();
+        let origin = |given: &str| ServerAddr(given.into()).origin();
+        assert_eq!(base(" desk:7340/ "), "http://desk:7340", "bare means http");
+        assert_eq!(
+            base("https://shore.example/"),
+            "https://shore.example",
+            "https stays"
+        );
+        assert_eq!(base("http://desk"), "http://desk", "http stays");
+        assert_eq!(
+            origin("https://shore.example:443/"),
+            "https://shore.example",
+            "default port"
+        );
+        assert_eq!(origin("desk:7340"), "http://desk:7340", "other ports stay");
+        assert_eq!(
+            origin("http://[::"),
+            "http://[::",
+            "an unparsable address is kept as given"
+        );
+    }
+
+    #[tokio::test]
+    async fn lines_are_read_across_chunks_blank_ones_skipped_and_an_unterminated_last_one_kept() {
+        let mut frames = FrameStream::bounded(
+            response(200, vec!["{\"a\"", ":1}\n\n  \n{\"b\":2}\n", "{\"c\":3}"]),
+            64,
+        );
+        assert_eq!(
+            frames.next_line().await.unwrap().as_deref(),
+            Some("{\"a\":1}\n"),
+            "joined"
+        );
+        assert_eq!(
+            frames.next_line().await.unwrap().as_deref(),
+            Some("{\"b\":2}\n"),
+            "blank lines skipped"
+        );
+        assert_eq!(
+            frames.next_line().await.unwrap().as_deref(),
+            Some("{\"c\":3}"),
+            "kept"
+        );
+        assert!(frames.next_line().await.unwrap().is_none(), "then the end");
+        let mut trailing = FrameStream::bounded(response(200, vec!["{}\n", "  \n "]), 64);
+        assert!(trailing.next_line().await.unwrap().is_some(), "a line");
+        assert!(
+            trailing.next_line().await.unwrap().is_none(),
+            "white space at the end is nothing"
+        );
+    }
 
     #[tokio::test]
     async fn a_line_exactly_at_the_size_limit_is_read_and_one_byte_more_is_refused() {
-        let fits = format!("{}\n", "x".repeat(15));
-        let mut pending = Vec::new();
-        let read = read_json_line_bounded(
-            &mut BufReader::with_capacity(4, fits.as_bytes()),
-            &mut pending,
-            16,
-        )
-        .await
-        .unwrap();
-        assert_eq!(read, fits);
-        let too_long = format!("{}\n", "x".repeat(16));
-        let refused = read_json_line_bounded(
-            &mut BufReader::with_capacity(4, too_long.as_bytes()),
-            &mut pending,
-            16,
-        )
-        .await
-        .unwrap_err();
-        assert!(
-            refused.to_string().contains("maximum size of 16 bytes"),
-            "{refused}"
-        );
-    }
-
-    #[tokio::test]
-    async fn a_regenerate_sends_its_kind_reason_and_tags_under_the_request_id_it_returns() {
-        let (client_stream, server_stream) = tokio::io::duplex(4096);
-        let mut conn = SWPConnection::from_raw_stream(client_stream);
-        let rid = conn
-            .send_regen(true, true, Some("flat".into()), vec!["too long".into()])
-            .await
-            .unwrap()
-            .expect("a regenerate has a request id");
-        let mut line = String::new();
-        let _read = BufReader::new(server_stream)
-            .read_line(&mut line)
-            .await
-            .unwrap();
-        let sent: serde_json::Value = serde_json::from_str(&line).unwrap();
+        let mut fits = FrameStream::bounded(response(200, vec!["12345\n"]), 6);
         assert_eq!(
-            sent,
-            serde_json::json!({ "type": "regen", "rid": rid, "stream": true, "another_take": true, "reason": "flat", "tags": ["too long"] })
+            fits.next_line().await.unwrap().as_deref(),
+            Some("12345\n"),
+            "at the limit"
         );
-        assert!(rid.len() > 8, "{rid}");
+        let mut over = FrameStream::bounded(response(200, vec!["123456\n"]), 6);
+        let refused = over.next_line().await.unwrap_err().to_string();
+        assert!(refused.contains("maximum size of 6 bytes"), "{refused}");
+        let mut broken = FrameStream::bounded(
+            reqwest::Response::from(http::Response::new(reqwest::Body::from(vec![
+                0xff_u8, b'\n',
+            ]))),
+            6,
+        );
+        assert!(
+            broken
+                .next_line()
+                .await
+                .unwrap_err()
+                .to_string()
+                .contains("invalid UTF-8"),
+            "bytes that aren't UTF-8 are refused"
+        );
     }
 
     #[tokio::test]
-    async fn unreadable_attachment_prevents_the_entire_message_send() {
-        let temp = tempfile::tempdir().unwrap();
-        let readable = temp.path().join("readable.png");
-        std::fs::write(&readable, b"image bytes").unwrap();
-        let unreadable = temp.path().join("missing.png");
-        let paths = vec![
-            readable.to_string_lossy().into_owned(),
-            unreadable.to_string_lossy().into_owned(),
-        ];
-        let (client_stream, mut server_stream) = tokio::io::duplex(1024);
-        let mut conn = SWPConnection::from_raw_stream(client_stream);
-
-        let error = conn
-            .send_message_with_images("keep every image", true, paths)
-            .await
-            .unwrap_err();
-
-        assert!(
-            matches!(
-                error,
-                ClientError::AttachmentRead { ref path, .. }
-                    if path == &unreadable.to_string_lossy()
-            ),
-            "the failure should name the unreadable attachment: {error}"
+    async fn a_refusal_becomes_the_error_its_code_names() {
+        let refused = |status, body| refusal(response(status, vec![body]), "https://shore.example");
+        let unauthorized =
+            refused(401, r#"{"code":"unauthorized","message":"Not signed in."}"#).await;
+        assert_eq!(
+            unauthorized.to_string(),
+            "Not signed in. Sign in with `shore sign-in https://shore.example`",
+            "says how to sign in"
         );
+        let provider = refused(
+            502,
+            r#"{"code":"provider_error","message":"down","retry_after_ms":5}"#,
+        )
+        .await;
         assert!(
-            timeout(Duration::from_millis(10), server_stream.read_u8())
-                .await
-                .is_err(),
-            "no partial message should reach the daemon"
+            matches!(provider, ClientError::Provider { ref message, retry_after_ms: Some(5) } if message == "down"),
+            "{provider:?}"
+        );
+        let timeout = refused(
+            504,
+            r#"{"code":"timeout","message":"slow","retry_after_ms":7}"#,
+        )
+        .await;
+        assert!(
+            matches!(timeout, ClientError::Timeout { ref message, retry_after_ms: Some(7) } if message == "slow"),
+            "{timeout:?}"
+        );
+        let other = refused(404, r#"{"code":"not_found","message":"No thread named x"}"#).await;
+        assert!(
+            matches!(other, ClientError::Refused(ref message) if message == "No thread named x"),
+            "{other:?}"
+        );
+        let garbled = refused(502, "<html>").await;
+        assert_eq!(
+            garbled.to_string(),
+            "the daemon answered HTTP 502 Bad Gateway",
+            "not JSON"
         );
     }
-}
 
-#[cfg(test)]
-mod deadline_tests {
-    use super::{ClientError, HANDSHAKE_DEADLINE, SWPConnection, ServerAddr};
-    use crate::token::TokenSource;
+    #[test]
+    fn a_selection_names_only_the_character_and_thread_that_are_given() {
+        let name = |text: &str| Some(text.to_owned());
+        assert_eq!(
+            selection(name("ada").as_ref(), name("garden").as_ref()),
+            [
+                ("character", "ada".to_owned()),
+                ("thread", "garden".to_owned())
+            ],
+            "both"
+        );
+        assert_eq!(
+            selection(name("").as_ref(), name("garden").as_ref()),
+            [("thread", "garden".to_owned())],
+            "an empty character is none"
+        );
+        assert_eq!(
+            selection(name("ada").as_ref(), name("").as_ref()),
+            [("character", "ada".to_owned())],
+            "an empty thread is none"
+        );
+        assert!(selection(None, None).is_empty(), "nothing");
+    }
 
-    #[tokio::test(start_paused = true)]
-    async fn a_daemon_that_never_sends_hello_reaches_the_handshake_deadline() {
-        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
-        let address = ServerAddr(listener.local_addr().unwrap().to_string());
-        let started = tokio::time::Instant::now();
-        let attempt = tokio::spawn(async move {
-            SWPConnection::connect_in_thread(
-                &address,
-                "test",
-                "test",
-                None,
-                None,
-                &TokenSource::Given("test-token".into()),
-            )
-            .await
-        });
-        let (_silent, _) = listener.accept().await.unwrap();
-        let result = tokio::time::timeout(HANDSHAKE_DEADLINE * 6, attempt)
-            .await
-            .expect("connect_in_thread must enforce its own deadline, not hang")
-            .unwrap();
-        let elapsed = started.elapsed();
+    #[test]
+    fn only_the_output_of_the_command_last_sent_is_taken_as_its_answer() {
+        let conn = SWPConnection {
+            http: http_client().unwrap(),
+            base: "http://desk:7340".into(),
+            origin: "http://desk:7340".into(),
+            token: "t".into(),
+            character: None,
+            thread: None,
+            request: None,
+            events: None,
+            last_command: Some("status".into()),
+        };
+        let output = |name: &str| {
+            ServerMessage::CommandOutput(crate::protocol::server_msg::CommandOutput {
+                rid: None,
+                name: name.into(),
+                data: serde_json::Value::Null,
+            })
+        };
+        assert!(conn.matches_last_request(&output("status")), "its own");
         assert!(
-            elapsed >= HANDSHAKE_DEADLINE
-                && elapsed <= HANDSHAKE_DEADLINE + std::time::Duration::from_secs(1),
-            "the deadline is {HANDSHAKE_DEADLINE:?}, but the attempt ended after {elapsed:?}"
+            !conn.matches_last_request(&output("log")),
+            "another command's"
         );
         assert!(
-            matches!(result, Err(ClientError::Timeout { .. })),
-            "a silent daemon must end in the handshake deadline"
+            conn.matches_last_request(&ServerMessage::Unknown),
+            "every other frame"
+        );
+        assert_eq!(conn.origin(), "http://desk:7340", "its origin");
+        assert_eq!(
+            conn.url("/api/hello"),
+            "http://desk:7340/api/hello",
+            "its urls"
         );
     }
 }

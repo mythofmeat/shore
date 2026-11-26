@@ -1,7 +1,7 @@
 import { describe, expect, jest, spyOn, test } from "bun:test";
 
 import { HOLD, useApp } from "./app.ts";
-import { acting, button, click, mount, renderHook } from "./dom.ts";
+import { acting, button, click, mount, renderHook, type } from "./dom.ts";
 
 const app = useApp();
 
@@ -208,7 +208,7 @@ describe("pages and banners", () => {
   });
 
   test("a command line waiting to sign in is shown wherever the page is, until it is let in or refused, and only while the page is seen", async () => {
-    const { SignInRequestBanner } = await import("../../src/browser/app/banner.tsx");
+    const { ConnectionBanner } = await import("../../src/browser/app/banner.tsx");
     const { toasts } = await import("../../src/browser/ui/toast.tsx");
     jest.useFakeTimers();
     const connection = app.state().workspace.connection;
@@ -220,9 +220,9 @@ describe("pages and banners", () => {
     Object.defineProperty(document, "visibilityState", { configurable: true, get: () => visibility });
     app.restores.push(() => { jest.useRealTimers(); listed.mockRestore(); decided.mockRestore(); shown.mockRestore(); Reflect.deleteProperty(document, "visibilityState"); });
     const snapshot = app.state().workspace.getSnapshot();
-    const view = await mount(<SignInRequestBanner state={{ ...snapshot, status: "reconnecting" }} />);
-    expect([view.host.innerHTML, listed.mock.calls.length]).toEqual(["", 0]);
-    await view.update(<SignInRequestBanner state={{ ...snapshot, status: "ready" }} />);
+    const view = await mount(<ConnectionBanner state={{ ...snapshot, status: "reconnecting" }} />);
+    expect([view.host.textContent, listed.mock.calls.length]).toEqual(["Reconnecting…Retry now", 0]);
+    await view.update(<ConnectionBanner state={{ ...snapshot, status: "ready" }} />);
     await acting(() => Promise.resolve());
     expect([...view.host.querySelectorAll("[role=alert] span")].map((item) => item.textContent)).toEqual([
       "A command line on laptop wants to sign in, showing the code 4F7K.", "A command line on desktop wants to sign in, showing the code ZZ22.",
@@ -245,6 +245,33 @@ describe("pages and banners", () => {
     await view.unmount();
     await acting(() => { jest.advanceTimersByTime(5_000); });
     expect(listed.mock.calls.length).toBe(before + 1);
+  });
+
+  test("the sign-in page takes a code or a link, signs in with the code, and says why one didn't work", async () => {
+    const { SignIn } = await import("../../src/browser/app/SignIn.tsx");
+    const code = "c".repeat(43);
+    let outcome: Error | undefined = new Error("That code has expired or was already used. Show a new one.");
+    const signIn = spyOn(app.state().workspace.connection, "signIn").mockImplementation(async () => { await Promise.resolve(); if (outcome !== undefined) throw outcome; });
+    app.restores.push(() => { signIn.mockRestore(); });
+    const view = await mount(<SignIn detail="Connection stopped" />);
+    const field = view.host.querySelector("input");
+    const connect = button(view.host, "Connect");
+    expect([view.host.querySelector("h1")?.textContent, connect.disabled, view.host.querySelector("[role=alert]")]).toEqual(["Connect to your daemon", true, null]);
+    expect(view.host.querySelector(".signin-hint")?.textContent).toContain("shore devices link");
+    await type(field, "   ");
+    expect(connect.disabled, "white space is no code").toBe(true);
+    await type(field, `https://shore.example/#login=${code}`);
+    await click(connect);
+    await acting(() => Promise.resolve());
+    expect(signIn.mock.calls).toEqual([[code, "That code has expired or was already used. Show a new one."]]);
+    expect([view.host.querySelector("[role=alert]")?.textContent, field?.value]).toEqual(["That code has expired or was already used. Show a new one.", `https://shore.example/#login=${code}`]);
+    outcome = undefined;
+    await click(connect);
+    await acting(() => Promise.resolve());
+    expect([view.host.querySelector("[role=alert]"), field?.value]).toEqual([null, ""]);
+    await view.update(<SignIn detail="The token was rejected" />);
+    expect(view.host.querySelector("[role=alert]")?.textContent).toBe("The token was rejected");
+    await view.unmount();
   });
 
   test("the keyboard page lists the shortcuts as the switches set them, and keeps the switches", async () => {

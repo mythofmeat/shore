@@ -181,10 +181,10 @@ describe("running an operation over HTTP", () => {
     expect(types.at(-1)).toBe("request_finished");
     expect(frames.at(-1)).toMatchObject({ outcome: "completed" });
     expect(frames.filter((frame) => frame["type"] === "stream_chunk").map((frame) => frame["text"]).join("")).toBe("hello there");
-    expect(new Set(frames.map((frame) => frame["rid"]))).toEqual(new Set([frames[0]?.["rid"]]));
+    expect(new Set(frames.map((frame) => frame["rid"]))).toEqual(new Set([streamed.headers.get("shore-request")]));
 
     const answered = await post(place, "/api/op/message?character=ada", TOKEN, { text: "again", stream: false });
-    expect(await answered.json()).toMatchObject({ type: "request_finished", outcome: "completed" });
+    expect(await answered.json()).toMatchObject({ type: "request_finished", outcome: "completed", rid: answered.headers.get("shore-request") });
 
     const log = await (await post(place, "/api/op/log?character=ada", TOKEN, { count: 10 })).json() as { messages: { content: string }[] };
     expect(log.messages.map((message) => message.content)).toEqual(["hi", "hello there", "again", "hello there"]);
@@ -206,8 +206,75 @@ describe("running an operation over HTTP", () => {
   test("stopping work answers at once", async () => {
     const place = await daemon();
     const stopped = await post(place, "/api/op/cancel?character=ada", TOKEN);
-    expect(stopped.status).toBe(200);
+    expect([stopped.status, stopped.headers.get("shore-request")]).toEqual([200, null]);
     expect(await stopped.json()).toBeNull();
+  });
+});
+
+describe("what else a signed-in device can do", () => {
+  test("an archive comes down from an export and goes back up for an import, and only to the device that made it", async () => {
+    const place = await daemon();
+    const exported = await (await post(place, "/api/op/export_character", TOKEN, { character: "ada" })).json() as { transfer: string; bytes: number };
+    const download = (credential: string) => fetch(`${place.origin}/api/transfers/${exported.transfer}`, { headers: { authorization: `Bearer ${credential}` } });
+    const key = await automationKey(place, ["presence"]);
+    expect((await download(key.token)).status).toBe(403);
+    const got = await download(TOKEN);
+    expect([got.status, got.headers.get("content-type")]).toEqual([200, "application/x-tar"]);
+    const archive = new Uint8Array(await got.arrayBuffer());
+    expect(archive.length).toBe(exported.bytes);
+    expect((await download(TOKEN)).status).toBe(404);
+
+    const upload = (body: Uint8Array, type = "application/octet-stream") => fetch(`${place.origin}/api/transfers`, { method: "POST", body, headers: { authorization: `Bearer ${TOKEN}`, "content-type": type } });
+    expect((await upload(archive, "application/json")).status).toBe(400);
+    expect((await upload(new Uint8Array())).status).toBe(400);
+    const sent = await upload(archive);
+    const { transfer, bytes } = await sent.json() as { transfer: string; bytes: number };
+    expect(bytes).toBe(archive.length);
+    const refused = await post(place, "/api/op/import_archive", TOKEN, { transfer });
+    expect(await refused.json()).toEqual({ code: "invalid_request", message: "Refusing to overwrite existing character 'ada'" });
+    expect((await post(place, "/api/op/delete_character", TOKEN, { character: "ada", confirm: "ada" })).status).toBe(200);
+    const again = await (await upload(archive)).json() as { transfer: string };
+    const imported = await post(place, "/api/op/import_archive", TOKEN, { transfer: again.transfer });
+    expect(await imported.json()).toMatchObject({ characters: ["ada"] });
+  });
+
+  test("a device can follow a character's events as they happen, one JSON object per line", async () => {
+    const place = await daemon(replying("heard you"));
+    const events = await fetch(`${place.origin}/api/events?character=ada`, { headers: { authorization: `Bearer ${TOKEN}` } });
+    expect(events.headers.get("content-type")).toBe("application/x-ndjson");
+    const reader = required(events.body).pipeThrough(new TextDecoderStream()).getReader();
+    let text = "";
+    const heard = () => text.split("\n").slice(0, -1).map((line) => JSON.parse(line) as Record<string, unknown>);
+    const replied = () => heard().some((frame) => frame["type"] === "new_message" && frame["role"] === "assistant" && frame["content"] === "heard you");
+    expect((await post(place, "/api/op/message?character=ada", TOKEN, { text: "hello", stream: true })).status).toBe(200);
+    for (let next = await reader.read(); !replied(); next = await reader.read()) {
+      if (next.done) throw new Error(`the events ended first: ${text}`);
+      text += next.value;
+    }
+    expect(heard()[0]).toEqual({ type: "ping" });
+    await reader.cancel();
+    const key = await automationKey(place, ["presence"]);
+    for (const path of ["/api/events", "/api/hello"]) expect((await fetch(`${place.origin}${path}`, { headers: { authorization: `Bearer ${key.token}` } })).status).toBe(403);
+    expect((await fetch(`${place.origin}/api/transfers`, { method: "POST", body: "x", headers: { authorization: `Bearer ${key.token}`, "content-type": "application/octet-stream" } })).status).toBe(403);
+  });
+
+  test("a request still running when the daemon stops ends with an error saying so", async () => {
+    const { promise: held, resolve: release } = Promise.withResolvers<void>();
+    const holding = {
+      async *stream(request: SidecarRequest) { yield { type: "start", model: request.model }; yield { type: "text", text: "partial" }; await held; },
+      generate: () => { throw new Error("unused"); },
+    } as unknown as SidecarProvider;
+    const place = await daemon(holding);
+    const answer = await post(place, "/api/op/message?character=ada", TOKEN, { text: "hi", stream: true }, { accept: "application/x-ndjson" });
+    const reader = required(answer.body).pipeThrough(new TextDecoderStream()).getReader();
+    let text = "";
+    while (!text.includes("partial")) text += (await reader.read()).value ?? "";
+    const stopping = running.at(-1);
+    stopping?.stop();
+    for (let next = await reader.read(); !next.done; next = await reader.read()) text += next.value;
+    release();
+    const last = JSON.parse(text.trim().split("\n").at(-1) ?? "{}") as { type: string; message: string };
+    expect(last).toMatchObject({ type: "error", message: "The daemon stopped before the request finished" });
   });
 });
 

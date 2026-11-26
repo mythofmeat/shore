@@ -18,7 +18,7 @@ import type { GenerateResponse, SidecarProvider, SidecarRequest } from "../src/l
 import { stopBackgroundCompactions } from "../src/memory/compaction/background.ts";
 import { runCompaction, runCompactionPass, type ArchiveDeps } from "../src/memory/compaction/run.ts";
 import { threadFile, writeDurable } from "../src/storage/files.ts";
-import { DEFAULT_HANDSHAKE } from "../src/swp/connection.ts";
+import { DEFAULT_HANDSHAKE } from "../src/swp/handshake.ts";
 import { SessionRouter } from "../src/swp/session.ts";
 import { CharacterWorkspace } from "../src/tools/character_workspace.ts";
 import { afterFirstChat } from "./support/chat_world.ts";

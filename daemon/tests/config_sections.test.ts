@@ -8,7 +8,7 @@ import { resolvedReasoningReplay } from "../src/config/models.ts";
 import { ProviderRegistry } from "../src/config/providers.ts";
 import { restartRequiredChanges } from "../src/config/restart.ts";
 import { attemptMatrixBridge, unusableReason } from "../src/connections/matrix/start.ts";
-import { resolveListenAddr } from "../src/daemon/startup.ts";
+import { resolveWebConfig } from "../src/daemon/startup.ts";
 import { shoreLog } from "../src/log.ts";
 import type { ToolContext } from "../src/tools/dispatch.ts";
 import { buildToolContext } from "../src/handler/tool_context.ts";
@@ -124,21 +124,25 @@ test("the browser listener's address is checked only while it is on, and image s
   expect(await outcomeOf(load("[images]\nquality = 0\n"))).toThrow(/^images\.quality is 0; it must be from 1 to 100$/);
 });
 
-test("[daemon] holds the address Shore listens on and the cache forensics switch, and a change to it, to [matrix] or to [notifications] needs a restart", async () => {
+test("[daemon] holds the web listener, on by default, and the cache forensics switch; the old TCP address is refused by name; a change to it, to [matrix] or to [notifications] needs a restart", async () => {
   const root = await mkdtemp(testTmp("shore-config-sections-"));
   const loaded = async (toml: string) => {
     await writeFile(join(root, "config.toml"), toml);
     return loadConfig(join(root, "config.toml"), { env: { SHORE_CONFIG_DIR: root }, onWarn: () => {} });
   };
   const plain = await loaded('[chat]\ndisplay_name = "eve"\n');
-  expect([plain.app.daemon.listen_addr, plain.app.daemon.cache_forensics]).toEqual(["127.0.0.1:7320", false]);
-  const set = await loaded('[daemon]\nlisten_addr = "0.0.0.0:7000"\ncache_forensics = true\n');
-  expect([set.app.daemon.listen_addr, set.app.daemon.cache_forensics]).toEqual(["0.0.0.0:7000", true]);
+  expect([plain.app.daemon.web.enabled, plain.app.daemon.web.bind_addr, plain.app.daemon.cache_forensics]).toEqual([true, "127.0.0.1:7340", false]);
+  const set = await loaded('[daemon]\ncache_forensics = true\n[daemon.web]\nbind_addr = "0.0.0.0:7000"\n');
+  expect([set.app.daemon.web.bind_addr, set.app.daemon.cache_forensics]).toEqual(["0.0.0.0:7000", true]);
+  expect(await outcomeOf(loaded('[daemon]\nlisten_addr = "0.0.0.0:7320"\n'))).toThrow("daemon.listen_addr is gone with the raw TCP port");
 
-  expect(resolveListenAddr(undefined, undefined, set)).toEqual(["0.0.0.0:7000", "config"]);
-  expect(resolveListenAddr(undefined, "  ", set)).toEqual(["0.0.0.0:7000", "config"]);
-  expect(resolveListenAddr(undefined, "10.0.0.1:1", set)).toEqual(["10.0.0.1:1", "env"]);
-  expect(resolveListenAddr("10.0.0.2:2", "10.0.0.1:1", set)).toEqual(["10.0.0.2:2", "cli"]);
+  const web = set.app.daemon.web;
+  expect(resolveWebConfig(web, {})).toEqual([web, "config"]);
+  expect(resolveWebConfig(web, { SHORE_WEB_ADDR: "  " })).toEqual([web, "config"]);
+  expect(resolveWebConfig({ ...web, enabled: false }, { SHORE_WEB_ADDR: "10.0.0.1:1" })).toEqual([{ ...web, enabled: true, bind_addr: "10.0.0.1:1" }, "env"]);
+  expect(resolveWebConfig(web, { SHORE_WEB_ADDR: "10.0.0.1:1" }, " 10.0.0.2:2 ")).toEqual([{ ...web, bind_addr: "10.0.0.2:2" }, "cli"]);
+  expect(() => resolveWebConfig(web, {}, "nowhere")).toThrow('Invalid --addr "nowhere"');
+  expect(() => resolveWebConfig(web, { SHORE_WEB_ADDR: "nowhere" })).toThrow('Invalid SHORE_WEB_ADDR "nowhere"');
 
   expect(restartRequiredChanges(plain, plain)).toEqual([]);
   expect(restartRequiredChanges(plain, set)).toEqual(["[daemon]"]);
