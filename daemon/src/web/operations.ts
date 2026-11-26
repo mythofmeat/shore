@@ -6,7 +6,7 @@ import type { ClientMessage } from "../protocol/ClientMessage.ts";
 import type { Error as ProtocolError } from "../protocol/Error.ts";
 import type { ErrorCode } from "../protocol/ErrorCode.ts";
 import type { ServerMessage } from "../protocol/ServerMessage.ts";
-import { AdmissionError, admitClientMessage } from "../swp/admission.ts";
+import { admitClientMessage } from "../swp/admission.ts";
 import { MULTIMODAL_TOOL_RESULTS } from "../swp/content_projection.ts";
 import { decodeClientMessage, WireError } from "../swp/framing.ts";
 import { encodeServerMessage } from "../swp/outbound.ts";
@@ -51,16 +51,14 @@ export async function* runRequest(server: Server, request: OneOffRequest): Async
   });
   try {
     const events = peer.events();
-    const sent = peer.send(request.message);
-    sent.catch((error: unknown) => { abort.abort(error); });
-    if (request.message.type === "cancel") { await sent; return; }
+    await peer.send(request.message);
+    if (request.message.type === "cancel") return;
     const rid = request.message.rid;
     for await (const frame of events) {
       if (!("rid" in frame) || frame.rid !== rid) continue;
       yield frame;
-      if (frame.type === "request_finished") { await sent; return; }
+      if (frame.type === "request_finished") return;
     }
-    await sent;
     signal.throwIfAborted();
     throw new Error("The daemon stopped before the request finished");
   } finally { await peer.detach(); }
@@ -95,12 +93,13 @@ async function argumentsOf(request: Request): Promise<unknown> {
 
 export function requestMessage(name: string, args: unknown, rid: string): OneOffMessage {
   if (name === "cancel") return { type: "cancel" };
-  const raw = name === "message" || name === "regen"
-    ? decodeClientMessage({ ...(typeof args === "object" && args !== null && !Array.isArray(args) ? args : {}), type: name, rid })
-    : { type: "command", name, args, rid };
-  const admitted = admitClientMessage(raw);
-  if (admitted.type === "hello") throw new AdmissionError("A request can't be a hello");
-  return admitted;
+  let raw: unknown = { type: "command", name, args, rid };
+  if (name === "message" || name === "regen") {
+    const fields = typeof args === "object" && args !== null && !Array.isArray(args) ? args : undefined;
+    if (fields === undefined) throw new WireError(`Send the ${name}'s fields as a JSON object`);
+    raw = decodeClientMessage({ ...fields, type: name, rid });
+  }
+  return admitClientMessage(raw) as OneOffMessage;
 }
 
 export interface OperationCall {
@@ -123,8 +122,7 @@ export async function operationResponse(request: Request, call: OperationCall): 
   const rid = `http-${crypto.randomUUID()}`;
   let message: OneOffMessage;
   try { message = requestMessage(name, args, rid); } catch (error) {
-    if (error instanceof AdmissionError || error instanceof WireError) return refused("invalid_request", error.message);
-    throw error;
+    return refused("invalid_request", error instanceof Error ? error.message : String(error));
   }
   const url = new URL(request.url);
   const controller = new AbortController();
@@ -155,13 +153,12 @@ export interface EventCall {
 export async function eventResponse(request: Request, call: EventCall): Promise<Response> {
   call.holdOpen();
   const url = new URL(request.url);
-  const controller = new AbortController();
   let behind = false;
   let peer: LocalPeer;
   try {
     peer = await call.server.attachLocal({
       clientType: "http", clientName: call.clientName, owner: call.owner, history: false,
-      capabilities: ["streaming", "history-deltas", MULTIMODAL_TOOL_RESULTS], signal: AbortSignal.any([request.signal, controller.signal]),
+      capabilities: ["streaming", "history-deltas", MULTIMODAL_TOOL_RESULTS], signal: request.signal,
       character: selected(url, "character"), thread: selected(url, "thread"),
       outboundLimits: { messages: WEB_LIMITS.queuedMessages, bytes: call.queuedBytes, coalesceStreams: true, onOverflow: () => { behind = true; } },
     });
@@ -170,7 +167,7 @@ export async function eventResponse(request: Request, call: EventCall): Promise<
   }
   const events = peer.events();
   let ping: ReturnType<typeof setInterval> | undefined;
-  const end = async () => { clearInterval(ping); controller.abort(); await peer.detach(); };
+  const end = async () => { clearInterval(ping); await peer.detach(); };
   const stream = new ReadableStream<Uint8Array>({
     start(output) {
       output.enqueue(line({ type: "ping" }));
@@ -198,21 +195,20 @@ function streamed(frames: AsyncGenerator<ServerMessage, void>, controller: Abort
       ping = setInterval(() => { output.enqueue(encoder.encode(`${encodeServerMessage({ type: "ping" }).text}\n`)); }, PING_MS);
     },
     async pull(output) {
-      try {
-        const next = await frames.next();
-        if (next.done) { clearInterval(ping); output.close(); return; }
-        output.enqueue(encoder.encode(`${encodeServerMessage(next.value).text}\n`));
-      } catch (error) {
-        clearInterval(ping);
+      let next: IteratorResult<ServerMessage, void>;
+      try { next = await frames.next(); } catch (error) {
         const message = error instanceof Error ? error.message : String(error);
         output.enqueue(encoder.encode(`${JSON.stringify({ type: "error", code: "internal_error", message })}\n`));
-        output.close();
+        next = { done: true, value: undefined };
       }
+      if (next.done === true) {
+        clearInterval(ping);
+        output.close();
+      } else output.enqueue(encoder.encode(`${encodeServerMessage(next.value).text}\n`));
     },
-    async cancel() {
+    cancel() {
       clearInterval(ping);
       controller.abort(new Error("The client stopped reading"));
-      await frames.return();
     },
   });
   const headers = securityHeaders();
@@ -236,6 +232,5 @@ async function answered(name: string, frames: AsyncGenerator<ServerMessage, void
   } catch (failed) {
     return refused("internal_error", failed instanceof Error ? failed.message : String(failed));
   }
-  if (error !== undefined) return failure(error);
   return Response.json(null, { headers: securityHeaders() });
 }
