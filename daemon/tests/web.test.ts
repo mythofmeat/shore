@@ -831,6 +831,115 @@ describe("a browser's socket", () => {
   });
 });
 
+describe("a browser's socket, once it is in", () => {
+  const sessionOf = (f: Awaited<ReturnType<typeof fixture>>) => required(f.swp.sessionRouter.sessions()[0])[0];
+  const small = { ...defaultWebConfig(), enabled: true, bind_addr: "127.0.0.1:0", max_queued_bytes: 4096 };
+
+  test("isn't timed out by its hello deadline once it has attached", async () => {
+    const f = await fixture({ handshakeTimeoutMs: 100 }); f.web.activate();
+    const browser = connectBrowser(f.web.origin, (await f.login()).cookie);
+    await browser.attach();
+    await Bun.sleep(250);
+    expect(browser.socket.readyState).toBe(WebSocket.OPEN);
+  });
+
+  test("that can't attach is told so and let go, and every socket is let go when the daemon stops", async () => {
+    const f = await fixture({}, {
+      hello: async () => { await Promise.resolve(); throw new Error("the characters can't be read"); },
+      select: (character) => Promise.resolve({ character, thread: null }),
+      history: () => Promise.reject(new Error("unused")),
+    }); f.web.activate();
+    const { cookie } = await f.login();
+    const refused = connectBrowser(f.web.origin, cookie);
+    await refused.opened;
+    refused.send({ type: "hello", client_type: "web", client_name: "test-tab", capabilities: [], character: "ada", thread: "main" });
+    expect(await refused.frame("error")).toEqual({ type: "error", code: "internal_error", message: "Could not attach the browser session" });
+    expect([(await refused.closed).code, refused.closeDetail]).toEqual([1012, "1012 Session ended; reconnect to refresh history"]);
+    const g = await fixture(); g.web.activate();
+    const browser = connectBrowser(g.web.origin, (await g.login()).cookie);
+    await browser.attach();
+    g.swp.stop();
+    expect((await browser.closed).code).toBe(1012);
+  });
+
+  test("gets a stream whole however far behind it is, but one that outgrows its queue is closed and told to reconnect", async () => {
+    const f = await fixture({ config: small }); f.web.activate();
+    const browser = connectBrowser(f.web.origin, (await f.login()).cookie);
+    await browser.attach();
+    const session = sessionOf(f);
+    for (let sent = 0; sent < 300; sent += 1) void f.swp.sessionRouter.sendToSession(session, { type: "stream_chunk", rid: "r", text: "ab", content_type: "text" });
+    const streamed = () => browser.messages.filter((frame) => frame.type === "stream_chunk").map((frame) => frame.type === "stream_chunk" ? frame.text : "").join("");
+    await until(() => streamed().length === 600, "the whole stream");
+    expect(browser.socket.readyState).toBe(WebSocket.OPEN);
+    for (let sent = 0; sent < 300; sent += 1) f.swp.broadcast({ type: "cache_warning", message: "x".repeat(1500), expected_tokens: sent });
+    expect([(await browser.closed).code, browser.closeDetail]).toEqual([1013, "1013 Outgoing limit reached; reconnect to refresh history"]);
+  });
+
+  test("gets a history larger than its queue", async () => {
+    const f = await fixture({ config: { ...small, max_queued_bytes: 1024 } }, {
+      hello: async () => ({ characters: [{ name: "ada" }] }),
+      select: (character) => Promise.resolve({ character, thread: null }),
+      history: async (selected, thread) => ({ messages: [], previousSegment: null, config: { notes: "x".repeat(5000) }, selectedCharacter: selected, selectedThread: thread ?? "main", revision: 0 }),
+    }); f.web.activate();
+    const browser = connectBrowser(f.web.origin, (await f.login()).cookie);
+    await browser.attach();
+    expect(browser.socket.readyState).toBe(WebSocket.OPEN);
+  });
+
+  test("a request that finished while its browser was away is told to the next socket, once", async () => {
+    const f = await fixture(); f.web.activate();
+    const { cookie } = await f.login();
+    const first = connectBrowser(f.web.origin, cookie);
+    await first.attach();
+    const rid = crypto.randomUUID();
+    first.send({ type: "message", rid, text: "hello" });
+    await until(() => f.routed.some((route) => route.kind === "engine" && route.meta.rid === rid), "the request to reach the daemon");
+    const session = sessionOf(f);
+    await first.close();
+    await until(() => f.swp.sessionRouter.sessions().length === 0, "the first socket to let go");
+    await f.finish(session, { type: "request_finished", rid, outcome: "completed" });
+    const second = connectBrowser(f.web.origin, cookie);
+    await second.attach();
+    expect(await second.frame("request_finished", rid)).toMatchObject({ rid, outcome: "completed" });
+    await second.close();
+    const third = connectBrowser(f.web.origin, cookie);
+    await third.attach();
+    await Bun.sleep(50);
+    expect(third.messages.filter((frame) => frame.type === "request_finished")).toEqual([]);
+  });
+
+  test("counts a request of exactly its queue as fitting", async () => {
+    const f = await fixture({ config: { ...small, max_queued_bytes: 1024 } }); f.web.activate();
+    const browser = connectBrowser(f.web.origin, (await f.login()).cookie);
+    await browser.attach();
+    const base = JSON.stringify({ type: "command", rid: "exact", name: "status", args: { pad: "" } });
+    browser.socket.send(base.replace('"pad":""', `"pad":"${"x".repeat(1024 - base.length)}"`));
+    await until(() => f.routed.some((route) => route.kind === "command" && route.meta.rid === "exact"), "a request the size of the queue to be taken");
+  });
+
+  test("takes 128 messages in its first second, its hello among them, and closes on the next", async () => {
+    const f = await fixture(); f.web.activate();
+    const browser = connectBrowser(f.web.origin, (await f.login()).cookie);
+    await browser.attach();
+    for (let sent = 0; sent < 127; sent += 1) browser.send({ type: "command", rid: `r${String(sent)}`, name: "status", args: {} });
+    await until(() => browser.messages.filter((frame) => frame.type === "error").length === 95, "the burst past the 32 pending requests to be refused");
+    expect(browser.socket.readyState).toBe(WebSocket.OPEN);
+    browser.send({ type: "command", rid: "one-too-many", name: "status", args: {} });
+    expect([(await browser.closed).code, browser.closeDetail]).toEqual([1008, "1008 Request rate limit reached"]);
+  });
+
+  test("takes as many bytes in its first second, its hello among them, as one message may hold", async () => {
+    const f = await fixture(); f.web.activate();
+    const browser = connectBrowser(f.web.origin, (await f.login()).cookie);
+    await browser.attach();
+    const hello = JSON.stringify({ type: "hello", client_type: "web", client_name: "test-tab", capabilities: ["history-deltas"], character: "ada", thread: "main" });
+    const base = JSON.stringify({ type: "command", rid: "huge", name: "status", args: { pad: "" } });
+    browser.socket.send(base.replace('"pad":""', `"pad":"${"x".repeat(WEB_LIMITS.messageBytes - hello.length - base.length)}"`));
+    await until(() => f.routed.some((route) => route.kind === "command" && route.meta.rid === "huge"), "the largest request there may be to be taken");
+    expect(browser.socket.readyState).toBe(WebSocket.OPEN);
+  });
+});
+
 describe("a request that fails inside the daemon", () => {
   test("a body too large is refused, and anything else is the daemon's own failure, for a browser and for a device alike", async () => {
     const f = await fixture(); f.web.activate();

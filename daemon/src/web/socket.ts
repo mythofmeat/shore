@@ -166,22 +166,19 @@ export class WebSocketPeers {
     try {
       const peer = await this.#server.attachLocal({
         clientType: "web", clientName: hello.client_name, owner: state.auth.id, capabilities: [...new Set([...hello.capabilities, REQUEST_LIFECYCLE_CAPABILITY])],
-        ...(hello.character === null || hello.character === undefined ? {} : { character: hello.character }),
-        ...(hello.thread === null || hello.thread === undefined ? {} : { thread: hello.thread }),
+        character: hello.character ?? undefined, thread: hello.thread ?? undefined,
         signal: state.abort.signal,
         prepareMessage: (message) => this.#prepare(socket, message),
         outboundLimits: { messages: WEB_LIMITS.queuedMessages, bytes: this.#maxBytes, largeHistory: true, coalesceStreams: true,
           onOverflow: () => { this.close(socket, 1013, "Outgoing limit reached; reconnect to refresh history"); } },
       });
       state.peer = peer;
-      if (state.abort.signal.aborted) { await peer.detach(); return; }
       clearTimeout(state.helloTimer);
       state.phase = "ready";
       await this.#write(socket, { type: "hello", v: SWP_V1, server_name: "shore-daemon", characters: [...peer.characters] });
       const unannounced = this.#unannounced.get(state.auth.id) ?? [];
       this.#unannounced.delete(state.auth.id);
       for await (const message of peer.events()) {
-        if (state.abort.signal.aborted) break;
         await this.#write(socket, message);
         if (message.type === "history") for (const finished of unannounced.splice(0)) this.#send(socket, finished);
       }
