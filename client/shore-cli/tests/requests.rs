@@ -184,3 +184,26 @@ fn the_version_probe_needs_no_sign_in_and_tells_a_shore_daemon_from_anything_els
         "{elsewhere:?}"
     );
 }
+
+#[test]
+fn a_thread_named_with_the_flag_that_doesn_t_exist_stops_only_commands_that_read_it() {
+    let stand_in = StandIn::start(&["ada"], None, |_, frame| {
+        if frame.get("type").and_then(Value::as_str) == Some("hello") {
+            return vec![
+                json!({ "type": "history", "selected_character": "ada", "selected_thread": "main" }),
+            ];
+        }
+        vec![
+            json!({ "type": "command_output", "name": at(frame, &["name"]), "rid": at(frame, &["rid"]), "data": { "statuses": [], "history": [] } }),
+        ]
+    });
+    let home = tempfile::tempdir().unwrap();
+    let status = run(&stand_in, home.path(), &["--thread", "attic", "presence"]);
+    assert!(status.status.success(), "{status:?}");
+    let reading = run(&stand_in, home.path(), &["--thread", "attic", "log"]);
+    assert!(!reading.status.success(), "{reading:?}");
+    assert!(
+        String::from_utf8_lossy(&reading.stderr).contains("you asked for it with --thread"),
+        "{reading:?}"
+    );
+}

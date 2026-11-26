@@ -37,10 +37,7 @@ pub async fn sign_in<F: FnOnce(&WebSignInPending)>(
     shown: F,
 ) -> Result<String> {
     let base = addr.base_url();
-    let http = reqwest::Client::builder()
-        .user_agent(concat!("shore/", env!("CARGO_PKG_VERSION")))
-        .build()
-        .map_err(|e| ClientError::Connect(e.to_string()))?;
+    let http = reqwest::Client::new();
     let secret = secret()?;
     let started = http
         .post(format!("{base}/api/sign-in"))

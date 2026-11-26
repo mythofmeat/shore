@@ -142,13 +142,6 @@ async fn refusal(response: reqwest::Response, origin: &str) -> ClientError {
     }
 }
 
-fn http_client() -> Result<reqwest::Client> {
-    reqwest::Client::builder()
-        .user_agent(concat!("shore/", env!("CARGO_PKG_VERSION")))
-        .build()
-        .map_err(|e| ClientError::Connect(e.to_string()))
-}
-
 fn version_of(response: &reqwest::Response) -> Option<String> {
     response
         .headers()
@@ -212,7 +205,7 @@ impl SWPConnection {
         let credential = token
             .resolve(&origin)
             .map_err(|e| ClientError::Unauthorized(e.to_string()))?;
-        let http = http_client()?;
+        let http = reqwest::Client::new();
         debug!(base = %base, character = ?character, thread = ?thread, "asking the daemon who it serves");
         let asked = http
             .get(format!("{base}/api/hello"))
@@ -262,7 +255,9 @@ impl SWPConnection {
 
     pub async fn probe(addr: &ServerAddr, deadline: std::time::Duration) -> Result<ServerHello> {
         let base = addr.base_url();
-        let asked = http_client()?.get(format!("{base}/api/hello")).send();
+        let asked = reqwest::Client::new()
+            .get(format!("{base}/api/hello"))
+            .send();
         let response = tokio::time::timeout(deadline, asked)
             .await
             .map_err(|_| hello_deadline())?
@@ -745,7 +740,7 @@ mod tests {
     #[test]
     fn only_the_output_of_the_command_last_sent_is_taken_as_its_answer() {
         let conn = SWPConnection {
-            http: http_client().unwrap(),
+            http: reqwest::Client::new(),
             base: "http://desk:7340".into(),
             origin: "http://desk:7340".into(),
             token: "t".into(),

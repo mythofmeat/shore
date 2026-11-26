@@ -10,10 +10,14 @@ type Failure = Box<dyn std::error::Error>;
 const POLL_EVERY: Duration = Duration::from_secs(2);
 
 fn this_computer() -> String {
-    std::process::Command::new("hostname")
-        .output()
+    std::fs::read_to_string("/proc/sys/kernel/hostname")
         .ok()
-        .and_then(|out| String::from_utf8(out.stdout).ok())
+        .or_else(|| {
+            std::process::Command::new("hostname")
+                .output()
+                .ok()
+                .and_then(|out| String::from_utf8(out.stdout).ok())
+        })
         .map(|name| name.trim().to_owned())
         .filter(|name| !name.is_empty())
         .unwrap_or_else(|| "command line".to_owned())

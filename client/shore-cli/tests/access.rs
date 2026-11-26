@@ -378,3 +378,21 @@ fn a_cli_that_isnt_signed_in_is_told_how_to_sign_in() {
         stderr(&unsigned)
     );
 }
+
+#[test]
+fn a_sign_in_without_a_name_goes_by_this_computer_s_name() {
+    let (daemon, asked) = signing_in(vec![(403, json!({ "code": "forbidden", "message": "no" }))]);
+    let home = tempfile::tempdir().unwrap();
+    let _output = shore_in(home.path(), &daemon.addr)
+        .env("SHORE_SIGN_IN_POLL_MS", "5")
+        .args(["sign-in", &daemon.addr])
+        .output()
+        .unwrap();
+    let expected = std::fs::read_to_string("/proc/sys/kernel/hostname")
+        .unwrap()
+        .trim()
+        .to_owned();
+    assert!(!expected.is_empty(), "the test machine has a name");
+    let requests = asked.lock().unwrap().clone();
+    assert_eq!(at(nth(&requests, 0), &["body", "name"]), expected.as_str());
+}
