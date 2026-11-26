@@ -1252,6 +1252,17 @@ pub(crate) enum ThreadCommand {
         pins: Vec<String>,
     },
 
+    /// Show the system prompt a thread's next request sends, part by part, and what each of its pins shows
+    Prompt {
+        /// Thread id
+        #[arg(add = values(Completes::Threads))]
+        name: String,
+
+        /// Read the pinned files and run the pinned commands again first, as a long pause in the thread does; the next request then misses the prompt cache
+        #[arg(long)]
+        refresh: bool,
+    },
+
     /// Lock a thread's label, purpose and pins, so only you change them. The character can still edit the pinned files themselves
     Lock {
         /// Thread id
@@ -2423,6 +2434,14 @@ pub(crate) fn to_swp_command(
             ThreadCommand::Pins { name, pins } => {
                 Some(("thread_pins", json!({ "name": name, "pins": pins })))
             }
+            ThreadCommand::Prompt { name, refresh } => Some((
+                if *refresh {
+                    "thread_prompt_refresh"
+                } else {
+                    "thread_prompt"
+                },
+                json!({ "name": name }),
+            )),
             ThreadCommand::Lock { name } => {
                 Some(("thread_lock", json!({ "name": name, "locked": true })))
             }

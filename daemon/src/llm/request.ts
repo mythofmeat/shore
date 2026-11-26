@@ -199,6 +199,13 @@ export function parseDurationMs(raw: string): number | undefined {
   }
 }
 
+const DEFAULT_CACHE_TTL_SECS = 3_600;
+
+export function cacheTtlSecs(model: { readonly cacheTtl?: string | undefined }): number {
+  const ms = model.cacheTtl === undefined ? undefined : parseDurationMs(model.cacheTtl);
+  return ms === undefined ? DEFAULT_CACHE_TTL_SECS : ms / 1000;
+}
+
 export function buildRequest(
   model: ResolvedModel,
   inputs: BuildInputs,

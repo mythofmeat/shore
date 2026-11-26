@@ -1866,6 +1866,38 @@
             "properties": {
               "name": {
                 "type": "string",
+                "const": "thread_prompt"
+              },
+              "data": {
+                "$ref": "#/$defs/ThreadPromptView"
+              }
+            },
+            "required": [
+              "name",
+              "data"
+            ]
+          },
+          {
+            "type": "object",
+            "properties": {
+              "name": {
+                "type": "string",
+                "const": "thread_prompt_refresh"
+              },
+              "data": {
+                "$ref": "#/$defs/ThreadPromptView"
+              }
+            },
+            "required": [
+              "name",
+              "data"
+            ]
+          },
+          {
+            "type": "object",
+            "properties": {
+              "name": {
+                "type": "string",
                 "const": "thread_lock"
               },
               "data": {
@@ -9848,6 +9880,84 @@
         "enum": [
           "full",
           "last_turns"
+        ]
+      },
+      "ThreadPromptView": {
+        "type": "object",
+        "properties": {
+          "thread": {
+            "type": "string"
+          },
+          "parts": {
+            "type": "array",
+            "items": {
+              "$ref": "#/$defs/ThreadPromptPart"
+            }
+          },
+          "pins": {
+            "type": "array",
+            "items": {
+              "$ref": "#/$defs/ThreadPinStatus"
+            }
+          }
+        },
+        "required": [
+          "thread",
+          "parts",
+          "pins"
+        ]
+      },
+      "ThreadPromptPart": {
+        "type": "object",
+        "properties": {
+          "label": {
+            "type": "string"
+          },
+          "text": {
+            "type": "string"
+          },
+          "changed": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "label",
+          "text",
+          "changed"
+        ]
+      },
+      "ThreadPinStatus": {
+        "type": "object",
+        "properties": {
+          "pin": {
+            "type": "string"
+          },
+          "bytes": {
+            "type": "integer",
+            "format": "uint",
+            "minimum": 0
+          },
+          "shown": {
+            "$ref": "#/$defs/PinShown"
+          },
+          "changed": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "pin",
+          "bytes",
+          "shown",
+          "changed"
+        ]
+      },
+      "PinShown": {
+        "type": "string",
+        "enum": [
+          "whole",
+          "cut",
+          "left_out",
+          "nothing"
         ]
       },
       "ThreadUnread": {
@@ -11343,6 +11453,38 @@
             "properties": {
               "name": {
                 "type": "string",
+                "const": "thread_prompt"
+              },
+              "data": {
+                "$ref": "#/$defs/ThreadPromptView"
+              }
+            },
+            "required": [
+              "name",
+              "data"
+            ]
+          },
+          {
+            "type": "object",
+            "properties": {
+              "name": {
+                "type": "string",
+                "const": "thread_prompt_refresh"
+              },
+              "data": {
+                "$ref": "#/$defs/ThreadPromptView"
+              }
+            },
+            "required": [
+              "name",
+              "data"
+            ]
+          },
+          {
+            "type": "object",
+            "properties": {
+              "name": {
+                "type": "string",
                 "const": "thread_lock"
               },
               "data": {
@@ -19325,6 +19467,84 @@
         "enum": [
           "full",
           "last_turns"
+        ]
+      },
+      "ThreadPromptView": {
+        "type": "object",
+        "properties": {
+          "thread": {
+            "type": "string"
+          },
+          "parts": {
+            "type": "array",
+            "items": {
+              "$ref": "#/$defs/ThreadPromptPart"
+            }
+          },
+          "pins": {
+            "type": "array",
+            "items": {
+              "$ref": "#/$defs/ThreadPinStatus"
+            }
+          }
+        },
+        "required": [
+          "thread",
+          "parts",
+          "pins"
+        ]
+      },
+      "ThreadPromptPart": {
+        "type": "object",
+        "properties": {
+          "label": {
+            "type": "string"
+          },
+          "text": {
+            "type": "string"
+          },
+          "changed": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "label",
+          "text",
+          "changed"
+        ]
+      },
+      "ThreadPinStatus": {
+        "type": "object",
+        "properties": {
+          "pin": {
+            "type": "string"
+          },
+          "bytes": {
+            "type": "integer",
+            "format": "uint",
+            "minimum": 0
+          },
+          "shown": {
+            "$ref": "#/$defs/PinShown"
+          },
+          "changed": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "pin",
+          "bytes",
+          "shown",
+          "changed"
+        ]
+      },
+      "PinShown": {
+        "type": "string",
+        "enum": [
+          "whole",
+          "cut",
+          "left_out",
+          "nothing"
         ]
       },
       "ThreadUnread": {

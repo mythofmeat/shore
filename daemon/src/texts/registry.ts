@@ -216,7 +216,7 @@ export const SYSTEM_TEXTS: readonly TextSpec[] = [
     label: "its label, when it has one",
     purpose: "its purpose, when it has one",
   }),
-  text("thread_pins", engine__thread_pins, "The heading of the system prompt's thread_pins part."),
+  text("thread_pins", engine__thread_pins, "The heading of the system prompt's thread_pins part.", { home: "set in the home thread, where a long pause doesn't refresh the pins" }),
   text("pinned_file", engine__pinned_file, "A file pinned to a thread, in its thread_pins part.", { path: "the file's path", content: "what is in it, when anything is" }),
   text("pinned_command", engine__pinned_command, "A command pinned to a thread, in its thread_pins part.", { command: "the command", output: "what it printed, once it has run" }),
   text("pin_left_out", engine__pin_left_out, "In place of a pin that doesn't fit in what a thread's pins can take together.", { limit: "how much they can take, like 128 KB", path: "the file, when the pin is a file" }),
