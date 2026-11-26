@@ -1,6 +1,7 @@
 import { IDBFactory } from "fake-indexeddb";
 
 import type { BrowserConnection } from "../../src/browser/connection.ts";
+import type { WebRequestInfo } from "../../src/protocol/WebRequestInfo.ts";
 
 export interface SocketEvent { data?: unknown; code?: number; reason?: string }
 export type Answer = (request: Record<string, unknown>) => unknown;
@@ -54,8 +55,11 @@ export const keptSettings = { values: {} as Record<string, string>, lists: 0, sa
 
 export function forgetKeptSettings(): void { Object.assign(keptSettings, { values: {}, lists: 0, saves: [] }); }
 
+export const daemonRequests: WebRequestInfo[] = [];
+
 async function answerPage(path: string, init: RequestInit = {}): Promise<Response> {
   await Promise.resolve();
+  if (path === "/api/requests/list") return Response.json({ requests: daemonRequests, max_records: 32, max_result_bytes: 65_536 });
   if (path === "/api/preferences/list") keptSettings.lists += 1;
   else if (path === "/api/preferences") {
     const { values } = JSON.parse(init.body as string) as { values: Record<string, string> };

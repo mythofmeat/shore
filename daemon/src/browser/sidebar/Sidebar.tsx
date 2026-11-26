@@ -79,7 +79,7 @@ function CharacterRow({ state, character, selected, openingThis, ready, select }
   </div>;
 }
 
-const presence = new PresenceStore(async (args) => await workspace.actions.run("presence", args), (error) => toasts.show(errorText(error), "error"));
+const presence = new PresenceStore(async (args) => await workspace.actions.run("presence", args), (error) => toasts.show(errorText(error), "error"), () => workspace.connection.live());
 
 function ConnectionStatus({ status }: { status: ChromeSnapshot["status"] }) {
   const [text, tone] = status === "ready" ? ["Connected", "ok"] : status === "error" ? ["Offline", "bad"] : status === "reload_required" ? ["Update ready", "bad"] : ["Reconnecting…", "wait"];

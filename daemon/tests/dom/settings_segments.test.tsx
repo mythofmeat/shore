@@ -347,7 +347,7 @@ describe("the diagnostics page", () => {
     const state = app.state();
     const selection = { character: "ada", thread: "story", messageRevision: 1, snapshotRevision: 1 };
     state.workspace["acknowledge"]("none");
-    const uncertain = [{ kind: "uncertain" as const, rid: "r_2", request: { type: "message" as const, text: "x", stream: true, images: [] }, selection }];
+    const uncertain = [{ kind: "uncertain" as const, rid: "r_2", request: { type: "message" as const, text: "x", stream: true, images: [] }, selection, phase: "running" as const }];
     const snapshot = spyOn(state.workspace, "getSnapshot").mockReturnValue({ ...state.workspace.getSnapshot(), uncertain });
     const acknowledge = spyOn(state.workspace, "acknowledge");
     app.restores.push(() => { snapshot.mockRestore(); acknowledge.mockRestore(); });

@@ -5,6 +5,7 @@ import { ConversationRequests } from "../src/browser/chat/requests.ts";
 import { checkAttachments, conversationRequest, imageUpload, remainingMessageOptions, restoredDraft } from "../src/browser/request_forms.ts";
 import type { ImageUpload } from "../src/protocol/ImageUpload.ts";
 import type { RequestFinished } from "../src/protocol/RequestFinished.ts";
+import { toasts } from "../src/browser/ui/toast.tsx";
 import { MAX_ATTACHMENTS, MAX_ATTACHMENT_BYTES, MAX_FILENAME_BYTES, MAX_MIME_TYPE_BYTES, MAX_TOTAL_ATTACHMENT_BYTES } from "../src/swp/limits.ts";
 
 function image(bytes: number, filename = "a.png"): ImageUpload {
@@ -66,6 +67,7 @@ function connection() {
   const submitted: { request: BrowserRequest; rid: string }[] = [];
   const finishes = new Map<string, (result: RequestFinished) => void>();
   let cancels = 0;
+  let refusing = false;
   let next = 0;
   const fake = {
     selection,
@@ -76,7 +78,10 @@ function connection() {
       const finished = new Promise<RequestFinished>((resolve) => { finishes.set(rid, resolve); });
       return { rid, finished };
     },
-    cancel: () => { cancels += 1; },
+    cancel: () => {
+      if (refusing) throw new Error("Cancellation needs an active connection");
+      cancels += 1;
+    },
   };
   const frame = (message: Record<string, unknown>) => { for (const listener of listeners) listener({ kind: "frame", message } as ConnectionUpdate); };
   const status = () => { for (const listener of listeners) listener({ kind: "status", status: "ready", detail: "" }); };
@@ -84,7 +89,7 @@ function connection() {
     finishes.get(rid)?.({ rid, outcome, ...(error === undefined ? {} : { error: { code: "provider_error", message: error } }) });
     await Bun.sleep(0);
   };
-  return { fake: fake as unknown as BrowserConnection, submitted, frame, status, finish, selection, cancels: () => cancels };
+  return { fake: fake as unknown as BrowserConnection, submitted, frame, status, finish, selection, cancels: () => cancels, refuseCancels: () => { refusing = true; } };
 }
 
 describe("a conversation's requests in flight", () => {
@@ -207,9 +212,17 @@ describe("a conversation's requests in flight", () => {
       await link.finish("r_1", outcome, error);
       expect(await regenerating).toBe(`Error: ${said}`);
     }
+  });
+
+  test("Stop cancels the reply, and while Shore is reconnecting says the reply wasn't stopped", () => {
+    for (const shown of toasts.getSnapshot()) toasts.dismiss(shown.id);
     const link = connection();
-    new ConversationRequests(link.fake).cancel();
-    expect(link.cancels()).toBe(1);
+    const requests = new ConversationRequests(link.fake);
+    requests.cancel();
+    expect([link.cancels(), toasts.getSnapshot()]).toEqual([1, []]);
+    link.refuseCancels();
+    requests.cancel();
+    expect(toasts.getSnapshot().map(({ text, tone }) => ({ text, tone }))).toEqual([{ text: "Shore was reconnecting, so the reply wasn't stopped. Try again in a moment.", tone: "error" }]);
   });
 
   test("continuing a reply sends a message with nothing in it, and one that does not complete says why", async () => {

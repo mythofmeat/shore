@@ -10,6 +10,8 @@ import type { SegmentSummary } from "../src/protocol/SegmentSummary.ts";
 import type { ServerMessage } from "../src/protocol/ServerMessage.ts";
 import type { ThreadListing } from "../src/protocol/ThreadListing.ts";
 import type { ThreadView } from "../src/protocol/ThreadView.ts";
+import type { WebRequestInfo } from "../src/protocol/WebRequestInfo.ts";
+import type { WebRequestList } from "../src/protocol/WebRequestList.ts";
 
 const message = (id: string, extra: Partial<Message> = {}): Message => ({ msg_id: id, role: "assistant", content: id, images: [], content_blocks: [], timestamp: "2026-11-10T00:00:00Z", ...extra });
 const thread = (id: string, extra: Partial<ThreadView> = {}): ThreadView => ({ id, created_at: "2026-11-01T00:00:00Z", compaction: true, home: id === "main", current: id === "main", ...extra });
@@ -19,6 +21,7 @@ const page = (messages: Message[], index: number | null, extra: Record<string, u
 const history = (extra: Record<string, unknown> = {}): ServerMessage => ({ type: "history", messages: [], config: { model: "opus" }, revision: 1, selected_character: "ada", selected_thread: "main", ...extra });
 const descriptor = (name: string, effects: OperationDescriptor["effects"]): OperationDescriptor => ({ name, label: name, category: "Conversation", scope: "selection", prerequisites: [], effects, confirmation: "none", fields: {}, input: {}, output: {} });
 const MESSAGE: BrowserRequest = { type: "message", text: "hi", stream: true, images: [] };
+const recorded = (rid: string, phase: WebRequestInfo["phase"], extra: Partial<WebRequestInfo> = {}): WebRequestInfo => ({ id: `id_${rid}`, rid, operation: "message", label: "Send message", character: "ada", thread: "main", started_at: 1, expires_at: 2, phase, result_omitted: false, ...extra });
 
 type Handler = ((args: unknown) => unknown) | null;
 interface Call { name: string; args: unknown; rid: string; reply: (data: unknown) => void; fail: (text: string) => void }
@@ -31,6 +34,9 @@ function rig(handlers: Record<string, Handler> = {}, schedule?: (callback: () =>
   let status: ConnectionStatus = "ready";
   let reconnects = 0;
   let next = 0;
+  let generation = 0;
+  let lists = 0;
+  let daemonList: () => Promise<WebRequestInfo[]> = async () => [];
   const emit = (update: ConnectionUpdate) => { for (const listener of listeners) listener(update); };
   const answers: Record<string, Handler> = {
     discover_operations: () => ({ operations: [], requests: [] }),
@@ -40,6 +46,7 @@ function rig(handlers: Record<string, Handler> = {}, schedule?: (callback: () =>
   };
   const connection = {
     get status() { return status; },
+    get generation() { return generation; },
     subscribe: (listener: (update: ConnectionUpdate) => void) => { listeners.add(listener); return () => { listeners.delete(listener); }; },
     reconnect: () => { reconnects += 1; },
     submit: (request: BrowserRequest) => {
@@ -59,13 +66,17 @@ function rig(handlers: Record<string, Handler> = {}, schedule?: (callback: () =>
       return { rid, finished };
     },
   };
-  const workspace = new Workspace(connection as unknown as BrowserConnection, schedule);
+  const listRequests = async (): Promise<WebRequestList> => { lists += 1; return { requests: await daemonList(), max_records: 32, max_result_bytes: 65_536 }; };
+  const workspace = new Workspace(connection as unknown as BrowserConnection, listRequests, schedule);
   let notified = 0;
   workspace.subscribe(() => { notified += 1; });
   return {
     workspace, calls, emit,
     frame: (frame: unknown) => { emit({ kind: "frame", message: frame as ServerMessage }); },
     setStatus: (value: ConnectionStatus, detail = "") => { status = value; emit({ kind: "status", status: value, detail }); },
+    drop: () => { generation += 1; },
+    record: (answer: () => Promise<WebRequestInfo[]>) => { daemonList = answer; },
+    lists: () => lists,
     reconnects: () => reconnects,
     notified: () => notified,
     state: () => workspace.getSnapshot(),
@@ -668,22 +679,193 @@ describe("other frames", () => {
     expect(link.state().mediaLimited).toBe(true);
   });
 
-  test("an uncertain request is listed with its secrets hidden, and takes the pictures it brought unless added by hand", async () => {
+  test("an uncertain request the daemon still has running is listed after reconnecting with its secrets hidden, and takes the pictures it brought unless added by hand", async () => {
     const link = await opened({ run_tool: null });
     const manual = await pending(link, "run_tool");
     link.frame({ type: "send_image", rid: "r_lost", path: "/lost.png", data: "L" });
     link.frame({ type: "send_image", rid: "r_kept", path: "/kept.png", data: "K" });
     link.frame({ type: "send_image", rid: manual, path: "/hand.png", data: "H" });
     const selection = { character: "ada", thread: "main", messageRevision: 1, snapshotRevision: 1 };
+    link.drop();
+    link.setStatus("reconnecting");
     link.emit({ kind: "uncertain", rid: "r_lost", request: { type: "command", name: "config", args: { value: "secret" } } as BrowserRequest, selection });
     link.emit({ kind: "uncertain", rid: manual, request: MESSAGE, selection });
+    expect(link.state().uncertain.map((item) => item.phase), "nothing is claimed in flight before the daemon says so").toEqual(["checking", "checking"]);
+    link.record(async () => [recorded("r_lost", "running"), recorded(manual, "running")]);
+    link.setStatus("ready");
+    await settle();
     expect(link.state().uncertain).toEqual([
-      { kind: "uncertain", rid: "r_lost", request: { type: "command", name: "config", args: { value: "<redacted>" } }, selection },
-      { kind: "uncertain", rid: manual, request: MESSAGE, selection },
+      { kind: "uncertain", rid: "r_lost", request: { type: "command", name: "config", args: { value: "<redacted>" } }, selection, phase: "running" },
+      { kind: "uncertain", rid: manual, request: MESSAGE, selection, phase: "running" },
     ]);
     expect(link.state().media.map((image) => image.path)).toEqual(["/kept.png", "/hand.png"]);
     link.workspace.acknowledge("r_lost");
     expect(link.state().uncertain.map((item) => item.rid)).toEqual([manual]);
+  });
+
+  test("after reconnecting, only an interrupted request the daemon still runs or lost track of stays listed, and one that failed is reported", async () => {
+    const link = await opened();
+    const selection = { character: "ada", thread: "main", messageRevision: 1, snapshotRevision: 1 };
+    const errors: string[] = [];
+    link.workspace.subscribe(() => { const { error } = link.state(); if (error !== "" && error !== errors.at(-1)) errors.push(error); });
+    link.drop();
+    link.setStatus("reconnecting");
+    for (const rid of ["r_never", "r_read", "r_done", "r_boom", "r_failed", "r_running", "r_unsure", "r_cancelled"]) link.emit({ kind: "uncertain", rid, request: MESSAGE, selection });
+    link.record(async () => [
+      recorded("r_done", "completed"), recorded("r_boom", "failed", { error: { code: "internal_error", message: "boom" } }), recorded("r_failed", "failed"),
+      recorded("r_running", "running"), recorded("r_unsure", "uncertain"), recorded("r_cancelled", "cancelled"),
+    ]);
+    const asked = link.lists();
+    link.setStatus("ready");
+    await settle();
+    expect(link.lists() - asked).toBe(1);
+    expect(link.state().uncertain.map((item) => [item.rid, item.phase])).toEqual([["r_running", "running"], ["r_unsure", "lost"]]);
+    expect(errors).toEqual(["boom", "A request that was in flight when the connection dropped failed."]);
+    link.record(async () => [recorded("r_running", "completed"), recorded("r_unsure", "uncertain")]);
+    link.setStatus("ready");
+    await settle();
+    expect(link.state().uncertain.map((item) => [item.rid, item.phase]), "a listed one is checked again on the next reconnect").toEqual([["r_unsure", "lost"]]);
+  });
+
+  test("with nothing interrupted, reconnecting asks the daemon nothing", async () => {
+    const link = await opened();
+    const asked = link.lists();
+    link.setStatus("reconnecting");
+    link.setStatus("ready");
+    await settle();
+    expect(link.lists()).toBe(asked);
+  });
+
+  test("when the daemon's list can't be had, every interrupted request is listed, to check again after the next reconnect", async () => {
+    const link = await opened();
+    const selection = { character: "ada", thread: "main", messageRevision: 1, snapshotRevision: 1 };
+    link.drop();
+    link.setStatus("reconnecting");
+    for (const rid of ["r_1", "r_2"]) link.emit({ kind: "uncertain", rid, request: MESSAGE, selection });
+    link.record(async () => { throw new Error("offline"); });
+    link.setStatus("ready");
+    await settle();
+    expect([link.state().uncertain.map((item) => [item.rid, item.phase]), link.state().error]).toEqual([[["r_1", "running"], ["r_2", "running"]], ""]);
+    link.record(async () => [recorded("r_1", "uncertain"), recorded("r_2", "running")]);
+    link.setStatus("ready");
+    await settle();
+    expect(link.state().uncertain.map((item) => [item.rid, item.phase])).toEqual([["r_1", "lost"], ["r_2", "running"]]);
+    link.record(async () => { throw new Error("offline"); });
+    link.setStatus("ready");
+    await settle();
+    expect(link.state().uncertain.map((item) => [item.rid, item.phase]), "what the daemon lost track of stays so").toEqual([["r_1", "lost"], ["r_2", "running"]]);
+  });
+
+  test("a request that could not have changed anything is not held, so it never shows, even when the daemon's list can't be had", async () => {
+    const status: OperationDescriptor = { ...descriptor("set_status", ["runtime_write"]), policies: [{ condition: { kind: "absent", field: "text" }, effects: ["read"], confirmation: "none" }] };
+    const link = await opened({ discover_operations: () => ({ operations: [descriptor("list_threads", ["read"]), descriptor("switch_thread", ["selection"]), descriptor("mark_thread_read", ["history_write"]), status], requests: [] }) });
+    const selection = { character: "ada", thread: "main", messageRevision: 1, snapshotRevision: 1 };
+    const interrupted: [string, BrowserRequest][] = [
+      ["r_read", { type: "command", name: "list_threads", args: {} }],
+      ["r_select", { type: "command", name: "switch_thread", args: { name: "side" } }],
+      ["r_write", { type: "command", name: "mark_thread_read", args: { name: "main" } }],
+      ["r_asked", { type: "command", name: "set_status", args: {} }],
+      ["r_set", { type: "command", name: "set_status", args: { text: "away" } }],
+      ["r_unknown", { type: "command", name: "something_new", args: null }],
+      ["r_message", MESSAGE],
+    ];
+    link.drop();
+    link.setStatus("reconnecting");
+    for (const [rid, request] of interrupted) link.emit({ kind: "uncertain", rid, request, selection });
+    link.record(async () => { throw new Error("offline"); });
+    link.setStatus("ready");
+    await settle();
+    expect(link.state().uncertain.map((item) => item.rid)).toEqual(["r_write", "r_set", "r_unknown", "r_message"]);
+  });
+
+  test("a failure already reported by its finish is not reported again when the daemon's list arrives", async () => {
+    const link = await opened();
+    const selection = { character: "ada", thread: "main", messageRevision: 1, snapshotRevision: 1 };
+    const errors: string[] = [];
+    link.workspace.subscribe(() => { const { error } = link.state(); if (error !== "" && error !== errors.at(-1)) errors.push(error); });
+    link.drop();
+    link.setStatus("reconnecting");
+    link.emit({ kind: "uncertain", rid: "r_1", request: MESSAGE, selection });
+    let answer: (requests: WebRequestInfo[]) => void = () => {};
+    link.record(async () => await new Promise<WebRequestInfo[]>((resolve) => { answer = resolve; }));
+    link.setStatus("ready");
+    await settle();
+    link.frame({ type: "request_finished", rid: "r_1", outcome: "failed", error: { code: "internal_error", message: "boom" } });
+    link.workspace.dismissError();
+    answer([recorded("r_1", "failed", { error: { code: "internal_error", message: "boom" } })]);
+    await settle();
+    expect([errors, link.state().error, link.state().uncertain]).toEqual([["boom"], "", []]);
+  });
+
+  test("an answer that comes after the connection dropped again settles nothing, and the next reconnect asks again", async () => {
+    const link = await opened();
+    const selection = { character: "ada", thread: "main", messageRevision: 1, snapshotRevision: 1 };
+    link.drop();
+    link.setStatus("reconnecting");
+    link.emit({ kind: "uncertain", rid: "r_1", request: MESSAGE, selection });
+    let answer: (requests: WebRequestInfo[]) => void = () => {};
+    link.record(async () => await new Promise<WebRequestInfo[]>((resolve) => { answer = resolve; }));
+    link.setStatus("ready");
+    await settle();
+    link.drop();
+    link.setStatus("reconnecting");
+    answer([recorded("r_1", "failed")]);
+    await settle();
+    expect([link.state().uncertain.map((item) => item.phase), link.state().error], "still held, unreported").toEqual([["checking"], ""]);
+    link.record(async () => [recorded("r_1", "running")]);
+    link.setStatus("ready");
+    await settle();
+    expect(link.state().uncertain.map((item) => item.rid)).toEqual(["r_1"]);
+  });
+
+  test("an older answer from the daemon brings back neither a card dismissed meanwhile nor a request that finished meanwhile", async () => {
+    const link = await opened();
+    const selection = { character: "ada", thread: "main", messageRevision: 1, snapshotRevision: 1 };
+    link.drop();
+    link.setStatus("reconnecting");
+    link.emit({ kind: "uncertain", rid: "r_shown", request: MESSAGE, selection });
+    link.record(async () => [recorded("r_shown", "running")]);
+    link.setStatus("ready");
+    await settle();
+    link.drop();
+    link.setStatus("reconnecting");
+    link.emit({ kind: "uncertain", rid: "r_held", request: MESSAGE, selection });
+    let answer: (requests: WebRequestInfo[]) => void = () => {};
+    link.record(async () => await new Promise<WebRequestInfo[]>((resolve) => { answer = resolve; }));
+    link.setStatus("ready");
+    await settle();
+    link.workspace.acknowledge("r_shown");
+    link.frame({ type: "request_finished", rid: "r_held", outcome: "completed" });
+    answer([recorded("r_shown", "running"), recorded("r_held", "running")]);
+    await settle();
+    expect(link.state().uncertain).toEqual([]);
+  });
+
+  test("a connection that gives up, or that needs the page reloaded, still shows what the daemon has running", async () => {
+    for (const status of ["error", "reload_required"] as const) {
+      const link = await opened();
+      const selection = { character: "ada", thread: "main", messageRevision: 1, snapshotRevision: 1 };
+      link.drop();
+      link.setStatus("reconnecting");
+      for (const rid of ["r_running", "r_never"]) link.emit({ kind: "uncertain", rid, request: MESSAGE, selection });
+      link.record(async () => [recorded("r_running", "running")]);
+      link.setStatus(status);
+      await settle();
+      expect(link.state().uncertain.map((item) => item.rid), status).toEqual(["r_running"]);
+    }
+  });
+
+  test("signing out forgets the requests it was unsure of", async () => {
+    const link = await opened();
+    const selection = { character: "ada", thread: "main", messageRevision: 1, snapshotRevision: 1 };
+    link.drop();
+    link.setStatus("reconnecting");
+    link.emit({ kind: "uncertain", rid: "r_1", request: MESSAGE, selection });
+    link.setStatus("signed_out");
+    link.record(async () => [recorded("r_1", "running")]);
+    link.setStatus("ready");
+    await settle();
+    expect(link.state().uncertain).toEqual([]);
   });
 
   test("a finished request ends its live reply unless it completed, settles an uncertain one, and counts when it could have spent", async () => {

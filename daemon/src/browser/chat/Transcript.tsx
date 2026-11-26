@@ -192,8 +192,8 @@ export function Transcript({ character, mobile, readOnly }: { character: string;
         {streams.map((stream, index) => <StreamingMessage key={stream.key} stream={stream} saved={savedParts[index]} character={character} state={state} openImage={openImage} mobile={mobile} />)}
         {waiting === undefined ? null : <StreamingMessage stream={liveTurn(waiting, waiting, null)} saved={undefined} character={character} state={state} openImage={openImage} mobile={mobile} />}
         {view === null ? null : <SegmentLink lead="After this:" segment={view.next} ready={ready} />}
-        {state.uncertain.map((item) => <div key={item.rid} className="notice-card" role="alert">
-          <Icon name="alert" size={16} /><span>The connection dropped while a request was in flight. Shore keeps working on it, and this notice clears when it finishes.</span>
+        {state.uncertain.filter((item) => item.phase !== "checking").map((item) => <div key={item.rid} className="notice-card" role="alert">
+          <Icon name="alert" size={16} /><span>{item.phase === "lost" ? "Shore lost track of a request that was in flight, so it can't tell whether it finished. Review it to check what happened." : "The connection dropped while a request was in flight. Shore keeps working on it, and this notice clears when it finishes."}</span>
           <button type="button" className="button" onClick={() => navigate({ view: "settings", page: "diagnostics" })}>Review</button>
           <button type="button" className="button ghost" onClick={() => workspace.acknowledge(item.rid)}>Dismiss</button>
         </div>)}
