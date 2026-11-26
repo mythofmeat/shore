@@ -31,6 +31,7 @@ import { runCompactionPass } from "../src/memory/compaction/run.ts";
 import type { ServerMessage } from "../src/protocol/ServerMessage.ts";
 import type { ThreadListing } from "../src/protocol/ThreadListing.ts";
 import { shoreLog } from "../src/log.ts";
+import * as usage from "../src/ledger/usage.ts";
 import { hostZone } from "../src/ledger/zoned.ts";
 import { createRuntime, startRuntimeClocks, type ShoreRuntime } from "../src/runtime.ts";
 import { initializeDatabase } from "../src/storage/database.ts";
@@ -46,6 +47,7 @@ import { restoreTestEnv, setTestEnv, unsetTestEnv } from "./support/env.ts";
 import { NO_MCP } from "./support/rebuild.ts";
 import { outcomeOf, rejectionOf } from "./support/outcome.ts";
 import { required } from "../src/util/required.ts";
+import { until } from "./support/until.ts";
 import { testTmp } from "./support/tmp.ts";
 import { promptedAppConfig } from "./support/prompt_list.ts";
 import { Texts } from "../src/texts/texts.ts";
@@ -1549,28 +1551,106 @@ test("a check still running when Shore shuts down is stopped, and nothing is rec
   expect(state).toBe("[[0,null]]");
 });
 
-test("the runtime's clocks look at the triggers every thirty seconds until they are stopped", async () => {
+test("the runtime's clocks look at the triggers every thirty seconds, and at keepalives and wakes every ten, until they are stopped", async () => {
   await withCharacter(async ({ runtime, say }) => {
     await say("hello");
     let looked = 0;
+    let kept = 0;
+    let woke = 0;
     runtime.triggers.tick = async () => { looked += 1; };
+    runtime.keepalive.tick = async () => { kept += 1; };
+    runtime.autonomy.tick = async () => { woke += 1; };
     jest.useFakeTimers();
     let stopping: Promise<void> | undefined;
     try {
       const clocks = startRuntimeClocks(runtime);
       jest.advanceTimersByTime(29_999);
-      expect(looked).toBe(0);
+      expect([looked, kept, woke]).toEqual([0, 2, 2]);
       jest.advanceTimersByTime(1);
-      expect(looked).toBe(1);
+      expect([looked, kept, woke]).toEqual([1, 3, 3]);
       jest.advanceTimersByTime(30_000);
-      expect(looked).toBe(2);
+      expect([looked, kept, woke]).toEqual([2, 6, 6]);
       stopping = clocks.stop();
       jest.advanceTimersByTime(90_000);
-      expect(looked).toBe(2);
+      expect([looked, kept, woke]).toEqual([2, 6, 6]);
     } finally {
       jest.useRealTimers();
     }
     await stopping;
+  });
+});
+
+test("the ledger's cost backfill runs as soon as the clocks start, without waiting out its interval", async () => {
+  await withCharacter(async ({ runtime }) => {
+    let runs = 0;
+    const backfill = spyOn(usage, "backfillLedgerCosts").mockImplementation(async () => {
+      runs += 1;
+      return { updated: 0, total: 0, failures: [] };
+    });
+    try {
+      const clocks = startRuntimeClocks(runtime, { costBackfillMs: 3_600_000 });
+      await until(() => runs === 1, "the backfill at start", 3_000);
+      await clocks.stop();
+    } finally {
+      backfill.mockRestore();
+    }
+  });
+});
+
+test("while the clocks run, every call that lands is shown to the keepalive; once they stop, none are", async () => {
+  await withCharacter(async ({ runtime, say }) => {
+    const shown: string[] = [];
+    const observe = spyOn(runtime.keepalive, "observe").mockImplementation((character) => { shown.push(character); });
+    try {
+      const clocks = startRuntimeClocks(runtime);
+      await say("hello");
+      expect(shown).toContain("ada");
+      await clocks.stop();
+      shown.length = 0;
+      await say("hello again");
+      expect(shown).toEqual([]);
+    } finally {
+      observe.mockRestore();
+    }
+  });
+});
+
+test("the ledger's cost backfill runs as the clocks start and again when due, never twice at once, says what it priced, and stopping waits for it", async () => {
+  await withCharacter(async ({ runtime }) => {
+    const told = spyOn(shoreLog, "info").mockImplementation(() => {});
+    const set = spyOn(globalThis, "setInterval");
+    const answers: Array<() => void> = [];
+    let runs = 0;
+    const backfill = spyOn(usage, "backfillLedgerCosts").mockImplementation(async () => {
+      runs += 1;
+      await new Promise<void>((resolve) => { answers.push(resolve); });
+      return { updated: runs === 1 ? 1 : 0, total: 2, failures: [] };
+    });
+    try {
+      const clocks = startRuntimeClocks(runtime, { costBackfillMs: 7 });
+      const timer = set.mock.results[set.mock.calls.findIndex((call) => call[1] === 7)]?.value as ReturnType<typeof setInterval>;
+      expect(timer.hasRef()).toBe(false);
+      await until(() => runs === 1, "the first backfill", 3_000);
+      await Bun.sleep(40);
+      expect(runs).toBe(1);
+      required(answers[0])();
+      await until(() => runs === 2, "the next backfill", 3_000);
+      expect(told.mock.calls.map((call) => String(call[0])).filter((line) => line.includes("ledger rows"))).toEqual(["shore: priced 1 of 2 ledger rows that had no cost"]);
+      let stopped = false;
+      const stopping = clocks.stop().then(() => { stopped = true; });
+      await Bun.sleep(40);
+      expect(stopped).toBe(false);
+      required(answers[1])();
+      await stopping;
+      await Bun.sleep(40);
+      expect(runs).toBe(2);
+      expect(told.mock.calls.map((call) => String(call[0])).filter((line) => line.includes("ledger rows"))).toEqual(["shore: priced 1 of 2 ledger rows that had no cost"]);
+    } finally {
+      for (const answer of answers) answer();
+      backfill.mockRestore();
+      set.mockRestore();
+      told.mockRestore();
+    }
   });
 });
 

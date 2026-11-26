@@ -321,6 +321,7 @@ export async function createRuntime(options: RuntimeOptions): Promise<ShoreRunti
 export interface RuntimeClockIntervals {
   keepaliveMs?: number | undefined;
   diagnosticRetentionMs?: number | undefined;
+  costBackfillMs?: number | undefined;
 }
 
 export function startRuntimeClocks(
@@ -344,6 +345,7 @@ export function startRuntimeClocks(
   const costBackfill = startCostBackfill(
     rustJoin(runtime.config.dirs.data, "shore.db"),
     runtime.snapshotGate,
+    intervals.costBackfillMs,
   );
 
   return {
@@ -608,12 +610,11 @@ export function applySubscriptionProviders(registry: CharacterRegistry): void {
   setNanoGptSubscriptionCacheDir(config.dirs.cache);
 }
 
-function startCostBackfill(ledgerPath: string, gate?: SnapshotGate): { stop: () => Promise<void> } {
+function startCostBackfill(ledgerPath: string, gate: SnapshotGate, intervalMs = COST_BACKFILL_MS): { stop: () => Promise<void> } {
   let running: Promise<void> | undefined;
   const sweep = async () => {
     try {
-      const result = await (gate?.withActivity(async () => await backfillLedgerCosts(ledgerPath)) ??
-        backfillLedgerCosts(ledgerPath));
+      const result = await gate.withActivity(async () => await backfillLedgerCosts(ledgerPath));
       if (result.updated > 0) {
         shoreLog.info(
           `shore: priced ${result.updated} of ${result.total} ledger rows that had no cost`,
@@ -629,7 +630,7 @@ function startCostBackfill(ledgerPath: string, gate?: SnapshotGate): { stop: () 
   };
 
   due();
-  const timer = setInterval(due, COST_BACKFILL_MS);
+  const timer = setInterval(due, intervalMs);
   timer.unref?.();
   return { stop: async () => { clearInterval(timer); await running; } };
 }
