@@ -1,5 +1,4 @@
-
-FROM rust:alpine AS builder
+FROM rust:slim AS builder
 WORKDIR /src
 COPY client .
 RUN --mount=type=cache,target=/usr/local/cargo/registry \
@@ -7,9 +6,11 @@ RUN --mount=type=cache,target=/usr/local/cargo/registry \
     cargo build --release --locked --bin shore \
     && cp target/release/shore /usr/local/bin/shore
 
-FROM alpine:latest
+FROM debian:testing
+RUN apt-get update && apt-get install -y --no-install-recommends vim-tiny \
+    && rm -rf /var/lib/apt/lists/*
 COPY --from=builder /usr/local/bin/shore /usr/local/bin/shore
-RUN adduser -D -u 1000 shore
+RUN useradd -m -u 1000 shore
 USER shore
 ENV SHORE_ADDR=shore-daemon:7320
 ENTRYPOINT ["shore"]
