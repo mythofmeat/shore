@@ -225,21 +225,39 @@ describe("client request admission", () => {
 describe("wire array decoding", () => {
   const decode = (value: unknown): ClientMessage => decodeClientMessage(value);
 
-  for (const [label, value] of [
-    ["non-array images", { ...message(), images: "shot.png" }],
-    ["non-string image path", { ...message(), images: [42] }],
-    ["non-boolean stream flag", { ...message(), stream: "yes" }],
-    ["non-object upload", message(["base64"])],
-    ["missing upload data", message([{ filename: "shot.png" }])],
-    ["non-string MIME type", message([{ filename: "shot.png", data: "AAAA", mime_type: 42 }])],
-    ["non-string capability", { type: "hello", client_type: "tui", client_name: "t", capabilities: [42] }],
-    ["non-string regeneration tag", { type: "regen", stream: true, tags: [42] }],
-    ["non-boolean another take", { type: "regen", stream: true, another_take: "yes" }],
+  const shot = { filename: "shot.png", data: "AAAA" };
+  for (const [label, value, refusal] of [
+    ["non-array images", { ...message(), images: "shot.png" }, 'Frame field "images" is not an array'],
+    ["non-string image path", { ...message(), images: ["a.png", 42] }, 'Frame field "images" element 2 is not a string'],
+    ["non-boolean stream flag", { ...message(), stream: "yes" }, 'Frame field "stream" is not a boolean'],
+    ["upload that is a string", message([shot, "base64"]), "Frame attachment 2 is not an object"],
+    ["upload that is a number", message([shot, 5]), "Frame attachment 2 is not an object"],
+    ["upload that is null", message([shot, null]), "Frame attachment 2 is not an object"],
+    ["upload that is a list", message([shot, []]), "Frame attachment 2 is not an object"],
+    ["upload without a filename", message([shot, { data: "AAAA" }]), "Frame attachment 2 filename is not a string"],
+    ["missing upload data", message([shot, { filename: "shot.png" }]), "Frame attachment 2 data is not a string"],
+    ["non-string MIME type", message([shot, { ...shot, mime_type: 42 }]), "Frame attachment 2 mime_type is not a string"],
+    ["non-string capability", { type: "hello", client_type: "tui", client_name: "t", capabilities: ["a", 42] }, 'Frame field "capabilities" element 2 is not a string'],
+    ["hello without a client type", { type: "hello", client_name: "t" }, 'Frame is missing required field "client_type"'],
+    ["hello without a client name", { type: "hello", client_type: "tui" }, 'Frame is missing required field "client_name"'],
+    ["command without a name", { type: "command", rid: "r" }, 'Frame is missing required field "name"'],
+    ["non-string regeneration tag", { type: "regen", stream: true, tags: [42] }, 'Frame field "tags" element 1 is not a string'],
+    ["non-boolean another take", { type: "regen", stream: true, another_take: "yes" }, 'Frame field "another_take" is not a boolean'],
   ] as const) {
-    test(`rejects ${label}`, () => {
-      expect(() => decode(value)).toThrow(WireError);
+    test(`rejects ${label}, and says why`, () => {
+      expect(() => decode(value)).toThrow(new WireError(refusal));
     });
   }
+
+  test("a hello needs no character or thread, and an upload keeps its MIME type only when it has one", () => {
+    expect(decode({ type: "hello", client_type: "web", client_name: "tab" })).toEqual({ type: "hello", client_type: "web", client_name: "tab", capabilities: [] });
+    expect(decode(message([{ ...shot, mime_type: "image/png" }, { ...shot, mime_type: null }])))
+      .toStrictEqual(message([{ ...shot, mime_type: "image/png" }, shot]));
+  });
+
+  test("a stream flag sent as null is off", () => {
+    expect(decode({ ...message(), stream: null })).toMatchObject({ stream: false });
+  });
 
   test("a regeneration keeps what it was given and nothing it wasn't, and an older client's guidance is its reason", () => {
     expect(decode({ type: "regen", stream: true })).toEqual({ type: "regen", stream: true });

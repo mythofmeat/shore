@@ -140,10 +140,4 @@ export class RequestHistory {
     try { this.#save(owner, info); }
     catch { this.#records.set(info.id, { owner, info: structuredClone(info) }); }
   }
-
-  interrupt(session: WebSession, id: string): void {
-    const record = this.#records.get(id);
-    if (record?.owner !== session.id || record.info.phase !== "running" || session.signal.aborted) return;
-    this.#store(record.owner, { ...record.info, phase: "uncertain" });
-  }
 }

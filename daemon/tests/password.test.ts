@@ -1,4 +1,5 @@
-import { describe, expect, test } from "bun:test";
+import { describe, expect, spyOn, test } from "bun:test";
+import * as fs from "node:fs";
 import { mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { acceptablePassword, PASSWORD_FILE, PasswordFileError, PasswordStore } from "../src/web/password.ts";
@@ -54,6 +55,15 @@ describe("the daemon's password", () => {
     expect(readdirSync(join(dir, "data"))).toEqual([PASSWORD_FILE]);
     expect(await store.choose("never lands"), "something is already there").toBe(false);
     expect(readdirSync(join(dir, "data"))).toEqual([PASSWORD_FILE]);
+  });
+
+  test("a first choice the filesystem won't link is an error, not a password already chosen, and leaves no temporary file", async () => {
+    const dir = fresh("shore-password-unlinkable-");
+    const store = new PasswordStore(dir);
+    const linking = spyOn(fs, "linkSync").mockImplementation(() => { throw Object.assign(new Error("EPERM: operation not permitted, link"), { code: "EPERM" }); });
+    try { expect(String(await rejectionOf(store.choose("never lands")))).toBe("Error: EPERM: operation not permitted, link"); }
+    finally { linking.mockRestore(); }
+    expect([store.isSet(), readdirSync(dir)]).toEqual([false, []]);
   });
 
   test("a file Shore didn't write is reported, not taken for a wrong password, and an unreadable one stops the check", async () => {

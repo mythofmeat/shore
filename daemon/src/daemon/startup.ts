@@ -31,7 +31,6 @@ export class StartupError extends Error {
     message: string,
   ) {
     super(message);
-    this.name = "StartupError";
   }
 }
 
