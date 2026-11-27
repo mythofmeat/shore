@@ -1690,6 +1690,22 @@
             "properties": {
               "name": {
                 "type": "string",
+                "const": "all_threads"
+              },
+              "data": {
+                "$ref": "#/$defs/AllThreads"
+              }
+            },
+            "required": [
+              "name",
+              "data"
+            ]
+          },
+          {
+            "type": "object",
+            "properties": {
+              "name": {
+                "type": "string",
                 "const": "workspace_files"
               },
               "data": {
@@ -9730,6 +9746,38 @@
         },
         "required": [
           "cached_request"
+        ]
+      },
+      "AllThreads": {
+        "type": "object",
+        "properties": {
+          "characters": {
+            "type": "array",
+            "items": {
+              "$ref": "#/$defs/CharacterThreads"
+            }
+          }
+        },
+        "required": [
+          "characters"
+        ]
+      },
+      "CharacterThreads": {
+        "type": "object",
+        "properties": {
+          "character": {
+            "type": "string"
+          },
+          "threads": {
+            "type": "array",
+            "items": {
+              "$ref": "#/$defs/ThreadView"
+            }
+          }
+        },
+        "required": [
+          "character",
+          "threads"
         ]
       },
       "WorkspaceFileListing": {
@@ -11352,6 +11400,22 @@
             "properties": {
               "name": {
                 "type": "string",
+                "const": "all_threads"
+              },
+              "data": {
+                "$ref": "#/$defs/AllThreads"
+              }
+            },
+            "required": [
+              "name",
+              "data"
+            ]
+          },
+          {
+            "type": "object",
+            "properties": {
+              "name": {
+                "type": "string",
                 "const": "workspace_files"
               },
               "data": {
@@ -19392,6 +19456,38 @@
         },
         "required": [
           "cached_request"
+        ]
+      },
+      "AllThreads": {
+        "type": "object",
+        "properties": {
+          "characters": {
+            "type": "array",
+            "items": {
+              "$ref": "#/$defs/CharacterThreads"
+            }
+          }
+        },
+        "required": [
+          "characters"
+        ]
+      },
+      "CharacterThreads": {
+        "type": "object",
+        "properties": {
+          "character": {
+            "type": "string"
+          },
+          "threads": {
+            "type": "array",
+            "items": {
+              "$ref": "#/$defs/ThreadView"
+            }
+          }
+        },
+        "required": [
+          "character",
+          "threads"
         ]
       },
       "WorkspaceFileListing": {

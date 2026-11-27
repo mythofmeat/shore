@@ -146,6 +146,88 @@ test("a reply starting elsewhere shows on its thread without the sidebar being d
   expect(view.thread("story")?.querySelector(".sidebar-replying .sr-only")?.textContent).toBe("(replying)");
 });
 
+test("another character's row counts its unread replies and threads marked for later, and the open character's row leaves that to its threads", async () => {
+  const thread = (id: string, over: Record<string, unknown> = {}) => ({ id, created_at: "2026-11-01T00:00:00Z", compaction: false, home: false, current: false, ...over });
+  const view = await sideBar({
+    characters: [{ name: "ada" }, { name: "bo" }, { name: "cy" }, { name: "dee" }],
+    threads: [thread("story", { home: true, unread: 5, later: "2026-11-27T00:00:00Z" })],
+    allThreads: [
+      { character: "ada", threads: [thread("story", { unread: 9 })] },
+      { character: "bo", threads: [thread("main", { unread: 2 }), thread("rowing", { unread: 1, later: "2026-11-27T00:00:00Z" }), thread("shelf", { later: "2026-11-26T00:00:00Z" })] },
+      { character: "cy", threads: [thread("main")] },
+    ],
+  });
+  const counts = (name: string) => [view.character(name)?.querySelector(".sidebar-later-count .sr-only")?.textContent ?? null, view.character(name)?.querySelector(".sidebar-unread .sr-only")?.textContent ?? null];
+  expect([counts("ada"), counts("bo"), counts("cy"), counts("dee")]).toEqual([
+    [null, null], ["(2 marked for later)", "(3 unread messages)"], [null, null], [null, null],
+  ]);
+});
+
+test("a single unread reply or thread marked for later still counts on another character's row", async () => {
+  const thread = (id: string, over: Record<string, unknown> = {}) => ({ id, created_at: "2026-11-01T00:00:00Z", compaction: false, home: false, current: false, ...over });
+  const view = await sideBar({ allThreads: [{ character: "bo", threads: [thread("main", { unread: 1, later: "2026-11-27T00:00:00Z" })] }] });
+  expect([view.character("bo")?.querySelector(".sidebar-later-count .sr-only")?.textContent, view.character("bo")?.querySelector(".sidebar-unread .sr-only")?.textContent]).toEqual(["(1 marked for later)", "(1 unread message)"]);
+});
+
+test("the open character's row, drawn at its size and marked on, has a menu from its button or a right-click that makes a folder or sorts its threads, and another character's row has none", async () => {
+  const { toasts } = await import("../../src/browser/ui/toast.tsx");
+  const { Icon } = await import("../../src/browser/ui/icons.tsx");
+  const { FOLDER_DIALOG_EVENT } = await import("../../src/browser/app/intents.ts");
+  const drawn = await mount(<Icon name="more" size={16} />);
+  const moreIcon = drawn.host.innerHTML;
+  await drawn.unmount();
+  const folders: unknown[] = [];
+  const asked = (event: Event) => { folders.push((event as CustomEvent).detail); };
+  addEventListener(FOLDER_DIALOG_EVENT, asked);
+  app.restores.push(() => { removeEventListener(FOLDER_DIALOG_EVENT, asked); });
+  let sortFails = false;
+  const sorting = () => app.answer((request) => {
+    if (request["name"] !== "thread_sort") return request["name"] === "presence" ? { statuses: [], history: [] } : undefined;
+    if (sortFails) throw new Error("the index is locked");
+    return { character: "ada", threads: [], home: "story", current: "story" };
+  });
+  const view = await sideBar({ manualOrder: true });
+  sorting();
+  const row = (name: string) => view.character(name)?.closest(".character-row");
+  const more = () => view.host.querySelector<HTMLButtonElement>(".character-row .thread-more");
+  const menu = () => document.body.querySelector("[role=menu]");
+  const items = () => [...(menu()?.querySelectorAll<HTMLButtonElement>("[role=menuitem]") ?? [])];
+  const shown = () => items().map((item) => [item.querySelector(".menu-label")?.textContent, item.querySelector(".menu-detail")?.textContent ?? null, item.disabled]);
+  const choose = async (label: string) => { await acting(() => { items().find((item) => item.querySelector(".menu-label")?.textContent === label)?.click(); }); await settle(); };
+
+  expect([view.character("ada")?.classList.contains("on"), view.character("bo")?.classList.contains("on"), view.character("ada")?.querySelector<HTMLElement>(".avatar")?.style.width]).toEqual([true, false, "30px"]);
+  expect([...view.host.querySelectorAll(".character-row .thread-more")].map((button) => [button.getAttribute("aria-label"), button.getAttribute("aria-expanded"), button.innerHTML])).toEqual([["Options for ada’s threads", "false", moreIcon]]);
+  await acting(() => { view.character("bo")?.dispatchEvent(new MouseEvent("contextmenu", { bubbles: true, cancelable: true })); });
+  expect(menu(), "another character's row has no menu").toBeNull();
+
+  await acting(() => { more()?.click(); });
+  expect([menu()?.getAttribute("aria-label"), more()?.getAttribute("aria-expanded"), row("ada")?.classList.contains("menu-open"), shown()]).toEqual([
+    "Options for ada’s threads", "true", true, [["New folder…", null, false], ["Sort threads by activity", null, false]],
+  ]);
+  await choose("New folder…");
+  expect([folders, menu(), row("ada")?.classList.contains("menu-open")]).toEqual([[{ kind: "new" }], null, false]);
+
+  await acting(() => { view.character("ada")?.dispatchEvent(new MouseEvent("contextmenu", { bubbles: true, cancelable: true })); });
+  const since = app.socket().sent.length;
+  await choose("Sort threads by activity");
+  expect([app.sent(since).filter((request) => request["name"] === "thread_sort").map((request) => request["args"]), app.state().workspace.getSnapshot().manualOrder]).toEqual([[{ by_activity: true }], false]);
+  await view.unmount();
+
+  const sorted = await sideBar({ manualOrder: false });
+  sorting();
+  sortFails = true;
+  await acting(() => { sorted.host.querySelector<HTMLButtonElement>(".character-row .thread-more")?.click(); });
+  expect(shown()[1]).toEqual(["Sort threads by activity", "On", false]);
+  const again = app.socket().sent.length;
+  await choose("Sort threads by activity");
+  expect([app.sent(again).filter((request) => request["name"] === "thread_sort").map((request) => request["args"]), toasts.getSnapshot().at(-1)?.text]).toEqual([[{ by_activity: false }], "the index is locked"]);
+  await sorted.unmount();
+
+  const offline = await sideBar({ status: "reconnecting" });
+  await acting(() => { offline.host.querySelector<HTMLButtonElement>(".character-row .thread-more")?.click(); });
+  expect(shown().map((item) => item[2]), "nothing in it works while the daemon is away").toEqual([true, true]);
+});
+
 test("the search at the top of the sidebar opens the switcher, closing the phone drawer first, and every character stays listed", async () => {
   app.answer((request) => request["name"] === "presence" ? { statuses: [], history: [] } : undefined);
   const { Sidebar } = await import("../../src/browser/sidebar/Sidebar.tsx");

@@ -155,6 +155,31 @@ describe("archiving the thread a session is on", () => {
   });
 });
 
+describe("switching character", () => {
+  test("answers with the character's model, opens no thread without a selection, and opens its home thread when no thread is asked for", async () => {
+    const router = new SessionRouter();
+    const frames = new Map<number, ServerMessage[]>();
+    registerTestSession(router, frames, 1);
+    router.setSelectedCharacter(1, "bo");
+    router.setSelectedThread(1, "notes");
+    const asked: unknown[][] = [];
+    const context = {
+      character: "ada", sessionId: 1, rid: "switch", router,
+      handshake: {
+        history: (character: string, thread?: string) => {
+          asked.push([character, thread]);
+          return Promise.resolve({ messages: [], previousSegment: null, config: { active_model: "pinned" }, selectedCharacter: character, selectedThread: thread ?? null, revision: 1 });
+        },
+      },
+    } as unknown as DispatchContext;
+
+    expect(await afterCommand("switch_character", { name: "ada" }, { changed: true }, context), "a result with no character selects nothing").toEqual({ changed: true });
+    expect([router.characterFor(1), router.threadFor(1), asked]).toEqual(["bo", "notes", []]);
+    expect(await afterCommand("switch_character", undefined, { character: "ada", changed: true }, context)).toEqual({ character: "ada", changed: true, selected_character: "ada", active_model: "pinned" });
+    expect([router.characterFor(1), router.threadFor(1), asked]).toEqual(["ada", null, [["ada", undefined]]]);
+  });
+});
+
 describe("what runs after a thread command", () => {
   const dispatched = (warm: string) => {
     const calls: unknown[][] = [];

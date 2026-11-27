@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 import type { ChromeSnapshot } from "../workspace.ts";
 import { Sidebar, threadLabel } from "../sidebar/Sidebar.tsx";
-import { sortThreads, threadsOnScreen, unreadIn } from "../sidebar/order.ts";
+import { sortThreads, threadsOnScreen, unreadEverywhere } from "../sidebar/order.ts";
 import { Chat } from "../chat/Chat.tsx";
 import { Settings } from "../settings/Settings.tsx";
 import { NewCharacterDialog, NewThreadDialog } from "../sidebar/dialogs.tsx";
@@ -25,7 +25,7 @@ export function Shell({ state }: { state: ChromeSnapshot }) {
   const [threadDialog, setThreadDialog] = useState<ThreadDialogRequest | null>(null);
   const [folderDialog, setFolderDialog] = useState<FolderDialogRequest | null>(null);
   const collapsed = useCollapsedFolders(state.character);
-  const unread = unreadIn(state.threads, state.thread, useWindowFocused());
+  const unread = unreadEverywhere(state, useWindowFocused());
   useEffect(() => {
     const open = (event: Event) => { setThreadDialog((event as CustomEvent<ThreadDialogRequest>).detail); };
     const openFolder = (event: Event) => { setFolderDialog((event as CustomEvent<FolderDialogRequest>).detail); };

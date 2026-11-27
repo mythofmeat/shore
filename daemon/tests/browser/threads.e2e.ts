@@ -131,6 +131,64 @@ test("a row's name, lock, unsent message, unread count and time sit on one line 
   await finish();
 });
 
+async function expectCharacterRowLaidOut(row: Locator, where: string): Promise<void> {
+  const item = row.locator(".sidebar-item");
+  expect(await item.evaluate(spill), `${where}: nothing spills out of the row`).toBe(0);
+  const around = await edgesOf(item);
+  const parts = await Promise.all([".avatar", ".sidebar-name", ".sidebar-later-count", ".sidebar-unread"].map((selector) => edgesOf(item.locator(selector))));
+  for (const [index, part] of parts.entries()) {
+    expect(part.left, `${where}: part ${String(index)} starts inside the row`).toBeGreaterThanOrEqual(around.left);
+    expect(part.right, `${where}: part ${String(index)} ends inside the row`).toBeLessThanOrEqual(around.right);
+    expect(Math.abs((part.top + part.bottom) / 2 - (around.top + around.bottom) / 2), `${where}: part ${String(index)} sits on the row's midline`).toBeLessThanOrEqual(1.5);
+    const next = parts[index + 1];
+    if (next !== undefined) expect(part.right, `${where}: part ${String(index)} ends before the next starts`).toBeLessThanOrEqual(next.left);
+  }
+}
+
+test("another character's unread replies and threads marked for later count on its row and in the tab's title, and the switcher goes back to its thread", async ({ page }) => {
+  const finish = await watchPage(page);
+  await signIn(page);
+  await createCharacter(page, "kestrel");
+  await createThread(page, "kestrel", "quiet");
+  await page.keyboard.press("Control+Shift+L");
+  await expect(page.locator(".sidebar-threads .thread-row", { has: page.getByText("quiet", { exact: true }) }).locator(".sidebar-later")).toBeVisible();
+  await createCharacter(page, "wren");
+  await expect(page).toHaveTitle("main · wren");
+  const other = await page.context().newPage();
+  await other.addInitScript("document.hasFocus = () => false");
+  await other.goto("/workspace/kestrel/main");
+  await send(other, "written from another tab");
+  await other.close();
+  const kestrel = page.locator(".character-row", { has: page.getByText("kestrel", { exact: true }) });
+  await expect(kestrel.locator(".sidebar-unread [aria-hidden]")).toHaveText("1");
+  await expect(kestrel.locator(".sidebar-later-count > span[aria-hidden]")).toHaveText("1");
+  await expect(page).toHaveTitle("(1) main · wren");
+  await expectCharacterRowLaidOut(kestrel, "default text");
+
+  const switcher = page.getByRole("dialog", { name: "Command palette" });
+  await page.getByRole("button", { name: /^Find a thread or command/ }).click();
+  await expect(switcher.getByRole("option").first()).toHaveText(/^Open quiet.*kestrel$/);
+  await page.keyboard.press("Enter");
+  await expect(page.locator(".topbar-thread")).toHaveText("quiet");
+  await expect(page).toHaveURL(/\/workspace\/kestrel\/quiet$/);
+  await expect(page).toHaveTitle("(1) quiet · kestrel");
+  await page.getByRole("button", { name: /^Find a thread or command/ }).click();
+  await expect(switcher.getByRole("option").first()).toHaveText(/^Open main.*wren$/);
+  await page.keyboard.press("Enter");
+  await expect(page).toHaveURL(/\/workspace\/wren\/main$/);
+  await expect(kestrel.locator(".sidebar-unread [aria-hidden]")).toHaveText("1");
+
+  await page.evaluate("localStorage.setItem('shore.font-size', 'larger')");
+  await page.reload();
+  await expect(kestrel.locator(".sidebar-unread [aria-hidden]")).toHaveText("1");
+  await expectCharacterRowLaidOut(kestrel, "largest text");
+  await page.setViewportSize({ width: 280, height: 653 });
+  await page.getByRole("button", { name: /^Open sidebar/ }).click();
+  await expect.poll(async () => (await edgesOf(page.locator("aside.sidebar"))).left, "the drawer has slid in").toBe(0);
+  await expectCharacterRowLaidOut(kestrel, "narrowest phone");
+  await finish();
+});
+
 test.describe("on a touch screen", () => {
   test.use({ isMobile: true, hasTouch: true, viewport: { width: 1000, height: 700 } });
 

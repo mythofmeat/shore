@@ -18,7 +18,8 @@ import { triggerFiredNote, userWroteNote, wakeNewsNote } from "../src/autonomy/w
 import { changePresence, lastSeen, noteSeen, presence, presenceState } from "../src/autonomy/presence.ts";
 import { checkFacts, startTriggerTimer, type TriggerService } from "../src/autonomy/trigger_service.ts";
 import { estimateHistoryTokens, wakeRunningText } from "../src/engine/prompt.ts";
-import { isWakeOpener, markThreadRead, threadActivityNow, threadContextTokens } from "../src/engine/threads.ts";
+import { isWakeOpener, markThreadRead, setThreadLater, threadActivityNow, threadContextTokens } from "../src/engine/threads.ts";
+import type { AllThreads } from "../src/protocol/AllThreads.ts";
 import type { Message } from "../src/engine/types.ts";
 import { dispatchCommand } from "../src/handler/commands.ts";
 import { buildCommandPathDeps, buildRunGeneration } from "../src/handler/deps.ts";
@@ -2546,6 +2547,28 @@ test("a thread marked for later says when on every client, a regenerate leaves t
 
     expect(await command("thread_later", { name: "nowhere", later: true })).toMatchObject({ type: "error", code: "not_found" });
     expect(await command("thread_later", { name: "garden", later: "yes" })).toMatchObject({ type: "error", message: "/later must be boolean" });
+  });
+});
+
+test("every character's threads come in one listing, each with its unread replies, later mark and archived time, from any session", async () => {
+  await withCharacter(async ({ runtime, command, say, data, workspace, script }) => {
+    const bo = join(workspace, "..", "..", "bo", "workspace");
+    await mkdir(bo, { recursive: true });
+    await writeFile(join(bo, "SOUL.md"), "Bo");
+    await runtime.registry.createThread("ada", "side");
+    await runtime.registry.createThread("ada", "garden");
+    await runtime.registry.createThread("bo", "rowing");
+    await runtime.registry.createThread("bo", "shelf");
+    markThreadRead(data, "ada", "side", T0 - MINUTE);
+    await repliedAt(1, script, () => say("hello", "side"));
+    await setThreadLater(data, "bo", "rowing", true, "2026-11-28T09:00:00.000Z");
+    expect(await command("archive_thread", { name: "garden" })).toMatchObject({ type: "command_output" });
+    const all = (await command("all_threads", {}, "main") as unknown as { data: AllThreads }).data;
+    const shown = all.characters.map(({ character, threads }) => [character, threads.map(({ id, home, unread, later, archived }) => [id, home, unread ?? null, later ?? null, archived === undefined ? null : "archived"])]);
+    expect(shown).toEqual([
+      ["ada", [["main", true, 0, null, null], ["side", false, 1, null, null], ["garden", false, 0, null, "archived"]]],
+      ["bo", [["main", true, 0, null, null], ["rowing", false, 0, "2026-11-28T09:00:00.000Z", null], ["shelf", false, 0, null, null]]],
+    ]);
   });
 });
 

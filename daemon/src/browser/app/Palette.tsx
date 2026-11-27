@@ -4,7 +4,7 @@ import { Dialog } from "../ui/controls.tsx";
 import { Icon, type IconName } from "../ui/icons.tsx";
 import { toasts } from "../ui/toast.tsx";
 import { makeHome } from "../chat/actions.ts";
-import { readOnlyThread } from "../sidebar/order.ts";
+import { readOnlyThread, threadsByCharacter } from "../sidebar/order.ts";
 import { threadLabel } from "../sidebar/Sidebar.tsx";
 import { UnreadBadge } from "../sidebar/ThreadRow.tsx";
 import { previousVisit, switcherThreads } from "./recent.ts";
@@ -33,10 +33,9 @@ export function Palette({ state, close, newThread, newCharacter, initialScope = 
     if (scope === "config") return keys.map((key) => ({ id: `config:${key}`, label: key, icon: "settings", group: "Settings keys", run: run(() => { requestConfigSearch(key); navigate({ view: "settings", page: "configuration" }); }) }));
     const current = state.thread;
     const openThread = state.threads.find((thread) => thread.id === current);
-    const previous = previousVisit(state.character, current);
-    const threads = state.character === null ? [] : switcherThreads(state.threads, current, previous?.character === state.character ? previous.thread : undefined).map((thread) => ({
-      id: `thread:${thread.id}`, label: `Open ${threadLabel(thread)}`, detail: thread.archived === undefined ? state.character ?? "" : "archived", keywords: thread.id, unread: thread.unread ?? 0,
-      icon: "chat" as const, group: "Threads", run: run(() => { navigate({ view: "chat" }); perform(() => workspace.openThread(thread.id)); }),
+    const threads = switcherThreads(threadsByCharacter(state), { character: state.character, thread: current }, previousVisit(state.character, current)).map(({ character, thread }) => ({
+      id: `thread:${JSON.stringify([character, thread.id])}`, label: `Open ${threadLabel(thread)}`, detail: thread.archived === undefined ? character : `${character} · archived`, keywords: thread.id, unread: thread.unread ?? 0,
+      icon: "chat" as const, group: "Threads", run: run(() => { navigate({ view: "chat" }); perform(() => workspace.openThreadIn(character, thread.id)); }),
     }));
     const conversation = state.character === null ? [] : [
       { id: "new-thread", label: "New thread", icon: "plus" as const, group: "Thread", run: run(newThread) },
@@ -59,7 +58,7 @@ export function Palette({ state, close, newThread, newCharacter, initialScope = 
       { id: "new-character", label: "New character", icon: "plus", group: "Characters", run: run(newCharacter) },
       ...SETTINGS_PAGES.map((page) => ({ id: `settings:${page.id}`, label: page.label, detail: `Settings · ${page.group}`, icon: "settings" as const, group: "Settings", run: run(() => navigate({ view: "settings", page: page.id })) })),
     ];
-  }, [scope, keys, state.characters, state.threads, state.character, state.thread, close, newThread, newCharacter]);
+  }, [scope, keys, state.characters, state.threads, state.allThreads, state.character, state.thread, close, newThread, newCharacter]);
   const visible = paletteMatches(commands, query).map((index) => commands[index]).filter((item): item is Command => item !== undefined).slice(0, 60);
   const current = Math.min(active, Math.max(visible.length - 1, 0));
   useEffect(() => { list.current?.querySelector(`[data-index="${String(current)}"]`)?.scrollIntoView({ block: "nearest" }); }, [current]);

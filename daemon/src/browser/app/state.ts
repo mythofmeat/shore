@@ -55,12 +55,7 @@ followStoredWrites(kept.wrote);
 export const themes = new ThemeStore(kept);
 export const fontSizes = new FontSizeStore(kept);
 export const display = new DisplayPreferences(kept);
-export const notifier = new Notifier({ storage: kept, open: (character, thread) => { navigate({ view: "chat" }); perform(() => openThreadIn(character, thread)); } });
-
-export async function openThreadIn(character: string, thread: string): Promise<void> {
-  if (character !== workspace.getSnapshot().character) await workspace.openCharacter(character);
-  if (thread !== (workspace.getSnapshot().thread ?? "main")) await workspace.openThread(thread);
-}
+export const notifier = new Notifier({ storage: kept, open: (character, thread) => { navigate({ view: "chat" }); perform(() => workspace.openThreadIn(character, thread)); } });
 
 function reloadStored(): void {
   themes.reload(); fontSizes.reload(); display.reload(); notifier.reload(); collapsedFolders.reload();

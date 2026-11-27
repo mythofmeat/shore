@@ -2570,6 +2570,13 @@ wire_types! {
     }
 
     #[serde(deny_unknown_fields)]
+    pub struct SwitchCharacterArgs {
+        pub name: String,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        pub thread: Option<String>,
+    }
+
+    #[serde(deny_unknown_fields)]
     pub struct SwitchThreadArgs {
         pub name: String,
         #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -2600,6 +2607,10 @@ wire_types! {
     pub struct ThreadPromptPart { pub label: String, pub text: String, pub changed: bool }
 
     pub struct ThreadPromptView { pub thread: String, pub parts: Vec<ThreadPromptPart>, pub pins: Vec<ThreadPinStatus> }
+
+    pub struct CharacterThreads { pub character: String, pub threads: Vec<ThreadView> }
+
+    pub struct AllThreads { pub characters: Vec<CharacterThreads> }
 
     #[serde(rename_all = "snake_case")]
     pub enum ContextLimitMode { Compaction, Trim, Off }
@@ -3024,9 +3035,10 @@ operations! {
     InjectSystem: "inject_system" (InjectSystemArgs) => SystemInjected,
     ListCharacters: "list_characters" (EmptyOperationArgs) => CharacterListing,
     CreateCharacter: "create_character" (NamedOperationArgs) => CharacterCreated,
-    SwitchCharacter: "switch_character" (NamedOperationArgs) => CharacterSelection,
+    SwitchCharacter: "switch_character" (SwitchCharacterArgs) => CharacterSelection,
     InspectCharacter: "character_info" (CharacterInfoArgs) => CharacterDetails,
     ListThreads: "list_threads" (EmptyOperationArgs) => ThreadListing,
+    ListAllThreads: "all_threads" (EmptyOperationArgs) => AllThreads,
     ListWorkspaceFiles: "workspace_files" (EmptyOperationArgs) => WorkspaceFileListing,
     SwitchThread: "switch_thread" (SwitchThreadArgs) => ThreadSelection,
     CreateThread: "create_thread" (CreateThreadArgs) => ThreadListing,

@@ -84,7 +84,7 @@ async function annotations(
     case "set_model_setting":
       return afterChatModelChange(name, args, data, ctx);
     case "switch_character":
-      return await afterSwitchCharacter(data, ctx);
+      return await afterSwitchCharacter(args, data, ctx);
     case "switch_thread":
       return await afterSwitchThread(args, data, ctx);
     case "thread_model":
@@ -158,20 +158,25 @@ async function afterConfigReload(
 }
 
 async function afterSwitchCharacter(
+  args: unknown,
   data: unknown,
   ctx: DispatchContext,
 ): Promise<Record<string, unknown> | undefined> {
   const selected = isRecord(data) ? data["character"] : undefined;
   if (typeof selected !== "string") return undefined;
+  const thread = isRecord(args) && typeof args["thread"] === "string" ? args["thread"] : undefined;
 
   const previous = ctx.router.characterFor(ctx.sessionId);
+  const previousThread = ctx.router.threadFor(ctx.sessionId);
   ctx.router.setSelectedCharacter(ctx.sessionId, selected);
+  if (thread !== undefined) ctx.router.setSelectedThread(ctx.sessionId, thread);
 
   let snapshot: HistorySnapshot;
   try {
-    snapshot = await ctx.handshake.history(selected);
+    snapshot = await ctx.handshake.history(selected, thread);
   } catch (e) {
     ctx.router.setSelectedCharacter(ctx.sessionId, previous);
+    ctx.router.setSelectedThread(ctx.sessionId, previousThread);
     throw e;
   }
 

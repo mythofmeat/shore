@@ -19,6 +19,27 @@ export function unreadIn(threads: readonly ThreadView[], open: string | null, fo
   return threads.reduce((total, thread) => total + shownUnread(thread, open, focused), 0);
 }
 
+export function totalUnread(threads: readonly ThreadView[]): number {
+  return threads.reduce((total, thread) => total + (thread.unread ?? 0), 0);
+}
+
+export function laterIn(threads: readonly ThreadView[]): number {
+  return threads.filter((thread) => thread.later !== undefined).length;
+}
+
+export interface CharacterThreadsView { character: string; threads: readonly ThreadView[] }
+
+export function threadsByCharacter(state: { characters: readonly { name: string }[]; character: string | null; threads: readonly ThreadView[]; allThreads: readonly CharacterThreadsView[] }): CharacterThreadsView[] {
+  return state.characters.map(({ name }) => ({
+    character: name,
+    threads: name === state.character ? state.threads : state.allThreads.find((each) => each.character === name)?.threads ?? [],
+  }));
+}
+
+export function unreadEverywhere(state: Parameters<typeof threadsByCharacter>[0] & { thread: string | null }, focused: boolean): number {
+  return threadsByCharacter(state).reduce((total, { character, threads }) => total + (character === state.character ? unreadIn(threads, state.thread, focused) : totalUnread(threads)), 0);
+}
+
 function pinned(thread: ThreadView): boolean {
   return thread.home;
 }

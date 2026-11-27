@@ -1,4 +1,5 @@
 import type { ThreadView } from "../../protocol/ThreadView.ts";
+import type { CharacterThreadsView } from "../sidebar/order.ts";
 
 export interface Visit { character: string; thread: string }
 
@@ -21,9 +22,11 @@ function recency(thread: ThreadView): string {
   return thread.last_active ?? thread.created_at;
 }
 
-export function switcherThreads(threads: readonly ThreadView[], current: string | null, previous: string | undefined): ThreadView[] {
-  const others = threads.filter((thread) => thread.id !== current).sort((a, b) =>
-    Number(a.archived !== undefined) - Number(b.archived !== undefined) || recency(b).localeCompare(recency(a)));
-  const back = others.find((thread) => thread.id === previous);
-  return back === undefined ? others : [back, ...others.filter((thread) => thread !== back)];
+export interface SwitcherThread { character: string; thread: ThreadView }
+
+export function switcherThreads(groups: readonly CharacterThreadsView[], here: { character: string | null; thread: string | null }, previous: Visit | undefined): SwitcherThread[] {
+  const others = groups.flatMap(({ character, threads }) => threads.filter((thread) => character !== here.character || thread.id !== here.thread).map((thread) => ({ character, thread })))
+    .sort((a, b) => Number(a.thread.archived !== undefined) - Number(b.thread.archived !== undefined) || recency(b.thread).localeCompare(recency(a.thread)));
+  const back = others.find((each) => each.character === previous?.character && each.thread.id === previous.thread);
+  return back === undefined ? others : [back, ...others.filter((each) => each !== back)];
 }

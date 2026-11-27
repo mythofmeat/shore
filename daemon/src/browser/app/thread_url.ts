@@ -1,6 +1,6 @@
 import { useEffect, useRef } from "react";
 import { required } from "../../util/required.ts";
-import { openThreadIn, perform } from "./state.ts";
+import { perform, workspace } from "./state.ts";
 import { toasts } from "../ui/toast.tsx";
 import { noteVisit } from "./recent.ts";
 
@@ -38,7 +38,7 @@ export function useThreadUrl(character: string | null, thread: string | null): v
   useEffect(() => {
     const moved = () => {
       const place = threadInPath(location.pathname);
-      if (place !== undefined && threadPath(place.character, place.thread) !== shown.current) perform(() => openThreadIn(place.character, place.thread));
+      if (place !== undefined && threadPath(place.character, place.thread) !== shown.current) perform(() => workspace.openThreadIn(place.character, place.thread));
     };
     addEventListener("popstate", moved);
     return () => { removeEventListener("popstate", moved); };

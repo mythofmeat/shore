@@ -9,7 +9,7 @@ import { Pictures, unplacedPictures } from "../src/browser/pictures.tsx";
 import { runInNewContext } from "node:vm";
 
 function emptySnapshot(): WorkspaceSnapshot {
-  return { characters: [], threads: [], operations: [], requests: [], messages: [], metadata: {}, streams: [], media: [], mediaLimited: false, activity: [], config: {}, error: "", status: "ready", detail: "", character: "ada", thread: "main", previousSegment: null, segmentView: null, uncertain: [], opening: null, folders: [], manualOrder: false, spendingRequestsFinished: 0 };
+  return { characters: [], threads: [], operations: [], requests: [], messages: [], metadata: {}, streams: [], media: [], mediaLimited: false, activity: [], config: {}, error: "", status: "ready", detail: "", character: "ada", thread: "main", previousSegment: null, segmentView: null, uncertain: [], opening: null, folders: [], manualOrder: false, spendingRequestsFinished: 0, allThreads: [] };
 }
 
 test("markdown renders formatting but never raw HTML, unsafe links or remote images", () => {

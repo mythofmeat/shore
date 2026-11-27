@@ -13,7 +13,7 @@ import { toasts } from "../ui/toast.tsx";
 import { unsentConversations, watchUnsent } from "../drafts.ts";
 import { FolderRow } from "./FolderRow.tsx";
 import { PresenceStore, StatusPicker } from "./StatusPicker.tsx";
-import { ARCHIVED_GROUP, HELD_GROUP, shownUnread, threadSections } from "./order.ts";
+import { ARCHIVED_GROUP, HELD_GROUP, laterIn, shownUnread, threadSections, threadsByCharacter, totalUnread, type CharacterThreadsView } from "./order.ts";
 import { useWindowFocused } from "../ui/hooks.ts";
 import { useRowMenu } from "./row_menu.ts";
 import { LaterCount, THREAD_DRAG_TYPE, ThreadRow, UnreadBadge, type ThreadNeighbours } from "./ThreadRow.tsx";
@@ -46,7 +46,6 @@ function ThreadList({ state, shownThread, ready, select, newThread }: { state: C
   const looseIds = sections.loose.map((thread) => thread.id);
   const looseByActivity = !state.manualOrder;
   const unreadOf = (thread: ThreadView) => shownUnread(thread, state.thread, focused);
-  const laterIn = (threads: readonly ThreadView[]) => threads.filter((thread) => thread.later !== undefined).length;
   const replyingIn = (thread: ThreadView) => thread.id !== state.thread && conversation.activeIn({ character: state.character, thread: thread.id });
   const row = (thread: ThreadView, ids: readonly string[], byActivity: boolean, folder?: string) => <ThreadRow key={thread.id} thread={thread} character={character} label={threadLabel(thread)} current={thread.id === shownThread} unread={unreadOf(thread)} drafted={thread.id !== shownThread && unsent.has(JSON.stringify([state.character, thread.id]))} replying={replyingIn(thread)}
     opening={state.opening?.thread === thread.id && thread.id !== state.thread} ready={ready} select={() => select(thread.id)} neighbours={neighboursIn(ids, thread.id, byActivity)}
@@ -111,7 +110,7 @@ function placeRelative(ids: readonly string[], onto: string, dragged: string, af
   return before === undefined ? {} : { before };
 }
 
-function CharacterRow({ state, character, selected, openingThis, ready, select }: { state: ChromeSnapshot; character: ChromeSnapshot["characters"][number]; selected: boolean; openingThis: boolean; ready: boolean; select: () => void }) {
+function CharacterRow({ state, character, threads, selected, openingThis, ready, select }: { state: ChromeSnapshot; character: ChromeSnapshot["characters"][number]; threads: CharacterThreadsView["threads"] | null; selected: boolean; openingThis: boolean; ready: boolean; select: () => void }) {
   const menu = useRowMenu();
   const items: MenuItem[] = [
     { label: "New folder…", icon: "folder", onSelect: () => openFolderDialog({ kind: "new" }), disabled: !ready },
@@ -122,6 +121,8 @@ function CharacterRow({ state, character, selected, openingThis, ready, select }
     <button type="button" className={`sidebar-item character ${selected ? "on" : ""}`} aria-current={selected ? "true" : undefined} aria-busy={openingThis} disabled={!ready} onClick={() => { if (!menu.swallowClick()) select(); }}>
       <Avatar name={character.name} avatar={character.avatar} size={30} selected={selected} /><span className="sidebar-name">{character.name}</span>
       {openingThis ? <span className="sidebar-replying"><span className="spinner" aria-hidden="true" /><span className="sr-only">(opening)</span></span> : null}
+      {threads !== null && laterIn(threads) > 0 ? <LaterCount count={laterIn(threads)} /> : null}
+      {threads !== null && totalUnread(threads) > 0 ? <UnreadBadge count={totalUnread(threads)} /> : null}
     </button>
     {openable ? <IconButton icon="more" size={16} className="thread-more" label={`Options for ${character.name}’s threads`} aria-haspopup="menu" aria-expanded={menu.at !== null} onClick={menu.openFrom} /> : null}
     {menu.at === null ? null : <PointMenu label={`Options for ${character.name}’s threads`} items={items} at={menu.at} close={menu.close} />}
@@ -143,6 +144,7 @@ export function Sidebar({ state, mobile, close, collapse, newCharacter, newThrea
   const opening = state.opening;
   const shownCharacter = opening?.character ?? state.character;
   const shownThread = opening === null ? state.thread : opening.thread;
+  const everyCharacter = threadsByCharacter(state);
   const selectCharacter = (name: string) => {
     navigate({ view: "chat" });
     if (mobile) close();
@@ -165,11 +167,11 @@ export function Sidebar({ state, mobile, close, collapse, newCharacter, newThrea
       <Icon name="search" size={16} /><span className="sidebar-search-text">Find a thread or command</span>{mobile ? null : <kbd>{`${keyLabel("Mod")} K`}</kbd>}
     </button>
     <nav className="sidebar-list" aria-label="Characters">
-      {state.characters.map((character) => {
+      {state.characters.map((character, index) => {
         const selected = character.name === shownCharacter;
         const openingThis = opening !== null && opening.character === character.name && character.name !== state.character;
         return <div key={character.name} className="sidebar-group">
-          <CharacterRow state={state} character={character} selected={selected} openingThis={openingThis} ready={ready} select={() => selectCharacter(character.name)} />
+          <CharacterRow state={state} character={character} threads={character.name === state.character ? null : everyCharacter[index]?.threads ?? []} selected={selected} openingThis={openingThis} ready={ready} select={() => selectCharacter(character.name)} />
           {character.name === state.character ? <ThreadList state={state} shownThread={shownThread} ready={ready} select={selectThread} newThread={newThread} /> : null}
         </div>;
       })}

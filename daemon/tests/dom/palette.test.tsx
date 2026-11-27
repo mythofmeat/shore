@@ -80,7 +80,7 @@ test("with nothing typed the threads come first: the one visited before this one
   const view = await palette(await chrome({ threads }));
   expect(view.labels().slice(0, 5)).toEqual(["Open lamp-c", "Open lamp-b", "Open lamp-a", "Open lamp-d", "New thread"]);
   const shown = [...view.host.querySelectorAll("[role=option]")].slice(0, 4).map((item) => [item.querySelector(".sidebar-unread [aria-hidden]")?.textContent ?? null, item.querySelector(".palette-detail")?.textContent]);
-  expect(shown).toEqual([[null, "ada"], [null, "ada"], ["3", "ada"], [null, "archived"]]);
+  expect(shown).toEqual([[null, "ada"], [null, "ada"], ["3", "ada"], [null, "ada · archived"]]);
   expect(view.host.querySelectorAll("[role=option] .sidebar-unread"), "only threads with unread replies count them").toHaveLength(1);
   await view.rerender(await chrome({ threads: [HOME, { ...lamp("a", 1), unread: 1 }] }));
   expect([...view.host.querySelectorAll("[role=option] .sidebar-unread [aria-hidden]")].map((badge) => badge.textContent)).toEqual(["1"]);
@@ -96,6 +96,23 @@ test("Enter on the switcher as it opens goes back to the thread visited before t
   await view.press("Enter");
   await settle();
   expect(asked(since, "switch_thread")).toEqual([{ name: "lamp-b", resync: true }]);
+});
+
+test("other characters' threads are listed under their names, the visit before first wherever it was, and choosing one opens that character on that thread", async () => {
+  app.answer((request) => request["name"] === "switch_character" ? { character: "bo", changed: true } : undefined);
+  const { noteVisit } = await import("../../src/browser/app/recent.ts");
+  noteVisit("bo", "shelf");
+  noteVisit("ada", "story");
+  const bo = [{ ...HOME, id: "main", current: false }, { ...lamp("x", 1), id: "rowing", last_active: "2026-11-20T00:00:00Z", unread: 2 }, { ...lamp("y", 2), id: "shelf" }];
+  const view = await palette(await chrome({ allThreads: [{ character: "ada", threads: [HOME] }, { character: "bo", threads: bo }] }));
+  const rows = () => [...view.host.querySelectorAll("[role=option]")].slice(0, 3).map((item) => [item.querySelector(".palette-label")?.textContent, item.querySelector(".palette-detail")?.textContent, item.querySelector(".sidebar-unread [aria-hidden]")?.textContent ?? null]);
+  expect(rows()).toEqual([["Open shelf", "bo", null], ["Open rowing", "bo", "2"], ["Open lamp-a", "ada", null]]);
+  const since = app.socket().sent.length;
+  await view.choose("Open rowing");
+  await settle();
+  expect(app.sent(since).filter((request) => String(request["name"]).startsWith("switch_")).map((request) => [request["name"], request["args"]])).toEqual([
+    ["switch_character", { name: "bo", thread: "rowing" }],
+  ]);
 });
 
 test("Another take from the palette asks for a different reply, in the chat", async () => {

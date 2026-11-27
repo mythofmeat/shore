@@ -122,7 +122,7 @@ describe("the app's state", () => {
     socket.receive({ type: "thread_unread", character: "bo", thread: "notes", unread: 1, reply: "hello from bo" });
     (opened.at(-1) as Shown | undefined)?.onclick?.();
     await acting(() => Bun.sleep(5));
-    expect(asked().at(1)).toEqual(["switch_character", { name: "bo" }]);
+    expect(asked().slice(1)).toEqual([["switch_character", { name: "bo", thread: "notes" }]]);
   });
 
   test("a message that was not saved comes back with a notice naming its character and any pictures left out", async () => {

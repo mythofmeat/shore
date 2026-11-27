@@ -241,7 +241,7 @@ describe("the archives page", () => {
     await settle();
     expect(net.paths().filter((path) => path !== "/list")).toEqual(["/up/import"]);
     expect(net.paths().at(-1)).toBe("/list");
-    expect(app.sent(before).map((request) => String(request["name"])).sort((a, b) => a.localeCompare(b))).toEqual(["discover_operations", "list_characters", "list_threads"]);
+    expect(app.sent(before).map((request) => String(request["name"])).sort((a, b) => a.localeCompare(b))).toEqual(["all_threads", "discover_operations", "list_characters", "list_threads"]);
     await click(button(view.host, "Remove"));
     await settle();
     expect(net.paths().slice(-2)).toEqual(["/up/remove", "/list"]);

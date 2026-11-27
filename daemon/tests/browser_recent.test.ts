@@ -28,9 +28,9 @@ test("the visit before this one is the last other thread opened, on any characte
   ]);
 });
 
-test("the switcher's threads are the visit before first, then newest first with archived ones last, never the open one", async () => {
+test("the switcher lists every character's threads, the visit before first, then newest first with archived ones last, never the open one", async () => {
   const { switcherThreads } = await fresh();
-  const threads = [
+  const ada = [
     thread("shelved", { archived: "2026-11-10T00:00:00Z", last_active: "2026-11-19T00:00:00Z" }),
     thread("open", { last_active: "2026-11-20T00:00:00Z" }),
     thread("old", { last_active: "2026-11-02T00:00:00Z" }),
@@ -38,11 +38,16 @@ test("the switcher's threads are the visit before first, then newest first with 
     thread("never"),
     thread("dusty", { archived: "2026-11-10T00:00:00Z", last_active: "2026-11-01T12:00:00Z" }),
   ];
-  const ids = (from: readonly ThreadView[]) => from.map((each) => each.id);
-  expect(ids(switcherThreads(threads, "open", undefined))).toEqual(["new", "old", "never", "shelved", "dusty"]);
-  expect(ids(switcherThreads([...threads].reverse(), "open", undefined))).toEqual(["new", "old", "never", "shelved", "dusty"]);
-  expect(ids(switcherThreads(threads, "open", "old"))).toEqual(["old", "new", "never", "shelved", "dusty"]);
-  expect(ids(switcherThreads(threads, "open", "dusty"))).toEqual(["dusty", "new", "old", "never", "shelved"]);
-  expect(ids(switcherThreads(threads, "open", "gone"))).toEqual(["new", "old", "never", "shelved", "dusty"]);
-  expect(ids(switcherThreads(threads, null, "open"))[0]).toBe("open");
+  const bo = [thread("open", { last_active: "2026-11-05T00:00:00Z" }), thread("rowing", { archived: "2026-11-11T00:00:00Z" })];
+  const groups = [{ character: "ada", threads: ada }, { character: "bo", threads: bo }];
+  const here = { character: "ada", thread: "open" };
+  const ids = (from: ReturnType<typeof switcherThreads>) => from.map((each) => `${each.character}/${each.thread.id}`);
+  const newest = ["ada/new", "bo/open", "ada/old", "ada/never", "ada/shelved", "ada/dusty", "bo/rowing"];
+  expect(ids(switcherThreads(groups, here, undefined))).toEqual(newest);
+  expect(ids(switcherThreads([...groups].reverse().map((group) => ({ ...group, threads: [...group.threads].reverse() })), here, undefined))).toEqual(newest);
+  expect(ids(switcherThreads(groups, here, { character: "ada", thread: "old" }))).toEqual(["ada/old", "ada/new", "bo/open", "ada/never", "ada/shelved", "ada/dusty", "bo/rowing"]);
+  expect(ids(switcherThreads(groups, here, { character: "bo", thread: "rowing" }))[0]).toBe("bo/rowing");
+  expect(ids(switcherThreads(groups, here, { character: "bo", thread: "old" })), "a visit names its character as well as its thread").toEqual(newest);
+  expect(ids(switcherThreads(groups, here, { character: "ada", thread: "gone" }))).toEqual(newest);
+  expect(ids(switcherThreads(groups, { character: null, thread: null }, { character: "ada", thread: "open" })).slice(0, 2)).toEqual(["ada/open", "ada/new"]);
 });

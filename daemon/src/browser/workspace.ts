@@ -14,6 +14,7 @@ import type { ServerMessage } from "../protocol/ServerMessage.ts";
 import type { ThreadUnread } from "../protocol/ThreadUnread.ts";
 import type { ThreadFolderView } from "../protocol/ThreadFolderView.ts";
 import type { ThreadListing } from "../protocol/ThreadListing.ts";
+import type { CharacterThreads } from "../protocol/CharacterThreads.ts";
 import type { ThreadView } from "../protocol/ThreadView.ts";
 import type { WebRequestList } from "../protocol/WebRequestList.ts";
 import { BrowserConnection, type ConnectionUpdate } from "./connection.ts";
@@ -44,6 +45,7 @@ export interface WorkspaceSnapshot {
   config: unknown; error: string; status: string; detail: string;
   character: string | null; thread: string | null; previousSegment: SegmentSummary | null; segmentView: SegmentView | null; uncertain: UncertainRequest[];
   opening: OpeningTarget | null; folders: ThreadFolderView[]; manualOrder: boolean; spendingRequestsFinished: number;
+  allThreads: CharacterThreads[];
 }
 
 export interface OpeningTarget { character: string | null; thread: string | null }
@@ -100,11 +102,12 @@ export class Workspace {
   #framePending = false;
   #navigation: object = {};
   #threadListing: object = {};
+  #allListing: object = {};
   #eventId = 0;
   #segmentEpoch: object = {};
   #loadingEarlier = false;
   #unread = new Map<string, ThreadUnread>();
-  #state: WorkspaceSnapshot = { characters: [], threads: [], operations: [], requests: [], messages: [], metadata: {}, streams: [], media: [], mediaLimited: false, activity: [], config: {}, error: "", status: "idle", detail: "", character: null, thread: null, previousSegment: null, segmentView: null, uncertain: [], opening: null, folders: [], manualOrder: false, spendingRequestsFinished: 0 };
+  #state: WorkspaceSnapshot = { characters: [], threads: [], operations: [], requests: [], messages: [], metadata: {}, streams: [], media: [], mediaLimited: false, activity: [], config: {}, error: "", status: "idle", detail: "", character: null, thread: null, previousSegment: null, segmentView: null, uncertain: [], opening: null, folders: [], manualOrder: false, spendingRequestsFinished: 0, allThreads: [] };
   constructor(readonly connection: BrowserConnection, readonly listRequests: () => Promise<WebRequestList>, frame: FrameScheduler = (callback) => { callback(); }) {
     this.#frame = frame;
     this.actions = new OperationClient(connection);
@@ -199,7 +202,17 @@ export class Workspace {
   async refreshNavigation(): Promise<void> {
     const generation = {};
     this.#navigation = generation;
-    await Promise.all([this.refreshThreads(), this.#refreshCatalogues(generation)]);
+    await Promise.all([this.refreshThreads(), this.#refreshCatalogues(generation), this.#refreshAllThreads()]);
+  }
+  async #refreshAllThreads(): Promise<void> {
+    const generation = {};
+    this.#allListing = generation;
+    const known = new Set(this.#unread.values());
+    try {
+      const all = await this.actions.run("all_threads", {});
+      if (generation !== this.#allListing) return;
+      this.#patch({ allThreads: all.characters.map((each) => ({ ...each, threads: this.#laterUnread(each.character, each.threads, known) })) });
+    } catch (error) { if (generation === this.#allListing && this.connection.status === "ready") this.report(error); }
   }
   async #refreshCatalogues(generation: object): Promise<void> {
     try {
@@ -219,7 +232,7 @@ export class Workspace {
     } catch (error) { if (generation === this.#threadListing && this.connection.status === "ready") this.report(error); }
   }
   #applyListing(listing: ThreadListing, known: ReadonlySet<ThreadUnread>): void {
-    this.#patch({ threads: this.#laterUnread(listing.threads, known), folders: listing.folders ?? [], manualOrder: listing.manual_order === true });
+    this.#patch({ threads: this.#laterUnread(listing.character, listing.threads, known), folders: listing.folders ?? [], manualOrder: listing.manual_order === true });
   }
   applyThreadListing(listing: ThreadListing): void {
     this.#threadListing = {};
@@ -237,6 +250,13 @@ export class Workspace {
   async openThread(name: string): Promise<void> {
     await this.#open({ character: this.#state.character, thread: name }, async () => { await this.actions.run("switch_thread", { name, resync: true }); });
   }
+  async openThreadIn(character: string, thread: string): Promise<void> {
+    if (character === this.#state.character) {
+      if (thread !== (this.#state.thread ?? "main")) await this.openThread(thread);
+      return;
+    }
+    await this.#open({ character, thread }, async () => { await this.actions.run("switch_character", { name: character, thread }); });
+  }
   async openCharacter(name: string): Promise<void> {
     await this.#open({ character: name, thread: null }, async () => { await this.actions.run("switch_character", { name }); });
   }
@@ -248,9 +268,9 @@ export class Workspace {
     const config = this.#state.config;
     this.#patch({ config: { ...(typeof config === "object" && config !== null ? config : {}), active_model: model } });
   }
-  #laterUnread(threads: ThreadView[], known: ReadonlySet<ThreadUnread>): ThreadView[] {
+  #laterUnread(character: string, threads: ThreadView[], known: ReadonlySet<ThreadUnread>): ThreadView[] {
     let merged = threads;
-    for (const update of this.#unread.values()) if (!known.has(update)) merged = applyThreadUnread(merged, update);
+    for (const update of this.#unread.values()) if (update.character === character && !known.has(update)) merged = applyThreadUnread(merged, update);
     return merged;
   }
   #stream(message: Extract<ServerMessage, { type: "stream_start" | "stream_chunk" | "stream_end" | "tool_call" | "tool_result" }>): void {
@@ -312,9 +332,9 @@ export class Workspace {
   }
   #receive(update: ConnectionUpdate): void {
     if (update.kind === "status") {
-      if (update.status !== "ready") { this.#navigation = {}; this.#threadListing = {}; }
+      if (update.status !== "ready") { this.#navigation = {}; this.#threadListing = {}; this.#allListing = {}; }
       if (update.status === "signed_out") this.#segmentEpoch = {};
-      this.#patch({ status: update.status, detail: update.detail, streams: update.status === "ready" ? this.#state.streams : [], ...(update.status === "signed_out" ? { error: "", messages: [], metadata: {}, config: {}, media: [], mediaLimited: false, activity: [], operations: [], requests: [], threads: [], characters: [], uncertain: [], previousSegment: null, segmentView: null, opening: null, folders: [], manualOrder: false } : {}) });
+      this.#patch({ status: update.status, detail: update.detail, streams: update.status === "ready" ? this.#state.streams : [], ...(update.status === "signed_out" ? { error: "", messages: [], metadata: {}, config: {}, media: [], mediaLimited: false, activity: [], operations: [], requests: [], threads: [], characters: [], uncertain: [], previousSegment: null, segmentView: null, opening: null, folders: [], manualOrder: false, allThreads: [] } : {}) });
       if (update.status === "ready") void this.refreshNavigation();
       if (update.status === "ready" || update.status === "error" || update.status === "reload_required") void this.#settleInterrupted();
       return;
@@ -379,13 +399,12 @@ export class Workspace {
       case "provider_fallback_warning": case "usage_warning": case "plan_limit_warning": case "config_warning": case "shutdown":
         this.#activity(message.type, message); break;
       case "threads_changed":
-        if (message.character === this.#state.character && this.connection.status === "ready") void this.refreshThreads();
+        if (this.connection.status === "ready") void (message.character === this.#state.character ? this.refreshThreads() : this.#refreshAllThreads());
         this.#activity(message.type, message); break;
       case "thread_unread":
-        if (message.character === this.#state.character) {
-          this.#unread.set(message.thread, message);
-          this.#patch({ threads: applyThreadUnread(this.#state.threads, message) });
-        }
+        this.#unread.set(JSON.stringify([message.character, message.thread]), message);
+        if (message.character === this.#state.character) this.#patch({ threads: applyThreadUnread(this.#state.threads, message) });
+        else this.#patch({ allThreads: this.#state.allThreads.map((each) => each.character === message.character ? { ...each, threads: applyThreadUnread(each.threads, message) } : each) });
         this.#activity(message.type, message); break;
       case "ping": break;
     }

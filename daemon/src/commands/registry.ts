@@ -21,7 +21,9 @@ import { defineOperation, discoverOperations, type OperationPresentation, type O
 import type { CommandDeps, CommandSession } from "./dispatch.ts";
 import { internalError, invalidRequest } from "./errors.ts";
 import { characterInfo, createCharacter, listCharacters, switchCharacter } from "./navigation.ts";
-import { archiveThread, forkThread, listThreads, markRead, newThread, switchThread, threadCompaction, threadFolderCreate, threadFolderDelete, threadFolderMove, threadFolderRename, threadFolderSort, threadHold, threadHome, threadLater, unarchiveThread, threadLabel, threadLock, threadModel, threadMove, threadPins, threadPurpose, threadSort } from "./threads.ts";
+import { discoverCharacters } from "../config/dirs.ts";
+import { required } from "../util/required.ts";
+import { allThreads, archiveThread, forkThread, listThreads, markRead, newThread, switchThread, threadCompaction, threadFolderCreate, threadFolderDelete, threadFolderMove, threadFolderRename, threadFolderSort, threadHold, threadHome, threadLater, unarchiveThread, threadLabel, threadLock, threadModel, threadMove, threadPins, threadPurpose, threadSort } from "./threads.ts";
 import { archiveWithSignal, threadContext, threadListingContext } from "./thread_context.ts";
 import { contextUse, refreshThreadPrompt, threadPrompt, type ThreadPromptContext } from "./thread_prompt.ts";
 import { alt, deleteMessages, edit, get, historyPage, injectSystem, listAlternatives, log } from "./conversation.ts";
@@ -411,8 +413,8 @@ export const commandOperations: OperationRegistry<CommandOperationContext> = {
   }),
   switch_character: register("switch_character", {
     ...characterPresentation, label: "Select character", scope: "selection", effects: ["selection"],
-    fields: { name: { label: "Character", choices: "characters" } },
-  }, ({ session, engine }, args) => switchCharacter(session.config.dirs.config, engine?.characterName ?? session.characterName, args)),
+    fields: { name: { label: "Character", choices: "characters" }, thread: { label: "Thread", hint: "Omit for the character's home thread" } },
+  }, ({ session, engine, deps }, args) => switchCharacter(session.config.dirs.config, engine?.characterName ?? session.characterName, args, (name) => deps.threads?.listThreads(name) ?? [])),
   character_info: register("character_info", {
     ...characterPresentation, label: "Inspect character", scope: "character",
     fields: { name: { label: "Character", choices: "characters", hint: "Omit for the selected character" } },
@@ -453,6 +455,9 @@ export const commandOperations: OperationRegistry<CommandOperationContext> = {
     context.deps.historyIndex?.noteMutation?.(engine.characterName);
     return result;
   }),
+  all_threads: register("all_threads", {
+    ...threadPresentation, scope: "global", label: "List every character's threads", fields: {},
+  }, async ({ session, deps }) => await allThreads(required(deps.threads), session.dataDir, discoverCharacters(session.config.dirs.config))),
   unarchive_thread: register("unarchive_thread", {
     ...threadPresentation, label: "Unarchive thread", effects: ["history_write"],
     fields: { name: threadName },

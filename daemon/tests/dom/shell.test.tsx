@@ -404,7 +404,7 @@ test("Back and Forward open the thread the address names, without adding to the 
   expect(await back("/elsewhere"), "an address that names no thread opens nothing").toEqual([]);
   expect(await back("/workspace/ada/side")).toEqual([["switch_thread", { name: "side", resync: true }]]);
   await view.rerender({ thread: "side" });
-  expect(await back("/workspace/bea/main"), "the character's own thread opens with it").toEqual([["switch_character", { name: "bea" }]]);
+  expect(await back("/workspace/bea/main"), "another character's thread opens with it, in one step").toEqual([["switch_character", { name: "bea", thread: "main" }]]);
   await view.unmount();
   expect(await back("/workspace/ada/notes"), "a shell that is gone stops following the address").toEqual([]);
 });
@@ -438,6 +438,8 @@ test("the tab title names the thread and character, or settings, counts the unre
   expect(document.title).toBe("(3) story · ada");
   await view.rerender({ threads: [{ ...HOME, unread: 2 }, { ...SIDE, unread: 1 }] });
   expect(document.title).toBe("(1) story · ada");
+  await view.rerender({ threads: [{ ...HOME, unread: 2 }, { ...SIDE, unread: 1 }], characters: [{ name: "ada" }, { name: "bo" }], allThreads: [{ character: "ada", threads: [{ ...HOME, unread: 40 }] }, { character: "bo", threads: [{ ...HOME, unread: 1 }, { ...SIDE, unread: 3 }] }] });
+  expect(document.title, "every character's replies count, the open thread's only in the background, and the open character by its own list").toBe("(5) story · ada");
   await view.rerender({ threads: [{ ...HOME, unread: 2 }, { ...SIDE, unread: 0 }] });
   expect(document.title).toBe("story · ada");
   await view.unmount();

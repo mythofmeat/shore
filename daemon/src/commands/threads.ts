@@ -1,3 +1,4 @@
+import type { AllThreads } from "../protocol/AllThreads.ts";
 import type { ThreadView } from "../protocol/ThreadView.ts";
 import type { ThreadListing } from "../protocol/ThreadListing.ts";
 import type { ThreadSelection } from "../protocol/ThreadSelection.ts";
@@ -9,6 +10,7 @@ import { busy, internalError, invalidRequest, notFound } from "./errors.ts";
 import { createFolder, deleteFolder, moveFolder, moveThread, placedThreads, renameFolder, setFolderSort, setThreadsSort, type PlacedThread } from "../engine/thread_layout.ts";
 import {
   homeThread,
+  threadActivities,
   wakesThread,
   ThreadError,
   type ArchiveThreadOptions,
@@ -166,6 +168,15 @@ function listing(ctx: ThreadContext, index?: ThreadsIndex): ThreadListing {
 
 export function listThreads(ctx: ThreadContext): ThreadListing {
   return listing(ctx);
+}
+
+export async function allThreads(registry: ThreadRegistry, dataDir: string, characters: readonly string[]): Promise<AllThreads> {
+  return {
+    characters: await Promise.all(characters.map(async (character) => {
+      const activity = await threadActivities(dataDir, character, registry.listThreads(character).map((record) => record.id));
+      return { character, threads: listing({ registry, character, current: registry.homeThread(character), activity }).threads };
+    })),
+  };
 }
 
 function requiredId(args: Args): string {
