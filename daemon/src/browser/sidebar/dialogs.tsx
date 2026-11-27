@@ -4,6 +4,7 @@ import { toasts } from "../ui/toast.tsx";
 import { navigate } from "../app/route.ts";
 import { workspace } from "../app/state.ts";
 import { PinsField, threadPinList } from "../chat/thread_prompt.tsx";
+import { namedThread } from "./thread_names.ts";
 
 export function WhenLongField({ compaction, setCompaction }: { compaction: boolean; setCompaction: (compaction: boolean) => void }) {
   return <label className="field"><span>Older turns are archived</span><select className="select" value={compaction ? "compact" : "trim"} onChange={(event) => setCompaction(event.target.value === "compact")}><option value="trim">Only when the context fills up</option><option value="compact">At the compaction limits</option></select></label>;
@@ -38,9 +39,8 @@ export function NewCharacterDialog({ close }: { close: () => void }) {
   </Dialog>;
 }
 
-export function NewThreadDialog({ character, close }: { character: string; close: () => void }) {
+export function NewThreadDialog({ character, taken, close }: { character: string; taken: readonly string[]; close: () => void }) {
   const [name, setName] = useState("");
-  const [label, setLabel] = useState("");
   const [purpose, setPurpose] = useState("");
   const [pins, setPins] = useState("");
   const [model, setModel] = useState("");
@@ -50,9 +50,9 @@ export function NewThreadDialog({ character, close }: { character: string; close
   const submit = async () => {
     setBusy(true); setError("");
     try {
-      const id = name.trim();
+      const { id, label } = namedThread(name, taken);
       const pinned = threadPinList(pins);
-      await workspace.actions.run("create_thread", { name: id, ...(label.trim() === "" ? {} : { label: label.trim() }), ...(purpose.trim() === "" ? {} : { purpose: purpose.trim() }), ...(pinned.length === 0 ? {} : { pins: pinned }), ...(model.trim() === "" ? {} : { model: model.trim() }), ...(compaction ? { compaction: true } : {}) });
+      await workspace.actions.run("create_thread", { name: id, ...(label === undefined ? {} : { label }), ...(purpose.trim() === "" ? {} : { purpose: purpose.trim() }), ...(pinned.length === 0 ? {} : { pins: pinned }), ...(model.trim() === "" ? {} : { model: model.trim() }), ...(compaction ? { compaction: true } : {}) });
       await workspace.openThread(id);
       navigate({ view: "chat" });
       close();
@@ -60,8 +60,7 @@ export function NewThreadDialog({ character, close }: { character: string; close
   };
   return <Dialog title={`New thread with ${character}`} close={close}>
     <form className="form" onSubmit={(event) => { event.preventDefault(); void submit(); }}>
-      <label className="field"><span>Name</span><input className="input" data-autofocus placeholder="e.g. lighthouse" value={name} onChange={(event) => setName(event.target.value)} /></label>
-      <label className="field"><span>Label <span className="muted">(optional)</span></span><input className="input" placeholder="Shown in the sidebar" value={label} onChange={(event) => setLabel(event.target.value)} /></label>
+      <label className="field"><span>Name</span><input className="input" data-autofocus placeholder="e.g. Lighthouse trip" value={name} onChange={(event) => setName(event.target.value)} /></label>
       <label className="field"><span>Purpose <span className="muted">(optional)</span></span><textarea className="input textarea" rows={2} placeholder={`What this thread is for; ${character} sees it here`} value={purpose} onChange={(event) => setPurpose(event.target.value)} /></label>
       <details className="disclosure"><summary>More options</summary>
         <div className="form">

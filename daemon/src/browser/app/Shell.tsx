@@ -90,7 +90,7 @@ export function Shell({ state }: { state: ChromeSnapshot }) {
       {route.view === "settings" ? <Settings state={state} page={route.page} sidebarOpen={open} toggleSidebar={toggle} /> : <Chat state={state} sidebarOpen={open} toggleSidebar={toggle} mobile={mobile} />}
     </div>
     {dialog === "character" ? <NewCharacterDialog close={() => setDialog(null)} /> : null}
-    {dialog === "thread" && state.character !== null ? <NewThreadDialog character={state.character} close={() => setDialog(null)} /> : null}
+    {dialog === "thread" && state.character !== null ? <NewThreadDialog character={state.character} taken={state.threads.map((thread) => thread.id)} close={() => setDialog(null)} /> : null}
     {dialog === "palette" ? <Palette state={state} close={() => setDialog(null)} newThread={() => setDialog("thread")} newCharacter={() => setDialog("character")} /> : null}
     {threadDialog === null ? null : <ThreadDialogs state={state} request={threadDialog} close={() => setThreadDialog(null)} />}
     {folderDialog === null ? null : <FolderDialogs request={folderDialog} close={() => setFolderDialog(null)} />}

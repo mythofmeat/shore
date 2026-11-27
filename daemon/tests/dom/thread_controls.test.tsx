@@ -318,7 +318,7 @@ test("a new thread needs a name, says so while it is being made, opens in the ch
   });
   navigate({ view: "settings", page: "segments" });
   let closed = 0;
-  const view = await mount(<NewThreadDialog character="ada" close={() => { closed += 1; }} />);
+  const view = await mount(<NewThreadDialog character="ada" taken={["story"]} close={() => { closed += 1; }} />);
   const create = () => view.host.querySelector<HTMLButtonElement>("button[type=submit]");
   const shown = () => [create()?.textContent, create()?.disabled, view.host.querySelector("[role=alert]")?.textContent ?? null];
   expect(view.host.querySelector("h2")?.textContent).toBe("New thread with ada");
@@ -351,26 +351,98 @@ test("a new thread needs a name, says so while it is being made, opens in the ch
   await view.unmount();
 });
 
-test("a new thread is made with whatever else was filled in: its label, purpose, model, files one to a line, and compacting at home's limits", async () => {
+test("a new thread's id is made from its name, which becomes its label, and it is made with whatever else was filled in: its purpose, model, files one to a line, and compacting at home's limits", async () => {
   const { NewThreadDialog } = await import("../../src/browser/sidebar/dialogs.tsx");
   app.answer((request) => {
     if (request["name"] === "create_thread") return LISTING;
     if (request["name"] === "switch_thread") return { character: "ada", thread: "lamp", changed: true };
     return undefined;
   });
-  const view = await mount(<NewThreadDialog character="ada" close={() => {}} />);
+  const view = await mount(<NewThreadDialog character="ada" taken={["story"]} close={() => {}} />);
   expect([field(view.host, "Purpose")?.getAttribute("rows"), field(view.host, "Pinned in the prompt")?.getAttribute("rows")]).toEqual(["2", "3"]);
   const since = app.socket().sent.length;
-  await type(field(view.host, "Name"), "lamp");
-  await type(field(view.host, "Label"), " The lamp ");
+  expect(field(view.host, "Label"), "the name is the only name asked for").toBeUndefined();
+  await type(field(view.host, "Name"), " The lamp ");
   await type(field(view.host, "Purpose"), " Keep the light ");
   await type(field(view.host, "Model"), " opus ");
   await type(field(view.host, "Pinned in the prompt"), "notes/a.md\n\n  [[lamp/]]  \n");
   await type(field(view.host, "Older turns are archived"), "compact");
   await click(view.host.querySelector("button[type=submit]"));
   await settle();
-  expect(asked(since, "create_thread")).toEqual([{ name: "lamp", label: "The lamp", purpose: "Keep the light", pins: ["notes/a.md", "[[lamp/]]"], model: "opus", compaction: true }]);
+  expect(asked(since, "create_thread")).toEqual([{ name: "the-lamp", label: "The lamp", purpose: "Keep the light", pins: ["notes/a.md", "[[lamp/]]"], model: "opus", compaction: true }]);
+  expect(asked(since, "switch_thread")).toEqual([{ name: "the-lamp", resync: true }]);
   await view.unmount();
+});
+
+test("a new thread whose name makes the id of one already there gets the next free number", async () => {
+  const { NewThreadDialog } = await import("../../src/browser/sidebar/dialogs.tsx");
+  app.answer((request) => request["name"] === "create_thread" ? LISTING : request["name"] === "switch_thread" ? { character: "ada", thread: "story-2", changed: true } : undefined);
+  const view = await mount(<NewThreadDialog character="ada" taken={["story"]} close={() => {}} />);
+  const since = app.socket().sent.length;
+  await type(field(view.host, "Name"), "story");
+  await click(view.host.querySelector("button[type=submit]"));
+  await settle();
+  expect(asked(since, "create_thread")).toEqual([{ name: "story-2", label: "story" }]);
+  await view.unmount();
+});
+
+test("each kind of thread dialog opens its own form, and one for a thread no longer there opens none", async () => {
+  const { ThreadDialogs } = await import("../../src/browser/chat/thread_dialogs.tsx");
+  const { chromeOf } = await import("../../src/browser/chrome.ts");
+  const state = { ...chromeOf(undefined, app.state().workspace.getSnapshot()), threads: [HOME, SIDE] };
+  const title = async (kind: "settings" | "fork" | "archive" | "move", thread = "side") => {
+    const view = await mount(<ThreadDialogs state={state} request={{ kind, thread }} close={() => {}} />);
+    const shown = document.body.querySelector("dialog h2")?.textContent ?? null;
+    await view.unmount();
+    return shown;
+  };
+  expect([await title("settings"), await title("fork"), await title("archive"), await title("move"), await title("settings", "gone")]).toEqual(["Thread settings", "Fork “side”", "Archive “side”?", "Move “side”", null]);
+});
+
+test("a fork's id is made from its name, which becomes its label, copies the turns asked for, and opens once made", async () => {
+  const { ThreadDialogs } = await import("../../src/browser/chat/thread_dialogs.tsx");
+  const { chromeOf } = await import("../../src/browser/chrome.ts");
+  const { toasts } = await import("../../src/browser/ui/toast.tsx");
+  const state = { ...chromeOf(undefined, app.state().workspace.getSnapshot()), threads: [HOME, SIDE] };
+  app.answer((request) => {
+    const args = request["args"] as { name: string; turns?: number };
+    switch (request["name"]) {
+      case "fork_thread": return { ...LISTING, fork: { fork_id: "f1", thread: args.name, source: "story", created_at: "2026-11-27T00:00:00Z", turns: args.turns ?? 4, scope: args.turns === undefined ? "full" : "last_turns" } };
+      case "thread_label": return LISTING;
+      case "switch_thread": return { character: "ada", thread: args.name, changed: true };
+      default: return undefined;
+    }
+  });
+  const fork = async (name: string, turns: string) => {
+    let closed = 0;
+    const view = await mount(<ThreadDialogs state={state} request={{ kind: "fork", thread: "story" }} close={() => { closed += 1; }} />);
+    const submit = () => document.body.querySelector<HTMLButtonElement>("dialog button[type=submit]");
+    expect([document.body.querySelector("dialog h2")?.textContent, submit()?.textContent, submit()?.disabled]).toEqual(["Fork “story”", "Fork", true]);
+    const since = app.socket().sent.length;
+    await type(field(document.body, "Name"), name);
+    await type(field(document.body, "Copy only the last turns"), "0");
+    const none = submit()?.disabled;
+    await type(field(document.body, "Copy only the last turns"), "1");
+    expect([none, submit()?.disabled], "no turns can't be copied, one can").toEqual([true, false]);
+    await type(field(document.body, "Copy only the last turns"), turns);
+    const ready = submit()?.disabled;
+    await click(submit());
+    await settle();
+    const sent = app.sent(since).filter((request) => request["type"] === "command" && request["name"] !== "list_threads").map((request) => [request["name"], request["args"]]);
+    const shown = toasts.getSnapshot().map((toast) => toast.text);
+    await acting(() => { for (const toast of toasts.getSnapshot()) toasts.dismiss(toast.id); });
+    await view.unmount();
+    return { ready, sent, shown, closed };
+  };
+  expect(await fork("A side road", "2")).toEqual({ ready: false, closed: 1, shown: ["Forked 2 turns into “A side road”"], sent: [
+    ["fork_thread", { name: "a-side-road", from: "story", turns: 2 }], ["thread_label", { name: "a-side-road", label: "A side road" }], ["switch_thread", { name: "a-side-road", resync: true }],
+  ] });
+  expect(await fork("side", ""), "a name already an id needs no label, and one taken gets a number").toEqual({ ready: false, closed: 1, shown: ["Forked 4 turns into “side”"], sent: [
+    ["fork_thread", { name: "side-2", from: "story" }], ["thread_label", { name: "side-2", label: "side" }], ["switch_thread", { name: "side-2", resync: true }],
+  ] });
+  expect(await fork("road", ""), "a name that is its own id needs no label").toEqual({ ready: false, closed: 1, shown: ["Forked 4 turns into “road”"], sent: [
+    ["fork_thread", { name: "road", from: "story" }], ["switch_thread", { name: "road", resync: true }],
+  ] });
 });
 
 test("a thread's settings open on what the thread has, save nothing that wasn't changed, and choose its model in a picker for that thread alone", async () => {
