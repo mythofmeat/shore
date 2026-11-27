@@ -1,7 +1,7 @@
 import { Database } from "bun:sqlite";
 import { afterAll, afterEach, expect, jest, setSystemTime, spyOn, test } from "bun:test";
 import { existsSync } from "node:fs";
-import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 
 import { registrationFor, TurnAutonomyBridge } from "../src/autonomy/registration.ts";
@@ -32,14 +32,15 @@ import type { ServerMessage } from "../src/protocol/ServerMessage.ts";
 import type { ThreadContextUse } from "../src/protocol/ThreadContextUse.ts";
 import type { ThreadListing } from "../src/protocol/ThreadListing.ts";
 import { shoreLog } from "../src/log.ts";
-import { hostZone } from "../src/ledger/zoned.ts";
+import * as usage from "../src/ledger/usage.ts";
+import { hostZone, naiveInZone } from "../src/ledger/zoned.ts";
 import { createRuntime, startRuntimeClocks, type ShoreRuntime } from "../src/runtime.ts";
 import { initializeDatabase } from "../src/storage/database.ts";
 import { insertEvent, withStorage } from "../src/storage/store.ts";
 import { characterWorkspace } from "../src/tools/character_workspace.ts";
 import * as execute from "../src/tools/execute.ts";
 import { recordedTurns, replyVersions, workspaceTurnsFor } from "../src/tools/workspace_turns.ts";
-import { DEFAULT_HANDSHAKE } from "../src/swp/connection.ts";
+import { DEFAULT_HANDSHAKE } from "../src/swp/handshake.ts";
 import { SessionRouter } from "../src/swp/session.ts";
 import { sizedImage } from "./support/sized_image.ts";
 import { eventsForResponse } from "./support/stream.ts";
@@ -47,6 +48,7 @@ import { restoreTestEnv, setTestEnv, unsetTestEnv } from "./support/env.ts";
 import { NO_MCP } from "./support/rebuild.ts";
 import { outcomeOf, rejectionOf } from "./support/outcome.ts";
 import { required } from "../src/util/required.ts";
+import { until } from "./support/until.ts";
 import { testTmp } from "./support/tmp.ts";
 import { promptedAppConfig } from "./support/prompt_list.ts";
 import { Texts } from "../src/texts/texts.ts";
@@ -1550,25 +1552,105 @@ test("a check still running when Shore shuts down is stopped, and nothing is rec
   expect(state).toBe("[[0,null]]");
 });
 
-test("the runtime's clocks look at the triggers every thirty seconds until they are stopped", async () => {
+test("the runtime's clocks look at the triggers every thirty seconds, and at keepalives and wakes every ten, until they are stopped", async () => {
   await withCharacter(async ({ runtime, say }) => {
     await say("hello");
     let looked = 0;
+    let kept = 0;
+    let woke = 0;
     runtime.triggers.tick = async () => { looked += 1; };
+    runtime.keepalive.tick = async () => { kept += 1; };
+    runtime.autonomy.tick = async () => { woke += 1; };
     jest.useFakeTimers();
+    let stopping: Promise<void> | undefined;
     try {
       const clocks = startRuntimeClocks(runtime);
       jest.advanceTimersByTime(29_999);
-      expect(looked).toBe(0);
+      expect([looked, kept, woke]).toEqual([0, 2, 2]);
       jest.advanceTimersByTime(1);
-      expect(looked).toBe(1);
+      expect([looked, kept, woke]).toEqual([1, 3, 3]);
       jest.advanceTimersByTime(30_000);
-      expect(looked).toBe(2);
-      clocks.stop();
+      expect([looked, kept, woke]).toEqual([2, 6, 6]);
+      stopping = clocks.stop();
       jest.advanceTimersByTime(90_000);
-      expect(looked).toBe(2);
+      expect([looked, kept, woke]).toEqual([2, 6, 6]);
     } finally {
       jest.useRealTimers();
+    }
+    await stopping;
+  });
+});
+
+test("the ledger's cost backfill runs as soon as the clocks start, without waiting out its interval", async () => {
+  await withCharacter(async ({ runtime }) => {
+    let runs = 0;
+    const backfill = spyOn(usage, "backfillLedgerCosts").mockImplementation(async () => {
+      runs += 1;
+      return { updated: 0, total: 0, failures: [] };
+    });
+    try {
+      const clocks = startRuntimeClocks(runtime, { costBackfillMs: 3_600_000 });
+      await until(() => runs === 1, "the backfill at start", 3_000);
+      await clocks.stop();
+    } finally {
+      backfill.mockRestore();
+    }
+  });
+});
+
+test("while the clocks run, every call that lands is shown to the keepalive; once they stop, none are", async () => {
+  await withCharacter(async ({ runtime, say }) => {
+    const shown: string[] = [];
+    const observe = spyOn(runtime.keepalive, "observe").mockImplementation((character) => { shown.push(character); });
+    try {
+      const clocks = startRuntimeClocks(runtime);
+      await say("hello");
+      expect(shown).toContain("ada");
+      await clocks.stop();
+      shown.length = 0;
+      await say("hello again");
+      expect(shown).toEqual([]);
+    } finally {
+      observe.mockRestore();
+    }
+  });
+});
+
+test("the ledger's cost backfill runs as the clocks start and again when due, never twice at once, says what it priced, and stopping waits for it", async () => {
+  await withCharacter(async ({ runtime }) => {
+    const told = spyOn(shoreLog, "info").mockImplementation(() => {});
+    const set = spyOn(globalThis, "setInterval");
+    const answers: Array<() => void> = [];
+    let runs = 0;
+    const backfill = spyOn(usage, "backfillLedgerCosts").mockImplementation(async () => {
+      runs += 1;
+      await new Promise<void>((resolve) => { answers.push(resolve); });
+      return { updated: runs === 1 ? 1 : 0, total: 2, failures: [] };
+    });
+    try {
+      const clocks = startRuntimeClocks(runtime, { costBackfillMs: 7 });
+      const timer = set.mock.results[set.mock.calls.findIndex((call) => call[1] === 7)]?.value as ReturnType<typeof setInterval>;
+      expect(timer.hasRef()).toBe(false);
+      await until(() => runs === 1, "the first backfill", 3_000);
+      await Bun.sleep(40);
+      expect(runs).toBe(1);
+      required(answers[0])();
+      await until(() => runs === 2, "the next backfill", 3_000);
+      expect(told.mock.calls.map((call) => String(call[0])).filter((line) => line.includes("ledger rows"))).toEqual(["shore: priced 1 of 2 ledger rows that had no cost"]);
+      let stopped = false;
+      const stopping = clocks.stop().then(() => { stopped = true; });
+      await Bun.sleep(40);
+      expect(stopped).toBe(false);
+      required(answers[1])();
+      await stopping;
+      await Bun.sleep(40);
+      expect(runs).toBe(2);
+      expect(told.mock.calls.map((call) => String(call[0])).filter((line) => line.includes("ledger rows"))).toEqual(["shore: priced 1 of 2 ledger rows that had no cost"]);
+    } finally {
+      for (const answer of answers) answer();
+      backfill.mockRestore();
+      set.mockRestore();
+      told.mockRestore();
     }
   });
 });
@@ -2164,7 +2246,7 @@ test("the user's message stops a wake in that thread at the end of its step and 
     await asking;
 
     const opener = wakeText("12:11 PM", [FIRED]);
-    const stopped = "[User wrote here while this wake was running, so Shore stopped it here for you to answer them. Once they have been quiet in this thread for 10 minutes, Shore wakes you here again to pick it up.]";
+    const stopped = "[User wrote here while this wake was running, so Shore stopped it here for you to answer them. Once they have been quiet in this thread for 10 minutes, Shore wakes you here again to pick it up, unless by then every trigger that set it off has been taken out of `TRIGGERS.toml` or given a new time.]";
     expect(script.wakes).toHaveLength(1);
     expect(stored(await thread("ring")).slice(2)).toEqual([
       ["user", "autonomous", wakeSeenLater(FIRED)],
@@ -2824,6 +2906,56 @@ test("a wake the character asked for and the user interrupted is not a request s
       '[You asked for this wake from "main" at Friday 2026-10-30 · 12:14 PM: Tell part three.]',
     ]);
   }, handOff());
+});
+
+test("a one-off whose wake the user stopped in its thread isn't picked up once the reply to them gives it a new time, and wakes the character there at that time instead", async () => {
+  await withCharacter(async ({ runtime, script, workspace, say }) => {
+    const local = (minutes: number): string => new Date(naiveInZone(T0 + minutes * MINUTE, hostZone())).toISOString().slice(0, 16).replace("T", " ");
+    const parcel = (minutes: number): string => `[parcel]\non = "${local(minutes)}"\nthread = "ring"\nreason = "See whether the parcel came."\n`;
+    await runtime.registry.createThread("ada", "ring");
+    await writeFile(join(workspace, "TRIGGERS.toml"), parcel(5));
+    await say("hello");
+    script.sends = undefined; script.closing = "Done.";
+    at(1);
+    await runtime.triggers.tick();
+    at(5);
+    await runtime.triggers.tick();
+
+    script.again = 3;
+    const held = hold();
+    script.beatHeld = held;
+    const waking = runtime.autonomy.runDue();
+    await held.started.promise;
+    at(6);
+    script.replyTool = { name: "edit", input: { file_path: "TRIGGERS.toml", old_string: local(5), new_string: local(8 * 60) } };
+    const asking = say("do that tonight instead, it saves usage", "ring");
+    held.release.resolve();
+    await waking;
+    await asking;
+    script.again = 0;
+    expect(await readFile(join(workspace, "TRIGGERS.toml"), "utf8")).toBe(parcel(8 * 60));
+    expect(textOf(script.replies.at(-1) as SidecarRequest)).toContain("Shore wakes you here again to pick it up, unless by then every trigger that set it off has been taken out of `TRIGGERS.toml` or given a new time.]");
+    const stopped = script.wakes.length;
+    expect(script.wakes.map((request) => request.context?.thread)).toEqual(Array.from({ length: stopped }, () => "ring"));
+
+    for (const minutes of [16, 60, 8 * 60 - 1]) {
+      at(minutes);
+      await runtime.triggers.tick();
+      await runtime.autonomy.runDue();
+    }
+    expect(script.wakes).toHaveLength(stopped);
+    expect(runtime.autonomy.log("ada", 20).map((event) => event.detail)).toContain(
+      'Wake in "ring" not picked up again for trigger "parcel": it was taken out of TRIGGERS.toml or given a new time after the user stopped it',
+    );
+
+    at(8 * 60);
+    await runtime.triggers.tick();
+    await runtime.autonomy.runDue();
+    expect(script.wakes.slice(stopped).map((request) => request.context?.thread)).toEqual(["ring", "ring"]);
+    const opened = turnsOf(script.wakes[stopped]).at(-1)?.[1] ?? "";
+    expect(setOffBy(opened)).toEqual([required(triggerFiredNote(new Texts(), { name: "parcel", reason: "See whether the parcel came.", at: T0 + 8 * 60 * MINUTE }, hostZone()))]);
+    expect(opened).toContain("[Your last wake here was stopped for User's message at Friday 2026-10-30 · 12:06 PM");
+  }, (app) => { app.tools.enabled.push("edit"); });
 });
 
 test("a hand-off is refused when the character's triggers are switched off", async () => {

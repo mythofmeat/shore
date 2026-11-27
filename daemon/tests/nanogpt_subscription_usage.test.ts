@@ -18,7 +18,7 @@ import {
 } from "../src/llm/nanogpt_subscription.ts";
 import { configureSecretStore, SecretStore, secretStorePath } from "../src/llm/secret_store.ts";
 import { createRuntime } from "../src/runtime.ts";
-import { DEFAULT_HANDSHAKE } from "../src/swp/connection.ts";
+import { DEFAULT_HANDSHAKE } from "../src/swp/handshake.ts";
 import { SessionRouter } from "../src/swp/session.ts";
 import { restoreTestEnv, setTestEnv, unsetTestEnv } from "./support/env.ts";
 import { testTmp } from "./support/tmp.ts";

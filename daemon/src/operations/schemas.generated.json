@@ -302,93 +302,6 @@
     }
   },
   {
-    "name": "read_transfer",
-    "input": {
-      "$schema": "https://json-schema.org/draft/2020-12/schema",
-      "title": "ReadTransferArgs",
-      "type": "object",
-      "properties": {
-        "transfer": {
-          "type": "string"
-        },
-        "offset": {
-          "type": "integer",
-          "format": "uint",
-          "minimum": 0
-        }
-      },
-      "additionalProperties": false,
-      "required": [
-        "transfer",
-        "offset"
-      ]
-    },
-    "output": {
-      "$schema": "https://json-schema.org/draft/2020-12/schema",
-      "title": "TransferChunk",
-      "type": "object",
-      "properties": {
-        "data": {
-          "type": "string"
-        },
-        "offset": {
-          "type": "integer",
-          "format": "uint",
-          "minimum": 0
-        },
-        "bytes": {
-          "type": "integer",
-          "format": "uint",
-          "minimum": 0
-        }
-      },
-      "required": [
-        "data",
-        "offset",
-        "bytes"
-      ]
-    }
-  },
-  {
-    "name": "write_transfer",
-    "input": {
-      "$schema": "https://json-schema.org/draft/2020-12/schema",
-      "title": "WriteTransferArgs",
-      "type": "object",
-      "properties": {
-        "transfer": {
-          "type": "string"
-        },
-        "data": {
-          "type": "string"
-        }
-      },
-      "additionalProperties": false,
-      "required": [
-        "data"
-      ]
-    },
-    "output": {
-      "$schema": "https://json-schema.org/draft/2020-12/schema",
-      "title": "TransferWritten",
-      "type": "object",
-      "properties": {
-        "transfer": {
-          "type": "string"
-        },
-        "bytes": {
-          "type": "integer",
-          "format": "uint",
-          "minimum": 0
-        }
-      },
-      "required": [
-        "transfer",
-        "bytes"
-      ]
-    }
-  },
-  {
     "name": "usage",
     "input": {
       "$schema": "https://json-schema.org/draft/2020-12/schema",
@@ -7336,7 +7249,6 @@
           "type": "string",
           "enum": [
             "chat_models",
-            "image_models",
             "tools",
             "subagents",
             "characters",
@@ -7347,12 +7259,6 @@
           "type": "object",
           "properties": {
             "chat_models": {
-              "type": "array",
-              "items": {
-                "type": "string"
-              }
-            },
-            "image_models": {
               "type": "array",
               "items": {
                 "type": "string"
@@ -7385,7 +7291,6 @@
           },
           "required": [
             "chat_models",
-            "image_models",
             "tools",
             "subagents",
             "characters",
@@ -9994,12 +9899,6 @@
             "boolean",
             "null"
           ]
-        },
-        "allow_unencrypted": {
-          "type": [
-            "boolean",
-            "null"
-          ]
         }
       },
       "additionalProperties": false,
@@ -10450,12 +10349,6 @@
           ]
         },
         "no_check": {
-          "type": [
-            "boolean",
-            "null"
-          ]
-        },
-        "allow_unencrypted": {
           "type": [
             "boolean",
             "null"

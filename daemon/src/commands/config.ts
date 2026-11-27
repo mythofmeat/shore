@@ -16,7 +16,7 @@ import { NO_CHAT_MODELS_MESSAGE } from "../config/models.ts";
 import { findEffectiveModel } from "../config/effective_catalog.ts";
 import { configView } from "../config/preferences.ts";
 import { isSecretConfigPath, REDACTED, redactSecrets, serializeAppConfig, serializeConfigValue } from "../config/serialize.ts";
-import { chatModelProfiles, defaultAppConfig, imageModelProfiles, mcpBearerToken, TOOLS_NOW_PART_OF } from "../config/app.ts";
+import { chatModelProfiles, defaultAppConfig, mcpBearerToken, TOOLS_NOW_PART_OF } from "../config/app.ts";
 import { configSchema, findSchemaEntry, type LiveInstances, type SchemaEntry } from "../config/schema.ts";
 import { schemaValueLiteral, SchemaValueError } from "../config/schema_value.ts";
 import {
@@ -201,7 +201,7 @@ export function config(ctx: ConfigContext, args: OperationInput<"config">): Oper
 function catalogSections(ctx: ConfigContext): Record<string, unknown> {
   const raw = (ctx.config.rawTable ?? {}) as Record<string, Record<string, unknown> | undefined>;
   const out: Record<string, unknown> = { providers: {} };
-  const written = { chat: chatModelProfiles(raw.chat), image: imageModelProfiles(raw.image), providers: raw.providers };
+  const written = { chat: chatModelProfiles(raw.chat), providers: raw.providers };
   for (const [section, value] of Object.entries(written)) {
     if (value !== undefined) out[section] = serializeConfigValue(value);
   }
@@ -217,7 +217,6 @@ function reportedConfig(ctx: ConfigContext): Record<string, unknown> {
     ...settings,
     ...catalog,
     chat: { ...(catalog.chat as Record<string, unknown> | undefined), ...(settings.chat as Record<string, unknown>) },
-    image: { ...(catalog.image as Record<string, unknown> | undefined), ...(settings.image as Record<string, unknown>) },
   }) as Record<string, unknown>;
 }
 
@@ -267,7 +266,6 @@ function valueSources(ctx: ConfigContext): ConfigSources {
   const sorted = (names: Iterable<string>): string[] => [...names].sort();
   return {
     chat_models: sorted(ctx.config.models.chat.keys()),
-    image_models: sorted(ctx.config.models.imageGeneration.keys()),
     tools: sorted(ALL_TOOLS.map((t) => t.name)),
     subagents: sorted(ctx.config.app.subagents.agents.keys()),
     characters: sorted(discoverCharacters(ctx.config.dirs.config)),
@@ -280,23 +278,15 @@ export function configSchemaCommand(ctx: ConfigContext) {
   return base;
 }
 
-function checkAgainstSource(ctx: ConfigContext, entry: SchemaEntry, value: string): void {
-  if (entry.source === undefined || entry.kind === "list") return;
+function checkModelName(ctx: ConfigContext, entry: SchemaEntry, value: string): void {
+  if (entry.source !== "chat_models") return;
   const trimmed = value.trim();
   if (trimmed === "") return;
-
-  if (entry.source === "chat_models") {
-    try {
-      findEffectiveModel(configView(ctx.config), ctx.config.dirs.cache, trimmed, true);
-    } catch (e) {
-      throw notFound(message(e));
-    }
-    return;
+  try {
+    findEffectiveModel(configView(ctx.config), ctx.config.dirs.cache, trimmed, true);
+  } catch (e) {
+    throw notFound(message(e));
   }
-
-  const known = valueSources(ctx)[entry.source] ?? [];
-  if (known.length === 0 || known.includes(trimmed)) return;
-  throw notFound(`${entry.key}: no ${entry.source} named "${trimmed}". Known: ${known.join(", ")}`);
 }
 
 function targetFile(ctx: ConfigContext, path: readonly string[]): { file: string; path: readonly string[] } {
@@ -456,7 +446,7 @@ export function setConfigKey(
     throw e instanceof SchemaValueError ? invalidRequest(`${key}: ${e.message}`) : e;
   }
 
-  checkAgainstSource(ctx, entry, value);
+  checkModelName(ctx, entry, value);
 
   return commitConfigKey(
     ctx,

@@ -159,6 +159,133 @@ pub struct WebPreferences {
     pub values: std::collections::BTreeMap<String, String>,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, JsonSchema, ts_rs::TS)]
+#[serde(rename_all = "snake_case")]
+#[ts(export, export_to = "../../../daemon/src/protocol/")]
+pub enum WebDeviceKind {
+    Browser,
+    Cli,
+    Automation,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema, ts_rs::TS)]
+#[ts(export, export_to = "../../../daemon/src/protocol/")]
+pub struct WebDevice {
+    pub id: String,
+    pub kind: WebDeviceKind,
+    pub name: String,
+    #[ts(type = "number")]
+    pub created_at: u64,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[ts(optional, type = "number")]
+    pub last_used_at: Option<u64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[ts(optional, type = "number")]
+    pub expires_at: Option<u64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[ts(optional)]
+    pub operations: Option<Vec<String>>,
+    pub current: bool,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema, ts_rs::TS)]
+#[ts(export, export_to = "../../../daemon/src/protocol/")]
+pub struct WebSignInRequest {
+    pub code: String,
+    pub name: String,
+    #[ts(type = "number")]
+    pub expires_at: u64,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema, ts_rs::TS)]
+#[ts(export, export_to = "../../../daemon/src/protocol/")]
+pub struct WebDeviceList {
+    pub devices: Vec<WebDevice>,
+    pub requests: Vec<WebSignInRequest>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema, ts_rs::TS)]
+#[serde(deny_unknown_fields)]
+#[ts(export, export_to = "../../../daemon/src/protocol/")]
+pub struct WebAutomationKey {
+    pub name: String,
+    pub operations: Vec<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema, ts_rs::TS)]
+#[ts(export, export_to = "../../../daemon/src/protocol/")]
+pub struct WebNewDevice {
+    pub device: WebDevice,
+    pub token: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema, ts_rs::TS)]
+#[serde(deny_unknown_fields)]
+#[ts(export, export_to = "../../../daemon/src/protocol/")]
+pub struct WebDeviceChoice {
+    pub id: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema, ts_rs::TS)]
+#[serde(deny_unknown_fields)]
+#[ts(export, export_to = "../../../daemon/src/protocol/")]
+pub struct WebSignInStart {
+    pub name: String,
+    pub secret: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema, ts_rs::TS)]
+#[ts(export, export_to = "../../../daemon/src/protocol/")]
+pub struct WebSignInPending {
+    pub id: String,
+    pub code: String,
+    #[ts(type = "number")]
+    pub expires_at: u64,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema, ts_rs::TS)]
+#[serde(deny_unknown_fields)]
+#[ts(export, export_to = "../../../daemon/src/protocol/")]
+pub struct WebSignInPoll {
+    pub secret: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema, ts_rs::TS)]
+#[ts(export, export_to = "../../../daemon/src/protocol/")]
+pub struct WebSignInGranted {
+    pub token: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema, ts_rs::TS)]
+#[serde(deny_unknown_fields)]
+#[ts(export, export_to = "../../../daemon/src/protocol/")]
+pub struct WebSignInDecision {
+    pub code: String,
+    pub allow: bool,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema, ts_rs::TS)]
+#[ts(export, export_to = "../../../daemon/src/protocol/")]
+pub struct WebHello {
+    pub server_name: String,
+    pub server_version: String,
+    pub characters: Vec<crate::protocol::types::CharacterInfo>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[ts(optional)]
+    pub selected_character: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[ts(optional)]
+    pub selected_thread: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema, ts_rs::TS)]
+#[ts(export, export_to = "../../../daemon/src/protocol/")]
+pub struct WebTransfer {
+    pub transfer: String,
+    #[ts(type = "number")]
+    pub bytes: u64,
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -177,6 +304,17 @@ mod tests {
             "request_info": SchemaSettings::draft2020_12().for_serialize().into_generator().into_root_schema_for::<WebRequestInfo>(),
             "request_list": SchemaSettings::draft2020_12().for_serialize().into_generator().into_root_schema_for::<WebRequestList>(),
             "preferences": SchemaSettings::draft2020_12().for_deserialize().into_generator().into_root_schema_for::<WebPreferences>(),
+            "device_list": SchemaSettings::draft2020_12().for_serialize().into_generator().into_root_schema_for::<WebDeviceList>(),
+            "automation_key": SchemaSettings::draft2020_12().for_deserialize().into_generator().into_root_schema_for::<WebAutomationKey>(),
+            "new_device": SchemaSettings::draft2020_12().for_serialize().into_generator().into_root_schema_for::<WebNewDevice>(),
+            "device_choice": SchemaSettings::draft2020_12().for_deserialize().into_generator().into_root_schema_for::<WebDeviceChoice>(),
+            "sign_in_start": SchemaSettings::draft2020_12().for_deserialize().into_generator().into_root_schema_for::<WebSignInStart>(),
+            "sign_in_pending": SchemaSettings::draft2020_12().for_serialize().into_generator().into_root_schema_for::<WebSignInPending>(),
+            "sign_in_poll": SchemaSettings::draft2020_12().for_deserialize().into_generator().into_root_schema_for::<WebSignInPoll>(),
+            "sign_in_granted": SchemaSettings::draft2020_12().for_serialize().into_generator().into_root_schema_for::<WebSignInGranted>(),
+            "sign_in_decision": SchemaSettings::draft2020_12().for_deserialize().into_generator().into_root_schema_for::<WebSignInDecision>(),
+            "hello": SchemaSettings::draft2020_12().for_serialize().into_generator().into_root_schema_for::<WebHello>(),
+            "transfer": SchemaSettings::draft2020_12().for_serialize().into_generator().into_root_schema_for::<WebTransfer>(),
         });
         let target = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
             .join("../../daemon/src/web/schemas.generated.json");

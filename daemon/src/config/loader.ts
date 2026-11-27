@@ -1,7 +1,6 @@
 import { validateConfigSource } from "./schema.ts";
 import { placed } from "./failure.ts";
 import { shoreLog } from "../log.ts";
-import { hardcodedProviderBaseUrl } from "../llm/request.ts";
 
 import { mkdirSync, readdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
 
@@ -10,7 +9,6 @@ import { webBinding } from "../web/policy.ts";
 import {
   budgetPeriodRank,
   chatModelProfiles,
-  imageModelProfiles,
   parseAppConfig,
   toolGrants,
   TOOLS_NOW_PART_OF,
@@ -297,7 +295,6 @@ function checkSource(table: TomlTable, source: string): void {
     const valid = validateAppConfigLayer(table);
     if ("err" in valid) throw new Error(`${source}: ${placed(valid)}`);
     ProviderRegistry.fromSection(sectionTable(table.providers));
-    catalogFromSections(undefined, imageModelProfiles(sectionTable(table.image)));
     for (const [name, entries] of Object.entries(sectionTable(table.chat) ?? {})) {
       if (!isTable(entries)) continue;
       const parsed = readModelConfigFields(entries);
@@ -323,7 +320,6 @@ export function parseConfigTable(
 
   const remainder = { ...table };
   const chatSection = chatModelProfiles(sectionTable(remainder.chat));
-  const imageGenerationSection = imageModelProfiles(sectionTable(remainder.image));
   const providersSection = sectionTable(remainder.providers);
   const parsed = parseAppConfig(remainder);
   if ("err" in parsed) throw new ConfigError("parse_app", placed(parsed));
@@ -342,11 +338,7 @@ export function parseConfigTable(
 
   let models: ModelCatalog;
   try {
-    models = catalogFromSections(
-      chatSection,
-      imageGenerationSection,
-      providers,
-    );
+    models = catalogFromSections(chatSection, providers);
   } catch (e) {
     throw e instanceof CatalogError ? new ConfigError("catalog", e.message) : e;
   }
@@ -457,7 +449,6 @@ function validateConfig(
   }
 
   validateMcpServers(app, onWarn);
-  validateDefaultImageGeneration(providers, app.image.model, onWarn);
   validateUsageConfig(app);
   if (app.daemon.web.enabled) {
     try { webBinding(app.daemon.web); }
@@ -650,57 +641,6 @@ function validateBudgetPace(idx: number, budget: UsageBudgetConfig): void {
       );
     }
   }
-}
-
-function validateAuxProvider(
-  providers: ProviderRegistry,
-  field: string,
-  providerKey: string,
-  onWarn: ConfigWarn,
-): void {
-  const entry = providers.get(providerKey);
-  if (entry === undefined) {
-    if (providerKey === "openai" || hardcodedProviderBaseUrl(providerKey) !== undefined) return;
-    onWarn(
-      `${field} references provider "${providerKey}" not configured under ` +
-        `[providers.${providerKey}] and has no built-in endpoint; set base_url ` +
-        "there and api_key_env if using a custom API key environment variable",
-      [
-        ["field", field],
-        ["provider", providerKey],
-      ],
-    );
-    return;
-  }
-  if (!entry.enabled) {
-    throw validationError(
-      `${field} references provider "${providerKey}" which is disabled in ` +
-        `[providers.${providerKey}] (enabled = false); a disabled provider yields no ` +
-        `credentials, so ${field} cannot resolve. Enable the provider or change ${field}.`,
-    );
-  }
-}
-
-function validateDefaultImageGeneration(
-  providers: ProviderRegistry,
-  name: string | undefined,
-  onWarn: ConfigWarn,
-): void {
-  if (name === undefined) return;
-  const split = splitOnce(name, ":");
-  if (split === undefined) {
-    throw validationError(
-      `image.model "${name}" must be a \`provider:model_id\` identity ` +
-        "(transport lives on [providers.<provider>])",
-    );
-  }
-  const [providerKey, modelId] = split;
-  if (providerKey === "" || modelId === "") {
-    throw validationError(
-      `image.model "${name}" is not a valid \`provider:model_id\` identity`,
-    );
-  }
-  validateAuxProvider(providers, "image.model", providerKey, onWarn);
 }
 
 function splitOnce(s: string, sep: string): [string, string] | undefined {

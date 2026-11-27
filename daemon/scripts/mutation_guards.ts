@@ -236,7 +236,6 @@ export const DAEMON_FLOORS: Readonly<Record<string, number>> = {
   "src/llm/fallback.ts": 0.65,
   "src/llm/generate.ts": 0.4,
   "src/llm/image_dimensions.ts": 0.75,
-  "src/llm/image_generate.ts": 0,
   "src/llm/image_settings.ts": 0.15,
   "src/llm/image_support.ts": 0.4,
   "src/llm/image_tokens.ts": 0.6,
@@ -313,7 +312,6 @@ export const DAEMON_FLOORS: Readonly<Record<string, number>> = {
   "src/storage/tar_writer.ts": 0.45,
   "src/swp/admission.ts": 0.75,
   "src/swp/broadcast.ts": 0.45,
-  "src/swp/connection.ts": 0.45,
   "src/swp/content_projection.ts": 0.1,
   "src/swp/framing.ts": 0.65,
   "src/swp/handshake.ts": 0.15,
@@ -335,7 +333,6 @@ export const DAEMON_FLOORS: Readonly<Record<string, number>> = {
   "src/tools/execute.ts": 0.35,
   "src/tools/file_access.ts": 0.6,
   "src/tools/history.ts": 0.2,
-  "src/tools/images.ts": 0.2,
   "src/tools/list_threads.ts": 0.75,
   "src/tools/markdown_images.ts": 0.35,
   "src/tools/mcp_holder.ts": 0.35,
@@ -356,7 +353,6 @@ export const DAEMON_FLOORS: Readonly<Record<string, number>> = {
   "src/tools/tree_index.ts": 0.6,
   "src/tools/validate.ts": 0.45,
   "src/tools/video.ts": 0.6,
-  "src/tools/web.ts": 0,
   "src/tools/workspace.ts": 0.65,
   "src/tools/workspace_helper.ts": 0,
   "src/tools/workspace_helper_server.ts": 0,
@@ -439,6 +435,15 @@ export const DAEMON_EQUIVALENTS: readonly string[] = [
   "src/memory/history_index.ts:readCorpus: id: 「0 → 1」,",
   "src/memory/history_index.ts:writeIndex: …ach((item, i) => { item.id = i 「+ → -」 1; });",
   "src/memory/history_index.ts:writeIndex: …h((item, i) => { item.id = i + 「1 → 2」; });",
+  "src/web/policy.ts:<module>: finishOnStopMs: 「2_000 → 2001」,",
+  "src/web/archives.ts:ArchiveTransfers.#execute: …cord.directory }, queuedBytes: 「1024 → 1025」 * 1024,",
+  "src/web/archives.ts:ArchiveTransfers.#execute: …rectory }, queuedBytes: 1024 * 「1024 → 1025」,",
+  "src/web/archives.ts:ArchiveTransfers.#execute: 「throw new Error(\"Archive connection end… → {}」",
+  "src/web/socket.ts:socketState: … 0, pendingBytes: 0, controls: 「0 → 1」,",
+  "src/web/server.ts:startWebServer: …ery?.close(); void server.stop(「true → false」); throw error; }",
+  "src/web/server.ts:stop: 「active = false; → {}」",
+  "src/web/server.ts:stop: active = 「false → true」;",
+  "src/web/server.ts:stop: 「await drained; → {}」",
 ];
 
 export const CLIENT_FLOORS: Readonly<Record<string, number>> = {
@@ -476,10 +481,8 @@ export const CLIENT_FLOORS: Readonly<Record<string, number>> = {
   "shore-common/src/protocol/tool_display.rs": 0.1,
   "shore-common/src/protocol/types.rs": 0.15,
   "shore-common/src/swp_client/client_config.rs": 0,
-  "shore-common/src/swp_client/conn_manager.rs": 0.4,
   "shore-common/src/swp_client/connection.rs": 0.6,
   "shore-common/src/swp_client/discovery.rs": 0.2,
-  "shore-common/src/swp_client/sync.rs": 0.85,
   "shore-common/src/token.rs": 0.5,
 };
 

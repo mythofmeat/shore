@@ -650,38 +650,6 @@
             "properties": {
               "name": {
                 "type": "string",
-                "const": "read_transfer"
-              },
-              "data": {
-                "$ref": "#/$defs/TransferChunk"
-              }
-            },
-            "required": [
-              "name",
-              "data"
-            ]
-          },
-          {
-            "type": "object",
-            "properties": {
-              "name": {
-                "type": "string",
-                "const": "write_transfer"
-              },
-              "data": {
-                "$ref": "#/$defs/TransferWritten"
-              }
-            },
-            "required": [
-              "name",
-              "data"
-            ]
-          },
-          {
-            "type": "object",
-            "properties": {
-              "name": {
-                "type": "string",
                 "const": "usage"
               },
               "data": {
@@ -2327,46 +2295,6 @@
           "skipped",
           "restored",
           "kept"
-        ]
-      },
-      "TransferChunk": {
-        "type": "object",
-        "properties": {
-          "data": {
-            "type": "string"
-          },
-          "offset": {
-            "type": "integer",
-            "format": "uint",
-            "minimum": 0
-          },
-          "bytes": {
-            "type": "integer",
-            "format": "uint",
-            "minimum": 0
-          }
-        },
-        "required": [
-          "data",
-          "offset",
-          "bytes"
-        ]
-      },
-      "TransferWritten": {
-        "type": "object",
-        "properties": {
-          "transfer": {
-            "type": "string"
-          },
-          "bytes": {
-            "type": "integer",
-            "format": "uint",
-            "minimum": 0
-          }
-        },
-        "required": [
-          "transfer",
-          "bytes"
         ]
       },
       "UsageResult": {
@@ -7765,7 +7693,6 @@
         "type": "string",
         "enum": [
           "chat_models",
-          "image_models",
           "tools",
           "subagents",
           "characters",
@@ -7776,12 +7703,6 @@
         "type": "object",
         "properties": {
           "chat_models": {
-            "type": "array",
-            "items": {
-              "type": "string"
-            }
-          },
-          "image_models": {
             "type": "array",
             "items": {
               "type": "string"
@@ -7814,7 +7735,6 @@
         },
         "required": [
           "chat_models",
-          "image_models",
           "tools",
           "subagents",
           "characters",
@@ -10392,38 +10312,6 @@
             "properties": {
               "name": {
                 "type": "string",
-                "const": "read_transfer"
-              },
-              "data": {
-                "$ref": "#/$defs/TransferChunk"
-              }
-            },
-            "required": [
-              "name",
-              "data"
-            ]
-          },
-          {
-            "type": "object",
-            "properties": {
-              "name": {
-                "type": "string",
-                "const": "write_transfer"
-              },
-              "data": {
-                "$ref": "#/$defs/TransferWritten"
-              }
-            },
-            "required": [
-              "name",
-              "data"
-            ]
-          },
-          {
-            "type": "object",
-            "properties": {
-              "name": {
-                "type": "string",
                 "const": "usage"
               },
               "data": {
@@ -12069,46 +11957,6 @@
           "skipped",
           "restored",
           "kept"
-        ]
-      },
-      "TransferChunk": {
-        "type": "object",
-        "properties": {
-          "data": {
-            "type": "string"
-          },
-          "offset": {
-            "type": "integer",
-            "format": "uint",
-            "minimum": 0
-          },
-          "bytes": {
-            "type": "integer",
-            "format": "uint",
-            "minimum": 0
-          }
-        },
-        "required": [
-          "data",
-          "offset",
-          "bytes"
-        ]
-      },
-      "TransferWritten": {
-        "type": "object",
-        "properties": {
-          "transfer": {
-            "type": "string"
-          },
-          "bytes": {
-            "type": "integer",
-            "format": "uint",
-            "minimum": 0
-          }
-        },
-        "required": [
-          "transfer",
-          "bytes"
         ]
       },
       "UsageResult": {
@@ -17507,7 +17355,6 @@
         "type": "string",
         "enum": [
           "chat_models",
-          "image_models",
           "tools",
           "subagents",
           "characters",
@@ -17518,12 +17365,6 @@
         "type": "object",
         "properties": {
           "chat_models": {
-            "type": "array",
-            "items": {
-              "type": "string"
-            }
-          },
-          "image_models": {
             "type": "array",
             "items": {
               "type": "string"
@@ -17556,7 +17397,6 @@
         },
         "required": [
           "chat_models",
-          "image_models",
           "tools",
           "subagents",
           "characters",
@@ -19943,6 +19783,409 @@
     "additionalProperties": false,
     "required": [
       "values"
+    ]
+  },
+  "device_list": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "title": "WebDeviceList",
+    "type": "object",
+    "properties": {
+      "devices": {
+        "type": "array",
+        "items": {
+          "$ref": "#/$defs/WebDevice"
+        }
+      },
+      "requests": {
+        "type": "array",
+        "items": {
+          "$ref": "#/$defs/WebSignInRequest"
+        }
+      }
+    },
+    "required": [
+      "devices",
+      "requests"
+    ],
+    "$defs": {
+      "WebDevice": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "kind": {
+            "$ref": "#/$defs/WebDeviceKind"
+          },
+          "name": {
+            "type": "string"
+          },
+          "created_at": {
+            "type": "integer",
+            "format": "uint64",
+            "minimum": 0
+          },
+          "last_used_at": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "uint64",
+            "minimum": 0
+          },
+          "expires_at": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "uint64",
+            "minimum": 0
+          },
+          "operations": {
+            "type": [
+              "array",
+              "null"
+            ],
+            "items": {
+              "type": "string"
+            }
+          },
+          "current": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "id",
+          "kind",
+          "name",
+          "created_at",
+          "current"
+        ]
+      },
+      "WebDeviceKind": {
+        "type": "string",
+        "enum": [
+          "browser",
+          "cli",
+          "automation"
+        ]
+      },
+      "WebSignInRequest": {
+        "type": "object",
+        "properties": {
+          "code": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "expires_at": {
+            "type": "integer",
+            "format": "uint64",
+            "minimum": 0
+          }
+        },
+        "required": [
+          "code",
+          "name",
+          "expires_at"
+        ]
+      }
+    }
+  },
+  "automation_key": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "title": "WebAutomationKey",
+    "type": "object",
+    "properties": {
+      "name": {
+        "type": "string"
+      },
+      "operations": {
+        "type": "array",
+        "items": {
+          "type": "string"
+        }
+      }
+    },
+    "additionalProperties": false,
+    "required": [
+      "name",
+      "operations"
+    ]
+  },
+  "new_device": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "title": "WebNewDevice",
+    "type": "object",
+    "properties": {
+      "device": {
+        "$ref": "#/$defs/WebDevice"
+      },
+      "token": {
+        "type": "string"
+      }
+    },
+    "required": [
+      "device",
+      "token"
+    ],
+    "$defs": {
+      "WebDevice": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "kind": {
+            "$ref": "#/$defs/WebDeviceKind"
+          },
+          "name": {
+            "type": "string"
+          },
+          "created_at": {
+            "type": "integer",
+            "format": "uint64",
+            "minimum": 0
+          },
+          "last_used_at": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "uint64",
+            "minimum": 0
+          },
+          "expires_at": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "uint64",
+            "minimum": 0
+          },
+          "operations": {
+            "type": [
+              "array",
+              "null"
+            ],
+            "items": {
+              "type": "string"
+            }
+          },
+          "current": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "id",
+          "kind",
+          "name",
+          "created_at",
+          "current"
+        ]
+      },
+      "WebDeviceKind": {
+        "type": "string",
+        "enum": [
+          "browser",
+          "cli",
+          "automation"
+        ]
+      }
+    }
+  },
+  "device_choice": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "title": "WebDeviceChoice",
+    "type": "object",
+    "properties": {
+      "id": {
+        "type": "string"
+      }
+    },
+    "additionalProperties": false,
+    "required": [
+      "id"
+    ]
+  },
+  "sign_in_start": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "title": "WebSignInStart",
+    "type": "object",
+    "properties": {
+      "name": {
+        "type": "string"
+      },
+      "secret": {
+        "type": "string"
+      }
+    },
+    "additionalProperties": false,
+    "required": [
+      "name",
+      "secret"
+    ]
+  },
+  "sign_in_pending": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "title": "WebSignInPending",
+    "type": "object",
+    "properties": {
+      "id": {
+        "type": "string"
+      },
+      "code": {
+        "type": "string"
+      },
+      "expires_at": {
+        "type": "integer",
+        "format": "uint64",
+        "minimum": 0
+      }
+    },
+    "required": [
+      "id",
+      "code",
+      "expires_at"
+    ]
+  },
+  "sign_in_poll": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "title": "WebSignInPoll",
+    "type": "object",
+    "properties": {
+      "secret": {
+        "type": "string"
+      }
+    },
+    "additionalProperties": false,
+    "required": [
+      "secret"
+    ]
+  },
+  "sign_in_granted": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "title": "WebSignInGranted",
+    "type": "object",
+    "properties": {
+      "token": {
+        "type": "string"
+      }
+    },
+    "required": [
+      "token"
+    ]
+  },
+  "sign_in_decision": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "title": "WebSignInDecision",
+    "type": "object",
+    "properties": {
+      "code": {
+        "type": "string"
+      },
+      "allow": {
+        "type": "boolean"
+      }
+    },
+    "additionalProperties": false,
+    "required": [
+      "code",
+      "allow"
+    ]
+  },
+  "hello": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "title": "WebHello",
+    "type": "object",
+    "properties": {
+      "server_name": {
+        "type": "string"
+      },
+      "server_version": {
+        "type": "string"
+      },
+      "characters": {
+        "type": "array",
+        "items": {
+          "$ref": "#/$defs/CharacterInfo"
+        }
+      },
+      "selected_character": {
+        "type": [
+          "string",
+          "null"
+        ]
+      },
+      "selected_thread": {
+        "type": [
+          "string",
+          "null"
+        ]
+      }
+    },
+    "required": [
+      "server_name",
+      "server_version",
+      "characters"
+    ],
+    "$defs": {
+      "CharacterInfo": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "avatar": {
+            "anyOf": [
+              {
+                "$ref": "#/$defs/CharacterAvatar"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "name"
+        ]
+      },
+      "CharacterAvatar": {
+        "type": "object",
+        "properties": {
+          "mime_type": {
+            "type": "string"
+          },
+          "data": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "mime_type",
+          "data"
+        ]
+      }
+    }
+  },
+  "transfer": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "title": "WebTransfer",
+    "type": "object",
+    "properties": {
+      "transfer": {
+        "type": "string"
+      },
+      "bytes": {
+        "type": "integer",
+        "format": "uint64",
+        "minimum": 0
+      }
+    },
+    "required": [
+      "transfer",
+      "bytes"
     ]
   }
 }

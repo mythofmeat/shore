@@ -10,6 +10,15 @@ import type { WebArchiveList } from "../protocol/WebArchiveList.ts";
 import type { WebRequestInfo } from "../protocol/WebRequestInfo.ts";
 import type { WebRequestList } from "../protocol/WebRequestList.ts";
 import type { WebPreferences } from "../protocol/WebPreferences.ts";
+import type { WebAutomationKey } from "../protocol/WebAutomationKey.ts";
+import type { WebDeviceChoice } from "../protocol/WebDeviceChoice.ts";
+import type { WebDeviceList } from "../protocol/WebDeviceList.ts";
+import type { WebNewDevice } from "../protocol/WebNewDevice.ts";
+import type { WebSignInDecision } from "../protocol/WebSignInDecision.ts";
+import type { WebSignInGranted } from "../protocol/WebSignInGranted.ts";
+import type { WebSignInPending } from "../protocol/WebSignInPending.ts";
+import type { WebSignInPoll } from "../protocol/WebSignInPoll.ts";
+import type { WebSignInStart } from "../protocol/WebSignInStart.ts";
 import schemas from "./schemas.generated.json" with { type: "json" };
 
 let validator: ReturnType<typeof contractValidator> | undefined;
@@ -29,3 +38,12 @@ export const validWebArchiveList = onFirstUse<WebArchiveList>(schemas.archive_li
 export const validWebRequestInfo = onFirstUse<WebRequestInfo>(schemas.request_info);
 export const validWebRequestList = onFirstUse<WebRequestList>(schemas.request_list);
 export const validWebPreferences = onFirstUse<WebPreferences>(schemas.preferences);
+export const validWebDeviceList = onFirstUse<WebDeviceList>(schemas.device_list);
+export const validWebAutomationKey = onFirstUse<WebAutomationKey>(schemas.automation_key);
+export const validWebNewDevice = onFirstUse<WebNewDevice>(schemas.new_device);
+export const validWebDeviceChoice = onFirstUse<WebDeviceChoice>(schemas.device_choice);
+export const validWebSignInStart = onFirstUse<WebSignInStart>(schemas.sign_in_start);
+export const validWebSignInPending = onFirstUse<WebSignInPending>(schemas.sign_in_pending);
+export const validWebSignInPoll = onFirstUse<WebSignInPoll>(schemas.sign_in_poll);
+export const validWebSignInGranted = onFirstUse<WebSignInGranted>(schemas.sign_in_granted);
+export const validWebSignInDecision = onFirstUse<WebSignInDecision>(schemas.sign_in_decision);

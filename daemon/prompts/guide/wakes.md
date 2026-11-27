@@ -73,6 +73,8 @@ In the thread a wake is running in:
 - The wake stops at the end of the step it is on. A tool call that is running finishes first.
 - A line in the thread says where it stopped, and you answer {{user}} as in any conversation. The wake's working isn't shown to that turn. In its place is a line saying how many tool calls the wake had made, which one was last, and the last thing you wrote in it.
 - Once they have been quiet in that thread for {{wake_quiet}}, you are woken there again. That wake starts fresh like any other, told that the last one was stopped for {{user}}'s message and the last thing it wrote.
+- If, after the wake was stopped, you take a trigger that set it off out of `TRIGGERS.toml`, or change when that trigger fires (its `on`, `at`, `every`, `when`, `after` or `follows`), the trigger is dropped from the wake. Changing anything else in it drops nothing. Shore reads the file just before it would wake you, so a change you make while answering {{user}} is in time. A wake left with nothing that set it off isn't picked up, and a trigger that follows a dropped one waits for that one's next wake.
+- Only triggers can be dropped this way: nothing you change drops a wake you handed over, or one started by hand.
 
 In another thread:
 

@@ -14,24 +14,12 @@ export interface Cli {
 
 export type StartupValueSource = "cli" | "env" | "config";
 
-export function sourceLabel(source: StartupValueSource): string {
-  switch (source) {
-    case "cli":
-      return "--addr";
-    case "env":
-      return "SHORE_ADDR";
-    case "config":
-      return "[daemon].listen_addr";
-  }
-}
-
 export interface StartupConfig {
   readonly loaded: LoadedConfig;
   readonly configPath: string;
   readonly token: ResolvedToken;
-  readonly bindAddr: string;
-  readonly bindAddrSource: StartupValueSource;
   readonly web: WebConfig;
+  readonly webSource: StartupValueSource;
 }
 
 export class StartupError extends Error {
@@ -101,8 +89,6 @@ export function resolveStartup(
     );
   }
 
-  const [bindAddr, bindAddrSource] = resolveListenAddr(cli.addr, startupEnvAddr(env), loaded);
-
   let token: ResolvedToken;
   try {
     token = resolveDaemonToken(env, loaded.dirs.config);
@@ -110,23 +96,24 @@ export function resolveStartup(
     throw new StartupError("token", String(e instanceof Error ? e.message : e));
   }
 
+  const [web, webSource] = resolveWebConfig(loaded.app.daemon.web, env, cli.addr);
   return {
     loaded,
     configPath: explicitConfigPath ?? defaultConfigPath(env),
     token,
-    bindAddr,
-    bindAddrSource,
-    web: resolveWebConfig(loaded.app.daemon.web, env),
+    web,
+    webSource,
   };
 }
 
-export function resolveWebConfig(config: WebConfig, env: NodeJS.ProcessEnv): WebConfig {
-  const addr = env["SHORE_WEB_ADDR"]?.trim();
-  if (addr === undefined || addr === "") return config;
+export function resolveWebConfig(config: WebConfig, env: NodeJS.ProcessEnv, cliAddr?: string): [WebConfig, StartupValueSource] {
+  const fromEnv = env["SHORE_WEB_ADDR"]?.trim();
+  const [addr, source, named] = cliAddr === undefined ? [fromEnv, "env", "SHORE_WEB_ADDR"] as const : [cliAddr.trim(), "cli", "--addr"] as const;
+  if (addr === undefined || addr === "") return [config, "config"];
   const web = { ...config, enabled: true, bind_addr: addr };
   try { webBinding(web); }
-  catch (error) { throw new StartupError("load_config", `Invalid SHORE_WEB_ADDR ${JSON.stringify(addr)}: ${error instanceof Error ? error.message : String(error)}`); }
-  return web;
+  catch (error) { throw new StartupError("load_config", `Invalid ${named} ${JSON.stringify(addr)}: ${error instanceof Error ? error.message : String(error)}`); }
+  return [web, source];
 }
 
 export function resolveExplicitConfigPath(path: string | undefined): string | undefined {
@@ -148,22 +135,6 @@ export function resolveExplicitConfigPath(path: string | undefined): string | un
     );
   }
   return path;
-}
-
-export function resolveListenAddr(
-  cliAddr: string | undefined,
-  envAddr: string | undefined,
-  loaded: LoadedConfig,
-): [string, StartupValueSource] {
-  if (cliAddr !== undefined) return [cliAddr, "cli"];
-  if (envAddr !== undefined && envAddr.trim() !== "") return [envAddr, "env"];
-  return [loaded.app.daemon.listen_addr, "config"];
-}
-
-function startupEnvAddr(env: NodeJS.ProcessEnv): string | undefined {
-  const raw = env["SHORE_ADDR"];
-  if (raw === undefined || raw.trim() === "") return undefined;
-  return raw;
 }
 
 function defaultConfigPath(env?: NodeJS.ProcessEnv): string {

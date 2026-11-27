@@ -1,9 +1,7 @@
 import { OutboundQueue, type QueueLimits } from "./outbound.ts";
 import { contentForClient } from "./content_projection.ts";
 import { HistoryMediaDelivery } from "./history_media.ts";
-import { required } from "../util/required.ts";
 import { abortRejection } from "../llm/abort.ts";
-import { createServer, type Server as NetServer, type Socket } from "node:net";
 
 import type { CharacterInfo } from "../protocol/CharacterInfo";
 import type { ClientMessage } from "../protocol/ClientMessage";
@@ -12,12 +10,12 @@ import { AdmissionError, admitCapabilities, admitClientMessage } from "./admissi
 import { Broadcast } from "./broadcast";
 import {
   DEFAULT_HANDSHAKE,
-  handleConnection,
   historyMessage,
   type HandshakeProvider,
   type HistorySnapshot,
   type Logger,
-} from "./connection";
+  type Selection,
+} from "./handshake.ts";
 import {
   resolveHandshakeCharacter,
   routeClientMessage,
@@ -32,26 +30,8 @@ import {
 } from "./session";
 
 export interface ServerConfig {
-  readonly addr: string;
-  readonly serverName: string;
-  readonly serverVersion?: string;
   readonly handshake?: HandshakeProvider;
-  readonly authenticate: (token: string | null | undefined) => boolean;
   readonly log?: Logger;
-}
-
-const HANG_UP_AFTER_MS = 2_000;
-
-async function settlesWithin(work: Promise<unknown>, ms: number): Promise<boolean> {
-  let timer: ReturnType<typeof setTimeout> | undefined;
-  const late = new Promise<boolean>((resolve) => {
-    timer = setTimeout(() => resolve(false), ms);
-  });
-  try {
-    return await Promise.race([work.then(() => true), late]);
-  } finally {
-    clearTimeout(timer);
-  }
 }
 
 class RouteQueue {
@@ -93,9 +73,11 @@ export interface LocalClientOptions {
   readonly clientType: string;
   readonly clientName: string;
   readonly capabilities?: readonly string[];
-  readonly confidential?: boolean;
+  readonly owner?: string;
   readonly character?: string | null | undefined;
   readonly thread?: string | undefined;
+  readonly history?: boolean;
+  readonly broadcasts?: boolean;
   readonly onLag?: (skipped: number) => void;
   readonly signal?: AbortSignal;
   readonly prepareMessage?: (message: ServerMessage) => ServerMessage;
@@ -107,7 +89,7 @@ export interface LocalClientOptions {
 export interface LocalPeer {
   readonly session: SessionMeta;
   readonly characters: readonly CharacterInfo[];
-  readonly history: HistorySnapshot;
+  readonly history: HistorySnapshot | undefined;
   send(msg: ClientMessage, beforeDispatch?: () => void): Promise<void>;
   events(): AsyncGenerator<ServerMessage, void>;
   detach(): Promise<void>;
@@ -172,22 +154,13 @@ export class Server {
   readonly #router = new SessionRouter();
   readonly #events = new Broadcast();
   readonly #routes = new RouteQueue();
-  readonly #connections = new Set<Promise<void>>();
-  #stopped = false;
-  #serving = false;
   readonly #stopController = new AbortController();
   #handshake: HandshakeProvider | undefined;
   #nextId = 1;
-  #listener: NetServer | null = null;
-  #shutdown!: () => void;
-  readonly #shutdownSignal: Promise<void>;
 
-  constructor(config: ServerConfig) {
+  constructor(config: ServerConfig = {}) {
     this.#config = config;
     this.#handshake = config.handshake;
-    this.#shutdownSignal = new Promise<void>((resolve) => {
-      this.#shutdown = resolve;
-    });
   }
 
   setHandshakeProvider(handshake: HandshakeProvider): void {
@@ -201,6 +174,13 @@ export class Server {
   async characters(): Promise<readonly CharacterInfo[]> {
     const provider = this.#handshake ?? DEFAULT_HANDSHAKE;
     return (await provider.hello()).characters;
+  }
+
+  async selection(character: string | null | undefined, thread: string | undefined): Promise<Selection & { readonly characters: readonly CharacterInfo[] }> {
+    const provider = this.#handshake ?? DEFAULT_HANDSHAKE;
+    const { characters } = await provider.hello();
+    const resolved = character === null ? null : resolveHandshakeCharacter(character ?? null, characters);
+    return { characters, ...await provider.select(resolved, thread ?? null) };
   }
 
   routes(): AsyncGenerator<RoutedMessage> {
@@ -220,11 +200,11 @@ export class Server {
     const signal = AbortSignal.any([this.#stopController.signal, ...(options.signal === undefined ? [] : [options.signal])]);
     const provider = this.#handshake ?? DEFAULT_HANDSHAKE;
     const hello = await whileAttached(provider.hello(), signal);
-    const requested = options.character ?? null;
-    const history = await whileAttached(provider.history(
-      options.character === null ? null : resolveHandshakeCharacter(requested, hello.characters),
-      options.thread ?? null,
-    ), signal);
+    const character = options.character === null ? null : resolveHandshakeCharacter(options.character ?? null, hello.characters);
+    const history = options.history === false ? undefined : await whileAttached(provider.history(character, options.thread ?? null), signal);
+    const selection = history === undefined
+      ? await whileAttached(provider.select(character, options.thread ?? null), signal)
+      : { character: history.selectedCharacter, thread: history.selectedThread };
     signal.throwIfAborted();
 
     const clientId = this.#nextId;
@@ -236,21 +216,21 @@ export class Server {
       clientType: options.clientType,
       clientName: options.clientName,
       capabilities,
-      confidential: options.confidential === true,
-      character: history.selectedCharacter,
-      thread: history.selectedThread,
+      ...(options.owner === undefined ? {} : { owner: options.owner }),
+      character: selection.character,
+      thread: selection.thread,
     };
 
     const inbox = new Inbox(limits);
     const media = new HistoryMediaDelivery();
-    const subscription = this.#events.subscribe(limits, this.#queuedFor(clientId));
+    const subscription = options.broadcasts === false ? undefined : this.#events.subscribe(limits, this.#queuedFor(clientId));
     let detached = false;
     let detachment: Promise<void> | undefined;
     const detach = (): Promise<void> => {
       if (detachment !== undefined) return detachment;
       detached = true;
       inbox.close(true);
-      subscription.unsubscribe();
+      subscription?.unsubscribe();
       this.#router.unregisterSession(clientId);
       this.#config.log?.info?.("Local client detached", { client_id: clientId });
       detachment = this.#route({ kind: "session_disconnected", sessionId: clientId });
@@ -273,9 +253,9 @@ export class Server {
       deliver(msg, catchUp);
     });
     signal.addEventListener("abort", aborted);
-    deliver(historyMessage(history), true);
+    if (history !== undefined) deliver(historyMessage(history), true);
 
-    void (async () => {
+    if (subscription !== undefined) void (async () => {
       for (let result = await subscription.recv(); result.kind !== "closed"; result = await subscription.recv()) {
         if (result.kind === "lagged") {
           options.onLag?.(result.skipped);
@@ -333,116 +313,16 @@ export class Server {
     };
   }
 
-  async bind(): Promise<{ readonly host: string; readonly port: number }> {
-    const { host, port } = splitAddr(this.#config.addr);
-    const listener = createServer({ noDelay: true }, (socket) => {
-      if (!this.#serving || this.#stopped) { socket.destroy(); return; }
-      this.#accept(socket);
-    });
-    this.#listener = listener;
-
-    await new Promise<void>((resolve, reject) => {
-      listener.once("error", reject);
-      listener.listen(port, host, () => {
-        listener.removeListener("error", reject);
-        resolve();
-      });
-    });
-
-    const address = listener.address();
-    if (address === null || typeof address === "string") {
-      throw new Error(`Expected a TCP address, got ${JSON.stringify(address)}`);
-    }
-    return { host: address.address, port: address.port };
-  }
-
-  async serve(): Promise<void> {
-    const listener = required(this.#listener);
-    const sockets = new Set<Socket>();
-    listener.on("connection", (socket: Socket) => {
-      sockets.add(socket);
-      socket.once("close", () => sockets.delete(socket));
-    });
-
-    const address = listener.address();
-    this.#config.log?.info?.("TCP listening", {
-      addr:
-        address === null || typeof address === "string"
-          ? this.#config.addr
-          : `${address.address}:${address.port}`,
-    });
-
-    this.#serving = true;
-
-    await this.#shutdownSignal;
-
-    this.#config.log?.info?.("Server shutting down");
-    listener.close();
-    const finished = Promise.allSettled(this.#connections);
-    if (!await settlesWithin(finished, HANG_UP_AFTER_MS)) {
-      this.#config.log?.warn?.("Hanging up on clients that didn't finish", { clients: sockets.size });
-      for (const socket of sockets) socket.destroy();
-      if (!await settlesWithin(finished, HANG_UP_AFTER_MS)) {
-        this.#config.log?.warn?.("Stopped with client handlers still running", { handlers: this.#connections.size });
-      }
-    }
-    this.#routes.close();
+  stopped(): Promise<void> {
+    const signal = this.#stopController.signal;
+    return signal.aborted ? Promise.resolve() : new Promise((resolve) => { signal.addEventListener("abort", () => { resolve(); }); });
   }
 
   stop(): void {
-    this.#stopped = true;
+    if (this.#stopController.signal.aborted) return;
+    this.#config.log?.info?.("Server shutting down");
     this.#stopController.abort();
-    this.#shutdown();
-  }
-
-  #accept(socket: Socket): void {
-    const clientId = this.#nextId;
-    this.#nextId += 1;
-    this.#config.log?.info?.("TCP client connected", { addr: socket.remoteAddress ?? "" });
-
-    const work = handleConnection(
-      {
-        input: socket,
-        output: {
-          write: (bytes) =>
-            new Promise<void>((resolve, reject) => {
-              if (socket.destroyed || socket.writableEnded) {
-                resolve();
-                return;
-              }
-              const settle = () => resolve();
-              socket.once("close", settle);
-              socket.write(bytes, (err) => {
-                socket.removeListener("close", settle);
-                if (err) reject(err);
-                else resolve();
-              });
-            }),
-        },
-      },
-      {
-        clientId,
-        serverName: this.#config.serverName,
-        ...(this.#config.serverVersion === undefined ? {} : { serverVersion: this.#config.serverVersion }),
-        router: this.#router,
-        events: this.#events.subscribe(undefined, this.#queuedFor(clientId)),
-        handshake: this.#handshake ?? DEFAULT_HANDSHAKE,
-        authenticate: this.#config.authenticate,
-        peer: socket.remoteAddress ?? "",
-        route: (msg) => this.#route(msg),
-        shutdown: this.#shutdownSignal,
-        ...(this.#config.log === undefined ? {} : { log: this.#config.log }),
-      },
-    )
-      .catch((error: unknown) => {
-        this.#config.log?.warn?.("Client handler error", { client_id: clientId, error: String(error) });
-      })
-      .finally(() => {
-        socket.destroy();
-        this.#connections.delete(work);
-      });
-
-    this.#connections.add(work);
+    this.#routes.close();
   }
 
   #queuedFor(clientId: number): (msg: ServerMessage) => boolean {
@@ -452,15 +332,4 @@ export class Server {
   async #route(msg: RoutedMessage): Promise<void> {
     this.#routes.push(msg);
   }
-}
-
-function splitAddr(addr: string): { host: string; port: number } {
-  const at = addr.lastIndexOf(":");
-  if (at === -1) throw new Error(`Expected host:port, got ${JSON.stringify(addr)}`);
-  const host = addr.slice(0, at);
-  const port = Number(addr.slice(at + 1));
-  if (!Number.isInteger(port) || port < 0 || port > 65535) {
-    throw new Error(`Invalid port in ${JSON.stringify(addr)}`);
-  }
-  return { host: host.replace(/^\[|\]$/g, ""), port };
 }

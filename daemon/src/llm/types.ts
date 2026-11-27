@@ -235,24 +235,6 @@ export interface SidecarProvider {
   signIn?(configDir: string | undefined): Promise<import("./claude_sign_in.ts").SignInFlow>;
 }
 
-export interface ImageRequest {
-  provider_key: string;
-  model: string;
-  api_key: string;
-  base_url?: string;
-  prompt: string;
-  size?: string;
-  quality?: string;
-  aspect_ratio?: string;
-  image_size?: string;
-}
-
-export interface ImageResponse {
-  url: string;
-  revised_prompt: string;
-  timing: { total_ms: number };
-}
-
 export interface TurnMessage {
   role: "user" | "assistant" | "system";
   content: ContentBlock[];

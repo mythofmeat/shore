@@ -152,6 +152,18 @@ export function parseTriggers(content: string, defaultCooldownMs: number, checks
   return parsed.triggers.reduce((settled) => withoutLostFollowers(settled), parsed);
 }
 
+const TIME_SETTINGS = ["every", "at", "on", "when", "after", "follows"];
+
+export function triggerTimes(content: string): ReadonlyMap<string, string> | undefined {
+  let table: Record<string, unknown>;
+  try {
+    table = Bun.TOML.parse(content) as Record<string, unknown>;
+  } catch {
+    return undefined;
+  }
+  return new Map(Object.entries(table).map(([name, raw]) => [name, JSON.stringify(TIME_SETTINGS.map((setting) => (raw as Record<string, unknown>)[setting]))]));
+}
+
 function withoutLostFollowers(parsed: ParsedTriggers): ParsedTriggers {
   const lost = parsed.triggers.flatMap((each) => {
     const problem = followProblem(each, parsed.triggers);

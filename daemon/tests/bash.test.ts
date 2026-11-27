@@ -22,7 +22,7 @@ async function world() {
   const ctx: ToolContext = {
     texts: new Texts(),
     workspaceDir, characterName: "Juniper Vale", characterDataDir: root,
-    imageDir: root, conversationDir: root, historyDbPath: join(root, "history.db"), configDir: root,
+    conversationDir: root, historyDbPath: join(root, "history.db"), configDir: root,
   };
   const frames: ServerMessage[] = [];
   const exec: ToolExecution = {
@@ -32,7 +32,7 @@ async function world() {
   };
   const run = (command: string, workdir?: string) => runToolUse({
     id: "bash-call", name: "bash", input: { command, ...(workdir === undefined ? {} : { workdir }) },
-  }, exec, []);
+  }, exec);
   return { root, ctx, exec, frames, run };
 }
 
@@ -41,7 +41,7 @@ describe("bash on Shore's tool surface", () => {
   test.each([{}, { command: 42 }, { command: "" }, { command: "pwd", workdir: 3 }, { command: "pwd", surprise: true }])(
     "rejects malformed input before touching the workspace: %j", async (input) => {
       const { exec, ctx } = await world();
-      const result = await runToolUse({ id: "bad", name: "bash", input }, exec, []);
+      const result = await runToolUse({ id: "bad", name: "bash", input }, exec);
       expect(result.rejected).toBe(true);
       expect(result.isError).toBe(true);
       expect(await Bun.file(join(ctx.workspaceDir, "marker")).exists()).toBe(false);
@@ -52,8 +52,7 @@ describe("bash on Shore's tool surface", () => {
     const { run } = await world();
     const result = await run("printf out; printf err >&2; exit 7");
     expect(result.isError).toBe(true);
-    expect(result.value).toMatchObject({ exit_code: 7, stdout: "out", stderr: "err" });
-    expect(result.raw).toContain("bash: exit 7");
+    expect(result.raw).toMatch(/^bash: exit 7\nworkdir: [^\n]+\nout\nstderr:\nerr$/);
     expect(result.block).toMatchObject({ is_error: true });
     expect((await run("false | cat")).isError).toBe(true);
   });

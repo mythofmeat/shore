@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test";
 
 import { parseToolArgs } from "../src/llm/tool_args.ts";
-import { executeToolUse, type ToolExecution } from "../src/tools/execute.ts";
+import { runToolUse, type ToolExecution } from "../src/tools/execute.ts";
 import { schemasFrom, schemaViolation } from "../src/tools/validate.ts";
 import { BUILTIN_TOOL_SCHEMAS } from "./support/builtin_tool_schemas.ts";
 import type { ToolContext } from "../src/tools/dispatch.ts";
@@ -34,7 +34,7 @@ describe("parseToolArgs", () => {
   });
 });
 
-describe("executeToolUse", () => {
+describe("runToolUse", () => {
   function harness() {
     const frames: ServerMessage[] = [];
     const exec: ToolExecution = {
@@ -50,11 +50,7 @@ describe("executeToolUse", () => {
 
   test("a garbled read never reaches the tool and never lists the workspace root", async () => {
     const { frames, exec } = harness();
-    const block = await executeToolUse(
-      { id: "t1", name: "read", input: {}, input_error: "the arguments were not valid JSON" },
-      exec,
-      [],
-    );
+    const { block } = await runToolUse({ id: "t1", name: "read", input: {}, input_error: "the arguments were not valid JSON" }, exec);
 
     expect(block).toMatchObject({ type: "tool_result", tool_use_id: "t1", is_error: true });
     expect((block as { content: string }).content).toContain("was not run");
@@ -63,18 +59,14 @@ describe("executeToolUse", () => {
 
   test("a call missing a required argument is refused before dispatch", async () => {
     const { exec } = harness();
-    const block = await executeToolUse({ id: "t2", name: "read", input: {} }, exec, []);
+    const { block } = await runToolUse({ id: "t2", name: "read", input: {} }, exec);
     expect(block).toMatchObject({ is_error: true });
     expect((block as { content: string }).content).toContain("`path`");
   });
 
   test("a call with the wrong declared type is refused before dispatch", async () => {
     const { exec } = harness();
-    const block = await executeToolUse(
-      { id: "t3", name: "read", input: { path: 42 } },
-      exec,
-      [],
-    );
+    const { block } = await runToolUse({ id: "t3", name: "read", input: { path: 42 } }, exec);
     expect(block).toMatchObject({ is_error: true });
     expect((block as { content: string }).content).toContain("`path`");
     expect((block as { content: string }).content).toContain("string");

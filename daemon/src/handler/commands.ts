@@ -19,7 +19,7 @@ import { runRegisteredOperation, isRegisteredOperation, commandOperations } from
 import { parseOperationInput, parseOperationResult } from "../operations/contracts.ts";
 import { threadModelOf, type ThreadRecord } from "../engine/threads.ts";
 import { afterConfigurationCommand, afterCommand, type DispatchRuntime } from "./command_dispatch.ts";
-import type { HandshakeProvider } from "../swp/connection.ts";
+import type { HandshakeProvider } from "../swp/handshake.ts";
 import type { SessionRouter } from "../swp/session.ts";
 import type { FrameSink } from "../llm/stream.ts";
 import type { RequestMeta } from "../swp/session.ts";
@@ -59,7 +59,7 @@ export async function dispatchCommand(
   const archive = originalDeps.commands.archive;
   const deps = archive === undefined ? originalDeps : {
     ...originalDeps, commands: { ...originalDeps.commands, archive: {
-      ...archive, owner: meta.session.sessionId, ...(meta.session.archiveLimits === undefined ? {} : { limits: meta.session.archiveLimits }),
+      ...archive, owner: meta.session.owner ?? `session-${String(meta.session.sessionId)}`, ...(meta.session.archiveLimits === undefined ? {} : { limits: meta.session.archiveLimits }),
     } },
   };
   const sessionId = meta.session.sessionId;
@@ -74,9 +74,8 @@ export async function dispatchCommand(
     }
   }
 
-  const confidential = meta.session.confidential === true;
   if (isCharacterless(cmd.name) && !(cmd.name === "list_models" && selected !== undefined)) {
-    return characterlessCommand(deps, cmd, sessionId, selected, rid, signal, confidential);
+    return characterlessCommand(deps, cmd, sessionId, selected, rid, signal);
   }
   if (cmd.name === "switch_character") {
     return await switchCharacterCommand(deps, cmd, sessionId, rid, selected);
@@ -87,7 +86,7 @@ export async function dispatchCommand(
   try {
     character = deps.registry.resolveCharacter(selected);
   } catch (e) {
-    if (optionalCharacter) return characterlessCommand(deps, cmd, sessionId, selected, rid, signal, confidential);
+    if (optionalCharacter) return characterlessCommand(deps, cmd, sessionId, selected, rid, signal);
     const message = e instanceof CharacterError ? e.message : String(e);
     return frameWithRid(commandFrame(cmd.name, { err: invalidRequest(message) }), rid);
   }
@@ -99,12 +98,12 @@ export async function dispatchCommand(
     const thread = liveThread(deps.registry, character, meta.session.selectedThread);
     engine = await deps.registry.getOrCreate(character, thread);
   } catch (e) {
-    if (optionalCharacter) return characterlessCommand(deps, cmd, sessionId, selected, rid, signal, confidential);
+    if (optionalCharacter) return characterlessCommand(deps, cmd, sessionId, selected, rid, signal);
     const message = e instanceof Error ? e.message : String(e);
     return frameWithRid(commandFrame(cmd.name, { err: internalError(message) }), rid);
   }
 
-  const session = { ...characterSession(deps, character, config, sessionId, rid, signal, engine.thread), confidential };
+  const session = characterSession(deps, character, config, sessionId, rid, signal, engine.thread);
 
   let frame: ServerMessage;
   try {
@@ -181,10 +180,8 @@ async function characterlessCommand(
   selected: string | undefined,
   rid: string | undefined,
   signal: AbortSignal,
-  confidential = false,
 ): Promise<ServerMessage> {
   const session: CommandSession = {
-    confidential,
     config: deps.globalConfig(),
     configPath: deps.configPath,
     dataDir: deps.dataDir,

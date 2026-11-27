@@ -2,7 +2,7 @@ import { constants } from "node:fs";
 import { mkdir, mkdtemp, open, rm, stat } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import type { Server, LocalPeer } from "../swp/server.ts";
+import type { Server } from "../swp/server.ts";
 import type { WebSession, WebSessions } from "./auth.ts";
 import type { WebRecovery } from "./recovery.ts";
 import type { WebArchiveInfo } from "../protocol/WebArchiveInfo.ts";
@@ -10,6 +10,7 @@ import type { WebArchiveList } from "../protocol/WebArchiveList.ts";
 import type { WebArchiveResult } from "../protocol/WebArchiveResult.ts";
 import type { OperationInput } from "../operations/types.ts";
 import { parseOperationInput, parseOperationResult } from "../operations/contracts.ts";
+import { runRequest } from "./operations.ts";
 import { securityHeaders } from "./policy.ts";
 
 export const ARCHIVE_TRANSFER_LIMITS = {
@@ -251,35 +252,25 @@ export class ArchiveTransfers {
   }
 
   async #execute<N extends ArchiveOperation>(record: Artifact, name: N, args: OperationInput<N>): Promise<WebArchiveResult> {
-    const controller = new AbortController();
-    const signal = AbortSignal.any([record.abort.signal, controller.signal, AbortSignal.timeout(this.#limits.operationMs)]);
-    let peer: LocalPeer | undefined;
-    try {
-      peer = await this.server.attachLocal({ clientType: "web", clientName: "Browser archive transfer", character: null, capabilities: ["request-lifecycle"], signal,
-        archiveLimits: { bytes: this.#limits.expandedBytes, entries: this.#limits.entries, temporaryDirectory: await record.directory },
-        outboundLimits: { messages: 32, bytes: 1024 * 1024, onOverflow: () => controller.abort(new Error("Archive response exceeded its delivery limit")) },
-      });
-      const rid = `archive-${record.info.id}`;
-      const events = peer.events();
-      let output: unknown;
-      let received = false;
-      const sent = peer.send({ type: "command", name, args, rid });
-      void sent.catch(() => controller.abort(new Error("Archive command delivery failed")));
-      for await (const frame of events) {
-        if (!("rid" in frame) || frame.rid !== rid) continue;
-        if (frame.type === "command_output") {
-          if (received || frame.name !== name) throw new Error("Unexpected archive response");
-          output = frame.data; received = true;
-        }
-        if (frame.type === "request_finished") {
-          await sent;
-          if (frame.outcome === "failed") throw new ConfirmedArchiveFailure(frame.error?.message ?? "Archive operation failed");
-          if (frame.outcome !== "completed" || !received) throw new Error("Archive outcome could not be confirmed; inspect the character list before trying again");
-          return name === "export_character" ? { name: "export_character", data: parseOperationResult("export_character", output) } : { name: "import_character", data: parseOperationResult("import_character", output) };
-        }
+    const signal = AbortSignal.any([record.abort.signal, AbortSignal.timeout(this.#limits.operationMs)]);
+    const frames = runRequest(this.server, {
+      message: { type: "command", name, args, rid: `archive-${record.info.id}` }, clientName: "Browser archive transfer", character: null, signal,
+      archiveLimits: { bytes: this.#limits.expandedBytes, entries: this.#limits.entries, temporaryDirectory: await record.directory }, queuedBytes: 1024 * 1024,
+    });
+    let output: unknown;
+    let received = false;
+    for await (const frame of frames) {
+      if (frame.type === "command_output") {
+        if (received || frame.name !== name) throw new Error("Unexpected archive response");
+        output = frame.data; received = true;
       }
-      throw new Error("Archive connection ended before its outcome was confirmed");
-    } finally { await peer?.detach(); }
+      if (frame.type === "request_finished") {
+        if (frame.outcome === "failed") throw new ConfirmedArchiveFailure(frame.error?.message ?? "Archive operation failed");
+        if (frame.outcome !== "completed" || !received) throw new Error("Archive outcome could not be confirmed; inspect the character list before trying again");
+        return name === "export_character" ? { name: "export_character", data: parseOperationResult("export_character", output) } : { name: "import_character", data: parseOperationResult("import_character", output) };
+      }
+    }
+    throw new Error("Archive connection ended before its outcome was confirmed");
   }
 
   async download(owner: WebSession, id: string, request: Request): Promise<Response> {

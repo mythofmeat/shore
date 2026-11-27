@@ -35,8 +35,6 @@ import type { ImportCharacterResult } from "../protocol/ImportCharacterResult.ts
 import type { DeleteCharacterResult } from "../protocol/DeleteCharacterResult.ts";
 import type { BackupExported } from "../protocol/BackupExported.ts";
 import type { ArchiveImported } from "../protocol/ArchiveImported.ts";
-import type { TransferChunk } from "../protocol/TransferChunk.ts";
-import type { TransferWritten } from "../protocol/TransferWritten.ts";
 
 const FORMAT = "shore-character";
 const VERSION = 2;
@@ -52,7 +50,7 @@ export interface ArchiveContext {
   readonly dirs: ShoreDirs;
   readonly limits?: ArchiveLimits;
   readonly spool?: ArchiveSpool;
-  readonly owner?: number;
+  readonly owner?: string;
   characters(): readonly string[];
   hasCharacter(name: string): boolean;
   withSnapshot<T>(run: () => Promise<T>): Promise<T>;
@@ -198,21 +196,9 @@ async function spooled(ctx: ArchiveContext, write: (entry: SpoolEntry) => Promis
   }
 }
 
-function transfers(ctx: ArchiveContext): { spool: ArchiveSpool; owner: number } {
-  if (ctx.spool === undefined || ctx.owner === undefined) throw internalError("Archive transfers are unavailable on this connection");
+function transfers(ctx: ArchiveContext): { spool: ArchiveSpool; owner: string } {
+  if (ctx.spool === undefined || ctx.owner === undefined) throw internalError("Archive transfers are unavailable here");
   return { spool: ctx.spool, owner: ctx.owner };
-}
-
-export async function readTransfer(ctx: ArchiveContext, args: Args): Promise<TransferChunk> {
-  const { spool, owner } = transfers(ctx);
-  return await spool.read(owner, requiredTransfer(args["transfer"]), Number(args["offset"]));
-}
-
-export async function writeTransfer(ctx: ArchiveContext, args: Args): Promise<TransferWritten> {
-  const { spool, owner } = transfers(ctx);
-  const data = args["data"];
-  if (typeof data !== "string") throw invalidRequest("data must be base64 text");
-  return await spool.append(owner, args["transfer"] === undefined ? undefined : requiredTransfer(args["transfer"]), data);
 }
 
 export async function importArchive(ctx: ArchiveContext, args: Args): Promise<ArchiveImported> {

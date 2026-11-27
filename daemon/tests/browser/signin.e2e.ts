@@ -1,7 +1,7 @@
 import { expect, test } from "./fixtures.ts";
-import { signIn, watchPage } from "./helpers.ts";
+import { signIn, signInCode, watchPage } from "./helpers.ts";
 
-test("a wrong token is rejected with a readable error and the right token connects", async ({ page }) => {
+test("a wrong code, or the daemon's own token, is refused with a readable error, and a fresh code or its link connects", async ({ page }) => {
   const errors: string[] = [];
   page.on("pageerror", (error) => { errors.push(error.message); });
   await page.addInitScript("window.shorePolicyViolations = []; document.addEventListener('securitypolicyviolation', event => window.shorePolicyViolations.push(event.violatedDirective));");
@@ -9,10 +9,13 @@ test("a wrong token is rejected with a readable error and the right token connec
   await expect(page.getByRole("heading", { name: "Connect to your daemon" })).toBeVisible();
   const connect = page.getByRole("button", { name: "Connect", exact: true });
   await expect(connect).toBeDisabled();
-  await page.getByLabel("Access token").fill("wrong-token");
-  await connect.click();
-  await expect(page.getByRole("alert")).toBeVisible();
-  await page.getByLabel("Access token").fill("browser-test-token");
+  const field = page.getByLabel("Sign-in code or link");
+  for (const wrong of ["wrong-code", "browser-test-token"]) {
+    await field.fill(wrong);
+    await connect.click();
+    await expect(page.getByRole("alert")).toContainText("expired or was already used");
+  }
+  await field.fill(`  ${new URL(page.url()).origin}/#login=${await signInCode(page)}  `);
   await connect.click();
   await expect(page.getByRole("heading", { name: "Connect to your daemon" })).toBeHidden();
   await expect(page.locator("html")).toHaveAttribute("data-theme", "default");
@@ -45,7 +48,7 @@ test("a sign-in code from Settings › Devices signs in another browser once, an
   const late = await (await browser.newContext()).newPage();
   await late.goto(link);
   await expect(late.getByRole("alert")).toContainText("expired or was already used");
-  await expect(late.getByLabel("Access token")).toBeVisible();
+  await expect(late.getByLabel("Sign-in code or link")).toBeVisible();
   await check();
 });
 

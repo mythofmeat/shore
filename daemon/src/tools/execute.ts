@@ -16,7 +16,6 @@ import { insideWorkspace } from "../storage/image_locations.ts";
 
 import { deriveContentFromBlocks } from "../engine/message_store.ts";
 import type { ContentBlock, ImageRef, Message, Role } from "../engine/types.ts";
-import { imageDataForPath } from "../engine/wire_images.ts";
 import { sha256Hex } from "../engine/picture_files.ts";
 import type { ToolUseEvent } from "../engine/tool_loop.ts";
 import type { ServerMessage } from "../protocol/ServerMessage.ts";
@@ -47,7 +46,7 @@ export interface ToolExecution {
   sendDirect: (message: ServerMessage) => void;
   ctx: ToolContext;
   limits: ToolLimitsView;
-  imageLimits?: ImageLimits;
+  imageLimits?: ImageLimits | undefined;
   rid?: string;
   subagent?: string;
   now: () => string;
@@ -65,22 +64,12 @@ export interface ToolRun {
   rejected: boolean;
   durationMs: number;
   window?: ToolResultWindow;
-  value?: unknown;
   pictures: ImageRef[];
-}
-
-export async function executeToolUse(
-  toolUse: ToolUseEvent,
-  exec: ToolExecution,
-  intermediateMessages: Message[],
-): Promise<ContentBlock> {
-  return (await runToolUse(toolUse, exec, intermediateMessages)).block;
 }
 
 export async function runToolUse(
   toolUse: ToolUseEvent,
   exec: ToolExecution,
-  intermediateMessages: Message[],
 ): Promise<ToolRun> {
   exec.sendDirect({
     type: "tool_call",
@@ -112,7 +101,6 @@ export async function runToolUse(
   const maxResultChars = resultCharsFor(exec.limits, toolUse.name);
   let rawOutput: string;
   let isError: boolean;
-  let okValue: unknown;
   let payload: ToolResultPayload | undefined;
   try {
     const dispatch = async () => await dispatchWithinDeadline(
@@ -124,7 +112,7 @@ export async function runToolUse(
     const record = exec.ctx.recordWorkspaceWrite;
     const value = record !== undefined && writesWorkspace(toolUse.name) ? await record(dispatch) : await dispatch();
     payload = toolMediaOf(value);
-    okValue = payload === undefined ? value : payload.value;
+    const okValue = payload === undefined ? value : payload.value;
     rawOutput = joinLines([formatToolOutput(exec.ctx.texts, toolUse.name, okValue), ...(payload?.extra ?? [])]);
     isError = ["bash", "apply_patch"].includes(toolUse.name) && (okValue as BashResult).exit_code !== 0;
   } catch (e) {
@@ -141,10 +129,6 @@ export async function runToolUse(
   const content = toolResultContent(windowed, [...(payload?.notes ?? []), ...attached.notes], attached.placed);
   const output = toolResultText(content);
 
-  if (!isError && toolUse.name === "generate_image") {
-    attachGeneratedImage(okValue, intermediateMessages, exec);
-  }
-
   emitToolResult(exec, toolUse, output, isError, attached.images);
 
   return {
@@ -160,7 +144,6 @@ export async function runToolUse(
     rejected: false,
     durationMs: dispatchMs,
     window: windowed,
-    value: okValue,
     pictures: attached.shown,
   };
 }
@@ -359,36 +342,6 @@ export function argumentRejection(
   );
 }
 
-export function attachGeneratedImage(
-  value: unknown,
-  intermediateMessages: Message[],
-  exec: Pick<ToolExecution, "sendDirect" | "rid">,
-): void {
-  if (typeof value !== "object" || value === null) return;
-  const fields = value as Record<string, unknown>;
-  const path = fields["path"];
-  if (typeof path !== "string") return;
-  const caption = typeof fields["caption"] === "string" ? fields["caption"] : undefined;
-
-  const image: ImageRef = { path, ...(caption !== undefined ? { caption } : {}) };
-  for (let i = intermediateMessages.length - 1; i >= 0; i -= 1) {
-    const message = intermediateMessages[i];
-    if (message?.role === "assistant") {
-      message.images.push(image);
-      break;
-    }
-  }
-
-  const data = imageDataForPath(path);
-  exec.sendDirect({
-    type: "send_image",
-    ...(exec.rid !== undefined ? { rid: exec.rid } : {}),
-    path,
-    ...(caption !== undefined ? { caption } : {}),
-    ...(data !== undefined ? { data } : {}),
-  });
-}
-
 function emitToolResult(
   exec: ToolExecution,
   toolUse: ToolUseEvent,
@@ -438,20 +391,19 @@ export interface ToolPhase {
 
 export function toolPhase(exec: ToolExecution, messages: Message[] = []): ToolPhase {
   const pictures = new Map<string, ImageRef[]>();
-  const picturesOf = (blocks: readonly ContentBlock[]): ImageRef[] => blocks.flatMap((block) => {
-    if (block.type !== "tool_result") return [];
-    const shown = pictures.get(block.tool_use_id) ?? [];
-    pictures.delete(block.tool_use_id);
+  const taken = (id: string): ImageRef[] => {
+    const shown = pictures.get(id) ?? [];
+    pictures.delete(id);
     return shown;
-  });
+  };
   return {
     messages,
     ...(exec.ctx.trackWorkspaceWrite === undefined ? {} : { parallel: false }),
     runTool: async (toolUse) => {
-      const run = await runToolUse(toolUse, exec, messages);
-      if (run.pictures.length > 0) pictures.set(toolUse.id, run.pictures);
+      const run = await runToolUse(toolUse, exec);
+      pictures.set(toolUse.id, run.pictures);
       return run.block;
     },
-    recordTurn: (role, blocks) => recordReportedMessage(messages, role, blocks, exec, picturesOf(blocks)),
+    recordTurn: (role, blocks) => recordReportedMessage(messages, role, blocks, exec, blocks.flatMap((block) => block.type === "tool_result" ? taken(block.tool_use_id) : [])),
   };
 }

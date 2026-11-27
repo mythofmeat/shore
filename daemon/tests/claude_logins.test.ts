@@ -79,7 +79,7 @@ async function world(toml: string = CONFIG, checks: Record<string, ClaudePlanChe
     fetch: (account: ClaudeAccount) => Promise.resolve(checks[account.name] ?? { status: "ok", poll: { subscription_type: "pro", five_hour: { percent_used: 0.1, resets_at: null }, seven_day: { percent_used: 0.2, resets_at: null } } }),
     signIn,
   });
-  return { ctx: { config: session, confidential: true }, session, configPath, home, root: claudeAccountsRoot(home), started, closed, signingInAs };
+  return { ctx: { config: session }, session, configPath, home, root: claudeAccountsRoot(home), started, closed, signingInAs };
 }
 
 function signedIn(w: World, folder: string, email: string): void {

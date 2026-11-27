@@ -12,7 +12,6 @@ import type { ProcessStreams } from "./process.ts";
 import { decodeToolValue } from "./workspace_ops.ts";
 import { InvalidArgs, NotImplemented, ToolIoError, ToolTimedOut } from "./errors.ts";
 import { handleChatLogs, type ChatLogOptions } from "./history.ts";
-import { handleGenerateImage, type ImageGenConfigView, type ImageGenerator } from "./images.ts";
 import { handleModelHistory, type ModelHistoryQuery } from "./model_history.ts";
 import { handleListTriggers } from "./list_triggers.ts";
 import type { TriggersView } from "../autonomy/trigger_loop.ts";
@@ -24,7 +23,6 @@ import { handleThreads } from "./threads.ts";
 import { reachableThreads } from "../autonomy/outbox.ts";
 import { handleWakeInThread, type WakeHandOff, type WakeInThreadRequest } from "./wake_in_thread.ts";
 import type { EditThreadRequest } from "./edit_thread.ts";
-import type { FetchLike } from "./web.ts";
 import type { ToolInput } from "./workspace.ts";
 import { McpCancelled } from "../mcp/client.ts";
 import type { ImagesConfig, SubagentConfig, ToolsConfig } from "../config/app.ts";
@@ -42,7 +40,6 @@ export interface ToolContext {
   maxResultChars?: number;
   maxInlineImageBytes?: number;
   images?: ImagesConfig;
-  imageDir: string;
   cacheDir?: string;
   workspaceDir: string;
   workspace?: CharacterWorkspace;
@@ -52,8 +49,6 @@ export interface ToolContext {
   historyDbPath: string;
   configDir: string;
 
-  imageGenConfig?: ImageGenConfigView;
-  imageGenerator?: ImageGenerator;
   modelHistoryQuery?: ModelHistoryQuery;
   activityStats?: ActivityStatsLookup;
 
@@ -93,8 +88,6 @@ export interface ToolContext {
   editThread?: (request: EditThreadRequest) => Promise<ThreadRecord | undefined>;
 
   signal?: AbortSignal;
-  fetchImpl?: FetchLike;
-  lookupImpl?: (hostname: string) => Promise<string[]>;
 }
 
 export function deferEditTo(
@@ -131,7 +124,7 @@ export async function dispatchTool(
   input: unknown,
   ctx: ToolContext,
 ): Promise<unknown> {
-  if (ctx.dryRun && (["bash", "edit", "apply_patch", "generate_image", "wake_in_thread"].includes(name) || name.startsWith("mcp__"))) {
+  if (ctx.dryRun && (["bash", "edit", "apply_patch", "wake_in_thread"].includes(name) || name.startsWith("mcp__"))) {
     throw new ToolIoError(`${name} blocked: dry-run tools cannot change files or external state`);
   }
   const args = (input ?? {}) as ToolInput;
@@ -157,16 +150,6 @@ export async function dispatchTool(
 
     case "model_history":
       return await handleModelHistory(args, ctx.characterName, ctx.modelHistoryQuery);
-
-    case "generate_image":
-      return await handleGenerateImage(
-        args,
-        ctx.imageDir,
-        ctx.imageGenConfig,
-        ctx.imageGenerator,
-        new Date(),
-        ctx.fetchImpl ?? fetch,
-      );
 
     case "activity_heatmap":
       if (ctx.activityStats === undefined) {

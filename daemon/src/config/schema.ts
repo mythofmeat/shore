@@ -8,6 +8,7 @@ import { requiresRestart } from "./restart.ts";
 import { configPathText } from "./failure.ts";
 import { formatConfigPath, isConfigTable, MODEL_FIELDS, parseConfigPath } from "./surface.ts";
 import { GEMINI_THINKING_MODES } from "../llm/types.ts";
+import { compareByCodePoint } from "../util/sort.ts";
 
 import { isSecretConfigPath } from "./serialize.ts";
 import type { ConfigSchemaEntry } from "../protocol/ConfigSchemaEntry.ts";
@@ -142,20 +143,12 @@ export function configSchema(live: LiveInstances): SchemaEntry[] {
     for (const field of ["session_limit", "weekly_limit"]) add([...prefix, "keys", "<index>", field], { kind: "float", optional: true });
     for (const field of MODEL_FIELDS) add([...prefix, field], modelInfo(field));
   }
-  for (const section of ["chat", "image"]) {
-    for (const identity of new Set(["<provider:model_id>", ...live.instancesAt(section).filter((name) => name.includes(":"))])) {
-      if (section === "chat") for (const field of [...MODEL_FIELDS, "sdk"]) add([section, identity, field], modelInfo(field));
-      if (section === "image") for (const field of ["size", "quality", "aspect_ratio", "image_size"]) add([section, identity, field], { kind: "string", optional: true });
-    }
+  for (const identity of new Set(["<provider:model_id>", ...live.instancesAt("chat").filter((name) => name.includes(":"))])) {
+    for (const field of [...MODEL_FIELDS, "sdk"]) add(["chat", identity, field], modelInfo(field));
   }
-  const parents = new Set<string>();
-  for (const row of out) {
-    const path = parseConfigPath(row.key);
-    for (let length = 1; length < path.length; length += 1) parents.add(formatConfigPath(path.slice(0, length)));
-  }
+  const parents = new Set(out.flatMap((row) => parseConfigPath(row.key).slice(0, -1).map((_, at, path) => formatConfigPath(path.slice(0, at + 1)))));
   for (const key of parents) if (!out.some((row) => row.key === key)) out.push(entry(key, { kind: "table", ...(key === "tools" ? { keySource: "tools" } : key === "subagents" ? { keySource: "subagents" } : {}) }));
-  out.sort((a, b) => (a.key < b.key ? -1 : a.key > b.key ? 1 : 0));
-  return out;
+  return out.sort((a, b) => compareByCodePoint(a.key, b.key));
 }
 
 function modelInfo(field: string): ConfigTypeInfo {
@@ -296,7 +289,10 @@ export function findSchemaEntry(entries: readonly SchemaEntry[], key: string): S
   return template === undefined ? undefined : { ...template, key };
 }
 
-const RETIRED_KEYS = new Map([["marks.tags", "is now two lists: marks.like_tags for a like and marks.dislike_tags for a dislike"]]);
+const RETIRED_KEYS = new Map([
+  ["marks.tags", "is now two lists: marks.like_tags for a like and marks.dislike_tags for a dislike"],
+  ["daemon.listen_addr", "is gone with the raw TCP port: everything, the CLI included, now uses daemon.web.bind_addr (port 7340 unless changed). Delete the line"],
+]);
 
 export function validateConfigSource(input: Record<string, unknown>, source: string): void {
   const entries = configSchema({ instancesAt: () => [] });

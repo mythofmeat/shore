@@ -1,5 +1,4 @@
 import { formatWallClock } from "../engine/prompt.ts";
-import type { ContentBlock } from "../engine/types.ts";
 import type { TriggerFiring, WakeNews } from "./runner.ts";
 import type { Texts } from "../texts/texts.ts";
 
@@ -50,55 +49,4 @@ export function appendWrapUpNudge(messages: WireMessageLike[], text: string): vo
     return;
   }
   messages.push({ role: "user", content: [{ type: "text", text }] });
-}
-
-export interface ImageRef {
-  path: string;
-  caption?: string | undefined;
-  data?: string | undefined;
-}
-
-export function generatedImageRef(value: unknown): ImageRef | undefined {
-  if (typeof value !== "object" || value === null) return undefined;
-  const record = value as Record<string, unknown>;
-  const path = record["path"];
-  if (typeof path !== "string") return undefined;
-  const caption = record["caption"];
-  return {
-    path,
-    caption: typeof caption === "string" ? caption : undefined,
-    data: undefined,
-  };
-}
-
-export interface AutonomousMessageShape {
-  role: "assistant";
-  origin: "autonomous";
-  content: string;
-  contentBlocks: ContentBlock[];
-  images: ImageRef[];
-  providerKey: string | undefined;
-  model: string | undefined;
-}
-
-export function buildAutonomousMessage(
-  text: string,
-  images: ImageRef[],
-  providerKey: string | undefined,
-  model: string | undefined,
-): AutonomousMessageShape {
-  const contentBlocks: ContentBlock[] = text.length > 0 ? [{ type: "text", text }] : [];
-  return {
-    role: "assistant",
-    origin: "autonomous",
-    content: deriveContentFromBlocks(contentBlocks),
-    contentBlocks,
-    images,
-    providerKey,
-    model,
-  };
-}
-
-function deriveContentFromBlocks(blocks: readonly ContentBlock[]): string {
-  return blocks.flatMap((block) => (block.type === "text" ? [block.text] : [])).join("");
 }

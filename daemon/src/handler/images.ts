@@ -4,7 +4,7 @@ import { shoreLog } from "../log.ts";
 import { readFile } from "node:fs/promises";
 
 import type { ContentBlock, ImageRef } from "../engine/types.ts";
-import { base64Rejection } from "../tools/images.ts";
+import { base64Rejection } from "../util/base64.ts";
 import { findModelCopy, modelCopyPath, omissionNotice, resolveImage } from "../llm/images.ts";
 import { prepareImageBlock, reduceImage } from "../llm/prepare_images.ts";
 import { DEFAULT_IMAGE_SETTINGS, type ImageSettings } from "../llm/image_settings.ts";
@@ -209,10 +209,9 @@ function decodeBase64(data: string): Uint8Array {
 
 export async function encodeImageBlock(
   img: ImageRef,
-  markUsed = false,
 ): Promise<{ type: "base64"; media_type: string; data: string } | undefined> {
   const copy = findModelCopy(img.path);
-  if (markUsed) markImagesUsed([img.path]);
+  markImagesUsed([img.path]);
   if (copy !== undefined) {
     try {
       return { type: "base64", media_type: copy.mediaType, data: (await readFile(copy.path)).toString("base64") };

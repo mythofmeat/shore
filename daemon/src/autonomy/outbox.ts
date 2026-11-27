@@ -11,7 +11,6 @@ import { truncateSummary, type NotificationPicture } from "../notifications.ts";
 import { ToolIoError } from "../tools/errors.ts";
 import type { SendMessage, SendMessageRequest } from "../tools/send_message.ts";
 import type { PushOutcome, PushRefusal } from "./push.ts";
-import { buildAutonomousMessage, type ImageRef } from "./wake_shape.ts";
 import type { Texts } from "../texts/texts.ts";
 
 export interface Outgoing {
@@ -109,17 +108,7 @@ export interface PostTo {
   engine: { appendMessage(msg: Message): Promise<void>; currentRevision(): number };
 }
 
-export interface Sending {
-  text: string;
-  images: ImageRef[];
-  push: boolean;
-}
-
-export function sendingsHere(here: readonly Outgoing[], images: ImageRef[]): Sending[] {
-  return here.length === 0 && images.length > 0
-    ? [{ text: "", images, push: false }]
-    : here.map((each, at) => ({ text: each.text, images: at === 0 ? images : [], push: each.push }));
-}
+export type Sending = Pick<Outgoing, "text" | "push">;
 
 export interface Poster {
   emit?: (character: string, revision: number, msg: Message, thread: string) => void;
@@ -145,21 +134,16 @@ export async function postMessage(
   to: PostTo,
   pictures: PictureSender,
 ): Promise<Message | undefined> {
-  const shape = buildAutonomousMessage(sending.text, sending.images, from.provider_key, from.model === "" ? undefined : from.model);
   const msg: Message = {
     msg_id: (deps.newId ?? (() => `m_${crypto.randomUUID()}`))(),
     origin: "autonomous",
     role: "assistant",
-    content: shape.content,
-    images: shape.images.map((img) => ({
-      path: img.path,
-      ...(img.caption === undefined ? {} : { caption: img.caption }),
-      ...(img.data === undefined ? {} : { data: img.data }),
-    })),
-    content_blocks: shape.contentBlocks,
+    content: sending.text,
+    images: [],
+    content_blocks: [{ type: "text", text: sending.text }],
     alternatives: [],
-    ...(shape.providerKey === undefined ? {} : { provider_key: shape.providerKey }),
-    ...(shape.model === undefined ? {} : { model: shape.model }),
+    ...(from.provider_key === undefined ? {} : { provider_key: from.provider_key }),
+    ...(from.model === undefined || from.model === "" ? {} : { model: from.model }),
     timestamp: (deps.nowIso ?? (() => new Date().toISOString()))(),
     version: newMessageVersion(),
   };
@@ -209,6 +193,6 @@ export async function postElsewhere(
       note("call_failed", `A message for the thread "${each.thread}" was not sent: that thread was gone by the time the ${where.turn} in "${where.from}" ended`);
       continue;
     }
-    await postMessage(where.character, request, { text: each.text, images: [], push: each.push }, deps, note, { thread: each.thread, engine }, pictures);
+    await postMessage(where.character, request, each, deps, note, { thread: each.thread, engine }, pictures);
   }
 }

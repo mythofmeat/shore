@@ -1,10 +1,11 @@
+import { required } from "../src/util/required.ts";
 import { afterAll, describe, expect, spyOn, test } from "bun:test";
 import { randomUUID } from "node:crypto";
 import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
 import { chmod, mkdir, readdir, readFile, writeFile } from "node:fs/promises";
 import { basename, dirname, join } from "node:path";
 import { Parser } from "tar";
-import { deleteCharacter, exportBackup, exportCharacter, importCharacter, readTransfer, writeTransfer, type ArchiveContext } from "../src/commands/archive.ts";
+import { deleteCharacter, exportBackup, exportCharacter, importCharacter, type ArchiveContext } from "../src/commands/archive.ts";
 import { ArchiveSpool } from "../src/commands/archive_spool.ts";
 import type { ShoreDirs } from "../src/config/dirs.ts";
 import { loadConfig } from "../src/config/loader.ts";
@@ -73,7 +74,7 @@ async function context(workspace: CharacterWorkspace): Promise<ToolContext> {
   return {
     texts: new Texts(),
     workspaceDir: workspace.dir, workspace, characterName: "Ada", characterDataDir: join(data, "ada"),
-    imageDir: data, conversationDir: data, historyDbPath: join(data, "shore.db"), configDir: data,
+    conversationDir: data, historyDbPath: join(data, "shore.db"), configDir: data,
   };
 }
 
@@ -192,7 +193,7 @@ describe.skipIf(!READY)("a character whose tools run as its own user", () => {
 
     await sharePictureFolders(config, [USER, OTHER, "cal"]);
 
-    const { messages } = await buildLlmMessages({ system: [], messages: [own] }, "text_standin", new Texts());
+    const { messages } = await buildLlmMessages({ system: [], messages: [own] }, new Texts());
     const shown = messages[0]?.content.flatMap((block) => block.type === "text" ? [/^\[picture: (.+)\]$/.exec(block.text)?.[1] ?? ""] : []).find((path) => path !== "") ?? "";
     expect(shown).toBe(own.images[0]?.path ?? "none");
     const workspace = await freshWorkspace();
@@ -387,14 +388,14 @@ describe.skipIf(!READY)("a character whose tools run as its own user", () => {
     const ctx: ArchiveContext = {
       dirs: source, characters: () => [name], hasCharacter: () => true, withSnapshot: async (run) => await run(), refreshDiscovery: async () => {},
       releaseCharacter: async () => {}, workspace: (character) => new CharacterWorkspace(join(root, character), OWN_USER),
-      spool: new ArchiveSpool(join(source.cache, "archive-transfers"), () => true), owner: 1,
+      spool: new ArchiveSpool(join(source.cache, "archive-transfers")), owner: "laptop",
     };
     const first = await tarEntries(ctx, (await exportBackup(ctx)).transfer);
     expect(first.get(`workspace/${name}/private/kept.txt`)?.toString()).toBe("mine");
     expect(first.get(`workspace/${name}/soul`)?.toString()).toBe("-> SOUL.md");
     await bash(workspace, "printf again >> private/kept.txt");
     const manifest = first.get("manifest.json") ?? Buffer.alloc(0);
-    const base = (await writeTransfer(ctx, { data: manifest.toString("base64") })).transfer;
+    const base = (await required(ctx.spool).receive("laptop", new Blob([manifest]).stream())).transfer;
     const second = await exportBackup(ctx, { base });
     const delta = await tarEntries(ctx, second.transfer);
     expect([...delta.keys()].filter((path) => path.startsWith("workspace/"))).toEqual([`workspace/${name}/private/kept.txt`]);
@@ -601,7 +602,7 @@ async function startDaemonProcess(env: Record<string, string> = {}) {
   const daemon = Bun.spawn([process.execPath, join(import.meta.dir, "..", "src", "daemon", "main.ts")], {
     env: {
       ...process.env, SHORE_CONFIG_DIR: join(base, "config"), SHORE_DATA_DIR: join(base, "data"), SHORE_CACHE_DIR: join(base, "cache"),
-      SHORE_RUNTIME_DIR: join(base, "runtime"), SHORE_WORKSPACE_DIR: root, SHORE_ADDR: "127.0.0.1:0", SHORE_WEB_ADDR: "127.0.0.1:0", ...env,
+      SHORE_RUNTIME_DIR: join(base, "runtime"), SHORE_WORKSPACE_DIR: root, SHORE_WEB_ADDR: "127.0.0.1:0", ...env,
     },
     stdin: "ignore", stdout: "ignore", stderr: "pipe",
   });
@@ -614,12 +615,7 @@ async function startDaemonProcess(env: Record<string, string> = {}) {
 }
 
 async function tarEntries(ctx: ArchiveContext, transfer: string): Promise<Map<string, Buffer>> {
-  const parts: Buffer[] = [];
-  for (let offset = 0, total = 1; offset < total;) {
-    const chunk = await readTransfer(ctx, { transfer, offset });
-    const bytes = Buffer.from(chunk.data, "base64");
-    parts.push(bytes); offset += bytes.length; total = chunk.bytes;
-  }
+  const parts = [Buffer.from(await new Response(required(ctx.spool).send("laptop", transfer).stream).arrayBuffer())];
   const entries = new Map<string, Buffer>();
   const pending: Promise<void>[] = [];
   const parser = new Parser({

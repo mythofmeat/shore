@@ -8,16 +8,16 @@ import { resolvedReasoningReplay } from "../src/config/models.ts";
 import { ProviderRegistry } from "../src/config/providers.ts";
 import { restartRequiredChanges } from "../src/config/restart.ts";
 import { attemptMatrixBridge, unusableReason } from "../src/connections/matrix/start.ts";
-import { resolveListenAddr } from "../src/daemon/startup.ts";
+import { resolveStartup, resolveWebConfig, StartupError } from "../src/daemon/startup.ts";
+import { defaultWebConfig } from "../src/config/app.ts";
+import { ConfigDuration } from "../src/config/duration.ts";
 import { shoreLog } from "../src/log.ts";
 import type { ToolContext } from "../src/tools/dispatch.ts";
 import { buildToolContext } from "../src/handler/tool_context.ts";
 import { mcpConfigView } from "../src/runtime.ts";
 import { buildSessionHistorySnapshot, type HandshakeRegistry } from "../src/swp/handshake.ts";
 import { toolLimitsFrom } from "../src/tools/dispatch.ts";
-import { handleGenerateImage } from "../src/tools/images.ts";
 import { toSpec } from "../src/tools/mcp_registry.ts";
-import { setTestEnv } from "./support/env.ts";
 import { outcomeOf } from "./support/outcome.ts";
 import { testTmp } from "./support/tmp.ts";
 
@@ -75,25 +75,23 @@ test("a compaction setting that can't work is refused, naming the key as the fil
   expect(read()[0]).toBe(false);
 });
 
-test("[marks], [matrix] and [image] are read from the file, and a section with nothing under its heading leaves the defaults", async () => {
+test("[marks] and [matrix] are read from the file, and a section with nothing under its heading leaves the defaults", async () => {
   const root = await mkdtemp(testTmp("shore-sections-config-"));
   await writeFile(join(root, "config.toml"), [
     "[marks]", 'like_tags = ["funny"]', 'dislike_tags = ["flat"]',
-    "[matrix]", "enabled = true", 'homeserver_url = "https://matrix.example"', 'user_id = "@ada:example"', 'room_id = "!room:example"', "mirror_user_messages = false",
-    "[image]", 'model = "openai:gpt-image"', "",
+    "[matrix]", "enabled = true", 'homeserver_url = "https://matrix.example"', 'user_id = "@ada:example"', 'room_id = "!room:example"', "mirror_user_messages = false", "",
   ].join("\n"));
   const { app } = loadConfig(join(root, "config.toml"), { env: { SHORE_CONFIG_DIR: root }, onWarn: () => {} });
-  expect([app.marks, app.matrix, app.image.model]).toEqual([
+  expect([app.marks, app.matrix]).toEqual([
     { like_tags: ["funny"], dislike_tags: ["flat"] },
     { enabled: true, homeserver_url: "https://matrix.example", user_id: "@ada:example", room_id: "!room:example", mirror_user_messages: false },
-    "openai:gpt-image",
   ]);
 
-  await writeFile(join(root, "config.toml"), "[triggers]\n[compaction]\n[marks]\n[matrix]\n[image]\n");
+  await writeFile(join(root, "config.toml"), "[triggers]\n[compaction]\n[marks]\n[matrix]\n");
   const bare = loadConfig(join(root, "config.toml"), { env: { SHORE_CONFIG_DIR: root }, onWarn: () => {} }).app;
-  expect([bare.triggers.enabled, bare.compaction.enabled, bare.marks, bare.matrix, bare.image.model]).toEqual([
+  expect([bare.triggers.enabled, bare.compaction.enabled, bare.marks, bare.matrix]).toEqual([
     false, true, { like_tags: [], dislike_tags: ["didn't look hard enough", "out of character", "too long", "repetitive"] },
-    { enabled: false, homeserver_url: "", user_id: "", room_id: "", mirror_user_messages: true }, undefined,
+    { enabled: false, homeserver_url: "", user_id: "", room_id: "", mirror_user_messages: true },
   ]);
 });
 
@@ -124,21 +122,25 @@ test("the browser listener's address is checked only while it is on, and image s
   expect(await outcomeOf(load("[images]\nquality = 0\n"))).toThrow(/^images\.quality is 0; it must be from 1 to 100$/);
 });
 
-test("[daemon] holds the address Shore listens on and the cache forensics switch, and a change to it, to [matrix] or to [notifications] needs a restart", async () => {
+test("[daemon] holds the web listener, on by default, and the cache forensics switch; the old TCP address is refused by name; a change to it, to [matrix] or to [notifications] needs a restart", async () => {
   const root = await mkdtemp(testTmp("shore-config-sections-"));
   const loaded = async (toml: string) => {
     await writeFile(join(root, "config.toml"), toml);
     return loadConfig(join(root, "config.toml"), { env: { SHORE_CONFIG_DIR: root }, onWarn: () => {} });
   };
   const plain = await loaded('[chat]\ndisplay_name = "eve"\n');
-  expect([plain.app.daemon.listen_addr, plain.app.daemon.cache_forensics]).toEqual(["127.0.0.1:7320", false]);
-  const set = await loaded('[daemon]\nlisten_addr = "0.0.0.0:7000"\ncache_forensics = true\n');
-  expect([set.app.daemon.listen_addr, set.app.daemon.cache_forensics]).toEqual(["0.0.0.0:7000", true]);
+  expect([plain.app.daemon.web.enabled, plain.app.daemon.web.bind_addr, plain.app.daemon.cache_forensics]).toEqual([true, "127.0.0.1:7340", false]);
+  const set = await loaded('[daemon]\ncache_forensics = true\n[daemon.web]\nbind_addr = "0.0.0.0:7000"\n');
+  expect([set.app.daemon.web.bind_addr, set.app.daemon.cache_forensics]).toEqual(["0.0.0.0:7000", true]);
+  expect(await outcomeOf(loaded('[daemon]\nlisten_addr = "0.0.0.0:7320"\n'))).toThrow("daemon.listen_addr is gone with the raw TCP port");
 
-  expect(resolveListenAddr(undefined, undefined, set)).toEqual(["0.0.0.0:7000", "config"]);
-  expect(resolveListenAddr(undefined, "  ", set)).toEqual(["0.0.0.0:7000", "config"]);
-  expect(resolveListenAddr(undefined, "10.0.0.1:1", set)).toEqual(["10.0.0.1:1", "env"]);
-  expect(resolveListenAddr("10.0.0.2:2", "10.0.0.1:1", set)).toEqual(["10.0.0.2:2", "cli"]);
+  const web = set.app.daemon.web;
+  expect(resolveWebConfig(web, {})).toEqual([web, "config"]);
+  expect(resolveWebConfig(web, { SHORE_WEB_ADDR: "  " })).toEqual([web, "config"]);
+  expect(resolveWebConfig({ ...web, enabled: false }, { SHORE_WEB_ADDR: "10.0.0.1:1" })).toEqual([{ ...web, enabled: true, bind_addr: "10.0.0.1:1" }, "env"]);
+  expect(resolveWebConfig(web, { SHORE_WEB_ADDR: "10.0.0.1:1" }, " 10.0.0.2:2 ")).toEqual([{ ...web, bind_addr: "10.0.0.2:2" }, "cli"]);
+  expect(() => resolveWebConfig(web, {}, "nowhere")).toThrow('Invalid --addr "nowhere"');
+  expect(() => resolveWebConfig(web, { SHORE_WEB_ADDR: "nowhere" })).toThrow('Invalid SHORE_WEB_ADDR "nowhere"');
 
   expect(restartRequiredChanges(plain, plain)).toEqual([]);
   expect(restartRequiredChanges(plain, set)).toEqual(["[daemon]"]);
@@ -278,51 +280,35 @@ test("[notifications] is read under the names in the file: how to deliver, which
   expect(await outcomeOf(load('[notifications.ntfy]\ntopic = "shore"\n'))).toThrow("unknown field `notifications.ntfy`");
 });
 
-test("[image] holds the model pictures are made with beside each image model's own settings, and a mistake in either names the file and the key", async () => {
-  const { root, load } = await sections();
-  const loaded = await load('[image]\nmodel = "openai:gpt-image"\n[image."openai:gpt-image"]\nsize = "1024x1024"\n[image."openai:other"]\nquality = "high"\n');
-  expect(loaded.app.image).toEqual({ model: "openai:gpt-image" });
-  expect([...loaded.models.imageGeneration]).toEqual([["openai:gpt-image", { size: "1024x1024" }], ["openai:other", { quality: "high" }]]);
-  expect([...(await load("[image]\n")).models.imageGeneration]).toEqual([]);
-
-  expect(await outcomeOf(load('[image."openai:gpt-image"]\nsize = 5\n'))).toThrow(
-    `${join(root, "config.toml")}: [image."openai:gpt-image"] is not a valid \`provider:model_id\` settings table: size: invalid type: integer \`5\`, expected string. Identity is the key (e.g. \`[image."openai:dall-e-3"]\`)`,
-  );
-  expect(await outcomeOf(load('[image]\nmodel = "gpt-image"\n'))).toThrow('image.model "gpt-image" must be a `provider:model_id` identity');
+test("a config that still has an [image] or [image_generation] section is refused, naming the section", async () => {
+  const { load } = await sections();
+  expect(await outcomeOf(load('[image]\nmodel = "openai:gpt-image"\n'))).toThrow("unknown field `image`, expected one of ");
+  expect(await outcomeOf(load('[image."openai:gpt-image"]\nsize = "1024x1024"\n'))).toThrow("unknown field `image`, expected one of ");
   expect(await outcomeOf(load('[image_generation."openai:gpt-image"]\nsize = "1024x1024"\n'))).toThrow("unknown field `image_generation`, expected one of ");
-  expect(await outcomeOf(handleGenerateImage({ prompt: "a cat" }, root, undefined, async () => { throw new Error("no call expected"); }))).toThrow("no image model is configured; set image.model");
 });
 
-test("the tools a reply runs are given the image model [image] names and a way to ask a sub-agent only when one is defined", async () => {
+test("the tools a reply runs are given a way to ask a sub-agent only when one is defined, and whatever else the caller offers", async () => {
   const { root, load } = await sections();
-  setTestEnv("SHORE_TEST_IMAGE_KEY", "k");
   const context = async (toml: string) => {
-    const loaded = await load(`${toml}[providers.openai]\napi_key_env = "SHORE_TEST_IMAGE_KEY"\n`);
+    const loaded = await load(toml);
     return await buildToolContext({ ...loaded, dirs: { ...loaded.dirs, data: join(root, "data"), cache: join(root, "cache") } }, join(root, "data"), "ada", { runSubagent: () => async () => "asked" });
   };
-  const profiles = '[image."openai:first"]\nsize = "512x512"\n[image."openai:second"]\nsize = "1024x1024"\n';
-  const chosen = await context(`[image]\nmodel = "openai:second"\n${profiles}`);
-  expect(chosen.imageGenConfig).toMatchObject({ provider: "openai", model_id: "second", size: "1024x1024", api_key: "k" });
-  expect(Object.keys(chosen.imageGenConfig ?? {}).filter((key) => key === "aspect_ratio" || key === "image_size")).toEqual([]);
-  const shaped = await context('[image]\nmodel = "openai:wide"\n[image."openai:wide"]\nsize = "1024x1024"\naspect_ratio = "16:9"\nimage_size = "2K"\n');
-  expect(shaped.imageGenConfig).toMatchObject({ model_id: "wide", aspect_ratio: "16:9", image_size: "2K" });
-  expect((await context(profiles)).imageGenConfig).toBeUndefined();
-  expect(chosen.runSubagent).toBeUndefined();
+  const plain = await context("");
+  expect(plain.runSubagent).toBeUndefined();
 
   const withAgent = await context('[subagents.scout]\ndescription = "looks"\nprompt = "look"\n');
   expect(await withAgent.runSubagent?.("scout", "find it")).toBe("asked");
 
-  const offered = ["dryRun", "imageGenerator", "modelHistoryQuery", "deferEdit", "sendMessage"] as const;
-  expect(offered.filter((key) => key in chosen)).toEqual([]);
-  const generator: NonNullable<ToolContext["imageGenerator"]> = async () => { throw new Error("no call expected"); };
+  const offered = ["dryRun", "modelHistoryQuery", "deferEdit", "sendMessage"] as const;
+  expect(offered.filter((key) => key in plain)).toEqual([]);
   const history: NonNullable<ToolContext["modelHistoryQuery"]> = async () => { throw new Error("no call expected"); };
   const defer = async (): Promise<void> => {};
   const send: NonNullable<ToolContext["sendMessage"]> = async () => "queued";
   const loaded = await load("");
   const given = await buildToolContext({ ...loaded, dirs: { ...loaded.dirs, data: join(root, "data"), cache: join(root, "cache") } }, join(root, "data"), "ada", {
-    dryRun: true, imageGenerator: generator, modelHistoryQuery: history, deferEdit: defer, sendMessage: send,
+    dryRun: true, modelHistoryQuery: history, deferEdit: defer, sendMessage: send,
   });
-  expect(offered.map((key) => given[key])).toEqual([true, generator, history, defer, send]);
+  expect(offered.map((key) => given[key])).toEqual([true, history, defer, send]);
 });
 
 test("the Matrix bridge signs in to [matrix]'s homeserver_url as its user_id", async () => {
@@ -600,4 +586,35 @@ test("a value of the wrong type is refused naming its key as written, in a named
   await writeFile(join(root, "characters", "ada", "config.toml"), "[tools]\nmax_result_chars = \"lots\"\n");
   const global = await load("");
   expect(() => loadCharacterConfig(global, "ada")).toThrow('tools.max_result_chars: invalid type: string "lots", expected integer');
+});
+
+test("the web listener is on by default at 127.0.0.1:7340, takes 16 connections and 32 MiB a connection, and signs browsers in for 30 days", async () => {
+  expect(defaultWebConfig()).toEqual({
+    enabled: true, bind_addr: "127.0.0.1:7340", public_origin: undefined, tls_cert: undefined, tls_key: undefined,
+    max_connections: 16, max_queued_bytes: 33_554_432, session_lifetime: ConfigDuration.fromSecs(2_592_000),
+  });
+  const dir = await mkdtemp(testTmp("shore-daemon-defaults-"));
+  const path = join(dir, "config.toml");
+  await writeFile(path, "");
+  expect(loadConfig(path, { env: { XDG_CONFIG_HOME: dir, XDG_DATA_HOME: join(dir, "data"), XDG_CACHE_HOME: join(dir, "cache") }, onWarn: () => {} }).app.daemon.shutdown_grace).toEqual(ConfigDuration.fromSecs(1_740));
+});
+
+test("an address that won't do says which setting gave it and why", () => {
+  expect(() => resolveWebConfig(defaultWebConfig(), {}, "nowhere")).toThrow('Invalid --addr "nowhere": daemon.web.bind_addr must be host:port');
+  expect(() => resolveWebConfig(defaultWebConfig(), { SHORE_WEB_ADDR: "nowhere" })).toThrow('Invalid SHORE_WEB_ADDR "nowhere": daemon.web.bind_addr must be host:port');
+});
+
+test("a daemon that can't read its config or make its token says which, and why", async () => {
+  const dir = await mkdtemp(testTmp("shore-daemon-startup-"));
+  const env = { XDG_CONFIG_HOME: join(dir, "xdg"), XDG_DATA_HOME: join(dir, "data"), XDG_CACHE_HOME: join(dir, "cache"), XDG_RUNTIME_DIR: join(dir, "run"), HOME: dir };
+  const broken = join(dir, "broken.toml");
+  await writeFile(broken, "[chat\n");
+  const failure = (run: () => unknown): StartupError => { try { run(); } catch (error) { if (error instanceof StartupError) return error; throw error; } throw new Error("it started"); };
+  const unreadable = failure(() => resolveStartup({ config: broken }, env));
+  expect([unreadable.kind, unreadable.message.startsWith(`Failed to load Shore config from ${broken}: `)]).toEqual(["load_config", true]);
+  const fine = join(dir, "config", "config.toml");
+  await mkdir(join(dir, "config", "token"), { recursive: true });
+  await writeFile(fine, "");
+  const tokenless = failure(() => resolveStartup({ config: fine }, env));
+  expect([tokenless.kind, tokenless.message.startsWith("shore has no token and could not create one at ")]).toEqual(["token", true]);
 });

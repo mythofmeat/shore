@@ -3,22 +3,21 @@ import { join } from "node:path";
 
 import { invalidRequest, notFound } from "./errors.ts";
 
-export const TRANSFER_CHUNK_BYTES = 8 * 1024 * 1024;
 const MAX_PER_OWNER = 4;
 const SWEEP_MS = 60_000;
+const READ_BYTES = 1024 * 1024;
 
 export interface SpoolEntry {
   readonly id: string;
-  readonly owner: number;
+  readonly owner: string;
   readonly directory: string;
   readonly file: string;
 }
 
 interface Transfer extends SpoolEntry {
   readonly direction: "download" | "upload";
-  bytes: number;
-  touched: number;
-  ahead?: { offset: number; chunk: Promise<Buffer> } | undefined;
+  readonly bytes: number;
+  readonly touched: number;
 }
 
 export class ArchiveSpool {
@@ -26,16 +25,11 @@ export class ArchiveSpool {
   #root: Promise<string> | undefined;
   #sweeper: ReturnType<typeof setInterval> | undefined;
 
-  constructor(
-    readonly directory: string,
-    readonly alive: (owner: number) => boolean,
-    readonly chunkBytes = TRANSFER_CHUNK_BYTES,
-    readonly idleMs = 15 * 60_000,
-  ) {}
+  constructor(readonly directory: string, readonly idleMs = 15 * 60_000) {}
 
-  async reserve(owner: number): Promise<SpoolEntry> {
+  async reserve(owner: string): Promise<SpoolEntry> {
     if ([...this.#transfers.values()].filter((transfer) => transfer.owner === owner).length >= MAX_PER_OWNER) {
-      throw invalidRequest(`A connection may hold at most ${String(MAX_PER_OWNER)} archive transfers; finish one or reconnect`);
+      throw invalidRequest(`A device may hold at most ${String(MAX_PER_OWNER)} archive transfers; download or use one, or wait a quarter of an hour`);
     }
     this.#root ??= rm(this.directory, { recursive: true, force: true })
       .then(async () => { await mkdir(this.directory, { recursive: true, mode: 0o700 }); return this.directory; });
@@ -52,56 +46,59 @@ export class ArchiveSpool {
     this.#sweeper.unref();
   }
 
-  async read(owner: number, id: string, offset: number): Promise<{ data: string; offset: number; bytes: number }> {
-    const transfer = this.#owned(owner, id, "download");
-    if (!Number.isSafeInteger(offset) || offset < 0 || offset >= transfer.bytes) {
-      throw invalidRequest(`Offset ${String(offset)} is outside the ${String(transfer.bytes)}-byte archive`);
-    }
-    const ahead = transfer.ahead;
-    transfer.ahead = undefined;
-    const chunk = ahead?.offset === offset ? await ahead.chunk : await this.#chunk(transfer, offset);
-    const next = offset + chunk.length;
-    if (next === transfer.bytes) {
-      await this.discard(transfer);
-    } else {
-      const prefetch = this.#chunk(transfer, next);
-      prefetch.catch(() => {});
-      transfer.ahead = { offset: next, chunk: prefetch };
-    }
-    return { data: chunk.toString("base64"), offset, bytes: transfer.bytes };
-  }
-
-  async #chunk(transfer: Transfer, offset: number): Promise<Buffer> {
-    const chunk = Buffer.alloc(Math.min(this.chunkBytes, transfer.bytes - offset));
-    const file = await open(transfer.file, "r");
+  async receive(owner: string, body: AsyncIterable<Uint8Array>): Promise<{ transfer: string; bytes: number }> {
+    const entry = await this.reserve(owner);
+    let bytes = 0;
     try {
-      for (let filled = 0; filled < chunk.length;) {
-        const { bytesRead } = await file.read(chunk, filled, chunk.length - filled, offset + filled);
-        if (bytesRead === 0) throw new Error("Archive ended before its recorded size");
-        filled += bytesRead;
-      }
-    } finally { await file.close(); }
-    return chunk;
-  }
-
-  async append(owner: number, id: string | undefined, data: string): Promise<{ transfer: string; bytes: number }> {
-    const chunk = Buffer.from(data, "base64");
-    if (chunk.length === 0 || chunk.length > this.chunkBytes || chunk.toString("base64") !== data) {
-      throw invalidRequest(`An archive chunk must be 1 to ${String(this.chunkBytes)} bytes of padded base64`);
+      const file = await open(entry.file, "wx", 0o600);
+      try {
+        for await (const chunk of body) {
+          await file.writeFile(chunk);
+          bytes += chunk.byteLength;
+        }
+      } finally { await file.close(); }
+      if (bytes === 0) throw invalidRequest("An upload needs at least one byte");
+    } catch (error) {
+      await rm(entry.directory, { recursive: true });
+      throw error;
     }
-    let transfer: Transfer;
-    if (id === undefined) {
-      const entry = await this.reserve(owner);
-      this.publish(entry, "upload", 0);
-      transfer = this.#owned(owner, entry.id, "upload");
-    } else transfer = this.#owned(owner, id, "upload");
-    const file = await open(transfer.file, "a", 0o600);
-    try { await file.writeFile(chunk); } finally { await file.close(); }
-    transfer.bytes += chunk.length;
-    return { transfer: transfer.id, bytes: transfer.bytes };
+    this.publish(entry, "upload", bytes);
+    return { transfer: entry.id, bytes };
   }
 
-  claim(owner: number, id: string): SpoolEntry {
+  send(owner: string, id: string): { bytes: number; stream: ReadableStream<Uint8Array> } {
+    const transfer = this.#owned(owner, id, "download");
+    this.#transfers.delete(id);
+    this.#idle();
+    let offset = 0;
+    const finish = async () => { await rm(transfer.directory, { recursive: true, force: true }); };
+    const stream = new ReadableStream<Uint8Array>({
+      pull: async (output) => {
+        try {
+          if (offset >= transfer.bytes) {
+            await finish();
+            output.close();
+          } else {
+            const chunk = Buffer.alloc(Math.min(READ_BYTES, transfer.bytes - offset));
+            const file = await open(transfer.file, "r");
+            try {
+              const { bytesRead } = await file.read(chunk, 0, chunk.length, offset);
+              if (bytesRead === 0) throw new Error("Archive ended before its recorded size");
+              offset += bytesRead;
+              output.enqueue(chunk.subarray(0, bytesRead));
+            } finally { await file.close(); }
+          }
+        } catch (error) {
+          await finish();
+          output.error(error);
+        }
+      },
+      cancel: finish,
+    });
+    return { bytes: transfer.bytes, stream };
+  }
+
+  claim(owner: string, id: string): SpoolEntry {
     const transfer = this.#owned(owner, id, "upload");
     this.#transfers.delete(id);
     this.#idle();
@@ -116,14 +113,13 @@ export class ArchiveSpool {
 
   async sweep(): Promise<void> {
     const cutoff = Date.now() - this.idleMs;
-    const stale = [...this.#transfers.values()].filter((transfer) => transfer.touched < cutoff || !this.alive(transfer.owner));
+    const stale = [...this.#transfers.values()].filter((transfer) => transfer.touched < cutoff);
     await Promise.all(stale.map(async (transfer) => { await this.discard(transfer); }));
   }
 
-  #owned(owner: number, id: string, direction: Transfer["direction"]): Transfer {
+  #owned(owner: string, id: string, direction: Transfer["direction"]): Transfer {
     const transfer = this.#transfers.get(id);
-    if (transfer?.owner !== owner || transfer.direction !== direction) throw notFound(`No ${direction} transfer ${id} on this connection`);
-    transfer.touched = Date.now();
+    if (transfer?.owner !== owner || transfer.direction !== direction) throw notFound(`No ${direction} transfer ${id} for this device`);
     return transfer;
   }
 

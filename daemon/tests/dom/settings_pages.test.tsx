@@ -124,7 +124,7 @@ describe("the settings screen", () => {
     const dialog = (): HTMLDialogElement => { const open = asked(); if (open === null) throw new Error("no dialog is open"); return open; };
     await click(button(view.host, "Sign out"));
     expect([asked()?.querySelector("h2")?.textContent, logout.mock.calls.length]).toEqual(["Sign out of this browser?", 0]);
-    expect(asked()?.textContent).toContain("you'll need the access token, or a sign-in code from a device that is still signed in");
+    expect(asked()?.textContent).toContain("you'll need a sign-in code from a device that is still signed in (Settings › Devices), or shore devices link on the daemon's machine");
     await click(button(dialog(), "Cancel"));
     expect([asked(), logout.mock.calls.length]).toEqual([null, 0]);
     await click(button(view.host, "Sign out"));

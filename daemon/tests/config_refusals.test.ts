@@ -135,9 +135,9 @@ describe("a model's settings", () => {
 });
 
 describe("the model tables", () => {
-  const tableRefusal = (chat: Record<string, unknown> | undefined, image?: Record<string, unknown>): string => {
+  const tableRefusal = (chat: Record<string, unknown>): string => {
     try {
-      catalogFromSections(chat, image);
+      catalogFromSections(chat);
     } catch (error) {
       return error instanceof Error ? error.message : String(error);
     }
@@ -161,26 +161,12 @@ describe("the model tables", () => {
 
   test("a chat model starts from its provider's sdk and address and from what is known of its context window, in the order of its name", () => {
     const providers = ProviderRegistry.fromSection({ relay: { sdk: "anthropic", base_url: "https://relay.example" } });
-    const catalog = catalogFromSections({ "relay:claude-x": {}, "openai:gpt-x": {}, "anthropic:claude-y": {} }, undefined, providers);
+    const catalog = catalogFromSections({ "relay:claude-x": {}, "openai:gpt-x": {}, "anthropic:claude-y": {} }, providers);
     expect([...catalog.chat.values()].map((model) => [model.qualifiedName, model.sdk, model.baseUrl ?? null, model.maxContextTokens ?? null])).toEqual([
       ["anthropic:claude-y", "anthropic", null, 200_000],
       ["openai:gpt-x", "openai", null, null],
       ["relay:claude-x", "anthropic", "https://relay.example", 200_000],
     ]);
-  });
-
-  test("an image model's table is keyed provider:model_id, and a setting in it that is wrong names the setting", () => {
-    const why = (key: string, detail: string): string => `[image.${JSON.stringify(key)}] is not a valid \`provider:model_id\` settings table: ${detail}.`;
-    for (const [section, refusal] of [
-      [{ "gpt-image": {} }, why("gpt-image", "the key must be a `provider:model_id` identity, not a bare alias")],
-      [{ ":gpt-image": {} }, why(":gpt-image", "both the provider and model_id halves of the `provider:model_id` key must be non-empty")],
-      [{ "openai:": {} }, why("openai:", "both the provider and model_id halves of the `provider:model_id` key must be non-empty")],
-      [{ "openai:gpt-image": 5 }, why("openai:gpt-image", "the value must be a settings table")],
-      [{ "openai:gpt-image": { size: 5 } }, why("openai:gpt-image", "size: invalid type: integer `5`, expected string")],
-    ] as const) {
-      expect(tableRefusal(undefined, section)).toStartWith(refusal);
-    }
-    expect([...catalogFromSections(undefined, { "openai:b": {}, "openai:a": { size: "512x512" } }).imageGeneration]).toEqual([["openai:a", { size: "512x512" }], ["openai:b", {}]]);
   });
 });
 

@@ -18,7 +18,7 @@ import { buildCommandPathDeps, buildGenerationDeps } from "../src/handler/deps.t
 import { runGeneration } from "../src/handler/generation.ts";
 import type { GenerateResponse, SidecarRequest } from "../src/llm/types.ts";
 import { createRuntime } from "../src/runtime.ts";
-import { DEFAULT_HANDSHAKE } from "../src/swp/connection.ts";
+import { DEFAULT_HANDSHAKE } from "../src/swp/handshake.ts";
 import { SessionRouter } from "../src/swp/session.ts";
 import { required } from "../src/util/required.ts";
 import { restoreTestEnv, setTestEnv } from "./support/env.ts";

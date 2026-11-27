@@ -17,3 +17,7 @@ import type { WebRequestList } from "../protocol/WebRequestList.ts";
 export declare function validWebRequestList(value: unknown): value is WebRequestList;
 import type { WebPreferences } from "../protocol/WebPreferences.ts";
 export declare function validWebPreferences(value: unknown): value is WebPreferences;
+import type { WebDeviceList } from "../protocol/WebDeviceList.ts";
+export declare function validWebDeviceList(value: unknown): value is WebDeviceList;
+import type { WebNewDevice } from "../protocol/WebNewDevice.ts";
+export declare function validWebNewDevice(value: unknown): value is WebNewDevice;

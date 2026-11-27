@@ -44,13 +44,18 @@ test("a wake's wrap-up nudge says how long is left, how many rounds, and that th
   expect(wakeWrapUpText(new Texts(), 30_000, 1, "eve")).toStartWith("[System nudge: this wake stops in less than a minute or after this round, whichever comes first. ");
 });
 
-test("a wake that is stopped, or fails, is told why in its thread", () => {
-  expect(wakeStoppedNote(new Texts(), { why: "interrupted" }, "eve", 30 * MINUTE)).toBe(
-    "[eve wrote here while this wake was running, so Shore stopped it here for you to answer them. Once they have been quiet in this thread for 10 minutes, Shore wakes you here again to pick it up.]",
+test("a wake that is stopped, or fails, is told why in its thread, and one only triggers set off is told how to call off its pick-up", () => {
+  const triggers = [{ name: "parcel", reason: "r", at: T0 }, { name: "lamp", reason: "r", at: T0 }];
+  const promised = "[eve wrote here while this wake was running, so Shore stopped it here for you to answer them. Once they have been quiet in this thread for 10 minutes, Shore wakes you here again to pick it up";
+  expect(wakeStoppedNote(new Texts(), { why: "interrupted" }, "eve", 30 * MINUTE, triggers)).toBe(
+    `${promised}, unless by then every trigger that set it off has been taken out of \`TRIGGERS.toml\` or given a new time.]`,
   );
-  expect(wakeStoppedNote(new Texts(), { why: "time" }, "eve", 90 * MINUTE)).toBe("[This wake reached its limit of 90 minutes, and Shore stopped it here.]");
-  expect(wakeStoppedNote(new Texts(), { why: "rounds" }, "eve", 90 * MINUTE)).toBe("[This wake used up its rounds of tool use, and Shore stopped it here.]");
-  expect(wakeStoppedNote(new Texts(), { why: "failed", error: "usage limit reached" }, "eve", 90 * MINUTE)).toBe('[This wake failed here, before it had finished, with this error: "usage limit reached".]');
+  for (const other of [{ name: "", reason: "r", at: T0, from: "main" }, { name: "", reason: "r", at: T0, byHand: true }, { name: "", reason: "r", at: T0, seal: true }]) {
+    expect(wakeStoppedNote(new Texts(), { why: "interrupted" }, "eve", 30 * MINUTE, [...triggers, other])).toBe(`${promised}.]`);
+  }
+  expect(wakeStoppedNote(new Texts(), { why: "time" }, "eve", 90 * MINUTE, triggers)).toBe("[This wake reached its limit of 90 minutes, and Shore stopped it here.]");
+  expect(wakeStoppedNote(new Texts(), { why: "rounds" }, "eve", 90 * MINUTE, triggers)).toBe("[This wake used up its rounds of tool use, and Shore stopped it here.]");
+  expect(wakeStoppedNote(new Texts(), { why: "failed", error: "usage limit reached" }, "eve", 90 * MINUTE, triggers)).toBe('[This wake failed here, before it had finished, with this error: "usage limit reached".]');
 });
 
 test("a wake says what set it off: its triggers, the turn that handed it over, a seal, or a start by hand", () => {
@@ -129,7 +134,7 @@ test("a dry run doesn't hand a wake over, start a thread or call an outside tool
   await createThread(data, "ada", "ring", "2026-11-01T00:00:00Z");
   const ctx: ToolContext = {
     texts: new Texts(),
-    workspaceDir: "/nowhere", characterName: "ada", characterDataDir: "/nowhere", imageDir: "/nowhere", conversationDir: "/nowhere",
+    workspaceDir: "/nowhere", characterName: "ada", characterDataDir: "/nowhere", conversationDir: "/nowhere",
     historyDbPath: join(data, "shore.db"), configDir: "/nowhere", dryRun: true, thread: "main",
     wakeInThread: (request) => {
       asked.push(request);

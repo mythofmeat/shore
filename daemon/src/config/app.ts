@@ -247,7 +247,6 @@ function suggests<T>(inner: Reader<T>, source: ConfigValueSource): Reader<T> {
 }
 
 const readChatModelName = suggests(readString, "chat_models");
-const readImageModelName = suggests(readString, "image_models");
 const readToolNameSeq = readSeq(suggests(readString, "tools"));
 const readSubagentNameSeq = readSeq(suggests(readString, "subagents"));
 
@@ -282,7 +281,7 @@ export interface WebConfig {
 }
 
 export const defaultWebConfig = (): WebConfig => ({
-  enabled: false,
+  enabled: true,
   bind_addr: "127.0.0.1:7340",
   public_origin: undefined,
   tls_cert: undefined,
@@ -308,7 +307,6 @@ const WEB: StructSpec<WebConfig> = {
 };
 
 export interface DaemonConfig {
-  listen_addr: string;
   image_cache_bytes: number;
   shutdown_grace: ConfigDuration;
   cache_forensics: boolean;
@@ -316,7 +314,6 @@ export interface DaemonConfig {
 }
 
 const defaultDaemonConfig = (): DaemonConfig => ({
-  listen_addr: "127.0.0.1:7320",
   image_cache_bytes: DEFAULT_IMAGE_CACHE_BYTES,
   shutdown_grace: ConfigDuration.fromSecs(29 * 60),
   cache_forensics: false,
@@ -327,7 +324,6 @@ const DAEMON: StructSpec<DaemonConfig> = {
   name: "DaemonConfig",
   make: defaultDaemonConfig,
   fields: {
-    listen_addr: readString,
     image_cache_bytes: readUsize,
     shutdown_grace: readDuration,
     cache_forensics: readBool,
@@ -610,22 +606,6 @@ const IMAGES: StructSpec<ImagesConfig> = {
     mcp: struct(IMAGE_OVERRIDE),
   },
 };
-
-export interface ImageConfig {
-  model: string | undefined;
-}
-
-const IMAGE: StructSpec<ImageConfig> = {
-  name: "ImageConfig",
-  make: () => ({ model: undefined }),
-  others: "read elsewhere",
-  fields: { model: optional(readImageModelName) },
-};
-
-export function imageModelProfiles(image: Table | undefined): Table | undefined {
-  if (image === undefined) return undefined;
-  return Object.fromEntries(Object.entries(image).filter(([key]) => !(key in IMAGE.fields)));
-}
 
 export function imageSettingsFor(images: ImagesConfig, origin: ImageOrigin): ImageSettings {
   const override = images[origin];
@@ -1220,7 +1200,6 @@ export interface AppConfig {
   chat: ChatConfig;
   prompt: PromptPart[];
   texts: Record<string, TextSetting | undefined>;
-  image: ImageConfig;
   images: ImagesConfig;
   triggers: TriggersConfig;
   marks: MarksConfig;
@@ -1240,7 +1219,6 @@ export const defaultAppConfig = (): AppConfig => ({
   chat: defaultChatConfig(),
   prompt: [],
   texts: {},
-  image: IMAGE.make(),
   images: defaultImagesConfig(),
   triggers: defaultTriggersConfig(),
   marks: defaultMarksConfig(),
@@ -1264,7 +1242,6 @@ const APP: StructSpec<AppConfig> = {
     chat: struct(CHAT),
     prompt: readSeq(readPromptPart),
     texts: struct(TEXTS),
-    image: struct(IMAGE),
     images: struct(IMAGES),
     triggers: struct(TRIGGERS),
     marks: struct(MARKS),

@@ -1,1 +1,1 @@
-[{{user}} wrote here while this wake was running, so Shore stopped it here for you to answer them. Once they have been quiet in this thread for {{quiet}}, Shore wakes you here again to pick it up.]
+[{{user}} wrote here while this wake was running, so Shore stopped it here for you to answer them. Once they have been quiet in this thread for {{quiet}}, Shore wakes you here again to pick it up{{#if triggers}}, unless by then every trigger that set it off has been taken out of `TRIGGERS.toml` or given a new time{{/if}}.]

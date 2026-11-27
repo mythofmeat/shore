@@ -166,7 +166,7 @@ wire_types! {
     pub enum ConfigKind { Boolean, String, Integer, Float, Duration, Enum, List, Map, Table, Unknown }
 
     #[serde(rename_all = "snake_case")]
-    pub enum ConfigSource { ChatModels, ImageModels, Tools, Subagents, Characters, Providers }
+    pub enum ConfigSource { ChatModels, Tools, Subagents, Characters, Providers }
 
     #[serde(rename_all = "lowercase")]
     pub enum ConfigWidth { Usize, U32, U64 }
@@ -272,32 +272,6 @@ wire_types! {
         #[serde(default, skip_serializing_if = "Option::is_none")]
         #[ts(optional)]
         pub secrets_left_out: Option<bool>,
-    }
-
-    #[serde(deny_unknown_fields)]
-    pub struct ReadTransferArgs {
-        pub transfer: String,
-        pub offset: usize,
-    }
-
-    pub struct TransferChunk {
-        pub data: String,
-        pub offset: usize,
-        pub bytes: usize,
-    }
-
-    #[serde(deny_unknown_fields)]
-    pub struct WriteTransferArgs {
-        #[serde(default, deserialize_with = "deserialize_present", skip_serializing_if = "Option::is_none")]
-        #[schemars(with = "String")]
-        #[ts(optional)]
-        pub transfer: Option<String>,
-        pub data: String,
-    }
-
-    pub struct TransferWritten {
-        pub transfer: String,
-        pub bytes: usize,
     }
 
     pub struct ImportCharacterResult {
@@ -1811,7 +1785,7 @@ wire_types! {
     pub enum ModelSettingsResult { Overview(ModelSettingsOverview), Detail(Box<ModelSettingsDetail>) }
 
     pub struct ConfigSources {
-        pub chat_models: Vec<String>, pub image_models: Vec<String>,
+        pub chat_models: Vec<String>,
         pub tools: Vec<String>, pub subagents: Vec<String>, pub characters: Vec<String>, pub providers: Vec<String>,
     }
 
@@ -2135,9 +2109,6 @@ wire_types! {
         #[serde(default, skip_serializing_if = "Option::is_none")]
         #[ts(optional)]
         pub no_check: Option<bool>,
-        #[serde(default, skip_serializing_if = "Option::is_none")]
-        #[ts(optional)]
-        pub allow_unencrypted: Option<bool>,
     }
 
     #[serde(deny_unknown_fields)]
@@ -2159,9 +2130,6 @@ wire_types! {
         #[serde(default, skip_serializing_if = "Option::is_none")]
         #[ts(optional)]
         pub no_check: Option<bool>,
-        #[serde(default, skip_serializing_if = "Option::is_none")]
-        #[ts(optional)]
-        pub allow_unencrypted: Option<bool>,
     }
 
     #[serde(deny_unknown_fields)]
@@ -2994,8 +2962,6 @@ operations! {
     DeleteCharacter: "delete_character" (DeleteCharacterArgs) => DeleteCharacterResult,
     ExportBackup: "export_backup" (ExportBackupArgs) => BackupExported,
     ImportArchive: "import_archive" (ImportArchiveArgs) => ArchiveImported,
-    ReadTransfer: "read_transfer" (ReadTransferArgs) => TransferChunk,
-    WriteTransfer: "write_transfer" (WriteTransferArgs) => TransferWritten,
     UsageReport: "usage" (UsageArgs) => UsageResult,
     ExecuteTool: "run_tool" (RunToolArgs) => RunToolResult,
     CompactConversation: "compact" (CompactArgs) => CompactionReport,
