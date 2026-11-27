@@ -54,7 +54,7 @@ export const DEFAULT_WAKE_LIMIT_MS = 30 * 60_000;
 
 const STARTED_BY_HAND = "It was started by hand, from Shore's command line or its settings.";
 
-function byTrigger(firing: TriggerFiring): boolean {
+export function byTrigger(firing: TriggerFiring): boolean {
   return firing.from === undefined && firing.seal !== true && firing.byHand !== true;
 }
 

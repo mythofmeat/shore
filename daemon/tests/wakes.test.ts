@@ -2245,7 +2245,7 @@ test("the user's message stops a wake in that thread at the end of its step and 
     await asking;
 
     const opener = wakeText("12:11 PM", [FIRED]);
-    const stopped = "[User wrote here while this wake was running, so Shore stopped it here for you to answer them. Once they have been quiet in this thread for 10 minutes, Shore wakes you here again to pick it up.]";
+    const stopped = "[User wrote here while this wake was running, so Shore stopped it here for you to answer them. Once they have been quiet in this thread for 10 minutes, Shore wakes you here again to pick it up, unless by then every trigger that set it off has been taken out of `TRIGGERS.toml` or given a new time.]";
     expect(script.wakes).toHaveLength(1);
     expect(stored(await thread("ring")).slice(2)).toEqual([
       ["user", "autonomous", wakeSeenLater(FIRED)],
@@ -2820,6 +2820,7 @@ test("a one-off whose wake the user stopped in its thread isn't picked up once t
     await asking;
     script.again = 0;
     expect(await readFile(join(workspace, "TRIGGERS.toml"), "utf8")).toBe(parcel(8 * 60));
+    expect(textOf(script.replies.at(-1) as SidecarRequest)).toContain("Shore wakes you here again to pick it up, unless by then every trigger that set it off has been taken out of `TRIGGERS.toml` or given a new time.]");
     const stopped = script.wakes.length;
     expect(script.wakes.map((request) => request.context?.thread)).toEqual(Array.from({ length: stopped }, () => "ring"));
 

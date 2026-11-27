@@ -276,7 +276,7 @@ export const WAKE_TEXTS: readonly TextSpec[] = [
     rounds: "how many rounds it has left, counting this one",
     user: "the user's name",
   }),
-  text("stopped_interrupted", autonomy__stopped_interrupted, "Left in a thread when the user's message stopped a wake there.", { user: "the user's name", quiet: "how long they have to be quiet before it is picked up again" }),
+  text("stopped_interrupted", autonomy__stopped_interrupted, "Left in a thread when the user's message stopped a wake there.", { user: "the user's name", quiet: "how long they have to be quiet before it is picked up again", triggers: "set when triggers alone set the wake off, so changing them in TRIGGERS.toml can call the pick-up off" }),
   text("stopped_time", autonomy__stopped_time, "Left in a thread when a wake reached its time limit.", { limit: "its time limit" }),
   text("stopped_rounds", autonomy__stopped_rounds, "Left in a thread when a wake used up its rounds of tool use."),
   text("stopped_failed", autonomy__stopped_failed, "Left in a thread when a wake failed.", { error: "the error" }),
