@@ -95,6 +95,36 @@ describe("the app's state", () => {
     expect(shown.map((item) => item.closed)).toEqual([1]);
   });
 
+  test("clicking a notification from another thread shows the chat and opens that thread, and one from another character opens it there", async () => {
+    const opened: unknown[] = [];
+    class Shown {
+      static permission = "granted";
+      static requestPermission = () => Promise.resolve("granted");
+      onclick: (() => void) | null = null;
+      constructor() { opened.push(this); }
+      close(): void {}
+    }
+    swap(globalThis, "isSecureContext", true);
+    swap(globalThis, "Notification", Shown);
+    const state = await load();
+    const { NOTIFY_KEY } = await import("../../src/browser/notifications.ts");
+    const { navigate } = await import("../../src/browser/app/route.ts");
+    swap(document, "hasFocus", () => false);
+    localStorage.setItem(NOTIFY_KEY, "true");
+    dispatchEvent(new Event("storage"));
+    const socket = await connected(state);
+    navigate({ view: "settings", page: "usage" });
+    const asked = () => socket.sent.filter((request) => String(request["name"]).startsWith("switch_")).map((request) => [request["name"], request["args"]]);
+    socket.receive({ type: "thread_unread", character: "ada", thread: "garden", unread: 1, reply: "the beans are up" });
+    (opened.at(-1) as Shown | undefined)?.onclick?.();
+    await acting(() => Bun.sleep(5));
+    expect([asked(), location.hash]).toEqual([[["switch_thread", { name: "garden", resync: true }]], ""]);
+    socket.receive({ type: "thread_unread", character: "bo", thread: "notes", unread: 1, reply: "hello from bo" });
+    (opened.at(-1) as Shown | undefined)?.onclick?.();
+    await acting(() => Bun.sleep(5));
+    expect(asked().at(1)).toEqual(["switch_character", { name: "bo" }]);
+  });
+
   test("a message that was not saved comes back with a notice naming its character and any pictures left out", async () => {
     const state = await load();
     const { toasts } = await import("../../src/browser/ui/toast.tsx");

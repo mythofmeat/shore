@@ -1,6 +1,6 @@
 import { useEffect, useRef } from "react";
 import { required } from "../../util/required.ts";
-import { perform, workspace } from "./state.ts";
+import { openThreadIn, perform } from "./state.ts";
 
 export interface ThreadPlace { character: string; thread: string }
 
@@ -12,11 +12,6 @@ export function threadInPath(path: string): ThreadPlace | undefined {
   const match = /^\/workspace\/([^/]+)\/([^/]+)$/.exec(path);
   if (match === null) return undefined;
   return { character: decodeURIComponent(required(match[1])), thread: decodeURIComponent(required(match[2])) };
-}
-
-async function openPlace(place: ThreadPlace): Promise<void> {
-  if (place.character !== workspace.getSnapshot().character) await workspace.openCharacter(place.character);
-  if (place.thread !== (workspace.getSnapshot().thread ?? "main")) await workspace.openThread(place.thread);
 }
 
 export function useThreadUrl(character: string | null, thread: string | null): void {
@@ -33,7 +28,7 @@ export function useThreadUrl(character: string | null, thread: string | null): v
   useEffect(() => {
     const moved = () => {
       const place = threadInPath(location.pathname);
-      if (place !== undefined && threadPath(place.character, place.thread) !== shown.current) perform(() => openPlace(place));
+      if (place !== undefined && threadPath(place.character, place.thread) !== shown.current) perform(() => openThreadIn(place.character, place.thread));
     };
     addEventListener("popstate", moved);
     return () => { removeEventListener("popstate", moved); };

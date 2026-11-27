@@ -10001,6 +10001,12 @@
               "string",
               "null"
             ]
+          },
+          "reply": {
+            "type": [
+              "string",
+              "null"
+            ]
           }
         },
         "required": [
@@ -19606,6 +19612,12 @@
             "minimum": 0
           },
           "last_active": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "reply": {
             "type": [
               "string",
               "null"

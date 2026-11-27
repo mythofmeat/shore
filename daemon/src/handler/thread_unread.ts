@@ -1,7 +1,7 @@
 import { shoreLog } from "../log.ts";
 import { noteSeen } from "../autonomy/presence.ts";
 import { MAIN_THREAD } from "../config/dirs.ts";
-import { markThreadRead, readThreadsIndex, startReadMarkBefore, threadActivityNow, threadRecord } from "../engine/threads.ts";
+import { isUnreadReply, markThreadRead, readThreadsIndex, startReadMarkBefore, threadActivityNow, threadRecord } from "../engine/threads.ts";
 import type { ThreadReads } from "../commands/threads.ts";
 import type { ServerMessage } from "../protocol/ServerMessage.ts";
 import type { ThreadUnread } from "../protocol/ThreadUnread.ts";
@@ -29,7 +29,8 @@ export class ThreadUnreadTracker implements ThreadReads {
     if (Number.isNaN(at)) return;
     const character = message.character;
     const thread = message.thread ?? MAIN_THREAD;
-    setTimeout(() => { void this.#follow(character, thread, at); }, 0);
+    const reply = message.role === "assistant" ? message.content : undefined;
+    setTimeout(() => { void this.#follow(character, thread, at, reply); });
   }
 
   markRead(character: string, thread: string, through: number): ThreadUnread {
@@ -38,25 +39,26 @@ export class ThreadUnreadTracker implements ThreadReads {
     return this.#announce(character, thread);
   }
 
-  async #follow(character: string, thread: string, at: number): Promise<void> {
+  async #follow(character: string, thread: string, at: number, reply: string | undefined): Promise<void> {
     try {
       const index = await readThreadsIndex(this.#data, character);
       const known = index === undefined ? thread === MAIN_THREAD : threadRecord(index, thread) !== undefined;
       if (!known) return;
       startReadMarkBefore(this.#data, character, thread, at);
-      this.#announce(character, thread);
+      this.#announce(character, thread, isUnreadReply(this.#data, character, thread, at) ? reply : undefined);
     } catch (e) {
       shoreLog.warn(`shore: could not count unread messages in ${character}/${thread}: ${String(e)}`);
     }
   }
 
-  #announce(character: string, thread: string): ThreadUnread {
+  #announce(character: string, thread: string, reply?: string): ThreadUnread {
     const activity = threadActivityNow(this.#data, character, thread);
     const state: ThreadUnread = {
       character,
       thread,
-      unread: activity.unread ?? 0,
+      unread: activity.unread,
       ...(activity.last_active === undefined ? {} : { last_active: activity.last_active }),
+      ...(reply === undefined ? {} : { reply }),
     };
     this.#broadcast({ type: "thread_unread", ...state });
     return state;

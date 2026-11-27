@@ -2041,6 +2041,12 @@
                   "string",
                   "null"
                 ]
+              },
+              "reply": {
+                "type": [
+                  "string",
+                  "null"
+                ]
               }
             },
             "required": [
@@ -3699,6 +3705,12 @@
                   "string",
                   "null"
                 ]
+              },
+              "reply": {
+                "type": [
+                  "string",
+                  "null"
+                ]
               }
             },
             "required": [
@@ -4187,7 +4199,7 @@
     "ThreadsChanged": "{ character: string, thread: string, }",
     "ThreadSelection": "{ character: string, thread: string, changed: boolean, selected_thread?: string, invalidated?: CacheInvalidation, }",
     "ThreadSortArgs": "{ by_activity: boolean, }",
-    "ThreadUnread": "{ character: string, thread: string, unread: number, last_active?: string, }",
+    "ThreadUnread": "{ character: string, thread: string, unread: number, last_active?: string, reply?: string, }",
     "ThreadView": "{ id: string, label?: string, purpose?: string, pins?: Array<string>, created_at: string, created_by?: string, last_active?: string, chat_model?: string, compaction: boolean, locked?: boolean, on_hold?: boolean, folder?: string, position?: number, home: boolean, wakes?: boolean, current: boolean, turns?: number, unread?: number, warm?: boolean, forked_from?: ThreadForkOrigin, }",
     "TimingInfo": "{ total_ms: number, ttft_ms: number, }",
     "TokenCounts": "{ input: number, output: number, cache_read: number, cache_write: number, }",

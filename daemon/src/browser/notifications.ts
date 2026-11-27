@@ -1,4 +1,5 @@
 import type { ConnectionUpdate } from "./connection.ts";
+import type { ThreadView } from "../protocol/ThreadView.ts";
 import { pictureText } from "../engine/embeds.ts";
 import { mediaSource } from "./media.ts";
 
@@ -22,8 +23,15 @@ export interface NotifierOptions {
   api?: NotificationApi | null;
   focused?: () => boolean;
   focusWindow?: () => void;
+  open?: (character: string, thread: string) => void;
 }
-export interface NotifySelection { character: string | null; thread: string | null }
+export interface NotifySelection { character: string | null; thread: string | null; threads?: readonly Pick<ThreadView, "id" | "label">[] }
+
+function titleFor(character: string | null, thread: string, selection: NotifySelection): string {
+  if (character === null) return "Shore";
+  const known = character === selection.character ? selection.threads?.find((each) => each.id === thread) : undefined;
+  return `${known?.label === undefined || known.label === "" ? thread : known.label} · ${character}`;
+}
 
 function browserApi(): NotificationApi | null {
   const scope = globalThis as { isSecureContext?: boolean; Notification?: NotificationApi };
@@ -55,6 +63,7 @@ export class Notifier {
   readonly #api: NotificationApi | null;
   readonly #focused: () => boolean;
   readonly #focusWindow: () => void;
+  readonly #open: (character: string, thread: string) => void;
   readonly #listeners = new Set<() => void>();
   readonly #shown = new Map<string, ShownNotification>();
   #snapshot: NotifySnapshot;
@@ -63,6 +72,7 @@ export class Notifier {
     this.#api = options.api === undefined ? browserApi() : options.api;
     this.#focused = options.focused ?? browserFocused;
     this.#focusWindow = options.focusWindow ?? focusBrowser;
+    this.#open = options.open ?? (() => {});
     this.#snapshot = { enabled: this.#stored(), permission: this.#permission() };
   }
   subscribe = (listener: () => void): (() => void) => { this.#listeners.add(listener); return () => { this.#listeners.delete(listener); }; };
@@ -115,16 +125,24 @@ export class Notifier {
     if (message.type === "new_message") {
       if (message.role !== "assistant" || message.origin === "user_input" || message.content.trim() === "") return;
       const picture = message.images.find((image) => typeof image.embed === "string" && (image.problem === undefined || image.problem === null) && typeof image.data === "string");
-      this.#alert(message.character ?? selection.character, message.thread ?? selection.thread, pictureText(message.content, message.images), mediaSource(picture?.data));
-    } else if (message.type === "error") this.#alert(selection.character, selection.thread, message.message);
+      this.#alert(message.character ?? selection.character, message.thread ?? selection.thread ?? "main", selection, pictureText(message.content, message.images), mediaSource(picture?.data));
+    } else if (message.type === "thread_unread") {
+      if (message.reply === undefined || (message.character === selection.character && message.thread === (selection.thread ?? "main"))) return;
+      this.#alert(message.character, message.thread, selection, pictureText(message.reply, []));
+    } else if (message.type === "error") this.#alert(selection.character, selection.thread ?? "main", selection, message.message);
   }
-  #alert(character: string | null, thread: string | null, body: string, picture?: string): void {
+  #alert(character: string | null, thread: string, selection: NotifySelection, body: string, picture?: string): void {
     if (!this.#snapshot.enabled || this.#focused()) return;
-    const tag = `shore:${character ?? ""}/${thread ?? "main"}`;
-    const shown = this.#show(character ?? "Shore", { body: notificationBody(body), tag, renotify: true, ...(picture === undefined ? {} : { icon: picture, image: picture }) });
+    const tag = `shore:${character ?? ""}/${thread}`;
+    const shown = this.#show(titleFor(character, thread, selection), { body: notificationBody(body), tag, renotify: true, ...(picture === undefined ? {} : { icon: picture, image: picture }) });
     if (shown === undefined) return;
     this.#shown.set(tag, shown);
-    shown.onclick = () => { this.#focusWindow(); shown.close(); if (this.#shown.get(tag) === shown) this.#shown.delete(tag); };
+    shown.onclick = () => {
+      this.#focusWindow();
+      if (character !== null) this.#open(character, thread);
+      shown.close();
+      if (this.#shown.get(tag) === shown) this.#shown.delete(tag);
+    };
   }
   #show(title: string, options: NotifyOptions): ShownNotification | undefined {
     const api = this.#api;

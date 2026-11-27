@@ -141,7 +141,7 @@ export interface ThreadActivity {
   user_turns: number;
   last_active?: string;
   last_user?: string;
-  unread?: number;
+  unread: number;
 }
 
 function messageTime(raw: unknown): number {
@@ -260,14 +260,13 @@ function scanActive(lines: readonly unknown[]): ActiveScan {
   return scanInto(emptyScan(), lines);
 }
 
-function unreadReplies(scan: ActiveScan, mark: number | undefined): number[] {
-  if (mark === undefined) return [];
-  const seen = Math.max(mark, scan.latestUser);
-  return scan.replies.filter((reply) => reply.time > seen).map((reply) => reply.at);
+function unreadReplies(scan: ActiveScan, mark: number | undefined): Reply[] {
+  const seen = Math.max(mark ?? Infinity, scan.latestUser);
+  return scan.replies.filter((reply) => reply.time > seen);
 }
 
 export function firstUnreadReply(data: string, character: string, id: string, messages: readonly Message[]): number | undefined {
-  return unreadReplies(scanActive(messages), threadReadMark(data, character, id))[0];
+  return unreadReplies(scanActive(messages), threadReadMark(data, character, id))[0]?.at;
 }
 
 function parsedLines(raw: readonly string[]): unknown[] {
@@ -309,6 +308,10 @@ function currentScan(data: string, character: string, id: string): ActiveScan {
     : scanActive(parsedLines(readDurable(file).split("\n")));
   rememberedScans.set(key, { mark, scan });
   return scan;
+}
+
+export function isUnreadReply(data: string, character: string, id: string, time: number): boolean {
+  return unreadReplies(currentScan(data, character, id), threadReadMark(data, character, id)).some((reply) => reply.time === time);
 }
 
 export function threadActivityNow(data: string, character: string, id: string): ThreadActivity {

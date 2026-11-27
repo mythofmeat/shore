@@ -13,7 +13,7 @@ import { listRequests } from "../request_history.ts";
 import { followStoredWrites, readStored, storedChanged } from "../stored.ts";
 import { FontSizeStore, FONT_SIZE_STORAGE_KEY, type FontSizeId } from "../font_size.ts";
 import { ThemeStore, THEME_STORAGE_KEY, type ThemeId } from "../theme.ts";
-import { LAST_PAGE_KEY } from "./route.ts";
+import { LAST_PAGE_KEY, navigate } from "./route.ts";
 import { toasts } from "../ui/toast.tsx";
 import { Workspace, type ChromeSnapshot, type WorkspaceSnapshot } from "../workspace.ts";
 
@@ -55,7 +55,12 @@ followStoredWrites(kept.wrote);
 export const themes = new ThemeStore(kept);
 export const fontSizes = new FontSizeStore(kept);
 export const display = new DisplayPreferences(kept);
-export const notifier = new Notifier({ storage: kept });
+export const notifier = new Notifier({ storage: kept, open: (character, thread) => { navigate({ view: "chat" }); perform(() => openThreadIn(character, thread)); } });
+
+export async function openThreadIn(character: string, thread: string): Promise<void> {
+  if (character !== workspace.getSnapshot().character) await workspace.openCharacter(character);
+  if (thread !== (workspace.getSnapshot().thread ?? "main")) await workspace.openThread(thread);
+}
 
 function reloadStored(): void {
   themes.reload(); fontSizes.reload(); display.reload(); notifier.reload(); collapsedFolders.reload();
