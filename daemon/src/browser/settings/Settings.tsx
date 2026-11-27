@@ -18,7 +18,7 @@ function SignOut() {
   return <>
     <button type="button" className="settings-nav-item" onClick={() => setAsking(true)}>Sign out</button>
     {asking ? <Form title="Sign out of this browser?" close={close} action="Sign out" danger busy={busy} error={error} submit={() => run(async () => { await workspace.connection.signOut(); return undefined; })}>
-      <p className="form-text">To sign back in you'll need the access token, or a sign-in code from a device that is still signed in (Settings › Devices).</p>
+      <p className="form-text">To sign back in you'll need a sign-in code from a device that is still signed in (Settings › Devices), or <code>shore devices link</code> on the daemon's machine.</p>
     </Form> : null}
   </>;
 }

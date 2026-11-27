@@ -22,6 +22,7 @@ macro_rules! cli_err {
     };
 }
 
+mod access;
 mod archives;
 mod backups;
 mod cli;

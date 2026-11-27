@@ -12,7 +12,7 @@ const DAEMON = join(DESKTOP, "..", "daemon");
 const ELECTRON = process.env["SHORE_DESKTOP_ELECTRON"] ?? "electron";
 const APP = process.env["SHORE_DESKTOP_APP"] ?? DESKTOP;
 
-export interface Daemon { origin: string; port: number; tcpPort: number }
+export interface Daemon { origin: string; port: number }
 export interface LaunchOptions { address?: string }
 export interface Launched { app: ElectronApplication; page: Page; settings(): Promise<{ address: string | null; closeToTray: boolean; zoom: number; window: { width: number; height: number; maximized: boolean } }> }
 
@@ -53,8 +53,8 @@ export const test = base.extend<{ profile: string; launch: (options?: LaunchOpti
         let output = "";
         child.stdout.on("data", (chunk: Buffer) => {
           output = (output + chunk.toString()).slice(-4000);
-          const match = /SHORE_BROWSER_READY (http:\/\/127\.0\.0\.1:(\d+)) (\d+)\r?\n/.exec(output);
-          if (match?.[1] !== undefined) resolve({ origin: match[1], port: Number(match[2]), tcpPort: Number(match[3]) });
+          const match = /SHORE_BROWSER_READY (http:\/\/127\.0\.0\.1:(\d+))\r?\n/.exec(output);
+          if (match?.[1] !== undefined) resolve({ origin: match[1], port: Number(match[2]) });
         });
         void stopped.then((code) => { reject(new Error(`The fixture daemon exited (${String(code)}).\n${errors}`)); }, reject);
       });
@@ -88,7 +88,10 @@ export const test = base.extend<{ profile: string; launch: (options?: LaunchOpti
 });
 
 export async function signIn(page: Page): Promise<void> {
-  await page.getByLabel("Access token").fill(TOKEN);
+  await expect(page.getByLabel("Sign-in code or link")).toBeVisible();
+  const created = await fetch(`http://127.0.0.1:${new URL(page.url()).port}/api/login-code`, { method: "POST", headers: { authorization: `Bearer ${TOKEN}` } });
+  expect(created.status).toBe(200);
+  await page.getByLabel("Sign-in code or link").fill(((await created.json()) as { code: string }).code);
   await page.getByRole("button", { name: "Connect", exact: true }).click();
   await expect(page.getByText("Connected", { exact: true })).toBeVisible();
 }

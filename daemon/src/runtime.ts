@@ -320,12 +320,13 @@ export async function createRuntime(options: RuntimeOptions): Promise<ShoreRunti
 export interface RuntimeClockIntervals {
   keepaliveMs?: number | undefined;
   diagnosticRetentionMs?: number | undefined;
+  costBackfillMs?: number | undefined;
 }
 
 export function startRuntimeClocks(
   runtime: ShoreRuntime,
   intervals: RuntimeClockIntervals = {},
-): { stop: () => void } {
+): { stop: () => Promise<void> } {
   setCallObserver((ctx, model, callType, req, usage) => {
     runtime.keepalive.observe(
       ctx.character,
@@ -343,16 +344,16 @@ export function startRuntimeClocks(
   const costBackfill = startCostBackfill(
     rustJoin(runtime.config.dirs.data, "shore.db"),
     runtime.snapshotGate,
+    intervals.costBackfillMs,
   );
 
   return {
-    stop: () => {
+    stop: async () => {
       keepaliveTimer.stop();
       autonomyTimer.stop();
       triggerTimer.stop();
-      costBackfill.stop();
-      retention.stop();
       setCallObserver(undefined);
+      await Promise.all([costBackfill.stop(), retention.stop()]);
     },
   };
 }
@@ -586,14 +587,11 @@ export function applySubscriptionProviders(registry: CharacterRegistry): void {
   setNanoGptSubscriptionCacheDir(config.dirs.cache);
 }
 
-function startCostBackfill(ledgerPath: string, gate?: SnapshotGate): { stop: () => void } {
-  let running = false;
+function startCostBackfill(ledgerPath: string, gate: SnapshotGate, intervalMs = COST_BACKFILL_MS): { stop: () => Promise<void> } {
+  let running: Promise<void> | undefined;
   const sweep = async () => {
-    if (running) return;
-    running = true;
     try {
-      const result = await (gate?.withActivity(async () => await backfillLedgerCosts(ledgerPath)) ??
-        backfillLedgerCosts(ledgerPath));
+      const result = await gate.withActivity(async () => await backfillLedgerCosts(ledgerPath));
       if (result.updated > 0) {
         shoreLog.info(
           `shore: priced ${result.updated} of ${result.total} ledger rows that had no cost`,
@@ -601,13 +599,15 @@ function startCostBackfill(ledgerPath: string, gate?: SnapshotGate): { stop: () 
       }
     } catch (e) {
       shoreLog.warn(`shore: ledger cost backfill failed: ${String(e)}`);
-    } finally {
-      running = false;
     }
   };
+  const due = (): void => {
+    if (running !== undefined) return;
+    running = sweep().finally(() => { running = undefined; });
+  };
 
-  void sweep();
-  const timer = setInterval(() => void sweep(), COST_BACKFILL_MS);
+  due();
+  const timer = setInterval(due, intervalMs);
   timer.unref?.();
-  return { stop: () => clearInterval(timer) };
+  return { stop: async () => { clearInterval(timer); await running; } };
 }

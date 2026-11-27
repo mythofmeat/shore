@@ -693,3 +693,47 @@ kbd {
   overflow-wrap: anywhere;
   user-select: all;
 }
+
+.key-operations {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+  gap: 6px 16px;
+  max-height: 320px;
+  margin: 0;
+  padding: 8px 0 0;
+  overflow-y: auto;
+  border: 0;
+}
+
+.key-operations legend {
+  padding: 0;
+  margin-bottom: 4px;
+}
+
+.key-operations code {
+  color: var(--text-3);
+  font-size: calc(12px * var(--font-scale));
+}
+
+.new-key {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.key-example {
+  margin: 0;
+  padding: 10px 12px;
+  overflow-x: auto;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: var(--surface);
+  font-family: var(--font-mono);
+  font-size: calc(12px * var(--font-scale));
+  white-space: pre;
+}
+
+.device-current {
+  color: var(--text-3);
+  font-weight: normal;
+}

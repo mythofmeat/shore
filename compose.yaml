@@ -12,7 +12,6 @@ services:
     environment:
       TZ: ${TZ:-UTC}
     ports:
-      - "127.0.0.1:7320:7320"
       - "127.0.0.1:7340:7340"
     volumes:
       - ./config:/config
@@ -37,7 +36,7 @@ services:
       context: .
       dockerfile: client/shore-cli/Dockerfile
     environment:
-      SHORE_ADDR: shore-daemon:7320
+      SHORE_ADDR: http://shore-daemon:7340
       SHORE_CONFIG_DIR: /config
     volumes:
       - ./config:/config:ro

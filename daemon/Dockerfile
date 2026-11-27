@@ -121,14 +121,12 @@ WORKDIR /workspace
 
 ENV HOME=/home/shore USER=shore LOGNAME=shore
 ENV PATH=/home/shore/.local/bin:/home/shore/.bun/bin:/home/shore/.cargo/bin:$PATH
-ENV SHORE_ADDR=0.0.0.0:7320
 ENV SHORE_WEB_ADDR=0.0.0.0:7340
 ENV SHORE_CONFIG_DIR=/config
 ENV SHORE_DATA_DIR=/data
 ENV SHORE_CACHE_DIR=/cache
 ENV SHORE_WORKSPACE_DIR=/workspace
 
-EXPOSE 7320
 EXPOSE 7340
 
 ENTRYPOINT ["/usr/bin/tini", "-s", "--", \

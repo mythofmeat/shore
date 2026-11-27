@@ -7,6 +7,7 @@ import { buildWarningMessage, llmHttpStatus, missingKeyReason, retryAfterHint, r
 import { CREDENTIAL_FAILURE_KINDS, type KeyCandidate } from "../src/llm/credentials";
 import type { LlmError } from "../src/llm/errors";
 import { rejectionOf } from "./support/outcome.ts";
+import { GOOGLE_REJECTS_KEY } from "./support/google.ts";
 
 const byteLen = (s: string) => Buffer.byteLength(s, "utf8");
 
@@ -142,6 +143,23 @@ describe("credential rotation", () => {
       )),
     ).toMatchObject({ kind: "http_status", status: 500 });
     expect(h.tried).toEqual(["first"]);
+  });
+
+  test("a request refused as malformed moves to the next key only when the refusal says the key is bad", async () => {
+    const bodies = ["Invalid_API_Key", "Invalid API key", "Authentication_Error", "Authentication failed", "Unauthorized", JSON.stringify(GOOGLE_REJECTS_KEY), "bad request"];
+    const outcomes: [string, string][] = [];
+    for (const body of bodies) {
+      const h = harness({ A: "sk-a", B: "sk-b" });
+      const outcome = await streamWithCredentialFallback(
+        "gemini",
+        [cand("first", "A"), cand("second", "B")],
+        h.readEnv,
+        h.attempt({ first: { kind: "http_status", status: 400, body } }),
+        h.hooks,
+      ).catch(() => "refused");
+      outcomes.push([body, outcome]);
+    }
+    expect(outcomes).toEqual(bodies.map((body) => [body, body === "bad request" ? "refused" : "served by second"]));
   });
 });
 

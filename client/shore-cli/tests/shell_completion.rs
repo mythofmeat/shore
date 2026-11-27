@@ -1,92 +1,16 @@
 #![cfg(test)]
 
-use std::io::{BufRead, BufReader, Write};
-use std::net::{TcpListener, TcpStream};
+mod support;
+
 use std::process::{Command, Output};
-use std::sync::atomic::{AtomicUsize, Ordering};
-use std::sync::{Arc, Mutex};
-use std::time::Duration;
+use std::sync::atomic::Ordering;
 
 use serde_json::{Value, json};
 
-type Answer = dyn Fn(&Value, &Value) -> Vec<Value> + Send + Sync;
+use support::StandIn;
 
-struct FakeDaemon {
-    addr: String,
-    accepted: Arc<AtomicUsize>,
-    received: Arc<Mutex<Vec<Value>>>,
-}
-
-impl FakeDaemon {
-    fn start(answering: impl Fn(&Value, &Value) -> Vec<Value> + Send + Sync + 'static) -> Self {
-        let listener = TcpListener::bind("127.0.0.1:0").unwrap();
-        let addr = listener.local_addr().unwrap().to_string();
-        let accepted = Arc::new(AtomicUsize::new(0));
-        let received = Arc::new(Mutex::new(Vec::new()));
-        let answer: Arc<Answer> = Arc::new(answering);
-        let counted = Arc::clone(&accepted);
-        let recorded = Arc::clone(&received);
-        let _server = std::thread::spawn(move || {
-            for incoming in listener.incoming() {
-                let Ok(stream) = incoming else { return };
-                let _previous = counted.fetch_add(1, Ordering::SeqCst);
-                let replies = Arc::clone(&answer);
-                let log = Arc::clone(&recorded);
-                let _worker = std::thread::spawn(move || serve(stream, replies.as_ref(), &log));
-            }
-        });
-        Self {
-            addr,
-            accepted,
-            received,
-        }
-    }
-
-    fn commands(&self, name: &str) -> Vec<Value> {
-        self.received
-            .lock()
-            .unwrap()
-            .iter()
-            .filter(|frame| frame.get("name").and_then(Value::as_str) == Some(name))
-            .cloned()
-            .collect()
-    }
-}
-
-fn send(stream: &mut TcpStream, frame: &Value) {
-    let _sent = writeln!(stream, "{frame}");
-}
-
-fn serve(stream: TcpStream, answer: &Answer, received: &Mutex<Vec<Value>>) {
-    stream.set_nonblocking(false).unwrap();
-    stream
-        .set_read_timeout(Some(Duration::from_secs(10)))
-        .unwrap();
-    let mut reader = BufReader::new(stream);
-    send(
-        reader.get_mut(),
-        &json!({
-            "type": "hello", "v": 1, "server_name": "test",
-            "characters": [{ "name": "ada" }, { "name": "bob" }]
-        }),
-    );
-    let mut hello = Value::Null;
-    loop {
-        let mut line = String::new();
-        if reader.read_line(&mut line).unwrap_or(0) == 0 {
-            return;
-        }
-        let Ok(frame) = serde_json::from_str::<Value>(&line) else {
-            return;
-        };
-        if frame.get("type").and_then(Value::as_str) == Some("hello") {
-            hello = frame.clone();
-        }
-        received.lock().unwrap().push(frame.clone());
-        for reply in answer(&hello, &frame) {
-            send(reader.get_mut(), &reply);
-        }
-    }
+fn start(answering: impl Fn(&Value, &Value) -> Vec<Value> + Send + Sync + 'static) -> StandIn {
+    StandIn::start(&["ada", "bob"], None, answering)
 }
 
 fn is_hello(frame: &Value) -> bool {
@@ -131,13 +55,15 @@ fn answers_threads(hello: &Value, frame: &Value) -> Vec<Value> {
 
 fn shore(env: &[(&str, &str)], args: &[&str]) -> Output {
     let home = tempfile::tempdir().unwrap();
+    std::fs::create_dir_all(home.path().join("config")).unwrap();
+    std::fs::write(home.path().join("config").join("token"), "test-token").unwrap();
     let mut command = Command::new(env!("CARGO_BIN_EXE_shore"));
     let _isolated = command
         .env_remove("SHORE_ADDR")
         .env_remove("SHORE_CHARACTER")
         .env_remove("SHORE_THREAD")
         .env_remove("SHORE_COMPLETE")
-        .env("SHORE_TOKEN", "test-token")
+        .env_remove("SHORE_TOKEN")
         .env("SHORE_CONFIG_DIR", home.path().join("config"))
         .env("SHORE_DATA_DIR", home.path().join("data"))
         .env("SHORE_RUNTIME_DIR", home.path().join("runtime"))
@@ -162,7 +88,7 @@ fn fish(words: &[&str]) -> Vec<String> {
 
 #[test]
 fn a_shell_completes_from_the_daemon_named_on_the_line_as_the_character_and_thread_named_there() {
-    let daemon = FakeDaemon::start(answers_threads);
+    let daemon = start(answers_threads);
     let offered = fish(&[
         "--addr",
         &daemon.addr,
@@ -180,7 +106,7 @@ fn a_shell_completes_from_the_daemon_named_on_the_line_as_the_character_and_thre
 
 #[test]
 fn a_shell_offers_the_characters_a_daemon_says_hello_with() {
-    let daemon = FakeDaemon::start(answers_threads);
+    let daemon = start(answers_threads);
     assert_eq!(
         fish(&["--addr", &daemon.addr, "--character", ""]),
         ["ada", "bob"]
@@ -188,12 +114,17 @@ fn a_shell_offers_the_characters_a_daemon_says_hello_with() {
 }
 
 #[test]
-fn message_refs_come_from_the_history_a_daemon_sends_on_connecting() {
-    let daemon = FakeDaemon::start(|_, frame| {
-        if !is_hello(frame) {
+fn message_refs_come_from_the_recent_messages_the_daemon_lists() {
+    let daemon = start(|_, frame| {
+        if is_hello(frame) {
+            return vec![history(json!([]))];
+        }
+        if named(frame) != Some("log") || frame["args"] != json!({ "count": 20 }) {
             return Vec::new();
         }
-        vec![history(json!([
+        vec![output(
+            frame,
+            json!({ "messages": [
             { "msg_id": "m_1", "role": "user", "timestamp": "2026-11-10T00:00:00Z",
               "content_blocks": [{ "type": "text", "text": "hello there\nsecond line" }] },
             { "msg_id": "m_2", "role": "assistant", "timestamp": "2026-11-10T00:00:01Z",
@@ -203,7 +134,8 @@ fn message_refs_come_from_the_history_a_daemon_sends_on_connecting() {
               ] },
             { "msg_id": "m_3", "role": "system", "timestamp": "2026-11-10T00:00:02Z",
               "content": "be brief\nand kind", "content_blocks": [] },
-        ]))]
+        ] }),
+        )]
     });
     assert_eq!(
         fish(&["--addr", &daemon.addr, "msg", "edit", ""]),
@@ -220,17 +152,18 @@ fn message_refs_come_from_the_history_a_daemon_sends_on_connecting() {
 }
 
 #[test]
-fn a_lookup_waits_for_its_own_answer_and_passes_over_frames_meant_for_others() {
-    let daemon = FakeDaemon::start(|hello, frame| {
+fn a_lookup_waits_for_its_own_answer_and_passes_over_other_frames() {
+    let daemon = start(|hello, frame| {
         if named(frame) != Some("list_threads") {
             return answers_threads(hello, frame);
         }
         vec![
+            json!({ "type": "request_accepted", "rid": frame["rid"] }),
             json!({
-                "type": "command_output", "name": "list_threads", "rid": "someone-else",
+                "type": "command_output", "name": "list_models", "rid": frame["rid"],
                 "data": { "threads": [{ "id": "not-mine" }] }
             }),
-            json!({ "type": "error", "rid": "someone-else", "code": "busy", "message": "not mine" }),
+            json!({ "type": "ping" }),
             output(frame, threads()),
         ]
     });
@@ -250,7 +183,7 @@ fn a_lookup_waits_for_its_own_answer_and_passes_over_frames_meant_for_others() {
 
 #[test]
 fn an_error_answer_ends_a_lookup_with_nothing_offered() {
-    let daemon = FakeDaemon::start(|hello, frame| {
+    let daemon = start(|hello, frame| {
         if named(frame) != Some("list_threads") {
             return answers_threads(hello, frame);
         }
@@ -278,7 +211,7 @@ fn an_error_answer_ends_a_lookup_with_nothing_offered() {
 
 #[test]
 fn a_daemon_that_refuses_the_connection_is_tried_once_per_completion() {
-    let daemon = FakeDaemon::start(|_, frame| {
+    let daemon = start(|_, frame| {
         if is_hello(frame) {
             vec![json!({ "type": "error", "code": "unauthorized", "message": "wrong token" })]
         } else {
@@ -299,7 +232,7 @@ fn a_daemon_that_refuses_the_connection_is_tried_once_per_completion() {
         "{offered:?}"
     );
     assert_eq!(
-        daemon.accepted.load(Ordering::SeqCst),
+        daemon.requests.load(Ordering::SeqCst),
         1,
         "two lookups on one line share the failed attempt"
     );
@@ -307,7 +240,7 @@ fn a_daemon_that_refuses_the_connection_is_tried_once_per_completion() {
 
 #[test]
 fn model_settings_are_asked_for_the_target_named_on_the_line() {
-    let daemon = FakeDaemon::start(|_, frame| {
+    let daemon = start(|_, frame| {
         if is_hello(frame) {
             return vec![history(json!([]))];
         }
@@ -339,7 +272,7 @@ fn model_settings_are_asked_for_the_target_named_on_the_line() {
 
 #[test]
 fn a_tool_is_described_once_for_its_arguments() {
-    let daemon = FakeDaemon::start(|_, frame| {
+    let daemon = start(|_, frame| {
         if is_hello(frame) {
             return vec![history(json!([]))];
         }
@@ -368,7 +301,7 @@ fn a_tool_is_described_once_for_its_arguments() {
 
 #[test]
 fn a_shell_offers_flags_only_once_a_dash_is_typed() {
-    let daemon = FakeDaemon::start(answers_threads);
+    let daemon = start(answers_threads);
     let words = |current: &'static str| {
         fish(&[
             "--addr",

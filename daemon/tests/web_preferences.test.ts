@@ -14,7 +14,7 @@ const TOKEN = "web-preferences-test-token";
 
 async function daemon(dataDir?: string) {
   const web = startWebServer({
-    server: new Server({ addr: "127.0.0.1:0", serverName: "preferences", authenticate: () => true }),
+    server: new Server(),
     authenticate: (token) => token === TOKEN,
     config: { ...defaultWebConfig(), enabled: true, bind_addr: "127.0.0.1:0" },
     ...(dataDir === undefined ? {} : { dataDir }),
@@ -23,11 +23,12 @@ async function daemon(dataDir?: string) {
   cleanups.push(async () => { await web.stop(); });
   const post = (path: string, cookie: string, body?: string, type = "application/json") =>
     fetch(`${web.origin}${path}`, { method: "POST", headers: { origin: web.origin, cookie, ...(body === undefined ? {} : { "content-type": type }) }, ...(body === undefined ? {} : { body }) });
-  const login = await post("/api/login", "", JSON.stringify({ token: TOKEN }));
+  const code = async () => ((await (await fetch(`${web.origin}/api/login-code`, { method: "POST", headers: { authorization: `Bearer ${TOKEN}` } })).json()) as { code: string }).code;
+  const login = await post("/api/login", "", JSON.stringify({ token: await code() }));
   const cookie = login.headers.get("set-cookie")?.split(";", 1)[0] ?? "";
   const answer = async (response: Response) => [response.status, await response.json()];
   return {
-    post, cookie, origin: web.origin,
+    post, cookie, code, origin: web.origin,
     list: async (as = cookie) => await answer(await post("/api/preferences/list", as)),
     save: async (values: unknown, as = cookie) => await answer(await post("/api/preferences", as, JSON.stringify({ values }))),
     stop: async () => { await web.stop(); },
@@ -38,7 +39,7 @@ test("settings one browser saves are what every signed-in browser reads, and a l
   const d = await daemon();
   expect(await d.list()).toEqual([200, { values: {} }]);
   expect(await d.save({ "shore.theme": "fog", "shore.vim-mode": "true" })).toEqual([200, { values: { "shore.theme": "fog", "shore.vim-mode": "true" } }]);
-  const other = (await d.post("/api/login", "", JSON.stringify({ token: TOKEN }))).headers.get("set-cookie")?.split(";", 1)[0] ?? "";
+  const other = (await d.post("/api/login", "", JSON.stringify({ token: await d.code() }))).headers.get("set-cookie")?.split(";", 1)[0] ?? "";
   expect(other).not.toBe(d.cookie);
   expect(await d.save({ "shore.theme": "default", "shore.view.v1.metadata": "on" }, other)).toEqual([200, { values: { "shore.theme": "default", "shore.vim-mode": "true", "shore.view.v1.metadata": "on" } }]);
   expect(await d.list()).toEqual([200, { values: { "shore.theme": "default", "shore.vim-mode": "true", "shore.view.v1.metadata": "on" } }]);

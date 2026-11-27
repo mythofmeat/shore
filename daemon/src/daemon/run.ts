@@ -8,7 +8,9 @@ import { Diagnostics } from "../diagnostics.ts";
 import { emitNewMessageEvent } from "../handler/persistence.ts";
 import { createDefaultConfig } from "../config/loader.ts";
 import { superviseMatrixBridge } from "../connections/matrix/supervise.ts";
-import { tokenMatches, TOKEN_ENV } from "../config/token.ts";
+import { tokenMatches } from "../config/token.ts";
+import { ArchiveSpool } from "../commands/archive_spool.ts";
+import { rustJoin } from "../config/dirs.ts";
 import { buildMessageHandlerDeps, configReloader, labelNewSegments } from "../handler/deps.ts";
 import { MessageHandler } from "../handler/router.ts";
 import { ThreadUnreadTracker } from "../handler/thread_unread.ts";
@@ -23,17 +25,16 @@ import {
 } from "../runtime.ts";
 import { DEFAULT_PROVIDERS } from "../llm/providers/table.ts";
 import type { ServerMessage } from "../protocol/ServerMessage";
-import type { Logger } from "../swp/connection.ts";
+import type { Logger } from "../swp/handshake.ts";
 import { buildHandshakeProvider } from "../swp/handshake.ts";
 import { Server } from "../swp/server.ts";
 import type { RunningWebServer } from "../web/server.ts";
 import { localRfc3339 } from "../util/time.ts";
-import { version as DAEMON_VERSION } from "../../package.json";
 import { startAutoDiscovery } from "./auto_discovery.ts";
 import { acquireDataDirectoryLease } from "./data_directory_lease.ts";
 import { startConfigWatcher } from "./hot_reload.ts";
 import { describeWork, runningReport, type ShutdownWindowState } from "./running.ts";
-import { parseArgs, resolveStartup, sourceLabel, StartupError } from "./startup.ts";
+import { parseArgs, resolveStartup, StartupError } from "./startup.ts";
 import { findSentPicture } from "../storage/sent_pictures.ts";
 import { startCharacterInits } from "../tools/character_init.ts";
 import { sharePictureFolders } from "../tools/picture_access.ts";
@@ -98,8 +99,6 @@ export interface DaemonOptions {
 }
 
 export interface RunningDaemon {
-  readonly host: string;
-  readonly port: number;
   readonly instanceId: string;
   readonly runtime: ShoreRuntime;
   readonly server: Server;
@@ -123,15 +122,14 @@ export async function startDaemon(options: DaemonOptions): Promise<RunningDaemon
 
   log?.info?.("Startup configuration resolved", {
     config_path: startup.configPath,
-    bind_addr: startup.bindAddr,
-    bind_addr_source: sourceLabel(startup.bindAddrSource),
     web_addr: startup.web.enabled ? startup.web.bind_addr : "off",
+    web_addr_source: startup.webSource,
     token_source: startup.token.source,
   });
   if (startup.token.source === "generated") {
     log?.info?.("Wrote a new client token", {
       path: startup.token.path ?? "",
-      hint: `clients elsewhere need this value in $${TOKEN_ENV}`,
+      hint: "the first device signs in with it; sign in others with shore sign-in, or a link from shore devices link",
     });
   }
   const { loaded } = startup;
@@ -154,25 +152,8 @@ export async function startDaemon(options: DaemonOptions): Promise<RunningDaemon
     data_dir: dataLease.dataDir,
     ownership_path: dataLease.path,
   });
-  const server = new Server({
-    addr: startup.bindAddr,
-    serverName: "shore-daemon",
-    serverVersion: DAEMON_VERSION,
-    authenticate: (presented) => tokenMatches(startup.token.token, presented),
-    ...(log === undefined ? {} : { log }),
-  });
-
-  let bound: { host: string; port: number };
-  try {
-    bound = await server.bind();
-  } catch (e) {
-    dataLease.release();
-    throw new StartupError(
-      "server_run",
-      `Failed to start shore-daemon on ${startup.bindAddr}: ${String(e)}`,
-    );
-  }
-  const resolvedAddr = formatAddr(bound.host, bound.port);
+  const server = new Server(log === undefined ? {} : { log });
+  const transfers = new ArchiveSpool(rustJoin(loaded.dirs.cache, "archive-transfers"));
 
   let web: RunningWebServer | undefined;
   try {
@@ -185,14 +166,15 @@ export async function startDaemon(options: DaemonOptions): Promise<RunningDaemon
         recovery: { dataDir: dataLease.dataDir, cacheDir: loaded.dirs.cache, token: startup.token.token },
         picture: (file) => findSentPicture(dataLease.dataDir, file),
         dataDir: dataLease.dataDir,
+        transfers,
       });
     }
   } catch (error) {
     server.stop();
-    await server.serve();
     dataLease.release();
-    throw new StartupError("server_run", `Failed to start browser transport: ${String(error)}`);
+    throw new StartupError("server_run", `Failed to start shore-daemon on ${startup.web.bind_addr}: ${String(error)}`);
   }
+  const resolvedAddr = web?.address ?? "";
 
   const instances =
     options.instancesPath === undefined ? new Instances() : new Instances(options.instancesPath);
@@ -209,7 +191,6 @@ export async function startDaemon(options: DaemonOptions): Promise<RunningDaemon
   } catch (e) {
     await web?.stop();
     server.stop();
-    await server.serve();
     dataLease.release();
     throw new StartupError(
       "register_instance",
@@ -291,6 +272,7 @@ export async function startDaemon(options: DaemonOptions): Promise<RunningDaemon
       diagnostics,
       env,
       running,
+      transfers,
       ...(log === undefined ? {} : { log }),
     };
     await adoptHomeThreadModels(runtime.registry);
@@ -310,7 +292,7 @@ export async function startDaemon(options: DaemonOptions): Promise<RunningDaemon
     const handlerDone = messages.run(server.routes());
     teardown.push(["message handler", async () => await handlerDone]);
     web?.activate();
-    if (web !== undefined) log?.info?.("Browser transport listening", { origin: web.origin });
+    if (web !== undefined) log?.info?.("Listening", { origin: web.origin, address: web.address });
     const reloadConfig = configReloader(assembly);
 
     const watcher = options.watchConfig === false
@@ -344,11 +326,11 @@ export async function startDaemon(options: DaemonOptions): Promise<RunningDaemon
       log?.warn?.("Matrix bridge supervisor stopped", { error: String(e) });
     });
 
-    const served = server.serve();
+    const served = server.stopped();
 
     const done = (async () => {
       await served;
-      if (web !== undefined) await bounded(web.stop(), "browser transport", log);
+      if (web !== undefined) await bounded(web.stop(), "web listener", log);
       await tearDown();
       if (!dataLease.release()) {
         log?.warn?.("Could not release Shore data-directory ownership", {
@@ -393,8 +375,6 @@ export async function startDaemon(options: DaemonOptions): Promise<RunningDaemon
     });
 
     return {
-      host: bound.host,
-      port: bound.port,
       instanceId,
       runtime,
       server,
@@ -406,7 +386,7 @@ export async function startDaemon(options: DaemonOptions): Promise<RunningDaemon
     };
   } catch (error) {
     server.stop();
-    await Promise.allSettled([web?.stop(), server.serve()]);
+    await Promise.allSettled([web?.stop()]);
     await tearDown();
     dataLease.release();
     throw new StartupError("server_run", `Failed to initialize shore-daemon: ${String(error)}`);
@@ -482,10 +462,6 @@ if (import.meta.main) await main();
 function format(level: string, msg: string, fields?: Record<string, unknown>): string {
   const pairs = Object.entries(fields ?? {}).map(([k, v]) => ` ${k}=${String(v)}`);
   return `${level} ${msg}${pairs.join("")}`;
-}
-
-export function formatAddr(host: string, port: number): string {
-  return host.includes(":") ? `[${host}]:${port}` : `${host}:${port}`;
 }
 
 export async function bounded(

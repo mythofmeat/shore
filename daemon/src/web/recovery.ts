@@ -5,6 +5,7 @@ import { join } from "node:path";
 import type { WebArchiveInfo } from "../protocol/WebArchiveInfo.ts";
 import type { WebRequestInfo } from "../protocol/WebRequestInfo.ts";
 import { shoreLog } from "../log.ts";
+import type { SavedSession } from "./auth.ts";
 import { validWebArchiveInfo, validWebRequestInfo } from "./contracts.ts";
 
 export interface WebRecoveryOptions {
@@ -53,9 +54,11 @@ export class WebRecovery {
     try {
       this.#db.run(`PRAGMA journal_mode = DELETE; PRAGMA synchronous = EXTRA; PRAGMA foreign_keys = ON; PRAGMA max_page_count = 16384;
         CREATE TABLE IF NOT EXISTS identity (id INTEGER PRIMARY KEY CHECK(id = 1), fingerprint TEXT NOT NULL);
-        CREATE TABLE IF NOT EXISTS sessions (id TEXT PRIMARY KEY, expires_at INTEGER NOT NULL);
+        CREATE TABLE IF NOT EXISTS sessions (id TEXT PRIMARY KEY, expires_at INTEGER NOT NULL, name TEXT NOT NULL DEFAULT 'Browser', created_at INTEGER NOT NULL DEFAULT 0, last_used_at INTEGER NOT NULL DEFAULT 0);
         CREATE TABLE IF NOT EXISTS archives (id TEXT PRIMARY KEY, owner TEXT NOT NULL REFERENCES sessions(id) ON DELETE CASCADE, info TEXT NOT NULL);
         CREATE TABLE IF NOT EXISTS requests (id TEXT PRIMARY KEY, owner TEXT NOT NULL REFERENCES sessions(id) ON DELETE CASCADE, info TEXT NOT NULL);`);
+      const columns = new Set(this.#db.query<{ name: string }, []>("PRAGMA table_info(sessions)").all().map((column) => column.name));
+      if (!columns.has("name")) this.#db.run("ALTER TABLE sessions ADD COLUMN name TEXT NOT NULL DEFAULT 'Browser'; ALTER TABLE sessions ADD COLUMN created_at INTEGER NOT NULL DEFAULT 0; ALTER TABLE sessions ADD COLUMN last_used_at INTEGER NOT NULL DEFAULT 0;");
       const fingerprint = sessionDigest(JSON.stringify([1, origin, options.token]));
       this.#db.transaction(() => {
         const previous = this.#db.query<{ fingerprint: string }, []>("SELECT fingerprint FROM identity WHERE id = 1").get();
@@ -70,12 +73,16 @@ export class WebRecovery {
     } catch (error) { this.#db.close(); throw error; }
   }
 
-  sessions(): { id: string; expires_at: number }[] {
-    return this.#db.query<{ id: string; expires_at: number }, []>("SELECT id, expires_at FROM sessions ORDER BY expires_at").all();
+  sessions(): SavedSession[] {
+    return this.#db.query<SavedSession, []>("SELECT id, expires_at, name, created_at, last_used_at FROM sessions ORDER BY expires_at").all();
   }
 
-  saveSession(id: string, expiresAt: number): void {
-    this.#db.query("INSERT INTO sessions VALUES (?, ?)").run(id, expiresAt);
+  saveSession(session: SavedSession): void {
+    this.#db.query("INSERT INTO sessions (id, expires_at, name, created_at, last_used_at) VALUES (?, ?, ?, ?, ?)").run(session.id, session.expires_at, session.name, session.created_at, session.last_used_at);
+  }
+
+  touchSession(id: string, lastUsedAt: number): void {
+    this.#db.query("UPDATE sessions SET last_used_at = ? WHERE id = ?").run(lastUsedAt, id);
   }
 
   renewSession(id: string, expiresAt: number): void {

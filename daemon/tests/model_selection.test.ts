@@ -16,7 +16,7 @@ import { dispatchCommand } from "../src/handler/commands.ts";
 import { buildCommandPathDeps } from "../src/handler/deps.ts";
 import type { ServerMessage } from "../src/protocol/ServerMessage.ts";
 import { createRuntime, type ShoreRuntime } from "../src/runtime.ts";
-import { DEFAULT_HANDSHAKE } from "../src/swp/connection.ts";
+import { DEFAULT_HANDSHAKE } from "../src/swp/handshake.ts";
 import { SessionRouter } from "../src/swp/session.ts";
 import { restoreTestEnv, setTestEnv } from "./support/env.ts";
 import { testTmp } from "./support/tmp.ts";

@@ -289,7 +289,10 @@ export function findSchemaEntry(entries: readonly SchemaEntry[], key: string): S
   return template === undefined ? undefined : { ...template, key };
 }
 
-const RETIRED_KEYS = new Map([["marks.tags", "is now two lists: marks.like_tags for a like and marks.dislike_tags for a dislike"]]);
+const RETIRED_KEYS = new Map([
+  ["marks.tags", "is now two lists: marks.like_tags for a like and marks.dislike_tags for a dislike"],
+  ["daemon.listen_addr", "is gone with the raw TCP port: everything, the CLI included, now uses daemon.web.bind_addr (port 7340 unless changed). Delete the line"],
+]);
 
 export function validateConfigSource(input: Record<string, unknown>, source: string): void {
   const entries = configSchema({ instancesAt: () => [] });

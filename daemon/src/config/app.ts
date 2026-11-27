@@ -281,7 +281,7 @@ export interface WebConfig {
 }
 
 export const defaultWebConfig = (): WebConfig => ({
-  enabled: false,
+  enabled: true,
   bind_addr: "127.0.0.1:7340",
   public_origin: undefined,
   tls_cert: undefined,
@@ -307,7 +307,6 @@ const WEB: StructSpec<WebConfig> = {
 };
 
 export interface DaemonConfig {
-  listen_addr: string;
   image_cache_bytes: number;
   shutdown_grace: ConfigDuration;
   cache_forensics: boolean;
@@ -315,7 +314,6 @@ export interface DaemonConfig {
 }
 
 const defaultDaemonConfig = (): DaemonConfig => ({
-  listen_addr: "127.0.0.1:7320",
   image_cache_bytes: DEFAULT_IMAGE_CACHE_BYTES,
   shutdown_grace: ConfigDuration.fromSecs(29 * 60),
   cache_forensics: false,
@@ -326,7 +324,6 @@ const DAEMON: StructSpec<DaemonConfig> = {
   name: "DaemonConfig",
   make: defaultDaemonConfig,
   fields: {
-    listen_addr: readString,
     image_cache_bytes: readUsize,
     shutdown_grace: readDuration,
     cache_forensics: readBool,

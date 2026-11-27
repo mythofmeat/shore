@@ -37,7 +37,7 @@ test("closing keeps Shore in the Dock, which brings the window back, and quittin
 
 test("the page's notifications go to the main process, and the Dock badge follows the unread count", async ({ daemon, launch }) => {
   const { app, page } = await launch({ address: daemon.origin });
-  await expect(page.getByLabel("Access token")).toBeVisible();
+  await expect(page.getByLabel("Sign-in code or link")).toBeVisible();
   await app.evaluate(({ ipcMain }) => {
     const posted: unknown[][] = [];
     Object.assign(globalThis, { posted });

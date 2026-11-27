@@ -1,7 +1,7 @@
 import { presenceCommand } from "./presence.ts";
 import { requestCatalogue } from "../operations/requests.ts";
 import { compact } from "./compact.ts";
-import { deleteCharacter, exportBackup, exportCharacter, importArchive, importCharacter, readTransfer, writeTransfer, type ArchiveContext } from "./archive.ts";
+import { deleteCharacter, exportBackup, exportCharacter, importArchive, importCharacter, type ArchiveContext } from "./archive.ts";
 import { usage } from "./usage.ts";
 import { usageConfigView } from "../ledger/budget.ts";
 import { describeTool, runTool } from "./run_tool.ts";
@@ -91,7 +91,6 @@ function adminContext({ session, deps }: CommandOperationContext): ProviderAdmin
     config: session,
     ledgerPath: deps.ledgerPath,
     threads: deps.threads,
-    confidential: session.confidential === true,
     ...(deps.fetchImpl === undefined ? {} : { fetchImpl: deps.fetchImpl }),
     ...(deps.now === undefined ? {} : { now: deps.now }),
   };
@@ -130,7 +129,6 @@ const providerField = { label: "Provider", choices: "providers" } as const;
 const providerWrite = { ...providerPresentation, effects: ["config_write"] } as const;
 const credentialField = { label: "Key or login", hint: "Its name, as `shore provider <name> auth` lists it; a Claude login also goes by its email" } as const;
 const secretField = { label: "API key", hint: "Sent to the daemon and saved in a file only it can read; never shown again", secret: true } as const;
-const plainOnly = { label: "Allow an unencrypted connection", hint: "Send the key even though this connection is neither local nor encrypted; only on a private network" } as const;
 const noCheck = { label: "Skip the check", hint: "Save the key without asking the provider whether it works" } as const;
 const threadPresentation = {
   category: "Threads", scope: "character", prerequisites: ["threads"], effects: ["read"], confirmation: "none",
@@ -151,21 +149,15 @@ const historyFields = {
 export const commandOperations: OperationRegistry<CommandOperationContext> = {
   export_character: register("export_character", { ...characterPresentation, prerequisites: ["archive"], effects: ["read", "workspace_write"], label: "Export character", fields: {
     character: { label: "Character", choices: "characters" },
-    output: { label: "Archive output on daemon host", hint: "Absolute server path to a new archive; its parent directory must exist. Existing files are never overwritten. Omit to download it with read_transfer." },
+    output: { label: "Archive output on daemon host", hint: "Absolute server path to a new archive; its parent directory must exist. Existing files are never overwritten. Omit to download it from /api/transfers/<transfer>." },
   }, policies: [{ condition: { kind: "absent", field: "output" }, effects: ["read"], confirmation: "none" }] }, (context, args) => exportCharacter(archiveContext(context), args)),
   export_backup: register("export_backup", { ...characterPresentation, prerequisites: ["archive"], label: "Back up every character and the global configuration", fields: {
-    base: { label: "Previous backup", hint: "A write_transfer upload of the previous backup's manifest.json. Only files and database blocks that changed since then are sent." },
+    base: { label: "Previous backup", hint: "An upload to /api/transfers of the previous backup's manifest.json. Only files and database blocks that changed since then are sent." },
     include_secrets: { label: "Include stored API keys", hint: "Left out unless asked for; the backup then holds keys in plain text" },
   } }, (context, args) => exportBackup(archiveContext(context), args)),
   import_archive: register("import_archive", { ...characterPresentation, prerequisites: ["archive"], effects: ["workspace_write", "history_write", "config_write", "runtime_write"], label: "Import an uploaded archive", fields: {
-    transfer: { label: "Upload", hint: "A write_transfer upload holding a character archive or a backup. Characters that exist and files already present are left alone." },
+    transfer: { label: "Upload", hint: "An upload to /api/transfers holding a character archive or a backup. Characters that exist and files already present are left alone." },
   } }, (context, args) => importArchive(archiveContext(context), args)),
-  read_transfer: register("read_transfer", { ...characterPresentation, prerequisites: ["archive"], label: "Download part of an archive", fields: {
-    transfer: { label: "Download" }, offset: { label: "Byte offset", hint: "The download is removed once its last byte is read" },
-  } }, (context, args) => readTransfer(archiveContext(context), args)),
-  write_transfer: register("write_transfer", { ...characterPresentation, prerequisites: ["archive"], effects: ["runtime_write"], label: "Upload part of an archive", fields: {
-    transfer: { label: "Upload", hint: "Omit to start a new upload" }, data: { label: "Bytes", hint: "Base64, at most 8 MiB decoded" },
-  } }, (context, args) => writeTransfer(archiveContext(context), args)),
   import_character: register("import_character", { ...characterPresentation, prerequisites: ["archive"], effects: ["workspace_write", "history_write", "config_write", "runtime_write"], label: "Import character", fields: {
     archive: { label: "Archive on daemon host", hint: "Absolute server path to a Shore character archive. Existing characters are never overwritten." },
   } }, (context, args) => importCharacter(archiveContext(context), args)),
@@ -324,11 +316,11 @@ export const commandOperations: OperationRegistry<CommandOperationContext> = {
   add_credential: register("add_credential", { ...providerWrite, effects: ["config_write", "provider_call"], label: "Add API key", fields: {
     provider: providerField, name: { label: "Key name", hint: "Defaults to default, then key2, key3…" }, secret: secretField,
     env: { label: "Environment variable", hint: "Instead of the key itself: a variable in the daemon's environment that holds it" },
-    no_check: noCheck, allow_unencrypted: plainOnly,
+    no_check: noCheck,
   }, policies: [{ condition: { kind: "equals", field: "no_check", value: true }, effects: ["config_write"], confirmation: "none" }] }, (context, args) => addCredential(adminContext(context), args)),
   update_credential: register("update_credential", { ...providerWrite, label: "Change key or login", fields: {
     provider: providerField, credential: credentialField, enabled: { label: "Enabled" }, rename: { label: "New name" },
-    secret: { ...secretField, label: "Replacement key" }, warn_on_fallback: { label: "Warn when calls move past it" }, no_check: noCheck, allow_unencrypted: plainOnly,
+    secret: { ...secretField, label: "Replacement key" }, warn_on_fallback: { label: "Warn when calls move past it" }, no_check: noCheck,
   } }, (context, args) => updateCredential(adminContext(context), args)),
   remove_credential: register("remove_credential", { ...providerWrite, confirmation: "delete", label: "Remove key or login", fields: { provider: providerField, credential: credentialField } },
     (context, args) => removeCredential(adminContext(context), args)),

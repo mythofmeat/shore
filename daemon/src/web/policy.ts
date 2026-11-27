@@ -1,4 +1,7 @@
 import type { WebConfig } from "../config/app.ts";
+import { version as DAEMON_VERSION } from "../../package.json";
+
+export { DAEMON_VERSION };
 
 export const WEB_LIMITS = {
   loginBytes: 4096,
@@ -10,8 +13,10 @@ export const WEB_LIMITS = {
   loginAttemptsPerMinute: 60,
   loginCodeMs: 5 * 60_000,
   loginCodes: 8,
+  signInRequests: 4,
   handshakeTimeoutMs: 10_000,
   drainTimeoutMs: 10_000,
+  finishOnStopMs: 2_000,
 } as const;
 
 export function webBinding(config: WebConfig): { hostname: string; port: number; secure: boolean } {
@@ -65,6 +70,7 @@ export function securityHeaders(): Headers {
     "cross-origin-resource-policy": "same-origin",
     "x-frame-options": "DENY",
     "permissions-policy": "camera=(), microphone=(), geolocation=()",
+    "shore-version": DAEMON_VERSION,
   });
 }
 
@@ -95,4 +101,9 @@ export async function readSmallJson(request: Request, limit: number): Promise<un
     reader.releaseLock();
   }
   return JSON.parse(Buffer.concat(chunks).toString("utf8")) as unknown;
+}
+
+export function checked<T>(valid: (value: unknown) => value is T, value: unknown, what: string): T {
+  if (!valid(value)) throw new Error(`Invalid ${what}`);
+  return value;
 }

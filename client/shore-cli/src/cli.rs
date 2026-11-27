@@ -50,7 +50,7 @@ pub(crate) struct Cli {
     )]
     pub thread: Option<String>,
 
-    /// TCP address of the daemon (overrides discovery)
+    /// The daemon's address, such as https://shore.example or my-computer:7340 (overrides discovery)
     #[arg(long, env = "SHORE_ADDR", help_heading = LEADING_HEADING)]
     pub addr: Option<String>,
 
@@ -585,6 +585,58 @@ pub(crate) enum CliCommand {
     Completions {
         /// Shell to generate completions for
         shell: Shell,
+    },
+
+    /// Sign this CLI in to a daemon. It shows a code to allow from a device
+    /// that's already signed in, then keeps its own credential for that address
+    #[command(name = "sign-in", display_order = 13)]
+    SignIn {
+        /// The daemon's address, such as https://shore.example or my-computer:7340
+        #[arg(value_name = "ADDRESS")]
+        address: String,
+
+        /// What the daemon's list of devices calls this CLI; this computer's name
+        /// unless given
+        #[arg(long, value_name = "NAME")]
+        name: Option<String>,
+    },
+
+    /// List the browsers, CLIs and automation keys signed in to the daemon, let
+    /// a waiting CLI in, sign one out, or make a sign-in link for a browser
+    #[command(display_order = 14)]
+    Devices {
+        #[command(subcommand)]
+        subcommand: Option<DevicesCommand>,
+
+        /// Output raw JSON
+        #[arg(long)]
+        json: bool,
+    },
+}
+
+#[derive(Subcommand, Debug)]
+pub(crate) enum DevicesCommand {
+    /// Let in the CLI that shows this code
+    Allow {
+        /// The four-letter code the waiting CLI shows
+        code: String,
+    },
+    /// Turn away the CLI that shows this code
+    Refuse {
+        /// The four-letter code the waiting CLI shows
+        code: String,
+    },
+    /// Sign a browser, CLI or automation key out
+    #[command(name = "sign-out")]
+    SignOut {
+        /// The device's id, as `shore devices` lists it
+        id: String,
+    },
+    /// Print a one-time link that signs a browser in
+    Link {
+        /// The address the browser opens, if not the one this CLI uses
+        #[arg(long, value_name = "ADDRESS")]
+        address: Option<String>,
     },
 }
 
@@ -1485,11 +1537,6 @@ pub(crate) struct KeySourceArgs {
     /// Save the key without asking the provider whether it works
     #[arg(long)]
     pub(crate) no_check: bool,
-
-    /// Send the key even though the connection to the daemon is neither local
-    /// nor encrypted; only on a private network such as a VPN
-    #[arg(long)]
-    pub(crate) allow_unencrypted: bool,
 }
 
 #[derive(clap::Args, Debug, Clone)]
@@ -1665,7 +1712,6 @@ pub(crate) struct KeyRequest {
     pub(crate) replace: Option<String>,
     pub(crate) input: KeyInput,
     pub(crate) no_check: bool,
-    pub(crate) allow_unencrypted: bool,
 }
 
 #[derive(Debug, Clone)]
@@ -1707,9 +1753,6 @@ impl KeyRequest {
         _ = args.insert("provider".to_owned(), self.provider.clone().into());
         if self.no_check {
             _ = args.insert("no_check".to_owned(), true.into());
-        }
-        if self.allow_unencrypted {
-            _ = args.insert("allow_unencrypted".to_owned(), true.into());
         }
         if let Some(value) = secret {
             _ = args.insert("secret".to_owned(), value.into());
@@ -1904,7 +1947,6 @@ pub(crate) fn provider_plan(command: &ProviderCommand) -> Result<ProviderPlan, S
                     replace: None,
                     input: key_input(&add.key),
                     no_check: add.key.no_check,
-                    allow_unencrypted: add.key.allow_unencrypted,
                 });
             Ok(ProviderPlan::Add {
                 args: serde_json::Value::Object(args),
@@ -2003,7 +2045,6 @@ fn auth_plan(provider: &str, auth: AuthArgs) -> Result<ProviderPlan, String> {
         replace,
         input: key_input(&auth.key),
         no_check: auth.key.no_check,
-        allow_unencrypted: auth.key.allow_unencrypted,
     };
     if let Some(name) = auth.add {
         return Ok(ProviderPlan::Key(request(Some(name), None)));
@@ -2080,7 +2121,7 @@ pub(crate) enum ConfigCommand {
     /// `shore config get compaction`
     #[command(verbatim_doc_comment)]
     Get {
-        /// Dotted key, e.g. triggers.enabled, daemon.listen_addr, mcp.beets.command
+        /// Dotted key, e.g. triggers.enabled, daemon.web.bind_addr, mcp.beets.command
         #[arg(add = values(Completes::ConfigSections))]
         key: String,
 
@@ -2274,7 +2315,7 @@ fn parse_json_object(raw: &str) -> Result<BTreeMap<String, serde_json::Value>, S
     }
 }
 
-const COMMAND_GROUPS: [(&str, &[&str]); 6] = [
+const COMMAND_GROUPS: [(&str, &[&str]); 7] = [
     ("Conversation", &["msg", "log"]),
     ("Maintenance", &["compact", "segments", "export", "import"]),
     (
@@ -2283,6 +2324,7 @@ const COMMAND_GROUPS: [(&str, &[&str]); 6] = [
     ),
     ("Inspection", &["status", "usage", "trace"]),
     ("Shell", &["completions"]),
+    ("Signing in", &["sign-in", "devices"]),
     ("Advanced", &["debug"]),
 ];
 
@@ -2521,7 +2563,10 @@ pub(crate) fn to_swp_command(
             )),
         },
 
-        CliCommand::Export { .. } | CliCommand::Import { .. } => None,
+        CliCommand::Export { .. }
+        | CliCommand::Import { .. }
+        | CliCommand::SignIn { .. }
+        | CliCommand::Devices { .. } => None,
 
         CliCommand::Log { .. } => log_to_swp(cmd),
         CliCommand::Trace { subcommand: None } => None,
