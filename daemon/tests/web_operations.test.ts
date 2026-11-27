@@ -2,7 +2,7 @@ import { afterEach, describe, expect, jest, test } from "bun:test";
 import { CommandError } from "../src/commands/errors.ts";
 import type { ServerMessage } from "../src/protocol/ServerMessage.ts";
 import { Server } from "../src/swp/server.ts";
-import { commandRefusal, eventResponse, operationExists, operationResponse } from "../src/web/operations.ts";
+import { commandRefusal, eventResponse, operationExists, operationResponse, runRequest } from "../src/web/operations.ts";
 import { required } from "../src/util/required.ts";
 import { until } from "./support/until.ts";
 
@@ -19,7 +19,7 @@ function world(behaviours: Record<string, Behaviour>) {
       history: () => Promise.reject(new Error("a request never needs history")),
     },
   });
-  const seen: { name: string; args: unknown; character: string | null; thread: string | null }[] = [];
+  const seen: { name: string; args: unknown; character: string | null; thread: string | null; limits: unknown }[] = [];
   const disconnects: number[] = [];
   const sending: Promise<void>[] = [];
   let held = 0;
@@ -28,7 +28,7 @@ function world(behaviours: Record<string, Behaviour>) {
       if (route.kind === "session_disconnected") disconnects.push(route.sessionId);
       if (route.kind !== "command") continue;
       const { sessionId, selectedCharacter, selectedThread } = route.meta.session;
-      seen.push({ name: route.cmd.name, args: route.cmd.args, character: selectedCharacter, thread: selectedThread });
+      seen.push({ name: route.cmd.name, args: route.cmd.args, character: selectedCharacter, thread: selectedThread, limits: route.meta.session.archiveLimits });
       const rid = route.meta.rid ?? "";
       sending.push((async () => {
         for (const frame of await (behaviours[route.cmd.name] ?? (() => []))(rid, (route.cmd.args ?? {}) as Record<string, unknown>)) {
@@ -138,6 +138,16 @@ describe("an operation's answer", () => {
     expect((await lines(streamed)).at(-1)).toEqual({ type: "error", code: "internal_error", message: "The answer outgrew what the daemon holds for a slow reader" });
   });
 
+  test("a request carries the archive limits it is given, and none when it is given none", async () => {
+    const w = world({ status: (rid) => [finished(rid)] });
+    const ask = async (archiveLimits?: { bytes: number; entries: number }) => {
+      for await (const frame of runRequest(w.server, { message: { type: "command", name: "status", args: {}, rid: "r" }, clientName: "test", signal: new AbortController().signal, queuedBytes: 1024 * 1024, ...(archiveLimits === undefined ? {} : { archiveLimits }) })) if (frame.type === "request_finished") break;
+    };
+    await ask({ bytes: 5, entries: 2 });
+    await ask();
+    expect(w.seen.map((entry) => entry.limits)).toEqual([{ bytes: 5, entries: 2 }, undefined]);
+  });
+
   test("a client that stops reading a streamed answer lets go of the request at once, and its pings stop", async () => {
     const w = world({ status: () => new Promise<ServerMessage[]>(() => {}) });
     jest.useFakeTimers();
@@ -158,9 +168,7 @@ describe("an operation's answer", () => {
     jest.useFakeTimers();
     cleanups.push(() => { jest.useRealTimers(); });
     const streamed = await w.call("status", { headers: { accept: "application/x-ndjson" } });
-    jest.useRealTimers();
     expect((await lines(streamed)).map((frame) => frame["type"])).toEqual(["command_output", "request_finished"]);
-    jest.useFakeTimers();
     jest.advanceTimersByTime(90_000);
   });
   test("each error code comes back under its own HTTP status, with a retry hint only when there is one", async () => {
@@ -270,9 +278,7 @@ describe("following events", () => {
     cleanups.push(() => { jest.useRealTimers(); });
     const response = await w.follow();
     w.server.stop();
-    jest.useRealTimers();
     expect(await lines(response)).toEqual([{ type: "ping" }, { type: "shutdown" }]);
-    jest.useFakeTimers();
     jest.advanceTimersByTime(90_000);
   });
 
