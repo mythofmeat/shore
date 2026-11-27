@@ -8,15 +8,12 @@ const B64_ALPHABET = /^[A-Za-z0-9+/]$/;
 
 export function base64Rejection(b64: string): string | undefined {
   const firstPad = b64.indexOf("=");
-  const padIsPositioned =
-    firstPad === -1 || firstPad === b64.length - 1 || firstPad === b64.length - 2;
+  const padIsPositioned = firstPad === b64.length - 1 || firstPad === b64.length - 2;
 
   for (let i = 0; i < b64.length; i += 1) {
     const ch = b64[i] as string;
     if (B64_ALPHABET.test(ch)) continue;
-    if (ch === "=" && padIsPositioned && i >= firstPad) {
-      continue;
-    }
+    if (ch === "=" && padIsPositioned) continue;
     return `Invalid symbol ${ch.charCodeAt(0)}, offset ${i}.`;
   }
 
