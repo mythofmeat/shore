@@ -296,7 +296,7 @@ export const OTHER_TEXTS: readonly TextSpec[] = [
   must("send_refused", tools__results__send_refused, "send_message's result when pictures in the message can't be sent.", { pictures: "a line for each picture: - its name: why" }),
   must("start_refused", tools__results__start_refused, "threads's result when pictures in the opening of a new thread can't be sent.", { pictures: "a line for each picture: - its name: why" }),
   must("tool_ask_query", tools__subagent__query, "The description of an ask_<subagent> tool's query parameter."),
-  must("label", memory__compaction__label, "The request for a segment's label, after the segment's conversation.", { user: "the user's name" }),
+  must("label", memory__compaction__label, "The request for a segment's label, after the segment's conversation written out as lines of who said what, each message cut at 1,000 bytes and the whole cut to 30,000 bytes from the middle.", { char: "the character's name", user: "the user's name", cut: "set when anything was cut" }),
   must("idle_resume", engine__idle_resume, "The user turn of a request rebuilt to keep the cache warm, when the conversation has none."),
   fixed("output_cut", tools__results__output_cut, "After a command's output that was too long: bash's, a pinned command's or a trigger check's. It can't be replaced yet."),
 ];

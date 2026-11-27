@@ -221,7 +221,6 @@ export function labelNewSegments(a: GenerationAssembly): { stop: () => void; set
       config: runtime.config,
       ...(a.env === undefined ? {} : { env: a.env }),
     }),
-    tools: runtimeToolDeps(a),
     ...(a.env === undefined ? {} : { env: a.env }),
   }));
   return { stop: onSegmentArchive(join(runtime.config.dirs.data, HISTORY_DB_FILE), labels.hook), settled: () => labels.settled() };

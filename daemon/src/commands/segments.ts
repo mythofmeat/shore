@@ -10,6 +10,7 @@ import { labelIfUnlabelled, prepareLabelCall, type SegmentLabelDeps } from "../m
 import { effectiveConfig, readArchivedSegment } from "../memory/compaction/run.ts";
 import { withHistoryIndexLock } from "../memory/history_index.ts";
 import { internalError, invalidRequest, notFound } from "./errors.ts";
+import { describeError } from "../llm/errors.ts";
 import type { OperationInput, OperationResult } from "../operations/types.ts";
 import type { MessageCopy } from "../protocol/MessageCopy.ts";
 import type { SegmentAction } from "../protocol/SegmentAction.ts";
@@ -78,17 +79,16 @@ async function autoLabel(
   const present = (skipped: boolean): OperationResult<"segments"> => ({ character, thread, action: "label", segment: segment(), skipped });
   const replace = args.replace === true;
   if (segment().label !== null && !replace) return present(true);
+  let ask: (() => Promise<string | undefined>) | undefined;
   let label: string | undefined;
   try {
-    const archived = readArchivedSegment(dataDir, character, thread, idx);
-    const ask = await prepareLabelCall(character, thread, archived.messages, deps, effectiveConfig(character, deps.config), {
-      prior: { archived: archived.priorContext },
-      ...(typeof args.model === "string" ? { model: args.model } : {}),
-    });
-    label = await ask();
+    ask = await prepareLabelCall(character, thread, readArchivedSegment(dataDir, character, thread, idx), deps, effectiveConfig(character, deps.config),
+      typeof args.model === "string" ? { model: args.model } : {});
+    label = await ask?.();
   } catch (error) {
-    throw internalError(`could not label segment ${String(idx)}: ${error instanceof Error ? error.message : String(error)}`);
+    throw internalError(`could not label segment ${String(idx)}: ${describeError(error)}`);
   }
+  if (ask === undefined) throw invalidRequest(`segment ${String(idx)} has nothing said in it to label`);
   if (label === undefined) throw internalError(`the model gave no label for segment ${String(idx)}`);
   return present(!labelIfUnlabelled(dataDir, character, thread, idx, label, replace));
 }
