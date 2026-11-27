@@ -289,7 +289,8 @@ describe("config set on disk", () => {
     const warned = spyOn(shoreLog, "warn").mockImplementation(() => {});
     try {
       expect(config(ctx, { key: "triggers.model", value: " " }), "a blank isn't a name to look up, so only the loader judges it").toMatchObject({ value: " " });
-      expect(warned.mock.calls.map(([line]) => String(line))).toEqual([expect.stringContaining('configured default model " " was not found in the static catalog')]);
+      const lines = warned.mock.calls.map(([line]) => String(line));
+      expect([lines.length, lines[0]?.includes('configured default model " " was not found in the static catalog')]).toEqual([1, true]);
     } finally {
       warned.mockRestore();
     }
