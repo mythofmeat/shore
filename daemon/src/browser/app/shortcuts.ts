@@ -71,10 +71,10 @@ export function adjacent<T>(items: readonly T[], current: T | undefined, step: n
   return items[(index + step + items.length) % items.length];
 }
 
-export function paletteMatches(commands: readonly { label: string; detail?: string }[], query: string): number[] {
+export function paletteMatches(commands: readonly { label: string; detail?: string; keywords?: string }[], query: string): number[] {
   const words = query.trim().toLowerCase().split(/\s+/).filter(Boolean);
   return commands.flatMap((command, index) => {
-    const text = `${command.label} ${command.detail ?? ""}`.toLowerCase();
+    const text = `${command.label} ${command.detail ?? ""} ${command.keywords ?? ""}`.toLowerCase();
     return words.every((word) => text.includes(word)) ? [index] : [];
   });
 }

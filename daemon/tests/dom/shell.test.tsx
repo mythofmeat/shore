@@ -180,6 +180,18 @@ test("Mod, Shift and L mark the open thread for later or clear its mark, once co
   expect(later(since), "nothing to mark until connected, or with no thread open").toEqual([]);
 });
 
+test("the sidebar's search opens the switcher, where Enter goes back to the thread open before this one", async () => {
+  const threads = [{ ...HOME, last_active: "2026-11-27T10:00:00Z" }, SIDE, NOTES];
+  const view = await shell({ threads });
+  await view.rerender({ thread: "side", threads });
+  await view.rerender({ thread: "notes", threads });
+  await click(document.body.querySelector("button.sidebar-search"));
+  expect(view.dialog()).toBe("Command palette");
+  const since = app.sent(0).length;
+  await press("Enter", {}, document.body.querySelector("dialog input[type=search]") ?? document.body);
+  expect(switched(since)).toEqual([{ name: "side", resync: true }]);
+});
+
 test("a new thread waits for a character and the connection", async () => {
   const reconnecting = await shell({ status: "reconnecting" });
   await press("O", { ...MOD, shiftKey: true });
@@ -194,9 +206,9 @@ test("a new thread waits for a character and the connection", async () => {
 
 test("the help key is a key typed into a box while typing, and other keys are left to the page", async () => {
   await shell();
-  const search = document.body.querySelector("input[aria-label='Search characters']");
-  if (search === null) throw new Error("no search box");
-  expect((await press("?", {}, search)).defaultPrevented).toBe(false);
+  const box = document.body.querySelector("#message-composer");
+  if (box === null) throw new Error("no message box");
+  expect((await press("?", {}, box)).defaultPrevented).toBe(false);
   expect(location.hash).toBe("");
   await press("?", {}, window);
   expect(location.hash, "a key with no element behind it").toBe("#settings/keyboard");

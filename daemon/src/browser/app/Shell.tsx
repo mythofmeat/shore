@@ -91,7 +91,7 @@ export function Shell({ state }: { state: ChromeSnapshot }) {
   });
   return <div className="shell" data-sidebar={open ? "open" : "closed"} data-layout={mobile ? "mobile" : "desktop"}>
     {mobile && drawer ? <button type="button" className="scrim" aria-label="Close sidebar" tabIndex={-1} onClick={closeDrawer} /> : null}
-    {open ? <Sidebar state={state} mobile={mobile} close={closeDrawer} collapse={() => setExpanded(false)} newCharacter={() => setDialog("character")} newThread={() => setDialog("thread")} /> : null}
+    {open ? <Sidebar state={state} mobile={mobile} close={closeDrawer} collapse={() => setExpanded(false)} newCharacter={() => setDialog("character")} newThread={() => setDialog("thread")} openSwitcher={() => setDialog("palette")} /> : null}
     <div className="main">
       {route.view === "settings" ? <Settings state={state} page={route.page} sidebarOpen={open} toggleSidebar={toggle} /> : <Chat state={state} sidebarOpen={open} toggleSidebar={toggle} mobile={mobile} />}
     </div>

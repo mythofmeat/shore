@@ -2,6 +2,7 @@ import { useEffect, useRef } from "react";
 import { required } from "../../util/required.ts";
 import { openThreadIn, perform } from "./state.ts";
 import { toasts } from "../ui/toast.tsx";
+import { noteVisit } from "./recent.ts";
 
 export interface ThreadPlace { character: string; thread: string }
 
@@ -24,6 +25,7 @@ export function useThreadUrl(character: string | null, thread: string | null): v
   const shown = useRef<string | null>(null);
   useEffect(() => {
     if (character === null) return;
+    noteVisit(character, thread ?? "main");
     const path = threadPath(character, thread);
     const first = shown.current === null;
     const switched = shown.current === location.pathname;

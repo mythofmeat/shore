@@ -32,7 +32,7 @@ async function sidebar(over: Partial<ChromeSnapshot> = {}) {
   app.restores.push(() => { for (const name of collapsedFolders.of("ada")) collapsedFolders.toggle("ada", name); });
   serve();
   const make = async (next: Partial<ChromeSnapshot>): Promise<ChromeSnapshot> => ({ ...chromeOf(undefined, app.state().workspace.getSnapshot()), status: "ready", character: "ada", thread: "story", threads: [HOME], ...over, ...next });
-  const element = async (next: Partial<ChromeSnapshot>) => <Sidebar state={await make(next)} mobile={false} close={() => {}} collapse={() => {}} newCharacter={() => {}} newThread={() => {}} />;
+  const element = async (next: Partial<ChromeSnapshot>) => <Sidebar state={await make(next)} mobile={false} close={() => {}} collapse={() => {}} newCharacter={() => {}} newThread={() => {}} openSwitcher={() => {}} />;
   const view = await mount(await element({}));
   await settle();
   const rows = () => [...view.host.querySelectorAll(".sidebar-threads > .thread-row, .sidebar-threads .thread-folder > .thread-row")];

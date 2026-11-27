@@ -1,4 +1,5 @@
 import { useEffect, useState, type ReactNode } from "react";
+import { keyLabel } from "../app/shortcuts.ts";
 import type { ChromeSnapshot } from "../workspace.ts";
 import type { ThreadView } from "../../protocol/ThreadView.ts";
 import { Avatar } from "../ui/avatar.tsx";
@@ -134,14 +135,11 @@ function ConnectionStatus({ status }: { status: ChromeSnapshot["status"] }) {
   return <span className="connection" data-tone={tone} title={text}><span className="connection-dot" />{text}</span>;
 }
 
-export function Sidebar({ state, mobile, close, collapse, newCharacter, newThread }: {
-  state: ChromeSnapshot; mobile: boolean; close: () => void; collapse: () => void; newCharacter: () => void; newThread: () => void;
+export function Sidebar({ state, mobile, close, collapse, newCharacter, newThread, openSwitcher }: {
+  state: ChromeSnapshot; mobile: boolean; close: () => void; collapse: () => void; newCharacter: () => void; newThread: () => void; openSwitcher: () => void;
 }) {
-  const [query, setQuery] = useState("");
   useActiveRequests();
   const ready = state.status === "ready";
-  const needle = query.trim().toLowerCase();
-  const characters = state.characters.filter((character) => character.name.toLowerCase().includes(needle));
   const opening = state.opening;
   const shownCharacter = opening?.character ?? state.character;
   const shownThread = opening === null ? state.thread : opening.thread;
@@ -163,12 +161,11 @@ export function Sidebar({ state, mobile, close, collapse, newCharacter, newThrea
         {mobile ? <IconButton icon="close" label="Close sidebar" onClick={close} /> : <IconButton icon="panel" label="Collapse sidebar" onClick={collapse} />}
       </div>
     </div>
-    <label className="sidebar-search">
-      <Icon name="search" size={16} />
-      <input type="search" aria-label="Search characters" placeholder="Search characters" value={query} onChange={(event) => setQuery(event.target.value)} />
-    </label>
+    <button type="button" className="sidebar-search" onClick={() => { if (mobile) close(); openSwitcher(); }}>
+      <Icon name="search" size={16} /><span className="sidebar-search-text">Find a thread or command</span>{mobile ? null : <kbd>{`${keyLabel("Mod")} K`}</kbd>}
+    </button>
     <nav className="sidebar-list" aria-label="Characters">
-      {characters.map((character) => {
+      {state.characters.map((character) => {
         const selected = character.name === shownCharacter;
         const openingThis = opening !== null && opening.character === character.name && character.name !== state.character;
         return <div key={character.name} className="sidebar-group">
@@ -177,7 +174,6 @@ export function Sidebar({ state, mobile, close, collapse, newCharacter, newThrea
         </div>;
       })}
       {state.characters.length === 0 && ready ? <p className="sidebar-empty">No characters yet.</p> : null}
-      {state.characters.length > 0 && characters.length === 0 ? <p className="sidebar-empty">No characters match “{query}”.</p> : null}
     </nav>
     <div className="sidebar-footer">
       <StatusPicker ready={ready} store={presence} />

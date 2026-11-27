@@ -77,6 +77,26 @@
   border-color: var(--accent-line);
 }
 
+button.sidebar-search {
+  width: 100%;
+  font-size: var(--text-md);
+  text-align: left;
+  cursor: pointer;
+}
+
+button.sidebar-search:hover {
+  border-color: var(--line-3);
+  color: var(--text-2);
+}
+
+.sidebar-search-text {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .sidebar-search input {
   flex: 1;
   min-width: 0;
