@@ -407,7 +407,6 @@ export const DAEMON_EQUIVALENTS: readonly string[] = [
   "src/ledger/zoned.ts:candidatesFor: const probes = [guess - 12 「* → /」 HOUR_MS, guess, guess + 12 * H…",
   "src/ledger/zoned.ts:candidatesFor: …- 12 * HOUR_MS, guess, guess + 「12 → 13」 * HOUR_MS];",
   "src/ledger/gate.ts:projectedLoopCost: if (cap === undefined || cap 「<= → <」 1) return undefined;",
-  "src/config/token.ts:resolveDaemonToken: …nc(path, `${token}\\n`, { mode: 「0o600 → 385」 });",
   "src/web/auth.ts:WebSessions.#presented: return token === null 「|| → &&」 token === undefined || !/^[A-Z…",
   "src/web/auth.ts:WebSessions.#presented: …== null || token === undefined 「|| → &&」 !/^[A-Za-z0-9_-]{43}$/.test(to…",
   "src/web/auth.ts:LoginCodes.create: … of this.#codes) if (expiresAt 「<= → <」 now) this.#codes.delete(id);",
