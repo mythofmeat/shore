@@ -2,16 +2,40 @@
   "login": {
     "$schema": "https://json-schema.org/draft/2020-12/schema",
     "title": "WebLogin",
-    "type": "object",
-    "properties": {
-      "token": {
-        "type": "string"
+    "anyOf": [
+      {
+        "$ref": "#/$defs/WebPasswordLogin"
+      },
+      {
+        "$ref": "#/$defs/WebCodeLogin"
       }
-    },
-    "additionalProperties": false,
-    "required": [
-      "token"
-    ]
+    ],
+    "$defs": {
+      "WebPasswordLogin": {
+        "type": "object",
+        "properties": {
+          "password": {
+            "type": "string"
+          }
+        },
+        "additionalProperties": false,
+        "required": [
+          "password"
+        ]
+      },
+      "WebCodeLogin": {
+        "type": "object",
+        "properties": {
+          "code": {
+            "type": "string"
+          }
+        },
+        "additionalProperties": false,
+        "required": [
+          "code"
+        ]
+      }
+    }
   },
   "session": {
     "$schema": "https://json-schema.org/draft/2020-12/schema",
@@ -19891,17 +19915,10 @@
         "items": {
           "$ref": "#/$defs/WebDevice"
         }
-      },
-      "requests": {
-        "type": "array",
-        "items": {
-          "$ref": "#/$defs/WebSignInRequest"
-        }
       }
     },
     "required": [
-      "devices",
-      "requests"
+      "devices"
     ],
     "$defs": {
       "WebDevice": {
@@ -19964,27 +19981,6 @@
           "browser",
           "cli",
           "automation"
-        ]
-      },
-      "WebSignInRequest": {
-        "type": "object",
-        "properties": {
-          "code": {
-            "type": "string"
-          },
-          "name": {
-            "type": "string"
-          },
-          "expires_at": {
-            "type": "integer",
-            "format": "uint64",
-            "minimum": 0
-          }
-        },
-        "required": [
-          "code",
-          "name",
-          "expires_at"
         ]
       }
     }
@@ -20113,51 +20109,47 @@
       "name": {
         "type": "string"
       },
-      "secret": {
+      "password": {
         "type": "string"
       }
     },
     "additionalProperties": false,
     "required": [
       "name",
-      "secret"
+      "password"
     ]
   },
-  "sign_in_pending": {
+  "sign_in_state": {
     "$schema": "https://json-schema.org/draft/2020-12/schema",
-    "title": "WebSignInPending",
+    "title": "WebSignInState",
     "type": "object",
     "properties": {
-      "id": {
-        "type": "string"
-      },
-      "code": {
-        "type": "string"
-      },
-      "expires_at": {
-        "type": "integer",
-        "format": "uint64",
-        "minimum": 0
+      "password_set": {
+        "type": "boolean"
       }
     },
     "required": [
-      "id",
-      "code",
-      "expires_at"
+      "password_set"
     ]
   },
-  "sign_in_poll": {
+  "password": {
     "$schema": "https://json-schema.org/draft/2020-12/schema",
-    "title": "WebSignInPoll",
+    "title": "WebPassword",
     "type": "object",
     "properties": {
-      "secret": {
+      "password": {
         "type": "string"
+      },
+      "current": {
+        "type": [
+          "string",
+          "null"
+        ]
       }
     },
     "additionalProperties": false,
     "required": [
-      "secret"
+      "password"
     ]
   },
   "sign_in_granted": {
@@ -20171,24 +20163,6 @@
     },
     "required": [
       "token"
-    ]
-  },
-  "sign_in_decision": {
-    "$schema": "https://json-schema.org/draft/2020-12/schema",
-    "title": "WebSignInDecision",
-    "type": "object",
-    "properties": {
-      "code": {
-        "type": "string"
-      },
-      "allow": {
-        "type": "boolean"
-      }
-    },
-    "additionalProperties": false,
-    "required": [
-      "code",
-      "allow"
     ]
   },
   "hello": {

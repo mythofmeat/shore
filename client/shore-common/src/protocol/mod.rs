@@ -24,7 +24,7 @@ mod tests {
     }
 
     #[test]
-    fn a_tokenless_hello_still_parses() {
+    fn a_hello_with_only_its_client_parses() {
         let json = serde_json::json!({
             "type": "hello",
             "client_type": "tui",
@@ -32,7 +32,10 @@ mod tests {
         });
         let msg: ClientMessage = serde_json::from_value(json).expect("parses");
         match msg {
-            ClientMessage::Hello(h) => assert_eq!(h.token, None),
+            ClientMessage::Hello(h) => {
+                assert!(h.capabilities.is_empty(), "no capabilities");
+                assert_eq!((h.character, h.thread), (None, None), "no selection");
+            }
             ClientMessage::Message(_)
             | ClientMessage::Regen(_)
             | ClientMessage::Command(_)

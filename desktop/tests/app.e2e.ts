@@ -102,7 +102,7 @@ test("right-clicking a thread opens the page's own menu, with no native menu on 
 
 test("plain HTTP to another host still gets a secure context and notifications", async ({ daemon, launch }) => {
   const { page } = await launch({ address: `http://shore.test:${String(daemon.port)}` });
-  await expect(page.getByLabel("Sign-in code or link")).toBeVisible();
+  await expect(page.getByLabel("Password", { exact: true })).toBeVisible();
   expect(await page.evaluate(() => [isSecureContext, Notification.permission])).toEqual([true, "granted"]);
   expect(await page.evaluate(() => Notification.requestPermission())).toBe("granted");
   await signIn(page);
@@ -110,7 +110,7 @@ test("plain HTTP to another host still gets a secure context and notifications",
 
 test("links open in the system browser and the window stays on the daemon", async ({ daemon, launch }) => {
   const { app, page } = await launch({ address: daemon.origin });
-  await expect(page.getByLabel("Sign-in code or link")).toBeVisible();
+  await expect(page.getByLabel("Password", { exact: true })).toBeVisible();
   await app.evaluate(({ shell }) => {
     const opened: string[] = [];
     Object.assign(globalThis, { opened });
@@ -137,7 +137,7 @@ test("an unreachable daemon explains itself, retries, and the address can change
   await expect(page.getByLabel("Address")).toHaveValue(`http://127.0.0.1:${String(port)}`);
   await page.getByLabel("Address").fill(daemon.origin);
   await page.getByRole("button", { name: "Continue" }).click();
-  await expect(page.getByLabel("Sign-in code or link")).toBeVisible();
+  await expect(page.getByLabel("Password", { exact: true })).toBeVisible();
   expect((await settings()).address).toBe(daemon.origin);
 });
 
@@ -175,7 +175,7 @@ test("a starting daemon and a redirect elsewhere are explained", async ({ launch
 
 test("KWin draws the frame, closing keeps Shore running, and a notification click or second launch brings it back", async ({ daemon, launch, profile }) => {
   const { app, page, settings } = await launch({ address: daemon.origin });
-  await expect(page.getByLabel("Sign-in code or link")).toBeVisible();
+  await expect(page.getByLabel("Password", { exact: true })).toBeVisible();
   const bounds = await app.evaluate(({ BrowserWindow }) => {
     const window = BrowserWindow.getAllWindows()[0];
     window?.setSize(900, 700);

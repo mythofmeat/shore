@@ -11,8 +11,10 @@ import type { WebDevice } from "../protocol/WebDevice.ts";
 import type { WebDeviceList } from "../protocol/WebDeviceList.ts";
 import { browserName, LoginCodes, LoginFailures, WebSessions, type WebSession } from "./auth.ts";
 import { WEB_CONTRACT, WEB_PROTOCOL, WEB_SUBPROTOCOL } from "./contract.ts";
-import { validWebLogin, validWebLoginCode, validWebProblem, validWebSession, validWebArchiveExport, validWebArchiveInfo, validWebArchiveList, validWebRequestList, validWebPreferences, validWebAutomationKey, validWebDeviceChoice, validWebDeviceList, validWebNewDevice, validWebSignInDecision, validWebSignInPoll, validWebSignInStart } from "./contracts.ts";
-import { bearerToken, DEVICE_NAME_RULE, deviceName, DeviceStore, principalName, principalOwner, SignInRequests, type Principal } from "./devices.ts";
+import { validWebLogin, validWebLoginCode, validWebSession, validWebArchiveExport, validWebArchiveInfo, validWebArchiveList, validWebRequestList, validWebPreferences, validWebAutomationKey, validWebDeviceChoice, validWebDeviceList, validWebNewDevice } from "./contracts.ts";
+import { bearerToken, DEVICE_NAME_RULE, deviceName, DeviceStore, principalName, principalOwner, type Principal } from "./devices.ts";
+import { PasswordStore } from "./password.ts";
+import { BUSY, problem, SignInDoor } from "./sign_in.ts";
 import { commandRefusal, CONNECTION_ONLY_OPERATIONS, eventResponse, operationExists, operationResponse, refused, selected } from "./operations.ts";
 import { checked, DAEMON_VERSION, pageOrigin, readSmallJson, securityHeaders, webBinding, WebBodyTooLarge, WEB_LIMITS } from "./policy.ts";
 import { socketState, WebSocketPeers, type WebSocketState } from "./socket.ts";
@@ -27,7 +29,7 @@ import { PreferenceError, PreferenceStore, PREFERENCE_LIMITS } from "./preferenc
 export interface WebServerOptions {
   readonly config: WebConfig;
   readonly server: Server;
-  readonly authenticate: (token: string) => boolean;
+  readonly dataDir: string;
   readonly sessionLifetimeMs?: number;
   readonly loginCodeMs?: number;
   readonly handshakeTimeoutMs?: number;
@@ -35,7 +37,6 @@ export interface WebServerOptions {
   readonly archiveLimits?: Partial<ArchiveTransferLimits>;
   readonly recovery?: WebRecoveryOptions;
   readonly picture?: (file: string) => string | undefined;
-  readonly dataDir?: string;
   readonly transfers?: ArchiveSpool;
 }
 
@@ -47,19 +48,11 @@ export interface RunningWebServer {
   stop(): Promise<void>;
 }
 
-function problem(status: number, code: WebProblem["code"], message: string): Response {
-  const body: WebProblem = { code, message };
-  if (!validWebProblem(body)) throw new Error("Invalid browser error response");
-  return Response.json(body, { status, headers: securityHeaders() });
-}
-
 const STATUS_CODES: Readonly<Record<number, WebProblem["code"]>> = { 401: "unauthorized", 404: "not_found", 429: "too_many_requests" };
 
 export function statusProblem(status: number, message: string): Response {
   return problem(status, STATUS_CODES[status] ?? "invalid_request", message);
 }
-
-const OWNER: Principal = { kind: "owner" };
 
 async function jsonBody(request: Request): Promise<unknown> {
   try { return await readSmallJson(request, WEB_LIMITS.loginBytes); } catch (error) {
@@ -89,48 +82,40 @@ export function startWebServer(options: WebServerOptions): RunningWebServer {
   let stopping: Promise<void> | undefined;
   const loginFailures = new LoginFailures(WEB_LIMITS.loginAttemptsPerMinute);
   const codes = new LoginCodes(options.loginCodeMs ?? WEB_LIMITS.loginCodeMs, WEB_LIMITS.loginCodes);
-  let loginRequests = 0;
   let archives: ArchiveTransfers;
   let recovery: WebRecovery | undefined;
   const preferences = new PreferenceStore(options.dataDir);
-  const devices = options.dataDir === undefined ? undefined : new DeviceStore(options.dataDir);
-  const signIns = new SignInRequests(options.loginCodeMs ?? WEB_LIMITS.loginCodeMs, WEB_LIMITS.signInRequests);
+  const devices = new DeviceStore(options.dataDir);
+  const door = new SignInDoor(new PasswordStore(options.dataDir), devices, loginFailures, config.max_connections);
 
   const deviceList = (principal: Principal): WebDeviceList => {
     const browsers = sessions.list().map((session): WebDevice => ({
       id: session.id, kind: "browser", name: session.name, created_at: session.createdAt, last_used_at: session.lastUsedAt, expires_at: session.expiresAt,
       current: principal.kind === "browser" && principal.session.id === session.id,
     }));
-    const others = (devices?.list() ?? []).map((device): WebDevice => ({
+    const others = devices.list().map((device): WebDevice => ({
       id: device.id, kind: device.kind, name: device.name, created_at: device.createdAt,
       ...(device.lastUsedAt === undefined ? {} : { last_used_at: device.lastUsedAt }),
       ...(device.operations === undefined ? {} : { operations: [...device.operations] }),
       current: principal.kind === "device" && principal.device.id === device.id,
     }));
-    return checked(validWebDeviceList, { devices: [...browsers, ...others], requests: signIns.pending() }, "device list");
+    return checked(validWebDeviceList, { devices: [...browsers, ...others] }, "device list");
   };
 
-  const signIn = async (request: Request, url: URL): Promise<Response> => {
+  const signIn = async (request: Request, url: URL, client: string): Promise<Response> => {
     if (["cross-site", "same-site"].includes(request.headers.get("sec-fetch-site") ?? "")) return problem(403, "forbidden", "Another site’s page can’t use this daemon");
-    if (devices === undefined) return problem(503, "unavailable", "This daemon keeps no device sign-ins");
     const body = await jsonBody(request);
-    if (url.pathname === "/api/sign-in") {
-      if (!validWebSignInStart(body) || body.secret.length < 32) return problem(400, "invalid_request", "Name this device and send a secret of at least 32 characters");
-      const name = deviceName(body.name);
-      if (name === undefined) return problem(400, "invalid_request", DEVICE_NAME_RULE);
-      const pending = signIns.start(name, body.secret);
-      if (pending === undefined) return problem(429, "too_many_requests", "Too many devices are waiting to sign in; approve or refuse them, or wait five minutes");
-      return Response.json(pending, { headers: securityHeaders() });
+    return await door.attempt(async () => url.pathname === "/api/password" ? await door.password(body, client) : await door.cli(body, client));
+  };
+
+  const redeemed = (client: string, code: string): Response | undefined => {
+    if (codes.redeem(code)) {
+      loginFailures.succeeded(client);
+      return undefined;
     }
-    const id = /^\/api\/sign-in\/([a-f0-9-]{36})$/.exec(url.pathname)?.[1];
-    if (id === undefined) return problem(404, "not_found", "Unknown sign-in endpoint");
-    if (!validWebSignInPoll(body)) return problem(400, "invalid_request", "Send the secret this sign-in started with");
-    const state = signIns.poll(id, body.secret);
-    if (state === undefined) return problem(404, "not_found", "This sign-in request expired or was never made; start again");
-    if (state === "waiting") return Response.json({}, { status: 202, headers: securityHeaders() });
-    if (state === "denied") return problem(403, "forbidden", "The sign-in was refused");
-    const created = devices.create("cli", state.allowed);
-    return Response.json({ token: created.token }, { headers: securityHeaders() });
+    if (loginFailures.refused(client)) return problem(429, "too_many_requests", BUSY);
+    loginFailures.failed(client);
+    return problem(401, "unauthorized", "That sign-in code has expired or was already used");
   };
 
   const shared = async (request: Request, url: URL, http: Bun.Server<WebSocketState>, principal: Principal): Promise<Response | undefined> => {
@@ -185,7 +170,6 @@ export function startWebServer(options: WebServerOptions): RunningWebServer {
       if (!validWebAutomationKey(body)) return problem(400, "invalid_request", "Name the key and list the operations it may run");
       const unknown = body.operations.filter((name) => !operationExists(name) || CONNECTION_ONLY_OPERATIONS.has(name));
       if (body.operations.length === 0 || unknown.length > 0) return problem(400, "invalid_request", unknown.length > 0 ? `A key can't run ${unknown.join(", ")}` : "Choose at least one operation the key may run");
-      if (devices === undefined) return problem(503, "unavailable", "This daemon keeps no device sign-ins");
       const name = deviceName(body.name);
       if (name === undefined) return problem(400, "invalid_request", DEVICE_NAME_RULE);
       const created = devices.create("automation", name, body.operations);
@@ -197,13 +181,7 @@ export function startWebServer(options: WebServerOptions): RunningWebServer {
       if (!validWebDeviceChoice(body)) return problem(400, "invalid_request", "Say which device to sign out");
       const browser = sessions.get(body.id);
       if (browser !== undefined) sessions.revoke(browser);
-      else if (devices?.revoke(body.id) !== true) return problem(404, "not_found", "No device has that id");
-      return new Response(null, { status: 204, headers: securityHeaders() });
-    }
-    if (url.pathname === "/api/devices/decide") {
-      const body = await jsonBody(request);
-      if (!validWebSignInDecision(body)) return problem(400, "invalid_request", "Give the code the other device shows, and whether to let it in");
-      if (!signIns.decide(body.code, body.allow)) return problem(404, "not_found", `No device is waiting with the code ${body.code}`);
+      else if (!devices.revoke(body.id)) return problem(404, "not_found", "No device has that id");
       return new Response(null, { status: 204, headers: securityHeaders() });
     }
     return undefined;
@@ -236,17 +214,17 @@ export function startWebServer(options: WebServerOptions): RunningWebServer {
         headers.set("content-type", Bun.file(path).type);
         return new Response(request.method === "HEAD" ? null : Bun.file(path), { headers });
       }
-      if ((url.pathname === "/api/sign-in" || url.pathname.startsWith("/api/sign-in/")) && request.method === "POST") {
-        try { return await signIn(request, url); } catch (error) {
+      if (url.pathname === "/api/sign-in" && request.method === "GET") return door.state();
+      if ((url.pathname === "/api/sign-in" || url.pathname === "/api/password") && request.method === "POST") {
+        try { return await signIn(request, url, http.requestIP(request)?.address ?? "unknown"); } catch (error) {
           return error instanceof WebBodyTooLarge ? problem(413, "invalid_request", error.message) : problem(503, "unavailable", "The daemon couldn’t record this sign-in");
         }
       }
       const bearer = bearerToken(request);
       if (bearer !== undefined) {
-        const device = options.authenticate(bearer) ? undefined : devices?.authenticate(bearer);
-        const principal: Principal | undefined = device === undefined ? (options.authenticate(bearer) ? OWNER : undefined) : { kind: "device", device };
-        if (principal === undefined) return problem(401, "unauthorized", "This credential isn’t signed in to this daemon; sign in again");
-        try { return await shared(request, url, http, principal) ?? problem(404, "not_found", "Unknown endpoint for a signed-in device"); } catch (error) {
+        const device = devices.authenticate(bearer);
+        if (device === undefined) return problem(401, "unauthorized", "This credential isn’t signed in to this daemon; sign in again");
+        try { return await shared(request, url, http, { kind: "device", device }) ?? problem(404, "not_found", "Unknown endpoint for a signed-in device"); } catch (error) {
           return error instanceof WebBodyTooLarge ? problem(413, "invalid_request", error.message) : problem(503, "unavailable", "The daemon couldn’t complete this request");
         }
       }
@@ -256,33 +234,23 @@ export function startWebServer(options: WebServerOptions): RunningWebServer {
 
       if (url.pathname === "/api/login" && request.method === "POST") {
         const client = http.requestIP(request)?.address ?? "unknown";
-        if (loginRequests >= config.max_connections) {
-          return problem(429, "too_many_requests", "Too many sign-in attempts; try again later");
-        }
-        loginRequests += 1;
         try {
-          const body = await readSmallJson(request, WEB_LIMITS.loginBytes);
-          if (!validWebLogin(body)) {
-            return problem(400, "invalid_request", "Supply a token to sign in");
-          }
-          if (!codes.redeem(body.token)) {
-            if (loginFailures.refused(client)) return problem(429, "too_many_requests", "Too many sign-in attempts; try again later");
-            loginFailures.failed(client);
-            return problem(401, "unauthorized", "The token was rejected");
-          }
-          loginFailures.succeeded(client);
-          const previous = sessions.read(request, secureCookie);
-          if (previous !== undefined) sessions.revoke(previous);
-          const session = sessions.create(browserName(request.headers.get("user-agent")));
-          if (session === undefined) return problem(503, "unavailable", "The daemon is stopping");
-          const headers = securityHeaders();
-          headers.set("set-cookie", sessions.cookie(session, secureCookie));
-          return Response.json(sessionInfo(session, config.max_queued_bytes), { headers });
+          return await door.attempt(async () => {
+            const body = await readSmallJson(request, WEB_LIMITS.loginBytes);
+            if (!validWebLogin(body)) return problem(400, "invalid_request", "Give the password, or a sign-in code");
+            const turnedAway = "password" in body ? await door.refusal(client, body.password) : redeemed(client, body.code);
+            if (turnedAway !== undefined) return turnedAway;
+            const previous = sessions.read(request, secureCookie);
+            if (previous !== undefined) sessions.revoke(previous);
+            const session = sessions.create(browserName(request.headers.get("user-agent")));
+            if (session === undefined) return problem(503, "unavailable", "The daemon is stopping");
+            const headers = securityHeaders();
+            headers.set("set-cookie", sessions.cookie(session, secureCookie));
+            return Response.json(sessionInfo(session, config.max_queued_bytes), { headers });
+          });
         } catch (error) {
           if (error instanceof WebBodyTooLarge) return problem(413, "invalid_request", error.message);
           return problem(400, "invalid_request", "Invalid sign-in request");
-        } finally {
-          loginRequests -= 1;
         }
       }
 

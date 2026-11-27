@@ -6,6 +6,8 @@ import { defaultWebConfig } from "../src/config/app.ts";
 import { Server } from "../src/swp/server.ts";
 const LIMITS = { keys: 64, valueBytes: 16_384, bodyBytes: 262_144 };
 import { startWebServer } from "../src/web/server.ts";
+import { DEVICES_FILE } from "../src/web/devices.ts";
+import { sessionDigest } from "../src/web/recovery.ts";
 
 const cleanups: (() => Promise<unknown> | void)[] = [];
 afterEach(async () => { for (const cleanup of cleanups.splice(0).reverse()) await cleanup(); });
@@ -13,18 +15,19 @@ afterEach(async () => { for (const cleanup of cleanups.splice(0).reverse()) awai
 const TOKEN = "web-preferences-test-token";
 
 async function daemon(dataDir?: string) {
+  const data = dataDir ?? await mkdtemp(join(tmpdir(), "shore-web-preferences-"));
+  await writeFile(join(data, DEVICES_FILE), JSON.stringify({ version: 1, devices: [{ id: "test-cli", kind: "cli", name: "Test CLI", created_at: 0, digest: sessionDigest(TOKEN) }] }));
   const web = startWebServer({
     server: new Server(),
-    authenticate: (token) => token === TOKEN,
     config: { ...defaultWebConfig(), enabled: true, bind_addr: "127.0.0.1:0" },
-    ...(dataDir === undefined ? {} : { dataDir }),
+    dataDir: data,
   });
   web.activate();
   cleanups.push(async () => { await web.stop(); });
   const post = (path: string, cookie: string, body?: string, type = "application/json") =>
     fetch(`${web.origin}${path}`, { method: "POST", headers: { origin: web.origin, cookie, ...(body === undefined ? {} : { "content-type": type }) }, ...(body === undefined ? {} : { body }) });
   const code = async () => ((await (await fetch(`${web.origin}/api/login-code`, { method: "POST", headers: { authorization: `Bearer ${TOKEN}` } })).json()) as { code: string }).code;
-  const login = await post("/api/login", "", JSON.stringify({ token: await code() }));
+  const login = await post("/api/login", "", JSON.stringify({ code: await code() }));
   const cookie = login.headers.get("set-cookie")?.split(";", 1)[0] ?? "";
   const answer = async (response: Response) => [response.status, await response.json()];
   return {
@@ -39,7 +42,7 @@ test("settings one browser saves are what every signed-in browser reads, and a l
   const d = await daemon();
   expect(await d.list()).toEqual([200, { values: {} }]);
   expect(await d.save({ "shore.theme": "fog", "shore.vim-mode": "true" })).toEqual([200, { values: { "shore.theme": "fog", "shore.vim-mode": "true" } }]);
-  const other = (await d.post("/api/login", "", JSON.stringify({ token: await d.code() }))).headers.get("set-cookie")?.split(";", 1)[0] ?? "";
+  const other = (await d.post("/api/login", "", JSON.stringify({ code: await d.code() }))).headers.get("set-cookie")?.split(";", 1)[0] ?? "";
   expect(other).not.toBe(d.cookie);
   expect(await d.save({ "shore.theme": "default", "shore.view.v1.metadata": "on" }, other)).toEqual([200, { values: { "shore.theme": "default", "shore.vim-mode": "true", "shore.view.v1.metadata": "on" } }]);
   expect(await d.list()).toEqual([200, { values: { "shore.theme": "default", "shore.vim-mode": "true", "shore.view.v1.metadata": "on" } }]);

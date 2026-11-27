@@ -50,7 +50,7 @@ function SignInCode() {
   const live = code !== undefined && code.expires_at > now ? code : undefined;
   const shown = origin === undefined || live === undefined ? undefined : { link: loginLink(origin, live.code), left: live.expires_at - now };
   const show = () => void run(async () => { const created = await workspace.connection.loginCode(); setNow(Date.now()); setCode(created); return undefined; });
-  return <SettingsSection title="Sign in a browser" description="Open this on the phone or computer to sign in. Each code works once and expires after five minutes.">
+  return <SettingsSection title="Sign in a browser" description="Scan this or open the link on the other device instead of typing the password there. Each code works once and expires after five minutes.">
     <div className="rows padded">
       <label className="field">
         <span>Address the other device opens</span>
@@ -68,6 +68,43 @@ function SignInCode() {
           <p className="setting-description">Expires in {countdown(shown.left)}</p>
         </div>
       </div> : code !== undefined && live === undefined ? <p className="setting-description">That code expired. Show a new one.</p> : null}
+    </div>
+  </SettingsSection>;
+}
+
+function PasswordSection() {
+  const [set, setSet] = useState<boolean>();
+  const [current, setCurrent] = useState("");
+  const [next, setNext] = useState("");
+  const [again, setAgain] = useState("");
+  const { busy, run } = useAction();
+  useEffect(() => {
+    workspace.connection.signInState().then((state) => { setSet(state.password_set); }, () => {});
+  }, []);
+  const save = () => void run(async () => {
+    if (set === true) await workspace.connection.changePassword(current, next);
+    else await workspace.connection.choosePassword(next);
+    setCurrent(""); setNext(""); setAgain(""); setSet(true);
+    return set === true ? "Password changed" : "Password set";
+  });
+  return <SettingsSection title="Password" description={set === false
+    ? "This daemon has no password yet. Choose one, and any browser or command line can sign in with it."
+    : "Every browser and command line signs in with this password. Changing it leaves everything below signed in; sign out any you don’t trust."}>
+    <div className="rows padded">
+      {set === true ? <label className="field">
+        <span>Current password</span>
+        <input className="input" type="password" autoComplete="current-password" value={current} onChange={(event) => setCurrent(event.target.value)} />
+      </label> : null}
+      <label className="field">
+        <span>New password</span>
+        <input className="input" type="password" autoComplete="new-password" value={next} onChange={(event) => setNext(event.target.value)} />
+      </label>
+      <label className="field">
+        <span>Type it again</span>
+        <input className="input" type="password" autoComplete="new-password" value={again} onChange={(event) => setAgain(event.target.value)} />
+      </label>
+      {again !== "" && again !== next ? <p className="form-error" role="alert">The two passwords differ.</p> : null}
+      <div className="actions-row tight"><button type="button" className="button primary" disabled={busy || set === undefined || next === "" || again !== next || (set && current === "")} onClick={save}>{set === true ? "Change password" : "Set password"}</button></div>
     </div>
   </SettingsSection>;
 }
@@ -121,7 +158,6 @@ export function DevicesPage({ state }: { state: ChromeSnapshot }) {
     const timer = setInterval(refresh, 5_000);
     return () => { clearInterval(timer); };
   }, [refresh]);
-  const decide = (code: string, allow: boolean) => void run(async () => { await workspace.connection.decideSignIn(code, allow); refresh(); return allow ? "Signed in" : "Refused"; });
   const revoke = (device: WebDevice) => void run(async () => {
     await workspace.connection.revokeDevice(device.id);
     refresh();
@@ -129,13 +165,8 @@ export function DevicesPage({ state }: { state: ChromeSnapshot }) {
   });
   return <>
     <p className="settings-description">Every browser, command line and automation key that can reach this daemon. Sign any of them out here.</p>
-    {list !== undefined && list.requests.length > 0 ? <SettingsSection title="Waiting to sign in" description="Allow only a code you can see on your own device.">
-      <div className="rows">{list.requests.map((request) => <SettingRow key={request.code} label={<>{request.name} <code>{request.code}</code></>} description={`Expires in ${countdown(request.expires_at - now)}`}>
-        <div className="actions-row tight"><button type="button" className="button primary" disabled={busy} onClick={() => decide(request.code, true)}>Allow</button>
-          <button type="button" className="button" disabled={busy} onClick={() => decide(request.code, false)}>Refuse</button></div>
-      </SettingRow>)}</div>
-    </SettingsSection> : null}
-    <SettingsSection title="Signed in" description={<>To sign in a command line, run <code>shore sign-in {location.origin}</code> there and allow the code it shows.</>}>
+    <PasswordSection />
+    <SettingsSection title="Signed in" description={<>To sign in a command line, run <code>shore sign-in {location.origin}</code> there and give the password.</>}>
       {error !== "" ? <p className="form-error" role="alert">{error}</p> : null}
       <div className="rows">{(list?.devices ?? []).map((device) => <SettingRow key={device.id} label={<>{device.name}{device.current ? <span className="device-current"> · this one</span> : null}</>} description={deviceDetail(device, now)}>
         <button type="button" className="button" disabled={busy} onClick={() => revoke(device)}>Sign out</button>

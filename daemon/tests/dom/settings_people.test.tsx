@@ -11,26 +11,30 @@ const details = (extra: Record<string, unknown> = {}) => ({
 });
 
 const NOW = new Date("2026-11-10T00:00:00Z").getTime();
-const devices = (requests: { code: string; name: string; expires_at: number }[] = []) => ({
+const devices = () => ({
   devices: [
     { id: "b1", kind: "browser" as const, name: "Firefox on Linux", created_at: 0, last_used_at: NOW - 30_000, expires_at: NOW + 1, current: true },
     { id: "c1", kind: "cli" as const, name: "desktop", created_at: 0, last_used_at: NOW - 3 * 3_600_000, current: false },
     { id: "k1", kind: "automation" as const, name: "Phone", created_at: 0, operations: ["presence", "status"], current: false },
   ],
-  requests,
 });
 
-function stubDevices(list = devices()) {
+function stubDevices(list = devices(), passwordSet = true) {
   const connection = app.state().workspace.connection;
   const listed = spyOn(connection, "devices").mockImplementation(async () => await Promise.resolve(list));
-  const decided = spyOn(connection, "decideSignIn").mockImplementation(async () => { await Promise.resolve(); });
+  const asked = spyOn(connection, "signInState").mockImplementation(async () => await Promise.resolve({ password_set: passwordSet }));
+  const chosen = spyOn(connection, "choosePassword").mockImplementation(async () => { await Promise.resolve(); });
+  const changed = spyOn(connection, "changePassword").mockImplementation(async () => { await Promise.resolve(); });
   const revoked = spyOn(connection, "revokeDevice").mockImplementation(async () => { await Promise.resolve(); });
   const made = spyOn(connection, "automationKey").mockImplementation(async (name, operations) => await Promise.resolve({
     device: { id: "k2", kind: "automation" as const, name, created_at: NOW, operations: [...operations], current: false }, token: "shore_secret-key",
   }));
-  app.restores.push(() => { listed.mockRestore(); decided.mockRestore(); revoked.mockRestore(); made.mockRestore(); });
-  return { listed, decided, revoked, made };
+  app.restores.push(() => { listed.mockRestore(); asked.mockRestore(); chosen.mockRestore(); changed.mockRestore(); revoked.mockRestore(); made.mockRestore(); });
+  return { listed, asked, chosen, changed, revoked, made };
 }
+
+const passwordSection = (host: HTMLElement) => [...host.querySelectorAll(".settings-section")].find((section) => section.querySelector("h2")?.textContent === "Password") ?? host;
+const field = (host: HTMLElement, label: string) => [...passwordSection(host).querySelectorAll("label.field")].find((item) => item.querySelector("span")?.textContent === label)?.querySelector("input") ?? null;
 
 describe("the devices page", () => {
   test("lists every signed-in device with what it is and when it was last used, and signs one out", async () => {
@@ -56,22 +60,97 @@ describe("the devices page", () => {
     await view.unmount();
   });
 
-  test("lets a waiting command line in, or refuses it, by the code it shows", async () => {
+  test("changes the password with the current one and the new one typed twice, and says it did", async () => {
     const { DevicesPage } = await import("../../src/browser/settings/Devices.tsx");
-    jest.useFakeTimers();
-    app.restores.push(() => { jest.useRealTimers(); });
-    jest.setSystemTime(NOW);
-    const stub = stubDevices(devices([{ code: "4F7K", name: "laptop", expires_at: NOW + 65_000 }, { code: "ZZ22", name: "stranger", expires_at: NOW + 5_000 }]));
+    const { toasts } = await import("../../src/browser/ui/toast.tsx");
+    const stub = stubDevices();
+    const shown = spyOn(toasts, "show");
+    app.restores.push(() => { shown.mockRestore(); });
     const view = await mount(<DevicesPage state={app.state().workspace.getSnapshot()} />);
     await acting(() => Promise.resolve());
-    const waiting = view.host.querySelector(".settings-section");
-    expect(waiting?.textContent).toContain("laptop 4F7K");
-    expect(waiting?.textContent).toContain("Expires in 1:05");
-    await click(button(waiting ?? view.host, "Allow"));
-    await click([...(waiting?.querySelectorAll("button") ?? [])].filter((item) => item.textContent === "Refuse")[1]);
+    const section = passwordSection(view.host);
+    expect(section.querySelector(".setting-description, p")?.textContent).toBe("Every browser and command line signs in with this password. Changing it leaves everything below signed in; sign out any you don’t trust.");
+    expect([...section.querySelectorAll("input")].map((input) => [input.type, input.autocomplete])).toEqual([["password", "current-password"], ["password", "new-password"], ["password", "new-password"]]);
+    const change = button(section, "Change password");
+    expect(change.disabled).toBe(true);
+    await type(field(view.host, "New password"), "battery staple");
+    await type(field(view.host, "Type it again"), "battery stapler");
+    expect([section.querySelector("[role=alert]")?.textContent, change.disabled]).toEqual(["The two passwords differ.", true]);
+    await type(field(view.host, "Type it again"), "battery staple");
+    expect([section.querySelector("[role=alert]"), change.disabled], "the current one is still missing").toEqual([null, true]);
+    await type(field(view.host, "Current password"), "correct horse");
+    await click(change);
     await acting(() => Promise.resolve());
-    expect(stub.decided.mock.calls).toEqual([["4F7K", true], ["ZZ22", false]]);
+    expect([stub.changed.mock.calls, stub.chosen.mock.calls, shown.mock.calls.at(-1)]).toEqual([[["correct horse", "battery staple"]], [], ["Password changed"]]);
+    expect([...section.querySelectorAll("input")].map((input) => input.value), "the fields start over").toEqual(["", "", ""]);
     await view.unmount();
+  });
+
+  test("with no password yet, one is chosen without a current one, and then the section asks for it", async () => {
+    const { DevicesPage } = await import("../../src/browser/settings/Devices.tsx");
+    const { toasts } = await import("../../src/browser/ui/toast.tsx");
+    const stub = stubDevices(devices(), false);
+    const shown = spyOn(toasts, "show");
+    app.restores.push(() => { shown.mockRestore(); });
+    const view = await mount(<DevicesPage state={app.state().workspace.getSnapshot()} />);
+    await acting(() => Promise.resolve());
+    const section = passwordSection(view.host);
+    expect(section.textContent).toContain("This daemon has no password yet. Choose one, and any browser or command line can sign in with it.");
+    expect(field(view.host, "Current password")).toBeNull();
+    await type(field(view.host, "New password"), "first pass");
+    await type(field(view.host, "Type it again"), "first pass");
+    await click(button(section, "Set password"));
+    await acting(() => Promise.resolve());
+    expect([stub.chosen.mock.calls, stub.changed.mock.calls, shown.mock.calls.at(-1)]).toEqual([[["first pass"]], [], ["Password set"]]);
+    expect(field(view.host, "Current password"), "now there is one to give").not.toBeNull();
+    expect(button(section, "Change password").disabled).toBe(true);
+    await type(field(view.host, "Current password"), "first pass");
+    expect(button(section, "Change password").disabled, "a current one alone changes nothing").toBe(true);
+    await view.unmount();
+  });
+
+  test("the password can't be saved twice at once", async () => {
+    const { DevicesPage } = await import("../../src/browser/settings/Devices.tsx");
+    const stub = stubDevices(devices(), false);
+    let release = (): void => {};
+    stub.chosen.mockImplementation(async () => { await new Promise<void>((resolve) => { release = resolve; }); });
+    const view = await mount(<DevicesPage state={app.state().workspace.getSnapshot()} />);
+    await acting(() => Promise.resolve());
+    await type(field(view.host, "New password"), "first pass");
+    await type(field(view.host, "Type it again"), "first pass");
+    await click(button(passwordSection(view.host), "Set password"));
+    expect(button(passwordSection(view.host), "Set password").disabled, "busy while it is saved").toBe(true);
+    release();
+    await acting(() => Promise.resolve());
+    expect(stub.chosen.mock.calls).toHaveLength(1);
+    await view.unmount();
+  });
+
+  test("until the daemon says whether it has a password, nothing can be saved, and a refused change says why", async () => {
+    const { DevicesPage } = await import("../../src/browser/settings/Devices.tsx");
+    const { toasts } = await import("../../src/browser/ui/toast.tsx");
+    const stub = stubDevices();
+    stub.asked.mockImplementation(async () => { await Promise.resolve(); throw new Error("offline"); });
+    const shown = spyOn(toasts, "show");
+    app.restores.push(() => { shown.mockRestore(); });
+    const view = await mount(<DevicesPage state={app.state().workspace.getSnapshot()} />);
+    await acting(() => Promise.resolve());
+    await type(field(view.host, "New password"), "first pass");
+    await type(field(view.host, "Type it again"), "first pass");
+    expect(button(passwordSection(view.host), "Set password").disabled).toBe(true);
+    await view.unmount();
+    stub.asked.mockImplementation(async () => await Promise.resolve({ password_set: true }));
+    stub.changed.mockImplementation(async () => { await Promise.resolve(); throw new Error("That password isn’t right"); });
+    const again = await mount(<DevicesPage state={app.state().workspace.getSnapshot()} />);
+    await acting(() => Promise.resolve());
+    await type(field(again.host, "Current password"), "not it");
+    await type(field(again.host, "New password"), "battery staple");
+    await type(field(again.host, "Type it again"), "battery staple");
+    await click(button(passwordSection(again.host), "Change password"));
+    await acting(() => Promise.resolve());
+    expect(shown.mock.calls.at(-1)).toEqual(["That password isn’t right", "error"]);
+    expect(field(again.host, "Current password")?.value, "nothing is cleared").toBe("not it");
+    await again.unmount();
   });
 
   test("makes an automation key for the ticked operations and shows it once, with how to use it", async () => {
@@ -99,9 +178,9 @@ describe("the devices page", () => {
 
   test("starts from this page's address, says which addresses won't do, and remembers what was typed", async () => {
     const { DevicesPage } = await import("../../src/browser/settings/Devices.tsx");
-    stubDevices({ devices: [], requests: [] });
+    stubDevices({ devices: [] });
     const view = await mount(<DevicesPage state={app.state().workspace.getSnapshot()} />);
-    const input = view.host.querySelector("input");
+    const input = view.host.querySelector<HTMLInputElement>("input.mono");
     const show = button(view.host, "Show sign-in code");
     expect([input?.value, input?.placeholder, show.disabled]).toEqual(["http://shore.test:7340", "my-computer:7340", false]);
     await type(input, "not a place/with/path");
@@ -115,7 +194,7 @@ describe("the devices page", () => {
     expect(view.host.textContent).not.toContain("only reaches this computer");
     await view.unmount();
     const again = await mount(<DevicesPage state={app.state().workspace.getSnapshot()} />);
-    expect(again.host.querySelector("input")?.value).toBe("desktop.lan");
+    expect(again.host.querySelector<HTMLInputElement>("input.mono")?.value).toBe("desktop.lan");
     localStorage.clear();
   });
 
@@ -126,14 +205,14 @@ describe("the devices page", () => {
     app.restores.push(() => { jest.useRealTimers(); });
     const start = new Date("2026-11-10T00:00:00Z").getTime();
     jest.setSystemTime(start);
-    stubDevices({ devices: [], requests: [] });
+    stubDevices({ devices: [] });
     const codes = spyOn(app.state().workspace.connection, "loginCode").mockImplementation(async () => await Promise.resolve({ code: "c0de", expires_at: Date.now() + 65_000 }));
     const written: string[] = [];
     Object.defineProperty(navigator, "clipboard", { configurable: true, value: { writeText: async (text: string) => { await Promise.resolve(); written.push(text); } } });
     const shown = spyOn(toasts, "show");
     app.restores.push(() => { codes.mockRestore(); shown.mockRestore(); Reflect.deleteProperty(navigator, "clipboard"); });
     const view = await mount(<DevicesPage state={app.state().workspace.getSnapshot()} />);
-    await type(view.host.querySelector("input"), "desktop.lan");
+    await type(view.host.querySelector<HTMLInputElement>("input.mono"), "desktop.lan");
     await click(button(view.host, "Show sign-in code"));
     await acting(() => Promise.resolve());
     expect([view.host.querySelector(".login-code-link")?.textContent, view.host.querySelector("svg.qr-code")?.getAttribute("aria-label")]).toEqual(["http://desktop.lan:7340/#login=c0de", "Sign-in code"]);
@@ -160,39 +239,16 @@ describe("the devices page", () => {
     expect([-1_000, 0, 59_000, 60_000, 60_001, 65_000].map(countdown)).toEqual(["0:00", "0:00", "0:59", "1:00", "1:01", "1:05"]);
   });
 
-  test("shows the waiting section only while a command line waits, even a single one", async () => {
-    const { DevicesPage } = await import("../../src/browser/settings/Devices.tsx");
-    stubDevices(devices());
-    const none = await mount(<DevicesPage state={app.state().workspace.getSnapshot()} />);
-    await acting(() => Promise.resolve());
-    expect([...none.host.querySelectorAll("h2")].map((title) => title.textContent)).not.toContain("Waiting to sign in");
-    await none.unmount();
-    app.restores.splice(0).reverse().forEach((restore) => { restore(); });
-    stubDevices(devices([{ code: "4F7K", name: "laptop", expires_at: Date.now() + 60_000 }]));
-    const one = await mount(<DevicesPage state={app.state().workspace.getSnapshot()} />);
-    await acting(() => Promise.resolve());
-    expect([...one.host.querySelectorAll("h2")].map((title) => title.textContent)).toContain("Waiting to sign in");
-    await one.unmount();
-  });
-
-  test("looks again at once after letting a device in, refusing one or signing one out, and says which it did", async () => {
+  test("looks again at once after signing a device out, and says it did", async () => {
     const { DevicesPage } = await import("../../src/browser/settings/Devices.tsx");
     const { toasts } = await import("../../src/browser/ui/toast.tsx");
-    const stub = stubDevices(devices([{ code: "4F7K", name: "laptop", expires_at: Date.now() + 60_000 }, { code: "ZZ22", name: "stranger", expires_at: Date.now() + 60_000 }]));
+    const stub = stubDevices(devices());
     const shown = spyOn(toasts, "show");
     app.restores.push(() => { shown.mockRestore(); });
     const view = await mount(<DevicesPage state={app.state().workspace.getSnapshot()} />);
     await acting(() => Promise.resolve());
-    const waiting = view.host.querySelector(".settings-section") ?? view.host;
-    let before = stub.listed.mock.calls.length;
-    await click(button(waiting, "Allow"));
-    await acting(() => Promise.resolve());
-    expect([stub.listed.mock.calls.length, shown.mock.calls.at(-1)]).toEqual([before + 1, ["Signed in"]]);
-    before = stub.listed.mock.calls.length;
-    await click(button(waiting, "Refuse"));
-    await acting(() => Promise.resolve());
-    expect([stub.listed.mock.calls.length, shown.mock.calls.at(-1)]).toEqual([before + 1, ["Refused"]]);
-    before = stub.listed.mock.calls.length;
+    expect([...view.host.querySelectorAll("h2")].map((title) => title.textContent)).toEqual(["Password", "Signed in", "Sign in a browser", "New automation key"]);
+    const before = stub.listed.mock.calls.length;
     const rows = [...view.host.querySelectorAll(".setting-row")].filter((row) => row.querySelector(".setting-label")?.textContent === "desktop");
     await click(button(rows[0] ?? view.host, "Sign out"));
     await acting(() => Promise.resolve());
@@ -206,7 +262,7 @@ describe("the devices page", () => {
     app.restores.push(() => { jest.useRealTimers(); });
     jest.setSystemTime(NOW);
     const answers: (() => Promise<unknown>)[] = [async () => { await Promise.resolve(); throw new Error("Keys can't list devices"); }, async () => { await Promise.resolve(); throw "plainly not"; }];
-    const list = { devices: [{ id: "c1", kind: "cli" as const, name: "desktop", created_at: 0, last_used_at: NOW, current: false }], requests: [] };
+    const list = { devices: [{ id: "c1", kind: "cli" as const, name: "desktop", created_at: 0, last_used_at: NOW, current: false }] };
     const listed = spyOn(app.state().workspace.connection, "devices").mockImplementation(async () => await ((answers.shift() ?? (async () => await Promise.resolve(list)))() as Promise<typeof list>));
     app.restores.push(() => { listed.mockRestore(); });
     const view = await mount(<DevicesPage state={app.state().workspace.getSnapshot()} />);
@@ -269,13 +325,13 @@ describe("the devices page", () => {
     jest.useFakeTimers();
     app.restores.push(() => { jest.useRealTimers(); });
     jest.setSystemTime(NOW);
-    stubDevices({ devices: [], requests: [] });
+    stubDevices({ devices: [] });
     const codes = spyOn(app.state().workspace.connection, "loginCode").mockImplementation(async () => await Promise.resolve({ code: "c0de", expires_at: Date.now() + 300_000 }));
     const set = spyOn(globalThis, "setInterval");
     const cleared = spyOn(globalThis, "clearInterval");
     app.restores.push(() => { codes.mockRestore(); set.mockRestore(); cleared.mockRestore(); });
     const view = await mount(<DevicesPage state={app.state().workspace.getSnapshot()} />);
-    const input = view.host.querySelector("input");
+    const input = view.host.querySelector<HTMLInputElement>("input.mono");
     expect([input?.getAttribute("spellcheck"), view.host.textContent?.includes("That code expired")]).toEqual(["false", false]);
     await type(input, "desktop.lan");
     expect(set.mock.calls.filter((call) => call[1] === 1000)).toEqual([]);

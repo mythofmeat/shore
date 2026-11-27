@@ -11,8 +11,6 @@ pub struct ClientHello {
     pub character: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub thread: Option<String>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub token: Option<String>,
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone, schemars::JsonSchema, ts_rs::TS)]

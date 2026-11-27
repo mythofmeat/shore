@@ -14,11 +14,10 @@ import type { WebAutomationKey } from "../protocol/WebAutomationKey.ts";
 import type { WebDeviceChoice } from "../protocol/WebDeviceChoice.ts";
 import type { WebDeviceList } from "../protocol/WebDeviceList.ts";
 import type { WebNewDevice } from "../protocol/WebNewDevice.ts";
-import type { WebSignInDecision } from "../protocol/WebSignInDecision.ts";
+import type { WebPassword } from "../protocol/WebPassword.ts";
 import type { WebSignInGranted } from "../protocol/WebSignInGranted.ts";
-import type { WebSignInPending } from "../protocol/WebSignInPending.ts";
-import type { WebSignInPoll } from "../protocol/WebSignInPoll.ts";
 import type { WebSignInStart } from "../protocol/WebSignInStart.ts";
+import type { WebSignInState } from "../protocol/WebSignInState.ts";
 import schemas from "./schemas.generated.json" with { type: "json" };
 
 let validator: ReturnType<typeof contractValidator> | undefined;
@@ -43,7 +42,6 @@ export const validWebAutomationKey = onFirstUse<WebAutomationKey>(schemas.automa
 export const validWebNewDevice = onFirstUse<WebNewDevice>(schemas.new_device);
 export const validWebDeviceChoice = onFirstUse<WebDeviceChoice>(schemas.device_choice);
 export const validWebSignInStart = onFirstUse<WebSignInStart>(schemas.sign_in_start);
-export const validWebSignInPending = onFirstUse<WebSignInPending>(schemas.sign_in_pending);
-export const validWebSignInPoll = onFirstUse<WebSignInPoll>(schemas.sign_in_poll);
+export const validWebSignInState = onFirstUse<WebSignInState>(schemas.sign_in_state);
+export const validWebPassword = onFirstUse<WebPassword>(schemas.password);
 export const validWebSignInGranted = onFirstUse<WebSignInGranted>(schemas.sign_in_granted);
-export const validWebSignInDecision = onFirstUse<WebSignInDecision>(schemas.sign_in_decision);

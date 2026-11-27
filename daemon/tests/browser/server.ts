@@ -13,6 +13,7 @@ import { seedUsageFixture, USAGE_FIXTURE_CONFIG } from "../support/usage_fixture
 import { sizedImage } from "../support/sized_image.ts";
 import { SQUARE_WEBM_16X16_ONE_SECOND, STRIP_WEBM_64X16_ONE_SECOND } from "../support/tiny_videos.ts";
 import { PROMPT_LIST_TOML } from "../support/prompt_list.ts";
+import { PasswordStore } from "../../src/web/password.ts";
 
 answerPricingCatalogsWithNoModels();
 const root = await mkdtemp(join(tmpdir(), "shore-gui-test-"));
@@ -206,8 +207,9 @@ const provider: SidecarProvider = {
 try {
   const daemon = await startDaemon({ argv: ["--config", configPath], env: {
     XDG_CONFIG_HOME: join(root, "config-home"), XDG_DATA_HOME: join(root, "data"), XDG_CACHE_HOME: join(root, "cache"), XDG_RUNTIME_DIR: join(root, "runtime"),
-    SHORE_TOKEN: "browser-test-token", SHORE_BROWSER_KEY: "test-key",
+    SHORE_BROWSER_KEY: "test-key",
   }, providers: { anthropic: provider }, instancesPath: join(root, "instances.json"), watchConfig: false, autoDiscovery: false });
+  await new PasswordStore(daemon.runtime.registry.globalConfig().dirs.data).choose("browser test password");
   await seedDiagnosticFixture(daemon.runtime, "nova");
   if (process.env["SHORE_BROWSER_USAGE_SEED"] === "true") await seedUsageFixture(daemon.runtime);
   seedArchivedSegment(daemon.runtime, "recovery");

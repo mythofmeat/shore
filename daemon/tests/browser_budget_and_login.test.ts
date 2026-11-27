@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test";
 
 import { budgetLevel, budgetWarning, focusedBudget, levelWarning, showPlanLimit, showUsage, type DisplayBudget } from "../src/browser/budget_display.ts";
-import { DEFAULT_WEB_PORT, deviceOrigin, enteredCode, loginCodeIn, loginLink, loopbackOrigin } from "../src/browser/login_link.ts";
+import { DEFAULT_WEB_PORT, deviceOrigin, loginCodeIn, loginLink, loopbackOrigin } from "../src/browser/login_link.ts";
 
 const level = (percent: number, overLimit = false, crossed: number[] = []) => ({ percent_used: percent, over_limit: overLimit, crossed_warn_at: crossed });
 const budget = (name: string, cap: ReturnType<typeof level>, pace?: ReturnType<typeof level>): DisplayBudget => ({ name, ...cap, ...(pace === undefined ? {} : { pace }) });
@@ -62,14 +62,6 @@ describe("signing in another device", () => {
     expect(loginCodeIn(`#login=${"a".repeat(42)}!`)).toBeUndefined();
     expect(loginCodeIn(`x#login=${code}`)).toBeUndefined();
     expect(loginCodeIn("")).toBeUndefined();
-  });
-
-  test("what is typed on the sign-in page is a code, or a whole link whose code is taken out of it", () => {
-    const code = "b".repeat(43);
-    expect(enteredCode(`  ${code}\n`)).toBe(code);
-    expect(enteredCode(` https://shore.example/#login=${code} `)).toBe(code);
-    expect(enteredCode(`https://shore.example/#login=${code}x`)).toBe(`https://shore.example/#login=${code}x`);
-    expect(enteredCode("short")).toBe("short");
   });
 
   test("an address typed for a device becomes its origin, on shore's web port unless one is given", () => {

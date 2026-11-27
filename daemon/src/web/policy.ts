@@ -13,7 +13,6 @@ export const WEB_LIMITS = {
   loginAttemptsPerMinute: 60,
   loginCodeMs: 5 * 60_000,
   loginCodes: 8,
-  signInRequests: 4,
   handshakeTimeoutMs: 10_000,
   drainTimeoutMs: 10_000,
   finishOnStopMs: 2_000,

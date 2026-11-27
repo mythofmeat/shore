@@ -205,7 +205,7 @@ export class WebSocketPeers {
       this.close(socket, 1008, "Invalid client message"); return;
     }
     if (state.phase === "hello") {
-      if (message.type !== "hello" || message.client_type !== "web" || (message.token !== null && message.token !== undefined)) {
+      if (message.type !== "hello" || message.client_type !== "web") {
         this.close(socket, 1008, "Expected a browser hello after sign-in"); return;
       }
       state.phase = "attaching";

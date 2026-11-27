@@ -56,14 +56,19 @@ fn answers_threads(hello: &Value, frame: &Value) -> Vec<Value> {
 fn shore(env: &[(&str, &str)], args: &[&str]) -> Output {
     let home = tempfile::tempdir().unwrap();
     std::fs::create_dir_all(home.path().join("config")).unwrap();
-    std::fs::write(home.path().join("config").join("token"), "test-token").unwrap();
+    if let Some(addr) = args.iter().skip_while(|arg| **arg != "--addr").nth(1) {
+        std::fs::write(
+            home.path().join("config").join("sign-ins.toml"),
+            format!("{:?} = \"test-token\"\n", support::origin_of(addr)),
+        )
+        .unwrap();
+    }
     let mut command = Command::new(env!("CARGO_BIN_EXE_shore"));
     let _isolated = command
         .env_remove("SHORE_ADDR")
         .env_remove("SHORE_CHARACTER")
         .env_remove("SHORE_THREAD")
         .env_remove("SHORE_COMPLETE")
-        .env_remove("SHORE_TOKEN")
         .env("SHORE_CONFIG_DIR", home.path().join("config"))
         .env("SHORE_DATA_DIR", home.path().join("data"))
         .env("SHORE_RUNTIME_DIR", home.path().join("runtime"))

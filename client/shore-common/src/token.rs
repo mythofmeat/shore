@@ -2,23 +2,19 @@ use std::collections::BTreeMap;
 use std::io::Write as _;
 use std::path::{Path, PathBuf};
 
-pub(crate) const TOKEN_FILE: &str = "token";
 const SIGN_INS_FILE: &str = "sign-ins.toml";
 
 #[derive(Debug, Clone)]
 pub(crate) struct TokenError {
     pub origin: String,
-    pub path: PathBuf,
 }
 
 impl std::fmt::Display for TokenError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(
             f,
-            "this CLI isn't signed in to {origin}. Run `shore sign-in {origin}` and allow the code it shows from a device that's already signed in. \
-             On the daemon's own machine the CLI uses {path} instead.",
-            origin = self.origin,
-            path = self.path.display()
+            "this CLI isn't signed in to {origin}. Run `shore sign-in {origin}` and give the daemon's password.",
+            origin = self.origin
         )
     }
 }
@@ -45,12 +41,7 @@ impl TokenSource {
     pub(crate) fn resolve(&self, origin: &str) -> Result<String, TokenError> {
         match self {
             Self::Given(token) => Ok(token.clone()),
-            Self::Discover => resolve_with(
-                &sign_ins_path(),
-                origin,
-                &crate::swp_client::discovery::config_dir_for_addr(origin)
-                    .unwrap_or_else(crate::dirs::config_dir),
-            ),
+            Self::Discover => resolve_with(&sign_ins_path(), origin),
         }
     }
 }
@@ -66,25 +57,12 @@ fn read_sign_ins(path: &Path) -> BTreeMap<String, String> {
         .unwrap_or_default()
 }
 
-pub(crate) fn resolve_with(
-    sign_ins: &Path,
-    origin: &str,
-    daemon_config_dir: &Path,
-) -> Result<String, TokenError> {
-    if let Some(token) = read_sign_ins(sign_ins)
+pub(crate) fn resolve_with(sign_ins: &Path, origin: &str) -> Result<String, TokenError> {
+    read_sign_ins(sign_ins)
         .get(origin)
         .and_then(|token| non_blank(token))
-    {
-        return Ok(token);
-    }
-    let path = daemon_config_dir.join(TOKEN_FILE);
-    std::fs::read_to_string(&path)
-        .ok()
-        .as_deref()
-        .and_then(non_blank)
         .ok_or_else(|| TokenError {
             origin: origin.to_owned(),
-            path,
         })
 }
 
@@ -136,24 +114,18 @@ mod tests {
     }
 
     #[test]
-    fn a_sign_in_for_the_address_wins_over_the_daemons_own_token_and_is_kept_owner_only() {
+    fn each_address_keeps_its_own_sign_in_owner_only() {
         let tmp = tempfile::tempdir().unwrap();
         let sign_ins = tmp.path().join("cli").join(SIGN_INS_FILE);
-        std::fs::write(tmp.path().join(TOKEN_FILE), "  from-file\n\n").unwrap();
-        assert_eq!(
-            resolve_with(&sign_ins, ORIGIN, tmp.path()).unwrap(),
-            "from-file",
-            "without a sign-in the daemon's own token is trimmed and used"
-        );
-        save_sign_in_at(&sign_ins, ORIGIN, "shore_signed").unwrap();
+        save_sign_in_at(&sign_ins, ORIGIN, "  shore_signed\n").unwrap();
         save_sign_in_at(&sign_ins, "http://other:7340", "shore_other").unwrap();
         assert_eq!(
-            resolve_with(&sign_ins, ORIGIN, tmp.path()).unwrap(),
+            resolve_with(&sign_ins, ORIGIN).unwrap(),
             "shore_signed",
-            "the sign-in for this address is used"
+            "the sign-in for this address is used, trimmed"
         );
         assert_eq!(
-            resolve_with(&sign_ins, "http://other:7340", tmp.path()).unwrap(),
+            resolve_with(&sign_ins, "http://other:7340").unwrap(),
             "shore_other",
             "each address keeps its own sign-in"
         );
@@ -166,25 +138,24 @@ mod tests {
     }
 
     #[test]
-    fn a_blank_sign_in_or_token_file_falls_through_and_nothing_anywhere_says_how_to_sign_in() {
+    fn without_a_sign_in_for_the_address_the_error_says_how_to_sign_in() {
         let tmp = tempfile::tempdir().unwrap();
         let sign_ins = tmp.path().join(SIGN_INS_FILE);
-        save_sign_in_at(&sign_ins, ORIGIN, "   ").unwrap();
-        std::fs::write(tmp.path().join(TOKEN_FILE), "\n").unwrap();
-        let message = resolve_with(&sign_ins, ORIGIN, tmp.path())
-            .unwrap_err()
-            .to_string();
-        assert!(
-            message.contains("shore sign-in https://shore.example"),
-            "{message}"
+        std::fs::write(tmp.path().join("token"), "a daemon token\n").unwrap();
+        let message = resolve_with(&sign_ins, ORIGIN).unwrap_err().to_string();
+        assert_eq!(
+            message,
+            "this CLI isn't signed in to https://shore.example. Run `shore sign-in https://shore.example` and give the daemon's password.",
+            "a token file beside the sign-ins is never read"
         );
+        save_sign_in_at(&sign_ins, ORIGIN, "   ").unwrap();
         assert!(
-            message.contains(&tmp.path().join(TOKEN_FILE).display().to_string()),
-            "{message}"
+            resolve_with(&sign_ins, ORIGIN).is_err(),
+            "a blank sign-in counts as none"
         );
         std::fs::write(&sign_ins, "not = [toml").unwrap();
         assert!(
-            resolve_with(&sign_ins, ORIGIN, tmp.path()).is_err(),
+            resolve_with(&sign_ins, ORIGIN).is_err(),
             "an unreadable sign-ins file counts as no sign-in"
         );
     }

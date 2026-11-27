@@ -1,23 +1,22 @@
 import { expect, test } from "./fixtures.ts";
-import { signIn, signInCode, watchPage } from "./helpers.ts";
+import { PASSWORD, signIn, watchPage } from "./helpers.ts";
 
-test("a wrong code, or the daemon's own token, is refused with a readable error, and a fresh code or its link connects", async ({ page }) => {
+test("a wrong password is refused with a readable error, and the right one connects", async ({ page }) => {
   const errors: string[] = [];
   page.on("pageerror", (error) => { errors.push(error.message); });
   await page.addInitScript("window.shorePolicyViolations = []; document.addEventListener('securitypolicyviolation', event => window.shorePolicyViolations.push(event.violatedDirective));");
   await page.goto("/workspace");
-  await expect(page.getByRole("heading", { name: "Connect to your daemon" })).toBeVisible();
-  const connect = page.getByRole("button", { name: "Connect", exact: true });
-  await expect(connect).toBeDisabled();
-  const field = page.getByLabel("Sign-in code or link");
-  for (const wrong of ["wrong-code", "browser-test-token"]) {
-    await field.fill(wrong);
-    await connect.click();
-    await expect(page.getByRole("alert")).toContainText("expired or was already used");
-  }
-  await field.fill(`  ${new URL(page.url()).origin}/#login=${await signInCode(page)}  `);
-  await connect.click();
-  await expect(page.getByRole("heading", { name: "Connect to your daemon" })).toBeHidden();
+  await expect(page.getByRole("heading", { name: "Sign in" })).toBeVisible();
+  const go = page.getByRole("button", { name: "Sign in", exact: true });
+  await expect(go).toBeDisabled();
+  const field = page.getByLabel("Password", { exact: true });
+  await expect(field).toHaveAttribute("type", "password");
+  await field.fill("not the password");
+  await go.click();
+  await expect(page.getByRole("alert")).toHaveText("That password isn’t right");
+  await field.fill(PASSWORD);
+  await go.click();
+  await expect(page.getByRole("heading", { name: "Sign in" })).toBeHidden();
   await expect(page.locator("html")).toHaveAttribute("data-theme", "default");
   expect(await page.evaluate("window.shorePolicyViolations")).toEqual([]);
   expect(errors).toEqual([]);
@@ -48,7 +47,7 @@ test("a sign-in code from Settings › Devices signs in another browser once, an
   const late = await (await browser.newContext()).newPage();
   await late.goto(link);
   await expect(late.getByRole("alert")).toContainText("expired or was already used");
-  await expect(late.getByLabel("Sign-in code or link")).toBeVisible();
+  await expect(late.getByLabel("Password", { exact: true })).toBeVisible();
   await check();
 });
 

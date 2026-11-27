@@ -97,12 +97,6 @@
               "string",
               "null"
             ]
-          },
-          "token": {
-            "type": [
-              "string",
-              "null"
-            ]
           }
         },
         "required": [

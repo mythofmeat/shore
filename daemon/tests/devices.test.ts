@@ -1,12 +1,11 @@
 import { describe, expect, spyOn, test } from "bun:test";
-import * as nodeCrypto from "node:crypto";
 import * as fs from "node:fs";
 import { mkdirSync, mkdtempSync, readdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { browserName } from "../src/web/auth.ts";
 import { required } from "../src/util/required.ts";
-import { bearerToken, deviceName, DEVICES_FILE, DeviceStore, principalName, principalOwner, SignInRequests } from "../src/web/devices.ts";
+import { bearerToken, deviceName, DEVICES_FILE, DeviceStore, principalName, principalOwner } from "../src/web/devices.ts";
 
 const dataDir = () => mkdtempSync(join(tmpdir(), "shore-devices-"));
 const stored = (dir: string) => JSON.parse(readFileSync(join(dir, DEVICES_FILE), "utf8")) as { devices: { last_used_at?: number }[] };
@@ -121,60 +120,6 @@ describe("the device store", () => {
   });
 });
 
-describe("devices waiting to sign in", () => {
-  test("wait until allowed or refused, answer only to their own secret, and are told once", () => {
-    const requests = new SignInRequests(60_000, 4);
-    const pending = requests.start("desktop", "secret-one", 0);
-    const other = requests.start("laptop", "secret-two", 0);
-    if (pending === undefined || other === undefined) throw new Error("both should start");
-    expect(requests.pending(1).map((request) => request.name)).toEqual(["desktop", "laptop"]);
-    expect(requests.poll(pending.id, "secret-two", 1)).toBeUndefined();
-    expect(requests.poll(pending.id, "secret-one", 1)).toBe("waiting");
-    expect(requests.decide(pending.code, true, 2)).toBe(true);
-    expect(requests.decide(pending.code, true, 2)).toBe(false);
-    expect(requests.pending(2).map((request) => request.name)).toEqual(["laptop"]);
-    expect(requests.poll(pending.id, "secret-one", 3)).toEqual({ allowed: "desktop" });
-    expect(requests.poll(pending.id, "secret-one", 3)).toBeUndefined();
-    expect(requests.decide(` ${other.code.toLowerCase()} `, false, 4)).toBe(true);
-    expect(requests.poll(other.id, "secret-two", 4)).toBe("denied");
-    expect(requests.poll(other.id, "secret-two", 4)).toBeUndefined();
-  });
-
-  test("expire after their lifetime, which frees their place", () => {
-    const requests = new SignInRequests(1_000, 1);
-    const pending = requests.start("desktop", "secret", 0);
-    expect(requests.start("laptop", "secret", 999)).toBeUndefined();
-    expect(requests.poll(pending?.id ?? "", "secret", 999)).toBe("waiting");
-    expect(pending?.expires_at).toBe(1_000);
-    expect(requests.decide(pending?.code ?? "", true, 1_000)).toBe(false);
-    expect(requests.poll(pending?.id ?? "", "secret", 1_000)).toBeUndefined();
-    expect(requests.pending(1_000)).toEqual([]);
-    expect(requests.start("laptop", "secret", 1_000)).toBeDefined();
-  });
-
-  test("each of starting, listing and asking forgets the ones that have expired", () => {
-    const starting = new SignInRequests(1_000, 1);
-    starting.start("desktop", "secret", 0);
-    expect(starting.start("laptop", "secret", 1_000)?.code).toHaveLength(4);
-    const listing = new SignInRequests(1_000, 4);
-    listing.start("desktop", "secret", 0);
-    expect(listing.pending(1_000)).toEqual([]);
-    const asking = new SignInRequests(1_000, 4);
-    const pending = required(asking.start("desktop", "secret", 0));
-    expect(asking.poll(pending.id, "secret", 1_000)).toBeUndefined();
-  });
-
-  test("never hand out a code another waiting device already shows", () => {
-    const picks = [0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 1];
-    const random = spyOn(nodeCrypto, "randomInt").mockImplementation(() => picks.shift() ?? 2);
-    try {
-      const requests = new SignInRequests(60_000, 4);
-      expect(requests.start("one", "secret")?.code).toBe("AAAA");
-      expect(requests.start("two", "secret")?.code).toBe("BBBB");
-    } finally { random.mockRestore(); }
-  });
-});
-
 describe("who a request comes from", () => {
   test("a bearer credential is read from the Authorization header alone", () => {
     const asked = (authorization?: string) => bearerToken(new Request("http://x/", authorization === undefined ? {} : { headers: { authorization } }));
@@ -185,16 +130,14 @@ describe("who a request comes from", () => {
     expect(asked("Bearer a b")).toBeUndefined();
   });
 
-  test("is told apart by its browser session, its device or the daemon's own token", () => {
+  test("is told apart by its browser session or its device", () => {
     const signal = new AbortController().signal;
-    expect(principalOwner({ kind: "owner" })).toBe("owner");
     expect(principalOwner({ kind: "device", device: { id: "a", kind: "cli", name: "desktop", createdAt: 0, lastUsedAt: undefined, operations: undefined } })).toBe("a");
     expect(principalOwner({ kind: "browser", session: { id: "s", name: "Firefox on Linux", createdAt: 0, expiresAt: 1, lastUsedAt: 0, signal } })).toBe("s");
   });
 
-  test("is named after its browser, its device or the daemon's own token", () => {
+  test("is named after its browser or its device", () => {
     const signal = new AbortController().signal;
-    expect(principalName({ kind: "owner" })).toBe("The daemon's own token");
     expect(principalName({ kind: "device", device: { id: "a", kind: "cli", name: "desktop", createdAt: 0, lastUsedAt: undefined, operations: undefined } })).toBe("desktop");
     expect(principalName({ kind: "browser", session: { id: "s", name: "Firefox on Linux", createdAt: 0, expiresAt: 1, lastUsedAt: 0, signal } })).toBe("Firefox on Linux");
   });

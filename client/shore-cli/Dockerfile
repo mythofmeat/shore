@@ -10,7 +10,7 @@ FROM debian:testing
 RUN apt-get update && apt-get install -y --no-install-recommends vim-tiny \
     && rm -rf /var/lib/apt/lists/*
 COPY --from=builder /usr/local/bin/shore /usr/local/bin/shore
-RUN useradd -m -u 1000 shore
+RUN useradd -m -u 1000 shore && install -d -o shore -g shore /home/shore/.config /home/shore/.config/shore
 USER shore
 ENV SHORE_ADDR=http://shore-daemon:7340
 ENTRYPOINT ["shore"]

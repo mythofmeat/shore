@@ -254,7 +254,7 @@ fn read_hidden(prompt: &str) -> Result<String, Failure> {
     Ok(secret.trim().to_owned())
 }
 
-fn read_keys() -> Result<String, Failure> {
+pub(crate) fn read_keys() -> Result<String, Failure> {
     let mut secret = String::new();
     loop {
         match event::read()? {

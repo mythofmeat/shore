@@ -70,8 +70,13 @@ pub(crate) async fn execute(
     if matches!(&cli.command, Some(CliCommand::Config { path: true, .. })) {
         return print_config_path(&cli).await;
     }
-    if let Some(CliCommand::SignIn { address, name }) = &cli.command {
-        return crate::access::sign_in(address, name.as_deref()).await;
+    if let Some(CliCommand::SignIn {
+        address,
+        name,
+        stdin,
+    }) = &cli.command
+    {
+        return crate::access::sign_in(address, name.as_deref(), *stdin).await;
     }
     let provider_plan = match cli.command.as_ref() {
         Some(CliCommand::Provider {

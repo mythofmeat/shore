@@ -11,7 +11,6 @@ import { validWebArchiveInfo, validWebRequestInfo } from "./contracts.ts";
 export interface WebRecoveryOptions {
   readonly cacheDir: string;
   readonly dataDir: string;
-  readonly token: string;
 }
 
 export const sessionDigest = (token: string): string => createHash("sha256").update(token).digest("hex");
@@ -59,7 +58,7 @@ export class WebRecovery {
         CREATE TABLE IF NOT EXISTS requests (id TEXT PRIMARY KEY, owner TEXT NOT NULL REFERENCES sessions(id) ON DELETE CASCADE, info TEXT NOT NULL);`);
       const columns = new Set(this.#db.query<{ name: string }, []>("PRAGMA table_info(sessions)").all().map((column) => column.name));
       if (!columns.has("name")) this.#db.run("ALTER TABLE sessions ADD COLUMN name TEXT NOT NULL DEFAULT 'Browser'; ALTER TABLE sessions ADD COLUMN created_at INTEGER NOT NULL DEFAULT 0; ALTER TABLE sessions ADD COLUMN last_used_at INTEGER NOT NULL DEFAULT 0;");
-      const fingerprint = sessionDigest(JSON.stringify([1, origin, options.token]));
+      const fingerprint = sessionDigest(JSON.stringify([2, origin]));
       this.#db.transaction(() => {
         const previous = this.#db.query<{ fingerprint: string }, []>("SELECT fingerprint FROM identity WHERE id = 1").get();
         if (previous?.fingerprint !== fingerprint) {

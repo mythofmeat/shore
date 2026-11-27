@@ -23,10 +23,6 @@ pub(crate) fn instances_path() -> PathBuf {
     crate::dirs::runtime_dir().join("instances.json")
 }
 
-pub(crate) fn read_instances() -> Result<Vec<InstanceEntry>> {
-    read_instances_from_path(&instances_path())
-}
-
 fn read_instances_from_path(path: &Path) -> Result<Vec<InstanceEntry>> {
     debug!(path = %path.display(), "reading instances file");
     let data = std::fs::read_to_string(path).map_err(|e| {
@@ -159,24 +155,6 @@ fn describe_instances(entries: &[InstanceEntry]) -> String {
         .join(", ")
 }
 
-pub(crate) fn config_dir_for_addr(addr: &str) -> Option<PathBuf> {
-    match read_instances() {
-        Ok(entries) => config_dir_of(&entries, addr),
-        Err(e) => {
-            debug!(error = %e, "no instance registry to resolve a token directory from");
-            None
-        }
-    }
-}
-
-fn config_dir_of(entries: &[InstanceEntry], origin: &str) -> Option<PathBuf> {
-    entries
-        .iter()
-        .find(|e| !e.addr.is_empty() && ServerAddr(e.addr.clone()).origin() == origin)
-        .and_then(|e| e.config_dir.as_deref())
-        .map(PathBuf::from)
-}
-
 pub(crate) const DEFAULT_ADDR: &str = "http://127.0.0.1:7340";
 
 pub fn discover_or_default(config_path: Option<&str>) -> Result<ServerAddr> {
@@ -271,38 +249,5 @@ mod tests {
 
         let addr = discover_from_path(&path, Some("play")).expect("the named daemon resolves");
         assert_eq!(addr.0, "http://127.0.0.1:7341");
-    }
-
-    #[test]
-    fn a_daemons_config_folder_is_found_by_its_address_however_it_is_written() {
-        let entries = vec![
-            InstanceEntry {
-                id: Some("work".into()),
-                addr: "http://127.0.0.1:7340".into(),
-                pid: None,
-                config_dir: Some("/srv/shore".into()),
-            },
-            InstanceEntry {
-                id: Some("quiet".into()),
-                addr: String::new(),
-                pid: None,
-                config_dir: Some("/srv/quiet".into()),
-            },
-        ];
-        assert_eq!(
-            config_dir_of(&entries, &ServerAddr("127.0.0.1:7340/".into()).origin()),
-            Some(PathBuf::from("/srv/shore")),
-            "a bare address means http"
-        );
-        assert_eq!(
-            config_dir_of(&entries, "https://127.0.0.1:7340"),
-            None,
-            "another scheme is another daemon"
-        );
-        assert_eq!(
-            config_dir_of(&entries, ""),
-            None,
-            "an instance with no listener has no address"
-        );
     }
 }

@@ -11,16 +11,12 @@ export async function watchPage(page: Page): Promise<() => Promise<void>> {
   };
 }
 
-export async function signInCode(page: Page): Promise<string> {
-  const answer = await page.request.post(`${new URL(page.url()).origin}/api/login-code`, { headers: { authorization: "Bearer browser-test-token" } });
-  expect(answer.status()).toBe(200);
-  return ((await answer.json()) as { code: string }).code;
-}
+export const PASSWORD = "browser test password";
 
 export async function signIn(page: Page, path = "/workspace"): Promise<void> {
   await page.goto(path);
-  await page.getByLabel("Sign-in code or link").fill(await signInCode(page));
-  await page.getByRole("button", { name: "Connect", exact: true }).click();
+  await page.getByLabel("Password", { exact: true }).fill(PASSWORD);
+  await page.getByRole("button", { name: "Sign in", exact: true }).click();
   await expect(page.getByText("Connected", { exact: true })).toBeVisible();
 }
 

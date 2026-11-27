@@ -37,9 +37,8 @@ services:
       dockerfile: client/shore-cli/Dockerfile
     environment:
       SHORE_ADDR: http://shore-daemon:7340
-      SHORE_CONFIG_DIR: /config
     volumes:
-      - ./config:/config:ro
+      - cli:/home/shore/.config/shore
     depends_on:
       - shore-daemon
     stdin_open: true
@@ -48,4 +47,5 @@ services:
 volumes:
   data:
   cache:
+  cli:
   home:

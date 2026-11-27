@@ -9,8 +9,9 @@ import type { SidecarProvider, SidecarRequest } from "../src/llm/types.ts";
 import { required } from "../src/util/required.ts";
 import { DEVICES_FILE } from "../src/web/devices.ts";
 import { PROMPT_LIST_TOML } from "./support/prompt_list.ts";
+import { signedInCli, TEST_PASSWORD } from "./support/signed_in.ts";
 
-const TOKEN = "http-api-owner-token";
+let TOKEN = "";
 const running: RunningDaemon[] = [];
 afterEach(async () => {
   for (const started of running.splice(0)) {
@@ -50,13 +51,15 @@ async function daemon(provider?: SidecarProvider): Promise<Place> {
     argv: ["--config", configPath, "--addr", "127.0.0.1:0"],
     env: {
       XDG_CONFIG_HOME: join(root, "xdg-config"), XDG_DATA_HOME: join(root, "data"), XDG_CACHE_HOME: join(root, "cache"),
-      XDG_RUNTIME_DIR: join(root, "runtime"), HOME: root, SHORE_TEST_KEY: "sk-test", SHORE_TOKEN: TOKEN,
+      XDG_RUNTIME_DIR: join(root, "runtime"), HOME: root, SHORE_TEST_KEY: "sk-test",
     },
     providers: provider === undefined ? {} : { anthropic: provider },
     instancesPath: join(root, "instances.json"), watchConfig: false, autoDiscovery: false,
   });
   running.push(started);
-  return { origin: required(started.web).origin, dataDir: started.runtime.config.dirs.data };
+  const origin = required(started.web).origin;
+  TOKEN = await signedInCli(origin);
+  return { origin, dataDir: started.runtime.config.dirs.data };
 }
 
 function post(place: Place, path: string, credential: string | undefined, body?: unknown, headers: Record<string, string> = {}): Promise<Response> {
@@ -131,12 +134,12 @@ describe("running an operation over HTTP", () => {
     }
   });
 
-  test("signing a device out or deciding on one needs to say which, and an unknown one is not found", async () => {
+  test("signing a device out needs to say which, and an unknown one is not found", async () => {
     const place = await daemon();
     const answers = [
       [await post(place, "/api/devices/revoke", TOKEN, {}), 400, "Say which device to sign out"],
       [await post(place, "/api/devices/revoke", TOKEN, { id: "nobody" }), 404, "No device has that id"],
-      [await post(place, "/api/devices/decide", TOKEN, { code: "AAAA" }), 400, "Give the code the other device shows, and whether to let it in"],
+      [await post(place, "/api/devices/decide", TOKEN, { code: "AAAA", allow: true }), 404, "Unknown endpoint for a signed-in device"],
     ] as const;
     for (const [answer, status, message] of answers) expect([answer.status, await answer.json()]).toEqual([status, { code: answer.status === 404 ? "not_found" : "invalid_request", message }]);
   });
@@ -145,19 +148,20 @@ describe("running an operation over HTTP", () => {
     const place = await daemon();
     const key = await automationKey(place, ["presence"]);
     const listed = async (credential: string) => (await (await post(place, "/api/devices/list", credential)).json() as { devices: Record<string, unknown>[] }).devices;
-    const byOwner = await listed(TOKEN);
-    expect(byOwner).toEqual([{ id: key.id, kind: "automation", name: "Phone", created_at: byOwner[0]?.["created_at"], operations: ["presence"], current: false }]);
+    const byCli = await listed(TOKEN);
+    expect(byCli.map((device) => [device["kind"], device["name"], device["current"]])).toEqual([["cli", "Test CLI", true], ["automation", "Phone", false]]);
+    expect(byCli[1]).toEqual({ id: key.id, kind: "automation", name: "Phone", created_at: byCli[1]?.["created_at"], operations: ["presence"], current: false });
     expect((await post(place, "/api/op/presence", key.token, {})).status).toBe(200);
-    const after = (await listed(TOKEN))[0];
+    const after = (await listed(TOKEN))[1];
     expect([typeof after?.["last_used_at"], after?.["current"]]).toEqual(["number", false]);
     const signed = await post(place, "/api/login-code", TOKEN);
     const { code } = await signed.json() as { code: string };
-    const login = await fetch(`${place.origin}/api/login`, { method: "POST", headers: { origin: place.origin, "content-type": "application/json" }, body: JSON.stringify({ token: code }) });
+    const login = await fetch(`${place.origin}/api/login`, { method: "POST", headers: { origin: place.origin, "content-type": "application/json" }, body: JSON.stringify({ code }) });
     const cookie = login.headers.get("set-cookie")?.split(";", 1)[0] ?? "";
     const browser = (await listed(TOKEN)).find((device) => device["kind"] === "browser");
-    expect(browser?.["current"], "the owner's token is not that browser").toBe(false);
+    expect(browser?.["current"], "the CLI is not that browser").toBe(false);
     const own = await (await fetch(`${place.origin}/api/devices/list`, { method: "POST", headers: { origin: place.origin, cookie } })).json() as { devices: Record<string, unknown>[] };
-    expect(own.devices.map((device) => [device["kind"], device["current"]])).toEqual([["browser", true], ["automation", false]]);
+    expect(own.devices.map((device) => [device["kind"], device["current"]])).toEqual([["browser", true], ["cli", false], ["automation", false]]);
   });
 
   test("hello takes a character or thread given empty as none given", async () => {
@@ -343,7 +347,7 @@ describe("a browser's own requests", () => {
     const code = await (await post(place, "/api/login-code", TOKEN)).json() as { code: string };
     const login = await fetch(`${place.origin}/api/login`, {
       method: "POST", headers: { origin: place.origin, "content-type": "application/json", "user-agent": "Mozilla/5.0 (X11; Linux x86_64; rv:140.0) Gecko/20100101 Firefox/140.0" },
-      body: JSON.stringify({ token: code.code }),
+      body: JSON.stringify({ code: code.code }),
     });
     expect(login.status).toBe(200);
     const cookie = required(login.headers.get("set-cookie")).split(";")[0] ?? "";
@@ -360,79 +364,37 @@ describe("a browser's own requests", () => {
   });
 });
 
-describe("signing in a CLI from a device that's already in", () => {
-  const secret = "s".repeat(40);
+describe("signing in a CLI with the password", () => {
+  const start = async (place: Place, name = "desktop", password = TEST_PASSWORD): Promise<Response> => await post(place, "/api/sign-in", undefined, { name, password });
 
-  async function start(place: Place, name = "desktop", given = secret): Promise<Response> {
-    return await post(place, "/api/sign-in", undefined, { name, secret: given });
-  }
-
-  test("the CLI waits until someone signed in allows its code, then gets a credential of its own once", async () => {
+  test("gives the CLI a credential of its own, listed as this one when it asks", async () => {
     const place = await daemon();
-    const pending = await (await start(place)).json() as { id: string; code: string };
-    expect(pending.code).toMatch(/^[A-Z2-9]{4}$/);
-    const poll = () => post(place, `/api/sign-in/${pending.id}`, undefined, { secret });
-
-    expect((await poll()).status).toBe(202);
-    const listed = await (await post(place, "/api/devices/list", TOKEN)).json() as { requests: { code: string; name: string }[] };
-    expect(listed.requests.map(({ code, name }) => ({ code, name }))).toEqual([{ code: pending.code, name: "desktop" }]);
-    expect((await post(place, `/api/sign-in/${pending.id}`, undefined, { secret: "x".repeat(40) })).status).toBe(404);
-
-    expect((await post(place, "/api/devices/decide", TOKEN, { code: pending.code.toLowerCase(), allow: true })).status).toBe(204);
-    const granted = await poll();
+    const granted = await start(place);
     expect(granted.status).toBe(200);
     const { token } = await granted.json() as { token: string };
-    expect((await poll()).status).toBe(404);
-
-    const status = await post(place, "/api/op/status?character=ada", token, {});
-    expect(status.status).toBe(200);
-    const devices = await (await post(place, "/api/devices/list", token)).json() as { devices: { kind: string; name: string; current: boolean }[]; requests: unknown[] };
-    expect(devices.devices.find((device) => device.kind === "cli")).toMatchObject({ name: "desktop", current: true });
-    expect(devices.requests).toEqual([]);
-  });
-
-  test("a refused CLI is told so, and a code nobody is waiting with changes nothing", async () => {
-    const place = await daemon();
-    const pending = await (await start(place)).json() as { id: string; code: string };
-    expect((await post(place, "/api/devices/decide", TOKEN, { code: "ZZZZ", allow: true })).status).toBe(404);
-    expect((await post(place, "/api/devices/decide", TOKEN, { code: pending.code, allow: false })).status).toBe(204);
-    const refused = await post(place, `/api/sign-in/${pending.id}`, undefined, { secret });
-    expect(refused.status).toBe(403);
-    expect((await post(place, `/api/sign-in/${pending.id}`, undefined, { secret })).status).toBe(404);
-  });
-
-  test("a sign-in needs a name that will do and a secret of 32 characters or more, and asks only the endpoints there are", async () => {
-    const place = await daemon();
-    const answers: [Response, number, string][] = [
-      [await start(place, "desktop", "s".repeat(31)), 400, "Name this device and send a secret of at least 32 characters"],
-      [await post(place, "/api/sign-in", undefined, { secret }), 400, "Name this device and send a secret of at least 32 characters"],
-      [await start(place, "  "), 400, "Give the device a name of 1 to 64 characters, without control characters"],
-      [await post(place, "/api/sign-in/not-a-sign-in", undefined, { secret }), 404, "Unknown sign-in endpoint"],
-      [await post(place, `/api/sign-in/${crypto.randomUUID()}`, undefined, {}), 400, "Send the secret this sign-in started with"],
-      [await post(place, "/api/sign-in", undefined, { name: "x".repeat(70_000), secret }), 413, "Request body is too large"],
-    ];
-    for (const [answer, status, message] of answers) expect([answer.status, await answer.json()]).toEqual([status, { code: status === 404 ? "not_found" : "invalid_request", message }]);
-    expect((await start(place, "desktop", "s".repeat(32))).status).toBe(200);
+    expect(token).not.toBe(TOKEN);
+    expect((await post(place, "/api/op/status?character=ada", token, {})).status).toBe(200);
+    const devices = await (await post(place, "/api/devices/list", token)).json() as { devices: { kind: string; name: string; current: boolean }[] };
+    expect(devices.devices.map((device) => [device.kind, device.name, device.current])).toEqual([["cli", "Test CLI", false], ["cli", "desktop", true]]);
+    expect(Object.keys(devices)).toEqual(["devices"]);
   });
 
   test("a sign-in the daemon can't record is answered as such, and the CLI may ask again", async () => {
     const place = await daemon();
-    const pending = await (await start(place)).json() as { id: string; code: string };
-    expect((await post(place, "/api/devices/decide", TOKEN, { code: pending.code, allow: true })).status).toBe(204);
     const renaming = spyOn(fs, "renameSync").mockImplementation(() => { throw new Error("the disk said no"); });
     let refused: Response;
-    try { refused = await post(place, `/api/sign-in/${pending.id}`, undefined, { secret }); } finally { renaming.mockRestore(); }
+    try { refused = await start(place); } finally { renaming.mockRestore(); }
     expect([refused.status, await refused.json()]).toEqual([503, { code: "unavailable", message: "The daemon couldn’t record this sign-in" }]);
+    expect((await start(place)).status).toBe(200);
   });
 
-  test("only a few devices can wait at once, a short secret is refused, and an automation key can't let anyone in", async () => {
+  test("a body too big, another site's page, or the old approval endpoints get nowhere", async () => {
     const place = await daemon();
-    expect((await start(place, "desktop", "short")).status).toBe(400);
-    for (let waiting = 0; waiting < 4; waiting += 1) expect((await start(place, `cli ${String(waiting)}`)).status).toBe(200);
-    expect((await start(place, "one too many")).status).toBe(429);
-    const key = await automationKey(place, ["presence"]);
-    expect((await post(place, "/api/devices/decide", key.token, { code: "AAAA", allow: true })).status).toBe(403);
-    const elsewhere = await post(place, "/api/sign-in", undefined, { name: "x", secret }, { "sec-fetch-site": "cross-site" });
-    expect(elsewhere.status).toBe(403);
+    const answers: [Response, number, string][] = [
+      [await post(place, "/api/sign-in", undefined, { name: "x".repeat(70_000), password: TEST_PASSWORD }), 413, "Request body is too large"],
+      [await post(place, "/api/sign-in", undefined, { name: "x", password: TEST_PASSWORD }, { "sec-fetch-site": "cross-site" }), 403, "Another site’s page can’t use this daemon"],
+      [await post(place, `/api/sign-in/${crypto.randomUUID()}`, undefined, { secret: "s".repeat(40) }), 403, "Only the Shore page in a browser can use this endpoint, and this request has no Origin header"],
+    ];
+    for (const [answer, status, message] of answers) expect([answer.status, ((await answer.json()) as { message: string }).message]).toEqual([status, message]);
   });
 });

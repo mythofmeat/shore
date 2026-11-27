@@ -89,7 +89,6 @@ export function decodeClientMessage(value: unknown): ClientMessage {
         capabilities: strArr("capabilities"),
         ...opt("character", str("character", false)),
         ...opt("thread", str("thread", false)),
-        ...opt("token", str("token", false)),
       };
     case "message":
       return {

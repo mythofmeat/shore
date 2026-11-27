@@ -457,12 +457,6 @@
                   "string",
                   "null"
                 ]
-              },
-              "token": {
-                "type": [
-                  "string",
-                  "null"
-                ]
               }
             },
             "required": [
@@ -2121,12 +2115,6 @@
                   "string",
                   "null"
                 ]
-              },
-              "token": {
-                "type": [
-                  "string",
-                  "null"
-                ]
               }
             },
             "required": [
@@ -3765,12 +3753,6 @@
                   "string",
                   "null"
                 ]
-              },
-              "token": {
-                "type": [
-                  "string",
-                  "null"
-                ]
               }
             },
             "required": [
@@ -3946,7 +3928,7 @@
     "ClaudePlanLimit": "{ window: ClaudePlanWindow, percent_used: number, resets_at: string | null, status: UsageBudgetLevel, warning_thresholds: Array<number>, crossed_warn_at: Array<number>, limit_at: number, action: UsageBudgetAction, over_limit: boolean, }",
     "ClaudePlanLimitsReport": "{ updated_at: string, subscription_type: string | null, windows: Array<ClaudePlanLimit>, account?: string, accounts: Array<ClaudeAccountReport>, }",
     "ClaudePlanWindow": "\"five_hour\" | \"seven_day\"",
-    "ClientHello": "{ client_type: string, client_name: string, capabilities: Array<string>, character?: string | null, thread?: string | null, token?: string | null, }",
+    "ClientHello": "{ client_type: string, client_name: string, capabilities: Array<string>, character?: string | null, thread?: string | null, }",
     "ClientMessage": "{ \"type\": \"hello\" } & ClientHello | { \"type\": \"message\" } & ClientMessageBody | { \"type\": \"regen\" } & Regen | { \"type\": \"command\" } & Command | { \"type\": \"cancel\" } & Cancel",
     "ClientMessageBody": "{ rid?: string | null, text: string, stream: boolean, images: Array<string>, image_data?: Array<ImageUpload>, absence_seconds?: number, }",
     "Command": "{ rid?: string | null, name: string, args: unknown, }",
@@ -4272,14 +4254,17 @@
     "WebArchivePhase": "\"uploading\" | \"ready\" | \"exporting\" | \"importing\" | \"imported\" | \"failed\" | \"uncertain\"",
     "WebArchiveResult": "{ \"name\": \"export_character\", \"data\": ExportCharacterResult } | { \"name\": \"import_character\", \"data\": ImportCharacterResult }",
     "WebAutomationKey": "{ name: string, operations: Array<string>, }",
+    "WebCodeLogin": "{ code: string, }",
     "WebDevice": "{ id: string, kind: WebDeviceKind, name: string, created_at: number, last_used_at?: number, expires_at?: number, operations?: Array<string>, current: boolean, }",
     "WebDeviceChoice": "{ id: string, }",
     "WebDeviceKind": "\"browser\" | \"cli\" | \"automation\"",
-    "WebDeviceList": "{ devices: Array<WebDevice>, requests: Array<WebSignInRequest>, }",
+    "WebDeviceList": "{ devices: Array<WebDevice>, }",
     "WebHello": "{ server_name: string, server_version: string, characters: Array<CharacterInfo>, selected_character?: string, selected_thread?: string, }",
-    "WebLogin": "{ token: string, }",
+    "WebLogin": "WebPasswordLogin | WebCodeLogin",
     "WebLoginCode": "{ code: string, expires_at: number, }",
     "WebNewDevice": "{ device: WebDevice, token: string, }",
+    "WebPassword": "{ password: string, current?: string, }",
+    "WebPasswordLogin": "{ password: string, }",
     "WebPreferences": "{ values: { [key in string]: string }, }",
     "WebProblem": "{ code: WebProblemCode, message: string, }",
     "WebProblemCode": "\"unauthorized\" | \"forbidden\" | \"invalid_request\" | \"too_many_requests\" | \"reload_required\" | \"unavailable\" | \"not_found\"",
@@ -4287,12 +4272,9 @@
     "WebRequestList": "{ requests: Array<WebRequestInfo>, max_records: number, max_result_bytes: number, }",
     "WebRequestPhase": "\"running\" | \"uncertain\" | \"completed\" | \"failed\" | \"cancelled\" | \"superseded\"",
     "WebSessionInfo": "{ contract: string, protocol: number, expires_at: number, max_message_bytes: number, max_pending_requests: number, }",
-    "WebSignInDecision": "{ code: string, allow: boolean, }",
     "WebSignInGranted": "{ token: string, }",
-    "WebSignInPending": "{ id: string, code: string, expires_at: number, }",
-    "WebSignInPoll": "{ secret: string, }",
-    "WebSignInRequest": "{ code: string, name: string, expires_at: number, }",
-    "WebSignInStart": "{ name: string, secret: string, }",
+    "WebSignInStart": "{ name: string, password: string, }",
+    "WebSignInState": "{ password_set: boolean, }",
     "WebTransfer": "{ transfer: string, bytes: number, }",
     "WorkspaceFileListing": "{ files: Array<string>, }",
     "WorkspaceKept": "\"later_turns\"",

@@ -36,6 +36,7 @@ import { handlesUnder } from "./support/handles.ts";
 import { until, untilAsync } from "./support/until.ts";
 import { BrowserSocket } from "./support/browser.ts";
 import { PROMPT_LIST_TOML } from "./support/prompt_list.ts";
+import { signedInCli } from "./support/signed_in.ts";
 
 const running: RunningDaemon[] = [];
 
@@ -46,7 +47,6 @@ afterEach(async () => {
   }
 });
 
-const TEST_TOKEN = "test-token";
 
 interface Layout {
   root: string;
@@ -77,7 +77,6 @@ async function layout(config = "", characters: readonly string[] = ["ada"]): Pro
       XDG_RUNTIME_DIR: join(root, "runtime"),
       HOME: root,
       SHORE_TEST_KEY: "sk-test",
-      SHORE_TOKEN: TEST_TOKEN,
     },
   };
 }
@@ -336,11 +335,11 @@ describe("what a client gets", () => {
     const place = await layout("", ["ada", "nova"]);
     const daemon = await start(place);
     const origin = required(daemon.web).origin;
-    const asked = await fetch(`${origin}/api/hello?character=nova`, { headers: { authorization: `Bearer ${TEST_TOKEN}` } });
+    const asked = await fetch(`${origin}/api/hello?character=nova`, { headers: { authorization: `Bearer ${await signedInCli(origin)}` } });
     const hello = await asked.json() as { characters: { name: string }[]; selected_character?: string; selected_thread?: string; server_version: string };
     expect(hello.characters.map((c) => c.name).sort()).toEqual(["ada", "nova"]);
     expect([hello.selected_character, hello.selected_thread, hello.server_version]).toEqual(["nova", "main", asked.headers.get("shore-version") ?? ""]);
-    const none = await (await fetch(`${origin}/api/hello?character=nobody`, { headers: { authorization: `Bearer ${TEST_TOKEN}` } })).json() as Record<string, unknown>;
+    const none = await (await fetch(`${origin}/api/hello?character=nobody`, { headers: { authorization: `Bearer ${await signedInCli(origin)}` } })).json() as Record<string, unknown>;
     expect(["selected_character" in none, "selected_thread" in none]).toEqual([false, false]);
     const stranger = await fetch(`${origin}/api/hello`, { headers: { authorization: "Bearer guess" } });
     expect(stranger.status).toBe(401);
@@ -545,7 +544,7 @@ describe("going down", () => {
     const daemon = await start(place);
     const client = await Client.open(daemon, "ada");
     try {
-      const events = await fetch(`${required(daemon.web).origin}/api/events?character=ada`, { headers: { authorization: `Bearer ${TEST_TOKEN}` } });
+      const events = await fetch(`${required(daemon.web).origin}/api/events?character=ada`, { headers: { authorization: `Bearer ${await signedInCli(required(daemon.web).origin)}` } });
       expect(events.headers.get("content-type")).toBe("application/x-ndjson");
       const reader = required(events.body).pipeThrough(new TextDecoderStream()).getReader();
       let text = "";
@@ -637,7 +636,7 @@ describe("going down", () => {
     const daemon = await start(place, [], { anthropic: heldProvider(held, "too late", () => {}) });
     const client = await Client.open(daemon, "ada");
     try {
-      const events = await fetch(`${required(daemon.web).origin}/api/events?character=ada`, { headers: { authorization: `Bearer ${TEST_TOKEN}` } });
+      const events = await fetch(`${required(daemon.web).origin}/api/events?character=ada`, { headers: { authorization: `Bearer ${await signedInCli(required(daemon.web).origin)}` } });
       client.send({ type: "message", text: "hi", stream: true, images: [] });
       await client.awaitFrame("stream_start");
       const began = Date.now();
@@ -655,8 +654,8 @@ describe("going down", () => {
     const page = async (daemon: RunningDaemon, save?: Record<string, string>) => {
       const origin = required(daemon.web).origin;
       const post = async (path: string, body: unknown, cookie = "") => await fetch(`${origin}${path}`, { method: "POST", headers: { origin, cookie, "content-type": "application/json" }, body: JSON.stringify(body) });
-      const { code } = await (await fetch(`${origin}/api/login-code`, { method: "POST", headers: { authorization: `Bearer ${TEST_TOKEN}` } })).json() as { code: string };
-      const cookie = (await post("/api/login", { token: code })).headers.get("set-cookie")?.split(";", 1)[0] ?? "";
+      const { code } = await (await fetch(`${origin}/api/login-code`, { method: "POST", headers: { authorization: `Bearer ${await signedInCli(origin)}` } })).json() as { code: string };
+      const cookie = (await post("/api/login", { code })).headers.get("set-cookie")?.split(";", 1)[0] ?? "";
       if (save !== undefined) expect((await post("/api/preferences", { values: save }, cookie)).status).toBe(200);
       return await (await post("/api/preferences/list", {}, cookie)).json();
     };
@@ -915,16 +914,17 @@ describe("what a daemon tells its log", () => {
     await daemon.shutdown();
     await daemon.done;
     expect(["Config hot reload watcher stopped", "Auto-discovery loop stopped", "Unregistered daemon instance", "Daemon shut down cleanly"].filter((line) => !lines.includes(line))).toEqual([]);
-    expect(lines.filter((line) => /Wrote a new client token|Created default config|Could not release|Waiting for running work/.test(line))).toEqual([]);
+    expect(lines.filter((line) => /client token|Created default config|Could not release|Waiting for running work/.test(line))).toEqual([]);
   });
 
-  test("a daemon that has to write its own config and client token says it did", async () => {
+  test("a daemon that has to write its own config says it did, and writes no token", async () => {
     const root = await mkdtemp(join(tmpdir(), "shore-daemon-"));
     const env = { XDG_CONFIG_HOME: join(root, "xdg-config"), XDG_DATA_HOME: join(root, "data"), XDG_CACHE_HOME: join(root, "cache"), XDG_RUNTIME_DIR: join(root, "runtime"), HOME: root };
     const { log, lines } = recorder();
     const daemon = await startDaemon({ argv: ["--addr", "127.0.0.1:0"], env, providers: {}, instancesPath: join(root, "instances.json"), log, autoDiscovery: false });
     running.push(daemon);
-    expect(["Created default config.toml", "Wrote a new client token"].filter((line) => !lines.includes(line))).toEqual([]);
+    expect(lines.filter((line) => /Created default config|token/.test(line))).toEqual(["Created default config.toml"]);
+    expect(existsSync(join(root, "xdg-config", "shore", "token"))).toBe(false);
   });
 
   test("a shutdown waiting on a turn says so, and status says when it asked to stop and when it stops waiting", async () => {
@@ -1202,8 +1202,8 @@ describe("the web UI while a long reply runs", () => {
     } as unknown as SidecarProvider;
     const daemon = await start(place, [], { anthropic: provider });
     const origin = required(daemon.web).origin;
-    const { code } = await (await fetch(`${origin}/api/login-code`, { method: "POST", headers: { authorization: `Bearer ${TEST_TOKEN}` } })).json() as { code: string };
-    const cookie = (await fetch(`${origin}/api/login`, { method: "POST", headers: { origin, "content-type": "application/json" }, body: JSON.stringify({ token: code }) }))
+    const { code } = await (await fetch(`${origin}/api/login-code`, { method: "POST", headers: { authorization: `Bearer ${await signedInCli(origin)}` } })).json() as { code: string };
+    const cookie = (await fetch(`${origin}/api/login`, { method: "POST", headers: { origin, "content-type": "application/json" }, body: JSON.stringify({ code }) }))
       .headers.get("set-cookie")?.split(";", 1)[0] ?? "";
     const client = await Client.open(daemon, "ada", ["request-lifecycle"]);
     const browsers: BrowserSocket[] = [];

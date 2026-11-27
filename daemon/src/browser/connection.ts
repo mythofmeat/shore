@@ -2,10 +2,12 @@ import type { ClientMessage } from "../protocol/ClientMessage.ts";
 import type { RequestFinished } from "../protocol/RequestFinished.ts";
 import type { ServerMessage } from "../protocol/ServerMessage.ts";
 import type { WebDeviceList } from "../protocol/WebDeviceList.ts";
+import type { WebLogin } from "../protocol/WebLogin.ts";
 import type { WebLoginCode } from "../protocol/WebLoginCode.ts";
 import type { WebNewDevice } from "../protocol/WebNewDevice.ts";
 import type { WebSessionInfo } from "../protocol/WebSessionInfo.ts";
-import { validClientMessage, validWebDeviceList, validWebLoginCode, validWebNewDevice, validWebProblem, validWebSessionInfo } from "./validators.generated.js";
+import type { WebSignInState } from "../protocol/WebSignInState.ts";
+import { validClientMessage, validWebDeviceList, validWebLoginCode, validWebNewDevice, validWebProblem, validWebSessionInfo, validWebSignInState } from "./validators.generated.js";
 import { SyncState, type SyncSnapshot } from "./sync.ts";
 import { parseServerFrame } from "./wire.ts";
 import { randomUUID } from "./platform.ts";
@@ -104,10 +106,29 @@ export class BrowserConnection {
     });
   }
 
-  async signIn(token: string, rejected?: string): Promise<void> {
+  async signInState(): Promise<WebSignInState> {
+    const fetcher = this.#options.fetch ?? ((url: string, options: RequestInit) => fetch(url, options));
+    const response = await fetcher(this.#options.origin + "/api/sign-in", {
+      method: "GET", credentials: "same-origin", redirect: "error", cache: "no-store", signal: AbortSignal.timeout(this.#options.handshakeTimeoutMs ?? 10_000),
+    });
+    const body: unknown = await response.json();
+    if (!response.ok) throw new Error(validWebProblem(body) ? body.message : "Could not reach the daemon");
+    if (!validWebSignInState(body)) throw new Error("The daemon sent an unexpected answer. Reload the page.");
+    return body;
+  }
+
+  async choosePassword(password: string): Promise<void> {
+    await this.#answer("/api/password", { password }, "Could not set the password");
+  }
+
+  async changePassword(current: string, password: string): Promise<void> {
+    await this.#answer("/api/password", { current, password }, "Could not change the password");
+  }
+
+  async signIn(login: WebLogin, rejected?: string): Promise<void> {
     this.stop();
     const generation = this.#generation;
-    const response = await this.#post("/api/login", { token }, AbortSignal.timeout(this.#options.handshakeTimeoutMs ?? 10_000));
+    const response = await this.#post("/api/login", login, AbortSignal.timeout(this.#options.handshakeTimeoutMs ?? 10_000));
     if (generation !== this.#generation) return;
     if (!response.ok) {
       const problem: unknown = await response.json();
@@ -136,10 +157,6 @@ export class BrowserConnection {
     const body = await this.#answer("/api/devices/list", undefined, "Could not list the signed-in devices");
     if (!validWebDeviceList(body)) throw new Error("The daemon sent an unexpected device list. Reload the page.");
     return body;
-  }
-
-  async decideSignIn(code: string, allow: boolean): Promise<void> {
-    await this.#answer("/api/devices/decide", { code, allow }, allow ? "Could not let that device in" : "Could not refuse that device");
   }
 
   async revokeDevice(id: string): Promise<void> {
@@ -212,7 +229,8 @@ export class BrowserConnection {
       if (generation !== this.#generation) return;
       if (!response.ok) {
         const detail = validWebProblem(body) ? body.message : "Could not check the browser session";
-        this.#lost(response.status === 401 ? "signed_out" : response.status === 409 ? "reload_required" : response.status === 403 ? "error" : "reconnecting", detail);
+        if (response.status === 401) { this.#lost("signed_out", ""); return; }
+        this.#lost(response.status === 409 ? "reload_required" : response.status === 403 ? "error" : "reconnecting", detail);
         return;
       }
       if (!validWebSessionInfo(body)) { this.#lost("error", "The daemon returned an invalid session contract"); return; }
