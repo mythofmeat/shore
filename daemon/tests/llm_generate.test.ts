@@ -13,8 +13,11 @@ import { closeLedgers } from "../src/ledger/record.ts";
 import { openLedger, rowsIn } from "./support/ledger_fixture.ts";
 import type { GenerateResponse, SidecarProvider, SidecarRequest } from "../src/llm/types.ts";
 import type { LlmError } from "../src/llm/errors.ts";
+import { GeminiProvider } from "../src/llm/providers/gemini.ts";
+import type { ToolPhase } from "../src/tools/execute.ts";
 import { testTmp } from "./support/tmp.ts";
 import { outcomeOf, rejectionOf } from "./support/outcome.ts";
+import { GOOGLE_REJECTS_KEY } from "./support/google.ts";
 
 afterEach(() => {
   closeLedgers();
@@ -144,6 +147,51 @@ describe("shared generation contract", () => {
         tools: (_request, sink) => { effectSink = sink; return undefined; },
       }))).toEqual(unauthorized());
       expect(attempts).toBe(1);
+    });
+  }
+
+  for (const withTools of [false, true]) {
+    test(`a Gemini key Google says is not valid hands the ${withTools ? "tool loop" : "reply"} to the provider's next key`, async () => {
+      const keysSeen: string[] = [];
+      const reply = {
+        candidates: [{ content: { role: "model", parts: [{ text: "hello" }] }, finishReason: "STOP", index: 0 }],
+        usageMetadata: { promptTokenCount: 1, candidatesTokenCount: 1, totalTokenCount: 2 },
+      };
+      const google = Bun.serve({
+        port: 0,
+        fetch: (incoming) => {
+          const key = incoming.headers.get("x-goog-api-key") ?? "";
+          keysSeen.push(key);
+          const body = key === "rejected-secret" ? JSON.stringify(GOOGLE_REJECTS_KEY) : `data: ${JSON.stringify(reply)}\r\n\r\n`;
+          return new Response(body, { status: key === "rejected-secret" ? 400 : 200, headers: { "content-type": "text/event-stream" } });
+        },
+      });
+      const phase: ToolPhase = { messages: [], runTool: () => Promise.reject(new Error("no tool was asked for")), recordTurn: () => {} };
+      try {
+        const { result, fallbacks } = await runGeneration(
+          request({
+            sdk: "gemini", model: "gemini-test", provider_key: "gemini", base_url: `http://127.0.0.1:${String(google.port)}`,
+            ...(withTools ? { tools: [{ name: "look", description: "look around", input_schema: { type: "object", properties: {} } }] } : {}),
+          }),
+          { providerKey: "gemini" },
+          deps(new GeminiProvider(), {
+            providers: { gemini: new GeminiProvider() },
+            config: {
+              ...config(false),
+              providers: ProviderRegistry.fromSection({
+                gemini: { keys: [{ name: "first", api_key_env: PRIMARY }, { name: "second", api_key_env: SPARE }] },
+              }),
+            },
+            env: { [PRIMARY]: "rejected-secret", [SPARE]: "working-secret" },
+          }),
+          withTools ? { tools: phase } : {},
+        );
+        expect(keysSeen).toEqual(["rejected-secret", "working-secret"]);
+        expect(result.content).toBe("hello");
+        expect(fallbacks.map((f) => [f.from.name, f.to?.name, f.kind, f.status])).toEqual([["first", "second", "invalid_key", 400]]);
+      } finally {
+        void google.stop(true);
+      }
     });
   }
 
