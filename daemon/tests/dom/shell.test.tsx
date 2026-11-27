@@ -3,7 +3,7 @@ import { expect, spyOn, test } from "bun:test";
 import type { ThreadView } from "../../src/protocol/ThreadView.ts";
 import type { ChromeSnapshot } from "../../src/browser/workspace.ts";
 import { useApp } from "./app.ts";
-import { replace } from "./daemon.ts";
+import { HISTORY, replace } from "./daemon.ts";
 import { acting, click, mount } from "./dom.ts";
 
 const app = useApp();
@@ -292,27 +292,80 @@ test("an error from the daemon is shown once as an error toast and then cleared"
   expect(workspace.getSnapshot().error).toBe("");
 });
 
-test("the address names the open character and thread, and keeps the page's hash", async () => {
+test("the address names the open character and thread, keeps the page's hash, and each switch is a new entry in the history", async () => {
   const { navigate } = await import("../../src/browser/app/route.ts");
   const replaced = spyOn(history, "replaceState");
-  app.restores.push(() => { replaced.mockRestore(); });
+  const pushed = spyOn(history, "pushState");
+  app.restores.push(() => { replaced.mockRestore(); pushed.mockRestore(); });
   const view = await shell();
-  expect([location.pathname, replaced.mock.calls.length]).toEqual([START, 0]);
+  expect([location.pathname, replaced.mock.calls.length, pushed.mock.calls.length]).toEqual([START, 0, 0]);
   await view.rerender({ thread: "side" });
-  expect(location.pathname).toBe("/workspace/ada/side");
+  expect([location.pathname, pushed.mock.calls.length, replaced.mock.calls.length]).toEqual(["/workspace/ada/side", 1, 0]);
   await view.rerender({ thread: null });
-  expect(location.pathname).toBe("/workspace/ada/main");
+  expect([location.pathname, pushed.mock.calls.length]).toEqual(["/workspace/ada/main", 2]);
   await acting(() => { navigate({ view: "settings", page: "usage" }); });
+  const settings = pushed.mock.calls.length;
   await view.rerender({ character: "a b", thread: "c/d" });
-  expect([location.pathname, location.hash]).toEqual(["/workspace/a%20b/c%2Fd", "#settings/usage"]);
+  expect([location.pathname, location.hash, pushed.mock.calls.length]).toEqual(["/workspace/a%20b/c%2Fd", "#settings/usage", settings + 1]);
   await view.rerender({ character: null, thread: null });
   expect(location.pathname, "with no character the address stays").toBe("/workspace/a%20b/c%2Fd");
 });
 
-test("the tab title names the character or settings, counts unread replies, and goes back to Shore when the shell closes", async () => {
+test("the first address the shell sees is replaced, not added to the history", async () => {
+  history.replaceState(null, "", "/workspace");
+  const pushed = spyOn(history, "pushState");
+  app.restores.push(() => { pushed.mockRestore(); });
+  await shell();
+  expect([location.pathname, pushed.mock.calls.length]).toEqual([START, 0]);
+});
+
+test("Back and Forward open the thread the address names, without adding to the history, and leave the shown thread alone", async () => {
+  const pushed = spyOn(history, "pushState");
+  app.restores.push(() => { pushed.mockRestore(); });
+  const view = await shell();
+  let revision = 10;
+  const select = (thread: string, character = "ada") => { app.socket().receive({ ...HISTORY, revision: ++revision, selected_character: character, selected_thread: thread }); };
+  app.restores.push(() => { select("story"); });
+  app.answer((request) => {
+    const name = (request["args"] as { name?: string } | undefined)?.name ?? "";
+    switch (request["name"]) {
+      case "switch_thread": select(name); return { character: "ada", thread: name, changed: true };
+      case "switch_character": select("main", name); return { character: name, changed: true };
+      case "presence": return { statuses: [], history: [] };
+      default: return undefined;
+    }
+  });
+  await acting(() => { select("side"); });
+  await view.rerender({ thread: "side" });
+  const back = async (path: string) => {
+    const since = app.sent(0).length;
+    history.replaceState(null, "", path);
+    await acting(() => { dispatchEvent(new PopStateEvent("popstate")); });
+    await settle();
+    return app.sent(since).filter((request) => String(request["name"]).startsWith("switch_")).map((request) => [request["name"], request["args"]]);
+  };
+  expect(await back(START)).toEqual([["switch_thread", { name: "story", resync: true }]]);
+  await view.rerender({ thread: "story" });
+  expect([location.pathname, pushed.mock.calls.length], "the thread Back opened stays where it was").toEqual([START, 1]);
+  expect(await back(START), "a change of hash alone opens nothing").toEqual([]);
+  expect(await back("/elsewhere"), "an address that names no thread opens nothing").toEqual([]);
+  expect(await back("/workspace/ada/side")).toEqual([["switch_thread", { name: "side", resync: true }]]);
+  await view.rerender({ thread: "side" });
+  expect(await back("/workspace/bea/main"), "the character's own thread opens with it").toEqual([["switch_character", { name: "bea" }]]);
+  await view.unmount();
+  expect(await back("/workspace/ada/notes"), "a shell that is gone stops following the address").toEqual([]);
+});
+
+test("the tab title names the thread and character, or settings, counts unread replies, and goes back to Shore when the shell closes", async () => {
   const { navigate } = await import("../../src/browser/app/route.ts");
   const view = await shell();
-  expect(document.title).toBe("ada · Shore");
+  expect(document.title).toBe("story · ada");
+  await view.rerender({ thread: "side", threads: [HOME, { ...SIDE, label: "Side quest" }] });
+  expect(document.title, "a thread with a label goes by it").toBe("Side quest · ada");
+  await view.rerender({ thread: "gone" });
+  expect(document.title, "a thread not in the list goes by its name").toBe("gone · ada");
+  await view.rerender({ thread: null });
+  expect(document.title).toBe("main · ada");
   await view.rerender({ character: null, thread: null });
   expect(document.title).toBe("Shore");
   await acting(() => { navigate({ view: "settings", page: "usage" }); });
@@ -325,7 +378,7 @@ test("the tab title names the character or settings, counts unread replies, and 
   await acting(async () => { await notifier.enable(); });
   app.restores.push(() => { notifier.disable(); });
   await acting(() => { app.socket().receive({ type: "new_message", revision: Date.now(), character: "ada", thread: "story", msg_id: "m_t1", role: "assistant", content: "hello", images: [], content_blocks: [], timestamp: "2026-11-10T00:00:00Z" }); });
-  expect(document.title).toBe("(1) ada · Shore");
+  expect(document.title).toBe("(1) story · ada");
   await view.unmount();
   expect(document.title).toBe("Shore");
 });

@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import type { ChromeSnapshot } from "../workspace.ts";
-import { Sidebar } from "../sidebar/Sidebar.tsx";
+import { Sidebar, threadLabel } from "../sidebar/Sidebar.tsx";
 import { sortThreads, threadsOnScreen } from "../sidebar/order.ts";
 import { Chat } from "../chat/Chat.tsx";
 import { Settings } from "../settings/Settings.tsx";
@@ -12,6 +12,7 @@ import { FOLDER_DIALOG_EVENT, THREAD_DIALOG_EVENT, type FolderDialogRequest, typ
 import { Palette } from "./Palette.tsx";
 import { navigate, openSettings, useRoute } from "./route.ts";
 import { adjacent, globalAction, nextUnread } from "./shortcuts.ts";
+import { useThreadUrl } from "./thread_url.ts";
 import { perform, useCollapsedFolders, useNotifications, workspace } from "./state.ts";
 
 export function Shell({ state }: { state: ChromeSnapshot }) {
@@ -40,16 +41,14 @@ export function Shell({ state }: { state: ChromeSnapshot }) {
     toasts.show(state.error, "error");
     workspace.dismissError();
   }, [state.error]);
+  useThreadUrl(state.character, state.thread);
+  const shownThread = state.threads.find((thread) => thread.id === state.thread);
+  const place = shownThread === undefined ? state.thread ?? "main" : threadLabel(shownThread);
   useEffect(() => {
-    if (state.character === null) return;
-    const path = `/workspace/${encodeURIComponent(state.character)}/${encodeURIComponent(state.thread ?? "main")}`;
-    if (location.pathname !== path) history.replaceState(history.state, "", path + location.hash);
-  }, [state.character, state.thread]);
-  useEffect(() => {
-    const title = route.view === "settings" ? "Settings · Shore" : state.character === null ? "Shore" : `${state.character} · Shore`;
+    const title = route.view === "settings" ? "Settings · Shore" : state.character === null ? "Shore" : `${place} · ${state.character}`;
     document.title = unread > 0 ? `(${String(unread)}) ${title}` : title;
     return () => { document.title = "Shore"; };
-  }, [route.view, state.character, unread]);
+  }, [route.view, state.character, place, unread]);
   const toggle = () => { if (mobile) setDrawer(!drawer); else setExpanded(!expanded); };
   useEffect(() => {
     const handler = (event: KeyboardEvent) => {

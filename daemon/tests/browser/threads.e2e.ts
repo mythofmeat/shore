@@ -20,6 +20,28 @@ async function textBoxLines(page: Page): Promise<{ rows: number; lines: number }
   }));
 }
 
+test("Back returns to the thread before and Forward comes back, and the tab names the thread and character", async ({ page }) => {
+  const finish = await watchPage(page);
+  await signIn(page);
+  await createCharacter(page, "wren");
+  await expect(page).toHaveTitle("main · wren");
+  await createThread(page, "wren", "notes");
+  await expect(page).toHaveTitle("notes · wren");
+  await expect(page).toHaveURL(/\/workspace\/wren\/notes$/);
+  await page.goBack();
+  await expect(page.locator(".topbar-thread")).toHaveText("main");
+  await expect(page).toHaveURL(/\/workspace\/wren\/main$/);
+  await expect(page).toHaveTitle("main · wren");
+  await page.goForward();
+  await expect(page.locator(".topbar-thread")).toHaveText("notes");
+  await expect(page).toHaveURL(/\/workspace\/wren\/notes$/);
+  await page.goBack();
+  await expect(page.locator(".topbar-thread")).toHaveText("main");
+  await page.goBack();
+  await expect(page, "the address before the first thread was shown is not kept").not.toHaveURL(/\/workspace\/wren/);
+  await finish();
+});
+
 test("a dialog's text boxes are as many lines tall as their rows, at the default and the largest text size", async ({ page }) => {
   const finish = await watchPage(page);
   await signIn(page);
