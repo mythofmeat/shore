@@ -33,7 +33,7 @@ import { toCredentialsEntry } from "../config/providers.ts";
 import { characterWorkspace } from "../tools/character_workspace.ts";
 import { assembleToolSurface, renderToolDefs, subagentToolDefs } from "../tools/registry.ts";
 import { withoutWakeWorking } from "../autonomy/wake_working.ts";
-import { assistantImageModeForRequest, buildLlmMessages, inReadingOrder, type SentMessage } from "./wire_messages.ts";
+import { buildLlmMessages, inReadingOrder, type SentMessage } from "./wire_messages.ts";
 import { Texts } from "../texts/texts.ts";
 
 export interface PrepareChatContextParams {
@@ -210,11 +210,7 @@ export async function prepareChatContext(
 
   const toolsAvailable = anyToolEnabled(config.app) || mcpToolDefs.length > 0;
 
-  const { messages: llmMessages, system, sent } = await buildLlmMessages(
-    prompt,
-    assistantImageModeForRequest(resolved.sdk, toolsAvailable),
-    texts,
-  );
+  const { messages: llmMessages, system, sent } = await buildLlmMessages(prompt, texts);
 
   const toolDefs = toolsAvailable
     ? assembleToolSurface(

@@ -6,6 +6,7 @@ import { setTomlValue, TomlEditError } from "../src/config/toml_edit.ts";
 import { clearConfigKey, commitConfigEdits, config, type ConfigContext, type ConfigRuntime } from "../src/commands/config.ts";
 import { loadConfig, type LoadedConfig } from "../src/config/loader.ts";
 import { configSchema } from "../src/config/schema.ts";
+import { shoreLog } from "../src/log.ts";
 import { setTestEnv } from "./support/env.ts";
 import { testTmp } from "./support/tmp.ts";
 
@@ -277,18 +278,22 @@ describe("config set on disk", () => {
     expect(await readFile(ctx.configPath, "utf8")).toBe(before);
   });
 
-  test("a value naming something its source doesn't have is refused, while lists, blanks and empty sources go unchecked", async () => {
-    const ctx = await world('[providers.anthropic]\napi_key_env = "ANTHROPIC_API_KEY"\n\n[chat."anthropic:claude-one"]\nmax_output_tokens = 100\n\n[image."openai:gpt-image-1"]\nsize = "1024x1024"\n\n[image."openai:gpt-image-2"]\nsize = "1024x1024"\n');
-    expect(refusalOf(() => config(ctx, { key: "image.model", value: "openai:dall-e-9" }))).toMatchObject({ code: "not_found", message: 'image.model: no image_models named "openai:dall-e-9". Known: openai:gpt-image-1, openai:gpt-image-2' });
-    expect(config(ctx, { key: "image.model", value: "openai:gpt-image-2" })).toMatchObject({ value: "openai:gpt-image-2" });
+  test("a model name that names no model is refused before the file is touched, while lists and blanks go unchecked", async () => {
+    const ctx = await world('[providers.anthropic]\napi_key_env = "ANTHROPIC_API_KEY"\n\n[chat."anthropic:claude-one"]\nmax_output_tokens = 100\n');
+    const before = await readFile(ctx.configPath, "utf8");
     expect(refusalOf(() => config(ctx, { key: "chat.model", value: "nosuch:model" }))).toMatchObject({ code: "not_found", message: 'model "nosuch:model" not found in static catalog or discovered models' });
+    expect(refusalOf(() => config(ctx, { key: "subagents.scout.model", value: " nosuch:model " }))).toMatchObject({ code: "not_found", message: 'model "nosuch:model" not found in static catalog or discovered models' });
+    expect(await readFile(ctx.configPath, "utf8")).toBe(before);
     expect(config(ctx, { key: "chat.model", value: "claude-one" }), "a configured model may go by its bare name").toMatchObject({ value: "claude-one" });
-    expect(config(ctx, { key: "tools.enabled", value: "read, edit" })).toMatchObject({ value: ["read", "edit"] });
-    const blank = refusalOf(() => config(ctx, { key: "image.model", value: " " }));
-    expect(blank, "a blank isn't a name to look up, so the loader judges it").toMatchObject({ code: "invalid_request" });
-    expect(blank.message).toStartWith('image.model = " " was rejected: ');
-    const bare = await world("");
-    expect(config(bare, { key: "image.model", value: "openai:dall-e-9" }), "with no image models configured there is nothing to check against").toMatchObject({ value: "openai:dall-e-9" });
+    expect(config(ctx, { key: "tools.enabled", value: "read, nosuch" })).toMatchObject({ value: ["read", "nosuch"] });
+    const warned = spyOn(shoreLog, "warn").mockImplementation(() => {});
+    try {
+      expect(config(ctx, { key: "triggers.model", value: " " }), "a blank isn't a name to look up, so only the loader judges it").toMatchObject({ value: " " });
+      const lines = warned.mock.calls.map(([line]) => String(line));
+      expect([lines.length, lines[0]?.includes('configured default model " " was not found in the static catalog')]).toEqual([1, true]);
+    } finally {
+      warned.mockRestore();
+    }
   });
 
   test("an edit the TOML editor can't make is refused as an invalid request", async () => {
@@ -377,4 +382,25 @@ test("the prompt list and each kind of part are described as parts of the prompt
   expect(described('prompt."<index>".workspace')).toStartWith("File in the character's workspace, relative to its root;");
   expect(described('prompt."<index>".shore')).toStartWith("A part Shore writes: system_prompt is the file");
   expect(described("subagents.notes.prompt")).toBe("prompt for subagents.");
+});
+
+test("the schema lists each key once, in key order, with a table above each group of keys, and says which keys can be set, which may be left out and what unit a number is in", () => {
+  const entries = configSchema({ instancesAt: () => [] });
+  const keys = entries.map((entry) => entry.key);
+  expect(keys).toEqual(keys.toSorted());
+  expect([new Set(keys).size, keys.filter((key) => key === "").length]).toEqual([keys.length, 0]);
+  const row = (key: string): unknown[] | undefined => {
+    const found = entries.find((entry) => entry.key === key);
+    return found === undefined ? undefined : [found.kind, found.settable, found.optional, "units" in found ? found.units : "none"];
+  };
+  expect(["providers", 'providers."<name>"', 'providers."<name>".keys', 'providers."<name>".keys."<index>"', "budgets", 'budgets."<index>"', "chat"].map(row)).toEqual([
+    ["table", false, false, "none"], ["table", false, false, "none"], ["list", false, false, "none"], ["table", false, false, "none"],
+    ["list", false, false, "none"], ["table", false, false, "none"], ["table", false, false, "none"],
+  ]);
+  expect(['providers."<name>".enabled', 'providers."<name>".keys."<index>".name', 'budgets."<index>".cost_usd', "chat.model", "tools.max_result_chars", "compaction.max_context_tokens"].map(row)).toEqual([
+    ["boolean", true, false, "none"], ["string", false, false, "none"], ["float", false, false, "USD"], ["string", true, true, "none"],
+    ["integer", true, false, "characters"], ["integer", true, false, "tokens"],
+  ]);
+  const optional = ["api_key_env", "spend_limit_usd", "spend_period", "dir", "session_limit", "weekly_limit", "name", "enabled"].map((field) => row(`providers."<name>".keys."<index>".${field}`)?.[2]);
+  expect(optional).toEqual([true, true, true, true, true, true, false, false]);
 });

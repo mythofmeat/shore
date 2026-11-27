@@ -1,7 +1,6 @@
 import type { ClientMessage } from "../protocol/ClientMessage";
 import type { ImageUpload } from "../protocol/ImageUpload";
-import { base64Rejection } from "../tools/images.ts";
-import { base64Bytes } from "../util/base64.ts";
+import { base64Bytes, base64Rejection } from "../util/base64.ts";
 
 import { MAX_CAPABILITIES, MAX_ATTACHMENTS, MAX_ATTACHMENT_BYTES, MAX_TOTAL_ATTACHMENT_BYTES, MAX_TEXT_BYTES, MAX_CAPABILITY_BYTES, MAX_FILENAME_BYTES, MAX_MIME_TYPE_BYTES, MAX_IMAGE_PATH_BYTES, MAX_MARK_TAGS, MAX_MARK_TAG_BYTES } from "./limits.ts";
 export { MAX_CAPABILITIES, MAX_ATTACHMENTS, MAX_ATTACHMENT_BYTES, MAX_TOTAL_ATTACHMENT_BYTES } from "./limits.ts";

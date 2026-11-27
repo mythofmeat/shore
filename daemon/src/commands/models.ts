@@ -320,12 +320,6 @@ function subagentRole(ctx: ModelsContext, chat: ModelRole): ModelRole {
   return { role: "sub-agents", model: chat.model, source: `inherits chat${suffix}` };
 }
 
-function imagesRole(ctx: ModelsContext): ModelRole {
-  const name = ctx.config.app.image.model;
-  if (name === undefined || name === "") return { role: "images", model: null, source: null };
-  return { role: "images", model: qualify(ctx, name), source: "image.model" };
-}
-
 export function modelRoles(ctx: ModelsContext): ModelRole[] {
   const inherited = inheritedChatRole(ctx);
   const home = homeChatRole(ctx, inherited);
@@ -333,7 +327,6 @@ export function modelRoles(ctx: ModelsContext): ModelRole[] {
     chatRole(ctx),
     ...BACKGROUND_TASKS.map((task) => backgroundRole(ctx, task, home)),
     subagentRole(ctx, inherited),
-    imagesRole(ctx),
   ];
 }
 

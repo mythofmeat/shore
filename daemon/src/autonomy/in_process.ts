@@ -247,18 +247,13 @@ async function runLoopTool(
     sendDirect: () => {},
     ctx,
     limits: toolLimitsFrom(config.app.tools, config.app.subagents.agents),
-    ...(imageLimits === undefined ? {} : { imageLimits }),
+    imageLimits,
     now: () => new Date().toISOString(),
     newMessageId: () => `m_${crypto.randomUUID()}`,
     schemas: schemasFrom(tools),
   };
-  const run = await runToolUse(use, exec, []);
-  return {
-    output: run.output,
-    isError: run.isError,
-    block: run.block,
-    ...(run.value === undefined ? {} : { value: run.value }),
-  };
+  const run = await runToolUse(use, exec);
+  return { output: run.output, isError: run.isError, block: run.block };
 }
 
 export type CompactionGenerate = (

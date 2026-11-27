@@ -247,7 +247,6 @@ function suggests<T>(inner: Reader<T>, source: ConfigValueSource): Reader<T> {
 }
 
 const readChatModelName = suggests(readString, "chat_models");
-const readImageModelName = suggests(readString, "image_models");
 const readToolNameSeq = readSeq(suggests(readString, "tools"));
 const readSubagentNameSeq = readSeq(suggests(readString, "subagents"));
 
@@ -607,22 +606,6 @@ const IMAGES: StructSpec<ImagesConfig> = {
     mcp: struct(IMAGE_OVERRIDE),
   },
 };
-
-export interface ImageConfig {
-  model: string | undefined;
-}
-
-const IMAGE: StructSpec<ImageConfig> = {
-  name: "ImageConfig",
-  make: () => ({ model: undefined }),
-  others: "read elsewhere",
-  fields: { model: optional(readImageModelName) },
-};
-
-export function imageModelProfiles(image: Table | undefined): Table | undefined {
-  if (image === undefined) return undefined;
-  return Object.fromEntries(Object.entries(image).filter(([key]) => !(key in IMAGE.fields)));
-}
 
 export function imageSettingsFor(images: ImagesConfig, origin: ImageOrigin): ImageSettings {
   const override = images[origin];
@@ -1217,7 +1200,6 @@ export interface AppConfig {
   chat: ChatConfig;
   prompt: PromptPart[];
   texts: Record<string, TextSetting | undefined>;
-  image: ImageConfig;
   images: ImagesConfig;
   triggers: TriggersConfig;
   marks: MarksConfig;
@@ -1237,7 +1219,6 @@ export const defaultAppConfig = (): AppConfig => ({
   chat: defaultChatConfig(),
   prompt: [],
   texts: {},
-  image: IMAGE.make(),
   images: defaultImagesConfig(),
   triggers: defaultTriggersConfig(),
   marks: defaultMarksConfig(),
@@ -1261,7 +1242,6 @@ const APP: StructSpec<AppConfig> = {
     chat: struct(CHAT),
     prompt: readSeq(readPromptPart),
     texts: struct(TEXTS),
-    image: struct(IMAGE),
     images: struct(IMAGES),
     triggers: struct(TRIGGERS),
     marks: struct(MARKS),

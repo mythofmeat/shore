@@ -417,7 +417,6 @@ function modelRefs(config: LoadedConfig): [string, string | undefined][] {
     ["chat.model", config.app.chat.model],
     ["triggers.model", config.app.triggers.model],
     ["subagents.model", config.app.subagents.model],
-    ["image.model", config.app.image.model],
     ...[...config.app.subagents.agents].map(([sub, def]): [string, string | undefined] => [`subagents.${sub}.model`, def.model]),
   ];
 }

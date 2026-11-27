@@ -51,7 +51,7 @@ function threadTools(dryRun = false): { ctx: ToolContext; asked: unknown[] } {
   const asked: unknown[] = [];
   const ctx: ToolContext = {
     texts: new Texts(),
-    workspaceDir: data, characterName: "ada", characterDataDir: join(data, "ada"), imageDir: data, conversationDir: data,
+    workspaceDir: data, characterName: "ada", characterDataDir: join(data, "ada"), conversationDir: data,
     historyDbPath: join(data, HISTORY_DB_FILE), configDir: data, thread: "main", userName: "eve", dryRun,
     startThread: async (request: StartThreadRequest) => { asked.push(["start", request]); },
     sealThread: async (request: NewSealedThread) => {

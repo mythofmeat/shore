@@ -144,7 +144,7 @@ test("the palette lists the keyboard shortcuts, and the settings keys once they 
   const [schema] = app.sent(since).filter((request) => request["name"] === "config_schema");
   const entry = (key: string, settable: boolean) => ({ key, kind: "string", type: "String", settable, optional: true, restart_required: false, secret: false, values: [] });
   await acting(async () => {
-    app.socket().receive({ type: "command_output", rid: schema?.["rid"], name: "config_schema", data: { sources: { chat_models: [], image_models: [], tools: [], subagents: [], characters: [], providers: [] }, schema: [entry("defaults.model", true), entry("dirs.data", false), entry("providers.<name>.api_key_env", true)] } });
+    app.socket().receive({ type: "command_output", rid: schema?.["rid"], name: "config_schema", data: { sources: { chat_models: [], tools: [], subagents: [], characters: [], providers: [] }, schema: [entry("defaults.model", true), entry("dirs.data", false), entry("providers.<name>.api_key_env", true)] } });
     app.socket().receive({ type: "request_finished", rid: schema?.["rid"], outcome: "completed" });
     await Bun.sleep(5);
   });

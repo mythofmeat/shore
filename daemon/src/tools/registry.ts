@@ -77,24 +77,6 @@ export const ALL_TOOLS: readonly ToolDef[] = Object.freeze([
     },
   },
   {
-    name: "generate_image",
-    parameters: {
-      type: "object",
-      properties: {
-        prompt: {
-          type: "string",
-        },
-        size: {
-          type: "string",
-        },
-        caption: {
-          type: "string",
-        },
-      },
-      required: ["prompt"],
-    },
-  },
-  {
     name: "activity_heatmap",
     parameters: {
       type: "object",

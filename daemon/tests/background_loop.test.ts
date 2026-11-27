@@ -8,7 +8,7 @@ import type { ToolPhase } from "../src/tools/execute.ts";
 afterEach(() => { jest.useRealTimers(); });
 
 const READ: ContentBlock = { type: "tool_use", id: "t1", name: "read", input: { file_path: "SOUL.md" } };
-const DRAW: ContentBlock = { type: "tool_use", id: "t2", name: "generate_image", input: { prompt: "a lamp" } };
+const LIST: ContentBlock = { type: "tool_use", id: "t2", name: "list_triggers", input: {} };
 
 function asked(): SidecarRequest {
   return {
@@ -39,7 +39,7 @@ function loop(generate: BackgroundLoopDeps["generate"], over: Partial<Background
   const seen: Seen = { persisted: [], transcripts: [], notes: [], parallel: [] };
   const results: Record<string, LoopToolResult> = {
     read: { output: "Ada", isError: false },
-    generate_image: { output: "made the lamp", isError: false, value: { path: "/media/lamp.png" } },
+    list_triggers: { output: "two triggers", isError: false },
   };
   const deps: BackgroundLoopDeps = {
     character: "ada",
@@ -85,27 +85,27 @@ async function lastRound(phase: ToolPhase, request: SidecarRequest, text: string
 test("a wake's rounds are kept once each, with the model that answered, its tools run one at a time, and what it ends with is added to what was asked", async () => {
   const request = asked();
   const { deps, seen } = loop(async (call, phase) => {
-    await toolRound(phase, call, [READ, DRAW]);
+    await toolRound(phase, call, [READ, LIST]);
     return await lastRound(phase, call, "Read the log.");
   });
   const result = await runBackgroundLoop(request, deps);
 
-  expect(result).toEqual({ images: [{ path: "/media/lamp.png", caption: undefined, data: undefined }], rounds: 2, usage: { input_tokens: 1, output_tokens: 7, cache_read_tokens: 0, cache_creation_tokens: 0 } });
+  expect(result).toEqual({ rounds: 2, usage: { input_tokens: 1, output_tokens: 7, cache_read_tokens: 0, cache_creation_tokens: 0 } });
   expect(seen.parallel).toEqual([false]);
   expect(seen.persisted).toEqual([
-    { role: "assistant", blocks: [READ, DRAW], model: "claude-answered" },
+    { role: "assistant", blocks: [READ, LIST], model: "claude-answered" },
     { role: "user", blocks: [
       { type: "tool_result", tool_use_id: "t1", content: "Ada", is_error: false },
-      { type: "tool_result", tool_use_id: "t2", content: "made the lamp", is_error: false },
+      { type: "tool_result", tool_use_id: "t2", content: "two triggers", is_error: false },
     ] },
     { role: "assistant", blocks: [{ type: "text", text: "Read the log." }], model: "claude-answered" },
   ]);
-  expect(seen.transcripts).toEqual([["wake", 0, ["read", "generate_image"]], ["wake_tool_loop", 1, []]]);
+  expect(seen.transcripts).toEqual([["wake", 0, ["read", "list_triggers"]], ["wake_tool_loop", 1, []]]);
   expect(request.messages).toEqual([
     { role: "user", content: [{ type: "text", text: "[wake]" }] },
     { role: "assistant", content: [{ type: "text", text: "Read the log." }] },
   ]);
-  expect(seen.notes).toEqual(["Tool: read → Ada", "Tool: generate_image → made the lamp"]);
+  expect(seen.notes).toEqual(["Tool: read → Ada", "Tool: list_triggers → two triggers"]);
 });
 
 test("a wake that answers at once is kept once, and a round kept before its model is known carries none", async () => {

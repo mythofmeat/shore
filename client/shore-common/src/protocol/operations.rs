@@ -166,7 +166,7 @@ wire_types! {
     pub enum ConfigKind { Boolean, String, Integer, Float, Duration, Enum, List, Map, Table, Unknown }
 
     #[serde(rename_all = "snake_case")]
-    pub enum ConfigSource { ChatModels, ImageModels, Tools, Subagents, Characters, Providers }
+    pub enum ConfigSource { ChatModels, Tools, Subagents, Characters, Providers }
 
     #[serde(rename_all = "lowercase")]
     pub enum ConfigWidth { Usize, U32, U64 }
@@ -1785,7 +1785,7 @@ wire_types! {
     pub enum ModelSettingsResult { Overview(ModelSettingsOverview), Detail(Box<ModelSettingsDetail>) }
 
     pub struct ConfigSources {
-        pub chat_models: Vec<String>, pub image_models: Vec<String>,
+        pub chat_models: Vec<String>,
         pub tools: Vec<String>, pub subagents: Vec<String>, pub characters: Vec<String>, pub providers: Vec<String>,
     }
 

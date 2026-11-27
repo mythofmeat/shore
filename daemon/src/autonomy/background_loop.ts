@@ -1,7 +1,7 @@
 import type { ToolPhase } from "../tools/execute.ts";
 import { ToolLoopStop } from "../llm/tool_loop_control.ts";
 
-import { appendWrapUpNudge, generatedImageRef, timeLeftPhrase, type ImageRef, type ToolUse } from "./wake_shape.ts";
+import { appendWrapUpNudge, timeLeftPhrase, type ToolUse } from "./wake_shape.ts";
 import type { GenerateResponse, SidecarRequest, ToolDefinition, Usage } from "../llm/types.ts";
 import type { ContentBlock } from "../engine/types.ts";
 import { truncateSummary } from "../notifications.ts";
@@ -12,7 +12,6 @@ export type { CapturedTool };
 export interface LoopToolResult {
   output: string;
   isError: boolean;
-  value?: unknown;
   block?: ContentBlock;
 }
 
@@ -54,7 +53,6 @@ export interface BackgroundLoopDeps {
 }
 
 export interface BackgroundLoopResult {
-  images: ImageRef[];
   failedRound?: number | undefined;
   failure?: unknown;
   timedOut?: boolean;
@@ -67,20 +65,15 @@ export async function dispatchLoopTools(
   toolUses: readonly ToolUse[],
   deps: Pick<BackgroundLoopDeps, "dispatch" | "note">,
   tools?: readonly ToolDefinition[],
-): Promise<{ results: ContentBlock[]; captured: CapturedTool[]; images: ImageRef[] }> {
+): Promise<{ results: ContentBlock[]; captured: CapturedTool[] }> {
   const results: ContentBlock[] = [];
   const captured: CapturedTool[] = [];
-  const images: ImageRef[] = [];
 
   for (const [id, name, input] of toolUses) {
     const result = await deps.dispatch(name, input, id, tools);
     const output = result.output;
     const isError = result.isError;
     const block = result.block;
-    if (!isError && name === "generate_image") {
-      const ref = generatedImageRef(result.value);
-      if (ref !== undefined) images.push(ref);
-    }
 
     results.push(
       block ?? { type: "tool_result", tool_use_id: id, content: output, is_error: isError },
@@ -90,14 +83,14 @@ export async function dispatchLoopTools(
     deps.note(`Tool: ${name} → ${truncateSummary(output, 80)}`);
   }
 
-  return { results, captured, images };
+  return { results, captured };
 }
 
 export async function runBackgroundLoop(
   request: SidecarRequest,
   deps: BackgroundLoopDeps,
 ): Promise<BackgroundLoopResult> {
-  const result: Omit<BackgroundLoopResult, "rounds"> = { images: [] };
+  const result: Omit<BackgroundLoopResult, "rounds"> = {};
   let iteration = 0;
   let captured: CapturedTool[] = [];
   const deadline = performance.now() + deps.timeLimitMs;
@@ -165,7 +158,6 @@ export async function runBackgroundLoop(
     runTool: async (use) => {
       const round = await dispatchLoopTools([[use.id, use.name, use.input]], deps, request.tools);
       captured.push(...round.captured);
-      result.images.push(...round.images);
       return required(round.results[0]);
     },
     recordTurn: async (role, blocks) => {

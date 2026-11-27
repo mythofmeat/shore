@@ -273,7 +273,7 @@ export async function runTool(
       : { schemas: new Map([[request.tool, resolved.schema]]) satisfies ToolSchemas }),
   };
 
-  const run = await runToolUse({ id: toolUseId, name: request.tool, input }, exec, []);
+  const run = await runToolUse({ id: toolUseId, name: request.tool, input }, exec);
   const output = run.output;
   const images = toolRunImages(frames);
 

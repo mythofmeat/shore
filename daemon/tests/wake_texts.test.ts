@@ -134,7 +134,7 @@ test("a dry run doesn't hand a wake over, start a thread or call an outside tool
   await createThread(data, "ada", "ring", "2026-11-01T00:00:00Z");
   const ctx: ToolContext = {
     texts: new Texts(),
-    workspaceDir: "/nowhere", characterName: "ada", characterDataDir: "/nowhere", imageDir: "/nowhere", conversationDir: "/nowhere",
+    workspaceDir: "/nowhere", characterName: "ada", characterDataDir: "/nowhere", conversationDir: "/nowhere",
     historyDbPath: join(data, "shore.db"), configDir: "/nowhere", dryRun: true, thread: "main",
     wakeInThread: (request) => {
       asked.push(request);

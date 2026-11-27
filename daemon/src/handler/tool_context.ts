@@ -1,6 +1,5 @@
 import type { PushOutcome } from "../autonomy/push.ts";
 import type { TriggersView } from "../autonomy/trigger_loop.ts";
-import { characterMediaDir } from "../storage/media.ts";
 
 import type { LoadedConfig } from "../config/loader.ts";
 import { toCredentialsEntry, type ProviderEntry as RegistryEntry } from "../config/providers.ts";
@@ -12,7 +11,6 @@ import {
 } from "../config/dirs.ts";
 import { HISTORY_DB_FILE } from "../engine/history_store.ts";
 import type { ProviderEntry } from "../llm/credentials.ts";
-import { resolveImageGenConfig } from "../llm/image_generate.ts";
 import { historyIndexPath } from "../memory/history_index.ts";
 import { resolveDisplayName } from "../config/app.ts";
 import { characterWorkspace } from "../tools/character_workspace.ts";
@@ -45,7 +43,6 @@ export interface ToolContextDeps extends Partial<ToolConversation> {
   mcpToolDefs?: McpRegistry["toolDefsFiltered"];
   runSubagent?: (parent: ToolContext) => NonNullable<ToolContext["runSubagent"]>;
   deferEdit?: (path: string) => Promise<void> | void;
-  imageGenerator?: ToolContext["imageGenerator"];
   modelHistoryQuery?: ToolContext["modelHistoryQuery"];
   activityStats?: (character: string, days: number) => ReturnType<ActivityStatsLookup>;
   triggersView?: (character: string) => Promise<TriggersView>;
@@ -62,23 +59,6 @@ export async function buildToolContext(
   charName: string,
   deps: ToolContextDeps = {},
 ): Promise<ToolContext> {
-  const providers = providerRecord(config);
-
-  const imageGen = resolveImageGenConfig({
-    ...(config.app.image.model === undefined
-      ? {}
-      : { defaultRef: config.app.image.model }),
-    imageGen: Object.fromEntries([...config.models.imageGeneration].map(([name, settings]) => {
-      const { aspectRatio, imageSize, ...rest } = settings;
-      return [name, {
-        ...rest,
-        ...(aspectRatio === undefined ? {} : { aspect_ratio: aspectRatio }),
-        ...(imageSize === undefined ? {} : { image_size: imageSize }),
-      }];
-    })),
-    providers,
-  });
-
   const charDataDir = characterDataDir(dataDir, charName);
   const configDir = config.dirs.config;
   const workspace = characterWorkspace(config, charName);
@@ -102,7 +82,6 @@ export async function buildToolContext(
     ...(deps.dryRun === undefined ? {} : { dryRun: deps.dryRun }),
     ...(deps.signal === undefined ? {} : { signal: deps.signal }),
     images: config.app.images,
-    imageDir: characterMediaDir(dataDir, charName),
     cacheDir: config.dirs.cache,
     workspaceDir: workspace.dir,
     workspace,
@@ -114,8 +93,6 @@ export async function buildToolContext(
     historyIndexPath: historyIndexPath(config.dirs.cache, charName),
     userName,
     guide: (input) => readGuide(texts, input, guideValues(config, userName), ALL_TOOLS.map((tool) => ({ name: tool.name, enabled: toolEnabled(config.app.tools, tool.name) }))),
-    ...("ok" in imageGen ? { imageGenConfig: imageGen.ok } : {}),
-    ...(deps.imageGenerator === undefined ? {} : { imageGenerator: deps.imageGenerator }),
     ...(deps.modelHistoryQuery === undefined ? {} : { modelHistoryQuery: deps.modelHistoryQuery }),
     ...(activityStats === undefined ? {} : { activityStats: (days: number) => activityStats(charName, days) }),
     ...(triggersView === undefined ? {} : { triggers: () => triggersView(charName) }),
@@ -141,19 +118,6 @@ export async function buildToolContext(
     ctx.runSubagent = deps.runSubagent(ctx);
   }
   return ctx;
-}
-
-function providerRecord(
-  config: LoadedConfig,
-): Record<string, { entry?: ProviderEntry; baseUrl?: string }> {
-  const out: Record<string, { entry?: ProviderEntry; baseUrl?: string }> = {};
-  for (const [key, entry] of config.providers.entries()) {
-    out[key] = {
-      entry: credentialEntry(entry),
-      ...(entry.baseUrl === undefined ? {} : { baseUrl: entry.baseUrl }),
-    };
-  }
-  return out;
 }
 
 export function credentialEntry(entry: RegistryEntry): ProviderEntry {

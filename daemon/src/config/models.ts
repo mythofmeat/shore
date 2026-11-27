@@ -304,27 +304,18 @@ function warnIgnoredFields(
   }
 }
 
-interface ImageGenSettings {
-  size?: string;
-  quality?: string;
-  aspectRatio?: string;
-  imageSize?: string;
-}
-
 export interface ModelCatalog {
   chat: Map<string, ResolvedModel>;
-  imageGeneration: Map<string, ImageGenSettings>;
 }
 
 export function emptyCatalog(): ModelCatalog {
-  return { chat: new Map(), imageGeneration: new Map() };
+  return { chat: new Map() };
 }
 
 export type CatalogErrorKind =
   | "parse_entry"
   | "ambiguous_name"
-  | "not_found"
-  | "aux_profile_invalid";
+  | "not_found";
 
 export class CatalogError extends Error {
   constructor(
@@ -357,21 +348,6 @@ export class CatalogError extends Error {
   static notFound(name: string): CatalogError {
     return new CatalogError("not_found", `model "${name}" not found`);
   }
-
-  static auxProfileInvalid(
-    category: string,
-    key: string,
-    detail: string,
-    example: string,
-  ): CatalogError {
-    return new CatalogError(
-      "aux_profile_invalid",
-      `[${category}.${JSON.stringify(key)}] is not a valid \`provider:model_id\` settings ` +
-        `table: ${detail}. Identity is the key (e.g. ` +
-        `\`[${category}."openai:${example}"]\`); put transport (sdk/base_url/api_key_env) on ` +
-        `[providers.<provider>] and keep only category settings in the table`,
-    );
-  }
 }
 
 
@@ -388,20 +364,9 @@ export interface ProviderRegistryEntry {
 
 export function catalogFromSections(
   chat: Record<string, unknown> | undefined,
-  imageGeneration: Record<string, unknown> | undefined,
   providers?: ProviderRegistryView,
 ): ModelCatalog {
-  const chatModels =
-    chat === undefined
-      ? new Map<string, ResolvedModel>()
-      : parseCategory("chat", chat, providers);
-
-  const imageGenProfiles =
-    imageGeneration === undefined
-      ? new Map<string, ImageGenSettings>()
-      : parseAuxSection("image", imageGeneration, "dall-e-3", readImageGenSettings);
-
-  return { chat: chatModels, imageGeneration: imageGenProfiles };
+  return { chat: chat === undefined ? new Map<string, ResolvedModel>() : parseCategory("chat", chat, providers) };
 }
 
 export function findModel(catalog: ModelCatalog, name: string): ResolvedModel {
@@ -459,51 +424,6 @@ function parseCategory(
   }
 
   return new Map(models);
-}
-
-function parseAuxSection<T>(
-  category: string,
-  section: Record<string, unknown>,
-  example: string,
-  read: (table: Record<string, unknown>) => ParseResult<T>,
-): Map<string, T> {
-  const out: [string, T][] = [];
-  for (const key of sortedKeys(section)) {
-    const colon = key.indexOf(":");
-    if (colon < 0) {
-      throw CatalogError.auxProfileInvalid(
-        category,
-        key,
-        "the key must be a `provider:model_id` identity, not a bare alias",
-        example,
-      );
-    }
-    if (colon === 0 || colon === key.length - 1) {
-      throw CatalogError.auxProfileInvalid(
-        category,
-        key,
-        "both the provider and model_id halves of the `provider:model_id` key must be non-empty",
-        example,
-      );
-    }
-
-    const value = section[key];
-    if (!isTable(value)) {
-      throw CatalogError.auxProfileInvalid(
-        category,
-        key,
-        "the value must be a settings table",
-        example,
-      );
-    }
-
-    const settings = read(value);
-    if ("err" in settings) {
-      throw CatalogError.auxProfileInvalid(category, key, placed(settings), example);
-    }
-    out.push([key, settings.ok]);
-  }
-  return new Map(out);
 }
 
 function baseProviderDefaults(): ModelConfigFields {
@@ -777,26 +697,6 @@ function expectedList(known: readonly string[]): string {
   if (known.length === 1) return `\`${known[0]}\``;
   const head = known.slice(0, -1).map((k) => `\`${k}\``).join(", ");
   return `one of ${head}, \`${known[known.length - 1]}\``;
-}
-
-const IMAGE_GEN_KEYS = ["size", "quality", "aspect_ratio", "image_size"];
-
-function readImageGenSettings(table: Record<string, unknown>): ParseResult<ImageGenSettings> {
-  const unknown = denyUnknown(table, IMAGE_GEN_KEYS);
-  if (unknown !== undefined) return { err: unknown };
-  const out: ImageGenSettings = {};
-  const pairs: [keyof ImageGenSettings, string][] = [
-    ["size", "size"],
-    ["quality", "quality"],
-    ["aspectRatio", "aspect_ratio"],
-    ["imageSize", "image_size"],
-  ];
-  for (const [field, key] of pairs) {
-    const read = readString(table, key);
-    if ("err" in read) return read;
-    if (read.ok !== undefined) (out as Record<string, unknown>)[field] = read.ok;
-  }
-  return { ok: out };
 }
 
 export function resolvedModelToWire(model: ResolvedModel): import("../protocol/ModelInfoResult.ts").ModelInfoResult {

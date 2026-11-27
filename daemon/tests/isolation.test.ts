@@ -74,7 +74,7 @@ async function context(workspace: CharacterWorkspace): Promise<ToolContext> {
   return {
     texts: new Texts(),
     workspaceDir: workspace.dir, workspace, characterName: "Ada", characterDataDir: join(data, "ada"),
-    imageDir: data, conversationDir: data, historyDbPath: join(data, "shore.db"), configDir: data,
+    conversationDir: data, historyDbPath: join(data, "shore.db"), configDir: data,
   };
 }
 
@@ -193,7 +193,7 @@ describe.skipIf(!READY)("a character whose tools run as its own user", () => {
 
     await sharePictureFolders(config, [USER, OTHER, "cal"]);
 
-    const { messages } = await buildLlmMessages({ system: [], messages: [own] }, "text_standin", new Texts());
+    const { messages } = await buildLlmMessages({ system: [], messages: [own] }, new Texts());
     const shown = messages[0]?.content.flatMap((block) => block.type === "text" ? [/^\[picture: (.+)\]$/.exec(block.text)?.[1] ?? ""] : []).find((path) => path !== "") ?? "";
     expect(shown).toBe(own.images[0]?.path ?? "none");
     const workspace = await freshWorkspace();

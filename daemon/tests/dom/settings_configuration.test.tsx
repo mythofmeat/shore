@@ -7,7 +7,7 @@ const app = useApp();
 
 const settle = async () => { await acting(() => Bun.sleep(5)); };
 const entry = (key: string, extra: Record<string, unknown> = {}) => ({ key, kind: "string", type: "String", settable: true, optional: true, restart_required: false, secret: false, values: [], ...extra });
-const SOURCES = { chat_models: ["opus", "haiku"], image_models: [], tools: ["read"], subagents: [], characters: ["ada"], providers: ["anthropic", "local"] };
+const SOURCES = { chat_models: ["opus", "haiku"], tools: ["read"], subagents: [], characters: ["ada"], providers: ["anthropic", "local"] };
 const SCHEMA = { sources: SOURCES, schema: [
   entry("model", { source: "chat_models" }),
   entry("chat.temperature", { kind: "float" }),
@@ -23,7 +23,7 @@ const SCHEMA = { sources: SOURCES, schema: [
   entry("misc.object", { kind: "map" }),
   entry("misc.missing"),
   entry("misc.blank"),
-  entry("misc.image", { source: "image_models" }),
+  entry("misc.agent", { source: "subagents" }),
   entry("misc.who", { source: "characters" }),
   entry("misc.provider", { key_source: "providers" }),
   entry("misc.level", { kind: "enum", values: ["low", "high"], source: "chat_models" }),
@@ -99,7 +99,7 @@ describe("the configuration page", () => {
       ["misc.object", "{\"a\":1}"],
       ["misc.missing", "Not set"],
       ["misc.blank", "Empty"],
-      ["misc.image", "Not set"],
+      ["misc.agent", "Not set"],
       ["misc.who", "Not set"],
       ["misc.provider", "Not set"],
       ["misc.level", "low"],
@@ -193,7 +193,7 @@ describe("the configuration page", () => {
       return [field?.tagName, [...field?.querySelectorAll("option") ?? []].map((option) => option.getAttribute("value")), (field as HTMLSelectElement | null)?.value];
     };
     expect(await choices("model")).toEqual(["SELECT", ["", "opus", "haiku"], "opus"]);
-    expect(await choices("misc.image")).toEqual(["INPUT", [], ""]);
+    expect(await choices("misc.agent")).toEqual(["INPUT", [], ""]);
     expect(await choices("misc.who")).toEqual(["SELECT", ["", "ada"], ""]);
     expect(await choices("misc.provider")).toEqual(["SELECT", ["", "anthropic", "local"], ""]);
     expect(await choices("misc.level")).toEqual(["SELECT", ["low", "high"], "low"]);

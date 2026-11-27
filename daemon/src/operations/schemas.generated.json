@@ -7249,7 +7249,6 @@
           "type": "string",
           "enum": [
             "chat_models",
-            "image_models",
             "tools",
             "subagents",
             "characters",
@@ -7260,12 +7259,6 @@
           "type": "object",
           "properties": {
             "chat_models": {
-              "type": "array",
-              "items": {
-                "type": "string"
-              }
-            },
-            "image_models": {
               "type": "array",
               "items": {
                 "type": "string"
@@ -7298,7 +7291,6 @@
           },
           "required": [
             "chat_models",
-            "image_models",
             "tools",
             "subagents",
             "characters",

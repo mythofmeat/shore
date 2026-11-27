@@ -40,7 +40,7 @@ import { presence } from "./presence.ts";
 import { byTrigger, WAKE_QUIET_MS, type TriggerFiring, type WakeNews, type WakeResult } from "./runner.ts";
 import { sealedListNote, sealedWakeNote } from "./sealed_notes.ts";
 import { threadDigest, type ThreadReader } from "./thread_digest.ts";
-import { Outbox, postElsewhere, postMessage, reachableThreads, sendingsHere } from "./outbox.ts";
+import { Outbox, postElsewhere, postMessage, reachableThreads } from "./outbox.ts";
 import { pushRefusal, type PushOutcome } from "./push.ts";
 import { spanPhrase, timeLeftPhrase, triggerFiredNote, wakeNewsNote } from "./wake_shape.ts";
 import { recordWakeEnd, stopOf, wakeRecord, wakeStopNote, WakeWords, type WakeEnding } from "./wake_record.ts";
@@ -412,10 +412,9 @@ export async function runWake(character: string, config: LoadedConfig, wake: Wak
     const waiting = stopped === "interrupted" ? [] : outbox.waiting;
     const here = waiting.filter((each) => each.thread === thread);
     const away = waiting.filter((each) => each.thread !== thread);
-    const sendings = sendingsHere(here, loop.images);
-    noteOutcome(character, loop, sendings.length === 0 && away.length === 0, note);
+    noteOutcome(character, loop, here.length === 0 && away.length === 0, note);
     let sent: Message | undefined;
-    for (const sending of sendings) sent = await postMessage(character, request, sending, heard, note, { thread, engine }, pictures) ?? sent;
+    for (const sending of here) sent = await postMessage(character, request, sending, heard, note, { thread, engine }, pictures) ?? sent;
     afterwards = async () => {
       await postElsewhere(away, { character, from: thread, turn: "wake", engine: async (name) => await deps.engine(character, name) }, request, heard, note, pictures);
     };
