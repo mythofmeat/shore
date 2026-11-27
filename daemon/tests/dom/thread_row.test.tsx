@@ -20,7 +20,7 @@ async function row(shown: Shown = {}) {
   const outside: string[] = [];
   const thread = shown.thread ?? SIDE;
   const view = await mount(<div onDragOver={() => outside.push("over")} onDrop={() => outside.push("drop")}>
-    <ThreadRow thread={thread} label={thread.label ?? thread.id} current={shown.current ?? false} unread={shown.unread ?? 0} drafted={shown.drafted ?? false} replying={shown.replying ?? false} opening={shown.opening ?? false}
+    <ThreadRow thread={thread} character="ada" label={thread.label ?? thread.id} current={shown.current ?? false} unread={shown.unread ?? 0} drafted={shown.drafted ?? false} replying={shown.replying ?? false} opening={shown.opening ?? false}
       ready={shown.ready ?? true} select={() => selected.push(1)} neighbours={NEIGHBOURS} drop={(id, after) => dropped.push([id, after])} />
   </div>);
   const box = () => view.host.querySelector(".thread-row");
@@ -44,12 +44,25 @@ async function icon(name: "home" | "chat" | "lock" | "edit" | "more", size: numb
   return html;
 }
 
-test("a row names its thread with the home or chat icon, and marks the open one", async () => {
+test("a row names its thread, with its full label and purpose in its tooltip, and marks the open one", async () => {
   const home = await row({ thread: HOME, current: true });
-  expect([home.item()?.querySelector("svg")?.outerHTML, home.item()?.classList.contains("on"), home.item()?.getAttribute("aria-current"), home.item()?.textContent]).toEqual([await icon("home", 14), true, "page", "story"]);
+  expect([home.item()?.querySelector("svg")?.outerHTML, home.item()?.classList.contains("on"), home.item()?.getAttribute("aria-current"), home.item()?.querySelector(".sidebar-name")?.textContent, home.item()?.getAttribute("title")]).toEqual([await icon("home", 14), true, "page", "story", "story"]);
   await home.unmount();
-  const side = await row();
-  expect([side.item()?.querySelector("svg")?.outerHTML, side.item()?.classList.contains("on"), side.item()?.getAttribute("aria-current")]).toEqual([await icon("chat", 14), false, null]);
+  const side = await row({ thread: { ...SIDE, label: "A side road with a long name", purpose: "Where the detours go" } });
+  expect([side.item()?.querySelector("svg"), side.item()?.classList.contains("on"), side.item()?.getAttribute("aria-current"), side.item()?.getAttribute("title")]).toEqual([null, false, null, "A side road with a long name\nWhere the detours go"]);
+  await side.unmount();
+  const blank = await row({ thread: { ...SIDE, purpose: "" } });
+  expect(blank.item()?.getAttribute("title")).toBe("side");
+});
+
+test("a row ends with how long ago its last message was, or says it is empty", async () => {
+  const { rowTime } = await import("../../src/browser/sidebar/row_time.ts");
+  const quiet = await row();
+  expect([quiet.item()?.querySelector(".sidebar-time")?.textContent, quiet.item()?.querySelector(".sidebar-time")?.getAttribute("title")]).toEqual(["empty", "No messages yet"]);
+  await quiet.unmount();
+  const at = new Date(Date.now() - 3 * 60 * 60_000).toISOString();
+  const used = await row({ thread: { ...SIDE, last_active: at } });
+  expect([used.item()?.querySelector(".sidebar-time")?.textContent, used.item()?.querySelector(".sidebar-time")?.getAttribute("title")]).toEqual(["3h", rowTime(at, Date.now()).title]);
 });
 
 test("a row shows unread messages, a lock, an unsent message, and a reply or an opening under way", async () => {

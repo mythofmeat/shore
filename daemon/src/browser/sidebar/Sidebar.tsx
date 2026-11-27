@@ -7,7 +7,7 @@ import { Icon } from "../ui/icons.tsx";
 import { navigate, openSettings } from "../app/route.ts";
 import { collapsedFolders, conversation, errorText, perform, useActiveRequests, useCollapsedFolders, workspace } from "../app/state.ts";
 import { openFolderDialog } from "../app/intents.ts";
-import { moveThreadTo } from "../chat/actions.ts";
+import { moveFolderTo, moveThreadTo } from "../chat/actions.ts";
 import { toasts } from "../ui/toast.tsx";
 import { unsentConversations, watchUnsent } from "../drafts.ts";
 import { FolderRow } from "./FolderRow.tsx";
@@ -44,7 +44,7 @@ function ThreadList({ state, shownThread, ready, select, newThread }: { state: C
   const looseByActivity = !state.manualOrder;
   const unreadOf = (thread: ThreadView) => thread.id === state.thread ? 0 : thread.unread ?? 0;
   const replyingIn = (thread: ThreadView) => thread.id !== state.thread && conversation.activeIn({ character: state.character, thread: thread.id });
-  const row = (thread: ThreadView, ids: readonly string[], byActivity: boolean, folder?: string) => <ThreadRow key={thread.id} thread={thread} label={threadLabel(thread)} current={thread.id === shownThread} unread={unreadOf(thread)} drafted={thread.id !== shownThread && unsent.has(JSON.stringify([state.character, thread.id]))} replying={replyingIn(thread)}
+  const row = (thread: ThreadView, ids: readonly string[], byActivity: boolean, folder?: string) => <ThreadRow key={thread.id} thread={thread} character={character} label={threadLabel(thread)} current={thread.id === shownThread} unread={unreadOf(thread)} drafted={thread.id !== shownThread && unsent.has(JSON.stringify([state.character, thread.id]))} replying={replyingIn(thread)}
     opening={state.opening?.thread === thread.id && thread.id !== state.thread} ready={ready} select={() => select(thread.id)} neighbours={neighboursIn(ids, thread.id, byActivity)}
     drop={(id, after) => { void moveThreadTo(id, { folder: folder ?? "", ...placeRelative(ids, thread.id, id, after) }); }} />;
   return <div className="sidebar-threads" role="group" aria-label={`${character} threads`}
@@ -59,7 +59,8 @@ function ThreadList({ state, shownThread, ready, select, newThread }: { state: C
       return <div key={folder.name} className="thread-folder" role="group" aria-label={`Folder ${folder.name}`}>
         <FolderRow character={character} folder={folder} collapsed={shut} ready={ready} unread={folder.threads.reduce((total, thread) => total + unreadOf(thread), 0)} replying={folder.threads.some(replyingIn)}
           neighbours={{ up: sections.folders[index - 1]?.name, down: sections.folders[index + 2]?.name, atEnd: index === sections.folders.length - 1 }}
-          drop={(id) => { void moveThreadTo(id, { folder: folder.name }); }} />
+          drop={(id) => { void moveThreadTo(id, { folder: folder.name }); }}
+          dropFolder={(name, after) => { void moveFolderTo(name, placeRelative(sections.folders.map((each) => each.name), folder.name, name, after).before); }} />
         {shown.map((thread) => row(thread, ids, folder.byActivity, folder.name))}
       </div>;
     })}

@@ -53,6 +53,15 @@ export async function markRead(thread: Pick<ThreadView, "id">): Promise<void> {
   }
 }
 
+export async function moveFolderTo(name: string, before: string | undefined): Promise<void> {
+  try {
+    workspace.applyThreadListing(await workspace.actions.run("thread_folder_move", { name, ...(before === undefined ? {} : { before }) }));
+  } catch (error) {
+    await workspace.refreshThreads();
+    toasts.show(errorText(error), "error");
+  }
+}
+
 export async function moveThreadTo(id: string, move: { folder?: string; before?: string }): Promise<void> {
   const state = workspace.getSnapshot();
   workspace.noteThreads(moveInThreads(state.threads, state.folders, id, move));

@@ -166,4 +166,19 @@ describe("thread actions", () => {
     expect(sentSince(failed)[0]).toMatchObject({ args: { name: "story", before: "side" } });
     expect(toasts()).toEqual([["move failed", "error"]]);
   });
+
+  test("moving a folder shows the daemon's listing, or relists with the reason", async () => {
+    const { actions, state, toasts } = await load();
+    const moved = { ...LISTING, threads, folders: [{ name: "play" }, { name: "work" }] };
+    answer = (request) => request["name"] === "thread_folder_move" ? moved : catalogue(request);
+    const before = socket.sent.length;
+    await actions.moveFolderTo("play", "work");
+    expect(sentSince(before)).toMatchObject([{ name: "thread_folder_move", args: { name: "play", before: "work" } }]);
+    expect(state.workspace.getSnapshot().folders).toEqual(moved.folders);
+    answer = (request) => { if (request["name"] === "thread_folder_move") throw new Error("folder move failed"); return catalogue(request); };
+    const failed = socket.sent.length;
+    await actions.moveFolderTo("work", undefined);
+    expect(sentSince(failed).map((request) => [request["name"], request["args"]])).toEqual([["thread_folder_move", { name: "work" }], ["list_threads", {}]]);
+    expect(toasts()).toEqual([["folder move failed", "error"]]);
+  });
 });

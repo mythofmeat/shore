@@ -115,7 +115,7 @@ test("the group of threads on hold says whether it is open with its chevron, shu
   const shows = () => [toggle()?.getAttribute("aria-expanded"), toggle()?.querySelector("svg")?.outerHTML, view.badge("On hold")];
   expect(shows()).toEqual(["true", await chevron("chevronDown"), null]);
   const moves = (await view.menu("Options for paused")).filter((item) => item.textContent.startsWith("Move ") && !item.textContent.includes("folder")).map((item) => [item.textContent, item.disabled]);
-  expect(moves).toEqual([["Move up", true], ["Move down", true]]);
+  expect(moves, "held threads keep to the order they were last active in").toEqual([]);
   await click(toggle());
   expect(shows()).toEqual(["false", await chevron("chevronRight"), null]);
 });
@@ -140,11 +140,11 @@ test("the thread opening is marked busy, unless it is already the one shown", as
   expect(view.named("side")?.querySelector(".sidebar-item")?.getAttribute("aria-busy")).toBe("false");
 });
 
-test("threads sorted by activity can't be moved up or down by hand, while a manual order can", async () => {
+test("threads sorted by activity don't offer to move up or down by hand, while a manual order does", async () => {
   const threads = [HOME, thread("side", { position: 1 }), thread("quiet", { position: 2 })];
   const sorted = await sidebar({ threads });
   const move = async (view: Awaited<ReturnType<typeof sidebar>>) => (await view.menu("Options for side")).filter((item) => item.textContent.startsWith("Move ") && !item.textContent.includes("folder")).map((item) => [item.textContent, item.disabled]);
-  expect(await move(sorted)).toEqual([["Move up", true], ["Move down", true]]);
+  expect(await move(sorted)).toEqual([]);
   await sorted.unmount();
   const manual = await sidebar({ threads, manualOrder: true });
   expect(await move(manual)).toEqual([["Move up", true], ["Move down", false]]);
@@ -178,6 +178,39 @@ test("a thread dropped on the list leaves its folder, dropped on a row lands bes
   await dragOnto(view.named("A"), "quiet");
   await dragOnto(view.named("draft"), "side");
   expect(sent(since, "thread_move")).toEqual([{ name: "draft", folder: "" }, { name: "draft", folder: "", before: "side" }, { name: "quiet", folder: "A" }, { name: "side", folder: "A", before: "draft" }]);
+});
+
+test("a folder dragged onto another lands before or after it by where it is dropped, a thread still goes into it, and nothing moves when dropped on itself or a thread", async () => {
+  const { FOLDER_DRAG_TYPE, THREAD_DRAG_TYPE } = await import("../../src/browser/sidebar/ThreadRow.tsx");
+  const view = await sidebar({ folders: FOLDERS, threads: [HOME, thread("side")] });
+  const fire = async (target: Element | null | undefined, type: string, data: Record<string, string>, clientY = 0) => {
+    const transfer = new DataTransfer();
+    for (const [kind, value] of Object.entries(data)) transfer.setData(kind, value);
+    const event = new Event(type, { bubbles: true, cancelable: true });
+    Object.defineProperties(event, { dataTransfer: { value: transfer }, clientY: { value: clientY } });
+    await acting(() => { target?.dispatchEvent(event); });
+    await acting(() => Bun.sleep(5));
+    return { prevented: event.defaultPrevented, dragged: transfer.getData(FOLDER_DRAG_TYPE), shown: view.named("C")?.className.split(" ").filter((name) => name.startsWith("drop-")) };
+  };
+  const folder = (name: string) => ({ [FOLDER_DRAG_TYPE]: name });
+  expect([view.named("A")?.getAttribute("draggable"), (await fire(view.named("A"), "dragstart", {})).dragged]).toEqual(["true", "A"]);
+  expect(await fire(view.named("C"), "dragover", folder("A"), 0)).toMatchObject({ prevented: true, shown: ["drop-before"] });
+  expect(await fire(view.named("C"), "dragover", folder("A"), 10)).toMatchObject({ prevented: true, shown: ["drop-after"] });
+  expect((await fire(view.named("C"), "dragleave", {})).shown).toEqual([]);
+  expect(await fire(view.named("C"), "dragover", { [THREAD_DRAG_TYPE]: "side" })).toMatchObject({ prevented: true, shown: ["drop-into"] });
+  expect(await fire(view.named("C"), "dragover", { "text/plain": "C" })).toMatchObject({ prevented: false, shown: ["drop-into"] });
+  expect((await fire(view.named("side"), "dragover", folder("A"))).prevented, "a thread row takes no folder").toBe(false);
+  const since = app.socket().sent.length;
+  expect(await fire(view.named("C"), "drop", folder("A"), 0)).toMatchObject({ prevented: true, shown: [] });
+  await fire(view.named("C"), "drop", folder("A"), 10);
+  await fire(view.named("C"), "drop", folder("D"), 10);
+  expect((await fire(view.named("C"), "drop", folder("C"), 10)).prevented, "a folder dropped on itself is taken but stays").toBe(true);
+  expect((await fire(view.named("C"), "drop", {})).prevented).toBe(false);
+  await fire(view.named("C"), "drop", { [THREAD_DRAG_TYPE]: "side" });
+  expect(sent(since, "thread_folder_move")).toEqual([{ name: "A", before: "C" }, { name: "A", before: "D" }, { name: "D" }]);
+  expect(sent(since, "thread_move")).toEqual([{ name: "side", folder: "C" }]);
+  await view.rerender({ status: "connecting" });
+  expect(view.named("A")?.getAttribute("draggable"), "nothing can be dragged until the daemon is ready").toBe("false");
 });
 
 test("a new thread can be started once the daemon is ready", async () => {
