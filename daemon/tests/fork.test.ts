@@ -123,6 +123,53 @@ describe("forking a thread", () => {
     expect(existsSync(join(root, "ada", "threads", "spin", FORK_MARKER_FILE))).toBe(false);
   });
 
+  test("a fork of a side thread keeps its purpose and pins as they are, a pin that can't be loaded any more too, but not its label, lock or folder", async () => {
+    const root = await character({ main: ["q", "a"], side: ["q", "a"], bare: ["q", "a"] });
+    const pins = ["notes/route.md", "!git -C notes log --oneline -3", "notes/never-written.md"];
+    const index = await readThreadsIndex(root, "ada");
+    if (index === undefined) throw new Error("no threads");
+    await writeThreadsIndex(root, "ada", {
+      ...index,
+      threads: index.threads.map((thread) => thread.id === "side" ? { ...thread, label: "Side", purpose: "Planning the walk.", pins, locked: true as const } : thread),
+      folders: [{ name: "Trips", threads: ["side"] }],
+    });
+
+    const forked = await forkThread(root, "ada", "side", "spin", { now: () => NOW, newForkId: () => "fk_side" });
+    expect(forked.child).toStrictEqual({
+      id: "spin",
+      created_at: NOW,
+      compaction: false,
+      purpose: "Planning the walk.",
+      pins,
+      forked_from: { fork_id: "fk_side", source: "side", created_at: NOW, turns: 1 },
+    });
+    expect(forked.index.folders).toStrictEqual([{ name: "Trips", threads: ["side"] }]);
+
+    const plain = await forkThread(root, "ada", "bare", "twig", { now: () => NOW, newForkId: () => "fk_bare" });
+    expect(plain.child).toStrictEqual({
+      id: "twig",
+      created_at: NOW,
+      compaction: false,
+      forked_from: { fork_id: "fk_bare", source: "bare", created_at: NOW, turns: 1 },
+    });
+  });
+
+  test("a fork of the home thread keeps its pins, but not a purpose left from before it was home, since home's prompt shows none", async () => {
+    const root = await character({ main: ["q", "a"] });
+    const index = await readThreadsIndex(root, "ada");
+    if (index === undefined) throw new Error("no threads");
+    await writeThreadsIndex(root, "ada", { ...index, threads: index.threads.map((thread) => ({ ...thread, purpose: "Planning the walk.", pins: ["notes/route.md"] })) });
+
+    const result = await forkThread(root, "ada", "main", "spin", { now: () => NOW, newForkId: () => "fk_home" });
+    expect(result.child).toStrictEqual({
+      id: "spin",
+      created_at: NOW,
+      compaction: true,
+      pins: ["notes/route.md"],
+      forked_from: { fork_id: "fk_home", source: "main", created_at: NOW, turns: 1 },
+    });
+  });
+
   test("a fork recorded with the stored row count of an earlier version reads back with its turns alone", async () => {
     const root = await character({ main: ["q", "a"] });
     const { index } = await forkThread(root, "ada", "main", "spin", { now: () => NOW, newForkId: () => "fk_test" });

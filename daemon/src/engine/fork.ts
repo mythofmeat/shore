@@ -22,6 +22,7 @@ import {
 import {
   ThreadError,
   assertThreadId,
+  homeThread,
   readThreadsIndex,
   threadRecord,
   writeThreadsIndex,
@@ -208,6 +209,8 @@ async function forkThreadLocked(
     id: child,
     created_at: marker.created_at,
     compaction: sourceRecord.compaction,
+    ...(sourceRecord.purpose === undefined || source === homeThread(index) ? {} : { purpose: sourceRecord.purpose }),
+    ...(sourceRecord.pins === undefined ? {} : { pins: sourceRecord.pins }),
     ...(sourceRecord.chat_model === undefined ? {} : { chat_model: sourceRecord.chat_model }),
     forked_from: {
       fork_id: marker.fork_id,
