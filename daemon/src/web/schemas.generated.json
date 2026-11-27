@@ -1690,6 +1690,22 @@
             "properties": {
               "name": {
                 "type": "string",
+                "const": "all_threads"
+              },
+              "data": {
+                "$ref": "#/$defs/AllThreads"
+              }
+            },
+            "required": [
+              "name",
+              "data"
+            ]
+          },
+          {
+            "type": "object",
+            "properties": {
+              "name": {
+                "type": "string",
                 "const": "workspace_files"
               },
               "data": {
@@ -1739,6 +1755,22 @@
               "name": {
                 "type": "string",
                 "const": "archive_thread"
+              },
+              "data": {
+                "$ref": "#/$defs/ThreadListing"
+              }
+            },
+            "required": [
+              "name",
+              "data"
+            ]
+          },
+          {
+            "type": "object",
+            "properties": {
+              "name": {
+                "type": "string",
+                "const": "unarchive_thread"
               },
               "data": {
                 "$ref": "#/$defs/ThreadListing"
@@ -1850,6 +1882,22 @@
             "properties": {
               "name": {
                 "type": "string",
+                "const": "context_use"
+              },
+              "data": {
+                "$ref": "#/$defs/ThreadContextUse"
+              }
+            },
+            "required": [
+              "name",
+              "data"
+            ]
+          },
+          {
+            "type": "object",
+            "properties": {
+              "name": {
+                "type": "string",
                 "const": "thread_prompt_refresh"
               },
               "data": {
@@ -1883,6 +1931,22 @@
               "name": {
                 "type": "string",
                 "const": "thread_hold"
+              },
+              "data": {
+                "$ref": "#/$defs/ThreadListing"
+              }
+            },
+            "required": [
+              "name",
+              "data"
+            ]
+          },
+          {
+            "type": "object",
+            "properties": {
+              "name": {
+                "type": "string",
+                "const": "thread_later"
               },
               "data": {
                 "$ref": "#/$defs/ThreadListing"
@@ -9552,6 +9616,18 @@
               "null"
             ]
           },
+          "later": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "archived": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
           "folder": {
             "type": [
               "string",
@@ -9670,6 +9746,38 @@
         },
         "required": [
           "cached_request"
+        ]
+      },
+      "AllThreads": {
+        "type": "object",
+        "properties": {
+          "characters": {
+            "type": "array",
+            "items": {
+              "$ref": "#/$defs/CharacterThreads"
+            }
+          }
+        },
+        "required": [
+          "characters"
+        ]
+      },
+      "CharacterThreads": {
+        "type": "object",
+        "properties": {
+          "character": {
+            "type": "string"
+          },
+          "threads": {
+            "type": "array",
+            "items": {
+              "$ref": "#/$defs/ThreadView"
+            }
+          }
+        },
+        "required": [
+          "character",
+          "threads"
         ]
       },
       "WorkspaceFileListing": {
@@ -9902,6 +10010,73 @@
           "nothing"
         ]
       },
+      "ThreadContextUse": {
+        "type": "object",
+        "properties": {
+          "thread": {
+            "type": "string"
+          },
+          "mode": {
+            "$ref": "#/$defs/ContextLimitMode"
+          },
+          "turns": {
+            "type": "integer",
+            "format": "uint64",
+            "minimum": 0
+          },
+          "min_turns": {
+            "type": "integer",
+            "format": "uint64",
+            "minimum": 0
+          },
+          "max_turns": {
+            "type": "integer",
+            "format": "uint64",
+            "minimum": 0
+          },
+          "context_tokens": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "uint64",
+            "minimum": 0
+          },
+          "max_context_tokens": {
+            "type": "integer",
+            "format": "uint64",
+            "minimum": 0
+          },
+          "message_tokens": {
+            "type": "integer",
+            "format": "uint64",
+            "minimum": 0
+          },
+          "trim_at": {
+            "type": "integer",
+            "format": "uint64",
+            "minimum": 0
+          }
+        },
+        "required": [
+          "thread",
+          "mode",
+          "turns",
+          "min_turns",
+          "max_turns",
+          "max_context_tokens",
+          "message_tokens",
+          "trim_at"
+        ]
+      },
+      "ContextLimitMode": {
+        "type": "string",
+        "enum": [
+          "compaction",
+          "trim",
+          "off"
+        ]
+      },
       "ThreadUnread": {
         "type": "object",
         "properties": {
@@ -9917,6 +10092,12 @@
             "minimum": 0
           },
           "last_active": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "reply": {
             "type": [
               "string",
               "null"
@@ -11219,6 +11400,22 @@
             "properties": {
               "name": {
                 "type": "string",
+                "const": "all_threads"
+              },
+              "data": {
+                "$ref": "#/$defs/AllThreads"
+              }
+            },
+            "required": [
+              "name",
+              "data"
+            ]
+          },
+          {
+            "type": "object",
+            "properties": {
+              "name": {
+                "type": "string",
                 "const": "workspace_files"
               },
               "data": {
@@ -11268,6 +11465,22 @@
               "name": {
                 "type": "string",
                 "const": "archive_thread"
+              },
+              "data": {
+                "$ref": "#/$defs/ThreadListing"
+              }
+            },
+            "required": [
+              "name",
+              "data"
+            ]
+          },
+          {
+            "type": "object",
+            "properties": {
+              "name": {
+                "type": "string",
+                "const": "unarchive_thread"
               },
               "data": {
                 "$ref": "#/$defs/ThreadListing"
@@ -11379,6 +11592,22 @@
             "properties": {
               "name": {
                 "type": "string",
+                "const": "context_use"
+              },
+              "data": {
+                "$ref": "#/$defs/ThreadContextUse"
+              }
+            },
+            "required": [
+              "name",
+              "data"
+            ]
+          },
+          {
+            "type": "object",
+            "properties": {
+              "name": {
+                "type": "string",
                 "const": "thread_prompt_refresh"
               },
               "data": {
@@ -11412,6 +11641,22 @@
               "name": {
                 "type": "string",
                 "const": "thread_hold"
+              },
+              "data": {
+                "$ref": "#/$defs/ThreadListing"
+              }
+            },
+            "required": [
+              "name",
+              "data"
+            ]
+          },
+          {
+            "type": "object",
+            "properties": {
+              "name": {
+                "type": "string",
+                "const": "thread_later"
               },
               "data": {
                 "$ref": "#/$defs/ThreadListing"
@@ -19081,6 +19326,18 @@
               "null"
             ]
           },
+          "later": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "archived": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
           "folder": {
             "type": [
               "string",
@@ -19199,6 +19456,38 @@
         },
         "required": [
           "cached_request"
+        ]
+      },
+      "AllThreads": {
+        "type": "object",
+        "properties": {
+          "characters": {
+            "type": "array",
+            "items": {
+              "$ref": "#/$defs/CharacterThreads"
+            }
+          }
+        },
+        "required": [
+          "characters"
+        ]
+      },
+      "CharacterThreads": {
+        "type": "object",
+        "properties": {
+          "character": {
+            "type": "string"
+          },
+          "threads": {
+            "type": "array",
+            "items": {
+              "$ref": "#/$defs/ThreadView"
+            }
+          }
+        },
+        "required": [
+          "character",
+          "threads"
         ]
       },
       "WorkspaceFileListing": {
@@ -19431,6 +19720,73 @@
           "nothing"
         ]
       },
+      "ThreadContextUse": {
+        "type": "object",
+        "properties": {
+          "thread": {
+            "type": "string"
+          },
+          "mode": {
+            "$ref": "#/$defs/ContextLimitMode"
+          },
+          "turns": {
+            "type": "integer",
+            "format": "uint64",
+            "minimum": 0
+          },
+          "min_turns": {
+            "type": "integer",
+            "format": "uint64",
+            "minimum": 0
+          },
+          "max_turns": {
+            "type": "integer",
+            "format": "uint64",
+            "minimum": 0
+          },
+          "context_tokens": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "uint64",
+            "minimum": 0
+          },
+          "max_context_tokens": {
+            "type": "integer",
+            "format": "uint64",
+            "minimum": 0
+          },
+          "message_tokens": {
+            "type": "integer",
+            "format": "uint64",
+            "minimum": 0
+          },
+          "trim_at": {
+            "type": "integer",
+            "format": "uint64",
+            "minimum": 0
+          }
+        },
+        "required": [
+          "thread",
+          "mode",
+          "turns",
+          "min_turns",
+          "max_turns",
+          "max_context_tokens",
+          "message_tokens",
+          "trim_at"
+        ]
+      },
+      "ContextLimitMode": {
+        "type": "string",
+        "enum": [
+          "compaction",
+          "trim",
+          "off"
+        ]
+      },
       "ThreadUnread": {
         "type": "object",
         "properties": {
@@ -19446,6 +19802,12 @@
             "minimum": 0
           },
           "last_active": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "reply": {
             "type": [
               "string",
               "null"

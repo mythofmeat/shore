@@ -131,15 +131,17 @@ export function switchCharacter(
   configDir: string,
   active: string | undefined,
   args: Args,
+  threadsOf: (name: string) => readonly { id: string }[] = () => [],
 ): CharacterSwitch {
   const name = asStr(args["name"]);
   if (name === undefined) throw invalidRequest("Missing required argument: name");
   requireUsableCharacterName(name);
-
-  if (name === active) return { character: name, changed: false };
-
-  if (!discoverCharacters(configDir).includes(name)) {
+  if (name !== active && !discoverCharacters(configDir).includes(name)) {
     throw notFound(`Character not found: ${name}`);
   }
-  return { character: name, changed: true };
+  const thread = asStr(args["thread"]);
+  if (thread !== undefined && !threadsOf(name).some((each) => each.id === thread)) {
+    throw notFound(`Thread not found: ${thread}`);
+  }
+  return { character: name, changed: name !== active };
 }

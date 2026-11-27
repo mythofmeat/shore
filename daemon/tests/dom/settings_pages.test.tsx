@@ -81,7 +81,7 @@ describe("the appearance page", () => {
     expect([enable.mock.calls.length, checked(view.host, "Notify when unfocused")]).toEqual([1, "true"]);
     await click(view.host.querySelector("[aria-label='Notify when unfocused']"));
     expect(disable.mock.calls.length).toBe(1);
-    const permission = (value: string, enabled: boolean) => spyOn(state.notifier, "getSnapshot").mockReturnValue({ enabled, permission: value as never, unread: 0 });
+    const permission = (value: string, enabled: boolean) => spyOn(state.notifier, "getSnapshot").mockReturnValue({ enabled, permission: value as never });
     for (const [value, enabled, note] of [
       ["denied", false, " Notifications are blocked for this site in the browser’s settings, so only the tab title count is shown."],
       ["default", true, " The browser hasn’t allowed desktop notifications for this site yet, so only the tab title count is shown. Turn this off and on again to be asked."],

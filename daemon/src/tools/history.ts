@@ -396,7 +396,7 @@ async function archivedConversations(options: ChatLogOptions, only: string | und
   if (!existsSync(options.dbPath)) return [];
   const index = options.dataDir === undefined ? undefined : await readThreadsIndex(options.dataDir, options.character);
   const apart = wakesThread(index);
-  const threads = only === undefined ? (index?.threads.map((record) => record.id) ?? ["main"]).filter((id) => id !== apart) : [only];
+  const threads = only === undefined ? (index?.threads.filter((record) => record.archived === undefined).map((record) => record.id) ?? ["main"]).filter((id) => id !== apart) : [only];
   const store = HistoryStore.open(options.dbPath);
   try {
     return threads.flatMap((thread) => store.entries(archiveKey(options.character, thread))

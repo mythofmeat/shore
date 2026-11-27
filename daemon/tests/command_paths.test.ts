@@ -11,7 +11,7 @@ import { buildCommandPathDeps } from "../src/handler/deps.ts";
 import type { GenerateResponse, SidecarProvider, SidecarRequest } from "../src/llm/types.ts";
 import type { ServerMessage } from "../src/protocol/ServerMessage.ts";
 import type { ShoreRuntime } from "../src/runtime.ts";
-import { DEFAULT_HANDSHAKE } from "../src/swp/handshake.ts";
+import { DEFAULT_HANDSHAKE, type HandshakeProvider } from "../src/swp/handshake.ts";
 import { SessionRouter, type SessionMeta } from "../src/swp/session.ts";
 import { afterFirstChat } from "./support/chat_world.ts";
 import { eventsForResponse } from "./support/stream.ts";
@@ -28,11 +28,11 @@ function provider(): SidecarProvider {
 
 type Dispatch = (name: string, args?: unknown, session?: Partial<SessionMeta>) => Promise<ServerMessage>;
 
-async function world(run: (dispatch: Dispatch, runtime: ShoreRuntime) => Promise<void>, commands: Partial<CommandDeps> = {}): Promise<void> {
+async function world(run: (dispatch: Dispatch, runtime: ShoreRuntime) => Promise<void>, commands: Partial<CommandDeps> = {}, wiring: { router?: SessionRouter; handshake?: HandshakeProvider } = {}): Promise<void> {
   await afterFirstChat({ name: "command-paths", keyEnv: KEY_ENV, provider: provider(), tools: ["read"] }, async ({ runtime }) => {
     const built = buildCommandPathDeps({
-      runtime, autonomy: new TurnAutonomyBridge(runtime.autonomy), diagnostics: new Diagnostics(), router: new SessionRouter(),
-      handshake: DEFAULT_HANDSHAKE, providers: runtime.providers, env: { [KEY_ENV]: "fixture-key" },
+      runtime, autonomy: new TurnAutonomyBridge(runtime.autonomy), diagnostics: new Diagnostics(), router: wiring.router ?? new SessionRouter(),
+      handshake: wiring.handshake ?? DEFAULT_HANDSHAKE, providers: runtime.providers, env: { [KEY_ENV]: "fixture-key" },
     });
     const deps = { ...built, commands: { ...built.commands, ...commands } };
     const dispatch: Dispatch = async (name, args = {}, session = {}) => await dispatchCommand(deps, { name, args }, {
@@ -67,6 +67,41 @@ test("switching character answers with the switch, and a character that doesn't 
     expect([away.type, away.type === "command_output" ? (away.data as { character: string }).character : away]).toEqual(["command_output", "ada"]);
     expect(await dispatch("status", {}, { selectedCharacter: "nobody" })).toEqual({ type: "error", rid: "r", code: "invalid_request", message: 'character "nobody" not found (available: ["ada"])' });
   });
+});
+
+test("switching character can open one of its threads straight away; a thread it lacks is refused, and a history that won't load puts the session back where it was", async () => {
+  const router = new SessionRouter();
+  const sent: ServerMessage[] = [];
+  router.registerSession({ id: 1, clientType: "test", clientName: "test", capabilities: [], character: "bo", thread: "notes" }, async (message) => { await Promise.resolve(); sent.push(message); });
+  const asked: [string | null, string | null | undefined][] = [];
+  let locked = false;
+  const handshake: HandshakeProvider = {
+    ...DEFAULT_HANDSHAKE,
+    history: async (selectedCharacter, selectedThread) => {
+      await Promise.resolve();
+      asked.push([selectedCharacter, selectedThread]);
+      if (locked) throw new Error("the history is locked");
+      return { messages: [], previousSegment: null, config: {}, selectedCharacter, selectedThread: selectedThread ?? null, revision: 0 };
+    },
+  };
+  await world(async (dispatch, runtime) => {
+    await runtime.registry.createThread("ada", "garden");
+    const where = () => [router.characterFor(1), router.threadFor(1)];
+    const opened = await dispatch("switch_character", { name: "ada", thread: "garden" }, { selectedCharacter: null });
+    expect([opened.type, where(), asked, sent.map((message) => message.type === "history" ? [message.selected_character, message.selected_thread] : message.type)]).toEqual([
+      "command_output", ["ada", "garden"], [["ada", "garden"]], [["ada", "garden"]],
+    ]);
+
+    router.setSelectedCharacter(1, "bo");
+    router.setSelectedThread(1, "notes");
+    expect(await dispatch("switch_character", { name: "ada", thread: "nowhere" }, { selectedCharacter: null })).toEqual({ type: "error", rid: "r", code: "not_found", message: "Thread not found: nowhere" });
+    locked = true;
+    expect(await dispatch("switch_character", { name: "ada", thread: "garden" }, { selectedCharacter: null })).toMatchObject({ type: "error", message: "the history is locked" });
+    expect(where()).toEqual(["bo", "notes"]);
+    locked = false;
+    await dispatch("switch_character", { name: "ada" }, { selectedCharacter: null });
+    expect([where(), asked.at(-1)]).toEqual([["ada", null], ["ada", undefined]]);
+  }, {}, { router, handshake });
 });
 
 test("a conversation that won't open fails as the daemon's own error, unless the command can do without a character", async () => {

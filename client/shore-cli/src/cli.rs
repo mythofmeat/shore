@@ -1406,8 +1406,15 @@ pub(crate) enum ThreadCommand {
         name: String,
     },
 
-    /// Retire a thread: its messages go to the archive and stay searchable
+    /// Archive a thread: it stays listed, to read or unarchive, and its messages go to the archive and stay searchable
     Archive {
+        /// Thread id
+        #[arg(add = values(Completes::Threads))]
+        name: String,
+    },
+
+    /// Bring an archived thread back, to write in again
+    Unarchive {
         /// Thread id
         #[arg(add = values(Completes::Threads))]
         name: String,
@@ -2557,6 +2564,9 @@ pub(crate) fn to_swp_command(
             }
             ThreadCommand::Home { name } => Some(("thread_home", json!({ "name": name }))),
             ThreadCommand::Archive { name } => Some(("archive_thread", json!({ "name": name }))),
+            ThreadCommand::Unarchive { name } => {
+                Some(("unarchive_thread", json!({ "name": name })))
+            }
             ThreadCommand::Fork { name, from, turns } => Some((
                 "fork_thread",
                 json!({ "name": name, "from": from, "turns": turns }),
@@ -3454,6 +3464,10 @@ mod tests {
                     "thread_hold",
                     json!({"name": "lighthouse", "on_hold": false}),
                 )),
+            ),
+            (
+                &["thread", "unarchive", "lighthouse"],
+                Some(("unarchive_thread", json!({"name": "lighthouse"}))),
             ),
             (
                 &["thread", "compaction", "lighthouse", "on"],

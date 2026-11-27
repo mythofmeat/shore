@@ -46,7 +46,7 @@ export function replyMessages(a: ToolAssembly, character: string, turn: Subagent
         character,
         from: here,
         turn: "turn",
-        engine: async (thread) => runtime.registry.listThreads(character).some((record) => record.id === thread) ? await runtime.registry.getOrCreate(character, thread) : undefined,
+        engine: async (thread) => runtime.registry.listThreads(character).some((record) => record.id === thread && record.archived === undefined) ? await runtime.registry.getOrCreate(character, thread) : undefined,
       }, { provider_key: reply?.provider_key, model: reply?.model }, {
         emit: (name, revision, msg, thread) => { if (a.emitEvent !== undefined) emitNewMessageEvent(a.emitEvent, name, "autonomous", revision, msg, thread); },
         notify: (title, shown, picture) => { runtime.notifier.notify("autonomous_message", title, shown, picture); },

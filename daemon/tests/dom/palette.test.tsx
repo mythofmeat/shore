@@ -59,17 +59,79 @@ function watchScrolling(): unknown[][] {
   return scrolled;
 }
 
-test("the palette opens on everything with its first command picked and small icons, asks for no settings keys, and says when nothing matches", async () => {
+test("the palette opens on everything with its first entry picked and small icons, asks for no settings keys, and says when nothing matches", async () => {
   const since = app.socket().sent.length;
   const view = await palette(await chrome());
   await settle();
   expect(view.checked()).toEqual([["Everything", "true"], ["Shortcuts", "false"], ["Settings keys", "false"]]);
-  expect(view.labels().slice(0, 2)).toEqual(["New thread", "Thread settings"]);
-  expect([view.picked(), view.lit()]).toEqual([["New thread"], ["New thread"]]);
+  expect(view.labels().slice(3, 5), "the threads come before the commands").toEqual(["New thread", "Thread settings"]);
+  expect([view.picked(), view.lit()]).toEqual([["Open lamp-a"], ["Open lamp-a"]]);
   expect([...view.host.querySelectorAll(".picker-search svg, [role=option] svg")].map((icon) => icon.getAttribute("width")).filter((width) => width !== "16")).toEqual([]);
   expect(asked(since, "config_schema")).toEqual([]);
   await view.search("zzz");
   expect([view.labels(), view.empty()]).toEqual([[], "Nothing matches."]);
+});
+
+test("with nothing typed the threads come first: the one visited before this one, then the rest newest first and archived last, each with its unread count, and not the open one", async () => {
+  const { noteVisit } = await import("../../src/browser/app/recent.ts");
+  noteVisit("ada", "lamp-c");
+  noteVisit("ada", "story");
+  const threads = [HOME, { ...lamp("a", 1), last_active: "2026-11-05T00:00:00Z", unread: 3 }, { ...lamp("b", 2), last_active: "2026-11-09T00:00:00Z" }, lamp("c", 3), { ...lamp("d", 4), archived: "2026-11-10T00:00:00Z", last_active: "2026-11-11T00:00:00Z" }];
+  const view = await palette(await chrome({ threads }));
+  expect(view.labels().slice(0, 5)).toEqual(["Open lamp-c", "Open lamp-b", "Open lamp-a", "Open lamp-d", "New thread"]);
+  const shown = [...view.host.querySelectorAll("[role=option]")].slice(0, 4).map((item) => [item.querySelector(".sidebar-unread [aria-hidden]")?.textContent ?? null, item.querySelector(".palette-detail")?.textContent]);
+  expect(shown).toEqual([[null, "ada"], [null, "ada"], ["3", "ada"], [null, "ada · archived"]]);
+  expect(view.host.querySelectorAll("[role=option] .sidebar-unread"), "only threads with unread replies count them").toHaveLength(1);
+  await view.rerender(await chrome({ threads: [HOME, { ...lamp("a", 1), unread: 1 }] }));
+  expect([...view.host.querySelectorAll("[role=option] .sidebar-unread [aria-hidden]")].map((badge) => badge.textContent)).toEqual(["1"]);
+});
+
+test("Enter on the switcher as it opens goes back to the thread visited before this one", async () => {
+  app.answer((request) => request["name"] === "switch_thread" ? { character: "ada", thread: "lamp-b", changed: true } : undefined);
+  const { noteVisit } = await import("../../src/browser/app/recent.ts");
+  noteVisit("ada", "lamp-b");
+  noteVisit("ada", "story");
+  const view = await palette(await chrome());
+  const since = app.socket().sent.length;
+  await view.press("Enter");
+  await settle();
+  expect(asked(since, "switch_thread")).toEqual([{ name: "lamp-b", resync: true }]);
+});
+
+test("other characters' threads are listed under their names, the visit before first wherever it was, and choosing one opens that character on that thread", async () => {
+  app.answer((request) => request["name"] === "switch_character" ? { character: "bo", changed: true } : undefined);
+  const { noteVisit } = await import("../../src/browser/app/recent.ts");
+  noteVisit("bo", "shelf");
+  noteVisit("ada", "story");
+  const bo = [{ ...HOME, id: "main", current: false }, { ...lamp("x", 1), id: "rowing", last_active: "2026-11-20T00:00:00Z", unread: 2 }, { ...lamp("y", 2), id: "shelf" }];
+  const view = await palette(await chrome({ allThreads: [{ character: "ada", threads: [HOME] }, { character: "bo", threads: bo }] }));
+  const rows = () => [...view.host.querySelectorAll("[role=option]")].slice(0, 3).map((item) => [item.querySelector(".palette-label")?.textContent, item.querySelector(".palette-detail")?.textContent, item.querySelector(".sidebar-unread [aria-hidden]")?.textContent ?? null]);
+  expect(rows()).toEqual([["Open shelf", "bo", null], ["Open rowing", "bo", "2"], ["Open lamp-a", "ada", null]]);
+  const since = app.socket().sent.length;
+  await view.choose("Open rowing");
+  await settle();
+  expect(app.sent(since).filter((request) => String(request["name"]).startsWith("switch_")).map((request) => [request["name"], request["args"]])).toEqual([
+    ["switch_character", { name: "bo", thread: "rowing" }],
+  ]);
+});
+
+test("Another take from the palette asks for a different reply, in the chat", async () => {
+  const { navigate } = await import("../../src/browser/app/route.ts");
+  app.restores.push(() => { navigate({ view: "chat" }); });
+  navigate({ view: "settings", page: "models" });
+  const view = await palette(await chrome());
+  const since = app.socket().sent.length;
+  await view.choose("Another take");
+  await settle();
+  expect([location.hash, app.sent(since).filter((request) => request["type"] === "regen").map((request) => request["another_take"])]).toEqual(["", [true]]);
+});
+
+test("a thread is found by its name or its label", async () => {
+  const view = await palette(await chrome({ threads: [HOME, { ...lamp("a", 1), label: "Harbour lights" }, lamp("b", 2)] }));
+  await view.search("lamp-a");
+  expect(view.labels()).toEqual(["Open Harbour lights"]);
+  await view.search("harbour");
+  expect(view.labels()).toEqual(["Open Harbour lights"]);
 });
 
 test("the palette shows at most sixty commands", async () => {
@@ -83,6 +145,8 @@ test("typing, the pointer and the arrow keys pick a command, the pick stays put 
   const { navigate } = await import("../../src/browser/app/route.ts");
   app.restores.push(() => { navigate({ view: "chat" }); });
   const scrolled = watchScrolling();
+  const { noteVisit } = await import("../../src/browser/app/recent.ts");
+  noteVisit("ada", "lamp-a");
   let closed = 0;
   const state = await chrome();
   const view = await palette(state, () => { closed += 1; });

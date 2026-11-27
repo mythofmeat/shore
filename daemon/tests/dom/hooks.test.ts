@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, test } from "bun:test";
+import { afterEach, describe, expect, spyOn, test } from "bun:test";
 
 import { acting, blockStorage, renderHook, useDom } from "./dom.ts";
 
@@ -54,6 +54,35 @@ describe("a media query", () => {
     expect(lists.get("(prefers-color-scheme: dark)")?.listeners.size).toBe(1);
     await hook.unmount();
     expect(lists.get("(prefers-color-scheme: dark)")?.listeners.size).toBe(0);
+  });
+});
+
+describe("the window's focus", () => {
+  test("follows whether the window has focus, listening only while it is used", async () => {
+    let focused = true;
+    const original = Object.getOwnPropertyDescriptor(document, "hasFocus");
+    Object.defineProperty(document, "hasFocus", { configurable: true, value: () => focused });
+    restores.push(() => { if (original === undefined) Reflect.deleteProperty(document, "hasFocus"); else Object.defineProperty(document, "hasFocus", original); });
+    const { useWindowFocused } = await hooks();
+    const added = spyOn(globalThis, "addEventListener");
+    const removed = spyOn(globalThis, "removeEventListener");
+    restores.push(() => { added.mockRestore(); removed.mockRestore(); });
+    const hook = await renderHook(useWindowFocused, undefined);
+    const listening = added.mock.calls.filter(([type]) => type === "focus" || type === "blur");
+    expect(listening.map(([type]) => type)).toEqual(["focus", "blur"]);
+    expect(hook.current()).toBe(true);
+    focused = false;
+    await acting(() => { dispatchEvent(new Event("blur")); });
+    expect(hook.current()).toBe(false);
+    focused = true;
+    await acting(() => { dispatchEvent(new Event("focus")); });
+    expect(hook.current()).toBe(true);
+    await hook.unmount();
+    const renders = hook.renders();
+    focused = false;
+    await acting(() => { dispatchEvent(new Event("blur")); dispatchEvent(new Event("focus")); });
+    expect(hook.renders(), "a hook no longer in use stops listening").toBe(renders);
+    expect(listening.map(([type, listener]) => removed.mock.calls.some(([gone, was]) => gone === type && was === listener))).toEqual([true, true]);
   });
 });
 

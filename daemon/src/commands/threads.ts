@@ -1,3 +1,5 @@
+import type { AllThreads } from "../protocol/AllThreads.ts";
+import { shoreLog } from "../log.ts";
 import type { ThreadView } from "../protocol/ThreadView.ts";
 import type { ThreadListing } from "../protocol/ThreadListing.ts";
 import type { ThreadSelection } from "../protocol/ThreadSelection.ts";
@@ -9,6 +11,7 @@ import { busy, internalError, invalidRequest, notFound } from "./errors.ts";
 import { createFolder, deleteFolder, moveFolder, moveThread, placedThreads, renameFolder, setFolderSort, setThreadsSort, type PlacedThread } from "../engine/thread_layout.ts";
 import {
   homeThread,
+  threadActivities,
   wakesThread,
   ThreadError,
   type ArchiveThreadOptions,
@@ -88,6 +91,8 @@ export interface ThreadRegistry {
     onHold: boolean,
     signal?: AbortSignal,
   ): Promise<ThreadsIndex>;
+  setThreadLater(character: string, id: string, later: boolean, signal?: AbortSignal): Promise<void>;
+  unarchiveThread(character: string, id: string, signal?: AbortSignal): Promise<ThreadsIndex>;
   setThreadCompaction(
     character: string,
     id: string,
@@ -136,6 +141,7 @@ function view(ctx: ThreadContext, { record, folder, position }: PlacedThread, ho
     current: record.id === current,
     ...(ctx.activity === undefined ? {} : { turns: activity?.turns ?? 0, unread: activity?.unread ?? 0 }),
     ...(activity?.last_active === undefined ? {} : { last_active: activity.last_active }),
+    ...(activity?.later === undefined ? {} : { later: activity.later }),
     ...(ctx.warm === record.id ? { warm: true } : {}),
   };
 }
@@ -163,6 +169,18 @@ function listing(ctx: ThreadContext, index?: ThreadsIndex): ThreadListing {
 
 export function listThreads(ctx: ThreadContext): ThreadListing {
   return listing(ctx);
+}
+
+export async function allThreads(registry: ThreadRegistry, dataDir: string, characters: readonly string[]): Promise<AllThreads> {
+  return {
+    characters: await Promise.all(characters.map(async (character) => {
+      const activity = await threadActivities(dataDir, character, registry.listThreads(character).map((record) => record.id)).catch((error: unknown) => {
+        shoreLog.warn(`shore: could not count ${character}'s unread replies for the thread list: ${String(error)}`);
+        return new Map<string, ThreadActivity>();
+      });
+      return { character, threads: listing({ registry, character, current: registry.homeThread(character), activity }).threads };
+    })),
+  };
 }
 
 function requiredId(args: Args): string {
@@ -205,7 +223,17 @@ export async function newThread(ctx: ThreadContext, args: Args): Promise<ThreadL
 export async function archiveThread(ctx: ThreadContext, args: Args): Promise<ThreadListing> {
   const id = requiredId(args);
   try {
-    return listing(ctx, await ctx.registry.archiveThread(ctx.character, id, undefined, ctx.signal));
+    const index = await ctx.registry.archiveThread(ctx.character, id, undefined, ctx.signal);
+    return listing(ctx.current === id ? { ...ctx, current: homeThread(index) } : ctx, index);
+  } catch (e) {
+    throw threadCommandError(e);
+  }
+}
+
+export async function unarchiveThread(ctx: ThreadContext, args: Args): Promise<ThreadListing> {
+  const id = requiredId(args);
+  try {
+    return listing(ctx, await ctx.registry.unarchiveThread(ctx.character, id, ctx.signal));
   } catch (e) {
     throw threadCommandError(e);
   }
@@ -256,6 +284,15 @@ export async function threadLock(ctx: ThreadContext, args: Args): Promise<Thread
   if (typeof locked !== "boolean") throw invalidRequest("locked must be true or false");
   try {
     return listing(ctx, await ctx.registry.setThreadLocked(ctx.character, id, locked, ctx.signal));
+  } catch (e) {
+    throw threadCommandError(e);
+  }
+}
+
+export async function threadLater(ctx: ThreadContext, args: Args): Promise<void> {
+  const id = requiredId(args);
+  try {
+    await ctx.registry.setThreadLater(ctx.character, id, args["later"] === true, ctx.signal);
   } catch (e) {
     throw threadCommandError(e);
   }

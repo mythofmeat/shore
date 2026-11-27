@@ -1994,6 +1994,12 @@
               "string",
               "null"
             ]
+          },
+          "reply": {
+            "type": [
+              "string",
+              "null"
+            ]
           }
         },
         "required": [

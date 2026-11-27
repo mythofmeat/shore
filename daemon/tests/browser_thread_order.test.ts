@@ -2,7 +2,7 @@ import { describe, expect, test } from "bun:test";
 
 import type { ConfigSchemaEntry } from "../src/protocol/ConfigSchemaEntry.ts";
 import type { ThreadView } from "../src/protocol/ThreadView.ts";
-import { HELD_GROUP, moveInThreads, sortThreads, threadSections, threadsOnScreen } from "../src/browser/sidebar/order.ts";
+import { ARCHIVED_GROUP, HELD_GROUP, moveInThreads, readOnlyThread, sortThreads, threadSections, threadsOnScreen } from "../src/browser/sidebar/order.ts";
 import { assertSettingsCoverage, configAt, settingControl, settingText } from "../src/browser/settings_forms.ts";
 
 function thread(id: string, overrides: Partial<ThreadView> = {}): ThreadView {
@@ -55,6 +55,22 @@ describe("the sidebar's thread order", () => {
     expect(ids(sortThreads(held, folders)).slice(-3)).toEqual(["story", "stalled", "paused"]);
     expect(ids(threadsOnScreen(held, folders, new Set(), null)).slice(-3)).toEqual(["story", "stalled", "paused"]);
     expect(ids(threadsOnScreen(held, folders, new Set([HELD_GROUP]), "paused")).slice(-2)).toEqual(["story", "paused"]);
+  });
+
+  test("archived threads come last, latest archived first, out of every other group, and Alt and the arrows reach them only while their group is open", () => {
+    const archived = [
+      ...threads,
+      thread("gone", { archived: "2026-11-02T00:00:00Z" }),
+      thread("long-gone", { archived: "2026-11-01T00:00:00Z", on_hold: true, folder: "work" }),
+      thread("stalled", { on_hold: true }),
+    ];
+    const sections = threadSections(archived, folders);
+    expect([ids(sections.held), ids(sections.archived), ids(sections.folders[0]?.threads ?? []).includes("long-gone"), ids(sections.loose).includes("gone")]).toEqual([["stalled"], ["gone", "long-gone"], false, false]);
+    expect(ids(sortThreads(archived, folders)).slice(-3)).toEqual(["stalled", "gone", "long-gone"]);
+    expect(ids(threadsOnScreen(archived, folders, new Set(), null)).slice(-2), "the archived group starts shut").toEqual(["story", "stalled"]);
+    expect(ids(threadsOnScreen(archived, folders, new Set(), "long-gone")).slice(-2)).toEqual(["stalled", "long-gone"]);
+    expect(ids(threadsOnScreen(archived, folders, new Set([ARCHIVED_GROUP]), null)).slice(-3)).toEqual(["stalled", "gone", "long-gone"]);
+    expect([readOnlyThread(undefined), readOnlyThread(thread("x")), readOnlyThread(thread("x", { wakes: true })), readOnlyThread(thread("x", { archived: "2026-11-02T00:00:00Z" }))]).toEqual([false, false, true, true]);
   });
 
   test("moving a thread places it before another, or last, in its new section, renumbering only that section", () => {

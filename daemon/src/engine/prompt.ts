@@ -162,6 +162,10 @@ export function buildSystemBlocks(params: SystemParams, timeZone: string = hostZ
   });
 }
 
+export function messageBudgetFor(system: SystemBlock[], maxContext: number | undefined, maxOutput: number | undefined): number {
+  return availableMessageTokens(system, maxContext ?? DEFAULT_MAX_CONTEXT_TOKENS, maxOutput ?? DEFAULT_MAX_OUTPUT_TOKENS);
+}
+
 function availableMessageTokens(
   system: SystemBlock[],
   maxContext: number,

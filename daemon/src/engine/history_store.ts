@@ -401,19 +401,25 @@ export class HistoryStore {
     return row?.display_seq ?? 0;
   }
 
-  lastUserTurnAt(character: string): string | undefined {
-    const row = this.#db
+  lastTimes(character: string): { user: string | null; latest: string | null } {
+    return this.#db
       .query(
-        `SELECT m.timestamp
-         FROM history_messages m
-         JOIN history_segments s ON s.character = m.character AND s.idx = m.segment
-         WHERE m.character = ?1 AND s.committed = 1 AND m.is_user_turn = 1
-           AND (m.origin IS NULL OR m.origin <> 'autonomous')
-         ORDER BY m.display_seq DESC
-         LIMIT 1`,
+        `SELECT
+           (SELECT m.timestamp
+            FROM history_messages m
+            JOIN history_segments s ON s.character = m.character AND s.idx = m.segment
+            WHERE m.character = ?1 AND s.committed = 1 AND m.is_user_turn = 1
+              AND (m.origin IS NULL OR m.origin <> 'autonomous')
+            ORDER BY m.display_seq DESC
+            LIMIT 1) AS user,
+           (SELECT m.timestamp
+            FROM history_messages m
+            JOIN history_segments s ON s.character = m.character AND s.idx = m.segment
+            WHERE m.character = ?1 AND s.committed = 1
+            ORDER BY m.display_seq DESC
+            LIMIT 1) AS latest`,
       )
-      .get(character) as { timestamp: string } | null;
-    return row?.timestamp;
+      .get(character) as { user: string | null; latest: string | null };
   }
 
   userTurnTimes(character: string): string[] {

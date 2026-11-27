@@ -7,7 +7,7 @@ import { join } from "node:path";
 import { archiveKey, threadDataDir } from "../src/config/dirs.ts";
 import { HISTORY_DB_FILE, HistoryStore } from "../src/engine/history_store.ts";
 import { serializeMessages } from "../src/engine/message_store.ts";
-import { createThread, ensureWakesThread } from "../src/engine/threads.ts";
+import { archiveThread, createThread, ensureWakesThread } from "../src/engine/threads.ts";
 import type { Message } from "../src/engine/types.ts";
 import { archiveAndRetain } from "../src/memory/compaction/archive.ts";
 import { initializeDatabase } from "../src/storage/database.ts";
@@ -330,6 +330,18 @@ describe("listing a character's archived conversations", () => {
       "2026-11-03 08:00 → 08:00  1 turn  (no label)",
       "2026-11-02 23:50 → 2026-11-03 00:10  1 turn  [story] The night watch",
       "2026-11-01 09:00 → 09:00  3 turns  Naming the keeper",
+    ]);
+  });
+
+  test("leaves out an archived thread's conversations, as before Shore kept archived threads", async () => {
+    const w = await world("story");
+    await w.archive("main", talk("a", "01", "09:00"));
+    await w.archive("story", talk("b", "02", "09:00"));
+    await archiveThread(w.data, "frank", "story", { now: () => NOW });
+    expect((await w.ask({ action: "list" })).split("\n")).toEqual([
+      "Archived conversations: 1–1 of 1, newest first (UTC)",
+      "",
+      "2026-11-01 09:00 → 09:00  1 turn  (no label)",
     ]);
   });
 

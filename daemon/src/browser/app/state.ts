@@ -13,7 +13,7 @@ import { listRequests } from "../request_history.ts";
 import { followStoredWrites, readStored, storedChanged } from "../stored.ts";
 import { FontSizeStore, FONT_SIZE_STORAGE_KEY, type FontSizeId } from "../font_size.ts";
 import { ThemeStore, THEME_STORAGE_KEY, type ThemeId } from "../theme.ts";
-import { LAST_PAGE_KEY } from "./route.ts";
+import { LAST_PAGE_KEY, navigate } from "./route.ts";
 import { toasts } from "../ui/toast.tsx";
 import { Workspace, type ChromeSnapshot, type WorkspaceSnapshot } from "../workspace.ts";
 
@@ -55,7 +55,7 @@ followStoredWrites(kept.wrote);
 export const themes = new ThemeStore(kept);
 export const fontSizes = new FontSizeStore(kept);
 export const display = new DisplayPreferences(kept);
-export const notifier = new Notifier({ storage: kept });
+export const notifier = new Notifier({ storage: kept, open: (character, thread) => { navigate({ view: "chat" }); perform(() => workspace.openThreadIn(character, thread)); } });
 
 function reloadStored(): void {
   themes.reload(); fontSizes.reload(); display.reload(); notifier.reload(); collapsedFolders.reload();
@@ -69,7 +69,7 @@ workspace.connection.subscribe((update) => {
   if (update.kind === "status") syncKept();
 });
 addEventListener("storage", reloadStored);
-addEventListener("focus", () => { notifier.markRead(); syncKept(); });
+addEventListener("focus", () => { notifier.pageFocused(); syncKept(); });
 
 export function useWorkspace(): WorkspaceSnapshot {
   return useSyncExternalStore(workspace.subscribe, workspace.getSnapshot);

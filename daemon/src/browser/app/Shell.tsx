@@ -1,18 +1,20 @@
 import { useCallback, useEffect, useState } from "react";
 import type { ChromeSnapshot } from "../workspace.ts";
-import { Sidebar } from "../sidebar/Sidebar.tsx";
-import { sortThreads, threadsOnScreen } from "../sidebar/order.ts";
+import { Sidebar, threadLabel } from "../sidebar/Sidebar.tsx";
+import { sortThreads, threadsOnScreen, unreadEverywhere } from "../sidebar/order.ts";
 import { Chat } from "../chat/Chat.tsx";
 import { Settings } from "../settings/Settings.tsx";
 import { NewCharacterDialog, NewThreadDialog } from "../sidebar/dialogs.tsx";
 import { Toasts, toasts } from "../ui/toast.tsx";
-import { useEscape, useMediaQuery, useStoredFlag } from "../ui/hooks.ts";
+import { useEscape, useMediaQuery, useStoredFlag, useWindowFocused } from "../ui/hooks.ts";
 import { FolderDialogs, ThreadDialogs } from "../chat/thread_dialogs.tsx";
 import { FOLDER_DIALOG_EVENT, THREAD_DIALOG_EVENT, type FolderDialogRequest, type ThreadDialogRequest } from "./intents.ts";
 import { Palette } from "./Palette.tsx";
 import { navigate, openSettings, useRoute } from "./route.ts";
 import { adjacent, globalAction, nextUnread } from "./shortcuts.ts";
-import { perform, useCollapsedFolders, useNotifications, workspace } from "./state.ts";
+import { useThreadUrl } from "./thread_url.ts";
+import { laterThread } from "../chat/actions.ts";
+import { perform, useCollapsedFolders, workspace } from "./state.ts";
 
 export function Shell({ state }: { state: ChromeSnapshot }) {
   const route = useRoute();
@@ -23,7 +25,7 @@ export function Shell({ state }: { state: ChromeSnapshot }) {
   const [threadDialog, setThreadDialog] = useState<ThreadDialogRequest | null>(null);
   const [folderDialog, setFolderDialog] = useState<FolderDialogRequest | null>(null);
   const collapsed = useCollapsedFolders(state.character);
-  const { unread } = useNotifications();
+  const unread = unreadEverywhere(state, useWindowFocused());
   useEffect(() => {
     const open = (event: Event) => { setThreadDialog((event as CustomEvent<ThreadDialogRequest>).detail); };
     const openFolder = (event: Event) => { setFolderDialog((event as CustomEvent<FolderDialogRequest>).detail); };
@@ -40,16 +42,14 @@ export function Shell({ state }: { state: ChromeSnapshot }) {
     toasts.show(state.error, "error");
     workspace.dismissError();
   }, [state.error]);
+  useThreadUrl(state.character, state.thread);
+  const shownThread = state.threads.find((thread) => thread.id === state.thread);
+  const place = shownThread === undefined ? state.thread ?? "main" : threadLabel(shownThread);
   useEffect(() => {
-    if (state.character === null) return;
-    const path = `/workspace/${encodeURIComponent(state.character)}/${encodeURIComponent(state.thread ?? "main")}`;
-    if (location.pathname !== path) history.replaceState(history.state, "", path + location.hash);
-  }, [state.character, state.thread]);
-  useEffect(() => {
-    const title = route.view === "settings" ? "Settings · Shore" : state.character === null ? "Shore" : `${state.character} · Shore`;
+    const title = route.view === "settings" ? "Settings · Shore" : state.character === null ? "Shore" : `${place} · ${state.character}`;
     document.title = unread > 0 ? `(${String(unread)}) ${title}` : title;
     return () => { document.title = "Shore"; };
-  }, [route.view, state.character, unread]);
+  }, [route.view, state.character, place, unread]);
   const toggle = () => { if (mobile) setDrawer(!drawer); else setExpanded(!expanded); };
   useEffect(() => {
     const handler = (event: KeyboardEvent) => {
@@ -73,6 +73,11 @@ export function Shell({ state }: { state: ChromeSnapshot }) {
           if (next !== undefined && next !== from && state.status === "ready") perform(() => workspace.openThread(next));
           break;
         }
+        case "later": {
+          const shown = state.threads.find((thread) => thread.id === state.thread);
+          if (shown !== undefined && state.status === "ready") void laterThread(shown, shown.later === undefined);
+          break;
+        }
         case "next-unread-thread": {
           const next = nextUnread(sortThreads(state.threads, state.folders), state.opening?.thread ?? state.thread);
           if (next === undefined) toasts.show("No unread messages in other threads");
@@ -86,12 +91,12 @@ export function Shell({ state }: { state: ChromeSnapshot }) {
   });
   return <div className="shell" data-sidebar={open ? "open" : "closed"} data-layout={mobile ? "mobile" : "desktop"}>
     {mobile && drawer ? <button type="button" className="scrim" aria-label="Close sidebar" tabIndex={-1} onClick={closeDrawer} /> : null}
-    {open ? <Sidebar state={state} mobile={mobile} close={closeDrawer} collapse={() => setExpanded(false)} newCharacter={() => setDialog("character")} newThread={() => setDialog("thread")} /> : null}
+    {open ? <Sidebar state={state} mobile={mobile} close={closeDrawer} collapse={() => setExpanded(false)} newCharacter={() => setDialog("character")} newThread={() => setDialog("thread")} openSwitcher={() => setDialog("palette")} /> : null}
     <div className="main">
       {route.view === "settings" ? <Settings state={state} page={route.page} sidebarOpen={open} toggleSidebar={toggle} /> : <Chat state={state} sidebarOpen={open} toggleSidebar={toggle} mobile={mobile} />}
     </div>
     {dialog === "character" ? <NewCharacterDialog close={() => setDialog(null)} /> : null}
-    {dialog === "thread" && state.character !== null ? <NewThreadDialog character={state.character} close={() => setDialog(null)} /> : null}
+    {dialog === "thread" && state.character !== null ? <NewThreadDialog character={state.character} taken={state.threads.map((thread) => thread.id)} close={() => setDialog(null)} /> : null}
     {dialog === "palette" ? <Palette state={state} close={() => setDialog(null)} newThread={() => setDialog("thread")} newCharacter={() => setDialog("character")} /> : null}
     {threadDialog === null ? null : <ThreadDialogs state={state} request={threadDialog} close={() => setThreadDialog(null)} />}
     {folderDialog === null ? null : <FolderDialogs request={folderDialog} close={() => setFolderDialog(null)} />}

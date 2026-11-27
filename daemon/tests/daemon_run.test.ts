@@ -267,7 +267,7 @@ describe("archiving a conversation", () => {
       const home = await daemon.runtime.registry.getOrCreate("ada");
       expect(home.historySnapshot({}).messages.map((message) => message.content)).toEqual(["hi", "hello back", "typed after archiving", "hello back"]);
       expect(await runCommand(elsewhere, "list_threads", {})).toMatchObject({ data: { current: "other" } });
-      expect(daemon.runtime.registry.listThreads("ada").map((thread) => thread.id).sort()).toEqual(["main", "other"]);
+      expect(daemon.runtime.registry.listThreads("ada").map((thread) => [thread.id, thread.archived !== undefined]).sort(([a], [b]) => String(a).localeCompare(String(b)))).toEqual([["main", false], ["other", false], ["side", true]]);
     } finally {
       release();
       for (const client of clients) client.close();
@@ -724,6 +724,7 @@ describe("a daemon that stays up", () => {
     await daemon.runtime.autonomy.runDue();
 
     await until(() => threadActivityNow(daemon.runtime.config.dirs.data, "ada", "main").turns === 0, "the idle conversation compacting");
+    expect(threadActivityNow(daemon.runtime.config.dirs.data, "ada", "main").last_active, "the thread still sorts by when it was last used").toBeDefined();
     const index = daemon.runtime.historyIndex;
     await untilAsync(async () => {
       await index.runOnce();

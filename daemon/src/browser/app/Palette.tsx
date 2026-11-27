@@ -4,15 +4,17 @@ import { Dialog } from "../ui/controls.tsx";
 import { Icon, type IconName } from "../ui/icons.tsx";
 import { toasts } from "../ui/toast.tsx";
 import { makeHome } from "../chat/actions.ts";
-import { sortThreads } from "../sidebar/order.ts";
+import { readOnlyThread, threadsByCharacter } from "../sidebar/order.ts";
 import { threadLabel } from "../sidebar/Sidebar.tsx";
+import { UnreadBadge } from "../sidebar/ThreadRow.tsx";
+import { previousVisit, switcherThreads } from "./recent.ts";
 import { openConversationDialog, openEffortMenu, openThreadDialog, requestConfigSearch } from "./intents.ts";
 import { navigate, SETTINGS_PAGES } from "./route.ts";
 import { keyLabel, paletteMatches, shortcutsFor } from "./shortcuts.ts";
 import { conversation as requests, enterSends, errorText, perform, streamReplies, workspace } from "./state.ts";
 
 export type PaletteScope = "full" | "shortcuts" | "config";
-interface Command { id: string; label: string; detail?: string; icon: IconName; group: string; run: () => void }
+interface Command { id: string; label: string; detail?: string; keywords?: string; unread?: number; icon: IconName; group: string; run: () => void }
 
 
 export function Palette({ state, close, newThread, newCharacter, initialScope = "full" }: { state: ChromeSnapshot; close: () => void; newThread: () => void; newCharacter: () => void; initialScope?: PaletteScope }) {
@@ -31,28 +33,32 @@ export function Palette({ state, close, newThread, newCharacter, initialScope = 
     if (scope === "config") return keys.map((key) => ({ id: `config:${key}`, label: key, icon: "settings", group: "Settings keys", run: run(() => { requestConfigSearch(key); navigate({ view: "settings", page: "configuration" }); }) }));
     const current = state.thread;
     const openThread = state.threads.find((thread) => thread.id === current);
+    const threads = switcherThreads(threadsByCharacter(state), { character: state.character, thread: current }, previousVisit(state.character, current)).map(({ character, thread }) => ({
+      id: `thread:${JSON.stringify([character, thread.id])}`, label: `Open ${threadLabel(thread)}`, detail: thread.archived === undefined ? character : `${character} · archived`, keywords: thread.id, unread: thread.unread ?? 0,
+      icon: "chat" as const, group: "Threads", run: run(() => { navigate({ view: "chat" }); perform(() => workspace.openThreadIn(character, thread.id)); }),
+    }));
     const conversation = state.character === null ? [] : [
       { id: "new-thread", label: "New thread", icon: "plus" as const, group: "Thread", run: run(newThread) },
       ...(current === null ? [] : (["settings", "fork", "archive"] as const).map((kind) => ({
         id: `thread-dialog:${kind}`, icon: "chat" as const, group: "Thread", run: run(() => { navigate({ view: "chat" }); openThreadDialog(kind, current); }),
         label: { settings: "Thread settings", fork: "Fork thread", archive: "Archive thread" }[kind],
       }))),
-      ...(openThread === undefined || openThread.home || openThread.wakes === true ? [] : [{ id: "make-home", label: "Make home", icon: "home" as const, group: "Thread", run: run(() => { void makeHome(openThread); }) }]),
-      ...(openThread?.wakes === true ? [] : [{ id: "another-take", label: "Another take", icon: "shuffle" as const, group: "Thread", run: run(() => { navigate({ view: "chat" }); void requests.regenerate({ anotherTake: true }, streamReplies()).catch((failure: unknown) => toasts.show(errorText(failure), "error")); }) }]),
+      ...(openThread === undefined || openThread.home || readOnlyThread(openThread) ? [] : [{ id: "make-home", label: "Make home", icon: "home" as const, group: "Thread", run: run(() => { void makeHome(openThread); }) }]),
+      ...(readOnlyThread(openThread) ? [] : [{ id: "another-take", label: "Another take", icon: "shuffle" as const, group: "Thread", run: run(() => { navigate({ view: "chat" }); void requests.regenerate({ anotherTake: true }, streamReplies()).catch((failure: unknown) => toasts.show(errorText(failure), "error")); }) }]),
       ...(["reason", "system", "compact", "gallery", "model"] as const).map((name) => ({
         id: `dialog:${name}`, icon: "chat" as const, group: "Thread", run: run(() => { navigate({ view: "chat" }); requestAnimationFrame(() => openConversationDialog(name)); }),
         label: { reason: "Regenerate with a reason", system: "Add system message", compact: "Compact context", gallery: "Images", model: "Choose a model" }[name],
       })),
       { id: "effort", label: "Change reasoning effort", icon: "chat" as const, group: "Thread", run: run(() => { navigate({ view: "chat" }); requestAnimationFrame(openEffortMenu); }) },
-      ...sortThreads(state.threads, state.folders).map((thread) => ({ id: `thread:${thread.id}`, label: `Open ${threadLabel(thread)}`, detail: state.character ?? "", icon: "chat" as const, group: "Threads", run: run(() => { navigate({ view: "chat" }); perform(() => workspace.openThread(thread.id)); }) })),
     ];
     return [
+      ...threads,
       ...conversation,
       ...state.characters.map((character) => ({ id: `character:${character.name}`, label: `Go to ${character.name}`, icon: "person" as const, group: "Characters", run: run(() => { navigate({ view: "chat" }); perform(() => workspace.openCharacter(character.name)); }) })),
       { id: "new-character", label: "New character", icon: "plus", group: "Characters", run: run(newCharacter) },
       ...SETTINGS_PAGES.map((page) => ({ id: `settings:${page.id}`, label: page.label, detail: `Settings · ${page.group}`, icon: "settings" as const, group: "Settings", run: run(() => navigate({ view: "settings", page: page.id })) })),
     ];
-  }, [scope, keys, state.characters, state.threads, state.folders, state.character, state.thread, close, newThread, newCharacter]);
+  }, [scope, keys, state.characters, state.threads, state.allThreads, state.character, state.thread, close, newThread, newCharacter]);
   const visible = paletteMatches(commands, query).map((index) => commands[index]).filter((item): item is Command => item !== undefined).slice(0, 60);
   const current = Math.min(active, Math.max(visible.length - 1, 0));
   useEffect(() => { list.current?.querySelector(`[data-index="${String(current)}"]`)?.scrollIntoView({ block: "nearest" }); }, [current]);
@@ -60,7 +66,7 @@ export function Palette({ state, close, newThread, newCharacter, initialScope = 
     <div className="segmented" role="radiogroup" aria-label="Search">
       {([["full", "Everything"], ["shortcuts", "Shortcuts"], ["config", "Settings keys"]] as const).map(([id, label]) => <button key={id} type="button" role="radio" aria-checked={scope === id} onClick={() => { setScope(id); setActive(0); }}>{label}</button>)}
     </div>
-    <label className="sidebar-search picker-search"><Icon name="search" size={16} /><input type="search" data-autofocus aria-label="Search commands" placeholder="Type a command, character or setting" value={query}
+    <label className="sidebar-search picker-search"><Icon name="search" size={16} /><input type="search" data-autofocus aria-label="Search commands" placeholder="Type a thread, command, character or setting" value={query}
       onChange={(event) => { setQuery(event.target.value); setActive(0); }}
       onKeyDown={(event) => {
         if (event.key === "ArrowDown") { event.preventDefault(); setActive(Math.min(current + 1, visible.length - 1)); }
@@ -69,7 +75,7 @@ export function Palette({ state, close, newThread, newCharacter, initialScope = 
       }} /></label>
     <div className="palette-list" role="listbox" aria-label="Commands" ref={list}>
       {visible.length === 0 ? <p className="picker-empty">{scope === "config" && keys.length === 0 ? "Loading settings…" : "Nothing matches."}</p> : visible.map((command, index) => <button key={command.id} type="button" role="option" data-index={index} aria-selected={index === current} className={`palette-item ${index === current ? "on" : ""}`} onMouseMove={() => setActive(index)} onClick={command.run}>
-        <Icon name={command.icon} size={16} /><span className="palette-label">{command.label}</span><span className="palette-detail">{command.detail ?? command.group}</span>
+        <Icon name={command.icon} size={16} /><span className="palette-label">{command.label}</span>{command.unread !== undefined && command.unread > 0 ? <UnreadBadge count={command.unread} /> : null}<span className="palette-detail">{command.detail ?? command.group}</span>
       </button>)}
     </div>
   </Dialog>;

@@ -2570,6 +2570,13 @@ wire_types! {
     }
 
     #[serde(deny_unknown_fields)]
+    pub struct SwitchCharacterArgs {
+        pub name: String,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        pub thread: Option<String>,
+    }
+
+    #[serde(deny_unknown_fields)]
     pub struct SwitchThreadArgs {
         pub name: String,
         #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -2601,6 +2608,33 @@ wire_types! {
 
     pub struct ThreadPromptView { pub thread: String, pub parts: Vec<ThreadPromptPart>, pub pins: Vec<ThreadPinStatus> }
 
+    pub struct CharacterThreads { pub character: String, pub threads: Vec<ThreadView> }
+
+    pub struct AllThreads { pub characters: Vec<CharacterThreads> }
+
+    #[serde(rename_all = "snake_case")]
+    pub enum ContextLimitMode { Compaction, Trim, Off }
+
+    pub struct ThreadContextUse {
+        pub thread: String,
+        pub mode: ContextLimitMode,
+        #[ts(type = "number")]
+        pub turns: u64,
+        #[ts(type = "number")]
+        pub min_turns: u64,
+        #[ts(type = "number")]
+        pub max_turns: u64,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        #[ts(optional, type = "number")]
+        pub context_tokens: Option<u64>,
+        #[ts(type = "number")]
+        pub max_context_tokens: u64,
+        #[ts(type = "number")]
+        pub message_tokens: u64,
+        #[ts(type = "number")]
+        pub trim_at: u64,
+    }
+
     #[serde(deny_unknown_fields)]
     pub struct ThreadPinsArgs {
         pub name: String,
@@ -2618,6 +2652,12 @@ wire_types! {
     pub struct ThreadHoldArgs {
         pub name: String,
         pub on_hold: bool,
+    }
+
+    #[serde(deny_unknown_fields)]
+    pub struct ThreadLaterArgs {
+        pub name: String,
+        pub later: bool,
     }
 
     #[serde(deny_unknown_fields)]
@@ -2770,6 +2810,12 @@ wire_types! {
         pub on_hold: Option<bool>,
         #[serde(default, skip_serializing_if = "Option::is_none")]
         #[ts(optional)]
+        pub later: Option<String>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        #[ts(optional)]
+        pub archived: Option<String>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        #[ts(optional)]
         pub folder: Option<String>,
         #[serde(default, skip_serializing_if = "Option::is_none")]
         #[ts(optional, type = "number")]
@@ -2801,6 +2847,9 @@ wire_types! {
         #[serde(default, skip_serializing_if = "Option::is_none")]
         #[ts(optional)]
         pub last_active: Option<String>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        #[ts(optional)]
+        pub reply: Option<String>,
     }
 
     pub struct ThreadFolderView {
@@ -2986,22 +3035,26 @@ operations! {
     InjectSystem: "inject_system" (InjectSystemArgs) => SystemInjected,
     ListCharacters: "list_characters" (EmptyOperationArgs) => CharacterListing,
     CreateCharacter: "create_character" (NamedOperationArgs) => CharacterCreated,
-    SwitchCharacter: "switch_character" (NamedOperationArgs) => CharacterSelection,
+    SwitchCharacter: "switch_character" (SwitchCharacterArgs) => CharacterSelection,
     InspectCharacter: "character_info" (CharacterInfoArgs) => CharacterDetails,
     ListThreads: "list_threads" (EmptyOperationArgs) => ThreadListing,
+    ListAllThreads: "all_threads" (EmptyOperationArgs) => AllThreads,
     ListWorkspaceFiles: "workspace_files" (EmptyOperationArgs) => WorkspaceFileListing,
     SwitchThread: "switch_thread" (SwitchThreadArgs) => ThreadSelection,
     CreateThread: "create_thread" (CreateThreadArgs) => ThreadListing,
     ArchiveThread: "archive_thread" (NamedOperationArgs) => ThreadListing,
+    UnarchiveThread: "unarchive_thread" (NamedOperationArgs) => ThreadListing,
     ForkThread: "fork_thread" (ForkThreadArgs) => ThreadForkResult,
     SetHomeThread: "thread_home" (NamedOperationArgs) => ThreadListing,
     LabelThread: "thread_label" (ThreadLabelArgs) => ThreadListing,
     SetThreadPurpose: "thread_purpose" (ThreadPurposeArgs) => ThreadListing,
     SetThreadPins: "thread_pins" (ThreadPinsArgs) => ThreadListing,
     ShowThreadPrompt: "thread_prompt" (NamedOperationArgs) => ThreadPromptView,
+    ShowContextUse: "context_use" (EmptyOperationArgs) => ThreadContextUse,
     RefreshThreadPrompt: "thread_prompt_refresh" (NamedOperationArgs) => ThreadPromptView,
     LockThread: "thread_lock" (ThreadLockArgs) => ThreadListing,
     HoldThread: "thread_hold" (ThreadHoldArgs) => ThreadListing,
+    LaterThread: "thread_later" (ThreadLaterArgs) => ThreadListing,
     SetThreadCompaction: "thread_compaction" (ThreadCompactionArgs) => ThreadListing,
     MoveThread: "thread_move" (ThreadMoveArgs) => ThreadListing,
     SortThreads: "thread_sort" (ThreadSortArgs) => ThreadListing,

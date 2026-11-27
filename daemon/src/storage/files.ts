@@ -1,5 +1,5 @@
 import { basename, dirname, relative, sep, join } from "node:path";
-import { pack, replaceCollection, appendCollection, ensureCollection, deleteState, readState, stateLinesAfter, stateMark, statePrefixUnchanged, writeState, withStorage, type StateMark } from "./store.ts";
+import { pack, replaceCollection, appendCollection, ensureCollection, deleteState, readState, stateLinesAfter, stateMark, writeState, withStorage, type StateMark } from "./store.ts";
 
 export interface StateFile { data: string; key: string; character: string }
 export type DurableFile = string | StateFile;
@@ -40,11 +40,6 @@ export function readDurable(path: DurableFile): string {
 export function durableMark(path: DurableFile): StateMark | undefined {
   const scope = fileScope(path);
   return stateMark(scope.data, scope.key);
-}
-
-export function durablePrefixUnchanged(path: DurableFile, mark: StateMark): boolean {
-  const scope = fileScope(path);
-  return statePrefixUnchanged(scope.data, scope.key, mark);
 }
 
 export function durableLinesAfter(path: DurableFile, last: number): string[] {

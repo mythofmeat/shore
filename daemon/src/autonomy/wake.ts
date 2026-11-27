@@ -10,7 +10,7 @@ import { estimateHistoryTokens, formatWallClock, lengthPhrase, nearMessageBudget
 import { Texts } from "../texts/texts.ts";
 import { sealedThreads, type SealedThread } from "../engine/sealed_list.ts";
 import { NO_PRIOR_CONTEXT } from "../engine/segments.ts";
-import { homeThread, isWakeOpener, readThreadsIndex, threadActivities, threadActivityNow, threadsTheCharacterSees, type ThreadsIndex } from "../engine/threads.ts";
+import { homeThread, isWakeOpener, readThreadsIndex, threadActivities, threadActivityNow, threadAway, threadsTheCharacterSees, type ThreadsIndex } from "../engine/threads.ts";
 import type { Message, MessageNote } from "../engine/types.ts";
 import { buildChatShapeRequestFromDisk } from "../handler/context.ts";
 import { inReadingOrder, type SentMessage } from "../handler/wire_messages.ts";
@@ -220,8 +220,9 @@ export async function runWake(character: string, config: LoadedConfig, wake: Wak
   const result = await withConversation(threadDataDir(config.dirs.data, character, thread), "turn", async (signal): Promise<WakeResult> => {
     const index = await readThreadsIndex(config.dirs.data, character);
     const home = homeThread(index);
-    if (index?.threads.some((each) => each.id === thread && each.on_hold === true) === true) {
-      note("call_failed", `Wake skipped: "${thread}" is on hold`);
+    const unseen = threadAway(index?.threads.find((each) => each.id === thread));
+    if (unseen !== undefined) {
+      note("call_failed", `Wake skipped: "${thread}" is ${unseen}`);
       return { events };
     }
     const chat = resolveChatModelForCharacter(

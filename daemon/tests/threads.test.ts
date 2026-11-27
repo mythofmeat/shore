@@ -1,17 +1,22 @@
-import { describe, expect, test } from "bun:test";
+import { describe, expect, spyOn, test } from "bun:test";
 import { createFolder, deleteFolder, moveFolder, moveThread, placedThreads, renameFolder, setFolderSort } from "../src/engine/thread_layout.ts";
-import { MAX_THREAD_ID_LENGTH, archiveThread, assertThreadId, isValidThreadId, createThread, ensureThreads, ensureWakesThread, wakesThread, firstUnreadReply, markThreadRead, readThreadsIndex, setHomeThread, setThreadCompaction, threadActivityNow, threadPins, writeThreadsIndex, type ThreadsIndex } from "../src/engine/threads.ts";
+import { MAX_THREAD_ID_LENGTH, clearThreadLater, noteContextTokens, setThreadLater, threadContextTokens, threadLaterMark, unarchiveThread, archiveThread, assertThreadId, isValidThreadId, createThread, ensureThreads, ensureWakesThread, wakesThread, firstUnreadReply, markThreadRead, readThreadsIndex, setHomeThread, setThreadCompaction, threadActivityNow, threadPins, writeThreadsIndex, type ThreadsIndex } from "../src/engine/threads.ts";
 import { readFileSync, readFile } from "./support/stored_files.ts";
 import { mkdirSync, mkdtempSync, readdirSync, readlinkSync, realpathSync, rmSync, writeFileSync, existsSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { CharacterRegistry } from "../src/characters.ts";
 import { defaultAppConfig } from "../src/config/app.ts";
-import { MAIN_THREAD, characterThreadsIndex, threadDataDir } from "../src/config/dirs.ts";
+import { MAIN_THREAD, archiveKey, characterThreadsIndex, threadDataDir } from "../src/config/dirs.ts";
+import { archiveAndRetain } from "../src/memory/compaction/archive.ts";
+import { initializeDatabase } from "../src/storage/database.ts";
+import { bookPathIn, readBook, sessionKey, SESSION_BOOK_VERSION, writeBook, type SessionRecord } from "../src/llm/providers/agent_sessions.ts";
 import { emptyCatalog } from "../src/config/models.ts";
 import { ProviderRegistry } from "../src/config/providers.ts";
 import { type LoadedConfig } from "../src/config/loader.ts";
-import { appendDurableLine, initializeDurableLines, readDurable, replaceDurableSuffix, updateDurableLine, writeDurable } from "../src/storage/files.ts";
+import { appendDurableLine, deleteThreadState, initializeDurableLines, readDurable, replaceDurableSuffix, threadFile, updateDurableLine, writeDurable } from "../src/storage/files.ts";
+import { pack, withStorage } from "../src/storage/store.ts";
+import * as files from "../src/storage/files.ts";
 import { mkdir, rm } from "node:fs/promises";
 import { HISTORY_DB_FILE, HistoryStore } from "../src/engine/history_store.ts";
 import { FORK_MARKER_FILE, forkThread, recoverForks, selectForkContext } from "../src/engine/fork.ts";
@@ -20,6 +25,7 @@ import { refreshConversation, withConversation } from "../src/engine/lifecycle.t
 import type { ConversationEngine } from "../src/engine/conversation.ts";
 import { type ContentBlock, type Message } from "../src/engine/types.ts";
 import { testTmp } from "./support/tmp.ts";
+import { handlesUnder } from "./support/handles.ts";
 import { outcomeOf } from "./support/outcome.ts";
 
 describe("pinned file paths", () => {
@@ -233,12 +239,15 @@ describe("concurrent thread-index mutations", () => {
     );
   });
 
-  test("archiving a thread forgets its engine, so a new thread of the same name starts afresh", async () => {
+  test("archiving a thread forgets its engine and keeps its name taken until it is unarchived, which starts it afresh", async () => {
     const { registry } = await registryWith("aria");
     await registry.createThread("aria", "side");
     const old = await registry.getOrCreate("aria", "side");
     await registry.archiveThread("aria", "side");
-    await registry.createThread("aria", "side");
+    expect(await outcomeOf(registry.createThread("aria", "side"))).toThrow('thread "side" already exists for aria, archived');
+    expect(registry.listThreads("aria").find((t) => t.id === "side")?.archived).toBeString();
+    await registry.unarchiveThread("aria", "side");
+    expect(registry.listThreads("aria").find((t) => t.id === "side")).not.toHaveProperty("archived");
     expect(await registry.getOrCreate("aria", "side")).not.toBe(old);
   });
 
@@ -263,10 +272,9 @@ describe("concurrent thread-index mutations", () => {
       readFileSync(characterThreadsIndex(dataDir, "aria"), "utf8"),
     ) as { threads: Array<{ id: string }> };
 
-    expect(onDisk.threads.map((t) => t.id).sort()).toEqual([MAIN_THREAD, "fresh"].sort());
-    expect(registry.listThreads("aria").map((t) => t.id).sort()).toEqual(
-      [MAIN_THREAD, "fresh"].sort(),
-    );
+    const byName = (a: string, b: string) => a.localeCompare(b);
+    expect(onDisk.threads.map((t) => t.id).sort(byName)).toEqual(["doomed", "fresh", MAIN_THREAD].sort(byName));
+    expect(registry.listThreads("aria").map((t) => `${t.id}${t.archived === undefined ? "" : " (archived)"}`).sort(byName)).toEqual(["doomed (archived)", "fresh", MAIN_THREAD].sort(byName));
   });
 });
 
@@ -479,8 +487,117 @@ describe("thread activity", () => {
     });
   });
 
+  test("the context tokens the compaction trigger was last given are kept, and read back only as a whole number", async () => {
+    await scanned(async (data) => {
+      expect(threadContextTokens(data, "ada", "side")).toBeUndefined();
+      noteContextTokens(data, "ada", "side", 81234);
+      expect(threadContextTokens(data, "ada", "side")).toBe(81234);
+      noteContextTokens(data, "ada", "side", 0);
+      expect(threadContextTokens(data, "ada", "side")).toBe(0);
+      for (const stored of ["lots", "-5", "1.5", "1e400"]) {
+        writeDurable(threadFile(data, "ada", "side", "context_tokens"), stored);
+        expect(threadContextTokens(data, "ada", "side"), stored).toBeUndefined();
+      }
+    });
+  });
+
+  test("a later mark keeps when it was set, is read back only when it holds a time, needs the thread, and clearing says whether there was one", async () => {
+    await scanned(async (data) => {
+      await createThread(data, "ada", "side", "2026-10-01T09:00:00.000Z");
+      const mark = () => threadLaterMark(data, "ada", "side");
+      expect([mark(), threadActivityNow(data, "ada", "side").later]).toEqual([undefined, undefined]);
+      await setThreadLater(data, "ada", "side", true, "2026-10-01T10:00:00.000Z");
+      expect([mark(), threadActivityNow(data, "ada", "side").later]).toEqual(["2026-10-01T10:00:00.000Z", "2026-10-01T10:00:00.000Z"]);
+      expect([clearThreadLater(data, "ada", "side"), clearThreadLater(data, "ada", "side"), mark()]).toEqual([true, false, undefined]);
+      await setThreadLater(data, "ada", "side", true, "2026-10-01T11:00:00.000Z");
+      await setThreadLater(data, "ada", "side", false, "2026-10-01T12:00:00.000Z");
+      expect(mark()).toBeUndefined();
+      expect(await outcomeOf(setThreadLater(data, "ada", "nowhere", true, "2026-10-01T10:00:00.000Z"))).toThrow('no thread "nowhere" for ada');
+      for (const stored of ["", " \n"]) {
+        writeDurable(threadFile(data, "ada", "side", "later"), stored);
+        expect(mark(), JSON.stringify(stored)).toBeUndefined();
+      }
+    });
+  });
+
+  test("reading a thread's activity again reads nothing when nothing changed, and only the new lines after an append", async () => {
+    await scanned(async (data, file) => {
+      writeDurable(file, asked("2026-10-01T10:00:00.000Z"));
+      initializeDurableLines(file, () => readDurable(file));
+      expect(threadActivityNow(data, "ada", "side").turns).toBe(1);
+      const whole = spyOn(files, "readDurable");
+      const after = spyOn(files, "durableLinesAfter");
+      try {
+        const thread = () => whole.mock.calls.filter(([path]) => typeof path !== "string" && path.key.endsWith("active.jsonl"));
+        expect(threadActivityNow(data, "ada", "side").turns).toBe(1);
+        expect([thread().length, after.mock.calls.length], "nothing changed").toEqual([0, 0]);
+        appendDurableLine(file, asked("2026-10-01T11:00:00.000Z"));
+        expect(threadActivityNow(data, "ada", "side").turns).toBe(2);
+        expect(threadActivityNow(data, "ada", "side").turns).toBe(2);
+        expect(thread(), "an append doesn't read the thread again").toEqual([]);
+        expect(after.mock.calls.length, "the new line is read once").toBe(1);
+      } finally {
+        whole.mockRestore();
+        after.mockRestore();
+      }
+    });
+  });
+
+  test("a rewrite, an edit or a regenerated reply that stores in as many bytes as before still shows on the next read", async () => {
+    await scanned(async (data, file) => {
+      const activity = () => threadActivityNow(data, "ada", "side");
+      const said = (minute: string) => reply(`2026-10-01T11:${minute}:00.000Z`).replace(/"msg_id":"[^"]+"/, '"msg_id":"m1"');
+      expect(new Set(["01", "04", "05", "07", "08"].map((minute) => pack(said(minute)).length)).size, "every version packs to the same size").toBe(1);
+
+      writeDurable(file, said("01"));
+      expect(activity().last_active).toBe("2026-10-01T11:01:00.000Z");
+      deleteThreadState(data, "ada", "side");
+      writeDurable(file, said("04"));
+      expect(activity().last_active).toBe("2026-10-01T11:04:00.000Z");
+      writeDurable(file, said("05"));
+      expect(activity().last_active).toBe("2026-10-01T11:05:00.000Z");
+
+      initializeDurableLines(file, () => readDurable(file));
+      expect(activity().last_active).toBe("2026-10-01T11:05:00.000Z");
+      updateDurableLine(file, 0, said("07"));
+      expect(activity().last_active).toBe("2026-10-01T11:07:00.000Z");
+      replaceDurableSuffix(file, 0, [said("08")]);
+      expect(activity().last_active).toBe("2026-10-01T11:08:00.000Z");
+      appendDurableLine(file, said("09"));
+      expect(activity().last_active).toBe("2026-10-01T11:09:00.000Z");
+
+      deleteThreadState(data, "ada", "side");
+      expect(activity()).toEqual({ turns: 0, user_turns: 0, unread: 0 });
+      withStorage(data, (db) => expect(db.query("SELECT count(*) AS n FROM state_revisions").get(), "a deleted file leaves no revision behind").toEqual({ n: 0 }));
+    });
+  });
+
+  test("a thread compacted down to nothing keeps the times of its newest archived messages, and a thread that never had any has none", async () => {
+    await scanned(async (data, file) => {
+      const activity = () => threadActivityNow(data, "ada", "side");
+      expect(activity()).toEqual({ turns: 0, user_turns: 0, unread: 0 });
+      initializeDatabase(data);
+      const before = handlesUnder(data);
+      expect(activity()).toEqual({ turns: 0, user_turns: 0, unread: 0 });
+      expect(handlesUnder(data), "the archive is closed again").toBe(before);
+
+      const woke = line({ role: "user", origin: "autonomous", timestamp: "2026-10-01T10:02:00.000Z", content_blocks: [{ type: "text", text: "a wake" }] });
+      const active = asked("2026-10-01T10:00:00.000Z") + reply("2026-10-01T10:01:00.000Z") + woke + reply("2026-10-01T10:03:00.000Z");
+      writeDurable(file, active);
+      await archiveAndRetain(threadDataDir(data, "ada", "side"), { dbPath: join(data, HISTORY_DB_FILE), archiveKey: archiveKey("ada", "side") }, 0, active);
+      expect(readDurable(file)).toBe("");
+      expect(activity()).toMatchObject({ turns: 0, last_active: "2026-10-01T10:03:00.000Z", last_user: "2026-10-01T10:00:00.000Z" });
+
+      writeDurable(file, reply("2026-10-01T11:00:00.000Z"));
+      expect(activity()).toMatchObject({ turns: 0, last_active: "2026-10-01T11:00:00.000Z", last_user: "2026-10-01T10:00:00.000Z" });
+
+      writeDurable(file, asked("2026-10-01T12:00:00.000Z"));
+      expect(activity()).toMatchObject({ turns: 1, last_active: "2026-10-01T12:00:00.000Z", last_user: "2026-10-01T12:00:00.000Z" });
+    });
+  });
+
   const at = (minute: number): string => `2026-10-01T10:${String(minute).padStart(2, "0")}:00.000Z`;
-  const call = (timestamp: string, id: string, text?: string): string => line({
+  const call =(timestamp: string, id: string, text?: string): string => line({
     role: "assistant", timestamp,
     content_blocks: [...(text === undefined ? [] : [{ type: "text" as const, text }]), { type: "tool_use", id, name: "read", input: {} }],
   });
@@ -552,7 +669,7 @@ describe("thread compaction setting", () => {
     expect((await setHomeThread(data, "ada", "own-time", now)).home).toBe("own-time");
     await setHomeThread(data, "ada", "main", now);
     const without = await archiveThread(data, "ada", "own-time");
-    expect(without.threads.map((thread) => thread.id)).toEqual(["main"]);
+    expect(without.threads.map((thread) => [thread.id, thread.archived !== undefined])).toEqual([["main", false], ["own-time", true]]);
   });
 });
 
@@ -569,6 +686,17 @@ describe("thread order and folders", () => {
   const noActivity = (): undefined => undefined;
   const shown = (index: ThreadsIndex, activity: (id: string) => string | undefined = noActivity): string[] =>
     placedThreads(index, activity).map(({ record, folder }) => folder === undefined ? record.id : `${folder}/${record.id}`);
+
+  test("archived threads come last, in no folder and with no place, and a move by hand never counts them", () => {
+    const base = indexOf("side", "old", "notes");
+    const index: ThreadsIndex = { ...base, threads: base.threads.map((record) => record.id === "old" ? { ...record, archived: now } : record), order: ["notes", "side"] };
+    expect(placedThreads(index, noActivity).map(({ record, folder, position }) => [record.id, folder, position])).toEqual([
+      ["main", undefined, undefined], ["notes", undefined, 0], ["side", undefined, 1], ["old", undefined, undefined],
+    ]);
+    expect(moveThread(index, "ada", "side", { before: "notes" }, noActivity).order).toEqual(["side", "notes"]);
+    expect(() => moveThread(index, "ada", "nowhere", {}, noActivity)).toThrow('no thread "nowhere" for ada');
+    expect(shown(createFolder(index, "Kept"))).toEqual(["main", "notes", "side", "old"]);
+  });
 
   test("with nothing moved the list stays by activity, home on top", () => {
     const active: Record<string, string> = { a: "2026-11-20T00:00:00.000Z", c: "2026-11-21T00:00:00.000Z" };
@@ -612,6 +740,41 @@ describe("thread order and folders", () => {
     expect(moveFolder(index, "ada", "One", undefined).folders?.map((folder) => folder.name)).toEqual(["Two", "One"]);
   });
 
+  test("a thread moved to another folder leaves the first, and a hand-sorted folder's threads carry their places while one sorted by activity's carry none", () => {
+    let index = createFolder(createFolder(indexOf("a", "b", "c"), "One"), "Two");
+    index = moveThread(moveThread(index, "ada", "a", { folder: "One" }, noActivity), "ada", "b", { folder: "One" }, noActivity);
+    expect(moveThread(index, "ada", "a", { folder: "Two" }, noActivity).folders).toEqual([{ name: "One", threads: ["b"] }, { name: "Two", threads: ["a"] }]);
+    const places = (from: ThreadsIndex) => placedThreads(from, noActivity).filter((item) => item.folder !== undefined).map(({ record, folder, position }) => [folder, record.id, position]);
+    expect(places(index)).toEqual([["One", "a", 0], ["One", "b", 1]]);
+    expect(places(setFolderSort(index, "ada", "One", true))).toEqual([["One", "b", undefined], ["One", "a", undefined]]);
+  });
+
+  test("a thread leaving a folder goes by activity unless the list outside is in a hand order or it is put in place, and one going into a folder leaves that hand order", () => {
+    const base = createFolder(indexOf("a", "b", "c"), "One");
+    const inOne = moveThread(base, "ada", "a", { folder: "One" }, noActivity);
+    expect(inOne).not.toHaveProperty("order");
+    const out = moveThread(inOne, "ada", "a", { folder: "" }, noActivity);
+    expect([out.order, out.folders]).toEqual([undefined, [{ name: "One", threads: [] }]]);
+    expect(moveThread(inOne, "ada", "a", { folder: "", before: "b" }, noActivity).order).toEqual(["c", "a", "b"]);
+    const ordered = moveThread(base, "ada", "c", { before: "a" }, noActivity);
+    expect(ordered.order).toEqual(["b", "c", "a"]);
+    const filed = moveThread(ordered, "ada", "a", { folder: "One" }, noActivity);
+    expect(filed.order).toEqual(["b", "c"]);
+    expect(moveThread(filed, "ada", "a", { folder: "" }, noActivity).order).toEqual(["b", "c", "a"]);
+  });
+
+  test("archiving drops what was kept beside the thread, its Later mark, context count and Agent SDK sessions, and the home thread can't be archived", async () => {
+    const data = join(mkdtempSync(testTmp("shore-thread-archive-")), "data");
+    await createThread(data, "ada", "side", now);
+    await setThreadLater(data, "ada", "side", true, now);
+    noteContextTokens(data, "ada", "side", 1234);
+    const session = (sessionId: string): SessionRecord => ({ version: SESSION_BOOK_VERSION, sessionId, entries: [] });
+    writeBook(bookPathIn(data), { [sessionKey("ada", "", "side")]: session("side"), [sessionKey("ada", "", "main")]: session("main") });
+    await archiveThread(data, "ada", "side");
+    expect([threadLaterMark(data, "ada", "side"), threadContextTokens(data, "ada", "side"), Object.keys(readBook(bookPathIn(data)))]).toEqual([undefined, undefined, [sessionKey("ada", "", "main")]]);
+    expect(await outcomeOf(archiveThread(data, "ada", "main"))).toThrow('thread "main" is the home thread for ada — point home at another thread first');
+  });
+
   test("folder names are unique and tidy, and deleting a folder puts its threads back without archiving any", () => {
     const index = moveThread(createFolder(indexOf("a", "b"), " Stories "), "ada", "a", { folder: "Stories" }, noActivity);
     expect(index.folders?.[0]?.name).toBe("Stories");
@@ -624,7 +787,7 @@ describe("thread order and folders", () => {
     expect(deleteFolder(renamed, "ada", "Tales").threads.map((thread) => thread.id)).toEqual(["main", "a", "b"]);
   });
 
-  test("archiving a thread takes it out of its folder for good, and the empty folder stays until deleted", async () => {
+  test("archiving a thread takes it out of its folder for good, the empty folder stays until deleted, and the name stays taken", async () => {
     const data = join(mkdtempSync(testTmp("shore-thread-folders-")), "data");
     await createThread(data, "ada", "side", now);
     const start = await readThreadsIndex(data, "ada");
@@ -632,8 +795,9 @@ describe("thread order and folders", () => {
     await writeThreadsIndex(data, "ada", moveThread(createFolder(start, "Stories"), "ada", "side", { folder: "Stories" }, noActivity));
     const archived = await archiveThread(data, "ada", "side");
     expect(archived.folders).toEqual([{ name: "Stories", threads: [] }]);
-    const remade = await createThread(data, "ada", "side", now);
-    expect(shown(remade)).toEqual(["main", "side"]);
+    expect(await outcomeOf(createThread(data, "ada", "side", now))).toThrow('thread "side" already exists for ada, archived');
+    const back = await unarchiveThread(data, "ada", "side", now);
+    expect([back.folders, back.threads.map((thread) => thread.archived)]).toEqual([[{ name: "Stories", threads: [] }], [undefined, undefined]]);
   });
 });
 
@@ -650,7 +814,7 @@ describe("the wakes thread", () => {
     expect(wakesThread(index("wakes", ["main", "wakes"], "wakes"))).toBeUndefined();
   });
 
-  test("is made once, next to threads of the same name, and stays when another thread is archived but not when it is", async () => {
+  test("is made once, next to threads of the same name, including archived ones, and stays when another thread is archived but not when it is", async () => {
     const data = mkdtempSync(testTmp("shore-wakes-thread-"));
     const now = "2026-11-15T00:00:00.000Z";
     await createThread(data, "ada", "wakes", now);
@@ -664,9 +828,8 @@ describe("the wakes thread", () => {
     expect(wakesThread(await readThreadsIndex(data, "ada"))).toBe("wakes-3");
     await archiveThread(data, "ada", "wakes-3");
     expect((await readThreadsIndex(data, "ada"))?.wakes).toBeUndefined();
-    await createThread(data, "ada", "wakes-3", now);
     expect(wakesThread(await readThreadsIndex(data, "ada"))).toBeUndefined();
-    expect((await ensureWakesThread(data, "ada", now)).index.wakes).toBe("wakes");
+    expect((await ensureWakesThread(data, "ada", now)).index.wakes).toBe("wakes-4");
   });
 
   test("can't be made home, nor set to compact", async () => {

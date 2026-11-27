@@ -10,6 +10,19 @@ export function useMediaQuery(query: string): boolean {
   return useSyncExternalStore(subscribe, () => matchMedia(query).matches);
 }
 
+function watchFocus(listener: () => void): () => void {
+  addEventListener("focus", listener);
+  addEventListener("blur", listener);
+  return () => {
+    removeEventListener("focus", listener);
+    removeEventListener("blur", listener);
+  };
+}
+
+export function useWindowFocused(): boolean {
+  return useSyncExternalStore(watchFocus, () => document.hasFocus());
+}
+
 export function useStoredFlag(key: string, fallback: boolean): [boolean, (value: boolean) => void] {
   const [value, setValue] = useState(() => { const stored = readStored(key); return stored === null ? fallback : stored === "true"; });
   useEffect(() => subscribeStored(() => { const stored = readStored(key); if (stored !== null) setValue(stored === "true"); }), [key]);

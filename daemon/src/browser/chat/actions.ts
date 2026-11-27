@@ -43,10 +43,39 @@ export async function holdThread(thread: Pick<ThreadView, "id">, onHold: boolean
   }
 }
 
+export async function unarchiveThread(thread: Pick<ThreadView, "id">): Promise<void> {
+  try {
+    workspace.applyThreadListing(await workspace.actions.run("unarchive_thread", { name: thread.id }));
+  } catch (error) {
+    await workspace.refreshThreads();
+    toasts.show(errorText(error), "error");
+  }
+}
+
+export async function laterThread(thread: Pick<ThreadView, "id" | "label">, later: boolean): Promise<void> {
+  const name = thread.label === undefined || thread.label === "" ? thread.id : thread.label;
+  try {
+    workspace.applyThreadListing(await workspace.actions.run("thread_later", { name: thread.id, later }));
+    toasts.show(later ? `“${name}” is marked for later` : `“${name}” is no longer marked for later`);
+  } catch (error) {
+    await workspace.refreshThreads();
+    toasts.show(errorText(error), "error");
+  }
+}
+
 export async function markRead(thread: Pick<ThreadView, "id">): Promise<void> {
   try {
     workspace.noteThreadRead(thread.id);
     await workspace.actions.run("mark_thread_read", { name: thread.id });
+  } catch (error) {
+    await workspace.refreshThreads();
+    toasts.show(errorText(error), "error");
+  }
+}
+
+export async function moveFolderTo(name: string, before: string | undefined): Promise<void> {
+  try {
+    workspace.applyThreadListing(await workspace.actions.run("thread_folder_move", { name, ...(before === undefined ? {} : { before }) }));
   } catch (error) {
     await workspace.refreshThreads();
     toasts.show(errorText(error), "error");

@@ -6,6 +6,7 @@ import { useOperation, type OperationState } from "../settings/shared.tsx";
 import { PinsField, pinnedToast, SavedPins, ThreadPromptDialog, threadPinList } from "./thread_prompt.tsx";
 import { WhenLongField } from "../sidebar/dialogs.tsx";
 import { threadLabel } from "../sidebar/Sidebar.tsx";
+import { namedThread } from "../sidebar/thread_names.ts";
 import type { FolderDialogRequest, ThreadDialogRequest } from "../app/intents.ts";
 import { threadSections } from "../sidebar/order.ts";
 import { moveThreadTo } from "./actions.ts";
@@ -72,16 +73,18 @@ function ThreadSettingsDialog({ state, thread, close }: { state: ChromeSnapshot;
   </Form>;
 }
 
-function ForkDialog({ thread, close }: { thread: ThreadView; close: () => void }) {
+function ForkDialog({ thread, taken, close }: { thread: ThreadView; taken: readonly string[]; close: () => void }) {
   const { busy, error, run } = useSubmit(close);
   const [name, setName] = useState("");
   const [turns, setTurns] = useState("");
   return <Form title={`Fork “${threadLabel(thread)}”`} close={close} busy={busy} error={error} action="Fork" disabled={name.trim() === "" || (turns !== "" && !(Number(turns) >= 1))} submit={() => run(async () => {
-    const result = await workspace.actions.run("fork_thread", { name: name.trim(), from: thread.id, ...(turns === "" ? {} : { turns: Number(turns) }) });
+    const named = namedThread(name, taken);
+    const result = await workspace.actions.run("fork_thread", { name: named.id, from: thread.id, ...(turns === "" ? {} : { turns: Number(turns) }) });
+    if (named.label !== undefined) await workspace.actions.run("thread_label", { name: result.fork.thread, label: named.label });
     await workspace.openThread(result.fork.thread);
-    return `Forked ${String(result.fork.turns)} turns into “${result.fork.thread}”`;
+    return `Forked ${String(result.fork.turns)} turns into “${named.label ?? result.fork.thread}”`;
   })}>
-    <label className="field"><span>New thread name</span><input className="input" data-autofocus value={name} onChange={(event) => setName(event.target.value)} /></label>
+    <label className="field"><span>Name</span><input className="input" data-autofocus value={name} onChange={(event) => setName(event.target.value)} /></label>
     <label className="field"><span>Copy only the last turns <span className="muted">(optional)</span></span><input className="input" inputMode="numeric" placeholder="All turns" value={turns} onChange={(event) => setTurns(event.target.value.replace(/\D/g, ""))} /></label>
   </Form>;
 }
@@ -144,7 +147,7 @@ export function ThreadDialogs({ state, request, close }: { state: ChromeSnapshot
   if (thread === undefined) return null;
   switch (request.kind) {
     case "settings": return <ThreadSettingsDialog state={state} thread={thread} close={close} />;
-    case "fork": return <ForkDialog thread={thread} close={close} />;
+    case "fork": return <ForkDialog thread={thread} taken={state.threads.map((each) => each.id)} close={close} />;
     case "archive": return <ArchiveDialog state={state} thread={thread} close={close} />;
     case "move": return <MoveToFolderDialog state={state} thread={thread} close={close} />;
   }

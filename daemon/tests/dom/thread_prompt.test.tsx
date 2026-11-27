@@ -220,7 +220,7 @@ test("a new thread can be given a picked file as a pin", async () => {
     return undefined;
   });
   const { NewThreadDialog } = await import("../../src/browser/sidebar/dialogs.tsx");
-  const view = await mount(<NewThreadDialog character="ada" close={() => {}} />);
+  const view = await mount(<NewThreadDialog character="ada" taken={["story"]} close={() => {}} />);
   const since = app.socket().sent.length;
   await type(field(view.host, "Name"), "lamp");
   expect(field(view.host, "Pinned in the prompt")?.closest("label")?.querySelector(".muted")?.textContent).toBe("(optional, one per line)");

@@ -43,7 +43,7 @@ test("chats through the app, and the window title follows the conversation", asy
   await box.fill("hello from the desktop app");
   await box.press("Enter");
   await expect(page.locator("article.message.assistant").last()).toContainText("hello from the desktop app");
-  await expect.poll(() => app.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0]?.getTitle())).toBe("Nova · Shore");
+  await expect.poll(() => app.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0]?.getTitle())).toBe("main · Nova");
 });
 
 test("right-clicking selected reply text offers Quote, which puts it in the message box", async ({ daemon, launch }) => {

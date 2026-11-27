@@ -42,6 +42,7 @@ function rig(handlers: Record<string, Handler> = {}, schedule?: (callback: () =>
     discover_operations: () => ({ operations: [], requests: [] }),
     list_characters: () => ({ characters: [{ name: "ada" }] }),
     list_threads: () => listing([thread("main")]),
+    all_threads: () => ({ characters: [] }),
     ...handlers,
   };
   const connection = {
@@ -176,17 +177,18 @@ describe("the workspace", () => {
   });
 
   test("signing out forgets everything the daemon had said", async () => {
-    const link = await opened();
+    const link = await opened({ all_threads: () => ({ characters: [{ character: "bo", threads: [thread("main")] }] }) });
+    expect(link.state().allThreads).toEqual([{ character: "bo", threads: [thread("main")] }]);
     link.workspace.report("old error");
     link.setStatus("signed_out");
     expect(link.state()).toMatchObject({
       error: "", messages: [], metadata: {}, config: {}, media: [], mediaLimited: false, activity: [], operations: [], requests: [], threads: [], characters: [], uncertain: [],
-      previousSegment: null, segmentView: null, opening: null, folders: [], manualOrder: false, status: "signed_out",
+      previousSegment: null, segmentView: null, opening: null, folders: [], manualOrder: false, status: "signed_out", allThreads: [],
     });
   });
 
   test("a catalogue or thread list that arrives after a newer request, or after the connection dropped, is not used, and its failure is reported only while connected", async () => {
-    const link = rig({ discover_operations: null, list_characters: null, list_threads: null });
+    const link = rig({ discover_operations: null, list_characters: null, list_threads: null, all_threads: null });
     link.frame(history());
     await settle();
     const stale = link.workspace.refreshNavigation();
@@ -195,37 +197,45 @@ describe("the workspace", () => {
     const [oldCatalogue, newCatalogue] = link.named("discover_operations").slice(-2);
     const [oldCharacters, newCharacters] = link.named("list_characters").slice(-2);
     const listings = link.named("list_threads");
+    const everywhere = link.named("all_threads");
     newCatalogue?.reply({ operations: [descriptor("new", [])], requests: [] });
     newCharacters?.reply({ characters: [{ name: "new" }] });
     listings.at(-1)?.reply(listing([thread("new")]));
+    everywhere.at(-1)?.reply({ characters: [{ character: "new", threads: [thread("new")] }] });
     await fresh;
     oldCatalogue?.reply({ operations: [descriptor("old", [])], requests: [] });
     oldCharacters?.reply({ characters: [{ name: "old" }] });
     listings.at(-2)?.reply(listing([thread("old")]));
+    everywhere.at(-2)?.reply({ characters: [{ character: "old", threads: [thread("old")] }] });
     await stale;
-    expect(link.state()).toMatchObject({ operations: [{ name: "new" }], characters: [{ name: "new" }], threads: [{ id: "new" }] });
+    expect(link.state()).toMatchObject({ operations: [{ name: "new" }], characters: [{ name: "new" }], threads: [{ id: "new" }], allThreads: [{ character: "new" }] });
 
-    const failing = link.workspace.refreshNavigation();
-    await settle();
-    link.named("discover_operations").at(-1)?.fail("catalogue down");
-    link.named("list_threads").at(-1)?.fail("threads down");
-    link.named("list_characters").at(-1)?.reply({ characters: [] });
-    await failing;
-    expect(link.state().error).toMatch(/down$/);
-    link.workspace.dismissError();
+    for (const [down, failure] of [["discover_operations", "catalogue down"], ["list_threads", "threads down"], ["all_threads", "every thread down"]] as const) {
+      const failing = link.workspace.refreshNavigation();
+      await settle();
+      for (const name of ["discover_operations", "list_threads", "all_threads"]) {
+        if (name === down) link.named(name).at(-1)?.fail(failure);
+        else link.named(name).at(-1)?.reply(name === "list_threads" ? listing([thread("new")]) : name === "all_threads" ? { characters: [] } : { operations: [], requests: [] });
+      }
+      link.named("list_characters").at(-1)?.reply({ characters: [] });
+      await failing;
+      expect(link.state().error).toBe(failure);
+      link.workspace.dismissError();
+    }
 
     const dropped = link.workspace.refreshNavigation();
     await settle();
     link.setStatus("reconnecting");
     link.named("discover_operations").at(-1)?.fail("catalogue down");
     link.named("list_threads").at(-1)?.fail("threads down");
+    link.named("all_threads").at(-1)?.fail("every thread down");
     link.named("list_characters").at(-1)?.reply({ characters: [] });
     await dropped;
     expect(link.state().error).toBe("");
   });
 
   test("failures while not connected are not reported, even for the current request", async () => {
-    const link = rig({ discover_operations: null, list_threads: null });
+    const link = rig({ discover_operations: null, list_threads: null, all_threads: null });
     link.frame(history());
     await settle();
     link.setStatus("error");
@@ -233,6 +243,7 @@ describe("the workspace", () => {
     await settle();
     link.named("discover_operations").at(-1)?.fail("catalogue down");
     link.named("list_threads").at(-1)?.fail("threads down");
+    link.named("all_threads").at(-1)?.fail("every thread down");
     await refreshing;
     expect(link.state().error).toBe("");
   });
@@ -445,7 +456,7 @@ describe("a conversation's history", () => {
     link.calls.length = 0;
     link.frame(history({ revision: 1, selected_character: "bo", selected_thread: null }));
     await settle();
-    expect(link.calls.map((call) => call.name).sort()).toEqual(["discover_operations", "list_characters", "list_threads"]);
+    expect(link.calls.map((call) => call.name).sort()).toEqual(["all_threads", "discover_operations", "list_characters", "list_threads"]);
     link.calls.length = 0;
     link.setStatus("connecting");
     link.frame(history({ revision: 1, selected_character: "cy", selected_thread: null }));
@@ -461,6 +472,24 @@ describe("a conversation's history", () => {
     link.named("list_threads").at(-1)?.reply(listing([thread("main"), thread("side")]));
     await refreshing;
     expect(link.state().threads.find((item) => item.id === "side")?.unread).toBe(4);
+  });
+
+  test("another character's thread opens in one step and stays the one being opened until its own history comes; one of this character's opens like any thread, and the shown one not at all", async () => {
+    const link = await opened({ switch_character: null, switch_thread: null });
+    link.calls.length = 0;
+    const opening = link.workspace.openThreadIn("bo", "rowing");
+    expect(link.state().opening).toEqual({ character: "bo", thread: "rowing" });
+    link.frame(history({ selected_character: "bo", selected_thread: "main" }));
+    expect(link.state().opening, "bo's home thread is not the one asked for").toEqual({ character: "bo", thread: "rowing" });
+    link.frame(history({ selected_character: "bo", selected_thread: "rowing" }));
+    expect(link.state().opening).toBeNull();
+    link.named("switch_character").at(-1)?.reply({ character: "bo", changed: true });
+    await opening;
+    const sideways = link.workspace.openThreadIn("bo", "shelf");
+    link.named("switch_thread").at(-1)?.reply({ character: "bo", thread: "shelf", changed: true });
+    await sideways;
+    await link.workspace.openThreadIn("bo", "rowing");
+    expect(link.calls.filter((call) => call.name.startsWith("switch_")).map((call) => [call.name, call.args])).toEqual([["switch_character", { name: "bo", thread: "rowing" }], ["switch_thread", { name: "shelf", resync: true }]]);
   });
 
   test("opening a character is reached by its history, whichever thread it lands on", async () => {
@@ -928,21 +957,23 @@ describe("other frames", () => {
     expect(link.state().activity.at(-1)?.data).toEqual({ type: "phase", phase: "99" });
   });
 
-  test("a change to the selected character's threads lists them again while connected", async () => {
-    const link = await opened();
+  test("a change to the selected character's threads lists them again, and a change to another's lists every character's, while connected", async () => {
+    const link = await opened({ all_threads: () => ({ characters: [{ character: "bo", threads: [thread("main"), thread("new")] }] }) });
     link.calls.length = 0;
     link.frame({ type: "threads_changed", character: "bo" });
     await settle();
-    expect(link.calls, "another character's threads").toHaveLength(0);
+    expect([link.calls.map((call) => call.name), link.state().allThreads]).toEqual([["all_threads"], [{ character: "bo", threads: [thread("main"), thread("new")] }]]);
+    link.calls.length = 0;
     link.frame({ type: "threads_changed", character: "ada" });
     await settle();
     expect(link.calls.map((call) => call.name)).toEqual(["list_threads"]);
     link.setStatus("reconnecting");
     link.calls.length = 0;
     link.frame({ type: "threads_changed", character: "ada" });
+    link.frame({ type: "threads_changed", character: "bo" });
     await settle();
     expect(link.calls).toHaveLength(0);
-    expect(link.state().activity.filter((item) => item.type === "threads_changed")).toHaveLength(3);
+    expect(link.state().activity.filter((item) => item.type === "threads_changed")).toHaveLength(4);
   });
 
   test("an unread count for the selected character lands on its thread", async () => {
@@ -951,6 +982,21 @@ describe("other frames", () => {
     link.frame({ type: "thread_unread", character: "bo", thread: "side", unread: 9 });
     link.frame({ type: "thread_unread", character: "ada", thread: "side", unread: 2 });
     expect(link.state().threads.map((item) => item.unread ?? 0)).toEqual([0, 2]);
+  });
+
+  test("another character's unread count lands on that character's threads, also when it arrives while they are being listed", async () => {
+    const link = await opened({ all_threads: null });
+    const counts = () => link.state().allThreads.map(({ character, threads }) => [character, threads.map((item) => item.unread ?? 0)]);
+    const refreshing = link.workspace.refreshNavigation();
+    await settle();
+    link.frame({ type: "thread_unread", character: "bo", thread: "side", unread: 4 });
+    link.frame({ type: "thread_unread", character: "cy", thread: "main", unread: 6 });
+    link.named("all_threads").at(-1)?.reply({ characters: [{ character: "ada", threads: [thread("side")] }, { character: "bo", threads: [thread("main", { unread: 1 }), thread("side")] }, { character: "dee", threads: [thread("side")] }] });
+    await refreshing;
+    expect(counts()).toEqual([["ada", [0]], ["bo", [1, 4]], ["dee", [0]]]);
+    link.frame({ type: "thread_unread", character: "dee", thread: "side", unread: 3 });
+    link.frame({ type: "thread_unread", character: "ada", thread: "side", unread: 8 });
+    expect(counts(), "the open character's own entry keeps up too, for when it is left").toEqual([["ada", [8]], ["bo", [1, 4]], ["dee", [3]]]);
   });
 });
 
@@ -1086,15 +1132,16 @@ describe("work that outlives its conversation", () => {
   });
 
   test("catalogues and thread listings asked for before the connection dropped are not used", async () => {
-    const link = await opened({ discover_operations: null, list_characters: null, list_threads: null });
+    const link = await opened({ discover_operations: null, list_characters: null, list_threads: null, all_threads: null });
     const refreshing = link.workspace.refreshNavigation();
     await settle();
     link.setStatus("reconnecting");
     link.named("discover_operations").at(-1)?.reply({ operations: [descriptor("stale", [])], requests: [] });
     link.named("list_characters").at(-1)?.reply({ characters: [{ name: "stale" }] });
     link.named("list_threads").at(-1)?.reply(listing([thread("stale")]));
+    link.named("all_threads").at(-1)?.reply({ characters: [{ character: "stale", threads: [thread("stale")] }] });
     await refreshing;
-    expect(link.state()).toMatchObject({ operations: [], characters: [], threads: [] });
+    expect(link.state()).toMatchObject({ operations: [], characters: [], threads: [], allThreads: [] });
   });
 });
 

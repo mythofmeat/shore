@@ -77,13 +77,12 @@ export function eventMatchesSession(
   if (UNROUTABLE_EVENTS.has(msg.type)) return false;
   if (UNCONDITIONAL_EVENTS.has(msg.type)) return true;
   if (!sessionRegistered) return false;
-  if (receivesAllCharacters) return true;
+  if (receivesAllCharacters || msg.type === "thread_unread") return true;
   if (selectedCharacter === null) return false;
   if (msg.type === "history") {
     return msg.selected_character === selectedCharacter && threadMatches(msg.selected_thread, selectedThread);
   }
   if (msg.type === "new_message") return msg.character === selectedCharacter && threadMatches(msg.thread ?? "main", selectedThread);
-  if (msg.type === "thread_unread") return msg.character === selectedCharacter;
   return true;
 }
 

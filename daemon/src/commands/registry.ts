@@ -21,9 +21,11 @@ import { defineOperation, discoverOperations, type OperationPresentation, type O
 import type { CommandDeps, CommandSession } from "./dispatch.ts";
 import { internalError, invalidRequest } from "./errors.ts";
 import { characterInfo, createCharacter, listCharacters, switchCharacter } from "./navigation.ts";
-import { archiveThread, forkThread, listThreads, markRead, newThread, switchThread, threadCompaction, threadFolderCreate, threadFolderDelete, threadFolderMove, threadFolderRename, threadFolderSort, threadHold, threadHome, threadLabel, threadLock, threadModel, threadMove, threadPins, threadPurpose, threadSort } from "./threads.ts";
+import { discoverCharacters } from "../config/dirs.ts";
+import { required } from "../util/required.ts";
+import { allThreads, archiveThread, forkThread, listThreads, markRead, newThread, switchThread, threadCompaction, threadFolderCreate, threadFolderDelete, threadFolderMove, threadFolderRename, threadFolderSort, threadHold, threadHome, threadLater, unarchiveThread, threadLabel, threadLock, threadModel, threadMove, threadPins, threadPurpose, threadSort } from "./threads.ts";
 import { archiveWithSignal, threadContext, threadListingContext } from "./thread_context.ts";
-import { refreshThreadPrompt, threadPrompt, type ThreadPromptContext } from "./thread_prompt.ts";
+import { contextUse, refreshThreadPrompt, threadPrompt, type ThreadPromptContext } from "./thread_prompt.ts";
 import { alt, deleteMessages, edit, get, historyPage, injectSystem, listAlternatives, log } from "./conversation.ts";
 import { listMarks, mark, unmark, type MarkContext } from "./marks.ts";
 import { workspaceTurnsFor, type WorkspaceTurns } from "../tools/workspace_turns.ts";
@@ -411,8 +413,8 @@ export const commandOperations: OperationRegistry<CommandOperationContext> = {
   }),
   switch_character: register("switch_character", {
     ...characterPresentation, label: "Select character", scope: "selection", effects: ["selection"],
-    fields: { name: { label: "Character", choices: "characters" } },
-  }, ({ session, engine }, args) => switchCharacter(session.config.dirs.config, engine?.characterName ?? session.characterName, args)),
+    fields: { name: { label: "Character", choices: "characters" }, thread: { label: "Thread", hint: "Omit for the character's home thread" } },
+  }, ({ session, engine, deps }, args) => switchCharacter(session.config.dirs.config, engine?.characterName ?? session.characterName, args, (name) => deps.threads?.listThreads(name) ?? [])),
   character_info: register("character_info", {
     ...characterPresentation, label: "Inspect character", scope: "character",
     fields: { name: { label: "Character", choices: "characters", hint: "Omit for the selected character" } },
@@ -453,6 +455,13 @@ export const commandOperations: OperationRegistry<CommandOperationContext> = {
     context.deps.historyIndex?.noteMutation?.(engine.characterName);
     return result;
   }),
+  all_threads: register("all_threads", {
+    ...threadPresentation, scope: "global", label: "List every character's threads", fields: {},
+  }, async ({ session, deps }) => await allThreads(required(deps.threads), session.dataDir, discoverCharacters(session.config.dirs.config))),
+  unarchive_thread: register("unarchive_thread", {
+    ...threadPresentation, label: "Unarchive thread", effects: ["history_write"],
+    fields: { name: threadName },
+  }, async (context, args) => unarchiveThread(await threadListingContext(context.deps, engineOf(context), context.session), args)),
   fork_thread: register("fork_thread", {
     ...threadPresentation, label: "Fork thread", effects: ["history_write"],
     fields: {
@@ -483,6 +492,9 @@ export const commandOperations: OperationRegistry<CommandOperationContext> = {
   thread_prompt: register("thread_prompt", {
     ...threadPresentation, label: "Show thread prompt", fields: { name: threadName },
   }, async (context, args) => threadPrompt(threadPromptContext(context), args)),
+  context_use: register("context_use", {
+    ...threadPresentation, label: "Show how close the thread is to its next compaction or trim", fields: {},
+  }, async (context) => await contextUse(threadPromptContext(context), engineOf(context))),
   thread_prompt_refresh: register("thread_prompt_refresh", {
     ...threadPresentation, label: "Refresh thread prompt", effects: ["history_write"],
     fields: { name: threadName },
@@ -529,6 +541,14 @@ export const commandOperations: OperationRegistry<CommandOperationContext> = {
     const model = typeof args.model === "string" && args.model !== "" ? qualifiedModelName(context.session, args.model) : args.model;
     return threadModel(await threadListingContext(context.deps, engineOf(context), context.session), { ...args, model });
   }),
+  thread_later: register("thread_later", {
+    ...threadPresentation, label: "Mark a thread for later", effects: ["runtime_write"],
+    fields: { name: threadName, later: { label: "Later", hint: "A reminder for you alone: the character never sees it, and writing in the thread clears it" } },
+  }, async (context, args) => {
+    const engine = engineOf(context);
+    await threadLater(threadContext(context.deps, engine, context.session.signal), args);
+    return listThreads(await threadListingContext(context.deps, engine, context.session));
+  }),
   mark_thread_read: register("mark_thread_read", {
     ...threadPresentation, label: "Mark thread read", effects: ["runtime_write"],
     fields: { name: threadName, through: { label: "Read through", hint: "Timestamp of the last message shown; omit for everything so far" } },
@@ -570,7 +590,7 @@ export function runRegisteredOperation<N extends OperationName>(
 }
 
 const THREAD_CHANGES: ReadonlySet<string> = new Set([
-  "create_thread", "fork_thread", "thread_home", "thread_label", "thread_purpose", "thread_pins", "thread_prompt", "thread_prompt_refresh", "thread_lock", "thread_hold", "thread_compaction", "thread_model",
+  "create_thread", "unarchive_thread", "fork_thread", "thread_home", "thread_label", "thread_purpose", "thread_pins", "thread_prompt", "thread_prompt_refresh", "thread_lock", "thread_hold", "thread_later", "thread_compaction", "thread_model",
   "thread_move", "thread_sort", "thread_folder_create", "thread_folder_rename", "thread_folder_delete", "thread_folder_move", "thread_folder_sort",
 ]);
 

@@ -2,7 +2,7 @@ import { describe, expect, test } from "bun:test";
 
 import { afterCommand, type DispatchContext } from "../src/handler/command_dispatch.ts";
 import { CharacterConfigError } from "../src/characters.ts";
-import { ImagesUnsupportedError, NoModelError, WakesThreadError, WakeTurnError } from "../src/handler/setup.ts";
+import { ArchivedThreadError, ImagesUnsupportedError, NoModelError, WakesThreadError, WakeTurnError } from "../src/handler/setup.ts";
 import { NothingToReplaceError, UnknownTagError } from "../src/handler/attempts.ts";
 import { MessageHandler, withRid, type GenerationParams, type HandlerRegistry, type MessageHandlerDeps } from "../src/handler/router.ts";
 import type { ErrorCode } from "../src/protocol/ErrorCode.ts";
@@ -152,6 +152,37 @@ describe("archiving the thread a session is on", () => {
     expect(router.threadFor(2)).toBe("other");
     expect(frames.get(1)).toMatchObject([{ type: "history", selected_thread: "main", rid: "archive" }]);
     expect(frames.get(2)).toEqual([]);
+  });
+});
+
+describe("switching character", () => {
+  test("answers with the character's model, opens no thread without a selection, and opens its home thread when no thread is asked for", async () => {
+    const router = new SessionRouter();
+    const frames = new Map<number, ServerMessage[]>();
+    registerTestSession(router, frames, 1);
+    router.setSelectedCharacter(1, "bo");
+    router.setSelectedThread(1, "notes");
+    const asked: unknown[][] = [];
+    const refreshed: unknown[][] = [];
+    const context = {
+      character: "ada", sessionId: 1, rid: "switch", router,
+      runtime: { homeThread: () => "main", refreshCachedRequest: (...args: unknown[]) => { refreshed.push(args); } },
+      handshake: {
+        history: (character: string, thread?: string) => {
+          asked.push([character, thread]);
+          return Promise.resolve({ messages: [], previousSegment: null, config: { active_model: "pinned" }, selectedCharacter: character, selectedThread: thread ?? null, revision: 1 });
+        },
+      },
+    } as unknown as DispatchContext;
+
+    expect(await afterCommand("switch_character", { name: "ada" }, { changed: true }, context), "a result with no character selects nothing").toEqual({ changed: true });
+    expect([router.characterFor(1), router.threadFor(1), asked]).toEqual(["bo", "notes", []]);
+    expect(await afterCommand("switch_character", undefined, { character: "ada", changed: true }, context)).toEqual({ character: "ada", changed: true, selected_character: "ada", active_model: "pinned" });
+    expect([router.characterFor(1), router.threadFor(1), asked]).toEqual(["ada", null, [["ada", undefined]]]);
+    await afterCommand("switch_character", { name: "ada", thread: "main" }, { character: "ada", changed: false }, context);
+    expect(refreshed, "opening a character's home thread keeps its cached request").toEqual([]);
+    await afterCommand("switch_character", { name: "ada", thread: "side" }, { character: "ada", changed: false }, context);
+    expect([router.threadFor(1), refreshed], "another of its threads has its request built afresh, as a thread switch would").toEqual(["side", [["ada", "thread_change", "side"]]]);
   });
 });
 
@@ -589,6 +620,7 @@ describe("replies", () => {
       [new ImagesUnsupportedError("chat.x", 2), "invalid_request", "chat.x does not accept images, so the 2 attachments were not sent. Switch to a vision-capable model and send again.", undefined],
       [new WakeTurnError("ada"), "invalid_request", "The last turn here is a wake of ada's own, not a reply to you, so there is nothing to regenerate. Write to ada instead.", undefined],
       [new WakesThreadError("ada", "wakes"), "invalid_request", "\"wakes\" is where Shore keeps the working from ada's wakes, so you can read it but not write there. Write to ada in another thread.", undefined],
+      [new ArchivedThreadError("ada", "garden"), "invalid_request", "\"garden\" is archived, so you can read it but not write there. Unarchive it to write to ada there again.", undefined],
       [new NothingToReplaceError(), "invalid_request", "There's no reply here to give a reason about. Regenerate without one, or write to the character instead.", undefined],
       [new UnknownTagError("rude", [], "dislike_tags"), "invalid_request", "\"rude\" isn't one of your dislike tags: marks.dislike_tags in your config is empty. Add it to marks.dislike_tags to use it.", undefined],
       [new CharacterConfigError("ada", new Error("bad toml")), "invalid_request", `invalid config for character "ada": bad toml`, undefined],

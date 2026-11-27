@@ -15712,11 +15712,17 @@
     "name": "switch_character",
     "input": {
       "$schema": "https://json-schema.org/draft/2020-12/schema",
-      "title": "NamedOperationArgs",
+      "title": "SwitchCharacterArgs",
       "type": "object",
       "properties": {
         "name": {
           "type": "string"
+        },
+        "thread": {
+          "type": [
+            "string",
+            "null"
+          ]
         }
       },
       "additionalProperties": false,
@@ -15946,6 +15952,18 @@
                 "null"
               ]
             },
+            "later": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "archived": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
             "folder": {
               "type": [
                 "string",
@@ -16064,6 +16082,218 @@
           },
           "required": [
             "cached_request"
+          ]
+        }
+      }
+    }
+  },
+  {
+    "name": "all_threads",
+    "input": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "title": "EmptyOperationArgs",
+      "type": "object",
+      "additionalProperties": false
+    },
+    "output": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "title": "AllThreads",
+      "type": "object",
+      "properties": {
+        "characters": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/CharacterThreads"
+          }
+        }
+      },
+      "required": [
+        "characters"
+      ],
+      "$defs": {
+        "CharacterThreads": {
+          "type": "object",
+          "properties": {
+            "character": {
+              "type": "string"
+            },
+            "threads": {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/ThreadView"
+              }
+            }
+          },
+          "required": [
+            "character",
+            "threads"
+          ]
+        },
+        "ThreadView": {
+          "type": "object",
+          "properties": {
+            "id": {
+              "type": "string"
+            },
+            "label": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "purpose": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "pins": {
+              "type": [
+                "array",
+                "null"
+              ],
+              "items": {
+                "type": "string"
+              }
+            },
+            "created_at": {
+              "type": "string"
+            },
+            "created_by": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "last_active": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "chat_model": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "compaction": {
+              "type": "boolean"
+            },
+            "locked": {
+              "type": [
+                "boolean",
+                "null"
+              ]
+            },
+            "on_hold": {
+              "type": [
+                "boolean",
+                "null"
+              ]
+            },
+            "later": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "archived": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "folder": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "position": {
+              "type": [
+                "integer",
+                "null"
+              ],
+              "format": "uint64",
+              "minimum": 0
+            },
+            "home": {
+              "type": "boolean"
+            },
+            "wakes": {
+              "type": [
+                "boolean",
+                "null"
+              ]
+            },
+            "current": {
+              "type": "boolean"
+            },
+            "turns": {
+              "type": [
+                "integer",
+                "null"
+              ],
+              "format": "uint64",
+              "minimum": 0
+            },
+            "unread": {
+              "type": [
+                "integer",
+                "null"
+              ],
+              "format": "uint64",
+              "minimum": 0
+            },
+            "warm": {
+              "type": [
+                "boolean",
+                "null"
+              ]
+            },
+            "forked_from": {
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/ThreadForkOrigin"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            }
+          },
+          "required": [
+            "id",
+            "created_at",
+            "compaction",
+            "home",
+            "current"
+          ]
+        },
+        "ThreadForkOrigin": {
+          "type": "object",
+          "properties": {
+            "fork_id": {
+              "type": "string"
+            },
+            "source": {
+              "type": "string"
+            },
+            "created_at": {
+              "type": "string"
+            },
+            "turns": {
+              "type": "integer",
+              "format": "uint64",
+              "minimum": 0
+            }
+          },
+          "required": [
+            "fork_id",
+            "source",
+            "created_at",
+            "turns"
           ]
         }
       }
@@ -16332,6 +16562,18 @@
                 "null"
               ]
             },
+            "later": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "archived": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
             "folder": {
               "type": [
                 "string",
@@ -16584,6 +16826,285 @@
             "on_hold": {
               "type": [
                 "boolean",
+                "null"
+              ]
+            },
+            "later": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "archived": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "folder": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "position": {
+              "type": [
+                "integer",
+                "null"
+              ],
+              "format": "uint64",
+              "minimum": 0
+            },
+            "home": {
+              "type": "boolean"
+            },
+            "wakes": {
+              "type": [
+                "boolean",
+                "null"
+              ]
+            },
+            "current": {
+              "type": "boolean"
+            },
+            "turns": {
+              "type": [
+                "integer",
+                "null"
+              ],
+              "format": "uint64",
+              "minimum": 0
+            },
+            "unread": {
+              "type": [
+                "integer",
+                "null"
+              ],
+              "format": "uint64",
+              "minimum": 0
+            },
+            "warm": {
+              "type": [
+                "boolean",
+                "null"
+              ]
+            },
+            "forked_from": {
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/ThreadForkOrigin"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            }
+          },
+          "required": [
+            "id",
+            "created_at",
+            "compaction",
+            "home",
+            "current"
+          ]
+        },
+        "ThreadForkOrigin": {
+          "type": "object",
+          "properties": {
+            "fork_id": {
+              "type": "string"
+            },
+            "source": {
+              "type": "string"
+            },
+            "created_at": {
+              "type": "string"
+            },
+            "turns": {
+              "type": "integer",
+              "format": "uint64",
+              "minimum": 0
+            }
+          },
+          "required": [
+            "fork_id",
+            "source",
+            "created_at",
+            "turns"
+          ]
+        },
+        "ThreadFolderView": {
+          "type": "object",
+          "properties": {
+            "name": {
+              "type": "string"
+            },
+            "by_activity": {
+              "type": [
+                "boolean",
+                "null"
+              ]
+            }
+          },
+          "required": [
+            "name"
+          ]
+        },
+        "CacheInvalidation": {
+          "type": "object",
+          "properties": {
+            "cached_request": {
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "cached_request"
+          ]
+        }
+      }
+    }
+  },
+  {
+    "name": "unarchive_thread",
+    "input": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "title": "NamedOperationArgs",
+      "type": "object",
+      "properties": {
+        "name": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "name"
+      ]
+    },
+    "output": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "title": "ThreadListing",
+      "type": "object",
+      "properties": {
+        "character": {
+          "type": "string"
+        },
+        "threads": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/ThreadView"
+          }
+        },
+        "home": {
+          "type": "string"
+        },
+        "current": {
+          "type": "string"
+        },
+        "folders": {
+          "type": [
+            "array",
+            "null"
+          ],
+          "items": {
+            "$ref": "#/$defs/ThreadFolderView"
+          }
+        },
+        "manual_order": {
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "invalidated": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/CacheInvalidation"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "required": [
+        "character",
+        "threads",
+        "home",
+        "current"
+      ],
+      "$defs": {
+        "ThreadView": {
+          "type": "object",
+          "properties": {
+            "id": {
+              "type": "string"
+            },
+            "label": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "purpose": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "pins": {
+              "type": [
+                "array",
+                "null"
+              ],
+              "items": {
+                "type": "string"
+              }
+            },
+            "created_at": {
+              "type": "string"
+            },
+            "created_by": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "last_active": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "chat_model": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "compaction": {
+              "type": "boolean"
+            },
+            "locked": {
+              "type": [
+                "boolean",
+                "null"
+              ]
+            },
+            "on_hold": {
+              "type": [
+                "boolean",
+                "null"
+              ]
+            },
+            "later": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "archived": {
+              "type": [
+                "string",
                 "null"
               ]
             },
@@ -16858,6 +17379,18 @@
             "on_hold": {
               "type": [
                 "boolean",
+                "null"
+              ]
+            },
+            "later": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "archived": {
+              "type": [
+                "string",
                 "null"
               ]
             },
@@ -17164,6 +17697,18 @@
                 "null"
               ]
             },
+            "later": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "archived": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
             "folder": {
               "type": [
                 "string",
@@ -17425,6 +17970,18 @@
                 "null"
               ]
             },
+            "later": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "archived": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
             "folder": {
               "type": [
                 "string",
@@ -17683,6 +18240,18 @@
             "on_hold": {
               "type": [
                 "boolean",
+                "null"
+              ]
+            },
+            "later": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "archived": {
+              "type": [
+                "string",
                 "null"
               ]
             },
@@ -17950,6 +18519,18 @@
                 "null"
               ]
             },
+            "later": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "archived": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
             "folder": {
               "type": [
                 "string",
@@ -18167,6 +18748,86 @@
             "cut",
             "left_out",
             "nothing"
+          ]
+        }
+      }
+    }
+  },
+  {
+    "name": "context_use",
+    "input": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "title": "EmptyOperationArgs",
+      "type": "object",
+      "additionalProperties": false
+    },
+    "output": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "title": "ThreadContextUse",
+      "type": "object",
+      "properties": {
+        "thread": {
+          "type": "string"
+        },
+        "mode": {
+          "$ref": "#/$defs/ContextLimitMode"
+        },
+        "turns": {
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        },
+        "min_turns": {
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        },
+        "max_turns": {
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        },
+        "context_tokens": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "uint64",
+          "minimum": 0
+        },
+        "max_context_tokens": {
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        },
+        "message_tokens": {
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        },
+        "trim_at": {
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        }
+      },
+      "required": [
+        "thread",
+        "mode",
+        "turns",
+        "min_turns",
+        "max_turns",
+        "max_context_tokens",
+        "message_tokens",
+        "trim_at"
+      ],
+      "$defs": {
+        "ContextLimitMode": {
+          "type": "string",
+          "enum": [
+            "compaction",
+            "trim",
+            "off"
           ]
         }
       }
@@ -18404,6 +19065,18 @@
             "on_hold": {
               "type": [
                 "boolean",
+                "null"
+              ]
+            },
+            "later": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "archived": {
+              "type": [
+                "string",
                 "null"
               ]
             },
@@ -18666,6 +19339,289 @@
                 "null"
               ]
             },
+            "later": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "archived": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "folder": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "position": {
+              "type": [
+                "integer",
+                "null"
+              ],
+              "format": "uint64",
+              "minimum": 0
+            },
+            "home": {
+              "type": "boolean"
+            },
+            "wakes": {
+              "type": [
+                "boolean",
+                "null"
+              ]
+            },
+            "current": {
+              "type": "boolean"
+            },
+            "turns": {
+              "type": [
+                "integer",
+                "null"
+              ],
+              "format": "uint64",
+              "minimum": 0
+            },
+            "unread": {
+              "type": [
+                "integer",
+                "null"
+              ],
+              "format": "uint64",
+              "minimum": 0
+            },
+            "warm": {
+              "type": [
+                "boolean",
+                "null"
+              ]
+            },
+            "forked_from": {
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/ThreadForkOrigin"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            }
+          },
+          "required": [
+            "id",
+            "created_at",
+            "compaction",
+            "home",
+            "current"
+          ]
+        },
+        "ThreadForkOrigin": {
+          "type": "object",
+          "properties": {
+            "fork_id": {
+              "type": "string"
+            },
+            "source": {
+              "type": "string"
+            },
+            "created_at": {
+              "type": "string"
+            },
+            "turns": {
+              "type": "integer",
+              "format": "uint64",
+              "minimum": 0
+            }
+          },
+          "required": [
+            "fork_id",
+            "source",
+            "created_at",
+            "turns"
+          ]
+        },
+        "ThreadFolderView": {
+          "type": "object",
+          "properties": {
+            "name": {
+              "type": "string"
+            },
+            "by_activity": {
+              "type": [
+                "boolean",
+                "null"
+              ]
+            }
+          },
+          "required": [
+            "name"
+          ]
+        },
+        "CacheInvalidation": {
+          "type": "object",
+          "properties": {
+            "cached_request": {
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "cached_request"
+          ]
+        }
+      }
+    }
+  },
+  {
+    "name": "thread_later",
+    "input": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "title": "ThreadLaterArgs",
+      "type": "object",
+      "properties": {
+        "name": {
+          "type": "string"
+        },
+        "later": {
+          "type": "boolean"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "name",
+        "later"
+      ]
+    },
+    "output": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "title": "ThreadListing",
+      "type": "object",
+      "properties": {
+        "character": {
+          "type": "string"
+        },
+        "threads": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/ThreadView"
+          }
+        },
+        "home": {
+          "type": "string"
+        },
+        "current": {
+          "type": "string"
+        },
+        "folders": {
+          "type": [
+            "array",
+            "null"
+          ],
+          "items": {
+            "$ref": "#/$defs/ThreadFolderView"
+          }
+        },
+        "manual_order": {
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "invalidated": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/CacheInvalidation"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "required": [
+        "character",
+        "threads",
+        "home",
+        "current"
+      ],
+      "$defs": {
+        "ThreadView": {
+          "type": "object",
+          "properties": {
+            "id": {
+              "type": "string"
+            },
+            "label": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "purpose": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "pins": {
+              "type": [
+                "array",
+                "null"
+              ],
+              "items": {
+                "type": "string"
+              }
+            },
+            "created_at": {
+              "type": "string"
+            },
+            "created_by": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "last_active": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "chat_model": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "compaction": {
+              "type": "boolean"
+            },
+            "locked": {
+              "type": [
+                "boolean",
+                "null"
+              ]
+            },
+            "on_hold": {
+              "type": [
+                "boolean",
+                "null"
+              ]
+            },
+            "later": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "archived": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
             "folder": {
               "type": [
                 "string",
@@ -18922,6 +19878,18 @@
             "on_hold": {
               "type": [
                 "boolean",
+                "null"
+              ]
+            },
+            "later": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "archived": {
+              "type": [
+                "string",
                 "null"
               ]
             },
@@ -19192,6 +20160,18 @@
                 "null"
               ]
             },
+            "later": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "archived": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
             "folder": {
               "type": [
                 "string",
@@ -19447,6 +20427,18 @@
                 "null"
               ]
             },
+            "later": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "archived": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
             "folder": {
               "type": [
                 "string",
@@ -19699,6 +20691,18 @@
             "on_hold": {
               "type": [
                 "boolean",
+                "null"
+              ]
+            },
+            "later": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "archived": {
+              "type": [
+                "string",
                 "null"
               ]
             },
@@ -19961,6 +20965,18 @@
                 "null"
               ]
             },
+            "later": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "archived": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
             "folder": {
               "type": [
                 "string",
@@ -20213,6 +21229,18 @@
             "on_hold": {
               "type": [
                 "boolean",
+                "null"
+              ]
+            },
+            "later": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "archived": {
+              "type": [
+                "string",
                 "null"
               ]
             },
@@ -20477,6 +21505,18 @@
                 "null"
               ]
             },
+            "later": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "archived": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
             "folder": {
               "type": [
                 "string",
@@ -20733,6 +21773,18 @@
             "on_hold": {
               "type": [
                 "boolean",
+                "null"
+              ]
+            },
+            "later": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "archived": {
+              "type": [
+                "string",
                 "null"
               ]
             },
@@ -20997,6 +22049,18 @@
                 "null"
               ]
             },
+            "later": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "archived": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
             "folder": {
               "type": [
                 "string",
@@ -21159,6 +22223,12 @@
           "minimum": 0
         },
         "last_active": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "reply": {
           "type": [
             "string",
             "null"

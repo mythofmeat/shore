@@ -1,4 +1,5 @@
-import { useState, type ReactNode } from "react";
+import { useEffect, useState, type ReactNode } from "react";
+import { keyLabel } from "../app/shortcuts.ts";
 import type { ChromeSnapshot } from "../workspace.ts";
 import type { ThreadView } from "../../protocol/ThreadView.ts";
 import { Avatar } from "../ui/avatar.tsx";
@@ -7,13 +8,15 @@ import { Icon } from "../ui/icons.tsx";
 import { navigate, openSettings } from "../app/route.ts";
 import { collapsedFolders, conversation, errorText, perform, useActiveRequests, useCollapsedFolders, workspace } from "../app/state.ts";
 import { openFolderDialog } from "../app/intents.ts";
-import { moveThreadTo } from "../chat/actions.ts";
+import { moveFolderTo, moveThreadTo } from "../chat/actions.ts";
 import { toasts } from "../ui/toast.tsx";
+import { unsentConversations, watchUnsent } from "../drafts.ts";
 import { FolderRow } from "./FolderRow.tsx";
 import { PresenceStore, StatusPicker } from "./StatusPicker.tsx";
-import { HELD_GROUP, threadSections } from "./order.ts";
+import { ARCHIVED_GROUP, HELD_GROUP, laterIn, shownUnread, threadSections, threadsByCharacter, totalUnread, type CharacterThreadsView } from "./order.ts";
+import { useWindowFocused } from "../ui/hooks.ts";
 import { useRowMenu } from "./row_menu.ts";
-import { THREAD_DRAG_TYPE, ThreadRow, UnreadBadge, type ThreadNeighbours } from "./ThreadRow.tsx";
+import { LaterCount, THREAD_DRAG_TYPE, ThreadRow, UnreadBadge, type ThreadNeighbours } from "./ThreadRow.tsx";
 
 export function threadLabel(thread: Pick<ThreadView, "id" | "label">): string {
   return thread.label !== undefined && thread.label !== "" ? thread.label : thread.id;
@@ -24,15 +27,27 @@ function neighboursIn(ids: readonly string[], id: string, byActivity: boolean): 
   return { up: ids[at - 1], down: ids[at + 2], atEnd: at === ids.length - 1, byActivity };
 }
 
+function useUnsentDrafts(): ReadonlySet<string> {
+  const [unsent, setUnsent] = useState<ReadonlySet<string>>(() => new Set());
+  useEffect(() => {
+    const refresh = () => { void unsentConversations().then(setUnsent, () => {}); };
+    refresh();
+    return watchUnsent(refresh);
+  }, []);
+  return unsent;
+}
+
 function ThreadList({ state, shownThread, ready, select, newThread }: { state: ChromeSnapshot; shownThread: string | null; ready: boolean; select: (name: string) => void; newThread: () => void }) {
   const character = state.character ?? "";
   const collapsed = useCollapsedFolders(character);
+  const unsent = useUnsentDrafts();
+  const focused = useWindowFocused();
   const sections = threadSections(state.threads, state.folders);
   const looseIds = sections.loose.map((thread) => thread.id);
   const looseByActivity = !state.manualOrder;
-  const unreadOf = (thread: ThreadView) => thread.id === state.thread ? 0 : thread.unread ?? 0;
+  const unreadOf = (thread: ThreadView) => shownUnread(thread, state.thread, focused);
   const replyingIn = (thread: ThreadView) => thread.id !== state.thread && conversation.activeIn({ character: state.character, thread: thread.id });
-  const row = (thread: ThreadView, ids: readonly string[], byActivity: boolean, folder?: string) => <ThreadRow key={thread.id} thread={thread} label={threadLabel(thread)} current={thread.id === shownThread} unread={unreadOf(thread)} replying={replyingIn(thread)}
+  const row = (thread: ThreadView, ids: readonly string[], byActivity: boolean, folder?: string) => <ThreadRow key={thread.id} thread={thread} character={character} label={threadLabel(thread)} current={thread.id === shownThread} unread={unreadOf(thread)} drafted={thread.id !== shownThread && unsent.has(JSON.stringify([state.character, thread.id]))} replying={replyingIn(thread)}
     opening={state.opening?.thread === thread.id && thread.id !== state.thread} ready={ready} select={() => select(thread.id)} neighbours={neighboursIn(ids, thread.id, byActivity)}
     drop={(id, after) => { void moveThreadTo(id, { folder: folder ?? "", ...placeRelative(ids, thread.id, id, after) }); }} />;
   return <div className="sidebar-threads" role="group" aria-label={`${character} threads`}
@@ -45,26 +60,43 @@ function ThreadList({ state, shownThread, ready, select, newThread }: { state: C
       const shut = collapsed.has(folder.name);
       const shown = shut ? folder.threads.filter((thread) => thread.id === state.thread) : folder.threads;
       return <div key={folder.name} className="thread-folder" role="group" aria-label={`Folder ${folder.name}`}>
-        <FolderRow character={character} folder={folder} collapsed={shut} ready={ready} unread={folder.threads.reduce((total, thread) => total + unreadOf(thread), 0)} replying={folder.threads.some(replyingIn)}
+        <FolderRow character={character} folder={folder} collapsed={shut} ready={ready} unread={folder.threads.reduce((total, thread) => total + unreadOf(thread), 0)} later={laterIn(folder.threads)} replying={folder.threads.some(replyingIn)}
           neighbours={{ up: sections.folders[index - 1]?.name, down: sections.folders[index + 2]?.name, atEnd: index === sections.folders.length - 1 }}
-          drop={(id) => { void moveThreadTo(id, { folder: folder.name }); }} />
+          drop={(id) => { void moveThreadTo(id, { folder: folder.name }); }}
+          dropFolder={(name, after) => { void moveFolderTo(name, placeRelative(sections.folders.map((each) => each.name), folder.name, name, after).before); }} />
         {shown.map((thread) => row(thread, ids, folder.byActivity, folder.name))}
       </div>;
     })}
     <button type="button" className="sidebar-item thread muted" disabled={!ready} onClick={newThread}><Icon name="plus" size={14} /><span className="sidebar-name">New thread</span></button>
-    {sections.held.length === 0 ? null : <HeldGroup character={character} shut={collapsed.has(HELD_GROUP)} unread={sections.held.reduce((total, thread) => total + unreadOf(thread), 0)}>
+    {sections.held.length === 0 ? null : <HeldGroup character={character} shut={collapsed.has(HELD_GROUP)} unread={sections.held.reduce((total, thread) => total + unreadOf(thread), 0)} later={laterIn(sections.held)}>
       {(collapsed.has(HELD_GROUP) ? sections.held.filter((thread) => thread.id === state.thread) : sections.held).map((thread) => row(thread, sections.held.map((each) => each.id), true))}
     </HeldGroup>}
+    {sections.archived.length === 0 ? null : <ArchivedGroup character={character} open={collapsed.has(ARCHIVED_GROUP)} count={sections.archived.length}>
+      {(collapsed.has(ARCHIVED_GROUP) ? sections.archived : sections.archived.filter((thread) => thread.id === state.thread)).map((thread) => row(thread, [], looseByActivity))}
+    </ArchivedGroup>}
   </div>;
 }
 
-function HeldGroup({ character, shut, unread, children }: { character: string; shut: boolean; unread: number; children: ReactNode }) {
+function HeldGroup({ character, shut, unread, later, children }: { character: string; shut: boolean; unread: number; later: number; children: ReactNode }) {
   return <div className="thread-folder" role="group" aria-label="On hold"
     onDragStartCapture={(event) => { event.preventDefault(); }} onDragOverCapture={(event) => { event.stopPropagation(); }}>
     <div className="thread-row folder-row">
       <button type="button" className="sidebar-item thread folder" aria-expanded={!shut} onClick={() => collapsedFolders.toggle(character, HELD_GROUP)}>
         <Icon name={shut ? "chevronRight" : "chevronDown"} size={14} /><span className="sidebar-name">On hold</span>
+        {shut && later > 0 ? <LaterCount count={later} /> : null}
         {shut && unread > 0 ? <UnreadBadge count={unread} /> : null}
+      </button>
+    </div>
+    {children}
+  </div>;
+}
+
+function ArchivedGroup({ character, open, count, children }: { character: string; open: boolean; count: number; children: ReactNode }) {
+  return <div className="thread-folder" role="group" aria-label="Archived">
+    <div className="thread-row folder-row">
+      <button type="button" className="sidebar-item thread folder" aria-expanded={open} onClick={() => collapsedFolders.toggle(character, ARCHIVED_GROUP)}>
+        <Icon name={open ? "chevronDown" : "chevronRight"} size={14} /><span className="sidebar-name">Archived</span>
+        {open ? null : <><span className="sidebar-time" aria-hidden="true">{String(count)}</span><span className="sr-only">{count === 1 ? "(1 thread)" : `(${String(count)} threads)`}</span></>}
       </button>
     </div>
     {children}
@@ -78,7 +110,7 @@ function placeRelative(ids: readonly string[], onto: string, dragged: string, af
   return before === undefined ? {} : { before };
 }
 
-function CharacterRow({ state, character, selected, openingThis, ready, select }: { state: ChromeSnapshot; character: ChromeSnapshot["characters"][number]; selected: boolean; openingThis: boolean; ready: boolean; select: () => void }) {
+function CharacterRow({ state, character, threads, selected, openingThis, ready, select }: { state: ChromeSnapshot; character: ChromeSnapshot["characters"][number]; threads: CharacterThreadsView["threads"] | null; selected: boolean; openingThis: boolean; ready: boolean; select: () => void }) {
   const menu = useRowMenu();
   const items: MenuItem[] = [
     { label: "New folder…", icon: "folder", onSelect: () => openFolderDialog({ kind: "new" }), disabled: !ready },
@@ -89,6 +121,8 @@ function CharacterRow({ state, character, selected, openingThis, ready, select }
     <button type="button" className={`sidebar-item character ${selected ? "on" : ""}`} aria-current={selected ? "true" : undefined} aria-busy={openingThis} disabled={!ready} onClick={() => { if (!menu.swallowClick()) select(); }}>
       <Avatar name={character.name} avatar={character.avatar} size={30} selected={selected} /><span className="sidebar-name">{character.name}</span>
       {openingThis ? <span className="sidebar-replying"><span className="spinner" aria-hidden="true" /><span className="sr-only">(opening)</span></span> : null}
+      {threads !== null && laterIn(threads) > 0 ? <LaterCount count={laterIn(threads)} /> : null}
+      {threads !== null && totalUnread(threads) > 0 ? <UnreadBadge count={totalUnread(threads)} /> : null}
     </button>
     {openable ? <IconButton icon="more" size={16} className="thread-more" label={`Options for ${character.name}’s threads`} aria-haspopup="menu" aria-expanded={menu.at !== null} onClick={menu.openFrom} /> : null}
     {menu.at === null ? null : <PointMenu label={`Options for ${character.name}’s threads`} items={items} at={menu.at} close={menu.close} />}
@@ -102,17 +136,15 @@ function ConnectionStatus({ status }: { status: ChromeSnapshot["status"] }) {
   return <span className="connection" data-tone={tone} title={text}><span className="connection-dot" />{text}</span>;
 }
 
-export function Sidebar({ state, mobile, close, collapse, newCharacter, newThread }: {
-  state: ChromeSnapshot; mobile: boolean; close: () => void; collapse: () => void; newCharacter: () => void; newThread: () => void;
+export function Sidebar({ state, mobile, close, collapse, newCharacter, newThread, openSwitcher }: {
+  state: ChromeSnapshot; mobile: boolean; close: () => void; collapse: () => void; newCharacter: () => void; newThread: () => void; openSwitcher: () => void;
 }) {
-  const [query, setQuery] = useState("");
   useActiveRequests();
   const ready = state.status === "ready";
-  const needle = query.trim().toLowerCase();
-  const characters = state.characters.filter((character) => character.name.toLowerCase().includes(needle));
   const opening = state.opening;
   const shownCharacter = opening?.character ?? state.character;
   const shownThread = opening === null ? state.thread : opening.thread;
+  const everyCharacter = threadsByCharacter(state);
   const selectCharacter = (name: string) => {
     navigate({ view: "chat" });
     if (mobile) close();
@@ -131,21 +163,19 @@ export function Sidebar({ state, mobile, close, collapse, newCharacter, newThrea
         {mobile ? <IconButton icon="close" label="Close sidebar" onClick={close} /> : <IconButton icon="panel" label="Collapse sidebar" onClick={collapse} />}
       </div>
     </div>
-    <label className="sidebar-search">
-      <Icon name="search" size={16} />
-      <input type="search" aria-label="Search characters" placeholder="Search characters" value={query} onChange={(event) => setQuery(event.target.value)} />
-    </label>
+    <button type="button" className="sidebar-search" onClick={() => { if (mobile) close(); openSwitcher(); }}>
+      <Icon name="search" size={16} /><span className="sidebar-search-text">Find a thread or command</span>{mobile ? null : <kbd>{`${keyLabel("Mod")} K`}</kbd>}
+    </button>
     <nav className="sidebar-list" aria-label="Characters">
-      {characters.map((character) => {
+      {state.characters.map((character, index) => {
         const selected = character.name === shownCharacter;
         const openingThis = opening !== null && opening.character === character.name && character.name !== state.character;
         return <div key={character.name} className="sidebar-group">
-          <CharacterRow state={state} character={character} selected={selected} openingThis={openingThis} ready={ready} select={() => selectCharacter(character.name)} />
+          <CharacterRow state={state} character={character} threads={character.name === state.character ? null : everyCharacter[index]?.threads ?? []} selected={selected} openingThis={openingThis} ready={ready} select={() => selectCharacter(character.name)} />
           {character.name === state.character ? <ThreadList state={state} shownThread={shownThread} ready={ready} select={selectThread} newThread={newThread} /> : null}
         </div>;
       })}
       {state.characters.length === 0 && ready ? <p className="sidebar-empty">No characters yet.</p> : null}
-      {state.characters.length > 0 && characters.length === 0 ? <p className="sidebar-empty">No characters match “{query}”.</p> : null}
     </nav>
     <div className="sidebar-footer">
       <StatusPicker ready={ready} store={presence} />

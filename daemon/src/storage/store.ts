@@ -29,6 +29,25 @@ CREATE TRIGGER IF NOT EXISTS delete_state_collection AFTER DELETE ON state_files
   DELETE FROM state_lines WHERE path = old.path;
   DELETE FROM state_collections WHERE path = old.path;
 END;
+CREATE TABLE IF NOT EXISTS state_revisions (
+  path TEXT PRIMARY KEY,
+  revision INTEGER NOT NULL
+) WITHOUT ROWID;
+CREATE TRIGGER IF NOT EXISTS new_state_revision AFTER INSERT ON state_files BEGIN
+  INSERT OR REPLACE INTO state_revisions VALUES (new.path, abs(random() % 1000000000));
+END;
+CREATE TRIGGER IF NOT EXISTS revise_state_file AFTER UPDATE ON state_files BEGIN
+  INSERT INTO state_revisions VALUES (new.path, abs(random() % 1000000000)) ON CONFLICT(path) DO UPDATE SET revision = revision + 1;
+END;
+CREATE TRIGGER IF NOT EXISTS revise_state_line AFTER UPDATE ON state_lines BEGIN
+  INSERT INTO state_revisions VALUES (new.path, abs(random() % 1000000000)) ON CONFLICT(path) DO UPDATE SET revision = revision + 1;
+END;
+CREATE TRIGGER IF NOT EXISTS remove_state_line AFTER DELETE ON state_lines WHEN EXISTS (SELECT 1 FROM state_files WHERE path = old.path) BEGIN
+  INSERT INTO state_revisions VALUES (old.path, abs(random() % 1000000000)) ON CONFLICT(path) DO UPDATE SET revision = revision + 1;
+END;
+CREATE TRIGGER IF NOT EXISTS forget_state_revision AFTER DELETE ON state_files BEGIN
+  DELETE FROM state_revisions WHERE path = old.path;
+END;
 
 CREATE TABLE IF NOT EXISTS events (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -222,22 +241,12 @@ export function replaceCollection(db: Database, path: string, character: string,
   appendCollection(db, path, entries);
 }
 
-export interface StateMark { stored: number; lines: number; last: number; bytes: number }
+export interface StateMark { revision: number; last: number }
 
 export function stateMark(data: string, path: string): StateMark | undefined {
-  return withStorage(data, (db) => {
-    const file = db.query("SELECT length(content) AS stored FROM state_files WHERE path = ?1").get(path) as { stored: number } | null;
-    if (file === null) return undefined;
-    const lines = db.query("SELECT count(*) AS lines, coalesce(max(seq), -1) AS last, coalesce(sum(length(content)), 0) AS bytes FROM state_lines WHERE path = ?1").get(path) as Omit<StateMark, "stored">;
-    return { stored: file.stored, ...lines };
-  });
-}
-
-export function statePrefixUnchanged(data: string, path: string, mark: StateMark): boolean {
-  return withStorage(data, (db) => {
-    const prefix = db.query("SELECT count(*) AS lines, coalesce(sum(length(content)), 0) AS bytes FROM state_lines WHERE path = ?1 AND seq <= ?2").get(path, mark.last) as { lines: number; bytes: number };
-    return prefix.lines === mark.lines && prefix.bytes === mark.bytes;
-  });
+  return withStorage(data, (db) => db.query(`SELECT coalesce((SELECT revision FROM state_revisions WHERE path = ?1), 0) AS revision,
+      (SELECT coalesce(max(seq), -1) FROM state_lines WHERE path = ?1) AS last
+    FROM state_files WHERE path = ?1`).get(path) as StateMark | null) ?? undefined;
 }
 
 export function stateLinesAfter(data: string, path: string, last: number): string[] {

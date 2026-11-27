@@ -422,6 +422,7 @@ export const DAEMON_EQUIVALENTS: readonly string[] = [
   "src/tools/workspace_turns.ts:completeSegments: …-1 : Number(a)) - (b === \"\" ? -「1 → 2」 : Number(b)))",
   "src/tools/workspace_turns.ts:WorkspaceRecorder.#finish: …ength === 0 && !headAmbiguous) 「return { before: before.id, after: afte… → {}」",
   "src/engine/threads.ts:scanInto: if (time 「> → >=」 scan.latestUser && !scan.wakeT…",
+  "src/engine/threads.ts:currentScan: 「rememberedScans.delete(key); → {}」",
   "src/browser/chat/QuoteButton.tsx:QuoteButton: const half = (width ?? 「0 → 1」) / 2;",
   "src/swp/outbound.ts:OutboundQueue.push: …|| limits.bytes === Infinity ? 「0 → 1」 : encodeServerMessage(message)…",
   "src/swp/server.ts:Server.attachLocal: this.#nextId += 「1 → 2」;",

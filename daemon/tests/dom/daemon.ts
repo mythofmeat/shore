@@ -17,6 +17,8 @@ export function catalogue(request: Record<string, unknown>): unknown {
     case "discover_operations": return { operations: [], requests: [] };
     case "list_characters": return { characters: [{ name: "ada" }] };
     case "list_threads": return LISTING;
+    case "all_threads": return { characters: [{ character: "ada", threads: LISTING.threads }] };
+    case "context_use": return { thread: "story", mode: "compaction", turns: 0, min_turns: 0, max_turns: 0, max_context_tokens: 0, message_tokens: 0, trim_at: 0 };
     default: return undefined;
   }
 }

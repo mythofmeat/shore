@@ -4,6 +4,7 @@ import type { ThreadView } from "../../src/protocol/ThreadView.ts";
 import type { ChromeSnapshot } from "../../src/browser/workspace.ts";
 import { useApp } from "./app.ts";
 import { acting, button, click, mount } from "./dom.ts";
+import { HOLD, replace } from "./daemon.ts";
 
 const app = useApp();
 
@@ -67,6 +68,73 @@ test("the topbar shows the character's own picture and the open thread's label, 
 
   await view.rerender(await chrome({ status: "reconnecting" }));
   expect(view.thread()).toEqual(["Our story", "Our story. Thread settings", true]);
+});
+
+test("opening the chat on a thread with unread replies marks them read at once while the window has focus", async () => {
+  replace(app.restores, document, "hasFocus", () => true);
+  const { workspace } = app.state();
+  await acting(() => {
+    workspace.applyThreadListing({ character: "ada", threads: [{ ...HOME, unread: 1 }, SIDE], home: "story", current: "story" });
+    app.socket().receive({ type: "history", messages: [{ msg_id: "m_new", role: "assistant", content: "hi", content_blocks: [], timestamp: "2026-11-27T10:00:00.000Z", images: [] }], config: {}, revision: 45, selected_character: "ada", selected_thread: "story" });
+  });
+  const { Chat } = await import("../../src/browser/chat/Chat.tsx");
+  const state = await chrome();
+  app.answer(() => HOLD);
+  const since = app.socket().sent.length;
+  await mount(<Chat state={state} sidebarOpen toggleSidebar={() => {}} mobile={false} />);
+  expect(app.sent(since).filter((request) => request["name"] === "mark_thread_read").map((request) => request["args"]), "with nothing else changing").toEqual([{ name: "story", through: "2026-11-27T10:00:00.000Z" }]);
+});
+
+test("the thread menu offers another take and a reason once connected, with a turn to redo and no reply running, and another take asks for one", async () => {
+  const regen = (shown: unknown[][]) => shown.filter(([label]) => label === "Another take" || label === "Regenerate with a reason…").map(([, disabled]) => disabled);
+  const said = (id: string, role: string, revision: number) => ({ type: "history", messages: [{ msg_id: id, role, content: "hi", content_blocks: [], timestamp: "2026-11-27T10:00:00.000Z", images: [] }], config: {}, revision, selected_character: "ada", selected_thread: "story" });
+  const view = await chat(await chrome());
+  await acting(() => { app.socket().receive(said("m_note", "system", 50)); });
+  expect(regen(await view.menu()), "a note from Shore is no turn to redo").toEqual([true, true]);
+  await acting(() => { app.socket().receive(said("m_reply", "assistant", 51)); });
+  expect(regen(await view.menu())).toEqual([false, false]);
+  await view.rerender(await chrome({ status: "reconnecting" }));
+  expect(regen(await view.menu())).toEqual([true, true]);
+  await view.rerender(await chrome());
+  const since = app.socket().sent.length;
+  await click(button(view.host, "Thread options"));
+  await click([...view.host.querySelectorAll<HTMLButtonElement>(".topbar [role=menuitem]")].find((item) => item.textContent === "Another take"));
+  await settle();
+  expect(app.sent(since).filter((request) => request["type"] === "regen").map((request) => request["another_take"])).toEqual([true]);
+  expect(regen(await view.menu()), "not while a reply is running").toEqual([true, true]);
+});
+
+test("an archived thread opens to read, with a notice that unarchives it, a note where the message box was, and a menu that unarchives it instead of offering to redo or move it", async () => {
+  const archived: ThreadView = { ...SIDE, archived: "2026-11-27T10:00:00Z" };
+  const view = await chat(await chrome({ thread: "side", threads: [HOME, archived] }));
+  const notice = () => view.host.querySelector(".banner[role=status]");
+  expect([notice()?.textContent, view.host.querySelector(".composer-note")?.textContent, view.host.querySelector("textarea, .cm-editor")]).toEqual([
+    "Archived. ada doesn't see this thread, and nothing more can be written here until it is unarchived.Unarchive",
+    "This thread is archived, to read. Unarchive it to write to ada here.",
+    null,
+  ]);
+  const labels = (await view.menu()).map(([label, disabled, danger]) => [label, disabled, danger]);
+  expect(labels.filter(([label]) => ["Another take", "Regenerate with a reason…", "Make home", "Archive…", "Unarchive"].includes(String(label)))).toEqual([["Unarchive", false, false]]);
+  const since = app.socket().sent.length;
+  await click(button(view.host, "Unarchive"));
+  await click(button(view.host, "Thread options"));
+  await click([...view.host.querySelectorAll<HTMLButtonElement>(".topbar [role=menuitem]")].find((item) => item.textContent === "Unarchive"));
+  await settle();
+  expect(app.sent(since).filter((request) => request["name"] === "unarchive_thread").map((request) => request["args"])).toEqual([{ name: "side" }, { name: "side" }]);
+  await view.rerender(await chrome({ thread: "side", threads: [HOME, archived], status: "reconnecting" }));
+  expect([button(view.host, "Unarchive").disabled, (await view.menu()).find(([label]) => label === "Unarchive")?.[1]]).toEqual([true, true]);
+  await view.rerender(await chrome({ thread: "side" }));
+  expect([notice(), view.host.querySelector(".composer-note")]).toEqual([null, null]);
+});
+
+test("the thread menu marks the open thread for later or clears its mark, and offers neither for a thread not in the list", async () => {
+  const later = (shown: unknown[][]) => shown.filter(([label]) => String(label).includes("later")).map(([label, disabled]) => [label, disabled]);
+  const view = await chat(await chrome({ thread: "side" }));
+  expect(later(await view.menu())).toEqual([["Mark for later", false]]);
+  await view.rerender(await chrome({ thread: "side", threads: [HOME, { ...SIDE, later: "2026-11-27T10:00:00Z" }], status: "reconnecting" }));
+  expect(later(await view.menu())).toEqual([["Clear later mark", true]]);
+  await view.rerender(await chrome({ thread: "gone" }));
+  expect(later(await view.menu())).toEqual([]);
 });
 
 test("the thread menu waits for the connection, and the home thread can't be archived", async () => {

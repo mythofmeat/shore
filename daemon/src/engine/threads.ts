@@ -1,8 +1,7 @@
 import { withConversation } from "./lifecycle.ts";
 import { required } from "../util/required.ts";
-import { threadFile, readDurable, writeDurable, deleteThreadState, durableLinesAfter, durableMark, durablePrefixUnchanged } from "../storage/files.ts";
+import { threadFile, readDurable, writeDurable, deleteDurable, deleteThreadState, durableLinesAfter, durableMark } from "../storage/files.ts";
 import type { StateMark } from "../storage/store.ts";
-import { existsSync } from "node:fs";
 import { mkdir, rm } from "node:fs/promises";
 import { join } from "node:path";
 
@@ -27,7 +26,7 @@ export const MAX_THREAD_PINS = 20;
 
 const THREAD_ID = /^[A-Za-z0-9][A-Za-z0-9._-]*$/;
 
-export type ThreadErrorKind = "invalid_id" | "invalid_pins" | "invalid_folder" | "invalid_seal" | "exists" | "not_found" | "is_home" | "is_wakes" | "is_pinned" | "locked" | "on_hold";
+export type ThreadErrorKind = "invalid_id" | "invalid_pins" | "invalid_folder" | "invalid_seal" | "exists" | "not_found" | "is_home" | "is_wakes" | "is_pinned" | "locked" | "on_hold" | "archived" | "not_archived";
 
 export class ThreadError extends Error {
   constructor(
@@ -71,6 +70,7 @@ export interface ThreadRecord {
   compaction: boolean;
   locked?: true;
   on_hold?: true;
+  archived?: string;
   forked_from?: ThreadForkOrigin;
 }
 
@@ -105,12 +105,18 @@ export function threadRecord(index: ThreadsIndex, id: string): ThreadRecord | un
   return index.threads.find((t) => t.id === id);
 }
 
-export function threadsTheCharacterSees<T extends Pick<ThreadRecord, "on_hold">>(records: readonly T[]): T[] {
-  return records.filter((record) => record.on_hold !== true);
+export function threadAway(record: Pick<ThreadRecord, "on_hold" | "archived"> | undefined): "archived" | "on hold" | undefined {
+  if (record?.archived !== undefined) return "archived";
+  return record?.on_hold === true ? "on hold" : undefined;
+}
+
+export function threadsTheCharacterSees<T extends Pick<ThreadRecord, "on_hold" | "archived">>(records: readonly T[]): T[] {
+  return records.filter((record) => threadAway(record) === undefined);
 }
 
 export function requireNameFree(index: ThreadsIndex, character: string, id: string): void {
   const taken = threadRecord(index, id);
+  if (taken?.archived !== undefined) throw new ThreadError("archived", `thread ${JSON.stringify(id)} already exists for ${character}, archived`);
   if (taken?.on_hold === true) throw new ThreadError("on_hold", `thread ${JSON.stringify(id)} already exists for ${character}, on hold`);
   if (taken !== undefined) throw new ThreadError("exists", `thread ${JSON.stringify(id)} already exists for ${character}`);
 }
@@ -142,7 +148,8 @@ export interface ThreadActivity {
   user_turns: number;
   last_active?: string;
   last_user?: string;
-  unread?: number;
+  unread: number;
+  later?: string;
 }
 
 function messageTime(raw: unknown): number {
@@ -184,16 +191,57 @@ export function markThreadRead(data: string, character: string, id: string, thro
   if (current === undefined || current < through) writeReadMark(data, character, id, through);
 }
 
+const LATER_FILE = "later";
+const CONTEXT_TOKENS_FILE = "context_tokens";
+
+export function threadContextTokens(data: string, character: string, id: string): number | undefined {
+  try {
+    const tokens = Number(readDurable(threadFile(data, character, id, CONTEXT_TOKENS_FILE)));
+    return Number.isSafeInteger(tokens) && tokens >= 0 ? tokens : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+export function noteContextTokens(data: string, character: string, id: string, tokens: number): void {
+  writeDurable(threadFile(data, character, id, CONTEXT_TOKENS_FILE), `${String(tokens)}\n`);
+}
+
+export function threadLaterMark(data: string, character: string, id: string): string | undefined {
+  try {
+    return readDurable(threadFile(data, character, id, LATER_FILE)).trim() || undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+export async function setThreadLater(data: string, character: string, id: string, later: boolean, now: string): Promise<void> {
+  requireThread(await ensureThreads(data, character, now), character, id);
+  const file = threadFile(data, character, id, LATER_FILE);
+  if (later) writeDurable(file, `${now}\n`);
+  else deleteDurable(file);
+}
+
+export function clearThreadLater(data: string, character: string, id: string): boolean {
+  if (threadLaterMark(data, character, id) === undefined) return false;
+  deleteDurable(threadFile(data, character, id, LATER_FILE));
+  return true;
+}
+
 export function startReadMarkBefore(data: string, character: string, id: string, first: number): void {
   if (threadReadMark(data, character, id) === undefined) writeReadMark(data, character, id, first - 1);
 }
 
-function archivedUserTurnAt(data: string, character: string, id: string): number {
-  const dbPath = join(data, HISTORY_DB_FILE);
-  if (!existsSync(dbPath)) return Number.NaN;
-  const store = HistoryStore.open(dbPath);
+interface LastTimes {
+  user: number;
+  latest: number;
+}
+
+function archivedTimes(data: string, character: string, id: string): LastTimes {
+  const store = HistoryStore.open(join(data, HISTORY_DB_FILE));
   try {
-    return Date.parse(store.lastUserTurnAt(archiveKey(character, id)) ?? "");
+    const times = store.lastTimes(archiveKey(character, id));
+    return { user: Date.parse(times.user ?? ""), latest: Date.parse(times.latest ?? "") };
   } finally {
     store.close();
   }
@@ -257,14 +305,13 @@ function scanActive(lines: readonly unknown[]): ActiveScan {
   return scanInto(emptyScan(), lines);
 }
 
-function unreadReplies(scan: ActiveScan, mark: number | undefined): number[] {
-  if (mark === undefined) return [];
-  const seen = Math.max(mark, scan.latestUser);
-  return scan.replies.filter((reply) => reply.time > seen).map((reply) => reply.at);
+function unreadReplies(scan: ActiveScan, mark: number | undefined): Reply[] {
+  const seen = Math.max(mark ?? Infinity, scan.latestUser);
+  return scan.replies.filter((reply) => reply.time > seen);
 }
 
 export function firstUnreadReply(data: string, character: string, id: string, messages: readonly Message[]): number | undefined {
-  return unreadReplies(scanActive(messages), threadReadMark(data, character, id))[0];
+  return unreadReplies(scanActive(messages), threadReadMark(data, character, id))[0]?.at;
 }
 
 function parsedLines(raw: readonly string[]): unknown[] {
@@ -288,36 +335,42 @@ interface RememberedScan {
 const rememberedScans = new Map<string, RememberedScan>();
 
 function sameMark(a: StateMark, b: StateMark): boolean {
-  return a.stored === b.stored && a.lines === b.lines && a.last === b.last && a.bytes === b.bytes;
+  return a.revision === b.revision && a.last === b.last;
 }
 
-function currentScan(data: string, character: string, id: string): RememberedScan {
+function currentScan(data: string, character: string, id: string): ActiveScan {
   const file = threadFile(data, character, id, "active.jsonl");
   const key = JSON.stringify([data, character, id]);
   const mark = durableMark(file);
   if (mark === undefined) {
     rememberedScans.delete(key);
-    return { mark: { stored: 0, lines: 0, last: -1, bytes: 0 }, scan: emptyScan() };
+    return emptyScan();
   }
   const known = rememberedScans.get(key);
-  if (known !== undefined && sameMark(known.mark, mark)) return known;
-  const scan = known !== undefined && known.mark.stored === mark.stored && known.mark.lines > 0 && durablePrefixUnchanged(file, known.mark)
+  if (known !== undefined && sameMark(known.mark, mark)) return known.scan;
+  const scan = known?.mark.revision === mark.revision
     ? scanInto(known.scan, parsedLines(durableLinesAfter(file, known.mark.last)))
     : scanActive(parsedLines(readDurable(file).split("\n")));
-  const remembered: RememberedScan = { mark, scan };
-  rememberedScans.set(key, remembered);
-  return remembered;
+  rememberedScans.set(key, { mark, scan });
+  return scan;
+}
+
+export function isUnreadReply(data: string, character: string, id: string, time: number): boolean {
+  return unreadReplies(currentScan(data, character, id), threadReadMark(data, character, id)).some((reply) => reply.time === time);
 }
 
 export function threadActivityNow(data: string, character: string, id: string): ThreadActivity {
-  const { scan } = currentScan(data, character, id);
-  const lastUser = scan.latestUser === -Infinity ? archivedUserTurnAt(data, character, id) : scan.latestUser;
+  const scan = currentScan(data, character, id);
+  const last = scan.latestUser === -Infinity ? archivedTimes(data, character, id) : { user: scan.latestUser, latest: Number.NaN };
+  const lastActive = scan.latest === -Infinity ? last.latest : scan.latest;
+  const later = threadLaterMark(data, character, id);
   return {
     turns: scan.turns,
     user_turns: scan.userTurns,
-    ...(scan.latest === -Infinity ? {} : { last_active: new Date(scan.latest).toISOString() }),
-    ...(Number.isNaN(lastUser) ? {} : { last_user: new Date(lastUser).toISOString() }),
+    ...(Number.isNaN(lastActive) ? {} : { last_active: new Date(lastActive).toISOString() }),
+    ...(Number.isNaN(last.user) ? {} : { last_user: new Date(last.user).toISOString() }),
     unread: unreadReplies(scan, threadReadMark(data, character, id)).length,
+    ...(later === undefined ? {} : { later }),
   };
 }
 
@@ -579,12 +632,17 @@ export async function setHomeThread(
   if (id === wakesThread(index)) {
     throw new ThreadError("is_wakes", `thread ${JSON.stringify(id)} is where Shore keeps ${character}'s working from wakes, so it can't be home`);
   }
+  requireNotArchived(record, character, "be home");
   const next: ThreadsIndex = { ...replaceThread(index, withSetting(record, "on_hold", undefined)), home: id };
   await writeThreadsIndex(data, character, next);
   return next;
 }
 
-type ThreadSetting = "label" | "purpose" | "pins" | "chat_model" | "locked" | "on_hold";
+type ThreadSetting = "label" | "purpose" | "pins" | "chat_model" | "locked" | "on_hold" | "archived";
+
+function requireNotArchived(record: ThreadRecord, character: string, doing: string): void {
+  if (record.archived !== undefined) throw new ThreadError("archived", `thread ${JSON.stringify(record.id)} for ${character} is archived, so it can't ${doing}; unarchive it first`);
+}
 
 function withSetting<K extends ThreadSetting>(record: ThreadRecord, key: K, value: ThreadRecord[K] | undefined): ThreadRecord {
   const { [key]: _dropped, ...rest } = record;
@@ -673,6 +731,7 @@ export async function setThreadOnHold(
   if (onHold && id === wakesThread(index)) {
     throw new ThreadError("is_wakes", `thread ${JSON.stringify(id)} is where Shore keeps ${character}'s working from wakes, so it can't be put on hold`);
   }
+  requireNotArchived(requireThread(index, character, id), character, "be put on hold");
   return await setThreadField(data, character, id, "on_hold", onHold ? true : undefined, now);
 }
 
@@ -701,7 +760,7 @@ export interface ThreadEdit {
 
 export function requireEditableByCharacter(index: ThreadsIndex, character: string, id: string): ThreadRecord {
   const record = requireThread(index, character, id);
-  if (record.on_hold === true) throw new ThreadError("not_found", `no thread ${JSON.stringify(id)} for ${character}`);
+  if (threadAway(record) !== undefined) throw new ThreadError("not_found", `no thread ${JSON.stringify(id)} for ${character}`);
   if (record.id === homeThread(index)) {
     throw new ThreadError(
       "is_home",
@@ -766,7 +825,7 @@ export async function archiveThread(
   return await withConversation(threadDataDir(data, character, id), "rewrite", async () => {
     const now = options.now ?? (() => new Date().toISOString());
     const index = await ensureThreads(data, character, now());
-    requireThread(index, character, id);
+    requireNotArchived(requireThread(index, character, id), character, "be archived again");
     if (index.home === id) {
       throw new ThreadError(
         "is_home",
@@ -805,9 +864,18 @@ export async function archiveThread(
     const next: ThreadsIndex = {
       ...rest,
       ...(wakes === id ? {} : { wakes }),
-      threads: index.threads.filter((t) => t.id !== id),
+      threads: index.threads.map((t) => t.id === id ? { ...withSetting(t, "on_hold", undefined), archived: now() } : t),
     };
     await writeThreadsIndex(data, character, next);
     return next;
   });
+}
+
+export async function unarchiveThread(data: string, character: string, id: string, now: string): Promise<ThreadsIndex> {
+  const index = await ensureThreads(data, character, now);
+  const record = requireThread(index, character, id);
+  if (record.archived === undefined) throw new ThreadError("not_archived", `thread ${JSON.stringify(id)} for ${character} isn't archived`);
+  const next = replaceThread(index, withSetting(record, "archived", undefined));
+  await writeThreadsIndex(data, character, next);
+  return next;
 }

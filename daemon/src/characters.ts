@@ -38,7 +38,9 @@ import {
   setThreadCompaction,
   setThreadLocked,
   setThreadModel,
+  setThreadLater,
   setThreadOnHold,
+  unarchiveThread,
   setThreadPurpose,
   threadRecord,
   ThreadError,
@@ -335,6 +337,10 @@ export class CharacterRegistry {
     }, signal);
   }
 
+  async unarchiveThread(name: string, id: string, signal?: AbortSignal): Promise<ThreadsIndex> {
+    return await this.#withThreadIndex(name, async () => this.#remember(name, await unarchiveThread(this.#dataDir, name, id, new Date().toISOString())), signal);
+  }
+
   async forkThread(
     name: string,
     source: string,
@@ -478,6 +484,10 @@ export class CharacterRegistry {
         ),
       signal,
     );
+  }
+
+  async setThreadLater(name: string, id: string, later: boolean, signal?: AbortSignal): Promise<void> {
+    await this.#withThreadIndex(name, async () => { await setThreadLater(this.#dataDir, name, id, later, new Date().toISOString()); }, signal);
   }
 
   async setThreadCompaction(

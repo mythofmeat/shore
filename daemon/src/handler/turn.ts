@@ -8,7 +8,7 @@ import type { ServerMessage } from "../protocol/ServerMessage.ts";
 import type { StreamResult } from "../llm/stream.ts";
 import { emitStreamEnd } from "../llm/stream.ts";
 import type { Usage } from "../llm/types.ts";
-import { firstUnreadReply, homeThread, homeThreadOf, isWakeOpener, readThreadsIndex } from "../engine/threads.ts";
+import { firstUnreadReply, homeThread, homeThreadOf, isWakeOpener, noteContextTokens, readThreadsIndex } from "../engine/threads.ts";
 import { MessageStore } from "../engine/message_store.ts";
 import { threadArchive } from "../engine/segments.ts";
 import { readDurable, threadFile } from "../storage/files.ts";
@@ -235,6 +235,7 @@ export async function maybeCompact(
 ): Promise<void> {
   const turnCount = engine.userTurnCount();
   const thread = engine.thread ?? await homeThreadOf(dataDir, charName);
+  noteContextTokens(dataDir, charName, thread, contextTokens);
   if (!ctx.autonomy.shouldCompactNow(charName, turnCount, contextTokens, crowded)) return;
   compactLater(dataDir, charName, thread, async () => await compactAfterTurn(ctx, charName, config, thread, runner));
 }

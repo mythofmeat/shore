@@ -22,28 +22,32 @@ async function quiet(): Promise<void> {
   await acting(() => { for (const shown of toasts.getSnapshot()) toasts.dismiss(shown.id); });
 }
 
-test("the home thread's row shows a house and stays where it is, and any other thread's shows a speech bubble, can be dragged and offers to become home or move", async () => {
+test("only home, the Wakes thread and threads the character started show an icon; home stays where it is, and any other thread can be dragged and offers to become home or move", async () => {
   const { ThreadRow, threadMenuItems } = await import("../../src/browser/sidebar/ThreadRow.tsx");
   const { Icon } = await import("../../src/browser/ui/icons.tsx");
   const neighbours = { up: undefined, down: undefined, atEnd: true, byActivity: false };
   const offered = (thread: ThreadView) => threadMenuItems(thread, true, neighbours).flatMap((item) => item === "separator" ? [] : [item.label]);
-  expect(offered(HOME)).toEqual(["Thread settings…", "Fork…", "Mark as read", "Archive…"]);
-  expect(offered(SIDE)).toEqual(["Thread settings…", "Fork…", "Mark as read", "Put on hold", "Make home", "Move up", "Move down", "Move to folder…", "Archive…"]);
+  expect(offered(HOME)).toEqual(["Thread settings…", "Fork…", "Mark as read", "Mark for later", "Archive…"]);
+  expect(offered(SIDE)).toEqual(["Thread settings…", "Fork…", "Mark as read", "Mark for later", "Put on hold", "Make home", "Move up", "Move down", "Move to folder…", "Archive…"]);
 
-  const icon = async (name: "home" | "chat") => {
+  const icon = async (name: "home" | "clock" | "spark", says: string) => {
     const drawn = await mount(<Icon name={name} size={14} />);
     const html = drawn.host.innerHTML;
     await drawn.unmount();
-    return html;
+    return [html, says];
   };
   const row = async (thread: ThreadView) => {
-    const view = await mount(<ThreadRow thread={thread} label={thread.id} current={false} unread={0} replying={false} opening={false} ready select={() => {}} neighbours={neighbours} drop={() => {}} />);
-    const shown = [view.host.querySelector(".thread-row")?.getAttribute("draggable"), view.host.querySelector(".sidebar-item svg")?.outerHTML];
+    const view = await mount(<ThreadRow thread={thread} character="ada" label={thread.id} current={false} unread={0} drafted={false} replying={false} opening={false} ready select={() => {}} neighbours={neighbours} drop={() => {}} />);
+    const shown = [view.host.querySelector(".thread-row")?.getAttribute("draggable"), [view.host.querySelector(".sidebar-item .sidebar-icon")?.innerHTML, view.host.querySelector(".sidebar-item")?.getAttribute("aria-description") ?? null]];
     await view.unmount();
     return shown;
   };
-  expect(await row(HOME)).toEqual(["false", await icon("home")]);
-  expect(await row(SIDE)).toEqual(["true", await icon("chat")]);
+  expect(await row(HOME)).toEqual(["false", await icon("home", "home")]);
+  expect(await row({ ...HOME, wakes: true }), "home goes by home first").toEqual(["false", await icon("home", "home")]);
+  expect(await row({ ...SIDE, wakes: true })).toEqual(["true", await icon("clock", "where wakes are kept")]);
+  expect(await row({ ...SIDE, created_by: "character" })).toEqual(["true", await icon("spark", "started by ada")]);
+  expect(await row({ ...SIDE, created_by: "user" }), "an icon for everything says nothing").toEqual(["true", ["", null]]);
+  expect(await row(SIDE)).toEqual(["true", ["", null]]);
 });
 
 test("a side thread's options put it on hold and a thread on hold's resume it, once the daemon is ready, while home and the wakes thread offer neither", async () => {
@@ -71,7 +75,7 @@ test("a thread's options wait for the daemon; mark as read needs an unread messa
   const shown = (thread: ThreadView, ready: boolean, neighbours = free) => threadMenuItems(thread, ready, neighbours).flatMap((item) => item === "separator" ? [] : [[item.label, item.disabled ?? false, item.danger ?? false]]);
   const UNREAD = { ...SIDE, unread: 1 };
   expect(shown(UNREAD, true)).toEqual([
-    ["Thread settings…", false, false], ["Fork…", false, false], ["Mark as read", false, false], ["Put on hold", false, false], ["Make home", false, false],
+    ["Thread settings…", false, false], ["Fork…", false, false], ["Mark as read", false, false], ["Mark for later", false, false], ["Put on hold", false, false], ["Make home", false, false],
     ["Move up", false, false], ["Move down", false, false], ["Move to folder…", false, false], ["Archive…", false, true],
   ]);
   expect(shown(UNREAD, false).filter(([, disabled]) => disabled !== true)).toEqual([]);
@@ -87,6 +91,34 @@ test("a thread's options wait for the daemon; mark as read needs an unread messa
   }
   await settle();
   expect(asked(since, "thread_move")).toEqual([{ name: "side", before: "above" }, { name: "side", before: "below" }]);
+});
+
+test("a thread is marked for later or has its mark cleared from its menu, which says so, and its row shows the mark", async () => {
+  const { laterItem, ThreadRow } = await import("../../src/browser/sidebar/ThreadRow.tsx");
+  const { Icon } = await import("../../src/browser/ui/icons.tsx");
+  const { toasts } = await import("../../src/browser/ui/toast.tsx");
+  app.answer((request) => request["name"] === "thread_later" ? LISTING : undefined);
+  await acting(() => { for (const toast of toasts.getSnapshot()) toasts.dismiss(toast.id); });
+  const marked: ThreadView = { ...SIDE, label: "Side road", later: "2026-11-27T10:00:00Z" };
+  expect([laterItem(SIDE, true), laterItem(marked, false)].map((item) => [item.label, item.icon, item.disabled])).toEqual([["Mark for later", "flag", false], ["Clear later mark", "flag", true]]);
+  const since = app.socket().sent.length;
+  await acting(() => { laterItem(SIDE, true).onSelect(); });
+  await acting(() => { laterItem(marked, true).onSelect(); });
+  await settle();
+  expect(asked(since, "thread_later")).toEqual([{ name: "side", later: true }, { name: "side", later: false }]);
+  expect(toasts.getSnapshot().map((toast) => toast.text)).toEqual(["“side” is marked for later", "“Side road” is no longer marked for later"]);
+  await acting(() => { for (const toast of toasts.getSnapshot()) toasts.dismiss(toast.id); });
+
+  const flag = await mount(<Icon name="flag" size={12} />);
+  const drawn = flag.host.innerHTML;
+  await flag.unmount();
+  const row = async (thread: ThreadView) => {
+    const view = await mount(<ThreadRow thread={thread} character="ada" label={thread.id} current={false} unread={0} drafted={false} replying={false} opening={false} ready select={() => {}} neighbours={{ up: undefined, down: undefined, atEnd: true, byActivity: false }} drop={() => {}} />);
+    const shown = view.host.querySelector(".sidebar-later")?.outerHTML ?? null;
+    await view.unmount();
+    return shown;
+  };
+  expect([await row(SIDE), await row(marked)]).toEqual([null, `<span class="sidebar-later" title="Marked for later">${drawn}<span class="sr-only">(marked for later)</span></span>`]);
 });
 
 test("an unread count reads 99+ past 99, and tells a screen reader one message or how many", async () => {
@@ -318,7 +350,7 @@ test("a new thread needs a name, says so while it is being made, opens in the ch
   });
   navigate({ view: "settings", page: "segments" });
   let closed = 0;
-  const view = await mount(<NewThreadDialog character="ada" close={() => { closed += 1; }} />);
+  const view = await mount(<NewThreadDialog character="ada" taken={["story"]} close={() => { closed += 1; }} />);
   const create = () => view.host.querySelector<HTMLButtonElement>("button[type=submit]");
   const shown = () => [create()?.textContent, create()?.disabled, view.host.querySelector("[role=alert]")?.textContent ?? null];
   expect(view.host.querySelector("h2")?.textContent).toBe("New thread with ada");
@@ -351,26 +383,98 @@ test("a new thread needs a name, says so while it is being made, opens in the ch
   await view.unmount();
 });
 
-test("a new thread is made with whatever else was filled in: its label, purpose, model, files one to a line, and compacting at home's limits", async () => {
+test("a new thread's id is made from its name, which becomes its label, and it is made with whatever else was filled in: its purpose, model, files one to a line, and compacting at home's limits", async () => {
   const { NewThreadDialog } = await import("../../src/browser/sidebar/dialogs.tsx");
   app.answer((request) => {
     if (request["name"] === "create_thread") return LISTING;
     if (request["name"] === "switch_thread") return { character: "ada", thread: "lamp", changed: true };
     return undefined;
   });
-  const view = await mount(<NewThreadDialog character="ada" close={() => {}} />);
+  const view = await mount(<NewThreadDialog character="ada" taken={["story"]} close={() => {}} />);
   expect([field(view.host, "Purpose")?.getAttribute("rows"), field(view.host, "Pinned in the prompt")?.getAttribute("rows")]).toEqual(["2", "3"]);
   const since = app.socket().sent.length;
-  await type(field(view.host, "Name"), "lamp");
-  await type(field(view.host, "Label"), " The lamp ");
+  expect(field(view.host, "Label"), "the name is the only name asked for").toBeUndefined();
+  await type(field(view.host, "Name"), " The lamp ");
   await type(field(view.host, "Purpose"), " Keep the light ");
   await type(field(view.host, "Model"), " opus ");
   await type(field(view.host, "Pinned in the prompt"), "notes/a.md\n\n  [[lamp/]]  \n");
   await type(field(view.host, "Older turns are archived"), "compact");
   await click(view.host.querySelector("button[type=submit]"));
   await settle();
-  expect(asked(since, "create_thread")).toEqual([{ name: "lamp", label: "The lamp", purpose: "Keep the light", pins: ["notes/a.md", "[[lamp/]]"], model: "opus", compaction: true }]);
+  expect(asked(since, "create_thread")).toEqual([{ name: "the-lamp", label: "The lamp", purpose: "Keep the light", pins: ["notes/a.md", "[[lamp/]]"], model: "opus", compaction: true }]);
+  expect(asked(since, "switch_thread")).toEqual([{ name: "the-lamp", resync: true }]);
   await view.unmount();
+});
+
+test("a new thread whose name makes the id of one already there gets the next free number", async () => {
+  const { NewThreadDialog } = await import("../../src/browser/sidebar/dialogs.tsx");
+  app.answer((request) => request["name"] === "create_thread" ? LISTING : request["name"] === "switch_thread" ? { character: "ada", thread: "story-2", changed: true } : undefined);
+  const view = await mount(<NewThreadDialog character="ada" taken={["story"]} close={() => {}} />);
+  const since = app.socket().sent.length;
+  await type(field(view.host, "Name"), "story");
+  await click(view.host.querySelector("button[type=submit]"));
+  await settle();
+  expect(asked(since, "create_thread")).toEqual([{ name: "story-2", label: "story" }]);
+  await view.unmount();
+});
+
+test("each kind of thread dialog opens its own form, and one for a thread no longer there opens none", async () => {
+  const { ThreadDialogs } = await import("../../src/browser/chat/thread_dialogs.tsx");
+  const { chromeOf } = await import("../../src/browser/chrome.ts");
+  const state = { ...chromeOf(undefined, app.state().workspace.getSnapshot()), threads: [HOME, SIDE] };
+  const title = async (kind: "settings" | "fork" | "archive" | "move", thread = "side") => {
+    const view = await mount(<ThreadDialogs state={state} request={{ kind, thread }} close={() => {}} />);
+    const shown = document.body.querySelector("dialog h2")?.textContent ?? null;
+    await view.unmount();
+    return shown;
+  };
+  expect([await title("settings"), await title("fork"), await title("archive"), await title("move"), await title("settings", "gone")]).toEqual(["Thread settings", "Fork “side”", "Archive “side”?", "Move “side”", null]);
+});
+
+test("a fork's id is made from its name, which becomes its label, copies the turns asked for, and opens once made", async () => {
+  const { ThreadDialogs } = await import("../../src/browser/chat/thread_dialogs.tsx");
+  const { chromeOf } = await import("../../src/browser/chrome.ts");
+  const { toasts } = await import("../../src/browser/ui/toast.tsx");
+  const state = { ...chromeOf(undefined, app.state().workspace.getSnapshot()), threads: [HOME, SIDE] };
+  app.answer((request) => {
+    const args = request["args"] as { name: string; turns?: number };
+    switch (request["name"]) {
+      case "fork_thread": return { ...LISTING, fork: { fork_id: "f1", thread: args.name, source: "story", created_at: "2026-11-27T00:00:00Z", turns: args.turns ?? 4, scope: args.turns === undefined ? "full" : "last_turns" } };
+      case "thread_label": return LISTING;
+      case "switch_thread": return { character: "ada", thread: args.name, changed: true };
+      default: return undefined;
+    }
+  });
+  const fork = async (name: string, turns: string) => {
+    let closed = 0;
+    const view = await mount(<ThreadDialogs state={state} request={{ kind: "fork", thread: "story" }} close={() => { closed += 1; }} />);
+    const submit = () => document.body.querySelector<HTMLButtonElement>("dialog button[type=submit]");
+    expect([document.body.querySelector("dialog h2")?.textContent, submit()?.textContent, submit()?.disabled]).toEqual(["Fork “story”", "Fork", true]);
+    const since = app.socket().sent.length;
+    await type(field(document.body, "Name"), name);
+    await type(field(document.body, "Copy only the last turns"), "0");
+    const none = submit()?.disabled;
+    await type(field(document.body, "Copy only the last turns"), "1");
+    expect([none, submit()?.disabled], "no turns can't be copied, one can").toEqual([true, false]);
+    await type(field(document.body, "Copy only the last turns"), turns);
+    const ready = submit()?.disabled;
+    await click(submit());
+    await settle();
+    const sent = app.sent(since).filter((request) => request["type"] === "command" && request["name"] !== "list_threads").map((request) => [request["name"], request["args"]]);
+    const shown = toasts.getSnapshot().map((toast) => toast.text);
+    await acting(() => { for (const toast of toasts.getSnapshot()) toasts.dismiss(toast.id); });
+    await view.unmount();
+    return { ready, sent, shown, closed };
+  };
+  expect(await fork("A side road", "2")).toEqual({ ready: false, closed: 1, shown: ["Forked 2 turns into “A side road”"], sent: [
+    ["fork_thread", { name: "a-side-road", from: "story", turns: 2 }], ["thread_label", { name: "a-side-road", label: "A side road" }], ["switch_thread", { name: "a-side-road", resync: true }],
+  ] });
+  expect(await fork("side", ""), "a name already an id needs no label, and one taken gets a number").toEqual({ ready: false, closed: 1, shown: ["Forked 4 turns into “side”"], sent: [
+    ["fork_thread", { name: "side-2", from: "story" }], ["thread_label", { name: "side-2", label: "side" }], ["switch_thread", { name: "side-2", resync: true }],
+  ] });
+  expect(await fork("road", ""), "a name that is its own id needs no label").toEqual({ ready: false, closed: 1, shown: ["Forked 4 turns into “road”"], sent: [
+    ["fork_thread", { name: "road", from: "story" }], ["switch_thread", { name: "road", resync: true }],
+  ] });
 });
 
 test("a thread's settings open on what the thread has, save nothing that wasn't changed, and choose its model in a picker for that thread alone", async () => {
