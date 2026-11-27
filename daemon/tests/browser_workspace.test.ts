@@ -991,12 +991,12 @@ describe("other frames", () => {
     await settle();
     link.frame({ type: "thread_unread", character: "bo", thread: "side", unread: 4 });
     link.frame({ type: "thread_unread", character: "cy", thread: "main", unread: 6 });
-    link.named("all_threads").at(-1)?.reply({ characters: [{ character: "bo", threads: [thread("main", { unread: 1 }), thread("side")] }, { character: "dee", threads: [thread("side")] }] });
+    link.named("all_threads").at(-1)?.reply({ characters: [{ character: "ada", threads: [thread("side")] }, { character: "bo", threads: [thread("main", { unread: 1 }), thread("side")] }, { character: "dee", threads: [thread("side")] }] });
     await refreshing;
-    expect(counts()).toEqual([["bo", [1, 4]], ["dee", [0]]]);
+    expect(counts()).toEqual([["ada", [0]], ["bo", [1, 4]], ["dee", [0]]]);
     link.frame({ type: "thread_unread", character: "dee", thread: "side", unread: 3 });
     link.frame({ type: "thread_unread", character: "ada", thread: "side", unread: 8 });
-    expect(counts()).toEqual([["bo", [1, 4]], ["dee", [3]]]);
+    expect(counts(), "the open character's own entry keeps up too, for when it is left").toEqual([["ada", [8]], ["bo", [1, 4]], ["dee", [3]]]);
   });
 });
 

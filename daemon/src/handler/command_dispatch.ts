@@ -181,6 +181,7 @@ async function afterSwitchCharacter(
   }
 
   await ctx.router.sendToSession(ctx.sessionId, historyMessage(snapshot, ctx.rid));
+  if (thread !== undefined && thread !== ctx.runtime.homeThread(selected)) ctx.runtime.refreshCachedRequest(selected, "thread_change", thread);
 
   const config = snapshot.config;
   return {

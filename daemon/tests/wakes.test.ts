@@ -19,6 +19,7 @@ import { changePresence, lastSeen, noteSeen, presence, presenceState } from "../
 import { checkFacts, startTriggerTimer, type TriggerService } from "../src/autonomy/trigger_service.ts";
 import { estimateHistoryTokens, wakeRunningText } from "../src/engine/prompt.ts";
 import { isWakeOpener, markThreadRead, setThreadLater, threadActivityNow, threadContextTokens } from "../src/engine/threads.ts";
+import * as engineThreads from "../src/engine/threads.ts";
 import type { AllThreads } from "../src/protocol/AllThreads.ts";
 import type { Message } from "../src/engine/types.ts";
 import { dispatchCommand } from "../src/handler/commands.ts";
@@ -2569,6 +2570,19 @@ test("every character's threads come in one listing, each with its unread replie
       ["ada", [["main", true, 0, null, null], ["side", false, 1, null, null], ["garden", false, 0, null, "archived"]]],
       ["bo", [["main", true, 0, null, null], ["rowing", false, 0, "2026-11-28T09:00:00.000Z", null], ["shelf", false, 0, null, null]]],
     ]);
+
+    const real = engineThreads.threadActivities;
+    const reading = spyOn(engineThreads, "threadActivities").mockImplementation(async (dataDir, character, ids) => {
+      if (character === "ada") throw new Error("a transcript won't open");
+      return await real(dataDir, character, ids);
+    });
+    try {
+      const broken = (await command("all_threads", {}, "main") as unknown as { data: AllThreads }).data;
+      expect(broken.characters.map(({ character, threads }) => [character, threads.map(({ id, unread, later }) => [id, unread, later ?? null])]), "one character whose replies can't be counted doesn't stop the others").toEqual([
+        ["ada", [["main", 0, null], ["side", 0, null], ["garden", 0, null]]],
+        ["bo", [["main", 0, null], ["rowing", 0, "2026-11-28T09:00:00.000Z"], ["shelf", 0, null]]],
+      ]);
+    } finally { reading.mockRestore(); }
   });
 });
 

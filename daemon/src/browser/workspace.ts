@@ -403,8 +403,10 @@ export class Workspace {
         this.#activity(message.type, message); break;
       case "thread_unread":
         this.#unread.set(JSON.stringify([message.character, message.thread]), message);
-        if (message.character === this.#state.character) this.#patch({ threads: applyThreadUnread(this.#state.threads, message) });
-        else this.#patch({ allThreads: this.#state.allThreads.map((each) => each.character === message.character ? { ...each, threads: applyThreadUnread(each.threads, message) } : each) });
+        this.#patch({
+          allThreads: this.#state.allThreads.map((each) => each.character === message.character ? { ...each, threads: applyThreadUnread(each.threads, message) } : each),
+          ...(message.character === this.#state.character ? { threads: applyThreadUnread(this.#state.threads, message) } : {}),
+        });
         this.#activity(message.type, message); break;
       case "ping": break;
     }

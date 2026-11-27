@@ -1,4 +1,5 @@
 import type { AllThreads } from "../protocol/AllThreads.ts";
+import { shoreLog } from "../log.ts";
 import type { ThreadView } from "../protocol/ThreadView.ts";
 import type { ThreadListing } from "../protocol/ThreadListing.ts";
 import type { ThreadSelection } from "../protocol/ThreadSelection.ts";
@@ -173,7 +174,10 @@ export function listThreads(ctx: ThreadContext): ThreadListing {
 export async function allThreads(registry: ThreadRegistry, dataDir: string, characters: readonly string[]): Promise<AllThreads> {
   return {
     characters: await Promise.all(characters.map(async (character) => {
-      const activity = await threadActivities(dataDir, character, registry.listThreads(character).map((record) => record.id));
+      const activity = await threadActivities(dataDir, character, registry.listThreads(character).map((record) => record.id)).catch((error: unknown) => {
+        shoreLog.warn(`shore: could not count ${character}'s unread replies for the thread list: ${String(error)}`);
+        return new Map<string, ThreadActivity>();
+      });
       return { character, threads: listing({ registry, character, current: registry.homeThread(character), activity }).threads };
     })),
   };

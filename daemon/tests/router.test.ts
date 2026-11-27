@@ -163,8 +163,10 @@ describe("switching character", () => {
     router.setSelectedCharacter(1, "bo");
     router.setSelectedThread(1, "notes");
     const asked: unknown[][] = [];
+    const refreshed: unknown[][] = [];
     const context = {
       character: "ada", sessionId: 1, rid: "switch", router,
+      runtime: { homeThread: () => "main", refreshCachedRequest: (...args: unknown[]) => { refreshed.push(args); } },
       handshake: {
         history: (character: string, thread?: string) => {
           asked.push([character, thread]);
@@ -177,6 +179,10 @@ describe("switching character", () => {
     expect([router.characterFor(1), router.threadFor(1), asked]).toEqual(["bo", "notes", []]);
     expect(await afterCommand("switch_character", undefined, { character: "ada", changed: true }, context)).toEqual({ character: "ada", changed: true, selected_character: "ada", active_model: "pinned" });
     expect([router.characterFor(1), router.threadFor(1), asked]).toEqual(["ada", null, [["ada", undefined]]]);
+    await afterCommand("switch_character", { name: "ada", thread: "main" }, { character: "ada", changed: false }, context);
+    expect(refreshed, "opening a character's home thread keeps its cached request").toEqual([]);
+    await afterCommand("switch_character", { name: "ada", thread: "side" }, { character: "ada", changed: false }, context);
+    expect([router.threadFor(1), refreshed], "another of its threads has its request built afresh, as a thread switch would").toEqual(["side", [["ada", "thread_change", "side"]]]);
   });
 });
 
