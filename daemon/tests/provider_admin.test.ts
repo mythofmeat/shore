@@ -359,7 +359,7 @@ describe("removing providers", () => {
       await writeFile(join(configDir, "characters", character, "config.toml"), toml);
     };
     await overlay("ada", '[chat]\nmodel = "openrouter:a"\n');
-    await overlay("bo", '[triggers]\nmodel = "openrouter:t"\n\n[image]\nmodel = "openrouter:i"\n');
+    await overlay("bo", '[triggers]\nmodel = "openrouter:t"\n\n[subagents]\nmodel = "openrouter:i"\n');
     await overlay("cy", "[chat\n");
     await mkdir(join(configDir, "characters", "dee"), { recursive: true });
     saveCharacterPreferences(data, "ada", { ...emptyPreferences(), selected: { provider: "openrouter", modelId: "m" } });
@@ -379,7 +379,7 @@ describe("removing providers", () => {
       "ada's chat.model (openrouter:a)",
       "ada's model (openrouter:m)",
       "ada's thread story (openrouter:s)",
-      "bo's image.model (openrouter:i)",
+      "bo's subagents.model (openrouter:i)",
       "cy's config, which can't be read",
       "cy's thread lamp (openrouter:c)",
       "dee's model preferences, which can't be read",

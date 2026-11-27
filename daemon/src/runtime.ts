@@ -60,7 +60,6 @@ import { configureSecretStore } from "./llm/secret_store.ts";
 import { configureCredentialStanding } from "./llm/credential_standing.ts";
 import { captureProviders } from "./llm/capture.ts";
 import { withResolvedCredential, withWorkspaceDir } from "./llm/generate.ts";
-import { generateImage } from "./llm/image_generate.ts";
 import type { SidecarProvider, SidecarRequest } from "./llm/types.ts";
 import { installWireCapture } from "./llm/wire_capture.ts";
 import { prefixFingerprint } from "./cache/keepalive.ts";
@@ -552,18 +551,6 @@ export function sharedToolDeps(
             });
           },
         }),
-    imageGenerator: async (params) =>
-      await generateImage({
-        provider_key: params.provider_key,
-        model: params.model,
-        api_key: params.api_key,
-        prompt: params.prompt,
-        ...(params.base_url === undefined ? {} : { base_url: params.base_url }),
-        ...(params.size === undefined ? {} : { size: params.size }),
-        ...(params.quality === undefined ? {} : { quality: params.quality }),
-        ...(params.aspect_ratio === undefined ? {} : { aspect_ratio: params.aspect_ratio }),
-        ...(params.image_size === undefined ? {} : { image_size: params.image_size }),
-      }),
     modelHistoryQuery: (character, since, until) => {
       const ledger = ledgerFor(rustJoin(config.dirs.data, "shore.db"));
       if (ledger === null) throw new Error("the ledger is unavailable");

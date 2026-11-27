@@ -23,7 +23,7 @@ async function workspace(): Promise<ToolContext> {
   writeFileSync(join(dir, "long.md"), Array.from({ length: 200 }, (_, line) => `line ${String(line)} of the keeper's log`).join("\n"));
   writeFileSync(join(dir, "note.md"), "The lamp:\n\n![[lamp.png]]\n");
   await Bun.write(join(dir, "lamp.png"), transparentPng(64, 64));
-  return { texts: new Texts(), workspaceDir: dir, characterName: "ada", characterDataDir: dir, imageDir: dir, conversationDir: dir, historyDbPath: join(dir, "shore.db"), configDir: dir };
+  return { texts: new Texts(), workspaceDir: dir, characterName: "ada", characterDataDir: dir, conversationDir: dir, historyDbPath: join(dir, "shore.db"), configDir: dir };
 }
 
 test("a read is held to the result size, the inline picture budget and the picture settings the turn gives it", async () => {
@@ -52,11 +52,11 @@ test("a read is held to the result size, the inline picture budget and the pictu
 test("a tool whose service the turn doesn't have says so, and a name that is no tool is said to be none", async () => {
   const ctx = await workspace();
   expect(await refused(dispatchTool("model_history", {}, ctx))).toBe("io: the usage ledger is not available in this context");
-  expect(await refused(dispatchTool("generate_image", { prompt: "a lamp" }, ctx))).toBe("io: image generation not available: no LLM client");
   expect(await refused(dispatchTool("activity_heatmap", {}, ctx))).toBe("io: activity history is not available in this context");
   expect(await refused(dispatchTool("mcp__weather__look", { place: "quay" }, ctx))).toBe("mcp__weather__look: not yet implemented");
   expect(await refused(dispatchTool("ask_scout", { query: "where is the log?" }, ctx))).toBe("ask_scout: not yet implemented");
   expect(await refused(dispatchTool("frobnicate", {}, ctx))).toBe("frobnicate: not yet implemented");
+  expect(await refused(dispatchTool("generate_image", { prompt: "a lamp" }, ctx))).toBe("generate_image: not yet implemented");
 });
 
 test("a sub-agent is asked by its name with the query, and an outside tool is called with what it was given", async () => {

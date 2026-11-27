@@ -18,7 +18,7 @@ async function world() {
   await mkdir(workspaceDir);
   const ctx: ToolContext = {
     texts: new Texts(),
-    workspaceDir, characterName: "Ada", characterDataDir: root, imageDir: join(root, "images"), cacheDir: join(root, "cache"),
+    workspaceDir, characterName: "Ada", characterDataDir: root, cacheDir: join(root, "cache"),
     conversationDir: root, historyDbPath: join(root, "history.db"), configDir: root,
   };
   const exec: ToolExecution = {
@@ -26,7 +26,7 @@ async function world() {
     limits: { max_result_chars: 50_000, timeout_ms: 5000 },
     now: () => "2026-09-21", newMessageId: () => crypto.randomUUID(),
   };
-  const run = (name: string, input: unknown) => runToolUse({ id: crypto.randomUUID(), name, input }, exec, []);
+  const run = (name: string, input: unknown) => runToolUse({ id: crypto.randomUUID(), name, input }, exec);
   const put = async (path: string, content: string | Buffer) => { await writeFile(join(workspaceDir, path), content); return join(workspaceDir, path); };
   return { root, ctx, exec, run, put };
 }

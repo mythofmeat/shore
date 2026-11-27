@@ -142,11 +142,8 @@ export function configSchema(live: LiveInstances): SchemaEntry[] {
     for (const field of ["session_limit", "weekly_limit"]) add([...prefix, "keys", "<index>", field], { kind: "float", optional: true });
     for (const field of MODEL_FIELDS) add([...prefix, field], modelInfo(field));
   }
-  for (const section of ["chat", "image"]) {
-    for (const identity of new Set(["<provider:model_id>", ...live.instancesAt(section).filter((name) => name.includes(":"))])) {
-      if (section === "chat") for (const field of [...MODEL_FIELDS, "sdk"]) add([section, identity, field], modelInfo(field));
-      if (section === "image") for (const field of ["size", "quality", "aspect_ratio", "image_size"]) add([section, identity, field], { kind: "string", optional: true });
-    }
+  for (const identity of new Set(["<provider:model_id>", ...live.instancesAt("chat").filter((name) => name.includes(":"))])) {
+    for (const field of [...MODEL_FIELDS, "sdk"]) add(["chat", identity, field], modelInfo(field));
   }
   const parents = new Set<string>();
   for (const row of out) {

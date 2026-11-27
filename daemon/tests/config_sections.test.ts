@@ -15,9 +15,7 @@ import { buildToolContext } from "../src/handler/tool_context.ts";
 import { mcpConfigView } from "../src/runtime.ts";
 import { buildSessionHistorySnapshot, type HandshakeRegistry } from "../src/swp/handshake.ts";
 import { toolLimitsFrom } from "../src/tools/dispatch.ts";
-import { handleGenerateImage } from "../src/tools/images.ts";
 import { toSpec } from "../src/tools/mcp_registry.ts";
-import { setTestEnv } from "./support/env.ts";
 import { outcomeOf } from "./support/outcome.ts";
 import { testTmp } from "./support/tmp.ts";
 
@@ -75,25 +73,23 @@ test("a compaction setting that can't work is refused, naming the key as the fil
   expect(read()[0]).toBe(false);
 });
 
-test("[marks], [matrix] and [image] are read from the file, and a section with nothing under its heading leaves the defaults", async () => {
+test("[marks] and [matrix] are read from the file, and a section with nothing under its heading leaves the defaults", async () => {
   const root = await mkdtemp(testTmp("shore-sections-config-"));
   await writeFile(join(root, "config.toml"), [
     "[marks]", 'like_tags = ["funny"]', 'dislike_tags = ["flat"]',
-    "[matrix]", "enabled = true", 'homeserver_url = "https://matrix.example"', 'user_id = "@ada:example"', 'room_id = "!room:example"', "mirror_user_messages = false",
-    "[image]", 'model = "openai:gpt-image"', "",
+    "[matrix]", "enabled = true", 'homeserver_url = "https://matrix.example"', 'user_id = "@ada:example"', 'room_id = "!room:example"', "mirror_user_messages = false", "",
   ].join("\n"));
   const { app } = loadConfig(join(root, "config.toml"), { env: { SHORE_CONFIG_DIR: root }, onWarn: () => {} });
-  expect([app.marks, app.matrix, app.image.model]).toEqual([
+  expect([app.marks, app.matrix]).toEqual([
     { like_tags: ["funny"], dislike_tags: ["flat"] },
     { enabled: true, homeserver_url: "https://matrix.example", user_id: "@ada:example", room_id: "!room:example", mirror_user_messages: false },
-    "openai:gpt-image",
   ]);
 
-  await writeFile(join(root, "config.toml"), "[triggers]\n[compaction]\n[marks]\n[matrix]\n[image]\n");
+  await writeFile(join(root, "config.toml"), "[triggers]\n[compaction]\n[marks]\n[matrix]\n");
   const bare = loadConfig(join(root, "config.toml"), { env: { SHORE_CONFIG_DIR: root }, onWarn: () => {} }).app;
-  expect([bare.triggers.enabled, bare.compaction.enabled, bare.marks, bare.matrix, bare.image.model]).toEqual([
+  expect([bare.triggers.enabled, bare.compaction.enabled, bare.marks, bare.matrix]).toEqual([
     false, true, { like_tags: [], dislike_tags: ["didn't look hard enough", "out of character", "too long", "repetitive"] },
-    { enabled: false, homeserver_url: "", user_id: "", room_id: "", mirror_user_messages: true }, undefined,
+    { enabled: false, homeserver_url: "", user_id: "", room_id: "", mirror_user_messages: true },
   ]);
 });
 
@@ -278,51 +274,35 @@ test("[notifications] is read under the names in the file: how to deliver, which
   expect(await outcomeOf(load('[notifications.ntfy]\ntopic = "shore"\n'))).toThrow("unknown field `notifications.ntfy`");
 });
 
-test("[image] holds the model pictures are made with beside each image model's own settings, and a mistake in either names the file and the key", async () => {
-  const { root, load } = await sections();
-  const loaded = await load('[image]\nmodel = "openai:gpt-image"\n[image."openai:gpt-image"]\nsize = "1024x1024"\n[image."openai:other"]\nquality = "high"\n');
-  expect(loaded.app.image).toEqual({ model: "openai:gpt-image" });
-  expect([...loaded.models.imageGeneration]).toEqual([["openai:gpt-image", { size: "1024x1024" }], ["openai:other", { quality: "high" }]]);
-  expect([...(await load("[image]\n")).models.imageGeneration]).toEqual([]);
-
-  expect(await outcomeOf(load('[image."openai:gpt-image"]\nsize = 5\n'))).toThrow(
-    `${join(root, "config.toml")}: [image."openai:gpt-image"] is not a valid \`provider:model_id\` settings table: size: invalid type: integer \`5\`, expected string. Identity is the key (e.g. \`[image."openai:dall-e-3"]\`)`,
-  );
-  expect(await outcomeOf(load('[image]\nmodel = "gpt-image"\n'))).toThrow('image.model "gpt-image" must be a `provider:model_id` identity');
+test("a config that still has an [image] or [image_generation] section is refused, naming the section", async () => {
+  const { load } = await sections();
+  expect(await outcomeOf(load('[image]\nmodel = "openai:gpt-image"\n'))).toThrow("unknown field `image`, expected one of ");
+  expect(await outcomeOf(load('[image."openai:gpt-image"]\nsize = "1024x1024"\n'))).toThrow("unknown field `image`, expected one of ");
   expect(await outcomeOf(load('[image_generation."openai:gpt-image"]\nsize = "1024x1024"\n'))).toThrow("unknown field `image_generation`, expected one of ");
-  expect(await outcomeOf(handleGenerateImage({ prompt: "a cat" }, root, undefined, async () => { throw new Error("no call expected"); }))).toThrow("no image model is configured; set image.model");
 });
 
-test("the tools a reply runs are given the image model [image] names and a way to ask a sub-agent only when one is defined", async () => {
+test("the tools a reply runs are given a way to ask a sub-agent only when one is defined, and whatever else the caller offers", async () => {
   const { root, load } = await sections();
-  setTestEnv("SHORE_TEST_IMAGE_KEY", "k");
   const context = async (toml: string) => {
-    const loaded = await load(`${toml}[providers.openai]\napi_key_env = "SHORE_TEST_IMAGE_KEY"\n`);
+    const loaded = await load(toml);
     return await buildToolContext({ ...loaded, dirs: { ...loaded.dirs, data: join(root, "data"), cache: join(root, "cache") } }, join(root, "data"), "ada", { runSubagent: () => async () => "asked" });
   };
-  const profiles = '[image."openai:first"]\nsize = "512x512"\n[image."openai:second"]\nsize = "1024x1024"\n';
-  const chosen = await context(`[image]\nmodel = "openai:second"\n${profiles}`);
-  expect(chosen.imageGenConfig).toMatchObject({ provider: "openai", model_id: "second", size: "1024x1024", api_key: "k" });
-  expect(Object.keys(chosen.imageGenConfig ?? {}).filter((key) => key === "aspect_ratio" || key === "image_size")).toEqual([]);
-  const shaped = await context('[image]\nmodel = "openai:wide"\n[image."openai:wide"]\nsize = "1024x1024"\naspect_ratio = "16:9"\nimage_size = "2K"\n');
-  expect(shaped.imageGenConfig).toMatchObject({ model_id: "wide", aspect_ratio: "16:9", image_size: "2K" });
-  expect((await context(profiles)).imageGenConfig).toBeUndefined();
-  expect(chosen.runSubagent).toBeUndefined();
+  const plain = await context("");
+  expect(plain.runSubagent).toBeUndefined();
 
   const withAgent = await context('[subagents.scout]\ndescription = "looks"\nprompt = "look"\n');
   expect(await withAgent.runSubagent?.("scout", "find it")).toBe("asked");
 
-  const offered = ["dryRun", "imageGenerator", "modelHistoryQuery", "deferEdit", "sendMessage"] as const;
-  expect(offered.filter((key) => key in chosen)).toEqual([]);
-  const generator: NonNullable<ToolContext["imageGenerator"]> = async () => { throw new Error("no call expected"); };
+  const offered = ["dryRun", "modelHistoryQuery", "deferEdit", "sendMessage"] as const;
+  expect(offered.filter((key) => key in plain)).toEqual([]);
   const history: NonNullable<ToolContext["modelHistoryQuery"]> = async () => { throw new Error("no call expected"); };
   const defer = async (): Promise<void> => {};
   const send: NonNullable<ToolContext["sendMessage"]> = async () => "queued";
   const loaded = await load("");
   const given = await buildToolContext({ ...loaded, dirs: { ...loaded.dirs, data: join(root, "data"), cache: join(root, "cache") } }, join(root, "data"), "ada", {
-    dryRun: true, imageGenerator: generator, modelHistoryQuery: history, deferEdit: defer, sendMessage: send,
+    dryRun: true, modelHistoryQuery: history, deferEdit: defer, sendMessage: send,
   });
-  expect(offered.map((key) => given[key])).toEqual([true, generator, history, defer, send]);
+  expect(offered.map((key) => given[key])).toEqual([true, history, defer, send]);
 });
 
 test("the Matrix bridge signs in to [matrix]'s homeserver_url as its user_id", async () => {

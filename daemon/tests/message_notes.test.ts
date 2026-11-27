@@ -23,7 +23,7 @@ import { withAttemptNoted } from "../src/handler/attempts.ts";
 import { buildChatShapeRequestFromDisk } from "../src/handler/context.ts";
 import { buildGenerationRequest } from "../src/handler/setup.ts";
 import { hostZone } from "../src/ledger/zoned.ts";
-import { buildLlmMessages, inReadingOrder, type AssistantImageMode, type SentMessage } from "../src/handler/wire_messages.ts";
+import { buildLlmMessages, inReadingOrder, type SentMessage } from "../src/handler/wire_messages.ts";
 import type { WireMessage } from "../src/llm/types.ts";
 import { promptedAppConfig } from "./support/prompt_list.ts";
 import { noisePng } from "./support/test_images.ts";
@@ -50,9 +50,9 @@ function said(id: string, role: Message["role"], words: string | ContentBlock[],
   };
 }
 
-async function request(messages: Message[], over: Partial<PromptParams> = {}, mode: AssistantImageMode = "text_standin"): Promise<{ wire: WireMessage[]; sent: SentMessage[] }> {
+async function request(messages: Message[], over: Partial<PromptParams> = {}): Promise<{ wire: WireMessage[]; sent: SentMessage[] }> {
   const prompt = assemblePrompt({ character_name: "ada", display_name: "eve", has_prior_context: false, user_timestamp_mode: "auto", sections: [], messages, texts: new Texts(), ...over }, "UTC");
-  const { messages: wire, sent } = await buildLlmMessages(prompt, mode, new Texts());
+  const { messages: wire, sent } = await buildLlmMessages(prompt, new Texts());
   return { wire, sent };
 }
 
@@ -154,10 +154,6 @@ test("a picture's name is recorded ahead of the other notes, a missing one says 
     { msg_id: "u1", notes: [start(`[picture: ${kept}]`), start("[image omitted: dog.png — no longer cached]"), start(cleared)] },
     { msg_id: "a1", notes: [{ place: "end", text: "[sent an image: a cat]" }, { place: "end", text: "[sent an image]" }] },
   ]);
-
-  const pictures = await request(messages, {}, "tool_pair");
-  expect(texts(pictures.wire[1])).toEqual(["Here is mine.", "<tool_use>", "[sent an image]"]);
-  expect(pictures.sent[1]).toEqual({ msg_id: "a1", notes: [{ place: "end", text: "[sent an image]" }] });
 });
 
 test("notes are put in the order the model reads them, keeping the order of notes in the same place", () => {
@@ -364,34 +360,6 @@ test("notes saved from a request leave the next request as it was", async () => 
   const second = await diskRequest([...engine.messages()], "always");
   expect(JSON.stringify(second.wire)).toBe(JSON.stringify(first.wire));
   expect(second.sent).toEqual(first.sent);
-});
-
-test("a character's picture sent back as a tool's result goes into the user's message after it, into a turn of its own before more of the character's, or at the end, and adds no note", async () => {
-  const root = testTmp(`message-notes-${crypto.randomUUID()}`);
-  await mkdir(root, { recursive: true });
-  const cat = join(root, "cat.png");
-  await writeFile(cat, await noisePng(8, 8));
-  const picture = (id: string, minutes: number): Message => said(id, "assistant", "Look.", minutes, { images: [{ path: cat, caption: id }], provider_key: "anthropic", model: "claude-lamp" });
-  const { wire, sent } = await request([
-    picture("a1", 0),
-    said("u1", "user", "nice", 1),
-    picture("a2", 2),
-    said("a3", "assistant", "And more.", 3),
-    picture("a4", 4),
-  ], {}, "tool_pair");
-
-  const shape = wire.map((message) => [message.role, message.model ?? "", message.content.map((block) => block.type === "tool_use" ? `use ${block.id}` : block.type === "tool_result" ? `result ${block.tool_use_id}` : block.type === "text" ? block.text : block.type)]);
-  expect(shape).toEqual([
-    ["user", "", ["[this conversation starts with your message]"]],
-    ["assistant", "claude-lamp", ["Look.", "use toolu_gen_0_cat"]],
-    ["user", "", ["result toolu_gen_0_cat", "nice"]],
-    ["assistant", "claude-lamp", ["Look.", "use toolu_gen_0_cat"]],
-    ["user", "", ["result toolu_gen_0_cat"]],
-    ["assistant", "", ["And more."]],
-    ["assistant", "claude-lamp", ["Look.", "use toolu_gen_0_cat"]],
-    ["user", "", ["result toolu_gen_0_cat"]],
-  ]);
-  expect(sent.map(({ msg_id, notes }) => [msg_id, notes.map(({ place }) => place)])).toEqual([["a1", ["before"]], ["u1", []], ["a2", []], ["a3", []], ["a4", []]]);
 });
 
 test("an archived message keeps what it was written with: its model and key, its version, its notes, a single other attempt, and a count of attempts it holds none of", async () => {

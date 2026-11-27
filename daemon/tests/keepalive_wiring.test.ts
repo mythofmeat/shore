@@ -42,11 +42,7 @@ function turnFor(sampler: SamplerSettings): {
   intervalMs: number | undefined;
   pings: number | undefined;
 } {
-  const catalog = catalogFromSections(
-    Bun.TOML.parse(`["anthropic:claude-opus-4-6"]`) as Record<string, unknown>,
-    undefined,
-    undefined,
-  );
+  const catalog = catalogFromSections(Bun.TOML.parse(`["anthropic:claude-opus-4-6"]`) as Record<string, unknown>);
   const listed = catalog.chat.get("anthropic:claude-opus-4-6");
   if (listed === undefined) throw new Error("the fixture catalog lost its model");
   const model = applySamplerOverlay(listed, sampler);

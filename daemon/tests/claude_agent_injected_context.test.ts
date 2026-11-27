@@ -154,7 +154,7 @@ test("a long tool result reaches the model as Shore made it, whole or cut once, 
     ctx: {
       texts: new Texts(),
       workspaceDir: workspace, characterName: "heidi", characterDataDir: dir,
-      imageDir: dir, conversationDir: dir, historyDbPath: join(dir, "history.db"), configDir: dir,
+      conversationDir: dir, historyDbPath: join(dir, "history.db"), configDir: dir,
     },
     sendDirect: () => {}, limits: { max_result_chars: 0, timeout_ms: 20_000 },
     now: () => new Date().toISOString(), newMessageId: () => "unused",

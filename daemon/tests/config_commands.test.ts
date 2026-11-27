@@ -89,8 +89,7 @@ describe("[chat] in config output", () => {
     "[chat]", 'model = "anthropic:claude-x"', 'display_name = "eve"', 'user_timestamps = "always"', 'reasoning_replay = "none"', "max_retries = 2", 'retry_backoff = "3s"',
     '[chat."anthropic:claude-x"]', "temperature = 0.5", 'reasoning_replay = "all"', "max_tool_rounds = 9",
     '[chat."anthropic:claude-y"]', "max_output_tokens = 1000",
-    "[providers.anthropic]", 'api_key_env = "K"', "temperature = 0.7",
-    '[image."openai:gpt-image"]', 'size = "1024x1024"', "",
+    "[providers.anthropic]", 'api_key_env = "K"', "temperature = 0.7", "",
   ].join("\n");
   const settings = {
     model: "anthropic:claude-x", display_name: "eve", system_prompt: null, user_timestamps: "always", reasoning_replay: "none", max_retries: 2, retry_backoff: "3s",
@@ -100,13 +99,12 @@ describe("[chat] in config output", () => {
     "anthropic:claude-y": { max_output_tokens: 1000 },
   };
 
-  test("the section shows the chat settings and each model's own settings together, and the providers and image models beside it", async () => {
+  test("the section shows the chat settings and each model's own settings together, and the providers beside it", async () => {
     const w = await build(undefined, CHAT);
     const shown = (config(w.ctx, {}) as { config: Record<string, unknown> }).config;
     expect(shown.chat).toEqual({ ...profiles, ...settings });
     expect(Object.keys(shown.chat as object)).toEqual([...Object.keys(profiles), ...Object.keys(settings)]);
     expect(shown.providers).toEqual({ anthropic: { api_key_env: "K", temperature: 0.7 } });
-    expect(shown.image).toEqual({ "openai:gpt-image": { size: "1024x1024" }, model: null });
   });
 
   test("a setting or a model's settings can be asked for by key, and a config with no model settings shows only the chat settings", async () => {
@@ -118,7 +116,7 @@ describe("[chat] in config output", () => {
     const plain = await build(undefined, '[chat]\ndisplay_name = "eve"\n');
     const shown = (config(plain.ctx, {}) as { config: Record<string, unknown> }).config;
     expect(shown.chat).toEqual({ model: null, display_name: "eve", system_prompt: null, user_timestamps: "auto", reasoning_replay: "all", max_retries: null, retry_backoff: null });
-    expect([shown.providers, shown.image]).toEqual([{}, { model: null }]);
+    expect(shown.providers).toEqual({});
   });
 });
 
@@ -181,7 +179,7 @@ describe("[tools], [subagents] and [notifications] in config output", () => {
       kind: "list", item_kind: "enum", settable: true, values: ["autonomous_message", "cache_warning", "compaction_complete", "error", "message_complete", "usage_warning"],
     });
     expect([rows.get("matrix")?.restart_required, rows.get("matrix.homeserver_url")?.restart_required, rows.get("daemon.listen_addr")?.restart_required]).toEqual([true, true, true]);
-    expect([rows.get("tools.enabled")?.restart_required, rows.get("marks.like_tags")?.restart_required, rows.get("marks.dislike_tags")?.restart_required, rows.get("image.model")?.restart_required]).toEqual([false, false, false, false]);
+    expect([rows.get("tools.enabled")?.restart_required, rows.get("marks.like_tags")?.restart_required, rows.get("marks.dislike_tags")?.restart_required]).toEqual([false, false, false]);
     for (const gone of ["tools.per_tool", "subagents.agents", "notifications.enabled", "notifications.backend", "notifications.ntfy.url", "matrix.homeserver", "defaults.subagent_model"]) {
       expect(keys.filter((key) => key === gone || key.startsWith(`${gone}.`))).toEqual([]);
     }
@@ -785,7 +783,6 @@ describe("the models and settings for wakes and sub-agents", () => {
       { role: "chat", model: "anthropic:claude-x", source: "character" },
       { role: "wake", model: "anthropic:claude-y", source: "triggers.model" },
       { role: "sub-agents", model: "anthropic:claude-x", source: "inherits chat · 1 override" },
-      { role: "images", model: null, source: null },
     ]);
   });
 

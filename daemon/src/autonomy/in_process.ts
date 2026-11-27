@@ -252,13 +252,8 @@ async function runLoopTool(
     newMessageId: () => `m_${crypto.randomUUID()}`,
     schemas: schemasFrom(tools),
   };
-  const run = await runToolUse(use, exec, []);
-  return {
-    output: run.output,
-    isError: run.isError,
-    block: run.block,
-    ...(run.value === undefined ? {} : { value: run.value }),
-  };
+  const run = await runToolUse(use, exec);
+  return { output: run.output, isError: run.isError, block: run.block };
 }
 
 export type CompactionGenerate = (

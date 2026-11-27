@@ -101,10 +101,6 @@ import tools__history__chat_logs__thread from "../../prompts/tools/history/chat_
 import tools__history__model_history__end_time from "../../prompts/tools/history/model_history/end_time.md" with { type: "text" };
 import tools__history__model_history__model_history from "../../prompts/tools/history/model_history/model_history.md" with { type: "text" };
 import tools__history__model_history__start_time from "../../prompts/tools/history/model_history/start_time.md" with { type: "text" };
-import tools__images__generate_image__caption from "../../prompts/tools/images/generate_image/caption.md" with { type: "text" };
-import tools__images__generate_image__generate_image from "../../prompts/tools/images/generate_image/generate_image.md" with { type: "text" };
-import tools__images__generate_image__prompt from "../../prompts/tools/images/generate_image/prompt.md" with { type: "text" };
-import tools__images__generate_image__size from "../../prompts/tools/images/generate_image/size.md" with { type: "text" };
 import tools__results__output_cut from "../../prompts/tools/results/output_cut.md" with { type: "text" };
 import tools__results__patch_failed from "../../prompts/tools/results/patch_failed.md" with { type: "text" };
 import tools__results__prompt_reload from "../../prompts/tools/results/prompt_reload.md" with { type: "text" };
@@ -317,7 +313,6 @@ const TOOL_TEXTS_SHIPPED: Readonly<Record<string, { description: string; paramet
   edit: { description: tools__workspace__edit__edit, parameters: { file_path: tools__workspace__edit__file_path, old_string: tools__workspace__edit__old_string, new_string: tools__workspace__edit__new_string, replace_all: tools__workspace__edit__replace_all } },
   apply_patch: { description: tools__workspace__apply_patch__apply_patch, parameters: { patch: tools__workspace__apply_patch__patch } },
   bash: { description: tools__bash__bash, parameters: { command: tools__bash__command, workdir: tools__bash__workdir } },
-  generate_image: { description: tools__images__generate_image__generate_image, parameters: { prompt: tools__images__generate_image__prompt, size: tools__images__generate_image__size, caption: tools__images__generate_image__caption } },
   activity_heatmap: { description: tools__activity__activity_heatmap__activity_heatmap, parameters: { days: tools__activity__activity_heatmap__days } },
   chat_logs: {
     description: tools__history__chat_logs__chat_logs,

@@ -31,7 +31,7 @@ async function world() {
   await mkdir(data, { recursive: true });
   const ctx: ToolContext = {
     texts: new Texts(),
-    workspaceDir, characterName: "ada", characterDataDir: join(data, "ada"), imageDir: join(root, "media"), cacheDir: cache,
+    workspaceDir, characterName: "ada", characterDataDir: join(data, "ada"), cacheDir: cache,
     conversationDir: join(data, "ada", "threads", "main"), historyDbPath: join(data, "shore.db"), configDir: root,
   };
   const exec: ToolExecution = {
@@ -40,7 +40,7 @@ async function world() {
     now: () => "2026-11-12T10:00:00+11:00", newMessageId: () => crypto.randomUUID(),
   };
   const run = async (name: string, input: unknown) => {
-    const result = await runToolUse({ id: crypto.randomUUID(), name, input }, exec, []);
+    const result = await runToolUse({ id: crypto.randomUUID(), name, input }, exec);
     const block = result.block as Extract<ContentBlock, { type: "tool_result" }>;
     return { isError: result.isError, text: toolResultText(block.content) };
   };
@@ -55,7 +55,7 @@ async function world() {
 }
 
 async function shownAs(message: Message): Promise<string[]> {
-  const { messages } = await buildLlmMessages({ system: [], messages: [message] }, "text_standin", new Texts());
+  const { messages } = await buildLlmMessages({ system: [], messages: [message] }, new Texts());
   return (messages[0]?.content ?? []).map((block) => block.type === "text" ? block.text : block.type);
 }
 
@@ -248,7 +248,7 @@ test("a picture is marked as just used each time a request carries it, so the im
   expect(statSync(file).mtimeMs).toBeGreaterThan(long.getTime() + 1_000);
 });
 
-test("pictures the character sent go back to a model that takes tools as its own generate_image calls, with the caption where there is one", async () => {
+test("pictures the character sent go back to the model as a line saying one was sent, with its caption where there is one, and never as the picture", async () => {
   const { root } = await world();
   const lamp = join(root, "lamp.png");
   const door = join(root, "door.png");
@@ -258,11 +258,8 @@ test("pictures the character sent go back to a model that takes tools as its own
     msg_id: "a1", role: "assistant", content: "Here.", images: [{ path: lamp, caption: "a lamp" }, { path: door, caption: "  " }],
     content_blocks: [{ type: "text", text: "Here." }], timestamp: "2026-11-12T09:00:00+11:00",
   };
-  const { messages } = await buildLlmMessages({ system: [], messages: [reply] }, "tool_pair", new Texts());
-  const shape = (blocks: readonly ContentBlock[] | undefined): unknown[] => (blocks ?? []).map((block) =>
-    block.type === "tool_use" ? ["tool_use", block.name, block.input] : block.type === "tool_result" ? ["tool_result", typeof block.content === "string" ? block.content : block.content.map((inner) => inner.type === "text" ? inner.text : inner.type)] : [block.type]);
-  expect(messages.map((message) => [message.role, shape(message.content)])).toEqual([
-    ["assistant", [["text"], ["tool_use", "generate_image", { caption: "a lamp" }], ["tool_use", "generate_image", {}]]],
-    ["user", [["tool_result", ["image", "a lamp"]], ["tool_result", ["image"]]]],
+  const { messages } = await buildLlmMessages({ system: [], messages: [reply] }, new Texts());
+  expect(messages.map((message) => [message.role, message.content])).toEqual([
+    ["assistant", [{ type: "text", text: "Here." }, { type: "text", text: "[sent an image: a lamp]" }, { type: "text", text: "[sent an image]" }]],
   ]);
 });

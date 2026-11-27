@@ -72,7 +72,7 @@ test("a topic the guide doesn't have is refused with the ones it does, and so is
 
   const bare: ToolContext = {
     texts: new Texts(),
-    workspaceDir: "/nowhere", characterName: "ada", characterDataDir: "/nowhere", imageDir: "/nowhere", conversationDir: "/nowhere",
+    workspaceDir: "/nowhere", characterName: "ada", characterDataDir: "/nowhere", conversationDir: "/nowhere",
     historyDbPath: "/nowhere/shore.db", configDir: "/nowhere",
   };
   expect(await rejectionOf(dispatchTool("guide", {}, bare))).toMatchObject({ name: "ToolIoError", message: "io: the guide is not available in this context" });

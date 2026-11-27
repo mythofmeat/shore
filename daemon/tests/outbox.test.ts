@@ -3,7 +3,7 @@ import { mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
-import { Outbox, postElsewhere, reachableThreads, sendingsHere, type OutboxSetup } from "../src/autonomy/outbox.ts";
+import { Outbox, postElsewhere, reachableThreads, type OutboxSetup } from "../src/autonomy/outbox.ts";
 import type { PushRefusal } from "../src/autonomy/push.ts";
 import { createThread } from "../src/engine/threads.ts";
 import type { Message } from "../src/engine/types.ts";
@@ -112,16 +112,6 @@ test("a push is refused whole when none is set up, when one went too lately, or 
     `io: not sent: a message with a push is already waiting to go when this turn ends, and that push is the one allowed for now. ${without}`,
   );
   expect(box.waiting.map((each) => [each.text, each.push])).toEqual([["Hello.", false], ["Now with a push.", true]]);
-});
-
-test("pictures a turn made go with its first message here, or alone when it sent none, and a turn with neither posts nothing", () => {
-  const lamp = { path: "/sent/lamp.png" };
-  const one = { text: "One.", thread: "main", push: true };
-  const two = { text: "Two.", thread: "main", push: false };
-  expect(sendingsHere([], [])).toEqual([]);
-  expect(sendingsHere([], [lamp])).toEqual([{ text: "", images: [lamp], push: false }]);
-  expect(sendingsHere([one], [])).toEqual([{ text: "One.", images: [], push: true }]);
-  expect(sendingsHere([one, two], [lamp])).toEqual([{ text: "One.", images: [lamp], push: true }, { text: "Two.", images: [], push: false }]);
 });
 
 function scratch(): { data: string; workspace: string } {
