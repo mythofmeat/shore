@@ -76,17 +76,8 @@ export function defaultBaseUrl(providerKey: string): string | undefined {
       return "https://api.openai.com/v1";
     case "deepseek":
       return "https://api.deepseek.com";
-    default:
-      return hardcodedProviderBaseUrl(providerKey);
-  }
-}
-
-export function hardcodedProviderBaseUrl(providerKey: string): string | undefined {
-  switch (providerKey) {
     case "openrouter":
       return "https://openrouter.ai/api/v1";
-    case "deepseek":
-      return "https://api.deepseek.com/v1";
     case "moonshot":
     case "moonshotai":
       return "https://api.moonshot.ai/v1";
