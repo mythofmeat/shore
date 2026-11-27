@@ -18,7 +18,7 @@ import { buildCommandPathDeps, labelNewSegments } from "../src/handler/deps.ts";
 import type { GenerateResponse, SidecarProvider, SidecarRequest } from "../src/llm/types.ts";
 import type { ContentBlock, Message } from "../src/engine/types.ts";
 import { shoreLog } from "../src/log.ts";
-import { LABEL_CONVERSATION_BYTES, LABEL_MESSAGE_BYTES, labelConversation, labelFromReply, prepareLabelCall } from "../src/memory/compaction/label.ts";
+import { labelConversation, labelFromReply, prepareLabelCall } from "../src/memory/compaction/label.ts";
 import { required } from "../src/util/required.ts";
 import { readDurable } from "../src/storage/files.ts";
 import { DEFAULT_HANDSHAKE } from "../src/swp/connection.ts";
@@ -160,9 +160,9 @@ test("a segment is written out for its label as who said what, leaving out tool 
 });
 
 test("a message over 1,000 bytes is cut after the last whole character that fits, with an ellipsis, and one of exactly 1,000 bytes is kept whole", () => {
-  const whole = "🌊".repeat(LABEL_MESSAGE_BYTES / 4);
+  const whole = "🌊".repeat(250);
   expect(labelConversation([said("user", [words(whole)])], NAMES)).toEqual({ text: `Mara: ${whole}`, cut: false });
-  const waves = "🌊".repeat(LABEL_MESSAGE_BYTES / 4 - 1);
+  const waves = "🌊".repeat(249);
   expect(labelConversation([said("assistant", [words(`${waves} and more`)])], NAMES)).toEqual({ text: `ada: ${waves} and…`, cut: true });
   expect(labelConversation([said("assistant", [words(`${waves} an 🌊`)])], NAMES), "a character that would cross the limit is left out whole")
     .toEqual({ text: `ada: ${waves} an…`, cut: true });
@@ -180,9 +180,9 @@ test("a conversation over 30,000 bytes keeps whole lines from both ends, a line 
   const even = sizedLines(Array.from({ length: 40 }, () => 1000));
   const fitted = labelConversation(even.messages, NAMES);
   expect(fitted).toEqual({ text: [...even.lines.slice(0, 15), "…", ...even.lines.slice(26)].join("\n"), cut: true });
-  expect(Buffer.byteLength(fitted.text)).toBeLessThanOrEqual(LABEL_CONVERSATION_BYTES);
+  expect(Buffer.byteLength(fitted.text)).toBeLessThanOrEqual(30_000);
 
-  const exactly = sizedLines(Array.from({ length: LABEL_CONVERSATION_BYTES / 1000 }, () => 1000));
+  const exactly = sizedLines(Array.from({ length: 30 }, () => 1000));
   expect(labelConversation(exactly.messages, NAMES), "lines that fit exactly, counting one newline each, are all kept").toEqual({ text: exactly.lines.join("\n"), cut: false });
   const over = sizedLines([...Array.from({ length: 29 }, () => 1000), 1001]);
   expect(labelConversation(over.messages, NAMES), "one line dropped is still a cut").toEqual({ text: [...over.lines.slice(0, 15), "…", ...over.lines.slice(16)].join("\n"), cut: true });
@@ -201,11 +201,11 @@ test("the middle cut charges each line it takes against what is left, and stops 
 
 test("a label asked for a segment with something cut says long messages were cut short", async () => {
   await world(async ({ command, settled, say, of }) => {
-    await say("y".repeat(LABEL_MESSAGE_BYTES + 1));
+    await say("y".repeat(1001));
     await command("compact", { keep_turns: 0 });
     await settled();
     expect(of("label").map(blocksOf)).toEqual([[
-      `${FIRST_TURN}\nMara: ${"y".repeat(LABEL_MESSAGE_BYTES)}…\nada: The lamp is lit.`,
+      `${FIRST_TURN}\nMara: ${"y".repeat(1000)}…\nada: The lamp is lit.`,
       PROMPT.replace("between ada and Mara.", "between ada and Mara, with long messages cut short."),
     ]]);
   });

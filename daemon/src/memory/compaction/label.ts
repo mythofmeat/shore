@@ -22,9 +22,9 @@ import { Texts } from "../../texts/texts.ts";
 
 export const SEGMENT_LABEL_CHARS = 160;
 
-export const LABEL_MESSAGE_BYTES = 1_000;
+const LABEL_MESSAGE_BYTES = 1_000;
 
-export const LABEL_CONVERSATION_BYTES = 30_000;
+const LABEL_CONVERSATION_BYTES = 30_000;
 
 const LABEL_CACHE_TTL = "5m";
 
