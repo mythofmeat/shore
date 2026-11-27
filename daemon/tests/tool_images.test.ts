@@ -36,8 +36,22 @@ async function world() {
     await phase.recordTurn("user", [block]);
     return messages.at(-1)?.images ?? [];
   };
-  return { root, cache, workspaceDir, read };
+  return { root, cache, workspaceDir, read, phase, messages, exec };
 }
+
+test("a tool's pictures go with the one message that records its result, and a turn that writes to the workspace runs its tools one at a time", async () => {
+  const { workspaceDir, phase, messages, exec } = await world();
+  await writeFile(join(workspaceDir, "drawing.png"), Buffer.from(await noisePng(8, 8, 6)));
+  const input = { file_path: "drawing.png" };
+  const result = await phase.runTool({ id: "t1", name: "read", input });
+  await phase.recordTurn("assistant", [{ type: "tool_use", id: "t1", name: "read", input }]);
+  await phase.recordTurn("user", [result]);
+  await phase.recordTurn("user", [result]);
+  expect(messages.map((message) => message.images.map((image) => image.path))).toEqual([[], [join(workspaceDir, "drawing.png")], []]);
+
+  expect(phase.parallel).toBeUndefined();
+  expect(toolPhase({ ...exec, ctx: { ...exec.ctx, trackWorkspaceWrite: async (_name, _input, write) => await write() } }).parallel).toBe(false);
+});
 
 function embedded(image: ImageRef): string | undefined {
   const copy = [{ ...image }];

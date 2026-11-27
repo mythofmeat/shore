@@ -247,7 +247,7 @@ async function runLoopTool(
     sendDirect: () => {},
     ctx,
     limits: toolLimitsFrom(config.app.tools, config.app.subagents.agents),
-    ...(imageLimits === undefined ? {} : { imageLimits }),
+    imageLimits,
     now: () => new Date().toISOString(),
     newMessageId: () => `m_${crypto.randomUUID()}`,
     schemas: schemasFrom(tools),

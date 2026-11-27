@@ -46,7 +46,7 @@ export interface ToolExecution {
   sendDirect: (message: ServerMessage) => void;
   ctx: ToolContext;
   limits: ToolLimitsView;
-  imageLimits?: ImageLimits;
+  imageLimits?: ImageLimits | undefined;
   rid?: string;
   subagent?: string;
   now: () => string;
@@ -391,20 +391,19 @@ export interface ToolPhase {
 
 export function toolPhase(exec: ToolExecution, messages: Message[] = []): ToolPhase {
   const pictures = new Map<string, ImageRef[]>();
-  const picturesOf = (blocks: readonly ContentBlock[]): ImageRef[] => blocks.flatMap((block) => {
-    if (block.type !== "tool_result") return [];
-    const shown = pictures.get(block.tool_use_id) ?? [];
-    pictures.delete(block.tool_use_id);
+  const taken = (id: string): ImageRef[] => {
+    const shown = pictures.get(id) ?? [];
+    pictures.delete(id);
     return shown;
-  });
+  };
   return {
     messages,
     ...(exec.ctx.trackWorkspaceWrite === undefined ? {} : { parallel: false }),
     runTool: async (toolUse) => {
       const run = await runToolUse(toolUse, exec);
-      if (run.pictures.length > 0) pictures.set(toolUse.id, run.pictures);
+      pictures.set(toolUse.id, run.pictures);
       return run.block;
     },
-    recordTurn: (role, blocks) => recordReportedMessage(messages, role, blocks, exec, picturesOf(blocks)),
+    recordTurn: (role, blocks) => recordReportedMessage(messages, role, blocks, exec, blocks.flatMap((block) => block.type === "tool_result" ? taken(block.tool_use_id) : [])),
   };
 }

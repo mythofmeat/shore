@@ -4,7 +4,8 @@ import { dirname, join } from "node:path";
 
 import { chmodSync, readFileSync } from "node:fs";
 
-import { config, configReload, schemaOf, tools, type ConfigContext, type ConfigRuntime } from "../src/commands/config.ts";
+import { config, configReload, configSchemaCommand, schemaOf, tools, type ConfigContext, type ConfigRuntime } from "../src/commands/config.ts";
+import { ALL_TOOLS } from "../src/tools/registry.ts";
 import { ensureActivePromptSnapshot, loadActivePromptFile } from "../src/memory/deferred_edits.ts";
 import { initializeDatabase } from "../src/storage/database.ts";
 import { writeDurable } from "../src/storage/files.ts";
@@ -789,5 +790,21 @@ describe("the models and settings for wakes and sub-agents", () => {
   test("with no character chosen there are no character settings to show", async () => {
     const { models } = await world(null);
     expect((modelSettings(models, {}) as ModelSettingsDetail).saved_character).toBeNull();
+  });
+});
+
+test("the schema comes with the names a setting can be chosen from: the chat models, tools, sub-agents, characters and providers, each in order", async () => {
+  const w = await build(undefined, [
+    '[chat."anthropic:claude-y"]', "max_output_tokens = 10", '[chat."anthropic:claude-x"]', "max_output_tokens = 20",
+    "[providers.local]", 'base_url = "http://localhost:1"', "[providers.anthropic]", 'api_key_env = "K"',
+    "[subagents.scout]", 'description = "looks"', 'prompt = "look"', "[subagents.idle]", 'description = "rests"', 'prompt = "rest"', "",
+  ].join("\n"), [["config/characters/bo/config.toml", ""], ["config/characters/ada/config.toml", ""]]);
+  const { sources } = configSchemaCommand(w.ctx);
+  expect(sources).toStrictEqual({
+    chat_models: ["anthropic:claude-x", "anthropic:claude-y"],
+    tools: ALL_TOOLS.map((tool) => tool.name).toSorted(),
+    subagents: ["idle", "scout"],
+    characters: ["ada", "bo"],
+    providers: ["anthropic", "local"],
   });
 });

@@ -383,3 +383,24 @@ test("the prompt list and each kind of part are described as parts of the prompt
   expect(described('prompt."<index>".shore')).toStartWith("A part Shore writes: system_prompt is the file");
   expect(described("subagents.notes.prompt")).toBe("prompt for subagents.");
 });
+
+test("the schema lists each key once, in key order, with a table above each group of keys, and says which keys can be set, which may be left out and what unit a number is in", () => {
+  const entries = configSchema({ instancesAt: () => [] });
+  const keys = entries.map((entry) => entry.key);
+  expect(keys).toEqual(keys.toSorted());
+  expect([new Set(keys).size, keys.filter((key) => key === "").length]).toEqual([keys.length, 0]);
+  const row = (key: string): unknown[] | undefined => {
+    const found = entries.find((entry) => entry.key === key);
+    return found === undefined ? undefined : [found.kind, found.settable, found.optional, "units" in found ? found.units : "none"];
+  };
+  expect(["providers", 'providers."<name>"', 'providers."<name>".keys', 'providers."<name>".keys."<index>"', "budgets", 'budgets."<index>"', "chat"].map(row)).toEqual([
+    ["table", false, false, "none"], ["table", false, false, "none"], ["list", false, false, "none"], ["table", false, false, "none"],
+    ["list", false, false, "none"], ["table", false, false, "none"], ["table", false, false, "none"],
+  ]);
+  expect(['providers."<name>".enabled', 'providers."<name>".keys."<index>".name', 'budgets."<index>".cost_usd', "chat.model", "tools.max_result_chars", "compaction.max_context_tokens"].map(row)).toEqual([
+    ["boolean", true, false, "none"], ["string", false, false, "none"], ["float", false, false, "USD"], ["string", true, true, "none"],
+    ["integer", true, false, "characters"], ["integer", true, false, "tokens"],
+  ]);
+  const optional = ["api_key_env", "spend_limit_usd", "spend_period", "dir", "session_limit", "weekly_limit", "name", "enabled"].map((field) => row(`providers."<name>".keys."<index>".${field}`)?.[2]);
+  expect(optional).toEqual([true, true, true, true, true, true, false, false]);
+});

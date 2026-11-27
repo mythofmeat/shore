@@ -256,10 +256,33 @@ test("pictures the character sent go back to the model as a line saying one was 
   await writeFile(door, Buffer.from(await noisePng(4, 4, 4)));
   const reply: Message = {
     msg_id: "a1", role: "assistant", content: "Here.", images: [{ path: lamp, caption: "a lamp" }, { path: door, caption: "  " }],
-    content_blocks: [{ type: "text", text: "Here." }], timestamp: "2026-11-12T09:00:00+11:00",
+    content_blocks: [{ type: "text", text: "Here." }], timestamp: "2026-11-12T09:00:00+11:00", provider_key: "anthropic", model: "claude-lamp",
   };
-  const { messages } = await buildLlmMessages({ system: [], messages: [reply] }, new Texts());
-  expect(messages.map((message) => [message.role, message.content])).toEqual([
-    ["assistant", [{ type: "text", text: "Here." }, { type: "text", text: "[sent an image: a lamp]" }, { type: "text", text: "[sent an image]" }]],
+  const thanks: Message = { msg_id: "u1", role: "user", content: "Thanks.", images: [], content_blocks: [{ type: "text", text: "Thanks." }], timestamp: "2026-11-12T09:01:00+11:00" };
+  const { messages } = await buildLlmMessages({ system: [], messages: [reply, thanks] }, new Texts());
+  expect(messages).toStrictEqual([
+    { role: "assistant", content: [{ type: "text", text: "Here." }, { type: "text", text: "[sent an image: a lamp]" }, { type: "text", text: "[sent an image]" }], provider_key: "anthropic", model: "claude-lamp" },
+    { role: "user", content: [{ type: "text", text: "Thanks." }] },
   ]);
+});
+
+test("a picture whose file is not a kind a model takes, or can't be read, is left out of what the model is sent, and the log says which and why", async () => {
+  const { root } = await world();
+  const bitmap = join(root, "drawing.bmp");
+  await writeFile(bitmap, Buffer.from(await noisePng(4, 4, 7)));
+  const folder = join(root, "folder.png");
+  mkdirSync(folder);
+  const said = spyOn(shoreLog, "warn").mockImplementation(() => {});
+  try {
+    const message: Message = {
+      msg_id: "u1", role: "user", content: "look", images: [{ path: bitmap }, { path: folder }],
+      content_blocks: [{ type: "text", text: "look" }], timestamp: "2026-11-12T09:00:00+11:00",
+    };
+    expect(await shownAs(message)).toEqual(["look"]);
+    const lines = said.mock.calls.map(([line]) => String(line));
+    expect(lines.map((line) => line.split(": ").slice(0, 2).join(": "))).toEqual(["shore: skipping image with unsupported extension", "shore: failed to read image file for LLM"]);
+    expect([lines[0], lines[1]?.startsWith(`shore: failed to read image file for LLM: ${folder}: `)]).toEqual([`shore: skipping image with unsupported extension: ${bitmap}`, true]);
+  } finally {
+    said.mockRestore();
+  }
 });
