@@ -16,9 +16,9 @@ export function SignIn({ detail }: { detail: string }) {
   const submit = async () => {
     setBusy(true); setError("");
     try {
-      if (choosing) await workspace.connection.choosePassword(password);
+      if (choosing) { await workspace.connection.choosePassword(password); setPasswordSet(true); }
       await workspace.connection.signIn({ password });
-      setPassword(""); setAgain("");
+      setPassword("");
     } catch (failure) { setError(said(failure)); }
     finally { setBusy(false); }
   };

@@ -247,13 +247,14 @@ describe("pages and banners", () => {
     await view.unmount();
   });
 
-  test("on a first visit the sign-in page has the password chosen, typed twice, and then signs in with it", async () => {
+  test("on a first visit the sign-in page has the password chosen, typed twice, and then signs in with it, and only signs in once it is chosen", async () => {
     const { SignIn } = await import("../../src/browser/app/SignIn.tsx");
     const connection = app.state().workspace.connection;
     const order: string[] = [];
+    let outcome: Error | undefined = new Error("Could not reach the daemon");
     const asked = spyOn(connection, "signInState").mockImplementation(async () => await Promise.resolve({ password_set: false }));
     const chosen = spyOn(connection, "choosePassword").mockImplementation(async (password) => { await Promise.resolve(); order.push(`choose ${password}`); });
-    const signIn = spyOn(connection, "signIn").mockImplementation(async (login) => { await Promise.resolve(); order.push(`sign in ${JSON.stringify(login)}`); });
+    const signIn = spyOn(connection, "signIn").mockImplementation(async (login) => { await Promise.resolve(); order.push(`sign in ${JSON.stringify(login)}`); if (outcome !== undefined) throw outcome; });
     app.restores.push(() => { asked.mockRestore(); chosen.mockRestore(); signIn.mockRestore(); });
     const view = await mount(<SignIn detail="Connection stopped" />);
     await acting(() => Promise.resolve());
@@ -270,6 +271,13 @@ describe("pages and banners", () => {
     await click(go);
     await acting(() => Promise.resolve());
     expect(order).toEqual(["choose first pass", 'sign in {"password":"first pass"}']);
+    const fields = [...view.host.querySelectorAll("input")];
+    expect([view.host.querySelector("h1")?.textContent, fields.map((input) => [input.autocomplete, input.value]), view.host.querySelector("[role=alert]")?.textContent])
+      .toEqual(["Sign in", [["current-password", "first pass"]], "Could not reach the daemon"]);
+    outcome = undefined;
+    await click(button(view.host, "Sign in"));
+    await acting(() => Promise.resolve());
+    expect([order, fields[0]?.value]).toEqual([["choose first pass", 'sign in {"password":"first pass"}', 'sign in {"password":"first pass"}'], ""]);
     await view.unmount();
   });
 
