@@ -9,6 +9,7 @@ import { ConfigDuration } from "../src/config/duration.ts";
 import type { LoadedConfig } from "../src/config/loader.ts";
 import { emptyCatalog, type ResolvedModel } from "../src/config/models.ts";
 import { ProviderRegistry } from "../src/config/providers.ts";
+import { forkThread } from "../src/engine/fork.ts";
 import { serializeMessages } from "../src/engine/message_store.ts";
 import { assemblePrompt } from "../src/engine/prompt.ts";
 import { NO_PRIOR_CONTEXT } from "../src/engine/segments.ts";
@@ -196,6 +197,30 @@ describe("a thread's pinned files", () => {
     await refresh();
     expect(await system()).toContain("## notes/plan.md\n\n(This file is empty or isn't in the workspace.)");
     expect(await system("bare")).not.toContain(HEADER);
+  });
+});
+
+describe("a forked thread's prompt", () => {
+  test("shows the source's purpose, and its pins as the source last showed them, a missing file included, until the fork's own prompt is refreshed", async () => {
+    const { dirs, workspace, system, talking, refresh } = await setup({ files: { "notes/plan.md": "Chapter three next." } });
+    await createThread(dirs.data, "frank", "story", NOW, { purpose: "Writing the novel together.", pins: ["notes/plan.md", "notes/cast.md", "!echo run >> runs.log; wc -l < runs.log"] });
+    talking();
+    const source = await system();
+    expect(source).toContain("## notes/plan.md\n\nChapter three next.");
+    expect(source).toContain("## notes/cast.md\n\n(This file is empty or isn't in the workspace.)");
+    expect(source).toContain("## $ echo run >> runs.log; wc -l < runs.log\n\n1");
+
+    await writeFile(join(workspace, "notes", "plan.md"), "Chapter four next.");
+    await forkThread(dirs.data, "frank", "story", "branch", { now: () => NOW });
+    const branch = await system("branch");
+    expect(branch).toContain("What this thread is for: Writing the novel together.");
+    expect(branch.slice(branch.indexOf(HEADER))).toBe(source.slice(source.indexOf(HEADER)));
+
+    await refresh("branch");
+    const refreshed = await system("branch");
+    expect(refreshed).toContain("## notes/plan.md\n\nChapter four next.");
+    expect(refreshed).toContain("## $ echo run >> runs.log; wc -l < runs.log\n\n2");
+    expect(await system()).toContain("## notes/plan.md\n\nChapter three next.");
   });
 });
 
