@@ -334,6 +334,24 @@ test("the address names the open character and thread, keeps the page's hash, an
   expect(location.pathname, "with no character the address stays").toBe("/workspace/a%20b/c%2Fd");
 });
 
+test("an address naming a thread or character that isn't there says so once, and an address that names neither says nothing", async () => {
+  const { toasts } = await import("../../src/browser/ui/toast.tsx");
+  const said = async (path: string, over: Partial<ChromeSnapshot> = {}) => {
+    history.replaceState(null, "", path);
+    const view = await shell(over);
+    const shown = toasts.getSnapshot().map((toast) => [toast.text, toast.tone]);
+    await view.rerender({ ...over, thread: "side" });
+    const after = toasts.getSnapshot().length;
+    await view.unmount();
+    return [shown, after];
+  };
+  expect(await said("/workspace/ada/gone")).toEqual([[["ada has no thread “gone”, so this is story", "error"]], 1]);
+  expect(await said("/workspace/bo/notes")).toEqual([[["There is no character “bo”, so this is ada", "error"]], 1]);
+  expect(await said("/workspace/ada/gone", { thread: null })).toEqual([[["ada has no thread “gone”, so this is main", "error"]], 1]);
+  expect(await said("/workspace")).toEqual([[], 0]);
+  expect(await said(START)).toEqual([[], 0]);
+});
+
 test("the first address the shell sees is replaced, not added to the history", async () => {
   history.replaceState(null, "", "/workspace");
   const pushed = spyOn(history, "pushState");
