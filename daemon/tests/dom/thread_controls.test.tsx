@@ -37,7 +37,7 @@ test("the home thread's row shows a house and stays where it is, and any other t
     return html;
   };
   const row = async (thread: ThreadView) => {
-    const view = await mount(<ThreadRow thread={thread} label={thread.id} current={false} unread={0} replying={false} opening={false} ready select={() => {}} neighbours={neighbours} drop={() => {}} />);
+    const view = await mount(<ThreadRow thread={thread} label={thread.id} current={false} unread={0} drafted={false} replying={false} opening={false} ready select={() => {}} neighbours={neighbours} drop={() => {}} />);
     const shown = [view.host.querySelector(".thread-row")?.getAttribute("draggable"), view.host.querySelector(".sidebar-item svg")?.outerHTML];
     await view.unmount();
     return shown;

@@ -44,8 +44,8 @@ export function UnreadBadge({ count }: { count: number }) {
   </span>;
 }
 
-export function ThreadRow({ thread, label, current, unread, replying, opening, ready, select, neighbours, drop }: {
-  thread: ThreadView; label: string; current: boolean; unread: number; replying: boolean; opening: boolean; ready: boolean; select: () => void; neighbours: ThreadNeighbours;
+export function ThreadRow({ thread, label, current, unread, drafted, replying, opening, ready, select, neighbours, drop }: {
+  thread: ThreadView; label: string; current: boolean; unread: number; drafted: boolean; replying: boolean; opening: boolean; ready: boolean; select: () => void; neighbours: ThreadNeighbours;
   drop: (dragged: string, after: boolean) => void;
 }) {
   const menu = useRowMenu();
@@ -71,7 +71,8 @@ export function ThreadRow({ thread, label, current, unread, replying, opening, r
     <div role="button" tabIndex={ready ? 0 : -1} className={`sidebar-item thread ${current ? "on" : ""} ${unread > 0 ? "unread" : ""}`} aria-current={current ? "page" : undefined} aria-busy={opening} aria-disabled={!ready} onClick={open}
       onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); open(); } }}>
       <Icon name={thread.home ? "home" : "chat"} size={14} /><span className="sidebar-name">{label}</span>
-      {thread.locked === true ? <span className="sidebar-locked" title="Locked: only you change its label, purpose and files"><Icon name="lock" size={12} /><span className="sr-only">(locked)</span></span> : null}
+      {thread.locked === true ? <span className="sidebar-locked" title="Locked: only you change its label, purpose and pins"><Icon name="lock" size={12} /><span className="sr-only">(locked)</span></span> : null}
+      {drafted ? <span className="sidebar-draft" title="An unsent message in this tab"><Icon name="edit" size={12} /><span className="sr-only">(unsent message)</span></span> : null}
       {replying || opening ? <span className="sidebar-replying"><span className="spinner" aria-hidden="true" /><span className="sr-only">{opening ? "(opening)" : "(replying)"}</span></span> : null}
       {unread > 0 ? <UnreadBadge count={unread} /> : null}
     </div>

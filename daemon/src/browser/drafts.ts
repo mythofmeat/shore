@@ -11,6 +11,8 @@ export interface SendingMessage { rid: string; conversation: string; tab: string
 const MAX_DRAFTS = 64;
 const MAX_BYTES = 128 * 1024 * 1024;
 const TAB_LOCK = "shore.draft.tab.";
+const OWNER = "shore.draft.owner.v2.";
+const unsentWatchers = new Set<() => void>();
 let database: Promise<IDBDatabase> | undefined;
 let ownership: Promise<boolean> | undefined;
 let tab: string | null = null;
@@ -85,6 +87,17 @@ async function hasDrafts(conversation: string): Promise<boolean> {
   return rows.some((row) => row.conversation === conversation);
 }
 
+export async function unsentConversations(): Promise<Set<string>> {
+  const db = await open();
+  const rows = await result(db.transaction("drafts").objectStore("drafts").getAll()) as StoredDraft[];
+  return new Set(rows.filter((row) => (row.text !== "" || row.imageCount > 0) && sessionStorage.getItem(`${OWNER}${row.conversation}`) === row.id).map((row) => row.conversation));
+}
+
+export function watchUnsent(listener: () => void): () => void {
+  unsentWatchers.add(listener);
+  return () => { unsentWatchers.delete(listener); };
+}
+
 async function readDraft(id: string, conversation: string): Promise<{ record: StoredDraft; content: DraftContent } | undefined> {
   const db = await open();
   const tx = db.transaction(["drafts", "attachments"]);
@@ -150,7 +163,7 @@ export class BrowserDraft {
   readonly #listeners = new Set<(content: DraftContent) => void>();
   #latest: object = {};
   readonly #key: string;
-  constructor(readonly conversation: string) { this.#key = `shore.draft.owner.v2.${conversation}`; }
+  constructor(readonly conversation: string) { this.#key = `${OWNER}${conversation}`; }
 
   async load(): Promise<DraftContent> {
     if (this.#current !== undefined) return this.#current;
@@ -212,6 +225,7 @@ export class BrowserDraft {
       try {
         await this.#write(content, sending);
         if (latest === this.#latest) unsavedDrafts.delete(this);
+        for (const watcher of unsentWatchers) watcher();
       } finally {
         if (latest === this.#latest) {
           this.#saving = false;

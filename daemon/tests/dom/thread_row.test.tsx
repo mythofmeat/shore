@@ -11,7 +11,7 @@ const HOME: ThreadView = { id: "story", created_at: "2026-11-01T00:00:00Z", comp
 const SIDE: ThreadView = { id: "side", created_at: "2026-11-02T00:00:00Z", compaction: false, home: false, current: false };
 const NEIGHBOURS = { up: undefined, down: undefined, atEnd: true, byActivity: false };
 
-interface Shown { thread?: ThreadView; current?: boolean; unread?: number; replying?: boolean; opening?: boolean; ready?: boolean }
+interface Shown { thread?: ThreadView; current?: boolean; unread?: number; drafted?: boolean; replying?: boolean; opening?: boolean; ready?: boolean }
 
 async function row(shown: Shown = {}) {
   const { ThreadRow, THREAD_DRAG_TYPE } = await import("../../src/browser/sidebar/ThreadRow.tsx");
@@ -20,7 +20,7 @@ async function row(shown: Shown = {}) {
   const outside: string[] = [];
   const thread = shown.thread ?? SIDE;
   const view = await mount(<div onDragOver={() => outside.push("over")} onDrop={() => outside.push("drop")}>
-    <ThreadRow thread={thread} label={thread.label ?? thread.id} current={shown.current ?? false} unread={shown.unread ?? 0} replying={shown.replying ?? false} opening={shown.opening ?? false}
+    <ThreadRow thread={thread} label={thread.label ?? thread.id} current={shown.current ?? false} unread={shown.unread ?? 0} drafted={shown.drafted ?? false} replying={shown.replying ?? false} opening={shown.opening ?? false}
       ready={shown.ready ?? true} select={() => selected.push(1)} neighbours={NEIGHBOURS} drop={(id, after) => dropped.push([id, after])} />
   </div>);
   const box = () => view.host.querySelector(".thread-row");
@@ -36,7 +36,7 @@ async function row(shown: Shown = {}) {
   return { ...view, box, item, selected, dropped, outside, drag, thread: (id: string) => ({ [THREAD_DRAG_TYPE]: id }), type: THREAD_DRAG_TYPE };
 }
 
-async function icon(name: "home" | "chat" | "lock" | "more", size: number): Promise<string> {
+async function icon(name: "home" | "chat" | "lock" | "edit" | "more", size: number): Promise<string> {
   const { Icon } = await import("../../src/browser/ui/icons.tsx");
   const drawn = await mount(<Icon name={name} size={size} />);
   const html = drawn.host.innerHTML;
@@ -52,13 +52,14 @@ test("a row names its thread with the home or chat icon, and marks the open one"
   expect([side.item()?.querySelector("svg")?.outerHTML, side.item()?.classList.contains("on"), side.item()?.getAttribute("aria-current")]).toEqual([await icon("chat", 14), false, null]);
 });
 
-test("a row shows unread messages, a lock, and a reply or an opening under way", async () => {
+test("a row shows unread messages, a lock, an unsent message, and a reply or an opening under way", async () => {
   const quiet = await row();
-  expect([quiet.item()?.classList.contains("unread"), present(quiet.item()?.querySelector(".sidebar-unread")), present(quiet.item()?.querySelector(".sidebar-locked")), present(quiet.item()?.querySelector(".sidebar-replying")), quiet.item()?.getAttribute("aria-busy")]).toEqual([false, false, false, false, "false"]);
+  expect([quiet.item()?.classList.contains("unread"), present(quiet.item()?.querySelector(".sidebar-unread")), present(quiet.item()?.querySelector(".sidebar-locked")), present(quiet.item()?.querySelector(".sidebar-draft")), present(quiet.item()?.querySelector(".sidebar-replying")), quiet.item()?.getAttribute("aria-busy")]).toEqual([false, false, false, false, false, "false"]);
   await quiet.unmount();
-  const one = await row({ unread: 1, thread: { ...SIDE, locked: true } });
+  const one = await row({ unread: 1, drafted: true, thread: { ...SIDE, locked: true } });
   expect([one.item()?.classList.contains("unread"), one.item()?.querySelector(".sidebar-unread [aria-hidden]")?.textContent]).toEqual([true, "1"]);
-  expect(one.item()?.querySelector(".sidebar-locked")?.innerHTML).toBe(`${await icon("lock", 12)}<span class="sr-only">(locked)</span>`);
+  expect(one.item()?.querySelector(".sidebar-locked")?.outerHTML).toBe(`<span class="sidebar-locked" title="Locked: only you change its label, purpose and pins">${await icon("lock", 12)}<span class="sr-only">(locked)</span></span>`);
+  expect(one.item()?.querySelector(".sidebar-draft")?.outerHTML).toBe(`<span class="sidebar-draft" title="An unsent message in this tab">${await icon("edit", 12)}<span class="sr-only">(unsent message)</span></span>`);
   await one.unmount();
   const replying = await row({ replying: true });
   expect(replying.item()?.querySelector(".sidebar-replying .sr-only")?.textContent).toBe("(replying)");

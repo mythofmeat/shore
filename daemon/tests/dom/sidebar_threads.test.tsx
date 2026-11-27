@@ -1,4 +1,5 @@
 import { expect, test } from "bun:test";
+import { IDBFactory } from "fake-indexeddb";
 
 import type { ThreadView } from "../../src/protocol/ThreadView.ts";
 import type { ChromeSnapshot } from "../../src/browser/workspace.ts";
@@ -201,4 +202,29 @@ test("a thread with a reply on the way shows it, unless it is the open thread", 
   expect(present(view.named("story")?.querySelector(".sidebar-replying")), "the reply is in the open thread").toBe(false);
   await view.rerender({ thread: "side" });
   expect([view.named("story")?.querySelector(".sidebar-replying .sr-only")?.textContent, present(view.named("side")?.querySelector(".sidebar-replying"))]).toEqual(["(replying)", false]);
+});
+
+test("a thread with an unsent message in this tab shows it, unless it is the open thread, and the mark follows the draft", async () => {
+  const original = Object.getOwnPropertyDescriptor(globalThis, "indexedDB");
+  Object.defineProperty(globalThis, "indexedDB", { configurable: true, writable: true, value: new IDBFactory() });
+  app.restores.push(() => { if (original === undefined) Reflect.deleteProperty(globalThis, "indexedDB"); else Object.defineProperty(globalThis, "indexedDB", original); });
+  const { browserDraft } = await import("../../src/browser/drafts.ts");
+  await browserDraft(JSON.stringify(["ada", "side"])).save({ text: "half a thought", images: [] });
+  await browserDraft(JSON.stringify(["ada", "story"])).save({ text: "and one here", images: [] });
+  await browserDraft(JSON.stringify(["ada", "settings"])).save({ text: "", images: [], options: { stream: false } });
+  const view = await sidebar({ threads: [HOME, thread("side"), thread("quiet"), thread("settings")] });
+  const marked = () => view.names().filter((name) => present(view.named(name ?? "")?.querySelector(".sidebar-draft")));
+  expect(marked(), "the open thread's draft is in its message box").toEqual(["side"]);
+  await acting(() => browserDraft(JSON.stringify(["ada", "quiet"])).save({ text: "", images: [{ filename: "a.png", mime_type: "image/png", data: "AAAA" }] }));
+  await settle();
+  expect(marked()).toEqual(["side", "quiet"]);
+  await acting(() => browserDraft(JSON.stringify(["ada", "side"])).save({ text: "", images: [] }));
+  await settle();
+  expect(marked()).toEqual(["quiet"]);
+  await view.rerender({ thread: "quiet" });
+  expect(marked()).toEqual(["story"]);
+  sessionStorage.clear();
+  await acting(() => browserDraft(JSON.stringify(["ada", "other"])).save({ text: "x", images: [] }));
+  await settle();
+  expect(marked(), "another tab's drafts aren't shown").toEqual([]);
 });

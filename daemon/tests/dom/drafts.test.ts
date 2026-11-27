@@ -146,6 +146,20 @@ describe("a conversation's draft", () => {
     });
   });
 
+  test("a watcher hears of each saved draft until it stops watching", async () => {
+    const page = await tab();
+    await page.run(async ({ browserDraft, watchUnsent }) => {
+      const draft = browserDraft("ada/main");
+      let heard = 0;
+      const stop = watchUnsent(() => { heard += 1; });
+      await draft.save({ text: "hello", images: [] });
+      expect(heard).toBe(1);
+      stop();
+      await draft.save({ text: "", images: [] });
+      expect(heard).toBe(1);
+    });
+  });
+
   test("an old draft from before draft storage moves in once, unless the conversation already has drafts", async () => {
     localStorage.setItem("shore.draft.v1.ada/main", "from before");
     const page = await tab();

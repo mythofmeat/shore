@@ -255,7 +255,8 @@
   flex-shrink: 0;
 }
 
-.sidebar-locked {
+.sidebar-locked,
+.sidebar-draft {
   display: inline-flex;
   flex-shrink: 0;
   color: var(--text-3);

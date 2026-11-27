@@ -1,4 +1,4 @@
-import { useState, type ReactNode } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import type { ChromeSnapshot } from "../workspace.ts";
 import type { ThreadView } from "../../protocol/ThreadView.ts";
 import { Avatar } from "../ui/avatar.tsx";
@@ -9,6 +9,7 @@ import { collapsedFolders, conversation, errorText, perform, useActiveRequests, 
 import { openFolderDialog } from "../app/intents.ts";
 import { moveThreadTo } from "../chat/actions.ts";
 import { toasts } from "../ui/toast.tsx";
+import { unsentConversations, watchUnsent } from "../drafts.ts";
 import { FolderRow } from "./FolderRow.tsx";
 import { PresenceStore, StatusPicker } from "./StatusPicker.tsx";
 import { HELD_GROUP, threadSections } from "./order.ts";
@@ -24,15 +25,26 @@ function neighboursIn(ids: readonly string[], id: string, byActivity: boolean): 
   return { up: ids[at - 1], down: ids[at + 2], atEnd: at === ids.length - 1, byActivity };
 }
 
+function useUnsentDrafts(): ReadonlySet<string> {
+  const [unsent, setUnsent] = useState<ReadonlySet<string>>(() => new Set());
+  useEffect(() => {
+    const refresh = () => { void unsentConversations().then(setUnsent, () => {}); };
+    refresh();
+    return watchUnsent(refresh);
+  }, []);
+  return unsent;
+}
+
 function ThreadList({ state, shownThread, ready, select, newThread }: { state: ChromeSnapshot; shownThread: string | null; ready: boolean; select: (name: string) => void; newThread: () => void }) {
   const character = state.character ?? "";
   const collapsed = useCollapsedFolders(character);
+  const unsent = useUnsentDrafts();
   const sections = threadSections(state.threads, state.folders);
   const looseIds = sections.loose.map((thread) => thread.id);
   const looseByActivity = !state.manualOrder;
   const unreadOf = (thread: ThreadView) => thread.id === state.thread ? 0 : thread.unread ?? 0;
   const replyingIn = (thread: ThreadView) => thread.id !== state.thread && conversation.activeIn({ character: state.character, thread: thread.id });
-  const row = (thread: ThreadView, ids: readonly string[], byActivity: boolean, folder?: string) => <ThreadRow key={thread.id} thread={thread} label={threadLabel(thread)} current={thread.id === shownThread} unread={unreadOf(thread)} replying={replyingIn(thread)}
+  const row = (thread: ThreadView, ids: readonly string[], byActivity: boolean, folder?: string) => <ThreadRow key={thread.id} thread={thread} label={threadLabel(thread)} current={thread.id === shownThread} unread={unreadOf(thread)} drafted={thread.id !== shownThread && unsent.has(JSON.stringify([state.character, thread.id]))} replying={replyingIn(thread)}
     opening={state.opening?.thread === thread.id && thread.id !== state.thread} ready={ready} select={() => select(thread.id)} neighbours={neighboursIn(ids, thread.id, byActivity)}
     drop={(id, after) => { void moveThreadTo(id, { folder: folder ?? "", ...placeRelative(ids, thread.id, id, after) }); }} />;
   return <div className="sidebar-threads" role="group" aria-label={`${character} threads`}
