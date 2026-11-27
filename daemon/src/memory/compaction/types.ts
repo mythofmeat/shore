@@ -15,10 +15,8 @@ export interface CompactionOutcome {
 }
 
 export type CompactionErrorKind =
-  | "llm"
   | "insufficient_messages"
   | "conversation"
-  | "not_found"
   | "busy"
   | "wakes_thread";
 
@@ -29,10 +27,6 @@ export class CompactionError extends Error {
     super(message, options);
     this.kind = kind;
     this.name = "CompactionError";
-  }
-
-  static llm(detail: string, cause?: unknown): CompactionError {
-    return new CompactionError("llm", `llm: ${detail}`, { cause });
   }
 
   static insufficientMessages(): CompactionError {

@@ -379,3 +379,40 @@ test("a regenerate's note reaches the model with the new attempt and is gone fro
     await rm(dir, { recursive: true, force: true });
   }
 }, 90_000);
+
+test("a request with no system prompt or tools reaches the model as one user message under the SDK identity line alone, with the five-minute cache lifetime it asked for", async () => {
+  const dir = await mkdtemp(join(tmpdir(), "shore-agent-bare-"));
+  const mock = await startMockAnthropic({ script: [{ text: "A label." }] });
+  const provider = new ClaudeAgentProvider({
+    bookPath: () => join(dir, "sessions.json"),
+    runQuery: params => query({ ...params, options: { ...params.options, env: {
+      ...params.options.env, HOME: dir, CLAUDE_CONFIG_DIR: dir,
+      CLAUDE_SECURESTORAGE_CONFIG_DIR: dir, CLAUDE_CODE_OAUTH_TOKEN: "test-oauth-token",
+    } } }),
+  });
+  const deps = {
+    config: {
+      app: defaultAppConfig(), models: emptyCatalog(), providers: ProviderRegistry.empty(), rawTable: undefined,
+      dirs: { config: dir, data: dir, cache: dir, runtime: dir },
+    },
+    providers: { claude_agent: provider }, retry: { maxRetries: 0, backoffBaseMs: 0 },
+  };
+  try {
+    const { result } = await runGeneration({
+      sdk: "claude_agent", api_key: "", base_url: mock.url, model: "opus",
+      context: { character: "heidi", workspace_dir: dir, thinking_enabled: false, call_type: "label" },
+      provider_options: { thinking_enabled: false, cache_ttl: "5m" },
+      max_tokens: 1024, reasoning_replay: "none",
+      messages: [{ role: "user", content: [{ type: "text", text: "Mara: hello" }, { type: "text", text: "Label it." }] }],
+    }, { providerKey: "claude-code" }, deps, { signal: AbortSignal.timeout(30_000), sink: () => {} });
+    expect(result.content).toBe("A label.");
+    const sent = required(mock.requests[0]);
+    expect((sent.body.system as { text: string }[]).map(block => block.text)).toEqual([SDK_IDENTITY]);
+    expect(sent.body.tools ?? []).toEqual([]);
+    const messages = (sent.body.messages as WireMessage[]).filter(message => (message.role as string) !== "system");
+    expect(messages).toEqual([{ role: "user", content: [{ type: "text", text: "Mara: hello" }, { type: "text", text: "Label it.", cache_control: { type: "ephemeral" } }] }] as unknown as WireMessage[]);
+  } finally {
+    await mock.stop();
+    await rm(dir, { recursive: true, force: true });
+  }
+}, 60_000);

@@ -5,16 +5,21 @@ import { join } from "node:path";
 
 import { TurnAutonomyBridge } from "../src/autonomy/registration.ts";
 import type { AppConfig } from "../src/config/app.ts";
-import { characterActiveJsonl } from "../src/config/dirs.ts";
+import type { ModelCatalog } from "../src/config/models.ts";
+import { characterActiveJsonl, threadDataDir } from "../src/config/dirs.ts";
 import { ConfigDuration } from "../src/config/duration.ts";
 import { Diagnostics } from "../src/diagnostics.ts";
 import { HISTORY_DB_FILE, HistoryStore } from "../src/engine/history_store.ts";
+import { serializeMessages } from "../src/engine/message_store.ts";
+import { archiveAndRetain } from "../src/memory/compaction/archive.ts";
 import { segments as segmentsCommand } from "../src/commands/segments.ts";
 import { dispatchCommand } from "../src/handler/commands.ts";
 import { buildCommandPathDeps, labelNewSegments } from "../src/handler/deps.ts";
 import type { GenerateResponse, SidecarProvider, SidecarRequest } from "../src/llm/types.ts";
+import type { ContentBlock, Message } from "../src/engine/types.ts";
 import { shoreLog } from "../src/log.ts";
-import { labelFromReply } from "../src/memory/compaction/label.ts";
+import { labelConversation, labelFromReply, prepareLabelCall } from "../src/memory/compaction/label.ts";
+import { required } from "../src/util/required.ts";
 import { readDurable } from "../src/storage/files.ts";
 import { DEFAULT_HANDSHAKE } from "../src/swp/handshake.ts";
 import { SessionRouter } from "../src/swp/session.ts";
@@ -25,7 +30,8 @@ import { eventsForResponse } from "./support/stream.ts";
 
 const KEY_ENV = "SHORE_TEST_SEGMENT_LABELS_KEY";
 const HOUR = 60 * 60_000;
-const PROMPT = "Write a one-line label for this conversation that says what happened in it, so you and Mara can tell later what it was about. Keep it under twenty words, in the third person, with no \"I\", \"we\" or \"you\". Reply with only the label.";
+const PROMPT = "Above is a conversation between ada and Mara. Write a one-line label for it that says what happened in it, so they can tell later what it was about. Keep it under twenty words, in the third person, with no \"I\", \"we\" or \"you\". Reply with only the label.";
+const FIRST_TURN = "Mara: hello\nada: The lamp is lit.";
 
 afterEach(() => {
   setSystemTime();
@@ -52,7 +58,7 @@ function provider(script: Script): SidecarProvider {
     if (request.context?.call_type !== "label") return respond(request, [{ type: "text", text: "The lamp is lit." }]);
     await script.held?.promise;
     if (script.label instanceof Error) throw script.label;
-    if (script.label === "call a tool") return respond(request, [{ type: "text", text: "Let me look." }, { type: "tool_use", id: "t1", name: "read", input: { file_path: "SOUL.md" } }]);
+    if (script.label === "refuse") return { ...respond(request, [{ type: "text", text: "I can't help with that." }]), finish_reason: "refusal" };
     return respond(request, [{ type: "text", text: script.label }]);
   };
   return {
@@ -70,16 +76,16 @@ interface World extends ChatWorld {
   of: (callType: string) => SidecarRequest[];
 }
 
-async function world(run: (world: World) => Promise<void>, tune?: (app: AppConfig) => void, prepare?: (workspace: string) => Promise<void>): Promise<void> {
+async function world(run: (world: World) => Promise<void>, tune?: (app: AppConfig, models: ModelCatalog) => void, prepare?: (workspace: string) => Promise<void>): Promise<void> {
   const script: Script = { calls: [], label: "Lighting the lamp", held: undefined };
   const env = { [KEY_ENV]: "fixture-key" };
   let settled = async (): Promise<void> => {};
   let stop = (): void => {};
   await afterFirstChat({
     name: "segment-labels", keyEnv: KEY_ENV, provider: provider(script), tools: ["read"], autonomy: true, models: ["fixture", "pinned"],
-    tune: (app) => {
+    tune: (app, models) => {
       app.chat.display_name = "Mara";
-      tune?.(app);
+      tune?.(app, models);
     },
     ...(prepare === undefined ? {} : { prepare }),
     started: (runtime) => {
@@ -118,8 +124,8 @@ async function world(run: (world: World) => Promise<void>, tune?: (app: AppConfi
   });
 }
 
-function textOf(request: SidecarRequest): string[] {
-  return request.messages.map((message) => message.content.flatMap((block) => block.type === "text" ? [block.text] : []).join(""));
+function blocksOf(request: SidecarRequest): string[] {
+  return request.messages.flatMap((message) => message.content.flatMap((block) => block.type === "text" ? [block.text] : []));
 }
 
 test("a label is the first line the model wrote, trimmed, and one over 160 characters ends at the last whole word that fits, then an ellipsis", () => {
@@ -133,7 +139,120 @@ test("a label is the first line the model wrote, trimmed, and one over 160 chara
   expect(labelFromReply("🌊".repeat(161))).toBe(`${"🌊".repeat(159)}…`);
 });
 
-test("archiving a conversation asks the chat's model for a label with the chat's own request plus one message, and the segment gets it", async () => {
+const NAMES = { char: "ada", user: "Mara" };
+
+function said(role: Message["role"], blocks: ContentBlock[], origin?: Message["origin"]): Message {
+  return { msg_id: "m", role, content: "", images: [], content_blocks: blocks, timestamp: "2026-11-27T00:00:00Z", ...(origin === undefined ? {} : { origin }) };
+}
+
+const words = (text: string): ContentBlock => ({ type: "text", text });
+
+test("a segment is written out for its label as who said what, leaving out tool calls and results, thinking, notes and the turns Shore wrote, but keeping what the character wrote in a wake", () => {
+  expect(labelConversation([
+    said("user", [words("Where is the lamp?")]),
+    said("assistant", [{ type: "thinking", thinking: "Hidden reasoning.", signature: "s" }, words("Let me look."), { type: "tool_use", id: "t1", name: "read", input: { file_path: "SOUL.md" } }]),
+    said("user", [{ type: "tool_result", tool_use_id: "t1", content: "Tool output." }]),
+    said("assistant", [words("  On the shelf.  ")]),
+    said("system", [words("A note for the model.")]),
+    said("user", [words("Wake up and check the lamp.")], "autonomous"),
+    said("assistant", [words("The lamp is still lit.")], "autonomous"),
+  ], NAMES)).toEqual({ text: "Mara: Where is the lamp?\nada: Let me look.\nada: On the shelf.\nada: The lamp is still lit.", cut: false });
+});
+
+test("a message over 1,000 bytes is cut after the last whole character that fits, with an ellipsis, and one of exactly 1,000 bytes is kept whole", () => {
+  const whole = "🌊".repeat(250);
+  expect(labelConversation([said("user", [words(whole)])], NAMES)).toEqual({ text: `Mara: ${whole}`, cut: false });
+  const waves = "🌊".repeat(249);
+  expect(labelConversation([said("assistant", [words(`${waves} and more`)])], NAMES)).toEqual({ text: `ada: ${waves} and…`, cut: true });
+  expect(labelConversation([said("assistant", [words(`${waves} an 🌊`)])], NAMES), "a character that would cross the limit is left out whole")
+    .toEqual({ text: `ada: ${waves} an…`, cut: true });
+});
+
+function sizedLines(sizes: readonly number[]): { messages: Message[]; lines: string[] } {
+  const content = (index: number): string => `${String(index)}:`.padEnd(required(sizes[index]) - 7, "x");
+  return {
+    messages: sizes.map((_, index) => said("user", [words(content(index))])),
+    lines: sizes.map((_, index) => `Mara: ${content(index)}`),
+  };
+}
+
+test("a conversation over 30,000 bytes keeps whole lines from both ends, a line from the start first, with an ellipsis line between", () => {
+  const even = sizedLines(Array.from({ length: 40 }, () => 1000));
+  const fitted = labelConversation(even.messages, NAMES);
+  expect(fitted).toEqual({ text: [...even.lines.slice(0, 15), "…", ...even.lines.slice(26)].join("\n"), cut: true });
+  expect(Buffer.byteLength(fitted.text)).toBeLessThanOrEqual(30_000);
+
+  const exactly = sizedLines(Array.from({ length: 30 }, () => 1000));
+  expect(labelConversation(exactly.messages, NAMES), "lines that fit exactly, counting one newline each, are all kept").toEqual({ text: exactly.lines.join("\n"), cut: false });
+  const over = sizedLines([...Array.from({ length: 29 }, () => 1000), 1001]);
+  expect(labelConversation(over.messages, NAMES), "one line dropped is still a cut").toEqual({ text: [...over.lines.slice(0, 15), "…", ...over.lines.slice(16)].join("\n"), cut: true });
+});
+
+test("the middle cut charges each line it takes against what is left, and stops at the first that doesn't fit, taking one that fits exactly", () => {
+  const smallFirst = sizedLines([100, ...Array.from({ length: 39 }, () => 1000)]);
+  expect(labelConversation(smallFirst.messages, NAMES).text).toBe([...smallFirst.lines.slice(0, 15), "…", ...smallFirst.lines.slice(25)].join("\n"));
+
+  const sizes = Array.from({ length: 40 }, () => 1000);
+  sizes[14] = 996;
+  sizes[24] = 1007;
+  const tight = sizedLines(sizes);
+  expect(labelConversation(tight.messages, NAMES).text).toBe([...tight.lines.slice(0, 15), "…", ...tight.lines.slice(25)].join("\n"));
+});
+
+test("a label asked for a segment with something cut says long messages were cut short", async () => {
+  await world(async ({ command, settled, say, of }) => {
+    await say("y".repeat(1001));
+    await command("compact", { keep_turns: 0 });
+    await settled();
+    expect(of("label").map(blocksOf)).toEqual([[
+      `${FIRST_TURN}\nMara: ${"y".repeat(1000)}…\nada: The lamp is lit.`,
+      PROMPT.replace("between ada and Mara.", "between ada and Mara, with long messages cut short."),
+    ]]);
+  });
+});
+
+test("a label is asked for without the chat model's effort or thinking budget, with the shortest cache lifetime, and with the model's other settings", async () => {
+  await world(async ({ command, settled, of }) => {
+    await command("compact", { keep_turns: 0 });
+    await settled();
+    const [chat] = of("message");
+    expect(chat?.provider_options).toEqual({ reasoning_effort: "max", reasoning_budget_tokens: 2048, cache_ttl: "1h", openrouter_routing: { order: ["somewhere"] } });
+    expect(of("label").map((request) => request.provider_options)).toEqual([{ thinking_enabled: false, cache_ttl: "5m", openrouter_routing: { order: ["somewhere"] } }]);
+  }, (_app, models) => {
+    Object.assign(required(models.chat.get("chat.fixture")), { reasoningEffort: "max", reasoningBudgetTokens: 2048, cacheTtl: "1h", openrouterRouting: { order: ["somewhere"] } });
+  });
+});
+
+test("a model whose provider has no cache lifetime to set is asked for a label with none", async () => {
+  await world(async ({ config }) => {
+    const sent: SidecarRequest[] = [];
+    const ask = await prepareLabelCall("ada", "main", [said("user", [words("hello")])], {
+      config, generate: async (request) => { sent.push(request); return { model: "m", content: "A label", content_blocks: [], finish_reason: "stop", usage: { input_tokens: 1, output_tokens: 1, cache_read_tokens: 0, cache_creation_tokens: 0 }, timing: { total_ms: 1, time_to_first_token_ms: 1 } }; },
+    }, config, { model: "pinned" });
+    expect(await ask?.()).toBe("A label");
+    expect(sent.map((request) => [request.sdk, request.provider_options])).toEqual([["openai", { thinking_enabled: false }]]);
+  }, (_app, models) => {
+    Object.assign(required(models.chat.get("chat.pinned")), { sdk: "openai", cacheTtl: "1h" });
+  });
+});
+
+test("a segment with nothing either of them said in it is archived with no label asked for, and label --auto refuses it", async () => {
+  await world(async ({ runtime, config, command, settled, segments, of }) => {
+    await runtime.registry.createThread("ada", "side");
+    const quiet = [
+      said("user", [words("Wake up and look around.")], "autonomous"),
+      said("assistant", [{ type: "tool_use", id: "t1", name: "read", input: { file_path: "SOUL.md" } }]),
+      said("user", [{ type: "tool_result", tool_use_id: "t1", content: "Ada" }]),
+    ];
+    await archiveAndRetain(threadDataDir(config.dirs.data, "ada", "side"), { dbPath: join(config.dirs.data, HISTORY_DB_FILE), archiveKey: "ada/side" }, 0, serializeMessages(quiet));
+    await settled();
+    expect(segments("side")).toEqual([{ idx: 0, label: undefined }]);
+    expect(await command("segments", { action: "label", index: 0, auto: true }, "side")).toMatchObject({ type: "error", code: "invalid_request", message: "segment 0 has nothing said in it to label" });
+    expect(of("label")).toEqual([]);
+  });
+});
+
+test("archiving a conversation asks the chat's model for a label with one message, the segment written out and then the label text, with no system prompt, tools or thinking, and the segment gets it", async () => {
   await world(async ({ command, settled, segments, of, config }) => {
     unsetTestEnv(KEY_ENV);
     await command("compact", { keep_turns: 0 });
@@ -144,11 +263,14 @@ test("archiving a conversation asks the chat's model for a label with the chat's
     const labels = of("label");
     const [label] = labels;
     if (chat === undefined || label === undefined) throw new Error("a request is missing");
+    expect(chat.system).toBeDefined();
+    expect(chat.tools).toBeDefined();
     expect(labels).toHaveLength(1);
     expect(label.model).toBe(chat.model);
-    expect(label.system).toEqual(chat.system);
-    expect(label.tools).toEqual(chat.tools);
-    expect(textOf(label)).toEqual([...textOf(chat), "The lamp is lit.", PROMPT]);
+    expect([label.system, label.tools]).toEqual([undefined, undefined]);
+    expect(label.messages.map((message) => message.role)).toEqual(["user"]);
+    expect(blocksOf(label)).toEqual([FIRST_TURN, PROMPT]);
+    expect([label.provider_options, label.reasoning_replay]).toEqual([{ thinking_enabled: false, cache_ttl: "5m" }, "none"]);
     expect(label.context?.foreground).toBe(false);
 
     expect(readDurable(characterActiveJsonl(config.dirs.data, "ada", "main"))).toBe("");
@@ -165,7 +287,7 @@ test("the label text pointed at the user's own file is the message the label is 
   await world(async ({ command, settled, of }) => {
     await command("compact", { keep_turns: 0 });
     await settled();
-    expect(of("label").map((request) => textOf(request).at(-1))).toEqual(["Name this talk between ada and Mara."]);
+    expect(of("label").map((request) => blocksOf(request).at(-1))).toEqual(["Name this talk between ada and Mara."]);
   }, (app) => {
     app.texts = { label: "texts/label.md" };
   }, async (workspace) => {
@@ -186,7 +308,7 @@ test("a label set by hand while the model is still answering is kept", async () 
   });
 });
 
-test("a label call that fails, or answers with a tool call or with nothing, leaves the segment unlabelled and the archive done", async () => {
+test("a label call that fails, is refused or answers with nothing leaves the segment unlabelled and the archive done", async () => {
   await world(async ({ script, command, settled, segments, say, of }) => {
     const warned = spyOn(shoreLog, "warn").mockImplementation(() => {});
     try {
@@ -194,13 +316,13 @@ test("a label call that fails, or answers with a tool call or with nothing, leav
       await command("compact", { keep_turns: 0 });
       await settled();
       expect(warned.mock.calls.map(([line]) => String(line)).filter((line) => line.includes("unlabelled"))).toEqual([
-        "shore: segment 0 of ada was left unlabelled: CompactionError: llm: provider fell over",
+        "shore: segment 0 of ada was left unlabelled: Error: provider fell over",
       ]);
     } finally {
       warned.mockRestore();
     }
 
-    script.label = "call a tool";
+    script.label = "refuse";
     await say("and the door?");
     await command("compact", { keep_turns: 0 });
     await settled();
@@ -231,7 +353,7 @@ test("archiving a side thread labels the segment it makes", async () => {
     await command("archive_thread", { name: "side" });
     await settled();
     expect(segments("side")).toEqual([{ idx: 0, label: "Lighting the lamp" }]);
-    expect(of("label").map((request) => textOf(request).slice(-3))).toEqual([["which lamp?", "The lamp is lit.", PROMPT]]);
+    expect(of("label").map(blocksOf)).toEqual([["Mara: which lamp?\nada: The lamp is lit.", PROMPT]]);
   });
 });
 
@@ -243,7 +365,7 @@ test("a conversation compacted for being idle is labelled, and one archived afte
     await runtime.autonomy.runDue();
     await settled();
     expect(segments()).toEqual([{ idx: 0, label: "Lighting the lamp" }]);
-    expect(of("label")).toHaveLength(1);
+    expect(of("label").map(blocksOf), "only the turns archived are written out, not the one kept").toEqual([[FIRST_TURN, PROMPT]]);
 
     setSystemTime(new Date(start + 30 * HOUR));
     await runtime.autonomy.runDue();
@@ -268,7 +390,7 @@ test("label --auto asks for a label for an archived segment, leaves a labelled o
     const first = await command("segments", { action: "label", index: 0, auto: true });
     expect(first).toMatchObject({ type: "command_output", data: { character: "ada", thread: "main", action: "label", skipped: false, segment: { index: 0, label: "Lighting the lamp" } } });
     const [asked] = of("label");
-    expect(asked === undefined ? [] : textOf(asked)).toEqual(["hello", "The lamp is lit.", PROMPT]);
+    expect(asked === undefined ? [] : blocksOf(asked)).toEqual([FIRST_TURN, PROMPT]);
     expect(asked?.model).toBe("claude-fixture");
     expect(asked?.context?.foreground).toBe(true);
 
@@ -300,7 +422,7 @@ test("label --auto is refused with a label, without a segment to label, or when 
     script.label = " \n";
     expect(await refused({ auto: true })).toEqual(["error", "internal_error", "the model gave no label for segment 0"]);
     script.label = new Error("provider fell over");
-    expect(await refused({ auto: true })).toEqual(["error", "internal_error", "could not label segment 0: llm: provider fell over"]);
+    expect(await refused({ auto: true })).toEqual(["error", "internal_error", "could not label segment 0: provider fell over"]);
     expect(await refused({ auto: true, model: "nobody" })).toEqual(["error", "internal_error", expect.stringMatching(/^could not label segment 0: .*nobody/) as string]);
     expect(segments()).toEqual([{ idx: 0, label: undefined }]);
   }, (app) => { app.compaction.label_segments = false; });

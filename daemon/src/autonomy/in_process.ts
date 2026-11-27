@@ -17,7 +17,6 @@ import type { LoadedConfig } from "../config/loader.ts";
 import { usageConfigView } from "../ledger/budget.ts";
 import type { Message } from "../engine/types.ts";
 import { generate, generateViaStream } from "../llm/generate.ts";
-import type { FrameSink } from "../llm/stream.ts";
 import type { GenerateDeps } from "../llm/generate.ts";
 import type { GenerateResponse, SidecarProvider, SidecarRequest, ToolDefinition } from "../llm/types.ts";
 import type { ToolContextDeps } from "../handler/tool_context.ts";
@@ -266,22 +265,20 @@ export type CompactionGenerate = (
   request: SidecarRequest,
   model: { provider_key: string; api_key_env?: string | undefined },
   character: string,
-  sink?: FrameSink,
-  tools?: ToolPhase,
 ) => Promise<GenerateResponse>;
 
 export function compactionGenerate(deps: GenerateDeps, { foreground = false }: { foreground?: boolean } = {}): CompactionGenerate {
-  return async (request, model, character, _sink, tools) => {
+  return async (request, model, character) => {
     labelAccountedCall(request, deps.config, character, "label", foreground);
     const { response, fallbacks } = await generateViaStream(
       request,
       { providerKey: model.provider_key, apiKeyEnv: model.api_key_env },
       deps,
-      tools === undefined ? {} : { tools },
+      {},
     );
     for (const event of fallbacks) {
       shoreLog.warn(
-        `shore: compaction for ${character} rotated ${event.from.name} → ` +
+        `shore: a segment label for ${character} rotated ${event.from.name} → ` +
           `${event.to?.name ?? "(none)"}: ${event.reason}`,
       );
     }
