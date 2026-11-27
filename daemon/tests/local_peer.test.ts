@@ -2,7 +2,7 @@ import { afterEach, describe, expect, test } from "bun:test";
 
 import type { ClientMessage } from "../src/protocol/ClientMessage.ts";
 import type { ServerMessage } from "../src/protocol/ServerMessage.ts";
-import type { HistorySnapshot } from "../src/swp/connection.ts";
+import { DEFAULT_HANDSHAKE, type HistorySnapshot } from "../src/swp/handshake.ts";
 import { Server, type LocalClientOptions, type LocalPeer } from "../src/swp/server.ts";
 import type { RoutedMessage } from "../src/swp/session.ts";
 import { rejectionOf } from "./support/outcome.ts";
@@ -22,6 +22,7 @@ interface World {
   readonly routed: RoutedMessage[];
   readonly logged: string[];
   readonly fetched: (readonly [string | null, string | null | undefined])[];
+  readonly selected: (readonly [string | null, string | null])[];
   hold(): () => void;
   attach(options?: Partial<LocalClientOptions>): Promise<LocalPeer>;
   kinds(sessionId: number): string[];
@@ -30,12 +31,13 @@ interface World {
 async function world(history: (character: string | null, thread?: string | null) => Promise<HistorySnapshot> = (character, thread) => Promise.resolve(snapshot(character, thread))): Promise<World> {
   const logged: string[] = [];
   const fetched: (readonly [string | null, string | null | undefined])[] = [];
+  const selected: (readonly [string | null, string | null])[] = [];
   let held: Promise<void> | undefined;
   const server = new Server({
-    addr: "127.0.0.1:0", serverName: "local-peers", authenticate: () => false,
     log: { info: (message) => logged.push(message), warn: (message) => logged.push(message), error: (message) => logged.push(message) },
     handshake: {
       hello: () => Promise.resolve({ characters: [{ name: "ada" }, { name: "bo" }] }),
+      select: (character, thread) => { selected.push([character, thread]); return Promise.resolve({ character, thread: thread === null ? null : `${thread}-resolved` }); },
       history: async (character, thread) => {
         fetched.push([character, thread]);
         if (held !== undefined) await held;
@@ -43,13 +45,11 @@ async function world(history: (character: string | null, thread?: string | null)
       },
     },
   });
-  await server.bind();
-  const served = server.serve();
   const routed: RoutedMessage[] = [];
   const routing = (async () => { for await (const message of server.routes()) routed.push(message); })();
-  cleanups.push(async () => { server.stop(); await served; await routing; });
+  cleanups.push(async () => { server.stop(); await routing; });
   return {
-    server, routed, logged, fetched,
+    server, routed, logged, fetched, selected,
     hold: () => {
       let release = (): void => {};
       held = new Promise<void>((resolve) => { release = resolve; });
@@ -84,14 +84,31 @@ describe("a local peer attaching", () => {
   test("gets back its session as asked for, is announced, and hears its history first", async () => {
     const w = await world();
     const archiveLimits = { bytes: 10, entries: 2, temporaryDirectory: "/nowhere" };
-    const kept = await w.attach({ confidential: true, archiveLimits });
+    const kept = await w.attach({ owner: "laptop", archiveLimits });
     const plain = await w.attach({ character: "bo" });
-    expect(kept.session).toMatchObject({ confidential: true, archiveLimits, selectedCharacter: "ada", selectedThread: "main" });
-    expect(plain.session.confidential).toBe(false);
+    expect(kept.session).toMatchObject({ owner: "laptop", archiveLimits, selectedCharacter: "ada", selectedThread: "main" });
+    expect("owner" in plain.session).toBe(false);
     expect("archiveLimits" in plain.session).toBe(false);
     expect(await take(kept, 1)).toEqual([{ type: "history", messages: [], config: "fresh", selected_thread: "main", selected_character: "ada", revision: 0 }]);
     await until(() => w.kinds(kept.session.sessionId).includes("session_connected"), "the peer to be announced");
     expect(w.kinds(plain.session.sessionId)).toEqual(["session_connected"]);
+  });
+
+  test("for one request, skips the history snapshot and every broadcast, and hears only what is sent to its session", async () => {
+    const w = await world();
+    const peer = await w.attach({ history: false, broadcasts: false, character: "bo", thread: "garden" });
+    expect(w.fetched).toEqual([]);
+    expect(w.selected).toEqual([["bo", "garden"]]);
+    expect(peer.history).toBeUndefined();
+    expect(peer.session).toMatchObject({ selectedCharacter: "bo", selectedThread: "garden-resolved" });
+    w.server.broadcast({ type: "ping" });
+    await Bun.sleep(20);
+    await w.server.sessionRouter.sendToSession(peer.session.sessionId, chunk("only you"));
+    expect(await take(peer, 1)).toEqual([chunk("only you")]);
+    await peer.detach();
+    const characterless = await w.attach({ history: false, character: null });
+    expect(w.selected.at(-1)).toEqual([null, "main"]);
+    expect(characterless.session.selectedCharacter).toBeNull();
   });
 
   test("with live limits, needs a positive whole number of messages and bytes", async () => {
@@ -293,4 +310,18 @@ describe("what a local peer asks", () => {
     await until(() => w.routed.some((m) => m.kind === "engine"), "the cancel to be routed");
     expect(order).toEqual(["before, 0 routed"]);
   });
+});
+
+test("a server stops once, however often it is told, and says so once", async () => {
+  const said: string[] = [];
+  const server = new Server({ log: { info: (message) => { said.push(message); } } });
+  const stopped = server.stopped();
+  server.stop();
+  server.stop();
+  await stopped;
+  expect(said.filter((line) => line === "Server shutting down")).toEqual(["Server shutting down"]);
+});
+
+test("the default handshake has no history and no thread", async () => {
+  expect(await DEFAULT_HANDSHAKE.history("ada", "main")).toEqual({ messages: [], previousSegment: null, config: {}, selectedCharacter: "ada", selectedThread: null, revision: 0 });
 });

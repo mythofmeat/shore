@@ -1,12 +1,5 @@
-import { HistoryMediaDelivery } from "./history_media.ts";
 import type { ClientMessage } from "../protocol/ClientMessage";
 import type { ImageUpload } from "../protocol/ImageUpload";
-import type { ServerMessage } from "../protocol/ServerMessage";
-
-export const MAX_WIRE_MESSAGE_SIZE = 128 * 1024 * 1024;
-export const MAX_PRE_AUTH_WIRE_MESSAGE_SIZE = 64 * 1024;
-
-const NEWLINE = 0x0a;
 
 const WIRE_TRIM_RE = /^\p{White_Space}+|\p{White_Space}+$/gu;
 
@@ -16,97 +9,6 @@ export function rustTrim(value: string): string {
 
 export class WireError extends Error {
   override readonly name = "WireError";
-}
-
-const decoder = new TextDecoder("utf-8", { fatal: true, ignoreBOM: true });
-const encoder = new TextEncoder();
-
-export interface ByteSink {
-  write(bytes: Uint8Array): Promise<void> | void;
-}
-
-const mediaDeliveries = new WeakMap<ByteSink, HistoryMediaDelivery>();
-
-export async function writeMessage(sink: ByteSink, msg: ServerMessage): Promise<void> {
-  let delivery = mediaDeliveries.get(sink);
-  if (delivery === undefined) {
-    delivery = new HistoryMediaDelivery();
-    mediaDeliveries.set(sink, delivery);
-  }
-  await sink.write(encoder.encode(`${JSON.stringify(delivery.prepare(msg))}\n`));
-}
-
-export class WireReader {
-  readonly #chunks: AsyncIterator<Uint8Array>;
-  #pending: Uint8Array = new Uint8Array(0);
-  #offset = 0;
-  #exhausted = false;
-  #maxMessageSize: number;
-
-  constructor(source: AsyncIterable<Uint8Array>, maxMessageSize = MAX_WIRE_MESSAGE_SIZE) {
-    this.#chunks = source[Symbol.asyncIterator]();
-    this.#maxMessageSize = maxMessageSize;
-  }
-
-  setMaxMessageSize(maxMessageSize: number): void {
-    this.#maxMessageSize = maxMessageSize;
-  }
-
-  async #fill(): Promise<Uint8Array> {
-    while (this.#offset >= this.#pending.length) {
-      if (this.#exhausted) return new Uint8Array(0);
-      const next = await this.#chunks.next();
-      if (next.done === true) {
-        this.#exhausted = true;
-        return new Uint8Array(0);
-      }
-      this.#pending = next.value;
-      this.#offset = 0;
-    }
-    return this.#pending.subarray(this.#offset);
-  }
-
-  async readMessage(): Promise<ClientMessage | null> {
-    const parts: Uint8Array[] = [];
-    let length = 0;
-
-    for (;;) {
-      const buf = await this.#fill();
-      if (buf.length === 0) {
-        if (length === 0) return null;
-        break;
-      }
-
-      const newline = buf.indexOf(NEWLINE);
-      const consume = newline === -1 ? buf.length : newline + 1;
-
-      if (length + consume > this.#maxMessageSize) {
-        throw new WireError("Message exceeds maximum size");
-      }
-
-      parts.push(buf.subarray(0, consume));
-      length += consume;
-      this.#offset += consume;
-
-      if (newline !== -1) break;
-    }
-
-    const bytes = concat(parts, length);
-    let line: string;
-    try {
-      line = decoder.decode(bytes);
-    } catch (cause) {
-      throw new WireError("Frame is not valid UTF-8", { cause });
-    }
-
-    let parsed: unknown;
-    try {
-      parsed = JSON.parse(rustTrim(line));
-    } catch (cause) {
-      throw new WireError(`Frame is not valid JSON: ${String(cause)}`, { cause });
-    }
-    return decodeClientMessage(parsed);
-  }
 }
 
 export function decodeClientMessage(value: unknown): ClientMessage {
@@ -226,15 +128,4 @@ function numberOrUndefined(v: unknown, key: string): number | undefined {
   if (v === undefined || v === null) return undefined;
   if (typeof v !== "number") throw new WireError(`Frame field ${JSON.stringify(key)} is not a number`);
   return v;
-}
-
-function concat(parts: readonly Uint8Array[], length: number): Uint8Array {
-  if (parts.length === 1) return parts[0] as Uint8Array;
-  const out = new Uint8Array(length);
-  let at = 0;
-  for (const part of parts) {
-    out.set(part, at);
-    at += part.length;
-  }
-  return out;
 }

@@ -11,7 +11,7 @@ export function App() {
     if (code === undefined) workspace.connection.connect();
     else {
       history.replaceState(history.state, "", location.pathname + location.search);
-      void workspace.connection.signIn(code, "This sign-in link has expired or was already used. Show a new code on a signed-in device, or enter the access token.").catch(() => {});
+      void workspace.connection.signIn(code, "This sign-in link has expired or was already used. Show a new code on a signed-in device, or run shore devices link on the daemon’s machine.").catch(() => {});
     }
     return () => { workspace.connection.stop(); };
   }, []);

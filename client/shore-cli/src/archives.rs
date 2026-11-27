@@ -2,18 +2,14 @@ use std::fs::File;
 use std::io::{self, IsTerminal as _, Write as _};
 use std::path::{Path, PathBuf};
 
-use base64::Engine as _;
-use base64::engine::general_purpose::STANDARD;
 use shore_common::protocol::operations::{
     BackupExported, ExportBackup, ExportBackupArgs, ExportCharacter, ExportCharacterArgs,
-    ImportArchive, ImportArchiveArgs, ReadTransfer, ReadTransferArgs, WriteTransfer,
-    WriteTransferArgs,
+    ImportArchive, ImportArchiveArgs,
 };
 use shore_common::swp_client::SWPConnection;
 
-use crate::run::{execute_operation, execute_operation_with_raw};
+use crate::run::execute_operation_with_raw;
 
-const CHUNK_BYTES: usize = 8 * 1024 * 1024;
 const BACKUP_FOLDER: &str = "shore-backup";
 
 type Failure = Box<dyn std::error::Error>;
@@ -61,7 +57,7 @@ async fn handle_backup(
             Some(
                 upload_reader(
                     conn,
-                    listing.as_slice(),
+                    io::Cursor::new(listing.clone()),
                     listing.len(),
                     "Sending what the folder holds",
                 )
@@ -83,7 +79,7 @@ async fn handle_backup(
         },
     )
     .await?;
-    let delta = fetch(conn, &data.transfer, &folder).await?;
+    let delta = fetch(conn, &data.transfer, data.bytes, &folder).await?;
     status("Updating the folder...");
     let manifest = crate::backups::commit_update(&folder, delta)?;
     if json {
@@ -206,7 +202,7 @@ pub(crate) async fn export_to(
     let transfer = data
         .transfer
         .ok_or("the daemon kept the archive instead of offering it for download")?;
-    let bytes = download(conn, &transfer, target).await?;
+    let bytes = download(conn, &transfer, data.bytes, target).await?;
     if let Some(fields) = raw.as_object_mut() {
         _ = fields.remove("transfer");
         _ = fields.insert("archive".to_owned(), target.display().to_string().into());
@@ -218,10 +214,11 @@ pub(crate) async fn export_to(
 async fn download(
     conn: &mut SWPConnection,
     transfer: &str,
+    total: usize,
     target: &Path,
 ) -> Result<usize, Failure> {
     let directory = target.parent().ok_or("the archive path has no directory")?;
-    let file = fetch(conn, transfer, directory).await?;
+    let file = fetch(conn, transfer, total, directory).await?;
     let bytes = usize::try_from(file.as_file().metadata()?.len())?;
     _ = file
         .persist_noclobber(target)
@@ -232,33 +229,19 @@ async fn download(
 async fn fetch(
     conn: &mut SWPConnection,
     transfer: &str,
+    total: usize,
     directory: &Path,
 ) -> Result<tempfile::NamedTempFile, Failure> {
     let mut file = tempfile::Builder::new()
         .prefix(".shore-download-")
         .tempfile_in(directory)?;
-    let mut offset = 0_usize;
-    loop {
-        let chunk = execute_operation::<ReadTransfer>(
-            conn,
-            ReadTransferArgs {
-                transfer: transfer.to_owned(),
-                offset,
-            },
-        )
+    let received = conn
+        .download(transfer, file.as_file_mut(), |done| {
+            progress("Downloading", done, total);
+        })
         .await?;
-        let bytes = STANDARD.decode(&chunk.data)?;
-        if chunk.offset != offset || bytes.is_empty() {
-            return Err("the daemon sent the wrong part of the archive".into());
-        }
-        file.write_all(&bytes)?;
-        offset = offset
-            .checked_add(bytes.len())
-            .ok_or("the archive is too large")?;
-        progress("Downloading", offset, chunk.bytes);
-        if offset >= chunk.bytes {
-            break;
-        }
+    if received != total {
+        return Err(format!("the daemon sent {received} of the archive's {total} bytes").into());
     }
     file.as_file().sync_all()?;
     Ok(file)
@@ -284,47 +267,19 @@ async fn upload(conn: &mut SWPConnection, archive: &Path) -> Result<String, Fail
     upload_reader(conn, file, total, "Uploading").await
 }
 
-async fn upload_reader<R: io::Read>(
+async fn upload_reader<R: io::Read + Send + 'static>(
     conn: &mut SWPConnection,
-    mut file: R,
+    file: R,
     total: usize,
-    verb: &str,
+    verb: &'static str,
 ) -> Result<String, Failure> {
-    let mut buffer = vec![0_u8; CHUNK_BYTES];
-    let mut transfer: Option<String> = None;
-    let mut sent = 0_usize;
-    loop {
-        let filled = fill(&mut file, &mut buffer)?;
-        let Some(chunk) = buffer.get(..filled).filter(|chunk| !chunk.is_empty()) else {
-            break;
-        };
-        let written = execute_operation::<WriteTransfer>(
-            conn,
-            WriteTransferArgs {
-                transfer: transfer.take(),
-                data: STANDARD.encode(chunk),
-            },
-        )
+    if total == 0 {
+        return Err("there was nothing to upload".into());
+    }
+    let sent = conn
+        .upload(file, Box::new(move |done| progress(verb, done, total)))
         .await?;
-        transfer = Some(written.transfer);
-        sent = sent.checked_add(filled).ok_or("the archive is too large")?;
-        progress(verb, sent, total);
-    }
-    transfer.ok_or_else(|| "there was nothing to upload".into())
-}
-
-fn fill<R: io::Read>(file: &mut R, buffer: &mut [u8]) -> io::Result<usize> {
-    let mut filled = 0;
-    while let Some(rest) = buffer.get_mut(filled..) {
-        match file.read(rest)? {
-            0 => break,
-            read => filled = filled.saturating_add(read),
-        }
-        if filled == buffer.len() {
-            break;
-        }
-    }
-    Ok(filled)
+    Ok(sent.transfer)
 }
 
 fn status(text: &str) {

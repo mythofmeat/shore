@@ -4,7 +4,7 @@ import type { ServerWebSocket } from "bun";
 import type { ClientMessage } from "../protocol/ClientMessage.ts";
 import type { ServerMessage } from "../protocol/ServerMessage.ts";
 import { admitClientMessage, sanitiseRid } from "../swp/admission.ts";
-import { SWP_V1 } from "../swp/connection.ts";
+import { SWP_V1 } from "../swp/handshake.ts";
 import { decodeClientMessage, rustTrim } from "../swp/framing.ts";
 import type { LocalPeer, Server } from "../swp/server.ts";
 import { REQUEST_LIFECYCLE_CAPABILITY, sessionMetaOf } from "../swp/session.ts";
@@ -20,7 +20,6 @@ interface PendingRequest {
 
 export interface WebSocketState {
   readonly auth: WebSession;
-  readonly confidential: boolean;
   readonly abort: AbortController;
   readonly pending: Map<string, PendingRequest>;
   phase: "hello" | "attaching" | "ready" | "closed";
@@ -35,8 +34,8 @@ export interface WebSocketState {
   controls: number;
 }
 
-export const socketState = (auth: WebSession, confidential = false): WebSocketState => ({
-  auth, confidential, abort: new AbortController(), pending: new Map(), phase: "hello",
+export const socketState = (auth: WebSession): WebSocketState => ({
+  auth, abort: new AbortController(), pending: new Map(), phase: "hello",
   windowStart: Date.now(), requests: 0, bytesInWindow: 0, pendingBytes: 0, controls: 0,
 });
 
@@ -73,7 +72,6 @@ export class WebSocketPeers {
     this.#unannounced.set(owner, [...waiting, finished].slice(-REQUEST_HISTORY_LIMITS.perSession));
   }
 
-  get size(): number { return this.#sockets.size; }
 
   #track(work: Promise<void>): void {
     this.#work.add(work);
@@ -166,23 +164,19 @@ export class WebSocketPeers {
     const state = socket.data;
     try {
       const peer = await this.#server.attachLocal({
-        clientType: "web", clientName: hello.client_name, confidential: state.confidential, capabilities: [...new Set([...hello.capabilities, REQUEST_LIFECYCLE_CAPABILITY])],
-        ...(hello.character === null || hello.character === undefined ? {} : { character: hello.character }),
-        ...(hello.thread === null || hello.thread === undefined ? {} : { thread: hello.thread }),
+        clientType: "web", clientName: hello.client_name, owner: state.auth.id, capabilities: [...new Set([...hello.capabilities, REQUEST_LIFECYCLE_CAPABILITY])],
+        character: hello.character ?? undefined, thread: hello.thread ?? undefined,
         signal: state.abort.signal,
         prepareMessage: (message) => this.#prepare(socket, message),
         outboundLimits: { messages: WEB_LIMITS.queuedMessages, bytes: this.#maxBytes, largeHistory: true, coalesceStreams: true,
           onOverflow: () => { this.close(socket, 1013, "Outgoing limit reached; reconnect to refresh history"); } },
       });
       state.peer = peer;
-      if (state.abort.signal.aborted) { await peer.detach(); return; }
       clearTimeout(state.helloTimer);
       state.phase = "ready";
       await this.#write(socket, { type: "hello", v: SWP_V1, server_name: "shore-daemon", characters: [...peer.characters] });
       const unannounced = this.#unannounced.get(state.auth.id) ?? [];
-      this.#unannounced.delete(state.auth.id);
       for await (const message of peer.events()) {
-        if (state.abort.signal.aborted) break;
         await this.#write(socket, message);
         if (message.type === "history") for (const finished of unannounced.splice(0)) this.#send(socket, finished);
       }

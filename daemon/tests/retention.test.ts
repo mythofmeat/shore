@@ -338,7 +338,7 @@ test("the sweep the daemon starts says what it removed, whichever kinds those we
       const gate = new SnapshotGate();
       const sweeping = startDiagnosticRetention(data, gate, 3_600_000);
       await gate.withSnapshot(async () => {});
-      sweeping.stop();
+      await sweeping.stop();
       return [...said.mock.calls, ...warned.mock.calls].map((call) => String(call[0]));
     };
     const wake = (data: string): void => { withStorage(data, (db) => { insertEvent(db, { character: "ada", kind: "wake", timestamp: long, content: "an old wake" }); }); };
@@ -383,7 +383,7 @@ test("a sweep that comes due while one is still running is skipped", async () =>
     release();
     await held;
     await until(() => said.mock.calls.length > 0, "the sweep's report", 3_000);
-    sweeping.stop();
+    await sweeping.stop();
     await gate.withSnapshot(async () => {});
     expect(said.mock.calls.map((call) => String(call[0]))).toEqual(["shore: diagnostic retention removed 300 captures and 0 wake events; retained results for 0 expired subagent traces"]);
   } finally {
@@ -400,7 +400,7 @@ test("once a sweep is done, the next one runs when it comes due", async () => {
     withStorage(data, (db) => { insertEvent(db, { character: "ada", kind: "wake", timestamp: LONG_AGO.toISOString(), content: "an old wake" }); });
     await until(() => readEvents(data, "ada", "wake").length === 0, "the next sweep", 3_000);
   } finally {
-    sweeping.stop();
+    await sweeping.stop();
     await gate.withSnapshot(async () => {});
   }
 });
@@ -413,9 +413,10 @@ test("a sweep stopped while it waits for a snapshot does nothing once the snapsh
   const holding = new Promise<void>((resolve) => { release = resolve; });
   const held = gate.withSnapshot(async () => { await holding; });
   const sweeping = startDiagnosticRetention(data, gate, 3_600_000);
-  sweeping.stop();
+  const stopped = sweeping.stop();
   release();
   await held;
+  await stopped;
   await gate.withSnapshot(async () => {});
   expect(readEvents(data, "ada", "wake")).toEqual(["an old wake"]);
 });
@@ -453,8 +454,9 @@ test("the daily sweep's timer doesn't keep the daemon alive, and stopping releas
     const index = set.mock.calls.findIndex((call) => call[1] === 3_600_000);
     const timer = set.mock.results[index]?.value as ReturnType<typeof setInterval>;
     expect(timer.hasRef()).toBe(false);
-    sweeping.stop();
+    const stopped = sweeping.stop();
     expect(cleared).toHaveBeenCalledWith(timer);
+    await stopped;
     await gate.withSnapshot(async () => {});
   } finally {
     set.mockRestore();
@@ -634,4 +636,22 @@ test("a sweep stopped before it reaches the sessions leaves them all, and never 
   expect(await whileSweeping(async () => await pruneSdkSessions(f.data, start + DAY + 1, [f.config], midway.signal), () => { midway.abort(); })).toBe(0);
   expect(f.stored()).toEqual([id]);
   expect(existsSync(f.local(id))).toBe(true);
+});
+
+test("stopping a sweep that is under way resolves only once the sweep has let go of the database", async () => {
+  const data = dataDir();
+  const store = CallStore.open(databasePath(data));
+  for (let i = 0; i < 600; i++) store.recordCall({ call_id: `old-${i}`, ts: LONG_AGO, usage: ZERO_USAGE, request_body: `old ${i}` });
+  store.close();
+  closeStorageConnections();
+  const said = spyOn(shoreLog, "info").mockImplementation(() => {});
+  try {
+    const gate = new SnapshotGate();
+    const sweeping = startDiagnosticRetention(data, gate, 3_600_000);
+    await Bun.sleep(0);
+    await sweeping.stop();
+    expect(handlesUnder(data)).toBe(0);
+  } finally {
+    said.mockRestore();
+  }
 });

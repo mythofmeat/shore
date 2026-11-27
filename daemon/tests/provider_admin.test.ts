@@ -1,7 +1,8 @@
-import { afterAll, describe, expect, test } from "bun:test";
+import { afterAll, describe, expect, spyOn, test } from "bun:test";
 import { mkdir, mkdtemp, readFile, stat, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 
+import * as configCommands from "../src/commands/config.ts";
 import { config, type ConfigContext } from "../src/commands/config.ts";
 import {
   addCredential, addProvider, listProviderStatuses, orderCredentials, providerDetail, providerUsers, removeCredential, removeProvider,
@@ -14,7 +15,7 @@ import { Ledger } from "../src/ledger/store.ts";
 import { toCredentialsEntry } from "../src/config/providers.ts";
 import { readCandidateEnv, resolveKeyCandidates } from "../src/llm/credentials.ts";
 import { CACHE_VERSION, cachePath, writeCache } from "../src/llm/discovery.ts";
-import { configureSecretStore } from "../src/llm/secret_store.ts";
+import { configureSecretStore, secretStoreFor } from "../src/llm/secret_store.ts";
 import { configureCredentialStanding } from "../src/llm/credential_standing.ts";
 import { openLedger } from "./support/ledger_fixture.ts";
 import { outcomeOf } from "./support/outcome.ts";
@@ -48,7 +49,7 @@ function provider(status = 200, answer?: Answer): { fetchImpl: typeof fetch; see
   return { fetchImpl, seen };
 }
 
-async function world(toml: string, options: { confidential?: boolean; status?: number; answer?: Answer; env?: Record<string, string> } = {}): Promise<World> {
+async function world(toml: string, options: { status?: number; answer?: Answer; env?: Record<string, string> } = {}): Promise<World> {
   const root = await mkdtemp(testTmp("shore-provider-admin-"));
   const configPath = join(root, "config", "config.toml");
   await mkdir(join(root, "config"), { recursive: true });
@@ -66,7 +67,7 @@ async function world(toml: string, options: { confidential?: boolean; status?: n
     runtime: { reloadRuntimeConfig: () => {}, adoptGlobalConfig: () => {}, notifyPromptSnapshotRefreshed: () => {} },
   };
   const { fetchImpl, seen } = provider(options.status ?? 200, options.answer);
-  return { ctx: { config: session, fetchImpl, confidential: options.confidential ?? true }, session, configPath, seen };
+  return { ctx: { config: session, fetchImpl }, session, configPath, seen };
 }
 
 const usedKey = (w: World, name: string): string | undefined => {
@@ -170,15 +171,6 @@ describe("keys", () => {
     expect(unchecked.provider.credentials[0]?.standing).toBe("not_checked");
   });
 
-  test("a key won't cross a connection that is neither local nor encrypted unless the user says the network is private", async () => {
-    const w = await world("[providers.openrouter]\ndiscover = true\n", { confidential: false });
-    expect(await outcomeOf(addCredential(w.ctx, { provider: "openrouter", secret: SECRET }))).toThrow("neither on this machine nor encrypted");
-    const env = await addCredential(w.ctx, { provider: "openrouter", name: "ci", env: "OPENROUTER_CI_KEY", no_check: true });
-    expect(env.provider.credentials[0]).toMatchObject({ name: "ci", kind: "env", env: "OPENROUTER_CI_KEY", standing: "missing" });
-    const allowed = await addCredential(w.ctx, { provider: "openrouter", name: "work", secret: SECRET, allow_unencrypted: true });
-    expect(allowed.provider.credentials.map((c) => c.name)).toEqual(["ci", "work"]);
-  });
-
   test("a second key keeps the environment key first, and order, pin and removal all change which key calls use", async () => {
     const w = await world("[providers.deepseek]\napi_key_env = \"SHORE_PROVIDER_ADMIN_DEEPSEEK_KEY\"\n", { env: { SHORE_PROVIDER_ADMIN_DEEPSEEK_KEY: "sk-env-key-0000000001" } });
     await addCredential(w.ctx, { provider: "deepseek", name: "spare", secret: SECRET, no_check: true });
@@ -219,6 +211,89 @@ describe("keys", () => {
     const disabled = await updateCredential(w.ctx, { provider: "openrouter", credential: "office", enabled: false });
     expect(disabled.provider.pinned).toBeNull();
     expect(usedKey(w, "openrouter")).toBe(`${SECRET}2`);
+  });
+
+  test("a key that can't be added says why: no key needed, both or neither of a key and a variable, a name that won't do or is taken", async () => {
+    const free = await world("[providers.openrouter]\nno_auth = true\n");
+    expect(await outcomeOf(addCredential(free.ctx, { provider: "openrouter", secret: SECRET }))).toThrow("openrouter is set to need no key; turn that off first with `shore provider openrouter set no-auth false`");
+    const w = await world("[providers.openrouter]\ndiscover = true\n");
+    for (const args of [{ provider: "openrouter" }, { provider: "openrouter", secret: SECRET, env: "SHORE_ADMIN_KEY" }]) {
+      expect(await outcomeOf(addCredential(w.ctx, args))).toThrow("give the key itself or the name of an environment variable that holds it, not both");
+    }
+    expect(await outcomeOf(addCredential(w.ctx, { provider: "openrouter", name: "bad name", secret: SECRET, no_check: true }))).toThrow('key names use letters, digits, ., _, @ and -: "bad name"');
+    await addCredential(w.ctx, { provider: "openrouter", name: "work", secret: SECRET, no_check: true });
+    expect(await outcomeOf(addCredential(w.ctx, { provider: "openrouter", name: "Work", secret: SECRET, no_check: true }))).toThrow('openrouter already has a key named "Work"; pick another name or replace it with `auth Work --replace`');
+    expect(await outcomeOf(addCredential(w.ctx, { provider: "openrouter", name: "env", env: " 1BAD " }))).toThrow('" 1BAD " isn\'t an environment variable name');
+  });
+
+  test("a key read from a variable is named by it, trimmed, and says whether the daemon has it yet", async () => {
+    unsetTestEnv("SHORE_ADMIN_UNSET_KEY");
+    const w = await world("[providers.openrouter]\ndiscover = true\n", { env: { SHORE_ADMIN_EMPTY_KEY: "", SHORE_ADMIN_SET_KEY: SECRET } });
+    const unset = await addCredential(w.ctx, { provider: "openrouter", name: "later", env: " SHORE_ADMIN_UNSET_KEY " });
+    expect(unset.message).toContain('Added key "later" to openrouter, read from SHORE_ADMIN_UNSET_KEY, which isn\'t set on the daemon yet');
+    expect(await readFile(w.configPath, "utf8")).toContain('api_key_env = "SHORE_ADMIN_UNSET_KEY"');
+    const empty = await addCredential(w.ctx, { provider: "openrouter", name: "blank", env: "SHORE_ADMIN_EMPTY_KEY" });
+    expect(empty.message).toContain("read from SHORE_ADMIN_EMPTY_KEY, which isn't set on the daemon yet");
+    const set = await addCredential(w.ctx, { provider: "openrouter", name: "now", env: "SHORE_ADMIN_SET_KEY" });
+    expect(set.message).toContain('Added key "now" to openrouter, read from SHORE_ADMIN_SET_KEY · works');
+    const typed = await addCredential(w.ctx, { provider: "openrouter", name: "typed", secret: SECRET, no_check: true });
+    expect(typed.message).toContain('Added key "typed" to openrouter, saved on the daemon (…WXYZ) · not checked');
+  });
+
+  test("a key whose config can't be written isn't kept, and a replacement whose config can't be written puts the old key back", async () => {
+    const w = await world("[providers.openrouter]\ndiscover = true\n");
+    const store = () => secretStoreFor(w.session.config.dirs.data);
+    const failing = spyOn(configCommands, "commitConfigEdits").mockImplementation(() => { throw new Error("the config is read-only"); });
+    try {
+      expect(await outcomeOf(addCredential(w.ctx, { provider: "openrouter", name: "work", secret: SECRET, no_check: true }))).toThrow("the config is read-only");
+    } finally { failing.mockRestore(); }
+    expect(store().get("openrouter", "work")).toBeUndefined();
+    await addCredential(w.ctx, { provider: "openrouter", name: "work", secret: SECRET, no_check: true });
+    await addCredential(w.ctx, { provider: "openrouter", name: "lost", secret: `${SECRET}2`, no_check: true });
+    store().remove("openrouter", "lost");
+    const failingAgain = spyOn(configCommands, "commitConfigEdits").mockImplementation(() => { throw new Error("the config is read-only"); });
+    try {
+      for (const credential of ["work", "lost"]) expect(await outcomeOf(updateCredential(w.ctx, { provider: "openrouter", credential, secret: `${SECRET}9`, no_check: true }))).toThrow("the config is read-only");
+    } finally { failingAgain.mockRestore(); }
+    expect([store().get("openrouter", "work"), store().get("openrouter", "lost")]).toEqual([SECRET, undefined]);
+  });
+
+  test("changing a key says what changed: on or off, how it moves on, its name, its pin and its value", async () => {
+    const w = await world("[providers.openrouter]\ndiscover = true\n");
+    await addCredential(w.ctx, { provider: "openrouter", name: "work", secret: SECRET });
+    await addCredential(w.ctx, { provider: "openrouter", name: "home", secret: `${SECRET}2`, no_check: true });
+    selectCredential(w.ctx, { provider: "openrouter", credential: "home" });
+    const change = async (args: Omit<Parameters<typeof updateCredential>[1], "provider">) => (await updateCredential(w.ctx, { provider: "openrouter", ...args })).message;
+    expect(await change({ credential: "work", enabled: false })).toBe('openrouter key "work": disabled');
+    expect(await change({ credential: "work", enabled: true })).toBe('openrouter key "work": enabled');
+    expect(await change({ credential: "home", enabled: true })).toBe('openrouter key "home": enabled');
+    expect(await change({ credential: "work", warn_on_fallback: true })).toBe('openrouter key "work": warns when calls move past it');
+    expect(await readFile(w.configPath, "utf8")).toContain("warn_on_fallback = true");
+    expect(await change({ credential: "work", warn_on_fallback: false })).toBe('openrouter key "work": moves on quietly');
+    expect(await readFile(w.configPath, "utf8")).toContain("warn_on_fallback = false");
+    expect(await outcomeOf(change({ credential: "work", rename: "no good" }))).toThrow('key names use letters, digits, ., _, @ and -: "no good"');
+    expect(await outcomeOf(change({ credential: "work", rename: "HOME" }))).toThrow('openrouter already has a key named "HOME"');
+    expect(await change({ credential: "work", rename: "work" })).toBe('openrouter key "work": renamed to "work" (earlier usage stays under "work")');
+    const renamed = await updateCredential(w.ctx, { provider: "openrouter", credential: "work", rename: "office" });
+    expect([renamed.provider.pinned, renamed.provider.credentials.find((c) => c.name === "office")?.standing]).toEqual(["home", "works"]);
+    expect(await change({ credential: "home", enabled: false })).toBe('openrouter key "home": disabled, no longer pinned');
+    expect(await outcomeOf(change({ credential: "office" }))).toThrow("nothing to change");
+  });
+
+  test("a replaced key is checked unless told not to, and what is known of it follows the check", async () => {
+    const w = await world("[providers.openrouter]\ndiscover = true\n");
+    await addCredential(w.ctx, { provider: "openrouter", name: "work", secret: SECRET });
+    const standing = () => providerDetail(w.ctx, { provider: "openrouter" }).credentials[0]?.standing;
+    expect(standing()).toBe("works");
+    const asked = w.seen.length;
+    const unchecked = await updateCredential(w.ctx, { provider: "openrouter", credential: "work", secret: `${SECRET}2`, no_check: true });
+    expect([unchecked.message, w.seen.length, standing(), secretStoreFor(w.session.config.dirs.data).get("openrouter", "work")]).toEqual(['openrouter key "work": key replaced (…XYZ2) · not checked', asked, "not_checked", `${SECRET}2`]);
+    const checked = await updateCredential(w.ctx, { provider: "openrouter", credential: "work", secret: SECRET });
+    expect([checked.message.startsWith('openrouter key "work": key replaced (…WXYZ) · works'), w.seen.length > asked, standing()]).toEqual([true, true, "works"]);
+    const rejecting = await world("[providers.openrouter]\ndiscover = true\n", { status: 401 });
+    await addCredential(rejecting.ctx, { provider: "openrouter", name: "work", secret: SECRET, no_check: true });
+    expect(await outcomeOf(updateCredential(rejecting.ctx, { provider: "openrouter", credential: "work", secret: `${SECRET}3` }))).toThrow("the key wasn't replaced. Skipping the check (--no-check) replaces it anyway");
+    expect(secretStoreFor(rejecting.session.config.dirs.data).get("openrouter", "work")).toBe(SECRET);
   });
 
   test("a spend limit is a budget for that key alone, and stays out of the reported budgets", async () => {

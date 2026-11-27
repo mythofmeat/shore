@@ -64,7 +64,7 @@ async function afterOneChat(wakeRead: number, idle: (chat: IdleChat) => Promise<
     },
     started: (runtime) => {
       const clocks = startRuntimeClocks(runtime);
-      return () => { clocks.stop(); };
+      return async () => { await clocks.stop(); };
     },
   }, async ({ runtime }) => {
     await idle({

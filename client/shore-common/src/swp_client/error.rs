@@ -20,6 +20,9 @@ pub enum ClientError {
     Protocol(String),
 
     #[error("{0}")]
+    Refused(String),
+
+    #[error("{0}")]
     Unauthorized(String),
 
     #[error("provider error: {message}")]

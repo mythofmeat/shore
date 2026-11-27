@@ -2,8 +2,8 @@ use shore_common::protocol::operations::{
     ConfigReloadArgs, ConversationLog, ConversationLogArgs, ConversationPage, CreateCharacter,
     DeleteCharacter, DeleteCharacterArgs, EmptyOperationArgs, GetMessage, GetMessageArgs,
     NamedOperationArgs, Operation, OperationResponse, PinThreadModel, ReadStatus,
-    ReloadConfiguration, ResetModel, ResetModelArgs, SwitchCharacter, SwitchModel, SwitchModelArgs,
-    SwitchThread, SwitchThreadArgs, ThreadModelArgs, is_registered_operation,
+    ReloadConfiguration, ResetModel, ResetModelArgs, SwitchModel, SwitchModelArgs, ThreadModelArgs,
+    is_registered_operation,
 };
 use std::io::{self, IsTerminal, Read as _};
 use std::path::{Path, PathBuf};
@@ -69,6 +69,9 @@ pub(crate) async fn execute(
     };
     if matches!(&cli.command, Some(CliCommand::Config { path: true, .. })) {
         return print_config_path(&cli).await;
+    }
+    if let Some(CliCommand::SignIn { address, name }) = &cli.command {
+        return crate::access::sign_in(address, name.as_deref()).await;
     }
     let provider_plan = match cli.command.as_ref() {
         Some(CliCommand::Provider {
@@ -302,6 +305,10 @@ pub(crate) async fn execute(
                 crate::providers::run(&mut conn, plan, json).await?;
             }
         }
+        CliCommand::Devices { subcommand, json } => {
+            crate::access::devices(&mut conn, subcommand.as_ref(), *json).await?;
+        }
+        CliCommand::SignIn { .. } => {}
         other @ (CliCommand::Character { .. }
         | CliCommand::Trace { .. }
         | CliCommand::Debug { .. }
@@ -369,6 +376,7 @@ pub(crate) fn wants_json(other: &CliCommand) -> bool {
         | CliCommand::Compact { json, .. }
         | CliCommand::Presence { json, .. }
         | CliCommand::Segments { json, .. }
+        | CliCommand::Devices { json, .. }
         | CliCommand::Usage { json, .. } => *json,
         CliCommand::Debug { subcommand } => matches!(
             subcommand,
@@ -381,9 +389,10 @@ pub(crate) fn wants_json(other: &CliCommand) -> bool {
             command,
             MsgCommand::Edit { json: true, .. } | MsgCommand::Delete { json: true, .. }
         ),
-        CliCommand::Log { .. } | CliCommand::Status { .. } | CliCommand::Completions { .. } => {
-            false
-        }
+        CliCommand::Log { .. }
+        | CliCommand::Status { .. }
+        | CliCommand::Completions { .. }
+        | CliCommand::SignIn { .. } => false,
     }
 }
 
@@ -637,6 +646,9 @@ async fn handle_log_command(
         return Ok(());
     }
 
+    if *follow {
+        conn.follow().await?;
+    }
     let (page, data) = execute_operation_with_raw::<ConversationLog>(
         conn,
         ConversationLogArgs {
@@ -1182,7 +1194,9 @@ fn reads_the_selected_thread(command: &CliCommand) -> bool {
         | CliCommand::Debug { .. }
         | CliCommand::Export { .. }
         | CliCommand::Import { .. }
-        | CliCommand::Completions { .. } => false,
+        | CliCommand::Completions { .. }
+        | CliCommand::SignIn { .. }
+        | CliCommand::Devices { .. } => false,
     }
 }
 
@@ -1227,13 +1241,12 @@ async fn handle_switch_character(
     name: &str,
 ) -> Result<(), Box<dyn std::error::Error>> {
     info!(character = name, "Switching active character");
-    let _selection = execute_operation::<SwitchCharacter>(
-        conn,
-        NamedOperationArgs {
-            name: name.to_owned(),
-        },
-    )
-    .await?;
+    let hello = conn.hello(Some(name), None).await?;
+    if hello.selected_character.as_deref() != Some(name) {
+        return Err(
+            format!("no character named {name:?}; run `shore character` to list them").into(),
+        );
+    }
     state::write_active_character(name)?;
     cli_out!("Switched to character: {name}");
     cli_out!("To override per-terminal: export SHORE_CHARACTER={name}");
@@ -1246,14 +1259,13 @@ async fn handle_switch_thread(
     character: &str,
 ) -> Result<(), Box<dyn std::error::Error>> {
     info!(thread = name, "Switching active thread");
-    let _selection = execute_operation::<SwitchThread>(
-        conn,
-        SwitchThreadArgs {
-            name: name.to_owned(),
-            resync: None,
-        },
-    )
-    .await?;
+    let hello = conn.hello(Some(character), Some(name)).await?;
+    if hello.selected_thread.as_deref() != Some(name) {
+        return Err(format!(
+            "no thread named {name:?} for {character}; run `shore thread` to list them"
+        )
+        .into());
+    }
     state::write_active_thread(character, name)?;
     cli_out!("Talking in thread: {name}");
     cli_out!("To override per-terminal: export SHORE_THREAD={name}");

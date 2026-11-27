@@ -2,7 +2,7 @@ import { shoreLog } from "../log.ts";
 import type { LoadedConfig } from "../config/loader.ts";
 import type { InvalidationReason } from "../cache/last_request.ts";
 import { restartRequiredChanges } from "../config/restart.ts";
-import { historyMessage, type HandshakeProvider, type HistorySnapshot } from "../swp/connection.ts";
+import { historyMessage, type HandshakeProvider, type HistorySnapshot } from "../swp/handshake.ts";
 import type { SessionRouter } from "../swp/session.ts";
 
 export interface ReloadSummary {
