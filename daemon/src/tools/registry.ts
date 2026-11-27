@@ -166,6 +166,7 @@ export const ALL_TOOLS: readonly ToolDef[] = Object.freeze([
         reason: { type: "string", minLength: 1 },
         limit: { type: "string" },
         overwrite: { type: "boolean" },
+        when: { type: "string" },
       },
       required: ["thread", "reason"],
       additionalProperties: false,

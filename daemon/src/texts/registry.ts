@@ -77,6 +77,7 @@ import tools__autonomy__wake_in_thread__overwrite from "../../prompts/tools/auto
 import tools__autonomy__wake_in_thread__reason from "../../prompts/tools/autonomy/wake_in_thread/reason.md" with { type: "text" };
 import tools__autonomy__wake_in_thread__thread from "../../prompts/tools/autonomy/wake_in_thread/thread.md" with { type: "text" };
 import tools__autonomy__wake_in_thread__wake_in_thread from "../../prompts/tools/autonomy/wake_in_thread/wake_in_thread.md" with { type: "text" };
+import tools__autonomy__wake_in_thread__when from "../../prompts/tools/autonomy/wake_in_thread/when.md" with { type: "text" };
 import tools__bash__bash from "../../prompts/tools/bash/bash.md" with { type: "text" };
 import tools__bash__command from "../../prompts/tools/bash/command.md" with { type: "text" };
 import tools__bash__workdir from "../../prompts/tools/bash/workdir.md" with { type: "text" };
@@ -332,7 +333,7 @@ const TOOL_TEXTS_SHIPPED: Readonly<Record<string, { description: string; paramet
     },
   },
   list_triggers: { description: tools__autonomy__list_triggers__list_triggers, parameters: {} },
-  wake_in_thread: { description: tools__autonomy__wake_in_thread__wake_in_thread, parameters: { thread: tools__autonomy__wake_in_thread__thread, reason: tools__autonomy__wake_in_thread__reason, limit: tools__autonomy__wake_in_thread__limit, overwrite: tools__autonomy__wake_in_thread__overwrite } },
+  wake_in_thread: { description: tools__autonomy__wake_in_thread__wake_in_thread, parameters: { thread: tools__autonomy__wake_in_thread__thread, reason: tools__autonomy__wake_in_thread__reason, limit: tools__autonomy__wake_in_thread__limit, overwrite: tools__autonomy__wake_in_thread__overwrite, when: tools__autonomy__wake_in_thread__when } },
   send_message: { description: tools__autonomy__send_message__send_message, parameters: { text: tools__autonomy__send_message__text, thread: tools__autonomy__send_message__thread, push: tools__autonomy__send_message__push } },
   guide: { description: tools__guide__guide, parameters: { topic: tools__guide__topic } },
 };

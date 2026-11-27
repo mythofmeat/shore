@@ -1,11 +1,11 @@
 # Triggers and checks
 
-Triggers are how you give yourself time, and the only way: nothing else wakes you on its own. Each one names a time or an event, and when it comes Shore wakes you without {{user}} prompting it. What the time is for is up to you:
+Triggers are how you give yourself time, and the only way besides asking for a wake with `{{wake_in_thread}}`: nothing else wakes you on its own. Each one names a time or an event, and when it comes Shore wakes you without {{user}} prompting it. What the time is for is up to you:
 
 - Watching for something: a `check`, which runs without you and fires only when it has something to say.
 - Time in one of your threads: `thread`, so that the wake runs there.
 - Free time, with nothing planned: no `thread`, at an hour you choose or once {{user}} has been away a while.
-- One thing, once: `on`.
+- One thing, once: `on`. For a single wake in one of your threads, `{{wake_in_thread}}` with `when` does the same without a change to this file.
 
 You set triggers up yourself in `TRIGGERS.toml`, in your workspace root. Shore looks at the file every half minute, so a change takes effect within a minute, and `{{list_triggers}}` shows what Shore made of it: when each trigger is next due, how often it has fired, and any that aren't running and why.
 

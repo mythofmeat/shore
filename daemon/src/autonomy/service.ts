@@ -229,6 +229,10 @@ export class AutonomyService {
     return undefined;
   }
 
+  askedWakes(character: string): readonly TriggerFiring[] {
+    return this.#entries.get(character)?.runner.askedWakes ?? [];
+  }
+
   requestWake(character: string, firing: TriggerFiring, overwrite: boolean): WakeRequest {
     return required(this.#entries.get(character)).runner.requestWake(firing, overwrite);
   }
