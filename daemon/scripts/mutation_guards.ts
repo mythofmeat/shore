@@ -278,7 +278,6 @@ export const DAEMON_FLOORS: Readonly<Record<string, number>> = {
   "src/mcp/client.ts": 0,
   "src/memory/compaction/archive.ts": 0.85,
   "src/memory/compaction/background.ts": 0.15,
-  "src/memory/compaction/llm.ts": 0.15,
   "src/memory/compaction/manager.ts": 0.4,
   "src/memory/compaction/plan.ts": 0.45,
   "src/memory/compaction/run.ts": 0.2,
