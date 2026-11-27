@@ -1,7 +1,7 @@
 import { Database } from "bun:sqlite";
 import { afterAll, afterEach, expect, jest, setSystemTime, spyOn, test } from "bun:test";
 import { existsSync } from "node:fs";
-import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 
 import { registrationFor, TurnAutonomyBridge } from "../src/autonomy/registration.ts";
@@ -31,7 +31,7 @@ import { runCompactionPass } from "../src/memory/compaction/run.ts";
 import type { ServerMessage } from "../src/protocol/ServerMessage.ts";
 import type { ThreadListing } from "../src/protocol/ThreadListing.ts";
 import { shoreLog } from "../src/log.ts";
-import { hostZone } from "../src/ledger/zoned.ts";
+import { hostZone, naiveInZone } from "../src/ledger/zoned.ts";
 import { createRuntime, startRuntimeClocks, type ShoreRuntime } from "../src/runtime.ts";
 import { initializeDatabase } from "../src/storage/database.ts";
 import { insertEvent, withStorage } from "../src/storage/store.ts";
@@ -2710,6 +2710,55 @@ test("a wake the character asked for and the user interrupted is not a request s
       '[You asked for this wake from "main" at Friday 2026-10-30 · 12:14 PM: Tell part three.]',
     ]);
   }, handOff());
+});
+
+test("a one-off whose wake the user stopped in its thread isn't picked up once the reply to them gives it a new time, and wakes the character there at that time instead", async () => {
+  await withCharacter(async ({ runtime, script, workspace, say }) => {
+    const local = (minutes: number): string => new Date(naiveInZone(T0 + minutes * MINUTE, hostZone())).toISOString().slice(0, 16).replace("T", " ");
+    const parcel = (minutes: number): string => `[parcel]\non = "${local(minutes)}"\nthread = "ring"\nreason = "See whether the parcel came."\n`;
+    await runtime.registry.createThread("ada", "ring");
+    await writeFile(join(workspace, "TRIGGERS.toml"), parcel(5));
+    await say("hello");
+    script.sends = undefined; script.closing = "Done.";
+    at(1);
+    await runtime.triggers.tick();
+    at(5);
+    await runtime.triggers.tick();
+
+    script.again = 3;
+    const held = hold();
+    script.beatHeld = held;
+    const waking = runtime.autonomy.runDue();
+    await held.started.promise;
+    at(6);
+    script.replyTool = { name: "edit", input: { file_path: "TRIGGERS.toml", old_string: local(5), new_string: local(8 * 60) } };
+    const asking = say("do that tonight instead, it saves usage", "ring");
+    held.release.resolve();
+    await waking;
+    await asking;
+    script.again = 0;
+    expect(await readFile(join(workspace, "TRIGGERS.toml"), "utf8")).toBe(parcel(8 * 60));
+    const stopped = script.wakes.length;
+    expect(script.wakes.map((request) => request.context?.thread)).toEqual(Array.from({ length: stopped }, () => "ring"));
+
+    for (const minutes of [16, 60, 8 * 60 - 1]) {
+      at(minutes);
+      await runtime.triggers.tick();
+      await runtime.autonomy.runDue();
+    }
+    expect(script.wakes).toHaveLength(stopped);
+    expect(runtime.autonomy.log("ada", 20).map((event) => event.detail)).toContain(
+      'Wake in "ring" not picked up again for trigger "parcel": it was taken out of TRIGGERS.toml or given a new time after the user stopped it',
+    );
+
+    at(8 * 60);
+    await runtime.triggers.tick();
+    await runtime.autonomy.runDue();
+    expect(script.wakes.slice(stopped).map((request) => request.context?.thread)).toEqual(["ring", "ring"]);
+    const opened = turnsOf(script.wakes[stopped]).at(-1)?.[1] ?? "";
+    expect(setOffBy(opened)).toEqual([required(triggerFiredNote(new Texts(), { name: "parcel", reason: "See whether the parcel came.", at: T0 + 8 * 60 * MINUTE }, hostZone()))]);
+    expect(opened).toContain("[Your last wake here was stopped for User's message at Friday 2026-10-30 · 12:06 PM");
+  }, (app) => { app.tools.enabled.push("edit"); });
 });
 
 test("a hand-off is refused when the character's triggers are switched off", async () => {

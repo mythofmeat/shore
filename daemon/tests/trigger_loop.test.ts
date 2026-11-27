@@ -5,6 +5,7 @@ import { join } from "node:path";
 import type { TriggerFiring } from "../src/autonomy/runner.ts";
 import type { CheckOutcome } from "../src/autonomy/trigger_check.ts";
 import { CharacterTriggers, type TriggerSettings } from "../src/autonomy/trigger_loop.ts";
+import { triggerTimes } from "../src/autonomy/triggers.ts";
 import { writeCharacterState } from "../src/storage/store.ts";
 import { testTmp } from "./support/tmp.ts";
 
@@ -542,6 +543,20 @@ test("the list is read from the file whenever it is asked for, with triggers swi
   w.unreadable = false;
   w.file = "";
   expect((await w.triggers.view()).triggers).toEqual([]);
+  expect(w.woke).toEqual([]);
+});
+
+test("the times a stopped wake's triggers are held to are read from the file as it is, whether or not triggers are on, with none for a file that isn't there and nothing for one that can't be read", async () => {
+  const w = await world(HOURLY);
+  w.settings = { ...w.settings, enabled: false };
+  expect(await w.triggers.times()).toEqual(triggerTimes(HOURLY));
+  w.file = '[lamp]\nevery = "2h"\nreason = "Trim the lamp."\n';
+  expect(await w.triggers.times()).toEqual(triggerTimes(w.file));
+  expect(await w.triggers.times()).not.toEqual(triggerTimes(HOURLY));
+  w.file = undefined;
+  expect(await w.triggers.times()).toEqual(new Map());
+  w.unreadable = true;
+  expect(await w.triggers.times()).toBeUndefined();
   expect(w.woke).toEqual([]);
 });
 

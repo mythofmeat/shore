@@ -149,6 +149,7 @@ export class AutonomyService {
       idle,
       events: {
         wakeDone: (triggers) => { this.#listener?.(character).wakeDone(triggers); },
+        triggerTimes: async () => await this.#listener?.(character).triggerTimes?.(),
       },
       now: this.#now,
     });

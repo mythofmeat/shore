@@ -83,6 +83,7 @@ export class TriggerService {
     this.#deps = deps;
     deps.autonomy.onEvents((character) => ({
       wakeDone: (names) => { void this.#for(character).finished(names); },
+      triggerTimes: async () => await this.#for(character).times(),
     }));
     deps.autonomy.showTriggersFrom(async (character) => await this.view(character));
   }

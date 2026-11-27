@@ -3,6 +3,7 @@ import { Dormancy, type DormancyConfig } from "./dormancy.ts";
 import { WakeLog, type WakeEventKind } from "./wake_log.ts";
 import { tickDecision, type CompactionReason, type TickInputs } from "./tick.ts";
 import { saveState, toRfc3339, type AutonomyStateFile, type PersistedKeepalive } from "./state_file.ts";
+import { TRIGGERS_FILE } from "./triggers.ts";
 
 
 export interface CompactionRunnerConfig {
@@ -35,6 +36,7 @@ export interface TriggerFiring {
   readonly seal?: boolean | undefined;
   readonly byHand?: boolean | undefined;
   readonly interruptedAt?: number | undefined;
+  readonly timeAtStop?: string | null | undefined;
 }
 
 export interface OpenedSeal {
@@ -52,8 +54,12 @@ export const DEFAULT_WAKE_LIMIT_MS = 30 * 60_000;
 
 const STARTED_BY_HAND = "It was started by hand, from Shore's command line or its settings.";
 
+function byTrigger(firing: TriggerFiring): boolean {
+  return firing.from === undefined && firing.seal !== true && firing.byHand !== true;
+}
+
 export function firedBy(firings: readonly TriggerFiring[]): string {
-  const triggers = firings.filter((firing) => firing.from === undefined && firing.seal !== true && firing.byHand !== true).map((firing) => `"${firing.name}"`);
+  const triggers = firings.filter(byTrigger).map((firing) => `"${firing.name}"`);
   const handed = firings.flatMap((firing) => firing.from === undefined ? [] : [`"${firing.from}"`]);
   return [
     ...(triggers.length === 0 ? [] : [`trigger ${triggers.join(", ")}`]),
@@ -100,6 +106,7 @@ interface LiveWake extends RunningWake {
 
 export interface AutonomyEvents {
   wakeDone(triggers: readonly string[]): void;
+  triggerTimes?(): Promise<ReadonlyMap<string, string> | undefined>;
 }
 
 export interface AutonomyExecutor {
@@ -393,10 +400,12 @@ export class CharacterAutonomy {
           for (const firing of here) this.#queue(firing);
           continue;
         }
-        this.note("tick_fired", `Woken in "${thread}" by ${firedBy(here)}`, started);
-        const limitMs = Math.max(...here.map((firing) => firing.limitMs ?? DEFAULT_WAKE_LIMIT_MS));
-        await this.#wake({ startedAt: started, thread, news: [], firings: [...here], userTold: false }, async (hooks) =>
-          await this.#executor.runWake(this.#character, { thread, fired: here, limitMs, interrupted: () => lastActive() >= started }, hooks));
+        const kept = await this.#notCalledOff(here, thread);
+        if (kept.length === 0) continue;
+        this.note("tick_fired", `Woken in "${thread}" by ${firedBy(kept)}`, started);
+        const limitMs = Math.max(...kept.map((firing) => firing.limitMs ?? DEFAULT_WAKE_LIMIT_MS));
+        await this.#wake({ startedAt: started, thread, news: [], firings: [...kept], userTold: false }, async (hooks) =>
+          await this.#executor.runWake(this.#character, { thread, fired: kept, limitMs, interrupted: () => lastActive() >= started }, hooks));
       }
 
       if (decision.compaction !== undefined) {
@@ -440,12 +449,34 @@ export class CharacterAutonomy {
       this.#wakeRunning = undefined;
       const stoppedAt = this.#now();
       const unheard = [...shown, ...firingsIn(running.news)];
-      if (result?.interrupted === true) for (const firing of running.firings) this.#queue({ ...firing, interruptedAt: stoppedAt });
-      else {
+      if (result?.interrupted === true) {
+        const times = await this.#triggerTimes();
+        for (const firing of running.firings) {
+          const { timeAtStop: _before, ...stopped } = firing;
+          this.#queue({ ...stopped, interruptedAt: stoppedAt, ...(times === undefined || !byTrigger(firing) ? {} : { timeAtStop: times.get(firing.name) ?? null }) });
+        }
+      } else {
         for (const firing of unheard) this.#queue(firing);
         this.#events?.wakeDone(running.firings.filter((firing) => !unheard.includes(firing)).map((firing) => firing.name));
       }
     }
+  }
+
+  async #triggerTimes(): Promise<ReadonlyMap<string, string> | undefined> {
+    try {
+      return await this.#events?.triggerTimes?.();
+    } catch {
+      return undefined;
+    }
+  }
+
+  async #notCalledOff(firings: readonly TriggerFiring[], thread: string): Promise<TriggerFiring[]> {
+    const times = await this.#triggerTimes();
+    return firings.filter((firing) => {
+      const kept = times === undefined || firing.timeAtStop === undefined || (times.get(firing.name) ?? null) === firing.timeAtStop;
+      if (!kept) this.note("wake", `Wake in "${thread}" not picked up again for trigger "${firing.name}": it was taken out of ${TRIGGERS_FILE} or given a new time after the user stopped it`, this.#now());
+      return kept;
+    });
   }
 
   #apply(result: AutonomyActionResult): void {
