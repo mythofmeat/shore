@@ -282,7 +282,7 @@ test("the guide states each thing a character could otherwise only learn by tryi
 
 test("the guide says what wakes a character, what each way costs, and what becomes of a wake's working", async () => {
   const wakes = await (await guideWith(TRIGGERS_ON))("wakes");
-  expect(wakes).toContain("## What wakes you\n\n- A trigger of yours, in `TRIGGERS.toml`. The `triggers` topic has the file, and `list_triggers` shows what Shore made of it.\n- `wake_in_thread`, which hands something over to a wake in another of your threads once your turn is over, or wakes you in any thread of yours at a time you give it.\n- A sealed thread reaching its time, which wakes you in it.");
+  expect(wakes).toContain("## What wakes you\n\n- A trigger of yours, in `TRIGGERS.toml`. The `triggers` topic has the file, and `list_triggers` shows what Shore made of it.\n- `wake_in_thread`, which hands something over to a wake in another of your threads once your turn is over, or wakes you in any thread of yours at a time you give it. `list_triggers` lists the ones that haven't started.\n- A sealed thread reaching its time, which wakes you in it.");
   expect(wakes).toContain("- A check that stays quiet costs nothing. No model is called.");
   expect(wakes).toContain("- A trigger with `wake = false` calls no model either, whatever its check prints.");
   expect(wakes).toContain("- A wake is one turn of your model. It starts fresh, so it costs your prompt and what was said in its thread since your last wake there, and then whatever you read and do. It doesn't grow with the thread it runs in, however long that thread gets.");
@@ -453,6 +453,15 @@ test("the guide says statuses are any words, several at once, and how they are s
   expect(messages).toContain("`[Their status was cleared 30 minutes ago.]`");
   expect(messages).toContain("- At the start of a wake, while any is on.\n- In a check, as `SHORE_USER_STATUSES`, one per line.");
   expect(messages).toContain('A trigger with `when = "status_changed"` fires when eve turns one on or off.');
+});
+
+test("list_triggers says it ends with the wakes the character asked for only while it has wake_in_thread", () => {
+  const described = (enabled: string[]): string | undefined => renderToolDefs(new Texts(), { enabled }, "Ada", "eve").find((def) => def.name === "list_triggers")?.description;
+  expect(described(["list_triggers", "wake_in_thread"])).toBe(
+    "List your triggers: everything set to wake you, or to run a check, without eve prompting it. For each one in `TRIGGERS.toml`, in your workspace root, it says when it fires, what it does, when it is next due and how often it has fired, and it lists any that aren't running and why. " +
+    "It also says whether eve has your triggers switched on. It ends with the wakes you asked for with `wake_in_thread` that haven't started.",
+  );
+  expect(described(["list_triggers"])).not.toContain("wake_in_thread");
 });
 
 test("a page ends by naming the tools on it that the user hasn't turned on, and says nothing when the character has them all", async () => {

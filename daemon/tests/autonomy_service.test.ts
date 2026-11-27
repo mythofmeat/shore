@@ -13,6 +13,7 @@ import type { LoadedConfig } from "../src/config/loader.ts";
 import { emptyCatalog } from "../src/config/models.ts";
 import { ProviderRegistry } from "../src/config/providers.ts";
 import { shoreLog } from "../src/log.ts";
+import * as store from "../src/storage/store.ts";
 import { readCharacterState, writeCharacterState } from "../src/storage/store.ts";
 import type { KeepaliveService } from "../src/cache/keepalive.ts";
 import { outcomeOf } from "./support/outcome.ts";
@@ -538,6 +539,28 @@ test("while a wake runs, the character counts as having one more wake without th
   expect([service.runningWake("ada"), service.runningWakes()]).toEqual([undefined, []]);
 });
 
+test("a character's dormancy is kept across a restart, along with the wakes counted without the user, and going dormant is logged once", async () => {
+  const { service, ran, restart } = await world({ maxIdleWakes: 3 });
+  service.wakeFor("ada", fired("lamp"));
+  await service.runDue();
+  service.wakeFor("ada", fired("tide"));
+  await service.runDue();
+  await restart();
+  expect(service.status("ada")).toMatchObject({ state: "Active", wakes_without_user: 2 });
+  service.wakeFor("ada", fired("ferry"));
+  await service.runDue();
+  expect(service.status("ada")).toMatchObject({ state: "Dormant", wakes_without_user: 3 });
+
+  service.wakeFor("ada", fired("bell"));
+  await service.runDue();
+  await restart();
+  service.wakeFor("ada", fired("gong"));
+  await service.runDue();
+  expect(service.status("ada")?.state).toBe("Dormant");
+  expect(ran.map((each) => each.fired)).toEqual([["lamp"], ["tide"], ["ferry"]]);
+  expect(service.log("ada", 20).filter((event) => event.kind === "dormant").map((event) => event.detail)).toEqual(["Went dormant (wakes without the user: 3)"]);
+});
+
 test("a dormant character is woken by nothing but a seal coming off, and what came due meanwhile is not made up", async () => {
   const { service, ran, seals, clock, woken } = await world({ maxIdleWakes: 2 });
   service.wakeFor("ada", fired("lamp"));
@@ -682,6 +705,28 @@ test("a wake asked for in a thread while the one waiting there is about to start
   await restart();
   await service.runDue();
   expect(ran.map((wake) => wake.thread)).toEqual(["main", "garden", "garden"]);
+});
+
+test("a wake asked for still runs when Shore can't save it, the failure is logged, and the character's later wakes go on", async () => {
+  const { service, ran, dataDir } = await world();
+  const write = store.writeCharacterState;
+  const failing = spyOn(store, "writeCharacterState").mockImplementation((dir, file, content) => {
+    if (file === ASKED_STATE) throw new Error("disk full");
+    write(dir, file, content);
+  });
+  const errors = spyOn(shoreLog, "error").mockImplementation(() => {});
+  try {
+    expect(service.requestWake("ada", asked("ring"), false).kind).toBe("queued");
+    await service.runDue();
+    service.wakeFor("ada", fired("song", { thread: "ring" }));
+    await service.runDue();
+    expect(ran.map((wake) => [wake.thread, wake.fired])).toEqual([["ring", [""]], ["ring", ["song"]]]);
+    expect(service.runningWake("ada")).toBeUndefined();
+    expect(errors.mock.calls.map((call) => String(call[0]))).toEqual(Array.from({ length: 3 }, () => `shore: could not save the wakes asked for at ${dataDir}: Error: disk full`));
+  } finally {
+    failing.mockRestore();
+    errors.mockRestore();
+  }
 });
 
 test("wakes asked for are read back from what Shore saved, leaving out an entry it can't make sense of, and none from a file it can't read", async () => {

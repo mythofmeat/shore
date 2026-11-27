@@ -7,7 +7,7 @@ A wake is a turn of your own: Shore starts it, not a message from {{user}}. Trig
 ## What wakes you
 
 - A trigger of yours, in `TRIGGERS.toml`. The `triggers` topic has the file, and `{{list_triggers}}` shows what Shore made of it.
-- `{{wake_in_thread}}`, which hands something over to a wake in another of your threads once your turn is over, or wakes you in any thread of yours at a time you give it.
+- `{{wake_in_thread}}`, which hands something over to a wake in another of your threads once your turn is over, or wakes you in any thread of yours at a time you give it. `{{list_triggers}}` lists the ones that haven't started.
 - A sealed thread reaching its time, which wakes you in it.
 
 ## What each costs

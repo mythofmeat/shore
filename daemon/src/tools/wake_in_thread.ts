@@ -55,7 +55,8 @@ function afterLength(text: string, now: number): number | undefined {
   if (match === null) return undefined;
   const [, amount, minutes, hours, days] = match;
   const parsed = ConfigDuration.parse(`${amount ?? ""}${(minutes ?? hours ?? days ?? "").toLowerCase()}`);
-  return "err" in parsed ? undefined : now + parsed.ok.asMillis();
+  const at = "err" in parsed ? Number.NaN : now + parsed.ok.asMillis();
+  return Number.isNaN(new Date(at).getTime()) ? undefined : at;
 }
 
 export function wakeStartsAt(value: unknown, now: number, timeZone: string): number {
@@ -91,7 +92,7 @@ function whenItStarts(startsAt: number | undefined, userName: string, timeZone: 
   const quiet = spanPhrase(WAKE_QUIET_MS);
   return startsAt === undefined
     ? `, once this turn is over and ${userName} has been quiet there for ${quiet}.`
-    : ` at ${formatWallClock(startsAt, timeZone)}. If ${userName} has written there in the ${quiet} before, it waits until they have been quiet there that long.`;
+    : ` at ${formatWallClock(startsAt, timeZone)}. If ${userName} has written there in the ${quiet} before, it waits until they have been quiet there that long. If you are dormant then, or ${userName} has switched your triggers off, it is dropped.`;
 }
 
 export function handleWakeInThread(

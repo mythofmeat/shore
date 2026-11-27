@@ -133,7 +133,7 @@ test("a hand-off's `when` is a local date with a 24-hour or 12-hour time, or a l
   expect(startsAt(null)).toBeUndefined();
 
   const unreadable = 'invalid args: when must be a local date and time, like "2026-11-19 13:00" or "2026-11-19 1:00PM", or a length of time from now, like "in 5 hours" or "90m"';
-  for (const when of ["soon", "tomorrow", "", 5, true, "in 5 weeks", "30s", "in five hours", "2026-10-30 0:30AM", "2026-10-30 13:00PM", "2026-10-30 24:00", "2026-02-30 10:00", "2026-10-30 9:5", "2026-10-30", "13:00"]) {
+  for (const when of ["soon", "tomorrow", "", 5, true, "in 5 weeks", "30s", "in 999999999 days", "in 99999999999999999999 days", "in five hours", "2026-10-30 0:30AM", "2026-10-30 13:00PM", "2026-10-30 24:00", "2026-02-30 10:00", "2026-10-30 9:5", "2026-10-30", "13:00"]) {
     expect(refusal(() => startsAt(when))).toBe(`InvalidArgs: ${unreadable}`);
   }
   expect(refusal(() => startsAt("2026-10-30 12:00"))).toBe("InvalidArgs: invalid args: when must be a time still to come, and Friday 2026-10-30 · 12:00 PM is not: it is Friday 2026-10-30 · 12:00 PM now");
@@ -149,7 +149,7 @@ test("a hand-off with `when` may be for the thread it is called from, and says w
     return { kind: "queued" as const, limitMs: 45 * MINUTE };
   };
   expect(handleWakeInThread({ thread: "ring", reason: "Look again.", when: "in 5 hours", limit: "45m" }, "ring", queue, "eve", "UTC", T0)).toBe(
-    'Shore will wake you in "ring" for up to 45 minutes at Friday 2026-10-30 · 5:00 PM. If eve has written there in the 10 minutes before, it waits until they have been quiet there that long.',
+    'Shore will wake you in "ring" for up to 45 minutes at Friday 2026-10-30 · 5:00 PM. If eve has written there in the 10 minutes before, it waits until they have been quiet there that long. If you are dormant then, or eve has switched your triggers off, it is dropped.',
   );
   expect(handleWakeInThread({ thread: "ring", reason: "Look again.", when: "2026-10-31 9:00AM" }, "main", queue, "eve", "UTC", T0)).toStartWith(
     'Shore will wake you in "ring" for up to 45 minutes at Saturday 2026-10-31 · 9:00 AM. If eve',

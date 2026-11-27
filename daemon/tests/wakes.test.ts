@@ -2761,7 +2761,7 @@ test("a reply asks to be woken in its own thread at a time, and the wake starts 
     script.replyTool = { name: "wake_in_thread", input: { thread: "main", reason: "See how the bread rose.", when: "in 3 hours" } };
     await say("remind yourself to check the bread");
     expect(lastToolResult(await thread("main"))).toEqual({
-      text: 'Shore will wake you in "main" for up to 30 minutes at Friday 2026-10-30 · 3:00 PM. If peggy has written there in the 10 minutes before, it waits until they have been quiet there that long.',
+      text: 'Shore will wake you in "main" for up to 30 minutes at Friday 2026-10-30 · 3:00 PM. If peggy has written there in the 10 minutes before, it waits until they have been quiet there that long. If you are dormant then, or peggy has switched your triggers off, it is dropped.',
       failed: false,
     });
     at(179);

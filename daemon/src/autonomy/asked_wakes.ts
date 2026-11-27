@@ -50,6 +50,10 @@ export class AskedWakes {
   }
 
   #save(): void {
-    writeCharacterState(this.#characterDir, ASKED_STATE, JSON.stringify(this.list().map(saved)));
+    try {
+      writeCharacterState(this.#characterDir, ASKED_STATE, JSON.stringify(this.list().map(saved)));
+    } catch (error) {
+      shoreLog.error(`shore: could not save the wakes asked for at ${this.#characterDir}: ${String(error)}`);
+    }
   }
 }
