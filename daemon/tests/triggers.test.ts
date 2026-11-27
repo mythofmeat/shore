@@ -8,7 +8,7 @@ import { configSchema } from "../src/config/schema.ts";
 import { handleListTriggers } from "../src/tools/list_triggers.ts";
 import { rejectionOf } from "./support/outcome.ts";
 import { testTmp } from "./support/tmp.ts";
-import { coolingDown, inItsHours, nextAt, parseTriggers, scheduledAt, type Trigger, type TriggerWhen } from "../src/autonomy/triggers.ts";
+import { coolingDown, inItsHours, nextAt, parseTriggers, scheduledAt, triggerTimes, type Trigger, type TriggerWhen } from "../src/autonomy/triggers.ts";
 
 const MINUTE = 60_000;
 const HOUR = 60 * MINUTE;
@@ -374,6 +374,28 @@ test("a one-off is due at its time in the local zone, and never again once that 
   expect(scheduledAt(once, Date.UTC(2026, 10, 12), "UTC")).toBeUndefined();
   expect(scheduledAt(once, Date.UTC(2026, 10, 13), "UTC")).toBeUndefined();
   expect(scheduledAt(once, Date.UTC(2026, 10, 1), "Australia/Sydney")).toBe(Date.UTC(2026, 10, 11, 13));
+});
+
+test("a trigger's time is what its `every`, `at`, `on`, `when`, `after` and `follows` say, so nothing else in it changes that, one that isn't running has a time too, and a file that isn't TOML has none", () => {
+  const file = (when: string, rest = ""): string => `[parcel]\n${when}\nreason = "See whether it came."\n${rest}\n[broken]\nevery = "1h"\nreason = "r"\ncolour = "red"\n`;
+  const timeOf = (when: string, rest?: string): string | undefined => triggerTimes(file(when, rest))?.get("parcel");
+  const times = [
+    'on = "2026-11-20 18:00"', 'on = "2026-11-20 20:00"', 'at = "18:00"', 'every = "1h"', 'every = "2h"',
+    'when = "user_quiet"', 'when = "status_changed"', 'when = "user_quiet"\nafter = "3h"', 'when = "user_quiet"\nafter = "4h"',
+    'follows = "lamp"', 'follows = "tide"',
+  ].map((when) => timeOf(when));
+  expect(times.every((time) => time !== undefined)).toBe(true);
+  expect(new Set(times).size).toBe(times.length);
+
+  const before = timeOf('on = "2026-11-20 18:00"');
+  for (const rest of ['check = "echo hi"', "wake = false", 'thread = "ring"', 'limit = "1h"', 'cooldown = "2h"', 'between = "08:00-23:00"']) {
+    expect(timeOf('on = "2026-11-20 18:00"', rest), rest).toBe(before);
+  }
+  expect(triggerTimes(file('on = "2026-11-20 18:00"').replace("See whether", "Look whether"))?.get("parcel")).toBe(before);
+  expect(parseTriggers(file('on = "2026-11-20 18:00"'), DEFAULT_COOLDOWN).triggers.map((trigger) => trigger.name)).toEqual(["parcel"]);
+  expect([...triggerTimes(file('on = "2026-11-20 18:00"'))?.keys() ?? []]).toEqual(["parcel", "broken"]);
+  expect(triggerTimes("")).toEqual(new Map());
+  expect(triggerTimes("[parcel\non = 1")).toBeUndefined();
 });
 
 async function shown(body: string, status: Partial<Omit<TriggerView, "trigger">> = {}): Promise<string> {

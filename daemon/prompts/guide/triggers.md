@@ -137,7 +137,7 @@ A trigger that comes due outside its `between` hours is skipped, not held until 
 
 ## One-offs
 
-A trigger with `on` fires once. After that it stays in the file, and `{{list_triggers}}` goes on showing it, as fired and with no next time. It does nothing more there, so take it out whenever you like. Writing a later time in its place arms it again.
+A trigger with `on` fires once. After that it stays in the file, and `{{list_triggers}}` goes on showing it, as fired and with no next time. It does nothing more there, so take it out whenever you like. Writing a later time in its place arms it again. If {{user}} stopped the wake it set off by writing in that wake's thread, either of those also keeps the wake from being picked up when they go quiet: with a later time, you are woken then instead. The `wakes` topic has the details.
 
 A one-off gets no second try, so a check that fails is handled differently: see the end of this page.
 

@@ -37,7 +37,7 @@ import { backgroundModelRequest, backgroundTaskModel } from "./background_model.
 import type { WakeEventKind } from "./wake_log.ts";
 import { runBackgroundLoop, type BackgroundLoopDeps, type BackgroundLoopResult, type LoopRound } from "./background_loop.ts";
 import { presence } from "./presence.ts";
-import { WAKE_QUIET_MS, type TriggerFiring, type WakeNews, type WakeResult } from "./runner.ts";
+import { byTrigger, WAKE_QUIET_MS, type TriggerFiring, type WakeNews, type WakeResult } from "./runner.ts";
 import { sealedListNote, sealedWakeNote } from "./sealed_notes.ts";
 import { threadDigest, type ThreadReader } from "./thread_digest.ts";
 import { Outbox, postElsewhere, postMessage, reachableThreads, sendingsHere } from "./outbox.ts";
@@ -107,10 +107,10 @@ export function wakeWrapUpText(texts: Texts, msLeft: number, rounds: number, use
   return texts.render("wrap_up", { time_left: timeLeftPhrase(msLeft), last_round: rounds === 1 ? "yes" : undefined, rounds: String(rounds), user: userName });
 }
 
-export function wakeStoppedNote(texts: Texts, ending: WakeEnding, userName: string, limitMs: number): string | undefined {
+export function wakeStoppedNote(texts: Texts, ending: WakeEnding, userName: string, limitMs: number, fired: readonly TriggerFiring[]): string | undefined {
   switch (ending.why) {
     case "interrupted":
-      return texts.render("stopped_interrupted", { user: userName, quiet: spanPhrase(WAKE_QUIET_MS) });
+      return texts.render("stopped_interrupted", { user: userName, quiet: spanPhrase(WAKE_QUIET_MS), triggers: fired.every(byTrigger) ? "yes" : undefined });
     case "time":
       return texts.render("stopped_time", { limit: spanPhrase(limitMs) });
     case "rounds":
@@ -402,7 +402,7 @@ export async function runWake(character: string, config: LoadedConfig, wake: Wak
           ? `Wake in "${thread}" stopped for ${userName}'s message`
           : `Wake in "${thread}" ${ending.why === "time" ? `reached its limit of ${spanPhrase(wake.limitMs)}` : "used up its rounds"} and was stopped`);
       }
-      const stoppedNote = wakeStoppedNote(texts, ending, userName, wake.limitMs);
+      const stoppedNote = wakeStoppedNote(texts, ending, userName, wake.limitMs, wake.fired);
       if (stoppedNote !== undefined) {
         const why = roundMessage({ role: "system", blocks: [{ type: "text", text: stoppedNote }] }, request, deps);
         await engine.appendMessage(why);

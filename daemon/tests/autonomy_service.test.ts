@@ -6,6 +6,7 @@ import type { AutonomyActionResult, AutonomyExecutor, OpenedSeal, TriggerFiring,
 import { TurnAutonomyBridge } from "../src/autonomy/registration.ts";
 import { AutonomyService } from "../src/autonomy/service.ts";
 import { decodeState, STATE_FILENAME } from "../src/autonomy/state_file.ts";
+import { triggerTimes } from "../src/autonomy/triggers.ts";
 import { defaultAppConfig } from "../src/config/app.ts";
 import type { LoadedConfig } from "../src/config/loader.ts";
 import { emptyCatalog } from "../src/config/models.ts";
@@ -175,6 +176,147 @@ test("a wake started by hand doesn't wait for the user to be quiet in home, but 
   clock.now = T0 + 10 * MINUTE;
   await service.runDue();
   expect(ran).toHaveLength(2);
+});
+
+const PARCEL = '[parcel]\non = "2026-10-30 12:05"\nthread = "ring"\nreason = "See whether the parcel came."\n';
+const LAMP = '[lamp]\nevery = "1h"\nreason = "Trim the lamp."\n';
+
+function readsTriggers(service: AutonomyService, file: { text: string | undefined | Error }): void {
+  service.onEvents(() => ({
+    wakeDone: () => {},
+    triggerTimes: async () => {
+      if (file.text instanceof Error) throw file.text;
+      return file.text === undefined ? undefined : triggerTimes(file.text);
+    },
+  }));
+}
+
+function stoppedBy(w: World, thread: string, meanwhile: () => void = () => {}): void {
+  w.during.run = () => {
+    meanwhile();
+    w.service.userActiveIn("ada", thread);
+    delete w.during.run;
+    return { events: [], interrupted: true };
+  };
+}
+
+const calledOff = (w: World): string[] => w.service.log("ada", 20).filter((event) => event.kind === "wake").map((event) => event.detail);
+
+test("a trigger whose wake the user stopped isn't picked up again once, after the stop, it is taken out of the file or given a new time, and the log says so, while any other change leaves it to be picked up", async () => {
+  const cases = [
+    [PARCEL.replace("12:05", "20:00"), false],
+    [PARCEL.replace('on = "2026-10-30 12:05"', 'at = "20:00"'), false],
+    ["", false],
+    [LAMP, false],
+    [PARCEL.replace("See whether", "Look whether").replace('thread = "ring"', 'thread = "ring"\nlimit = "1h"\ncooldown = "2h"'), true],
+    [PARCEL, true],
+  ] as const;
+  for (const [after, picked] of cases) {
+    const w = await world();
+    const file = { text: PARCEL as string };
+    readsTriggers(w.service, file);
+    stoppedBy(w, "ring");
+    w.service.wakeFor("ada", fired("parcel", { thread: "ring" }));
+    await w.service.runDue();
+    file.text = after;
+    w.clock.now = T0 + 10 * MINUTE;
+    await w.service.runDue();
+    await w.service.runDue();
+    expect(w.ran.map((each) => each.fired), after).toEqual(picked ? [["parcel"], ["parcel"]] : [["parcel"]]);
+    expect(calledOff(w), after).toEqual(picked ? [] : ['Wake in "ring" not picked up again for trigger "parcel": it was taken out of TRIGGERS.toml or given a new time after the user stopped it']);
+    expect(w.woken()).toEqual(picked ? ['Woken in "ring" by trigger "parcel"', 'Woken in "ring" by trigger "parcel"'] : ['Woken in "ring" by trigger "parcel"']);
+  }
+});
+
+test("what the file said when the wake was stopped is what counts, so a wake that took its own trigger out is still picked up, and so is one whose file can't be read or isn't TOML", async () => {
+  const cases: [string, (file: { text: string | undefined | Error }) => void, (file: { text: string | undefined | Error }) => void][] = [
+    ["took its own trigger out", (file) => { file.text = ""; }, () => {}],
+    ["isn't TOML afterwards", () => {}, (file) => { file.text = "[parcel"; }],
+    ["can't be read afterwards", () => {}, (file) => { file.text = undefined; }],
+    ["reading it fails afterwards", () => {}, (file) => { file.text = new Error("no workspace"); }],
+    ["couldn't be read at the stop", (file) => { file.text = undefined; }, (file) => { file.text = ""; }],
+    ["reading it failed at the stop", (file) => { file.text = new Error("no workspace"); }, (file) => { file.text = ""; }],
+  ];
+  for (const [what, meanwhile, after] of cases) {
+    const w = await world();
+    const file: { text: string | undefined | Error } = { text: PARCEL };
+    readsTriggers(w.service, file);
+    stoppedBy(w, "ring", () => { meanwhile(file); });
+    w.service.wakeFor("ada", fired("parcel", { thread: "ring" }));
+    await w.service.runDue();
+    after(file);
+    w.clock.now = T0 + 10 * MINUTE;
+    await w.service.runDue();
+    expect(w.ran.map((each) => each.fired), what).toEqual([["parcel"], ["parcel"]]);
+    expect(calledOff(w), what).toEqual([]);
+  }
+});
+
+test("only a trigger is dropped from a stopped wake: a hand-off and a start by hand that shared it are picked up without it, and with nothing left the wake isn't picked up", async () => {
+  const w = await world();
+  const file = { text: LAMP };
+  readsTriggers(w.service, file);
+  stoppedBy(w, "main");
+  w.service.wakeFor("ada", fired("lamp"));
+  w.service.wakeFor("ada", fired("lamp", { from: "garden" }));
+  w.service.wakeNow("ada");
+  await w.service.runDue();
+  file.text = LAMP.replace("1h", "2h");
+  w.clock.now = T0 + 10 * MINUTE;
+  await w.service.runDue();
+  expect(w.ran.map((each) => each.fired)).toEqual([["lamp", "lamp", ""], ["lamp", ""]]);
+  expect(w.woken().at(-1)).toBe('Woken in "main" by a start by hand and a hand-off from "garden"');
+
+  const alone = await world();
+  const theirs = { text: `${LAMP}\n[tide]\nevery = "1h"\nreason = "Watch the tide."\n` };
+  readsTriggers(alone.service, theirs);
+  stoppedBy(alone, "main");
+  alone.service.wakeFor("ada", fired("lamp"));
+  alone.service.wakeFor("ada", fired("tide"));
+  await alone.service.runDue();
+  theirs.text = "";
+  alone.clock.now = T0 + 10 * MINUTE;
+  await alone.service.runDue();
+  expect(alone.ran.map((each) => each.fired)).toEqual([["lamp", "tide"]]);
+  expect(calledOff(alone)).toHaveLength(2);
+});
+
+test("a trigger given a new time wakes the character at it as usual, even when that comes before its stopped wake would have been picked up", async () => {
+  const w = await world();
+  const file = { text: PARCEL };
+  readsTriggers(w.service, file);
+  stoppedBy(w, "ring");
+  w.service.wakeFor("ada", fired("parcel", { thread: "ring" }));
+  await w.service.runDue();
+  file.text = PARCEL.replace("12:05", "12:08");
+  w.clock.now = T0 + 8 * MINUTE;
+  w.service.wakeFor("ada", fired("parcel", { thread: "ring", reason: "Again.", at: T0 + 8 * MINUTE }));
+  await w.service.runDue();
+  expect(w.ran).toHaveLength(1);
+  w.clock.now = T0 + 10 * MINUTE;
+  await w.service.runDue();
+  expect(w.ran.map((each) => each.fired)).toEqual([["parcel"], ["parcel"]]);
+  expect(calledOff(w)).toEqual([]);
+});
+
+test("the file is read again for each thread's turn, so a change made while another thread's wake runs in the same look still drops the trigger", async () => {
+  const w = await world();
+  const file = { text: PARCEL };
+  readsTriggers(w.service, file);
+  stoppedBy(w, "ring", () => {
+    w.service.wakeFor("ada", fired("lamp"));
+    w.service.userActiveIn("ada", "main");
+  });
+  w.service.wakeFor("ada", fired("parcel", { thread: "ring" }));
+  await w.service.runDue();
+  w.during.run = () => {
+    file.text = PARCEL.replace("12:05", "20:00");
+    return { events: [] };
+  };
+  w.clock.now = T0 + 10 * MINUTE;
+  await w.service.runDue();
+  expect(w.ran.map((each) => [each.thread, each.fired])).toEqual([["ring", ["parcel"]], ["main", ["lamp"]]]);
+  expect(calledOff(w)).toHaveLength(1);
 });
 
 test("a tick that fails says so to whoever asked for it, naming the character, and the next tick runs", async () => {

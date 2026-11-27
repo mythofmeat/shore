@@ -2,7 +2,7 @@ import { shoreLog } from "../log.ts";
 import { readCharacterState, writeCharacterState } from "../storage/store.ts";
 import type { TriggerFiring } from "./runner.ts";
 import type { CheckOutcome } from "./trigger_check.ts";
-import { coolingDown, inItsHours, nextFiring, parseTriggers, scheduledAt, TRIGGERS_FILE, type ParsedTriggers, type Trigger } from "./triggers.ts";
+import { coolingDown, inItsHours, nextFiring, parseTriggers, scheduledAt, triggerTimes, TRIGGERS_FILE, type ParsedTriggers, type Trigger } from "./triggers.ts";
 
 const TRIGGER_STATE = "triggers.json";
 
@@ -167,6 +167,15 @@ export class CharacterTriggers {
         };
       }),
     };
+  }
+
+  async times(): Promise<ReadonlyMap<string, string> | undefined> {
+    try {
+      return triggerTimes(await this.#deps.readFile() ?? "");
+    } catch (error) {
+      shoreLog.warn(`shore: could not read ${TRIGGERS_FILE} at ${this.#deps.characterDir}: ${String(error)}`);
+      return undefined;
+    }
   }
 
   async #inTurn(work: () => Promise<void>): Promise<void> {
