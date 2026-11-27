@@ -489,14 +489,15 @@ export function sharedToolDeps(
   config: LoadedConfig,
   mcp: McpHolder,
   autonomy: Pick<AutonomyService, "activityStats" | "wakesMayRun" | "requestWake">,
-  subagent?: SubagentToolDeps,
+  subagent: SubagentToolDeps,
   triggers?: Pick<TriggerService, "view">,
 ): ToolContextDeps {
+  const { registry, turn } = subagent;
   return {
     ...(triggers === undefined ? {} : { triggersView: (character: string) => triggers.view(character) }),
     push: async (character, message) => {
-      const notifications = (subagent?.registry.effectiveConfig(character) ?? config).app.notifications;
-      const env = subagent?.env ?? process.env;
+      const notifications = registry.effectiveConfig(character).app.notifications;
+      const env = subagent.env ?? process.env;
       return await pushToUser(characterDataDir(config.dirs.data, character), `Shore - ${character}`, message, {
         url: notifications.url,
         topic: notifications.push_topic,
@@ -505,52 +506,41 @@ export function sharedToolDeps(
       }, Date.now(), async (delivery, title, body) => { await realSink.ntfy(delivery, title, body); });
     },
     activityStats: (character, days) => autonomy.activityStats(character, localWallClock(Date.now()), days),
-    ...(subagent === undefined ? {} : {
-      wakeInThread: (character, from, request) => {
-        if (!autonomy.wakesMayRun(character)) return { kind: "off" };
-        const { registry } = subagent;
-        const known = [...registry.listThreads(character), ...registry.sealedThreads(character)].some((record) => record.id === request.thread);
-        if (!known) return { kind: "no_thread" };
-        if (request.thread === registry.wakesThread(character)) return { kind: "wakes_thread" };
-        const most = registry.effectiveConfig(character).app.triggers.max_wake_limit.asMillis();
-        const limitMs = request.limitMs === undefined ? undefined : Math.min(request.limitMs, most);
-        const asked = autonomy.requestWake(character, { name: "", from, reason: request.reason, at: Date.now(), thread: request.thread, limitMs }, request.overwrite);
-        return asked.kind === "waiting" ? asked : { kind: "queued", limitMs, replaced: asked.replaced };
-      },
-      sealThread: async (character, request) => {
-        const { sealed, filesDir } = await startSealedThread(subagent.registry, character, request);
-        return { unsealAt: sealed.unseal_at, filesDir };
-      },
-    }),
-    ...(subagent?.turn === undefined ? {} : { signal: subagent.turn.signal }),
-    ...(subagent?.turn === undefined ? {} : { conversation: subagent.turn.conversation }),
-    ...(subagent?.turn?.thread === undefined ? {} : { thread: subagent.turn.thread }),
+    wakeInThread: (character, from, request) => {
+      if (!autonomy.wakesMayRun(character)) return { kind: "off" };
+      const known = [...registry.listThreads(character), ...registry.sealedThreads(character)].some((record) => record.id === request.thread);
+      if (!known) return { kind: "no_thread" };
+      if (request.thread === registry.wakesThread(character)) return { kind: "wakes_thread" };
+      const most = registry.effectiveConfig(character).app.triggers.max_wake_limit.asMillis();
+      const limitMs = request.limitMs === undefined ? undefined : Math.min(request.limitMs, most);
+      const asked = autonomy.requestWake(character, { name: "", from, reason: request.reason, at: Date.now(), thread: request.thread, limitMs }, request.overwrite);
+      return asked.kind === "waiting" ? asked : { kind: "queued", limitMs, replaced: asked.replaced };
+    },
+    sealThread: async (character, request) => {
+      const { sealed, filesDir } = await startSealedThread(registry, character, request);
+      return { unsealAt: sealed.unseal_at, filesDir };
+    },
+    ...(turn === undefined ? {} : { signal: turn.signal, conversation: turn.conversation }),
+    ...(turn?.thread === undefined ? {} : { thread: turn.thread }),
     mcpRegistry: mcp.callView(),
     mcpToolDefs: (patterns) => mcp.current.toolDefsFiltered(patterns),
-    ...(subagent === undefined
-      ? {}
-      : {
-          runSubagent: (parent: ToolContext) => {
-            const turn = subagent.turn;
-            return subagentRunner({
-              config: subagent.registry.effectiveConfig(parent.characterName),
-              ctx: parent,
-              conversation: parent.conversation,
-              providers: subagent.providers,
-              ...(subagent.callStore === undefined ? {} : { callStore: subagent.callStore }),
-              mcpRegistry: mcp.current,
-              ...(subagent.env === undefined ? {} : { env: subagent.env }),
-              ...(turn === undefined
-                ? {}
-                : {
-                    sendDirect: turn.send,
-                    ...(turn.rid === undefined ? {} : { rid: turn.rid }),
-                    now: turn.now,
-                    newMessageId: turn.newMessageId,
-                  }),
-            });
-          },
-        }),
+    runSubagent: (parent: ToolContext) => subagentRunner({
+      config: registry.effectiveConfig(parent.characterName),
+      ctx: parent,
+      conversation: parent.conversation,
+      providers: subagent.providers,
+      ...(subagent.callStore === undefined ? {} : { callStore: subagent.callStore }),
+      mcpRegistry: mcp.current,
+      ...(subagent.env === undefined ? {} : { env: subagent.env }),
+      ...(turn === undefined
+        ? {}
+        : {
+            sendDirect: turn.send,
+            ...(turn.rid === undefined ? {} : { rid: turn.rid }),
+            now: turn.now,
+            newMessageId: turn.newMessageId,
+          }),
+    }),
     modelHistoryQuery: (character, since, until) => {
       const ledger = ledgerFor(rustJoin(config.dirs.data, "shore.db"));
       if (ledger === null) throw new Error("the ledger is unavailable");
