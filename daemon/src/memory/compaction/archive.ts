@@ -21,7 +21,7 @@ export interface DurableHistoryLocation {
   unlabelled?: boolean;
 }
 
-export type SegmentArchiveHook = (archiving: { archiveKey: string; activeContent: string }) => Promise<((segment: number) => void) | undefined>;
+export type SegmentArchiveHook = (archiving: { archiveKey: string; archived: readonly string[] }) => Promise<((segment: number) => void) | undefined>;
 
 const archiveHooks = new Map<string, SegmentArchiveHook>();
 
@@ -78,7 +78,7 @@ export async function archiveAndRetain(
     const retainedContent = retained.length === 0 ? "" : retained.join("\n") + "\n";
 
     if (archived.length > 0) {
-      const archivedAs = history.unlabelled === true ? undefined : await archiveHooks.get(history.dbPath)?.({ archiveKey: history.archiveKey, activeContent });
+      const archivedAs = history.unlabelled === true ? undefined : await archiveHooks.get(history.dbPath)?.({ archiveKey: history.archiveKey, archived });
       const segment = await archiveToDatabase(
         history,
         archived,

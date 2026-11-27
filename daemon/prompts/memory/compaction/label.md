@@ -1,1 +1,1 @@
-Write a one-line label for this conversation that says what happened in it, so you and {{user}} can tell later what it was about. Keep it under twenty words, in the third person, with no "I", "we" or "you". Reply with only the label.
+Above is a conversation between {{char}} and {{user}}{{#if cut}}, with long messages cut short{{/if}}. Write a one-line label for it that says what happened in it, so they can tell later what it was about. Keep it under twenty words, in the third person, with no "I", "we" or "you". Reply with only the label.

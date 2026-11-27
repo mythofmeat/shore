@@ -7,25 +7,18 @@ import { join } from "node:path";
 
 import type { LoadedConfig } from "../../config/loader.ts";
 import { HISTORY_DB_FILE, HistoryStore } from "../../engine/history_store.ts";
-import type { PriorContext } from "../../engine/segments.ts";
 import { loadCharacterConfig } from "../../config/loader.ts";
 import { MAIN_THREAD, archiveKey, characterDataDir } from "../../config/dirs.ts";
-import { readThreadsIndex, threadChatModel, homeThreadOf, wakesThread } from "../../engine/threads.ts";
-import { resolveChatModelForCharacter } from "../../config/preferences.ts";
-import { configView } from "../../config/preferences.ts";
-import { findEffectiveModel } from "../../config/effective_catalog.ts";
-import type { ResolvedModel } from "../../config/models.ts";
-import type { SidecarRequest, ToolDefinition } from "../../llm/types.ts";
+import { readThreadsIndex, homeThreadOf, wakesThread } from "../../engine/threads.ts";
 import type { Message } from "../../engine/types.ts";
 import type { LastRequestCache } from "../../cache/last_request.ts";
 import type { RebuildDeps } from "../../cache/rebuild.ts";
-import { buildChatShapeRequestFromDisk } from "../../handler/context.ts";
 import { saveWorkspaceAtArchive } from "../../tools/workspace.ts";
 import { characterWorkspace } from "../../tools/character_workspace.ts";
 import type { ToolContextDeps } from "../../handler/tool_context.ts";
 import { applyDeferredEdits } from "../deferred_edits.ts";
 import type { CompactionRunner } from "../../handler/turn.ts";
-import { conversationManager, priorContext } from "./archive.ts";
+import { conversationManager } from "./archive.ts";
 import { type CompactionCompletion, alongsidePasses, handleCompactionOutcome, loadMessagesForCompaction } from "./background.ts";
 import { tryBeginCompaction } from "./manager.ts";
 import { CompactionError, type CompactionOutcome } from "./types.ts";
@@ -174,7 +167,7 @@ export function readArchivedSegment(
   character: string,
   thread: string,
   segment: number,
-): { messages: Message[]; priorContext: boolean } {
+): Message[] {
   const key = archiveKey(character, thread);
   const store = HistoryStore.open(join(dataDir, HISTORY_DB_FILE));
   try {
@@ -185,7 +178,7 @@ export function readArchivedSegment(
     }
     const messages = store.readSegment(key, segment);
     if (messages.length === 0) throw CompactionError.insufficientMessages();
-    return { messages, priorContext: entries.some((entry) => entry.idx < segment) };
+    return messages;
   } finally {
     store.close();
   }
@@ -201,38 +194,6 @@ export function effectiveConfig(character: string, config: LoadedConfig): Loaded
     );
     return config;
   }
-}
-
-export async function resolveChatRequest(
-  character: string,
-  thread: string,
-  messages: readonly Message[],
-  effective: LoadedConfig,
-  mcpToolDefs: readonly ToolDefinition[],
-  env: NodeJS.ProcessEnv | undefined,
-  prior?: PriorContext,
-  model?: ResolvedModel,
-): Promise<SidecarRequest> {
-  const chatModel = model ?? resolveChatModelForCharacter(
-    configView(effective),
-    character,
-    (v, c, n, h) => findEffectiveModel(v, c, n, h),
-    await threadChatModel(effective.dirs.data, character, thread),
-  );
-  if (chatModel === undefined) {
-    throw CompactionError.llm("No chat model configured for compaction prefix rebuild");
-  }
-
-  const built = await buildChatShapeRequestFromDisk(
-    character,
-    characterDataDir(effective.dirs.data, character),
-    effective,
-    chatModel,
-    [...messages],
-    prior ?? priorContext(effective.dirs.data, character, thread),
-    { thread, mcpToolDefs, ...(env === undefined ? {} : { env }) },
-  );
-  return built.request;
 }
 
 export function compactionRunner(
