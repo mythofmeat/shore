@@ -57,6 +57,7 @@ export interface TriggersView {
   enabled: boolean;
   triggers: TriggerView[];
   problems: string[];
+  asked: readonly TriggerFiring[];
 }
 
 function record(raw: unknown): TriggerRecord | undefined {
@@ -144,7 +145,7 @@ export class CharacterTriggers {
     });
   }
 
-  async view(): Promise<TriggersView> {
+  async view(): Promise<Omit<TriggersView, "asked">> {
     const settings = this.#deps.settings();
     await this.#load(settings);
     const state = this.#state();

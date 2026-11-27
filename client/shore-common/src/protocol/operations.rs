@@ -997,7 +997,16 @@ wire_types! {
 
     pub struct NextWakeReport {
         pub trigger: String,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        #[ts(optional)]
+        pub thread: Option<String>,
         pub at: String,
+    }
+
+    pub struct AskedWakeReport {
+        pub thread: String,
+        pub does: String,
+        pub status: String,
     }
 
     pub struct TriggersStatusReport {
@@ -1007,6 +1016,8 @@ wire_types! {
         pub next_wake: Option<NextWakeReport>,
         pub triggers: Vec<TriggerStatusReport>,
         pub not_running: Vec<String>,
+        #[serde(default)]
+        pub asked: Vec<AskedWakeReport>,
     }
 
     pub struct ActivityStatusReport {

@@ -14,6 +14,10 @@ import { testTmp } from "./support/tmp.ts";
 const MINUTE = 60_000;
 const T0 = Date.UTC(2026, 9, 30, 12);
 
+function ask(input: Record<string, unknown>): ReturnType<typeof wakeInThreadRequest> {
+  return wakeInThreadRequest(input, T0, "UTC");
+}
+
 function refusal(run: () => unknown): string {
   try {
     run();
@@ -77,22 +81,22 @@ test("a wake says what set it off: its triggers, the turn that handed it over, a
 });
 
 test("a hand-off needs a thread's id and a reason, and takes a limit of a minute or more", () => {
-  expect(wakeInThreadRequest({ thread: " ring ", reason: " Carry on. " })).toEqual({ thread: "ring", reason: "Carry on.", limitMs: undefined, overwrite: false });
-  expect(wakeInThreadRequest({ thread: "ring", reason: "r", limit: null })).toEqual({ thread: "ring", reason: "r", limitMs: undefined, overwrite: false });
-  expect(wakeInThreadRequest({ thread: "ring", reason: "r", limit: "1m" })).toEqual({ thread: "ring", reason: "r", limitMs: MINUTE, overwrite: false });
-  expect(wakeInThreadRequest({ thread: "ring", reason: "r", limit: "2h", overwrite: true })).toEqual({ thread: "ring", reason: "r", limitMs: 120 * MINUTE, overwrite: true });
-  expect(wakeInThreadRequest({ thread: "ring", reason: "r", overwrite: true }).overwrite).toBe(true);
-  expect(wakeInThreadRequest({ thread: "ring", reason: "r", overwrite: "yes" }).overwrite).toBe(false);
+  expect(ask({ thread: " ring ", reason: " Carry on. " })).toEqual({ thread: "ring", reason: "Carry on.", limitMs: undefined, overwrite: false, startsAt: undefined });
+  expect(ask({ thread: "ring", reason: "r", limit: null })).toEqual({ thread: "ring", reason: "r", limitMs: undefined, overwrite: false, startsAt: undefined });
+  expect(ask({ thread: "ring", reason: "r", limit: "1m" })).toEqual({ thread: "ring", reason: "r", limitMs: MINUTE, overwrite: false, startsAt: undefined });
+  expect(ask({ thread: "ring", reason: "r", limit: "2h", overwrite: true })).toEqual({ thread: "ring", reason: "r", limitMs: 120 * MINUTE, overwrite: true, startsAt: undefined });
+  expect(ask({ thread: "ring", reason: "r", overwrite: true }).overwrite).toBe(true);
+  expect(ask({ thread: "ring", reason: "r", overwrite: "yes" }).overwrite).toBe(false);
   const thread = "invalid args: thread must be a thread's id, as `threads` lists it";
-  expect(refusal(() => wakeInThreadRequest({ reason: "r" }))).toContain(thread);
-  expect(refusal(() => wakeInThreadRequest({ thread: 5, reason: "r" }))).toContain(thread);
-  expect(refusal(() => wakeInThreadRequest({ thread: "the ring", reason: "r" }))).toContain(thread);
+  expect(refusal(() => ask({ reason: "r" }))).toContain(thread);
+  expect(refusal(() => ask({ thread: 5, reason: "r" }))).toContain(thread);
+  expect(refusal(() => ask({ thread: "the ring", reason: "r" }))).toContain(thread);
   const reason = "reason must be a non-empty string";
-  expect(refusal(() => wakeInThreadRequest({ thread: "ring" }))).toContain(reason);
-  expect(refusal(() => wakeInThreadRequest({ thread: "ring", reason: 5 }))).toContain(reason);
-  expect(refusal(() => wakeInThreadRequest({ thread: "ring", reason: " " }))).toContain(reason);
-  expect(refusal(() => wakeInThreadRequest({ thread: "ring", reason: "r", limit: "soon" }))).toContain('limit must be a length of time, like "45m" or "2h"');
-  expect(refusal(() => wakeInThreadRequest({ thread: "ring", reason: "r", limit: "59s" }))).toContain("limit can't be shorter than a minute");
+  expect(refusal(() => ask({ thread: "ring" }))).toContain(reason);
+  expect(refusal(() => ask({ thread: "ring", reason: 5 }))).toContain(reason);
+  expect(refusal(() => ask({ thread: "ring", reason: " " }))).toContain(reason);
+  expect(refusal(() => ask({ thread: "ring", reason: "r", limit: "soon" }))).toContain('limit must be a length of time, like "45m" or "2h"');
+  expect(refusal(() => ask({ thread: "ring", reason: "r", limit: "59s" }))).toContain("limit can't be shorter than a minute");
 });
 
 test("a hand-off answers with where and for how long, and refuses the thread it is called from before anything is queued", () => {
@@ -107,10 +111,68 @@ test("a hand-off answers with where and for how long, and refuses the thread it 
   expect(handleWakeInThread({ thread: "ring", reason: "r" }, undefined, queue(undefined), "eve")).toBe(
     'Shore will wake you in "ring" for up to 30 minutes, once this turn is over and eve has been quiet there for 10 minutes.',
   );
-  expect(asked).toEqual([{ thread: "ring", reason: "r", limitMs: 45 * MINUTE, overwrite: false }, { thread: "ring", reason: "r", limitMs: undefined, overwrite: false }]);
+  expect(asked).toEqual([{ thread: "ring", reason: "r", limitMs: 45 * MINUTE, overwrite: false, startsAt: undefined }, { thread: "ring", reason: "r", limitMs: undefined, overwrite: false, startsAt: undefined }]);
   expect(refusal(() => handleWakeInThread({ thread: "ring", reason: "r" }, "ring", queue(undefined), "eve"))).toContain('you are in "ring" now, so there is nothing to hand over');
   expect(refusal(() => handleWakeInThread({ thread: "ring" }, "main", undefined, "eve"))).toContain("a wake can't be handed on from here");
   expect(asked).toHaveLength(2);
+});
+
+test("a hand-off's `when` is a local date with a 24-hour or 12-hour time, or a length of time from now, in minutes, hours or days", () => {
+  const HOUR = 60 * MINUTE;
+  const startsAt = (when: unknown, timeZone = "UTC"): number | undefined => wakeInThreadRequest({ thread: "ring", reason: "r", when }, T0, timeZone).startsAt;
+  expect([
+    "2026-10-30 13:00", "2026-10-30T13:00", " 2026-10-30 13:00 ", "2026-10-31 7:00", "2026-10-30 1:00PM", "2026-10-30 1:00 pm", "2026-10-30 1:05 p.m.",
+    "2026-10-30 12:30PM", "2026-10-31 12:00AM", "2026-10-31 12:15 am", "2026-10-31 9:00AM", "2026-10-31 11:59PM",
+  ].map((when) => ((startsAt(when) ?? 0) - T0) / MINUTE)).toEqual([60, 60, 60, 19 * 60, 60, 60, 65, 30, 12 * 60, 12 * 60 + 15, 21 * 60, 36 * 60 - 1]);
+  expect(["in 5 hours", "5h", "in 1 hour", "In 3 Hrs", "2 hr", "90m", "in 90 minutes", "45 mins", "1 min", "in 1.5 hours", "in 2 days", "1d", "in 1 day"].map((when) => ((startsAt(when) ?? 0) - T0) / MINUTE)).toEqual([
+    300, 300, 60, 180, 120, 90, 90, 45, 1, 90, 2880, 1440, 1440,
+  ]);
+  expect(startsAt("2026-10-31 09:00", "Australia/Sydney")).toBe(T0 + 10 * HOUR);
+  expect(startsAt("in 2 hours", "Australia/Sydney")).toBe(T0 + 2 * HOUR);
+  expect(startsAt(undefined)).toBeUndefined();
+  expect(startsAt(null)).toBeUndefined();
+
+  const unreadable = 'invalid args: when must be a local date and time, like "2026-11-19 13:00" or "2026-11-19 1:00PM", or a length of time from now, like "in 5 hours" or "90m"';
+  for (const when of ["soon", "tomorrow", "", 5, true, "in 5 weeks", "30s", "in five hours", "2026-10-30 0:30AM", "2026-10-30 13:00PM", "2026-10-30 24:00", "2026-02-30 10:00", "2026-10-30 9:5", "2026-10-30", "13:00"]) {
+    expect(refusal(() => startsAt(when))).toBe(`InvalidArgs: ${unreadable}`);
+  }
+  expect(refusal(() => startsAt("2026-10-30 12:00"))).toBe("InvalidArgs: invalid args: when must be a time still to come, and Friday 2026-10-30 · 12:00 PM is not: it is Friday 2026-10-30 · 12:00 PM now");
+  expect(refusal(() => startsAt("2026-10-30 11:59AM"))).toBe("InvalidArgs: invalid args: when must be a time still to come, and Friday 2026-10-30 · 11:59 AM is not: it is Friday 2026-10-30 · 12:00 PM now");
+  expect(refusal(() => startsAt("in 0 minutes"))).toBe("InvalidArgs: invalid args: when must be a time still to come, and Friday 2026-10-30 · 12:00 PM is not: it is Friday 2026-10-30 · 12:00 PM now");
+  expect(refusal(() => startsAt("2026-10-31 09:00", "Australia/Sydney"))).toBe("");
+});
+
+test("a hand-off with `when` may be for the thread it is called from, and says when it starts and that it waits for the user to go quiet there", () => {
+  const asked: unknown[] = [];
+  const queue = (request: unknown) => {
+    asked.push(request);
+    return { kind: "queued" as const, limitMs: 45 * MINUTE };
+  };
+  expect(handleWakeInThread({ thread: "ring", reason: "Look again.", when: "in 5 hours", limit: "45m" }, "ring", queue, "eve", "UTC", T0)).toBe(
+    'Shore will wake you in "ring" for up to 45 minutes at Friday 2026-10-30 · 5:00 PM. If eve has written there in the 10 minutes before, it waits until they have been quiet there that long.',
+  );
+  expect(handleWakeInThread({ thread: "ring", reason: "Look again.", when: "2026-10-31 9:00AM" }, "main", queue, "eve", "UTC", T0)).toStartWith(
+    'Shore will wake you in "ring" for up to 45 minutes at Saturday 2026-10-31 · 9:00 AM. If eve',
+  );
+  expect(asked).toEqual([
+    { thread: "ring", reason: "Look again.", limitMs: 45 * MINUTE, overwrite: false, startsAt: T0 + 300 * MINUTE },
+    { thread: "ring", reason: "Look again.", limitMs: undefined, overwrite: false, startsAt: T0 + 21 * 60 * MINUTE },
+  ]);
+  expect(refusal(() => handleWakeInThread({ thread: "ring", reason: "r" }, "ring", queue, "eve", "UTC", T0))).toBe(
+    'ToolIoError: io: you are in "ring" now, so there is nothing to hand over. To be woken here later, give `when`.',
+  );
+  expect(refusal(() => handleWakeInThread({ thread: "ring", reason: "r", when: "in 0 hours" }, "ring", queue, "eve", "UTC", T0))).toContain("when must be a time still to come");
+  expect(asked).toHaveLength(2);
+
+  const waiting = { from: "main", reason: "Tell part two.", at: T0 + 20 * MINUTE, startsAt: T0 + 6 * 60 * MINUTE };
+  expect(refusal(() => handleWakeInThread({ thread: "ring", reason: "Tell part three." }, "main", () => ({ kind: "waiting", waiting }), "eve", "UTC", T0))).toBe(
+    'ToolIoError: io: you already have a wake waiting in "ring", asked for from "main" at Friday 2026-10-30 · 12:20 PM to start at Friday 2026-10-30 · 6:00 PM: Tell part two.\n' +
+    "Nothing was changed. To put this one in its place, call again with `overwrite` set to true.",
+  );
+  expect(handleWakeInThread({ thread: "ring", reason: "Tell part three.", overwrite: true }, "main", () => ({ kind: "queued", limitMs: undefined, replaced: waiting }), "eve", "UTC", T0)).toBe(
+    'Shore will wake you in "ring" for up to 30 minutes, once this turn is over and eve has been quiet there for 10 minutes.\n' +
+    'This takes the place of the wake you had waiting there, asked for from "main" at Friday 2026-10-30 · 12:20 PM to start at Friday 2026-10-30 · 6:00 PM: Tell part two.',
+  );
 });
 
 test("a hand-off into a thread where one is already waiting is refused with what is waiting, and one that takes its place says what it replaced", () => {
@@ -144,7 +206,7 @@ test("a dry run doesn't hand a wake over, start a thread or call an outside tool
       asked.push(name);
       return "called";
     },
-    triggers: async () => ({ enabled: false, problems: [], triggers: [] }),
+    triggers: async () => ({ enabled: false, problems: [], triggers: [], asked: [] }),
   };
   const blocked = async (name: string, input: unknown): Promise<string> => {
     try {
@@ -159,7 +221,7 @@ test("a dry run doesn't hand a wake over, start a thread or call an outside tool
   expect(await blocked("threads", { action: "edit", name: "ring", label: "Ring" })).toContain("threads edit blocked: dry-run tools cannot change files or external state");
   expect(await blocked("mcp__weather__look", {})).toContain("mcp__weather__look blocked: dry-run tools cannot change files or external state");
   expect(asked).toEqual([]);
-  expect(String(await dispatchTool("list_triggers", {}, ctx))).toContain("You have none there yet, so nothing wakes you on its own.");
+  expect(String(await dispatchTool("list_triggers", {}, ctx))).toContain("You have none there yet, so no trigger wakes you.");
   expect(await dispatchTool("wake_in_thread", { thread: "ring", reason: "r" }, { ...ctx, dryRun: false })).toBe(
     'Shore will wake you in "ring" for up to 30 minutes, once this turn is over and the user has been quiet there for 10 minutes.',
   );

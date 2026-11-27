@@ -74,6 +74,7 @@ function triggers(enabled = true): TriggersView {
     triggers: parsed.triggers.map((trigger) => ({
       trigger, off: false, problem: undefined, fired: 0, lastFiredAt: undefined, checkedAt: undefined, nextAt: undefined, ...next[trigger.name],
     })),
+    asked: [],
   };
 }
 
@@ -92,12 +93,31 @@ test("status lists the character's triggers as the user reads them, and names th
       { name: "late", does: 'Sat at 20:00, wakes ada, "r", at most every 1h', status: "next Thursday 2026-11-19 · 6:00 PM · never fired" },
     ],
     not_running: ["`broken` isn't running: it needs a `reason` to show you when it fires, or a `check` whose output is the reason"],
+    asked: [],
   });
   expect(report.sections).toContain("triggers");
 
   const later = triggers();
   later.triggers = later.triggers.filter((each) => !["tide", "lamp", "kite"].includes(each.trigger.name));
   expect((await status(await context(true, undefined, "Active", later))).triggers?.next_wake).toEqual({ trigger: "bell", at: "2026-11-18T18:00:00+00:00" });
+});
+
+test("status lists the wakes the character asked for that haven't started, and names one as next when it starts before any trigger", async () => {
+  const ring = { name: "", from: "main", reason: "Tell part two.", at: NOW - HOUR, thread: "ring", startsAt: NOW + 30 * 60_000 };
+  const garden = { name: "", from: "ring", reason: "Water them.", at: NOW - 60_000, thread: "garden" };
+  const later = { name: "", from: "main", reason: "Later.", at: NOW - HOUR, thread: "shed", startsAt: NOW + 2 * HOUR };
+  const report = async (asked: TriggersView["asked"], state = "Active") => (await status(await context(true, undefined, state, { ...triggers(), asked }))).triggers;
+
+  expect((await report([ring]))?.next_wake).toStrictEqual({ trigger: "", thread: "ring", at: "2026-11-18T12:30:00+00:00" });
+  expect((await report([later]))?.next_wake).toStrictEqual({ trigger: "lamp", at: "2026-11-18T13:00:00+00:00" });
+  const both = await report([ring, garden]);
+  expect(both?.next_wake).toStrictEqual({ trigger: "", thread: "garden", at: "2026-11-18T11:59:00+00:00" });
+  expect(both?.asked).toEqual([
+    { thread: "ring", does: 'asked for from "main" at Wednesday 2026-11-18 · 11:00 AM: Tell part two.', status: "starts Wednesday 2026-11-18 · 12:30 PM" },
+    { thread: "garden", does: 'asked for from "ring" at Wednesday 2026-11-18 · 11:59 AM: Water them.', status: "starts as soon as it can" },
+  ]);
+  const dormant = await report([ring], "Dormant");
+  expect([dormant?.next_wake, dormant?.asked.map((each) => each.thread)]).toEqual([undefined, ["ring"]]);
 });
 
 test("status names no trigger as next while triggers are switched off, or the character is dormant or hasn't started, and still lists them", async () => {

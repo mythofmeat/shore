@@ -1,3 +1,4 @@
+import type { TriggerFiring } from "../autonomy/runner.ts";
 import type { TriggersView, TriggerView } from "../autonomy/trigger_loop.ts";
 import { TRIGGERS_FILE, type TriggerWhen } from "../autonomy/triggers.ts";
 import { ConfigDuration } from "../config/duration.ts";
@@ -90,6 +91,20 @@ export function describeTrigger(each: TriggerView, voice: TriggerVoice, timeZone
   return { name: trigger.name, does: parts.join(", "), status: status.join(" · ") };
 }
 
+export interface DescribedAsk {
+  thread: string;
+  does: string;
+  status: string;
+}
+
+export function describeAsked(firing: TriggerFiring, timeZone: string): DescribedAsk {
+  return {
+    thread: firing.thread ?? "",
+    does: `asked for from "${firing.from ?? ""}" at ${formatWallClock(firing.at, timeZone)}: ${firing.reason}`,
+    status: firing.startsAt === undefined ? "starts as soon as it can" : `starts ${formatWallClock(firing.startsAt, timeZone)}`,
+  };
+}
+
 export async function handleListTriggers(pending: Promise<TriggersView> | undefined, userName: string, timeZone: string = hostZone()): Promise<string> {
   const view = await pending;
   if (view === undefined) throw new ToolIoError("triggers are not available in this context");
@@ -97,11 +112,15 @@ export async function handleListTriggers(pending: Promise<TriggersView> | undefi
   const voice = characterVoice(userName);
   return [
     view.enabled ? where : `${where} ${userName} has your triggers switched off, so nothing fires.`,
-    ...(view.triggers.length === 0 && view.problems.length === 0 ? ["You have none there yet, so nothing wakes you on its own."] : []),
+    ...(view.triggers.length === 0 && view.problems.length === 0 ? ["You have none there yet, so no trigger wakes you."] : []),
     ...view.triggers.map((each) => {
       const { name, does, status } = describeTrigger(each, voice, timeZone);
       return `${name}: ${does}\n  ${status}`;
     }),
     ...(view.problems.length === 0 ? [] : [`Not running:\n${view.problems.map((problem) => `- ${problem}`).join("\n")}`]),
+    ...(view.asked.length === 0 ? [] : [`Wakes you asked for with \`wake_in_thread\` that haven't started:\n${view.asked.map((firing) => {
+      const { thread, does, status } = describeAsked(firing, timeZone);
+      return `"${thread}": ${does}\n  ${status}`;
+    }).join("\n")}`]),
   ].join("\n\n");
 }

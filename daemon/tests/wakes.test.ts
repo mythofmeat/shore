@@ -1517,7 +1517,7 @@ test("a character with no triggers file has none, and a file that can't be read 
     await say("hello");
     at(1);
     await runtime.triggers.tick();
-    expect((await runtime.triggers.view("ada"))).toEqual({ enabled: true, triggers: [], problems: [] });
+    expect((await runtime.triggers.view("ada"))).toEqual({ enabled: true, triggers: [], problems: [], asked: [] });
 
     await writeFile(join(workspace, "TRIGGERS.toml"), TOUCH);
     at(2);
@@ -1716,7 +1716,7 @@ test("the character can list its triggers from a conversation, and is told when 
   await withCharacter(async ({ runtime, script, workspace, say, thread }) => {
     script.replyTool = { name: "list_triggers", input: {} };
     await say("what have you set up?");
-    expect(lastToolResult(await thread("main"))).toEqual({ text: "Your triggers, from TRIGGERS.toml in your workspace root.\n\nYou have none there yet, so nothing wakes you on its own.", failed: false });
+    expect(lastToolResult(await thread("main"))).toEqual({ text: "Your triggers, from TRIGGERS.toml in your workspace root.\n\nYou have none there yet, so no trigger wakes you.", failed: false });
 
     await writeFile(join(workspace, "TRIGGERS.toml"), file);
     at(1);
@@ -1761,6 +1761,7 @@ test("the user's status lists the character's triggers as its file has them, and
       next_wake: { trigger: "lamp", at: "2026-10-30T13:01:00+00:00" },
       triggers: [{ name: "lamp", does: 'every 1h, wakes ada, "Trim the lamp.", at most every 1h', status: "next Friday 2026-10-30 · 1:01 PM · never fired" }],
       not_running: [],
+      asked: [],
     });
     expect(shown.data.sections).toContain("triggers");
   }, withTriggers);
@@ -2753,6 +2754,39 @@ test("a trigger that names a thread on hold wakes nobody and doesn't count towar
   }, withTriggers);
 });
 
+test("a reply asks to be woken in its own thread at a time, and the wake starts there then and not before, though Shore restarts in between", async () => {
+  let root = "";
+  await withCharacter(async ({ runtime, script, data, say, thread }) => {
+    root = dirname(data);
+    script.replyTool = { name: "wake_in_thread", input: { thread: "main", reason: "See how the bread rose.", when: "in 3 hours" } };
+    await say("remind yourself to check the bread");
+    expect(lastToolResult(await thread("main"))).toEqual({
+      text: 'Shore will wake you in "main" for up to 30 minutes at Friday 2026-10-30 · 3:00 PM. If peggy has written there in the 10 minutes before, it waits until they have been quiet there that long.',
+      failed: false,
+    });
+    at(179);
+    await runtime.autonomy.runDue();
+    expect(script.wakes).toEqual([]);
+  }, handOff());
+
+  await withCharacter(async ({ runtime, script }) => {
+    const started = new TurnAutonomyBridge(runtime.autonomy);
+    started.ensureState("ada", runtime.registry.effectiveConfig("ada"));
+    await started.settled("ada");
+    script.sends = undefined; script.closing = "Done.";
+    at(179);
+    await runtime.autonomy.runDue();
+    expect(script.wakes).toEqual([]);
+    at(180);
+    await runtime.autonomy.runDue();
+    expect(script.wakes.map((request) => request.context?.thread)).toEqual(["main", "main"]);
+    expect(setOffBy(turnsOf(script.wakes[0]).at(-1)?.[1])).toEqual(['[You asked for this wake from "main" at Friday 2026-10-30 · 12:00 PM: See how the bread rose.]']);
+    at(240);
+    await runtime.autonomy.runDue();
+    expect(script.wakes).toHaveLength(2);
+  }, handOff(), root);
+});
+
 test("a wake handed to a thread that the user then puts on hold is skipped when it comes due, and the log says why", async () => {
   await withCharacter(async ({ runtime, script, say, command }) => {
     await runtime.registry.createThread("ada", "garden");
@@ -2820,7 +2854,7 @@ test("a hand-off is refused for a thread the character doesn't have, the one it 
       return result?.text;
     };
     expect(await refused({ thread: "nowhere", reason: "r" })).toBe('io: you have no thread "nowhere" to be woken in; `threads` lists the ones you have');
-    expect(await refused({ thread: "main", reason: "r" })).toBe('io: you are in "main" now, so there is nothing to hand over');
+    expect(await refused({ thread: "main", reason: "r" })).toBe('io: you are in "main" now, so there is nothing to hand over. To be woken here later, give `when`.');
     expect(await refused({ thread: "the ring", reason: "r" })).toContain("thread must be a thread's id, as `threads` lists it");
     expect(await refused({ thread: "  ", reason: "r" })).toContain("thread must be a thread's id, as `threads` lists it");
     expect(await refused({ thread: "ring", reason: "  " })).toContain("reason must be a non-empty string");

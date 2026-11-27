@@ -1,9 +1,12 @@
+import { dirname } from "node:path";
+
 import { ActivityTracker, weekdayOf, type ActivityStats } from "./activity.ts";
 import { Dormancy, type DormancyConfig } from "./dormancy.ts";
 import { WakeLog, type WakeEventKind } from "./wake_log.ts";
 import { tickDecision, type CompactionReason, type TickInputs } from "./tick.ts";
 import { saveState, toRfc3339, type AutonomyStateFile, type PersistedKeepalive } from "./state_file.ts";
 import { TRIGGERS_FILE } from "./triggers.ts";
+import { AskedWakes } from "./asked_wakes.ts";
 
 
 export interface CompactionRunnerConfig {
@@ -37,6 +40,7 @@ export interface TriggerFiring {
   readonly byHand?: boolean | undefined;
   readonly interruptedAt?: number | undefined;
   readonly timeAtStop?: string | null | undefined;
+  readonly startsAt?: number | undefined;
 }
 
 export interface OpenedSeal {
@@ -145,6 +149,7 @@ export class CharacterAutonomy {
   #state: RunnerState;
   #wakeRunning: LiveWake | undefined;
   readonly #fired: TriggerFiring[] = [];
+  readonly #asked: AskedWakes;
   readonly #userActiveAt = new Map<string, number>();
   readonly #events: AutonomyEvents | undefined;
   #resting: boolean;
@@ -181,6 +186,8 @@ export class CharacterAutonomy {
       activeTurnCount: opts.idle?.turnCount ?? 0,
       keepalive: restored?.keepalive,
     };
+    this.#asked = new AskedWakes(dirname(opts.statePath));
+    this.#fired.push(...this.#asked.list());
   }
 
   get dormancy(): Dormancy {
@@ -193,6 +200,10 @@ export class CharacterAutonomy {
 
   get runningWake(): RunningWake | undefined {
     return this.#wakeRunning;
+  }
+
+  get askedWakes(): readonly TriggerFiring[] {
+    return this.#asked.list();
   }
 
   get wakesMayRun(): boolean {
@@ -249,6 +260,7 @@ export class CharacterAutonomy {
     if (waiting !== undefined && !overwrite) return { kind: "waiting", waiting };
     this.#fired.splice(0, this.#fired.length, ...this.#fired.filter((other) => !asked(other)));
     this.#queue(firing);
+    this.#asked.keep(firing);
     return { kind: "queued", replaced: waiting };
   }
 
@@ -389,7 +401,7 @@ export class CharacterAutonomy {
     const resting = this.#dormancy.isDormant(now);
     if (resting && !this.#resting) this.note("dormant", `Went dormant (wakes without the user: ${String(this.#dormancy.wakesWithoutUser)})`, now);
     this.#resting = resting;
-    const due = this.#fired.splice(0).filter((firing) => this.wakesMayRun && (firing.seal === true || !resting));
+    const due = this.#takeDue(now, resting);
     try {
       for (const thread of new Set(due.map((firing) => this.#threadOf(firing)))) {
         const here = due.filter((firing) => this.#threadOf(firing) === thread);
@@ -426,8 +438,22 @@ export class CharacterAutonomy {
     }
   }
 
+  #takeDue(now: number, resting: boolean): TriggerFiring[] {
+    const later = this.#fired.filter((firing) => firing.startsAt !== undefined && firing.startsAt > now);
+    const due = this.#fired.filter((firing) => !later.includes(firing));
+    this.#fired.splice(0, this.#fired.length, ...later);
+    return due.filter((firing) => this.#mayRun(firing, resting));
+  }
+
+  #mayRun(firing: TriggerFiring, resting: boolean): boolean {
+    const runs = this.wakesMayRun && (firing.seal === true || !resting);
+    if (!runs) this.#asked.gone([firing]);
+    return runs;
+  }
+
   async #wake(running: LiveWake, run: (hooks: WakeHooks) => Promise<WakeResult>): Promise<void> {
     this.#wakeRunning = running;
+    this.#asked.gone(running.firings);
     this.#dormancy.wakeStarted();
     this.#state.dirty = true;
     await this.persist();

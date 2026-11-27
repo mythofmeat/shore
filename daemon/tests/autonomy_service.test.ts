@@ -5,6 +5,7 @@ import { join } from "node:path";
 import type { AutonomyActionResult, AutonomyExecutor, OpenedSeal, TriggerFiring, WakeHooks, WakeResult, WakeRun } from "../src/autonomy/runner.ts";
 import { TurnAutonomyBridge } from "../src/autonomy/registration.ts";
 import { AutonomyService } from "../src/autonomy/service.ts";
+import { ASKED_STATE } from "../src/autonomy/asked_wakes.ts";
 import { decodeState, STATE_FILENAME } from "../src/autonomy/state_file.ts";
 import { triggerTimes } from "../src/autonomy/triggers.ts";
 import { defaultAppConfig } from "../src/config/app.ts";
@@ -12,7 +13,7 @@ import type { LoadedConfig } from "../src/config/loader.ts";
 import { emptyCatalog } from "../src/config/models.ts";
 import { ProviderRegistry } from "../src/config/providers.ts";
 import { shoreLog } from "../src/log.ts";
-import { readCharacterState } from "../src/storage/store.ts";
+import { readCharacterState, writeCharacterState } from "../src/storage/store.ts";
 import type { KeepaliveService } from "../src/cache/keepalive.ts";
 import { outcomeOf } from "./support/outcome.ts";
 import { until } from "./support/until.ts";
@@ -38,6 +39,7 @@ interface World {
   clock: { now: number };
   during: { run?: (wake: WakeRun, hooks: WakeHooks) => Promise<WakeResult> | WakeResult; look?: () => Promise<void> };
   woken: () => string[];
+  restart: () => Promise<void>;
 }
 
 interface WorldOptions {
@@ -79,14 +81,17 @@ async function world({ idleCompactionSecs = 0, archiveAfterSecs = 0, compaction 
   };
   const service = new AutonomyService(executor, () => clock.now);
   const dataDir = join(await mkdtemp(testTmp("shore-autonomy-service-")), "ada");
-  await service.register({
-    character: "ada",
-    data_dir: dataDir,
-    config: { autonomyEnabled: enabled, compactionEnabled: compaction, minTurns, maxTurns: 0, idleTriggerSecs: idleCompactionSecs, archiveAfterSecs, maxContextTokens: 0 },
-    dormancy: { maxIdleWakes, maxSilentMs: 4 * HOUR },
-  });
+  const restart = async (): Promise<void> => {
+    await service.register({
+      character: "ada",
+      data_dir: dataDir,
+      config: { autonomyEnabled: enabled, compactionEnabled: compaction, minTurns, maxTurns: 0, idleTriggerSecs: idleCompactionSecs, archiveAfterSecs, maxContextTokens: 0 },
+      dormancy: { maxIdleWakes, maxSilentMs: 4 * HOUR },
+    });
+  };
+  await restart();
   const woken = (): string[] => service.log("ada", 20).filter((event) => event.kind === "tick_fired").map((event) => event.detail);
-  return { service, dataDir, ran, compactions, archives, seals, clock, during, woken };
+  return { service, dataDir, ran, compactions, archives, seals, clock, during, woken, restart };
 }
 
 const fired = (name: string, over: Partial<TriggerFiring> = {}): TriggerFiring => ({ name, reason: "the lamp is low", at: T0, ...over });
@@ -583,6 +588,130 @@ test("the log says what woke the character: triggers by name, a hand-off by the 
   service.requestWake("ada", fired("", { thread: "ring", from: "main" }), false);
   await service.runDue();
   expect(woken()).toEqual(['Woken in "ring" by trigger "song" and a hand-off from "main"']);
+});
+
+const asked = (thread: string, over: Partial<TriggerFiring> = {}): TriggerFiring => ({ name: "", from: "main", reason: `Back to ${thread}.`, at: T0, thread, ...over });
+
+test("a wake asked for at a time starts then and not before, a trigger for its thread meanwhile wakes the character on its own, and one asked for without a time starts at once", async () => {
+  const { service, ran, clock } = await world();
+  expect(service.requestWake("ada", asked("ring", { startsAt: T0 + HOUR }), false)).toEqual({ kind: "queued", replaced: undefined });
+  service.requestWake("ada", asked("garden"), false);
+  service.wakeFor("ada", fired("song", { thread: "ring" }));
+  await service.runDue();
+  expect(ran.map((wake) => [wake.thread, wake.fired])).toEqual([["garden", [""]], ["ring", ["song"]]]);
+  expect(service.askedWakes("ada").map((firing) => [firing.thread, firing.startsAt])).toEqual([["ring", T0 + HOUR]]);
+  expect(service.requestWake("ada", asked("ring", { reason: "Sooner." }), false)).toEqual({ kind: "waiting", waiting: asked("ring", { startsAt: T0 + HOUR }) });
+
+  clock.now = T0 + HOUR - 1;
+  await service.runDue();
+  expect(ran).toHaveLength(2);
+  clock.now = T0 + HOUR;
+  await service.runDue();
+  expect(ran.at(-1)).toEqual({ thread: "ring", fired: [""], limitMs: 30 * MINUTE });
+  expect(service.askedWakes("ada")).toEqual([]);
+  expect(service.askedWakes("nobody")).toEqual([]);
+});
+
+test("a wake asked for that hasn't started is kept across a restart, with a time or without, and one that has started isn't run again", async () => {
+  const { service, ran, clock, restart } = await world();
+  service.requestWake("ada", asked("ring", { startsAt: T0 + HOUR, limitMs: 45 * MINUTE }), false);
+  service.requestWake("ada", asked("garden"), false);
+  await restart();
+  expect(service.askedWakes("ada")).toEqual([asked("ring", { startsAt: T0 + HOUR, limitMs: 45 * MINUTE }), asked("garden")]);
+  await service.runDue();
+  expect(ran).toEqual([{ thread: "garden", fired: [""], limitMs: 30 * MINUTE }]);
+
+  await restart();
+  await service.runDue();
+  expect(ran).toHaveLength(1);
+  expect(service.requestWake("ada", asked("ring", { reason: "Again." }), false)).toMatchObject({ kind: "waiting", waiting: { reason: "Back to ring.", startsAt: T0 + HOUR } });
+
+  clock.now = T0 + 2 * HOUR;
+  await restart();
+  await service.runDue();
+  expect(ran.at(-1)).toEqual({ thread: "ring", fired: [""], limitMs: 45 * MINUTE });
+  await restart();
+  await service.runDue();
+  expect(ran).toHaveLength(2);
+  expect(service.askedWakes("ada")).toEqual([]);
+});
+
+test("a wake asked for at a time is kept while the character is dormant before then, and dropped if it is dormant, or its triggers are off, at that time", async () => {
+  const { service, ran, clock, restart } = await world();
+  service.requestWake("ada", asked("ring", { startsAt: T0 + HOUR }), false);
+  service.requestWake("ada", asked("garden", { startsAt: T0 + 2 * HOUR }), false);
+  expect(service.forceDormancy("ada", "dormant")).toBe(true);
+  await service.runDue();
+  expect(service.askedWakes("ada").map((firing) => firing.thread)).toEqual(["ring", "garden"]);
+
+  service.forceDormancy("ada", "active");
+  clock.now = T0 + HOUR;
+  await service.runDue();
+  expect(ran.map((wake) => wake.thread)).toEqual(["ring"]);
+
+  service.forceDormancy("ada", "dormant");
+  clock.now = T0 + 2 * HOUR;
+  await service.runDue();
+  service.forceDormancy("ada", "active");
+  await restart();
+  await service.runDue();
+  expect(ran.map((wake) => wake.thread)).toEqual(["ring"]);
+  expect(service.askedWakes("ada")).toEqual([]);
+
+  const off = await world({ enabled: false });
+  off.service.requestWake("ada", asked("ring", { startsAt: T0 + HOUR }), false);
+  await off.service.runDue();
+  expect(off.service.askedWakes("ada")).toHaveLength(1);
+  off.clock.now = T0 + HOUR;
+  await off.service.runDue();
+  await off.restart();
+  expect([off.ran, off.service.askedWakes("ada")]).toEqual([[], []]);
+});
+
+test("a wake asked for in a thread while the one waiting there is about to start, behind another thread's wake, is kept for afterwards", async () => {
+  const { service, ran, during, restart } = await world();
+  service.wakeFor("ada", fired("lamp"));
+  service.requestWake("ada", asked("garden", { reason: "First." }), false);
+  during.run = (wake) => {
+    if (wake.thread === "main") service.requestWake("ada", asked("garden", { reason: "Second.", at: T0 + MINUTE }), false);
+    return { events: [] };
+  };
+  await service.runDue();
+  expect(ran.map((wake) => wake.thread)).toEqual(["main", "garden"]);
+  expect(service.askedWakes("ada").map((firing) => firing.reason)).toEqual(["Second."]);
+  await restart();
+  await service.runDue();
+  expect(ran.map((wake) => wake.thread)).toEqual(["main", "garden", "garden"]);
+});
+
+test("wakes asked for are read back from what Shore saved, leaving out an entry it can't make sense of, and none from a file it can't read", async () => {
+  const { service, dataDir, restart } = await world();
+  writeCharacterState(dataDir, ASKED_STATE, JSON.stringify([
+    { thread: "ring", from: "main", reason: "r", at: T0, startsAt: T0 + HOUR, limitMs: MINUTE },
+    null, 5, "ring",
+    { from: "main", reason: "r", at: T0 },
+    { thread: "a", reason: "r", at: T0 },
+    { thread: "b", from: "main", at: T0 },
+    { thread: "c", from: "main", reason: "r" },
+    { thread: "d", from: "main", reason: "r", at: "2026-10-30" },
+    { thread: "garden", from: "main", reason: "r", at: T0, startsAt: "soon", limitMs: "1h" },
+  ]));
+  await restart();
+  expect(service.askedWakes("ada")).toEqual([
+    { name: "", thread: "ring", from: "main", reason: "r", at: T0, startsAt: T0 + HOUR, limitMs: MINUTE },
+    { name: "", thread: "garden", from: "main", reason: "r", at: T0 },
+  ]);
+  const errors = spyOn(shoreLog, "error").mockImplementation(() => {});
+  try {
+    for (const unreadable of ["{", "{}"]) {
+      writeCharacterState(dataDir, ASKED_STATE, unreadable);
+      await restart();
+      expect(service.askedWakes("ada")).toEqual([]);
+    }
+    expect(errors.mock.calls.map((call) => String(call[0]).split(": SyntaxError")[0])).toEqual([`shore: could not read the wakes asked for at ${dataDir}`]);
+  } finally {
+    errors.mockRestore();
+  }
 });
 
 test("with the user's switch off nothing wakes the character, and what fired is let go", async () => {

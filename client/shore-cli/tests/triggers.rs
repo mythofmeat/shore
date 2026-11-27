@@ -62,3 +62,35 @@ fn the_triggers_section_lists_each_one_and_warns_only_while_the_character_is_dor
         Some("! ada is dormant, so nothing fires until you write")
     );
 }
+
+#[test]
+fn status_names_a_wake_the_character_asked_for_as_next_and_lists_it_in_the_triggers_section() {
+    let mut reply = status("Active");
+    reply["triggers"]["next_wake"] = json!({ "trigger": "", "thread": "ring", "at": "2026-11-18T13:00:00+00:00" });
+    reply["triggers"]["asked"] = json!([{ "thread": "ring", "does": "asked for from \"main\": Tell part two.", "status": "starts Wednesday 2026-11-18 \u{00b7} 1:00 PM" }]);
+    let row = printed_lines(reply.clone(), &["status"]);
+    assert!(
+        row.iter()
+            .any(|line| line == "triggers 1 \u{00b7} next wake asked for in \"ring\" due now"),
+        "{row:?}"
+    );
+    let section = printed_lines(reply, &["status", "--section", "triggers"]);
+    assert_eq!(
+        section.get(3..),
+        Some(
+            &[
+                "\"ring\" asked for from \"main\": Tell part two.".to_owned(),
+                "starts Wednesday 2026-11-18 \u{00b7} 1:00 PM".to_owned()
+            ][..]
+        )
+    );
+}
+
+fn printed_lines(reply: Value, args: &[&str]) -> Vec<String> {
+    let (output, _) = asked(reply, args);
+    assert!(output.status.success(), "{output:?}");
+    printed(&output)
+        .lines()
+        .map(|line| line.split_whitespace().collect::<Vec<_>>().join(" "))
+        .collect()
+}

@@ -64,10 +64,10 @@ test("a wake asked for in a thread the character has no such thread of is refuse
   const { asked, deps } = await world();
   const wake = deps().wakeInThread;
   if (wake === undefined) throw new Error("the deps offer no wakeInThread");
-  expect(wake("ada", "main", { thread: "nosuch", reason: "look", limitMs: undefined, overwrite: false })).toEqual({ kind: "no_thread" });
-  expect(wake("ada", "main", { thread: "vault", reason: "look", limitMs: undefined, overwrite: false })).toMatchObject({ kind: "queued" });
-  expect(wake("ada", "main", { thread: "ring", reason: "again", limitMs: undefined, overwrite: false })).toMatchObject({ kind: "queued" });
-  expect(asked.map((firing) => [firing.thread, firing.reason])).toEqual([["vault", "look"], ["ring", "again"]]);
+  expect(wake("ada", "main", { thread: "nosuch", reason: "look", limitMs: undefined, overwrite: false, startsAt: undefined })).toEqual({ kind: "no_thread" });
+  expect(wake("ada", "main", { thread: "vault", reason: "look", limitMs: undefined, overwrite: false, startsAt: undefined })).toMatchObject({ kind: "queued" });
+  expect(wake("ada", "main", { thread: "ring", reason: "again", limitMs: undefined, overwrite: false, startsAt: 1_800_000_000_000 })).toMatchObject({ kind: "queued" });
+  expect(asked.map((firing) => [firing.thread, firing.reason, firing.startsAt])).toEqual([["vault", "look", undefined], ["ring", "again", 1_800_000_000_000]]);
 });
 
 test("a sub-agent runs on the character's own config with the turn's frames, call store and environment, and a turn's signal, conversation and thread go to its tools", async () => {
