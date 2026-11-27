@@ -25,6 +25,7 @@ import { mkdir, mkdtemp, readFile, readdir, rm, stat, writeFile, chmod, symlink 
 import { dirname, join, basename } from "node:path";
 import { WebRecovery, sessionDigest, type WebRecoveryOptions } from "../src/web/recovery.ts";
 import { ArchiveTransferError, ArchiveTransfers, type ArchiveTransferLimits } from "../src/web/archives.ts";
+import { ArchiveSpool } from "../src/commands/archive_spool.ts";
 import { type WebArchiveInfo } from "../src/protocol/WebArchiveInfo.ts";
 import { parseOperationInput } from "../src/operations/contracts.ts";
 import { validWebArchiveInfo, validWebArchiveList } from "../src/web/contracts.ts";
@@ -1017,6 +1018,53 @@ describe("a request that fails inside the daemon", () => {
       await fetch(`${f.web.address}/api/transfers`, { method: "POST", body: "x", headers: { authorization: `Bearer ${TOKEN}`, "content-type": "application/octet-stream" } }),
     ];
     for (const answer of transfers) expect([answer.status, await answer.json()]).toEqual([503, { code: "unavailable", message: "This daemon keeps no archive transfers" }]);
+  });
+});
+
+describe("what the listener asks of Bun", () => {
+  function recordingServe() {
+    const real = Bun.serve.bind(Bun);
+    let given: Parameters<typeof Bun.serve>[0] | undefined;
+    const held: string[] = [];
+    const serve = spyOn(Bun, "serve").mockImplementation(((options: Parameters<typeof Bun.serve>[0]) => {
+      given = options;
+      const server = real(options);
+      const timeout = server.timeout.bind(server);
+      Object.defineProperty(server, "timeout", { configurable: true, value: (request: Request, seconds: number) => { held.push(`${new URL(request.url).pathname} ${String(seconds)}`); timeout(request, seconds); } });
+      return server;
+    }) as typeof Bun.serve);
+    cleanups.push(() => { serve.mockRestore(); });
+    return { given: () => required(given), held };
+  }
+
+  test("idles HTTP out after ten seconds and sockets after a minute, pings sockets, doesn't compress them, closes one that won't drain, and resumes one that does", async () => {
+    const recorded = recordingServe();
+    const f = await fixture(); f.web.activate();
+    const given = recorded.given() as { idleTimeout: number; websocket: { idleTimeout: number; sendPings: boolean; perMessageDeflate: boolean; closeOnBackpressureLimit: boolean; drain: (socket: unknown) => void } };
+    expect([given.idleTimeout, given.websocket.idleTimeout, given.websocket.sendPings, given.websocket.perMessageDeflate, given.websocket.closeOnBackpressureLimit]).toEqual([10, 60, true, false, true]);
+    let drained = 0;
+    given.websocket.drain({ data: { drain: () => { drained += 1; } } });
+    expect(drained).toBe(1);
+  });
+
+  test("keeps the connection open, however long it is quiet, for every operation, follower, transfer and archive", async () => {
+    const recorded = recordingServe();
+    const spool = new ArchiveSpool(join(await mkdtemp(join(tmpdir(), "shore-held-")), "transfers"));
+    const f = await fixture({ transfers: spool }); f.web.activate();
+    const spooled = await spool.reserve("owner");
+    await writeFile(spooled.file, "archive");
+    spool.publish(spooled, "download", 7);
+    const bearer = { authorization: `Bearer ${TOKEN}` };
+    await fetch(`${f.web.address}/api/op/no_such_operation_here`, { method: "POST", headers: bearer });
+    await fetch(`${f.web.address}/api/op/status`, { method: "POST", headers: bearer, signal: AbortSignal.timeout(200) }).catch(() => undefined);
+    const events = await fetch(`${f.web.address}/api/events`, { headers: bearer });
+    await events.body?.cancel();
+    await fetch(`${f.web.address}/api/transfers`, { method: "POST", body: "x", headers: { ...bearer, "content-type": "application/octet-stream" } });
+    expect(await (await fetch(`${f.web.address}/api/transfers/${spooled.id}`, { headers: bearer })).text()).toBe("archive");
+    const { cookie } = await f.login();
+    await f.api("/api/archives", cookie, "archive bytes", { "content-type": "application/octet-stream", "x-shore-filename": "a.tar.gz" });
+    await f.api(`/api/archives/${crypto.randomUUID()}/download`, cookie);
+    expect(recorded.held).toEqual(["/api/op/status 0", "/api/events 0", "/api/transfers 0", `/api/transfers/${spooled.id} 0`, "/api/archives 0", expect.stringMatching(/^\/api\/archives\/[a-f0-9-]{36}\/download 0$/) as string]);
   });
 });
 
