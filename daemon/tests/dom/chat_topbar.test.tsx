@@ -4,7 +4,7 @@ import type { ThreadView } from "../../src/protocol/ThreadView.ts";
 import type { ChromeSnapshot } from "../../src/browser/workspace.ts";
 import { useApp } from "./app.ts";
 import { acting, button, click, mount } from "./dom.ts";
-import { replace } from "./daemon.ts";
+import { HOLD, replace } from "./daemon.ts";
 
 const app = useApp();
 
@@ -77,9 +77,12 @@ test("opening the chat on a thread with unread replies marks them read at once w
     workspace.applyThreadListing({ character: "ada", threads: [{ ...HOME, unread: 1 }, SIDE], home: "story", current: "story" });
     app.socket().receive({ type: "history", messages: [{ msg_id: "m_new", role: "assistant", content: "hi", content_blocks: [], timestamp: "2026-11-27T10:00:00.000Z", images: [] }], config: {}, revision: 45, selected_character: "ada", selected_thread: "story" });
   });
+  const { Chat } = await import("../../src/browser/chat/Chat.tsx");
+  const state = await chrome();
+  app.answer(() => HOLD);
   const since = app.socket().sent.length;
-  await chat(await chrome());
-  expect(app.sent(since).filter((request) => request["name"] === "mark_thread_read").map((request) => request["args"])).toEqual([{ name: "story", through: "2026-11-27T10:00:00.000Z" }]);
+  await mount(<Chat state={state} sidebarOpen toggleSidebar={() => {}} mobile={false} />);
+  expect(app.sent(since).filter((request) => request["name"] === "mark_thread_read").map((request) => request["args"]), "with nothing else changing").toEqual([{ name: "story", through: "2026-11-27T10:00:00.000Z" }]);
 });
 
 test("the thread menu offers another take and a reason once connected, with a turn to redo and no reply running, and another take asks for one", async () => {

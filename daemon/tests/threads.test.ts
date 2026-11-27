@@ -10,6 +10,7 @@ import { defaultAppConfig } from "../src/config/app.ts";
 import { MAIN_THREAD, archiveKey, characterThreadsIndex, threadDataDir } from "../src/config/dirs.ts";
 import { archiveAndRetain } from "../src/memory/compaction/archive.ts";
 import { initializeDatabase } from "../src/storage/database.ts";
+import { bookPathIn, readBook, sessionKey, SESSION_BOOK_VERSION, writeBook, type SessionRecord } from "../src/llm/providers/agent_sessions.ts";
 import { emptyCatalog } from "../src/config/models.ts";
 import { ProviderRegistry } from "../src/config/providers.ts";
 import { type LoadedConfig } from "../src/config/loader.ts";
@@ -737,6 +738,41 @@ describe("thread order and folders", () => {
     expect(shown(setFolderSort(sorted, "ada", "One", false), active)).toEqual(["main", "One/a", "One/b"]);
     expect(moveFolder(index, "ada", "Two", "One").folders?.map((folder) => folder.name)).toEqual(["Two", "One"]);
     expect(moveFolder(index, "ada", "One", undefined).folders?.map((folder) => folder.name)).toEqual(["Two", "One"]);
+  });
+
+  test("a thread moved to another folder leaves the first, and a hand-sorted folder's threads carry their places while one sorted by activity's carry none", () => {
+    let index = createFolder(createFolder(indexOf("a", "b", "c"), "One"), "Two");
+    index = moveThread(moveThread(index, "ada", "a", { folder: "One" }, noActivity), "ada", "b", { folder: "One" }, noActivity);
+    expect(moveThread(index, "ada", "a", { folder: "Two" }, noActivity).folders).toEqual([{ name: "One", threads: ["b"] }, { name: "Two", threads: ["a"] }]);
+    const places = (from: ThreadsIndex) => placedThreads(from, noActivity).filter((item) => item.folder !== undefined).map(({ record, folder, position }) => [folder, record.id, position]);
+    expect(places(index)).toEqual([["One", "a", 0], ["One", "b", 1]]);
+    expect(places(setFolderSort(index, "ada", "One", true))).toEqual([["One", "b", undefined], ["One", "a", undefined]]);
+  });
+
+  test("a thread leaving a folder goes by activity unless the list outside is in a hand order or it is put in place, and one going into a folder leaves that hand order", () => {
+    const base = createFolder(indexOf("a", "b", "c"), "One");
+    const inOne = moveThread(base, "ada", "a", { folder: "One" }, noActivity);
+    expect(inOne).not.toHaveProperty("order");
+    const out = moveThread(inOne, "ada", "a", { folder: "" }, noActivity);
+    expect([out.order, out.folders]).toEqual([undefined, [{ name: "One", threads: [] }]]);
+    expect(moveThread(inOne, "ada", "a", { folder: "", before: "b" }, noActivity).order).toEqual(["c", "a", "b"]);
+    const ordered = moveThread(base, "ada", "c", { before: "a" }, noActivity);
+    expect(ordered.order).toEqual(["b", "c", "a"]);
+    const filed = moveThread(ordered, "ada", "a", { folder: "One" }, noActivity);
+    expect(filed.order).toEqual(["b", "c"]);
+    expect(moveThread(filed, "ada", "a", { folder: "" }, noActivity).order).toEqual(["b", "c", "a"]);
+  });
+
+  test("archiving drops what was kept beside the thread, its Later mark, context count and Agent SDK sessions, and the home thread can't be archived", async () => {
+    const data = join(mkdtempSync(testTmp("shore-thread-archive-")), "data");
+    await createThread(data, "ada", "side", now);
+    await setThreadLater(data, "ada", "side", true, now);
+    noteContextTokens(data, "ada", "side", 1234);
+    const session = (sessionId: string): SessionRecord => ({ version: SESSION_BOOK_VERSION, sessionId, entries: [] });
+    writeBook(bookPathIn(data), { [sessionKey("ada", "", "side")]: session("side"), [sessionKey("ada", "", "main")]: session("main") });
+    await archiveThread(data, "ada", "side");
+    expect([threadLaterMark(data, "ada", "side"), threadContextTokens(data, "ada", "side"), Object.keys(readBook(bookPathIn(data)))]).toEqual([undefined, undefined, [sessionKey("ada", "", "main")]]);
+    expect(await outcomeOf(archiveThread(data, "ada", "main"))).toThrow('thread "main" is the home thread for ada — point home at another thread first');
   });
 
   test("folder names are unique and tidy, and deleting a folder puts its threads back without archiving any", () => {
