@@ -274,32 +274,6 @@ wire_types! {
         pub secrets_left_out: Option<bool>,
     }
 
-    #[serde(deny_unknown_fields)]
-    pub struct ReadTransferArgs {
-        pub transfer: String,
-        pub offset: usize,
-    }
-
-    pub struct TransferChunk {
-        pub data: String,
-        pub offset: usize,
-        pub bytes: usize,
-    }
-
-    #[serde(deny_unknown_fields)]
-    pub struct WriteTransferArgs {
-        #[serde(default, deserialize_with = "deserialize_present", skip_serializing_if = "Option::is_none")]
-        #[schemars(with = "String")]
-        #[ts(optional)]
-        pub transfer: Option<String>,
-        pub data: String,
-    }
-
-    pub struct TransferWritten {
-        pub transfer: String,
-        pub bytes: usize,
-    }
-
     pub struct ImportCharacterResult {
         pub character: String,
         pub archive: String,
@@ -2135,9 +2109,6 @@ wire_types! {
         #[serde(default, skip_serializing_if = "Option::is_none")]
         #[ts(optional)]
         pub no_check: Option<bool>,
-        #[serde(default, skip_serializing_if = "Option::is_none")]
-        #[ts(optional)]
-        pub allow_unencrypted: Option<bool>,
     }
 
     #[serde(deny_unknown_fields)]
@@ -2159,9 +2130,6 @@ wire_types! {
         #[serde(default, skip_serializing_if = "Option::is_none")]
         #[ts(optional)]
         pub no_check: Option<bool>,
-        #[serde(default, skip_serializing_if = "Option::is_none")]
-        #[ts(optional)]
-        pub allow_unencrypted: Option<bool>,
     }
 
     #[serde(deny_unknown_fields)]
@@ -2956,8 +2924,6 @@ operations! {
     DeleteCharacter: "delete_character" (DeleteCharacterArgs) => DeleteCharacterResult,
     ExportBackup: "export_backup" (ExportBackupArgs) => BackupExported,
     ImportArchive: "import_archive" (ImportArchiveArgs) => ArchiveImported,
-    ReadTransfer: "read_transfer" (ReadTransferArgs) => TransferChunk,
-    WriteTransfer: "write_transfer" (WriteTransferArgs) => TransferWritten,
     UsageReport: "usage" (UsageArgs) => UsageResult,
     ExecuteTool: "run_tool" (RunToolArgs) => RunToolResult,
     CompactConversation: "compact" (CompactArgs) => CompactionReport,

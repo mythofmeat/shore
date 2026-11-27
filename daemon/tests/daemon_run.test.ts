@@ -1,7 +1,7 @@
 import { required } from "../src/util/required.ts";
 
 import { afterEach, describe, expect, jest, spyOn, test } from "bun:test";
-import { connect, createServer, type Socket } from "node:net";
+import { createServer } from "node:net";
 import { chmod, mkdir, mkdtemp, readFile, stat, writeFile } from "node:fs/promises";
 import { existsSync, readdirSync, readFileSync, readlinkSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -13,8 +13,10 @@ import { TurnAutonomyBridge } from "../src/autonomy/registration.ts";
 import { Diagnostics } from "../src/diagnostics.ts";
 import { buildMessageHandlerDeps } from "../src/handler/deps.ts";
 import type { MessageHandlerDeps } from "../src/handler/router.ts";
-import { DEFAULT_HANDSHAKE, type Logger } from "../src/swp/connection.ts";
+import { DEFAULT_HANDSHAKE, type Logger } from "../src/swp/handshake.ts";
 import { SessionRouter } from "../src/swp/session.ts";
+import type { LocalPeer } from "../src/swp/server.ts";
+import { decodeClientMessage } from "../src/swp/framing.ts";
 import { DATA_DIRECTORY_LEASE_FILE } from "../src/daemon/data_directory_lease.ts";
 import type { InstanceInfo } from "../src/daemon/instances.ts";
 import type { SidecarProvider, SidecarRequest } from "../src/llm/types.ts";
@@ -162,58 +164,20 @@ async function instances(place: Layout): Promise<InstanceInfo[]> {
   return JSON.parse(await readFile(place.instancesPath, "utf8")) as InstanceInfo[];
 }
 
-async function settlesWithin(work: Promise<unknown>, ms: number): Promise<boolean> {
-  let timer: ReturnType<typeof setTimeout> | undefined;
-  const late = new Promise<false>((resolve) => {
-    timer = setTimeout(() => resolve(false), ms);
-  });
-  try {
-    return await Promise.race([work.then(() => true), late]);
-  } finally {
-    clearTimeout(timer);
-  }
-}
-
 class Client {
   readonly frames: Record<string, unknown>[] = [];
-  #buffered = "";
 
-  private constructor(readonly socket: Socket) {}
+  private constructor(readonly peer: LocalPeer) {}
 
-  static async open(port: number, selected: string | null, capabilities: string[] = []): Promise<Client> {
-    const socket = connect({ host: "127.0.0.1", port, noDelay: true });
-    await new Promise<void>((resolve, reject) => {
-      socket.once("connect", resolve);
-      socket.once("error", reject);
-    });
-    const client = new Client(socket);
-    socket.on("data", (chunk: Buffer) => client.#consume(chunk.toString("utf8")));
-    socket.write(
-      `${JSON.stringify({
-        type: "hello",
-        client_type: "tui",
-        client_name: "test",
-        capabilities,
-        token: TEST_TOKEN,
-        ...(selected === null ? {} : { character: selected }),
-      })}\n`,
-    );
+  static async open(daemon: RunningDaemon, selected: string | null, capabilities: string[] = []): Promise<Client> {
+    const peer = await daemon.server.attachLocal({ clientType: "tui", clientName: "test", capabilities, character: selected });
+    const client = new Client(peer);
+    void (async () => { for await (const frame of peer.events()) client.frames.push(frame); })();
     return client;
   }
 
-  #consume(text: string): void {
-    this.#buffered += text;
-    for (;;) {
-      const at = this.#buffered.indexOf("\n");
-      if (at === -1) return;
-      const line = this.#buffered.slice(0, at);
-      this.#buffered = this.#buffered.slice(at + 1);
-      if (line.trim() !== "") this.frames.push(JSON.parse(line) as Record<string, unknown>);
-    }
-  }
-
   send(message: unknown): void {
-    this.socket.write(`${JSON.stringify(message)}\n`);
+    void this.peer.send(decodeClientMessage(message));
   }
 
   async awaitFrame(type: string, timeoutMs = 5_000): Promise<Record<string, unknown>> {
@@ -235,7 +199,7 @@ class Client {
   }
 
   close(): void {
-    this.socket.destroy();
+    void this.peer.detach();
   }
 }
 
@@ -263,10 +227,10 @@ describe("archiving a conversation", () => {
     const held = new Promise<void>((resolve) => { release = resolve; });
     const place = await layout(MODEL_CONFIG);
     const daemon = await start(place, [], { anthropic: heldProvider(held, "hello back", () => {}) });
-    const archiver = await Client.open(daemon.port, "ada");
-    const viewer = await Client.open(daemon.port, "ada", ["request-lifecycle"]);
-    const atHome = await Client.open(daemon.port, "ada");
-    const elsewhere = await Client.open(daemon.port, "ada");
+    const archiver = await Client.open(daemon, "ada");
+    const viewer = await Client.open(daemon, "ada", ["request-lifecycle"]);
+    const atHome = await Client.open(daemon, "ada");
+    const elsewhere = await Client.open(daemon, "ada");
     const clients = [archiver, viewer, atHome, elsewhere];
     try {
       for (const client of clients) await client.awaitFrame("history");
@@ -313,7 +277,7 @@ describe("archiving a conversation", () => {
   test("a running daemon labels the segment a compaction makes", async () => {
     const place = await layout(MODEL_CONFIG);
     const daemon = await start(place, [], { anthropic: scriptedProvider("Lamp talk") });
-    const client = await Client.open(daemon.port, "ada", ["request-lifecycle"]);
+    const client = await Client.open(daemon, "ada", ["request-lifecycle"]);
     try {
       await client.awaitFrame("history");
       await finishTurn(client, "hi");
@@ -331,7 +295,7 @@ describe("archiving a conversation", () => {
   test("stops paying to keep the archived thread warm, and leaves another thread's cache slot alone", async () => {
     const place = await layout(MODEL_CONFIG);
     const daemon = await start(place, [], { anthropic: scriptedProvider("hello back") });
-    const client = await Client.open(daemon.port, "ada", ["request-lifecycle"]);
+    const client = await Client.open(daemon, "ada", ["request-lifecycle"]);
     const { keepalive } = daemon.runtime;
     try {
       await client.awaitFrame("history");
@@ -368,17 +332,19 @@ describe("archiving a conversation", () => {
 });
 
 describe("what a client gets", () => {
-  test("the handshake names the characters actually on disk", async () => {
+  test("hello names the characters actually on disk, the one it would serve, and the daemon's version, but only to someone signed in", async () => {
     const place = await layout("", ["ada", "nova"]);
     const daemon = await start(place);
-    const client = await Client.open(daemon.port, null);
-    try {
-      const hello = await client.awaitFrame("hello");
-      const names = (hello["characters"] as { name: string }[]).map((c) => c.name);
-      expect(names.sort()).toEqual(["ada", "nova"]);
-    } finally {
-      client.close();
-    }
+    const origin = required(daemon.web).origin;
+    const asked = await fetch(`${origin}/api/hello?character=nova`, { headers: { authorization: `Bearer ${TEST_TOKEN}` } });
+    const hello = await asked.json() as { characters: { name: string }[]; selected_character?: string; selected_thread?: string; server_version: string };
+    expect(hello.characters.map((c) => c.name).sort()).toEqual(["ada", "nova"]);
+    expect([hello.selected_character, hello.selected_thread, hello.server_version]).toEqual(["nova", "main", asked.headers.get("shore-version") ?? ""]);
+    const none = await (await fetch(`${origin}/api/hello?character=nobody`, { headers: { authorization: `Bearer ${TEST_TOKEN}` } })).json() as Record<string, unknown>;
+    expect(["selected_character" in none, "selected_thread" in none]).toEqual([false, false]);
+    const stranger = await fetch(`${origin}/api/hello`, { headers: { authorization: "Bearer guess" } });
+    expect(stranger.status).toBe(401);
+    expect(stranger.headers.get("shore-version")).toBe(hello.server_version);
   });
 
   test("a character's pictures that an older daemon left open to everyone are the daemon's alone once it has started", async () => {
@@ -395,9 +361,8 @@ describe("what a client gets", () => {
   test("a command is answered, so the handler was draining before the accept", async () => {
     const place = await layout("", ["ada", "nova"]);
     const daemon = await start(place);
-    const client = await Client.open(daemon.port, "ada");
+    const client = await Client.open(daemon, "ada");
     try {
-      await client.awaitFrame("hello");
       client.send({ type: "command", name: "list_characters" });
 
       const output = await client.awaitFrame("command_output");
@@ -410,9 +375,8 @@ describe("what a client gets", () => {
   test("switching character answers with that character's conversation", async () => {
     const place = await layout("", ["ada", "nova"]);
     const daemon = await start(place);
-    const client = await Client.open(daemon.port, "ada");
+    const client = await Client.open(daemon, "ada");
     try {
-      await client.awaitFrame("hello");
       expect((await client.awaitFrame("history"))["selected_character"]).toBe("ada");
       client.frames.length = 0;
 
@@ -428,9 +392,8 @@ describe("what a client gets", () => {
   test("a turn streams to the client and lands in the conversation", async () => {
     const place = await layout(MODEL_CONFIG);
     const daemon = await start(place, [], { anthropic: scriptedProvider("hello back") });
-    const client = await Client.open(daemon.port, "ada");
+    const client = await Client.open(daemon, "ada");
     try {
-      await client.awaitFrame("hello");
       client.frames.length = 0;
 
       client.send({ type: "message", text: "hi", stream: true, images: [] });
@@ -451,9 +414,8 @@ describe("what a client gets", () => {
   test("a chat turn is recorded in the call store", async () => {
     const place = await layout(MODEL_CONFIG);
     const daemon = await start(place, [], { anthropic: scriptedProvider("hello back") });
-    const client = await Client.open(daemon.port, "ada");
+    const client = await Client.open(daemon, "ada");
     try {
-      await client.awaitFrame("hello");
       client.send({ type: "message", text: "hi", stream: true, images: [] });
       await client.awaitFrame("stream_end");
 
@@ -469,9 +431,8 @@ describe("what a client gets", () => {
   test("a conversation change is pushed to everyone connected", async () => {
     const place = await layout();
     const daemon = await start(place);
-    const client = await Client.open(daemon.port, "ada");
+    const client = await Client.open(daemon, "ada");
     try {
-      await client.awaitFrame("hello");
       expect((await client.awaitFrame("history"))["messages"]).toEqual([]);
       client.frames.length = 0;
 
@@ -511,9 +472,8 @@ describe("hot reload", () => {
     await untilAdopted(
       () => daemon.runtime.registry.globalConfig().app.tools.max_result_chars === 4242,
     );
-    const client = await Client.open(daemon.port, "ada");
+    const client = await Client.open(daemon, "ada");
     try {
-      await client.awaitFrame("hello");
 
       await writeFile(place.configPath, "[tools]\nmax_result_chars = ");
       await client.awaitFrame("config_warning");
@@ -580,17 +540,22 @@ describe("hot reload", () => {
 });
 
 describe("going down", () => {
-  test("clients are told, and the instance is unregistered", async () => {
+  test("a client following events is told, and the instance is unregistered", async () => {
     const place = await layout();
     const daemon = await start(place);
-    const client = await Client.open(daemon.port, "ada");
+    const client = await Client.open(daemon, "ada");
     try {
-      await client.awaitFrame("hello");
-
+      const events = await fetch(`${required(daemon.web).origin}/api/events?character=ada`, { headers: { authorization: `Bearer ${TEST_TOKEN}` } });
+      expect(events.headers.get("content-type")).toBe("application/x-ndjson");
+      const reader = required(events.body).pipeThrough(new TextDecoderStream()).getReader();
+      let text = "";
+      const told = () => text.split("\n").filter((line) => line !== "").map((line) => (JSON.parse(line) as Record<string, unknown>)["type"]);
+      daemon.server.broadcast({ type: "cache_warning", message: "cold", expected_tokens: 1 });
+      while (!told().includes("cache_warning")) text += (await reader.read()).value ?? "";
       daemon.stop();
       await daemon.done;
-
-      await client.awaitFrame("shutdown");
+      for (let next = await reader.read(); !next.done; next = await reader.read()) text += next.value;
+      expect(told()).toEqual(["ping", "cache_warning", "shutdown"]);
       expect(await instances(place)).toEqual([]);
       expect(
         existsSync(join(daemon.runtime.config.dirs.data, DATA_DIRECTORY_LEASE_FILE)),
@@ -598,41 +563,6 @@ describe("going down", () => {
     } finally {
       client.close();
       running.length = 0;
-    }
-  });
-
-  test("a client that connected and never said hello is hung up on, and doesn't keep the daemon from stopping", async () => {
-    const daemon = await start(await layout());
-    const socket = connect({ host: "127.0.0.1", port: daemon.port });
-    const hungUp = new Promise<void>((resolve) => {
-      socket.once("close", () => resolve());
-    });
-    try {
-      await new Promise<void>((resolve) => {
-        socket.once("data", () => resolve());
-      });
-      daemon.stop();
-      expect(await settlesWithin(daemon.done, 5_000)).toBe(true);
-      expect(await settlesWithin(hungUp, 1_000)).toBe(true);
-    } finally {
-      socket.destroy();
-    }
-  });
-
-  test("a client that stopped reading doesn't keep the daemon from stopping", async () => {
-    const daemon = await start(await layout());
-    const client = await Client.open(daemon.port, "ada");
-    try {
-      await client.awaitFrame("history");
-      client.socket.pause();
-      daemon.server.broadcast({ type: "error", code: "internal_error", message: "x".repeat(32 << 20) });
-      await new Promise((resolve) => {
-        setTimeout(resolve, 0);
-      });
-      daemon.stop();
-      expect(await settlesWithin(daemon.done, 5_000)).toBe(true);
-    } finally {
-      client.close();
     }
   });
 
@@ -684,9 +614,8 @@ describe("going down", () => {
         settled = true;
       }),
     });
-    const client = await Client.open(daemon.port, "ada");
+    const client = await Client.open(daemon, "ada");
     try {
-      await client.awaitFrame("hello");
       client.send({ type: "message", text: "hi", stream: true, images: [] });
       await client.awaitFrame("stream_start");
       expect(settled, "the turn is parked mid-stream before the daemon stops").toBe(false);
@@ -706,15 +635,15 @@ describe("going down", () => {
     const place = await layout(`${MODEL_CONFIG}[daemon]\nshutdown_grace = "1s"\n`);
     const { promise: held, resolve: release } = Promise.withResolvers<void>();
     const daemon = await start(place, [], { anthropic: heldProvider(held, "too late", () => {}) });
-    const client = await Client.open(daemon.port, "ada");
+    const client = await Client.open(daemon, "ada");
     try {
-      await client.awaitFrame("hello");
+      const events = await fetch(`${required(daemon.web).origin}/api/events?character=ada`, { headers: { authorization: `Bearer ${TEST_TOKEN}` } });
       client.send({ type: "message", text: "hi", stream: true, images: [] });
       await client.awaitFrame("stream_start");
       const began = Date.now();
       await daemon.shutdown();
       expect(Date.now() - began).toBeGreaterThanOrEqual(900);
-      await client.awaitFrame("shutdown");
+      expect((await events.text()).trim().split("\n").at(-1)).toBe('{"type":"shutdown"}');
       release();
     } finally {
       client.close();
@@ -726,7 +655,8 @@ describe("going down", () => {
     const page = async (daemon: RunningDaemon, save?: Record<string, string>) => {
       const origin = required(daemon.web).origin;
       const post = async (path: string, body: unknown, cookie = "") => await fetch(`${origin}${path}`, { method: "POST", headers: { origin, cookie, "content-type": "application/json" }, body: JSON.stringify(body) });
-      const cookie = (await post("/api/login", { token: TEST_TOKEN })).headers.get("set-cookie")?.split(";", 1)[0] ?? "";
+      const { code } = await (await fetch(`${origin}/api/login-code`, { method: "POST", headers: { authorization: `Bearer ${TEST_TOKEN}` } })).json() as { code: string };
+      const cookie = (await post("/api/login", { token: code })).headers.get("set-cookie")?.split(";", 1)[0] ?? "";
       if (save !== undefined) expect((await post("/api/preferences", { values: save }, cookie)).status).toBe(200);
       return await (await post("/api/preferences/list", {}, cookie)).json();
     };
@@ -741,7 +671,7 @@ describe("going down", () => {
   test("the port is free afterwards", async () => {
     const place = await layout();
     const daemon = await start(place);
-    const port = daemon.port;
+    const port = required(daemon.web).port;
     daemon.stop();
     await daemon.done;
     running.length = 0;
@@ -785,8 +715,7 @@ describe("a daemon that stays up", () => {
   test("a conversation left idle after a command and its last reply compacts without a restart, and the chat log index takes in what was archived", async () => {
     const place = await layout(IDLE_CONFIG);
     const daemon = await start(place, [], { anthropic: scriptedProvider("noted") });
-    const client = await Client.open(daemon.port, "ada");
-    await client.awaitFrame("hello");
+    const client = await Client.open(daemon, "ada");
     await command(client, "list_threads", {});
     await talk(client, ["the lamp is lit", "two", "three"]);
     client.close();
@@ -844,8 +773,7 @@ describe("coming back up", () => {
     const place = await layout(IDLE_CONFIG);
     const provider = scriptedProvider("noted");
     const first = await start(place, [], { anthropic: provider });
-    const client = await Client.open(first.port, "ada");
-    await client.awaitFrame("hello");
+    const client = await Client.open(first, "ada");
     await talk(client, ["one", "two", "three"]);
     client.close();
     const data = first.runtime.config.dirs.data;
@@ -982,11 +910,11 @@ describe("what a daemon tells its log", () => {
     const daemon = await startDaemon({ argv: ["--config", place.configPath, "--addr", "127.0.0.1:0"], env: place.env, providers: {}, instancesPath: place.instancesPath, log });
     running.push(daemon);
     await until(() => lines.some((line) => line.startsWith("warn: Matrix bridge")), "the matrix bridge reporting it can't connect");
-    expect(["TCP listening", "message handler started", "Config hot reload watcher started", "Auto-discovery loop started"].filter((line) => !lines.includes(line))).toEqual([]);
+    expect(["Listening", "message handler started", "Config hot reload watcher started", "Auto-discovery loop started"].filter((line) => !lines.includes(line))).toEqual([]);
     await daemon.shutdown();
     await daemon.done;
     expect(["Config hot reload watcher stopped", "Auto-discovery loop stopped", "Unregistered daemon instance", "Daemon shut down cleanly"].filter((line) => !lines.includes(line))).toEqual([]);
-    expect(lines.filter((line) => /Browser transport|Wrote a new client token|Created default config|Could not release|Waiting for running work/.test(line))).toEqual([]);
+    expect(lines.filter((line) => /Wrote a new client token|Created default config|Could not release|Waiting for running work/.test(line))).toEqual([]);
   });
 
   test("a daemon that has to write its own config and client token says it did", async () => {
@@ -1007,9 +935,8 @@ describe("what a daemon tells its log", () => {
       providers: { anthropic: heldProvider(held, "late", () => {}) }, instancesPath: place.instancesPath, log,
     });
     running.push(daemon);
-    const client = await Client.open(daemon.port, "ada");
+    const client = await Client.open(daemon, "ada");
     try {
-      await client.awaitFrame("hello");
       client.send({ type: "message", text: "hi", stream: true, images: [] });
       await client.awaitFrame("stream_start");
       const asked = Date.now();
@@ -1036,9 +963,8 @@ describe("a daemon going down", () => {
   test("saves what its characters' wakes keep, closes its stores, leaves no file of its own open, and lets go of its data directory", async () => {
     const place = await layout(MODEL_CONFIG);
     const daemon = await start(place, [], { anthropic: scriptedProvider("hello") });
-    const client = await Client.open(daemon.port, "ada");
+    const client = await Client.open(daemon, "ada");
     try {
-      await client.awaitFrame("hello");
       await talk(client, ["hi"]);
       expect((await client.awaitFrame("thread_unread"))["character"]).toBe("ada");
     } finally {
@@ -1051,7 +977,7 @@ describe("a daemon going down", () => {
     expect(() => daemon.runtime.callStore?.callCount()).toThrow();
     expect(handlesUnder(place.root)).toBe(0);
     expect(decodeState(readCharacterState(characterDataDir(data, "ada"), STATE_FILENAME) ?? "")?.lastUserAt).toBeNumber();
-    expect((await start(place)).port).toBeGreaterThan(0);
+    expect((await start(place)).web?.port).toBeGreaterThan(0);
   });
 });
 
@@ -1059,7 +985,7 @@ describe("a daemon coming up", () => {
   test("makes a character by command that it can talk to at once, without waiting for the config watcher", async () => {
     const place = await layout(MODEL_CONFIG);
     const daemon = await start(place, [], {}, false);
-    const client = await Client.open(daemon.port, "ada");
+    const client = await Client.open(daemon, "ada");
     try {
       await client.awaitFrame("history");
       client.send({ type: "command", rid: "make", name: "create_character", args: { name: "bo" } });
@@ -1090,21 +1016,23 @@ describe("a daemon that fails to start", () => {
   test("on a port already in use leaves its data directory free for the next start", async () => {
     const place = await layout();
     const taken = await listening();
+    const { log, lines } = recorder();
     try {
-      expect((await refused({ argv: ["--config", place.configPath, "--addr", `127.0.0.1:${taken.port}`], env: place.env, providers: {}, instancesPath: place.instancesPath })).kind).toBe("server_run");
+      expect((await refused({ argv: ["--config", place.configPath, "--addr", `127.0.0.1:${taken.port}`], env: place.env, providers: {}, instancesPath: place.instancesPath, log })).kind).toBe("server_run");
     } finally {
       await taken.close();
     }
-    expect((await start(place)).port).toBeGreaterThan(0);
+    expect(lines).toContain("Server shutting down");
+    expect((await start(place)).web?.port).toBeGreaterThan(0);
   });
 
-  test("because its browser transport can't listen gives up its own port and its data directory", async () => {
+  test("because the port its config names is taken gives up its data directory and opens no other", async () => {
     const taken = await listening();
     const place = await layout(`[daemon.web]\nenabled = true\nbind_addr = "127.0.0.1:${taken.port}"\n`);
     const before = listeningPorts();
     try {
-      const failure = await refused({ argv: ["--config", place.configPath, "--addr", "127.0.0.1:0"], env: place.env, providers: {}, instancesPath: place.instancesPath });
-      expect([failure.kind, failure.message]).toEqual(["server_run", expect.stringContaining("Failed to start browser transport") as string]);
+      const failure = await refused({ argv: ["--config", place.configPath], env: place.env, providers: {}, instancesPath: place.instancesPath });
+      expect([failure.kind, failure.message]).toEqual(["server_run", expect.stringContaining(`Failed to start shore-daemon on 127.0.0.1:${String(taken.port)}`) as string]);
       expect(openedSince(before)).toEqual([]);
     } finally {
       await taken.close();
@@ -1117,10 +1045,11 @@ describe("a daemon that fails to start", () => {
     const place = await layout(`[daemon.web]\nenabled = true\nbind_addr = "127.0.0.1:0"\n`);
     await writeFile(join(place.root, "a-file"), "");
     const before = listeningPorts();
-    const failure = await refused({ argv: ["--config", place.configPath, "--addr", "127.0.0.1:0"], env: place.env, providers: {}, instancesPath: join(place.root, "a-file", "instances.json") });
-    expect(failure.kind).toBe("register_instance");
+    const { log, lines } = recorder();
+    const failure = await refused({ argv: ["--config", place.configPath, "--addr", "127.0.0.1:0"], env: place.env, providers: {}, instancesPath: join(place.root, "a-file", "instances.json"), log });
+    expect([failure.kind, lines.includes("Server shutting down")]).toEqual(["register_instance", true]);
     expect(openedSince(before)).toEqual([]);
-    expect((await start(place)).port).toBeGreaterThan(0);
+    expect((await start(place)).web?.port).toBeGreaterThan(0);
   });
 });
 
@@ -1133,7 +1062,7 @@ describe("a daemon's teardown", () => {
     const stopped: string[] = [];
     const clocks = spyOn(runtimeModule, "startRuntimeClocks").mockImplementation((runtime, intervals) => {
       const started = realClocks(runtime, intervals);
-      return { stop: () => { stopped.push("clocks"); started.stop(); } };
+      return { stop: async () => { stopped.push("clocks"); await started.stop(); } };
     });
     const bridge = spyOn(matrixModule, "superviseMatrixBridge").mockImplementation((options) => {
       const started = realBridge(options);
@@ -1169,8 +1098,8 @@ describe("a daemon's teardown", () => {
     expect([failure.kind, failure.message]).toEqual(["server_run", expect.stringContaining("no bridge today") as string]);
     expect(openedSince(before)).toEqual([]);
     expect(await instances(place)).toEqual([]);
-    expect(["Auto-discovery loop stopped", "Config hot reload watcher stopped", "Unregistered daemon instance"].filter((line) => !lines.includes(line))).toEqual([]);
-    expect((await start(place)).port).toBeGreaterThan(0);
+    expect(["Auto-discovery loop stopped", "Config hot reload watcher stopped", "Unregistered daemon instance", "Server shutting down"].filter((line) => !lines.includes(line))).toEqual([]);
+    expect((await start(place)).web?.port).toBeGreaterThan(0);
   });
 
   test("a matrix bridge supervisor that fails is logged instead of left to crash the daemon", async () => {
@@ -1272,9 +1201,10 @@ describe("the web UI while a long reply runs", () => {
     } as unknown as SidecarProvider;
     const daemon = await start(place, [], { anthropic: provider });
     const origin = required(daemon.web).origin;
-    const cookie = (await fetch(`${origin}/api/login`, { method: "POST", headers: { origin, "content-type": "application/json" }, body: JSON.stringify({ token: TEST_TOKEN }) }))
+    const { code } = await (await fetch(`${origin}/api/login-code`, { method: "POST", headers: { authorization: `Bearer ${TEST_TOKEN}` } })).json() as { code: string };
+    const cookie = (await fetch(`${origin}/api/login`, { method: "POST", headers: { origin, "content-type": "application/json" }, body: JSON.stringify({ token: code }) }))
       .headers.get("set-cookie")?.split(";", 1)[0] ?? "";
-    const client = await Client.open(daemon.port, "ada", ["request-lifecycle"]);
+    const client = await Client.open(daemon, "ada", ["request-lifecycle"]);
     const browsers: BrowserSocket[] = [];
     try {
       await client.awaitFrame("history");

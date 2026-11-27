@@ -1,4 +1,7 @@
 import type { CharacterInfo } from "../protocol/CharacterInfo";
+import type { Message } from "../protocol/Message";
+import type { SegmentSummary } from "../protocol/SegmentSummary";
+import type { ServerMessage } from "../protocol/ServerMessage";
 import { EngineCharacterNotFound } from "../characters.ts";
 import { characterMetadata } from "../commands/navigation.ts";
 import { findEffectiveModel } from "../config/effective_catalog.ts";
@@ -7,7 +10,68 @@ import { firstChatModel } from "../config/models.ts";
 import { configView, resolveChatModelForCharacter } from "../config/preferences.ts";
 import type { ConversationEngine } from "../engine/conversation.ts";
 import { threadModelOf, type ThreadRecord } from "../engine/threads.ts";
-import type { HandshakeProvider, HelloSnapshot, HistorySnapshot } from "./connection";
+
+export const SWP_V1 = 1;
+
+export interface HelloSnapshot {
+  readonly characters: readonly CharacterInfo[];
+  readonly selected?: string | undefined;
+}
+
+export interface HistorySnapshot {
+  readonly messages: readonly Message[];
+  readonly previousSegment: SegmentSummary | null;
+  readonly config: unknown;
+  readonly selectedCharacter: string | null;
+  readonly selectedThread: string | null;
+  readonly revision: number;
+}
+
+export interface Selection {
+  readonly character: string | null;
+  readonly thread: string | null;
+}
+
+export interface HandshakeProvider {
+  hello(): Promise<HelloSnapshot>;
+  history(selectedCharacter: string | null, selectedThread?: string | null): Promise<HistorySnapshot>;
+  select(character: string | null, thread: string | null): Promise<Selection>;
+}
+
+export const DEFAULT_HANDSHAKE: HandshakeProvider = {
+  hello: () => Promise.resolve({ characters: [{ name: "default" }] }),
+  history: (selectedCharacter) =>
+    Promise.resolve({
+      messages: [],
+      previousSegment: null,
+      config: {},
+      selectedCharacter,
+      selectedThread: null,
+      revision: 0,
+    }),
+  select: (character) => Promise.resolve({ character, thread: null }),
+};
+
+export interface Logger {
+  info?(msg: string, fields?: Record<string, unknown>): void;
+  warn?(msg: string, fields?: Record<string, unknown>): void;
+  error?(msg: string, fields?: Record<string, unknown>): void;
+}
+
+export function historyMessage(history: HistorySnapshot, rid?: string): ServerMessage {
+  return {
+    type: "history",
+    ...(rid === undefined ? {} : { rid }),
+    messages: history.messages as Message[],
+    ...(history.previousSegment === null ? {} : { previous_segment: history.previousSegment }),
+    config: history.config,
+    ...(history.selectedThread === null ? {} : { selected_thread: history.selectedThread }),
+    ...(history.selectedCharacter === null
+      ? {}
+      : { selected_character: history.selectedCharacter }),
+    revision: history.revision,
+  };
+}
 
 export interface HandshakeRegistry {
   availableCharacters(): readonly string[];
@@ -36,7 +100,13 @@ export function buildHandshakeProvider(registry: HandshakeRegistry): HandshakePr
     hello: () => Promise.resolve(helloSnapshot(registry)),
     history: async (selectedCharacter, selectedThread) =>
       await buildSessionHistorySnapshot(registry, selectedCharacter, selectedThread ?? null),
+    select: async (character, thread) => await resolveSelection(registry, character, thread),
   };
+}
+
+async function resolveSelection(registry: HandshakeRegistry, character: string | null, thread: string | null): Promise<Selection> {
+  const engine = character === null ? undefined : await engineIfCharacterExists(registry, character, liveThread(registry, character, thread));
+  return engine === undefined ? { character: null, thread: null } : { character, thread: engine.thread };
 }
 
 export function helloSnapshot(registry: HandshakeRegistry): HelloSnapshot {

@@ -1,9 +1,11 @@
 import type { ClientMessage } from "../protocol/ClientMessage.ts";
 import type { RequestFinished } from "../protocol/RequestFinished.ts";
 import type { ServerMessage } from "../protocol/ServerMessage.ts";
+import type { WebDeviceList } from "../protocol/WebDeviceList.ts";
 import type { WebLoginCode } from "../protocol/WebLoginCode.ts";
+import type { WebNewDevice } from "../protocol/WebNewDevice.ts";
 import type { WebSessionInfo } from "../protocol/WebSessionInfo.ts";
-import { validClientMessage, validWebLoginCode, validWebProblem, validWebSessionInfo } from "./validators.generated.js";
+import { validClientMessage, validWebDeviceList, validWebLoginCode, validWebNewDevice, validWebProblem, validWebSessionInfo } from "./validators.generated.js";
 import { SyncState, type SyncSnapshot } from "./sync.ts";
 import { parseServerFrame } from "./wire.ts";
 import { randomUUID } from "./platform.ts";
@@ -120,6 +122,33 @@ export class BrowserConnection {
     const body: unknown = await response.json();
     if (!response.ok) throw new Error(validWebProblem(body) ? body.message : "Could not create a sign-in code");
     if (!validWebLoginCode(body)) throw new Error("The daemon sent an unexpected sign-in code. Reload the page.");
+    return body;
+  }
+
+  async #answer(path: string, body: unknown, failed: string): Promise<unknown> {
+    const response = await this.#post(path, body, AbortSignal.timeout(this.#options.handshakeTimeoutMs ?? 10_000));
+    const answer: unknown = response.status === 204 ? undefined : await response.json();
+    if (!response.ok) throw new Error(validWebProblem(answer) ? answer.message : failed);
+    return answer;
+  }
+
+  async devices(): Promise<WebDeviceList> {
+    const body = await this.#answer("/api/devices/list", undefined, "Could not list the signed-in devices");
+    if (!validWebDeviceList(body)) throw new Error("The daemon sent an unexpected device list. Reload the page.");
+    return body;
+  }
+
+  async decideSignIn(code: string, allow: boolean): Promise<void> {
+    await this.#answer("/api/devices/decide", { code, allow }, allow ? "Could not let that device in" : "Could not refuse that device");
+  }
+
+  async revokeDevice(id: string): Promise<void> {
+    await this.#answer("/api/devices/revoke", { id }, "Could not sign that device out");
+  }
+
+  async automationKey(name: string, operations: readonly string[]): Promise<WebNewDevice> {
+    const body = await this.#answer("/api/devices/automation", { name, operations }, "Could not make the key");
+    if (!validWebNewDevice(body)) throw new Error("The daemon sent an unexpected key. Reload the page.");
     return body;
   }
 

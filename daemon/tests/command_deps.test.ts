@@ -10,7 +10,7 @@ import { Diagnostics } from "../src/diagnostics.ts";
 import { buildCommandPathDeps, buildGenerationDeps } from "../src/handler/deps.ts";
 import { createRuntime } from "../src/runtime.ts";
 import type { ServerMessage } from "../src/protocol/ServerMessage.ts";
-import { DEFAULT_HANDSHAKE } from "../src/swp/connection.ts";
+import { DEFAULT_HANDSHAKE } from "../src/swp/handshake.ts";
 import { SessionRouter } from "../src/swp/session.ts";
 import { characterWorkspace } from "../src/tools/character_workspace.ts";
 import { required } from "../src/util/required.ts";

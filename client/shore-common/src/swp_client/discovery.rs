@@ -51,7 +51,10 @@ fn read_instances_from_path(path: &Path) -> Result<Vec<InstanceEntry>> {
             message: format!("corrupt instances registry {}: {e}", path.display()),
         })?;
     let total = entries.len();
-    let live: Vec<_> = entries.into_iter().filter(entry_alive).collect();
+    let live: Vec<_> = entries
+        .into_iter()
+        .filter(|entry| !entry.addr.is_empty() && entry_alive(entry))
+        .collect();
     debug!(total, live = live.len(), "discovered daemon instances");
     Ok(live)
 }
@@ -166,15 +169,15 @@ pub(crate) fn config_dir_for_addr(addr: &str) -> Option<PathBuf> {
     }
 }
 
-fn config_dir_of(entries: &[InstanceEntry], addr: &str) -> Option<PathBuf> {
+fn config_dir_of(entries: &[InstanceEntry], origin: &str) -> Option<PathBuf> {
     entries
         .iter()
-        .find(|e| e.addr == addr)
+        .find(|e| !e.addr.is_empty() && ServerAddr(e.addr.clone()).origin() == origin)
         .and_then(|e| e.config_dir.as_deref())
         .map(PathBuf::from)
 }
 
-pub(crate) const DEFAULT_ADDR: &str = "127.0.0.1:7320";
+pub(crate) const DEFAULT_ADDR: &str = "http://127.0.0.1:7340";
 
 pub fn discover_or_default(config_path: Option<&str>) -> Result<ServerAddr> {
     let client_default =
@@ -223,7 +226,12 @@ mod tests {
         let path = tmp.path().join("instances.json");
         std::fs::write(
             &path,
-            r#"[{"id":"work","addr":"127.0.0.1:7320"},{"id":"play","addr":"127.0.0.1:7321"}]"#,
+            serde_json::json!([
+                { "id": "work", "addr": "http://127.0.0.1:7340" },
+                { "id": "play", "addr": "http://127.0.0.1:7341" },
+                { "id": "quiet", "addr": "" },
+            ])
+            .to_string(),
         )
         .unwrap();
 
@@ -232,8 +240,18 @@ mod tests {
             panic!("expected a discovery error");
         };
         assert_eq!(kind, DiscoveryKind::Ambiguous);
-        assert!(message.contains("work at 127.0.0.1:7320"), "{message}");
-        assert!(message.contains("play at 127.0.0.1:7321"), "{message}");
+        assert!(
+            message.contains("work at http://127.0.0.1:7340"),
+            "{message}"
+        );
+        assert!(
+            message.contains("play at http://127.0.0.1:7341"),
+            "{message}"
+        );
+        assert!(
+            message.starts_with("2 daemons"),
+            "a daemon with no listener isn't counted: {message}"
+        );
     }
 
     #[test]
@@ -242,11 +260,49 @@ mod tests {
         let path = tmp.path().join("instances.json");
         std::fs::write(
             &path,
-            r#"[{"id":"work","addr":"127.0.0.1:7320"},{"id":"play","addr":"127.0.0.1:7321"}]"#,
+            serde_json::json!([
+                { "id": "work", "addr": "http://127.0.0.1:7340" },
+                { "id": "play", "addr": "http://127.0.0.1:7341" },
+                { "id": "quiet", "addr": "" },
+            ])
+            .to_string(),
         )
         .unwrap();
 
         let addr = discover_from_path(&path, Some("play")).expect("the named daemon resolves");
-        assert_eq!(addr.0, "127.0.0.1:7321");
+        assert_eq!(addr.0, "http://127.0.0.1:7341");
+    }
+
+    #[test]
+    fn a_daemons_config_folder_is_found_by_its_address_however_it_is_written() {
+        let entries = vec![
+            InstanceEntry {
+                id: Some("work".into()),
+                addr: "http://127.0.0.1:7340".into(),
+                pid: None,
+                config_dir: Some("/srv/shore".into()),
+            },
+            InstanceEntry {
+                id: Some("quiet".into()),
+                addr: String::new(),
+                pid: None,
+                config_dir: Some("/srv/quiet".into()),
+            },
+        ];
+        assert_eq!(
+            config_dir_of(&entries, &ServerAddr("127.0.0.1:7340/".into()).origin()),
+            Some(PathBuf::from("/srv/shore")),
+            "a bare address means http"
+        );
+        assert_eq!(
+            config_dir_of(&entries, "https://127.0.0.1:7340"),
+            None,
+            "another scheme is another daemon"
+        );
+        assert_eq!(
+            config_dir_of(&entries, ""),
+            None,
+            "an instance with no listener has no address"
+        );
     }
 }

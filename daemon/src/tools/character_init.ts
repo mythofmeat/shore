@@ -1,7 +1,7 @@
 import { join } from "node:path";
 
 import type { LoadedConfig } from "../config/loader.ts";
-import type { Logger } from "../swp/connection.ts";
+import type { Logger } from "../swp/handshake.ts";
 import { characterToolsFor, characterWorkspace } from "./character_workspace.ts";
 
 const INIT_SCRIPT = ".init.sh";

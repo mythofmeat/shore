@@ -65,12 +65,10 @@ export async function pruneDiagnostics(data: string, nowMs = Date.now(), stop?: 
   } finally { store.close(); }
 }
 
-export function startDiagnosticRetention(data: string, gate: SnapshotGate, intervalMs = SWEEP_INTERVAL_MS): { stop(): void } {
+export function startDiagnosticRetention(data: string, gate: SnapshotGate, intervalMs = SWEEP_INTERVAL_MS): { stop(): Promise<void> } {
   const stopping = new AbortController();
-  let running = false;
+  let running: Promise<void> | undefined;
   const sweep = async () => {
-    if (stopping.signal.aborted || running) return;
-    running = true;
     try {
       await gate.withActivity(async () => {
         if (stopping.signal.aborted) return;
@@ -84,10 +82,14 @@ export function startDiagnosticRetention(data: string, gate: SnapshotGate, inter
       });
     } catch (error) {
       shoreLog.warn(`shore: diagnostic retention failed: ${String(error)}`);
-    } finally { running = false; }
+    }
   };
-  void sweep();
-  const timer = setInterval(() => void sweep(), intervalMs);
+  const due = (): void => {
+    if (stopping.signal.aborted || running !== undefined) return;
+    running = sweep().finally(() => { running = undefined; });
+  };
+  due();
+  const timer = setInterval(due, intervalMs);
   timer.unref?.();
-  return { stop: () => { stopping.abort(); clearInterval(timer); } };
+  return { stop: async () => { stopping.abort(); clearInterval(timer); await running; } };
 }

@@ -18,7 +18,7 @@ import { buildGenerationRequest } from "../src/handler/setup.ts";
 import { Diagnostics } from "../src/diagnostics.ts";
 import type { GenerateResponse, SidecarProvider, SidecarRequest } from "../src/llm/types.ts";
 import type { ThreadPromptView } from "../src/protocol/ThreadPromptView.ts";
-import { DEFAULT_HANDSHAKE } from "../src/swp/connection.ts";
+import { DEFAULT_HANDSHAKE } from "../src/swp/handshake.ts";
 import { SessionRouter } from "../src/swp/session.ts";
 import { initializeDatabase } from "../src/storage/database.ts";
 import { threadFile, writeDurable } from "../src/storage/files.ts";
