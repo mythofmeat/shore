@@ -35,12 +35,11 @@ export interface WebSocketState {
   requests: number;
   bytesInWindow: number;
   pendingBytes: number;
-  controls: number;
 }
 
 export const socketState = (auth: WebSession): WebSocketState => ({
   auth, abort: new AbortController(), pending: new Map(), phase: "hello",
-  windowStart: Date.now(), requests: 0, bytesInWindow: 0, pendingBytes: 0, controls: 0,
+  windowStart: Date.now(), requests: 0, bytesInWindow: 0, pendingBytes: 0,
 });
 
 export class WebSocketPeers {
@@ -218,11 +217,7 @@ export class WebSocketPeers {
     const peer = state.peer;
     if (peer === undefined || message.type === "hello") return [1008, "Wait for the server hello before sending requests"];
     if (message.type === "cancel") {
-      if (state.controls >= WEB_LIMITS.pendingRequests) return [1008, "Too many control requests"];
-      state.controls += 1;
-      this.#track(peer.send(message)
-        .catch(() => { this.close(socket, 1011, "Request delivery failed"); })
-        .finally(() => { state.controls -= 1; }));
+      this.#track(peer.send(message).catch(() => { this.close(socket, 1011, "Request delivery failed"); }));
       return undefined;
     }
     const rid = message.rid;

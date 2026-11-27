@@ -438,7 +438,6 @@ export const DAEMON_EQUIVALENTS: readonly string[] = [
   "src/web/archives.ts:ArchiveTransfers.#execute: …cord.directory }, queuedBytes: 「1024 → 1025」 * 1024,",
   "src/web/archives.ts:ArchiveTransfers.#execute: …rectory }, queuedBytes: 1024 * 「1024 → 1025」,",
   "src/web/archives.ts:ArchiveTransfers.#execute: 「throw new Error(\"Archive connection end… → {}」",
-  "src/web/socket.ts:socketState: … 0, pendingBytes: 0, controls: 「0 → 1」,",
   "src/web/server.ts:startWebServer: …ery?.close(); void server.stop(「true → false」); throw error; }",
   "src/web/server.ts:stop: 「active = false; → {}」",
   "src/web/server.ts:stop: active = 「false → true」;",

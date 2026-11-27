@@ -12,8 +12,7 @@ import { browserConnection } from "./support/browser_connection.ts";
 import { type ServerMessage } from "../src/protocol/ServerMessage.ts";
 import { type WebSessionInfo } from "../src/protocol/WebSessionInfo.ts";
 import { type HandshakeProvider } from "../src/swp/handshake.ts";
-import { Server, type LocalPeer } from "../src/swp/server.ts";
-import { type ClientMessage } from "../src/protocol/ClientMessage.ts";
+import { Server } from "../src/swp/server.ts";
 import { isControlRoutedMessage, type ControlRoutedMessage, type RoutedMessage } from "../src/swp/session.ts";
 import { WEB_CONTRACT, WEB_SUBPROTOCOL } from "../src/web/contract.ts";
 import { LoginCodes, LoginFailures, WebSessions, type WebSession } from "../src/web/auth.ts";
@@ -40,8 +39,6 @@ const cleanups: (() => Promise<unknown> | void)[] = [];
 afterEach(async () => { for (const cleanup of cleanups.splice(0).reverse()) await cleanup(); });
 
 const TOKEN = "web-transport-test-token";
-
-type LocalPeerSend = (peer: LocalPeer, message: ClientMessage, beforeDispatch?: () => void) => Promise<void>;
 
 function signedInData(dataDir?: string): string {
   const dir = dataDir ?? mkdtempSync(join(tmpdir(), "shore-web-data-"));
@@ -1143,14 +1140,6 @@ describe("what a browser's socket takes and refuses", () => {
   };
   const taken = (f: Fixture, rid: string) => f.routed.some((route) => (route.kind === "command" || route.kind === "engine") && route.meta.rid === rid);
   const closing = async (browser: BrowserSocket): Promise<string> => { await browser.closed; return browser.closeDetail; };
-  const attachedHolding = (send: LocalPeerSend) => {
-    const attach = Object.getOwnPropertyDescriptor(Server.prototype, "attachLocal")?.value as typeof Server.prototype.attachLocal;
-    const attaching = spyOn(Server.prototype, "attachLocal").mockImplementation(async function (this: Server, options) {
-      const peer = await attach.call(this, options);
-      return { ...peer, send: (message, beforeDispatch) => send(peer, message, beforeDispatch) };
-    });
-    cleanups.push(() => { attaching.mockRestore(); });
-  };
 
   test("opens with a browser's hello and nothing else, and attaches nothing otherwise", async () => {
     const f = await fixture(); f.web.activate();
@@ -1283,7 +1272,11 @@ describe("what a browser's socket takes and refuses", () => {
   });
 
   test("a request the daemon can't be handed is refused as never dispatched, and a stop it can't be handed closes the socket", async () => {
-    attachedHolding(() => Promise.reject(new Error("the daemon is going away")));
+    const attach = Object.getOwnPropertyDescriptor(Server.prototype, "attachLocal")?.value as typeof Server.prototype.attachLocal;
+    const attaching = spyOn(Server.prototype, "attachLocal").mockImplementation(async function (this: Server, options) {
+      return { ...await attach.call(this, options), send: () => Promise.reject(new Error("the daemon is going away")) };
+    });
+    cleanups.push(() => { attaching.mockRestore(); });
     const f = await fixture({ config: small }); f.web.activate();
     const browser = connectBrowser(f.web.origin, (await f.login()).cookie);
     await browser.attach();
@@ -1297,26 +1290,13 @@ describe("what a browser's socket takes and refuses", () => {
     expect(await closing(browser)).toBe("1011 Request delivery failed");
   });
 
-  test("has at most 32 stops on their way at once, and takes more as they are handed on", async () => {
-    const held: (() => void)[] = [];
-    attachedHolding(async (peer, message, beforeDispatch) => {
-      if (message.type === "cancel") await new Promise<void>((resolve) => { held.push(resolve); });
-      await peer.send(message, beforeDispatch);
-    });
+  test("hands on every stop, however many come at once", async () => {
     const f = await fixture(); f.web.activate();
-    cleanups.push(() => { for (const release of held.splice(0)) release(); });
     const browser = connectBrowser(f.web.origin, (await f.login()).cookie);
     await browser.attach();
-    const stops = (): number => f.controls.filter((route) => route.kind === "engine").length;
-    for (let sent = 0; sent < 32; sent += 1) browser.send({ type: "cancel" });
-    await until(() => held.length === 32, "32 stops to be on their way");
-    for (const release of held.splice(0)) release();
-    await until(() => stops() === 32, "the stops to be handed on");
-    for (let sent = 0; sent < 32; sent += 1) browser.send({ type: "cancel" });
-    await until(() => held.length === 32, "32 more stops to be on their way");
+    for (let sent = 0; sent < 100; sent += 1) browser.send({ type: "cancel" });
+    await until(() => f.controls.filter((route) => route.kind === "engine").length === 100, "every stop to be handed on");
     expect(browser.socket.readyState).toBe(WebSocket.OPEN);
-    browser.send({ type: "cancel" });
-    expect(await closing(browser)).toBe("1008 Too many control requests");
   });
 });
 
