@@ -59,9 +59,11 @@ export function labelConversation(messages: readonly Message[], names: { char: s
     if (shown !== text) cut = true;
     return [`${message.role === "user" ? names.user : names.char}: ${shown}`];
   });
-  const kept = fitConversation(lines);
-  return { text: kept.join("\n"), cut: cut || kept.length !== lines.length };
+  if (lines.reduce((total, line) => total + lineSize(line), 0) <= LABEL_CONVERSATION_BYTES) return { text: lines.join("\n"), cut };
+  return { text: cutMiddle(lines).join("\n"), cut: true };
 }
+
+const lineSize = (line: string): number => bytes(line) + 1;
 
 function cutMessage(text: string): string {
   if (bytes(text) <= LABEL_MESSAGE_BYTES) return text;
@@ -75,16 +77,14 @@ function cutMessage(text: string): string {
   return `${kept.join("").trimEnd()}${CUT}`;
 }
 
-function fitConversation(lines: readonly string[]): string[] {
-  const size = (line: string): number => bytes(line) + 1;
-  if (lines.reduce((total, line) => total + size(line), 0) <= LABEL_CONVERSATION_BYTES) return [...lines];
-  let room = LABEL_CONVERSATION_BYTES - size(CUT);
+function cutMiddle(lines: readonly string[]): string[] {
+  let room = LABEL_CONVERSATION_BYTES - lineSize(CUT);
   let first = 0;
   let end = lines.length;
   for (let fromHead = true; ; fromHead = !fromHead) {
     const line = required(lines[fromHead ? first : end - 1]);
-    if (size(line) > room) break;
-    room -= size(line);
+    if (lineSize(line) > room) break;
+    room -= lineSize(line);
     if (fromHead) first += 1;
     else end -= 1;
   }

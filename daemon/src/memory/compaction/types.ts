@@ -17,7 +17,6 @@ export interface CompactionOutcome {
 export type CompactionErrorKind =
   | "insufficient_messages"
   | "conversation"
-  | "not_found"
   | "busy"
   | "wakes_thread";
 

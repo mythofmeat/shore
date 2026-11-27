@@ -168,19 +168,35 @@ test("a message over 1,000 bytes is cut after the last whole character that fits
     .toEqual({ text: `ada: ${waves} an…`, cut: true });
 });
 
-test("a conversation over 30,000 bytes keeps whole lines from both ends, a line from the start first, with an ellipsis line between", () => {
-  const line = (index: number): string => `${String(index)}:`.padEnd(LABEL_MESSAGE_BYTES - 7, "x");
-  const messages = Array.from({ length: 40 }, (_, index) => said("user", [words(line(index))]));
-  const lines = messages.map((_, index) => `Mara: ${line(index)}`);
-  const fitted = labelConversation(messages, NAMES);
-  expect(fitted.text.split("\n")).toEqual([...lines.slice(0, 15), "…", ...lines.slice(26)]);
-  expect(Buffer.byteLength(fitted.text)).toBeLessThanOrEqual(LABEL_CONVERSATION_BYTES);
-  expect(fitted.cut).toBe(true);
+function sizedLines(sizes: readonly number[]): { messages: Message[]; lines: string[] } {
+  const content = (index: number): string => `${String(index)}:`.padEnd(required(sizes[index]) - 7, "x");
+  return {
+    messages: sizes.map((_, index) => said("user", [words(content(index))])),
+    lines: sizes.map((_, index) => `Mara: ${content(index)}`),
+  };
+}
 
-  const exactly = Array.from({ length: LABEL_CONVERSATION_BYTES / LABEL_MESSAGE_BYTES }, (_, index) => said("user", [words(line(index))]));
-  expect(labelConversation(exactly, NAMES), "lines that fit exactly, counting one newline each, are all kept").toMatchObject({ cut: false });
-  const over = [...exactly.slice(0, -1), said("user", [words(`${line(29)}x`)])];
-  expect(labelConversation(over, NAMES).text.split("\n")[15]).toBe("…");
+test("a conversation over 30,000 bytes keeps whole lines from both ends, a line from the start first, with an ellipsis line between", () => {
+  const even = sizedLines(Array.from({ length: 40 }, () => 1000));
+  const fitted = labelConversation(even.messages, NAMES);
+  expect(fitted).toEqual({ text: [...even.lines.slice(0, 15), "…", ...even.lines.slice(26)].join("\n"), cut: true });
+  expect(Buffer.byteLength(fitted.text)).toBeLessThanOrEqual(LABEL_CONVERSATION_BYTES);
+
+  const exactly = sizedLines(Array.from({ length: LABEL_CONVERSATION_BYTES / 1000 }, () => 1000));
+  expect(labelConversation(exactly.messages, NAMES), "lines that fit exactly, counting one newline each, are all kept").toEqual({ text: exactly.lines.join("\n"), cut: false });
+  const over = sizedLines([...Array.from({ length: 29 }, () => 1000), 1001]);
+  expect(labelConversation(over.messages, NAMES), "one line dropped is still a cut").toEqual({ text: [...over.lines.slice(0, 15), "…", ...over.lines.slice(16)].join("\n"), cut: true });
+});
+
+test("the middle cut charges each line it takes against what is left, and stops at the first that doesn't fit, taking one that fits exactly", () => {
+  const smallFirst = sizedLines([100, ...Array.from({ length: 39 }, () => 1000)]);
+  expect(labelConversation(smallFirst.messages, NAMES).text).toBe([...smallFirst.lines.slice(0, 15), "…", ...smallFirst.lines.slice(25)].join("\n"));
+
+  const sizes = Array.from({ length: 40 }, () => 1000);
+  sizes[14] = 996;
+  sizes[24] = 1007;
+  const tight = sizedLines(sizes);
+  expect(labelConversation(tight.messages, NAMES).text).toBe([...tight.lines.slice(0, 15), "…", ...tight.lines.slice(25)].join("\n"));
 });
 
 test("a label asked for a segment with something cut says long messages were cut short", async () => {

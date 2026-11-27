@@ -8,7 +8,7 @@ import { join } from "node:path";
 import type { LoadedConfig } from "../../config/loader.ts";
 import { HISTORY_DB_FILE, HistoryStore } from "../../engine/history_store.ts";
 import { loadCharacterConfig } from "../../config/loader.ts";
-import { MAIN_THREAD, archiveKey, characterDataDir } from "../../config/dirs.ts";
+import { archiveKey, characterDataDir } from "../../config/dirs.ts";
 import { readThreadsIndex, homeThreadOf, wakesThread } from "../../engine/threads.ts";
 import type { Message } from "../../engine/types.ts";
 import type { LastRequestCache } from "../../cache/last_request.ts";
@@ -168,17 +168,9 @@ export function readArchivedSegment(
   thread: string,
   segment: number,
 ): Message[] {
-  const key = archiveKey(character, thread);
   const store = HistoryStore.open(join(dataDir, HISTORY_DB_FILE));
   try {
-    const entries = store.entries(key);
-    if (!entries.some((entry) => entry.idx === segment)) {
-      const where = thread === MAIN_THREAD ? character : `${character} thread ${thread}`;
-      throw new CompactionError("not_found", `segment ${String(segment)} not found for ${where}`);
-    }
-    const messages = store.readSegment(key, segment);
-    if (messages.length === 0) throw CompactionError.insufficientMessages();
-    return messages;
+    return store.readSegment(archiveKey(character, thread), segment);
   } finally {
     store.close();
   }
