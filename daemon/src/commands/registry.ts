@@ -23,7 +23,7 @@ import { internalError, invalidRequest } from "./errors.ts";
 import { characterInfo, createCharacter, listCharacters, switchCharacter } from "./navigation.ts";
 import { archiveThread, forkThread, listThreads, markRead, newThread, switchThread, threadCompaction, threadFolderCreate, threadFolderDelete, threadFolderMove, threadFolderRename, threadFolderSort, threadHold, threadHome, threadLater, unarchiveThread, threadLabel, threadLock, threadModel, threadMove, threadPins, threadPurpose, threadSort } from "./threads.ts";
 import { archiveWithSignal, threadContext, threadListingContext } from "./thread_context.ts";
-import { refreshThreadPrompt, threadPrompt, type ThreadPromptContext } from "./thread_prompt.ts";
+import { contextUse, refreshThreadPrompt, threadPrompt, type ThreadPromptContext } from "./thread_prompt.ts";
 import { alt, deleteMessages, edit, get, historyPage, injectSystem, listAlternatives, log } from "./conversation.ts";
 import { listMarks, mark, unmark, type MarkContext } from "./marks.ts";
 import { workspaceTurnsFor, type WorkspaceTurns } from "../tools/workspace_turns.ts";
@@ -495,6 +495,9 @@ export const commandOperations: OperationRegistry<CommandOperationContext> = {
   thread_prompt: register("thread_prompt", {
     ...threadPresentation, label: "Show thread prompt", fields: { name: threadName },
   }, async (context, args) => threadPrompt(threadPromptContext(context), args)),
+  context_use: register("context_use", {
+    ...threadPresentation, label: "Show how close the thread is to its next compaction or trim", fields: {},
+  }, async (context) => await contextUse(threadPromptContext(context), engineOf(context))),
   thread_prompt_refresh: register("thread_prompt_refresh", {
     ...threadPresentation, label: "Refresh thread prompt", effects: ["history_write"],
     fields: { name: threadName },

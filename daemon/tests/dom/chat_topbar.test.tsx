@@ -4,6 +4,7 @@ import type { ThreadView } from "../../src/protocol/ThreadView.ts";
 import type { ChromeSnapshot } from "../../src/browser/workspace.ts";
 import { useApp } from "./app.ts";
 import { acting, button, click, mount } from "./dom.ts";
+import { replace } from "./daemon.ts";
 
 const app = useApp();
 
@@ -67,6 +68,18 @@ test("the topbar shows the character's own picture and the open thread's label, 
 
   await view.rerender(await chrome({ status: "reconnecting" }));
   expect(view.thread()).toEqual(["Our story", "Our story. Thread settings", true]);
+});
+
+test("opening the chat on a thread with unread replies marks them read at once while the window has focus", async () => {
+  replace(app.restores, document, "hasFocus", () => true);
+  const { workspace } = app.state();
+  await acting(() => {
+    workspace.applyThreadListing({ character: "ada", threads: [{ ...HOME, unread: 1 }, SIDE], home: "story", current: "story" });
+    app.socket().receive({ type: "history", messages: [{ msg_id: "m_new", role: "assistant", content: "hi", content_blocks: [], timestamp: "2026-11-27T10:00:00.000Z", images: [] }], config: {}, revision: 45, selected_character: "ada", selected_thread: "story" });
+  });
+  const since = app.socket().sent.length;
+  await chat(await chrome());
+  expect(app.sent(since).filter((request) => request["name"] === "mark_thread_read").map((request) => request["args"])).toEqual([{ name: "story", through: "2026-11-27T10:00:00.000Z" }]);
 });
 
 test("the thread menu offers another take and a reason once connected, with a turn to redo and no reply running, and another take asks for one", async () => {

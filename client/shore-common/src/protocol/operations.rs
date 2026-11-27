@@ -2633,6 +2633,29 @@ wire_types! {
 
     pub struct ThreadPromptView { pub thread: String, pub parts: Vec<ThreadPromptPart>, pub pins: Vec<ThreadPinStatus> }
 
+    #[serde(rename_all = "snake_case")]
+    pub enum ContextLimitMode { Compaction, Trim, Off }
+
+    pub struct ThreadContextUse {
+        pub thread: String,
+        pub mode: ContextLimitMode,
+        #[ts(type = "number")]
+        pub turns: u64,
+        #[ts(type = "number")]
+        pub min_turns: u64,
+        #[ts(type = "number")]
+        pub max_turns: u64,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        #[ts(optional, type = "number")]
+        pub context_tokens: Option<u64>,
+        #[ts(type = "number")]
+        pub max_context_tokens: u64,
+        #[ts(type = "number")]
+        pub message_tokens: u64,
+        #[ts(type = "number")]
+        pub trim_at: u64,
+    }
+
     #[serde(deny_unknown_fields)]
     pub struct ThreadPinsArgs {
         pub name: String,
@@ -3049,6 +3072,7 @@ operations! {
     SetThreadPurpose: "thread_purpose" (ThreadPurposeArgs) => ThreadListing,
     SetThreadPins: "thread_pins" (ThreadPinsArgs) => ThreadListing,
     ShowThreadPrompt: "thread_prompt" (NamedOperationArgs) => ThreadPromptView,
+    ShowContextUse: "context_use" (EmptyOperationArgs) => ThreadContextUse,
     RefreshThreadPrompt: "thread_prompt_refresh" (NamedOperationArgs) => ThreadPromptView,
     LockThread: "thread_lock" (ThreadLockArgs) => ThreadListing,
     HoldThread: "thread_hold" (ThreadHoldArgs) => ThreadListing,

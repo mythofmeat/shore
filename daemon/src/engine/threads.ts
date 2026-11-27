@@ -192,6 +192,20 @@ export function markThreadRead(data: string, character: string, id: string, thro
 }
 
 const LATER_FILE = "later";
+const CONTEXT_TOKENS_FILE = "context_tokens";
+
+export function threadContextTokens(data: string, character: string, id: string): number | undefined {
+  try {
+    const tokens = Number(readDurable(threadFile(data, character, id, CONTEXT_TOKENS_FILE)));
+    return Number.isSafeInteger(tokens) && tokens >= 0 ? tokens : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+export function noteContextTokens(data: string, character: string, id: string, tokens: number): void {
+  writeDurable(threadFile(data, character, id, CONTEXT_TOKENS_FILE), `${String(tokens)}\n`);
+}
 
 export function threadLaterMark(data: string, character: string, id: string): string | undefined {
   try {

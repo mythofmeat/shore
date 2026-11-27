@@ -17,8 +17,8 @@ import { encodeEvent } from "../src/autonomy/wake_log.ts";
 import { triggerFiredNote, userWroteNote, wakeNewsNote } from "../src/autonomy/wake_shape.ts";
 import { changePresence, lastSeen, noteSeen, presence, presenceState } from "../src/autonomy/presence.ts";
 import { checkFacts, startTriggerTimer, type TriggerService } from "../src/autonomy/trigger_service.ts";
-import { wakeRunningText } from "../src/engine/prompt.ts";
-import { isWakeOpener, markThreadRead, threadActivityNow } from "../src/engine/threads.ts";
+import { estimateHistoryTokens, wakeRunningText } from "../src/engine/prompt.ts";
+import { isWakeOpener, markThreadRead, threadActivityNow, threadContextTokens } from "../src/engine/threads.ts";
 import type { Message } from "../src/engine/types.ts";
 import { dispatchCommand } from "../src/handler/commands.ts";
 import { buildCommandPathDeps, buildRunGeneration } from "../src/handler/deps.ts";
@@ -29,6 +29,7 @@ import { HISTORY_DB_FILE, HistoryStore } from "../src/engine/history_store.ts";
 import { archiveKey } from "../src/config/dirs.ts";
 import { runCompactionPass } from "../src/memory/compaction/run.ts";
 import type { ServerMessage } from "../src/protocol/ServerMessage.ts";
+import type { ThreadContextUse } from "../src/protocol/ThreadContextUse.ts";
 import type { ThreadListing } from "../src/protocol/ThreadListing.ts";
 import { shoreLog } from "../src/log.ts";
 import { hostZone } from "../src/ledger/zoned.ts";
@@ -2463,6 +2464,43 @@ test("a thread marked for later says when on every client, a regenerate leaves t
 
     expect(await command("thread_later", { name: "nowhere", later: true })).toMatchObject({ type: "error", code: "not_found" });
     expect(await command("thread_later", { name: "garden", later: "yes" })).toMatchObject({ type: "error", message: "/later must be boolean" });
+  });
+});
+
+test("the open thread's context use says how far it is from its next compaction or trim, in the trigger's own terms", async () => {
+  await withCharacter(async ({ runtime, command, say, workspace, data }) => {
+    const use = async (thread = "main") => (await command("context_use", {}, thread) as unknown as { data: ThreadContextUse }).data;
+    const fresh = await use();
+    expect(fresh).toMatchObject({ thread: "main", mode: "compaction", turns: 0, min_turns: 2, max_turns: 6, max_context_tokens: 9000, message_tokens: 0 });
+    expect(fresh).not.toHaveProperty("context_tokens");
+    expect(fresh.trim_at, "90% of the room the model leaves for messages").toBeLessThanOrEqual(Math.floor(0.9 * (200_000 - 4096)));
+    expect(fresh.trim_at).toBeGreaterThan(0.8 * 0.9 * (200_000 - 4096));
+    await say("hello");
+    await say("and again");
+    const used = await use();
+    expect(used).toMatchObject({ turns: 2, context_tokens: 1 });
+    expect(used.message_tokens).toBe(estimateHistoryTokens(await runtime.registry.getOrCreate("ada", "main").then((engine) => engine.messages())));
+    expect(threadContextTokens(data, "ada", "main"), "what the compaction trigger was given is kept").toBe(1);
+
+    await runtime.registry.createThread("ada", "garden");
+    expect(await use("garden")).toMatchObject({ thread: "garden", mode: "trim", turns: 0 });
+    await mkdir(join(workspace, "notes"), { recursive: true });
+    await writeFile(join(workspace, "notes", "beds.md"), "Sow the beans along the south fence. ".repeat(400));
+    const before = (await use("garden")).trim_at;
+    await command("thread_pins", { name: "garden", pins: ["notes/beds.md"] });
+    const pinned = (await use("garden")).trim_at;
+    expect(pinned, "a pin in the prompt leaves less room for messages").toBeLessThan(before);
+    await say("water the beans", "garden");
+    await writeFile(join(workspace, "notes", "beds.md"), "Sow the beans along the south fence. ".repeat(800));
+    expect((await use("garden")).trim_at, "the prompt the next request sends is measured, not the file as it is now").toBe(pinned);
+  }, (app) => {
+    app.compaction.enabled = true;
+    app.compaction.min_turns = 2;
+    app.compaction.max_turns = 6;
+    app.compaction.max_context_tokens = 9000;
+  });
+  await withCharacter(async ({ command }) => {
+    expect((await command("context_use", {}) as unknown as { data: ThreadContextUse }).data.mode).toBe("off");
   });
 });
 

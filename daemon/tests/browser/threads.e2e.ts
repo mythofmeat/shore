@@ -149,6 +149,40 @@ test.describe("on a touch screen", () => {
   });
 });
 
+interface Lined { getBoundingClientRect: () => { height: number }; ownerDocument: { defaultView: { getComputedStyle: (part: Lined) => { lineHeight: string } } | null; createRange: () => { selectNodeContents: (part: Lined) => void; getBoundingClientRect: () => { left: number } } } }
+
+test("the line on how near the thread is to compaction sits just above the message box, on one line inside its width, with its text in line with the box's, at the largest text and on the narrowest phone", async ({ page }) => {
+  const finish = await watchPage(page);
+  await signIn(page);
+  await createCharacter(page, "petrel");
+  await send(page, "hello there");
+  const line = page.locator(".context-use");
+  await expect(line).toContainText("Next compaction:");
+  const measure = async (where: string) => {
+    const [around, words, box, text] = await Promise.all([edgesOf(line), line.evaluate((part: Lined) => {
+      const style = part.ownerDocument.defaultView?.getComputedStyle(part);
+      const range = part.ownerDocument.createRange();
+      range.selectNodeContents(part);
+      return { height: part.getBoundingClientRect().height, lineHeight: Number.parseFloat(style?.lineHeight ?? "0"), textLeft: range.getBoundingClientRect().left };
+    }), edgesOf(page.locator(".composer")), edgesOf(page.getByLabel("Message", { exact: true }))]);
+    expect(around.left, `${where}: inside the box's width on the left`).toBeGreaterThanOrEqual(box.left - 0.5);
+    expect(around.right, `${where}: inside the box's width on the right`).toBeLessThanOrEqual(box.right + 0.5);
+    expect(box.top - around.bottom, `${where}: just above the box`).toBeGreaterThanOrEqual(0);
+    expect(box.top - around.bottom, `${where}: just above the box`).toBeLessThanOrEqual(4);
+    expect(words.height, `${where}: one line`).toBeLessThanOrEqual(words.lineHeight * 1.5);
+    expect(Math.abs(words.textLeft - text.left), `${where}: its text starts where the box's does`).toBeLessThanOrEqual(2);
+  };
+  await measure("default text");
+  await page.evaluate("localStorage.setItem('shore.font-size', 'larger')");
+  await page.reload();
+  await expect(line).toContainText("Next compaction:");
+  await measure("largest text");
+  await page.setViewportSize({ width: 280, height: 653 });
+  await expect(page.locator(".shell")).toHaveAttribute("data-layout", "mobile");
+  await measure("narrowest phone");
+  await finish();
+});
+
 test("a dialog's text boxes are as many lines tall as their rows, at the default and the largest text size", async ({ page }) => {
   const finish = await watchPage(page);
   await signIn(page);

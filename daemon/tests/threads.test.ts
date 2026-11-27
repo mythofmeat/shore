@@ -1,6 +1,6 @@
 import { describe, expect, spyOn, test } from "bun:test";
 import { createFolder, deleteFolder, moveFolder, moveThread, placedThreads, renameFolder, setFolderSort } from "../src/engine/thread_layout.ts";
-import { MAX_THREAD_ID_LENGTH, clearThreadLater, setThreadLater, threadLaterMark, unarchiveThread, archiveThread, assertThreadId, isValidThreadId, createThread, ensureThreads, ensureWakesThread, wakesThread, firstUnreadReply, markThreadRead, readThreadsIndex, setHomeThread, setThreadCompaction, threadActivityNow, threadPins, writeThreadsIndex, type ThreadsIndex } from "../src/engine/threads.ts";
+import { MAX_THREAD_ID_LENGTH, clearThreadLater, noteContextTokens, setThreadLater, threadContextTokens, threadLaterMark, unarchiveThread, archiveThread, assertThreadId, isValidThreadId, createThread, ensureThreads, ensureWakesThread, wakesThread, firstUnreadReply, markThreadRead, readThreadsIndex, setHomeThread, setThreadCompaction, threadActivityNow, threadPins, writeThreadsIndex, type ThreadsIndex } from "../src/engine/threads.ts";
 import { readFileSync, readFile } from "./support/stored_files.ts";
 import { mkdirSync, mkdtempSync, readdirSync, readlinkSync, realpathSync, rmSync, writeFileSync, existsSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -271,10 +271,9 @@ describe("concurrent thread-index mutations", () => {
       readFileSync(characterThreadsIndex(dataDir, "aria"), "utf8"),
     ) as { threads: Array<{ id: string }> };
 
-    expect(onDisk.threads.map((t) => t.id).sort((a, b) => a.localeCompare(b))).toEqual(["doomed", "fresh", MAIN_THREAD].sort((a, b) => a.localeCompare(b)));
-    expect(registry.listThreads("aria").map((t) => [t.id, t.archived !== undefined] as const).sort(([a], [b]) => a.localeCompare(b))).toEqual(
-      [["doomed", true], ["fresh", false], [MAIN_THREAD, false]].sort(([a], [b]) => String(a).localeCompare(String(b))),
-    );
+    const byName = (a: string, b: string) => a.localeCompare(b);
+    expect(onDisk.threads.map((t) => t.id).sort(byName)).toEqual(["doomed", "fresh", MAIN_THREAD].sort(byName));
+    expect(registry.listThreads("aria").map((t) => `${t.id}${t.archived === undefined ? "" : " (archived)"}`).sort(byName)).toEqual(["doomed (archived)", "fresh", MAIN_THREAD].sort(byName));
   });
 });
 
@@ -484,6 +483,20 @@ describe("thread activity", () => {
 
       writeDurable(file, "");
       expect(activity().turns).toBe(0);
+    });
+  });
+
+  test("the context tokens the compaction trigger was last given are kept, and read back only as a whole number", async () => {
+    await scanned(async (data) => {
+      expect(threadContextTokens(data, "ada", "side")).toBeUndefined();
+      noteContextTokens(data, "ada", "side", 81234);
+      expect(threadContextTokens(data, "ada", "side")).toBe(81234);
+      noteContextTokens(data, "ada", "side", 0);
+      expect(threadContextTokens(data, "ada", "side")).toBe(0);
+      for (const stored of ["lots", "-5", "1.5", "1e400"]) {
+        writeDurable(threadFile(data, "ada", "side", "context_tokens"), stored);
+        expect(threadContextTokens(data, "ada", "side"), stored).toBeUndefined();
+      }
     });
   });
 

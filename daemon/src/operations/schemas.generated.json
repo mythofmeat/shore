@@ -18643,6 +18643,86 @@
     }
   },
   {
+    "name": "context_use",
+    "input": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "title": "EmptyOperationArgs",
+      "type": "object",
+      "additionalProperties": false
+    },
+    "output": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "title": "ThreadContextUse",
+      "type": "object",
+      "properties": {
+        "thread": {
+          "type": "string"
+        },
+        "mode": {
+          "$ref": "#/$defs/ContextLimitMode"
+        },
+        "turns": {
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        },
+        "min_turns": {
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        },
+        "max_turns": {
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        },
+        "context_tokens": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "uint64",
+          "minimum": 0
+        },
+        "max_context_tokens": {
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        },
+        "message_tokens": {
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        },
+        "trim_at": {
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        }
+      },
+      "required": [
+        "thread",
+        "mode",
+        "turns",
+        "min_turns",
+        "max_turns",
+        "max_context_tokens",
+        "message_tokens",
+        "trim_at"
+      ],
+      "$defs": {
+        "ContextLimitMode": {
+          "type": "string",
+          "enum": [
+            "compaction",
+            "trim",
+            "off"
+          ]
+        }
+      }
+    }
+  },
+  {
     "name": "thread_prompt_refresh",
     "input": {
       "$schema": "https://json-schema.org/draft/2020-12/schema",

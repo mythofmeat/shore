@@ -9,6 +9,7 @@ import { conversation, errorText, readMarks, streamReplies, useConversationActiv
 import { toasts } from "../ui/toast.tsx";
 import { holdThread, makeHome, unarchiveThread } from "./actions.ts";
 import { readOnlyThread } from "../sidebar/order.ts";
+import { ContextUse } from "./context_use.tsx";
 import { laterItem } from "../sidebar/ThreadRow.tsx";
 import { BudgetChip } from "./budget.tsx";
 import { GalleryDialog } from "./gallery.tsx";
@@ -110,7 +111,7 @@ export function Chat({ state, sidebarOpen, toggleSidebar, mobile }: { state: Chr
       <Transcript key={`${state.character}/${state.thread ?? ""}/${String(state.segmentView?.segment.index ?? "current")}`} character={state.character} mobile={mobile} readOnly={kept} />
       {kept
         ? <div className="composer-wrap"><p className="composer composer-note" role="note">{open?.wakes === true ? `Shore keeps the working from ${state.character}'s wakes here, to read. Write to ${state.character} in another thread.` : `This thread is archived, to read. Unarchive it to write to ${state.character} here.`}</p></div>
-        : <Composer key={JSON.stringify([state.character, state.thread])} state={state} character={state.character} mobile={mobile} />}
+        : <><ContextUse state={state} /><Composer key={JSON.stringify([state.character, state.thread])} state={state} character={state.character} mobile={mobile} /></>}
       <QuoteButton />
     </>}
   </>;
