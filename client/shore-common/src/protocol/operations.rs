@@ -2833,6 +2833,9 @@ wire_types! {
         #[serde(default, skip_serializing_if = "Option::is_none")]
         #[ts(optional)]
         pub last_active: Option<String>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        #[ts(optional)]
+        pub reply: Option<String>,
     }
 
     pub struct ThreadFolderView {

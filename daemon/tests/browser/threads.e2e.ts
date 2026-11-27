@@ -1,6 +1,6 @@
-import type { Page } from "@playwright/test";
+import type { Locator, Page } from "@playwright/test";
 import { expect, test } from "./fixtures.ts";
-import { createCharacter, createThread, signIn, watchPage } from "./helpers.ts";
+import { createCharacter, createThread, send, signIn, watchPage } from "./helpers.ts";
 
 interface Spacing { lineHeight: string; paddingTop: string; paddingBottom: string; borderTopWidth: string; borderBottomWidth: string }
 interface TextBox { rows: number; offsetHeight: number; ownerDocument: { defaultView: { getComputedStyle: (box: TextBox) => Spacing } | null } }
@@ -40,6 +40,113 @@ test("Back returns to the thread before and Forward comes back, and the tab name
   await page.goBack();
   await expect(page, "the address before the first thread was shown is not kept").not.toHaveURL(/\/workspace\/wren/);
   await finish();
+});
+
+interface Edges { left: number; right: number; top: number; bottom: number }
+
+async function edgesOf(part: Locator): Promise<Edges> {
+  const box = await part.boundingBox();
+  if (box === null) throw new Error("a part of the row is not on the page");
+  return { left: box.x, right: box.x + box.width, top: box.y, bottom: box.y + box.height };
+}
+
+interface Scrolled { scrollWidth: number; clientWidth: number }
+const spill = (box: Scrolled) => box.scrollWidth - box.clientWidth;
+
+async function expectRowLaidOut(row: Locator, where: string): Promise<void> {
+  const item = row.locator(".sidebar-item");
+  expect(await item.evaluate(spill), `${where}: nothing spills out of the row`).toBe(0);
+  const around = await edgesOf(item);
+  const selectors = [".sidebar-name", ".sidebar-locked", ".sidebar-draft", ".sidebar-unread", ".sidebar-time"];
+  const parts = await Promise.all(selectors.map((selector) => edgesOf(item.locator(selector))));
+  for (const selector of selectors.slice(1)) expect(await item.locator(selector).evaluate(spill), `${where}: ${selector} is not squeezed`).toBe(0);
+  for (const [index, part] of parts.entries()) {
+    expect(part.left, `${where}: part ${String(index)} starts inside the row`).toBeGreaterThanOrEqual(around.left);
+    expect(part.right, `${where}: part ${String(index)} ends inside the row`).toBeLessThanOrEqual(around.right);
+    expect(Math.abs((part.top + part.bottom) / 2 - (around.top + around.bottom) / 2), `${where}: part ${String(index)} sits on the row's midline`).toBeLessThanOrEqual(1.5);
+    const next = parts[index + 1];
+    if (next !== undefined) expect(part.right, `${where}: part ${String(index)} ends before the next starts`).toBeLessThanOrEqual(next.left);
+  }
+  await row.hover();
+  await expect(row.locator(".sidebar-time")).toBeHidden();
+  const [badge, more] = await Promise.all([edgesOf(item.locator(".sidebar-unread")), edgesOf(row.locator(".thread-more"))]);
+  expect(badge.right, `${where}: the options button leaves the unread count showing`).toBeLessThanOrEqual(more.left);
+  expect(more.right, `${where}: the options button stays inside the row`).toBeLessThanOrEqual(around.right);
+}
+
+test("a row's name, lock, unsent message, unread count and time sit on one line inside it, and on hover the options button takes the time's place beside the count, at the largest text and on the narrowest phone", async ({ page }) => {
+  const finish = await watchPage(page);
+  const long = "a-thread-whose-name-runs-on-well-past-the-sidebar";
+  await signIn(page);
+  await createCharacter(page, "kestrel");
+  await createThread(page, "kestrel", long);
+  await page.getByRole("button", { name: `Options for ${long}`, exact: true }).click();
+  await page.getByRole("menuitem", { name: "Thread settings…" }).click();
+  const settings = page.getByRole("dialog", { name: /Thread settings/ });
+  await settings.getByLabel("Lock the label, purpose and pins").check();
+  await settings.getByRole("button", { name: "Save", exact: true }).click();
+  await expect(settings).toBeHidden();
+  await page.getByLabel("Message", { exact: true }).fill("words not sent yet");
+  await createThread(page, "kestrel", "quiet");
+  const other = await page.context().newPage();
+  await other.addInitScript("document.hasFocus = () => false");
+  await other.goto(`/workspace/kestrel/${long}`);
+  await send(other, "written from another tab");
+  await other.close();
+  const row = page.locator(".sidebar-threads .thread-row", { has: page.getByText(long, { exact: true }) });
+  await expect(row.locator(".sidebar-unread [aria-hidden]")).toHaveText("1");
+  await expect(row.locator(".sidebar-time")).toHaveText("now");
+  await expectRowLaidOut(row, "default text");
+  const names = page.locator(".sidebar-threads > .thread-row .sidebar-name");
+  const [home, quiet] = await Promise.all([edgesOf(names.filter({ hasText: "main" })), edgesOf(names.filter({ hasText: "quiet" }))]);
+  expect(quiet.left, "a row with no icon keeps its name in line with home's").toBe(home.left);
+
+  await page.getByRole("button", { name: "kestrel", exact: true }).click({ button: "right" });
+  await page.getByRole("menuitem", { name: "New folder…" }).click();
+  const newFolder = page.getByRole("dialog", { name: "New folder" });
+  await newFolder.getByLabel("Name").fill("Shelf");
+  await newFolder.getByRole("button", { name: "Create", exact: true }).click();
+  await expect(newFolder).toBeHidden();
+  const folder = page.getByRole("group", { name: "Folder Shelf" });
+  await row.dragTo(folder.getByRole("button", { name: "Shelf", exact: true }));
+  await expect(folder.getByText(long, { exact: true })).toBeVisible();
+  await folder.getByRole("button", { name: "Shelf", exact: true }).click();
+  const shelf = folder.locator(".folder-row");
+  await expect(shelf.locator(".sidebar-unread [aria-hidden]")).toHaveText("1");
+  await shelf.hover();
+  const [count, options] = await Promise.all([edgesOf(shelf.locator(".sidebar-unread")), edgesOf(shelf.locator(".thread-more"))]);
+  expect(count.right, "a shut folder's options button leaves its count showing").toBeLessThanOrEqual(options.left);
+  await folder.getByRole("button", { name: /^Shelf/ }).click();
+  await expect(row).toBeVisible();
+
+  await page.evaluate("localStorage.setItem('shore.font-size', 'larger')");
+  await page.reload();
+  await expect(row.locator(".sidebar-unread [aria-hidden]")).toHaveText("1");
+  await expectRowLaidOut(row, "largest text");
+
+  await page.setViewportSize({ width: 280, height: 653 });
+  await page.getByRole("button", { name: /^Open sidebar/ }).click();
+  await expect.poll(async () => (await edgesOf(page.locator("aside.sidebar"))).left, "the drawer has slid in").toBe(0);
+  await expectRowLaidOut(row, "narrowest phone");
+  await finish();
+});
+
+test.describe("on a touch screen", () => {
+  test.use({ isMobile: true, hasTouch: true, viewport: { width: 1000, height: 700 } });
+
+  test("each row shows its options button after its time without a hover", async ({ page }) => {
+    const finish = await watchPage(page);
+    await signIn(page);
+    await createCharacter(page, "plover");
+    const row = page.locator(".sidebar-threads .thread-row", { has: page.getByText("main", { exact: true }) });
+    const more = row.locator(".thread-more");
+    await expect(more).toBeVisible();
+    const [time, options, around] = await Promise.all([edgesOf(row.locator(".sidebar-time")), edgesOf(more), edgesOf(row)]);
+    expect(time.right).toBeLessThanOrEqual(options.left);
+    expect(options.right).toBeLessThanOrEqual(around.right);
+    expect(await more.evaluate((button: { ownerDocument: { defaultView: { getComputedStyle: (part: unknown) => { opacity: string } } | null } }) => button.ownerDocument.defaultView?.getComputedStyle(button).opacity)).toBe("1");
+    await finish();
+  });
 });
 
 test("a dialog's text boxes are as many lines tall as their rows, at the default and the largest text size", async ({ page }) => {

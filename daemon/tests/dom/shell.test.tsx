@@ -356,7 +356,7 @@ test("Back and Forward open the thread the address names, without adding to the 
   expect(await back("/workspace/ada/notes"), "a shell that is gone stops following the address").toEqual([]);
 });
 
-test("the tab title names the thread and character, or settings, counts unread replies, and goes back to Shore when the shell closes", async () => {
+test("the tab title names the thread and character, or settings, counts the unread replies the daemon counts, and goes back to Shore when the shell closes", async () => {
   const { navigate } = await import("../../src/browser/app/route.ts");
   const view = await shell();
   expect(document.title).toBe("story · ada");
@@ -373,12 +373,20 @@ test("the tab title names the thread and character, or settings, counts unread r
   await acting(() => { navigate({ view: "chat" }); });
   await view.rerender({});
   expect(present(view.host.querySelector(".settings-nav"))).toBe(false);
-  replace(app.restores, document, "hasFocus", () => false);
-  const { notifier } = app.state();
-  await acting(async () => { await notifier.enable(); });
-  app.restores.push(() => { notifier.disable(); });
-  await acting(() => { app.socket().receive({ type: "new_message", revision: Date.now(), character: "ada", thread: "story", msg_id: "m_t1", role: "assistant", content: "hello", images: [], content_blocks: [], timestamp: "2026-11-10T00:00:00Z" }); });
+  let focused = true;
+  replace(app.restores, document, "hasFocus", () => focused);
+  await view.rerender({ threads: [{ ...HOME, unread: 2 }, { ...SIDE, unread: 3 }] });
+  expect(document.title, "the open thread's replies are being read").toBe("(3) story · ada");
+  focused = false;
+  await acting(() => { dispatchEvent(new Event("blur")); });
+  expect(document.title, "while the window is in the background they count too").toBe("(5) story · ada");
+  focused = true;
+  await acting(() => { dispatchEvent(new Event("focus")); });
+  expect(document.title).toBe("(3) story · ada");
+  await view.rerender({ threads: [{ ...HOME, unread: 2 }, { ...SIDE, unread: 1 }] });
   expect(document.title).toBe("(1) story · ada");
+  await view.rerender({ threads: [{ ...HOME, unread: 2 }, { ...SIDE, unread: 0 }] });
+  expect(document.title).toBe("story · ada");
   await view.unmount();
   expect(document.title).toBe("Shore");
 });

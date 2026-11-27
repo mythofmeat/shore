@@ -69,7 +69,7 @@ workspace.connection.subscribe((update) => {
   if (update.kind === "status") syncKept();
 });
 addEventListener("storage", reloadStored);
-addEventListener("focus", () => { notifier.markRead(); syncKept(); });
+addEventListener("focus", () => { notifier.pageFocused(); syncKept(); });
 
 export function useWorkspace(): WorkspaceSnapshot {
   return useSyncExternalStore(workspace.subscribe, workspace.getSnapshot);

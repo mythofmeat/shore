@@ -6,6 +6,14 @@ export interface ThreadSections { pinned: ThreadView[]; loose: ThreadView[]; fol
 
 export const HELD_GROUP = "\u0000on hold";
 
+export function shownUnread(thread: ThreadView, open: string | null, focused: boolean): number {
+  return thread.id === open && focused ? 0 : thread.unread ?? 0;
+}
+
+export function unreadIn(threads: readonly ThreadView[], open: string | null, focused: boolean): number {
+  return threads.reduce((total, thread) => total + shownUnread(thread, open, focused), 0);
+}
+
 function pinned(thread: ThreadView): boolean {
   return thread.home;
 }

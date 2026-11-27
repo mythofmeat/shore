@@ -69,7 +69,19 @@ describe("the app's state", () => {
 
   });
 
-  test("notifies about replies while connected, and marks them read when the page gets focus", async () => {
+  test("notifies about replies while connected, and closes the notifications when the page gets focus", async () => {
+    const shown: { body: string; closed: number }[] = [];
+    class Shown {
+      static permission = "granted";
+      static requestPermission = () => Promise.resolve("granted");
+      onclick: (() => void) | null = null;
+      closed = 0;
+      body: string;
+      constructor(_title: string, options: { body: string }) { this.body = options.body; shown.push(this); }
+      close(): void { this.closed += 1; }
+    }
+    swap(globalThis, "isSecureContext", true);
+    swap(globalThis, "Notification", Shown);
     const state = await load();
     const { NOTIFY_KEY } = await import("../../src/browser/notifications.ts");
     swap(document, "hasFocus", () => false);
@@ -78,9 +90,9 @@ describe("the app's state", () => {
     const socket = await connected(state);
     expect(state.notifier.getSnapshot().enabled).toBe(true);
     socket.receive({ type: "new_message", revision: 2, character: "ada", thread: "story", msg_id: "m_1", role: "assistant", content: "hello", images: [], content_blocks: [], timestamp: "2026-11-10T00:00:00Z" });
-    expect(state.notifier.getSnapshot().unread).toBe(1);
+    expect(shown.map((item) => [item.body, item.closed])).toEqual([["hello", 0]]);
     dispatchEvent(new Event("focus"));
-    expect(state.notifier.getSnapshot().unread).toBe(0);
+    expect(shown.map((item) => item.closed)).toEqual([1]);
   });
 
   test("a message that was not saved comes back with a notice naming its character and any pictures left out", async () => {
@@ -321,7 +333,7 @@ describe("the app's hooks", () => {
       theme: state.useTheme(), size: state.useFontSize(), notifications: state.useNotifications(), display: state.useDisplay(),
       active: state.useActiveRequests(), busy: state.useConversationActive({ character: "ada", thread: "story" }), folders: state.useCollapsedFolders("ada"),
     }), undefined);
-    expect(hook.current()).toMatchObject({ status: "idle", theme: "default", size: "default", notifications: { unread: 0 }, busy: false });
+    expect(hook.current()).toMatchObject({ status: "idle", theme: "default", size: "default", notifications: { enabled: false }, busy: false });
     expect(hook.current().workspace).toBe(state.workspace.getSnapshot());
     expect(hook.current().display).toBe(state.display.getSnapshot().values);
     expect(hook.current().active).toBe(state.conversation.getSnapshot());

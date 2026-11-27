@@ -61,7 +61,7 @@ describe("turning notifications on and off", () => {
     const saved = storage({ [NOTIFY_KEY]: "true" });
     const browser = notifications("default", "granted");
     const notifier = new Notifier({ storage: saved, api: browser.api, focused: () => false });
-    expect(notifier.getSnapshot()).toEqual({ enabled: true, permission: "default", unread: 0 });
+    expect(notifier.getSnapshot()).toEqual({ enabled: true, permission: "default" });
     await notifier.enable();
     expect(saved.values.get(NOTIFY_KEY)).toBe("true");
     expect(browser.requests()).toBe(1);
@@ -71,7 +71,7 @@ describe("turning notifications on and off", () => {
     notifier.disable();
     expect(saved.values.get(NOTIFY_KEY)).toBe("false");
     expect(notifier.getSnapshot().enabled).toBe(false);
-    expect(new Notifier({ storage: storage({ [NOTIFY_KEY]: "yes" }), api: null }).getSnapshot()).toEqual({ enabled: false, permission: "unavailable", unread: 0 });
+    expect(new Notifier({ storage: storage({ [NOTIFY_KEY]: "yes" }), api: null }).getSnapshot()).toEqual({ enabled: false, permission: "unavailable" });
     expect(new Notifier({ api: null }).getSnapshot().enabled).toBe(false);
     expect(new Notifier().getSnapshot().permission, "no secure browser context here").toBe("unavailable");
   });
@@ -88,7 +88,7 @@ describe("turning notifications on and off", () => {
     const browser = notifications("default", "denied");
     const asked = new Notifier({ storage: null, api: browser.api });
     await asked.enable();
-    expect(asked.getSnapshot()).toEqual({ enabled: true, permission: "denied", unread: 0 });
+    expect(asked.getSnapshot()).toEqual({ enabled: true, permission: "denied" });
   });
 
   test("a reload follows the stored setting, dropping what is shown when it was turned off elsewhere", () => {
@@ -98,11 +98,11 @@ describe("turning notifications on and off", () => {
     notifier.observe(reply("hi"), selection);
     browser.setPermission("denied");
     notifier.reload();
-    expect(notifier.getSnapshot()).toEqual({ enabled: true, permission: "denied", unread: 1 });
+    expect(notifier.getSnapshot()).toEqual({ enabled: true, permission: "denied" });
     expect(browser.shown.map((item) => item.closed)).toEqual([0]);
     saved.values.set(NOTIFY_KEY, "false");
     notifier.reload();
-    expect(notifier.getSnapshot()).toEqual({ enabled: false, permission: "denied", unread: 0 });
+    expect(notifier.getSnapshot()).toEqual({ enabled: false, permission: "denied" });
     expect(browser.shown.map((item) => item.closed)).toEqual([1]);
   });
 });
@@ -119,7 +119,6 @@ describe("what gets a notification", () => {
       ["ada", { body: "from the selected one", tag: "shore:ada/main", renotify: true }],
       ["Shore", { body: "the provider is down", tag: "shore:/main", renotify: true }],
     ]);
-    expect(notifier.getSnapshot().unread).toBe(3);
   });
 
   test("a reply's first sent picture becomes its image, and its text names the picture", () => {
@@ -151,25 +150,22 @@ describe("what gets a notification", () => {
     notifier.disable();
     notifier.observe(reply("muted"), selection);
     expect(browser.shown).toEqual([]);
-    expect(notifier.getSnapshot().unread).toBe(0);
   });
 
-  test("without permission, or when the browser refuses, a reply only counts as unread", () => {
+  test("without permission, or when the browser refuses, a reply shows nothing", () => {
     const denied = notifications("denied");
     const quiet = new Notifier({ storage: storage({ [NOTIFY_KEY]: "true" }), api: denied.api, focused: () => false });
     quiet.observe(reply("hi"), selection);
-    expect([denied.shown.length, quiet.getSnapshot().unread]).toEqual([0, 1]);
+    expect(denied.shown).toEqual([]);
     const refusing = notifications();
     refusing.fail();
     const failing = new Notifier({ storage: storage({ [NOTIFY_KEY]: "true" }), api: refusing.api, focused: () => false });
     failing.observe(reply("hi"), selection);
-    expect([refusing.shown.length, failing.getSnapshot().unread]).toEqual([0, 1]);
-    const unavailable = new Notifier({ storage: storage({ [NOTIFY_KEY]: "true" }), api: null, focused: () => false });
-    unavailable.observe(reply("hi"), selection);
-    expect(unavailable.getSnapshot().unread).toBe(1);
+    expect(refusing.shown).toEqual([]);
+    expect(() => { new Notifier({ storage: storage({ [NOTIFY_KEY]: "true" }), api: null, focused: () => false }).observe(reply("hi"), selection); }).not.toThrow();
   });
 
-  test("clicking a notification brings the page forward and closes it, and reading closes the rest", () => {
+  test("clicking a notification brings the page forward and closes it, and the page getting focus closes the rest", () => {
     const browser = notifications();
     let focusedWindow = 0;
     const notifier = new Notifier({ storage: storage({ [NOTIFY_KEY]: "true" }), api: browser.api, focused: () => false, focusWindow: () => { focusedWindow += 1; } });
@@ -181,10 +177,11 @@ describe("what gets a notification", () => {
     expect([focusedWindow, first?.closed]).toEqual([1, 1]);
     second?.onclick?.();
     expect(second?.closed).toBe(1);
-    notifier.markRead();
+    browser.setPermission("denied");
+    notifier.pageFocused();
     expect([first?.closed, second?.closed, elsewhere?.closed], "a clicked one is not closed again").toEqual([1, 1, 1]);
-    expect(notifier.getSnapshot().unread).toBe(0);
-    notifier.markRead();
+    expect(notifier.getSnapshot().permission, "a permission changed while away shows on return").toBe("denied");
+    notifier.pageFocused();
     expect(elsewhere?.closed, "a closed one is forgotten").toBe(1);
   });
 
@@ -195,7 +192,7 @@ describe("what gets a notification", () => {
     notifier.observe(reply("second"), selection);
     const [first, second] = browser.shown;
     first?.onclick?.();
-    notifier.markRead();
+    notifier.pageFocused();
     expect([first?.closed, second?.closed]).toEqual([1, 1]);
   });
 
@@ -212,14 +209,14 @@ describe("what gets a notification", () => {
     const scope = globalThis as unknown as Record<string, unknown>;
     const notifier = new Notifier({ storage: storage({ [NOTIFY_KEY]: "true" }), api: browser.api });
     notifier.observe(reply("while focused"), selection);
-    expect(notifier.getSnapshot().unread, "with no page to ask, it counts as focused").toBe(0);
+    expect(browser.shown, "with no page to ask, it counts as focused").toEqual([]);
     let focused = 0;
     Object.assign(scope, { document: { hasFocus: () => false }, focus: () => { focused += 1; }, isSecureContext: true, Notification: browser.api });
     try {
       const background = new Notifier({ storage: storage({ [NOTIFY_KEY]: "true" }) });
       expect(background.getSnapshot().permission).toBe("granted");
       background.observe(reply("while away"), selection);
-      expect(background.getSnapshot().unread).toBe(1);
+      expect(browser.shown.map((item) => item.options.body)).toEqual(["while away"]);
       browser.shown.at(-1)?.onclick?.();
       expect(focused).toBe(1);
       scope["isSecureContext"] = false;
@@ -236,7 +233,7 @@ describe("what gets a notification", () => {
     const notifier = new Notifier({ storage: storage(), api: notifications().api, focused: () => false });
     let heard = 0;
     const stop = notifier.subscribe(() => { heard += 1; });
-    notifier.markRead();
+    notifier.pageFocused();
     expect(heard, "nothing changed").toBe(0);
     notifier.disable();
     expect(heard, "already off").toBe(0);

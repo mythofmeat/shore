@@ -12,7 +12,8 @@ import { toasts } from "../ui/toast.tsx";
 import { unsentConversations, watchUnsent } from "../drafts.ts";
 import { FolderRow } from "./FolderRow.tsx";
 import { PresenceStore, StatusPicker } from "./StatusPicker.tsx";
-import { HELD_GROUP, threadSections } from "./order.ts";
+import { HELD_GROUP, shownUnread, threadSections } from "./order.ts";
+import { useWindowFocused } from "../ui/hooks.ts";
 import { useRowMenu } from "./row_menu.ts";
 import { THREAD_DRAG_TYPE, ThreadRow, UnreadBadge, type ThreadNeighbours } from "./ThreadRow.tsx";
 
@@ -39,10 +40,11 @@ function ThreadList({ state, shownThread, ready, select, newThread }: { state: C
   const character = state.character ?? "";
   const collapsed = useCollapsedFolders(character);
   const unsent = useUnsentDrafts();
+  const focused = useWindowFocused();
   const sections = threadSections(state.threads, state.folders);
   const looseIds = sections.loose.map((thread) => thread.id);
   const looseByActivity = !state.manualOrder;
-  const unreadOf = (thread: ThreadView) => thread.id === state.thread ? 0 : thread.unread ?? 0;
+  const unreadOf = (thread: ThreadView) => shownUnread(thread, state.thread, focused);
   const replyingIn = (thread: ThreadView) => thread.id !== state.thread && conversation.activeIn({ character: state.character, thread: thread.id });
   const row = (thread: ThreadView, ids: readonly string[], byActivity: boolean, folder?: string) => <ThreadRow key={thread.id} thread={thread} character={character} label={threadLabel(thread)} current={thread.id === shownThread} unread={unreadOf(thread)} drafted={thread.id !== shownThread && unsent.has(JSON.stringify([state.character, thread.id]))} replying={replyingIn(thread)}
     opening={state.opening?.thread === thread.id && thread.id !== state.thread} ready={ready} select={() => select(thread.id)} neighbours={neighboursIn(ids, thread.id, byActivity)}

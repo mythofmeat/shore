@@ -1,19 +1,19 @@
 import { useCallback, useEffect, useState } from "react";
 import type { ChromeSnapshot } from "../workspace.ts";
 import { Sidebar, threadLabel } from "../sidebar/Sidebar.tsx";
-import { sortThreads, threadsOnScreen } from "../sidebar/order.ts";
+import { sortThreads, threadsOnScreen, unreadIn } from "../sidebar/order.ts";
 import { Chat } from "../chat/Chat.tsx";
 import { Settings } from "../settings/Settings.tsx";
 import { NewCharacterDialog, NewThreadDialog } from "../sidebar/dialogs.tsx";
 import { Toasts, toasts } from "../ui/toast.tsx";
-import { useEscape, useMediaQuery, useStoredFlag } from "../ui/hooks.ts";
+import { useEscape, useMediaQuery, useStoredFlag, useWindowFocused } from "../ui/hooks.ts";
 import { FolderDialogs, ThreadDialogs } from "../chat/thread_dialogs.tsx";
 import { FOLDER_DIALOG_EVENT, THREAD_DIALOG_EVENT, type FolderDialogRequest, type ThreadDialogRequest } from "./intents.ts";
 import { Palette } from "./Palette.tsx";
 import { navigate, openSettings, useRoute } from "./route.ts";
 import { adjacent, globalAction, nextUnread } from "./shortcuts.ts";
 import { useThreadUrl } from "./thread_url.ts";
-import { perform, useCollapsedFolders, useNotifications, workspace } from "./state.ts";
+import { perform, useCollapsedFolders, workspace } from "./state.ts";
 
 export function Shell({ state }: { state: ChromeSnapshot }) {
   const route = useRoute();
@@ -24,7 +24,7 @@ export function Shell({ state }: { state: ChromeSnapshot }) {
   const [threadDialog, setThreadDialog] = useState<ThreadDialogRequest | null>(null);
   const [folderDialog, setFolderDialog] = useState<FolderDialogRequest | null>(null);
   const collapsed = useCollapsedFolders(state.character);
-  const { unread } = useNotifications();
+  const unread = unreadIn(state.threads, state.thread, useWindowFocused());
   useEffect(() => {
     const open = (event: Event) => { setThreadDialog((event as CustomEvent<ThreadDialogRequest>).detail); };
     const openFolder = (event: Event) => { setFolderDialog((event as CustomEvent<FolderDialogRequest>).detail); };

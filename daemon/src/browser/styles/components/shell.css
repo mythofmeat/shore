@@ -228,6 +228,10 @@
 }
 
 @media (hover: hover) {
+  .folder-row .sidebar-item {
+    padding-right: 36px;
+  }
+
   .thread-row:hover .sidebar-time,
   .thread-row:focus-within .sidebar-time,
   .thread-row.menu-open .sidebar-time {
@@ -281,13 +285,10 @@
 }
 
 .sidebar-time {
-  flex-shrink: 0;
-  min-width: 22px;
   color: var(--text-3);
   font-size: var(--text-sm);
   font-variant-numeric: tabular-nums;
   font-weight: 400;
-  text-align: right;
 }
 
 .sidebar-replying .spinner {

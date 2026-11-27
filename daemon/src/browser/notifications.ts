@@ -8,7 +8,7 @@ const UNSAVED = "This browser couldn’t save the notification setting, so it wi
 
 type GrantState = "default" | "granted" | "denied";
 export type NotifyPermission = GrantState | "unavailable";
-export interface NotifySnapshot { enabled: boolean; permission: NotifyPermission; unread: number }
+export interface NotifySnapshot { enabled: boolean; permission: NotifyPermission }
 export interface ShownNotification { onclick: (() => void) | null; close(): void }
 export interface NotificationApi {
   readonly permission: GrantState;
@@ -63,13 +63,13 @@ export class Notifier {
     this.#api = options.api === undefined ? browserApi() : options.api;
     this.#focused = options.focused ?? browserFocused;
     this.#focusWindow = options.focusWindow ?? focusBrowser;
-    this.#snapshot = { enabled: this.#stored(), permission: this.#permission(), unread: 0 };
+    this.#snapshot = { enabled: this.#stored(), permission: this.#permission() };
   }
   subscribe = (listener: () => void): (() => void) => { this.#listeners.add(listener); return () => { this.#listeners.delete(listener); }; };
   getSnapshot = (): NotifySnapshot => this.#snapshot;
   #set(patch: Partial<NotifySnapshot>): void {
     const next = { ...this.#snapshot, ...patch };
-    if (next.enabled === this.#snapshot.enabled && next.permission === this.#snapshot.permission && next.unread === this.#snapshot.unread) return;
+    if (next.enabled === this.#snapshot.enabled && next.permission === this.#snapshot.permission) return;
     this.#snapshot = next;
     for (const listener of this.#listeners) listener();
   }
@@ -97,17 +97,17 @@ export class Notifier {
   disable(): void {
     const saved = this.#store(false);
     this.#closeShown();
-    this.#set({ enabled: false, unread: 0 });
+    this.#set({ enabled: false });
     if (!saved) throw new Error(UNSAVED);
   }
   reload(): void {
     const enabled = this.#stored();
     if (!enabled) this.#closeShown();
-    this.#set({ enabled, permission: this.#permission(), unread: enabled ? this.#snapshot.unread : 0 });
+    this.#set({ enabled, permission: this.#permission() });
   }
-  markRead(): void {
+  pageFocused(): void {
     this.#closeShown();
-    this.#set({ permission: this.#permission(), unread: 0 });
+    this.#set({ permission: this.#permission() });
   }
   observe(update: ConnectionUpdate, selection: NotifySelection): void {
     if (update.kind !== "frame") return;
@@ -120,7 +120,6 @@ export class Notifier {
   }
   #alert(character: string | null, thread: string | null, body: string, picture?: string): void {
     if (!this.#snapshot.enabled || this.#focused()) return;
-    this.#set({ unread: this.#snapshot.unread + 1 });
     const tag = `shore:${character ?? ""}/${thread ?? "main"}`;
     const shown = this.#show(character ?? "Shore", { body: notificationBody(body), tag, renotify: true, ...(picture === undefined ? {} : { icon: picture, image: picture }) });
     if (shown === undefined) return;

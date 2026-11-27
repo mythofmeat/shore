@@ -5,6 +5,7 @@ import type { ThreadView } from "../../src/protocol/ThreadView.ts";
 import type { ChromeSnapshot } from "../../src/browser/workspace.ts";
 import { useApp } from "./app.ts";
 import { acting, button, click, mount } from "./dom.ts";
+import { replace } from "./daemon.ts";
 
 const app = useApp();
 const present = (found: Element | null | undefined): boolean => found !== null && found !== undefined;
@@ -77,6 +78,19 @@ test("home comes first, then the loose threads, then each folder's; the open thr
   expect(present(view.named("story")?.querySelector(".sidebar-item.on"))).toBe(true);
   await view.rerender({ thread: "side" });
   expect([view.badge("story"), view.badge("side")], "once another thread is open, home's own count shows").toEqual(["5", null]);
+});
+
+test("the open thread shows its unread count while the window is in the background", async () => {
+  let focused = true;
+  replace(app.restores, document, "hasFocus", () => focused);
+  const view = await sidebar({ threads: [HOME, thread("side", { unread: 1 })] });
+  expect([view.badge("story"), view.badge("side")]).toEqual([null, "1"]);
+  focused = false;
+  await acting(() => { dispatchEvent(new Event("blur")); });
+  expect([view.badge("story"), view.badge("side")]).toEqual(["5", "1"]);
+  focused = true;
+  await acting(() => { dispatchEvent(new Event("focus")); });
+  expect([view.badge("story"), view.badge("side")]).toEqual([null, "1"]);
 });
 
 test("a shut folder counts its threads' unread messages and still shows the open thread inside it", async () => {
