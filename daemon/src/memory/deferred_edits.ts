@@ -281,11 +281,9 @@ export async function forkPromptState(
       ).all(character, sourcePrefix);
       for (const { path } of held) {
         const file = path.slice(sourcePrefix.length);
-        if (file === ".snapshot" || file.startsWith(`${THREAD_PINS_DIR}/`)) continue;
         const content = readCharacterState(characterDir, stateFile(source, `active_prompt/${file}`)) ?? "";
         writeCharacterState(characterDir, stateFile(child, `active_prompt/${file}`), content);
       }
-      writeCharacterState(characterDir, stateFile(child, "active_prompt/.snapshot"), "1");
     }
     const queue = readCharacterState(characterDir, stateFile(source, QUEUE_FILE));
     if (queue !== undefined) writeCharacterState(characterDir, stateFile(child, QUEUE_FILE), queue);

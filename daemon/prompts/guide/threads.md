@@ -32,6 +32,10 @@ The action `edit` changes a side thread's label, purpose or pins, whoever starte
 
 A side thread has no time of its own until you give it some: nothing wakes you in it unasked. A trigger with `thread` set to the thread's id gives it regular time, at the hours or the interval you choose, and `{{wake_in_thread}}` takes you there once. The `triggers` topic has an example.
 
+## Forked threads
+
+{{user}} can fork a thread into a new side thread, which starts with a copy of that thread's conversation, or of its last few turns. The fork keeps the thread's purpose, pins, model and compaction setting, and goes in the same folder of {{user}}'s thread list. It doesn't keep the label or a lock. After that the two are separate threads: what is said in one isn't shown in the other.
+
 ## Sealed threads
 
 `start` with `sealed_until` makes a thread that {{user}} can't see until that time, for something you want ready for them by then, such as a surprise. `sealed_until` is a local date and 24-hour time that is still to come, like "2026-12-24 08:00". A sealed thread takes only that, a `name` and a `label`.

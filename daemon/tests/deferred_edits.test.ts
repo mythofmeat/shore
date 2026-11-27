@@ -60,7 +60,7 @@ describe("the prompt files that changed since the snapshot", () => {
 });
 
 describe("a forked thread's prompt state", () => {
-  test("is the source's prompt files under any name, its snapshot mark and its queue, without the source's pins or the child's own leftovers", async () => {
+  test("is the source's prompt files under any name, its pins as it last showed them, its snapshot mark and its queue, without the child's own leftovers", async () => {
     const { dir } = await character();
     writeCharacterState(dir, "active_prompt/SOUL.md", "soul");
     writeCharacterState(dir, "active_prompt/notes/MAP.md", "map");
@@ -75,7 +75,7 @@ describe("a forked thread's prompt state", () => {
     expect(await loadActivePromptFile(dir, "SOUL.md", "spin")).toBe("soul");
     expect(await loadActivePromptFile(dir, "notes/MAP.md", "spin")).toBe("map");
     expect(await loadActivePromptFile(dir, "old.md", "spin")).toBeUndefined();
-    expect(readCharacterState(dir, "threads/spin/active_prompt/thread_pins/plan.md")).toBeUndefined();
+    expect(readCharacterState(dir, "threads/spin/active_prompt/thread_pins/plan.md")).toBe("the source's pin");
     expect(readCharacterState(dir, "threads/spin/active_prompt/.snapshot")).toBe("1");
     expect(await pendingDeferredEditPaths(dir, "spin")).toEqual(["notes/MAP.md"]);
   });
