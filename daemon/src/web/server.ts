@@ -316,9 +316,8 @@ export function startWebServer(options: WebServerOptions): RunningWebServer {
             const body = await readSmallJson(request, WEB_LIMITS.loginBytes);
             if (!validWebArchiveExport(body)) return problem(400, "invalid_request", "Choose a character to export");
             result = archives.export(session, body.character);
-          } else if (id !== undefined && action === "status") result = archives.get(session, id);
-          else if (id !== undefined && action === "import") result = archives.import(session, id);
-          else return problem(404, "not_found", "Unknown archive transfer endpoint");
+          } else if (id === undefined) return problem(404, "not_found", "Unknown archive transfer endpoint");
+          else result = action === "status" ? archives.get(session, id) : archives.import(session, id);
           const info = checked(validWebArchiveInfo, result, "archive transfer response");
           return Response.json(info, { status: info.phase === "importing" || info.phase === "exporting" ? 202 : 200, headers: securityHeaders() });
         } catch (error) {
