@@ -109,6 +109,7 @@ function mentionsCredentialRateLimit(bodyLc: string): boolean {
 function mentionsInvalidCredential(bodyLc: string): boolean {
   return (
     bodyLc.includes("invalid_api_key") ||
+    bodyLc.includes("api_key_invalid") ||
     bodyLc.includes("invalid api key") ||
     bodyLc.includes("authentication_error") ||
     bodyLc.includes("authentication failed") ||

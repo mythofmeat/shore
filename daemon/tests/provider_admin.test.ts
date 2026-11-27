@@ -19,6 +19,7 @@ import { configureSecretStore, secretStoreFor } from "../src/llm/secret_store.ts
 import { configureCredentialStanding } from "../src/llm/credential_standing.ts";
 import { openLedger } from "./support/ledger_fixture.ts";
 import { outcomeOf } from "./support/outcome.ts";
+import { GOOGLE_REJECTS_KEY } from "./support/google.ts";
 import { restoreTestEnv, setTestEnv, unsetTestEnv } from "./support/env.ts";
 import { testTmp } from "./support/tmp.ts";
 
@@ -138,6 +139,8 @@ describe("keys", () => {
     const rows: [string, string, Answer, string, string[], (string | null)[] | null][] = [
       ["[providers.gemini]\n", "gemini", () => Response.json(gemini), "works · 1 models",
         [keyed("https://generativelanguage.googleapis.com/v1beta/models?pageSize=1000")], ["1 models"]],
+      ["[providers.gemini]\n", "gemini", () => Response.json(GOOGLE_REJECTS_KEY, { status: 400 }), `gemini rejected: HTTP 400${unsaved} anyway`,
+        [keyed("https://generativelanguage.googleapis.com/v1beta/models?pageSize=1000")], null],
       ["[providers.anthropic]\n", "anthropic", () => roster(), "works · 2 models", [keyed("https://api.anthropic.com/v1/models")], ["2 models"]],
       ["[providers.openrouter]\n", "openrouter", at("/key", () => { throw new Error("connection reset"); }),
         `couldn't check: connection reset${unsaved} without asking`, [bearer("https://openrouter.ai/api/v1/key")], null],
