@@ -446,6 +446,7 @@ export const DAEMON_EQUIVALENTS: readonly string[] = [
   "src/web/server.ts:startWebServer: …ery?.close(); void server.stop(「true → false」); throw error; }",
   "src/web/server.ts:stop: 「active = false; → {}」",
   "src/web/server.ts:stop: active = 「false → true」;",
+  "src/web/server.ts:stop: 「await drained; → {}」",
 ];
 
 export const CLIENT_FLOORS: Readonly<Record<string, number>> = {

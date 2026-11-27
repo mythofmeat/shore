@@ -116,10 +116,10 @@ describe("the archive spool", () => {
       const sweeper = () => set.mock.results[set.mock.calls.findLastIndex((call) => call[1] === 60_000)]?.value as ReturnType<typeof setInterval>;
       const upload = await spool.receive("laptop", new Blob(["x"]).stream());
       spool.claim("laptop", upload.transfer);
-      expect(cleared).toHaveBeenCalledWith(sweeper());
+      expect(cleared.mock.calls.some(([handle]) => handle === sweeper())).toBe(true);
       cleared.mockClear();
       spool.send("laptop", await spooledDownload(spool, "laptop", bytes(5)));
-      expect(cleared).toHaveBeenCalledWith(sweeper());
+      expect(cleared.mock.calls.some(([handle]) => handle === sweeper())).toBe(true);
     } finally {
       set.mockRestore();
       cleared.mockRestore();

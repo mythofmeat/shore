@@ -72,7 +72,6 @@ export class WebSocketPeers {
     this.#unannounced.set(owner, [...waiting, finished].slice(-REQUEST_HISTORY_LIMITS.perSession));
   }
 
-  get size(): number { return this.#sockets.size; }
 
   #track(work: Promise<void>): void {
     this.#work.add(work);
@@ -177,7 +176,6 @@ export class WebSocketPeers {
       state.phase = "ready";
       await this.#write(socket, { type: "hello", v: SWP_V1, server_name: "shore-daemon", characters: [...peer.characters] });
       const unannounced = this.#unannounced.get(state.auth.id) ?? [];
-      this.#unannounced.delete(state.auth.id);
       for await (const message of peer.events()) {
         await this.#write(socket, message);
         if (message.type === "history") for (const finished of unannounced.splice(0)) this.#send(socket, finished);

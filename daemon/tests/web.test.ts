@@ -598,9 +598,9 @@ async function freePort(): Promise<number> {
   return port;
 }
 
-function recoveringServer(recovery: WebRecoveryOptions, port: number, sessionLifetimeMs = 60_000) {
+function recoveringServer(recovery: WebRecoveryOptions, port: number, sessionLifetimeMs = 60_000, drainTimeoutMs?: number) {
   const swp = new Server({ handshake: { hello: async () => ({ characters: [{ name: "ada" }] }), history: async (selectedCharacter) => ({ messages: [], previousSegment: null, config: {}, selectedCharacter, selectedThread: "main", revision: 0 }), select: async (character) => ({ character, thread: null }) } });
-  const web = startWebServer({ server: swp, authenticate: (token) => token === "recovery-token", config: { ...defaultWebConfig(), enabled: true, bind_addr: `127.0.0.1:${String(port)}` }, recovery, sessionLifetimeMs });
+  const web = startWebServer({ server: swp, authenticate: (token) => token === "recovery-token", config: { ...defaultWebConfig(), enabled: true, bind_addr: `127.0.0.1:${String(port)}` }, recovery, sessionLifetimeMs, ...(drainTimeoutMs === undefined ? {} : { drainTimeoutMs }) });
   web.activate();
   return { swp, web, post: (path: string, cookie: string, body: NonNullable<RequestInit["body"]> = "{}", headers: Record<string, string> = {}) => fetch(`${web.origin}/api${path}`, { method: "POST", body, headers: { cookie, origin: web.origin, "content-type": "application/json", ...headers } }) };
 }
@@ -791,6 +791,14 @@ describe("signing a browser in", () => {
     expect([renewed.status, renewed.headers.get("set-cookie")?.split(";", 1)[0]]).toEqual([200, second]);
   });
 
+  test("a browser that signs in starts its count of failed attempts over", async () => {
+    const f = await fixture(); f.web.activate();
+    const wrong = async () => (await f.api("/api/login", "", { token: "wrong" })).status;
+    for (let tried = 1; tried < WEB_LIMITS.loginAttemptsPerMinute; tried += 1) expect(await wrong()).toBe(401);
+    expect((await f.api("/api/login", "", { token: await f.code() })).status).toBe(200);
+    expect([await wrong(), await wrong()]).toEqual([401, 401]);
+  });
+
   test("a sign-in still arriving when the daemon stops is told the daemon is stopping", async () => {
     const f = await fixture(); f.web.activate();
     const token = await f.code();
@@ -920,7 +928,7 @@ describe("a browser's socket, once it is in", () => {
     expect([(await browser.closed).code, browser.closeDetail]).toEqual([1013, "1013 Outgoing limit reached; reconnect to refresh history"]);
   });
 
-  test("gets a history larger than its queue", async () => {
+  test("gets a history larger than its queue, at attach and any time after", async () => {
     const f = await fixture({ config: { ...small, max_queued_bytes: 1024 } }, {
       hello: async () => ({ characters: [{ name: "ada" }] }),
       select: (character) => Promise.resolve({ character, thread: null }),
@@ -928,6 +936,8 @@ describe("a browser's socket, once it is in", () => {
     }); f.web.activate();
     const browser = connectBrowser(f.web.origin, (await f.login()).cookie);
     await browser.attach();
+    await f.swp.sessionRouter.sendToSession(sessionOf(f), { type: "history", messages: [], config: { notes: "y".repeat(5000) }, selected_character: "ada", selected_thread: "main", revision: 2 });
+    await until(() => browser.messages.some((frame) => frame.type === "history" && frame.revision === 2), "the later history");
     expect(browser.socket.readyState).toBe(WebSocket.OPEN);
   });
 
@@ -1079,14 +1089,23 @@ describe("stopping the web listener", () => {
     expect([handlesUnder(recovery.dataDir), handlesUnder(recovery.cacheDir)]).toEqual([0, 0]);
   });
 
-  test("stopping waits for its browsers to be let go, however long their requests take to drain", async () => {
-    const f = await fixture({ drainTimeoutMs: 2_600 }); f.web.activate();
-    const browser = connectBrowser(f.web.origin, (await f.login()).cookie);
+  test("stopping closes the recovery store only once its browsers' unfinished requests are written down", async () => {
+    const recovery = await recoveryOptions();
+    const port = await freePort();
+    const listener = recoveringServer(recovery, port, 60_000, 2_600);
+    const { code } = await (await fetch(`${listener.web.origin}/api/login-code`, { method: "POST", headers: { authorization: "Bearer recovery-token" } })).json() as WebLoginCode;
+    const cookie = (await listener.post("/login", "", JSON.stringify({ token: code }))).headers.get("set-cookie")?.split(";")[0] ?? "";
+    const browser = connectBrowser(listener.web.origin, cookie);
     await browser.attach();
-    browser.send({ type: "command", rid: crypto.randomUUID(), name: "status", args: {} });
-    await until(() => f.routed.some((route) => route.kind === "command"), "the request to reach the daemon");
-    await f.web.stop();
-    expect(f.controls.some((control) => control.kind === "session_disconnected")).toBe(true);
+    const rid = crypto.randomUUID();
+    browser.send({ type: "message", rid, text: "hello" });
+    await untilAsync(async () => ((await (await listener.post("/requests/list", cookie)).json()) as { requests: unknown[] }).requests.length === 1, "the request to be recorded");
+    await listener.web.stop(); listener.swp.stop();
+    await Bun.sleep(1_000);
+    const again = recoveringServer(recovery, port);
+    cleanups.push(async () => { await again.web.stop(); again.swp.stop(); });
+    const kept = await (await again.post("/requests/list", cookie)).json() as { requests: { rid: string; phase: string }[] };
+    expect(kept.requests.map((request) => [request.rid, request.phase])).toEqual([[rid, "uncertain"]]);
   });
 
   test("stopping twice is one stop, and a device still following is let go once the grace is up", async () => {

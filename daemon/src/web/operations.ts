@@ -135,7 +135,7 @@ export async function operationResponse(request: Request, call: OperationCall): 
   return response;
 }
 
-function selected(url: URL, key: string): string | undefined {
+export function selected(url: URL, key: string): string | undefined {
   const value = url.searchParams.get(key);
   return value === null || value === "" ? undefined : value;
 }

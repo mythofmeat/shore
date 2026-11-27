@@ -13,7 +13,7 @@ import { browserName, LoginCodes, LoginFailures, WebSessions, type WebSession } 
 import { WEB_CONTRACT, WEB_PROTOCOL, WEB_SUBPROTOCOL } from "./contract.ts";
 import { validWebLogin, validWebLoginCode, validWebProblem, validWebSession, validWebArchiveExport, validWebArchiveInfo, validWebArchiveList, validWebRequestList, validWebPreferences, validWebAutomationKey, validWebDeviceChoice, validWebDeviceList, validWebNewDevice, validWebSignInDecision, validWebSignInPoll, validWebSignInStart } from "./contracts.ts";
 import { bearerToken, DEVICE_NAME_RULE, deviceName, DeviceStore, principalName, principalOwner, SignInRequests, type Principal } from "./devices.ts";
-import { commandRefusal, CONNECTION_ONLY_OPERATIONS, eventResponse, operationExists, operationResponse, refused } from "./operations.ts";
+import { commandRefusal, CONNECTION_ONLY_OPERATIONS, eventResponse, operationExists, operationResponse, refused, selected } from "./operations.ts";
 import { checked, DAEMON_VERSION, pageOrigin, readSmallJson, securityHeaders, webBinding, WebBodyTooLarge, WEB_LIMITS } from "./policy.ts";
 import { socketState, WebSocketPeers, type WebSocketState } from "./socket.ts";
 import { browserAssets } from "./assets.generated.ts";
@@ -145,8 +145,7 @@ export function startWebServer(options: WebServerOptions): RunningWebServer {
     }
     if (principal.kind === "device" && principal.device.operations !== undefined) return problem(403, "forbidden", "An automation key can only run the operations it was given");
     if (url.pathname === "/api/hello" && request.method === "GET") {
-      const chosen = (key: string) => { const value = url.searchParams.get(key); return value === null || value === "" ? undefined : value; };
-      const selection = await options.server.selection(chosen("character"), chosen("thread"));
+      const selection = await options.server.selection(selected(url, "character"), selected(url, "thread"));
       const hello: WebHello = {
         server_name: "shore-daemon", server_version: DAEMON_VERSION, characters: [...selection.characters],
         ...(selection.character === null ? {} : { selected_character: selection.character }),
@@ -308,17 +307,17 @@ export function startWebServer(options: WebServerOptions): RunningWebServer {
           if (url.pathname === "/api/archives/list") {
             return Response.json(checked(validWebArchiveList, archives.list(session), "archive list"), { headers: securityHeaders() });
           }
-          const match = /^\/api\/archives\/([a-f0-9-]{36})\/(status|import|download|remove)$/.exec(url.pathname);
-          if (match?.[1] !== undefined && match[2] === "download") { http.timeout(request, 0); return await archives.download(session, match[1], request); }
-          if (match?.[1] !== undefined && match[2] === "remove") { await archives.remove(session, match[1]); return new Response(null, { status: 204, headers: securityHeaders() }); }
+          const [, id, action] = /^\/api\/archives\/([a-f0-9-]{36})\/(status|import|download|remove)$/.exec(url.pathname) ?? [];
+          if (id !== undefined && action === "download") { http.timeout(request, 0); return await archives.download(session, id, request); }
+          if (id !== undefined && action === "remove") { await archives.remove(session, id); return new Response(null, { status: 204, headers: securityHeaders() }); }
           let result;
           if (url.pathname === "/api/archives") { http.timeout(request, 0); result = await archives.upload(session, request); }
           else if (url.pathname === "/api/archives/export") {
             const body = await readSmallJson(request, WEB_LIMITS.loginBytes);
             if (!validWebArchiveExport(body)) return problem(400, "invalid_request", "Choose a character to export");
             result = archives.export(session, body.character);
-          } else if (match?.[1] !== undefined && match[2] === "status") result = archives.get(session, match[1]);
-          else if (match?.[1] !== undefined && match[2] === "import") result = archives.import(session, match[1]);
+          } else if (id !== undefined && action === "status") result = archives.get(session, id);
+          else if (id !== undefined && action === "import") result = archives.import(session, id);
           else return problem(404, "not_found", "Unknown archive transfer endpoint");
           const info = checked(validWebArchiveInfo, result, "archive transfer response");
           return Response.json(info, { status: info.phase === "importing" || info.phase === "exporting" ? 202 : 200, headers: securityHeaders() });
@@ -354,12 +353,8 @@ export function startWebServer(options: WebServerOptions): RunningWebServer {
         if (request.headers.get("sec-websocket-protocol") !== WEB_SUBPROTOCOL) {
           return problem(409, "reload_required", "This browser version is incompatible; reload the page");
         }
-        if (http.pendingWebSockets >= config.max_connections || peers.size >= config.max_connections) {
-          return problem(429, "too_many_requests", "Browser connection limit reached");
-        }
-        const headers = securityHeaders();
-        headers.set("sec-websocket-protocol", WEB_SUBPROTOCOL);
-        return http.upgrade(request, { data: socketState(session), headers })
+        if (http.pendingWebSockets >= config.max_connections) return problem(429, "too_many_requests", "Browser connection limit reached");
+        return http.upgrade(request, { data: socketState(session), headers: securityHeaders() })
           ? undefined : problem(400, "invalid_request", "Expected a WebSocket upgrade");
       }
       try { return await shared(request, url, http, { kind: "browser", session }) ?? problem(404, "not_found", "Unknown browser endpoint"); } catch (error) {

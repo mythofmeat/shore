@@ -46,6 +46,7 @@ async function world(run: (dispatch: Dispatch, runtime: ShoreRuntime) => Promise
 test("a registered operation's arguments are checked before anything runs", async () => {
   await world(async (dispatch) => {
     expect(await dispatch("status", { nope: 1 })).toEqual({ type: "error", rid: "r", code: "invalid_request", message: "arguments must NOT have additional properties" });
+    expect(await dispatch("status", { nope: 1 }, { selectedCharacter: "nobody" }), "before the character is even looked for").toEqual({ type: "error", rid: "r", code: "invalid_request", message: "arguments must NOT have additional properties" });
   });
 });
 
@@ -62,6 +63,8 @@ test("listing models runs for the selected character, and for the daemon when no
 test("switching character answers with the switch, and a character that doesn't exist is named in the refusal", async () => {
   await world(async (dispatch) => {
     expect(await dispatch("switch_character", { name: "ada" })).toEqual({ type: "command_output", rid: "r", name: "switch_character", data: { character: "ada", changed: false, selected_character: "ada", active_model: null } });
+    const away = await dispatch("switch_character", { name: "ada" }, { selectedCharacter: "nobody" });
+    expect([away.type, away.type === "command_output" ? (away.data as { character: string }).character : away]).toEqual(["command_output", "ada"]);
     expect(await dispatch("status", {}, { selectedCharacter: "nobody" })).toEqual({ type: "error", rid: "r", code: "invalid_request", message: 'character "nobody" not found (available: ["ada"])' });
   });
 });
