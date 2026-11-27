@@ -107,6 +107,30 @@ describe("adding providers", () => {
   });
 });
 
+describe("where a provider's requests go", () => {
+  test("a known provider with no base url of its own shows its vendor's address, and one shore has no address for shows none", async () => {
+    const known = {
+      anthropic: "https://api.anthropic.com",
+      openai: "https://api.openai.com/v1",
+      deepseek: "https://api.deepseek.com",
+      openrouter: "https://openrouter.ai/api/v1",
+      moonshot: "https://api.moonshot.ai/v1",
+      moonshotai: "https://api.moonshot.ai/v1",
+      xai: "https://api.x.ai/v1",
+      zhipuai: "https://open.bigmodel.cn/api/paas/v4",
+      "zai-api": "https://api.z.ai/api/paas/v4",
+      "zai-sub": "https://api.z.ai/api/coding/paas/v4",
+      nanogpt: "https://nano-gpt.com/api/v1",
+      "opencode-go": "https://opencode.ai/zen/go/v1",
+      gemini: null,
+      mine: "http://127.0.0.1:9/v1",
+    };
+    const sections = Object.keys(known).map((name) => `[providers.${name}]\n${name === "mine" ? "sdk = \"openai\"\nbase_url = \"http://127.0.0.1:9/v1\"\n" : ""}`);
+    const w = await world(sections.join("\n"));
+    expect(Object.fromEntries(listProviderStatuses(w.ctx).providers.map((p) => [p.name, p.base_url]))).toEqual(known);
+  });
+});
+
 describe("keys", () => {
   test("a key typed into shore is checked, kept out of the config and shown only by its last four characters", async () => {
     const w = await world("[providers.openrouter]\ndiscover = true\n");
