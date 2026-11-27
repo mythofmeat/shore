@@ -61,6 +61,15 @@ export class WakesThreadError extends Error {
   }
 }
 
+export class ArchivedThreadError extends Error {
+  readonly code: ErrorCode = "invalid_request";
+
+  constructor(character: string, thread: string) {
+    super(`"${thread}" is archived, so you can read it but not write there. Unarchive it to write to ${character} there again.`);
+    this.name = "ArchivedThreadError";
+  }
+}
+
 export class WakeTurnError extends Error {
   readonly code: ErrorCode = "invalid_request";
 

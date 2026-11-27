@@ -116,6 +116,41 @@ test("threads on hold sit in a group of their own after the new-thread button; s
   expect([view.names(), view.badge("On hold")]).toEqual([["story", "side", "A", "On hold", "paused"], "1"]);
 });
 
+test("archived threads sit last in a group that starts shut and counts them, shut still shows the open one, and opened lists them latest first", async () => {
+  const { Icon } = await import("../../src/browser/ui/icons.tsx");
+  const drawn = async (name: "chevronDown" | "chevronRight") => {
+    const icon = await mount(<Icon name={name} size={14} />);
+    const html = icon.host.innerHTML;
+    await icon.unmount();
+    return html;
+  };
+  const threads = [HOME, thread("side"), thread("paused", { on_hold: true }), thread("gone", { archived: "2026-11-02T00:00:00Z" }), thread("long-gone", { archived: "2026-11-01T00:00:00Z" })];
+  const view = await sidebar({ threads });
+  const group = () => view.named("Archived")?.querySelector<HTMLButtonElement>("button.folder");
+  const shown = () => [group()?.getAttribute("aria-expanded"), group()?.querySelector("svg")?.outerHTML, view.named("Archived")?.querySelector(".sidebar-time")?.textContent ?? null];
+  expect(view.names()).toEqual(["story", "side", "On hold", "paused", "Archived"]);
+  expect([...view.host.querySelectorAll(".sidebar-threads > *")].at(-1)?.getAttribute("aria-label")).toBe("Archived");
+  expect(shown()).toEqual(["false", await drawn("chevronRight"), "2"]);
+  expect(group()?.textContent).toBe("Archived2(2 threads)");
+  await click(group());
+  expect([view.names(), ...shown()]).toEqual([["story", "side", "On hold", "paused", "Archived", "gone", "long-gone"], "true", await drawn("chevronDown"), null]);
+  await click(group());
+  await view.rerender({ thread: "long-gone" });
+  expect(view.names()).toEqual(["story", "side", "On hold", "paused", "Archived", "long-gone"]);
+  await view.rerender({ thread: "long-gone", threads: threads.filter((each) => each.id !== "gone") });
+  expect(group()?.textContent).toBe("Archived1(1 thread)");
+  await view.rerender({ thread: "long-gone" });
+  expect([view.named("long-gone")?.getAttribute("draggable"), view.named("side")?.getAttribute("draggable")], "an archived thread can't be dragged").toEqual(["false", "true"]);
+  const offered = (await view.menu("Options for long-gone")).map((item) => item.textContent);
+  expect(offered).toEqual(["Unarchive"]);
+  const since = app.socket().sent.length;
+  await click([...document.body.querySelectorAll<HTMLButtonElement>("[role=menu] [role=menuitem]")].find((item) => item.textContent === "Unarchive"));
+  await settle();
+  expect(sent(since, "unarchive_thread")).toEqual([{ name: "long-gone" }]);
+  await view.rerender({ threads: [HOME, thread("side")] });
+  expect(view.named("Archived"), "no archived threads, no group").toBeUndefined();
+});
+
 test("a shut folder and the shut group of threads on hold count their threads marked for later apart from their unread messages", async () => {
   const marked = "2026-11-27T10:00:00Z";
   const threads = [HOME, thread("side", { folder: "A", later: marked }), thread("near", { folder: "A", later: marked, unread: 1 }), thread("far", { folder: "A" }), thread("paused", { on_hold: true, later: marked })];

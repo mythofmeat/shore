@@ -26,7 +26,7 @@ export const MAX_THREAD_PINS = 20;
 
 const THREAD_ID = /^[A-Za-z0-9][A-Za-z0-9._-]*$/;
 
-export type ThreadErrorKind = "invalid_id" | "invalid_pins" | "invalid_folder" | "invalid_seal" | "exists" | "not_found" | "is_home" | "is_wakes" | "is_pinned" | "locked" | "on_hold";
+export type ThreadErrorKind = "invalid_id" | "invalid_pins" | "invalid_folder" | "invalid_seal" | "exists" | "not_found" | "is_home" | "is_wakes" | "is_pinned" | "locked" | "on_hold" | "archived" | "not_archived";
 
 export class ThreadError extends Error {
   constructor(
@@ -70,6 +70,7 @@ export interface ThreadRecord {
   compaction: boolean;
   locked?: true;
   on_hold?: true;
+  archived?: string;
   forked_from?: ThreadForkOrigin;
 }
 
@@ -104,12 +105,18 @@ export function threadRecord(index: ThreadsIndex, id: string): ThreadRecord | un
   return index.threads.find((t) => t.id === id);
 }
 
-export function threadsTheCharacterSees<T extends Pick<ThreadRecord, "on_hold">>(records: readonly T[]): T[] {
-  return records.filter((record) => record.on_hold !== true);
+export function threadAway(record: Pick<ThreadRecord, "on_hold" | "archived"> | undefined): "archived" | "on hold" | undefined {
+  if (record?.archived !== undefined) return "archived";
+  return record?.on_hold === true ? "on hold" : undefined;
+}
+
+export function threadsTheCharacterSees<T extends Pick<ThreadRecord, "on_hold" | "archived">>(records: readonly T[]): T[] {
+  return records.filter((record) => threadAway(record) === undefined);
 }
 
 export function requireNameFree(index: ThreadsIndex, character: string, id: string): void {
   const taken = threadRecord(index, id);
+  if (taken?.archived !== undefined) throw new ThreadError("archived", `thread ${JSON.stringify(id)} already exists for ${character}, archived`);
   if (taken?.on_hold === true) throw new ThreadError("on_hold", `thread ${JSON.stringify(id)} already exists for ${character}, on hold`);
   if (taken !== undefined) throw new ThreadError("exists", `thread ${JSON.stringify(id)} already exists for ${character}`);
 }
@@ -611,12 +618,17 @@ export async function setHomeThread(
   if (id === wakesThread(index)) {
     throw new ThreadError("is_wakes", `thread ${JSON.stringify(id)} is where Shore keeps ${character}'s working from wakes, so it can't be home`);
   }
+  requireNotArchived(record, character, "be home");
   const next: ThreadsIndex = { ...replaceThread(index, withSetting(record, "on_hold", undefined)), home: id };
   await writeThreadsIndex(data, character, next);
   return next;
 }
 
-type ThreadSetting = "label" | "purpose" | "pins" | "chat_model" | "locked" | "on_hold";
+type ThreadSetting = "label" | "purpose" | "pins" | "chat_model" | "locked" | "on_hold" | "archived";
+
+function requireNotArchived(record: ThreadRecord, character: string, doing: string): void {
+  if (record.archived !== undefined) throw new ThreadError("archived", `thread ${JSON.stringify(record.id)} for ${character} is archived, so it can't ${doing}; unarchive it first`);
+}
 
 function withSetting<K extends ThreadSetting>(record: ThreadRecord, key: K, value: ThreadRecord[K] | undefined): ThreadRecord {
   const { [key]: _dropped, ...rest } = record;
@@ -705,6 +717,7 @@ export async function setThreadOnHold(
   if (onHold && id === wakesThread(index)) {
     throw new ThreadError("is_wakes", `thread ${JSON.stringify(id)} is where Shore keeps ${character}'s working from wakes, so it can't be put on hold`);
   }
+  requireNotArchived(requireThread(index, character, id), character, "be put on hold");
   return await setThreadField(data, character, id, "on_hold", onHold ? true : undefined, now);
 }
 
@@ -733,7 +746,7 @@ export interface ThreadEdit {
 
 export function requireEditableByCharacter(index: ThreadsIndex, character: string, id: string): ThreadRecord {
   const record = requireThread(index, character, id);
-  if (record.on_hold === true) throw new ThreadError("not_found", `no thread ${JSON.stringify(id)} for ${character}`);
+  if (threadAway(record) !== undefined) throw new ThreadError("not_found", `no thread ${JSON.stringify(id)} for ${character}`);
   if (record.id === homeThread(index)) {
     throw new ThreadError(
       "is_home",
@@ -798,7 +811,7 @@ export async function archiveThread(
   return await withConversation(threadDataDir(data, character, id), "rewrite", async () => {
     const now = options.now ?? (() => new Date().toISOString());
     const index = await ensureThreads(data, character, now());
-    requireThread(index, character, id);
+    requireNotArchived(requireThread(index, character, id), character, "be archived again");
     if (index.home === id) {
       throw new ThreadError(
         "is_home",
@@ -837,9 +850,18 @@ export async function archiveThread(
     const next: ThreadsIndex = {
       ...rest,
       ...(wakes === id ? {} : { wakes }),
-      threads: index.threads.filter((t) => t.id !== id),
+      threads: index.threads.map((t) => t.id === id ? { ...withSetting(t, "on_hold", undefined), archived: now() } : t),
     };
     await writeThreadsIndex(data, character, next);
     return next;
   });
+}
+
+export async function unarchiveThread(data: string, character: string, id: string, now: string): Promise<ThreadsIndex> {
+  const index = await ensureThreads(data, character, now);
+  const record = requireThread(index, character, id);
+  if (record.archived === undefined) throw new ThreadError("not_archived", `thread ${JSON.stringify(id)} for ${character} isn't archived`);
+  const next = replaceThread(index, withSetting(record, "archived", undefined));
+  await writeThreadsIndex(data, character, next);
+  return next;
 }

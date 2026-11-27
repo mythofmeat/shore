@@ -48,6 +48,7 @@ export function startThreadRequest(input: Record<string, unknown>): StartThreadR
 }
 
 export function startRefusal(e: ThreadError, name: unknown, userName: string): ToolIoError {
+  if (e.kind === "archived") return new ToolIoError(`Not started: ${userName} has an archived thread named ${JSON.stringify(name)}, so that name is taken. Choose another.`);
   if (e.kind !== "on_hold") return new ToolIoError(e.message);
   return new ToolIoError(`Not started: ${userName} has a thread named ${JSON.stringify(name)} on hold, so that name is taken. Choose another.`);
 }

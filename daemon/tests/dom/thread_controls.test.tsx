@@ -34,11 +34,11 @@ test("only home, the Wakes thread and threads the character started show an icon
     const drawn = await mount(<Icon name={name} size={14} />);
     const html = drawn.host.innerHTML;
     await drawn.unmount();
-    return `${html}<span class="sr-only">(${says})</span>`;
+    return [html, says];
   };
   const row = async (thread: ThreadView) => {
     const view = await mount(<ThreadRow thread={thread} character="ada" label={thread.id} current={false} unread={0} drafted={false} replying={false} opening={false} ready select={() => {}} neighbours={neighbours} drop={() => {}} />);
-    const shown = [view.host.querySelector(".thread-row")?.getAttribute("draggable"), view.host.querySelector(".sidebar-item .sidebar-icon")?.innerHTML];
+    const shown = [view.host.querySelector(".thread-row")?.getAttribute("draggable"), [view.host.querySelector(".sidebar-item .sidebar-icon")?.innerHTML, view.host.querySelector(".sidebar-item")?.getAttribute("aria-description") ?? null]];
     await view.unmount();
     return shown;
   };
@@ -46,8 +46,8 @@ test("only home, the Wakes thread and threads the character started show an icon
   expect(await row({ ...HOME, wakes: true }), "home goes by home first").toEqual(["false", await icon("home", "home")]);
   expect(await row({ ...SIDE, wakes: true })).toEqual(["true", await icon("clock", "where wakes are kept")]);
   expect(await row({ ...SIDE, created_by: "character" })).toEqual(["true", await icon("spark", "started by ada")]);
-  expect(await row({ ...SIDE, created_by: "user" }), "an icon for everything says nothing").toEqual(["true", ""]);
-  expect(await row(SIDE)).toEqual(["true", ""]);
+  expect(await row({ ...SIDE, created_by: "user" }), "an icon for everything says nothing").toEqual(["true", ["", null]]);
+  expect(await row(SIDE)).toEqual(["true", ["", null]]);
 });
 
 test("a side thread's options put it on hold and a thread on hold's resume it, once the daemon is ready, while home and the wakes thread offer neither", async () => {

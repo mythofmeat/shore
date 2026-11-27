@@ -43,7 +43,7 @@ export function placedThreads(index: ThreadsIndex, activity: (id: string) => str
     });
     return { name: folder.name, byActivity: folder.by_activity === true, records };
   });
-  const loose = index.threads.filter((record) => !taken.has(record.id));
+  const loose = index.threads.filter((record) => !taken.has(record.id) && record.archived === undefined);
   const recent = newestFirst(activity);
   const order = Array.isArray(index.order) ? index.order : undefined;
   const looseRecords = order === undefined
@@ -58,6 +58,7 @@ export function placedThreads(index: ThreadsIndex, activity: (id: string) => str
     ...folders.flatMap((folder) => folder.byActivity
       ? placed([...folder.records].sort(recent), folder.name, false)
       : placed(folder.records, folder.name, true)),
+    ...index.threads.filter((record) => record.archived !== undefined).map((record) => ({ record })),
   ];
 }
 
@@ -79,11 +80,13 @@ function placedBefore<T>(items: readonly T[], item: T, before: T | undefined): T
 }
 
 function looseOnScreen(index: ThreadsIndex, activity: (id: string) => string | undefined): string[] {
-  return placedThreads(index, activity).filter((item) => item.folder === undefined && !pinnedThreads(index).includes(item.record.id)).map((item) => item.record.id);
+  return placedThreads(index, activity).filter((item) => item.folder === undefined && item.record.archived === undefined && !pinnedThreads(index).includes(item.record.id)).map((item) => item.record.id);
 }
 
 export function moveThread(index: ThreadsIndex, character: string, id: string, move: ThreadMove, activity: (id: string) => string | undefined): ThreadsIndex {
-  if (!index.threads.some((record) => record.id === id)) throw new ThreadError("not_found", `no thread ${JSON.stringify(id)} for ${character}`);
+  const moving = index.threads.find((record) => record.id === id);
+  if (moving === undefined) throw new ThreadError("not_found", `no thread ${JSON.stringify(id)} for ${character}`);
+  if (moving.archived !== undefined) throw new ThreadError("archived", `thread ${JSON.stringify(id)} for ${character} is archived, so it stays in the archived threads; unarchive it first`);
   if (pinnedThreads(index).includes(id)) throw new ThreadError("is_pinned", `thread ${JSON.stringify(id)} is the home thread, and it stays at the top of the list`);
   const current = folderList(index).find((folder) => folder.threads.includes(id))?.name;
   const target = move.folder === undefined ? current : move.folder === "" ? undefined : requireFolder(index, character, move.folder).name;

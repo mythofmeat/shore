@@ -746,9 +746,9 @@ pub(crate) fn write_character_list<W: Write>(out: &mut W, data: &Value, active: 
     rows.write(out);
 }
 
-fn thread_turns(turns: u64) -> String {
+fn thread_turns(turns: u64, used: bool) -> String {
     match turns {
-        0 => "empty".to_owned(),
+        0 if !used => "empty".to_owned(),
         1 => "1 turn".to_owned(),
         n => format!("{n} turns"),
     }
@@ -771,7 +771,10 @@ fn thread_facts(row: &Value) -> String {
         parts.push(format!("{unread} new"));
     }
     if let Some(turns) = row.get("turns").and_then(Value::as_u64) {
-        parts.push(thread_turns(turns));
+        parts.push(thread_turns(
+            turns,
+            row.get("last_active").and_then(Value::as_str).is_some(),
+        ));
     }
     if flag(row, "warm") {
         parts.push("warm".to_owned());
@@ -808,6 +811,9 @@ fn thread_facts(row: &Value) -> String {
     }
     if flag(row, "on_hold") {
         parts.push("on hold".to_owned());
+    }
+    if row.get("archived").and_then(Value::as_str).is_some() {
+        parts.push("archived".to_owned());
     }
     parts.join(" \u{b7} ")
 }
@@ -899,6 +905,15 @@ pub(crate) fn write_thread_list<W: Write>(out: &mut W, data: &Value) {
         note(
             out,
             "the character doesn't see a thread on hold; writing in it, or `shore thread resume`, brings it back",
+        );
+    }
+    if threads
+        .iter()
+        .any(|thread| thread.get("archived").and_then(Value::as_str).is_some())
+    {
+        note(
+            out,
+            "an archived thread can be read but not written in; `shore thread unarchive` brings it back",
         );
     }
 }

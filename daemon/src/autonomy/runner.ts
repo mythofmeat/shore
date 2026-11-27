@@ -104,7 +104,7 @@ export interface AutonomyEvents {
 
 export interface AutonomyExecutor {
   homeThread(character: string): string;
-  onHold?(character: string, thread: string | undefined): boolean;
+  away?(character: string, thread: string | undefined): "archived" | "on hold" | undefined;
   runWake(character: string, wake: WakeRun, hooks: WakeHooks): Promise<WakeResult>;
   runCompaction(character: string, reason: CompactionReason): Promise<AutonomyActionResult>;
   runDeepArchive(character: string): Promise<AutonomyActionResult>;

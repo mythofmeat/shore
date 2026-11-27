@@ -7,6 +7,7 @@ import type { LastRequestCache } from "../cache/last_request.ts";
 import type { PostArchiveEngine } from "./post_archive.ts";
 import type { AutonomyActionResult, AutonomyExecutor, OpenedSeal, WakeHooks, WakeResult, WakeRun } from "./runner.ts";
 import { runWake } from "./wake.ts";
+import { threadAway } from "../engine/threads.ts";
 import { sealedFilesDir } from "../handler/sealed_thread.ts";
 import type { ToolContext } from "../tools/dispatch.ts";
 import type { CompactionReason } from "./tick.ts";
@@ -60,8 +61,8 @@ export class InProcessAutonomyExecutor implements AutonomyExecutor {
     return this.#deps.registry.homeThread(character);
   }
 
-  onHold(character: string, thread: string | undefined): boolean {
-    return this.#deps.registry.listThreads(character).some((record) => record.id === thread && record.on_hold === true);
+  away(character: string, thread: string | undefined): "archived" | "on hold" | undefined {
+    return threadAway(this.#deps.registry.listThreads(character).find((record) => record.id === thread));
   }
 
   async runWake(character: string, wake: WakeRun, hooks: WakeHooks): Promise<WakeResult> {
@@ -90,7 +91,7 @@ export class InProcessAutonomyExecutor implements AutonomyExecutor {
           return await runLoopTool(ctx, config, calls.imageLimits(), { id: toolUseId ?? `wk_${crypto.randomUUID()}`, name, input }, tools);
         },
         ...this.#transcripts("wake", character),
-        engine: async (name, thread) => this.#deps.registry.listThreads(name).some((record) => record.id === thread)
+        engine: async (name, thread) => this.#deps.registry.listThreads(name).some((record) => record.id === thread && record.archived === undefined)
           ? await this.#deps.registry.getOrCreate(name, thread)
           : await this.#deps.registry.sealedEngine(name, thread),
         sealed: async (name, thread) => {

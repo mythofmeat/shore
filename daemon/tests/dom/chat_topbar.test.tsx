@@ -88,6 +88,29 @@ test("the thread menu offers another take and a reason once connected, with a tu
   expect(regen(await view.menu()), "not while a reply is running").toEqual([true, true]);
 });
 
+test("an archived thread opens to read, with a notice that unarchives it, a note where the message box was, and a menu that unarchives it instead of offering to redo or move it", async () => {
+  const archived: ThreadView = { ...SIDE, archived: "2026-11-27T10:00:00Z" };
+  const view = await chat(await chrome({ thread: "side", threads: [HOME, archived] }));
+  const notice = () => view.host.querySelector(".banner[role=status]");
+  expect([notice()?.textContent, view.host.querySelector(".composer-note")?.textContent, view.host.querySelector("textarea, .cm-editor")]).toEqual([
+    "Archived. ada doesn't see this thread, and nothing more can be written here until it is unarchived.Unarchive",
+    "This thread is archived, to read. Unarchive it to write to ada here.",
+    null,
+  ]);
+  const labels = (await view.menu()).map(([label, disabled, danger]) => [label, disabled, danger]);
+  expect(labels.filter(([label]) => ["Another take", "Regenerate with a reason…", "Make home", "Archive…", "Unarchive"].includes(String(label)))).toEqual([["Unarchive", false, false]]);
+  const since = app.socket().sent.length;
+  await click(button(view.host, "Unarchive"));
+  await click(button(view.host, "Thread options"));
+  await click([...view.host.querySelectorAll<HTMLButtonElement>(".topbar [role=menuitem]")].find((item) => item.textContent === "Unarchive"));
+  await settle();
+  expect(app.sent(since).filter((request) => request["name"] === "unarchive_thread").map((request) => request["args"])).toEqual([{ name: "side" }, { name: "side" }]);
+  await view.rerender(await chrome({ thread: "side", threads: [HOME, archived], status: "reconnecting" }));
+  expect([button(view.host, "Unarchive").disabled, (await view.menu()).find(([label]) => label === "Unarchive")?.[1]]).toEqual([true, true]);
+  await view.rerender(await chrome({ thread: "side" }));
+  expect([notice(), view.host.querySelector(".composer-note")]).toEqual([null, null]);
+});
+
 test("the thread menu marks the open thread for later or clears its mark, and offers neither for a thread not in the list", async () => {
   const later = (shown: unknown[][]) => shown.filter(([label]) => String(label).includes("later")).map(([label, disabled]) => [label, disabled]);
   const view = await chat(await chrome({ thread: "side" }));

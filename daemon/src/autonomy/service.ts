@@ -222,8 +222,9 @@ export class AutonomyService {
 
   wakeFor(character: string, firing: TriggerFiring): "handed" | "queued" | undefined {
     const runner = this.#entries.get(character)?.runner;
-    if (this.#executor.onHold?.(character, firing.thread) !== true) return runner?.wakeFor(firing);
-    runner?.note("call_failed", `Wake skipped: "${firing.thread ?? ""}" is on hold`, this.#now());
+    const away = this.#executor.away?.(character, firing.thread);
+    if (away === undefined) return runner?.wakeFor(firing);
+    runner?.note("call_failed", `Wake skipped: "${firing.thread ?? ""}" is ${away}`, this.#now());
     return undefined;
   }
 

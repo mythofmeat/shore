@@ -539,7 +539,7 @@ test("a wake's message for a thread that is archived before the wake ends isn't 
     end.release.resolve();
     await waking;
 
-    expect(runtime.registry.listThreads("ada").map((record) => record.id)).toEqual(["main", "wakes"]);
+    expect(runtime.registry.listThreads("ada").map((record) => [record.id, record.archived !== undefined])).toEqual([["main", false], ["garden", true], ["wakes", false]]);
     expect(runtime.autonomy.log("ada", 100).filter((event) => event.kind === "call_failed").map((event) => event.detail)).toEqual([
       'A message for the thread "garden" was not sent: that thread was gone by the time the wake in "main" ended',
     ]);
@@ -1812,7 +1812,7 @@ test("a reply's message for a thread that is archived before the reply is done i
     await saying;
 
     expect((await thread("main")).at(-1)?.content).toBe("reply to: tell the garden");
-    expect(runtime.registry.listThreads("ada").map((record) => record.id)).toEqual(["main", "attic"]);
+    expect(runtime.registry.listThreads("ada").map((record) => [record.id, record.archived !== undefined])).toEqual([["main", false], ["garden", true], ["attic", false]]);
   }).finally(() => {
     lines.push(...warned.mock.calls.map(([line]) => String(line)));
     warned.mockRestore();
@@ -2464,6 +2464,49 @@ test("a thread marked for later says when on every client, a regenerate leaves t
     expect(await command("thread_later", { name: "nowhere", later: true })).toMatchObject({ type: "error", code: "not_found" });
     expect(await command("thread_later", { name: "garden", later: "yes" })).toMatchObject({ type: "error", message: "/later must be boolean" });
   });
+});
+
+test("an archived thread is kept to read: the character can't see or reach it, its name stays taken, the user can't write, move, hold or make it home, no wake runs there, and unarchiving brings it back for every client", async () => {
+  await withCharacter(async ({ runtime, script, say, thread, command, events }) => {
+    await runtime.registry.createThread("ada", "garden", { label: "Beans", purpose: "Watering" });
+    await say("the beans are up", "garden");
+    await say("hello");
+    const archived = listedThread(await command("archive_thread", { name: "garden" }), "garden") as { archived?: string; label?: string; purpose?: string };
+    expect([Number.isNaN(Date.parse(archived.archived ?? "")), archived.label, archived.purpose]).toEqual([false, "Beans", "Watering"]);
+    const answer = async (name: string, input: Record<string, unknown>) => {
+      script.replyTool = { name, input };
+      await say("go on");
+      return lastToolResult(await thread("main"));
+    };
+    expect((await answer("threads", { action: "list" }))?.text).not.toContain("garden");
+    expect(await answer("send_message", { text: "More beans.", thread: "garden" })).toEqual({ text: 'io: you have no thread "garden" to send it in; `threads` lists the ones you have', failed: true });
+    expect(await answer("wake_in_thread", { thread: "garden", reason: "Water them." })).toEqual({ text: 'io: you have no thread "garden" to be woken in; `threads` lists the ones you have', failed: true });
+    expect(await answer("threads", { action: "edit", name: "garden", label: "Peas" })).toEqual({ text: 'io: no thread "garden" for ada', failed: true });
+    expect(await answer("threads", { action: "start", name: "garden", label: "Peas" })).toEqual({ text: 'io: Not started: peggy has an archived thread named "garden", so that name is taken. Choose another.', failed: true });
+
+    expect(String(await rejectionOf(say("let me in", "garden")))).toBe('ArchivedThreadError: "garden" is archived, so you can read it but not write there. Unarchive it to write to ada there again.');
+    expect(await command("thread_home", { name: "garden" })).toMatchObject({ type: "error", message: 'thread "garden" for ada is archived, so it can\'t be home; unarchive it first' });
+    expect(await command("thread_hold", { name: "garden", on_hold: true })).toMatchObject({ type: "error", message: 'thread "garden" for ada is archived, so it can\'t be put on hold; unarchive it first' });
+    expect(await command("thread_move", { name: "garden", folder: "" })).toMatchObject({ type: "error", message: 'thread "garden" for ada is archived, so it stays in the archived threads; unarchive it first' });
+    expect(await command("archive_thread", { name: "garden" })).toMatchObject({ type: "error", message: 'thread "garden" for ada is archived, so it can\'t be archived again; unarchive it first' });
+    expect(await command("create_thread", { name: "garden" })).toMatchObject({ type: "error", message: 'thread "garden" already exists for ada, archived' });
+
+    runtime.autonomy.wakeFor("ada", { name: "water", reason: "r", at: T0 + 30 * MINUTE, thread: "garden" });
+    at(30);
+    await runtime.autonomy.runDue();
+    expect(runtime.autonomy.log("ada", 100).map((event) => [event.kind, event.detail]).at(-1)).toEqual(["call_failed", 'Wake skipped: "garden" is archived']);
+
+    events.length = 0;
+    const back = listedThread(await command("unarchive_thread", { name: "garden" }), "garden");
+    expect(back).toMatchObject({ label: "Beans", purpose: "Watering" });
+    expect(back).not.toHaveProperty("archived");
+    expect(events.filter((event) => event.type === "threads_changed")).toEqual([{ type: "threads_changed", character: "ada", thread: "garden" }]);
+    expect(await command("unarchive_thread", { name: "garden" })).toMatchObject({ type: "error", message: 'thread "garden" for ada isn\'t archived' });
+    expect(await command("unarchive_thread", { name: "nowhere" })).toMatchObject({ type: "error", code: "not_found" });
+    expect((await answer("threads", { action: "list" }))?.text).toContain('garden "Beans"');
+    await say("back to the beans", "garden");
+    expect((await thread("garden")).map((message) => message.content)).toEqual(["back to the beans", "reply to: back to the beans"]);
+  }, handOff("threads"));
 });
 
 test("the character can't see a thread on hold: her list leaves it out, and a message, a hand-off, an edit or a new thread of its name is refused, until the user writes there and brings it back for every client", async () => {
@@ -3661,12 +3704,12 @@ test("the wakes thread is for reading: nothing is sent or regenerated there, it 
     expect(runtime.autonomy.log("ada", 100).map((event) => [event.kind, event.detail]).at(-1)).toEqual(["call_failed", 'Wake skipped: "wakes" keeps the working from wakes']);
 
     expect(await command("archive_thread", { name: "wakes" })).toMatchObject({ type: "command_output" });
-    expect(runtime.registry.listThreads("ada").map((record) => record.id)).toEqual(["main"]);
+    expect(runtime.registry.listThreads("ada").map((record) => [record.id, record.archived !== undefined])).toEqual([["main", false], ["wakes", true]]);
     expect(runtime.registry.wakesThread("ada")).toBeUndefined();
     at(40);
     await wakeNow();
-    expect(runtime.registry.listThreads("ada").map((record) => record.id)).toEqual(["main", "wakes"]);
-    expect((await thread("wakes")).filter(isWakeOpener).map((message) => message.content.split("\n")[0])).toEqual(['[wake in "main"]']);
+    expect(runtime.registry.listThreads("ada").map((record) => [record.id, record.archived !== undefined])).toEqual([["main", false], ["wakes", true], ["wakes-2", false]]);
+    expect((await thread("wakes-2")).filter(isWakeOpener).map((message) => message.content.split("\n")[0])).toEqual(['[wake in "main"]']);
   }, handOff("threads"));
 });
 

@@ -12,7 +12,7 @@ import { toasts } from "../ui/toast.tsx";
 import { unsentConversations, watchUnsent } from "../drafts.ts";
 import { FolderRow } from "./FolderRow.tsx";
 import { PresenceStore, StatusPicker } from "./StatusPicker.tsx";
-import { HELD_GROUP, shownUnread, threadSections } from "./order.ts";
+import { ARCHIVED_GROUP, HELD_GROUP, shownUnread, threadSections } from "./order.ts";
 import { useWindowFocused } from "../ui/hooks.ts";
 import { useRowMenu } from "./row_menu.ts";
 import { LaterCount, THREAD_DRAG_TYPE, ThreadRow, UnreadBadge, type ThreadNeighbours } from "./ThreadRow.tsx";
@@ -71,6 +71,9 @@ function ThreadList({ state, shownThread, ready, select, newThread }: { state: C
     {sections.held.length === 0 ? null : <HeldGroup character={character} shut={collapsed.has(HELD_GROUP)} unread={sections.held.reduce((total, thread) => total + unreadOf(thread), 0)} later={laterIn(sections.held)}>
       {(collapsed.has(HELD_GROUP) ? sections.held.filter((thread) => thread.id === state.thread) : sections.held).map((thread) => row(thread, sections.held.map((each) => each.id), true))}
     </HeldGroup>}
+    {sections.archived.length === 0 ? null : <ArchivedGroup character={character} open={collapsed.has(ARCHIVED_GROUP)} count={sections.archived.length}>
+      {(collapsed.has(ARCHIVED_GROUP) ? sections.archived : sections.archived.filter((thread) => thread.id === state.thread)).map((thread) => row(thread, [], looseByActivity))}
+    </ArchivedGroup>}
   </div>;
 }
 
@@ -82,6 +85,18 @@ function HeldGroup({ character, shut, unread, later, children }: { character: st
         <Icon name={shut ? "chevronRight" : "chevronDown"} size={14} /><span className="sidebar-name">On hold</span>
         {shut && later > 0 ? <LaterCount count={later} /> : null}
         {shut && unread > 0 ? <UnreadBadge count={unread} /> : null}
+      </button>
+    </div>
+    {children}
+  </div>;
+}
+
+function ArchivedGroup({ character, open, count, children }: { character: string; open: boolean; count: number; children: ReactNode }) {
+  return <div className="thread-folder" role="group" aria-label="Archived">
+    <div className="thread-row folder-row">
+      <button type="button" className="sidebar-item thread folder" aria-expanded={open} onClick={() => collapsedFolders.toggle(character, ARCHIVED_GROUP)}>
+        <Icon name={open ? "chevronDown" : "chevronRight"} size={14} /><span className="sidebar-name">Archived</span>
+        {open ? null : <><span className="sidebar-time" aria-hidden="true">{String(count)}</span><span className="sr-only">{count === 1 ? "(1 thread)" : `(${String(count)} threads)`}</span></>}
       </button>
     </div>
     {children}

@@ -1,7 +1,7 @@
 import { useState, type DragEvent } from "react";
 import type { ThreadView } from "../../protocol/ThreadView.ts";
 import { openThreadDialog } from "../app/intents.ts";
-import { holdThread, laterThread, markRead, makeHome, moveThreadTo } from "../chat/actions.ts";
+import { holdThread, laterThread, markRead, makeHome, moveThreadTo, unarchiveThread } from "../chat/actions.ts";
 import { IconButton, PointMenu, type MenuItem } from "../ui/controls.tsx";
 import { Icon, type IconName } from "../ui/icons.tsx";
 import { useRowMenu } from "./row_menu.ts";
@@ -24,6 +24,7 @@ export function laterItem(thread: ThreadView, ready: boolean): Exclude<MenuItem,
 }
 
 export function threadMenuItems(thread: ThreadView, ready: boolean, neighbours: ThreadNeighbours): MenuItem[] {
+  if (thread.archived !== undefined) return [{ label: "Unarchive", icon: "archive", onSelect: () => void unarchiveThread(thread), disabled: !ready }];
   const movable = !thread.home;
   return [
     { label: "Thread settings…", icon: "settings", onSelect: () => openThreadDialog("settings", thread.id), disabled: !ready },
@@ -78,7 +79,7 @@ export function ThreadRow({ thread, character, label, current, unread, drafted, 
 }) {
   const menu = useRowMenu();
   const [target, setTarget] = useState<"before" | "after" | null>(null);
-  const movable = !thread.home;
+  const movable = !thread.home && thread.archived === undefined;
   const icon = rowIcon(thread, character);
   const time = rowTime(thread.last_active, useNow());
   const open = () => { if (ready && !menu.swallowClick()) select(); };
@@ -95,16 +96,16 @@ export function ThreadRow({ thread, character, label, current, unread, drafted, 
       if (dragged !== thread.id) drop(dragged, place(event) === "after");
     }}>
     <div role="button" tabIndex={ready ? 0 : -1} className={`sidebar-item thread ${current ? "on" : ""} ${unread > 0 ? "unread" : ""}`} aria-current={current ? "page" : undefined} aria-busy={opening} aria-disabled={!ready} onClick={open}
-      title={thread.purpose === undefined || thread.purpose === "" ? label : `${label}\n${thread.purpose}`}
+      title={thread.purpose === undefined || thread.purpose === "" ? label : `${label}\n${thread.purpose}`} aria-description={icon?.says}
       onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); open(); } }}>
-      <span className="sidebar-icon">{icon === undefined ? null : <><Icon name={icon.name} size={14} /><span className="sr-only">({icon.says})</span></>}</span>
+      <span className="sidebar-icon" aria-hidden="true">{icon === undefined ? null : <Icon name={icon.name} size={14} />}</span>
       <span className="sidebar-name">{label}</span>
       {thread.later === undefined ? null : <span className="sidebar-later" title="Marked for later"><Icon name="flag" size={12} /><span className="sr-only">(marked for later)</span></span>}
       {thread.locked === true ? <span className="sidebar-locked" title="Locked: only you change its label, purpose and pins"><Icon name="lock" size={12} /><span className="sr-only">(locked)</span></span> : null}
       {drafted ? <span className="sidebar-draft" title="An unsent message in this tab"><Icon name="edit" size={12} /><span className="sr-only">(unsent message)</span></span> : null}
       {replying || opening ? <span className="sidebar-replying"><span className="spinner" aria-hidden="true" /><span className="sr-only">{opening ? "(opening)" : "(replying)"}</span></span> : null}
       {unread > 0 ? <UnreadBadge count={unread} /> : null}
-      <span className="sidebar-time" title={time.title}>{time.text}</span>
+      <span className="sidebar-time" aria-hidden="true" title={time.title}>{time.text}</span>
     </div>
     <IconButton icon="more" size={16} className="thread-more" label={`Options for ${label}`} aria-haspopup="menu" aria-expanded={menu.at !== null} onClick={menu.openFrom} />
     {menu.at === null ? null : <PointMenu label={`Options for ${label}`} items={threadMenuItems(thread, ready, neighbours)} at={menu.at} close={menu.close} />}

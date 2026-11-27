@@ -2,7 +2,7 @@ import { sealedListNote } from "../autonomy/sealed_notes.ts";
 import { characterDataDir } from "../config/dirs.ts";
 import { sealedThreads } from "../engine/sealed_list.ts";
 import { folderOf } from "../engine/thread_layout.ts";
-import { defaultThreadsIndex, homeThread, readThreadsIndex, threadActivities, wakesThread, type ThreadActivity, type ThreadRecord } from "../engine/threads.ts";
+import { defaultThreadsIndex, homeThread, readThreadsIndex, threadActivities, threadAway, wakesThread, type ThreadActivity, type ThreadRecord } from "../engine/threads.ts";
 import { agoPhrase, formatWallClock } from "../engine/prompt.ts";
 import { hostZone } from "../ledger/zoned.ts";
 import type { Texts } from "../texts/texts.ts";
@@ -55,7 +55,7 @@ export async function handleListThreads(options: ListThreadsOptions): Promise<st
   const sealed = sealedThreads(characterDataDir(options.dataDir, options.character));
   const sealedHere = sealed.find((thread) => thread.id === options.thread)?.id;
   const current = sealedHere ?? (index.threads.some((thread) => thread.id === options.thread) ? options.thread ?? home : home);
-  const seen = index.threads.filter((thread) => thread.on_hold !== true || thread.id === current);
+  const seen = index.threads.filter((thread) => threadAway(thread) === undefined || thread.id === current);
   const activity = await threadActivities(options.dataDir, options.character, seen.map((thread) => thread.id));
   const threads = [...seen].sort((a, b) => Number(b.id === home) - Number(a.id === home));
   const shown = threads.map((record) => described(record, activity.get(record.id), [

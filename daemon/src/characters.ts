@@ -40,6 +40,7 @@ import {
   setThreadModel,
   setThreadLater,
   setThreadOnHold,
+  unarchiveThread,
   setThreadPurpose,
   threadRecord,
   ThreadError,
@@ -334,6 +335,10 @@ export class CharacterRegistry {
       this.#drop(engineKey(name, id));
       return this.#remember(name, index);
     }, signal);
+  }
+
+  async unarchiveThread(name: string, id: string, signal?: AbortSignal): Promise<ThreadsIndex> {
+    return await this.#withThreadIndex(name, async () => this.#remember(name, await unarchiveThread(this.#dataDir, name, id, new Date().toISOString())), signal);
   }
 
   async forkThread(

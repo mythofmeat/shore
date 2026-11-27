@@ -21,7 +21,7 @@ import { defineOperation, discoverOperations, type OperationPresentation, type O
 import type { CommandDeps, CommandSession } from "./dispatch.ts";
 import { internalError, invalidRequest } from "./errors.ts";
 import { characterInfo, createCharacter, listCharacters, switchCharacter } from "./navigation.ts";
-import { archiveThread, forkThread, listThreads, markRead, newThread, switchThread, threadCompaction, threadFolderCreate, threadFolderDelete, threadFolderMove, threadFolderRename, threadFolderSort, threadHold, threadHome, threadLater, threadLabel, threadLock, threadModel, threadMove, threadPins, threadPurpose, threadSort } from "./threads.ts";
+import { archiveThread, forkThread, listThreads, markRead, newThread, switchThread, threadCompaction, threadFolderCreate, threadFolderDelete, threadFolderMove, threadFolderRename, threadFolderSort, threadHold, threadHome, threadLater, unarchiveThread, threadLabel, threadLock, threadModel, threadMove, threadPins, threadPurpose, threadSort } from "./threads.ts";
 import { archiveWithSignal, threadContext, threadListingContext } from "./thread_context.ts";
 import { refreshThreadPrompt, threadPrompt, type ThreadPromptContext } from "./thread_prompt.ts";
 import { alt, deleteMessages, edit, get, historyPage, injectSystem, listAlternatives, log } from "./conversation.ts";
@@ -461,6 +461,10 @@ export const commandOperations: OperationRegistry<CommandOperationContext> = {
     context.deps.historyIndex?.noteMutation?.(engine.characterName);
     return result;
   }),
+  unarchive_thread: register("unarchive_thread", {
+    ...threadPresentation, label: "Unarchive thread", effects: ["history_write"],
+    fields: { name: threadName },
+  }, async (context, args) => unarchiveThread(await threadListingContext(context.deps, engineOf(context), context.session), args)),
   fork_thread: register("fork_thread", {
     ...threadPresentation, label: "Fork thread", effects: ["history_write"],
     fields: {
@@ -586,7 +590,7 @@ export function runRegisteredOperation<N extends OperationName>(
 }
 
 const THREAD_CHANGES: ReadonlySet<string> = new Set([
-  "create_thread", "fork_thread", "thread_home", "thread_label", "thread_purpose", "thread_pins", "thread_prompt", "thread_prompt_refresh", "thread_lock", "thread_hold", "thread_later", "thread_compaction", "thread_model",
+  "create_thread", "unarchive_thread", "fork_thread", "thread_home", "thread_label", "thread_purpose", "thread_pins", "thread_prompt", "thread_prompt_refresh", "thread_lock", "thread_hold", "thread_later", "thread_compaction", "thread_model",
   "thread_move", "thread_sort", "thread_folder_create", "thread_folder_rename", "thread_folder_delete", "thread_folder_move", "thread_folder_sort",
 ]);
 

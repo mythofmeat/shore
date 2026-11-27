@@ -89,6 +89,7 @@ export interface ThreadRegistry {
     signal?: AbortSignal,
   ): Promise<ThreadsIndex>;
   setThreadLater(character: string, id: string, later: boolean, signal?: AbortSignal): Promise<void>;
+  unarchiveThread(character: string, id: string, signal?: AbortSignal): Promise<ThreadsIndex>;
   setThreadCompaction(
     character: string,
     id: string,
@@ -207,7 +208,17 @@ export async function newThread(ctx: ThreadContext, args: Args): Promise<ThreadL
 export async function archiveThread(ctx: ThreadContext, args: Args): Promise<ThreadListing> {
   const id = requiredId(args);
   try {
-    return listing(ctx, await ctx.registry.archiveThread(ctx.character, id, undefined, ctx.signal));
+    const index = await ctx.registry.archiveThread(ctx.character, id, undefined, ctx.signal);
+    return listing(ctx.current === id ? { ...ctx, current: homeThread(index) } : ctx, index);
+  } catch (e) {
+    throw threadCommandError(e);
+  }
+}
+
+export async function unarchiveThread(ctx: ThreadContext, args: Args): Promise<ThreadListing> {
+  const id = requiredId(args);
+  try {
+    return listing(ctx, await ctx.registry.unarchiveThread(ctx.character, id, ctx.signal));
   } catch (e) {
     throw threadCommandError(e);
   }

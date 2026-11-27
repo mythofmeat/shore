@@ -1786,6 +1786,22 @@
             "properties": {
               "name": {
                 "type": "string",
+                "const": "unarchive_thread"
+              },
+              "data": {
+                "$ref": "#/$defs/ThreadListing"
+              }
+            },
+            "required": [
+              "name",
+              "data"
+            ]
+          },
+          {
+            "type": "object",
+            "properties": {
+              "name": {
+                "type": "string",
                 "const": "fork_thread"
               },
               "data": {
@@ -9649,6 +9665,12 @@
             ]
           },
           "later": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "archived": {
             "type": [
               "string",
               "null"
@@ -11423,6 +11445,22 @@
             "properties": {
               "name": {
                 "type": "string",
+                "const": "unarchive_thread"
+              },
+              "data": {
+                "$ref": "#/$defs/ThreadListing"
+              }
+            },
+            "required": [
+              "name",
+              "data"
+            ]
+          },
+          {
+            "type": "object",
+            "properties": {
+              "name": {
+                "type": "string",
                 "const": "fork_thread"
               },
               "data": {
@@ -19286,6 +19324,12 @@
             ]
           },
           "later": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "archived": {
             "type": [
               "string",
               "null"

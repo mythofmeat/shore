@@ -2811,6 +2811,9 @@ wire_types! {
         pub later: Option<String>,
         #[serde(default, skip_serializing_if = "Option::is_none")]
         #[ts(optional)]
+        pub archived: Option<String>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        #[ts(optional)]
         pub folder: Option<String>,
         #[serde(default, skip_serializing_if = "Option::is_none")]
         #[ts(optional, type = "number")]
@@ -3039,6 +3042,7 @@ operations! {
     SwitchThread: "switch_thread" (SwitchThreadArgs) => ThreadSelection,
     CreateThread: "create_thread" (CreateThreadArgs) => ThreadListing,
     ArchiveThread: "archive_thread" (NamedOperationArgs) => ThreadListing,
+    UnarchiveThread: "unarchive_thread" (NamedOperationArgs) => ThreadListing,
     ForkThread: "fork_thread" (ForkThreadArgs) => ThreadForkResult,
     SetHomeThread: "thread_home" (NamedOperationArgs) => ThreadListing,
     LabelThread: "thread_label" (ThreadLabelArgs) => ThreadListing,

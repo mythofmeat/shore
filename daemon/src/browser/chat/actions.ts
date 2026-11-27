@@ -43,6 +43,15 @@ export async function holdThread(thread: Pick<ThreadView, "id">, onHold: boolean
   }
 }
 
+export async function unarchiveThread(thread: Pick<ThreadView, "id">): Promise<void> {
+  try {
+    workspace.applyThreadListing(await workspace.actions.run("unarchive_thread", { name: thread.id }));
+  } catch (error) {
+    await workspace.refreshThreads();
+    toasts.show(errorText(error), "error");
+  }
+}
+
 export async function laterThread(thread: Pick<ThreadView, "id" | "label">, later: boolean): Promise<void> {
   const name = thread.label === undefined || thread.label === "" ? thread.id : thread.label;
   try {

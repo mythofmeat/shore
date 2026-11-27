@@ -7,7 +7,8 @@ import { ConnectionBanner } from "../app/banner.tsx";
 import { threadLabel } from "../sidebar/Sidebar.tsx";
 import { conversation, errorText, readMarks, streamReplies, useConversationActive, useWorkspaceValue, workspace } from "../app/state.ts";
 import { toasts } from "../ui/toast.tsx";
-import { holdThread, makeHome } from "./actions.ts";
+import { holdThread, makeHome, unarchiveThread } from "./actions.ts";
+import { readOnlyThread } from "../sidebar/order.ts";
 import { laterItem } from "../sidebar/ThreadRow.tsx";
 import { BudgetChip } from "./budget.tsx";
 import { GalleryDialog } from "./gallery.tsx";
@@ -51,14 +52,16 @@ function ChatTopbar({ state, sidebarOpen, toggleSidebar, mobile }: { state: Chro
     { label: "Compact context…", icon: "compact", onSelect: () => setDialog("compact"), disabled: !ready || busy },
     { label: "Fork…", icon: "branch", onSelect: () => openThreadDialog("fork", threadId), disabled: !ready },
     "separator",
-    ...(thread?.wakes === true ? [] : [
+    ...(readOnlyThread(thread) ? [] : [
       { label: "Another take", icon: "shuffle" as const, onSelect: () => { void conversation.regenerate({ anotherTake: true }, streamReplies()).catch((error: unknown) => toasts.show(errorText(error), "error")); }, disabled: !ready || busy || !hasTurns },
       { label: "Regenerate with a reason…", icon: "regenerate" as const, onSelect: () => setDialog("reason"), disabled: !ready || busy || !hasTurns },
     ]),
     "separator",
     ...(thread === undefined ? [] : [laterItem(thread, ready)]),
-    ...(thread === undefined || thread.home || thread.wakes === true ? [] : [{ label: "Make home", icon: "home" as const, onSelect: () => { void makeHome(thread); }, disabled: !ready }]),
-    { label: "Archive…", icon: "archive", onSelect: () => openThreadDialog("archive", threadId), disabled: !ready || thread?.home === true, danger: true },
+    ...(thread === undefined || thread.home || readOnlyThread(thread) ? [] : [{ label: "Make home", icon: "home" as const, onSelect: () => { void makeHome(thread); }, disabled: !ready }]),
+    thread?.archived === undefined
+      ? { label: "Archive…", icon: "archive", onSelect: () => openThreadDialog("archive", threadId), disabled: !ready || thread?.home === true, danger: true }
+      : { label: "Unarchive", icon: "archive", onSelect: () => { void unarchiveThread(thread); }, disabled: !ready },
   ];
   return <header className="topbar">
     <SidebarToggle open={sidebarOpen} mobile={mobile} toggle={toggleSidebar} unread={unreadElsewhere(state)} />
@@ -95,16 +98,18 @@ export function Chat({ state, sidebarOpen, toggleSidebar, mobile }: { state: Chr
     };
   }, []);
   const open = state.threads.find((thread) => thread.id === state.thread);
-  const kept = open?.wakes === true;
+  const kept = readOnlyThread(open);
   return <>
     <ChatTopbar state={state} sidebarOpen={sidebarOpen} toggleSidebar={toggleSidebar} mobile={mobile} />
     <ConnectionBanner state={state} />
     {open?.on_hold === true ? <div className="banner" role="status">{`On hold. ${state.character ?? ""} doesn't see this thread, and no wake runs in it. Writing here resumes it.`}
       <button type="button" className="button" disabled={state.status !== "ready"} onClick={() => void holdThread(open, false)}>Resume</button></div> : null}
+    {open?.archived === undefined ? null : <div className="banner" role="status">{`Archived. ${state.character ?? ""} doesn't see this thread, and nothing more can be written here until it is unarchived.`}
+      <button type="button" className="button" disabled={state.status !== "ready"} onClick={() => void unarchiveThread(open)}>Unarchive</button></div>}
     {state.character === null ? <NoCharacter state={state} /> : <>
       <Transcript key={`${state.character}/${state.thread ?? ""}/${String(state.segmentView?.segment.index ?? "current")}`} character={state.character} mobile={mobile} readOnly={kept} />
       {kept
-        ? <div className="composer-wrap"><p className="composer composer-note" role="note">{`Shore keeps the working from ${state.character}'s wakes here, to read. Write to ${state.character} in another thread.`}</p></div>
+        ? <div className="composer-wrap"><p className="composer composer-note" role="note">{open?.wakes === true ? `Shore keeps the working from ${state.character}'s wakes here, to read. Write to ${state.character} in another thread.` : `This thread is archived, to read. Unarchive it to write to ${state.character} here.`}</p></div>
         : <Composer key={JSON.stringify([state.character, state.thread])} state={state} character={state.character} mobile={mobile} />}
       <QuoteButton />
     </>}

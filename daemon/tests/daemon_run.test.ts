@@ -303,7 +303,7 @@ describe("archiving a conversation", () => {
       const home = await daemon.runtime.registry.getOrCreate("ada");
       expect(home.historySnapshot({}).messages.map((message) => message.content)).toEqual(["hi", "hello back", "typed after archiving", "hello back"]);
       expect(await runCommand(elsewhere, "list_threads", {})).toMatchObject({ data: { current: "other" } });
-      expect(daemon.runtime.registry.listThreads("ada").map((thread) => thread.id).sort()).toEqual(["main", "other"]);
+      expect(daemon.runtime.registry.listThreads("ada").map((thread) => [thread.id, thread.archived !== undefined]).sort(([a], [b]) => String(a).localeCompare(String(b)))).toEqual([["main", false], ["other", false], ["side", true]]);
     } finally {
       release();
       for (const client of clients) client.close();

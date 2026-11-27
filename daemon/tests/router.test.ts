@@ -2,7 +2,7 @@ import { describe, expect, test } from "bun:test";
 
 import { afterCommand, type DispatchContext } from "../src/handler/command_dispatch.ts";
 import { CharacterConfigError } from "../src/characters.ts";
-import { ImagesUnsupportedError, NoModelError, WakesThreadError, WakeTurnError } from "../src/handler/setup.ts";
+import { ArchivedThreadError, ImagesUnsupportedError, NoModelError, WakesThreadError, WakeTurnError } from "../src/handler/setup.ts";
 import { NothingToReplaceError, UnknownTagError } from "../src/handler/attempts.ts";
 import { MessageHandler, withRid, type GenerationParams, type HandlerRegistry, type MessageHandlerDeps } from "../src/handler/router.ts";
 import type { ErrorCode } from "../src/protocol/ErrorCode.ts";
@@ -589,6 +589,7 @@ describe("replies", () => {
       [new ImagesUnsupportedError("chat.x", 2), "invalid_request", "chat.x does not accept images, so the 2 attachments were not sent. Switch to a vision-capable model and send again.", undefined],
       [new WakeTurnError("ada"), "invalid_request", "The last turn here is a wake of ada's own, not a reply to you, so there is nothing to regenerate. Write to ada instead.", undefined],
       [new WakesThreadError("ada", "wakes"), "invalid_request", "\"wakes\" is where Shore keeps the working from ada's wakes, so you can read it but not write there. Write to ada in another thread.", undefined],
+      [new ArchivedThreadError("ada", "garden"), "invalid_request", "\"garden\" is archived, so you can read it but not write there. Unarchive it to write to ada there again.", undefined],
       [new NothingToReplaceError(), "invalid_request", "There's no reply here to give a reason about. Regenerate without one, or write to the character instead.", undefined],
       [new UnknownTagError("rude", [], "dislike_tags"), "invalid_request", "\"rude\" isn't one of your dislike tags: marks.dislike_tags in your config is empty. Add it to marks.dislike_tags to use it.", undefined],
       [new CharacterConfigError("ada", new Error("bad toml")), "invalid_request", `invalid config for character "ada": bad toml`, undefined],

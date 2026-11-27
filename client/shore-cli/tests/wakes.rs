@@ -161,6 +161,59 @@ fn the_thread_list_marks_a_thread_on_hold_and_says_how_it_comes_back() {
 }
 
 #[test]
+fn the_thread_list_marks_an_archived_thread_and_says_how_it_comes_back() {
+    let (output, _frames) = asked(
+        json!({
+            "character": "ada",
+            "threads": [
+                {"id": "main", "created_at": "2026-11-21T00:00:00Z", "compaction": true, "home": true, "current": true, "turns": 2},
+                {"id": "tale", "created_at": "2026-11-21T00:00:00Z", "compaction": false, "home": false, "current": false, "turns": 0, "last_active": "2026-11-26T10:00:00Z", "archived": "2026-11-27T10:00:00Z"},
+            ],
+            "home": "main", "current": "main",
+        }),
+        &["thread"],
+    );
+    assert_eq!(
+        lines(&output).get(1..),
+        Some(
+            &[
+                "* main home \u{00b7} 2 turns \u{00b7} compacts".to_owned(),
+                "tale 0 turns \u{00b7} trims \u{00b7} archived".to_owned(),
+                "a wake runs in home, unless its trigger names another thread".to_owned(),
+                "an archived thread can be read but not written in; `shore thread unarchive` brings it back"
+                    .to_owned(),
+            ][..]
+        )
+    );
+}
+
+#[test]
+fn a_thread_with_no_messages_anywhere_is_empty_and_one_compacted_down_to_nothing_has_no_turns() {
+    let (output, _frames) = asked(
+        json!({
+            "character": "ada",
+            "threads": [
+                {"id": "main", "created_at": "2026-11-21T00:00:00Z", "compaction": true, "home": true, "current": true, "turns": 1, "last_active": "2026-11-26T10:00:00Z"},
+                {"id": "fresh", "created_at": "2026-11-21T00:00:00Z", "compaction": false, "home": false, "current": false, "turns": 0},
+                {"id": "kept", "created_at": "2026-11-21T00:00:00Z", "compaction": true, "home": false, "current": false, "turns": 0, "last_active": "2026-11-26T10:00:00Z"},
+            ],
+            "home": "main", "current": "main",
+        }),
+        &["thread"],
+    );
+    assert_eq!(
+        lines(&output).get(1..4),
+        Some(
+            &[
+                "* main home \u{00b7} 1 turn \u{00b7} compacts".to_owned(),
+                "fresh empty \u{00b7} trims".to_owned(),
+                "kept 0 turns \u{00b7} compacts".to_owned(),
+            ][..]
+        )
+    );
+}
+
+#[test]
 fn the_thread_list_counts_each_threads_pins_and_says_what_a_lock_keeps() {
     let thread = |id: &str, pins: &[&str], locked: bool| {
         json!({

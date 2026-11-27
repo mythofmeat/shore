@@ -367,8 +367,8 @@ describe("removing providers", () => {
     await mkdir(join(data, "dee", "preferences"), { recursive: true });
     await writeFile(characterPreferencesPath(data, "dee"), "[selected\n");
     saveGlobalPreferences(data, { ...emptyPreferences(), selected: { provider: "openrouter", modelId: "d" } });
-    const threads: Record<string, { id: string; chat_model?: string; archived?: boolean }[]> = {
-      ada: [{ id: "main" }, { id: "story", chat_model: "openrouter:s" }, { id: "old", chat_model: "openrouter:o", archived: true }, { id: "other", chat_model: "deepseek:chat" }],
+    const threads: Record<string, { id: string; chat_model?: string; archived?: string }[]> = {
+      ada: [{ id: "main" }, { id: "story", chat_model: "openrouter:s" }, { id: "old", chat_model: "openrouter:o", archived: "2026-11-27T10:00:00Z" }, { id: "other", chat_model: "deepseek:chat" }],
       cy: [{ id: "lamp", chat_model: "openrouter:c" }],
       dee: [{ id: "ring", chat_model: "openrouter:r" }],
     };

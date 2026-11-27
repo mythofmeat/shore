@@ -47,7 +47,7 @@ export interface ProviderAdminContext {
   config: ConfigContext;
   fetchImpl?: typeof fetch;
   ledgerPath?: string | undefined;
-  threads?: { listThreads(character: string): readonly { id: string; chat_model?: string; archived?: boolean }[] } | undefined;
+  threads?: { listThreads(character: string): readonly { id: string; chat_model?: string; archived?: string }[] } | undefined;
   confidential: boolean;
   now?: () => number;
 }
@@ -448,7 +448,7 @@ export function providerUsers(ctx: ProviderAdminContext, name: string): string[]
       users.push(`${character}'s model preferences, which can't be read`);
     }
     for (const thread of ctx.threads?.listThreads(character) ?? []) {
-      if (thread.archived !== true && uses(own, thread.chat_model)) users.push(`${character}'s thread ${thread.id} (${String(thread.chat_model)})`);
+      if (thread.archived === undefined && uses(own, thread.chat_model)) users.push(`${character}'s thread ${thread.id} (${String(thread.chat_model)})`);
     }
   }
   try {

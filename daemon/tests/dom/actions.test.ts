@@ -181,6 +181,19 @@ describe("thread actions", () => {
     expect(toasts().at(-1)).toEqual(["later failed", "error"]);
   });
 
+  test("unarchiving a thread shows the daemon's listing, or relists with the reason", async () => {
+    const { actions, state, toasts } = await load();
+    state.workspace.applyThreadListing({ ...LISTING, threads: [{ ...side, archived: "2026-11-27T10:00:00Z" }, story] });
+    answer = (request) => request["name"] === "unarchive_thread" ? { ...LISTING, threads } : catalogue(request);
+    await actions.unarchiveThread(side);
+    expect(state.workspace.getSnapshot().threads.find((thread) => thread.id === "side")).not.toHaveProperty("archived");
+    answer = (request) => { if (request["name"] === "unarchive_thread") throw new Error("unarchive failed"); return catalogue(request); };
+    const failed = socket.sent.length;
+    await actions.unarchiveThread(side);
+    expect(sentSince(failed).map((request) => [request["name"], request["args"]])).toEqual([["unarchive_thread", { name: "side" }], ["list_threads", {}]]);
+    expect(toasts()).toEqual([["unarchive failed", "error"]]);
+  });
+
   test("moving a folder shows the daemon's listing, or relists with the reason", async () => {
     const { actions, state, toasts } = await load();
     const moved = { ...LISTING, threads, folders: [{ name: "play" }, { name: "work" }] };
