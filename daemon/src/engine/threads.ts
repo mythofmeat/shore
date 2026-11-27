@@ -1,8 +1,7 @@
 import { withConversation } from "./lifecycle.ts";
 import { required } from "../util/required.ts";
-import { threadFile, readDurable, writeDurable, deleteThreadState, durableLinesAfter, durableMark, durablePrefixUnchanged } from "../storage/files.ts";
+import { threadFile, readDurable, writeDurable, deleteThreadState, durableLinesAfter, durableMark } from "../storage/files.ts";
 import type { StateMark } from "../storage/store.ts";
-import { existsSync } from "node:fs";
 import { mkdir, rm } from "node:fs/promises";
 import { join } from "node:path";
 
@@ -188,12 +187,16 @@ export function startReadMarkBefore(data: string, character: string, id: string,
   if (threadReadMark(data, character, id) === undefined) writeReadMark(data, character, id, first - 1);
 }
 
-function archivedUserTurnAt(data: string, character: string, id: string): number {
-  const dbPath = join(data, HISTORY_DB_FILE);
-  if (!existsSync(dbPath)) return Number.NaN;
-  const store = HistoryStore.open(dbPath);
+interface LastTimes {
+  user: number;
+  latest: number;
+}
+
+function archivedTimes(data: string, character: string, id: string): LastTimes {
+  const store = HistoryStore.open(join(data, HISTORY_DB_FILE));
   try {
-    return Date.parse(store.lastUserTurnAt(archiveKey(character, id)) ?? "");
+    const times = store.lastTimes(archiveKey(character, id));
+    return { user: Date.parse(times.user ?? ""), latest: Date.parse(times.latest ?? "") };
   } finally {
     store.close();
   }
@@ -288,35 +291,35 @@ interface RememberedScan {
 const rememberedScans = new Map<string, RememberedScan>();
 
 function sameMark(a: StateMark, b: StateMark): boolean {
-  return a.stored === b.stored && a.lines === b.lines && a.last === b.last && a.bytes === b.bytes;
+  return a.revision === b.revision && a.last === b.last;
 }
 
-function currentScan(data: string, character: string, id: string): RememberedScan {
+function currentScan(data: string, character: string, id: string): ActiveScan {
   const file = threadFile(data, character, id, "active.jsonl");
   const key = JSON.stringify([data, character, id]);
   const mark = durableMark(file);
   if (mark === undefined) {
     rememberedScans.delete(key);
-    return { mark: { stored: 0, lines: 0, last: -1, bytes: 0 }, scan: emptyScan() };
+    return emptyScan();
   }
   const known = rememberedScans.get(key);
-  if (known !== undefined && sameMark(known.mark, mark)) return known;
-  const scan = known !== undefined && known.mark.stored === mark.stored && known.mark.lines > 0 && durablePrefixUnchanged(file, known.mark)
+  if (known !== undefined && sameMark(known.mark, mark)) return known.scan;
+  const scan = known?.mark.revision === mark.revision
     ? scanInto(known.scan, parsedLines(durableLinesAfter(file, known.mark.last)))
     : scanActive(parsedLines(readDurable(file).split("\n")));
-  const remembered: RememberedScan = { mark, scan };
-  rememberedScans.set(key, remembered);
-  return remembered;
+  rememberedScans.set(key, { mark, scan });
+  return scan;
 }
 
 export function threadActivityNow(data: string, character: string, id: string): ThreadActivity {
-  const { scan } = currentScan(data, character, id);
-  const lastUser = scan.latestUser === -Infinity ? archivedUserTurnAt(data, character, id) : scan.latestUser;
+  const scan = currentScan(data, character, id);
+  const last = scan.latestUser === -Infinity ? archivedTimes(data, character, id) : { user: scan.latestUser, latest: Number.NaN };
+  const lastActive = scan.latest === -Infinity ? last.latest : scan.latest;
   return {
     turns: scan.turns,
     user_turns: scan.userTurns,
-    ...(scan.latest === -Infinity ? {} : { last_active: new Date(scan.latest).toISOString() }),
-    ...(Number.isNaN(lastUser) ? {} : { last_user: new Date(lastUser).toISOString() }),
+    ...(Number.isNaN(lastActive) ? {} : { last_active: new Date(lastActive).toISOString() }),
+    ...(Number.isNaN(last.user) ? {} : { last_user: new Date(last.user).toISOString() }),
     unread: unreadReplies(scan, threadReadMark(data, character, id)).length,
   };
 }

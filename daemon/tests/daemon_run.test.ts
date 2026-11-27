@@ -795,6 +795,7 @@ describe("a daemon that stays up", () => {
     await daemon.runtime.autonomy.runDue();
 
     await until(() => threadActivityNow(daemon.runtime.config.dirs.data, "ada", "main").turns === 0, "the idle conversation compacting");
+    expect(threadActivityNow(daemon.runtime.config.dirs.data, "ada", "main").last_active, "the thread still sorts by when it was last used").toBeDefined();
     const index = daemon.runtime.historyIndex;
     await untilAsync(async () => {
       await index.runOnce();

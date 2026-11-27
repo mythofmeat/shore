@@ -1,4 +1,4 @@
-import { describe, expect, test } from "bun:test";
+import { describe, expect, spyOn, test } from "bun:test";
 import { createFolder, deleteFolder, moveFolder, moveThread, placedThreads, renameFolder, setFolderSort } from "../src/engine/thread_layout.ts";
 import { MAX_THREAD_ID_LENGTH, archiveThread, assertThreadId, isValidThreadId, createThread, ensureThreads, ensureWakesThread, wakesThread, firstUnreadReply, markThreadRead, readThreadsIndex, setHomeThread, setThreadCompaction, threadActivityNow, threadPins, writeThreadsIndex, type ThreadsIndex } from "../src/engine/threads.ts";
 import { readFileSync, readFile } from "./support/stored_files.ts";
@@ -7,11 +7,15 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { CharacterRegistry } from "../src/characters.ts";
 import { defaultAppConfig } from "../src/config/app.ts";
-import { MAIN_THREAD, characterThreadsIndex, threadDataDir } from "../src/config/dirs.ts";
+import { MAIN_THREAD, archiveKey, characterThreadsIndex, threadDataDir } from "../src/config/dirs.ts";
+import { archiveAndRetain } from "../src/memory/compaction/archive.ts";
+import { initializeDatabase } from "../src/storage/database.ts";
 import { emptyCatalog } from "../src/config/models.ts";
 import { ProviderRegistry } from "../src/config/providers.ts";
 import { type LoadedConfig } from "../src/config/loader.ts";
-import { appendDurableLine, initializeDurableLines, readDurable, replaceDurableSuffix, updateDurableLine, writeDurable } from "../src/storage/files.ts";
+import { appendDurableLine, deleteThreadState, initializeDurableLines, readDurable, replaceDurableSuffix, updateDurableLine, writeDurable } from "../src/storage/files.ts";
+import { pack, withStorage } from "../src/storage/store.ts";
+import * as files from "../src/storage/files.ts";
 import { mkdir, rm } from "node:fs/promises";
 import { HISTORY_DB_FILE, HistoryStore } from "../src/engine/history_store.ts";
 import { FORK_MARKER_FILE, forkThread, recoverForks, selectForkContext } from "../src/engine/fork.ts";
@@ -20,6 +24,7 @@ import { refreshConversation, withConversation } from "../src/engine/lifecycle.t
 import type { ConversationEngine } from "../src/engine/conversation.ts";
 import { type ContentBlock, type Message } from "../src/engine/types.ts";
 import { testTmp } from "./support/tmp.ts";
+import { handlesUnder } from "./support/handles.ts";
 import { outcomeOf } from "./support/outcome.ts";
 
 describe("pinned file paths", () => {
@@ -479,8 +484,84 @@ describe("thread activity", () => {
     });
   });
 
+  test("reading a thread's activity again reads nothing when nothing changed, and only the new lines after an append", async () => {
+    await scanned(async (data, file) => {
+      writeDurable(file, asked("2026-10-01T10:00:00.000Z"));
+      initializeDurableLines(file, () => readDurable(file));
+      expect(threadActivityNow(data, "ada", "side").turns).toBe(1);
+      const whole = spyOn(files, "readDurable");
+      const after = spyOn(files, "durableLinesAfter");
+      try {
+        const thread = () => whole.mock.calls.filter(([path]) => typeof path !== "string" && path.key.endsWith("active.jsonl"));
+        expect(threadActivityNow(data, "ada", "side").turns).toBe(1);
+        expect([thread().length, after.mock.calls.length], "nothing changed").toEqual([0, 0]);
+        appendDurableLine(file, asked("2026-10-01T11:00:00.000Z"));
+        expect(threadActivityNow(data, "ada", "side").turns).toBe(2);
+        expect(threadActivityNow(data, "ada", "side").turns).toBe(2);
+        expect(thread(), "an append doesn't read the thread again").toEqual([]);
+        expect(after.mock.calls.length, "the new line is read once").toBe(1);
+      } finally {
+        whole.mockRestore();
+        after.mockRestore();
+      }
+    });
+  });
+
+  test("a rewrite, an edit or a regenerated reply that stores in as many bytes as before still shows on the next read", async () => {
+    await scanned(async (data, file) => {
+      const activity = () => threadActivityNow(data, "ada", "side");
+      const said = (minute: string) => reply(`2026-10-01T11:${minute}:00.000Z`).replace(/"msg_id":"[^"]+"/, '"msg_id":"m1"');
+      expect(new Set(["01", "04", "05", "07", "08"].map((minute) => pack(said(minute)).length)).size, "every version packs to the same size").toBe(1);
+
+      writeDurable(file, said("01"));
+      expect(activity().last_active).toBe("2026-10-01T11:01:00.000Z");
+      deleteThreadState(data, "ada", "side");
+      writeDurable(file, said("04"));
+      expect(activity().last_active).toBe("2026-10-01T11:04:00.000Z");
+      writeDurable(file, said("05"));
+      expect(activity().last_active).toBe("2026-10-01T11:05:00.000Z");
+
+      initializeDurableLines(file, () => readDurable(file));
+      expect(activity().last_active).toBe("2026-10-01T11:05:00.000Z");
+      updateDurableLine(file, 0, said("07"));
+      expect(activity().last_active).toBe("2026-10-01T11:07:00.000Z");
+      replaceDurableSuffix(file, 0, [said("08")]);
+      expect(activity().last_active).toBe("2026-10-01T11:08:00.000Z");
+      appendDurableLine(file, said("09"));
+      expect(activity().last_active).toBe("2026-10-01T11:09:00.000Z");
+
+      deleteThreadState(data, "ada", "side");
+      expect(activity()).toEqual({ turns: 0, user_turns: 0, unread: 0 });
+      withStorage(data, (db) => expect(db.query("SELECT count(*) AS n FROM state_revisions").get(), "a deleted file leaves no revision behind").toEqual({ n: 0 }));
+    });
+  });
+
+  test("a thread compacted down to nothing keeps the times of its newest archived messages, and a thread that never had any has none", async () => {
+    await scanned(async (data, file) => {
+      const activity = () => threadActivityNow(data, "ada", "side");
+      expect(activity()).toEqual({ turns: 0, user_turns: 0, unread: 0 });
+      initializeDatabase(data);
+      const before = handlesUnder(data);
+      expect(activity()).toEqual({ turns: 0, user_turns: 0, unread: 0 });
+      expect(handlesUnder(data), "the archive is closed again").toBe(before);
+
+      const woke = line({ role: "user", origin: "autonomous", timestamp: "2026-10-01T10:02:00.000Z", content_blocks: [{ type: "text", text: "a wake" }] });
+      const active = asked("2026-10-01T10:00:00.000Z") + reply("2026-10-01T10:01:00.000Z") + woke + reply("2026-10-01T10:03:00.000Z");
+      writeDurable(file, active);
+      await archiveAndRetain(threadDataDir(data, "ada", "side"), { dbPath: join(data, HISTORY_DB_FILE), archiveKey: archiveKey("ada", "side") }, 0, active);
+      expect(readDurable(file)).toBe("");
+      expect(activity()).toMatchObject({ turns: 0, last_active: "2026-10-01T10:03:00.000Z", last_user: "2026-10-01T10:00:00.000Z" });
+
+      writeDurable(file, reply("2026-10-01T11:00:00.000Z"));
+      expect(activity()).toMatchObject({ turns: 0, last_active: "2026-10-01T11:00:00.000Z", last_user: "2026-10-01T10:00:00.000Z" });
+
+      writeDurable(file, asked("2026-10-01T12:00:00.000Z"));
+      expect(activity()).toMatchObject({ turns: 1, last_active: "2026-10-01T12:00:00.000Z", last_user: "2026-10-01T12:00:00.000Z" });
+    });
+  });
+
   const at = (minute: number): string => `2026-10-01T10:${String(minute).padStart(2, "0")}:00.000Z`;
-  const call = (timestamp: string, id: string, text?: string): string => line({
+  const call =(timestamp: string, id: string, text?: string): string => line({
     role: "assistant", timestamp,
     content_blocks: [...(text === undefined ? [] : [{ type: "text" as const, text }]), { type: "tool_use", id, name: "read", input: {} }],
   });
