@@ -34,7 +34,7 @@ A side thread has no time of its own until you give it some: nothing wakes you i
 
 ## Forked threads
 
-{{user}} can fork a thread into a new side thread, which starts with a copy of that thread's conversation, or of its last few turns. The fork keeps the thread's purpose, pins, model and compaction setting, but not its label, its folder or a lock. After that the two are separate threads: what is said in one isn't shown in the other.
+{{user}} can fork a thread into a new side thread, which starts with a copy of that thread's conversation, or of its last few turns. The fork keeps the thread's purpose, pins, model and compaction setting, and goes in the same folder of {{user}}'s thread list. It doesn't keep the label or a lock. After that the two are separate threads: what is said in one isn't shown in the other.
 
 ## Sealed threads
 

@@ -14,6 +14,7 @@ import {
 import { shoreLog } from "../log.ts";
 import { HISTORY_DB_FILE, HistoryStore, type ThreadForkRecord } from "./history_store.ts";
 import { sealedIn } from "./sealed_list.ts";
+import { folderOf, placeInFolder } from "./thread_layout.ts";
 import {
   MessageStore,
   serializeMessages,
@@ -205,11 +206,12 @@ async function forkThreadLocked(
   }
   if (options.failAfter === "provenance") throw new Error("injected fork failure after provenance");
 
+  const fromHome = source === homeThread(index);
   const record: ThreadRecord = {
     id: child,
     created_at: marker.created_at,
     compaction: sourceRecord.compaction,
-    ...(sourceRecord.purpose === undefined || source === homeThread(index) ? {} : { purpose: sourceRecord.purpose }),
+    ...(sourceRecord.purpose === undefined || fromHome ? {} : { purpose: sourceRecord.purpose }),
     ...(sourceRecord.pins === undefined ? {} : { pins: sourceRecord.pins }),
     ...(sourceRecord.chat_model === undefined ? {} : { chat_model: sourceRecord.chat_model }),
     forked_from: {
@@ -219,7 +221,9 @@ async function forkThreadLocked(
       turns: marker.turn_count,
     },
   };
-  const published: ThreadsIndex = { ...index, threads: [...index.threads, record] };
+  const listed: ThreadsIndex = { ...index, threads: [...index.threads, record] };
+  const folder = fromHome ? undefined : folderOf(index, source);
+  const published = folder === undefined ? listed : placeInFolder(listed, character, child, folder);
   await writeThreadsIndex(data, character, published);
   if (options.failAfter === "publish") throw new Error("injected fork failure after publish");
 
