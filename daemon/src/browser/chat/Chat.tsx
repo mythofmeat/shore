@@ -8,6 +8,7 @@ import { threadLabel } from "../sidebar/Sidebar.tsx";
 import { conversation, errorText, readMarks, streamReplies, useConversationActive, useWorkspaceValue, workspace } from "../app/state.ts";
 import { toasts } from "../ui/toast.tsx";
 import { holdThread, makeHome } from "./actions.ts";
+import { laterItem } from "../sidebar/ThreadRow.tsx";
 import { BudgetChip } from "./budget.tsx";
 import { GalleryDialog } from "./gallery.tsx";
 import { Composer } from "./Composer.tsx";
@@ -55,6 +56,7 @@ function ChatTopbar({ state, sidebarOpen, toggleSidebar, mobile }: { state: Chro
       { label: "Regenerate with a reason…", icon: "regenerate" as const, onSelect: () => setDialog("reason"), disabled: !ready || busy || !hasTurns },
     ]),
     "separator",
+    ...(thread === undefined ? [] : [laterItem(thread, ready)]),
     ...(thread === undefined || thread.home || thread.wakes === true ? [] : [{ label: "Make home", icon: "home" as const, onSelect: () => { void makeHome(thread); }, disabled: !ready }]),
     { label: "Archive…", icon: "archive", onSelect: () => openThreadDialog("archive", threadId), disabled: !ready || thread?.home === true, danger: true },
   ];

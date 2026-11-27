@@ -43,6 +43,17 @@ export async function holdThread(thread: Pick<ThreadView, "id">, onHold: boolean
   }
 }
 
+export async function laterThread(thread: Pick<ThreadView, "id" | "label">, later: boolean): Promise<void> {
+  const name = thread.label === undefined || thread.label === "" ? thread.id : thread.label;
+  try {
+    workspace.applyThreadListing(await workspace.actions.run("thread_later", { name: thread.id, later }));
+    toasts.show(later ? `“${name}” is marked for later` : `“${name}” is no longer marked for later`);
+  } catch (error) {
+    await workspace.refreshThreads();
+    toasts.show(errorText(error), "error");
+  }
+}
+
 export async function markRead(thread: Pick<ThreadView, "id">): Promise<void> {
   try {
     workspace.noteThreadRead(thread.id);

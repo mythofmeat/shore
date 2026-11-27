@@ -88,6 +88,7 @@ export interface ThreadRegistry {
     onHold: boolean,
     signal?: AbortSignal,
   ): Promise<ThreadsIndex>;
+  setThreadLater(character: string, id: string, later: boolean, signal?: AbortSignal): Promise<void>;
   setThreadCompaction(
     character: string,
     id: string,
@@ -136,6 +137,7 @@ function view(ctx: ThreadContext, { record, folder, position }: PlacedThread, ho
     current: record.id === current,
     ...(ctx.activity === undefined ? {} : { turns: activity?.turns ?? 0, unread: activity?.unread ?? 0 }),
     ...(activity?.last_active === undefined ? {} : { last_active: activity.last_active }),
+    ...(activity?.later === undefined ? {} : { later: activity.later }),
     ...(ctx.warm === record.id ? { warm: true } : {}),
   };
 }
@@ -256,6 +258,15 @@ export async function threadLock(ctx: ThreadContext, args: Args): Promise<Thread
   if (typeof locked !== "boolean") throw invalidRequest("locked must be true or false");
   try {
     return listing(ctx, await ctx.registry.setThreadLocked(ctx.character, id, locked, ctx.signal));
+  } catch (e) {
+    throw threadCommandError(e);
+  }
+}
+
+export async function threadLater(ctx: ThreadContext, args: Args): Promise<void> {
+  const id = requiredId(args);
+  try {
+    await ctx.registry.setThreadLater(ctx.character, id, args["later"] === true, ctx.signal);
   } catch (e) {
     throw threadCommandError(e);
   }

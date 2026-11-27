@@ -1,7 +1,7 @@
 import { useState, type DragEvent } from "react";
 import type { ThreadView } from "../../protocol/ThreadView.ts";
 import { openThreadDialog } from "../app/intents.ts";
-import { holdThread, markRead, makeHome, moveThreadTo } from "../chat/actions.ts";
+import { holdThread, laterThread, markRead, makeHome, moveThreadTo } from "../chat/actions.ts";
 import { IconButton, PointMenu, type MenuItem } from "../ui/controls.tsx";
 import { Icon, type IconName } from "../ui/icons.tsx";
 import { useRowMenu } from "./row_menu.ts";
@@ -18,12 +18,18 @@ export function holdItem(thread: ThreadView, ready: boolean): MenuItem[] {
   return [{ label: "Put on hold", icon: "pause", onSelect: () => void holdThread(thread, true), disabled: !ready }];
 }
 
+export function laterItem(thread: ThreadView, ready: boolean): Exclude<MenuItem, "separator"> {
+  const later = thread.later === undefined;
+  return { label: later ? "Mark for later" : "Clear later mark", icon: "flag", onSelect: () => void laterThread(thread, later), disabled: !ready };
+}
+
 export function threadMenuItems(thread: ThreadView, ready: boolean, neighbours: ThreadNeighbours): MenuItem[] {
   const movable = !thread.home;
   return [
     { label: "Thread settings…", icon: "settings", onSelect: () => openThreadDialog("settings", thread.id), disabled: !ready },
     { label: "Fork…", icon: "branch", onSelect: () => openThreadDialog("fork", thread.id), disabled: !ready },
     { label: "Mark as read", icon: "check", onSelect: () => void markRead(thread), disabled: !ready || (thread.unread ?? 0) === 0 },
+    laterItem(thread, ready),
     ...holdItem(thread, ready),
     ...(movable ? [
       { label: "Make home", icon: "home" as const, onSelect: () => void makeHome(thread), disabled: !ready },
@@ -45,6 +51,13 @@ export function place(event: DragEvent<HTMLDivElement>): "before" | "after" {
 }
 
 export interface ThreadNeighbours { up: string | undefined; down: string | undefined; atEnd: boolean; byActivity: boolean }
+
+export function LaterCount({ count }: { count: number }) {
+  return <span className="sidebar-later sidebar-later-count">
+    <Icon name="flag" size={12} /><span aria-hidden="true">{String(count)}</span>
+    <span className="sr-only">{count === 1 ? "(1 marked for later)" : `(${String(count)} marked for later)`}</span>
+  </span>;
+}
 
 export function UnreadBadge({ count }: { count: number }) {
   return <span className="sidebar-unread">
@@ -86,6 +99,7 @@ export function ThreadRow({ thread, character, label, current, unread, drafted, 
       onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); open(); } }}>
       <span className="sidebar-icon">{icon === undefined ? null : <><Icon name={icon.name} size={14} /><span className="sr-only">({icon.says})</span></>}</span>
       <span className="sidebar-name">{label}</span>
+      {thread.later === undefined ? null : <span className="sidebar-later" title="Marked for later"><Icon name="flag" size={12} /><span className="sr-only">(marked for later)</span></span>}
       {thread.locked === true ? <span className="sidebar-locked" title="Locked: only you change its label, purpose and pins"><Icon name="lock" size={12} /><span className="sr-only">(locked)</span></span> : null}
       {drafted ? <span className="sidebar-draft" title="An unsent message in this tab"><Icon name="edit" size={12} /><span className="sr-only">(unsent message)</span></span> : null}
       {replying || opening ? <span className="sidebar-replying"><span className="spinner" aria-hidden="true" /><span className="sr-only">{opening ? "(opening)" : "(replying)"}</span></span> : null}

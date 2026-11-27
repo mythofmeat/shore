@@ -40,6 +40,26 @@ test("an index with no folders and no order lists neither", () => {
   expect(listed(registry({ folders: [{ name: "Drafts", threads: ["side"] }] })).folders).toEqual([{ name: "Drafts" }]);
 });
 
+test("each thread carries its activity: turns and unread wherever activity was read, a thread missing from it at none, its last message and later mark when it has them, and the warm thread says so", () => {
+  const activity = new Map([
+    ["story", { turns: 3, user_turns: 2, unread: 1, last_active: "2026-11-25T00:00:00Z", later: "2026-11-26T00:00:00Z" }],
+    ["side", { turns: 0, user_turns: 0, unread: 0 }],
+  ]);
+  const listing = listThreads({ registry: registry({}), character: "ada", current: "story", activity, warm: "side" });
+  expect(listing.threads.map(({ id, turns, unread, last_active, later, warm }) => ({ id, turns, unread, last_active, later, warm }))).toEqual([
+    { id: "story", turns: 3, unread: 1, last_active: "2026-11-25T00:00:00Z", later: "2026-11-26T00:00:00Z", warm: undefined },
+    { id: "side", turns: 0, unread: 0, last_active: undefined, later: undefined, warm: true },
+    { id: "notes", turns: 0, unread: 0, last_active: undefined, later: undefined, warm: undefined },
+  ]);
+  expect(Object.keys(listing.threads[1] ?? {})).not.toContain("last_active");
+  expect(listed(registry({})).threads.map((thread) => [thread.turns, thread.unread]), "without activity there are no counts").toEqual([[undefined, undefined], [undefined, undefined], [undefined, undefined]]);
+});
+
+test("threads placed by hand carry their place, and threads sorted by activity carry none", () => {
+  expect(listed(registry({ order: ["notes", "side"] })).threads.map((thread) => [thread.id, thread.position])).toEqual([["story", undefined], ["notes", 0], ["side", 1]]);
+  expect(listed(registry({})).threads.map((thread) => Object.keys(thread).includes("position"))).toEqual([false, false, false]);
+});
+
 test("a current thread that no longer exists is shown as home", () => {
   expect(listed(registry({}), "gone").current).toBe("story");
   expect(listed(registry(), "gone").current).toBe("side");

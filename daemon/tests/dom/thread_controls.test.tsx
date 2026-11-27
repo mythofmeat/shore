@@ -27,8 +27,8 @@ test("only home, the Wakes thread and threads the character started show an icon
   const { Icon } = await import("../../src/browser/ui/icons.tsx");
   const neighbours = { up: undefined, down: undefined, atEnd: true, byActivity: false };
   const offered = (thread: ThreadView) => threadMenuItems(thread, true, neighbours).flatMap((item) => item === "separator" ? [] : [item.label]);
-  expect(offered(HOME)).toEqual(["Thread settings…", "Fork…", "Mark as read", "Archive…"]);
-  expect(offered(SIDE)).toEqual(["Thread settings…", "Fork…", "Mark as read", "Put on hold", "Make home", "Move up", "Move down", "Move to folder…", "Archive…"]);
+  expect(offered(HOME)).toEqual(["Thread settings…", "Fork…", "Mark as read", "Mark for later", "Archive…"]);
+  expect(offered(SIDE)).toEqual(["Thread settings…", "Fork…", "Mark as read", "Mark for later", "Put on hold", "Make home", "Move up", "Move down", "Move to folder…", "Archive…"]);
 
   const icon = async (name: "home" | "clock" | "spark", says: string) => {
     const drawn = await mount(<Icon name={name} size={14} />);
@@ -75,7 +75,7 @@ test("a thread's options wait for the daemon; mark as read needs an unread messa
   const shown = (thread: ThreadView, ready: boolean, neighbours = free) => threadMenuItems(thread, ready, neighbours).flatMap((item) => item === "separator" ? [] : [[item.label, item.disabled ?? false, item.danger ?? false]]);
   const UNREAD = { ...SIDE, unread: 1 };
   expect(shown(UNREAD, true)).toEqual([
-    ["Thread settings…", false, false], ["Fork…", false, false], ["Mark as read", false, false], ["Put on hold", false, false], ["Make home", false, false],
+    ["Thread settings…", false, false], ["Fork…", false, false], ["Mark as read", false, false], ["Mark for later", false, false], ["Put on hold", false, false], ["Make home", false, false],
     ["Move up", false, false], ["Move down", false, false], ["Move to folder…", false, false], ["Archive…", false, true],
   ]);
   expect(shown(UNREAD, false).filter(([, disabled]) => disabled !== true)).toEqual([]);
@@ -91,6 +91,34 @@ test("a thread's options wait for the daemon; mark as read needs an unread messa
   }
   await settle();
   expect(asked(since, "thread_move")).toEqual([{ name: "side", before: "above" }, { name: "side", before: "below" }]);
+});
+
+test("a thread is marked for later or has its mark cleared from its menu, which says so, and its row shows the mark", async () => {
+  const { laterItem, ThreadRow } = await import("../../src/browser/sidebar/ThreadRow.tsx");
+  const { Icon } = await import("../../src/browser/ui/icons.tsx");
+  const { toasts } = await import("../../src/browser/ui/toast.tsx");
+  app.answer((request) => request["name"] === "thread_later" ? LISTING : undefined);
+  await acting(() => { for (const toast of toasts.getSnapshot()) toasts.dismiss(toast.id); });
+  const marked: ThreadView = { ...SIDE, label: "Side road", later: "2026-11-27T10:00:00Z" };
+  expect([laterItem(SIDE, true), laterItem(marked, false)].map((item) => [item.label, item.icon, item.disabled])).toEqual([["Mark for later", "flag", false], ["Clear later mark", "flag", true]]);
+  const since = app.socket().sent.length;
+  await acting(() => { laterItem(SIDE, true).onSelect(); });
+  await acting(() => { laterItem(marked, true).onSelect(); });
+  await settle();
+  expect(asked(since, "thread_later")).toEqual([{ name: "side", later: true }, { name: "side", later: false }]);
+  expect(toasts.getSnapshot().map((toast) => toast.text)).toEqual(["“side” is marked for later", "“Side road” is no longer marked for later"]);
+  await acting(() => { for (const toast of toasts.getSnapshot()) toasts.dismiss(toast.id); });
+
+  const flag = await mount(<Icon name="flag" size={12} />);
+  const drawn = flag.host.innerHTML;
+  await flag.unmount();
+  const row = async (thread: ThreadView) => {
+    const view = await mount(<ThreadRow thread={thread} character="ada" label={thread.id} current={false} unread={0} drafted={false} replying={false} opening={false} ready select={() => {}} neighbours={{ up: undefined, down: undefined, atEnd: true, byActivity: false }} drop={() => {}} />);
+    const shown = view.host.querySelector(".sidebar-later")?.outerHTML ?? null;
+    await view.unmount();
+    return shown;
+  };
+  expect([await row(SIDE), await row(marked)]).toEqual([null, `<span class="sidebar-later" title="Marked for later">${drawn}<span class="sr-only">(marked for later)</span></span>`]);
 });
 
 test("an unread count reads 99+ past 99, and tells a screen reader one message or how many", async () => {

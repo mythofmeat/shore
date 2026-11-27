@@ -1,6 +1,6 @@
 import { describe, expect, spyOn, test } from "bun:test";
 import { createFolder, deleteFolder, moveFolder, moveThread, placedThreads, renameFolder, setFolderSort } from "../src/engine/thread_layout.ts";
-import { MAX_THREAD_ID_LENGTH, archiveThread, assertThreadId, isValidThreadId, createThread, ensureThreads, ensureWakesThread, wakesThread, firstUnreadReply, markThreadRead, readThreadsIndex, setHomeThread, setThreadCompaction, threadActivityNow, threadPins, writeThreadsIndex, type ThreadsIndex } from "../src/engine/threads.ts";
+import { MAX_THREAD_ID_LENGTH, clearThreadLater, setThreadLater, threadLaterMark, archiveThread, assertThreadId, isValidThreadId, createThread, ensureThreads, ensureWakesThread, wakesThread, firstUnreadReply, markThreadRead, readThreadsIndex, setHomeThread, setThreadCompaction, threadActivityNow, threadPins, writeThreadsIndex, type ThreadsIndex } from "../src/engine/threads.ts";
 import { readFileSync, readFile } from "./support/stored_files.ts";
 import { mkdirSync, mkdtempSync, readdirSync, readlinkSync, realpathSync, rmSync, writeFileSync, existsSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -13,7 +13,7 @@ import { initializeDatabase } from "../src/storage/database.ts";
 import { emptyCatalog } from "../src/config/models.ts";
 import { ProviderRegistry } from "../src/config/providers.ts";
 import { type LoadedConfig } from "../src/config/loader.ts";
-import { appendDurableLine, deleteThreadState, initializeDurableLines, readDurable, replaceDurableSuffix, updateDurableLine, writeDurable } from "../src/storage/files.ts";
+import { appendDurableLine, deleteThreadState, initializeDurableLines, readDurable, replaceDurableSuffix, threadFile, updateDurableLine, writeDurable } from "../src/storage/files.ts";
 import { pack, withStorage } from "../src/storage/store.ts";
 import * as files from "../src/storage/files.ts";
 import { mkdir, rm } from "node:fs/promises";
@@ -481,6 +481,25 @@ describe("thread activity", () => {
 
       writeDurable(file, "");
       expect(activity().turns).toBe(0);
+    });
+  });
+
+  test("a later mark keeps when it was set, is read back only when it holds a time, needs the thread, and clearing says whether there was one", async () => {
+    await scanned(async (data) => {
+      await createThread(data, "ada", "side", "2026-10-01T09:00:00.000Z");
+      const mark = () => threadLaterMark(data, "ada", "side");
+      expect([mark(), threadActivityNow(data, "ada", "side").later]).toEqual([undefined, undefined]);
+      await setThreadLater(data, "ada", "side", true, "2026-10-01T10:00:00.000Z");
+      expect([mark(), threadActivityNow(data, "ada", "side").later]).toEqual(["2026-10-01T10:00:00.000Z", "2026-10-01T10:00:00.000Z"]);
+      expect([clearThreadLater(data, "ada", "side"), clearThreadLater(data, "ada", "side"), mark()]).toEqual([true, false, undefined]);
+      await setThreadLater(data, "ada", "side", true, "2026-10-01T11:00:00.000Z");
+      await setThreadLater(data, "ada", "side", false, "2026-10-01T12:00:00.000Z");
+      expect(mark()).toBeUndefined();
+      expect(await outcomeOf(setThreadLater(data, "ada", "nowhere", true, "2026-10-01T10:00:00.000Z"))).toThrow('no thread "nowhere" for ada');
+      for (const stored of ["", " \n"]) {
+        writeDurable(threadFile(data, "ada", "side", "later"), stored);
+        expect(mark(), JSON.stringify(stored)).toBeUndefined();
+      }
     });
   });
 

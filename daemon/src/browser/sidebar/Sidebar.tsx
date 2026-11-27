@@ -15,7 +15,7 @@ import { PresenceStore, StatusPicker } from "./StatusPicker.tsx";
 import { HELD_GROUP, shownUnread, threadSections } from "./order.ts";
 import { useWindowFocused } from "../ui/hooks.ts";
 import { useRowMenu } from "./row_menu.ts";
-import { THREAD_DRAG_TYPE, ThreadRow, UnreadBadge, type ThreadNeighbours } from "./ThreadRow.tsx";
+import { LaterCount, THREAD_DRAG_TYPE, ThreadRow, UnreadBadge, type ThreadNeighbours } from "./ThreadRow.tsx";
 
 export function threadLabel(thread: Pick<ThreadView, "id" | "label">): string {
   return thread.label !== undefined && thread.label !== "" ? thread.label : thread.id;
@@ -45,6 +45,7 @@ function ThreadList({ state, shownThread, ready, select, newThread }: { state: C
   const looseIds = sections.loose.map((thread) => thread.id);
   const looseByActivity = !state.manualOrder;
   const unreadOf = (thread: ThreadView) => shownUnread(thread, state.thread, focused);
+  const laterIn = (threads: readonly ThreadView[]) => threads.filter((thread) => thread.later !== undefined).length;
   const replyingIn = (thread: ThreadView) => thread.id !== state.thread && conversation.activeIn({ character: state.character, thread: thread.id });
   const row = (thread: ThreadView, ids: readonly string[], byActivity: boolean, folder?: string) => <ThreadRow key={thread.id} thread={thread} character={character} label={threadLabel(thread)} current={thread.id === shownThread} unread={unreadOf(thread)} drafted={thread.id !== shownThread && unsent.has(JSON.stringify([state.character, thread.id]))} replying={replyingIn(thread)}
     opening={state.opening?.thread === thread.id && thread.id !== state.thread} ready={ready} select={() => select(thread.id)} neighbours={neighboursIn(ids, thread.id, byActivity)}
@@ -59,7 +60,7 @@ function ThreadList({ state, shownThread, ready, select, newThread }: { state: C
       const shut = collapsed.has(folder.name);
       const shown = shut ? folder.threads.filter((thread) => thread.id === state.thread) : folder.threads;
       return <div key={folder.name} className="thread-folder" role="group" aria-label={`Folder ${folder.name}`}>
-        <FolderRow character={character} folder={folder} collapsed={shut} ready={ready} unread={folder.threads.reduce((total, thread) => total + unreadOf(thread), 0)} replying={folder.threads.some(replyingIn)}
+        <FolderRow character={character} folder={folder} collapsed={shut} ready={ready} unread={folder.threads.reduce((total, thread) => total + unreadOf(thread), 0)} later={laterIn(folder.threads)} replying={folder.threads.some(replyingIn)}
           neighbours={{ up: sections.folders[index - 1]?.name, down: sections.folders[index + 2]?.name, atEnd: index === sections.folders.length - 1 }}
           drop={(id) => { void moveThreadTo(id, { folder: folder.name }); }}
           dropFolder={(name, after) => { void moveFolderTo(name, placeRelative(sections.folders.map((each) => each.name), folder.name, name, after).before); }} />
@@ -67,18 +68,19 @@ function ThreadList({ state, shownThread, ready, select, newThread }: { state: C
       </div>;
     })}
     <button type="button" className="sidebar-item thread muted" disabled={!ready} onClick={newThread}><Icon name="plus" size={14} /><span className="sidebar-name">New thread</span></button>
-    {sections.held.length === 0 ? null : <HeldGroup character={character} shut={collapsed.has(HELD_GROUP)} unread={sections.held.reduce((total, thread) => total + unreadOf(thread), 0)}>
+    {sections.held.length === 0 ? null : <HeldGroup character={character} shut={collapsed.has(HELD_GROUP)} unread={sections.held.reduce((total, thread) => total + unreadOf(thread), 0)} later={laterIn(sections.held)}>
       {(collapsed.has(HELD_GROUP) ? sections.held.filter((thread) => thread.id === state.thread) : sections.held).map((thread) => row(thread, sections.held.map((each) => each.id), true))}
     </HeldGroup>}
   </div>;
 }
 
-function HeldGroup({ character, shut, unread, children }: { character: string; shut: boolean; unread: number; children: ReactNode }) {
+function HeldGroup({ character, shut, unread, later, children }: { character: string; shut: boolean; unread: number; later: number; children: ReactNode }) {
   return <div className="thread-folder" role="group" aria-label="On hold"
     onDragStartCapture={(event) => { event.preventDefault(); }} onDragOverCapture={(event) => { event.stopPropagation(); }}>
     <div className="thread-row folder-row">
       <button type="button" className="sidebar-item thread folder" aria-expanded={!shut} onClick={() => collapsedFolders.toggle(character, HELD_GROUP)}>
         <Icon name={shut ? "chevronRight" : "chevronDown"} size={14} /><span className="sidebar-name">On hold</span>
+        {shut && later > 0 ? <LaterCount count={later} /> : null}
         {shut && unread > 0 ? <UnreadBadge count={unread} /> : null}
       </button>
     </div>

@@ -21,7 +21,7 @@ import { defineOperation, discoverOperations, type OperationPresentation, type O
 import type { CommandDeps, CommandSession } from "./dispatch.ts";
 import { internalError, invalidRequest } from "./errors.ts";
 import { characterInfo, createCharacter, listCharacters, switchCharacter } from "./navigation.ts";
-import { archiveThread, forkThread, listThreads, markRead, newThread, switchThread, threadCompaction, threadFolderCreate, threadFolderDelete, threadFolderMove, threadFolderRename, threadFolderSort, threadHold, threadHome, threadLabel, threadLock, threadModel, threadMove, threadPins, threadPurpose, threadSort } from "./threads.ts";
+import { archiveThread, forkThread, listThreads, markRead, newThread, switchThread, threadCompaction, threadFolderCreate, threadFolderDelete, threadFolderMove, threadFolderRename, threadFolderSort, threadHold, threadHome, threadLater, threadLabel, threadLock, threadModel, threadMove, threadPins, threadPurpose, threadSort } from "./threads.ts";
 import { archiveWithSignal, threadContext, threadListingContext } from "./thread_context.ts";
 import { refreshThreadPrompt, threadPrompt, type ThreadPromptContext } from "./thread_prompt.ts";
 import { alt, deleteMessages, edit, get, historyPage, injectSystem, listAlternatives, log } from "./conversation.ts";
@@ -537,6 +537,14 @@ export const commandOperations: OperationRegistry<CommandOperationContext> = {
     const model = typeof args.model === "string" && args.model !== "" ? qualifiedModelName(context.session, args.model) : args.model;
     return threadModel(await threadListingContext(context.deps, engineOf(context), context.session), { ...args, model });
   }),
+  thread_later: register("thread_later", {
+    ...threadPresentation, label: "Mark a thread for later", effects: ["runtime_write"],
+    fields: { name: threadName, later: { label: "Later", hint: "A reminder for you alone: the character never sees it, and writing in the thread clears it" } },
+  }, async (context, args) => {
+    const engine = engineOf(context);
+    await threadLater(threadContext(context.deps, engine, context.session.signal), args);
+    return listThreads(await threadListingContext(context.deps, engine, context.session));
+  }),
   mark_thread_read: register("mark_thread_read", {
     ...threadPresentation, label: "Mark thread read", effects: ["runtime_write"],
     fields: { name: threadName, through: { label: "Read through", hint: "Timestamp of the last message shown; omit for everything so far" } },
@@ -578,7 +586,7 @@ export function runRegisteredOperation<N extends OperationName>(
 }
 
 const THREAD_CHANGES: ReadonlySet<string> = new Set([
-  "create_thread", "fork_thread", "thread_home", "thread_label", "thread_purpose", "thread_pins", "thread_prompt", "thread_prompt_refresh", "thread_lock", "thread_hold", "thread_compaction", "thread_model",
+  "create_thread", "fork_thread", "thread_home", "thread_label", "thread_purpose", "thread_pins", "thread_prompt", "thread_prompt_refresh", "thread_lock", "thread_hold", "thread_later", "thread_compaction", "thread_model",
   "thread_move", "thread_sort", "thread_folder_create", "thread_folder_rename", "thread_folder_delete", "thread_folder_move", "thread_folder_sort",
 ]);
 

@@ -6,6 +6,7 @@ export const SHORTCUTS: readonly Shortcut[] = [
   { keys: ["Mod", "Shift", "O"], description: "New thread", where: "Anywhere" },
   { keys: ["Alt", "↑ / ↓"], description: "Previous or next thread", where: "Anywhere" },
   { keys: ["Alt", "Shift", "↓"], description: "Next thread with unread messages", where: "Anywhere" },
+  { keys: ["Mod", "Shift", "L"], description: "Mark the open thread for later, or clear its mark", where: "Anywhere" },
   { keys: ["Mod", "\\"], description: "Show or hide the sidebar", where: "Anywhere" },
   { keys: ["Mod", ","], description: "Open settings", where: "Anywhere" },
   { keys: ["?"], description: "Show keyboard shortcuts", where: "Anywhere" },
@@ -37,7 +38,7 @@ export function keyLabel(key: string): string {
   return key === "Mod" ? IS_MAC ? "⌘" : "Ctrl" : key;
 }
 
-export type GlobalAction = "palette" | "focus" | "new-thread" | "previous-thread" | "next-thread" | "next-unread-thread" | "sidebar" | "settings" | "help";
+export type GlobalAction = "palette" | "focus" | "new-thread" | "previous-thread" | "next-thread" | "next-unread-thread" | "later" | "sidebar" | "settings" | "help";
 
 export interface KeyInput { key: string; ctrlKey: boolean; metaKey: boolean; altKey: boolean; shiftKey: boolean }
 
@@ -46,6 +47,7 @@ export function globalAction(event: KeyInput, typing: boolean): GlobalAction | u
   if (mod && !event.altKey && !event.shiftKey && event.key.toLowerCase() === "k") return "palette";
   if (mod && !event.altKey && event.key === "/") return "focus";
   if (mod && event.shiftKey && event.key.toLowerCase() === "o") return "new-thread";
+  if (mod && event.shiftKey && !event.altKey && event.key.toLowerCase() === "l") return "later";
   if (mod && !event.shiftKey && event.key === "\\") return "sidebar";
   if (mod && !event.shiftKey && event.key === ",") return "settings";
   if (event.altKey && !mod && !event.shiftKey && event.key === "ArrowUp") return "previous-thread";

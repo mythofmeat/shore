@@ -157,6 +157,29 @@ test("the shortcuts open the palette, a new thread, settings and the keyboard he
   expect([location.hash, switched(since)]).toEqual(["#settings/keyboard", []]);
 });
 
+test("Mod, Shift and L mark the open thread for later or clear its mark, once connected, and do nothing else", async () => {
+  const later = (since: number) => app.sent(since).filter((request) => request["name"] === "thread_later").map((request) => request["args"]);
+  const { toasts } = await import("../../src/browser/ui/toast.tsx");
+  const view = await shell();
+  let since = app.sent(0).length;
+  await press("ArrowDown", { altKey: true });
+  expect(later(since), "the next thread is only opened").toEqual([]);
+  since = app.sent(0).length;
+  await press("L", { ...MOD, shiftKey: true });
+  expect(later(since)).toEqual([{ name: "story", later: true }]);
+  expect([switched(since), toasts.getSnapshot().map((toast) => toast.text)], "nothing else is opened or said").toEqual([[], []]);
+  await view.rerender({ threads: [{ ...HOME, later: "2026-11-27T10:00:00Z" }, SIDE] });
+  since = app.sent(0).length;
+  await press("l", { ...MOD, shiftKey: true });
+  expect(later(since)).toEqual([{ name: "story", later: false }]);
+  await view.rerender({ status: "connecting" });
+  since = app.sent(0).length;
+  await press("l", { ...MOD, shiftKey: true });
+  await view.rerender({ thread: "gone" });
+  await press("l", { ...MOD, shiftKey: true });
+  expect(later(since), "nothing to mark until connected, or with no thread open").toEqual([]);
+});
+
 test("a new thread waits for a character and the connection", async () => {
   const reconnecting = await shell({ status: "reconnecting" });
   await press("O", { ...MOD, shiftKey: true });

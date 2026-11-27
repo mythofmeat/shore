@@ -48,6 +48,7 @@ const ICONS = {
   info: stroke(<><circle cx="12" cy="12" r="8.5" /><path d="M12 11v5M12 8v.01" /></>),
   expand: stroke(<path d="M14 4h6v6M10 20H4v-6M20 4l-7 7M4 20l7-7" />),
   clock: stroke(<><circle cx="12" cy="12" r="8.5" /><path d="M12 7.5V12l3 2" /></>),
+  flag: stroke(<path d="M6 21V4M6 4.5h11l-2.5 4 2.5 4H6" />),
   spark: stroke(<path d="M12 4l1.8 6.2L20 12l-6.2 1.8L12 20l-1.8-6.2L4 12l6.2-1.8z" />),
 } as const;
 

@@ -38,6 +38,7 @@ import {
   setThreadCompaction,
   setThreadLocked,
   setThreadModel,
+  setThreadLater,
   setThreadOnHold,
   setThreadPurpose,
   threadRecord,
@@ -478,6 +479,10 @@ export class CharacterRegistry {
         ),
       signal,
     );
+  }
+
+  async setThreadLater(name: string, id: string, later: boolean, signal?: AbortSignal): Promise<void> {
+    await this.#withThreadIndex(name, async () => { await setThreadLater(this.#dataDir, name, id, later, new Date().toISOString()); }, signal);
   }
 
   async setThreadCompaction(

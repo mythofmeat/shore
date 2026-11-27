@@ -116,6 +116,19 @@ test("threads on hold sit in a group of their own after the new-thread button; s
   expect([view.names(), view.badge("On hold")]).toEqual([["story", "side", "A", "On hold", "paused"], "1"]);
 });
 
+test("a shut folder and the shut group of threads on hold count their threads marked for later apart from their unread messages", async () => {
+  const marked = "2026-11-27T10:00:00Z";
+  const threads = [HOME, thread("side", { folder: "A", later: marked }), thread("near", { folder: "A", later: marked, unread: 1 }), thread("far", { folder: "A" }), thread("paused", { on_hold: true, later: marked })];
+  const view = await sidebar({ threads, folders: [{ name: "A" }] });
+  const later = (name: string) => view.named(name)?.querySelector(".sidebar-later-count")?.textContent ?? null;
+  expect([later("A"), later("On hold")], "open, each row shows its own mark").toEqual([null, null]);
+  await click(view.named("A")?.querySelector("button.folder"));
+  await click(view.named("On hold")?.querySelector("button.folder"));
+  expect([later("A"), view.badge("A"), later("On hold"), view.badge("On hold")]).toEqual(["2(2 marked for later)", "1", "1(1 marked for later)", null]);
+  await view.rerender({ threads: threads.map(({ later: _later, ...each }) => each) });
+  expect([later("A"), later("On hold")], "nothing marked, nothing counted").toEqual([null, null]);
+});
+
 test("the group of threads on hold says whether it is open with its chevron, shut shows no count when nothing is unread, and its threads keep to the order they were last active in", async () => {
   const { Icon } = await import("../../src/browser/ui/icons.tsx");
   const chevron = async (name: "chevronDown" | "chevronRight") => {

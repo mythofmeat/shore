@@ -277,6 +277,19 @@
   color: var(--text-3);
 }
 
+.sidebar-later {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  color: var(--accent);
+}
+
+.sidebar-later-count {
+  font-size: calc(11px * var(--font-scale));
+  font-variant-numeric: tabular-nums;
+  font-weight: 600;
+}
+
 .sidebar-icon {
   display: inline-flex;
   flex-shrink: 0;

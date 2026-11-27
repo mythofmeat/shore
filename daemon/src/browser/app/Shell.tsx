@@ -13,6 +13,7 @@ import { Palette } from "./Palette.tsx";
 import { navigate, openSettings, useRoute } from "./route.ts";
 import { adjacent, globalAction, nextUnread } from "./shortcuts.ts";
 import { useThreadUrl } from "./thread_url.ts";
+import { laterThread } from "../chat/actions.ts";
 import { perform, useCollapsedFolders, workspace } from "./state.ts";
 
 export function Shell({ state }: { state: ChromeSnapshot }) {
@@ -70,6 +71,11 @@ export function Shell({ state }: { state: ChromeSnapshot }) {
           const ids = threadsOnScreen(state.threads, state.folders, collapsed, from).map((thread) => thread.id);
           const next = adjacent(ids, from ?? undefined, action === "next-thread" ? 1 : -1);
           if (next !== undefined && next !== from && state.status === "ready") perform(() => workspace.openThread(next));
+          break;
+        }
+        case "later": {
+          const shown = state.threads.find((thread) => thread.id === state.thread);
+          if (shown !== undefined && state.status === "ready") void laterThread(shown, shown.later === undefined);
           break;
         }
         case "next-unread-thread": {

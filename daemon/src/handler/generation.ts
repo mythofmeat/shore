@@ -58,7 +58,7 @@ import {
   type PersistEngine,
 } from "./persistence.ts";
 import type { GenerationParams, RunGeneration } from "./router.ts";
-import { homeThreadOf, isWakeOpener, threadActivities, threadModelOf, threadsTheCharacterSees, type ThreadRecord } from "../engine/threads.ts";
+import { clearThreadLater, homeThreadOf, isWakeOpener, threadActivities, threadModelOf, threadsTheCharacterSees, type ThreadRecord } from "../engine/threads.ts";
 import { liveThread } from "./commands.ts";
 import {
   appendUserTurn,
@@ -206,6 +206,7 @@ export async function runGeneration(
     await deps.registry.resumeThread?.(params.charName, engine.thread);
     deps.emitEvent({ type: "threads_changed", character: params.charName, thread: engine.thread });
   }
+  if (!params.regen && clearThreadLater(deps.dataDir, params.charName, engine.thread)) deps.emitEvent({ type: "threads_changed", character: params.charName, thread: engine.thread });
   deps.userActiveIn?.(params.charName, engine.thread);
   return await withConversation(threadDataDir(deps.dataDir, params.charName, engine.thread), "turn", async (signal) => {
   params = { ...params, signal };

@@ -6,7 +6,7 @@ import { acting, click, mount } from "./dom.ts";
 
 const app = useApp();
 
-interface Shown { collapsed?: boolean; unread?: number; replying?: boolean; ready?: boolean }
+interface Shown { collapsed?: boolean; unread?: number; later?: number; replying?: boolean; ready?: boolean }
 
 async function folderRow(shown: Shown = {}) {
   const { FolderRow } = await import("../../src/browser/sidebar/FolderRow.tsx");
@@ -14,7 +14,7 @@ async function folderRow(shown: Shown = {}) {
   const moved: [string, boolean][] = [];
   const outside: string[] = [];
   const view = await mount(<div onDragOver={() => outside.push("over")} onDrop={() => outside.push("drop")}>
-    <FolderRow character="ada" folder={{ name: "work", byActivity: false, threads: [] }} collapsed={shown.collapsed ?? false} unread={shown.unread ?? 0} replying={shown.replying ?? false} ready={shown.ready ?? true}
+    <FolderRow character="ada" folder={{ name: "work", byActivity: false, threads: [] }} collapsed={shown.collapsed ?? false} unread={shown.unread ?? 0} later={shown.later ?? 0} replying={shown.replying ?? false} ready={shown.ready ?? true}
       neighbours={{ up: undefined, down: undefined, atEnd: true }} drop={(id) => dropped.push(id)} dropFolder={(name, after) => moved.push([name, after])} />
   </div>);
   const row = () => view.host.querySelector(".thread-row");
@@ -22,7 +22,7 @@ async function folderRow(shown: Shown = {}) {
   return { ...view, row, item, dropped, moved, outside };
 }
 
-async function drawn(name: "chevronDown" | "chevronRight" | "more", size: number): Promise<string> {
+async function drawn(name: "chevronDown" | "chevronRight" | "more" | "flag", size: number): Promise<string> {
   const { Icon } = await import("../../src/browser/ui/icons.tsx");
   const icon = await mount(<Icon name={name} size={size} />);
   const html = icon.host.innerHTML;
@@ -30,16 +30,19 @@ async function drawn(name: "chevronDown" | "chevronRight" | "more", size: number
   return html;
 }
 
-test("a folder row says whether it is open with its chevron, and only shut shows a reply under way or its unread count", async () => {
+test("a folder row says whether it is open with its chevron, and only shut shows a reply under way, its threads marked for later and its unread count", async () => {
   const shown = async (state: Shown) => {
     const view = await folderRow(state);
-    const seen = [view.item()?.getAttribute("aria-expanded"), view.item()?.querySelector("svg")?.outerHTML, view.item()?.querySelector(".sidebar-replying .sr-only")?.textContent ?? null, view.item()?.querySelector(".sidebar-unread [aria-hidden]")?.textContent ?? null];
+    const seen = [view.item()?.getAttribute("aria-expanded"), view.item()?.querySelector("svg")?.outerHTML, view.item()?.querySelector(".sidebar-replying .sr-only")?.textContent ?? null, view.item()?.querySelector(".sidebar-later-count")?.textContent ?? null, view.item()?.querySelector(".sidebar-unread [aria-hidden]")?.textContent ?? null];
     await view.unmount();
     return seen;
   };
-  expect(await shown({ replying: true, unread: 3 })).toEqual(["true", await drawn("chevronDown", 14), null, null]);
-  expect(await shown({ collapsed: true, replying: true, unread: 1 })).toEqual(["false", await drawn("chevronRight", 14), "(replying)", "1"]);
-  expect(await shown({ collapsed: true })).toEqual(["false", await drawn("chevronRight", 14), null, null]);
+  expect(await shown({ replying: true, unread: 3, later: 2 })).toEqual(["true", await drawn("chevronDown", 14), null, null, null]);
+  expect(await shown({ collapsed: true, replying: true, unread: 1, later: 1 })).toEqual(["false", await drawn("chevronRight", 14), "(replying)", "1(1 marked for later)", "1"]);
+  expect(await shown({ collapsed: true, later: 2 })).toEqual(["false", await drawn("chevronRight", 14), null, "2(2 marked for later)", null]);
+  expect(await shown({ collapsed: true })).toEqual(["false", await drawn("chevronRight", 14), null, null, null]);
+  const marked = await folderRow({ collapsed: true, later: 3 });
+  expect(marked.item()?.querySelector(".sidebar-later-count")?.innerHTML).toBe(`${await drawn("flag", 12)}<span aria-hidden="true">3</span><span class="sr-only">(3 marked for later)</span>`);
 });
 
 test("a folder row's options button opens its menu and says so", async () => {

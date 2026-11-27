@@ -1,6 +1,6 @@
 import { withConversation } from "./lifecycle.ts";
 import { required } from "../util/required.ts";
-import { threadFile, readDurable, writeDurable, deleteThreadState, durableLinesAfter, durableMark } from "../storage/files.ts";
+import { threadFile, readDurable, writeDurable, deleteDurable, deleteThreadState, durableLinesAfter, durableMark } from "../storage/files.ts";
 import type { StateMark } from "../storage/store.ts";
 import { mkdir, rm } from "node:fs/promises";
 import { join } from "node:path";
@@ -142,6 +142,7 @@ export interface ThreadActivity {
   last_active?: string;
   last_user?: string;
   unread: number;
+  later?: string;
 }
 
 function messageTime(raw: unknown): number {
@@ -181,6 +182,29 @@ function writeReadMark(data: string, character: string, id: string, through: num
 export function markThreadRead(data: string, character: string, id: string, through: number): void {
   const current = threadReadMark(data, character, id);
   if (current === undefined || current < through) writeReadMark(data, character, id, through);
+}
+
+const LATER_FILE = "later";
+
+export function threadLaterMark(data: string, character: string, id: string): string | undefined {
+  try {
+    return readDurable(threadFile(data, character, id, LATER_FILE)).trim() || undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+export async function setThreadLater(data: string, character: string, id: string, later: boolean, now: string): Promise<void> {
+  requireThread(await ensureThreads(data, character, now), character, id);
+  const file = threadFile(data, character, id, LATER_FILE);
+  if (later) writeDurable(file, `${now}\n`);
+  else deleteDurable(file);
+}
+
+export function clearThreadLater(data: string, character: string, id: string): boolean {
+  if (threadLaterMark(data, character, id) === undefined) return false;
+  deleteDurable(threadFile(data, character, id, LATER_FILE));
+  return true;
 }
 
 export function startReadMarkBefore(data: string, character: string, id: string, first: number): void {
@@ -318,12 +342,14 @@ export function threadActivityNow(data: string, character: string, id: string): 
   const scan = currentScan(data, character, id);
   const last = scan.latestUser === -Infinity ? archivedTimes(data, character, id) : { user: scan.latestUser, latest: Number.NaN };
   const lastActive = scan.latest === -Infinity ? last.latest : scan.latest;
+  const later = threadLaterMark(data, character, id);
   return {
     turns: scan.turns,
     user_turns: scan.userTurns,
     ...(Number.isNaN(lastActive) ? {} : { last_active: new Date(lastActive).toISOString() }),
     ...(Number.isNaN(last.user) ? {} : { last_user: new Date(last.user).toISOString() }),
     unread: unreadReplies(scan, threadReadMark(data, character, id)).length,
+    ...(later === undefined ? {} : { later }),
   };
 }
 

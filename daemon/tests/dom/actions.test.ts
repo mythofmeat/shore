@@ -167,6 +167,20 @@ describe("thread actions", () => {
     expect(toasts()).toEqual([["move failed", "error"]]);
   });
 
+  test("marking a thread for later shows the daemon's listing, or relists with the reason", async () => {
+    const { actions, state, toasts } = await load();
+    const marked = { ...LISTING, threads: [{ ...side, later: "2026-11-27T10:00:00Z" }, story] };
+    answer = (request) => request["name"] === "thread_later" ? marked : catalogue(request);
+    await actions.laterThread({ id: "side", label: "" }, true);
+    expect(state.workspace.getSnapshot().threads.find((thread) => thread.id === "side")?.later).toBe("2026-11-27T10:00:00Z");
+    expect(toasts()).toEqual([["“side” is marked for later", "info"]]);
+    answer = (request) => { if (request["name"] === "thread_later") throw new Error("later failed"); return catalogue(request); };
+    const failed = socket.sent.length;
+    await actions.laterThread(side, false);
+    expect(sentSince(failed).map((request) => [request["name"], request["args"]])).toEqual([["thread_later", { name: "side", later: false }], ["list_threads", {}]]);
+    expect(toasts().at(-1)).toEqual(["later failed", "error"]);
+  });
+
   test("moving a folder shows the daemon's listing, or relists with the reason", async () => {
     const { actions, state, toasts } = await load();
     const moved = { ...LISTING, threads, folders: [{ name: "play" }, { name: "work" }] };

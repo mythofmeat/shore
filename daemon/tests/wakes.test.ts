@@ -283,7 +283,7 @@ async function withCharacter(run: (h: Harness) => Promise<void>, configure?: (ap
       thread: async (id) => (await runtime.registry.getOrCreate("ada", id)).messages(),
       command: async (name, args, thread = "main") => await dispatchCommand(buildCommandPathDeps({
         runtime, autonomy, diagnostics: new Diagnostics(), router: new SessionRouter(),
-        handshake: DEFAULT_HANDSHAKE, providers: runtime.providers, env,
+        handshake: DEFAULT_HANDSHAKE, providers: runtime.providers, env, emitEvent: (event) => { events.push(event); },
       }), { name, args }, {
         session: { sessionId: 1, clientId: 1, clientType: "test", clientName: "test", capabilities: [], selectedCharacter: "ada", selectedThread: thread },
         rid: name,
@@ -2430,6 +2430,39 @@ test("the user puts any thread but home and the wakes thread on hold and resumes
     expect(await command("thread_hold", { name: "main", on_hold: false }), "resuming a thread that was never on hold changes nothing").toMatchObject({ type: "command_output" });
     expect(await command("thread_hold", { name: "wakes", on_hold: false })).toMatchObject({ type: "command_output" });
     expect(runtime.registry.listThreads("ada").map((record) => [record.id, record.on_hold ?? false])).toEqual([["main", false], ["garden", false], ["wakes", false]]);
+  });
+});
+
+test("a thread marked for later says when on every client, a regenerate leaves the mark, the user's next message there clears it, and the character's request is the same with it or without", async () => {
+  await withCharacter(async ({ runtime, command, say, regenerate, script, events, fromReplies }) => {
+    await runtime.registry.createThread("ada", "garden");
+    await say("hello", "garden");
+    events.length = 0;
+    const marked = listedThread(await command("thread_later", { name: "garden", later: true }), "garden") as { later?: string };
+    expect(Number.isNaN(Date.parse(marked.later ?? ""))).toBe(false);
+    expect(events.filter((event) => event.type === "threads_changed")).toEqual([{ type: "threads_changed", character: "ada", thread: "garden" }]);
+    expect(listedThread(await command("list_threads", {}), "garden")).toMatchObject({ later: marked.later });
+
+    script.replies.length = 0;
+    await regenerate("garden");
+    expect(listedThread(await command("list_threads", {}), "garden"), "a regenerate is not a message").toMatchObject({ later: marked.later });
+    await command("thread_later", { name: "garden", later: false });
+    expect(listedThread(await command("list_threads", {}), "garden")).not.toHaveProperty("later");
+    await regenerate("garden");
+    const [withMark, without] = script.replies.map((request) => JSON.stringify({ system: request.system, messages: request.messages, tools: request.tools }));
+    expect(withMark, "the character never sees the mark").toBe(without);
+
+    await command("thread_later", { name: "garden", later: true });
+    fromReplies.length = 0;
+    await say("back to the beans", "garden");
+    expect(listedThread(await command("list_threads", {}), "garden")).not.toHaveProperty("later");
+    expect(fromReplies.filter((event) => event.type === "threads_changed")).toEqual([{ type: "threads_changed", character: "ada", thread: "garden" }]);
+    fromReplies.length = 0;
+    await say("and again", "garden");
+    expect(fromReplies.filter((event) => event.type === "threads_changed"), "a thread with no mark changes nothing").toEqual([]);
+
+    expect(await command("thread_later", { name: "nowhere", later: true })).toMatchObject({ type: "error", code: "not_found" });
+    expect(await command("thread_later", { name: "garden", later: "yes" })).toMatchObject({ type: "error", message: "/later must be boolean" });
   });
 });
 
