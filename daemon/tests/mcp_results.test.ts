@@ -1,11 +1,14 @@
 import { afterAll, beforeAll, describe, expect, test } from "bun:test";
-import { join } from "node:path";
+import { existsSync } from "node:fs";
+import { mkdir } from "node:fs/promises";
+import { dirname, join } from "node:path";
 
-import { interpretResult, McpClient, McpError } from "../src/mcp/client.ts";
+import { interpretResult, McpCancelled, McpClient, McpError, McpTransportError } from "../src/mcp/client.ts";
 import { MCP_TEXTS } from "../src/texts/registry.ts";
 import { Texts } from "../src/texts/texts.ts";
 import { toolMediaOf } from "../src/tools/media.ts";
 import { rejectionOf } from "./support/outcome.ts";
+import { testTmp } from "./support/tmp.ts";
 
 const shipped = new Texts();
 
@@ -100,20 +103,48 @@ describe("calling a tool on an MCP server", () => {
   afterAll(async () => { await client.shutdown(); });
 
   test("answers with what the server sent and notes in the character's wording, and an error result as an error carrying the same", async () => {
-    const answer = toolMediaOf(await client.call("every_kind", {}, marked()));
+    const answer = toolMediaOf(await client.call("every_kind", {}, marked(), undefined, false));
     expect(answer?.value).toBe("said");
     expect(answer?.extra).toEqual([
       "⟦mcp_audio|type=audio/wav|size=3 bytes⟧", "⟦mcp_image_type|type=image/bmp⟧", "⟦mcp_resource|uri=file:///notes.txt|text=the notes⟧",
       "⟦mcp_resource_binary|uri=file:///song.ogg|type=audio/ogg|size=3 bytes⟧", "⟦mcp_resource_link|name=map|uri=file:///map.png|type=image/png⟧",
     ]);
-    const failure = await rejectionOf(client.call("fails", {}, marked()));
+    const failure = await rejectionOf(client.call("fails", {}, marked(), undefined, false));
     expect(failure).toBeInstanceOf(McpError);
     expect((failure as Error).message).toBe("MCP tool 'fails' returned an error: it broke\n⟦mcp_audio|type=audio/wav|size=3 bytes⟧");
   });
 
   test("arguments that aren't an object are refused before anything is sent, and none at all are fine", async () => {
-    expect(String(await rejectionOf(client.call("every_kind", [1], shipped)))).toContain("invalid arguments for MCP tool 'every_kind': expected a JSON object, got [1]");
-    expect(toolMediaOf(await client.call("every_kind", undefined, shipped))?.value).toBe("said");
-    expect(toolMediaOf(await client.call("every_kind", null, shipped))?.value).toBe("said");
+    expect(String(await rejectionOf(client.call("every_kind", [1], shipped, undefined, false)))).toContain("invalid arguments for MCP tool 'every_kind': expected a JSON object, got [1]");
+    expect(toolMediaOf(await client.call("every_kind", undefined, shipped, undefined, false))?.value).toBe("said");
+    expect(toolMediaOf(await client.call("every_kind", null, shipped, undefined, false))?.value).toBe("said");
+    expect(await client.call("nested", { entries: [{ text: "a", enabled: null }], mode: "all" }, shipped, undefined, false)).toBe('{"entries":[{"text":"a","enabled":null}],"mode":"all"}');
   });
+
+  test("a call stopped part way says so and whether it may be made again, and one whose server has shut says why", async () => {
+    for (const repeatable of [false, true]) {
+      const marker = join(testTmp(`mcp-cancel-${crypto.randomUUID()}`), "marker");
+      await mkdir(dirname(marker), { recursive: true });
+      const stop = new AbortController();
+      const call = client.call("cancel_late", { marker }, shipped, stop.signal, repeatable);
+      for (let tries = 0; tries < 200 && !existsSync(marker); tries += 1) await Bun.sleep(10);
+      stop.abort();
+      const cancelled = await rejectionOf(call);
+      expect(cancelled).toBeInstanceOf(McpCancelled);
+      expect([(cancelled as McpCancelled).message, (cancelled as McpCancelled).repeatable]).toEqual([
+        "MCP tool 'cancel_late' on 'fixture' was asked to stop. MCP cancellation is a notification the server never acknowledges, so whether it stopped is not observable from here.",
+        repeatable,
+      ]);
+    }
+    const shut = await McpClient.connect({ name: "shut", transport: { kind: "stdio", command: process.execPath, args: ["run", join(import.meta.dir, "support/mcp_tool_fixture.ts")], env: {} } });
+    await shut.shutdown();
+    const failed = await rejectionOf(shut.call("every_kind", {}, shipped, undefined, false));
+    expect(failed).toBeInstanceOf(McpTransportError);
+    expect((failed as Error).message).toStartWith("MCP request to 'shut': ");
+  });
+});
+
+test("a picture whose type isn't text is told as having no type", () => {
+  expect(interpretResult(shipped, { content: [{ type: "image", data: "AAAA", mimeType: 5 }] }).extra).toEqual(["[image omitted: an unlabelled type is not a supported format]"]);
+  expect(interpretResult(shipped, { content: [{ type: "image", data: "AAAA", mimeType: "" }] }).extra).toEqual(["[image omitted: an unlabelled type is not a supported format]"]);
 });

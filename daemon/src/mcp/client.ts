@@ -182,17 +182,12 @@ export class McpClient {
     tool: string,
     args: unknown,
     texts: Texts,
-    signal?: AbortSignal,
-    repeatable = false,
+    signal: AbortSignal | undefined,
+    repeatable: boolean,
   ): Promise<unknown> {
-    let argumentsMap: Record<string, unknown> | undefined;
-    if (args === null || args === undefined) {
-      argumentsMap = undefined;
-    } else if (typeof args === "object" && !Array.isArray(args)) {
-      argumentsMap = args as Record<string, unknown>;
-    } else {
-      throw new McpError(texts.always("mcp_bad_arguments", { tool, args: JSON.stringify(args) }));
-    }
+    const none = args === null || args === undefined;
+    if (!none && (typeof args !== "object" || Array.isArray(args))) throw new McpError(texts.always("mcp_bad_arguments", { tool, args: JSON.stringify(args) }));
+    const argumentsMap = none ? undefined : args as Record<string, unknown>;
 
     let result: Awaited<ReturnType<Client["callTool"]>>;
     try {
