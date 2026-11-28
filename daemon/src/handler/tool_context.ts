@@ -113,7 +113,7 @@ export async function buildToolContext(
       ? {}
       : {
           mcpCall: (name: string, input: unknown, signal?: AbortSignal) =>
-            mcp.call(name, input, signal),
+            mcp.call(name, input, texts, signal),
         }),
   };
 

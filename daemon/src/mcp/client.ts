@@ -22,6 +22,7 @@ import {
   setprivFor,
   switchUserProblem,
 } from "../tools/character_user.ts";
+import type { Texts } from "../texts/texts.ts";
 
 export type Transport =
   | {
@@ -180,6 +181,7 @@ export class McpClient {
   async call(
     tool: string,
     args: unknown,
+    texts: Texts,
     signal?: AbortSignal,
     repeatable = false,
   ): Promise<unknown> {
@@ -217,9 +219,9 @@ export class McpClient {
     }
 
     if (result.isError === true) {
-      throw new McpError(`MCP tool '${tool}' returned an error: ${flattenText(result)}`);
+      throw new McpError(`MCP tool '${tool}' returned an error: ${flattenText(texts, result)}`);
     }
-    return carryToolMedia(interpretResult(result));
+    return carryToolMedia(interpretResult(texts, result));
   }
 
   async shutdown(): Promise<void> {
@@ -233,120 +235,74 @@ export class McpClient {
 
 const IMAGE_MIME = new Set(["image/png", "image/jpeg", "image/webp", "image/gif"]);
 
-export function interpretResult(result: Record<string, unknown>): ToolResultPayload {
+export function interpretResult(texts: Texts, result: Record<string, unknown>): ToolResultPayload {
   const blocks: unknown[] = Array.isArray(result["content"]) ? result["content"] : [];
-  const texts: string[] = [];
+  const said: string[] = [];
   const media: ToolMediaItem[] = [];
   const extra: string[] = [];
+  const note = (text: string | undefined): void => {
+    if (text !== undefined) extra.push(text);
+  };
 
   for (const block of blocks) {
     if (typeof block !== "object" || block === null) continue;
     const b = block as Record<string, unknown>;
     switch (b["type"]) {
       case "text":
-        if (typeof b["text"] === "string") texts.push(b["text"]);
+        if (typeof b["text"] === "string") said.push(b["text"]);
         break;
       case "image":
-        absorbBinary(b["data"], b["mimeType"], "image", media, extra);
+        absorbImage(texts, b["data"], b["mimeType"], media, note);
         break;
       case "audio":
-        absorbBinary(b["data"], b["mimeType"], "audio", media, extra);
+        note(typeof b["data"] !== "string" || b["data"] === ""
+          ? texts.render("mcp_no_audio")
+          : texts.render("mcp_audio", { type: given(b["mimeType"])?.toLowerCase(), size: describeSize(b["data"]) }));
         break;
       case "resource":
-        absorbResource(b, media, extra);
+        absorbResource(texts, b, media, note);
         break;
       case "resource_link":
-        extra.push(describeLink(b));
+        note(texts.render("mcp_resource_link", { name: given(b["name"]), uri: given(b["uri"]), type: given(b["mimeType"]) }));
         break;
       default:
-        extra.push(`[${describeType(b["type"])} content omitted: shore cannot render it]`);
+        note(texts.render("mcp_unknown", { type: given(b["type"]) }));
         break;
     }
   }
 
   const structured = result["structuredContent"];
-  if (structured === undefined) return { value: texts.join("\n"), media, extra };
+  if (structured === undefined) return { value: said.join("\n"), media, extra };
 
-  const distinct = texts.filter((t) => !mirrorsStructured(t, structured));
+  const distinct = said.filter((t) => !mirrorsStructured(t, structured));
   return { value: structured, media, extra: [...distinct, ...extra] };
 }
 
-export function flattenText(result: Record<string, unknown>): string {
-  return renderPayload(interpretResult(result));
+export function flattenText(texts: Texts, result: Record<string, unknown>): string {
+  return renderPayload(interpretResult(texts, result));
 }
 
-function absorbBinary(
-  data: unknown,
-  mimeType: unknown,
-  kind: "image" | "audio",
-  media: ToolMediaItem[],
-  extra: string[],
-): void {
-  const mime = typeof mimeType === "string" ? mimeType.toLowerCase() : "";
-  if (typeof data !== "string" || data === "") {
-    extra.push(`[${kind} omitted: the server sent no ${kind} data]`);
-    return;
-  }
-  if (kind === "audio") {
-    extra.push(
-      `[audio omitted: ${describeMime(mime)}, ${describeSize(data)} — ` +
-        `shore cannot send audio to a model]`,
-    );
-    return;
-  }
-  if (!IMAGE_MIME.has(mime)) {
-    extra.push(`[image omitted: ${describeMime(mime)} is not a supported format]`);
-    return;
-  }
-  media.push({ mime_type: mime, data, label: `${mime}, ${describeSize(data)}` });
+function given(value: unknown): string | undefined {
+  return typeof value === "string" && value !== "" ? value : undefined;
 }
 
-function absorbResource(
-  block: Record<string, unknown>,
-  media: ToolMediaItem[],
-  extra: string[],
-): void {
+function absorbImage(texts: Texts, data: unknown, mimeType: unknown, media: ToolMediaItem[], note: (text: string | undefined) => void): void {
+  const mime = given(mimeType)?.toLowerCase();
+  if (typeof data !== "string" || data === "") note(texts.render("mcp_no_image"));
+  else if (mime === undefined || !IMAGE_MIME.has(mime)) note(texts.render("mcp_image_type", { type: mime }));
+  else media.push({ mime_type: mime, data, label: `${mime}, ${describeSize(data)}` });
+}
+
+function absorbResource(texts: Texts, block: Record<string, unknown>, media: ToolMediaItem[], note: (text: string | undefined) => void): void {
   const nested = block["resource"];
-  const r = (
-    typeof nested === "object" && nested !== null ? nested : block
-  ) as Record<string, unknown>;
-  const uri = typeof r["uri"] === "string" && r["uri"] !== "" ? r["uri"] : "an unnamed resource";
-  const mime = typeof r["mimeType"] === "string" ? r["mimeType"].toLowerCase() : "";
-
-  if (typeof r["text"] === "string") {
-    extra.push(`[resource ${uri}]\n${r["text"]}`);
-    return;
-  }
-
+  const r = (typeof nested === "object" && nested !== null ? nested : block) as Record<string, unknown>;
+  const uri = given(r["uri"]);
+  const mime = given(r["mimeType"])?.toLowerCase();
   const blob = r["blob"];
-  if (typeof blob === "string" && blob !== "") {
-    if (IMAGE_MIME.has(mime)) {
-      media.push({ mime_type: mime, data: blob, label: `${uri} (${mime}, ${describeSize(blob)})` });
-      return;
-    }
-    extra.push(
-      `[resource ${uri} omitted: ${describeMime(mime)}, ${describeSize(blob)} — ` +
-        `shore cannot render it]`,
-    );
-    return;
-  }
-
-  extra.push(`[resource ${uri} omitted: it carried no text or data]`);
-}
-
-function describeLink(block: Record<string, unknown>): string {
-  const uri = typeof block["uri"] === "string" && block["uri"] !== "" ? block["uri"] : "an unnamed resource";
-  const name = typeof block["name"] === "string" && block["name"] !== "" ? `${block["name"]}: ` : "";
-  const mime = typeof block["mimeType"] === "string" && block["mimeType"] !== "" ? ` (${block["mimeType"]})` : "";
-  return `[resource link: ${name}${uri}${mime}]`;
-}
-
-function describeType(type: unknown): string {
-  return typeof type === "string" && type !== "" ? type : "unlabelled";
-}
-
-function describeMime(mime: string): string {
-  return mime === "" ? "an unlabelled type" : mime;
+  if (typeof r["text"] === "string") note(texts.render("mcp_resource", { uri, text: r["text"] }));
+  else if (typeof blob !== "string" || blob === "") note(texts.render("mcp_resource_empty", { uri }));
+  else if (mime !== undefined && IMAGE_MIME.has(mime)) media.push({ mime_type: mime, data: blob, label: `${uri === undefined ? "" : `${uri} `}(${mime}, ${describeSize(blob)})` });
+  else note(texts.render("mcp_resource_binary", { uri, type: mime, size: describeSize(blob) }));
 }
 
 function describeSize(data: string): string {

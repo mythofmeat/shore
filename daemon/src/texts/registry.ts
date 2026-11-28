@@ -95,6 +95,15 @@ import read__md_more_images from "../../prompts/tools/workspace/read/answers/md_
 import read__md_failed from "../../prompts/tools/workspace/read/answers/md_failed.md" with { type: "text" };
 import read__md_nul from "../../prompts/tools/workspace/read/answers/md_nul.md" with { type: "text" };
 import read__md_changed from "../../prompts/tools/workspace/read/answers/md_changed.md" with { type: "text" };
+import mcp__unknown from "../../prompts/mcp/unknown.md" with { type: "text" };
+import mcp__no_image from "../../prompts/mcp/no_image.md" with { type: "text" };
+import mcp__no_audio from "../../prompts/mcp/no_audio.md" with { type: "text" };
+import mcp__audio from "../../prompts/mcp/audio.md" with { type: "text" };
+import mcp__image_type from "../../prompts/mcp/image_type.md" with { type: "text" };
+import mcp__resource from "../../prompts/mcp/resource.md" with { type: "text" };
+import mcp__resource_binary from "../../prompts/mcp/resource_binary.md" with { type: "text" };
+import mcp__resource_empty from "../../prompts/mcp/resource_empty.md" with { type: "text" };
+import mcp__resource_link from "../../prompts/mcp/resource_link.md" with { type: "text" };
 import messages__earlier_not_shown from "../../prompts/messages/earlier_not_shown.md" with { type: "text" };
 import messages__opened_by_you from "../../prompts/messages/opened_by_you.md" with { type: "text" };
 import messages__picture_gone from "../../prompts/messages/picture_gone.md" with { type: "text" };
@@ -405,6 +414,24 @@ export const READ_TEXTS: readonly TextSpec[] = [
   must("read_md_changed", read__md_changed, "Why the pictures in a Markdown file can't be looked for when the file changes while read reads it."),
 ];
 
+const MCP_TYPE = "its type, when the server gave one";
+const MCP_SIZE = "how big it is, like 512 bytes or 1.2 MB";
+const MCP_URI = "the resource's address, when the server gave one";
+
+export const MCP_TEXTS: readonly TextSpec[] = [
+  text("mcp_unknown", mcp__unknown, "In an MCP tool's result, in place of content of a kind Shore doesn't know.", { type: "the kind the server called it, when it gave one" }),
+  text("mcp_no_image", mcp__no_image, "In an MCP tool's result, in place of a picture the server sent nothing of."),
+  text("mcp_no_audio", mcp__no_audio, "In an MCP tool's result, in place of audio the server sent nothing of."),
+  text("mcp_audio", mcp__audio, "In an MCP tool's result, in place of audio, which Shore can't send a model.", { type: MCP_TYPE, size: MCP_SIZE }),
+  text("mcp_image_type", mcp__image_type, "In an MCP tool's result, in place of a picture of a type models don't take.", { type: MCP_TYPE }),
+  text("mcp_resource", mcp__resource, "In an MCP tool's result, a resource the server sent as text, with the text.", { uri: MCP_URI, text: "the resource's text" }),
+  text("mcp_resource_binary", mcp__resource_binary, "In an MCP tool's result, in place of a resource that is neither text nor a picture.", { uri: MCP_URI, type: MCP_TYPE, size: MCP_SIZE }),
+  text("mcp_resource_empty", mcp__resource_empty, "In an MCP tool's result, in place of a resource the server sent nothing of.", { uri: MCP_URI }),
+  text("mcp_resource_link", mcp__resource_link, "In an MCP tool's result, a link to a resource.", { name: "its name, when the server gave one", uri: MCP_URI, type: MCP_TYPE }),
+];
+
+export const MCP_TEXT_NAMES: readonly string[] = MCP_TEXTS.map((spec) => spec.name);
+
 const GUIDE_VALUES = { user: "the user's name", tools_off: "the tools a topic names that are off" };
 
 export const GUIDE_TEXTS: readonly TextSpec[] = [
@@ -462,7 +489,7 @@ export const TOOL_TEXTS: readonly TextSpec[] = Object.entries(TOOL_TEXTS_SHIPPED
 
 export const READ_TEXT_NAMES: readonly string[] = READ_TEXTS.map((spec) => spec.name);
 
-export const TEXTS: readonly TextSpec[] = [...MESSAGE_TEXTS, ...SYSTEM_TEXTS, ...WAKE_TEXTS, ...TOOL_TEXTS, ...OTHER_TEXTS, ...IMAGE_TEXTS, ...READ_TEXTS, ...GUIDE_TEXTS];
+export const TEXTS: readonly TextSpec[] = [...MESSAGE_TEXTS, ...SYSTEM_TEXTS, ...WAKE_TEXTS, ...TOOL_TEXTS, ...OTHER_TEXTS, ...IMAGE_TEXTS, ...READ_TEXTS, ...MCP_TEXTS, ...GUIDE_TEXTS];
 
 export const TEXT_SPECS: ReadonlyMap<string, TextSpec> = new Map(TEXTS.map((spec) => [spec.name, spec]));
 

@@ -2,6 +2,7 @@ import { describe, expect, test } from "bun:test";
 import { McpRegistry, type McpToolDef } from "../src/tools/mcp_registry.ts";
 import { childEnvironment } from "../src/mcp/client.ts";
 import { outcomeOf } from "./support/outcome.ts";
+import { Texts } from "../src/texts/texts.ts";
 
 function toolDef(server: string, tool: string): McpToolDef {
   return {
@@ -27,7 +28,7 @@ const registry = McpRegistry.fromTools([
 
 describe("call routing", () => {
   test("an unknown name is reported, not dispatched", async () => {
-    expect(await outcomeOf(registry.call("mcp__nope__x", {}))).toThrow("not yet implemented");
+    expect(await outcomeOf(registry.call("mcp__nope__x", {}, new Texts()))).toThrow("not yet implemented");
   });
 });
 
