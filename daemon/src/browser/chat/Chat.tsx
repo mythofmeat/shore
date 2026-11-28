@@ -9,7 +9,7 @@ import { conversation, errorText, readMarks, streamReplies, useConversationActiv
 import { toasts } from "../ui/toast.tsx";
 import { holdThread, makeHome, unarchiveThread } from "./actions.ts";
 import { readOnlyThread } from "../sidebar/order.ts";
-import { ContextUse } from "./context_use.tsx";
+import { ContextChip } from "./context_use.tsx";
 import { laterItem } from "../sidebar/ThreadRow.tsx";
 import { BudgetChip } from "./budget.tsx";
 import { GalleryDialog } from "./gallery.tsx";
@@ -72,7 +72,7 @@ function ChatTopbar({ state, sidebarOpen, toggleSidebar, mobile }: { state: Chro
         <span className="topbar-name">{state.opening?.character ?? state.character}</span>
         {state.thread === null || (state.opening !== null && state.opening.thread === null) ? null : <><span className="topbar-separator">/</span><button type="button" className="topbar-thread" title="Thread settings" aria-label={`${shownThread === undefined ? state.thread : threadLabel(shownThread)}. Thread settings`} disabled={!ready || state.opening !== null} onClick={() => openThreadDialog("settings", threadId)}>{shownThread === undefined ? state.thread : threadLabel(shownThread)}</button></>}
       </div>
-      {mobile ? null : <BudgetChip state={state} />}
+      {mobile ? null : <><ContextChip state={state} open={() => setDialog("compact")} /><BudgetChip state={state} /></>}
       <Menu label="Thread options" items={items} />
     </>}
     {dialog === "gallery" ? <GalleryDialog close={() => setDialog(null)} /> : dialog === null ? null : <ConversationDialogs dialog={dialog} state={state} close={() => setDialog(null)} />}
@@ -111,7 +111,7 @@ export function Chat({ state, sidebarOpen, toggleSidebar, mobile }: { state: Chr
       <Transcript key={`${state.character}/${state.thread ?? ""}/${String(state.segmentView?.segment.index ?? "current")}`} character={state.character} mobile={mobile} readOnly={kept} />
       {kept
         ? <div className="composer-wrap"><p className="composer composer-note" role="note">{open?.wakes === true ? `Shore keeps the working from ${state.character}'s wakes here, to read. Write to ${state.character} in another thread.` : `This thread is archived, to read. Unarchive it to write to ${state.character} here.`}</p></div>
-        : <><ContextUse state={state} /><Composer key={JSON.stringify([state.character, state.thread])} state={state} character={state.character} mobile={mobile} /></>}
+        : <Composer key={JSON.stringify([state.character, state.thread])} state={state} character={state.character} mobile={mobile} />}
       <QuoteButton />
     </>}
   </>;

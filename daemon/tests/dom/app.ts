@@ -26,6 +26,7 @@ export function useApp(url = "http://shore.test:7340/workspace/ada/story") {
     },
   });
   afterEach(() => {
+    socket?.cancelUnfinished();
     for (const restore of restores.splice(0).reverse()) restore();
     answer = catalogue;
     document.body.replaceChildren();

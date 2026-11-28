@@ -1,7 +1,7 @@
 import { expect, spyOn, test } from "bun:test";
 
 import { useApp } from "./app.ts";
-import { button, click, mount, type } from "./dom.ts";
+import { acting, button, click, mount, type } from "./dom.ts";
 
 const app = useApp();
 const settle = async () => { await Bun.sleep(10); };
@@ -60,4 +60,23 @@ test("adding a system message waits for some text, then sends it trimmed and clo
   await settle();
   expect(app.sent(before).filter((request) => request["name"] === "inject_system").map((request) => request["args"])).toEqual([{ text: "keep it brief" }]);
   expect(closed).toBe(1);
+});
+
+test("the compact dialog shows the thread's limits, and compacting waits for the connection and for a running reply", async () => {
+  const { ConversationDialogs } = await import("../../src/browser/chat/dialogs.tsx");
+  const { conversation } = app.state();
+  app.answer((asked) => asked["name"] === "context_use" ? { thread: "story", mode: "trim", turns: 3, min_turns: 4, max_turns: 40, max_context_tokens: 150_000, message_tokens: 150, trim_at: 773_000 } : undefined);
+  const live = app.state().workspace.getSnapshot();
+  const view = await mount(<ConversationDialogs dialog="compact" state={live} close={() => {}} />);
+  await settle();
+  expect([view.host.querySelector(".context-limit")?.textContent, button(view.host, "Compact").disabled]).toEqual(["Messages150 of 773k tokens", false]);
+  await view.update(<ConversationDialogs dialog="compact" state={{ ...live, status: "reconnecting" }} close={() => {}} />);
+  expect(button(view.host, "Compact").disabled).toBe(true);
+  await view.update(<ConversationDialogs dialog="compact" state={live} close={() => {}} />);
+  const since = app.socket().sent.length;
+  await acting(() => { void conversation.submit("message", { text: "hello", stream: true, images: [] }).catch(() => undefined); });
+  expect(button(view.host, "Compact").disabled).toBe(true);
+  const message = app.sent(since).find((request) => request["type"] === "message");
+  await acting(() => { app.socket().receive({ type: "request_finished", rid: message?.["rid"], outcome: "completed" }); });
+  expect(button(view.host, "Compact").disabled).toBe(false);
 });

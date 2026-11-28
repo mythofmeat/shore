@@ -2,10 +2,11 @@ import { useEffect, useState, type ReactNode } from "react";
 import type { ChromeSnapshot } from "../workspace.ts";
 import { Dialog } from "../ui/controls.tsx";
 import { toasts } from "../ui/toast.tsx";
-import { conversation, errorText, replyMarks, streamReplies, workspace } from "../app/state.ts";
+import { conversation, errorText, replyMarks, streamReplies, useConversationActive, workspace } from "../app/state.ts";
 import { useReplyMarks } from "./marks.tsx";
 import { threadLabel } from "../sidebar/Sidebar.tsx";
 import { compactionSummary } from "./transcript.ts";
+import { ContextLimits } from "./context_use.tsx";
 
 export type ConversationDialog = "compact" | "reason" | "system";
 
@@ -70,11 +71,12 @@ async function compactInBackground(state: ChromeSnapshot, label: string, work: (
 export function ConversationDialogs({ dialog, state, close }: { dialog: ConversationDialog; state: ChromeSnapshot; close: () => void }) {
   const thread = state.threads.find((item) => item.id === state.thread);
   const { busy, error, run } = useSubmit(close);
+  const replying = useConversationActive({ character: state.character, thread: state.thread });
   const [text, setText] = useState("");
   const [turns, setTurns] = useState("");
   const label = thread === undefined ? state.thread ?? "" : threadLabel(thread);
   switch (dialog) {
-    case "compact": return <Form title="Compact context" close={close} busy={busy} error={error} action="Compact" submit={() => {
+    case "compact": return <Form title="Compact context" close={close} busy={busy} error={error} action="Compact" disabled={replying || state.status !== "ready"} submit={() => {
       close();
       void compactInBackground(state, label, async () => {
         const report = await workspace.actions.run("compact", turns === "" ? {} : { keep_turns: Number(turns) });
@@ -82,7 +84,8 @@ export function ConversationDialogs({ dialog, state, close }: { dialog: Conversa
         return compactionSummary(report);
       });
     }}>
-      <p className="form-text">Archives the older turns of this thread as a segment you can open from the top of the thread. A reply you haven’t read stays, with everything after it.</p>
+      <ContextLimits state={state} />
+      <p className="form-text">Compacting archives the older turns now, as a segment you can open from the top of the thread. A reply you haven’t read stays, with everything after it.</p>
       <label className="field"><span>Turns to keep <span className="muted">(optional)</span></span><input className="input" inputMode="numeric" placeholder="Configured default" value={turns} onChange={(event) => setTurns(event.target.value.replace(/\D/g, ""))} /></label>
     </Form>;
     case "reason": return <ReasonForm close={close} busy={busy} error={error} />;

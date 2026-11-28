@@ -169,16 +169,27 @@ test("a dialog asked for from elsewhere opens over the chat, closes when the thr
   expect(listening(added.mock.calls).filter((listener) => !listening(removed.mock.calls).includes(listener))).toEqual([]);
 });
 
-test("on a phone the topbar leaves the usage chip out", async () => {
+test("on a phone the topbar leaves the context and usage chips out", async () => {
   const { display } = app.state();
   display.change("usage", "always");
   app.restores.push(() => { display.change("usage", "off"); });
   const asked = async (mobile: boolean) => {
     const since = app.socket().sent.length;
-    const view = await chat(await chrome(), mobile);
+    const view = await chat(await chrome({ thread: "side" }), mobile);
     await view.unmount();
-    return app.sent(since).filter((request) => request["name"] === "usage").map((request) => request["args"]);
+    return app.sent(since).filter((request) => ["usage", "context_use"].includes(String(request["name"]))).map((request) => [request["name"], request["args"]]);
   };
-  expect(await asked(false)).toEqual([{ budget: true }]);
+  expect(await asked(false)).toEqual([["context_use", {}], ["usage", { budget: true }]]);
   expect(await asked(true)).toEqual([]);
+});
+
+test("the context chip sits in the topbar, not over the message box, and opens the compact dialog with the thread's limits", async () => {
+  app.answer((request) => request["name"] === "context_use" ? { thread: "side", mode: "trim", turns: 3, min_turns: 4, max_turns: 40, max_context_tokens: 150_000, message_tokens: 150, trim_at: 773_000 } : undefined);
+  const view = await chat(await chrome({ thread: "side" }));
+  const chip = view.host.querySelector<HTMLButtonElement>(".topbar button[title$='archiving older turns']");
+  expect([chip?.textContent, view.host.querySelectorAll("button[title$='archiving older turns']").length]).toEqual(["Context 0%", 1]);
+  await click(chip);
+  await settle();
+  const dialog = document.body.querySelector("dialog");
+  expect([dialog?.querySelector("h2")?.textContent, dialog?.querySelector(".context-limit")?.textContent]).toEqual(["Compact context", "Messages150 of 773k tokens"]);
 });

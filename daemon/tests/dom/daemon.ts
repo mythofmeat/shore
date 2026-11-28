@@ -18,7 +18,7 @@ export function catalogue(request: Record<string, unknown>): unknown {
     case "list_characters": return { characters: [{ name: "ada" }] };
     case "list_threads": return LISTING;
     case "all_threads": return { characters: [{ character: "ada", threads: LISTING.threads }] };
-    case "context_use": return { thread: "story", mode: "compaction", turns: 0, min_turns: 0, max_turns: 0, max_context_tokens: 0, message_tokens: 0, trim_at: 0 };
+    case "context_use": return { thread: "story", mode: "compaction", turns: 0, min_turns: 0, max_turns: 0, max_context_tokens: 0, message_tokens: 0, trim_at: 100_000 };
     default: return undefined;
   }
 }
@@ -27,6 +27,7 @@ export class FakeSocket {
   static opened: FakeSocket[] = [];
   readonly sent: Record<string, unknown>[] = [];
   readonly #listeners = new Map<string, ((event: SocketEvent) => void)[]>();
+  readonly #unfinished = new Set<unknown>();
   bufferedAmount = 0;
   answer: Answer = catalogue;
 
@@ -34,11 +35,21 @@ export class FakeSocket {
   addEventListener(type: string, listener: (event: SocketEvent) => void): void { this.#listeners.set(type, [...(this.#listeners.get(type) ?? []), listener]); }
   close(): void { this.fire("closed-by-page"); }
   fire(type: string, event: SocketEvent = {}): void { for (const listener of this.#listeners.get(type) ?? []) listener(event); }
-  receive(frame: unknown): void { this.fire("message", { data: JSON.stringify(frame) }); }
+  receive(frame: unknown): void {
+    const { type, rid } = frame as { type?: unknown; rid?: unknown };
+    if (type === "request_finished") this.#unfinished.delete(rid);
+    this.fire("message", { data: JSON.stringify(frame) });
+  }
+
+  cancelUnfinished(): void {
+    const unfinished = Array.from(this.#unfinished);
+    for (const rid of unfinished) this.receive({ type: "request_finished", rid, outcome: "cancelled" });
+  }
 
   send(text: string): void {
     const request = JSON.parse(text) as Record<string, unknown>;
     this.sent.push(request);
+    if ("rid" in request) this.#unfinished.add(request["rid"]);
     if (request["type"] !== "command") return;
     let data: unknown;
     try { data = this.answer(request); } catch (error) {
