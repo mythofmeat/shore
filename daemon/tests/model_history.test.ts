@@ -57,6 +57,8 @@ test("model history asks the ledger in UTC whatever offset a time was given in, 
   expect(await sinceAsked("2026-11-01T15:45:00+05:45")).toBe("2026-11-01T10:00:00+00:00");
   expect(await sinceAsked("2026-11-01T06:30:00-03:30")).toBe("2026-11-01T10:00:00+00:00");
   expect(await sinceAsked("2026-11-01T01:00:00+02:00")).toBe("2026-10-31T23:00:00+00:00");
+  expect(await sinceAsked("2026-11-01T21:30:00+11:30")).toBe("2026-11-01T10:00:00+00:00");
+  expect(await sinceAsked("2026-10-31T22:00:00-12:00")).toBe("2026-11-01T10:00:00+00:00");
   expect(await sinceAsked("2026-11-01T05:15:30.5-04:45")).toBe("2026-11-01T10:00:30.500+00:00");
   expect(await sinceAsked("2026-11-01T10:00:00.120z")).toBe("2026-11-01T10:00:00.120+00:00");
   expect(await sinceAsked("2026-11-01t10:00:00.1234Z")).toBe("2026-11-01T10:00:00.123400+00:00");

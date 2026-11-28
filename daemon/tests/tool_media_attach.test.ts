@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { mkdir } from "node:fs/promises";
+import { mkdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 
 import type { ContentBlock } from "../src/engine/types.ts";
@@ -8,7 +8,7 @@ import { Texts } from "../src/texts/texts.ts";
 import type { ToolContext } from "../src/tools/dispatch.ts";
 import { runToolUse, type ToolExecution } from "../src/tools/execute.ts";
 import { carryToolMedia, type ToolMediaItem } from "../src/tools/media.ts";
-import { transparentPng } from "./support/test_images.ts";
+import { transparentPng, withTextChunk } from "./support/test_images.ts";
 import { testTmp } from "./support/tmp.ts";
 
 const PNG = transparentPng(1, 1).toString("base64");
@@ -93,4 +93,28 @@ test("a picture that can't be prepared makes the result an error and says why, a
   const placed = await world([picture("the map", { at: 4 })], { value: "see:\nthe map above", cache: true });
   expect(placed.shape.slice(1)).toEqual(["image", "\nthe map above"]);
   expect(placed.shape[0]).toStartWith("see:\n[the map attached; its file is ");
+});
+
+test("a picture held back without a copy saved says both, and is still offered to the user's screen, however it was held back", async () => {
+  const unsaved = (label: string) => `[${label}: a separate media copy could not be saved]`;
+  const off = await world([picture("one")], { maxBytes: 0 });
+  expect(off.shape).toEqual([`looked\n${unsaved("one")}\n[one not sent to the model: inline images are disabled for this tool]`]);
+  expect(off.images.map((image) => image.caption)).toEqual(["one"]);
+  const over = await world([picture("one")], { maxBytes: 1 });
+  expect(over.shape).toEqual([`looked\n${unsaved("one")}\n[one not sent to the model: at most 20 images and 1 bytes of prepared image data are sent per tool result]`]);
+  expect(over.images.map((image) => image.caption)).toEqual(["one"]);
+  const broken = await world([picture("odd", { mime_type: "image/x-unknown" })]);
+  expect(broken.shape).toEqual([`looked\n${unsaved("odd")}\n[odd not sent to the model: image/x-unknown is not a supported format]`]);
+  expect(broken.images.map((image) => image.caption)).toEqual(["odd"]);
+});
+
+test("a picture read made smaller before it reached the model says so, even when nothing more was done to it", async () => {
+  const root = testTmp(`tool-media-read-${crypto.randomUUID()}`);
+  const workspaceDir = join(root, "workspace");
+  await mkdir(workspaceDir, { recursive: true });
+  await writeFile(join(workspaceDir, "padded.png"), withTextChunk(transparentPng(40, 40), 5 * 1024 * 1024));
+  const ctx: ToolContext = { texts: new Texts(), characterName: "ada", workspaceDir, characterDataDir: root, conversationDir: root, historyDbPath: join(root, "h.db"), configDir: root };
+  const exec: ToolExecution = { ctx, sendDirect: () => {}, limits: { timeout_ms: 0, max_result_chars: 0 }, now: () => "2026-11-24T00:00:00Z", newMessageId: () => "m_1" };
+  const run = await runToolUse({ id: "t1", name: "read", input: { file_path: "padded.png" } }, exec);
+  expect(run.output).toContain(`[${join(workspaceDir, "padded.png")}: reduced from 40×40 PNG`);
 });

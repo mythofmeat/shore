@@ -31,6 +31,10 @@ export function kindFor(callType: string): string {
   }
 }
 
+const TO_THE_SECOND = 19;
+
+const OFFSET = 6;
+
 export function utcBound(
   texts: Texts,
   input: Record<string, unknown>,
@@ -38,25 +42,8 @@ export function utcBound(
 ): string | undefined {
   const bound = parseTimeBound(texts, input, field);
   if (bound === undefined) return undefined;
-
-  const m = /^(.+?)([+-]\d{2}:\d{2})$/.exec(bound.rfc3339);
-  if (m === null) return bound.rfc3339;
-  const [, localPart, offset] = m as unknown as [string, string, string];
-
-  if (offset === "+00:00") return bound.rfc3339;
-
-  const dot = localPart.indexOf(".");
-  const secondsPart = dot === -1 ? localPart : localPart.slice(0, dot);
-  const fraction = dot === -1 ? "" : localPart.slice(dot);
-
-  const sign = offset.startsWith("-") ? -1 : 1;
-  const offsetMinutes =
-    sign * (Number(offset.slice(1, 3)) * 60 + Number(offset.slice(4, 6)));
-
-  const asIfUtc = Date.parse(`${secondsPart}Z`);
-  const shifted = new Date(asIfUtc - offsetMinutes * 60_000);
-  const iso = shifted.toISOString();
-  return `${iso.slice(0, 19)}${fraction}+00:00`;
+  const fraction = bound.rfc3339.slice(TO_THE_SECOND, -OFFSET);
+  return `${new Date(Math.floor(bound.ms / 1000) * 1000).toISOString().slice(0, TO_THE_SECOND)}${fraction}+00:00`;
 }
 
 export interface ModelHistoryResult {

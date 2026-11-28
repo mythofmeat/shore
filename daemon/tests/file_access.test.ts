@@ -66,6 +66,7 @@ test("a file that grew while it was read is refused, and a stop before or during
     stat.mockRestore();
     const before = new Error("stopped before");
     expect(await rejectionOf(readBoundedFile(texts, file, path, 100, "file_kind_image", AbortSignal.abort(before)))).toBe(before);
+    expect(await rejectionOf(readBoundedFile(texts, file, path, 1, "file_kind_image", AbortSignal.abort(before)))).toBe(before);
     const stop = new AbortController();
     const during = new Error("stopped during");
     const original = file.read.bind(file);
