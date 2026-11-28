@@ -178,6 +178,10 @@
   gap: 12px;
 }
 
+.provider-head {
+  align-items: center;
+}
+
 .provider-title,
 .archive-main {
   display: flex;
@@ -210,7 +214,7 @@
 
 .credential {
   display: flex;
-  align-items: flex-start;
+  align-items: center;
   gap: 12px;
   padding: 10px 0;
   border-bottom: 1px solid var(--line-2);
@@ -252,6 +256,10 @@
 
 .shell[data-layout="mobile"] .credential {
   flex-wrap: wrap;
+}
+
+.shell[data-layout="mobile"] .credential-main {
+  flex-basis: 100%;
 }
 
 .segment-body,
