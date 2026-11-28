@@ -62,6 +62,34 @@ fn stream_chunk_unknown_fields_ignored() {
 }
 
 #[test]
+fn stream_chunk_without_content_type_is_text() {
+    let fixture = r#"{ "type": "stream_chunk", "text": "partial" }"#;
+    let msg: ServerMessage = serde_json::from_str(fixture).expect("content_type may be left out");
+    assert_variant!(
+    msg,
+    ServerMessage::StreamChunk(c) => assert_eq!(c.content_type, "text")
+    );
+}
+
+#[test]
+fn stream_end_without_is_final_is_final() {
+    let fixture = r#"{
+        "type": "stream_end",
+        "content": "done",
+        "metadata": {
+            "tokens": { "input": 1, "output": 1, "cache_read": 0, "cache_write": 0 },
+            "timing": { "total_ms": 1, "ttft_ms": 1 },
+            "model": "m"
+        }
+    }"#;
+    let msg: ServerMessage = serde_json::from_str(fixture).expect("is_final may be left out");
+    assert_variant!(
+    msg,
+    ServerMessage::StreamEnd(e) => assert!(e.is_final)
+    );
+}
+
+#[test]
 fn message_object_unknown_fields_ignored() {
     let fixture = r#"{
         "msg_id": "m_unk",
