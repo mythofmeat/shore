@@ -1,0 +1,1 @@
+`call_off` takes back the wake waiting in that thread and asks for none, so it can't be given with `when` or `overwrite`. To be woken there at another time instead, leave out `call_off` and set `overwrite` to true.

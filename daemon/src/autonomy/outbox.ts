@@ -58,35 +58,32 @@ export class Outbox {
     }
     if (request.push) this.#checkPush();
     this.#waiting.push({ text: request.text, thread, push: request.push });
-    const where = thread === here ? "in this thread" : `in "${thread}"`;
-    const pushed = request.push ? ` It goes to ${userName}'s phone then too.` : "";
-    return `It will be posted ${where} when this ${turn === "wake" ? "wake" : "turn"} ends.${pushed}`;
+    return this.#setup.texts.render("send_queued", { here: thread === here ? "yes" : undefined, thread, wake: turn === "wake" ? "yes" : undefined, push: request.push ? "yes" : undefined, user: userName }) ?? "";
   };
 
   async #threadFor(request: SendMessageRequest): Promise<string> {
-    const { turn, here, sealed, userName } = this.#setup;
+    const { turn, here, sealed, userName, texts } = this.#setup;
     const thread = request.thread ?? here;
     if (thread === here) {
-      if (turn === "reply") throw new ToolIoError(`your reply here is already a message to ${userName}; \`send_message\` is for saying something in another thread, so name one with \`thread\``);
+      if (turn === "reply") throw new ToolIoError(texts.always("send_in_reply", { user: userName }));
       return here;
     }
-    if (sealed) throw new ToolIoError("a wake in a sealed thread sends nothing outside it: leave `thread` out, and the message waits here until the thread opens");
+    if (sealed) throw new ToolIoError(texts.always("send_out_of_seal"));
     const known = await this.#setup.threads();
-    if (thread === known.wakes) throw new ToolIoError(`"${thread}" is where Shore keeps the working from your wakes, and nothing is sent there`);
-    if (known.sealed.includes(thread)) throw new ToolIoError(`"${thread}" is sealed, so only a wake inside it can leave a message there`);
-    if (!known.open.includes(thread)) throw new ToolIoError(`you have no thread "${thread}" to send it in; \`threads\` lists the ones you have`);
+    if (thread === known.wakes) throw new ToolIoError(texts.always("send_to_wakes", { thread }));
+    if (known.sealed.includes(thread)) throw new ToolIoError(texts.always("send_to_sealed", { thread }));
+    if (!known.open.includes(thread)) throw new ToolIoError(texts.always("send_no_thread", { thread }));
     return thread;
   }
 
   #checkPush(): void {
-    const { sealed, userName, timeZone } = this.#setup;
-    const without = "Send it again without `push` to post it all the same.";
-    if (sealed) throw new ToolIoError(`not sent: nothing from a sealed thread is announced before it opens, a push included. ${without}`);
-    if (this.#waiting.some((each) => each.push)) throw new ToolIoError(`not sent: a message with a push is already waiting to go when this turn ends, and that push is the one allowed for now. ${without}`);
+    const { sealed, userName, timeZone, texts } = this.#setup;
+    if (sealed) throw new ToolIoError(texts.always("send_push_sealed"));
+    if (this.#waiting.some((each) => each.push)) throw new ToolIoError(texts.always("send_push_waiting"));
     const refused = this.#setup.pushRefusal();
     if (refused === undefined) return;
-    if (refused.kind === "not_set_up") throw new ToolIoError(`not sent: push notifications aren't set up, because ${userName} hasn't given Shore a topic to send them to. ${without}`);
-    throw new ToolIoError(`not sent: your last push was ${formatWallClock(refused.lastAt, timeZone)}, and the next one is allowed from ${formatWallClock(refused.nextAt, timeZone)}. ${without}`);
+    if (refused.kind === "not_set_up") throw new ToolIoError(texts.always("send_push_not_set_up", { user: userName }));
+    throw new ToolIoError(texts.always("send_push_too_soon", { last: formatWallClock(refused.lastAt, timeZone), next: formatWallClock(refused.nextAt, timeZone) }));
   }
 }
 

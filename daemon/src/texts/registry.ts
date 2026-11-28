@@ -104,6 +104,36 @@ import mcp__resource from "../../prompts/mcp/resource.md" with { type: "text" };
 import mcp__resource_binary from "../../prompts/mcp/resource_binary.md" with { type: "text" };
 import mcp__resource_empty from "../../prompts/mcp/resource_empty.md" with { type: "text" };
 import mcp__resource_link from "../../prompts/mcp/resource_link.md" with { type: "text" };
+import t__tools__autonomy__send_message__answers__queued from "../../prompts/tools/autonomy/send_message/answers/queued.md" with { type: "text" };
+import t__tools__autonomy__send_message__answers__in_reply from "../../prompts/tools/autonomy/send_message/answers/in_reply.md" with { type: "text" };
+import t__tools__autonomy__send_message__answers__out_of_seal from "../../prompts/tools/autonomy/send_message/answers/out_of_seal.md" with { type: "text" };
+import t__tools__autonomy__send_message__answers__to_wakes from "../../prompts/tools/autonomy/send_message/answers/to_wakes.md" with { type: "text" };
+import t__tools__autonomy__send_message__answers__to_sealed from "../../prompts/tools/autonomy/send_message/answers/to_sealed.md" with { type: "text" };
+import t__tools__autonomy__send_message__answers__no_thread from "../../prompts/tools/autonomy/send_message/answers/no_thread.md" with { type: "text" };
+import t__tools__autonomy__send_message__answers__push_sealed from "../../prompts/tools/autonomy/send_message/answers/push_sealed.md" with { type: "text" };
+import t__tools__autonomy__send_message__answers__push_waiting from "../../prompts/tools/autonomy/send_message/answers/push_waiting.md" with { type: "text" };
+import t__tools__autonomy__send_message__answers__push_not_set_up from "../../prompts/tools/autonomy/send_message/answers/push_not_set_up.md" with { type: "text" };
+import t__tools__autonomy__send_message__answers__push_too_soon from "../../prompts/tools/autonomy/send_message/answers/push_too_soon.md" with { type: "text" };
+import t__tools__autonomy__send_message__answers__no_text from "../../prompts/tools/autonomy/send_message/answers/no_text.md" with { type: "text" };
+import t__tools__autonomy__send_message__answers__unavailable from "../../prompts/tools/autonomy/send_message/answers/unavailable.md" with { type: "text" };
+import t__tools__arguments__thread_id from "../../prompts/tools/arguments/thread_id.md" with { type: "text" };
+import t__tools__autonomy__wake_in_thread__answers__when_form from "../../prompts/tools/autonomy/wake_in_thread/answers/when_form.md" with { type: "text" };
+import t__tools__autonomy__wake_in_thread__answers__when_past from "../../prompts/tools/autonomy/wake_in_thread/answers/when_past.md" with { type: "text" };
+import t__tools__autonomy__wake_in_thread__answers__no_reason from "../../prompts/tools/autonomy/wake_in_thread/answers/no_reason.md" with { type: "text" };
+import t__tools__autonomy__wake_in_thread__answers__limit_form from "../../prompts/tools/autonomy/wake_in_thread/answers/limit_form.md" with { type: "text" };
+import t__tools__autonomy__wake_in_thread__answers__limit_short from "../../prompts/tools/autonomy/wake_in_thread/answers/limit_short.md" with { type: "text" };
+import t__tools__autonomy__wake_in_thread__answers__asked_for from "../../prompts/tools/autonomy/wake_in_thread/answers/asked_for.md" with { type: "text" };
+import t__tools__autonomy__wake_in_thread__answers__call_off_alone from "../../prompts/tools/autonomy/wake_in_thread/answers/call_off_alone.md" with { type: "text" };
+import t__tools__autonomy__wake_in_thread__answers__call_off_unavailable from "../../prompts/tools/autonomy/wake_in_thread/answers/call_off_unavailable.md" with { type: "text" };
+import t__tools__autonomy__wake_in_thread__answers__nothing_to_call_off from "../../prompts/tools/autonomy/wake_in_thread/answers/nothing_to_call_off.md" with { type: "text" };
+import t__tools__autonomy__wake_in_thread__answers__called_off from "../../prompts/tools/autonomy/wake_in_thread/answers/called_off.md" with { type: "text" };
+import t__tools__autonomy__wake_in_thread__answers__unavailable from "../../prompts/tools/autonomy/wake_in_thread/answers/unavailable.md" with { type: "text" };
+import t__tools__autonomy__wake_in_thread__answers__here from "../../prompts/tools/autonomy/wake_in_thread/answers/here.md" with { type: "text" };
+import t__tools__autonomy__wake_in_thread__answers__triggers_off from "../../prompts/tools/autonomy/wake_in_thread/answers/triggers_off.md" with { type: "text" };
+import t__tools__autonomy__wake_in_thread__answers__no_thread from "../../prompts/tools/autonomy/wake_in_thread/answers/no_thread.md" with { type: "text" };
+import t__tools__autonomy__wake_in_thread__answers__in_wakes from "../../prompts/tools/autonomy/wake_in_thread/answers/in_wakes.md" with { type: "text" };
+import t__tools__autonomy__wake_in_thread__answers__waiting from "../../prompts/tools/autonomy/wake_in_thread/answers/waiting.md" with { type: "text" };
+import t__tools__autonomy__wake_in_thread__answers__queued from "../../prompts/tools/autonomy/wake_in_thread/answers/queued.md" with { type: "text" };
 import messages__earlier_not_shown from "../../prompts/messages/earlier_not_shown.md" with { type: "text" };
 import messages__opened_by_you from "../../prompts/messages/opened_by_you.md" with { type: "text" };
 import messages__picture_gone from "../../prompts/messages/picture_gone.md" with { type: "text" };
@@ -432,6 +462,45 @@ export const MCP_TEXTS: readonly TextSpec[] = [
 
 export const MCP_TEXT_NAMES: readonly string[] = MCP_TEXTS.map((spec) => spec.name);
 
+export const SEND_TEXTS: readonly TextSpec[] = [
+  text("send_queued", t__tools__autonomy__send_message__answers__queued, "What send_message answers once a message is waiting to go.", { here: "set when it goes in the thread the character is in", thread: "the thread it goes in", wake: "set when the character is in a wake", push: "set when it goes with a push", user: "the user's name" }),
+  must("send_in_reply", t__tools__autonomy__send_message__answers__in_reply, "send_message's error for a message to the thread the character is answering the user in.", { user: "the user's name" }),
+  must("send_out_of_seal", t__tools__autonomy__send_message__answers__out_of_seal, "send_message's error for a message to another thread from a wake in a sealed thread."),
+  must("send_to_wakes", t__tools__autonomy__send_message__answers__to_wakes, "send_message's error for a message to the wakes thread.", { thread: "the wakes thread" }),
+  must("send_to_sealed", t__tools__autonomy__send_message__answers__to_sealed, "send_message's error for a message to a sealed thread from outside it.", { thread: "the thread" }),
+  must("send_no_thread", t__tools__autonomy__send_message__answers__no_thread, "send_message's error for a message to a thread the character doesn't have.", { thread: "the thread named" }),
+  must("send_push_sealed", t__tools__autonomy__send_message__answers__push_sealed, "send_message's error for a push from a sealed thread."),
+  must("send_push_waiting", t__tools__autonomy__send_message__answers__push_waiting, "send_message's error for a second push in one turn."),
+  must("send_push_not_set_up", t__tools__autonomy__send_message__answers__push_not_set_up, "send_message's error for a push when push notifications aren't set up.", { user: "the user's name" }),
+  must("send_push_too_soon", t__tools__autonomy__send_message__answers__push_too_soon, "send_message's error for a push sooner than the last one allows.", { last: "when the last push went", next: "when the next one is allowed" }),
+  must("send_no_text", t__tools__autonomy__send_message__answers__no_text, "send_message's error for a message with no text."),
+  must("send_unavailable", t__tools__autonomy__send_message__answers__unavailable, "send_message's error where nothing can be sent, as in a subagent."),
+];
+
+export const ARG_TEXTS: readonly TextSpec[] = [
+  must("arg_thread_id", t__tools__arguments__thread_id, "The error of send_message and wake_in_thread for a thread given that can't be a thread's id."),
+];
+
+export const WAKE_TOOL_TEXTS: readonly TextSpec[] = [
+  must("wake_when_form", t__tools__autonomy__wake_in_thread__answers__when_form, "wake_in_thread's error for a `when` it can't read."),
+  must("wake_when_past", t__tools__autonomy__wake_in_thread__answers__when_past, "wake_in_thread's error for a `when` that has passed.", { when: "the time it was given", now: "the time now" }),
+  must("wake_no_reason", t__tools__autonomy__wake_in_thread__answers__no_reason, "wake_in_thread's error for a wake asked for with no reason."),
+  must("wake_limit_form", t__tools__autonomy__wake_in_thread__answers__limit_form, "wake_in_thread's error for a `limit` it can't read."),
+  must("wake_limit_short", t__tools__autonomy__wake_in_thread__answers__limit_short, "wake_in_thread's error for a `limit` under a minute."),
+  text("wake_asked_for", t__tools__autonomy__wake_in_thread__answers__asked_for, "A wake waiting in a thread, in wake_called_off, wake_waiting and wake_queued.", { from: "the thread it was asked for from", at: "when it was asked for", starts: "when it is to start, when it was given a time", reason: "the reason it was given" }),
+  must("wake_call_off_alone", t__tools__autonomy__wake_in_thread__answers__call_off_alone, "wake_in_thread's error for `call_off` given with `when` or `overwrite`."),
+  must("wake_call_off_unavailable", t__tools__autonomy__wake_in_thread__answers__call_off_unavailable, "wake_in_thread's error for `call_off` where no wake can be called off, as in a subagent."),
+  must("wake_nothing_to_call_off", t__tools__autonomy__wake_in_thread__answers__nothing_to_call_off, "wake_in_thread's error for `call_off` in a thread with no wake waiting.", { thread: "the thread" }),
+  text("wake_called_off", t__tools__autonomy__wake_in_thread__answers__called_off, "What wake_in_thread answers when it calls a wake off.", { thread: "the thread", asked: "the wake that was waiting, as wake_asked_for has it" }),
+  must("wake_unavailable", t__tools__autonomy__wake_in_thread__answers__unavailable, "wake_in_thread's error where no wake can be asked for, as in a subagent."),
+  must("wake_here", t__tools__autonomy__wake_in_thread__answers__here, "wake_in_thread's error for a wake asked for now in the thread the character is in.", { thread: "the thread" }),
+  must("wake_triggers_off", t__tools__autonomy__wake_in_thread__answers__triggers_off, "wake_in_thread's error while the user has the character's triggers off.", { user: "the user's name" }),
+  must("wake_no_thread", t__tools__autonomy__wake_in_thread__answers__no_thread, "wake_in_thread's error for a thread the character doesn't have.", { thread: "the thread named" }),
+  must("wake_in_wakes", t__tools__autonomy__wake_in_thread__answers__in_wakes, "wake_in_thread's error for the wakes thread.", { thread: "the wakes thread" }),
+  must("wake_waiting", t__tools__autonomy__wake_in_thread__answers__waiting, "wake_in_thread's error for a thread that already has a wake waiting, without `overwrite`.", { thread: "the thread", asked: "the wake that was waiting, as wake_asked_for has it" }),
+  text("wake_queued", t__tools__autonomy__wake_in_thread__answers__queued, "What wake_in_thread answers once a wake is asked for.", { thread: "the thread", limit: "how long the wake may run", at: "when it starts, when it was given a time", user: "the user's name", quiet: "how long the user has to be quiet in that thread first", replaced: "the wake that was waiting, as wake_asked_for has it, when this one takes its place" }),
+];
+
 const GUIDE_VALUES = { user: "the user's name", tools_off: "the tools a topic names that are off" };
 
 export const GUIDE_TEXTS: readonly TextSpec[] = [
@@ -489,7 +558,7 @@ export const TOOL_TEXTS: readonly TextSpec[] = Object.entries(TOOL_TEXTS_SHIPPED
 
 export const READ_TEXT_NAMES: readonly string[] = READ_TEXTS.map((spec) => spec.name);
 
-export const TEXTS: readonly TextSpec[] = [...MESSAGE_TEXTS, ...SYSTEM_TEXTS, ...WAKE_TEXTS, ...TOOL_TEXTS, ...OTHER_TEXTS, ...IMAGE_TEXTS, ...READ_TEXTS, ...MCP_TEXTS, ...GUIDE_TEXTS];
+export const TEXTS: readonly TextSpec[] = [...MESSAGE_TEXTS, ...SYSTEM_TEXTS, ...WAKE_TEXTS, ...TOOL_TEXTS, ...OTHER_TEXTS, ...IMAGE_TEXTS, ...READ_TEXTS, ...MCP_TEXTS, ...SEND_TEXTS, ...ARG_TEXTS, ...WAKE_TOOL_TEXTS, ...GUIDE_TEXTS];
 
 export const TEXT_SPECS: ReadonlyMap<string, TextSpec> = new Map(TEXTS.map((spec) => [spec.name, spec]));
 

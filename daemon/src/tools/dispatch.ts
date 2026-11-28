@@ -190,14 +190,14 @@ export async function dispatchTool(
     case "wake_in_thread": {
       const handOff = ctx.wakeInThread;
       const reach = await reachableThreads(dirname(ctx.historyDbPath), ctx.characterName);
-      return handleWakeInThread(args, ctx.thread, {
+      return handleWakeInThread(ctx.texts, args, ctx.thread, {
         handOff: handOff === undefined ? undefined : (request): WakeHandOff => [...reach.open, ...reach.sealed].includes(request.thread) ? handOff(request) : { kind: "no_thread" },
         callOff: ctx.callOffWake,
       }, ctx.userName ?? "the user");
     }
 
     case "send_message":
-      return await handleSendMessage(args, ctx.sendMessage);
+      return await handleSendMessage(ctx.texts, args, ctx.sendMessage);
 
     case "guide":
       if (ctx.guide === undefined) throw new ToolIoError("the guide is not available in this context");
