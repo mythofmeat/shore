@@ -13,6 +13,7 @@ import { required } from "../src/util/required.ts";
 import { handlesUnder } from "./support/handles.ts";
 import { outcomeOf } from "./support/outcome.ts";
 import { testTmp } from "./support/tmp.ts";
+import { Texts } from "../src/texts/texts.ts";
 
 function message(id: string, text: string, minute: number | string, extra: Partial<Message> = {}): Message {
   const timestamp = typeof minute === "string" ? minute : new Date(Date.parse("2026-11-01T09:00:00Z") + minute * 60_000).toISOString();
@@ -52,7 +53,7 @@ async function archive(): Promise<Archive> {
       }
     },
     index: async () => {
-      await refreshHistoryIndex(ref, indexPath);
+      await refreshHistoryIndex(ref, indexPath, new Texts());
       return HistoryIndex.open(indexPath);
     },
   };
@@ -86,7 +87,7 @@ describe("rebuilding the chat log index", () => {
       return read.call(this, character, idx);
     });
     try {
-      expect(await refreshHistoryIndex(w.ref, w.indexPath, true)).toBe(true);
+      expect(await refreshHistoryIndex(w.ref, w.indexPath, new Texts(), true)).toBe(true);
     } finally {
       counter.stop();
       spy.mockRestore();
@@ -98,7 +99,7 @@ describe("rebuilding the chat log index", () => {
   test("writes the new index beside the old one, which answers searches until every message is in, and lets other work run between messages", async () => {
     const w = await archive();
     w.put("main", 0, [message("u1", "the lighthouse", 0), message("a1", "its keeper", 1)]);
-    await refreshHistoryIndex(w.ref, w.indexPath);
+    await refreshHistoryIndex(w.ref, w.indexPath, new Texts());
     w.put("main", 1, [message("u2", "the harbour", 2), message("a2", "the ferry", 3), message("u3", "the boathouse", 4)]);
     const searchable = (): number => {
       const index = HistoryIndex.open(w.indexPath);
@@ -117,7 +118,7 @@ describe("rebuilding the chat log index", () => {
     };
     setImmediate(watch);
     try {
-      expect(await refreshHistoryIndex(w.ref, w.indexPath)).toBe(true);
+      expect(await refreshHistoryIndex(w.ref, w.indexPath, new Texts())).toBe(true);
     } finally {
       spinning = false;
     }
@@ -129,20 +130,20 @@ describe("rebuilding the chat log index", () => {
   test("leaves an index that matches the archive as it is, unless told to build it again", async () => {
     const w = await archive();
     w.put("main", 0, [message("u1", "the lighthouse", 0)]);
-    expect(await refreshHistoryIndex(w.ref, w.indexPath)).toBe(true);
+    expect(await refreshHistoryIndex(w.ref, w.indexPath, new Texts())).toBe(true);
     const built = statSync(w.indexPath);
-    expect(await refreshHistoryIndex(w.ref, w.indexPath)).toBe(false);
+    expect(await refreshHistoryIndex(w.ref, w.indexPath, new Texts())).toBe(false);
     expect(statSync(w.indexPath).ino).toBe(built.ino);
-    expect(await refreshHistoryIndex(w.ref, w.indexPath, true)).toBe(true);
+    expect(await refreshHistoryIndex(w.ref, w.indexPath, new Texts(), true)).toBe(true);
     expect(statSync(w.indexPath).ino).not.toBe(built.ino);
   });
 
   test("closes the archive and the new index once it is built", async () => {
     const w = await archive();
     w.put("main", 0, [message("u1", "the lighthouse", 0)]);
-    await refreshHistoryIndex(w.ref, w.indexPath);
+    await refreshHistoryIndex(w.ref, w.indexPath, new Texts());
     const open = handlesUnder(w.root);
-    for (let round = 0; round < 3; round += 1) await refreshHistoryIndex(w.ref, w.indexPath, true);
+    for (let round = 0; round < 3; round += 1) await refreshHistoryIndex(w.ref, w.indexPath, new Texts(), true);
     expect(handlesUnder(w.root)).toBe(open);
   });
 
@@ -150,12 +151,12 @@ describe("rebuilding the chat log index", () => {
     const w = await archive();
     w.put("main", 0, [message("u1", "the lighthouse", 0)]);
     await mkdir(w.indexPath);
-    expect(await outcomeOf(refreshHistoryIndex(w.ref, w.indexPath))).toThrow();
+    expect(await outcomeOf(refreshHistoryIndex(w.ref, w.indexPath, new Texts()))).toThrow();
     expect(readdirSync(w.cache)).toEqual(["chat_logs.db"]);
     const elsewhere = join(w.root, "locked");
     await mkdir(elsewhere, { mode: 0o500 });
     try {
-      expect(await outcomeOf(refreshHistoryIndex(w.ref, join(elsewhere, "chat_logs.db")))).toThrow("unable to open database file");
+      expect(await outcomeOf(refreshHistoryIndex(w.ref, join(elsewhere, "chat_logs.db"), new Texts()))).toThrow("unable to open database file");
     } finally {
       await chmod(elsewhere, 0o700);
     }
@@ -166,7 +167,7 @@ describe("rebuilding the chat log index", () => {
     const w = await archive();
     w.put("main", 0, [message("u1", "the lighthouse", 0)]);
     for (const name of ["history_search.db", "history_search.db-wal", "history_search.db-shm"]) writeFileSync(join(w.cache, name), "");
-    await refreshHistoryIndex(w.ref, w.indexPath);
+    await refreshHistoryIndex(w.ref, w.indexPath, new Texts());
     expect(readdirSync(w.cache)).toEqual(["chat_logs.db"]);
   });
 });

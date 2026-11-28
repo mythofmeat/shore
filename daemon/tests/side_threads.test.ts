@@ -581,6 +581,7 @@ describe("chat logs across threads", () => {
       message("u2", "Mara should visit the harbor", NOW),
     ]));
     const options = (thread: string) => ({
+      texts: new Texts(),
       character: "frank",
       dbPath: join(data, HISTORY_DB_FILE),
       dataDir: data,
@@ -642,7 +643,7 @@ describe("chat logs across threads", () => {
     await archive(data, "main", forked);
     await archive(data, "story", forked);
     writeDurable(threadFile(data, "frank", "main", "active.jsonl"), serializeMessages([message("u4", "and Mara?", at("14:00"))]));
-    const options = { character: "frank", dbPath: join(data, HISTORY_DB_FILE), dataDir: data, thread: "story", indexPath: join(config.dirs.cache, "chat_logs.db"), timeZone: "UTC", userName: "sam" };
+    const options = { texts: new Texts(), character: "frank", dbPath: join(data, HISTORY_DB_FILE), dataDir: data, thread: "story", indexPath: join(config.dirs.cache, "chat_logs.db"), timeZone: "UTC", userName: "sam" };
     const listed = (result: string) => result.split("\n").flatMap((line) => chatLogMessageId(line) ?? []);
 
     const search = await handleSearchChatLogs({ query: "Mara", all_time: true, sort: "oldest" }, threadDataDir(data, "frank", "story"), options);
@@ -659,7 +660,7 @@ describe("chat logs across threads", () => {
     const data = config.dirs.data;
     const at = (time: string) => `2026-11-01T${time}:00Z`;
     await archive(data, "main", [message("u1", "the keeper's name is Mara", at("09:00")), message("a1", "Mara it is", at("09:01"))]);
-    const options = { character: "frank", dbPath: join(data, HISTORY_DB_FILE), dataDir: data, thread: "story", indexPath: join(config.dirs.cache, "chat_logs.db"), timeZone: "UTC", userName: "sam" };
+    const options = { texts: new Texts(), character: "frank", dbPath: join(data, HISTORY_DB_FILE), dataDir: data, thread: "story", indexPath: join(config.dirs.cache, "chat_logs.db"), timeZone: "UTC", userName: "sam" };
     const dir = threadDataDir(data, "frank", "story");
 
     const found = await handleChatLogs({ action: "search", query: "Mara", all_time: true, sort: "oldest" }, dir, options);
@@ -687,7 +688,7 @@ describe("chat logs across threads", () => {
     await createThread(data, "frank", "story", NOW);
     const at = (time: string) => `2026-11-01T${time}:00Z`;
     await archive(data, "main", [message("u1", "where is Mara?", at("09:00")), message("h1", "Mara came back", at("12:00"), { origin: "autonomous" })]);
-    const options = { character: "frank", dbPath: join(data, HISTORY_DB_FILE), dataDir: data, thread: "story", indexPath: join(config.dirs.cache, "chat_logs.db"), timeZone: "UTC", userName: "sam" };
+    const options = { texts: new Texts(), character: "frank", dbPath: join(data, HISTORY_DB_FILE), dataDir: data, thread: "story", indexPath: join(config.dirs.cache, "chat_logs.db"), timeZone: "UTC", userName: "sam" };
     const search = async () => await handleSearchChatLogs({ query: "Mara", all_time: true, sort: "oldest" }, threadDataDir(data, "frank", "story"), options);
 
     const fresh = await search();
@@ -709,7 +710,7 @@ describe("chat logs across threads", () => {
       message("a1", "Mara is out", at("09:01")),
       message("h1", "Mara came back", at("12:00"), { origin: "autonomous" }),
     ]));
-    const options = { character: "frank", dbPath: join(data, HISTORY_DB_FILE), dataDir: data, thread: "story", indexPath: join(config.dirs.cache, "chat_logs.db"), timeZone: "UTC", userName: "sam" };
+    const options = { texts: new Texts(), character: "frank", dbPath: join(data, HISTORY_DB_FILE), dataDir: data, thread: "story", indexPath: join(config.dirs.cache, "chat_logs.db"), timeZone: "UTC", userName: "sam" };
 
     const search = await handleSearchChatLogs({ query: "Mara", all_time: true, sort: "oldest" }, threadDataDir(data, "frank", "story"), options);
 
@@ -734,7 +735,7 @@ describe("chat logs across threads", () => {
       message("a2", "As I was saying", at("18:00")),
       message("h4", "Goodnight", at("18:10"), { origin: "autonomous" }),
     ]));
-    const options = { character: "frank", dbPath: join(data, HISTORY_DB_FILE), dataDir: data, thread: "story", indexPath: join(config.dirs.cache, "chat_logs.db"), timeZone: "UTC", userName: "sam" };
+    const options = { texts: new Texts(), character: "frank", dbPath: join(data, HISTORY_DB_FILE), dataDir: data, thread: "story", indexPath: join(config.dirs.cache, "chat_logs.db"), timeZone: "UTC", userName: "sam" };
 
     const read = await handleReadChatLogs({ around: "h1", before: 1, after: 0 }, threadDataDir(data, "frank", "story"), options);
     expect(read.split("\n").filter((line) => line.endsWith("  a1") || line.endsWith("  h1"))).toEqual([
@@ -760,6 +761,7 @@ describe("chat logs across threads", () => {
       message("a1", "I repainted the lighthouse door", NOW),
     ]));
     const search = async (fresh: boolean | undefined): Promise<string> => await handleSearchChatLogs({ query: "lighthouse door", all_time: true }, threadDataDir(data, "frank", "main"), {
+      texts: new Texts(),
       character: "frank",
       dbPath: join(data, HISTORY_DB_FILE),
       dataDir: data,

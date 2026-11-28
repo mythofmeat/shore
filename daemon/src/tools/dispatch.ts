@@ -107,6 +107,7 @@ export function deferEditTo(
 
 function chatLogOptions(ctx: ToolContext): ChatLogOptions {
   return {
+    texts: ctx.texts,
     character: ctx.characterName,
     dbPath: ctx.historyDbPath,
     dataDir: dirname(ctx.historyDbPath),

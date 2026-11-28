@@ -50,6 +50,8 @@ import memory__compaction__label from "../../prompts/memory/compaction/label.md"
 import messages__earlier_not_shown from "../../prompts/messages/earlier_not_shown.md" with { type: "text" };
 import messages__opened_by_you from "../../prompts/messages/opened_by_you.md" with { type: "text" };
 import messages__picture_gone from "../../prompts/messages/picture_gone.md" with { type: "text" };
+import messages__embed_not_sent from "../../prompts/messages/embed_not_sent.md" with { type: "text" };
+import messages__embed_sent from "../../prompts/messages/embed_sent.md" with { type: "text" };
 import messages__picture from "../../prompts/messages/picture.md" with { type: "text" };
 import messages__pictures_not_sent from "../../prompts/messages/pictures_not_sent.md" with { type: "text" };
 import messages__sent_picture from "../../prompts/messages/sent_picture.md" with { type: "text" };
@@ -167,7 +169,9 @@ const LAST_WAKE = {
 const STATUS = { statuses: "each status that is on, as status_item has it, with \", \" between them" };
 
 export const MESSAGE_TEXTS: readonly TextSpec[] = [
-  text("picture", messages__picture, "Before a picture the user attached, naming its file.", { path: "the picture's file" }),
+  text("picture", messages__picture, "Before a picture the user attached, naming its file, and in place of the picture in chat_logs and in what a wake is shown of its thread.", { path: "the picture's file, or in chat_logs its name once the file is gone" }),
+  text("embed_sent", messages__embed_sent, "In chat_logs and in what a wake is shown of its thread, in place of a picture or video the character put in a message and sent.", { name: "its file's name", video: "set when it is a video" }),
+  text("embed_not_sent", messages__embed_not_sent, "The same, for one that could not be sent.", { name: "the name it was given in the message", video: "set when the name is a video's" }),
   must("picture_gone", messages__picture_gone, "In place of a picture the user attached whose file is gone.", { name: "the picture's file name" }),
   text("wake_running", messages__wake_running, "At the start of a user's message written while a wake was running.", { thread: "the thread the wake is in", since: "when it started" }),
   text("wake_running_own_time", messages__wake_running_own_time, "The same, for a message from before own time was removed, when no thread was recorded.", { since: "when it started" }),

@@ -117,7 +117,17 @@ export function embedName(embed: Embed): string {
 }
 
 
-export function pictureText(text: string, images: readonly Sent[]): string {
+export interface EmbedLabel {
+  name: string;
+  video: boolean;
+  sent: boolean;
+}
+
+function plainLabel({ name, video, sent }: EmbedLabel): string {
+  return `[${video ? "video" : "picture"}${sent ? "" : " not sent"}: ${name}]`;
+}
+
+export function pictureText(text: string, images: readonly Sent[], label: (embed: EmbedLabel) => string = plainLabel): string {
   const sent = images.filter((image) => typeof image.embed === "string");
   if (sent.length === 0) return text;
   let result = "";
@@ -126,8 +136,8 @@ export function pictureText(text: string, images: readonly Sent[]): string {
     const image = sentFor(sent, embed);
     if (image === undefined || embed.at < cursor) continue;
     result += text.slice(cursor, embed.at) + (typeof image.name === "string" && (image.problem === undefined || image.problem === null)
-      ? `[${isVideoFile(image.path ?? "") ? "video" : "picture"}: ${image.name}]`
-      : `[${isVideoFile(embedName(embed)) ? "video" : "picture"} not sent: ${embedName(embed)}]`);
+      ? label({ name: image.name, video: isVideoFile(image.path ?? ""), sent: true })
+      : label({ name: embedName(embed), video: isVideoFile(embedName(embed)), sent: false }));
     cursor = embed.at + embed.source.length;
   }
   return result + text.slice(cursor);

@@ -17,6 +17,7 @@ import { required } from "../src/util/required.ts";
 import { handlesUnder } from "./support/handles.ts";
 import { outcomeOf } from "./support/outcome.ts";
 import { testTmp } from "./support/tmp.ts";
+import { Texts } from "../src/texts/texts.ts";
 
 const NOW = "2026-11-05T10:00:00Z";
 
@@ -51,7 +52,7 @@ async function world(...threads: string[]): Promise<World> {
     else await createThread(data, "frank", thread, NOW);
   }
   const dbPath = join(data, HISTORY_DB_FILE);
-  const options: ChatLogOptions = { character: "frank", dbPath, dataDir: data, thread: "main", indexPath: join(root, "cache", "chat_logs.db"), timeZone: "UTC", userName: "sam" };
+  const options: ChatLogOptions = { texts: new Texts(), character: "frank", dbPath, dataDir: data, thread: "main", indexPath: join(root, "cache", "chat_logs.db"), timeZone: "UTC", userName: "sam" };
   return {
     data,
     options,
@@ -391,7 +392,7 @@ describe("listing a character's archived conversations", () => {
 
   test("says there are none before anything is archived, and counts one as one", async () => {
     const root = testTmp(`chat-logs-list-${crypto.randomUUID()}`);
-    const options: ChatLogOptions = { character: "frank", dbPath: join(root, "data", HISTORY_DB_FILE), dataDir: join(root, "data"), timeZone: "UTC" };
+    const options: ChatLogOptions = { texts: new Texts(), character: "frank", dbPath: join(root, "data", HISTORY_DB_FILE), dataDir: join(root, "data"), timeZone: "UTC" };
     expect(await handleChatLogs({ action: "list" }, join(root, "data", "frank"), options)).toBe("No archived conversations.");
     expect(existsSync(options.dbPath)).toBe(false);
     const w = await world();

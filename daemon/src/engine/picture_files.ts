@@ -8,10 +8,6 @@ export function sha256Hex(bytes: Uint8Array): string {
   return createHash("sha256").update(bytes).digest("hex");
 }
 
-export function pictureFileLabel(path: string): string {
-  return `[picture: ${path}]`;
-}
-
 const hashedFiles = new Map<string, { ino: number; size: number; mtimeMs: number; sha256: string }>();
 
 function fileSha256(path: string): string | undefined {

@@ -25,6 +25,7 @@ import {
 import { required } from "../util/required.ts";
 import { actionOf } from "./actions.ts";
 import { InvalidArgs, ToolIoError } from "./errors";
+import type { Texts } from "../texts/texts.ts";
 
 const GAP_MS = 90 * 60_000;
 const DAY_MS = 86_400_000;
@@ -98,6 +99,7 @@ function echoFraction(fraction: string | undefined): string {
 }
 
 export interface ChatLogOptions {
+  texts: Texts;
   character: string;
   dbPath: string;
   dataDir?: string;
@@ -110,6 +112,7 @@ export interface ChatLogOptions {
 }
 
 interface View {
+  texts: Texts;
   zone: string;
   user: string;
   character: string;
@@ -119,6 +122,7 @@ interface View {
 function viewOf(options: ChatLogOptions): View {
   const user = options.userName ?? "user";
   return {
+    texts: options.texts,
     zone: options.timeZone ?? hostZone(),
     user,
     character: options.character,
@@ -156,8 +160,8 @@ async function withIndex<T>(conversationDir: string, options: ChatLogOptions, ru
   const ref = { mainConversationDir: conversationDir, dbPath: options.dbPath, character: options.character };
   const refreshed = async (force: boolean): Promise<HistoryIndex> => {
     await withHistoryIndexLock(path, async () => {
-      await refreshHistoryIndex(ref, path, force);
-      refreshLiveRows(path, options.thread ?? "main", await unseenThreads(options));
+      await refreshHistoryIndex(ref, path, options.texts, force);
+      refreshLiveRows(path, options.thread ?? "main", await unseenThreads(options), options.texts);
     });
     return HistoryIndex.open(path).keptApart(await wakesThreadOf(options));
   };
@@ -523,7 +527,7 @@ function entryHead(row: ChatLogMessage, view: View, marked: boolean): string {
 }
 
 function entrySize(row: ChatLogMessage, view: View): number {
-  return entryHead(row, view, false).length + shownText(row).length + 3;
+  return entryHead(row, view, false).length + shownText(row, view.texts).length + 3;
 }
 
 function gapText(ms: number): string {
@@ -539,7 +543,7 @@ function transcript(rows: readonly ChatLogMessage[], view: View, markId?: number
   let previous: ChatLogMessage | undefined;
   for (const row of rows) {
     if (previous !== undefined && row.ts - previous.ts >= GAP_MS) lines.push(`· · · ${gapText(row.ts - previous.ts)} later · · ·`, "");
-    lines.push(entryHead(row, view, row.id === markId), shownText(row), "");
+    lines.push(entryHead(row, view, row.id === markId), shownText(row, view.texts), "");
     previous = row;
   }
   return lines;

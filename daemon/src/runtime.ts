@@ -182,6 +182,7 @@ export async function createRuntime(options: RuntimeOptions): Promise<ShoreRunti
         ),
         dbPath: rustJoin(effective.dirs.data, HISTORY_DB_FILE),
         indexPath: historyIndexPath(effective.dirs.cache, character),
+        texts: effective,
       });
     }
   };

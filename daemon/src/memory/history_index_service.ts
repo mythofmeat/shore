@@ -1,6 +1,7 @@
 import { describeError } from "../llm/errors";
 import { shoreLog } from "../log.ts";
 
+import { Texts, type TextsSource } from "../texts/texts.ts";
 import { refreshHistoryIndex, withHistoryIndexLock } from "./history_index.ts";
 
 export interface HistoryIndexRegistration {
@@ -8,6 +9,7 @@ export interface HistoryIndexRegistration {
   conversationDir: string;
   dbPath: string;
   indexPath: string;
+  texts: TextsSource;
 }
 
 export interface HistoryIndexServiceOptions {
@@ -15,13 +17,14 @@ export interface HistoryIndexServiceOptions {
   timerIntervalMs?: number;
 }
 
-export interface HistoryIndexProgress extends HistoryIndexRegistration {
+export interface HistoryIndexProgress extends Omit<HistoryIndexRegistration, "texts"> {
   failures: number;
   retryAt: number;
   lastError: string | undefined;
 }
 
 interface Entry extends HistoryIndexProgress {
+  texts: TextsSource;
   dirty: boolean;
 }
 
@@ -132,6 +135,7 @@ export class HistoryIndexService {
         await refreshHistoryIndex(
           { character: entry.character, dbPath: entry.dbPath, mainConversationDir: entry.conversationDir },
           entry.indexPath,
+          Texts.of(entry.texts),
         );
       });
       entry.failures = 0;
