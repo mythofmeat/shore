@@ -5,6 +5,9 @@ import { join } from "node:path";
 const ROOT = join(import.meta.dir, "..");
 const PLAYWRIGHT = join(ROOT, "node_modules", ".bin", "playwright");
 
+const generated = Bun.spawnSync(["bun", join(ROOT, "..", "daemon", "scripts", "generate.ts")], { stdin: "ignore", stdout: "inherit", stderr: "inherit" });
+if (generated.exitCode !== 0) process.exit(generated.exitCode);
+
 if (process.platform === "darwin") {
   const playwright = Bun.spawn([PLAYWRIGHT, "test", ...process.argv.slice(2)], { cwd: ROOT, stdio: ["inherit", "inherit", "inherit"] });
   process.exit(await playwright.exited);

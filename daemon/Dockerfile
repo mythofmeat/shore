@@ -9,15 +9,20 @@ RUN --mount=type=cache,target=/root/.cache/shore \
     --mount=type=cache,target=/usr/local/cargo/git \
     bun run scripts/build_patch.ts
 
-FROM oven/bun:debian AS daemon-builder
+FROM rust:slim AS daemon-builder
+COPY --from=oven/bun:debian /usr/local/bin/bun /usr/local/bin/bun
 WORKDIR /build/daemon
 COPY daemon/package.json daemon/bun.lock ./
 RUN bun install --frozen-lockfile --production
+COPY client /build/client
 COPY daemon/tsconfig.json ./
 COPY daemon/prompts prompts
 COPY daemon/scripts scripts
 COPY daemon/src src
-RUN bun run build:daemon
+RUN --mount=type=cache,target=/build/client/target \
+    --mount=type=cache,target=/usr/local/cargo/registry \
+    --mount=type=cache,target=/usr/local/cargo/git \
+    bun run build:daemon
 
 FROM debian:testing
 RUN apt-get update && apt-get upgrade -y

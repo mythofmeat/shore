@@ -312,10 +312,11 @@ mod tests {
             "hello": SchemaSettings::draft2020_12().for_serialize().into_generator().into_root_schema_for::<WebHello>(),
             "transfer": SchemaSettings::draft2020_12().for_serialize().into_generator().into_root_schema_for::<WebTransfer>(),
         });
-        let target = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
-            .join("../../daemon/src/web/schemas.generated.json");
+        let directory =
+            std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../daemon/src/web");
+        std::fs::create_dir_all(&directory).unwrap();
         std::fs::write(
-            target,
+            directory.join("schemas.generated.json"),
             format!("{}\n", serde_json::to_string_pretty(&schema).unwrap()),
         )
         .unwrap();

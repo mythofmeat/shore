@@ -57,6 +57,9 @@ jobs:
             ~/.cargo/registry/cache
           key: codex-apply-patch-${{ runner.os }}-rust-${{ steps.rust.outputs.version }}-${{ hashFiles('daemon/vendor/codex-apply-patch/**', 'daemon/scripts/build_patch.ts') }}
       - run: bun run build:patch
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: client
       - run: bun install --frozen-lockfile
       - env:
           FILES: ${{ inputs.files }}
