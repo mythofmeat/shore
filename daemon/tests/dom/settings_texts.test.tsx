@@ -58,26 +58,30 @@ describe("the texts page", () => {
     expect(rows(failed.host)).toEqual([]);
   });
 
-  test("a text an update reworded or added is marked, with Shore's wording before, until the user marks them seen", async () => {
+  test("a text an update reworded or added is listed first and marked, with Shore's wording before, until the user marks them seen", async () => {
     const changed = [
+      entry("time", "yours"),
       entry("wake", "shore", { changed: true, previous: "Wake up.", wording: "Wake, please.", shipped: "Wake, please." }),
       entry("wake_turn", "shore", { changed: true }),
-      entry("time", "yours"),
     ];
+    const sections = (root: ParentNode) => [...root.querySelectorAll("section")].map((section) => [section.querySelector("h2")?.textContent, [...section.querySelectorAll("summary")].map((summary) => summary.textContent)]);
     let marked = false;
     const view = await page("ada", () => ({ texts: marked ? changed.map((text) => ({ ...text, changed: false, previous: null })) : changed }));
     app.answer((request) => {
       if (request["name"] === "texts_seen") { marked = true; return { texts: [] }; }
       return request["name"] === "texts" ? { texts: marked ? changed.map((text) => ({ ...text, changed: false, previous: null })) : changed } : undefined;
     });
-    expect(rows(view.host).map(([summary]) => summary)).toEqual(["wake · Shore’s wording · changed in an update", "wake_turn · Shore’s wording · new in an update", "time · Your wording"]);
+    expect(sections(view.host)).toEqual([
+      ["Changed in an update", ["wake · Shore’s wording · changed in an update", "wake_turn · Shore’s wording · new in an update"]],
+      ["Texts", ["time · Your wording"]],
+    ]);
     expect(rows(view.host)[0]?.[1]).toEqual([["Where", "Where wake goes."], ["In use", "Wake, please."], ["Shore’s before", "Wake up."]]);
-    expect(view.host.textContent).toContain("2 of Shore’s texts in use are new or reworded since you last marked them seen.");
+    expect(view.host.querySelector("section .settings-description")?.textContent).toBe("2 of Shore’s texts in use are new or reworded since you last marked them seen.");
     const before = app.socket().sent.length;
     await click(button(view.host, "Mark as seen"));
     await settle();
     expect(app.sent(before).map((request) => request["name"])).toEqual(["texts_seen", "texts"]);
-    expect(rows(view.host).map(([summary]) => summary)).toEqual(["wake · Shore’s wording", "wake_turn · Shore’s wording", "time · Your wording"]);
+    expect(sections(view.host)).toEqual([["Texts", ["time · Your wording", "wake · Shore’s wording", "wake_turn · Shore’s wording"]]]);
     expect([...view.host.querySelectorAll("button")].map((item) => item.textContent)).not.toContain("Mark as seen");
   });
 

@@ -3,7 +3,7 @@ use std::io::Write;
 use serde_json::Value;
 use shore_common::protocol::operations::{TextEntry, TextListing, TextOwner};
 
-use super::vocab::{Rows, Tone, blank, indent_to, key_line, section};
+use super::vocab::{Rows, Tone, blank, indent_to, key_line, note, section};
 
 fn owner_word(owner: &TextOwner) -> &'static str {
     match owner {
@@ -31,21 +31,37 @@ fn write_block<W: Write>(out: &mut W, title: &str, body: &str) {
     }
 }
 
-pub(crate) fn write_list<W: Write>(out: &mut W, listing: &TextListing) {
+fn write_rows<'listing, W: Write>(
+    out: &mut W,
+    texts: impl Iterator<Item = &'listing TextEntry>,
+    tone: Tone,
+) {
     let mut rows = Rows::new();
-    for text in &listing.texts {
-        rows.add_noted(
-            &text.name,
-            &whose(text),
-            &text.place,
-            if text.changed {
-                Tone::Warn
-            } else {
-                Tone::Plain
-            },
-        );
+    for text in texts {
+        rows.add_noted(&text.name, &whose(text), &text.place, tone);
     }
     rows.write(out);
+}
+
+pub(crate) fn write_list<W: Write>(out: &mut W, listing: &TextListing) {
+    if !listing.texts.iter().any(|text| text.changed) {
+        write_rows(out, listing.texts.iter(), Tone::Plain);
+        return;
+    }
+    section(out, "changed in an update", None);
+    write_rows(
+        out,
+        listing.texts.iter().filter(|text| text.changed),
+        Tone::Warn,
+    );
+    note(out, "`shore config texts --seen` marks them seen.");
+    blank(out);
+    section(out, "texts", None);
+    write_rows(
+        out,
+        listing.texts.iter().filter(|text| !text.changed),
+        Tone::Plain,
+    );
 }
 
 pub(crate) fn write_text<W: Write>(out: &mut W, text: &TextEntry) {

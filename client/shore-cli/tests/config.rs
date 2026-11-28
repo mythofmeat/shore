@@ -160,6 +160,10 @@ fn config_texts_refuses_a_name_it_has_no_text_for_and_gives_the_list_as_json() {
 fn changed_texts() -> serde_json::Value {
     json!({ "texts": [
         {
+            "name": "time", "place": "Before a user's message.", "owner": "shore", "required": false, "wording": "[{{now}}]",
+            "shipped": "[{{now}}]", "file": null, "error": null, "values": [], "changed": false, "previous": null,
+        },
+        {
             "name": "wake", "place": "The end of a wake's opening.", "owner": "shore", "required": false, "wording": "Wake, please.",
             "shipped": "Wake, please.", "file": null, "error": null, "values": [], "changed": true, "previous": "Wake up.",
         },
@@ -177,7 +181,7 @@ fn config_texts_marks_a_text_an_update_reworded_or_added_shows_the_wording_befor
     assert!(output.status.success(), "{output:?}");
     assert_eq!(
         printed(&output),
-        "wake       Shore's, changed  The end of a wake's opening.\n  wake_turn  Shore's, new      Before a message sent from a wake."
+        "── changed in an update ────────────────────────────────────────────────────────\n  wake       Shore's, changed  The end of a wake's opening.\n  wake_turn  Shore's, new      Before a message sent from a wake.\n  `shore config texts --seen` marks them seen.\n\n── texts ───────────────────────────────────────────────────────────────────────\n  time  Shore's  Before a user's message."
     );
     assert_eq!(sent(&frames), [(Some("texts"), Some(&json!({})))]);
     let (detail, _detail_asked) = asked(changed_texts(), &["config", "texts", "wake"]);

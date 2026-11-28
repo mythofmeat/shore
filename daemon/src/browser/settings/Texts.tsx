@@ -38,19 +38,23 @@ function Text({ text }: { text: TextEntry }) {
 export function TextsPage({ state }: { state: ChromeSnapshot }) {
   const listing = useOperation(state, "texts", {}, [state.character]);
   const { busy, run } = useAction();
-  const changed = (listing.data?.texts ?? []).filter((text) => text.changed).length;
+  const texts = listing.data?.texts ?? [];
+  const changed = texts.filter((text) => text.changed);
   return <>
     <p className="settings-description">Everything Shore writes for {state.character ?? "a character"}’s model besides your messages and files: what each text is, where it goes and whose wording is in use. Under [texts] in config.toml, point a name at a file of your own, or set it to false to switch it off.</p>
-    {changed === 0 ? null : <div className="inline-form wrap">
-      <p className="settings-description">{changed === 1 ? "1 of Shore’s texts in use is new or reworded since you last marked them seen." : `${String(changed)} of Shore’s texts in use are new or reworded since you last marked them seen.`}</p>
-      <button type="button" className="button" disabled={busy} onClick={() => { void run(async () => {
+    {changed.length === 0 ? null : <SettingsSection
+      title="Changed in an update"
+      description={changed.length === 1 ? "1 of Shore’s texts in use is new or reworded since you last marked them seen." : `${String(changed.length)} of Shore’s texts in use are new or reworded since you last marked them seen.`}
+      actions={<button type="button" className="button" disabled={busy} onClick={() => { void run(async () => {
         await workspace.actions.run("texts_seen", {});
         await listing.reload();
         return undefined;
-      }); }}>Mark as seen</button>
-    </div>}
+      }); }}>Mark as seen</button>}
+    >
+      {changed.map((text) => <Text key={text.name} text={text} />)}
+    </SettingsSection>}
     <SettingsSection title="Texts">
-      <Loading error={listing.error} ready={listing.data !== undefined}>{(listing.data?.texts ?? []).map((text) => <Text key={text.name} text={text} />)}</Loading>
+      <Loading error={listing.error} ready={listing.data !== undefined}>{texts.filter((text) => !text.changed).map((text) => <Text key={text.name} text={text} />)}</Loading>
     </SettingsSection>
   </>;
 }
