@@ -4168,7 +4168,7 @@
     "SystemInjected": "{ injected: boolean, }",
     "TextEntry": "{ name: string, place: string, owner: TextOwner, required: boolean, wording: string | null, shipped: string, file: string | null, error: string | null, values: Array<TextValue>, }",
     "TextListing": "{ texts: Array<TextEntry>, }",
-    "TextOwner": "\"shore\" | \"yours\" | \"off\" | \"fixed\" | \"cli\"",
+    "TextOwner": "\"shore\" | \"yours\" | \"off\" | \"cli\"",
     "TextValue": "{ name: string, about: string, }",
     "ThreadCompactionArgs": "{ name: string, compaction: boolean, }",
     "ThreadContextUse": "{ thread: string, mode: ContextLimitMode, turns: number, min_turns: number, max_turns: number, context_tokens?: number, max_context_tokens: number, message_tokens: number, trim_at: number, }",

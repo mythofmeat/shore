@@ -100,7 +100,6 @@ fn texts() -> serde_json::Value {
             "name": "label", "place": "The request for a label.", "owner": "yours", "required": true, "wording": null, "shipped": "Label this.",
             "file": "/srv/config/gone.md", "error": "text \"label\" could not be read at /srv/config/gone.md: no such file", "values": [],
         },
-        text("line_cut", "After a line read cuts short.", "fixed", true, Some("[line cut]"), "[line cut]"),
         text("cli_identity", "The CLI's first line.", "cli", false, Some("You are a Claude agent."), "You are a Claude agent."),
     ]})
 }
@@ -111,7 +110,7 @@ fn config_texts_lists_every_text_with_whose_wording_is_in_use_and_where_it_goes(
     assert!(output.status.success(), "{output:?}");
     assert_eq!(
         printed(&output),
-        "time           yours           Before a user's message.\n  status         off             The user's statuses.\n  opened_by_you  Shore's         A user turn put first.\n  label          yours           The request for a label.\n  line_cut       Shore's, fixed  After a line read cuts short.\n  cli_identity   the CLI's       The CLI's first line."
+        "time           yours      Before a user's message.\n  status         off        The user's statuses.\n  opened_by_you  Shore's    A user turn put first.\n  label          yours      The request for a label.\n  cli_identity   the CLI's  The CLI's first line."
     );
     assert_eq!(sent(&frames), [(Some("texts"), Some(&json!({})))]);
 }

@@ -179,7 +179,11 @@ describe("a tool's picture Shore no longer keeps", () => {
     const blobs = imageBlobs(cache, "ada", true);
     const stored = withImageReferences([{ type: "image", source: gif }], blobs);
     const texts = await theirs(["picture_gone"]);
-    const gone = withImageData(stored, undefined, texts) as { type: string; text?: string }[];
+    let asked = 0;
+    expect(withImageData([{ type: "text", text: "kept" }], blobs, () => { asked += 1; return texts; })).toEqual([{ type: "text", text: "kept" }]);
+    expect(withImageData(stored, blobs, () => { asked += 1; return texts; })).toMatchObject([{ type: "image", source: { type: "base64", data: GIF } }]);
+    expect(asked).toBe(0);
+    const gone = withImageData(stored, undefined, () => texts) as { type: string; text?: string }[];
     expect(gone.map((block) => block.type)).toEqual(["text"]);
     expect(gone[0]?.text).toMatch(/^\(gone: [0-9a-f]{12}\.gif\)$/);
     useCharacterTexts((character) => character === "ada" ? texts : new Texts({ picture_gone: "nowhere.md" }, cache));

@@ -126,12 +126,12 @@ export function withImageReferences<T>(value: T, blobs: ImageBlobs): T {
   }) as T;
 }
 
-export function withImageData<T>(value: T, blobs: ImageBlobs | undefined, texts: Texts): T {
+export function withImageData<T>(value: T, blobs: ImageBlobs | undefined, texts: () => Texts): T {
   return mapJson(value, (item) => {
     const reference = cachedReference(item);
     if (reference === undefined) return item;
     const data = blobs?.load(reference);
-    if (data === undefined) return { type: "text", text: texts.always("picture_gone", { name: referenceLabel(reference) }) };
+    if (data === undefined) return { type: "text", text: texts().always("picture_gone", { name: referenceLabel(reference) }) };
     const { source: _source, ...rest } = item as Record<string, unknown>;
     return { ...rest, source: { type: "base64", media_type: reference.media_type, data } };
   }) as T;

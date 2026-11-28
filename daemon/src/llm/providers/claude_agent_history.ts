@@ -27,7 +27,7 @@ export function nativeHistoryStore(book: string, conversation: string): SessionS
       if (db.query("SELECT 1 FROM state_files WHERE path = ?1").get(path) === null) return null;
       ensureCollection(db, path, character, "array");
       const entries = JSON.parse(collectionText(db, path) ?? "[]") as SessionStoreEntry[];
-      return withImageData(entries, blobs, characterTexts(character));
+      return withImageData(entries, blobs, () => characterTexts(character));
     })())),
     append: (key, added) => {
       const stored = blobs === undefined ? added : added.map((entry) => withImageReferences(entry, blobs));

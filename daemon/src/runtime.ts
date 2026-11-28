@@ -314,6 +314,7 @@ export async function createRuntime(options: RuntimeOptions): Promise<ShoreRunti
       callStore?.close();
       closeLedgers();
       setNanoGptSubscriptionCacheDir(undefined);
+      useCharacterTexts(() => new Texts());
     },
   };
 }
