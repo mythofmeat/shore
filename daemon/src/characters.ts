@@ -321,7 +321,7 @@ export class CharacterRegistry {
   async #threadPins(name: string, pins: readonly string[], signal?: AbortSignal): Promise<string[]> {
     const workspace = characterWorkspace(this.#globalConfig, name);
     return await resolveThreadPins(pins, async (requested) =>
-      await workspace.call("locateFiles", { workspaceDir: workspace.dir, files: requested }, signal), workspace.promptFiles);
+      await workspace.call("locateFiles", { workspaceDir: workspace.dir, files: requested, texts: workspace.texts.overrides() }, signal), workspace.promptFiles);
   }
 
   async archiveThread(

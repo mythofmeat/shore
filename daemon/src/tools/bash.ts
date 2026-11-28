@@ -5,6 +5,7 @@ import { InvalidArgs, ToolIoError } from "./errors.ts";
 import type { ProcessStreams } from "./process.ts";
 import { characterGitIdentity, type ToolInput } from "./workspace.ts";
 import type { Texts } from "../texts/texts.ts";
+import { workspaceTexts } from "./character_workspace.ts";
 
 export interface BashResult {
   workdir: string;
@@ -62,15 +63,12 @@ export async function handleBash(
 ): Promise<BashResult> {
   signal?.throwIfAborted();
   const command = input["command"];
-  if (typeof command !== "string" || command.trim() === "" || command.includes("\0")) {
-    throw new InvalidArgs("command must be a non-empty string without NUL bytes");
-  }
+  const texts = workspaceTexts(target);
+  if (typeof command !== "string" || command.trim() === "" || command.includes("\0")) throw new InvalidArgs(texts.always("bash_command_form"));
   const requestedDir = input["workdir"];
-  if (requestedDir !== undefined && (typeof requestedDir !== "string" || requestedDir.includes("\0"))) {
-    throw new InvalidArgs("workdir must be a string without NUL bytes");
-  }
+  if (requestedDir !== undefined && (typeof requestedDir !== "string" || requestedDir.includes("\0"))) throw new InvalidArgs(texts.always("bash_workdir_form"));
   const workspace = asCharacterWorkspace(target);
-  if (workspace.dir === "") throw new InvalidArgs("workspace not configured");
+  if (workspace.dir === "") throw new InvalidArgs(texts.always("file_no_workspace"));
   const root = resolve(workspace.dir);
   const workdir = resolve(root, requestedDir ?? ".");
   try {
@@ -92,7 +90,7 @@ export async function handleBash(
       });
     } catch (error) {
       signal?.throwIfAborted();
-      throw new ToolIoError(`could not run bash in ${workdir}: ${String(error)}. Bash must be installed on the daemon host.`);
+      throw new ToolIoError(texts.always("bash_not_run", { workdir, error: String(error) }));
     }
   };
   let output;

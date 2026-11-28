@@ -62,7 +62,7 @@ export function readGuide(texts: Texts, input: Record<string, unknown>, values: 
   const vars = new Map([...values, ...tools.map((tool): [string, string] => [tool.name, tool.name])]);
   if (asked === "") return renderTemplate(guideText(texts, "guide_index"), vars);
   const topic = GUIDE_TOPICS.find((each) => each === asked);
-  if (topic === undefined) throw new InvalidArgs(`there is no topic ${JSON.stringify(asked)}; the topics are ${GUIDE_TOPICS.join(", ")}`);
+  if (topic === undefined) throw new InvalidArgs(texts.always("guide_no_topic", { asked: JSON.stringify(asked), topics: GUIDE_TOPICS.join(", ") }));
   const text = guideText(texts, `guide_${topic}`);
   const off = tools.filter((tool) => !tool.enabled && text.includes(`{{${tool.name}}}`)).map((tool) => `\`${tool.name}\``).join(", ");
   return renderTemplate(off === "" ? text : `${text}\n\n${guideText(texts, "guide_tools_off")}`, new Map([...vars, ["tools_off", off]]));

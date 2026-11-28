@@ -1,6 +1,7 @@
 import { hostZone, normalizeToZone } from "../ledger/zoned.ts";
 import { parseTimeBound } from "./history.ts";
 import { InvalidArgs, ToolIoError } from "./errors.ts";
+import type { Texts } from "../texts/texts.ts";
 
 interface ModelHistoryRow {
   model: string;
@@ -78,22 +79,23 @@ export interface ModelHistoryResult {
 }
 
 export async function handleModelHistory(
+  texts: Texts,
   input: Record<string, unknown>,
   character: string,
   query: ModelHistoryQuery | undefined,
   timeZone: string = hostZone(),
 ): Promise<ModelHistoryResult> {
   if (query === undefined) {
-    throw new ToolIoError("the usage ledger is not available in this context");
+    throw new ToolIoError(texts.always("history_ledger_unavailable"));
   }
   if (character === "") {
-    throw new InvalidArgs("model history is not configured");
+    throw new InvalidArgs(texts.always("history_not_configured"));
   }
 
   const since = utcBound(input, "start_time");
   const until = utcBound(input, "end_time");
   if (since !== undefined && until !== undefined && since > until) {
-    throw new InvalidArgs("start_time must be before or equal to end_time");
+    throw new InvalidArgs(texts.always("history_range_backwards"));
   }
 
   const rows = await query(character, since, until);

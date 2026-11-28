@@ -1,0 +1,1 @@
+subagent '{{name}}' has no model: subagents.{{name}}.model and defaults.subagent_model are unset, and {{#if character}}{{character}} has no chat model to inherit{{else}}no character is attached to inherit a chat model from{{/if}}

@@ -22,7 +22,7 @@ export interface WorkspaceOpTable {
   edit: (args: { input: Record<string, unknown>; workspaceDir: string; texts: TextOverrides }, signal?: AbortSignal) => Promise<string>;
   pictures: (args: { workspaceDir: string; targets: PictureTarget[]; texts: TextOverrides }, signal?: AbortSignal) => Promise<PictureLookup[]>;
   firstFrame: (args: { path: string }, signal?: AbortSignal) => Promise<string | null>;
-  locateFiles: (args: { workspaceDir: string; files: string[] }, signal?: AbortSignal) => Promise<{ paths: string[]; problems: string[] }>;
+  locateFiles: (args: { workspaceDir: string; files: string[]; texts: TextOverrides }, signal?: AbortSignal) => Promise<{ paths: string[]; problems: string[] }>;
   listFiles: (args: { workspaceDir: string }, signal?: AbortSignal) => Promise<string[]>;
   readFiles: (args: { paths: string[] }) => Promise<FileRead[]>;
   exists: (args: { paths: string[] }) => Promise<boolean[]>;
@@ -66,7 +66,7 @@ export const WORKSPACE_OPS: WorkspaceOpTable = {
   edit: async ({ input, workspaceDir, texts }, signal) => await handleEdit(Texts.from(texts), input, workspaceDir, signal),
   pictures: async (args, signal) => await lookUpPictures(args, signal),
   firstFrame: async ({ path }, signal) => (await firstVideoFrame(path, signal))?.toString("base64") ?? null,
-  locateFiles: async ({ workspaceDir, files }, signal) => await locateWorkspaceFiles(files, workspaceDir, signal),
+  locateFiles: async ({ workspaceDir, files, texts }, signal) => await locateWorkspaceFiles(Texts.from(texts), files, workspaceDir, signal),
   listFiles: async ({ workspaceDir }, signal) => await listedWorkspaceFiles(workspaceDir, signal),
   readFiles: async ({ paths }) => await Promise.all(paths.map(async (path): Promise<FileRead> => {
     try {

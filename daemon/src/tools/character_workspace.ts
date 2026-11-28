@@ -168,6 +168,10 @@ export function asCharacterWorkspace(workspace: string | CharacterWorkspace): Ch
   return typeof workspace === "string" ? new CharacterWorkspace(workspace) : workspace;
 }
 
+export function workspaceTexts(workspace: string | CharacterWorkspace): Texts {
+  return asCharacterWorkspace(workspace).texts;
+}
+
 export function closeWorkspaceHelpers(): void {
   for (const helper of helpers.values()) helper.close();
   helpers.clear();

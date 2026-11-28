@@ -65,6 +65,7 @@ import type { SavedModelSetting as OverviewSetting } from "../protocol/SavedMode
 import type { ModelOverviewRole as OverviewRole } from "../protocol/ModelOverviewRole.ts";
 import type { ModelSettingsOverview } from "../protocol/ModelSettingsOverview.ts";
 import type { ModelSettingsDetail } from "../protocol/ModelSettingsDetail.ts";
+import { Texts } from "../texts/texts.ts";
 type Args = OperationInput<"model_info">;
 
 export interface ModelsContext {
@@ -195,7 +196,7 @@ function subagentTargetModel(ctx: ModelsContext, subagent: string): ResolvedMode
     throw catalogError(e);
   }
   if (model === undefined) {
-    throw invalidRequest(missingModelMessage(subagent, ctx.characterName));
+    throw invalidRequest(missingModelMessage(new Texts(), subagent, ctx.characterName));
   }
   return model;
 }

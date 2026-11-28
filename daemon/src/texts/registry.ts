@@ -247,6 +247,44 @@ import t__tools__arguments__schema__type from "../../prompts/tools/arguments/sch
 import t__tools__arguments__schema__enum from "../../prompts/tools/arguments/schema/enum.md" with { type: "text" };
 import t__tools__arguments__schema__format from "../../prompts/tools/arguments/schema/format.md" with { type: "text" };
 import t__tools__arguments__schema__other from "../../prompts/tools/arguments/schema/other.md" with { type: "text" };
+import t__engine__pins__output_cut from "../../prompts/engine/pins/output_cut.md" with { type: "text" };
+import t__engine__pins__killed from "../../prompts/engine/pins/killed.md" with { type: "text" };
+import t__engine__pins__exit_status from "../../prompts/engine/pins/exit_status.md" with { type: "text" };
+import t__engine__pins__timed_out from "../../prompts/engine/pins/timed_out.md" with { type: "text" };
+import t__engine__pins__not_run from "../../prompts/engine/pins/not_run.md" with { type: "text" };
+import t__engine__pins__silent from "../../prompts/engine/pins/silent.md" with { type: "text" };
+import t__engine__pins__file_unshown from "../../prompts/engine/pins/file_unshown.md" with { type: "text" };
+import t__engine__pins__file_cut from "../../prompts/engine/pins/file_cut.md" with { type: "text" };
+import t__engine__pins__is_picture from "../../prompts/engine/pins/is_picture.md" with { type: "text" };
+import t__engine__pins__not_utf8 from "../../prompts/engine/pins/not_utf8.md" with { type: "text" };
+import t__engine__pins__no_index from "../../prompts/engine/pins/no_index.md" with { type: "text" };
+import t__engine__pins__not_file from "../../prompts/engine/pins/not_file.md" with { type: "text" };
+import t__engine__pins__missing from "../../prompts/engine/pins/missing.md" with { type: "text" };
+import t__engine__pins__too_big from "../../prompts/engine/pins/too_big.md" with { type: "text" };
+import t__engine__pins__not_text from "../../prompts/engine/pins/not_text.md" with { type: "text" };
+import t__engine__pins__too_many from "../../prompts/engine/pins/too_many.md" with { type: "text" };
+import t__tools__answers__bash_command_form from "../../prompts/tools/answers/bash_command_form.md" with { type: "text" };
+import t__tools__answers__bash_workdir_form from "../../prompts/tools/answers/bash_workdir_form.md" with { type: "text" };
+import t__tools__answers__bash_not_run from "../../prompts/tools/answers/bash_not_run.md" with { type: "text" };
+import t__tools__answers__patch_form from "../../prompts/tools/answers/patch_form.md" with { type: "text" };
+import t__tools__answers__patch_helper_path from "../../prompts/tools/answers/patch_helper_path.md" with { type: "text" };
+import t__tools__answers__patch_helper_missing from "../../prompts/tools/answers/patch_helper_missing.md" with { type: "text" };
+import t__tools__answers__patch_user_error from "../../prompts/tools/answers/patch_user_error.md" with { type: "text" };
+import t__tools__answers__patch_warning from "../../prompts/tools/answers/patch_warning.md" with { type: "text" };
+import t__tools__answers__patch_helper_failed from "../../prompts/tools/answers/patch_helper_failed.md" with { type: "text" };
+import t__tools__answers__guide_no_topic from "../../prompts/tools/answers/guide_no_topic.md" with { type: "text" };
+import t__tools__answers__guide_unavailable from "../../prompts/tools/answers/guide_unavailable.md" with { type: "text" };
+import t__tools__answers__activity_unavailable from "../../prompts/tools/answers/activity_unavailable.md" with { type: "text" };
+import t__tools__answers__history_ledger_unavailable from "../../prompts/tools/answers/history_ledger_unavailable.md" with { type: "text" };
+import t__tools__answers__history_not_configured from "../../prompts/tools/answers/history_not_configured.md" with { type: "text" };
+import t__tools__answers__history_range_backwards from "../../prompts/tools/answers/history_range_backwards.md" with { type: "text" };
+import t__tools__answers__check_timed_out from "../../prompts/tools/answers/check_timed_out.md" with { type: "text" };
+import t__tools__answers__check_not_run from "../../prompts/tools/answers/check_not_run.md" with { type: "text" };
+import t__tools__answers__check_failed from "../../prompts/tools/answers/check_failed.md" with { type: "text" };
+import t__tools__answers__check_cut from "../../prompts/tools/answers/check_cut.md" with { type: "text" };
+import t__tools__answers__subagent_system from "../../prompts/tools/answers/subagent_system.md" with { type: "text" };
+import t__tools__answers__subagent_images from "../../prompts/tools/answers/subagent_images.md" with { type: "text" };
+import t__tools__answers__subagent_no_model from "../../prompts/tools/answers/subagent_no_model.md" with { type: "text" };
 import messages__earlier_not_shown from "../../prompts/messages/earlier_not_shown.md" with { type: "text" };
 import messages__opened_by_you from "../../prompts/messages/opened_by_you.md" with { type: "text" };
 import messages__picture_gone from "../../prompts/messages/picture_gone.md" with { type: "text" };
@@ -758,6 +796,50 @@ export const TOOL_ARG_TEXTS: readonly TextSpec[] = [
   must("tool_arg_other", t__tools__arguments__schema__other, "In tool_rejected, for any other way an argument doesn't fit.", { argument: "the argument, in backticks", problem: "what the schema checker said", keyword: "the rule it broke" }),
 ];
 
+export const PIN_TEXTS: readonly TextSpec[] = [
+  text("pin_output_cut", t__engine__pins__output_cut, "After the part of a pinned command's output that fits, when the rest doesn't.", { limit: "how much a pin can be: a size, like 32 KB", total: "how much it printed" }),
+  text("pin_killed", t__engine__pins__killed, "After a pinned command's output when it was killed."),
+  text("pin_exit_status", t__engine__pins__exit_status, "After a pinned command's output when it failed.", { code: "its exit status" }),
+  text("pin_timed_out", t__engine__pins__timed_out, "In place of a pinned command's output when it ran out of time.", { limit: "its time limit, like 30 seconds" }),
+  text("pin_not_run", t__engine__pins__not_run, "In place of a pinned command's output when it couldn't be run.", { error: "why" }),
+  text("pin_silent", t__engine__pins__silent, "In place of a pinned command's output when it printed nothing."),
+  text("pin_file_unshown", t__engine__pins__file_unshown, "In place of a pinned file that isn't text.", { path: "the file", reason: "why, as pin_is_picture or pin_not_utf8 has it" }),
+  text("pin_file_cut", t__engine__pins__file_cut, "After the part of a pinned file that fits, when the rest doesn't.", { limit: "how much a pin can be: a size, like 32 KB", total: "how big the file is", path: "the file" }),
+  must("pin_is_picture", t__engine__pins__is_picture, "Why a pinned file isn't shown, or can't be pinned, when it is a picture."),
+  must("pin_not_utf8", t__engine__pins__not_utf8, "Why a pinned file isn't shown, or can't be pinned, when it isn't text."),
+  must("pin_no_index", t__engine__pins__no_index, "Why a link to a folder can't be pinned, when the folder has no INDEX.md.", { link: "the link", folder: "the folder", index: "the file it needs, INDEX.md" }),
+  must("pin_not_file", t__engine__pins__not_file, "Why something that isn't a file can't be pinned.", { file: "what was given", folder: "set when it is a folder" }),
+  must("pin_missing", t__engine__pins__missing, "Why a file that doesn't exist can't be pinned.", { file: "what was given", link: "the file of its name Shore found, when it found one", why: "what the search by name found, when it found none" }),
+  must("pin_too_big", t__engine__pins__too_big, "Why a file too big can't be pinned.", { file: "the file", size: "how big it is", limit: "how big a pin can be" }),
+  must("pin_not_text", t__engine__pins__not_text, "Why a file that isn't text can't be pinned.", { file: "the file", reason: "why, as pin_is_picture or pin_not_utf8 has it" }),
+  must("pin_too_many", t__engine__pins__too_many, "Why files can't be pinned together when they are too big together.", { total: "how big they are together", limit: "how big a thread's pins can be together" }),
+];
+
+export const MISC_TOOL_TEXTS: readonly TextSpec[] = [
+  must("bash_command_form", t__tools__answers__bash_command_form, "bash's error for a command that is blank or has a NUL byte in it."),
+  must("bash_workdir_form", t__tools__answers__bash_workdir_form, "bash's error for a workdir with a NUL byte in it."),
+  must("bash_not_run", t__tools__answers__bash_not_run, "bash's error when the command couldn't be started.", { workdir: "where it was to run", error: "why" }),
+  must("patch_form", t__tools__answers__patch_form, "apply_patch's error for a patch that is blank or has a NUL byte in it."),
+  must("patch_helper_path", t__tools__answers__patch_helper_path, "apply_patch's error when SHORE_APPLY_PATCH_PATH isn't an absolute path."),
+  must("patch_helper_missing", t__tools__answers__patch_helper_missing, "apply_patch's error when the patch helper can't be found."),
+  must("patch_user_error", t__tools__answers__patch_user_error, "apply_patch's error when the character's tools user can't be used.", { error: "why" }),
+  text("patch_warning", t__tools__answers__patch_warning, "The warning in apply_patch's result when the patch failed."),
+  must("patch_helper_failed", t__tools__answers__patch_helper_failed, "apply_patch's error when the patch helper itself fails.", { error: "why" }),
+  must("guide_no_topic", t__tools__answers__guide_no_topic, "guide's error for a topic it doesn't have.", { asked: "the topic asked for, in quotes", topics: "its topics, with \", \" between them" }),
+  must("guide_unavailable", t__tools__answers__guide_unavailable, "guide's error where there is no guide, as in a subagent."),
+  must("activity_unavailable", t__tools__answers__activity_unavailable, "activity_heatmap's error where there is no activity history, as in a subagent."),
+  must("history_ledger_unavailable", t__tools__answers__history_ledger_unavailable, "model_history's error where there is no usage ledger, as in a subagent."),
+  must("history_not_configured", t__tools__answers__history_not_configured, "model_history's error when it has no character to look up."),
+  must("history_range_backwards", t__tools__answers__history_range_backwards, "model_history's error for a start after the end."),
+  must("check_timed_out", t__tools__answers__check_timed_out, "Why a trigger's check failed, when it ran out of time."),
+  must("check_not_run", t__tools__answers__check_not_run, "Why a trigger's check failed, when it couldn't be started.", { error: "why" }),
+  must("check_failed", t__tools__answers__check_failed, "Why a trigger's check failed, when it exited with an error.", { code: "its exit status", said: "what it wrote to its errors, cut at 500 characters, when it wrote any" }),
+  text("check_cut", t__tools__answers__check_cut, "A trigger check's output or error cut short.", { text: "the part kept" }),
+  text("subagent_system", t__tools__answers__subagent_system, "Who said a message of Shore's own, in the history a subagent is given."),
+  text("subagent_images", t__tools__answers__subagent_images, "After a message with pictures, in the history a subagent is given.", { count: "how many" }),
+  must("subagent_no_model", t__tools__answers__subagent_no_model, "The error of an ask_ tool, and of model commands, when a subagent has no model.", { name: "the subagent", character: "the character, when one is attached" }),
+];
+
 const GUIDE_VALUES = { user: "the user's name", tools_off: "the tools a topic names that are off" };
 
 export const GUIDE_TEXTS: readonly TextSpec[] = [
@@ -813,7 +895,7 @@ export const TOOL_TEXTS: readonly TextSpec[] = Object.entries(TOOL_TEXTS_SHIPPED
   ...Object.entries(parameters).map(([parameter, shipped]) => text(parameterText(tool, parameter), shipped, `The description of the ${parameter} parameter of ${tool}.`, TOOL_VALUES)),
 ]);
 
-export const TEXTS: readonly TextSpec[] = [...MESSAGE_TEXTS, ...SYSTEM_TEXTS, ...WAKE_TEXTS, ...TOOL_TEXTS, ...OTHER_TEXTS, ...IMAGE_TEXTS, ...READ_TEXTS, ...MCP_TEXTS, ...SEND_TEXTS, ...ARG_TEXTS, ...WAKE_TOOL_TEXTS, ...TOOL_COMMON_TEXTS, ...ARG_COMMON_TEXTS, ...THREADS_TOOL_TEXTS, ...TRIGGERS_TOOL_TEXTS, ...FILE_TEXTS, ...EDIT_TEXTS, ...PICTURE_SEND_TEXTS, ...TOOL_RESULT_TEXTS, ...TOOL_OUTPUT_TEXTS, ...MCP_ERROR_TEXTS, ...TOOL_ARG_TEXTS, ...GUIDE_TEXTS];
+export const TEXTS: readonly TextSpec[] = [...MESSAGE_TEXTS, ...SYSTEM_TEXTS, ...WAKE_TEXTS, ...TOOL_TEXTS, ...OTHER_TEXTS, ...IMAGE_TEXTS, ...READ_TEXTS, ...MCP_TEXTS, ...SEND_TEXTS, ...ARG_TEXTS, ...WAKE_TOOL_TEXTS, ...TOOL_COMMON_TEXTS, ...ARG_COMMON_TEXTS, ...THREADS_TOOL_TEXTS, ...TRIGGERS_TOOL_TEXTS, ...FILE_TEXTS, ...EDIT_TEXTS, ...PICTURE_SEND_TEXTS, ...TOOL_RESULT_TEXTS, ...TOOL_OUTPUT_TEXTS, ...MCP_ERROR_TEXTS, ...TOOL_ARG_TEXTS, ...PIN_TEXTS, ...MISC_TOOL_TEXTS, ...GUIDE_TEXTS];
 
 export const TEXT_SPECS: ReadonlyMap<string, TextSpec> = new Map(TEXTS.map((spec) => [spec.name, spec]));
 

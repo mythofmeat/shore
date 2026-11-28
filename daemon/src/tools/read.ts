@@ -77,7 +77,7 @@ async function locate(texts: Texts, input: Record<string, unknown>, requested: s
 
 const messageOf = (error: unknown) => error instanceof Error ? error.message : String(error);
 
-async function promptFile(value: string, workspaceDir: string, names: () => Promise<WorkspaceNames>): Promise<string> {
+async function promptFile(texts: Texts, value: string, workspaceDir: string, names: () => Promise<WorkspaceNames>): Promise<string> {
   const link = WORKSPACE_LINK.exec(value);
   if (link !== null) {
     const found = await linkedFile(await names(), link[1] === "!", link[2] ?? "").catch((error: unknown) => {
@@ -86,26 +86,26 @@ async function promptFile(value: string, workspaceDir: string, names: () => Prom
     if (!await isFolder(found)) return found;
     const index = join(found, FOLDER_INDEX);
     if (await isFile(index)) return index;
-    throw new Error(`${value}: ${relative(workspaceDir, found)}/ has no ${FOLDER_INDEX}`);
+    throw new Error(texts.always("pin_no_index", { link: value, folder: relative(workspaceDir, found), index: FOLDER_INDEX }));
   }
   const path = join(workspaceDir, value);
   const stats = await stat(path).catch(() => undefined);
   if (stats?.isFile() === true) return path;
-  if (stats !== undefined) throw new Error(`${value} is ${stats.isDirectory() ? "a folder" : "not a regular file"}`);
-  const hint = await namedFile(await names(), value.split("/"), false).then((found) => `did you mean ${found.link}?`, messageOf);
-  throw new Error(`${value} does not exist; ${hint}`);
+  if (stats !== undefined) throw new Error(texts.always("pin_not_file", { file: value, folder: stats.isDirectory() ? "yes" : undefined }));
+  const hint = await namedFile(await names(), value.split("/"), false).then((found) => ({ link: found.link }), (error: unknown) => ({ why: messageOf(error) }));
+  throw new Error(texts.always("pin_missing", { file: value, ...hint }));
 }
 
-async function promptFileBytes(value: string, path: string, shown: string): Promise<number> {
-  const label = WORKSPACE_LINK.test(value) ? `${value} (${shown})` : shown;
+async function promptFileBytes(texts: Texts, value: string, path: string, shown: string): Promise<number> {
+  const file = WORKSPACE_LINK.test(value) ? `${value} (${shown})` : shown;
   const { size } = await stat(path);
-  if (size > MAX_THREAD_PIN_BYTES) throw new Error(`${label} is ${byteSize(size)}; a pinned file can be at most ${byteSize(MAX_THREAD_PIN_BYTES)}`);
-  const read = threadFileText(path, await readFile(path));
-  if ("reason" in read) throw new Error(`${label} ${read.reason}; a pinned file must be text`);
+  if (size > MAX_THREAD_PIN_BYTES) throw new Error(texts.always("pin_too_big", { file, size: byteSize(size), limit: byteSize(MAX_THREAD_PIN_BYTES) }));
+  const read = threadFileText(texts, path, await readFile(path));
+  if ("reason" in read) throw new Error(texts.always("pin_not_text", { file, reason: read.reason }));
   return size;
 }
 
-export async function locateWorkspaceFiles(files: readonly string[], workspaceDir: string, signal?: AbortSignal): Promise<{ paths: string[]; problems: string[] }> {
+export async function locateWorkspaceFiles(texts: Texts, files: readonly string[], workspaceDir: string, signal?: AbortSignal): Promise<{ paths: string[]; problems: string[] }> {
   let names: Promise<WorkspaceNames> | undefined;
   const lookUp = () => names ??= workspaceNames(workspaceDir, signal);
   const paths: string[] = [];
@@ -113,9 +113,9 @@ export async function locateWorkspaceFiles(files: readonly string[], workspaceDi
   const sizes = new Map<string, number>();
   for (const file of files) {
     try {
-      const path = await promptFile(file, workspaceDir, lookUp);
+      const path = await promptFile(texts, file, workspaceDir, lookUp);
       const shown = relative(workspaceDir, path).split(sep).join("/");
-      sizes.set(shown, await promptFileBytes(file.trim(), path, shown));
+      sizes.set(shown, await promptFileBytes(texts, file.trim(), path, shown));
       paths.push(shown);
     } catch (error) {
       signal?.throwIfAborted();
@@ -124,7 +124,7 @@ export async function locateWorkspaceFiles(files: readonly string[], workspaceDi
   }
   const total = [...sizes.values()].reduce((sum, size) => sum + size, 0);
   if (problems.length === 0 && total > MAX_THREAD_PINS_BYTES) {
-    problems.push(`together these files are ${byteSize(total)}; a thread's pins can be at most ${byteSize(MAX_THREAD_PINS_BYTES)} together`);
+    problems.push(texts.always("pin_too_many", { total: byteSize(total), limit: byteSize(MAX_THREAD_PINS_BYTES) }));
   }
   return { paths, problems };
 }

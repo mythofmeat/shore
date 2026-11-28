@@ -153,11 +153,11 @@ export async function dispatchTool(
       return await handleChatLogs(args, ctx.conversationDir, chatLogOptions(ctx));
 
     case "model_history":
-      return await handleModelHistory(args, ctx.characterName, ctx.modelHistoryQuery);
+      return await handleModelHistory(ctx.texts, args, ctx.characterName, ctx.modelHistoryQuery);
 
     case "activity_heatmap":
       if (ctx.activityStats === undefined) {
-        throw new ToolIoError("activity history is not available in this context");
+        throw new ToolIoError(ctx.texts.always("activity_unavailable"));
       }
       return handleActivityHeatmap(args, ctx.activityStats);
 
@@ -199,7 +199,7 @@ export async function dispatchTool(
       return await handleSendMessage(ctx.texts, args, ctx.sendMessage);
 
     case "guide":
-      if (ctx.guide === undefined) throw new ToolIoError("the guide is not available in this context");
+      if (ctx.guide === undefined) throw new ToolIoError(ctx.texts.always("guide_unavailable"));
       return ctx.guide(args);
 
     default: {
