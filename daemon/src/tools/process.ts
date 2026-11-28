@@ -1,7 +1,6 @@
 import { spawn } from "node:child_process";
 
 import { shoreLog } from "../log.ts";
-import { shippedText } from "../texts/registry.ts";
 
 const INHERITED_GIT_LOCATION_VARS: readonly string[] = [
   "GIT_DIR",
@@ -40,6 +39,7 @@ export function runProcess(
   options: {
     stdin?: string | undefined; cwd?: string | undefined; env?: NodeJS.ProcessEnv | undefined; signal?: AbortSignal | undefined;
     stopped?: ((output: ProcessStreams) => void) | undefined;
+    cut?: string | undefined;
   },
 ): Promise<ProcessOutput> {
   return new Promise((resolve, reject) => {
@@ -51,8 +51,8 @@ export function runProcess(
       stdio: [options.stdin === undefined ? "ignore" : "pipe", "pipe", "pipe"],
       detached: grouped,
     });
-    const stdout = boundedProcessOutput();
-    const stderr = boundedProcessOutput();
+    const stdout = boundedProcessOutput(options.cut);
+    const stderr = boundedProcessOutput(options.cut);
     let failure: Error | undefined;
     let escalation: ReturnType<typeof setTimeout> | undefined;
     const kill = (signal: NodeJS.Signals): void => {
@@ -89,7 +89,7 @@ export function runProcess(
   });
 }
 
-function boundedProcessOutput() {
+function boundedProcessOutput(cut: string | undefined) {
   const chunks: Buffer[] = [];
   let bytes = 0;
   let truncated = false;
@@ -101,6 +101,6 @@ function boundedProcessOutput() {
       chunks.push(kept);
       bytes += kept.length;
     },
-    text: () => Buffer.concat(chunks).toString("utf8") + (truncated ? `\n${shippedText("output_cut")}` : ""),
+    text: () => Buffer.concat(chunks).toString("utf8") + (truncated && cut !== undefined ? `\n${cut}` : ""),
   };
 }

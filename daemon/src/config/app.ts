@@ -1184,15 +1184,10 @@ const readNeededText: Reader<TextSetting> = typed(
   { kind: "string" },
 );
 
-const readFixedText: Reader<TextSetting> = typed(
-  () => ({ err: "this text can't be replaced yet" }),
-  { kind: "string" },
-);
-
 const TEXTS: StructSpec<Record<string, TextSetting | undefined>> = {
   name: "Texts",
   make: () => ({}),
-  fields: Object.fromEntries(TEXT_LIST.map((spec) => [spec.name, spec.fixed ? readFixedText : spec.required ? readNeededText : readTextOrOff])),
+  fields: Object.fromEntries(TEXT_LIST.map((spec) => [spec.name, spec.required ? readNeededText : readTextOrOff])),
 };
 
 export interface AppConfig {

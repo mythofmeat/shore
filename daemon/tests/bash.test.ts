@@ -73,6 +73,15 @@ describe("bash on Shore's tool surface", () => {
     expect((await run("cat done.txt")).raw).toContain("done");
   });
 
+  test("output cut at the limit ends with the user's wording of output_cut, on each stream, when their config points it at a file", async () => {
+    const { run, ctx, root } = await world();
+    await writeFile(join(root, "cut.md"), "(more was printed than Shore keeps)\n");
+    ctx.workspace = new CharacterWorkspace(ctx.workspaceDir, undefined, [], { app: { texts: { output_cut: "cut.md" } }, dirs: { config: root } });
+    const result = await run("head -c 1100000 /dev/zero | tr '\\0' x; head -c 1100000 /dev/zero | tr '\\0' y >&2");
+    expect(result.raw.split("(more was printed than Shore keeps)").length).toBe(3);
+    expect(result.raw).not.toContain("[process output truncated]");
+  });
+
   test("dry-run blocks Bash before creating any files", async () => {
     const { ctx } = await world();
     ctx.dryRun = true;

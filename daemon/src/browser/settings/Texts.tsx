@@ -7,7 +7,6 @@ const WHOSE: Record<TextEntry["owner"], string> = {
   shore: "Shore’s wording",
   yours: "Your wording",
   off: "Switched off",
-  fixed: "Shore’s wording, which can’t be replaced yet",
   cli: "The CLI’s wording",
 };
 

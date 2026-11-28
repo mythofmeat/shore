@@ -19,6 +19,7 @@ import {
 import { helperCommand, WorkspaceHelper } from "./workspace_helper.ts";
 import { WORKSPACE_OPS, type OpArgs, type OpResult, type WorkspaceOp } from "./workspace_ops.ts";
 import { envWithoutInheritedGitRepo, runProcess, type ProcessOutput, type ProcessStreams } from "./process.ts";
+import { Texts, type TextsSource } from "../texts/texts.ts";
 
 export interface CharacterTools {
   readonly user: string | undefined;
@@ -79,11 +80,17 @@ export class CharacterWorkspace {
   readonly dir: string;
   readonly tools: CharacterTools;
   readonly promptFiles: readonly string[];
+  readonly #texts: TextsSource | undefined;
 
-  constructor(dir: string, tools: CharacterTools = NO_USER, promptFiles: readonly string[] = []) {
+  constructor(dir: string, tools: CharacterTools = NO_USER, promptFiles: readonly string[] = [], texts?: TextsSource) {
     this.dir = dir;
     this.tools = tools;
     this.promptFiles = promptFiles;
+    this.#texts = texts;
+  }
+
+  get texts(): Texts {
+    return this.#texts === undefined ? new Texts() : Texts.of(this.#texts);
   }
 
   get isolated(): boolean {
@@ -91,7 +98,7 @@ export class CharacterWorkspace {
   }
 
   at(dir: string): CharacterWorkspace {
-    return dir === this.dir ? this : new CharacterWorkspace(dir, this.tools);
+    return dir === this.dir ? this : new CharacterWorkspace(dir, this.tools, [], this.#texts);
   }
 
   async user(): Promise<CharacterUser | undefined> {
@@ -106,7 +113,7 @@ export class CharacterWorkspace {
 
   async run(program: string, args: readonly string[], options: CharacterRunOptions = {}): Promise<ProcessOutput> {
     const launch = await this.#launch(program, args, options);
-    return await runProcess(launch.command, launch.args, { cwd: launch.cwd, env: launch.env, stdin: options.stdin, signal: options.signal, stopped: options.stopped });
+    return await runProcess(launch.command, launch.args, { cwd: launch.cwd, env: launch.env, stdin: options.stdin, signal: options.signal, stopped: options.stopped, cut: this.texts.render("output_cut") });
   }
 
   async spawn(program: string, args: readonly string[], options: Pick<CharacterRunOptions, "cwd" | "env"> = {}): Promise<ChildProcessWithoutNullStreams> {
@@ -169,13 +176,15 @@ export function closeWorkspaceHelpers(): void {
 interface CharacterSetup {
   tools: CharacterTools;
   promptFiles: readonly string[];
+  texts: TextsSource;
 }
 
 const setupCache = new WeakMap<LoadedConfig, Map<string, CharacterSetup>>();
 
 function setupOnDisk(config: LoadedConfig, name: string): CharacterSetup {
-  const { tools, triggers, prompt } = (loadCharacterConfig(config, name, () => {}) ?? config).app;
-  return { tools: toolsFrom(tools, triggers), promptFiles: promptWorkspaceFiles(prompt) };
+  const effective = loadCharacterConfig(config, name, () => {}) ?? config;
+  const { tools, triggers, prompt } = effective.app;
+  return { tools: toolsFrom(tools, triggers), promptFiles: promptWorkspaceFiles(prompt), texts: effective };
 }
 
 function characterSetup(config: LoadedConfig, name: string): CharacterSetup {
@@ -201,5 +210,6 @@ export function characterWorkspace(config: LoadedConfig, name: string, options: 
     characterWorkspaceDir(config.dirs.config, name, config.dirs.workspace),
     setup.tools,
     setup.promptFiles,
+    setup.texts,
   );
 }

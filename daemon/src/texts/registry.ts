@@ -138,20 +138,15 @@ export interface TextSpec {
   where: string;
   values: Readonly<Record<string, string>>;
   required: boolean;
-  fixed: boolean;
 }
 
 
-function text(name: string, shipped: string, where: string, values: Record<string, string> = {}, kind: "optional" | "required" | "fixed" = "optional"): TextSpec {
-  return { name, shipped: shipped.endsWith("\n") ? shipped.slice(0, -1) : shipped, where, values, required: kind !== "optional", fixed: kind === "fixed" };
+function text(name: string, shipped: string, where: string, values: Record<string, string> = {}, required = false): TextSpec {
+  return { name, shipped: shipped.endsWith("\n") ? shipped.slice(0, -1) : shipped, where, values, required };
 }
 
 function must(name: string, shipped: string, where: string, values: Record<string, string> = {}): TextSpec {
-  return text(name, shipped, where, values, "required");
-}
-
-function fixed(name: string, shipped: string, where: string, values: Record<string, string> = {}): TextSpec {
-  return text(name, shipped, where, values, "fixed");
+  return text(name, shipped, where, values, true);
 }
 
 const WHEN = "the time, like Friday 2026-10-30 · 12:00 PM";
@@ -296,7 +291,7 @@ export const OTHER_TEXTS: readonly TextSpec[] = [
   must("tool_ask_query", tools__subagent__query, "The description of an ask_<subagent> tool's query parameter."),
   must("label", memory__compaction__label, "The request for a segment's label, after the segment's conversation written out as lines of who said what, each message cut at 1,000 bytes and the whole cut to 30,000 bytes from the middle.", { char: "the character's name", user: "the user's name", cut: "set when anything was cut" }),
   must("idle_resume", engine__idle_resume, "The user turn of a request rebuilt to keep the cache warm, when the conversation has none."),
-  fixed("output_cut", tools__results__output_cut, "After a command's output that was too long: bash's, a pinned command's or a trigger check's. It can't be replaced yet."),
+  text("output_cut", tools__results__output_cut, "After what a bash command printed, on each of its output and its errors, when it printed more than 1 MB there."),
 ];
 
 const GUIDE_VALUES = { user: "the user's name", tools_off: "the tools a topic names that are off" };

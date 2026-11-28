@@ -10,7 +10,6 @@ fn owner_word(owner: &TextOwner) -> &'static str {
         TextOwner::Shore => "Shore's",
         TextOwner::Yours => "yours",
         TextOwner::Off => "off",
-        TextOwner::Fixed => "Shore's, fixed",
         TextOwner::Cli => "the CLI's",
     }
 }

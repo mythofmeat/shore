@@ -1892,7 +1892,7 @@ wire_types! {
     pub struct ToolAccessResult { pub tools: Vec<ToolAccess>, pub subagents: Vec<SubagentAccess>, pub mcp: Vec<String>, pub warnings: Vec<String> }
 
     #[serde(rename_all = "snake_case")]
-    pub enum TextOwner { Shore, Yours, Off, Fixed, Cli }
+    pub enum TextOwner { Shore, Yours, Off, Cli }
 
     pub struct TextValue { pub name: String, pub about: String }
 

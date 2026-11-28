@@ -4410,7 +4410,7 @@ test("a message is counted once in the character's activity record, whether it i
   }, undefined, root);
 });
 
-const MARKED = TEXTS.filter((spec) => !spec.fixed);
+const MARKED = TEXTS;
 
 function declared(spec: TextSpec): string[] {
   return Object.keys(spec.values).filter((value) => value !== "<tool>");

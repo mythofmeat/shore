@@ -16,7 +16,6 @@ const TEXTS = [
   entry("status", "off", { wording: null }),
   entry("opened_by_you", "shore", { required: true }),
   entry("label", "yours", { required: true, wording: null, shipped: "Label this.", file: "/config/gone.md", error: "text \"label\" could not be read at /config/gone.md" }),
-  entry("line_cut", "fixed"),
   entry("cli_identity", "cli"),
 ];
 
@@ -46,7 +45,6 @@ describe("the texts page", () => {
       ["status · Switched off", [["Where", "Where status goes."], ["In use", "(none)"], ["Shore’s", "status wording"]]],
       ["opened_by_you · Shore’s wording", [["Where", "Where opened_by_you goes. It can’t be switched off."], ["In use", "opened_by_you wording"]]],
       ["label · Your wording", [["Where", "Where label goes. It can’t be switched off."], ["File", "/config/gone.md"], ["Error", "text \"label\" could not be read at /config/gone.md"], ["In use", "(none)"], ["Shore’s", "Label this."]]],
-      ["line_cut · Shore’s wording, which can’t be replaced yet", [["Where", "Where line_cut goes."], ["In use", "line_cut wording"]]],
       ["cli_identity · The CLI’s wording", [["Where", "Where cli_identity goes."], ["In use", "cli_identity wording"]]],
     ]);
     expect(view.host.querySelector("[role=alert]")?.textContent).toBe("text \"label\" could not be read at /config/gone.md");

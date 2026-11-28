@@ -14,7 +14,6 @@ function entry(spec: TextSpec, source: TextsSource): TextEntry {
     shipped: spec.shipped,
     values: Object.entries(spec.values).map(([name, about]) => ({ name, about })),
   };
-  if (spec.fixed) return { ...base, owner: "fixed", wording: spec.shipped, file: null, error: null };
   const setting = source.app.texts[spec.name];
   if (setting === undefined) return { ...base, owner: "shore", wording: spec.shipped, file: null, error: null };
   if (setting === false) return { ...base, owner: "off", wording: null, file: null, error: null };
