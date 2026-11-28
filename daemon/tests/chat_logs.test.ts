@@ -18,6 +18,8 @@ import { handlesUnder } from "./support/handles.ts";
 import { outcomeOf } from "./support/outcome.ts";
 import { testTmp } from "./support/tmp.ts";
 import { Texts } from "../src/texts/texts.ts";
+import { schemaViolation } from "../src/tools/validate.ts";
+import { BUILTIN_TOOL_SCHEMAS } from "./support/builtin_tool_schemas.ts";
 
 const NOW = "2026-11-05T10:00:00Z";
 
@@ -423,6 +425,6 @@ describe("listing a character's archived conversations", () => {
     const w = await world();
     expect(await outcomeOf(w.ask({ action: "list", overview: "2026-11-01" }))).toThrow("invalid args: `overview` goes with `read`, not `list`");
     expect(await outcomeOf(w.ask({ action: "list", limit: -1 }))).toThrow("invalid args: limit must be a whole number, 0 or more");
-    expect(await outcomeOf(w.ask({ action: "list", thread: 3 }))).toThrow("invalid args: thread must be a string");
+    expect(schemaViolation(new Texts(), BUILTIN_TOOL_SCHEMAS.get("chat_logs"), { action: "list", thread: 3 })).toBe("argument `thread` must be a string");
   });
 });

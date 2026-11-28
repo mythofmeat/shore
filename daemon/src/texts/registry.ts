@@ -285,6 +285,53 @@ import t__tools__answers__check_cut from "../../prompts/tools/answers/check_cut.
 import t__tools__answers__subagent_system from "../../prompts/tools/answers/subagent_system.md" with { type: "text" };
 import t__tools__answers__subagent_images from "../../prompts/tools/answers/subagent_images.md" with { type: "text" };
 import t__tools__answers__subagent_no_model from "../../prompts/tools/answers/subagent_no_model.md" with { type: "text" };
+import t__tools__history__chat_logs__answers__time_form from "../../prompts/tools/history/chat_logs/answers/time_form.md" with { type: "text" };
+import t__tools__history__chat_logs__answers__not_configured from "../../prompts/tools/history/chat_logs/answers/not_configured.md" with { type: "text" };
+import t__tools__history__chat_logs__answers__bound_form from "../../prompts/tools/history/chat_logs/answers/bound_form.md" with { type: "text" };
+import t__tools__history__chat_logs__answers__count_form from "../../prompts/tools/history/chat_logs/answers/count_form.md" with { type: "text" };
+import t__tools__history__chat_logs__answers__speaker_form from "../../prompts/tools/history/chat_logs/answers/speaker_form.md" with { type: "text" };
+import t__tools__history__chat_logs__answers__or from "../../prompts/tools/history/chat_logs/answers/or.md" with { type: "text" };
+import t__tools__history__chat_logs__answers__no_thread from "../../prompts/tools/history/chat_logs/answers/no_thread.md" with { type: "text" };
+import t__tools__history__chat_logs__answers__query_required from "../../prompts/tools/history/chat_logs/answers/query_required.md" with { type: "text" };
+import t__tools__history__chat_logs__answers__start_after_end from "../../prompts/tools/history/chat_logs/answers/start_after_end.md" with { type: "text" };
+import t__tools__history__chat_logs__answers__overview_form from "../../prompts/tools/history/chat_logs/answers/overview_form.md" with { type: "text" };
+import t__tools__history__chat_logs__answers__one_mode from "../../prompts/tools/history/chat_logs/answers/one_mode.md" with { type: "text" };
+import t__tools__history__chat_logs__answers__empty_archive from "../../prompts/tools/history/chat_logs/answers/empty_archive.md" with { type: "text" };
+import t__tools__history__chat_logs__answers__fts_fallback from "../../prompts/tools/history/chat_logs/answers/fts_fallback.md" with { type: "text" };
+import t__tools__history__chat_logs__answers__nothing_searched from "../../prompts/tools/history/chat_logs/answers/nothing_searched.md" with { type: "text" };
+import t__tools__history__chat_logs__answers__try_wakes from "../../prompts/tools/history/chat_logs/answers/try_wakes.md" with { type: "text" };
+import t__tools__history__chat_logs__answers__try_substring from "../../prompts/tools/history/chat_logs/answers/try_substring.md" with { type: "text" };
+import t__tools__history__chat_logs__answers__next_page from "../../prompts/tools/history/chat_logs/answers/next_page.md" with { type: "text" };
+import t__tools__history__chat_logs__answers__scope_speaker from "../../prompts/tools/history/chat_logs/answers/scope_speaker.md" with { type: "text" };
+import t__tools__history__chat_logs__answers__scope_thread from "../../prompts/tools/history/chat_logs/answers/scope_thread.md" with { type: "text" };
+import t__tools__history__chat_logs__answers__scope_time from "../../prompts/tools/history/chat_logs/answers/scope_time.md" with { type: "text" };
+import t__tools__history__chat_logs__answers__search_none from "../../prompts/tools/history/chat_logs/answers/search_none.md" with { type: "text" };
+import t__tools__history__chat_logs__answers__search_header from "../../prompts/tools/history/chat_logs/answers/search_header.md" with { type: "text" };
+import t__tools__history__chat_logs__answers__shown from "../../prompts/tools/history/chat_logs/answers/shown.md" with { type: "text" };
+import t__tools__history__chat_logs__answers__sort from "../../prompts/tools/history/chat_logs/answers/sort.md" with { type: "text" };
+import t__tools__history__chat_logs__answers__hit from "../../prompts/tools/history/chat_logs/answers/hit.md" with { type: "text" };
+import t__tools__history__chat_logs__answers__system from "../../prompts/tools/history/chat_logs/answers/system.md" with { type: "text" };
+import t__tools__history__chat_logs__answers__list_none from "../../prompts/tools/history/chat_logs/answers/list_none.md" with { type: "text" };
+import t__tools__history__chat_logs__answers__list_past_end from "../../prompts/tools/history/chat_logs/answers/list_past_end.md" with { type: "text" };
+import t__tools__history__chat_logs__answers__list_header from "../../prompts/tools/history/chat_logs/answers/list_header.md" with { type: "text" };
+import t__tools__history__chat_logs__answers__list_entry from "../../prompts/tools/history/chat_logs/answers/list_entry.md" with { type: "text" };
+import t__tools__history__chat_logs__answers__entry_head from "../../prompts/tools/history/chat_logs/answers/entry_head.md" with { type: "text" };
+import t__tools__history__chat_logs__answers__gap from "../../prompts/tools/history/chat_logs/answers/gap.md" with { type: "text" };
+import t__tools__history__chat_logs__answers__gap_length from "../../prompts/tools/history/chat_logs/answers/gap_length.md" with { type: "text" };
+import t__tools__history__chat_logs__answers__not_found from "../../prompts/tools/history/chat_logs/answers/not_found.md" with { type: "text" };
+import t__tools__history__chat_logs__answers__around_header from "../../prompts/tools/history/chat_logs/answers/around_header.md" with { type: "text" };
+import t__tools__history__chat_logs__answers__also_in from "../../prompts/tools/history/chat_logs/answers/also_in.md" with { type: "text" };
+import t__tools__history__chat_logs__answers__stopped from "../../prompts/tools/history/chat_logs/answers/stopped.md" with { type: "text" };
+import t__tools__history__chat_logs__answers__range from "../../prompts/tools/history/chat_logs/answers/range.md" with { type: "text" };
+import t__tools__history__chat_logs__answers__range_none from "../../prompts/tools/history/chat_logs/answers/range_none.md" with { type: "text" };
+import t__tools__history__chat_logs__answers__range_past_end from "../../prompts/tools/history/chat_logs/answers/range_past_end.md" with { type: "text" };
+import t__tools__history__chat_logs__answers__range_header from "../../prompts/tools/history/chat_logs/answers/range_header.md" with { type: "text" };
+import t__tools__history__chat_logs__answers__day_none from "../../prompts/tools/history/chat_logs/answers/day_none.md" with { type: "text" };
+import t__tools__history__chat_logs__answers__day_header from "../../prompts/tools/history/chat_logs/answers/day_header.md" with { type: "text" };
+import t__tools__history__chat_logs__answers__day_size from "../../prompts/tools/history/chat_logs/answers/day_size.md" with { type: "text" };
+import t__tools__history__chat_logs__answers__day_first from "../../prompts/tools/history/chat_logs/answers/day_first.md" with { type: "text" };
+import t__tools__history__chat_logs__answers__day_wakes from "../../prompts/tools/history/chat_logs/answers/day_wakes.md" with { type: "text" };
+import t__tools__history__chat_logs__answers__day_no_reply from "../../prompts/tools/history/chat_logs/answers/day_no_reply.md" with { type: "text" };
 import messages__earlier_not_shown from "../../prompts/messages/earlier_not_shown.md" with { type: "text" };
 import messages__opened_by_you from "../../prompts/messages/opened_by_you.md" with { type: "text" };
 import messages__picture_gone from "../../prompts/messages/picture_gone.md" with { type: "text" };
@@ -840,6 +887,56 @@ export const MISC_TOOL_TEXTS: readonly TextSpec[] = [
   must("subagent_no_model", t__tools__answers__subagent_no_model, "The error of an ask_ tool, and of model commands, when a subagent has no model.", { name: "the subagent", character: "the character, when one is attached" }),
 ];
 
+export const LOGS_TEXTS: readonly TextSpec[] = [
+  must("logs_time_form", t__tools__history__chat_logs__answers__time_form, "model_history's error for a time it can't read.", { field: "the argument" }),
+  must("logs_not_configured", t__tools__history__chat_logs__answers__not_configured, "chat_logs' error when the character has no conversation history."),
+  must("logs_bound_form", t__tools__history__chat_logs__answers__bound_form, "chat_logs' error for a start or end it can't read.", { field: "the argument" }),
+  must("logs_count_form", t__tools__history__chat_logs__answers__count_form, "chat_logs' error for a count below 0.", { field: "the argument" }),
+  must("logs_speaker_form", t__tools__history__chat_logs__answers__speaker_form, "chat_logs' error for a speaker it doesn't know.", { choices: "who it can be, as logs_or has them" }),
+  must("logs_or", t__tools__history__chat_logs__answers__or, "The choices in logs_speaker_form.", { list: "all but the last, with \", \" between them", last: "the last" }),
+  must("logs_no_thread", t__tools__history__chat_logs__answers__no_thread, "chat_logs' error for a thread with no messages in the logs.", { thread: "the thread asked for, in quotes", threads: "the threads there are, with \", \" between them" }),
+  must("logs_query_required", t__tools__history__chat_logs__answers__query_required, "chat_logs' error for search with no query."),
+  must("logs_start_after_end", t__tools__history__chat_logs__answers__start_after_end, "chat_logs' error for a start after the end."),
+  must("logs_overview_form", t__tools__history__chat_logs__answers__overview_form, "chat_logs' error for an overview it can't read."),
+  must("logs_one_mode", t__tools__history__chat_logs__answers__one_mode, "chat_logs' error for read given none or more than one way to read."),
+  text("logs_empty_archive", t__tools__history__chat_logs__answers__empty_archive, "After chat_logs' answer when there are no messages to read.", { span: "when the logs start and end, when there are any" }),
+  text("logs_fts_fallback", t__tools__history__chat_logs__answers__fts_fallback, "Before chat_logs' search answer when the query wasn't valid search syntax.", { error: "why", expression: "what was searched for instead" }),
+  text("logs_nothing_searched", t__tools__history__chat_logs__answers__nothing_searched, "After chat_logs' search answer when nothing matched.", { span: "when the logs start and end, when there are any", messages: "how many messages there are" }),
+  text("logs_try_wakes", t__tools__history__chat_logs__answers__try_wakes, "After chat_logs' search answer when nothing matched and the wakes thread was left out.", { thread: "the wakes thread, in quotes" }),
+  text("logs_try_substring", t__tools__history__chat_logs__answers__try_substring, "After chat_logs' search answer when nothing matched as words."),
+  text("logs_next_page", t__tools__history__chat_logs__answers__next_page, "After a page of chat_logs' answer when there is more.", { offset: "the offset to go on from" }),
+  text("logs_scope_speaker", t__tools__history__chat_logs__answers__scope_speaker, "In a search's scope, the speaker it was limited to.", { speaker: "who" }),
+  text("logs_scope_thread", t__tools__history__chat_logs__answers__scope_thread, "In a search's scope, the thread it was limited to.", { thread: "the thread" }),
+  text("logs_scope_time", t__tools__history__chat_logs__answers__scope_time, "In a search's scope, the times it was limited to.", { start: "the start given", end: "the end given" }),
+  text("logs_search_none", t__tools__history__chat_logs__answers__search_none, "The first line of chat_logs' search answer when nothing matched.", { query: "the query", substring: "set for a substring search", scope: "what it was limited to, the logs_scope_ texts with spaces between them", older: "how many match before the months searched, when any do", months: "how many months back it searched" }),
+  text("logs_search_header", t__tools__history__chat_logs__answers__search_header, "The first line of chat_logs' search answer.", { query: "the query", substring: "set for a substring search", count: "how many matched", one: "set when one did", scope: "what it was limited to", older: "how many match before the months searched, when any do", months: "how many months back it searched", shown: "which are shown, as logs_shown has it", sort: "the order, as logs_sort has it" }),
+  text("logs_shown", t__tools__history__chat_logs__answers__shown, "Which matches a page of search shows.", { from: "the first shown, when any are", to: "the last shown" }),
+  text("logs_sort", t__tools__history__chat_logs__answers__sort, "The order of a search's matches.", { oldest: "set for oldest first", best: "set for best match first" }),
+  text("logs_hit", t__tools__history__chat_logs__answers__hit, "Each match in chat_logs' search answer.", { at: "when it was said", speaker: "who said it", thread: "its thread, when it isn't main", wake: "set when it was said in a wake", snippet: "the words around the match", id: "the message's id", also: "other threads it is in" }),
+  text("logs_system", t__tools__history__chat_logs__answers__system, "Who said a message of Shore's own, in chat_logs' answers."),
+  text("logs_list_none", t__tools__history__chat_logs__answers__list_none, "chat_logs' list answer when there are none.", { thread: "the thread asked for, when one was" }),
+  text("logs_list_past_end", t__tools__history__chat_logs__answers__list_past_end, "chat_logs' list answer for an offset past the last.", { count: "how many there are", one: "set when there is one", thread: "the thread asked for, when one was", offset: "the offset given" }),
+  text("logs_list_header", t__tools__history__chat_logs__answers__list_header, "The first line of chat_logs' list answer.", { thread: "the thread asked for, when one was", from: "the first shown", to: "the last shown", count: "how many there are", zone: "the time zone" }),
+  text("logs_list_entry", t__tools__history__chat_logs__answers__list_entry, "Each conversation in chat_logs' list answer.", { span: "when it ran", turns: "how many turns it had", one: "set when it had one", thread: "its thread, when it isn't main", label: "its label, when it has one" }),
+  text("logs_entry_head", t__tools__history__chat_logs__answers__entry_head, "The line before each message chat_logs reads out.", { marked: "set on the message asked for", at: "when it was said", speaker: "who said it", wake: "set when it was said in a wake", id: "its id" }),
+  text("logs_gap", t__tools__history__chat_logs__answers__gap, "Between messages chat_logs reads out when 90 minutes or more passed between them.", { gap: "how long, as logs_gap_length has it" }),
+  text("logs_gap_length", t__tools__history__chat_logs__answers__gap_length, "How long a gap was, in logs_gap.", { days: "how many days, for two or more", hours: "how many hours, for an hour or more", minutes: "how many minutes past the hour, or in all under an hour" }),
+  text("logs_not_found", t__tools__history__chat_logs__answers__not_found, "chat_logs' read answer for a message it can't find.", { id: "the id given", thread: "the thread given, when one was" }),
+  text("logs_around_header", t__tools__history__chat_logs__answers__around_header, "The first line of chat_logs' read answer around a message.", { id: "the message", thread: "its thread", before: "how many before it are shown", after: "how many after it", zone: "the time zone" }),
+  text("logs_also_in", t__tools__history__chat_logs__answers__also_in, "After logs_around_header when the message is in other threads too.", { threads: "the threads, with \", \" between them" }),
+  text("logs_stopped", t__tools__history__chat_logs__answers__stopped, "After chat_logs' read answer around a message when not all fit.", { chars: "how many characters a read holds", earlier: "how many earlier aren't shown, when any aren't", later: "how many later aren't shown, when any aren't", one: "set when one isn't" }),
+  text("logs_range", t__tools__history__chat_logs__answers__range, "The times chat_logs reads between, in its range answers.", { start: "the start given", end: "the end given" }),
+  text("logs_range_none", t__tools__history__chat_logs__answers__range_none, "chat_logs' read answer for a range with no messages.", { thread: "the thread", range: "the times, as logs_range has them", note: "logs_empty_archive" }),
+  text("logs_range_past_end", t__tools__history__chat_logs__answers__range_past_end, "chat_logs' read answer for an offset past the last message in a range.", { thread: "the thread", range: "the times", count: "how many messages there are", offset: "the offset given" }),
+  text("logs_range_header", t__tools__history__chat_logs__answers__range_header, "The first line of chat_logs' read answer for a range.", { thread: "the thread", range: "the times", from: "the first shown", to: "the last shown", count: "how many there are", zone: "the time zone" }),
+  text("logs_day_none", t__tools__history__chat_logs__answers__day_none, "chat_logs' overview answer for a day with no messages.", { date: "the day", note: "logs_empty_archive" }),
+  text("logs_day_header", t__tools__history__chat_logs__answers__day_header, "The first line of chat_logs' overview answer.", { date: "the day", weekday: "its weekday", count: "how many conversations", one: "set when there is one", messages: "how many messages that day", zone: "the time zone" }),
+  text("logs_day_size", t__tools__history__chat_logs__answers__day_size, "How many messages a conversation in chat_logs' overview had.", { count: "how many", one: "set when it had one" }),
+  text("logs_day_first", t__tools__history__chat_logs__answers__day_first, "In chat_logs' overview, a conversation's first message from the user.", { text: "its start" }),
+  text("logs_day_wakes", t__tools__history__chat_logs__answers__day_wakes, "In chat_logs' overview, a conversation that is only messages from wakes.", { count: "how many", one: "set when there is one", char: "the character's name", user: "the user's name" }),
+  text("logs_day_no_reply", t__tools__history__chat_logs__answers__day_no_reply, "In chat_logs' overview, a conversation with nothing from the user.", { count: "how many", char: "the character's name", user: "the user's name" }),
+];
+
 const GUIDE_VALUES = { user: "the user's name", tools_off: "the tools a topic names that are off" };
 
 export const GUIDE_TEXTS: readonly TextSpec[] = [
@@ -895,7 +992,7 @@ export const TOOL_TEXTS: readonly TextSpec[] = Object.entries(TOOL_TEXTS_SHIPPED
   ...Object.entries(parameters).map(([parameter, shipped]) => text(parameterText(tool, parameter), shipped, `The description of the ${parameter} parameter of ${tool}.`, TOOL_VALUES)),
 ]);
 
-export const TEXTS: readonly TextSpec[] = [...MESSAGE_TEXTS, ...SYSTEM_TEXTS, ...WAKE_TEXTS, ...TOOL_TEXTS, ...OTHER_TEXTS, ...IMAGE_TEXTS, ...READ_TEXTS, ...MCP_TEXTS, ...SEND_TEXTS, ...ARG_TEXTS, ...WAKE_TOOL_TEXTS, ...TOOL_COMMON_TEXTS, ...ARG_COMMON_TEXTS, ...THREADS_TOOL_TEXTS, ...TRIGGERS_TOOL_TEXTS, ...FILE_TEXTS, ...EDIT_TEXTS, ...PICTURE_SEND_TEXTS, ...TOOL_RESULT_TEXTS, ...TOOL_OUTPUT_TEXTS, ...MCP_ERROR_TEXTS, ...TOOL_ARG_TEXTS, ...PIN_TEXTS, ...MISC_TOOL_TEXTS, ...GUIDE_TEXTS];
+export const TEXTS: readonly TextSpec[] = [...MESSAGE_TEXTS, ...SYSTEM_TEXTS, ...WAKE_TEXTS, ...TOOL_TEXTS, ...OTHER_TEXTS, ...IMAGE_TEXTS, ...READ_TEXTS, ...MCP_TEXTS, ...SEND_TEXTS, ...ARG_TEXTS, ...WAKE_TOOL_TEXTS, ...TOOL_COMMON_TEXTS, ...ARG_COMMON_TEXTS, ...THREADS_TOOL_TEXTS, ...TRIGGERS_TOOL_TEXTS, ...FILE_TEXTS, ...EDIT_TEXTS, ...PICTURE_SEND_TEXTS, ...TOOL_RESULT_TEXTS, ...TOOL_OUTPUT_TEXTS, ...MCP_ERROR_TEXTS, ...TOOL_ARG_TEXTS, ...PIN_TEXTS, ...MISC_TOOL_TEXTS, ...LOGS_TEXTS, ...GUIDE_TEXTS];
 
 export const TEXT_SPECS: ReadonlyMap<string, TextSpec> = new Map(TEXTS.map((spec) => [spec.name, spec]));
 

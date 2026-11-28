@@ -32,10 +32,11 @@ export function kindFor(callType: string): string {
 }
 
 export function utcBound(
+  texts: Texts,
   input: Record<string, unknown>,
   field: string,
 ): string | undefined {
-  const bound = parseTimeBound(input, field);
+  const bound = parseTimeBound(texts, input, field);
   if (bound === undefined) return undefined;
 
   const m = /^(.+?)([+-]\d{2}:\d{2})$/.exec(bound.rfc3339);
@@ -92,8 +93,8 @@ export async function handleModelHistory(
     throw new InvalidArgs(texts.always("history_not_configured"));
   }
 
-  const since = utcBound(input, "start_time");
-  const until = utcBound(input, "end_time");
+  const since = utcBound(texts, input, "start_time");
+  const until = utcBound(texts, input, "end_time");
   if (since !== undefined && until !== undefined && since > until) {
     throw new InvalidArgs(texts.always("history_range_backwards"));
   }
