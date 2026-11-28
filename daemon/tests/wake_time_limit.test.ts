@@ -237,6 +237,7 @@ test("a wake in a thread runs to the limit its trigger set, is warned a quarter 
       ]);
       expect((await world.runtime.registry.getOrCreate("ada", "ring")).messages().at(-1)?.content).toBe("More tomorrow.");
       expect(world.runtime.autonomy.log("ada", 100).map((event) => event.kind)).not.toContain("timeout");
+      expect(world.runtime.autonomy.log("ada", 100).filter((event) => event.detail.startsWith("Wrap-up")).map((event) => event.detail)).toEqual(["Wrap-up nudge on round 5, with about 10 minutes left"]);
     },
   );
 });

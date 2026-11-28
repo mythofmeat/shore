@@ -92,13 +92,13 @@ export function recordWakeEnd(characterDir: string, thread: string, before: Wake
 
 export function wakeStopNote(texts: Texts, stop: WakeStop, userName: string, timeZone: string): string | undefined {
   const values = {
-    at: formatWallClock(stop.at, timeZone),
+    at: formatWallClock(texts, stop.at, timeZone),
     rounds: stop.rounds === 1 ? "1 round" : `${String(stop.rounds)} rounds`,
     sent: stop.sent ? "yes" : undefined,
     user: userName,
     last: stop.last,
   };
-  if (stop.why === "time") return texts.render("last_wake_time", { ...values, limit: spanPhrase(stop.limitMs) });
+  if (stop.why === "time") return texts.render("last_wake_time", { ...values, limit: spanPhrase(texts, stop.limitMs) });
   if (stop.why === "failed") return texts.render("last_wake_failed", { ...values, error: stop.error });
   return texts.render(`last_wake_${stop.why}`, values);
 }

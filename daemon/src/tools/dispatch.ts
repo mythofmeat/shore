@@ -53,7 +53,7 @@ export interface ToolContext {
   activityStats?: ActivityStatsLookup;
 
   historyIndexPath?: string;
-  userName?: string;
+  userName: string;
 
   deferEdit?: (path: string) => Promise<void> | void;
   stoppedOutput?: (output: ProcessStreams) => void;
@@ -173,7 +173,7 @@ export async function dispatchTool(
           texts: ctx.texts,
           dataDir: dirname(ctx.historyDbPath),
           character: ctx.characterName,
-          userName: ctx.userName ?? "the user",
+          userName: ctx.userName,
           ...(ctx.thread === undefined ? {} : { thread: ctx.thread }),
         },
         timeZone: hostZone(),
@@ -184,7 +184,7 @@ export async function dispatchTool(
       });
 
     case "list_triggers":
-      return handleListTriggers(ctx.texts, ctx.triggers?.(), ctx.userName ?? "the user");
+      return handleListTriggers(ctx.texts, ctx.triggers?.(), ctx.userName);
 
     case "wake_in_thread": {
       const handOff = ctx.wakeInThread;
@@ -192,7 +192,7 @@ export async function dispatchTool(
       return handleWakeInThread(ctx.texts, args, ctx.thread, {
         handOff: handOff === undefined ? undefined : (request): WakeHandOff => [...reach.open, ...reach.sealed].includes(request.thread) ? handOff(request) : { kind: "no_thread" },
         callOff: ctx.callOffWake,
-      }, ctx.userName ?? "the user");
+      }, ctx.userName);
     }
 
     case "send_message":

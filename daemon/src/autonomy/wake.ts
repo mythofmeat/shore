@@ -42,7 +42,7 @@ import { sealedListNote, sealedWakeNote } from "./sealed_notes.ts";
 import { threadDigest, type ThreadReader } from "./thread_digest.ts";
 import { Outbox, postElsewhere, postMessage, reachableThreads } from "./outbox.ts";
 import { pushRefusal, type PushOutcome } from "./push.ts";
-import { spanPhrase, timeLeftPhrase, triggerFiredNote, wakeNewsNote } from "./wake_shape.ts";
+import { spanPhrase, timeLeftText, triggerFiredNote, wakeNewsNote } from "./wake_shape.ts";
 import { recordWakeEnd, stopOf, wakeRecord, wakeStopNote, WakeWords, type WakeEnding } from "./wake_record.ts";
 import { keptWorkingSummary, withoutWakeWorking } from "./wake_working.ts";
 
@@ -104,15 +104,15 @@ export function wrapUpMsFor(limitMs: number): number {
 }
 
 export function wakeWrapUpText(texts: Texts, msLeft: number, rounds: number, userName: string): string | undefined {
-  return texts.render("wrap_up", { time_left: timeLeftPhrase(msLeft), last_round: rounds === 1 ? "yes" : undefined, rounds: String(rounds), user: userName });
+  return texts.render("wrap_up", { time_left: timeLeftText(texts, msLeft), last_round: rounds === 1 ? "yes" : undefined, rounds: String(rounds), user: userName });
 }
 
 export function wakeStoppedNote(texts: Texts, ending: WakeEnding, userName: string, limitMs: number, fired: readonly TriggerFiring[]): string | undefined {
   switch (ending.why) {
     case "interrupted":
-      return texts.render("stopped_interrupted", { user: userName, quiet: spanPhrase(WAKE_QUIET_MS), triggers: fired.every(byTrigger) ? "yes" : undefined });
+      return texts.render("stopped_interrupted", { user: userName, quiet: spanPhrase(texts, WAKE_QUIET_MS), triggers: fired.every(byTrigger) ? "yes" : undefined });
     case "time":
-      return texts.render("stopped_time", { limit: spanPhrase(limitMs) });
+      return texts.render("stopped_time", { limit: spanPhrase(texts, limitMs) });
     case "rounds":
       return texts.render("stopped_rounds");
     case "failed":
@@ -145,7 +145,7 @@ export async function lastWroteNote(
     latest = { id: thread.id, label: thread.label, at };
   }
   if (latest === undefined) return undefined;
-  const values = { user: userName, length: lengthPhrase((nowMs - latest.at) / 1000), thread: latest.id, label: latest.label };
+  const values = { user: userName, length: lengthPhrase(texts, (nowMs - latest.at) / 1000), thread: latest.id, label: latest.label };
   return texts.render(latest.id === here ? "last_wrote_here" : latest.id === home ? "last_wrote_home" : "last_wrote_side", values);
 }
 
@@ -259,14 +259,14 @@ export async function runWake(character: string, config: LoadedConfig, wake: Wak
       }
     }
     const rendered = texts.render("wake", {
-      now: formatWallClock(nowMs, timeZone),
+      now: formatWallClock(texts, nowMs, timeZone),
       user: userName,
       thread,
       home,
-      time_limit: spanPhrase(wake.limitMs),
-      wrap_up_after: spanPhrase(wake.limitMs - wrapUpMs),
+      time_limit: spanPhrase(texts, wake.limitMs),
+      wrap_up_after: spanPhrase(texts, wake.limitMs - wrapUpMs),
       max_rounds: maxToolRounds === undefined ? undefined : String(maxToolRounds),
-      resume_after: spanPhrase(WAKE_QUIET_MS),
+      resume_after: spanPhrase(texts, WAKE_QUIET_MS),
       working_thread: log?.engine.thread,
       working_here: log === undefined ? "yes" : undefined,
       send_message: toolEnabled(config.app.tools, "send_message") ? "yes" : undefined,
@@ -401,7 +401,7 @@ export async function runWake(character: string, config: LoadedConfig, wake: Wak
       if (ending.why !== "failed") {
         note(ending.why === "interrupted" ? "wake" : "timeout", ending.why === "interrupted"
           ? `Wake in "${thread}" stopped for ${userName}'s message`
-          : `Wake in "${thread}" ${ending.why === "time" ? `reached its limit of ${spanPhrase(wake.limitMs)}` : "used up its rounds"} and was stopped`);
+          : `Wake in "${thread}" ${ending.why === "time" ? `reached its limit of ${spanPhrase(new Texts(), wake.limitMs)}` : "used up its rounds"} and was stopped`);
       }
       const stoppedNote = wakeStoppedNote(texts, ending, userName, wake.limitMs, wake.fired);
       if (stoppedNote !== undefined) {

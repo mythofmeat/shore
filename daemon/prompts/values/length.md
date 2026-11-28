@@ -1,0 +1,1 @@
+{{#if a_minute}}a minute{{/if}}{{#if minutes}}{{minutes}} minutes{{/if}}{{#if about_an_hour}}about an hour{{/if}}{{#if hours}}{{hours}} hours{{/if}}{{#if about_a_day}}about a day{{/if}}{{#if days}}{{days}} days{{/if}}

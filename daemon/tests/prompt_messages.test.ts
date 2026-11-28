@@ -273,5 +273,19 @@ test("the time line names the thread the user was last in only when that time ca
 });
 
 test("a length of time is told in whole minutes under an hour, never less than a minute", () => {
-  expect([0, 29, 90, 3_540].map(lengthPhrase)).toEqual(["a minute", "a minute", "2 minutes", "59 minutes"]);
+  expect([0, 29, 60, 90, 3_540].map((secs) => lengthPhrase(new Texts(), secs))).toEqual(["a minute", "a minute", "a minute", "2 minutes", "59 minutes"]);
+});
+
+test("the time line and statuses give lengths of time and day names in the user's words, and with day names off a time has none", () => {
+  const back = said("user", "back", 150, {
+    last_elsewhere: { thread: "garden", at: new Date(T0 + 140 * MINUTE).toISOString() },
+    presence: { statuses: [{ status: "home", set_at: new Date(T0).toISOString() }], changed_at: new Date(T0).toISOString() },
+  });
+  const notes = (texts: Texts): string[] | undefined => shown([said("user", "before", 0), back], { user_timestamp_mode: "always", texts }).at(-1)?.[1].split(/[|\n]/).filter((block) => block.startsWith("["));
+  const theirs = Texts.from({
+    length: "{{#if a_minute}}1 min{{/if}}{{#if minutes}}{{minutes}} min{{/if}}{{#if about_an_hour}}~1 h{{/if}}{{#if hours}}{{hours}} h{{/if}}{{#if about_a_day}}~1 d{{/if}}{{#if days}}{{days}} d{{/if}}",
+    weekday: "{{#if thursday}}Thu{{/if}}{{#if friday}}Fri{{/if}}",
+  });
+  expect(notes(theirs)).toEqual(['[Their status: "home" for 3 h]', "[3 h later · Fri 2026-10-30 · 2:30 PM · last in garden 10 min ago]"]);
+  expect(notes(Texts.from({ weekday: null }))).toEqual(['[Their status: "home" for 3 hours]', "[3 hours later · 2026-10-30 · 2:30 PM · last in garden 10 minutes ago]"]);
 });

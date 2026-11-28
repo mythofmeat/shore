@@ -83,7 +83,7 @@ export class Outbox {
     const refused = this.#setup.pushRefusal();
     if (refused === undefined) return;
     if (refused.kind === "not_set_up") throw new ToolIoError(texts.always("send_push_not_set_up", { user: userName }));
-    throw new ToolIoError(texts.always("send_push_too_soon", { last: formatWallClock(refused.lastAt, timeZone), next: formatWallClock(refused.nextAt, timeZone) }));
+    throw new ToolIoError(texts.always("send_push_too_soon", { last: formatWallClock(texts, refused.lastAt, timeZone), next: formatWallClock(texts, refused.nextAt, timeZone) }));
   }
 }
 

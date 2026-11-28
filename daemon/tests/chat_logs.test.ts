@@ -394,7 +394,7 @@ describe("listing a character's archived conversations", () => {
 
   test("says there are none before anything is archived, and counts one as one", async () => {
     const root = testTmp(`chat-logs-list-${crypto.randomUUID()}`);
-    const options: ChatLogOptions = { texts: new Texts(), character: "frank", dbPath: join(root, "data", HISTORY_DB_FILE), dataDir: join(root, "data"), timeZone: "UTC" };
+    const options: ChatLogOptions = { texts: new Texts(), userName: "user", character: "frank", dbPath: join(root, "data", HISTORY_DB_FILE), dataDir: join(root, "data"), timeZone: "UTC" };
     expect(await handleChatLogs({ action: "list" }, join(root, "data", "frank"), options)).toBe("No archived conversations.");
     expect(existsSync(options.dbPath)).toBe(false);
     const w = await world();

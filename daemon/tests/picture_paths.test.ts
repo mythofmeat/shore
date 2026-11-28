@@ -30,7 +30,7 @@ async function world() {
   await mkdir(workspaceDir, { recursive: true });
   await mkdir(data, { recursive: true });
   const ctx: ToolContext = {
-    texts: new Texts(),
+    texts: new Texts(), userName: "eve",
     workspaceDir, characterName: "ada", characterDataDir: join(data, "ada"), cacheDir: cache,
     conversationDir: join(data, "ada", "threads", "main"), historyDbPath: join(data, "shore.db"), configDir: root,
   };

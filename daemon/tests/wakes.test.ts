@@ -4534,10 +4534,10 @@ test("with every text Shore writes pointed at a marker, a reply carrying every k
 
   const toolTexts = ALL_TOOLS.flatMap((tool) => [toolText(tool.name), ...Object.keys((tool.parameters as { properties: Record<string, unknown> }).properties).map((parameter) => parameterText(tool.name, parameter))]);
   expect([...given.keys()].filter((name) => !toolTexts.includes(name)).sort()).toEqual([
-    "digest_first", "digest_user", "digest_you", "fired_trigger", "last_wake_interrupted", "last_wrote_here", "last_wrote_home",
+    "digest_first", "digest_user", "digest_you", "exact_length", "fired_trigger", "last_wake_interrupted", "last_wrote_here", "last_wrote_home", "length",
     "opened_by_you", "picture", "picture_gone", "picture_send_problem", "pictures_not_sent", "pinned_file", "read_end", "read_line_cut", "read_lines", "sent_picture", "status", "status_cleared", "status_item",
     "stopped_interrupted", "thread", "thread_pins", "time", "time_later", "wake", "wake_opener", "wake_opener_kept", "wake_running", "wake_running_own_time",
-    "wake_status", "wake_turn", "working_kept", "working_kept_unfinished",
+    "wake_status", "wake_turn", "weekday", "working_kept", "working_kept_unfinished",
   ].sort());
   expect(toolTexts.filter((name) => !given.has(name))).toEqual([]);
   const mismatched = [...given].flatMap(([name, calls]) => {

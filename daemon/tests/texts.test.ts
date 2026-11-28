@@ -118,7 +118,7 @@ test("the list names every text with whose wording is in use, a file of the user
   const row = (name: string) => required(listed.find((entry) => entry.name === name));
   expect(row("time")).toEqual({
     name: "time", place: required(TEXT_SPECS.get("time")).where, owner: "yours", required: false, wording: "[now: {{now}}]", shipped: "[{{now}}]",
-    file: join(dir, "time.md"), error: null, values: [{ name: "now", about: "the time, like Friday 2026-10-30 · 12:00 PM" }], changed: false, previous: null,
+    file: join(dir, "time.md"), error: null, values: [{ name: "now", about: "the time, like Friday 2026-10-30 · 12:00 PM, with the day named as weekday has it" }], changed: false, previous: null,
   });
   expect([row("status").owner, row("status").wording, row("status").shipped]).toEqual(["off", null, "[Their status: {{statuses}}]"]);
   expect([row("label").owner, row("label").wording, row("label").required, row("label").error]).toEqual(["yours", null, true, `text "label" could not be read at ${join(dir, "gone.md")}: ENOENT: no such file or directory, open '${join(dir, "gone.md")}'`]);

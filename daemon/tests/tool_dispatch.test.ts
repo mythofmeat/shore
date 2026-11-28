@@ -25,7 +25,7 @@ async function workspace(): Promise<ToolContext> {
   writeFileSync(join(dir, "long.md"), Array.from({ length: 200 }, (_, line) => `line ${String(line)} of the keeper's log`).join("\n"));
   writeFileSync(join(dir, "note.md"), "The lamp:\n\n![[lamp.png]]\n");
   await Bun.write(join(dir, "lamp.png"), transparentPng(64, 64));
-  return { texts: new Texts(), workspaceDir: dir, characterName: "ada", characterDataDir: dir, conversationDir: dir, historyDbPath: join(dir, "shore.db"), configDir: dir };
+  return { texts: new Texts(), userName: "eve", workspaceDir: dir, characterName: "ada", characterDataDir: dir, conversationDir: dir, historyDbPath: join(dir, "shore.db"), configDir: dir };
 }
 
 test("a read is held to the result size, the inline picture budget and the picture settings the turn gives it", async () => {

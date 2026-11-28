@@ -20,7 +20,7 @@ async function world(media: ToolMediaItem[], options: { cache?: boolean; maxByte
   await mkdir(root, { recursive: true });
   const frames: ServerMessage[] = [];
   const ctx: ToolContext = {
-    texts: new Texts(), characterName: "ada", workspaceDir: join(root, "workspace"), characterDataDir: root, conversationDir: root,
+    texts: new Texts(), userName: "eve", characterName: "ada", workspaceDir: join(root, "workspace"), characterDataDir: root, conversationDir: root,
     historyDbPath: join(root, "h.db"), configDir: root, ...(options.cache === true ? { cacheDir: join(root, "cache") } : {}),
     mcpCall: () => Promise.resolve(carryToolMedia({ value: options.value ?? "looked", media, extra: [] })),
   };
@@ -113,7 +113,7 @@ test("a picture read made smaller before it reached the model says so, even when
   const workspaceDir = join(root, "workspace");
   await mkdir(workspaceDir, { recursive: true });
   await writeFile(join(workspaceDir, "padded.png"), withTextChunk(transparentPng(40, 40), 5 * 1024 * 1024));
-  const ctx: ToolContext = { texts: new Texts(), characterName: "ada", workspaceDir, characterDataDir: root, conversationDir: root, historyDbPath: join(root, "h.db"), configDir: root };
+  const ctx: ToolContext = { texts: new Texts(), userName: "eve", characterName: "ada", workspaceDir, characterDataDir: root, conversationDir: root, historyDbPath: join(root, "h.db"), configDir: root };
   const exec: ToolExecution = { ctx, sendDirect: () => {}, limits: { timeout_ms: 0, max_result_chars: 0 }, now: () => "2026-11-24T00:00:00Z", newMessageId: () => "m_1" };
   const run = await runToolUse({ id: "t1", name: "read", input: { file_path: "padded.png" } }, exec);
   expect(run.output).toContain(`[${join(workspaceDir, "padded.png")}: reduced from 40×40 PNG`);

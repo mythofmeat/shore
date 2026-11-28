@@ -312,6 +312,10 @@ describe("an own-time thread kept from an older Shore, in the character's list o
     const listed = await handleListThreads({ texts: new Texts(), dataDir: data, character: "frank", userName: "sam", timeZone: "UTC", now: () => nowMs });
     expect(listed).toContain("  sam last wrote here Monday 2026-11-02 · 5:20 AM, 2 hours ago");
     expect(listed).toContain("  sam last wrote here Monday 2026-11-02 · 6:50 AM, a minute ago");
+    const theirs = Texts.from({ length: "{{#if a_minute}}1 min{{/if}}{{#if hours}}{{hours}} h{{/if}}", weekday: "{{#if monday}}Mon{{/if}}" });
+    const reworded = await handleListThreads({ texts: theirs, dataDir: data, character: "frank", userName: "sam", timeZone: "UTC", now: () => nowMs });
+    expect(reworded).toContain("  sam last wrote here Mon 2026-11-02 · 5:20 AM, 2 h ago");
+    expect(reworded).toContain("  sam last wrote here Mon 2026-11-02 · 6:50 AM, 1 min ago");
   });
 });
 
@@ -588,6 +592,7 @@ describe("chat logs across threads", () => {
       thread,
       indexPath: join(config.dirs.cache, "chat_logs.db"),
       timeZone: "UTC",
+      userName: "user",
     });
 
     const fromMain = await handleSearchChatLogs({ query: "Mara", all_time: true }, threadDataDir(data, "frank", "main"), options("main"));
@@ -761,7 +766,7 @@ describe("chat logs across threads", () => {
       message("a1", "I repainted the lighthouse door", NOW),
     ]));
     const search = async (fresh: boolean | undefined): Promise<string> => await handleSearchChatLogs({ query: "lighthouse door", all_time: true }, threadDataDir(data, "frank", "main"), {
-      texts: new Texts(),
+      texts: new Texts(), userName: "user",
       character: "frank",
       dbPath: join(data, HISTORY_DB_FILE),
       dataDir: data,

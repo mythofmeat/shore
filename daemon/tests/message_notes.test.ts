@@ -219,7 +219,7 @@ test("a reply's request is put together in the time zone it is given, or the hos
   const kiritimati = await built("Pacific/Kiritimati");
   expect(texts(kiritimati.request.messages[0])).toEqual([`${there}\n\nhello`]);
   expect(kiritimati.sent).toEqual([{ msg_id: "u1", notes: [start(there)] }]);
-  const host = `[${formatWallClock(T0, hostZone())}]`;
+  const host = `[${formatWallClock(new Texts(), T0, hostZone())}]`;
   expect((await built()).sent).toEqual([{ msg_id: "u1", notes: [start(host)] }]);
 });
 
