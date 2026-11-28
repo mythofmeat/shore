@@ -264,7 +264,7 @@ test("only a trigger is dropped from a stopped wake: a hand-off and a start by h
   readsTriggers(w.service, file);
   stoppedBy(w, "main");
   w.service.wakeFor("ada", fired("lamp"));
-  w.service.wakeFor("ada", fired("lamp", { from: "garden" }));
+  w.service.requestWake("ada", fired("lamp", { from: "garden", thread: "main" }), false);
   w.service.wakeNow("ada");
   await w.service.runDue();
   file.text = LAMP.replace("1h", "2h");
@@ -691,20 +691,81 @@ test("a wake asked for at a time is kept while the character is dormant before t
   expect([off.ran, off.service.askedWakes("ada")]).toEqual([[], []]);
 });
 
-test("a wake asked for in a thread while the one waiting there is about to start, behind another thread's wake, is kept for afterwards", async () => {
-  const { service, ran, during, restart } = await world();
-  service.wakeFor("ada", fired("lamp"));
-  service.requestWake("ada", asked("garden", { reason: "First." }), false);
-  during.run = (wake) => {
-    if (wake.thread === "main") service.requestWake("ada", asked("garden", { reason: "Second.", at: T0 + MINUTE }), false);
+async function behindLamp(meanwhile: (service: AutonomyService) => unknown): Promise<{ answer: unknown; reasons: string[][]; w: World }> {
+  const w = await world();
+  const reasons: string[][] = [];
+  let answer: unknown;
+  w.service.wakeFor("ada", fired("lamp"));
+  w.service.requestWake("ada", asked("garden", { reason: "First." }), false);
+  w.during.run = (wake) => {
+    reasons.push(wake.fired.map((firing) => firing.reason));
+    if (wake.thread === "main") answer = meanwhile(w.service);
     return { events: [] };
   };
-  await service.runDue();
-  expect(ran.map((wake) => wake.thread)).toEqual(["main", "garden"]);
-  expect(service.askedWakes("ada").map((firing) => firing.reason)).toEqual(["Second."]);
-  await restart();
-  await service.runDue();
-  expect(ran.map((wake) => wake.thread)).toEqual(["main", "garden", "garden"]);
+  await w.service.runDue();
+  return { answer, reasons, w };
+}
+
+test("a wake asked for that has come due behind another thread's wake is waiting until it starts: asking again there is refused, overwrite puts the new one in its place, and one called off doesn't start", async () => {
+  const first = asked("garden", { reason: "First." });
+  const second = asked("garden", { reason: "Second.", at: T0 + MINUTE });
+  const refused = await behindLamp((service) => service.requestWake("ada", second, false));
+  expect(refused.answer).toEqual({ kind: "waiting", waiting: first });
+  expect(refused.reasons).toEqual([["the lamp is low"], ["First."]]);
+
+  const replaced = await behindLamp((service) => service.requestWake("ada", second, true));
+  expect(replaced.answer).toEqual({ kind: "queued", replaced: first });
+  expect(replaced.reasons).toEqual([["the lamp is low"]]);
+  await replaced.w.restart();
+  await replaced.w.service.runDue();
+  expect(replaced.reasons).toEqual([["the lamp is low"], ["Second."]]);
+
+  const taken = await behindLamp((service) => service.callOffWake("ada", "garden", "main"));
+  expect(taken.answer).toEqual(first);
+  await taken.w.restart();
+  await taken.w.service.runDue();
+  expect([taken.reasons, taken.w.service.askedWakes("ada")]).toEqual([[["the lamp is low"]], []]);
+});
+
+test("a wake asked for that is put in another's place, or called off and asked for again, in the millisecond it was asked for doesn't start, while what waits for that thread and others still does", async () => {
+  const meanwhile = async (change: (service: AutonomyService) => void): Promise<string[][]> => {
+    const w = await world();
+    const reasons: string[][] = [];
+    w.during.run = (wake) => {
+      reasons.push([wake.thread, ...wake.fired.map((firing) => firing.reason)]);
+      return { events: [] };
+    };
+    w.service.requestWake("ada", asked("garden"), false);
+    w.service.requestWake("ada", asked("ring", { reason: "First." }), false);
+    w.service.wakeFor("ada", fired("song", { thread: "ring" }));
+    change(w.service);
+    await w.service.runDue();
+    return reasons;
+  };
+  const ran = [["garden", "Back to garden."], ["ring", "the lamp is low", "Second."]];
+  expect(await meanwhile((service) => { service.requestWake("ada", asked("ring", { reason: "Second." }), true); })).toEqual(ran);
+  expect(await meanwhile((service) => {
+    service.callOffWake("ada", "ring", "main");
+    service.requestWake("ada", asked("ring", { reason: "Second." }), false);
+  })).toEqual(ran);
+});
+
+test("a wake asked for is called off in its own thread only, stays off across a restart, and the log says so, while one that has started, or a thread nothing was asked for in, has nothing to call off", async () => {
+  const w = await world();
+  w.service.requestWake("ada", asked("ring", { startsAt: T0 + HOUR }), false);
+  w.service.requestWake("ada", asked("garden", { startsAt: T0 + HOUR }), false);
+  expect(w.service.callOffWake("ada", "ring", "study")).toEqual(asked("ring", { startsAt: T0 + HOUR }));
+  expect(w.service.callOffWake("ada", "ring", "study")).toBeUndefined();
+  expect(w.service.callOffWake("ada", "main", "study")).toBeUndefined();
+  expect(calledOff(w)).toEqual(['Wake asked for in "ring" called off from "study": Back to ring.']);
+  await w.restart();
+  expect(w.service.askedWakes("ada").map((firing) => firing.thread)).toEqual(["garden"]);
+  expect(w.service.requestWake("ada", asked("ring", { reason: "Sooner.", at: T0 + MINUTE }), false)).toEqual({ kind: "queued", replaced: undefined });
+
+  w.clock.now = T0 + HOUR;
+  await w.service.runDue();
+  expect(w.ran.map((wake) => wake.thread)).toEqual(["garden", "ring"]);
+  expect(w.service.callOffWake("ada", "garden", "study")).toBeUndefined();
 });
 
 test("a wake asked for still runs when Shore can't save it, the failure is logged, and the character's later wakes go on", async () => {

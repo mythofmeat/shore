@@ -2927,7 +2927,54 @@ test("a second wake asked for in a thread is refused while the first is still wa
   }, handOff());
 });
 
-test("a wake the character asked for and the user interrupted is not a request still waiting: a new request for its thread is taken, overwriting leaves the interrupted wake be, and it picks up with both", async () => {
+test("the character calls off a wake it asked for that hasn't started, from a reply, from a wake that was itself handed over, or with its triggers switched off, and nothing wakes it there then", async () => {
+  await withCharacter(async ({ runtime, script, say, thread, reload }) => {
+    await runtime.registry.createThread("ada", "ring");
+    await runtime.registry.createThread("ada", "garden");
+    await say("hello");
+    const reply = async (input: Record<string, unknown>): Promise<{ text: unknown; failed: boolean } | undefined> => {
+      script.replyTool = { name: "wake_in_thread", input };
+      await say("go on");
+      return lastToolResult(await thread("main"));
+    };
+    const calledOff = (): string[] => runtime.autonomy.log("ada", 100).filter((event) => event.kind === "wake").map((event) => event.detail);
+    expect(await reply({ thread: "main", reason: "See how the bread rose.", when: "in 3 hours" })).toMatchObject({ failed: false });
+    at(1);
+    expect(await reply({ thread: "main", call_off: true })).toEqual({
+      text: 'Called off the wake you had waiting in "main", asked for from "main" at Friday 2026-10-30 · 12:00 PM to start at Friday 2026-10-30 · 3:00 PM: See how the bread rose.', failed: false,
+    });
+    expect(await reply({ thread: "main", call_off: true })).toEqual({ text: 'io: you have no wake waiting in "main" to call off: only a wake you asked for that hasn\'t started can be', failed: true });
+    expect(calledOff()).toEqual(['Wake asked for in "main" called off from "main": See how the bread rose.']);
+
+    at(2);
+    expect(await reply({ thread: "garden", reason: "Water the beans.", when: "in 3 hours" })).toMatchObject({ failed: false });
+    expect(await reply({ thread: "ring", reason: "Tell part two." })).toMatchObject({ failed: false });
+    script.beatTool = { name: "wake_in_thread", input: { thread: "garden", call_off: true } };
+    script.sends = undefined; script.closing = "Done.";
+    at(20);
+    await runtime.autonomy.runDue();
+    expect(script.wakes.map((request) => request.context?.thread)).toEqual(["ring", "ring"]);
+    expect(lastToolResult(await thread("wakes"))).toEqual({
+      text: 'Called off the wake you had waiting in "garden", asked for from "main" at Friday 2026-10-30 · 12:02 PM to start at Friday 2026-10-30 · 3:02 PM: Water the beans.', failed: false,
+    });
+    expect(calledOff().at(-1)).toBe('Wake asked for in "garden" called off from "ring": Water the beans.');
+
+    at(21);
+    expect(await reply({ thread: "ring", reason: "Tell part three.", when: "in 3 hours" })).toMatchObject({ failed: false });
+    runtime.registry.effectiveConfig("ada").app.triggers.enabled = false;
+    await reload();
+    expect(await reply({ thread: "ring", reason: "Tell part four." })).toEqual({ text: "io: peggy has your triggers switched off, so nothing would wake you", failed: true });
+    expect(await reply({ thread: "ring", call_off: true })).toMatchObject({ text: 'Called off the wake you had waiting in "ring", asked for from "main" at Friday 2026-10-30 · 12:21 PM to start at Friday 2026-10-30 · 3:21 PM: Tell part three.', failed: false });
+    runtime.registry.effectiveConfig("ada").app.triggers.enabled = true;
+    await reload();
+    expect(runtime.autonomy.askedWakes("ada")).toEqual([]);
+    at(240);
+    await runtime.autonomy.runDue();
+    expect(script.wakes).toHaveLength(2);
+  }, handOff());
+});
+
+test("a wake the character asked for and the user interrupted is not a request still waiting: it can't be called off, a new request for its thread is taken, overwriting leaves the interrupted wake be, and it picks up with both", async () => {
   await withCharacter(async ({ runtime, script, say, thread }) => {
     await runtime.registry.createThread("ada", "ring");
     await say("hello");
@@ -2955,6 +3002,7 @@ test("a wake the character asked for and the user interrupted is not a request s
     expect((await thread("ring")).some((message) => message.content.includes("Shore stopped it here for you to answer them"))).toBe(true);
 
     at(13);
+    expect(await ask({ thread: "ring", call_off: true })).toEqual({ text: 'io: you have no wake waiting in "ring" to call off: only a wake you asked for that hasn\'t started can be', failed: true });
     expect(await ask({ thread: "ring", reason: "And the fox's name." })).toEqual({ text: granted, failed: false });
     at(14);
     const later = 'asked for from "main" at Friday 2026-10-30 · 12:13 PM: And the fox\'s name.';
@@ -3121,7 +3169,7 @@ test("a wake in a thread takes in what fires for that thread while it runs, leav
     await held.started.promise;
     at(41);
     expect(runtime.autonomy.wakeFor("ada", fired("encore", 41, "ring"))).toBe("handed");
-    expect(runtime.autonomy.wakeFor("ada", { ...fired("", 41, "ring"), from: "main" })).toBe("queued");
+    expect(runtime.autonomy.requestWake("ada", { ...fired("", 41, "ring"), from: "main" }, false)).toEqual({ kind: "queued", replaced: undefined });
     const asking = say("wait", "ring");
     held.release.resolve();
     await waking;
@@ -3149,7 +3197,7 @@ test("a wake in a thread takes in what fires for that thread while it runs, leav
   });
 });
 
-test("what is waiting for a thread where a wake is running starts together once that wake is over, as one wake that opens with each reason and runs to the longest limit, a repeat counted once", async () => {
+test("a wake asked for in a thread where a wake is running waits for that wake to end and starts as a wake of its own, on the limit it asked for, and a second one asked for there meanwhile is refused", async () => {
   await withCharacter(async ({ runtime, script, say }) => {
     const asked = (reason: string, minutes: number, limitMs: number) => ({ name: "", from: "main", reason, at: T0 + minutes * MINUTE, thread: "ring", limitMs });
     const show = (reason: string, minutes: number) => ({ name: "show", reason, at: T0 + minutes * MINUTE, thread: "ring" });
@@ -3167,10 +3215,9 @@ test("what is waiting for a thread where a wake is running starts together once 
     expect(textOf(script.wakes[0] as SidecarRequest)).toContain('[Your trigger "show" fired at Friday 2026-10-30 · 12:10 PM: the late show]');
     expect(textOf(script.wakes[0] as SidecarRequest)).not.toContain("the early show");
     at(11);
-    expect(runtime.autonomy.wakeFor("ada", asked("carry on with the first plan", 11, 45 * MINUTE))).toBe("queued");
+    expect(runtime.autonomy.requestWake("ada", asked("carry on with the first plan", 11, 90 * MINUTE), false)).toEqual({ kind: "queued", replaced: undefined });
     at(12);
-    expect(runtime.autonomy.wakeFor("ada", asked("carry on with the second plan", 12, 90 * MINUTE))).toBe("queued");
-    expect(runtime.autonomy.wakeFor("ada", asked("carry on with the second plan", 12, 90 * MINUTE))).toBe("queued");
+    expect(runtime.autonomy.requestWake("ada", asked("carry on with the second plan", 12, 45 * MINUTE), false)).toEqual({ kind: "waiting", waiting: asked("carry on with the first plan", 11, 90 * MINUTE) });
     held.release.resolve();
     await waking;
     expect(script.wakes).toHaveLength(2);
@@ -3181,10 +3228,7 @@ test("what is waiting for a thread where a wake is running starts together once 
     expect(script.wakes.map((request) => request.context?.thread)).toEqual(["ring", "ring", "ring", "ring"]);
     const opener = turnsOf(script.wakes[2]).at(-1)?.[1] ?? "";
     expect(opener).toStartWith("[wake]\n\nNothing has been said in this thread since your last wake here.\n\n");
-    expect(setOffBy(opener)).toEqual([
-      '[You asked for this wake from "main" at Friday 2026-10-30 · 12:11 PM: carry on with the first plan]',
-      '[You asked for this wake from "main" at Friday 2026-10-30 · 12:12 PM: carry on with the second plan]',
-    ]);
+    expect(setOffBy(opener)).toEqual(['[You asked for this wake from "main" at Friday 2026-10-30 · 12:11 PM: carry on with the first plan]']);
     expect(opener).toContain("A wake here can run for up to 90 minutes.");
   });
 });

@@ -21,7 +21,7 @@ import type { StartThreadRequest } from "./start_thread.ts";
 import { handleSendMessage, type SendMessage } from "./send_message.ts";
 import { handleThreads } from "./threads.ts";
 import { reachableThreads } from "../autonomy/outbox.ts";
-import { handleWakeInThread, type WakeHandOff, type WakeInThreadRequest } from "./wake_in_thread.ts";
+import { handleWakeInThread, type WaitingWake, type WakeHandOff, type WakeInThreadRequest } from "./wake_in_thread.ts";
 import type { EditThreadRequest } from "./edit_thread.ts";
 import type { ToolInput } from "./workspace.ts";
 import { McpCancelled } from "../mcp/client.ts";
@@ -80,6 +80,8 @@ export interface ToolContext {
   guide?: (input: ToolInput) => string;
 
   wakeInThread?: (request: WakeInThreadRequest) => WakeHandOff;
+
+  callOffWake?: (thread: string) => WaitingWake | undefined;
 
   startThread?: (request: StartThreadRequest) => Promise<void>;
 
@@ -185,7 +187,10 @@ export async function dispatchTool(
     case "wake_in_thread": {
       const handOff = ctx.wakeInThread;
       const reach = await reachableThreads(dirname(ctx.historyDbPath), ctx.characterName);
-      return handleWakeInThread(args, ctx.thread, handOff === undefined ? undefined : (request): WakeHandOff => [...reach.open, ...reach.sealed].includes(request.thread) ? handOff(request) : { kind: "no_thread" }, ctx.userName ?? "the user");
+      return handleWakeInThread(args, ctx.thread, {
+        handOff: handOff === undefined ? undefined : (request): WakeHandOff => [...reach.open, ...reach.sealed].includes(request.thread) ? handOff(request) : { kind: "no_thread" },
+        callOff: ctx.callOffWake,
+      }, ctx.userName ?? "the user");
     }
 
     case "send_message":

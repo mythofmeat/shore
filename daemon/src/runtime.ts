@@ -47,7 +47,6 @@ import { Diagnostics } from "./diagnostics.ts";
 import { closeWorkspaceHelpers } from "./tools/character_workspace.ts";
 import type { ToolContext } from "./tools/dispatch.ts";
 import { subagentRunner } from "./tools/subagent_loop.ts";
-import { Ledger } from "./ledger/store.ts";
 import { backfillLedgerCosts } from "./ledger/usage.ts";
 import { setNanoGptSubscription, setSubscriptionProviders } from "./ledger/store.ts";
 import { claudeLoginSettingsOf, DEFAULT_SUBSCRIPTION_PROVIDERS } from "./config/providers.ts";
@@ -135,7 +134,6 @@ export async function createRuntime(options: RuntimeOptions): Promise<ShoreRunti
   const notifier = new NotificationService(config.app.notifications);
   const snapshotGate = new SnapshotGate();
   const callStore = openCallStore(config);
-  ensureLedger(config);
 
   const providers = captureProviders(options.providers, callStore);
   const uninstallWireCapture = installCallStoreWireCapture(callStore);
@@ -246,6 +244,7 @@ export async function createRuntime(options: RuntimeOptions): Promise<ShoreRunti
           activityStats: (character, localAt, days) => autonomy.activityStats(character, localAt, days),
           wakesMayRun: (character) => autonomy.wakesMayRun(character),
           requestWake: (character, firing, overwrite) => autonomy.requestWake(character, firing, overwrite),
+          callOffWake: (character, thread, from) => autonomy.callOffWake(character, thread, from),
         }, {
           providers,
           registry,
@@ -401,10 +400,6 @@ function installCallStoreWireCapture(store: CallStore | undefined): () => void {
   });
 }
 
-function ensureLedger(config: LoadedConfig): void {
-  Ledger.create(rustJoin(config.dirs.data, "shore.db")).close();
-}
-
 export function mcpConfigView(
   config: LoadedConfig,
   env: Record<string, string | undefined> = process.env,
@@ -489,7 +484,7 @@ export interface SubagentToolDeps {
 export function sharedToolDeps(
   config: LoadedConfig,
   mcp: McpHolder,
-  autonomy: Pick<AutonomyService, "activityStats" | "wakesMayRun" | "requestWake">,
+  autonomy: Pick<AutonomyService, "activityStats" | "wakesMayRun" | "requestWake" | "callOffWake">,
   subagent: SubagentToolDeps,
   triggers?: Pick<TriggerService, "view">,
 ): ToolContextDeps {
@@ -517,6 +512,7 @@ export function sharedToolDeps(
       const asked = autonomy.requestWake(character, { name: "", from, reason: request.reason, at: Date.now(), thread: request.thread, limitMs, startsAt: request.startsAt }, request.overwrite);
       return asked.kind === "waiting" ? asked : { kind: "queued", limitMs, replaced: asked.replaced };
     },
+    callOffWake: (character, from, thread) => autonomy.callOffWake(character, thread, from),
     sealThread: async (character, request) => {
       const { sealed, filesDir } = await startSealedThread(registry, character, request);
       return { unsealAt: sealed.unseal_at, filesDir };

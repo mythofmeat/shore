@@ -255,13 +255,22 @@ export class CharacterAutonomy {
   }
 
   requestWake(firing: TriggerFiring, overwrite: boolean): WakeRequest {
-    const asked = (other: TriggerFiring): boolean => other.from !== undefined && other.thread === firing.thread && other.interruptedAt === undefined;
-    const waiting = this.#fired.find(asked);
+    const waiting = this.#asked.waitingIn(firing.thread ?? "");
     if (waiting !== undefined && !overwrite) return { kind: "waiting", waiting };
+    const asked = (other: TriggerFiring): boolean => other.from !== undefined && other.thread === firing.thread && other.interruptedAt === undefined;
     this.#fired.splice(0, this.#fired.length, ...this.#fired.filter((other) => !asked(other)));
     this.#queue(firing);
     this.#asked.keep(firing);
     return { kind: "queued", replaced: waiting };
+  }
+
+  callOff(thread: string, from: string): TriggerFiring | undefined {
+    const waiting = this.#asked.waitingIn(thread);
+    if (waiting !== undefined) {
+      this.#asked.gone([waiting]);
+      this.note("wake", `Wake asked for in "${thread}" called off from "${from}": ${waiting.reason}`, this.#now());
+    }
+    return waiting;
   }
 
   #threadOf(firing: TriggerFiring): string {
@@ -499,6 +508,7 @@ export class CharacterAutonomy {
   async #notCalledOff(firings: readonly TriggerFiring[], thread: string): Promise<TriggerFiring[]> {
     const times = await this.#triggerTimes();
     return firings.filter((firing) => {
+      if (firing.from !== undefined && firing.interruptedAt === undefined) return this.#asked.holds(firing);
       const kept = times === undefined || firing.timeAtStop === undefined || (times.get(firing.name) ?? null) === firing.timeAtStop;
       if (!kept) this.note("wake", `Wake in "${thread}" not picked up again for trigger "${firing.name}": it was taken out of ${TRIGGERS_FILE} or given a new time after the user stopped it`, this.#now());
       return kept;
