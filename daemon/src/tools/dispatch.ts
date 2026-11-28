@@ -205,10 +205,7 @@ export async function dispatchTool(
     default: {
       if (name.startsWith("ask_")) {
         const agent = name.slice("ask_".length);
-        const query = args["query"];
-        if (typeof query !== "string") {
-          throw new InvalidArgs(`${name} requires a string \`query\``);
-        }
+        const query = String(args["query"]);
         if (ctx.runSubagent === undefined) throw new NotImplemented(`ask_${agent}`);
         return await ctx.runSubagent(agent, query, ctx.signal, ctx.toolUseId);
       }

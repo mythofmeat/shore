@@ -332,6 +332,7 @@ import t__tools__history__chat_logs__answers__day_size from "../../prompts/tools
 import t__tools__history__chat_logs__answers__day_first from "../../prompts/tools/history/chat_logs/answers/day_first.md" with { type: "text" };
 import t__tools__history__chat_logs__answers__day_wakes from "../../prompts/tools/history/chat_logs/answers/day_wakes.md" with { type: "text" };
 import t__tools__history__chat_logs__answers__day_no_reply from "../../prompts/tools/history/chat_logs/answers/day_no_reply.md" with { type: "text" };
+import t__tools__threads__threads__answers__seal_folder from "../../prompts/tools/threads/threads/answers/seal_folder.md" with { type: "text" };
 import messages__earlier_not_shown from "../../prompts/messages/earlier_not_shown.md" with { type: "text" };
 import messages__opened_by_you from "../../prompts/messages/opened_by_you.md" with { type: "text" };
 import messages__picture_gone from "../../prompts/messages/picture_gone.md" with { type: "text" };
@@ -937,6 +938,10 @@ export const LOGS_TEXTS: readonly TextSpec[] = [
   text("logs_day_no_reply", t__tools__history__chat_logs__answers__day_no_reply, "In chat_logs' overview, a conversation with nothing from the user.", { count: "how many", char: "the character's name", user: "the user's name" }),
 ];
 
+export const SEAL_TEXTS: readonly TextSpec[] = [
+  must("threads_seal_folder", t__tools__threads__threads__answers__seal_folder, "threads' error when a sealed thread's folder can't be made.", { folder: "the folder", error: "why" }),
+];
+
 const GUIDE_VALUES = { user: "the user's name", tools_off: "the tools a topic names that are off" };
 
 export const GUIDE_TEXTS: readonly TextSpec[] = [
@@ -992,7 +997,7 @@ export const TOOL_TEXTS: readonly TextSpec[] = Object.entries(TOOL_TEXTS_SHIPPED
   ...Object.entries(parameters).map(([parameter, shipped]) => text(parameterText(tool, parameter), shipped, `The description of the ${parameter} parameter of ${tool}.`, TOOL_VALUES)),
 ]);
 
-export const TEXTS: readonly TextSpec[] = [...MESSAGE_TEXTS, ...SYSTEM_TEXTS, ...WAKE_TEXTS, ...TOOL_TEXTS, ...OTHER_TEXTS, ...IMAGE_TEXTS, ...READ_TEXTS, ...MCP_TEXTS, ...SEND_TEXTS, ...ARG_TEXTS, ...WAKE_TOOL_TEXTS, ...TOOL_COMMON_TEXTS, ...ARG_COMMON_TEXTS, ...THREADS_TOOL_TEXTS, ...TRIGGERS_TOOL_TEXTS, ...FILE_TEXTS, ...EDIT_TEXTS, ...PICTURE_SEND_TEXTS, ...TOOL_RESULT_TEXTS, ...TOOL_OUTPUT_TEXTS, ...MCP_ERROR_TEXTS, ...TOOL_ARG_TEXTS, ...PIN_TEXTS, ...MISC_TOOL_TEXTS, ...LOGS_TEXTS, ...GUIDE_TEXTS];
+export const TEXTS: readonly TextSpec[] = [...MESSAGE_TEXTS, ...SYSTEM_TEXTS, ...WAKE_TEXTS, ...TOOL_TEXTS, ...OTHER_TEXTS, ...IMAGE_TEXTS, ...READ_TEXTS, ...MCP_TEXTS, ...SEND_TEXTS, ...ARG_TEXTS, ...WAKE_TOOL_TEXTS, ...TOOL_COMMON_TEXTS, ...ARG_COMMON_TEXTS, ...THREADS_TOOL_TEXTS, ...TRIGGERS_TOOL_TEXTS, ...FILE_TEXTS, ...EDIT_TEXTS, ...PICTURE_SEND_TEXTS, ...TOOL_RESULT_TEXTS, ...TOOL_OUTPUT_TEXTS, ...MCP_ERROR_TEXTS, ...TOOL_ARG_TEXTS, ...PIN_TEXTS, ...MISC_TOOL_TEXTS, ...LOGS_TEXTS, ...SEAL_TEXTS, ...GUIDE_TEXTS];
 
 export const TEXT_SPECS: ReadonlyMap<string, TextSpec> = new Map(TEXTS.map((spec) => [spec.name, spec]));
 

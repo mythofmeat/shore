@@ -8,6 +8,8 @@ import { dispatchTool, type ToolContext } from "../src/tools/dispatch.ts";
 import { toolMediaOf } from "../src/tools/media.ts";
 import { transparentPng } from "./support/test_images.ts";
 import { Texts } from "../src/texts/texts.ts";
+import { schemaViolation } from "../src/tools/validate.ts";
+import { SUBAGENT_INPUT_SCHEMA } from "../src/tools/registry.ts";
 
 async function refused(work: Promise<unknown>): Promise<string> {
   try {
@@ -76,7 +78,7 @@ test("a sub-agent is asked by its name with the query, and an outside tool is ca
     ["subagent", "scout", "where is the log?", signal, "tu_1"],
     ["mcp", "mcp__weather__look", { place: "quay" }, signal],
   ]);
-  expect(await refused(dispatchTool("ask_scout", { query: 5 }, wired))).toBe("invalid args: ask_scout requires a string `query`");
-  expect(await refused(dispatchTool("ask_scout", {}, wired))).toBe("invalid args: ask_scout requires a string `query`");
+  expect(schemaViolation(new Texts(), SUBAGENT_INPUT_SCHEMA, { query: 5 })).toBe("argument `query` must be a string");
+  expect(schemaViolation(new Texts(), SUBAGENT_INPUT_SCHEMA, {})).toBe("the required argument `query` was missing");
   expect(asked).toHaveLength(2);
 });
