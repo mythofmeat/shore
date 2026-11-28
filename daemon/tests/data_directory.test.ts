@@ -533,7 +533,6 @@ describe("data-directory ownership edges", () => {
 });
 
 const DAEMON_DIR = new URL("..", import.meta.url).pathname;
-const TOKEN = "process-test-token";
 const START_MS = 30_000;
 const STEP_MS = 10_000;
 const startsAndSteps = (starts: number, steps: number): number => starts * START_MS + steps * STEP_MS + 5_000;
@@ -578,7 +577,6 @@ async function processLayout(
       SHORE_CACHE_DIR: join(base, "cache"),
       SHORE_RUNTIME_DIR: runtimeDir,
       SHORE_TEST_READY_FILE: join(base, "ready"),
-      SHORE_TOKEN: TOKEN,
     },
   };
 }

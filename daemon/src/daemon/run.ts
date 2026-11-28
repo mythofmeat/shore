@@ -8,7 +8,6 @@ import { Diagnostics } from "../diagnostics.ts";
 import { emitNewMessageEvent } from "../handler/persistence.ts";
 import { createDefaultConfig } from "../config/loader.ts";
 import { superviseMatrixBridge } from "../connections/matrix/supervise.ts";
-import { tokenMatches } from "../config/token.ts";
 import { ArchiveSpool } from "../commands/archive_spool.ts";
 import { rustJoin } from "../config/dirs.ts";
 import { buildMessageHandlerDeps, configReloader, labelNewSegments } from "../handler/deps.ts";
@@ -124,14 +123,7 @@ export async function startDaemon(options: DaemonOptions): Promise<RunningDaemon
     config_path: startup.configPath,
     web_addr: startup.web.enabled ? startup.web.bind_addr : "off",
     web_addr_source: startup.webSource,
-    token_source: startup.token.source,
   });
-  if (startup.token.source === "generated") {
-    log?.info?.("Wrote a new client token", {
-      path: startup.token.path ?? "",
-      hint: "the first device signs in with it; sign in others with shore sign-in, or a link from shore devices link",
-    });
-  }
   const { loaded } = startup;
   const instanceId = cli.instanceId ?? options.newInstanceId?.() ?? randomUUID();
   const startedAt = localRfc3339(new Date());
@@ -162,8 +154,7 @@ export async function startDaemon(options: DaemonOptions): Promise<RunningDaemon
       web = startWebServer({
         config: startup.web,
         server,
-        authenticate: (presented) => tokenMatches(startup.token.token, presented),
-        recovery: { dataDir: dataLease.dataDir, cacheDir: loaded.dirs.cache, token: startup.token.token },
+        recovery: { dataDir: dataLease.dataDir, cacheDir: loaded.dirs.cache },
         picture: (file) => findSentPicture(dataLease.dataDir, file),
         dataDir: dataLease.dataDir,
         transfers,

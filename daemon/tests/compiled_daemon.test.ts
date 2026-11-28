@@ -5,9 +5,9 @@ import { startMockAnthropic } from "../src/testing/mock_anthropic.ts";
 import { testTmp } from "./support/tmp.ts";
 import { until } from "./support/until.ts";
 import { PROMPT_LIST_TOML } from "./support/prompt_list.ts";
+import { signedInCli } from "./support/signed_in.ts";
 
 const DAEMON_DIR = join(import.meta.dir, "..");
-const TOKEN = "compiled-daemon-token";
 
 let bin = "";
 
@@ -51,7 +51,7 @@ test("a compiled daemon started away from daemon/ answers through the Claude Cod
       PATH: process.env["PATH"] ?? "", HOME: dirs.home, TZ: "UTC",
       SHORE_CONFIG_DIR: dirs.config, SHORE_DATA_DIR: dirs.data, SHORE_CACHE_DIR: dirs.cache,
       SHORE_RUNTIME_DIR: dirs.runtime, SHORE_WORKSPACE_DIR: dirs.workspace,
-      SHORE_WEB_ADDR: "127.0.0.1:0", SHORE_TOKEN: TOKEN, CLAUDE_CONFIG_DIR: dirs.claude,
+      SHORE_WEB_ADDR: "127.0.0.1:0", CLAUDE_CONFIG_DIR: dirs.claude,
     },
     stdin: "ignore", stdout: "ignore", stderr: "pipe",
   });
@@ -65,7 +65,7 @@ test("a compiled daemon started away from daemon/ answers through the Claude Cod
     const address = /Listening origin=\S+ address=(http:\/\/\S+:\d+)/.exec(log)?.[1] ?? "";
     const answer = await fetch(`${address}/api/op/message?character=ada`, {
       method: "POST", body: JSON.stringify({ text: "hello there", stream: true }),
-      headers: { authorization: `Bearer ${TOKEN}`, accept: "application/x-ndjson", "content-type": "application/json" },
+      headers: { authorization: `Bearer ${await signedInCli(address)}`, accept: "application/x-ndjson", "content-type": "application/json" },
     });
     const frames = (await answer.text()).split("\n").filter((line) => line.trim() !== "").map((line) => JSON.parse(line) as Record<string, unknown>);
     const rid = frames.find((frame) => frame["type"] === "request_finished")?.["rid"];

@@ -53,7 +53,7 @@ export function renderStarterConfig(): string {
 # \`shore config keys\` the type each one takes.
 # Each folder in characters/ is a character; its workspace is characters/<name>/workspace.
 # Additional TOML files in conf.d/ load automatically, in filename order.
-# The daemon creates a client authentication token beside this file.
+# The first visit to the web UI, or the first \`shore sign-in\`, chooses the password.
 
 [providers.anthropic]
 api_key_env = "ANTHROPIC_API_KEY"

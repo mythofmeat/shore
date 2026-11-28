@@ -1,15 +1,11 @@
-import { randomBytes, randomInt } from "node:crypto";
+import { randomBytes } from "node:crypto";
 import { mkdirSync, readFileSync, renameSync, rmSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
-import type { WebSignInPending } from "../protocol/WebSignInPending.ts";
-import type { WebSignInRequest } from "../protocol/WebSignInRequest.ts";
 import type { WebSession } from "./auth.ts";
 import { sessionDigest } from "./recovery.ts";
 
 export const DEVICES_FILE = "devices.json";
 const LAST_USED_WRITE_MS = 60_000;
-const CODE_ALPHABET = "ABCDEFGHJKMNPQRSTUVWXYZ23456789";
-const CODE_LENGTH = 4;
 
 export type DeviceKind = "cli" | "automation";
 
@@ -34,7 +30,6 @@ interface StoredDevice {
 
 export type Principal =
   | { readonly kind: "browser"; readonly session: WebSession }
-  | { readonly kind: "owner" }
   | { readonly kind: "device"; readonly device: Device };
 
 export function bearerToken(request: Request): string | undefined {
@@ -43,13 +38,11 @@ export function bearerToken(request: Request): string | undefined {
 }
 
 export function principalOwner(principal: Principal): string {
-  if (principal.kind === "browser") return principal.session.id;
-  return principal.kind === "device" ? principal.device.id : "owner";
+  return principal.kind === "browser" ? principal.session.id : principal.device.id;
 }
 
 export function principalName(principal: Principal): string {
-  if (principal.kind === "browser") return principal.session.name;
-  return principal.kind === "device" ? principal.device.name : "The daemon's own token";
+  return principal.kind === "browser" ? principal.session.name : principal.device.name;
 }
 
 export const DEVICE_NAME_RULE = "Give the device a name of 1 to 64 characters, without control characters";
@@ -141,61 +134,4 @@ export class DeviceStore {
     }
     for (const device of this.#devices) this.#written.set(device.id, device.last_used_at);
   }
-}
-
-interface PendingSignIn {
-  readonly id: string;
-  readonly code: string;
-  readonly name: string;
-  readonly secret: string;
-  readonly expiresAt: number;
-  decision?: boolean;
-}
-
-export type SignInState = "waiting" | "denied" | { readonly allowed: string };
-
-export class SignInRequests {
-  readonly #requests = new Map<string, PendingSignIn>();
-
-  constructor(readonly lifetime: number, readonly capacity: number) {}
-
-  #sweep(now: number): void {
-    for (const [id, request] of this.#requests) if (request.expiresAt <= now) this.#requests.delete(id);
-  }
-
-  start(name: string, secret: string, now = Date.now()): WebSignInPending | undefined {
-    this.#sweep(now);
-    if (this.#requests.size >= this.capacity) return undefined;
-    const taken = new Set([...this.#requests.values()].map((request) => request.code));
-    let code: string;
-    do code = Array.from({ length: CODE_LENGTH }, () => CODE_ALPHABET[randomInt(CODE_ALPHABET.length)]).join("");
-    while (taken.has(code));
-    const request: PendingSignIn = { id: crypto.randomUUID(), code, name, secret: sessionDigest(secret), expiresAt: now + this.lifetime };
-    this.#requests.set(request.id, request);
-    return { id: request.id, code, expires_at: request.expiresAt };
-  }
-
-  pending(now = Date.now()): WebSignInRequest[] {
-    this.#sweep(now);
-    return [...this.#requests.values()].filter((request) => request.decision === undefined)
-      .map((request) => ({ code: request.code, name: request.name, expires_at: request.expiresAt }));
-  }
-
-  decide(code: string, allow: boolean, now = Date.now()): boolean {
-    this.#sweep(now);
-    const request = [...this.#requests.values()].find((candidate) => candidate.code === code.trim().toUpperCase() && candidate.decision === undefined);
-    if (request === undefined) return false;
-    request.decision = allow;
-    return true;
-  }
-
-  poll(id: string, secret: string, now = Date.now()): SignInState | undefined {
-    this.#sweep(now);
-    const request = this.#requests.get(id);
-    if (request?.secret !== sessionDigest(secret)) return undefined;
-    if (request.decision === undefined) return "waiting";
-    this.#requests.delete(id);
-    return request.decision ? { allowed: request.name } : "denied";
-  }
-
 }

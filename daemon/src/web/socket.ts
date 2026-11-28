@@ -11,10 +11,14 @@ import { REQUEST_LIFECYCLE_CAPABILITY, sessionMetaOf } from "../swp/session.ts";
 import type { WebSession } from "./auth.ts";
 import { WEB_LIMITS } from "./policy.ts";
 import { REQUEST_HISTORY_LIMITS, RequestHistory, RequestHistoryError, type SettledRequest } from "./requests.ts";
+import { required } from "../util/required.ts";
+
+function clientMessage(text: string): ClientMessage | undefined {
+  try { return admitClientMessage(decodeClientMessage(JSON.parse(rustTrim(text)) as unknown)); } catch { return undefined; }
+}
 
 interface PendingRequest {
   bytes: number;
-  historyId?: string;
   images?: Map<string, string>;
 }
 
@@ -31,12 +35,11 @@ export interface WebSocketState {
   requests: number;
   bytesInWindow: number;
   pendingBytes: number;
-  controls: number;
 }
 
 export const socketState = (auth: WebSession): WebSocketState => ({
   auth, abort: new AbortController(), pending: new Map(), phase: "hello",
-  windowStart: Date.now(), requests: 0, bytesInWindow: 0, pendingBytes: 0, controls: 0,
+  windowStart: Date.now(), requests: 0, bytesInWindow: 0, pendingBytes: 0,
 });
 
 export class WebSocketPeers {
@@ -188,73 +191,56 @@ export class WebSocketPeers {
   }
 
   message(socket: ServerWebSocket<WebSocketState>, text: string | Buffer): void {
+    const refusal = this.#take(socket, text);
+    if (refusal !== undefined) this.close(socket, ...refusal);
+  }
+
+  #take(socket: ServerWebSocket<WebSocketState>, text: string | Buffer): readonly [code: number, reason: string] | undefined {
     const state = socket.data;
-    if (state.phase === "closed") return;
     const now = Date.now();
     if (now - state.windowStart >= 1000) { state.windowStart = now; state.requests = 0; state.bytesInWindow = 0; }
     state.requests += 1;
-    if (state.requests > WEB_LIMITS.requestsPerSecond) { this.close(socket, 1008, "Request rate limit reached"); return; }
+    if (state.requests > WEB_LIMITS.requestsPerSecond) return [1008, "Request rate limit reached"];
     const bytes = Buffer.byteLength(text);
     state.bytesInWindow += bytes;
     if (typeof text !== "string" || bytes > (state.phase === "hello" ? WEB_LIMITS.helloBytes : WEB_LIMITS.messageBytes) || state.bytesInWindow > WEB_LIMITS.messageBytes) {
-      this.close(socket, 1009, "Expected a bounded JSON text message"); return;
+      return [1009, "Expected a bounded JSON text message"];
     }
-    let message: ClientMessage;
-    try { message = admitClientMessage(decodeClientMessage(JSON.parse(rustTrim(text)) as unknown)); }
-    catch {
-      this.close(socket, 1008, "Invalid client message"); return;
-    }
+    const message = clientMessage(text);
+    if (message === undefined) return [1008, "Invalid client message"];
     if (state.phase === "hello") {
-      if (message.type !== "hello" || message.client_type !== "web" || (message.token !== null && message.token !== undefined)) {
-        this.close(socket, 1008, "Expected a browser hello after sign-in"); return;
-      }
+      if (message.type !== "hello" || message.client_type !== "web") return [1008, "Expected a browser hello after sign-in"];
       state.phase = "attaching";
       this.#track(this.#attach(socket, message));
-      return;
+      return undefined;
     }
-    if (state.phase !== "ready" || state.peer === undefined || message.type === "hello") {
-      this.close(socket, 1008, "Wait for the server hello before sending requests"); return;
+    const peer = state.peer;
+    if (peer === undefined || message.type === "hello") return [1008, "Wait for the server hello before sending requests"];
+    if (message.type === "cancel") {
+      this.#track(peer.send(message).catch(() => { this.close(socket, 1011, "Request delivery failed"); }));
+      return undefined;
     }
-    if (message.type !== "cancel") {
-      const rid = message.rid;
-      if (typeof rid !== "string" || rid.length === 0 || sanitiseRid(rid) === null || Buffer.byteLength(rid) > 128 || state.pending.has(rid)) {
-        this.close(socket, 1008, "Requests need distinct correlation IDs"); return;
-      }
-      if (bytes > this.#maxBytes || state.pending.size >= WEB_LIMITS.pendingRequests || state.pendingBytes + bytes > this.#maxBytes) {
-        const error = { rid, code: "invalid_request", message: bytes > this.#maxBytes ? `Request is too large; maximum is ${Math.min(this.#maxBytes, WEB_LIMITS.messageBytes)} bytes` : "Too many pending requests; wait for a result" } as const;
-        this.#send(socket, { type: "error", ...error });
-        this.#send(socket, { type: "request_finished", rid, outcome: "failed", error });
-        return;
-      }
-      state.pending.set(rid, { bytes });
-      state.pendingBytes += bytes;
-    } else {
-      if (state.controls >= WEB_LIMITS.pendingRequests) { this.close(socket, 1008, "Too many control requests"); return; }
-      state.controls += 1;
+    const rid = message.rid;
+    if (typeof rid !== "string" || rid.length === 0 || sanitiseRid(rid) === null || Buffer.byteLength(rid) > 128 || state.pending.has(rid)) {
+      return [1008, "Requests need distinct correlation IDs"];
     }
-    const control = message.type === "cancel";
-    this.#track(state.peer.send(message, () => {
-      if (message.type === "cancel") return;
-      const selected = state.peer === undefined ? undefined : this.#server.sessionRouter.client(state.peer.session.sessionId);
-      if (selected === undefined || state.abort.signal.aborted) throw new Error("Browser session detached");
-      const historyId = this.history.begin(state.auth, sessionMetaOf(selected), message);
-      const pending = typeof message.rid === "string" ? state.pending.get(message.rid) : undefined;
-      if (pending !== undefined && historyId !== undefined) pending.historyId = historyId;
-    })
-      .catch((failure: unknown) => {
-        const rid = "rid" in message ? message.rid : undefined;
-        const pending = typeof rid === "string" ? state.pending.get(rid) : undefined;
-        if (typeof rid === "string" && pending !== undefined && pending.historyId === undefined) {
-          const error = { rid, code: "invalid_request", message: failure instanceof RequestHistoryError ? failure.message : "Could not deliver this request. Nothing was dispatched; try again after the connection and recovery storage are available." } as const;
-          this.#complete(state, { type: "request_finished", rid, outcome: "failed", error });
-          this.#send(socket, { type: "error", ...error });
-          this.#send(socket, { type: "request_finished", rid, outcome: "failed", error });
-        } else {
-          if (pending?.historyId !== undefined) this.history.interrupt(state.auth, pending.historyId);
-          this.close(socket, 1011, "Request delivery failed");
-        }
-      })
-      .finally(() => { if (control) state.controls -= 1; }));
+    if (bytes > this.#maxBytes || state.pending.size >= WEB_LIMITS.pendingRequests || state.pendingBytes + bytes > this.#maxBytes) {
+      const error = { rid, code: "invalid_request", message: bytes > this.#maxBytes ? `Request is too large; maximum is ${Math.min(this.#maxBytes, WEB_LIMITS.messageBytes)} bytes` : "Too many pending requests; wait for a result" } as const;
+      this.#send(socket, { type: "error", ...error });
+      this.#send(socket, { type: "request_finished", rid, outcome: "failed", error });
+      return undefined;
+    }
+    state.pending.set(rid, { bytes });
+    state.pendingBytes += bytes;
+    this.#track(peer.send(message, () => {
+      this.history.begin(state.auth, sessionMetaOf(required(this.#server.sessionRouter.client(peer.session.sessionId))), message);
+    }).catch((failure: unknown) => {
+      const error = { rid, code: "invalid_request", message: failure instanceof RequestHistoryError ? failure.message : "Could not deliver this request. Nothing was dispatched; try again after the connection and recovery storage are available." } as const;
+      this.#complete(state, { type: "request_finished", rid, outcome: "failed", error });
+      this.#send(socket, { type: "error", ...error });
+      this.#send(socket, { type: "request_finished", rid, outcome: "failed", error });
+    }));
+    return undefined;
   }
 
   async stop(): Promise<void> {

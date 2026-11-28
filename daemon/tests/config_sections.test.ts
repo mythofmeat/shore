@@ -1,5 +1,5 @@
 import { expect, spyOn, test } from "bun:test";
-import { mkdir, mkdtemp, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 
 import { resultCharsFor, subagentEnabled, timeoutFor, toolGrants } from "../src/config/app.ts";
@@ -604,7 +604,7 @@ test("an address that won't do says which setting gave it and why", () => {
   expect(() => resolveWebConfig(defaultWebConfig(), { SHORE_WEB_ADDR: "nowhere" })).toThrow('Invalid SHORE_WEB_ADDR "nowhere": daemon.web.bind_addr must be host:port');
 });
 
-test("a daemon that can't read its config or make its token says which, and why", async () => {
+test("a daemon that can't read its config says so, and why, and no longer makes a token", async () => {
   const dir = await mkdtemp(testTmp("shore-daemon-startup-"));
   const env = { XDG_CONFIG_HOME: join(dir, "xdg"), XDG_DATA_HOME: join(dir, "data"), XDG_CACHE_HOME: join(dir, "cache"), XDG_RUNTIME_DIR: join(dir, "run"), HOME: dir };
   const broken = join(dir, "broken.toml");
@@ -613,8 +613,8 @@ test("a daemon that can't read its config or make its token says which, and why"
   const unreadable = failure(() => resolveStartup({ config: broken }, env));
   expect([unreadable.kind, unreadable.message.startsWith(`Failed to load Shore config from ${broken}: `)]).toEqual(["load_config", true]);
   const fine = join(dir, "config", "config.toml");
-  await mkdir(join(dir, "config", "token"), { recursive: true });
+  await mkdir(join(dir, "config"), { recursive: true });
   await writeFile(fine, "");
-  const tokenless = failure(() => resolveStartup({ config: fine }, env));
-  expect([tokenless.kind, tokenless.message.startsWith("shore has no token and could not create one at ")]).toEqual(["token", true]);
+  expect(Object.keys(resolveStartup({ config: fine }, env)).sort()).toEqual(["configPath", "loaded", "web", "webSource"]);
+  expect(await readdir(join(dir, "config")), "nothing is written beside the config").toEqual(["config.toml"]);
 });

@@ -3,7 +3,6 @@ import { statSync } from "node:fs";
 import type { WebConfig } from "../config/app.ts";
 import { rustJoin, configDir } from "../config/dirs.ts";
 import { loadConfig, type LoadedConfig } from "../config/loader.ts";
-import { resolveDaemonToken, type ResolvedToken } from "../config/token.ts";
 import { webBinding } from "../web/policy.ts";
 
 export interface Cli {
@@ -17,7 +16,6 @@ export type StartupValueSource = "cli" | "env" | "config";
 export interface StartupConfig {
   readonly loaded: LoadedConfig;
   readonly configPath: string;
-  readonly token: ResolvedToken;
   readonly web: WebConfig;
   readonly webSource: StartupValueSource;
 }
@@ -29,12 +27,10 @@ export class StartupError extends Error {
       | "load_config"
       | "own_data_directory"
       | "register_instance"
-      | "server_run"
-      | "token",
+      | "server_run",
     message: string,
   ) {
     super(message);
-    this.name = "StartupError";
   }
 }
 
@@ -89,18 +85,10 @@ export function resolveStartup(
     );
   }
 
-  let token: ResolvedToken;
-  try {
-    token = resolveDaemonToken(env, loaded.dirs.config);
-  } catch (e) {
-    throw new StartupError("token", String(e instanceof Error ? e.message : e));
-  }
-
   const [web, webSource] = resolveWebConfig(loaded.app.daemon.web, env, cli.addr);
   return {
     loaded,
     configPath: explicitConfigPath ?? defaultConfigPath(env),
-    token,
     web,
     webSource,
   };

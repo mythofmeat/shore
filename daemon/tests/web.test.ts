@@ -1,12 +1,12 @@
 import { until, untilAsync } from "./support/until.ts";
 import { afterEach, describe, expect, setSystemTime, spyOn, test } from "bun:test";
-import { readFileSync } from "node:fs";
+import { mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { createHash } from "node:crypto";
 import { hostname, tmpdir } from "node:os";
 import { type WebLoginCode } from "../src/protocol/WebLoginCode.ts";
 import { type WebProblem } from "../src/protocol/WebProblem.ts";
 import { defaultWebConfig } from "../src/config/app.ts";
-import { tokenMatches } from "../src/config/token.ts";
+import { DEVICES_FILE } from "../src/web/devices.ts";
 import { BrowserSocket } from "./support/browser.ts";
 import { browserConnection } from "./support/browser_connection.ts";
 import { type ServerMessage } from "../src/protocol/ServerMessage.ts";
@@ -40,7 +40,13 @@ afterEach(async () => { for (const cleanup of cleanups.splice(0).reverse()) awai
 
 const TOKEN = "web-transport-test-token";
 
-async function fixture(options: Partial<Omit<WebServerOptions, "server" | "authenticate">> = {}, provider?: HandshakeProvider) {
+function signedInData(dataDir?: string): string {
+  const dir = dataDir ?? mkdtempSync(join(tmpdir(), "shore-web-data-"));
+  writeFileSync(join(dir, DEVICES_FILE), JSON.stringify({ version: 1, devices: [{ id: "test-cli", kind: "cli", name: "Test CLI", created_at: 0, digest: sessionDigest(TOKEN) }] }));
+  return dir;
+}
+
+async function fixture(options: Partial<Omit<WebServerOptions, "server">> = {}, provider?: HandshakeProvider) {
   let histories = 0;
   const swp = new Server({
     handshake: provider ?? {
@@ -61,8 +67,9 @@ async function fixture(options: Partial<Omit<WebServerOptions, "server" | "authe
     }
   })();
   const web = startWebServer({
-    server: swp, authenticate: (token) => tokenMatches(TOKEN, token),
+    server: swp,
     config: { ...defaultWebConfig(), enabled: true, bind_addr: "127.0.0.1:0" }, ...options,
+    dataDir: signedInData(options.dataDir),
   });
   cleanups.push(async () => { await web.stop(); swp.stop(); await routing; });
   const api = (path: string, cookie = "", body: unknown = {}, headers: Record<string, string> = {}) =>
@@ -80,7 +87,7 @@ async function fixture(options: Partial<Omit<WebServerOptions, "server" | "authe
     return (await created.json() as WebLoginCode).code;
   };
   const login = async () => {
-    const response = await api("/api/login", "", { token: await code() });
+    const response = await api("/api/login", "", { code: await code() });
     expect(response.status).toBe(200);
     const cookie = response.headers.get("set-cookie")?.split(";", 1)[0];
     if (cookie === undefined) throw new Error("No session cookie");
@@ -107,8 +114,8 @@ describe("browser authentication boundary", () => {
       const origin = `http://${host}`;
       expect((await fetch(`${target}/workspace`, { headers: { host } })).status).toBe(200);
       expect((await fetch(`${target}/api/session`, { method: "POST", headers: { host, origin } })).status).toBe(401);
-      expect((await fetch(`${target}/api/login`, { method: "POST", headers: { host, origin, "content-type": "application/json" }, body: JSON.stringify({ token: "wrong" }) })).status).toBe(401);
-      const login = await fetch(`${target}/api/login`, { method: "POST", headers: { host, origin, "content-type": "application/json" }, body: JSON.stringify({ token: await f.code() }) });
+      expect((await fetch(`${target}/api/login`, { method: "POST", headers: { host, origin, "content-type": "application/json" }, body: JSON.stringify({ code: "wrong" }) })).status).toBe(401);
+      const login = await fetch(`${target}/api/login`, { method: "POST", headers: { host, origin, "content-type": "application/json" }, body: JSON.stringify({ code: await f.code() }) });
       expect(login.status).toBe(200);
       expect(login.headers.get("set-cookie")).not.toContain("Secure");
       const cookie = login.headers.get("set-cookie")?.split(";", 1)[0];
@@ -128,7 +135,7 @@ describe("browser authentication boundary", () => {
     const f = await fixture(); f.web.activate();
     for (const origin of ["https://shore.test-tailnet.ts.net:8443", "https://shore.test-tailnet.ts.net"]) {
       const headers = { host: new URL(origin).host, origin };
-      const login = await fetch(`${f.web.origin}/api/login`, { method: "POST", headers: { ...headers, "content-type": "application/json" }, body: JSON.stringify({ token: await f.code() }) });
+      const login = await fetch(`${f.web.origin}/api/login`, { method: "POST", headers: { ...headers, "content-type": "application/json" }, body: JSON.stringify({ code: await f.code() }) });
       expect(login.status).toBe(200);
       expect(login.headers.get("set-cookie")).toStartWith("__Host-shore_web_");
       expect(login.headers.get("set-cookie")).toContain("Secure");
@@ -152,7 +159,7 @@ describe("browser authentication boundary", () => {
     await writeFile(picture, "png bytes");
     const f = await fixture({ config: { ...defaultWebConfig(), enabled: true, bind_addr: "127.0.0.1:0", public_origin: origin }, picture: (file) => file === "p.png" ? picture : undefined }); f.web.activate();
     const target = `http://127.0.0.1:${String(f.web.port)}`;
-    const rewritten = await fetch(`${target}/api/login`, { method: "POST", headers: { origin, "content-type": "application/json" }, body: JSON.stringify({ token: await f.code() }) });
+    const rewritten = await fetch(`${target}/api/login`, { method: "POST", headers: { origin, "content-type": "application/json" }, body: JSON.stringify({ code: await f.code() }) });
     expect(rewritten.status).toBe(200);
     expect(rewritten.headers.get("set-cookie")).toStartWith("__Host-shore_web_");
     for (const accessOrigin of [origin, target, "http://shore.test-tailnet.ts.net:17340"]) {
@@ -160,7 +167,7 @@ describe("browser authentication boundary", () => {
       const secure = accessOrigin.startsWith("https:");
       expect((await fetch(`${target}/workspace`, { headers })).status).toBe(200);
       expect((await fetch(`${target}/api/session`, { method: "POST", headers })).status).toBe(401);
-      const login = await fetch(`${target}/api/login`, { method: "POST", headers: { ...headers, "content-type": "application/json" }, body: JSON.stringify({ token: await f.code() }) });
+      const login = await fetch(`${target}/api/login`, { method: "POST", headers: { ...headers, "content-type": "application/json" }, body: JSON.stringify({ code: await f.code() }) });
       expect(login.status).toBe(200);
       expect(login.headers.get("set-cookie")?.includes("Secure")).toBe(secure);
       expect(login.headers.get("set-cookie")?.startsWith("__Host-")).toBe(secure);
@@ -196,13 +203,15 @@ describe("browser authentication boundary", () => {
 
   test("malformed sign-in bodies and oversized native HTTP bodies cannot create a session", async () => {
     const f = await fixture(); f.web.activate();
-    for (const body of [{}, { token: 1 }, { token: TOKEN, extra: true }, [TOKEN]]) {
-      expect((await f.api("/api/login", "", body)).status).toBe(400);
+    for (const body of [{}, { code: 1 }, { password: 1 }, { token: TOKEN }, { code: TOKEN, extra: true }, { code: TOKEN, password: TOKEN }, [TOKEN]]) {
+      const refused = await f.api("/api/login", "", body);
+      expect(refused.status).toBe(400);
+      expect(await refused.json()).toEqual({ code: "invalid_request", message: "Give the password, or a sign-in code" });
     }
-    expect((await f.api("/api/login", "", { token: TOKEN }, { "content-type": "text/plain" })).status).toBe(400);
+    expect((await f.api("/api/login", "", { code: TOKEN }, { "content-type": "text/plain" })).status).toBe(400);
     const malformed = await fetch(`${f.web.origin}/api/login`, { method: "POST", headers: { origin: f.web.origin, "content-type": "application/json" }, body: "{" });
     expect(malformed.status).toBe(400);
-    expect((await f.api("/api/login", "", { token: "x".repeat(WEB_LIMITS.loginBytes) })).status).toBe(413);
+    expect((await f.api("/api/login", "", { code: "x".repeat(WEB_LIMITS.loginBytes) })).status).toBe(413);
     const chunked = new ReadableStream<Uint8Array>({ start(controller) { controller.enqueue(new Uint8Array(WEB_LIMITS.loginBytes + 1)); controller.close(); } });
     expect((await fetch(`${f.web.origin}/api/login`, { method: "POST", headers: { origin: f.web.origin, "content-type": "application/json" }, body: chunked })).status).toBe(413);
     expect(f.histories()).toBe(0);
@@ -212,23 +221,26 @@ describe("browser authentication boundary", () => {
   test("session storage and repeated failed sign-ins are bounded", async () => {
     const f = await fixture({ config: { ...defaultWebConfig(), enabled: true, bind_addr: "127.0.0.1:0", max_connections: 1 } }); f.web.activate();
     const first = await f.login(); await f.login();
-    expect((await f.api("/api/login", "", { token: await f.code() })).status).toBe(200);
+    expect((await f.api("/api/login", "", { code: await f.code() })).status).toBe(200);
     expect((await f.api("/api/session", first.cookie)).status).toBe(401);
     for (let i = 0; i < WEB_LIMITS.loginAttemptsPerMinute; i += 1) {
-      expect((await f.api("/api/login", "", { token: "wrong" })).status).toBe(401);
+      const wrong = await f.api("/api/login", "", { code: "wrong" });
+      expect(wrong.status).toBe(401);
+      expect((await wrong.json() as WebProblem).message).toBe("That sign-in code has expired or was already used");
     }
-    expect((await f.api("/api/login", "", { token: "wrong" })).status).toBe(429);
-    expect((await f.api("/api/login", "", { token: await f.code() })).status).toBe(200);
+    const held = await f.api("/api/login", "", { code: "wrong" });
+    expect([held.status, (await held.json() as WebProblem).message]).toEqual([429, "Too many sign-in attempts; try again in a minute"]);
+    expect((await f.api("/api/login", "", { code: await f.code() })).status).toBe(200);
     expect(f.histories()).toBe(0);
   });
 
   test("authentication and compatibility precede any history or peer attachment", async () => {
     const f = await fixture();
-    expect((await f.api("/api/login", "", { token: TOKEN })).status).toBe(503);
+    expect((await f.api("/api/login", "", { code: TOKEN })).status).toBe(503);
     f.web.activate();
     expect((await f.api("/api/session")).status).toBe(401);
-    expect((await f.api("/api/login", "", { token: "wrong" })).status).toBe(401);
-    expect((await f.api("/api/login", "", { token: TOKEN })).status, "the daemon's own token signs a browser in no longer").toBe(401);
+    expect((await f.api("/api/login", "", { code: "wrong" })).status).toBe(401);
+    expect((await f.api("/api/login", "", { code: TOKEN })).status, "a CLI's credential is no sign-in code").toBe(401);
     const denied = connectBrowser(f.web.origin, "");
     expect(await outcomeOf(denied.opened)).toThrow("rejected");
     await denied.closed;
@@ -252,7 +264,7 @@ describe("browser authentication boundary", () => {
     const { cookie } = await f.login();
     for (const origin of ["https://evil.example", "null", ""]) {
       expect((await f.api("/api/logout", cookie, {}, { origin })).status).toBe(403);
-      expect((await f.api("/api/login", "", { token: TOKEN }, { origin })).status).toBe(403);
+      expect((await f.api("/api/login", "", { code: TOKEN }, { origin })).status).toBe(403);
     }
     expect((await f.api("/api/session", cookie, {}, { "sec-fetch-site": "same-site" })).status).toBe(403);
     expect((await f.api("/api/session", cookie, {}, { host: "evil.example" })).status).toBe(403);
@@ -310,25 +322,25 @@ describe("staying signed in and signing in other devices", () => {
     expect(code.code).toMatch(/^[A-Za-z0-9_-]{43}$/);
     expect(code.expires_at - Date.now()).toBeGreaterThan(WEB_LIMITS.loginCodeMs - 5000);
     expect(code.expires_at - Date.now()).toBeLessThanOrEqual(WEB_LIMITS.loginCodeMs);
-    const phone = await f.api("/api/login", "", { token: code.code });
+    const phone = await f.api("/api/login", "", { code: code.code });
     expect(phone.status).toBe(200);
     const phoneCookie = phone.headers.get("set-cookie")?.split(";", 1)[0] ?? "";
     expect(phoneCookie).not.toBe(cookie);
     expect((await f.api("/api/session", phoneCookie)).status).toBe(200);
     expect((await f.api("/api/session", cookie)).status).toBe(200);
-    expect((await f.api("/api/login", "", { token: code.code })).status).toBe(401);
+    expect((await f.api("/api/login", "", { code: code.code })).status).toBe(401);
     const next = await (await f.api("/api/login-code", phoneCookie)).json() as WebLoginCode;
     const laptop = browserConnection(f.web.origin);
     const late = browserConnection(f.web.origin);
     try {
-      await laptop.client.signIn(next.code, "This link was used"); await until(() => laptop.client.status === "ready", "the transport to settle");
-      expect(await outcomeOf(late.client.signIn(next.code, "This link was used"))).toThrow("This link was used");
+      await laptop.client.signIn({ code: next.code }, "This link was used"); await until(() => laptop.client.status === "ready", "the transport to settle");
+      expect(await outcomeOf(late.client.signIn({ code: next.code }, "This link was used"))).toThrow("This link was used");
       expect(late.client.status).toBe("signed_out");
       expect(late.client.detail).toBe("This link was used");
-      expect(await outcomeOf(late.client.signIn("wrong", "This link was used"))).toThrow("This link was used");
+      expect(await outcomeOf(late.client.signIn({ code: "wrong" }, "This link was used"))).toThrow("This link was used");
     } finally { laptop.client.stop(); late.client.stop(); }
     const fromClient = await laptop.client.loginCode();
-    expect((await f.api("/api/login", "", { token: fromClient.code })).status).toBe(200);
+    expect((await f.api("/api/login", "", { code: fromClient.code })).status).toBe(200);
   });
 
   test("sign-in codes expire, and only the newest few stay usable", async () => {
@@ -336,7 +348,7 @@ describe("staying signed in and signing in other devices", () => {
     const { cookie } = await f.login();
     const stale = await (await f.api("/api/login-code", cookie)).json() as WebLoginCode;
     await Bun.sleep(80);
-    expect((await f.api("/api/login", "", { token: stale.code })).status).toBe(401);
+    expect((await f.api("/api/login", "", { code: stale.code })).status).toBe(401);
     const codes = new LoginCodes(60_000, 2);
     const [first, second, third] = [codes.create(), codes.create(), codes.create()];
     expect(codes.redeem(first.code)).toBe(false);
@@ -351,7 +363,7 @@ const origin = "http://127.0.0.1:7430";
 async function recoveryOptions(): Promise<WebRecoveryOptions> {
   const root = await mkdtemp(join(tmpdir(), "shore-web-recovery-"));
   const dataDir = join(root, "data"); await mkdir(dataDir);
-  return { dataDir, cacheDir: join(root, "cache"), token: "private-recovery-daemon-token" };
+  return { dataDir, cacheDir: join(root, "cache") };
 }
 
 function open(config: WebRecoveryOptions, url = origin, capacity = 4, lifetime = 60_000) {
@@ -388,7 +400,7 @@ test("restart preserves session ownership and original expiry using hashes, neve
   if (cookieToken === undefined) throw new Error("Missing token");
   expect(first.session.id).toBe(sessionDigest(cookieToken));
   const bytes = await readFile(path);
-  expect(bytes.includes(cookieToken)).toBe(false); expect(bytes.includes(config.token)).toBe(false);
+  expect(bytes.includes(cookieToken)).toBe(false);
   await a.close();
   const b = open(config); const recovered = b.sessions.read(first.request); const other = b.sessions.read(second.request);
   expect(recovered?.expiresAt).toBe(first.session.expiresAt);
@@ -406,12 +418,12 @@ test("restart preserves session ownership and original expiry using hashes, neve
   expect(c.recovery.archives()).toEqual([]);
 });
 
-test.each(["token", "origin"])("changing the %s invalidates old credentials and transfers before serving", async (changed) => {
+test("changing the origin invalidates old credentials and transfers before serving", async () => {
   const config = await recoveryOptions(); const a = open(config); const signed = signIn(a.sessions);
   a.recovery.saveArchive(signed.session.id, saved("uncertain"));
   const artifacts = a.recovery.artifacts;
   await a.close(); await writeFile(join(artifacts, "crash-orphan"), "private bytes");
-  const b = open(changed === "token" ? { ...config, token: "rotated-token" } : config, changed === "origin" ? "https://shore.example" : origin);
+  const b = open(config, "https://shore.example");
   expect(b.sessions.read(signed.request)).toBeUndefined(); expect(b.recovery.archives()).toEqual([]);
   expect(await readdir(artifacts)).toEqual([]);
   await b.close();
@@ -515,12 +527,12 @@ test("uploads enforce declared and streamed byte limits, valid filenames, conten
 
 test("HTTP archive endpoints authenticate and enforce origin before attaching a bounded worker alongside a browser", async () => {
   const f = await archiveFixture();
-  const web = startWebServer({ server: f.server, authenticate: (token) => token === "archive-token", config: { ...defaultWebConfig(), enabled: true, bind_addr: "127.0.0.1:0", max_connections: 1 }, archiveLimits: { uploadBytes: 8192 } });
+  const web = startWebServer({ server: f.server, dataDir: signedInData(), config: { ...defaultWebConfig(), enabled: true, bind_addr: "127.0.0.1:0", max_connections: 1 }, archiveLimits: { uploadBytes: 8192 } });
   cleanups.push(() => web.stop()); web.activate();
   const post = (path: string, cookie = "", body: NonNullable<RequestInit["body"]> = "{}", headers: Record<string, string> = {}) => fetch(`${web.origin}/api${path}`, { method: "POST", body, headers: { cookie, origin: web.origin, "content-type": "application/json", ...headers } });
   const login = async () => {
-    const { code } = await (await fetch(`${web.origin}/api/login-code`, { method: "POST", headers: { authorization: "Bearer archive-token" } })).json() as WebLoginCode;
-    const response = await post("/login", "", JSON.stringify({ token: code }));
+    const { code } = await (await fetch(`${web.origin}/api/login-code`, { method: "POST", headers: { authorization: `Bearer ${TOKEN}` } })).json() as WebLoginCode;
+    const response = await post("/login", "", JSON.stringify({ code }));
     expect(response.status).toBe(200); const cookie = response.headers.get("set-cookie")?.split(";").at(0);
     if (cookie === undefined) throw new Error("Missing archive session cookie"); return cookie;
   };
@@ -562,11 +574,11 @@ test("a refusal's code follows its status: signed out, not found and too many ha
 
 test("an archive goes the whole way over HTTP: exported, downloaded, removed, with exact refusals for what it can't do", async () => {
   const f = await archiveFixture();
-  const web = startWebServer({ server: f.server, authenticate: (token) => token === "archive-token", config: { ...defaultWebConfig(), enabled: true, bind_addr: "127.0.0.1:0" }, archiveLimits: { uploadBytes: 8192 } });
+  const web = startWebServer({ server: f.server, dataDir: signedInData(), config: { ...defaultWebConfig(), enabled: true, bind_addr: "127.0.0.1:0" }, archiveLimits: { uploadBytes: 8192 } });
   cleanups.push(() => web.stop()); web.activate();
   const post = (path: string, cookie: string, body: NonNullable<RequestInit["body"]> = "{}", headers: Record<string, string> = {}) => fetch(`${web.origin}/api${path}`, { method: "POST", body, headers: { cookie, origin: web.origin, "content-type": "application/json", ...headers } });
-  const { code } = await (await fetch(`${web.origin}/api/login-code`, { method: "POST", headers: { authorization: "Bearer archive-token" } })).json() as WebLoginCode;
-  const cookie = (await post("/login", "", JSON.stringify({ token: code }))).headers.get("set-cookie")?.split(";")[0] ?? "";
+  const { code } = await (await fetch(`${web.origin}/api/login-code`, { method: "POST", headers: { authorization: `Bearer ${TOKEN}` } })).json() as WebLoginCode;
+  const cookie = (await post("/login", "", JSON.stringify({ code }))).headers.get("set-cookie")?.split(";")[0] ?? "";
   const exporting = await post("/archives/export", cookie, '{"character":"ada"}');
   const info = await exporting.json() as { id: string; phase: string };
   expect([exporting.status, info.phase]).toEqual([202, "exporting"]);
@@ -600,7 +612,7 @@ async function freePort(): Promise<number> {
 
 function recoveringServer(recovery: WebRecoveryOptions, port: number, sessionLifetimeMs = 60_000, drainTimeoutMs?: number) {
   const swp = new Server({ handshake: { hello: async () => ({ characters: [{ name: "ada" }] }), history: async (selectedCharacter) => ({ messages: [], previousSegment: null, config: {}, selectedCharacter, selectedThread: "main", revision: 0 }), select: async (character) => ({ character, thread: null }) } });
-  const web = startWebServer({ server: swp, authenticate: (token) => token === "recovery-token", config: { ...defaultWebConfig(), enabled: true, bind_addr: `127.0.0.1:${String(port)}` }, recovery, sessionLifetimeMs, ...(drainTimeoutMs === undefined ? {} : { drainTimeoutMs }) });
+  const web = startWebServer({ server: swp, dataDir: signedInData(), config: { ...defaultWebConfig(), enabled: true, bind_addr: `127.0.0.1:${String(port)}` }, recovery, sessionLifetimeMs, ...(drainTimeoutMs === undefined ? {} : { drainTimeoutMs }) });
   web.activate();
   return { swp, web, post: (path: string, cookie: string, body: NonNullable<RequestInit["body"]> = "{}", headers: Record<string, string> = {}) => fetch(`${web.origin}/api${path}`, { method: "POST", body, headers: { cookie, origin: web.origin, "content-type": "application/json", ...headers } }) };
 }
@@ -609,8 +621,8 @@ test("a daemon that restarts keeps its browsers signed in and remembers their ar
   const recovery = await recoveryOptions();
   const port = await freePort();
   const first = recoveringServer(recovery, port);
-  const { code } = await (await fetch(`${first.web.origin}/api/login-code`, { method: "POST", headers: { authorization: "Bearer recovery-token" } })).json() as WebLoginCode;
-  const cookie = (await first.post("/login", "", JSON.stringify({ token: code }))).headers.get("set-cookie")?.split(";")[0] ?? "";
+  const { code } = await (await fetch(`${first.web.origin}/api/login-code`, { method: "POST", headers: { authorization: `Bearer ${TOKEN}` } })).json() as WebLoginCode;
+  const cookie = (await first.post("/login", "", JSON.stringify({ code }))).headers.get("set-cookie")?.split(";")[0] ?? "";
   const uploaded = await (await first.post("/archives", cookie, "local archive bytes", { "content-type": "application/octet-stream", "x-shore-filename": "picked.tar.gz" })).json() as { id: string };
   await first.web.stop(); first.swp.stop();
   const second = recoveringServer(recovery, port);
@@ -624,8 +636,8 @@ test("a listener that fails to start lets go of its port, its stored sign-ins an
   const recovery = await recoveryOptions();
   const port = await freePort();
   const first = recoveringServer(recovery, port, 300);
-  const { code } = await (await fetch(`${first.web.origin}/api/login-code`, { method: "POST", headers: { authorization: "Bearer recovery-token" } })).json() as WebLoginCode;
-  expect((await first.post("/login", "", JSON.stringify({ token: code }))).status).toBe(200);
+  const { code } = await (await fetch(`${first.web.origin}/api/login-code`, { method: "POST", headers: { authorization: `Bearer ${TOKEN}` } })).json() as WebLoginCode;
+  expect((await first.post("/login", "", JSON.stringify({ code }))).status).toBe(200);
   await first.web.stop(); first.swp.stop();
   const restoring = spyOn(ArchiveTransfers.prototype, "restore").mockImplementation(() => { throw new Error("the archive records are unreadable"); });
   try {
@@ -699,14 +711,14 @@ test("signed-in pages can load a sent picture without an Origin header, and nobo
     handshake: { hello: async () => ({ characters: [] }), history: async () => ({ messages: [], previousSegment: null, config: {}, selectedCharacter: null, selectedThread: "main", revision: 0 }), select: async (character) => ({ character, thread: null }) },
   });
   const web = startWebServer({
-    server: swp, authenticate: (token) => tokenMatches("token", token),
+    server: swp, dataDir: signedInData(),
     config: { ...defaultWebConfig(), enabled: true, bind_addr: "127.0.0.1:0" },
     picture: (file) => findSentPicture(data, file),
   });
   web.activate();
   cleanups.push(async () => { await web.stop(); swp.stop(); });
-  const { code } = await (await fetch(`${web.origin}/api/login-code`, { method: "POST", headers: { authorization: "Bearer token" } })).json() as WebLoginCode;
-  const login = await fetch(`${web.origin}/api/login`, { method: "POST", headers: { origin: web.origin, "content-type": "application/json" }, body: JSON.stringify({ token: code }) });
+  const { code } = await (await fetch(`${web.origin}/api/login-code`, { method: "POST", headers: { authorization: `Bearer ${TOKEN}` } })).json() as WebLoginCode;
+  const login = await fetch(`${web.origin}/api/login`, { method: "POST", headers: { origin: web.origin, "content-type": "application/json" }, body: JSON.stringify({ code }) });
   const cookie = login.headers.get("set-cookie")?.split(";", 1)[0] ?? "";
   const picture = (file: string, headers?: Record<string, string>) => fetch(`${web.origin}/api/pictures/${file}`, { headers: headers ?? { cookie } });
 
@@ -752,6 +764,122 @@ describe("what the page itself is served", () => {
 
 });
 
+describe("the daemon's password", () => {
+  const PASSWORD = "correct horse";
+  const said = async (response: Response) => [response.status, response.status === 204 ? null : await response.json()];
+  const cli = (f: Awaited<ReturnType<typeof fixture>>, body: unknown, headers: Record<string, string> = {}) =>
+    fetch(`${f.web.address}/api/sign-in`, { method: "POST", body: JSON.stringify(body), headers: { "content-type": "application/json", ...headers } });
+  const state = async (f: Awaited<ReturnType<typeof fixture>>) => await (await fetch(`${f.web.address}/api/sign-in`)).json();
+
+  test("is chosen on a first visit by whoever comes, once, and only a long enough one", async () => {
+    const f = await fixture(); f.web.activate();
+    expect(await state(f)).toEqual({ password_set: false });
+    expect(await said(await f.api("/api/login", "", { password: PASSWORD }))).toEqual([403, { code: "forbidden", message: "This daemon has no password yet. Choose one first." }]);
+    expect(await said(await cli(f, { name: "desk", password: PASSWORD }))).toEqual([403, { code: "forbidden", message: "This daemon has no password yet. Choose one first." }]);
+    for (const body of [{}, { password: 8 }, { password: PASSWORD, extra: true }, { current: PASSWORD }]) {
+      expect(await said(await f.api("/api/password", "", body))).toEqual([400, { code: "invalid_request", message: "Send the new password, and the current one if the daemon has one" }]);
+    }
+    expect(await said(await f.api("/api/password", "", { password: "seven c" }))).toEqual([400, { code: "invalid_request", message: "Choose a password of at least 8 characters" }]);
+    expect(await state(f)).toEqual({ password_set: false });
+    expect(await said(await f.api("/api/password", "", { password: PASSWORD }))).toEqual([204, null]);
+    expect(await state(f)).toEqual({ password_set: true });
+    expect(await said(await f.api("/api/password", "", { password: "someone else's" }))).toEqual([403, { code: "forbidden", message: "This daemon already has a password. Give the current one to change it." }]);
+    expect(await said(await f.api("/api/login", "", { password: "someone else's" }))).toEqual([401, { code: "unauthorized", message: "That password isn’t right" }]);
+    expect(f.histories()).toBe(0);
+  });
+
+  test("signs a browser in, and signs a CLI in as a device of its own", async () => {
+    const f = await fixture(); f.web.activate();
+    await f.api("/api/password", "", { password: PASSWORD });
+    const login = await f.api("/api/login", "", { password: PASSWORD });
+    expect(login.status).toBe(200);
+    const cookie = login.headers.get("set-cookie")?.split(";", 1)[0] ?? "";
+    expect((await f.api("/api/session", cookie)).status).toBe(200);
+
+    expect(await said(await cli(f, { name: "desk", password: "nope nope" }))).toEqual([401, { code: "unauthorized", message: "That password isn’t right" }]);
+    expect(await said(await cli(f, { name: "  ", password: PASSWORD }))).toEqual([400, { code: "invalid_request", message: "Give the device a name of 1 to 64 characters, without control characters" }]);
+    for (const body of [{ name: "desk" }, { name: "desk", password: PASSWORD, secret: "s" }, "not an object"]) {
+      expect(await said(await cli(f, body))).toEqual([400, { code: "invalid_request", message: "Name this device and give the daemon’s password" }]);
+    }
+    const signed = await cli(f, { name: " desk ", password: PASSWORD });
+    expect(signed.status).toBe(200);
+    const { token } = await signed.json() as { token: string };
+    expect(token).toMatch(/^shore_[A-Za-z0-9_-]{43}$/);
+    const hello = await fetch(`${f.web.address}/api/hello`, { headers: { authorization: `Bearer ${token}` } });
+    expect(hello.status).toBe(200);
+    const listed = await (await f.api("/api/devices/list", cookie)).json() as { devices: { kind: string; name: string }[] };
+    expect(listed.devices.filter((device) => device.kind === "cli").map((device) => device.name)).toEqual(["Test CLI", "desk"]);
+  });
+
+  test("changes only with the current one, and then the old one no longer works", async () => {
+    const f = await fixture(); f.web.activate();
+    await f.api("/api/password", "", { password: PASSWORD });
+    const { cookie } = await f.login();
+    expect(await said(await f.api("/api/password", "", { current: "not it at all", password: "battery staple" }))).toEqual([401, { code: "unauthorized", message: "That password isn’t right" }]);
+    expect(await said(await f.api("/api/password", "", { current: PASSWORD, password: "short" }))).toEqual([400, { code: "invalid_request", message: "Choose a password of at least 8 characters" }]);
+    expect(await said(await f.api("/api/password", "", { current: PASSWORD, password: "battery staple" }))).toEqual([204, null]);
+    expect((await f.api("/api/login", "", { password: PASSWORD })).status).toBe(401);
+    expect((await f.api("/api/login", "", { password: "battery staple" })).status).toBe(200);
+    expect((await cli(f, { name: "desk", password: "battery staple" })).status).toBe(200);
+    expect((await f.api("/api/session", cookie)).status, "a browser already in stays in").toBe(200);
+  });
+
+  test("is guessed at most so often a minute from one place, whichever door the guesses come through", async () => {
+    const f = await fixture(); f.web.activate();
+    await f.api("/api/password", "", { password: PASSWORD });
+    for (let i = 0; i < WEB_LIMITS.loginAttemptsPerMinute; i += 1) {
+      const door = [() => f.api("/api/login", "", { password: `wrong ${String(i)}` }), () => cli(f, { name: "desk", password: `wrong ${String(i)}` }), () => f.api("/api/password", "", { current: `wrong ${String(i)}`, password: "battery staple" })][i % 3];
+      expect((await required(door)()).status).toBe(401);
+    }
+    const held = { code: "too_many_requests", message: "Too many sign-in attempts; try again in a minute" };
+    expect(await said(await f.api("/api/login", "", { password: PASSWORD })), "not even the right one").toEqual([429, held]);
+    expect(await said(await cli(f, { name: "desk", password: PASSWORD }))).toEqual([429, held]);
+    expect(await said(await f.api("/api/password", "", { current: PASSWORD, password: "battery staple" }))).toEqual([429, held]);
+  }, 20_000);
+
+  test("a right password forgives the wrong ones before it", async () => {
+    const f = await fixture(); f.web.activate();
+    await f.api("/api/password", "", { password: PASSWORD });
+    for (let i = 1; i < WEB_LIMITS.loginAttemptsPerMinute; i += 1) expect((await cli(f, { name: "desk", password: "wrong one" })).status).toBe(401);
+    expect((await cli(f, { name: "desk", password: PASSWORD })).status).toBe(200);
+    const after = [await cli(f, { name: "desk", password: "wrong one" }), await cli(f, { name: "desk", password: "wrong one" })];
+    expect(after.map((answer) => answer.status), "the count started again").toEqual([401, 401]);
+  }, 20_000);
+
+  test("is refused to another site's page, and shares its limit on sign-ins under way with the browser's door", async () => {
+    const f = await fixture({ config: { ...defaultWebConfig(), enabled: true, bind_addr: "127.0.0.1:0", max_connections: 1 } }); f.web.activate();
+    for (const site of ["cross-site", "same-site"]) {
+      expect(await said(await cli(f, { password: PASSWORD }, { "sec-fetch-site": site }))).toEqual([403, { code: "forbidden", message: "Another site’s page can’t use this daemon" }]);
+      expect(await said(await fetch(`${f.web.address}/api/password`, { method: "POST", body: JSON.stringify({ password: PASSWORD }), headers: { "content-type": "application/json", "sec-fetch-site": site } }))).toEqual([403, { code: "forbidden", message: "Another site’s page can’t use this daemon" }]);
+    }
+    expect(await state(f)).toEqual({ password_set: false });
+    const holding = new AbortController();
+    const held = fetch(`${f.web.origin}/api/login`, {
+      method: "POST", signal: holding.signal, headers: { origin: f.web.origin, "content-type": "application/json" },
+      body: new ReadableStream({ start(output) { output.enqueue(new TextEncoder().encode('{"pass')); } }), duplex: "half",
+    }).catch(() => undefined);
+    await Bun.sleep(50);
+    expect(await said(await f.api("/api/password", "", { password: PASSWORD }))).toEqual([429, { code: "too_many_requests", message: "Too many sign-in attempts; try again in a minute" }]);
+    holding.abort();
+    await held;
+    await untilAsync(async () => (await f.api("/api/password", "", { password: PASSWORD })).status === 204, "the held sign-in to end its count");
+    expect((await fetch(`${f.web.address}/api/password`, { method: "POST", body: "x".repeat(WEB_LIMITS.loginBytes + 1), headers: { "content-type": "application/json" } })).status).toBe(413);
+  });
+
+  test("a password file Shore didn't write says to delete it, and deleting it lets a new one be chosen", async () => {
+    const dataDir = await mkdtemp(join(tmpdir(), "shore-web-password-"));
+    await writeFile(join(dataDir, "password"), "written by hand\n");
+    const f = await fixture({ dataDir }); f.web.activate();
+    const problem = [503, { code: "unavailable", message: `${join(dataDir, "password")} doesn’t hold a password Shore set. Delete it, then choose the password again.` }];
+    expect(await said(await f.api("/api/login", "", { password: "written by hand" }))).toEqual(problem);
+    expect(await said(await cli(f, { name: "desk", password: "written by hand" }))).toEqual(problem);
+    await rm(join(dataDir, "password"));
+    expect(await state(f)).toEqual({ password_set: false });
+    expect((await f.api("/api/password", "", { password: PASSWORD })).status).toBe(204);
+    expect((await f.api("/api/login", "", { password: PASSWORD })).status).toBe(200);
+  });
+});
+
 describe("signing a browser in", () => {
   test("too many failed attempts from one place are refused for a minute from the first, and a success forgets them", () => {
     const failures = new LoginFailures(2, 2);
@@ -784,7 +912,7 @@ describe("signing a browser in", () => {
   test("signing in again from a browser already signed in ends its old sign-in, and renewing hands the cookie back", async () => {
     const f = await fixture(); f.web.activate();
     const first = await f.login();
-    const again = await f.api("/api/login", first.cookie, { token: await f.code() });
+    const again = await f.api("/api/login", first.cookie, { code: await f.code() });
     const second = again.headers.get("set-cookie")?.split(";", 1)[0] ?? "";
     expect((await f.api("/api/session", first.cookie)).status).toBe(401);
     const renewed = await f.api("/api/session", second);
@@ -793,9 +921,9 @@ describe("signing a browser in", () => {
 
   test("a browser that signs in starts its count of failed attempts over", async () => {
     const f = await fixture(); f.web.activate();
-    const wrong = async () => (await f.api("/api/login", "", { token: "wrong" })).status;
+    const wrong = async () => (await f.api("/api/login", "", { code: "wrong" })).status;
     for (let tried = 1; tried < WEB_LIMITS.loginAttemptsPerMinute; tried += 1) expect(await wrong()).toBe(401);
-    expect((await f.api("/api/login", "", { token: await f.code() })).status).toBe(200);
+    expect((await f.api("/api/login", "", { code: await f.code() })).status).toBe(200);
     expect([await wrong(), await wrong()]).toEqual([401, 401]);
   });
 
@@ -804,7 +932,7 @@ describe("signing a browser in", () => {
     const token = await f.code();
     let rest = (): void => {};
     const body = new ReadableStream<Uint8Array>({ start(output) {
-      output.enqueue(new TextEncoder().encode('{"token":'));
+      output.enqueue(new TextEncoder().encode('{"code":'));
       rest = () => { output.enqueue(new TextEncoder().encode(JSON.stringify(token) + "}")); output.close(); };
     } });
     const answer = fetch(`${f.web.origin}/api/login`, { method: "POST", body, duplex: "half", headers: { origin: f.web.origin, "content-type": "application/json" } });
@@ -818,18 +946,18 @@ describe("signing a browser in", () => {
 
   test("only as many sign-ins can be under way at once as the daemon takes connections, and each one ends its count", async () => {
     const f = await fixture({ config: { ...defaultWebConfig(), enabled: true, bind_addr: "127.0.0.1:0", max_connections: 1 } }); f.web.activate();
-    expect((await f.api("/api/login", "", { token: "wrong" })).status).toBe(401);
+    expect((await f.api("/api/login", "", { code: "wrong" })).status).toBe(401);
     const holding = new AbortController();
     const held = fetch(`${f.web.origin}/api/login`, {
       method: "POST", signal: holding.signal, headers: { origin: f.web.origin, "content-type": "application/json" },
       body: new ReadableStream({ start(output) { output.enqueue(new TextEncoder().encode('{"tok')); } }), duplex: "half",
     }).catch(() => undefined);
     await Bun.sleep(50);
-    const refused = await f.api("/api/login", "", { token: "wrong" });
-    expect([refused.status, await refused.json()]).toEqual([429, { code: "too_many_requests", message: "Too many sign-in attempts; try again later" }]);
+    const refused = await f.api("/api/login", "", { code: "wrong" });
+    expect([refused.status, await refused.json()]).toEqual([429, { code: "too_many_requests", message: "Too many sign-in attempts; try again in a minute" }]);
     holding.abort();
     await held;
-    await untilAsync(async () => (await f.api("/api/login", "", { token: "wrong" })).status === 401, "the held sign-in to end its count");
+    await untilAsync(async () => (await f.api("/api/login", "", { code: "wrong" })).status === 401, "the held sign-in to end its count");
   });
 });
 
@@ -983,7 +1111,9 @@ describe("a browser's socket, once it is in", () => {
     expect([(await browser.closed).code, browser.closeDetail]).toEqual([1008, "1008 Request rate limit reached"]);
   });
 
-  test("takes as many bytes in its first second, its hello among them, as one message may hold", async () => {
+  test("takes as many bytes in its first second, its hello among them, as one message may hold, and closes on the next byte", async () => {
+    setSystemTime(new Date(Date.now()));
+    cleanups.push(() => { setSystemTime(); });
     const f = await fixture(); f.web.activate();
     const browser = connectBrowser(f.web.origin, (await f.login()).cookie);
     await browser.attach();
@@ -991,6 +1121,181 @@ describe("a browser's socket, once it is in", () => {
     const base = JSON.stringify({ type: "command", rid: "huge", name: "status", args: { pad: "" } });
     browser.socket.send(base.replace('"pad":""', `"pad":"${"x".repeat(WEB_LIMITS.messageBytes - hello.length - base.length)}"`));
     await until(() => f.routed.some((route) => route.kind === "command" && route.meta.rid === "huge"), "the largest request there may be to be taken");
+    expect(browser.socket.readyState).toBe(WebSocket.OPEN);
+    browser.socket.send(" ");
+    await browser.closed;
+    expect(browser.closeDetail).toBe("1009 Expected a bounded JSON text message");
+  });
+});
+
+describe("what a browser's socket takes and refuses", () => {
+  type Fixture = Awaited<ReturnType<typeof fixture>>;
+  const small = { ...defaultWebConfig(), enabled: true, bind_addr: "127.0.0.1:0", max_queued_bytes: 4096 };
+  const hello = { type: "hello", client_type: "web", client_name: "test-tab", capabilities: [], character: "ada", thread: "main" };
+  const command = (rid: string) => ({ type: "command", rid, name: "status", args: { pad: "" } });
+  const sized = (rid: string, bytes: number, type: "command" | "message" = "command") => {
+    const base = JSON.stringify(type === "command" ? command(rid) : { type, rid, text: "" });
+    const blank = type === "command" ? '"pad":""' : '"text":""';
+    return base.replace(blank, `${blank.slice(0, -1)}${"x".repeat(bytes - base.length)}"`);
+  };
+  const taken = (f: Fixture, rid: string) => f.routed.some((route) => (route.kind === "command" || route.kind === "engine") && route.meta.rid === rid);
+  const closing = async (browser: BrowserSocket): Promise<string> => { await browser.closed; return browser.closeDetail; };
+
+  test("opens with a browser's hello and nothing else, and attaches nothing otherwise", async () => {
+    const f = await fixture(); f.web.activate();
+    const { cookie } = await f.login();
+    const opened = async (): Promise<BrowserSocket> => { const browser = connectBrowser(f.web.origin, cookie); await browser.opened; return browser; };
+    for (const first of [command("early"), { ...hello, client_type: "cli" }]) {
+      const browser = await opened();
+      browser.send(first);
+      expect(await closing(browser)).toBe("1008 Expected a browser hello after sign-in");
+    }
+    const garbled = await opened();
+    garbled.socket.send("{");
+    expect(await closing(garbled)).toBe("1008 Invalid client message");
+    const binary = await opened();
+    binary.socket.send(new TextEncoder().encode(JSON.stringify(hello)));
+    expect(await closing(binary)).toBe("1009 Expected a bounded JSON text message");
+    const padded = (bytes: number): string => { const text = JSON.stringify(hello); return text + " ".repeat(bytes - text.length); };
+    const longest = await opened();
+    longest.socket.send(padded(WEB_LIMITS.helloBytes + 1));
+    expect(await closing(longest)).toBe("1009 Expected a bounded JSON text message");
+    expect([f.histories(), f.swp.sessionRouter.sessions()]).toEqual([0, []]);
+    const fits = await opened();
+    fits.socket.send(padded(WEB_LIMITS.helloBytes));
+    await fits.frame("history");
+  });
+
+  test("takes nothing but its hello until the daemon has said hello back, and no second hello after", async () => {
+    let gate: Promise<void> | undefined;
+    let asked = 0;
+    const f = await fixture({}, {
+      hello: async () => { asked += 1; await gate; return { characters: [{ name: "ada" }] }; },
+      select: (character) => Promise.resolve({ character, thread: null }),
+      history: async (selected, thread) => ({ messages: [], previousSegment: null, config: {}, selectedCharacter: selected, selectedThread: thread ?? "main", revision: 0 }),
+    }); f.web.activate();
+    const { cookie } = await f.login();
+    let answer = (): void => {};
+    gate = new Promise<void>((resolve) => { answer = resolve; });
+    cleanups.push(() => { answer(); });
+    const before = asked;
+    const early = connectBrowser(f.web.origin, cookie);
+    await early.opened;
+    early.send(hello);
+    await until(() => asked > before, "the daemon to be asked for its hello");
+    early.send(command("too-soon"));
+    expect(await closing(early)).toBe("1008 Wait for the server hello before sending requests");
+    answer();
+    const twice = connectBrowser(f.web.origin, cookie);
+    await twice.attach();
+    twice.send(hello);
+    expect(await closing(twice)).toBe("1008 Wait for the server hello before sending requests");
+    expect(taken(f, "too-soon")).toBe(false);
+  });
+
+  test("starts its count and its bytes over exactly a second after its window opened, and again a second after that", async () => {
+    const start = Date.now();
+    setSystemTime(new Date(start));
+    cleanups.push(() => { setSystemTime(); });
+    const f = await fixture(); f.web.activate();
+    const browser = connectBrowser(f.web.origin, (await f.login()).cookie);
+    await browser.attach();
+    const errors = (): number => browser.messages.filter((frame) => frame.type === "error").length;
+    let next = 0;
+    const burst = (count: number): void => { for (let sent = 0; sent < count; sent += 1) { browser.send(command(`r${String(next)}`)); next += 1; } };
+    burst(127);
+    await until(() => errors() === 95, "the first second's requests past the 32 pending to be refused");
+    setSystemTime(new Date(start + 1000));
+    browser.socket.send(sized("whole", WEB_LIMITS.messageBytes));
+    await until(() => errors() === 96, "a request as large as one may be, alone in its second, to be refused only for its queue");
+    setSystemTime(new Date(start + 2000));
+    burst(128);
+    await until(() => errors() === 224, "the third second's requests to be refused as too many pending");
+    expect(browser.socket.readyState).toBe(WebSocket.OPEN);
+    burst(1);
+    expect(await closing(browser)).toBe("1008 Request rate limit reached");
+  });
+
+  test("needs a correlation ID of each request's own: there, ASCII, at most 128 bytes, and not one still pending", async () => {
+    const f = await fixture(); f.web.activate();
+    const { cookie } = await f.login();
+    const browser = connectBrowser(f.web.origin, cookie);
+    await browser.attach();
+    const good = ["a", "x".repeat(128), "pending"];
+    for (const rid of good) browser.send(command(rid));
+    await until(() => good.every((rid) => taken(f, rid)), "the requests with good IDs to be taken");
+    browser.send(command("pending"));
+    expect(await closing(browser)).toBe("1008 Requests need distinct correlation IDs");
+    for (const request of [{ type: "command", name: "status", args: {} }, command(""), command("é"), command("x".repeat(129))]) {
+      const refused = connectBrowser(f.web.origin, cookie);
+      await refused.attach();
+      refused.send(request);
+      expect(await closing(refused)).toBe("1008 Requests need distinct correlation IDs");
+    }
+  });
+
+  test("refuses, and stays open, a request too large for its queue or one that would overfill it, and says which", async () => {
+    const f = await fixture({ config: small }); f.web.activate();
+    const browser = connectBrowser(f.web.origin, (await f.login()).cookie);
+    await browser.attach();
+    browser.socket.send(sized("held", 3000));
+    await until(() => taken(f, "held"), "the first request to be taken");
+    for (const [rid, bytes] of [["overfills", 1097], ["whole-queue", 4096], ["too-large", 4097], ["fits", 1096]] as const) browser.socket.send(sized(rid, bytes));
+    await until(() => taken(f, "fits"), "the request that just fits beside the first to be taken");
+    const pending = "Too many pending requests; wait for a result";
+    for (const [rid, message] of [["overfills", pending], ["whole-queue", pending], ["too-large", "Request is too large; maximum is 4096 bytes"]] as const) {
+      const error = { rid, code: "invalid_request" as const, message };
+      expect([browser.messages.find((frame) => frame.type === "error" && frame.rid === rid), await browser.frame("request_finished", rid)])
+        .toEqual([{ type: "error", ...error }, { type: "request_finished", rid, outcome: "failed", error }]);
+    }
+    expect(["overfills", "whole-queue", "too-large"].filter((rid) => taken(f, rid))).toEqual([]);
+    expect(browser.socket.readyState).toBe(WebSocket.OPEN);
+  });
+
+  test("a request its history can't take is refused with the reason, and gives back its room in the queue", async () => {
+    const f = await fixture({ config: small }); f.web.activate();
+    const browser = connectBrowser(f.web.origin, (await f.login()).cookie);
+    await browser.attach();
+    browser.socket.send(sized("once", 100, "message"));
+    await until(() => taken(f, "once"), "the first message to be taken");
+    const route = required(f.routed.find((entry) => entry.kind === "engine" && entry.meta.rid === "once"));
+    if (route.kind !== "engine") throw new Error("not a message");
+    await f.finish(route.meta.session.sessionId, { type: "request_finished", rid: "once", outcome: "completed" });
+    await browser.frame("request_finished", "once");
+    browser.socket.send(sized("once", 3000, "message"));
+    const ended = () => browser.messages.filter((frame) => "rid" in frame && frame.rid === "once");
+    await until(() => ended().filter((frame) => frame.type === "request_finished").length === 2, "the second message under the same ID to finish");
+    const error = { rid: "once", code: "invalid_request" as const, message: "This request ID already has an outcome; inspect it before starting a new action" };
+    expect(ended().slice(-2)).toEqual([{ type: "error", ...error }, { type: "request_finished", rid: "once", outcome: "failed", error }]);
+    browser.socket.send(sized("after", 3000, "message"));
+    await until(() => taken(f, "after"), "a message as large as the refused one to be taken");
+  });
+
+  test("a request the daemon can't be handed is refused as never dispatched, and a stop it can't be handed closes the socket", async () => {
+    const attach = Object.getOwnPropertyDescriptor(Server.prototype, "attachLocal")?.value as typeof Server.prototype.attachLocal;
+    const attaching = spyOn(Server.prototype, "attachLocal").mockImplementation(async function (this: Server, options) {
+      return { ...await attach.call(this, options), send: () => Promise.reject(new Error("the daemon is going away")) };
+    });
+    cleanups.push(() => { attaching.mockRestore(); });
+    const f = await fixture({ config: small }); f.web.activate();
+    const browser = connectBrowser(f.web.origin, (await f.login()).cookie);
+    await browser.attach();
+    const error = { code: "invalid_request" as const, message: "Could not deliver this request. Nothing was dispatched; try again after the connection and recovery storage are available." };
+    for (const rid of ["lost", "lost too"]) {
+      browser.socket.send(sized(rid, 3000));
+      expect(await browser.frame("request_finished", rid)).toEqual({ type: "request_finished", rid, outcome: "failed", error: { rid, ...error } });
+      expect(browser.messages.find((frame) => frame.type === "error" && frame.rid === rid)).toEqual({ type: "error", rid, ...error });
+    }
+    browser.send({ type: "cancel" });
+    expect(await closing(browser)).toBe("1011 Request delivery failed");
+  });
+
+  test("hands on every stop, however many come at once", async () => {
+    const f = await fixture(); f.web.activate();
+    const browser = connectBrowser(f.web.origin, (await f.login()).cookie);
+    await browser.attach();
+    for (let sent = 0; sent < 100; sent += 1) browser.send({ type: "cancel" });
+    await until(() => f.controls.filter((route) => route.kind === "engine").length === 100, "every stop to be handed on");
     expect(browser.socket.readyState).toBe(WebSocket.OPEN);
   });
 });
@@ -1016,13 +1321,8 @@ describe("a request that fails inside the daemon", () => {
     } finally { reading.mockRestore(); }
   });
 
-  test("a daemon that keeps no sign-ins or transfers says so", async () => {
+  test("a daemon that keeps no transfers says so", async () => {
     const f = await fixture(); f.web.activate();
-    const asked = [
-      await fetch(`${f.web.address}/api/sign-in`, { method: "POST", body: JSON.stringify({ name: "desk", secret: "s".repeat(40) }), headers: { "content-type": "application/json" } }),
-      await fetch(`${f.web.address}/api/devices/automation`, { method: "POST", body: JSON.stringify({ name: "desk", operations: ["presence"] }), headers: { authorization: `Bearer ${TOKEN}`, "content-type": "application/json" } }),
-    ];
-    for (const answer of asked) expect([answer.status, await answer.json()]).toEqual([503, { code: "unavailable", message: "This daemon keeps no device sign-ins" }]);
     const transfers = [
       await fetch(`${f.web.address}/api/transfers/${crypto.randomUUID()}`, { headers: { authorization: `Bearer ${TOKEN}` } }),
       await fetch(`${f.web.address}/api/transfers`, { method: "POST", body: "x", headers: { authorization: `Bearer ${TOKEN}`, "content-type": "application/octet-stream" } }),
@@ -1061,7 +1361,7 @@ describe("what the listener asks of Bun", () => {
     const recorded = recordingServe();
     const spool = new ArchiveSpool(join(await mkdtemp(join(tmpdir(), "shore-held-")), "transfers"));
     const f = await fixture({ transfers: spool }); f.web.activate();
-    const spooled = await spool.reserve("owner");
+    const spooled = await spool.reserve("test-cli");
     await writeFile(spooled.file, "archive");
     spool.publish(spooled, "download", 7);
     const bearer = { authorization: `Bearer ${TOKEN}` };
@@ -1082,8 +1382,8 @@ describe("stopping the web listener", () => {
   test("a stopped listener leaves no browser sign-in waiting to run out on the store it closed", async () => {
     const recovery = await recoveryOptions();
     const listener = recoveringServer(recovery, await freePort(), 300);
-    const { code } = await (await fetch(`${listener.web.origin}/api/login-code`, { method: "POST", headers: { authorization: "Bearer recovery-token" } })).json() as WebLoginCode;
-    expect((await listener.post("/login", "", JSON.stringify({ token: code }))).status).toBe(200);
+    const { code } = await (await fetch(`${listener.web.origin}/api/login-code`, { method: "POST", headers: { authorization: `Bearer ${TOKEN}` } })).json() as WebLoginCode;
+    expect((await listener.post("/login", "", JSON.stringify({ code }))).status).toBe(200);
     await listener.web.stop(); listener.swp.stop();
     await Bun.sleep(400);
     expect([handlesUnder(recovery.dataDir), handlesUnder(recovery.cacheDir)]).toEqual([0, 0]);
@@ -1093,8 +1393,8 @@ describe("stopping the web listener", () => {
     const recovery = await recoveryOptions();
     const port = await freePort();
     const listener = recoveringServer(recovery, port, 60_000, 2_600);
-    const { code } = await (await fetch(`${listener.web.origin}/api/login-code`, { method: "POST", headers: { authorization: "Bearer recovery-token" } })).json() as WebLoginCode;
-    const cookie = (await listener.post("/login", "", JSON.stringify({ token: code }))).headers.get("set-cookie")?.split(";")[0] ?? "";
+    const { code } = await (await fetch(`${listener.web.origin}/api/login-code`, { method: "POST", headers: { authorization: `Bearer ${TOKEN}` } })).json() as WebLoginCode;
+    const cookie = (await listener.post("/login", "", JSON.stringify({ code }))).headers.get("set-cookie")?.split(";")[0] ?? "";
     const browser = connectBrowser(listener.web.origin, cookie);
     await browser.attach();
     const rid = crypto.randomUUID();

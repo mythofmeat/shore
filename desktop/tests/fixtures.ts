@@ -6,7 +6,7 @@ import { join } from "node:path";
 
 export { expect };
 
-export const TOKEN = "browser-test-token";
+export const PASSWORD = "browser test password";
 const DESKTOP = join(import.meta.dirname, "..");
 const DAEMON = join(DESKTOP, "..", "daemon");
 const ELECTRON = process.env["SHORE_DESKTOP_ELECTRON"] ?? "electron";
@@ -88,10 +88,8 @@ export const test = base.extend<{ profile: string; launch: (options?: LaunchOpti
 });
 
 export async function signIn(page: Page): Promise<void> {
-  await expect(page.getByLabel("Sign-in code or link")).toBeVisible();
-  const created = await fetch(`http://127.0.0.1:${new URL(page.url()).port}/api/login-code`, { method: "POST", headers: { authorization: `Bearer ${TOKEN}` } });
-  expect(created.status).toBe(200);
-  await page.getByLabel("Sign-in code or link").fill(((await created.json()) as { code: string }).code);
-  await page.getByRole("button", { name: "Connect", exact: true }).click();
+  await expect(page.getByLabel("Password", { exact: true })).toBeVisible();
+  await page.getByLabel("Password", { exact: true }).fill(PASSWORD);
+  await page.getByRole("button", { name: "Sign in", exact: true }).click();
   await expect(page.getByText("Connected", { exact: true })).toBeVisible();
 }

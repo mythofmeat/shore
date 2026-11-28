@@ -37,7 +37,6 @@ export function admitClientMessage(value: unknown): ClientMessage {
         capabilities: admitCapabilities(raw.capabilities),
         ...optionalString(raw, "character"),
         ...optionalString(raw, "thread"),
-        ...optionalString(raw, "token"),
       };
 
     case "message": {

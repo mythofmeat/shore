@@ -4,8 +4,23 @@ use serde::{Deserialize, Serialize};
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema, ts_rs::TS)]
 #[serde(deny_unknown_fields)]
 #[ts(export, export_to = "../../../daemon/src/protocol/")]
-pub struct WebLogin {
-    pub token: String,
+pub struct WebPasswordLogin {
+    pub password: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema, ts_rs::TS)]
+#[serde(deny_unknown_fields)]
+#[ts(export, export_to = "../../../daemon/src/protocol/")]
+pub struct WebCodeLogin {
+    pub code: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema, ts_rs::TS)]
+#[serde(untagged)]
+#[ts(export, export_to = "../../../daemon/src/protocol/")]
+pub enum WebLogin {
+    Password(WebPasswordLogin),
+    Code(WebCodeLogin),
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema, ts_rs::TS)]
@@ -190,18 +205,8 @@ pub struct WebDevice {
 
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema, ts_rs::TS)]
 #[ts(export, export_to = "../../../daemon/src/protocol/")]
-pub struct WebSignInRequest {
-    pub code: String,
-    pub name: String,
-    #[ts(type = "number")]
-    pub expires_at: u64,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema, ts_rs::TS)]
-#[ts(export, export_to = "../../../daemon/src/protocol/")]
 pub struct WebDeviceList {
     pub devices: Vec<WebDevice>,
-    pub requests: Vec<WebSignInRequest>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema, ts_rs::TS)]
@@ -231,37 +236,29 @@ pub struct WebDeviceChoice {
 #[ts(export, export_to = "../../../daemon/src/protocol/")]
 pub struct WebSignInStart {
     pub name: String,
-    pub secret: String,
+    pub password: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema, ts_rs::TS)]
 #[ts(export, export_to = "../../../daemon/src/protocol/")]
-pub struct WebSignInPending {
-    pub id: String,
-    pub code: String,
-    #[ts(type = "number")]
-    pub expires_at: u64,
+pub struct WebSignInState {
+    pub password_set: bool,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema, ts_rs::TS)]
 #[serde(deny_unknown_fields)]
 #[ts(export, export_to = "../../../daemon/src/protocol/")]
-pub struct WebSignInPoll {
-    pub secret: String,
+pub struct WebPassword {
+    pub password: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[ts(optional)]
+    pub current: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema, ts_rs::TS)]
 #[ts(export, export_to = "../../../daemon/src/protocol/")]
 pub struct WebSignInGranted {
     pub token: String,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema, ts_rs::TS)]
-#[serde(deny_unknown_fields)]
-#[ts(export, export_to = "../../../daemon/src/protocol/")]
-pub struct WebSignInDecision {
-    pub code: String,
-    pub allow: bool,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema, ts_rs::TS)]
@@ -309,10 +306,9 @@ mod tests {
             "new_device": SchemaSettings::draft2020_12().for_serialize().into_generator().into_root_schema_for::<WebNewDevice>(),
             "device_choice": SchemaSettings::draft2020_12().for_deserialize().into_generator().into_root_schema_for::<WebDeviceChoice>(),
             "sign_in_start": SchemaSettings::draft2020_12().for_deserialize().into_generator().into_root_schema_for::<WebSignInStart>(),
-            "sign_in_pending": SchemaSettings::draft2020_12().for_serialize().into_generator().into_root_schema_for::<WebSignInPending>(),
-            "sign_in_poll": SchemaSettings::draft2020_12().for_deserialize().into_generator().into_root_schema_for::<WebSignInPoll>(),
+            "sign_in_state": SchemaSettings::draft2020_12().for_serialize().into_generator().into_root_schema_for::<WebSignInState>(),
+            "password": SchemaSettings::draft2020_12().for_deserialize().into_generator().into_root_schema_for::<WebPassword>(),
             "sign_in_granted": SchemaSettings::draft2020_12().for_serialize().into_generator().into_root_schema_for::<WebSignInGranted>(),
-            "sign_in_decision": SchemaSettings::draft2020_12().for_deserialize().into_generator().into_root_schema_for::<WebSignInDecision>(),
             "hello": SchemaSettings::draft2020_12().for_serialize().into_generator().into_root_schema_for::<WebHello>(),
             "transfer": SchemaSettings::draft2020_12().for_serialize().into_generator().into_root_schema_for::<WebTransfer>(),
         });

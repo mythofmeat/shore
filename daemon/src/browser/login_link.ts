@@ -8,11 +8,6 @@ export function loginCodeIn(hash: string): string | undefined {
   return /^#login=([A-Za-z0-9_-]{43})$/.exec(hash)?.[1];
 }
 
-export function enteredCode(text: string): string {
-  const trimmed = text.trim();
-  return /#login=([A-Za-z0-9_-]{43})$/.exec(trimmed)?.[1] ?? trimmed;
-}
-
 export function deviceOrigin(text: string): string | undefined {
   const trimmed = text.trim();
   const explicit = /^[a-z][a-z0-9+.-]*:\/\//i.test(trimmed);

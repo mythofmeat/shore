@@ -153,9 +153,9 @@ describe("connecting", () => {
     }
   });
 
-  test("a session check that is refused says why, and only an unexplained failure keeps trying", async () => {
+  test("a session check that is refused says why, unless it only means no one is signed in, and only an unexplained failure keeps trying", async () => {
     const cases: [Response, string][] = [
-      [problem(401, "Sign in again"), "signed_out: Sign in again"],
+      [problem(401, "Sign in again"), "signed_out: "],
       [problem(409, "Old page"), "reload_required: Old page"],
       [problem(403, "Wrong origin"), "error: Wrong origin"],
       [problem(503), "reconnecting: Could not check the browser session"],
@@ -437,7 +437,7 @@ describe("staying connected", () => {
     await settle();
     jest.advanceTimersByTime(200);
     await settle();
-    expect(link.statuses().at(-1)).toBe("signed_out: Sign in");
+    expect(link.statuses().at(-1)).toBe("signed_out: ");
     link.connection.connect();
     expect(link.statuses().at(-1)).toBe("connecting: ");
     link.connection.stop();
@@ -706,12 +706,14 @@ describe("sending requests", () => {
 });
 
 describe("signing in and out", () => {
-  test("signing in stops any connection, sends the token, and connects once it is accepted", async () => {
+  test("signing in stops any connection, sends the password or code, and connects once it is accepted", async () => {
     const link = await ready();
-    await link.connection.signIn("secret");
+    await link.connection.signIn({ password: "secret" });
     expect(link.statuses()).toContain("stopped: Connection stopped");
     const login = link.calls.find((call) => call.path === "/api/login");
-    expect(login?.init).toMatchObject({ method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ token: "secret" }) });
+    expect(login?.init).toMatchObject({ method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ password: "secret" }) });
+    await link.connection.signIn({ code: "c0de" });
+    expect(link.calls.filter((call) => call.path === "/api/login").at(-1)?.init.body).toBe(JSON.stringify({ code: "c0de" }));
     expect(login?.init.signal).toBeInstanceOf(AbortSignal);
     await settle();
     expect(link.calls.at(-1)?.path).toBe("/api/session");
@@ -728,7 +730,7 @@ describe("signing in and out", () => {
     for (const [reply, rejected, detail] of cases) {
       const link = rig();
       link.answer("/api/login", () => reply);
-      expect(await link.connection.signIn("secret", rejected).then(() => "", (error: unknown) => (error as Error).message)).toBe(detail);
+      expect(await link.connection.signIn({ code: "secret" }, rejected).then(() => "", (error: unknown) => (error as Error).message)).toBe(detail);
       expect(link.statuses().at(-1)).toBe(`signed_out: ${detail}`);
       expect(link.calls.map((call) => call.path)).toEqual(["/api/login"]);
     }
@@ -738,7 +740,7 @@ describe("signing in and out", () => {
     let release: (response: Response) => void = () => {};
     const link = rig();
     link.answer("/api/login", async () => await new Promise<Response>((resolve) => { release = resolve; }));
-    const signing = link.connection.signIn("secret");
+    const signing = link.connection.signIn({ password: "secret" });
     await settle();
     link.connection.stop();
     release(problem(401, "Bad token"));
@@ -770,12 +772,14 @@ describe("signing in and out", () => {
     try {
       for (const options of [{}, { handshakeTimeoutMs: 250 }]) {
         const link = rig(options);
-        await link.connection.signIn("secret");
+        await link.connection.signIn({ password: "secret" });
         await link.connection.loginCode().catch(() => undefined);
         await link.connection.devices().catch(() => undefined);
+        await link.connection.signInState().catch(() => undefined);
+        await link.connection.choosePassword("a new one").catch(() => undefined);
         await link.connection.signOut();
       }
-      expect(timeouts.mock.calls.map(([delay]) => delay)).toEqual([10_000, 10_000, 10_000, 10_000, 250, 250, 250, 250]);
+      expect(timeouts.mock.calls.map(([delay]) => delay)).toEqual([10_000, 10_000, 10_000, 10_000, 10_000, 10_000, 250, 250, 250, 250, 250, 250]);
     } finally {
       timeouts.mockRestore();
     }
@@ -791,28 +795,48 @@ describe("signing in and out", () => {
     expect(await failure()).toBe("Could not create a sign-in code");
     expect(await failure()).toBe("The daemon sent an unexpected sign-in code. Reload the page.");
   });
+
+  test("whether the daemon has a password is asked with a GET and checked", async () => {
+    const link = rig();
+    link.answer("/api/sign-in", () => Response.json({ password_set: false }), () => problem(503, "The daemon is not ready"), () => Response.json({}, { status: 500 }), () => Response.json({ password_set: "yes" }));
+    expect(await link.connection.signInState()).toEqual({ password_set: false });
+    expect(link.calls[0]?.init).toMatchObject({ method: "GET", credentials: "same-origin", redirect: "error", cache: "no-store" });
+    expect(link.calls[0]?.init.body).toBeUndefined();
+    const failure = async () => await link.connection.signInState().then(() => "", (error: unknown) => (error as Error).message);
+    expect(await failure()).toBe("The daemon is not ready");
+    expect(await failure()).toBe("Could not reach the daemon");
+    expect(await failure()).toBe("The daemon sent an unexpected answer. Reload the page.");
+  });
+
+  test("a password is chosen with the new one alone, and changed with the current one too", async () => {
+    const link = rig();
+    link.answer("/api/password", () => new Response(null, { status: 204 }), () => new Response(null, { status: 204 }), () => problem(401, "That password isn’t right"), () => problem(500), () => problem(500));
+    await link.connection.choosePassword("first pass");
+    await link.connection.changePassword("first pass", "second pass");
+    const failure = async (work: () => Promise<unknown>) => await work().then(() => "", (error: unknown) => (error as Error).message);
+    expect(await failure(() => link.connection.changePassword("wrong", "second pass"))).toBe("That password isn’t right");
+    expect(await failure(() => link.connection.choosePassword("first pass"))).toBe("Could not set the password");
+    expect(await failure(() => link.connection.changePassword("first pass", "second pass"))).toBe("Could not change the password");
+    expect(link.calls.map((call) => JSON.parse(typeof call.init.body === "string" ? call.init.body : "null") as unknown)).toEqual([
+      { password: "first pass" }, { current: "first pass", password: "second pass" }, { current: "wrong", password: "second pass" }, { password: "first pass" }, { current: "first pass", password: "second pass" },
+    ]);
+  });
 });
 
 describe("managing devices from the page", () => {
   const device = { id: "c1", kind: "cli" as const, name: "desk", created_at: 1, current: false };
 
-  test("lists devices, lets one in or turns it away, signs one out and makes a key, each checked", async () => {
+  test("lists devices, signs one out and makes a key, each checked", async () => {
     const link = rig();
-    link.answer("/api/devices/list", () => Response.json({ devices: [device], requests: [] }), () => Response.json({ devices: "nope" }), () => problem(403, "Keys can't list devices"), () => problem(500));
-    link.answer("/api/devices/decide", () => new Response(null, { status: 204 }), () => problem(404, "No device is waiting with the code ZZZZ"), () => problem(500), () => problem(500));
+    link.answer("/api/devices/list", () => Response.json({ devices: [device] }), () => Response.json({ devices: "nope" }), () => problem(403, "Keys can't list devices"), () => problem(500));
     link.answer("/api/devices/revoke", () => new Response(null, { status: 204 }), () => problem(500));
     link.answer("/api/devices/automation", () => Response.json({ device: { ...device, kind: "automation", operations: ["presence"] }, token: "shore_k" }), () => Response.json({ token: 5 }), () => problem(400, "Choose at least one operation the key may run"));
     const failure = async (work: () => Promise<unknown>) => await work().then(() => "", (error: unknown) => (error as Error).message);
 
-    expect(await link.connection.devices()).toEqual({ devices: [device], requests: [] });
+    expect(await link.connection.devices()).toEqual({ devices: [device] });
     expect(await failure(() => link.connection.devices())).toBe("The daemon sent an unexpected device list. Reload the page.");
     expect(await failure(() => link.connection.devices())).toBe("Keys can't list devices");
     expect(await failure(() => link.connection.devices())).toBe("Could not list the signed-in devices");
-
-    await link.connection.decideSignIn("4F7K", true);
-    expect(await failure(() => link.connection.decideSignIn("ZZZZ", true))).toBe("No device is waiting with the code ZZZZ");
-    expect(await failure(() => link.connection.decideSignIn("4F7K", true))).toBe("Could not let that device in");
-    expect(await failure(() => link.connection.decideSignIn("4F7K", false))).toBe("Could not refuse that device");
 
     await link.connection.revokeDevice("c1");
     expect(await failure(() => link.connection.revokeDevice("c1"))).toBe("Could not sign that device out");
@@ -822,7 +846,6 @@ describe("managing devices from the page", () => {
     expect(await failure(() => link.connection.automationKey("Phone", []))).toBe("Choose at least one operation the key may run");
 
     const sent = (path: string) => link.calls.filter((call) => call.path === path).map((call) => JSON.parse(typeof call.init.body === "string" ? call.init.body : "null") as unknown);
-    expect(sent("/api/devices/decide")).toEqual([{ code: "4F7K", allow: true }, { code: "ZZZZ", allow: true }, { code: "4F7K", allow: true }, { code: "4F7K", allow: false }]);
     expect(sent("/api/devices/revoke")).toEqual([{ id: "c1" }, { id: "c1" }]);
     expect(sent("/api/devices/automation")[0]).toEqual({ name: "Phone", operations: ["presence"] });
     expect(link.calls.every((call) => call.init.signal instanceof AbortSignal && call.init.method === "POST")).toBe(true);

@@ -13,6 +13,7 @@ describe("opening a sign-in link", () => {
     const asked: string[] = [];
     const fetching = spyOn(globalThis, "fetch").mockImplementation((async (input: string | URL | Request, init?: RequestInit) => {
       const path = typeof input === "string" ? input : input instanceof URL ? input.pathname : new URL(input.url).pathname;
+      if (path.endsWith("/api/sign-in")) return Response.json({ password_set: true });
       if (!path.endsWith("/api/login")) return await original(input, init);
       asked.push(typeof init?.body === "string" ? init.body : "");
       return Response.json({ code: "unauthorized", message: "Unknown or expired sign-in code" }, { status: 401 });
@@ -20,9 +21,9 @@ describe("opening a sign-in link", () => {
     app.restores.push(() => { fetching.mockRestore(); });
     const view = await mount(<App />);
     await acting(() => Bun.sleep(5));
-    expect([asked, location.href]).toEqual([[JSON.stringify({ token: CODE })], "http://shore.test:7340/workspace/ada/story?from=phone"]);
+    expect([asked, location.href]).toEqual([[JSON.stringify({ code: CODE })], "http://shore.test:7340/workspace/ada/story?from=phone"]);
     expect([view.host.querySelector("h1")?.textContent, view.host.querySelector("[role=alert]")?.textContent]).toEqual([
-      "Connect to your daemon", "This sign-in link has expired or was already used. Show a new code on a signed-in device, or run shore devices link on the daemon’s machine.",
+      "Sign in", "This sign-in link has expired or was already used. Sign in with the password instead.",
     ]);
     await view.unmount();
   });

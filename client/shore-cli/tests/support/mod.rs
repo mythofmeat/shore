@@ -293,9 +293,22 @@ impl StandIn {
     }
 }
 
+pub(crate) fn origin_of(addr: &str) -> String {
+    let bare = addr.trim_end_matches('/');
+    if bare.contains("://") {
+        bare.to_owned()
+    } else {
+        format!("http://{bare}")
+    }
+}
+
 pub(crate) fn shore_in(home: &std::path::Path, addr: &str) -> Command {
     std::fs::create_dir_all(home.join("config")).unwrap();
-    std::fs::write(home.join("config").join("token"), "test-token\n").unwrap();
+    std::fs::write(
+        home.join("config").join("sign-ins.toml"),
+        format!("{:?} = \"test-token\"\n", origin_of(addr)),
+    )
+    .unwrap();
     let mut command = Command::new(env!("CARGO_BIN_EXE_shore"));
     let _isolated = command
         .env_clear()

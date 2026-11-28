@@ -20,7 +20,7 @@ async function recoveryOptions(): Promise<WebRecoveryOptions> {
   const root = await mkdtemp(join(tmpdir(), "shore-web-recovery-"));
   const dataDir = join(root, "data");
   await mkdir(dataDir);
-  return { dataDir, cacheDir: join(root, "cache"), token: "private-recovery-daemon-token" };
+  return { dataDir, cacheDir: join(root, "cache") };
 }
 
 function start(config: WebRecoveryOptions) {

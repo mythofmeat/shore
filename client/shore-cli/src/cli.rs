@@ -587,8 +587,9 @@ pub(crate) enum CliCommand {
         shell: Shell,
     },
 
-    /// Sign this CLI in to a daemon. It shows a code to allow from a device
-    /// that's already signed in, then keeps its own credential for that address
+    /// Sign this CLI in to a daemon with its password, then keep this CLI's own
+    /// credential for that address. A daemon with no password yet asks you to
+    /// choose one
     #[command(name = "sign-in", display_order = 13)]
     SignIn {
         /// The daemon's address, such as https://shore.example or my-computer:7340
@@ -599,10 +600,14 @@ pub(crate) enum CliCommand {
         /// unless given
         #[arg(long, value_name = "NAME")]
         name: Option<String>,
+
+        /// Read the password from standard input, e.g. piped from a password manager
+        #[arg(long)]
+        stdin: bool,
     },
 
-    /// List the browsers, CLIs and automation keys signed in to the daemon, let
-    /// a waiting CLI in, sign one out, or make a sign-in link for a browser
+    /// List the browsers, CLIs and automation keys signed in to the daemon,
+    /// sign one out, or make a sign-in link for a browser
     #[command(display_order = 14)]
     Devices {
         #[command(subcommand)]
@@ -616,16 +621,6 @@ pub(crate) enum CliCommand {
 
 #[derive(Subcommand, Debug)]
 pub(crate) enum DevicesCommand {
-    /// Let in the CLI that shows this code
-    Allow {
-        /// The four-letter code the waiting CLI shows
-        code: String,
-    },
-    /// Turn away the CLI that shows this code
-    Refuse {
-        /// The four-letter code the waiting CLI shows
-        code: String,
-    },
     /// Sign a browser, CLI or automation key out
     #[command(name = "sign-out")]
     SignOut {

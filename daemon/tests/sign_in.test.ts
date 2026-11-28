@@ -202,7 +202,7 @@ describe("the page a request comes from", () => {
 describe("what the daemon keeps on disk for browsers", () => {
   test("the recovery store is private to the daemon's user and refuses anything but a regular file", () => {
     const root = mkdtempSync(join(tmpdir(), "shore-sign-in-"));
-    const options = { cacheDir: join(root, "cache"), dataDir: root, token: "t" };
+    const options = { cacheDir: join(root, "cache"), dataDir: root };
     const directory = join(options.cacheDir, "web", sessionDigest(root));
     mkdirSync(directory, { recursive: true });
     writeFileSync(join(directory, "recovery.sqlite"), "");
@@ -217,12 +217,12 @@ describe("what the daemon keeps on disk for browsers", () => {
     const fifoDir = join(fifo, "cache", "web", sessionDigest(fifo));
     mkdirSync(fifoDir, { recursive: true });
     Bun.spawnSync(["mkfifo", join(fifoDir, "recovery.sqlite")]);
-    expect(() => new WebRecovery({ cacheDir: join(fifo, "cache"), dataDir: fifo, token: "t" }, ORIGIN)).toThrow("regular database file");
+    expect(() => new WebRecovery({ cacheDir: join(fifo, "cache"), dataDir: fifo }, ORIGIN)).toThrow("regular database file");
   });
 
   test("browser sessions outlive a restart unless they have expired, or the origin changed", () => {
     const root = mkdtempSync(join(tmpdir(), "shore-sign-in-restart-"));
-    const options = { cacheDir: join(root, "cache"), dataDir: root, token: "t" };
+    const options = { cacheDir: join(root, "cache"), dataDir: root };
     const first = new WebRecovery(options, ORIGIN);
     first.saveSession({ id: "live", expires_at: Date.now() + 60_000, name: "Firefox on Linux", created_at: 1, last_used_at: 2 });
     first.saveSession({ id: "stale", expires_at: Date.now() - 1, name: "Browser", created_at: 1, last_used_at: 1 });
@@ -235,9 +235,9 @@ describe("what the daemon keeps on disk for browsers", () => {
     moved.close();
   });
 
-  test("a store written by an earlier daemon keeps its sessions while the origin and token stay the same, named as a browser", () => {
+  test("a store from before passwords signs its browsers out once, and then keeps named sessions", () => {
     const root = mkdtempSync(join(tmpdir(), "shore-sign-in-upgrade-"));
-    const options = { cacheDir: join(root, "cache"), dataDir: root, token: "t" };
+    const options = { cacheDir: join(root, "cache"), dataDir: root };
     const directory = join(options.cacheDir, "web", sessionDigest(realpathSync(root)));
     mkdirSync(directory, { recursive: true, mode: 0o700 });
     const db = new Database(join(directory, "recovery.sqlite"));
@@ -248,16 +248,36 @@ describe("what the daemon keeps on disk for browsers", () => {
     db.query("INSERT INTO sessions VALUES (?, ?)").run("kept", expires);
     db.close();
     const upgraded = new WebRecovery(options, ORIGIN);
-    expect(upgraded.sessions()).toEqual([{ id: "kept", expires_at: expires, name: "Browser", created_at: 0, last_used_at: 0 }]);
+    expect(upgraded.sessions(), "a browser the daemon's token signed in").toEqual([]);
     upgraded.saveSession({ id: "new", expires_at: expires + 1, name: "Firefox on Linux", created_at: 5, last_used_at: 6 });
     upgraded.touchSession("new", 9);
-    expect(upgraded.sessions().at(-1)).toEqual({ id: "new", expires_at: expires + 1, name: "Firefox on Linux", created_at: 5, last_used_at: 9 });
+    expect(upgraded.sessions()).toEqual([{ id: "new", expires_at: expires + 1, name: "Firefox on Linux", created_at: 5, last_used_at: 9 }]);
+    upgraded.close();
+    const again = new WebRecovery(options, ORIGIN);
+    expect(again.sessions().map((session) => session.id), "only once").toEqual(["new"]);
+    again.close();
+  });
+
+  test("a store written since passwords keeps its sessions across an upgrade", () => {
+    const root = mkdtempSync(join(tmpdir(), "shore-sign-in-current-"));
+    const options = { cacheDir: join(root, "cache"), dataDir: root };
+    const directory = join(options.cacheDir, "web", sessionDigest(realpathSync(root)));
+    mkdirSync(directory, { recursive: true, mode: 0o700 });
+    const db = new Database(join(directory, "recovery.sqlite"));
+    db.run(`CREATE TABLE identity (id INTEGER PRIMARY KEY CHECK(id = 1), fingerprint TEXT NOT NULL);
+      CREATE TABLE sessions (id TEXT PRIMARY KEY, expires_at INTEGER NOT NULL, name TEXT NOT NULL DEFAULT 'Browser', created_at INTEGER NOT NULL DEFAULT 0, last_used_at INTEGER NOT NULL DEFAULT 0);`);
+    db.query("INSERT INTO identity VALUES (1, ?)").run(sessionDigest(JSON.stringify([2, ORIGIN])));
+    const expires = Date.now() + 60_000;
+    db.query("INSERT INTO sessions VALUES (?, ?, ?, ?, ?)").run("kept", expires, "Firefox on Linux", 1, 2);
+    db.close();
+    const upgraded = new WebRecovery(options, ORIGIN);
+    expect(upgraded.sessions()).toEqual([{ id: "kept", expires_at: expires, name: "Firefox on Linux", created_at: 1, last_used_at: 2 }]);
     upgraded.close();
   });
 
   test("opening the recovery store leaves no file open, and a damaged one is refused and closed", () => {
     const root = realpathSync(mkdtempSync(join(tmpdir(), "shore-sign-in-damaged-")));
-    const options = { cacheDir: join(root, "cache"), dataDir: root, token: "t" };
+    const options = { cacheDir: join(root, "cache"), dataDir: root };
     const store = join(options.cacheDir, "web", sessionDigest(root), "recovery.sqlite");
     const openOnTheStore = () => readdirSync("/proc/self/fd").filter((descriptor) => {
       try {

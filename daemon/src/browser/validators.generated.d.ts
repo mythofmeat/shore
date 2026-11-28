@@ -21,3 +21,5 @@ import type { WebDeviceList } from "../protocol/WebDeviceList.ts";
 export declare function validWebDeviceList(value: unknown): value is WebDeviceList;
 import type { WebNewDevice } from "../protocol/WebNewDevice.ts";
 export declare function validWebNewDevice(value: unknown): value is WebNewDevice;
+import type { WebSignInState } from "../protocol/WebSignInState.ts";
+export declare function validWebSignInState(value: unknown): value is WebSignInState;

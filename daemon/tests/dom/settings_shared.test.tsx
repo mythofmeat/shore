@@ -207,94 +207,110 @@ describe("pages and banners", () => {
     expect(reconnects).toHaveBeenCalledTimes(1);
   });
 
-  test("a command line waiting to sign in is shown wherever the page is, until it is let in or refused, and only while the page is seen", async () => {
+  test("a ready page shows no banner and asks the daemon nothing", async () => {
     const { ConnectionBanner } = await import("../../src/browser/app/banner.tsx");
-    const { toasts } = await import("../../src/browser/ui/toast.tsx");
     jest.useFakeTimers();
-    const connection = app.state().workspace.connection;
-    let requests = [{ code: "4F7K", name: "laptop", expires_at: Date.now() + 60_000 }, { code: "ZZ22", name: "desktop", expires_at: Date.now() + 60_000 }];
-    const listed = spyOn(connection, "devices").mockImplementation(async () => await Promise.resolve({ devices: [], requests }));
-    const decided = spyOn(connection, "decideSignIn").mockImplementation(async (code) => { await Promise.resolve(); if (code === "ZZ22") throw new Error("No device is waiting with the code ZZ22"); });
-    const shown = spyOn(toasts, "show");
-    let visibility = "visible";
-    Object.defineProperty(document, "visibilityState", { configurable: true, get: () => visibility });
-    app.restores.push(() => { jest.useRealTimers(); listed.mockRestore(); decided.mockRestore(); shown.mockRestore(); Reflect.deleteProperty(document, "visibilityState"); });
+    const listed = spyOn(app.state().workspace.connection, "devices");
+    app.restores.push(() => { jest.useRealTimers(); listed.mockRestore(); });
     const snapshot = app.state().workspace.getSnapshot();
-    const view = await mount(<ConnectionBanner state={{ ...snapshot, status: "reconnecting" }} />);
-    expect([view.host.textContent, listed.mock.calls.length]).toEqual(["Reconnecting…Retry now", 0]);
-    await view.update(<ConnectionBanner state={{ ...snapshot, status: "ready" }} />);
-    await acting(() => Promise.resolve());
-    expect([...view.host.querySelectorAll("[role=alert] span")].map((item) => item.textContent)).toEqual([
-      "A command line on laptop wants to sign in, showing the code 4F7K.", "A command line on desktop wants to sign in, showing the code ZZ22.",
-    ]);
-    await click(button(view.host, "Allow"));
-    await acting(() => Promise.resolve());
-    expect([decided.mock.calls, shown.mock.calls.at(-1), view.host.querySelectorAll("[role=alert]").length]).toEqual([[["4F7K", true]], ["Signed in"], 1]);
-    await click(button(view.host, "Refuse"));
-    await acting(() => Promise.resolve());
-    expect([decided.mock.calls.at(-1), shown.mock.calls.at(-1), view.host.querySelectorAll("[role=alert]").length]).toEqual([["ZZ22", false], ["No device is waiting with the code ZZ22", "error"], 1]);
-    const looked = listed.mock.calls.length;
-    await acting(() => { jest.advanceTimersByTime(4_999); });
-    expect(listed.mock.calls.length, "it looks every five seconds").toBe(looked);
-    await acting(() => { jest.advanceTimersByTime(1); });
-    expect(listed.mock.calls.length).toBe(looked + 1);
-    visibility = "hidden";
-    const before = listed.mock.calls.length;
-    await acting(() => { jest.advanceTimersByTime(5_000); });
-    expect(listed.mock.calls.length).toBe(before);
-    requests = [];
-    visibility = "visible";
-    await acting(() => { document.dispatchEvent(new Event("visibilitychange")); });
-    await acting(() => Promise.resolve());
-    expect([listed.mock.calls.length, view.host.innerHTML]).toEqual([before + 1, ""]);
+    const view = await mount(<ConnectionBanner state={{ ...snapshot, status: "ready" }} />);
+    await acting(() => { jest.advanceTimersByTime(10_000); });
+    expect([view.host.innerHTML, listed.mock.calls.length]).toEqual(["", 0]);
     await view.unmount();
-    await acting(() => { jest.advanceTimersByTime(5_000); });
-    expect(listed.mock.calls.length).toBe(before + 1);
   });
 
-  test("the sign-in page takes a code or a link, signs in with the code, and says why one didn't work", async () => {
+  test("the sign-in page asks for the password, signs in with it, and says why it didn't work", async () => {
     const { SignIn } = await import("../../src/browser/app/SignIn.tsx");
-    const code = "c".repeat(43);
-    let outcome: Error | undefined = new Error("That code has expired or was already used. Show a new one.");
-    const signIn = spyOn(app.state().workspace.connection, "signIn").mockImplementation(async () => { await Promise.resolve(); if (outcome !== undefined) throw outcome; });
-    app.restores.push(() => { signIn.mockRestore(); });
+    const connection = app.state().workspace.connection;
+    let outcome: Error | undefined = new Error("That password isn’t right");
+    const asked = spyOn(connection, "signInState").mockImplementation(async () => await Promise.resolve({ password_set: true }));
+    const chosen = spyOn(connection, "choosePassword");
+    const signIn = spyOn(connection, "signIn").mockImplementation(async () => { await Promise.resolve(); if (outcome !== undefined) throw outcome; });
+    app.restores.push(() => { asked.mockRestore(); chosen.mockRestore(); signIn.mockRestore(); });
     const view = await mount(<SignIn detail="Connection stopped" />);
-    const field = view.host.querySelector("input");
-    const connect = button(view.host, "Connect");
-    expect([view.host.querySelector("h1")?.textContent, connect.disabled, view.host.querySelector("[role=alert]")]).toEqual(["Connect to your daemon", true, null]);
-    expect(view.host.querySelector(".signin-hint")?.textContent).toContain("shore devices link");
-    await type(field, "   ");
-    expect(connect.disabled, "white space is no code").toBe(true);
-    await type(field, `https://shore.example/#login=${code}`);
-    await click(connect);
     await acting(() => Promise.resolve());
-    expect(signIn.mock.calls).toEqual([[code, "That code has expired or was already used. Show a new one."]]);
-    expect([view.host.querySelector("[role=alert]")?.textContent, field?.value]).toEqual(["That code has expired or was already used. Show a new one.", `https://shore.example/#login=${code}`]);
+    const fields = [...view.host.querySelectorAll("input")];
+    const go = button(view.host, "Sign in");
+    expect([view.host.querySelector("h1")?.textContent, view.host.querySelector(".signin-hint"), fields.map((input) => [input.type, input.autocomplete]), go.disabled, view.host.querySelector("[role=alert]")])
+      .toEqual(["Sign in", null, [["password", "current-password"]], true, null]);
+    await type(fields[0] ?? null, "correct horse");
+    await click(go);
+    await acting(() => Promise.resolve());
+    expect(signIn.mock.calls).toEqual([[{ password: "correct horse" }]]);
+    expect([view.host.querySelector("[role=alert]")?.textContent, fields[0]?.value]).toEqual(["That password isn’t right", "correct horse"]);
     outcome = undefined;
-    await click(connect);
+    await click(go);
     await acting(() => Promise.resolve());
-    expect([view.host.querySelector("[role=alert]"), field?.value]).toEqual([null, ""]);
-    await view.update(<SignIn detail="The token was rejected" />);
-    expect(view.host.querySelector("[role=alert]")?.textContent).toBe("The token was rejected");
+    expect([view.host.querySelector("[role=alert]"), fields[0]?.value, chosen.mock.calls]).toEqual([null, "", []]);
+    await view.update(<SignIn detail="This sign-in link has expired or was already used. Sign in with the password instead." />);
+    expect(view.host.querySelector("[role=alert]")?.textContent).toBe("This sign-in link has expired or was already used. Sign in with the password instead.");
     await view.unmount();
   });
 
-  test("the sign-in page stays on the page, waits while it connects, and leaves the code to be read as typed", async () => {
+  test("on a first visit the sign-in page has the password chosen, typed twice, and then signs in with it, and only signs in once it is chosen", async () => {
     const { SignIn } = await import("../../src/browser/app/SignIn.tsx");
-    let release = (): void => {};
-    const signIn = spyOn(app.state().workspace.connection, "signIn").mockImplementation(async () => { await new Promise<void>((resolve) => { release = resolve; }); });
-    app.restores.push(() => { signIn.mockRestore(); });
+    const connection = app.state().workspace.connection;
+    const order: string[] = [];
+    let outcome: Error | undefined = new Error("Could not reach the daemon");
+    const asked = spyOn(connection, "signInState").mockImplementation(async () => await Promise.resolve({ password_set: false }));
+    const chosen = spyOn(connection, "choosePassword").mockImplementation(async (password) => { await Promise.resolve(); order.push(`choose ${password}`); });
+    const signIn = spyOn(connection, "signIn").mockImplementation(async (login) => { await Promise.resolve(); order.push(`sign in ${JSON.stringify(login)}`); if (outcome !== undefined) throw outcome; });
+    app.restores.push(() => { asked.mockRestore(); chosen.mockRestore(); signIn.mockRestore(); });
     const view = await mount(<SignIn detail="Connection stopped" />);
-    const field = view.host.querySelector("input");
-    expect(field?.getAttribute("spellcheck")).toBe("false");
-    await type(field, "4F7K");
+    await acting(() => Promise.resolve());
+    expect([view.host.querySelector("h1")?.textContent, view.host.querySelector(".signin-hint")?.textContent]).toEqual(["Choose a password", "This daemon has no password yet. Every browser and command line signs in with the one you choose here."]);
+    const [first, again] = [...view.host.querySelectorAll("input")];
+    expect([first?.autocomplete, again?.autocomplete]).toEqual(["new-password", "new-password"]);
+    const go = button(view.host, "Set password and sign in");
+    await type(first ?? null, "first pass");
+    expect([go.disabled, view.host.querySelector("[role=alert]")], "nothing typed again yet is not a mismatch").toEqual([true, null]);
+    await type(again ?? null, "first pasz");
+    expect([go.disabled, view.host.querySelector("[role=alert]")?.textContent]).toEqual([true, "The two passwords differ."]);
+    await type(again ?? null, "first pass");
+    expect(go.disabled).toBe(false);
+    await click(go);
+    await acting(() => Promise.resolve());
+    expect(order).toEqual(["choose first pass", 'sign in {"password":"first pass"}']);
+    const fields = [...view.host.querySelectorAll("input")];
+    expect([view.host.querySelector("h1")?.textContent, fields.map((input) => [input.autocomplete, input.value]), view.host.querySelector("[role=alert]")?.textContent])
+      .toEqual(["Sign in", [["current-password", "first pass"]], "Could not reach the daemon"]);
+    outcome = undefined;
+    await click(button(view.host, "Sign in"));
+    await acting(() => Promise.resolve());
+    expect([order, fields[0]?.value]).toEqual([["choose first pass", 'sign in {"password":"first pass"}', 'sign in {"password":"first pass"}'], ""]);
+    await view.unmount();
+  });
+
+  test("the sign-in page waits for the daemon's answer, says if there was none, and waits while it signs in", async () => {
+    const { SignIn } = await import("../../src/browser/app/SignIn.tsx");
+    const connection = app.state().workspace.connection;
+    let answer = (): void => {};
+    const asked = spyOn(connection, "signInState").mockImplementation(async () => { await new Promise<void>((resolve) => { answer = resolve; }); return { password_set: true }; });
+    let release = (): void => {};
+    const signIn = spyOn(connection, "signIn").mockImplementation(async () => { await new Promise<void>((resolve) => { release = resolve; }); });
+    app.restores.push(() => { asked.mockRestore(); signIn.mockRestore(); });
+    const view = await mount(<SignIn detail="Connection stopped" />);
+    await type(view.host.querySelector("input"), "correct horse");
+    expect(button(view.host, "Sign in").disabled, "not before the daemon says").toBe(true);
+    answer();
+    await acting(() => Promise.resolve());
     const submitted = new Event("submit", { bubbles: true, cancelable: true });
     await acting(() => { view.host.querySelector("form")?.dispatchEvent(submitted); });
-    expect([submitted.defaultPrevented, button(view.host, "Connecting…").disabled]).toEqual([true, true]);
+    expect([submitted.defaultPrevented, button(view.host, "Signing in…").disabled]).toEqual([true, true]);
     release();
     await acting(() => Promise.resolve());
-    expect(button(view.host, "Connect").disabled).toBe(true);
+    expect(button(view.host, "Sign in").disabled).toBe(true);
     await view.unmount();
+    asked.mockImplementation(async () => { await Promise.resolve(); throw new Error("Could not reach the daemon"); });
+    const offline = await mount(<SignIn detail="Connection stopped" />);
+    await acting(() => Promise.resolve());
+    expect(offline.host.querySelector("[role=alert]")?.textContent).toBe("Could not reach the daemon");
+    await offline.unmount();
+    asked.mockImplementation(async () => { await Promise.resolve(); throw "plainly not"; });
+    const odd = await mount(<SignIn detail="Connection stopped" />);
+    await acting(() => Promise.resolve());
+    expect(odd.host.querySelector("[role=alert]")?.textContent, "whatever was thrown is said").toBe("plainly not");
+    await odd.unmount();
   });
 
   test("the keyboard page lists the shortcuts as the switches set them, and keeps the switches", async () => {
