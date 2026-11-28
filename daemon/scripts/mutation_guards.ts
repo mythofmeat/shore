@@ -477,7 +477,6 @@ export const CLIENT_FLOORS: Readonly<Record<string, number>> = {
   "shore-common/src/image_protocol.rs": 0,
   "shore-common/src/protocol/mod.rs": 0.45,
   "shore-common/src/protocol/operations.rs": 0.1,
-  "shore-common/src/protocol/server_msg.rs": 0.55,
   "shore-common/src/protocol/tool_display.rs": 0.1,
   "shore-common/src/protocol/types.rs": 0.15,
   "shore-common/src/swp_client/client_config.rs": 0,

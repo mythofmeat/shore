@@ -359,36 +359,6 @@ pub enum ServerMessage {
 }
 
 impl ServerMessage {
-    pub fn request_id(&self) -> Option<&str> {
-        match self {
-            Self::History(frame) => frame.rid.as_deref(),
-            Self::CommandOutput(frame) => frame.rid.as_deref(),
-            Self::Error(frame) => frame.rid.as_deref(),
-            Self::StreamStart(frame) => frame.rid.as_deref(),
-            Self::StreamChunk(frame) => frame.rid.as_deref(),
-            Self::StreamEnd(frame) => frame.rid.as_deref(),
-            Self::Phase(frame) => frame.rid.as_deref(),
-            Self::ToolCall(frame) => frame.rid.as_deref(),
-            Self::ToolResult(frame) => frame.rid.as_deref(),
-            Self::SendImage(frame) => frame.rid.as_deref(),
-            Self::ProviderWarning(frame) => frame.rid.as_deref(),
-            Self::ProviderFallbackWarning(frame) => frame.rid.as_deref(),
-            Self::UsageWarning(frame) => frame.rid.as_deref(),
-            Self::PlanLimitWarning(frame) => frame.rid.as_deref(),
-            Self::ConfigWarning(frame) => frame.rid.as_deref(),
-            Self::RequestAccepted(frame) => Some(&frame.rid),
-            Self::RequestFinished(frame) => Some(&frame.rid),
-            Self::Hello(_)
-            | Self::Shutdown(_)
-            | Self::Ping(_)
-            | Self::NewMessage(_)
-            | Self::CacheWarning(_)
-            | Self::ThreadsChanged(_)
-            | Self::ThreadUnread(_)
-            | Self::Unknown => None,
-        }
-    }
-
     #[must_use]
     pub fn subagent(&self) -> Option<&str> {
         match self {
