@@ -436,6 +436,7 @@ export async function handleListChatLogs(input: Record<string, unknown>, options
       one: conversation.turns === 1 ? "yes" : undefined,
       thread: conversation.thread === "main" ? undefined : conversation.thread,
       label: conversation.label,
+      unlabeled: conversation.label === undefined ? "yes" : undefined,
     }) ?? ""),
   ];
   if (offset + page.length < all.length) lines.push("", ...nextPage(texts, offset + page.length));

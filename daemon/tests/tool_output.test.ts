@@ -26,5 +26,7 @@ test("an activity heatmap and a model history with nothing in them say so", () =
 test("a bash result that isn't an object is shown as it came, and one with errors shows them after its output", () => {
   expect(["done", null, ["a", 1]].map((value) => formatToolOutput(new Texts(), "bash", value))).toEqual(["done", payloadText(null), payloadText(["a", 1])]);
   expect(formatToolOutput(new Texts(), "bash", { ...bash([]), exit_code: 2, stderr: "oops\n" })).toBe("bash: exit 2\nworkdir: /w\nhi\nstderr:\noops");
+  expect(formatToolOutput(new Texts(), "bash", { ...bash([]), stdout: "\n", stderr: "\n" })).toBe("bash: exit 0\nworkdir: /w\n\nstderr:\n");
+  expect(formatToolOutput(new Texts(), "bash", { ...bash([]), exit_code: null, stdout: "" })).toBe("bash: exit terminated by signal\nworkdir: /w");
   expect(formatToolOutput(new Texts(), "threads", { started: "garden" })).toBe(payloadText({ started: "garden" }));
 });

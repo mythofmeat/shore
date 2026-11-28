@@ -43,6 +43,7 @@ export function formatToolOutput(texts: Texts, name: string, value: unknown): st
       return texts.render("output_bash", {
         code: result.exit_code === null ? undefined : String(result.exit_code),
         workdir: oneLine(result.workdir),
+        printed: result.stdout === "" ? undefined : "yes",
         stdout: result.stdout.replace(/\n$/, ""),
         stderr: result.stderr === "" ? undefined : texts.render("tool_stderr", { stderr: result.stderr.replace(/\n$/, "") }),
         reload: result.prompt_files_changed.length > 0 ? texts.render("prompt_reload", { files: result.prompt_files_changed.join(", ") }) : undefined,
