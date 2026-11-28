@@ -163,8 +163,6 @@ export class StreamAccumulator {
       }
 
       case "ping":
-        return { kind: "continue" };
-
       case "call_complete":
         return { kind: "continue" };
 

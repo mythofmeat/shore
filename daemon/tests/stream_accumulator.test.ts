@@ -69,6 +69,30 @@ test("a stream's text, thinking and tool calls come back in the order they arriv
   ]);
 });
 
+test("thinking ends where text, a hidden thought or a tool call begins, and text ends where a tool call begins, each carrying only what it has", async () => {
+  const { outcome } = await consume([
+    { type: "thinking", text: "first" },
+    { type: "text", text: "said" },
+    { type: "thinking", text: "second" },
+    { type: "redacted_thinking", data: "hidden" },
+    { type: "text", text: "then" },
+    { type: "tool_use", id: "t1", name: "read", input: {} },
+    { type: "thinking", text: "third" },
+    { type: "tool_use", id: "t2", name: "read", input: {} },
+    done(),
+  ]);
+  expect("ok" in outcome ? outcome.ok.content_blocks : []).toStrictEqual([
+    { type: "thinking", thinking: "first" },
+    { type: "text", text: "said" },
+    { type: "thinking", thinking: "second" },
+    { type: "redacted_thinking", data: "hidden" },
+    { type: "text", text: "then" },
+    { type: "tool_use", id: "t1", name: "read", input: {} },
+    { type: "thinking", thinking: "third" },
+    { type: "tool_use", id: "t2", name: "read", input: {} },
+  ]);
+});
+
 test("a stream with no start has no model, and the blocks a provider sends with its end take the place of what was gathered", async () => {
   const blocks = [{ type: "text" as const, text: "from the provider" }];
   const { outcome } = await consume([{ type: "text", text: "gathered" }, done({ content_blocks: blocks })]);

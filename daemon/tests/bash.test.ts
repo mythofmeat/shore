@@ -131,6 +131,14 @@ describe("bash on Shore's tool surface", () => {
     const { ctx } = await world();
     const elsewhere = new CharacterWorkspace(ctx.workspaceDir, { user: "no-such-user-shore-test", passEnv: [], noNewPrivs: true, checkLimitMs: 1000 });
     expect(await failure(dispatchTool("bash", { command: "ls" }, { ...ctx, workspace: elsewhere }))).toBe("ToolIoError: io: tools.user names no-such-user-shore-test, but this system has no user by that name");
+    const lookedUp = new CharacterWorkspace(ctx.workspaceDir);
+    const broken = new Error("passwd is unreadable");
+    const user = spyOn(lookedUp, "user").mockRejectedValueOnce(broken);
+    try {
+      expect(await rejectionOf(dispatchTool("bash", { command: "ls" }, { ...ctx, workspace: lookedUp }))).toBe(broken);
+    } finally {
+      user.mockRestore();
+    }
     const workspace = new CharacterWorkspace(ctx.workspaceDir);
     const run = spyOn(workspace, "run").mockRejectedValueOnce(new Error("spawn bash ENOENT"));
     try {
