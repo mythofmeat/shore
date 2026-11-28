@@ -149,12 +149,12 @@ export async function ingestImages(
     const resolution = resolveImage(saved.ref);
     if ("omitted" in resolution) {
       omit(label, resolution.omitted);
-      if (added > 0) noteCachedImages(cacheDir, added);
+      if (added !== 0) noteCachedImages(cacheDir, added);
       return;
     }
     const copied = findModelCopy(saved.ref.path) === undefined ? await saveModelCopy(saved.ref.path, saved.bytes, settings) : 0;
     images.push(saved.ref);
-    if (added + copied > 0) noteCachedImages(cacheDir, added + copied);
+    if (added + copied !== 0) noteCachedImages(cacheDir, added + copied);
   };
 
   for (const upload of imageData) {

@@ -122,7 +122,7 @@ test("the list names every text with whose wording is in use, a file of the user
   });
   expect([row("status").owner, row("status").wording, row("status").shipped]).toEqual(["off", null, "[Their status: {{statuses}}]"]);
   expect([row("label").owner, row("label").wording, row("label").required, row("label").error]).toEqual(["yours", null, true, `text "label" could not be read at ${join(dir, "gone.md")}: ENOENT: no such file or directory, open '${join(dir, "gone.md")}'`]);
-  expect([row("wake").owner, row("wake").wording === row("wake").shipped, row("wake").file]).toEqual(["shore", true, null]);
+  expect([row("wake").owner, row("wake").wording === row("wake").shipped, row("wake").file, row("wake").changed, row("wake").previous]).toEqual(["shore", true, null, false, null]);
   expect([row("output_cut").owner, row("output_cut").wording, row("output_cut").values]).toEqual(["shore", "[process output truncated]", []]);
   const { place, ...identity } = row("cli_identity");
   expect(place).toStartWith("The first line of the system prompt on claude_agent.");

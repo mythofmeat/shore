@@ -62,6 +62,17 @@ test("canonical history round-trips message bodies and alternatives", () => {
   store.close();
 });
 
+test("a stored message's text is read back from its blocks, a tool's result included", () => {
+  const store = HistoryStore.openInMemory();
+  const result: Message = {
+    msg_id: "r1", role: "user", content: "", images: [], timestamp: "2026-08-13T10:00:00+10:00",
+    content_blocks: [{ type: "tool_result", tool_use_id: "t1", content: "the tide is out", is_error: false }],
+  };
+  store.putSegment("ada", 0, { file: "0001.jsonl", compacted_at: "2026-08-13T10:01:00+10:00", compaction_id: "compact-1" }, [result]);
+  expect(store.readSegment("ada", 0).map((each) => each.content)).toEqual(["the tide is out"]);
+  store.close();
+});
+
 test("pending compactions are hidden and recover from either side of the active-file write", () => {
   const store = HistoryStore.openInMemory();
   const entry = {

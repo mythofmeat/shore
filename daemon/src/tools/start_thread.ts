@@ -13,9 +13,8 @@ export interface StartThreadRequest {
 }
 
 function text(texts: Texts, input: Record<string, unknown>, field: string): string | undefined {
-  const value = input[field];
+  const value = input[field] as string | null | undefined;
   if (value === undefined || value === null) return undefined;
-  if (typeof value !== "string") throw new InvalidArgs(texts.always("arg_string", { field }));
   const trimmed = value.trim();
   return trimmed === "" ? undefined : trimmed;
 }

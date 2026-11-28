@@ -146,6 +146,22 @@ describe("what lands on disk", () => {
     }
   });
 
+  test("a captured call whose request can't be written down says so and names the model", async () => {
+    const store = CallStore.openInMemory();
+    try {
+      const captured = withCallCapture(provider(), store);
+      const looped: Record<string, unknown> = {};
+      looped["self"] = looped;
+      for await (const _event of captured.stream({ ...request(), metadata: looped } as never)) {
+        void _event;
+      }
+      const payload = store.getCall(required(store.queryCalls({ limit: 1 })[0]).id);
+      expect(JSON.parse(payload?.request ?? "{}")).toEqual({ error: "request not serializable", sdk: request().sdk, model: request().model });
+    } finally {
+      store.close();
+    }
+  });
+
   test("a captured call holds the request as sent, without the texts it carries for its provider", async () => {
     const store = CallStore.openInMemory();
     try {

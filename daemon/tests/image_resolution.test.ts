@@ -29,6 +29,8 @@ describe("deciding whether a picture can be sent", () => {
     expect(resolveImage({ path: join(dir, "elsewhere.gif"), data: GIF })).toEqual({ image: { mediaType: "image/gif", base64: GIF } });
     expect(resolveImage({ path: join(dir, "elsewhere.gif"), data: GIF }, GIF_BYTES.length - 1)).toEqual({ omitted: { reason: "image_too_big", values: { bytes: String(GIF_BYTES.length), limit: String(GIF_BYTES.length - 1) } } });
     expect(resolveImage({ path, data: "" })).toEqual({ image: { mediaType: "image/gif", base64: GIF } });
+    expect(resolveImage({ path: join(dir, "elsewhere.gif"), data: GIF }, GIF_BYTES.length)).toEqual({ image: { mediaType: "image/gif", base64: GIF } });
+    expect(resolveImage({ path: join(dir, "elsewhere.gif"), data: "R" })).toEqual({ image: { mediaType: "image/gif", base64: "R" } });
   });
 
   test("a file is sent at exactly its limit, left out past it, and left out when it can't be read", async () => {

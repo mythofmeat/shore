@@ -292,6 +292,14 @@ describe("sub-agents in the model and tool commands", () => {
     expect(() => modelSettings(models, { key: "bogus" })).toThrow("unknown setting key: bogus; supported: ");
   });
 
+  test("a setting for a sub-agent with no model to go by, or one naming a model there isn't, is refused saying why", async () => {
+    const bare = await build(undefined, TOML.replace('[chat]\nmodel = "anthropic:claude-x"\n', "").replace('enabled = ["scout"]', "enabled = []"));
+    expect(() => setModelSetting({ ...bare.ctx, dataDir: bare.ctx.config.dirs.data }, { key: "reasoning_effort", value: "low", subagent: "scout" }))
+      .toThrow("subagent 'scout' has no model: subagents.scout.model and defaults.subagent_model are unset, and no character is attached to inherit a chat model from");
+    const unknown = await build(undefined, TOML.replace('model = "anthropic:claude-y"', 'model = "nowhere:nothing"'));
+    expect(() => setModelSetting({ ...unknown.ctx, dataDir: unknown.ctx.config.dirs.data }, { key: "reasoning_effort", value: "low", subagent: "idle" })).toThrow("nowhere");
+  });
+
   test("a sub-agent can be looked up as a tool: whether it is on, what it is for, and what it takes", async () => {
     const w = await build(undefined, TOML);
     const loaded = w.ctx.config;

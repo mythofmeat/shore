@@ -29,14 +29,13 @@ export function nativeHistoryStore(book: string, conversation: string): SessionS
       const entries = JSON.parse(collectionText(db, path) ?? "[]") as SessionStoreEntry[];
       return withImageData(entries, blobs, () => characterTexts(character));
     })())),
-    append: (key, added) => {
+    append: async (key, added) => {
       const stored = blobs === undefined ? added : added.map((entry) => withImageReferences(entry, blobs));
       withStorage(data, (db) => db.transaction(() => {
         const path = pathOf(key);
         ensureCollection(db, path, character, "array");
         appendCollection(db, path, stored.map(entry => ({ text: JSON.stringify(entry), ...(entry.uuid === undefined ? {} : { key: entry.uuid }) })));
       })());
-      return Promise.resolve();
     },
   };
 }

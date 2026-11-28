@@ -135,7 +135,6 @@ import t__tools__autonomy__wake_in_thread__answers__in_wakes from "../../prompts
 import t__tools__autonomy__wake_in_thread__answers__waiting from "../../prompts/tools/autonomy/wake_in_thread/answers/waiting.md" with { type: "text" };
 import t__tools__autonomy__wake_in_thread__answers__queued from "../../prompts/tools/autonomy/wake_in_thread/answers/queued.md" with { type: "text" };
 import t__tools__common__dry_run from "../../prompts/tools/common/dry_run.md" with { type: "text" };
-import t__tools__arguments__string from "../../prompts/tools/arguments/string.md" with { type: "text" };
 import t__tools__arguments__action from "../../prompts/tools/arguments/action.md" with { type: "text" };
 import t__tools__arguments__misplaced from "../../prompts/tools/arguments/misplaced.md" with { type: "text" };
 import t__tools__threads__threads__answers__home from "../../prompts/tools/threads/threads/answers/home.md" with { type: "text" };
@@ -755,7 +754,6 @@ export const TOOL_COMMON_TEXTS: readonly TextSpec[] = [
 ];
 
 export const ARG_COMMON_TEXTS: readonly TextSpec[] = [
-  must("arg_string", t__tools__arguments__string, "A tool's error for an argument that should be words and isn't.", { field: "the argument" }),
   must("arg_action", t__tools__arguments__action, "The error of a tool that takes an action, for one it doesn't take.", { actions: "its actions, with \", \" between them" }),
   must("arg_misplaced", t__tools__arguments__misplaced, "The error of a tool that takes an action, for each argument given that belongs to another; they are joined with \"; \".", { field: "the argument", actions: "the actions it goes with, each in backticks, with \" or \" between them", action: "the action given" }),
 ];

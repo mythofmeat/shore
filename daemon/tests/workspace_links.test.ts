@@ -3,6 +3,7 @@ import { mkdir, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 
 import { Texts } from "../src/texts/texts.ts";
+import { locateWorkspaceFiles } from "../src/tools/read.ts";
 import { embeddedPicture, linkedFile, namedFile, PICTURES_AND_VIDEOS, workspaceNames } from "../src/tools/workspace_names.ts";
 import { outcomeOf } from "./support/outcome.ts";
 import { transparentPng } from "./support/test_images.ts";
@@ -64,6 +65,15 @@ test("a link that names no file is left alone in a picture, and refused as a fil
   expect(await linkedFile(texts, names, true, "harbor.png")).toBe(join(root, "harbor.png"));
   expect(await namedFile(texts, names, ["gallery"], true)).toEqual({ path: join(root, "gallery"), link: "[[gallery/]]" });
   expect(await namedFile(texts, names, ["boats"], true)).toEqual({ path: join(root, "boats.png"), link: "[[boats.png]]" });
+});
+
+test("a pin written as a picture link offers pictures by that name, and one written as a plain link offers any file", async () => {
+  const { root } = await workspace();
+  const { problems } = await locateWorkspaceFiles(texts, ["![[harbr]]", "[[harbr]]"], root);
+  expect(problems).toEqual([
+    "![[harbr]]: no file matches; did you mean ![[harbor.png]]?",
+    "[[harbr]]: no file matches; did you mean [[harbor]], [[harbor.png]]?",
+  ]);
 });
 
 test("what a link lookup says is worded in the character's texts", async () => {
