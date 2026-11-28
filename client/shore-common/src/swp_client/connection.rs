@@ -22,9 +22,13 @@ impl ServerAddr {
     pub fn base_url(&self) -> String {
         let trimmed = self.0.trim().trim_end_matches('/');
         if trimmed.starts_with("http://") || trimmed.starts_with("https://") {
-            trimmed.to_owned()
-        } else {
+            return trimmed.to_owned();
+        }
+        let (authority, path) = trimmed.split_at(trimmed.find('/').unwrap_or(trimmed.len()));
+        if names_a_port(authority) {
             format!("http://{trimmed}")
+        } else {
+            format!("http://{authority}:{DEFAULT_WEB_PORT}{path}")
         }
     }
 
@@ -32,6 +36,13 @@ impl ServerAddr {
         let base = self.base_url();
         reqwest::Url::parse(&base).map_or(base, |url| url.origin().ascii_serialization())
     }
+}
+
+fn names_a_port(authority: &str) -> bool {
+    authority
+        .rsplit_once(']')
+        .map_or(authority, |(_, after)| after)
+        .contains(':')
 }
 
 #[derive(Debug)]
@@ -101,14 +112,26 @@ struct Problem {
     retry_after_ms: Option<u64>,
 }
 
-fn transport(error: reqwest::Error) -> ClientError {
-    if error.is_connect() {
-        let place = error.url().map_or_else(String::new, |url| {
-            format!("{} ", url.origin().ascii_serialization())
-        });
-        ClientError::Connect(format!(
-            "nothing answered at {place}({error}). The CLI talks to the daemon's web listener, port {DEFAULT_WEB_PORT} unless changed; the old TCP port 7320 is gone"
-        ))
+fn unanswered(url: &reqwest::Url, why: &impl std::fmt::Display) -> String {
+    let scheme = url.scheme();
+    let host = url.host_str().unwrap_or_default();
+    let port = url.port_or_known_default().unwrap_or_default();
+    let listener = format!(
+        "The CLI talks to the daemon's web listener, port {DEFAULT_WEB_PORT} unless changed"
+    );
+    let instead = if port == DEFAULT_WEB_PORT {
+        String::new()
+    } else {
+        format!(", so try {scheme}://{host}:{DEFAULT_WEB_PORT}")
+    };
+    format!(
+        "nothing answered at {scheme}://{host}:{port} ({why}). {listener}{instead}; the old TCP port 7320 is gone"
+    )
+}
+
+pub(crate) fn transport(error: reqwest::Error) -> ClientError {
+    if let Some(url) = error.url().filter(|_| error.is_connect()) {
+        ClientError::Connect(unanswered(url, &error))
     } else if error.is_timeout() {
         ClientError::Timeout {
             message: error.to_string(),
@@ -602,6 +625,28 @@ mod tests {
         );
         assert_eq!(base("http://desk"), "http://desk", "http stays");
         assert_eq!(
+            base("shore-daemon"),
+            "http://shore-daemon:7340",
+            "bare without a port means the daemon's web port"
+        );
+        assert_eq!(base("desk:80"), "http://desk:80", "a named port stays");
+        assert_eq!(
+            base("desk/shore/"),
+            "http://desk:7340/shore",
+            "the port goes before a path"
+        );
+        assert_eq!(
+            base("[::1]"),
+            "http://[::1]:7340",
+            "an IPv6 address's colons aren't a port"
+        );
+        assert_eq!(base("[::1]:9000"), "http://[::1]:9000", "its port stays");
+        assert_eq!(
+            origin("shore-daemon"),
+            "http://shore-daemon:7340",
+            "its origin"
+        );
+        assert_eq!(
             origin("https://shore.example:443/"),
             "https://shore.example",
             "default port"
@@ -611,6 +656,26 @@ mod tests {
             origin("http://[::"),
             "http://[::",
             "an unparsable address is kept as given"
+        );
+    }
+
+    #[test]
+    fn nothing_answering_names_the_port_tried_and_suggests_the_daemons_own() {
+        let said = |url: &str| unanswered(&reqwest::Url::parse(url).unwrap(), &"refused");
+        assert_eq!(
+            said("http://shore-daemon/api/sign-in"),
+            "nothing answered at http://shore-daemon:80 (refused). The CLI talks to the daemon's web listener, port 7340 unless changed, so try http://shore-daemon:7340; the old TCP port 7320 is gone",
+            "http's own port"
+        );
+        assert_eq!(
+            said("https://[::1]/api/hello"),
+            "nothing answered at https://[::1]:443 (refused). The CLI talks to the daemon's web listener, port 7340 unless changed, so try https://[::1]:7340; the old TCP port 7320 is gone",
+            "https keeps its scheme"
+        );
+        assert_eq!(
+            said("http://desk:7340/api/hello"),
+            "nothing answered at http://desk:7340 (refused). The CLI talks to the daemon's web listener, port 7340 unless changed; the old TCP port 7320 is gone",
+            "nothing to suggest at the daemon's port"
         );
     }
 

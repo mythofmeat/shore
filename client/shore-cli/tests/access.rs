@@ -283,7 +283,14 @@ fn a_sign_in_nobody_answers_says_where_it_looked() {
     let output = piped(command, "hunter22");
     assert!(!output.status.success(), "{output:?}");
     assert!(
-        stderr(&output).contains("nothing answered at http://127.0.0.1:1"),
+        stderr(&output).contains("nothing answered at http://127.0.0.1:1 ("),
+        "{}",
+        stderr(&output)
+    );
+    assert!(
+        stderr(&output).contains(
+            "port 7340 unless changed, so try http://127.0.0.1:7340; the old TCP port 7320 is gone"
+        ),
         "{}",
         stderr(&output)
     );
@@ -632,7 +639,9 @@ fn a_cli_that_isnt_signed_in_is_told_how_to_sign_in() {
         .output()
         .unwrap();
     assert!(
-        stderr(&missing).contains("port 7340 unless changed; the old TCP port 7320 is gone"),
+        stderr(&missing).contains(
+            "port 7340 unless changed, so try http://127.0.0.1:7340; the old TCP port 7320 is gone"
+        ),
         "{}",
         stderr(&missing)
     );
