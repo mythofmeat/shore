@@ -5,6 +5,9 @@ import { join } from "node:path";
 const ROOT = join(import.meta.dir, "..");
 const PLAYWRIGHT = join(ROOT, "node_modules", ".bin", "playwright");
 
+const generated = Bun.spawnSync(["bun", join(ROOT, "..", "daemon", "scripts", "generate.ts")], { stdin: "ignore", stdout: "inherit", stderr: "inherit" });
+if (generated.exitCode !== 0) process.exit(generated.exitCode);
+
 if (process.platform === "darwin") {
   const playwright = Bun.spawn([PLAYWRIGHT, "test", ...process.argv.slice(2)], { cwd: ROOT, stdio: ["inherit", "inherit", "inherit"] });
   process.exit(await playwright.exited);
@@ -30,12 +33,21 @@ try {
     "--socket", display, "--width", "1280", "--height", "900", "--exit-with-session", session,
   ], {
     env: {
-      ...process.env, DISPLAY: "", SHORE_DESKTOP_E2E_DISPLAY: display,
+      ...process.env, DISPLAY: "", WAYLAND_DISPLAY: display, SHORE_DESKTOP_E2E_DISPLAY: display,
       XDG_CONFIG_HOME: join(home, "config"), XDG_DATA_HOME: join(home, "data"), XDG_CACHE_HOME: join(home, "cache"), XDG_STATE_HOME: join(home, "state"),
     },
-    stdout: "inherit", stderr: "pipe",
+    stdout: "inherit", stderr: "pipe", detached: true,
   });
-  const [code, log] = await Promise.all([kwin.exited, new Response(kwin.stderr).text()]);
+  const endSession = () => {
+    try {
+      process.kill(-kwin.pid, "SIGKILL");
+    } catch {}
+  };
+  for (const signal of ["SIGINT", "SIGTERM", "SIGHUP"] as const) process.on(signal, endSession);
+  const output = new Response(kwin.stderr).text();
+  const code = await kwin.exited;
+  endSession();
+  const log = await output;
   const result = await readFile(status, "utf8").then((text) => Number(text.trim()), () => undefined);
   if (result === undefined) console.error(`KWin exited (${String(code)}) before the journeys finished:\n${log.slice(-4000)}`);
   process.exitCode = result ?? 1;

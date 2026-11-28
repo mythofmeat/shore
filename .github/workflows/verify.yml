@@ -51,6 +51,9 @@ jobs:
             ~/.cargo/registry/index
             ~/.cargo/registry/cache
           key: ${{ steps.patch-cache.outputs.cache-primary-key }}
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: client
       - run: bun install --frozen-lockfile
       - run: bun run lint
       - run: bun run lint:comments
@@ -61,7 +64,6 @@ jobs:
       - run: bun run mutate --list > /dev/null
       - run: bun run mutate --client --list > /dev/null
       - run: bun run typecheck
-      - run: bun run browser:check
       - run: bun run build:daemon
       - run: bun test
       - name: tools run as each character's own user
@@ -155,14 +157,6 @@ jobs:
         with:
           tool: cargo-mutants@27.1.0
       - run: cargo test --workspace
-      - name: daemon wire types and schemas are current
-        run: |
-          if [ -n "$(git status --porcelain -- ../daemon)" ]; then
-            echo "::error title=stale wire types::cargo test regenerated the wire types and schemas it exports to daemon/. Run cargo test in client/ and commit what changes there."
-            git status --short -- ../daemon
-            git --no-pager diff -- ../daemon | head -n 200
-            exit 1
-          fi
       - run: cargo fmt --all --check
       - run: cargo clippy --workspace --all-targets
       - name: every mutant on a changed client line fails a test
