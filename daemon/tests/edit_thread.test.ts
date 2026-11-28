@@ -199,7 +199,7 @@ describe("what the threads tool is given", () => {
     }
   });
 
-  test("a new thread's folder name that is too long or has a control character is refused in the character's words for it", () => {
+  test("a new thread's folder name longer than the limit or with a control character is refused in the character's words for it, and one at the limit is kept", () => {
     const long = "x".repeat(MAX_FOLDER_NAME_LENGTH + 1);
     expect(() => startThreadRequest(new Texts(), { name: "story", label: "Lighthouse", folder: long })).toThrow(`a folder name can be at most ${String(MAX_FOLDER_NAME_LENGTH)} characters`);
     expect(() => startThreadRequest(new Texts(), { name: "story", label: "Lighthouse", folder: "a\u0007b" })).toThrow("a folder name can't contain control characters");
@@ -208,6 +208,7 @@ describe("what the threads tool is given", () => {
     expect(() => startThreadRequest(mine, { name: "story", label: "Lighthouse", folder: "a\u0007b" })).toThrow(/^CONTROL$/);
     expect(() => cleanFolderName("  ")).toThrow(/^a folder needs a name$/);
     expect(startThreadRequest(mine, { name: "story", label: "Lighthouse", folder: " Stories " })).toMatchObject({ folder: "Stories" });
+    expect(startThreadRequest(mine, { name: "story", label: "Lighthouse", folder: long.slice(1) })).toMatchObject({ folder: long.slice(1) });
   });
 
   test("an edit or a new thread where threads can't be changed says so, and a failure that isn't about the thread is passed on as it is", async () => {
