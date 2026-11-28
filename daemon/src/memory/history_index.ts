@@ -492,9 +492,9 @@ export class HistoryIndex {
     return (row as ChatLogMessage | null) ?? undefined;
   }
 
-  neighbors(row: ChatLogMessage, direction: -1 | 1, limit: number): ChatLogMessage[] {
+  neighbors(row: ChatLogMessage, side: "earlier" | "later", limit: number): ChatLogMessage[] {
     if (limit === 0) return [];
-    const sql = direction < 0
+    const sql = side === "earlier"
       ? "SELECT * FROM messages WHERE thread = ?1 AND run = ?2 AND seq < ?3 ORDER BY seq DESC LIMIT ?4"
       : "SELECT * FROM messages WHERE thread = ?1 AND run = ?2 AND seq > ?3 ORDER BY seq LIMIT ?4";
     return this.#db.query(sql).all(row.thread, row.run, row.seq, limit) as ChatLogMessage[];

@@ -237,12 +237,12 @@ function boundFrom(texts: Texts, input: Record<string, unknown>, field: string, 
     const parts = date.slice(1).map(Number);
     const start = localInstant(parts, zone);
     if (start === undefined) throw invalid;
-    const [year = 0, month = 1, day = 1] = parts;
+    const [year, month, day] = parts as [number, number, number];
     return end ? nextMidnight(year, month, day, zone) - 1 : start;
   }
   const time = LOCAL_TIME.exec(raw);
   if (time !== null) {
-    const parts = time.slice(1, 7).map((part) => Number(part ?? 0));
+    const parts = time.slice(1).map((part) => Number(part ?? 0));
     const instant = localInstant(parts, zone);
     if (instant === undefined) throw invalid;
     return end ? instant + (time[6] === undefined ? 59_999 : 999) : instant;
@@ -534,7 +534,6 @@ function entrySize(row: ChatLogMessage, view: View): number {
 function gapText(texts: Texts, ms: number): string | undefined {
   const minutes = Math.round(ms / 60_000);
   if (minutes >= 2 * 24 * 60) return texts.render("logs_gap_length", { days: String(Math.round(minutes / (24 * 60))) });
-  if (minutes < 60) return texts.render("logs_gap_length", { minutes: String(minutes) });
   const rest = minutes % 60;
   return texts.render("logs_gap_length", { hours: String(Math.floor(minutes / 60)), minutes: rest === 0 ? undefined : String(rest) });
 }
@@ -556,24 +555,20 @@ function readAround(index: HistoryIndex, view: View, msgId: string, thread: stri
   checkThread(texts, index, thread);
   const target = index.find(msgId, thread);
   if (target === undefined) return texts.render("logs_not_found", { id: msgId, thread }) ?? "";
-  const earlier = index.neighbors(target, -1, before);
-  const later = index.neighbors(target, 1, after);
+  const earlier = index.neighbors(target, "earlier", before);
+  const later = index.neighbors(target, "later", after);
   const keptEarlier: ChatLogMessage[] = [];
   const keptLater: ChatLogMessage[] = [];
+  const nearestFirst = Array.from({ length: Math.max(earlier.length, later.length) }, (_, distance) => [
+    { row: earlier[distance], kept: keptEarlier },
+    { row: later[distance], kept: keptLater },
+  ]).flat();
   let used = entrySize(target, view);
-  let full = false;
-  for (let distance = 0; distance < Math.max(earlier.length, later.length) && !full; distance += 1) {
-    for (const [side, kept] of [[earlier, keptEarlier], [later, keptLater]] as const) {
-      const row = side[distance];
-      if (row === undefined || full) continue;
-      const size = entrySize(row, view);
-      if (used + size > BUDGET_CHARS) {
-        full = true;
-        continue;
-      }
-      used += size;
-      kept.push(row);
-    }
+  for (const { row, kept } of nearestFirst) {
+    if (row === undefined) continue;
+    used += entrySize(row, view);
+    if (used > BUDGET_CHARS) break;
+    kept.push(row);
   }
   const copies = alsoIn(target);
   const lines = [
@@ -590,6 +585,20 @@ function readAround(index: HistoryIndex, view: View, msgId: string, thread: stri
   return lines.join("\n").trimEnd();
 }
 
+function rowsThatFit(index: HistoryIndex, view: View, range: { thread: string; low: number; high: number; offset: number; total: number }): ChatLogMessage[] {
+  const rows: ChatLogMessage[] = [];
+  let used = 0;
+  for (let page = range.offset; page < range.total; page += RANGE_BATCH) {
+    for (const row of index.range(range.thread, range.low, range.high, page, RANGE_BATCH)) {
+      const size = entrySize(row, view);
+      if (rows.length > 0 && used + size > BUDGET_CHARS) return rows;
+      used += size;
+      rows.push(row);
+    }
+  }
+  return rows;
+}
+
 function readRange(
   index: HistoryIndex,
   view: View,
@@ -600,28 +609,13 @@ function readRange(
   const low = bounds.start ?? Number.MIN_SAFE_INTEGER;
   const high = bounds.end ?? Number.MAX_SAFE_INTEGER;
   const texts = view.texts;
-  const range = texts.render("logs_range", { start: bounds.rawStart, end: bounds.rawEnd }) ?? "";
+  const shown = texts.render("logs_range", { start: bounds.rawStart, end: bounds.rawEnd }) ?? "";
   const total = index.countRange(thread, low, high);
-  if (total === 0) return texts.render("logs_range_none", { thread, range, note: emptyArchiveNote(texts, index, view.zone) }) ?? "";
-  if (offset >= total) return texts.render("logs_range_past_end", { thread, range, count: count(total), offset: String(offset) }) ?? "";
-  const rows: ChatLogMessage[] = [];
-  let used = 0;
-  let full = false;
-  for (let page = offset; !full && page < total; page += RANGE_BATCH) {
-    const batch = index.range(thread, low, high, page, RANGE_BATCH);
-    if (batch.length === 0) break;
-    for (const row of batch) {
-      const size = entrySize(row, view);
-      if (rows.length > 0 && used + size > BUDGET_CHARS) {
-        full = true;
-        break;
-      }
-      used += size;
-      rows.push(row);
-    }
-  }
+  if (total === 0) return texts.render("logs_range_none", { thread, range: shown, note: emptyArchiveNote(texts, index, view.zone) }) ?? "";
+  if (offset >= total) return texts.render("logs_range_past_end", { thread, range: shown, count: count(total), offset: String(offset) }) ?? "";
+  const rows = rowsThatFit(index, view, { thread, low, high, offset, total });
   const lines = [
-    texts.render("logs_range_header", { thread, range, from: count(offset + 1), to: count(offset + rows.length), count: count(total), zone: view.zone }) ?? "",
+    texts.render("logs_range_header", { thread, range: shown, from: count(offset + 1), to: count(offset + rows.length), count: count(total), zone: view.zone }) ?? "",
     "",
     ...transcript(rows, view),
   ];
@@ -645,7 +639,7 @@ function dayOverview(index: HistoryIndex, view: View, date: string): string {
   const dayStart = parts === undefined ? undefined : localInstant(parts, view.zone);
   const texts = view.texts;
   if (parts === undefined || dayStart === undefined) throw new InvalidArgs(texts.always("logs_overview_form"));
-  const [year = 0, month = 1, day = 1] = parts;
+  const [year, month, day] = parts as [number, number, number];
   const dayEnd = nextMidnight(year, month, day, view.zone) - 1;
   const inDay = (row: ChatLogMessage) => row.ts >= dayStart && row.ts <= dayEnd;
   const conversations = conversationsOf(index.between(dayStart - DAY_MS, dayEnd + DAY_MS)).filter((c) => c.some(inDay));

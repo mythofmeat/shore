@@ -1,39 +1,32 @@
 import type { Texts } from "../texts/texts.ts";
 
-const INVALID = "invalid args: ";
-const IO = "io: ";
-const MISSING = ": not yet implemented";
-
 export class InvalidArgs extends Error {
-  constructor(message: string) {
-    super(`${INVALID}${message}`);
-    this.name = "InvalidArgs";
-  }
+  readonly reason: string;
 
-  get reason(): string {
-    return this.message.startsWith(INVALID) ? this.message.slice(INVALID.length) : this.message;
+  constructor(reason: string) {
+    super(`invalid args: ${reason}`);
+    this.name = "InvalidArgs";
+    this.reason = reason;
   }
 }
 
 export class ToolIoError extends Error {
-  constructor(message: string) {
-    super(`${IO}${message}`);
-    this.name = "ToolIoError";
-  }
+  readonly reason: string;
 
-  get reason(): string {
-    return this.message.startsWith(IO) ? this.message.slice(IO.length) : this.message;
+  constructor(reason: string) {
+    super(`io: ${reason}`);
+    this.name = "ToolIoError";
+    this.reason = reason;
   }
 }
 
 export class NotImplemented extends Error {
-  constructor(name: string) {
-    super(`${name}${MISSING}`);
-    this.name = "NotImplemented";
-  }
+  readonly tool: string;
 
-  get tool(): string {
-    return this.message.endsWith(MISSING) ? this.message.slice(0, -MISSING.length) : this.message;
+  constructor(tool: string) {
+    super(`${tool}: not yet implemented`);
+    this.name = "NotImplemented";
+    this.tool = tool;
   }
 }
 

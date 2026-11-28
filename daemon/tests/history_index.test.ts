@@ -182,9 +182,9 @@ describe("what the chat log index holds", () => {
     try {
       expect(ids(index.search("words", "lantern", {}, "oldest", 10, 0))).toEqual(["u1", "a1", "u3", "a3"]);
       const row = (id: string) => required(index.find(id));
-      expect(ids(index.neighbors(row("u1"), 1, 10))).toEqual(["a1"]);
-      expect(ids(index.neighbors(row("u3"), -1, 10))).toEqual([]);
-      expect(ids(index.neighbors(row("u3"), 1, 10))).toEqual(["a3"]);
+      expect(ids(index.neighbors(row("u1"), "later", 10))).toEqual(["a1"]);
+      expect(ids(index.neighbors(row("u3"), "earlier", 10))).toEqual([]);
+      expect(ids(index.neighbors(row("u3"), "later", 10))).toEqual(["a3"]);
     } finally {
       index.close();
     }
@@ -195,7 +195,7 @@ describe("what the chat log index holds", () => {
     for (let idx = 0; idx < 4; idx += 1) w.put("main", idx, [message(`u${String(idx)}`, `chapter ${String(idx)}`, idx)]);
     const index = await w.index();
     try {
-      expect(ids(index.neighbors(required(index.find("u0")), 1, 10))).toEqual(["u1", "u2", "u3"]);
+      expect(ids(index.neighbors(required(index.find("u0")), "later", 10))).toEqual(["u1", "u2", "u3"]);
     } finally {
       index.close();
     }
@@ -210,7 +210,7 @@ describe("what the chat log index holds", () => {
     try {
       const hits = index.search("words", "kettle", {}, "oldest", 10, 0);
       expect(hits.map((hit) => [hit.msg_id, hit.thread, hit.also_in])).toEqual([["u1", "main", JSON.stringify(["story"])], ["a1", "main", null]]);
-      expect(ids(index.neighbors(required(index.find("u1", "main")), 1, 10))).toEqual(["a1"]);
+      expect(ids(index.neighbors(required(index.find("u1", "main")), "later", 10))).toEqual(["a1"]);
     } finally {
       index.close();
     }

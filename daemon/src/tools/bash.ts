@@ -62,11 +62,11 @@ export async function handleBash(
   stopped?: (output: ProcessStreams) => void,
 ): Promise<BashResult> {
   signal?.throwIfAborted();
-  const command = input["command"];
+  const command = input["command"] as string;
   const texts = workspaceTexts(target);
-  if (typeof command !== "string" || command.trim() === "" || command.includes("\0")) throw new InvalidArgs(texts.always("bash_command_form"));
-  const requestedDir = input["workdir"];
-  if (requestedDir !== undefined && (typeof requestedDir !== "string" || requestedDir.includes("\0"))) throw new InvalidArgs(texts.always("bash_workdir_form"));
+  if (command.trim() === "" || command.includes("\0")) throw new InvalidArgs(texts.always("bash_command_form"));
+  const requestedDir = input["workdir"] as string | undefined;
+  if (requestedDir?.includes("\0") === true) throw new InvalidArgs(texts.always("bash_workdir_form"));
   const workspace = asCharacterWorkspace(target);
   if (workspace.dir === "") throw new InvalidArgs(texts.always("file_no_workspace"));
   const root = resolve(workspace.dir);

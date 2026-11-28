@@ -15,6 +15,7 @@ export interface ToolUseEvent {
   name: string;
   input: unknown;
   input_error?: string;
+  input_length?: number;
 }
 
 export interface StreamResult {

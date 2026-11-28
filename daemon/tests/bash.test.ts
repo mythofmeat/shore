@@ -1,4 +1,5 @@
-import { describe, expect, test } from "bun:test";
+import { describe, expect, spyOn, test } from "bun:test";
+import { existsSync } from "node:fs";
 import { mkdir, mkdtemp, readFile, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -101,6 +102,42 @@ describe("bash on Shore's tool surface", () => {
     expect(await readFile(join(ctx.workspaceDir, "notes", "MAP.md"), "utf8")).toBe("partial");
     expect(queued).toEqual(["notes/MAP.md"]);
     expect(await Bun.file(join(ctx.workspaceDir, "leaked.txt")).exists()).toBe(false);
+  });
+
+  test("bash refuses a blank command, a NUL byte in the command or the workdir, and a character with no workspace", async () => {
+    const { ctx } = await world();
+    const form = "InvalidArgs: invalid args: command must be a non-empty string without NUL bytes";
+    expect(await failure(dispatchTool("bash", { command: "   " }, ctx))).toBe(form);
+    expect(await failure(dispatchTool("bash", { command: "ls\0" }, ctx))).toBe(form);
+    expect(await failure(dispatchTool("bash", { command: "ls", workdir: "a\0b" }, ctx))).toBe("InvalidArgs: invalid args: workdir must be a string without NUL bytes");
+    expect(await failure(dispatchTool("bash", { command: "ls" }, { ...ctx, workspaceDir: "" }))).toBe("InvalidArgs: invalid args: workspace not configured");
+    expect(existsSync(ctx.workspaceDir)).toBe(false);
+  });
+
+  test("a stop before bash starts leaves the workspace as it was, and one while it runs comes back as that stop", async () => {
+    const { ctx } = await world();
+    const early = new Error("stopped early");
+    expect(await rejectionOf(dispatchTool("bash", { command: "touch made" }, { ...ctx, signal: AbortSignal.abort(early) }))).toBe(early);
+    expect(existsSync(ctx.workspaceDir)).toBe(false);
+    const controller = new AbortController();
+    const call = dispatchTool("bash", { command: "printf ready > ready; sleep 10" }, { ...ctx, signal: controller.signal });
+    for (let attempts = 0; attempts < 100 && !await Bun.file(join(ctx.workspaceDir, "ready")).exists(); attempts += 1) await Bun.sleep(10);
+    const late = new Error("stopped late");
+    controller.abort(late);
+    expect(await rejectionOf(call)).toBe(late);
+  });
+
+  test("bash is refused when the character's tools user can't be found, or bash can't be started, and says why", async () => {
+    const { ctx } = await world();
+    const elsewhere = new CharacterWorkspace(ctx.workspaceDir, { user: "no-such-user-shore-test", passEnv: [], noNewPrivs: true, checkLimitMs: 1000 });
+    expect(await failure(dispatchTool("bash", { command: "ls" }, { ...ctx, workspace: elsewhere }))).toBe("ToolIoError: io: tools.user names no-such-user-shore-test, but this system has no user by that name");
+    const workspace = new CharacterWorkspace(ctx.workspaceDir);
+    const run = spyOn(workspace, "run").mockRejectedValueOnce(new Error("spawn bash ENOENT"));
+    try {
+      expect(await failure(dispatchTool("bash", { command: "ls" }, { ...ctx, workspace }))).toBe(`ToolIoError: io: could not run bash in ${ctx.workspaceDir}: Error: spawn bash ENOENT. Bash must be installed on the daemon host.`);
+    } finally {
+      run.mockRestore();
+    }
   });
 
   test("caller cancellation reaches the command and its child processes", async () => {
