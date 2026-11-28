@@ -237,6 +237,10 @@ export class AutonomyService {
     return required(this.#entries.get(character)).runner.requestWake(firing, overwrite);
   }
 
+  callOffWake(character: string, thread: string, from: string): TriggerFiring | undefined {
+    return required(this.#entries.get(character)).runner.callOff(thread, from);
+  }
+
   userActiveIn(character: string, thread: string): void {
     this.#entries.get(character)?.runner.userActiveIn(thread, this.#now());
   }

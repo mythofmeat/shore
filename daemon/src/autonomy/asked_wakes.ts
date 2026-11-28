@@ -36,6 +36,15 @@ export class AskedWakes {
     return [...this.#waiting.values()];
   }
 
+  waitingIn(thread: string): TriggerFiring | undefined {
+    return this.#waiting.get(thread);
+  }
+
+  holds(firing: TriggerFiring): boolean {
+    const kept = this.#waiting.get(firing.thread ?? "");
+    return kept?.at === firing.at && kept.from === firing.from;
+  }
+
   keep(firing: TriggerFiring): void {
     this.#waiting.set(firing.thread ?? "", firing);
     this.#save();
@@ -43,8 +52,7 @@ export class AskedWakes {
 
   gone(firings: readonly TriggerFiring[]): void {
     for (const firing of firings) {
-      const kept = this.#waiting.get(firing.thread ?? "");
-      if (kept?.at === firing.at && kept.from === firing.from) this.#waiting.delete(firing.thread ?? "");
+      if (this.holds(firing)) this.#waiting.delete(firing.thread ?? "");
     }
     this.#save();
   }

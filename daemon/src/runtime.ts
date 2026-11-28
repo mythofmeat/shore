@@ -246,6 +246,7 @@ export async function createRuntime(options: RuntimeOptions): Promise<ShoreRunti
           activityStats: (character, localAt, days) => autonomy.activityStats(character, localAt, days),
           wakesMayRun: (character) => autonomy.wakesMayRun(character),
           requestWake: (character, firing, overwrite) => autonomy.requestWake(character, firing, overwrite),
+          callOffWake: (character, thread, from) => autonomy.callOffWake(character, thread, from),
         }, {
           providers,
           registry,
@@ -489,7 +490,7 @@ export interface SubagentToolDeps {
 export function sharedToolDeps(
   config: LoadedConfig,
   mcp: McpHolder,
-  autonomy: Pick<AutonomyService, "activityStats" | "wakesMayRun" | "requestWake">,
+  autonomy: Pick<AutonomyService, "activityStats" | "wakesMayRun" | "requestWake" | "callOffWake">,
   subagent: SubagentToolDeps,
   triggers?: Pick<TriggerService, "view">,
 ): ToolContextDeps {
@@ -517,6 +518,7 @@ export function sharedToolDeps(
       const asked = autonomy.requestWake(character, { name: "", from, reason: request.reason, at: Date.now(), thread: request.thread, limitMs, startsAt: request.startsAt }, request.overwrite);
       return asked.kind === "waiting" ? asked : { kind: "queued", limitMs, replaced: asked.replaced };
     },
+    callOffWake: (character, from, thread) => autonomy.callOffWake(character, thread, from),
     sealThread: async (character, request) => {
       const { sealed, filesDir } = await startSealedThread(registry, character, request);
       return { unsealAt: sealed.unseal_at, filesDir };

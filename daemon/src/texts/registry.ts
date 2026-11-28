@@ -72,6 +72,7 @@ import tools__autonomy__send_message__push from "../../prompts/tools/autonomy/se
 import tools__autonomy__send_message__send_message from "../../prompts/tools/autonomy/send_message/send_message.md" with { type: "text" };
 import tools__autonomy__send_message__text from "../../prompts/tools/autonomy/send_message/text.md" with { type: "text" };
 import tools__autonomy__send_message__thread from "../../prompts/tools/autonomy/send_message/thread.md" with { type: "text" };
+import tools__autonomy__wake_in_thread__call_off from "../../prompts/tools/autonomy/wake_in_thread/call_off.md" with { type: "text" };
 import tools__autonomy__wake_in_thread__limit from "../../prompts/tools/autonomy/wake_in_thread/limit.md" with { type: "text" };
 import tools__autonomy__wake_in_thread__overwrite from "../../prompts/tools/autonomy/wake_in_thread/overwrite.md" with { type: "text" };
 import tools__autonomy__wake_in_thread__reason from "../../prompts/tools/autonomy/wake_in_thread/reason.md" with { type: "text" };
@@ -333,7 +334,7 @@ const TOOL_TEXTS_SHIPPED: Readonly<Record<string, { description: string; paramet
     },
   },
   list_triggers: { description: tools__autonomy__list_triggers__list_triggers, parameters: {} },
-  wake_in_thread: { description: tools__autonomy__wake_in_thread__wake_in_thread, parameters: { thread: tools__autonomy__wake_in_thread__thread, reason: tools__autonomy__wake_in_thread__reason, limit: tools__autonomy__wake_in_thread__limit, overwrite: tools__autonomy__wake_in_thread__overwrite, when: tools__autonomy__wake_in_thread__when } },
+  wake_in_thread: { description: tools__autonomy__wake_in_thread__wake_in_thread, parameters: { thread: tools__autonomy__wake_in_thread__thread, reason: tools__autonomy__wake_in_thread__reason, limit: tools__autonomy__wake_in_thread__limit, overwrite: tools__autonomy__wake_in_thread__overwrite, when: tools__autonomy__wake_in_thread__when, call_off: tools__autonomy__wake_in_thread__call_off } },
   send_message: { description: tools__autonomy__send_message__send_message, parameters: { text: tools__autonomy__send_message__text, thread: tools__autonomy__send_message__thread, push: tools__autonomy__send_message__push } },
   guide: { description: tools__guide__guide, parameters: { topic: tools__guide__topic } },
 };

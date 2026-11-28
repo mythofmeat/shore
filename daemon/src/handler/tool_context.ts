@@ -23,7 +23,7 @@ import type { Message } from "../engine/types.ts";
 import type { NewSealedThread } from "../engine/sealed.ts";
 import type { StartedSealedThread } from "../tools/start_sealed_thread.ts";
 import type { StartThreadRequest } from "../tools/start_thread.ts";
-import type { WakeHandOff, WakeInThreadRequest } from "../tools/wake_in_thread.ts";
+import type { WaitingWake, WakeHandOff, WakeInThreadRequest } from "../tools/wake_in_thread.ts";
 import type { EditThreadRequest } from "../tools/edit_thread.ts";
 import type { ThreadRecord } from "../engine/threads.ts";
 import { Texts } from "../texts/texts.ts";
@@ -48,6 +48,7 @@ export interface ToolContextDeps extends Partial<ToolConversation> {
   triggersView?: (character: string) => Promise<TriggersView>;
   push?: (character: string, message: string) => Promise<PushOutcome>;
   wakeInThread?: (character: string, from: string, request: WakeInThreadRequest) => WakeHandOff;
+  callOffWake?: (character: string, from: string, thread: string) => WaitingWake | undefined;
   startThread?: (character: string, request: StartThreadRequest) => Promise<void>;
   sealThread?: (character: string, request: NewSealedThread) => Promise<StartedSealedThread>;
   editThread?: (character: string, request: EditThreadRequest) => Promise<ThreadRecord | undefined>;
@@ -67,6 +68,7 @@ export async function buildToolContext(
   const activityStats = deps.activityStats;
   const triggersView = deps.triggersView;
   const wakeInThread = deps.wakeInThread;
+  const callOffWake = deps.callOffWake;
   const startThread = deps.startThread;
   const sealThread = deps.sealThread;
   const editThread = deps.editThread;
@@ -98,6 +100,7 @@ export async function buildToolContext(
     ...(triggersView === undefined ? {} : { triggers: () => triggersView(charName) }),
     ...(deps.sendMessage === undefined ? {} : { sendMessage: deps.sendMessage }),
     ...(wakeInThread === undefined ? {} : { wakeInThread: (request: WakeInThreadRequest) => wakeInThread(charName, deps.thread ?? MAIN_THREAD, request) }),
+    ...(callOffWake === undefined ? {} : { callOffWake: (thread: string) => callOffWake(charName, deps.thread ?? MAIN_THREAD, thread) }),
     ...(deps.deferEdit === undefined ? {} : { deferEdit: deps.deferEdit }),
     ...(startThread === undefined
       ? {}

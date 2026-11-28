@@ -22,6 +22,11 @@ export interface WaitingWake {
   readonly startsAt?: number | undefined;
 }
 
+export interface WakeAsking {
+  readonly handOff?: ((request: WakeInThreadRequest) => WakeHandOff) | undefined;
+  readonly callOff?: ((thread: string) => WaitingWake | undefined) | undefined;
+}
+
 export type WakeHandOff =
   | { kind: "queued"; limitMs: number | undefined; replaced?: WaitingWake | undefined }
   | { kind: "waiting"; waiting: WaitingWake }
@@ -30,6 +35,8 @@ export type WakeHandOff =
   | { kind: "wakes_thread" };
 
 const MINUTE_MS = 60_000;
+
+const CALL_OFF_ALONE = "`call_off` takes back the wake waiting in that thread and asks for none, so it can't be given with `when` or `overwrite`. To be woken there at another time instead, leave out `call_off` and set `overwrite` to true.";
 
 const DATE_TIME = /^(\d{4}-\d{2}-\d{2})[ T](\d{1,2}):(\d{2})\s*([ap]\.?m\.?)?$/i;
 
@@ -67,9 +74,14 @@ export function wakeStartsAt(value: unknown, now: number, timeZone: string): num
   return at;
 }
 
-export function wakeInThreadRequest(input: Record<string, unknown>, now: number, timeZone: string): WakeInThreadRequest {
+function threadIn(input: Record<string, unknown>): string {
   const thread = typeof input["thread"] === "string" ? input["thread"].trim() : "";
   if (!isValidThreadId(thread)) throw new InvalidArgs("thread must be a thread's id, as `threads` lists it");
+  return thread;
+}
+
+export function wakeInThreadRequest(input: Record<string, unknown>, now: number, timeZone: string): WakeInThreadRequest {
+  const thread = threadIn(input);
   const reason = typeof input["reason"] === "string" ? input["reason"].trim() : "";
   if (reason === "") throw new InvalidArgs("reason must be a non-empty string");
   const overwrite = input["overwrite"] === true;
@@ -95,14 +107,29 @@ function whenItStarts(startsAt: number | undefined, userName: string, timeZone: 
     : ` at ${formatWallClock(startsAt, timeZone)}. If ${userName} has written there in the ${quiet} before, it waits until they have been quiet there that long. If you are dormant then, or ${userName} has switched your triggers off, it is dropped.`;
 }
 
+function given(value: unknown): boolean {
+  return value !== undefined && value !== null;
+}
+
+function callOffWake(input: Record<string, unknown>, callOff: WakeAsking["callOff"], timeZone: string): string {
+  if (callOff === undefined) throw new ToolIoError("a wake can't be called off from here");
+  const thread = threadIn(input);
+  if (input["overwrite"] === true || given(input["when"])) throw new InvalidArgs(CALL_OFF_ALONE);
+  const waiting = callOff(thread);
+  if (waiting === undefined) throw new ToolIoError(`you have no wake waiting in "${thread}" to call off: only a wake you asked for that hasn't started can be`);
+  return `Called off the wake you had waiting in "${thread}", ${askedFor(waiting, timeZone)}`;
+}
+
 export function handleWakeInThread(
   input: Record<string, unknown>,
   here: string | undefined,
-  handOff: ((request: WakeInThreadRequest) => WakeHandOff) | undefined,
+  wakes: WakeAsking,
   userName: string,
   timeZone: string = hostZone(),
   now: number = Date.now(),
 ): string {
+  if (input["call_off"] === true) return callOffWake(input, wakes.callOff, timeZone);
+  const handOff = wakes.handOff;
   if (handOff === undefined) throw new ToolIoError("a wake can't be handed on from here");
   const request = wakeInThreadRequest(input, now, timeZone);
   if (request.thread === here && request.startsAt === undefined) {
