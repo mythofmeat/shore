@@ -20,7 +20,7 @@ const SETTINGS = "every, at, on, when, after, follows, check, wake, thread, limi
 const AT_HELP = '`at` must be a 24-hour local time, with the days it applies to in front if not every day, like "20:00" or "Sat 20:00" or "Mon,Thu 09:30"';
 
 function parse(content: string): ReturnType<typeof parseTriggers> {
-  return parseTriggers(content, DEFAULT_COOLDOWN);
+  return parseTriggers(new Texts(), content, DEFAULT_COOLDOWN);
 }
 
 function only(body: string): Trigger | string {
@@ -393,7 +393,7 @@ test("a trigger's time is what its `every`, `at`, `on`, `when`, `after` and `fol
     expect(timeOf('on = "2026-11-20 18:00"', rest), rest).toBe(before);
   }
   expect(triggerTimes(file('on = "2026-11-20 18:00"').replace("See whether", "Look whether"))?.get("parcel")).toBe(before);
-  expect(parseTriggers(file('on = "2026-11-20 18:00"'), DEFAULT_COOLDOWN).triggers.map((trigger) => trigger.name)).toEqual(["parcel"]);
+  expect(parseTriggers(new Texts(), file('on = "2026-11-20 18:00"'), DEFAULT_COOLDOWN).triggers.map((trigger) => trigger.name)).toEqual(["parcel"]);
   expect([...triggerTimes(file('on = "2026-11-20 18:00"'))?.keys() ?? []]).toEqual(["parcel", "broken"]);
   expect(triggerTimes("")).toEqual(new Map());
   expect(triggerTimes("[parcel\non = 1")).toBeUndefined();
@@ -474,9 +474,9 @@ test("the list ends with the wakes the character asked for that haven't started,
 test("no name is kept back from the character's triggers, and one with a check isn't run for a character without the bash tool", () => {
   expect(parse('[heartbeat]\nevery = "1h"\nreason = "r"\n')).toMatchObject({ triggers: [{ name: "heartbeat" }], problems: [] });
   const file = '[mail]\nevery = "30m"\ncheck = "new-mail.sh"\n\n[supper]\nat = "20:00"\nreason = "Supper."\n\n[after-mail]\nfollows = "mail"\nreason = "r"\n';
-  expect(parseTriggers(file, DEFAULT_COOLDOWN).triggers.map((trigger) => trigger.name)).toEqual(["mail", "supper", "after-mail"]);
-  expect(parseTriggers(file, DEFAULT_COOLDOWN, true).problems).toEqual([]);
-  const without = parseTriggers(file, DEFAULT_COOLDOWN, false);
+  expect(parseTriggers(new Texts(), file, DEFAULT_COOLDOWN).triggers.map((trigger) => trigger.name)).toEqual(["mail", "supper", "after-mail"]);
+  expect(parseTriggers(new Texts(), file, DEFAULT_COOLDOWN, true).problems).toEqual([]);
+  const without = parseTriggers(new Texts(), file, DEFAULT_COOLDOWN, false);
   expect(without.triggers.map((trigger) => trigger.name)).toEqual(["supper"]);
   expect(without.problems).toEqual([
     "`mail` isn't running: its `check` is a command, and you don't have the `bash` tool to run commands with",

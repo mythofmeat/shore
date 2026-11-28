@@ -1493,6 +1493,22 @@ test("the character's triggers run whenever they are switched on, a check only w
   }, withTriggers);
 });
 
+test("why a trigger isn't running is told in the character's own words for it", async () => {
+  const root = await mkdtemp(testTmp("shore-wakes-"));
+  await mkdir(join(root, "config"), { recursive: true });
+  await writeFile(join(root, "config", "stopped.md"), "`{{name}}` is stopped: {{problem}}\n");
+  await writeFile(join(root, "config", "no_bash.md"), "you can't run checks\n");
+  at(0);
+  await withCharacter(async ({ runtime, workspace, say }) => {
+    await writeFile(join(workspace, "TRIGGERS.toml"), TOUCH);
+    await say("hello");
+    await looks(runtime);
+    expect((await runtime.triggers.view("ada")).problems).toEqual(["`touch` is stopped: you can't run checks"]);
+  }, (app) => {
+    app.texts = { trigger_file_not_running: "stopped.md", trigger_file_no_bash: "no_bash.md" };
+  }, root);
+});
+
 test("the user's settings reach the character's triggers: a longer cooldown, a shorter check limit, and a trigger switched off by name", async () => {
   await withCharacter(async ({ runtime, workspace, say }) => {
     await writeFile(join(workspace, "TRIGGERS.toml"), `${TOUCH}\n[slow]\nevery = "10m"\ncheck = "sleep 30"\nwake = false\n\n[lamp]\nevery = "10m"\nreason = "Trim the lamp."\n`);
@@ -4519,7 +4535,7 @@ test("with every text Shore writes pointed at a marker, a reply carrying every k
   const toolTexts = ALL_TOOLS.flatMap((tool) => [toolText(tool.name), ...Object.keys((tool.parameters as { properties: Record<string, unknown> }).properties).map((parameter) => parameterText(tool.name, parameter))]);
   expect([...given.keys()].filter((name) => !toolTexts.includes(name)).sort()).toEqual([
     "digest_first", "digest_user", "digest_you", "fired_trigger", "last_wake_interrupted", "last_wrote_here", "last_wrote_home",
-    "opened_by_you", "picture", "picture_gone", "pictures_not_sent", "pinned_file", "read_end", "read_line_cut", "read_lines", "sent_picture", "status", "status_cleared", "status_item",
+    "opened_by_you", "picture", "picture_gone", "picture_send_problem", "pictures_not_sent", "pinned_file", "read_end", "read_line_cut", "read_lines", "sent_picture", "status", "status_cleared", "status_item",
     "stopped_interrupted", "thread", "thread_pins", "time", "time_later", "wake", "wake_opener", "wake_opener_kept", "wake_running", "wake_running_own_time",
     "wake_status", "wake_turn", "working_kept", "working_kept_unfinished",
   ].sort());

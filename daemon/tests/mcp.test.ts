@@ -28,7 +28,7 @@ const registry = McpRegistry.fromTools([
 
 describe("call routing", () => {
   test("an unknown name is reported, not dispatched", async () => {
-    expect(await outcomeOf(registry.call("mcp__nope__x", {}, new Texts()))).toThrow("not yet implemented");
+    expect(await outcomeOf(registry.call("mcp__nope__x", {}, new Texts()))).toThrow("invalid args: mcp__nope__x: not yet implemented");
   });
 });
 

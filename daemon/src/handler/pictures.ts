@@ -84,7 +84,7 @@ export async function sendPictures(texts: readonly string[], sender: PictureSend
     lookups = await lookUp(embeds, sender.workspace, signal);
   } catch (error) {
     signal?.throwIfAborted();
-    lookups = embeds.map(() => ({ problem: `the workspace could not be searched: ${message(error)}` }));
+    lookups = embeds.map(() => ({ problem: sender.workspace.texts.always("picture_send_unsearched", { error: message(error) }) }));
   }
   const images: ImageRef[] = [];
   for (const [index, embed] of embeds.entries()) {
@@ -98,7 +98,7 @@ export async function sendPictures(texts: readonly string[], sender: PictureSend
       images.push(await keep(embed, found.path, sender, signal));
     } catch (error) {
       signal?.throwIfAborted();
-      images.push(unsent(embed, `it could not be sent: ${message(error)}`));
+      images.push(unsent(embed, sender.workspace.texts.always("picture_send_failed", { error: message(error) })));
     }
   }
   return images;

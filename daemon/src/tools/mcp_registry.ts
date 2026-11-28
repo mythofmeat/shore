@@ -469,7 +469,7 @@ export class McpRegistry {
   async call(fullName: string, args: unknown, texts: Texts, signal?: AbortSignal): Promise<unknown> {
     const surface = this.surface;
     const def = surface.tools.find((t) => t.full_name === fullName);
-    if (def === undefined) throw new InvalidArgs(`${fullName}: not yet implemented`);
+    if (def === undefined) throw new InvalidArgs(texts.always("tool_not_implemented", { tool: fullName }));
     const client = surface.clients.get(def.server);
     if (client === undefined) {
       await this.reviveClient(def.server);

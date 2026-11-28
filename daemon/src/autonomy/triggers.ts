@@ -3,6 +3,7 @@ import { ConfigDuration } from "../config/duration.ts";
 import { isValidThreadId } from "../engine/threads.ts";
 import { asNaive, DAY_MS, naiveInZone, resolveInZone } from "../ledger/zoned.ts";
 import { inDayWindow, type DayWindow } from "./tick.ts";
+import type { Texts } from "../texts/texts.ts";
 
 export const TRIGGERS_FILE = "TRIGGERS.toml";
 
@@ -48,19 +49,19 @@ export interface ParsedTriggers {
   problems: string[];
 }
 
-function duration(value: unknown, setting: string): number {
+function duration(texts: Texts, value: unknown, setting: string): number {
   const parsed = ConfigDuration.deserialize(value);
-  if ("err" in parsed) throw new Error(`\`${setting}\` must be a length of time in quotes, like "90m" or "6h"`);
+  if ("err" in parsed) throw new Error(texts.always("trigger_file_length", { setting }));
   return parsed.ok.asMillis();
 }
 
-function text(value: unknown, setting: string): string {
-  if (typeof value !== "string" || value.trim() === "") throw new Error(`\`${setting}\` must be text in quotes`);
+function text(texts: Texts, value: unknown, setting: string): string {
+  if (typeof value !== "string" || value.trim() === "") throw new Error(texts.always("trigger_file_text", { setting }));
   return value.trim();
 }
 
-function atTime(value: unknown): TriggerWhen {
-  const wrong = new Error('`at` must be a 24-hour local time, with the days it applies to in front if not every day, like "20:00" or "Sat 20:00" or "Mon,Thu 09:30"');
+function atTime(texts: Texts, value: unknown): TriggerWhen {
+  const wrong = new Error(texts.always("trigger_file_at"));
   const match = typeof value === "string" ? AT.exec(value.trim()) : null;
   if (match === null) throw wrong;
   const [, days, hour, minute] = match;
@@ -78,78 +79,76 @@ export function localDateTime(value: unknown): number | undefined {
   return Number.isNaN(local) || new Date(local).toISOString().slice(0, 16) !== written ? undefined : local;
 }
 
-function onDate(value: unknown): TriggerWhen {
+function onDate(texts: Texts, value: unknown): TriggerWhen {
   const local = localDateTime(value);
-  if (local === undefined) throw new Error('`on` must be a local date and 24-hour time, like "2026-11-12 00:00"');
+  if (local === undefined) throw new Error(texts.always("trigger_file_on"));
   return { kind: "once", local };
 }
 
-function whenOf(raw: Record<string, unknown>): TriggerWhen {
+function whenOf(texts: Texts, raw: Record<string, unknown>): TriggerWhen {
   const given = ["every", "at", "on", "when", "follows"].filter((setting) => raw[setting] !== undefined);
-  if (given.length !== 1) throw new Error("it needs exactly one of `every`, `at`, `on`, `when` or `follows` to say when it fires");
-  if (raw["when"] === undefined && raw["after"] !== undefined) throw new Error("`after` only goes with `when`");
+  if (given.length !== 1) throw new Error(texts.always("trigger_file_one_when"));
+  if (raw["when"] === undefined && raw["after"] !== undefined) throw new Error(texts.always("trigger_file_after_alone"));
   if (raw["every"] !== undefined) {
-    const everyMs = duration(raw["every"], "every");
-    if (everyMs < MINUTE_MS) throw new Error("`every` can't be shorter than a minute");
+    const everyMs = duration(texts, raw["every"], "every");
+    if (everyMs < MINUTE_MS) throw new Error(texts.always("trigger_file_every_short"));
     return { kind: "every", everyMs };
   }
-  if (raw["at"] !== undefined) return atTime(raw["at"]);
-  if (raw["on"] !== undefined) return onDate(raw["on"]);
-  if (raw["follows"] !== undefined) return { kind: "follows", trigger: text(raw["follows"], "follows") };
+  if (raw["at"] !== undefined) return atTime(texts, raw["at"]);
+  if (raw["on"] !== undefined) return onDate(texts, raw["on"]);
+  if (raw["follows"] !== undefined) return { kind: "follows", trigger: text(texts, raw["follows"], "follows") };
   const event = EVENTS.find((each) => each === raw["when"]);
-  if (event === undefined) throw new Error(`\`when\` must be one of ${EVENTS.map((each) => `"${each}"`).join(", ")}`);
+  if (event === undefined) throw new Error(texts.always("trigger_file_event", { events: EVENTS.map((each) => `"${each}"`).join(", ") }));
   const timed = event === "user_quiet";
-  if (timed !== (raw["after"] !== undefined)) {
-    throw new Error(timed ? `\`when = "${event}"\` needs \`after\`, the least time away that counts` : `\`when = "${event}"\` takes no \`after\``);
-  }
-  return { kind: "event", event, afterMs: timed ? duration(raw["after"], "after") : 0 };
+  if (timed !== (raw["after"] !== undefined)) throw new Error(texts.always(timed ? "trigger_file_needs_after" : "trigger_file_no_after", { event }));
+  return { kind: "event", event, afterMs: timed ? duration(texts, raw["after"], "after") : 0 };
 }
 
-function trigger(name: string, raw: unknown, defaultCooldownMs: number, checks: boolean): Trigger {
-  if (typeof raw !== "object" || raw === null || Array.isArray(raw)) throw new Error(`write it as \`[${name}]\` with its settings on the lines under it`);
-  if (!TRIGGER_NAME.test(name)) throw new Error("a trigger's name is letters, digits, dashes and underscores, starting with a letter or digit, at most 64 characters");
+function trigger(texts: Texts, name: string, raw: unknown, defaultCooldownMs: number, checks: boolean): Trigger {
+  if (typeof raw !== "object" || raw === null || Array.isArray(raw)) throw new Error(texts.always("trigger_file_table", { name }));
+  if (!TRIGGER_NAME.test(name)) throw new Error(texts.always("trigger_file_name"));
   const settings = raw as Record<string, unknown>;
   const unknown = Object.keys(settings).filter((setting) => !SETTINGS.includes(setting));
   const nested = unknown.find((setting) => typeof settings[setting] === "object" && !Array.isArray(settings[setting]));
-  if (nested !== undefined) throw new Error(`a trigger's name can't have a dot in it, so \`[${name}.${nested}]\` could be \`[${name}-${nested}]\``);
-  if (unknown.length > 0) throw new Error(`${unknown.map((setting) => `\`${setting}\``).join(", ")} isn't a trigger setting; the settings are ${SETTINGS.join(", ")}`);
-  const when = whenOf(settings);
+  if (nested !== undefined) throw new Error(texts.always("trigger_file_dot", { name, nested }));
+  if (unknown.length > 0) throw new Error(texts.always("trigger_file_unknown", { unknown: unknown.map((setting) => `\`${setting}\``).join(", "), settings: SETTINGS.join(", ") }));
+  const when = whenOf(texts, settings);
   const wakes = settings["wake"] ?? true;
-  if (typeof wakes !== "boolean") throw new Error("`wake` must be true or false, without quotes");
-  const reason = settings["reason"] === undefined ? undefined : text(settings["reason"], "reason");
-  const check = settings["check"] === undefined ? undefined : text(settings["check"], "check");
-  if (reason === undefined && check === undefined) throw new Error("it needs a `reason` to show you when it fires, or a `check` whose output is the reason");
-  if (!wakes && check === undefined) throw new Error("`wake = false` runs a `check` and nothing else, and this trigger has no `check`");
-  if (check !== undefined && !checks) throw new Error("its `check` is a command, and you don't have the `bash` tool to run commands with");
+  if (typeof wakes !== "boolean") throw new Error(texts.always("trigger_file_wake"));
+  const reason = settings["reason"] === undefined ? undefined : text(texts, settings["reason"], "reason");
+  const check = settings["check"] === undefined ? undefined : text(texts, settings["check"], "check");
+  if (reason === undefined && check === undefined) throw new Error(texts.always("trigger_file_no_reason"));
+  if (!wakes && check === undefined) throw new Error(texts.always("trigger_file_quiet_no_check"));
+  if (check !== undefined && !checks) throw new Error(texts.always("trigger_file_no_bash"));
   const between = settings["between"] === undefined ? undefined : parseDayWindow(typeof settings["between"] === "string" ? settings["between"] : "");
-  if (settings["between"] !== undefined && between === undefined) throw new Error('`between` must be a local time range like "08:00-23:00"');
+  if (settings["between"] !== undefined && between === undefined) throw new Error(texts.always("trigger_file_between"));
   const wakesAgain = wakes && when.kind !== "once";
-  const cooldownMs = settings["cooldown"] === undefined ? (wakesAgain ? defaultCooldownMs : 0) : duration(settings["cooldown"], "cooldown");
-  const thread = settings["thread"] === undefined ? undefined : text(settings["thread"], "thread");
-  if (thread !== undefined && !wakes) throw new Error("`thread` is where a wake runs, and this trigger doesn't wake you");
-  if (thread !== undefined && !isValidThreadId(thread)) throw new Error(`\`thread\` must be a thread's id, as \`threads\` lists it, and ${JSON.stringify(thread)} can't be one`);
-  if (settings["limit"] !== undefined && !wakes) throw new Error("`limit` is how long a wake may run, and this trigger doesn't wake you");
-  const limitMs = settings["limit"] === undefined ? undefined : duration(settings["limit"], "limit");
-  if (limitMs !== undefined && limitMs < MINUTE_MS) throw new Error("`limit` can't be shorter than a minute");
+  const cooldownMs = settings["cooldown"] === undefined ? (wakesAgain ? defaultCooldownMs : 0) : duration(texts, settings["cooldown"], "cooldown");
+  const thread = settings["thread"] === undefined ? undefined : text(texts, settings["thread"], "thread");
+  if (thread !== undefined && !wakes) throw new Error(texts.always("trigger_file_thread_no_wake"));
+  if (thread !== undefined && !isValidThreadId(thread)) throw new Error(texts.always("trigger_file_thread_id", { thread: JSON.stringify(thread) }));
+  if (settings["limit"] !== undefined && !wakes) throw new Error(texts.always("trigger_file_limit_no_wake"));
+  const limitMs = settings["limit"] === undefined ? undefined : duration(texts, settings["limit"], "limit");
+  if (limitMs !== undefined && limitMs < MINUTE_MS) throw new Error(texts.always("trigger_file_limit_short"));
   return { name, when, wakes, reason, check, cooldownMs, between, thread, limitMs };
 }
 
-export function parseTriggers(content: string, defaultCooldownMs: number, checks = true): ParsedTriggers {
+export function parseTriggers(texts: Texts, content: string, defaultCooldownMs: number, checks = true): ParsedTriggers {
   let table: Record<string, unknown>;
   try {
     table = Bun.TOML.parse(content) as Record<string, unknown>;
   } catch (error) {
-    return { triggers: [], problems: [`${TRIGGERS_FILE} can't be read as TOML, so none of its triggers are running: ${(error as Error).message}`] };
+    return { triggers: [], problems: [texts.always("trigger_file_toml", { file: TRIGGERS_FILE, error: (error as Error).message })] };
   }
   const parsed: ParsedTriggers = { triggers: [], problems: [] };
   for (const [name, raw] of Object.entries(table)) {
     try {
-      parsed.triggers.push(trigger(name, raw, defaultCooldownMs, checks));
+      parsed.triggers.push(trigger(texts, name, raw, defaultCooldownMs, checks));
     } catch (error) {
-      parsed.problems.push(`\`${name}\` isn't running: ${(error as Error).message}`);
+      parsed.problems.push(texts.always("trigger_file_not_running", { name, problem: (error as Error).message }));
     }
   }
-  return parsed.triggers.reduce((settled) => withoutLostFollowers(settled), parsed);
+  return parsed.triggers.reduce((settled) => withoutLostFollowers(texts, settled), parsed);
 }
 
 const TIME_SETTINGS = ["every", "at", "on", "when", "after", "follows"];
@@ -164,14 +163,14 @@ export function triggerTimes(content: string): ReadonlyMap<string, string> | und
   return new Map(Object.entries(table).map(([name, raw]) => [name, JSON.stringify(TIME_SETTINGS.map((setting) => (raw as Record<string, unknown>)[setting]))]));
 }
 
-function withoutLostFollowers(parsed: ParsedTriggers): ParsedTriggers {
+function withoutLostFollowers(texts: Texts, parsed: ParsedTriggers): ParsedTriggers {
   const lost = parsed.triggers.flatMap((each) => {
-    const problem = followProblem(each, parsed.triggers);
+    const problem = followProblem(texts, each, parsed.triggers);
     return problem === undefined ? [] : [{ name: each.name, problem }];
   });
   return {
     triggers: parsed.triggers.filter((each) => lost.every((gone) => gone.name !== each.name)),
-    problems: [...parsed.problems, ...lost.map((gone) => `\`${gone.name}\` isn't running: ${gone.problem}`)],
+    problems: [...parsed.problems, ...lost.map((gone) => texts.always("trigger_file_not_running", { name: gone.name, problem: gone.problem }))],
   };
 }
 
@@ -180,13 +179,13 @@ function followed(follower: Trigger, all: readonly Trigger[]): Trigger | undefin
   return when.kind === "follows" ? all.find((other) => other.name === when.trigger) : undefined;
 }
 
-function followProblem(follower: Trigger, all: readonly Trigger[]): string | undefined {
+function followProblem(texts: Texts, follower: Trigger, all: readonly Trigger[]): string | undefined {
   if (follower.when.kind !== "follows") return undefined;
   const leader = followed(follower, all);
-  if (leader === follower) return "it can't follow itself";
-  if (leader === undefined) return `it follows \`${follower.when.trigger}\`, which isn't a running trigger in this file`;
+  if (leader === follower) return texts.always("trigger_file_self");
+  if (leader === undefined) return texts.always("trigger_file_lost", { trigger: follower.when.trigger });
   const end = all.reduce<Trigger | undefined>((at) => (at === undefined || at === follower ? at : followed(at, all)), leader);
-  return end === follower ? `it follows \`${leader.name}\`, which ends up following it, so each would set the other off forever` : undefined;
+  return end === follower ? texts.always("trigger_file_loop", { trigger: leader.name }) : undefined;
 }
 
 export function nextAt(when: Extract<TriggerWhen, { kind: "at" }>, after: number, timeZone: string): number {

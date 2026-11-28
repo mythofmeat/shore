@@ -3,6 +3,7 @@ import { readCharacterState, writeCharacterState } from "../storage/store.ts";
 import type { TriggerFiring } from "./runner.ts";
 import type { CheckOutcome } from "./trigger_check.ts";
 import { coolingDown, inItsHours, nextFiring, parseTriggers, scheduledAt, triggerTimes, TRIGGERS_FILE, type ParsedTriggers, type Trigger } from "./triggers.ts";
+import type { Texts } from "../texts/texts.ts";
 
 const TRIGGER_STATE = "triggers.json";
 
@@ -39,6 +40,7 @@ export interface TriggerLoopDeps {
   lastUserAt(): number | undefined;
   statuses(): string[];
   readFile(): Promise<string | undefined>;
+  texts(): Texts;
   runCheck(trigger: Trigger, limitMs: number, statusesSeen: readonly string[] | undefined): Promise<CheckOutcome>;
   wake(firing: TriggerFiring): void;
 }
@@ -195,7 +197,7 @@ export class CharacterTriggers {
       shoreLog.warn(`shore: could not read ${TRIGGERS_FILE} at ${this.#deps.characterDir}: ${String(error)}`);
       return;
     }
-    this.#parsed = parseTriggers(content ?? "", settings.wakeCooldownMs, settings.checks);
+    this.#parsed = parseTriggers(this.#deps.texts(), content ?? "", settings.wakeCooldownMs, settings.checks);
   }
 
   #state(): TriggerState {

@@ -136,6 +136,23 @@ test("a reply stopped while its pictures are looked up keeps none of them, wheth
   expect(await readdir(sent)).toEqual([]);
 });
 
+test("pictures the workspace can't be searched for, or one found but not read, are kept back with why", async () => {
+  const { dir, sender } = await world();
+  await writeFile(join(dir, "harbor.png"), transparentPng(4, 4));
+  const call = sender.workspace.call.bind(sender.workspace);
+  const helper = spyOn(sender.workspace, "call").mockRejectedValueOnce(new Error("the helper is gone"));
+  try {
+    expect((await sendPictures(["![[harbor]] ![[tide]]"], sender)).map(({ embed, problem }) => ({ embed, problem }))).toEqual([
+      { embed: "![[harbor]]", problem: "the workspace could not be searched: the helper is gone" },
+      { embed: "![[tide]]", problem: "the workspace could not be searched: the helper is gone" },
+    ]);
+    helper.mockImplementation((async (op: string, args: never, signal?: AbortSignal) => op === "readFiles" ? [{ error: { message: "the disk is gone" } }] : await call(op as never, args, signal)) as never);
+    expect((await sendPictures(["![[harbor]]"], sender)).map(({ problem }) => problem)).toEqual(["it could not be sent: the disk is gone"]);
+  } finally {
+    helper.mockRestore();
+  }
+});
+
 test("an animated PNG can go by the name its tools give it", async () => {
   const { dir, sender } = await world();
   await writeFile(join(dir, "loop.apng"), animatedPng(transparentPng(16, 16)));

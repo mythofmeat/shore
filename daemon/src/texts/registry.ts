@@ -341,6 +341,8 @@ import t__tools__workspace__names__picture_or_video from "../../prompts/tools/wo
 import t__tools__workspace__names__no_file from "../../prompts/tools/workspace/names/no_file.md" with { type: "text" };
 import t__tools__workspace__names__tried_as from "../../prompts/tools/workspace/names/tried_as.md" with { type: "text" };
 import t__tools__workspace__names__link_failed from "../../prompts/tools/workspace/names/link_failed.md" with { type: "text" };
+import t__messages__sending__unsearched from "../../prompts/messages/sending/unsearched.md" with { type: "text" };
+import t__messages__sending__failed from "../../prompts/messages/sending/failed.md" with { type: "text" };
 import t__messages__sending__too_many from "../../prompts/messages/sending/too_many.md" with { type: "text" };
 import t__messages__sending__problem from "../../prompts/messages/sending/problem.md" with { type: "text" };
 import t__tools__threads__threads__answers__exists from "../../prompts/tools/threads/threads/answers/exists.md" with { type: "text" };
@@ -356,6 +358,34 @@ import t__tools__threads__threads__answers__pins_too_many from "../../prompts/to
 import t__tools__threads__threads__answers__pins_no_bash from "../../prompts/tools/threads/threads/answers/pins_no_bash.md" with { type: "text" };
 import t__tools__threads__threads__answers__pin_in_prompt from "../../prompts/tools/threads/threads/answers/pin_in_prompt.md" with { type: "text" };
 import t__tools__threads__threads__answers__pins_unloadable from "../../prompts/tools/threads/threads/answers/pins_unloadable.md" with { type: "text" };
+import t__tools__autonomy__list_triggers__file__toml from "../../prompts/tools/autonomy/list_triggers/file/toml.md" with { type: "text" };
+import t__tools__autonomy__list_triggers__file__not_running from "../../prompts/tools/autonomy/list_triggers/file/not_running.md" with { type: "text" };
+import t__tools__autonomy__list_triggers__file__length from "../../prompts/tools/autonomy/list_triggers/file/length.md" with { type: "text" };
+import t__tools__autonomy__list_triggers__file__text from "../../prompts/tools/autonomy/list_triggers/file/text.md" with { type: "text" };
+import t__tools__autonomy__list_triggers__file__at from "../../prompts/tools/autonomy/list_triggers/file/at.md" with { type: "text" };
+import t__tools__autonomy__list_triggers__file__on from "../../prompts/tools/autonomy/list_triggers/file/on.md" with { type: "text" };
+import t__tools__autonomy__list_triggers__file__one_when from "../../prompts/tools/autonomy/list_triggers/file/one_when.md" with { type: "text" };
+import t__tools__autonomy__list_triggers__file__after_alone from "../../prompts/tools/autonomy/list_triggers/file/after_alone.md" with { type: "text" };
+import t__tools__autonomy__list_triggers__file__every_short from "../../prompts/tools/autonomy/list_triggers/file/every_short.md" with { type: "text" };
+import t__tools__autonomy__list_triggers__file__event from "../../prompts/tools/autonomy/list_triggers/file/event.md" with { type: "text" };
+import t__tools__autonomy__list_triggers__file__needs_after from "../../prompts/tools/autonomy/list_triggers/file/needs_after.md" with { type: "text" };
+import t__tools__autonomy__list_triggers__file__no_after from "../../prompts/tools/autonomy/list_triggers/file/no_after.md" with { type: "text" };
+import t__tools__autonomy__list_triggers__file__table from "../../prompts/tools/autonomy/list_triggers/file/table.md" with { type: "text" };
+import t__tools__autonomy__list_triggers__file__name from "../../prompts/tools/autonomy/list_triggers/file/name.md" with { type: "text" };
+import t__tools__autonomy__list_triggers__file__dot from "../../prompts/tools/autonomy/list_triggers/file/dot.md" with { type: "text" };
+import t__tools__autonomy__list_triggers__file__unknown from "../../prompts/tools/autonomy/list_triggers/file/unknown.md" with { type: "text" };
+import t__tools__autonomy__list_triggers__file__wake from "../../prompts/tools/autonomy/list_triggers/file/wake.md" with { type: "text" };
+import t__tools__autonomy__list_triggers__file__no_reason from "../../prompts/tools/autonomy/list_triggers/file/no_reason.md" with { type: "text" };
+import t__tools__autonomy__list_triggers__file__quiet_no_check from "../../prompts/tools/autonomy/list_triggers/file/quiet_no_check.md" with { type: "text" };
+import t__tools__autonomy__list_triggers__file__no_bash from "../../prompts/tools/autonomy/list_triggers/file/no_bash.md" with { type: "text" };
+import t__tools__autonomy__list_triggers__file__between from "../../prompts/tools/autonomy/list_triggers/file/between.md" with { type: "text" };
+import t__tools__autonomy__list_triggers__file__thread_no_wake from "../../prompts/tools/autonomy/list_triggers/file/thread_no_wake.md" with { type: "text" };
+import t__tools__autonomy__list_triggers__file__thread_id from "../../prompts/tools/autonomy/list_triggers/file/thread_id.md" with { type: "text" };
+import t__tools__autonomy__list_triggers__file__limit_no_wake from "../../prompts/tools/autonomy/list_triggers/file/limit_no_wake.md" with { type: "text" };
+import t__tools__autonomy__list_triggers__file__limit_short from "../../prompts/tools/autonomy/list_triggers/file/limit_short.md" with { type: "text" };
+import t__tools__autonomy__list_triggers__file__self from "../../prompts/tools/autonomy/list_triggers/file/self.md" with { type: "text" };
+import t__tools__autonomy__list_triggers__file__lost from "../../prompts/tools/autonomy/list_triggers/file/lost.md" with { type: "text" };
+import t__tools__autonomy__list_triggers__file__loop from "../../prompts/tools/autonomy/list_triggers/file/loop.md" with { type: "text" };
 import messages__earlier_not_shown from "../../prompts/messages/earlier_not_shown.md" with { type: "text" };
 import messages__opened_by_you from "../../prompts/messages/opened_by_you.md" with { type: "text" };
 import messages__picture_gone from "../../prompts/messages/picture_gone.md" with { type: "text" };
@@ -819,6 +849,8 @@ export const PICTURE_SEND_TEXTS: readonly TextSpec[] = [
   must("picture_send_too_big", t__messages__sending__too_big, "Why a picture or video the character put in a message can't be sent, when it is too big.", { bytes: "how many bytes it is", limit: "how many it can be", video: "set when it is a video" }),
   must("picture_send_type", t__messages__sending__type, "Why a file the character put in a message as a picture can't be sent, when it isn't one."),
   must("picture_send_too_many", t__messages__sending__too_many, "Why a picture the character put in a message can't be sent, when the message has too many.", { count: "how many are sent" }),
+  must("picture_send_unsearched", t__messages__sending__unsearched, "Why the pictures the character put in a message weren't sent, when the workspace couldn't be searched for them.", { error: "why" }),
+  must("picture_send_failed", t__messages__sending__failed, "Why a picture the character put in a message wasn't sent, when it was found but couldn't be kept.", { error: "why" }),
   must("picture_send_problem", t__messages__sending__problem, "Each picture in send_refused and start_refused.", { picture: "the picture as the message has it", problem: "why it can't be sent" }),
 ];
 
@@ -994,6 +1026,37 @@ export const THREAD_REFUSAL_TEXTS: readonly TextSpec[] = [
   must("threads_pins_unloadable", t__tools__threads__threads__answers__pins_unloadable, "threads' error for pins it can't find or load.", { one: "set when it is one pin", problems: "each pin's problem, after \"- \", one to a line" }),
 ];
 
+export const TRIGGER_FILE_TEXTS: readonly TextSpec[] = [
+  must("trigger_file_toml", t__tools__autonomy__list_triggers__file__toml, "What list_triggers says of a TRIGGERS.toml it can't read.", { file: "TRIGGERS.toml", error: "why" }),
+  must("trigger_file_not_running", t__tools__autonomy__list_triggers__file__not_running, "Each trigger in TRIGGERS.toml that isn't running, in what list_triggers answers.", { name: "the trigger's name", problem: "why, as a trigger_file_ text has it" }),
+  must("trigger_file_length", t__tools__autonomy__list_triggers__file__length, "Why a trigger in TRIGGERS.toml isn't running, in what list_triggers answers: a length of time it can't read.", { setting: "the setting" }),
+  must("trigger_file_text", t__tools__autonomy__list_triggers__file__text, "Why a trigger in TRIGGERS.toml isn't running, in what list_triggers answers: a setting that isn't text.", { setting: "the setting" }),
+  must("trigger_file_at", t__tools__autonomy__list_triggers__file__at, "Why a trigger in TRIGGERS.toml isn't running, in what list_triggers answers: an `at` it can't read."),
+  must("trigger_file_on", t__tools__autonomy__list_triggers__file__on, "Why a trigger in TRIGGERS.toml isn't running, in what list_triggers answers: an `on` it can't read."),
+  must("trigger_file_one_when", t__tools__autonomy__list_triggers__file__one_when, "Why a trigger in TRIGGERS.toml isn't running, in what list_triggers answers: none or more than one of when it fires."),
+  must("trigger_file_after_alone", t__tools__autonomy__list_triggers__file__after_alone, "Why a trigger in TRIGGERS.toml isn't running, in what list_triggers answers: an `after` without `when`."),
+  must("trigger_file_every_short", t__tools__autonomy__list_triggers__file__every_short, "Why a trigger in TRIGGERS.toml isn't running, in what list_triggers answers: an `every` under a minute."),
+  must("trigger_file_event", t__tools__autonomy__list_triggers__file__event, "Why a trigger in TRIGGERS.toml isn't running, in what list_triggers answers: a `when` it doesn't know.", { events: "the events it can be, in quotes, with \", \" between them" }),
+  must("trigger_file_needs_after", t__tools__autonomy__list_triggers__file__needs_after, "Why a trigger in TRIGGERS.toml isn't running, in what list_triggers answers: a `when` that needs an `after` and has none.", { event: "the event" }),
+  must("trigger_file_no_after", t__tools__autonomy__list_triggers__file__no_after, "Why a trigger in TRIGGERS.toml isn't running, in what list_triggers answers: an `after` with a `when` that takes none.", { event: "the event" }),
+  must("trigger_file_table", t__tools__autonomy__list_triggers__file__table, "Why a trigger in TRIGGERS.toml isn't running, in what list_triggers answers: a trigger that isn't a table of settings.", { name: "the trigger's name" }),
+  must("trigger_file_name", t__tools__autonomy__list_triggers__file__name, "Why a trigger in TRIGGERS.toml isn't running, in what list_triggers answers: a name a trigger can't have."),
+  must("trigger_file_dot", t__tools__autonomy__list_triggers__file__dot, "Why a trigger in TRIGGERS.toml isn't running, in what list_triggers answers: a name with a dot in it.", { name: "the name before the dot", nested: "the name after it" }),
+  must("trigger_file_unknown", t__tools__autonomy__list_triggers__file__unknown, "Why a trigger in TRIGGERS.toml isn't running, in what list_triggers answers: settings it doesn't know.", { unknown: "those settings, in backticks, with \", \" between them", settings: "the settings there are, with \", \" between them" }),
+  must("trigger_file_wake", t__tools__autonomy__list_triggers__file__wake, "Why a trigger in TRIGGERS.toml isn't running, in what list_triggers answers: a `wake` that isn't true or false."),
+  must("trigger_file_no_reason", t__tools__autonomy__list_triggers__file__no_reason, "Why a trigger in TRIGGERS.toml isn't running, in what list_triggers answers: a trigger with neither a reason nor a check."),
+  must("trigger_file_quiet_no_check", t__tools__autonomy__list_triggers__file__quiet_no_check, "Why a trigger in TRIGGERS.toml isn't running, in what list_triggers answers: a trigger that doesn't wake and has no check."),
+  must("trigger_file_no_bash", t__tools__autonomy__list_triggers__file__no_bash, "Why a trigger in TRIGGERS.toml isn't running, in what list_triggers answers: a check when the character has no bash tool."),
+  must("trigger_file_between", t__tools__autonomy__list_triggers__file__between, "Why a trigger in TRIGGERS.toml isn't running, in what list_triggers answers: a `between` it can't read."),
+  must("trigger_file_thread_no_wake", t__tools__autonomy__list_triggers__file__thread_no_wake, "Why a trigger in TRIGGERS.toml isn't running, in what list_triggers answers: a `thread` on a trigger that doesn't wake."),
+  must("trigger_file_thread_id", t__tools__autonomy__list_triggers__file__thread_id, "Why a trigger in TRIGGERS.toml isn't running, in what list_triggers answers: a `thread` no thread could be named.", { thread: "what it says, in quotes" }),
+  must("trigger_file_limit_no_wake", t__tools__autonomy__list_triggers__file__limit_no_wake, "Why a trigger in TRIGGERS.toml isn't running, in what list_triggers answers: a `limit` on a trigger that doesn't wake."),
+  must("trigger_file_limit_short", t__tools__autonomy__list_triggers__file__limit_short, "Why a trigger in TRIGGERS.toml isn't running, in what list_triggers answers: a `limit` under a minute."),
+  must("trigger_file_self", t__tools__autonomy__list_triggers__file__self, "Why a trigger in TRIGGERS.toml isn't running, in what list_triggers answers: a trigger that follows itself."),
+  must("trigger_file_lost", t__tools__autonomy__list_triggers__file__lost, "Why a trigger in TRIGGERS.toml isn't running, in what list_triggers answers: a trigger that follows one that isn't running.", { trigger: "the one it follows" }),
+  must("trigger_file_loop", t__tools__autonomy__list_triggers__file__loop, "Why a trigger in TRIGGERS.toml isn't running, in what list_triggers answers: triggers that follow each other round in a loop.", { trigger: "the one it follows" }),
+];
+
 const GUIDE_VALUES = { user: "the user's name", tools_off: "the tools a topic names that are off" };
 
 export const GUIDE_TEXTS: readonly TextSpec[] = [
@@ -1049,7 +1112,7 @@ export const TOOL_TEXTS: readonly TextSpec[] = Object.entries(TOOL_TEXTS_SHIPPED
   ...Object.entries(parameters).map(([parameter, shipped]) => text(parameterText(tool, parameter), shipped, `The description of the ${parameter} parameter of ${tool}.`, TOOL_VALUES)),
 ]);
 
-export const TEXTS: readonly TextSpec[] = [...MESSAGE_TEXTS, ...SYSTEM_TEXTS, ...WAKE_TEXTS, ...TOOL_TEXTS, ...OTHER_TEXTS, ...IMAGE_TEXTS, ...READ_TEXTS, ...MCP_TEXTS, ...SEND_TEXTS, ...ARG_TEXTS, ...WAKE_TOOL_TEXTS, ...TOOL_COMMON_TEXTS, ...ARG_COMMON_TEXTS, ...THREADS_TOOL_TEXTS, ...TRIGGERS_TOOL_TEXTS, ...FILE_TEXTS, ...EDIT_TEXTS, ...PICTURE_SEND_TEXTS, ...TOOL_RESULT_TEXTS, ...TOOL_OUTPUT_TEXTS, ...MCP_ERROR_TEXTS, ...TOOL_ARG_TEXTS, ...PIN_TEXTS, ...MISC_TOOL_TEXTS, ...LOGS_TEXTS, ...SEAL_TEXTS, ...NAME_TEXTS, ...THREAD_REFUSAL_TEXTS, ...GUIDE_TEXTS];
+export const TEXTS: readonly TextSpec[] = [...MESSAGE_TEXTS, ...SYSTEM_TEXTS, ...WAKE_TEXTS, ...TOOL_TEXTS, ...OTHER_TEXTS, ...IMAGE_TEXTS, ...READ_TEXTS, ...MCP_TEXTS, ...SEND_TEXTS, ...ARG_TEXTS, ...WAKE_TOOL_TEXTS, ...TOOL_COMMON_TEXTS, ...ARG_COMMON_TEXTS, ...THREADS_TOOL_TEXTS, ...TRIGGERS_TOOL_TEXTS, ...FILE_TEXTS, ...EDIT_TEXTS, ...PICTURE_SEND_TEXTS, ...TOOL_RESULT_TEXTS, ...TOOL_OUTPUT_TEXTS, ...MCP_ERROR_TEXTS, ...TOOL_ARG_TEXTS, ...PIN_TEXTS, ...MISC_TOOL_TEXTS, ...LOGS_TEXTS, ...SEAL_TEXTS, ...NAME_TEXTS, ...THREAD_REFUSAL_TEXTS, ...TRIGGER_FILE_TEXTS, ...GUIDE_TEXTS];
 
 export const TEXT_SPECS: ReadonlyMap<string, TextSpec> = new Map(TEXTS.map((spec) => [spec.name, spec]));
 
