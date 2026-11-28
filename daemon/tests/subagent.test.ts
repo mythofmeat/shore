@@ -3,7 +3,7 @@ import { afterAll, beforeAll, describe, expect, test } from "bun:test";
 import { mkdtempSync, mkdirSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { expandPromptMacros, renderHistorySlice, subagentToolSubset, type RegisteredTool } from "../src/tools/subagent";
+import { expandPromptMacros, messageDisplayText, renderHistorySlice, subagentToolSubset, type RegisteredTool } from "../src/tools/subagent";
 import { ALL_TOOLS, renderedTools } from "../src/tools/registry";
 import { PathError, promptFileAt, resolvePath, resolveRoots } from "../src/tools/workspace_path";
 import { CharacterWorkspace } from "../src/tools/character_workspace.ts";
@@ -291,6 +291,17 @@ describe("which tools a sub-agent is offered", () => {
     expect(offered.map((def) => def.name)).toEqual(["read", "mcp__web__search"]);
     expect(unknown).toEqual(["nope"]);
   });
+});
+
+test("a message in a sub-agent's history shows its text, or its text blocks when it has no text, and how many pictures it had", () => {
+  const msg = (content: string, extra: Partial<Message> = {}): Message => ({ msg_id: "m1", role: "user", content, images: [], content_blocks: [], timestamp: "2026-10-30T12:00:00Z", ...extra });
+  const picture = { path: "/media/a.png" };
+  expect(messageDisplayText(new Texts(), msg("hi", { images: [picture, picture] }))).toBe("hi [2 image(s)]");
+  expect(messageDisplayText(new Texts(), msg("  ", { content_blocks: [{ type: "text", text: "one" }, { type: "image", source: { type: "base64", media_type: "image/png", data: "" } }, { type: "text", text: "two" }] }))).toBe("one\ntwo");
+  expect(messageDisplayText(new Texts(), msg("", { images: [picture] }))).toBe("[1 image(s)]");
+  expect(messageDisplayText(Texts.from({ subagent_images: null }), msg("hi", { images: [picture] }))).toBe("hi");
+  const system: Message = { msg_id: "s1", role: "system", content: "a note", images: [], content_blocks: [{ type: "text", text: "a note" }], timestamp: "2026-10-30T12:00:00Z" };
+  expect(renderHistorySlice(new Texts(), [system], "5", "Ada", "Eve", "UTC").split("\n").at(-1)).toBe("System: a note");
 });
 
 test("a sub-agent's slice of history marks the time before its first message and after a gap of half an hour or more, and leaves out messages with nothing to show", () => {

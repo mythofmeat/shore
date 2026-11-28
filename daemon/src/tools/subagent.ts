@@ -164,7 +164,7 @@ export function messageDisplayText(texts: Texts, msg: Message): string {
           .join("\n")
       : msg.content;
 
-  const imageCount = msg.images?.length ?? 0;
+  const imageCount = msg.images.length;
   const note = imageCount > 0 ? texts.render("subagent_images", { count: String(imageCount) }) : undefined;
   if (note !== undefined) text = text.trim() === "" ? note : `${text} ${note}`;
   return text;
