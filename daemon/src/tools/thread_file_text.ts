@@ -11,7 +11,7 @@ export function byteSize(bytes: number): string {
 }
 
 export function threadFileText(texts: Texts, path: string, bytes: Uint8Array): { text: string } | { reason: string } {
-  if (imageMime(Buffer.from(bytes.subarray(0, 12))) !== undefined || IMAGE_EXTENSIONS.has(extname(path).toLowerCase())) return { reason: texts.always("pin_is_picture") };
+  if (imageMime(Buffer.from(bytes)) !== undefined || IMAGE_EXTENSIONS.has(extname(path).toLowerCase())) return { reason: texts.always("pin_is_picture") };
   try {
     const text = new TextDecoder("utf-8", { fatal: true }).decode(bytes);
     return text.includes("\0") ? { reason: texts.always("pin_not_utf8") } : { text };

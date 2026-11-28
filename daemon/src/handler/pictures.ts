@@ -60,7 +60,7 @@ async function firstFrame(path: string, sender: PictureSender, signal?: AbortSig
 async function keepBytes(path: string, bytes: Buffer, sender: PictureSender, signal?: AbortSignal): Promise<string> {
   const video = videoMime(bytes);
   if (video !== undefined) return await keepSentVideo(sender.dir, bytes, video, async () => await firstFrame(path, sender, signal));
-  const mime = imageMime(bytes.subarray(0, 12));
+  const mime = imageMime(bytes);
   if (mime === undefined) throw new Error(sender.workspace.texts.always("picture_send_type"));
   return await keepSentPicture(sender.dir, bytes, mime);
 }
