@@ -11,6 +11,7 @@ import { sessionKeyOwner } from "./agent_sessions.ts";
 import { limitImageBlocks } from "../prepare_images.ts";
 import { MANY_IMAGES_MAX_EDGE } from "../image_settings.ts";
 import { RESUME_PROMPT } from "./claude_agent_injections.ts";
+import { characterTexts } from "../../texts/texts.ts";
 
 export function nativeHistoryStore(book: string, conversation: string): SessionStore {
   const data = dirname(book);
@@ -26,7 +27,7 @@ export function nativeHistoryStore(book: string, conversation: string): SessionS
       if (db.query("SELECT 1 FROM state_files WHERE path = ?1").get(path) === null) return null;
       ensureCollection(db, path, character, "array");
       const entries = JSON.parse(collectionText(db, path) ?? "[]") as SessionStoreEntry[];
-      return withImageData(entries, blobs);
+      return withImageData(entries, blobs, characterTexts(character));
     })())),
     append: (key, added) => {
       const stored = blobs === undefined ? added : added.map((entry) => withImageReferences(entry, blobs));

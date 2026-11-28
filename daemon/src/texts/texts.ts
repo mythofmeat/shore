@@ -85,3 +85,17 @@ export class Texts {
     return rendered;
   }
 }
+
+let resolveCharacterTexts: (character: string) => Texts = () => new Texts();
+
+export function useCharacterTexts(lookUp: (character: string) => Texts): void {
+  resolveCharacterTexts = lookUp;
+}
+
+export function characterTexts(character: string): Texts {
+  try {
+    return resolveCharacterTexts(character);
+  } catch {
+    return new Texts();
+  }
+}

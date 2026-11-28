@@ -22,6 +22,7 @@ import { buildRequestWithResolvedKey, type BuiltRequest } from "../llm/request.t
 import type { McpRegistry } from "../tools/mcp_registry.ts";
 import { prepareChatContext } from "./context.ts";
 import type { SentMessage } from "./wire_messages.ts";
+import { Texts } from "../texts/texts.ts";
 
 export interface SetupEngine {
   readonly thread?: string;
@@ -142,6 +143,7 @@ export async function buildGenerationRequest(
 
   return {
     ...buildRequestWithResolvedKey(toRequestModel(resolved), "", {
+      texts: Texts.of(config),
       messages: prepared.llmMessages,
       system: prepared.system,
       ...(prepared.toolDefs === undefined ? {} : { tools: prepared.toolDefs }),

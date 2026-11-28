@@ -238,7 +238,7 @@ async function attachToolMedia(
       const reduced = await reduceToolImage(item, exec, toolUse);
       const block: ContentBlock = { type: "image", source: reduced.source };
       const resolution = resolveImageBlock(block.source);
-      if ("omitted" in resolution) throw new Error(resolution.omitted);
+      if ("omitted" in resolution) throw new Error(exec.ctx.texts.render(resolution.omitted.reason, resolution.omitted.values) ?? "");
       const bytes = base64Bytes(block.source.data);
       if (bytes > maxBytes - inlinedBytes) {
         attached.notes.push(...unsaved);

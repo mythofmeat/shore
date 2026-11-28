@@ -15,7 +15,8 @@ import {
   type Tool,
 } from "@google/genai";
 
-import { resolveImageBlock, omissionNotice } from "../images.ts";
+import { requestTexts, resolveImageBlock, unnamedOmission, type ImagePlace } from "../images.ts";
+import { Texts } from "../../texts/texts.ts";
 import type { ContentBlock } from "../../engine/types.ts";
 import type {
   GenerateResponse,
@@ -84,7 +85,7 @@ export function buildGeminiParams(
   const config = buildGeminiConfig(req, signal);
   return {
     model: req.model,
-    contents: translateMessages(replayableMessages(req), isThirdGeneration(req)),
+    contents: translateMessages(replayableMessages(req), isThirdGeneration(req), requestTexts(req)),
     config,
   };
 }
@@ -227,7 +228,7 @@ export function geminiGenerateResponse(
   };
 }
 
-export function translateMessages(messages: WireMessage[], thirdGeneration = false): Content[] {
+export function translateMessages(messages: WireMessage[], thirdGeneration = false, texts: Texts = new Texts()): Content[] {
   const toolIdToName = new Map<string, string>();
   const contents: Content[] = [];
   for (const msg of messages) {
@@ -239,7 +240,7 @@ export function translateMessages(messages: WireMessage[], thirdGeneration = fal
 
     for (const block of msg.content) if (block.type === "tool_use") toolIdToName.set(block.id, block.name);
     const role = msg.role === "assistant" ? "model" : "user";
-    const parts = translateParts(msg.content, toolIdToName, thirdGeneration);
+    const parts = translateParts(msg.content, toolIdToName, thirdGeneration, texts);
     if (parts.length > 0) contents.push({ role, parts });
   }
 
@@ -247,7 +248,13 @@ export function translateMessages(messages: WireMessage[], thirdGeneration = fal
   return contents;
 }
 
-function translateParts(content: WireMessage["content"], toolIdToName: Map<string, string>, thirdGeneration: boolean): Part[] {
+function geminiImage(texts: Texts, source: Parameters<typeof resolveImageBlock>[0], place: ImagePlace): Part[] | { mimeType: string; data: string } {
+  const resolution = resolveImageBlock(source);
+  if ("omitted" in resolution) return unnamedOmission(texts, place, resolution.omitted).map((block) => ({ text: block.type === "text" ? block.text : "" }));
+  return { mimeType: resolution.image.mediaType, data: resolution.image.base64 };
+}
+
+function translateParts(content: WireMessage["content"], toolIdToName: Map<string, string>, thirdGeneration: boolean, texts: Texts): Part[] {
   const parts: Part[] = [];
   for (const block of content) {
     switch (block.type) {
@@ -266,26 +273,21 @@ function translateParts(content: WireMessage["content"], toolIdToName: Map<strin
         };
         parts.push({ functionResponse: response });
         for (const image of images) {
-          const resolution = resolveImageBlock(image.source);
-          if ("omitted" in resolution) {
-            response.response = { error: `${toolResultText(block.content)}\n${omissionNotice("a tool result image", resolution.omitted)}` };
+          const inlineData = geminiImage(texts, image.source, "image_in_tool_result");
+          if (Array.isArray(inlineData)) {
+            response.response = { error: [toolResultText(block.content), ...inlineData.map((part) => part.text)].join("\n") };
+          } else if (thirdGeneration) {
+            (response.parts ??= []).push({ inlineData });
           } else {
-            const inlineData = { mimeType: resolution.image.mediaType, data: resolution.image.base64 };
-            if (thirdGeneration) (response.parts ??= []).push({ inlineData });
-            else parts.push({ text: `Image from tool ${name} (tool_call_id: ${block.tool_use_id}):` }, { inlineData });
+            const label = texts.render("image_from_tool_one", { tool: name, id: block.tool_use_id });
+            parts.push(...(label === undefined ? [] : [{ text: label }]), { inlineData });
           }
         }
         break;
       }
       case "image": {
-        const resolution = resolveImageBlock(block.source);
-        if ("omitted" in resolution) {
-          parts.push({ text: omissionNotice("an attached image", resolution.omitted) });
-        } else {
-          parts.push({
-            inlineData: { mimeType: resolution.image.mediaType, data: resolution.image.base64 },
-          });
-        }
+        const inlineData = geminiImage(texts, block.source, "image_in_message");
+        parts.push(...(Array.isArray(inlineData) ? inlineData : [{ inlineData }]));
         break;
       }
       case "thinking":

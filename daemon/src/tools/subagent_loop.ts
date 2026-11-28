@@ -147,6 +147,7 @@ export async function runSubagent(
     toRequestModel(resolved),
     entry === undefined ? undefined : credentialEntry(entry),
     {
+      texts: Texts.of(config),
       messages: [{ role: "user", content: [{ type: "text", text: query }] }],
       system: [{ text: systemText, label: "system" }],
       tools,

@@ -4,6 +4,7 @@ import { thinkingEnabled } from "../src/handler/generation.ts";
 import { buildRequest, buildRequestWithProviderKeys, MissingApiKey, providerOptionsFor, type ResolvedModel } from "../src/llm/request";
 import { type ProviderEntry } from "../src/llm/credentials";
 import type { ProviderOptions, ThinkingReplay } from "../src/llm/types";
+import { Texts } from "../src/texts/texts.ts";
 
 function model(over: Partial<ResolvedModel> = {}): ResolvedModel {
   return {
@@ -17,7 +18,7 @@ function model(over: Partial<ResolvedModel> = {}): ResolvedModel {
   } as unknown as ResolvedModel;
 }
 
-const INPUTS = { messages: [], replay: "all" as ThinkingReplay };
+const INPUTS = { texts: new Texts(), messages: [], replay: "all" as ThinkingReplay };
 
 describe("finding the key in the environment", () => {
 

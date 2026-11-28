@@ -3,13 +3,11 @@ import { existsSync, mkdirSync, readFileSync, renameSync, rmSync, statSync, writ
 import { dirname, join, resolve } from "node:path";
 
 import { extensionForMediaType, sniffMediaType } from "../handler/images.ts";
-import { omissionNotice } from "../llm/images.ts";
+import type { Texts } from "../texts/texts.ts";
 import { shoreLog } from "../log.ts";
 import { imageCacheDir, markImagesUsed, noteCachedImages } from "./image_cache.ts";
 
 const CACHED_IMAGE_SOURCE = "shore_image";
-export const EVICTED_IMAGE = "no longer cached";
-
 interface ImageReference {
   sha256: string;
   media_type: string;
@@ -128,12 +126,12 @@ export function withImageReferences<T>(value: T, blobs: ImageBlobs): T {
   }) as T;
 }
 
-export function withImageData<T>(value: T, blobs: ImageBlobs | undefined): T {
+export function withImageData<T>(value: T, blobs: ImageBlobs | undefined, texts: Texts): T {
   return mapJson(value, (item) => {
     const reference = cachedReference(item);
     if (reference === undefined) return item;
     const data = blobs?.load(reference);
-    if (data === undefined) return { type: "text", text: omissionNotice(referenceLabel(reference), EVICTED_IMAGE) };
+    if (data === undefined) return { type: "text", text: texts.always("picture_gone", { name: referenceLabel(reference) }) };
     const { source: _source, ...rest } = item as Record<string, unknown>;
     return { ...rest, source: { type: "base64", media_type: reference.media_type, data } };
   }) as T;

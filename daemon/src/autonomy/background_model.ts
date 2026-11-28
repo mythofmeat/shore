@@ -8,6 +8,7 @@ import { resolvedReasoningReplay, toRequestModel, type ResolvedModel } from "../
 import { credentialEntry } from "../handler/tool_context.ts";
 import { buildRequestWithProviderKeys } from "../llm/request.ts";
 import type { SidecarRequest } from "../llm/types.ts";
+import { requestTexts } from "../llm/images.ts";
 
 export interface BackgroundModelChoice {
   request: SidecarRequest;
@@ -40,6 +41,7 @@ export function backgroundModelRequest(
       toRequestModel(resolved),
       entry === undefined ? undefined : credentialEntry(entry),
       {
+        texts: requestTexts(request),
         messages: request.messages,
         ...(request.system === undefined ? {} : { system: request.system }),
         ...(request.tools === undefined ? {} : { tools: request.tools }),

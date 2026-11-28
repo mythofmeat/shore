@@ -382,7 +382,6 @@ export const DAEMON_EQUIVALENTS: readonly string[] = [
   "src/llm/image_dimensions.ts:jpeg: const marker = read(offset, 「2 → 3」);",
   "src/llm/image_dimensions.ts:jpeg: …= read(offset + 2, frame ? 7 : 「2 → 3」);",
   "src/engine/embeds.ts:embedsIn: if (!text.includes(\"![\")) 「return []; → {}」",
-  "src/engine/embeds.ts:pictureText: if (sent.length === 0) 「return text; → {}」",
   "src/llm/providers/gemini.ts:translateParts: 「break; → {}」 #4",
   "src/daemon/data_directory_lease.ts:acquireDataDirectoryLease: … = takeLock(`${path}.acquire`, 「15_000 → 15001」);",
   "src/daemon/data_directory_lease.ts:ownerIsDead: …ecordedStart) && recordedStart 「< → <=」 performance.timeOrigin;",

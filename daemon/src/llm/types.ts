@@ -2,6 +2,7 @@ import type { ContentBlock } from "../engine/types.ts";
 import type { UsageConfig } from "../ledger/budget.ts";
 import { isAbortError, isTimeoutError } from "./abort.ts";
 import { retryAfterMsFromError } from "./retry_after.ts";
+import type { Texts } from "../texts/texts.ts";
 
 export type Sdk =
   | "anthropic"
@@ -117,6 +118,7 @@ export interface CallContext {
 }
 
 export interface SidecarRequest {
+  texts?: Texts;
   supports_images?: boolean;
   sdk: Sdk;
   model: string;

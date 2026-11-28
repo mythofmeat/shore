@@ -47,6 +47,21 @@ import guide__tools_off from "../../prompts/guide/tools_off.md" with { type: "te
 import guide__triggers from "../../prompts/guide/triggers.md" with { type: "text" };
 import guide__wakes from "../../prompts/guide/wakes.md" with { type: "text" };
 import memory__compaction__label from "../../prompts/memory/compaction/label.md" with { type: "text" };
+import images__image_omitted from "../../prompts/images/image_omitted.md" with { type: "text" };
+import images__in_message from "../../prompts/images/in_message.md" with { type: "text" };
+import images__in_tool_result from "../../prompts/images/in_tool_result.md" with { type: "text" };
+import images__type from "../../prompts/images/type.md" with { type: "text" };
+import images__extension from "../../prompts/images/extension.md" with { type: "text" };
+import images__no_data from "../../prompts/images/no_data.md" with { type: "text" };
+import images__too_big from "../../prompts/images/too_big.md" with { type: "text" };
+import images__changed from "../../prompts/images/changed.md" with { type: "text" };
+import images__unreadable from "../../prompts/images/unreadable.md" with { type: "text" };
+import images__not_uploaded from "../../prompts/images/not_uploaded.md" with { type: "text" };
+import images__not_saved from "../../prompts/images/not_saved.md" with { type: "text" };
+import images__request_cap from "../../prompts/images/request_cap.md" with { type: "text" };
+import images__text_only from "../../prompts/images/text_only.md" with { type: "text" };
+import images__from_tool from "../../prompts/images/from_tool.md" with { type: "text" };
+import images__from_tool_one from "../../prompts/images/from_tool_one.md" with { type: "text" };
 import messages__earlier_not_shown from "../../prompts/messages/earlier_not_shown.md" with { type: "text" };
 import messages__opened_by_you from "../../prompts/messages/opened_by_you.md" with { type: "text" };
 import messages__picture_gone from "../../prompts/messages/picture_gone.md" with { type: "text" };
@@ -172,7 +187,7 @@ export const MESSAGE_TEXTS: readonly TextSpec[] = [
   text("picture", messages__picture, "Before a picture the user attached, naming its file, and in place of the picture in chat_logs and in what a wake is shown of its thread.", { path: "the picture's file, or in chat_logs its name once the file is gone" }),
   text("embed_sent", messages__embed_sent, "In chat_logs and in what a wake is shown of its thread, in place of a picture or video the character put in a message and sent.", { name: "its file's name", video: "set when it is a video" }),
   text("embed_not_sent", messages__embed_not_sent, "The same, for one that could not be sent.", { name: "the name it was given in the message", video: "set when the name is a video's" }),
-  must("picture_gone", messages__picture_gone, "In place of a picture the user attached whose file is gone.", { name: "the picture's file name" }),
+  must("picture_gone", messages__picture_gone, "In place of a picture whose file is gone: one the user attached, or one a tool returned that Shore no longer keeps.", { name: "the picture's file name" }),
   text("wake_running", messages__wake_running, "At the start of a user's message written while a wake was running.", { thread: "the thread the wake is in", since: "when it started" }),
   text("wake_running_own_time", messages__wake_running_own_time, "The same, for a message from before own time was removed, when no thread was recorded.", { since: "when it started" }),
   text("status", messages__status, "At the start of a user's message, once for each change of their statuses, in each thread.", STATUS),
@@ -298,6 +313,26 @@ export const OTHER_TEXTS: readonly TextSpec[] = [
   text("output_cut", tools__results__output_cut, "After what a bash command printed, on each of its output and its errors, when it printed more than 1 MB there."),
 ];
 
+const OMITTED = "why, as one of the image_ reasons has it";
+
+export const IMAGE_TEXTS: readonly TextSpec[] = [
+  text("image_omitted", images__image_omitted, "In place of a picture that can't be sent to the model.", { image: "the picture's file name, or image_in_message or image_in_tool_result when it has none", reason: OMITTED }),
+  text("image_in_message", images__in_message, "What image_omitted calls a picture in a message that has no file name."),
+  text("image_in_tool_result", images__in_tool_result, "What image_omitted calls a picture in a tool's result that has no file name."),
+  text("image_type", images__type, "image_omitted's reason when a picture's type is not one models take.", { type: "its type, when it has one" }),
+  text("image_extension", images__extension, "image_omitted's reason when a picture's file name doesn't end in a type models take.", { extension: "the end of its file name, like .bmp, when it has one" }),
+  text("image_no_data", images__no_data, "image_omitted's reason when a picture came with nothing in it."),
+  text("image_too_big", images__too_big, "image_omitted's reason when a picture is too big to send.", { bytes: "how many bytes it is", limit: "how many it can be" }),
+  text("image_changed", images__changed, "image_omitted's reason when a picture's file has changed since the model was shown it."),
+  text("image_unreadable", images__unreadable, "image_omitted's reason when a picture's file can't be read.", { error: "why" }),
+  text("image_not_uploaded", images__not_uploaded, "image_omitted's reason when the client named a picture it didn't send."),
+  text("image_not_saved", images__not_saved, "image_omitted's reason when Shore couldn't keep a picture the user sent."),
+  text("image_request_cap", images__request_cap, "image_omitted's reason when a request carries more pictures than it can, for each older one left out.", { images: "how many it can carry", chars: "how many base64 characters they can be together" }),
+  text("image_text_only", images__text_only, "image_omitted's reason when the model doesn't take pictures.", { model: "the provider and model, like openrouter/some-model" }),
+  text("image_from_tool", images__from_tool, "Before the pictures of a tool's result, on providers that take them in a message of their own: OpenAI's and the AI SDK's.", { tool: "the tool's name, when Shore knows it", id: "the tool call's id" }),
+  text("image_from_tool_one", images__from_tool_one, "Before each picture of a tool's result on Gemini models before Gemini 3.", { tool: "the tool's name, or the call's id when Shore doesn't know it", id: "the tool call's id" }),
+];
+
 const GUIDE_VALUES = { user: "the user's name", tools_off: "the tools a topic names that are off" };
 
 export const GUIDE_TEXTS: readonly TextSpec[] = [
@@ -353,7 +388,7 @@ export const TOOL_TEXTS: readonly TextSpec[] = Object.entries(TOOL_TEXTS_SHIPPED
   ...Object.entries(parameters).map(([parameter, shipped]) => text(parameterText(tool, parameter), shipped, `The description of the ${parameter} parameter of ${tool}.`, TOOL_VALUES)),
 ]);
 
-export const TEXTS: readonly TextSpec[] = [...MESSAGE_TEXTS, ...SYSTEM_TEXTS, ...WAKE_TEXTS, ...TOOL_TEXTS, ...OTHER_TEXTS, ...GUIDE_TEXTS];
+export const TEXTS: readonly TextSpec[] = [...MESSAGE_TEXTS, ...SYSTEM_TEXTS, ...WAKE_TEXTS, ...TOOL_TEXTS, ...OTHER_TEXTS, ...IMAGE_TEXTS, ...GUIDE_TEXTS];
 
 export const TEXT_SPECS: ReadonlyMap<string, TextSpec> = new Map(TEXTS.map((spec) => [spec.name, spec]));
 

@@ -25,6 +25,7 @@ import { zaiBaseUrl, ZAI_API_PROVIDER, ZAI_SUB_PROVIDER } from "./providers/zai_
 import { NANOGPT_BASE_URL, NANOGPT_PROVIDER, nanogptTransportError } from "./providers/nanogpt_config";
 import { DEFAULT_KEEPALIVE_PINGS } from "../config/keepalive.ts";
 import { DEFAULT_MAX_OUTPUT_TOKENS } from "../config/model_defaults.ts";
+import type { Texts } from "../texts/texts.ts";
 
 export interface ResolvedModel {
   name: string;
@@ -122,6 +123,7 @@ export function providerOptionsFor(model: ResolvedModel): ProviderOptions | unde
 }
 
 export interface BuildInputs {
+  texts: Texts;
   messages: WireMessage[];
   system?: SidecarRequest["system"];
   tools?: SidecarRequest["tools"];
@@ -137,6 +139,7 @@ export function buildRequestWithResolvedKey(
   const transportError = nanogptTransportError(model.provider_key, model.sdk);
   if (transportError !== undefined) throw new Error(transportError);
   const request: SidecarRequest = {
+    texts: inputs.texts,
     sdk: model.sdk,
     model: model.model_id,
     ...(model.supports_images === undefined ? {} : { supports_images: model.supports_images }),

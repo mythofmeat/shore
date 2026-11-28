@@ -11,6 +11,7 @@ import { persistAndNotify, type PersistContext } from "../src/handler/persistenc
 import { buildRequestWithResolvedKey } from "../src/llm/request.ts";
 import type { GenerateResponse, SidecarRequest } from "../src/llm/types.ts";
 import type { StreamResult } from "../src/llm/stream.ts";
+import { Texts } from "../src/texts/texts.ts";
 
 const CHARACTER = "ada";
 const MINUTE = 60_000;
@@ -48,6 +49,7 @@ function turnFor(sampler: SamplerSettings): {
   const model = applySamplerOverlay(listed, sampler);
 
   const built = buildRequestWithResolvedKey(toRequestModel(model), "sk-test", {
+    texts: new Texts(),
     messages: [{ role: "user", content: [{ type: "text", text: "hello" }] }],
     replay: "all",
   });

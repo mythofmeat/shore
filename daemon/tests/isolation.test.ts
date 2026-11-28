@@ -184,7 +184,7 @@ describe.skipIf(!READY)("a character whose tools run as its own user", () => {
     });
     const png = Buffer.from("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==", "base64");
     const sent = async (character: string): Promise<Message> => {
-      const { images } = await ingestImages(cache, character, ["dot.png"], [{ filename: "dot.png", data: png.toString("base64") }]);
+      const { images } = await ingestImages(new Texts(), cache, character, ["dot.png"], [{ filename: "dot.png", data: png.toString("base64") }]);
       return { msg_id: randomUUID(), role: "user", content: "look", images, content_blocks: [{ type: "text", text: "look" }], timestamp: "2026-11-12T10:00:00Z" };
     };
     const [own, others, unshared] = [await sent(USER), await sent(OTHER), await sent("cal")];

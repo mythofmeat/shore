@@ -24,7 +24,7 @@ function nextCallId(ts: Date): string {
 }
 
 function requestBody(req: SidecarRequest): string {
-  const { context: _context, ...rest } = redactRequest(req);
+  const { context: _context, texts: _texts, ...rest } = redactRequest(req);
   try {
     return JSON.stringify(rest);
   } catch {

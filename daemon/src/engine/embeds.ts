@@ -129,7 +129,6 @@ function plainLabel({ name, video, sent }: EmbedLabel): string {
 
 export function pictureText(text: string, images: readonly Sent[], label: (embed: EmbedLabel) => string = plainLabel): string {
   const sent = images.filter((image) => typeof image.embed === "string");
-  if (sent.length === 0) return text;
   let result = "";
   let cursor = 0;
   for (const embed of embedsIn(text)) {

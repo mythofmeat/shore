@@ -9,6 +9,7 @@ import { noisePng } from "./support/test_images.ts";
 import { capRequestImages, countImageBlocks, MAX_REQUEST_IMAGES, REQUEST_IMAGE_DROP_STEP } from "../src/llm/image_support";
 import { type WireMessage } from "../src/llm/types";
 import { HIGH_RESOLUTION_IMAGE_TIER, STANDARD_IMAGE_TIER, fitLongEdge, imageTokens, sizeForTier, visualTokens } from "../src/llm/image_tokens.ts";
+import { Texts } from "../src/texts/texts.ts";
 
 type ImageBlock = Extract<ContentBlock, { type: "image" }>;
 
@@ -53,7 +54,7 @@ function imageMessage(data = "AAAA"): WireMessage {
 describe("capping images per request", () => {
   test("images up to the character limit all go, the same messages as before", () => {
     const history = [imageMessage("A".repeat(12_000_000)), imageMessage("A".repeat(8_000_000))];
-    const capped = capRequestImages(history);
+    const capped = capRequestImages(new Texts(), history);
     expect(capped.stripped).toBe(0);
     expect(capped.messages).toHaveLength(2);
     capped.messages.forEach((message, i) => { expect(message).toBe(history[i] as WireMessage); });
@@ -61,7 +62,7 @@ describe("capping images per request", () => {
 
   test("past the character limit the oldest images go until ten million characters have gone", () => {
     const history = [imageMessage("A".repeat(9_999_999)), imageMessage("A"), imageMessage("A".repeat(10_000_001))];
-    const capped = capRequestImages(history);
+    const capped = capRequestImages(new Texts(), history);
     expect(capped.stripped).toBe(2);
     expect(countImageBlocks(capped.messages)).toBe(1);
     expect(capped.messages[2]).toBe(history[2] as WireMessage);
@@ -69,12 +70,12 @@ describe("capping images per request", () => {
 
   test("the dropped prefix stays identical as history grows within a step, keeping the prompt cache valid", () => {
     const base = Array.from({ length: MAX_REQUEST_IMAGES + 1 }, () => imageMessage());
-    const first = capRequestImages(base);
-    const grown = capRequestImages([...base, ...Array.from({ length: REQUEST_IMAGE_DROP_STEP - 1 }, () => imageMessage())]);
+    const first = capRequestImages(new Texts(), base);
+    const grown = capRequestImages(new Texts(), [...base, ...Array.from({ length: REQUEST_IMAGE_DROP_STEP - 1 }, () => imageMessage())]);
 
     expect(grown.stripped).toBe(first.stripped);
     expect(grown.messages.slice(0, base.length)).toEqual(first.messages);
-    const next = capRequestImages([...base, ...Array.from({ length: REQUEST_IMAGE_DROP_STEP }, () => imageMessage())]);
+    const next = capRequestImages(new Texts(), [...base, ...Array.from({ length: REQUEST_IMAGE_DROP_STEP }, () => imageMessage())]);
     expect(next.stripped).toBe(2 * REQUEST_IMAGE_DROP_STEP);
     expect(countImageBlocks(next.messages)).toBeLessThanOrEqual(MAX_REQUEST_IMAGES);
   });

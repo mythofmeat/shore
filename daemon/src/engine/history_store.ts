@@ -20,6 +20,7 @@ import type {
   MessageNote,
   MessageOrigin,
 } from "./types.ts";
+import { characterTexts } from "../texts/texts.ts";
 
 export const HISTORY_DB_FILE = "shore.db";
 
@@ -868,7 +869,7 @@ export class HistoryStore {
       metrics.decoded_body_bytes += bytes.byteLength;
       if (row.images !== null) metrics.decoded_body_bytes += utf8.encode(row.images).byteLength;
     }
-    const blocks = withImageData(JSON.parse(decoder.decode(bytes)) as ContentBlock[], this.#blobs(character));
+    const blocks = withImageData(JSON.parse(decoder.decode(bytes)) as ContentBlock[], this.#blobs(character), characterTexts(character));
     const images = row.images === null ? [] : this.#loadedImages(row.images, character);
     return { blocks, images, content: deriveContentFromBlocks(blocks, true) };
   }
