@@ -32,6 +32,7 @@ import { workspaceTurnsFor, type WorkspaceTurns } from "../tools/workspace_turns
 import { characterWorkspace } from "../tools/character_workspace.ts";
 import { config, configCheck, configSchemaCommand, configReload, tools } from "./config.ts";
 import { listTexts } from "../texts/listing.ts";
+import { markTextsSeen, seenWordings } from "../texts/seen.ts";
 import { listProviderModels, refreshProviderModels, refreshAllProviderModels, reportedNanoGptSubscription, type ProvidersContext } from "./providers.ts";
 import {
   addCredential, addProvider, cancelSignIn, finishSignIn, listProviderStatuses, orderCredentials, providerPresets, refreshedProviderDetail, removeCredential, removeProvider,
@@ -292,7 +293,12 @@ export const commandOperations: OperationRegistry<CommandOperationContext> = {
   tools: register("tools", { ...configPresentation, label: "Inspect tool access", fields: {} },
     ({ session, deps }) => tools(session, (deps.runTool?.mcpTools() ?? []).map((tool) => tool.full_name))),
   texts: register("texts", { ...configPresentation, label: "List what Shore writes for models", fields: {} },
-    ({ session }) => listTexts(session.config)),
+    ({ session }) => listTexts(session.config, seenWordings(session.config.dirs.data))),
+  texts_seen: register("texts_seen", { ...configPresentation, label: "Mark Shore's changed wording as seen", effects: ["runtime_write"], fields: {} },
+    ({ session }) => {
+      markTextsSeen(session.config.dirs.data);
+      return listTexts(session.config, seenWordings(session.config.dirs.data));
+    }),
   list_providers: register("list_providers", { ...providerPresentation, label: "Browse providers", fields: {} },
     (context) => listProviderStatuses(adminContext(context))),
   provider_detail: register("provider_detail", { ...providerPresentation, label: "Inspect provider", fields: { provider: providerField } },

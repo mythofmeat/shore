@@ -1909,6 +1909,9 @@ wire_types! {
         #[serde(deserialize_with = "deserialize_nullable")]
         pub error: Option<String>,
         pub values: Vec<TextValue>,
+        pub changed: bool,
+        #[serde(deserialize_with = "deserialize_nullable")]
+        pub previous: Option<String>,
     }
 
     pub struct TextListing { pub texts: Vec<TextEntry> }
@@ -3014,6 +3017,7 @@ operations! {
     ReloadConfiguration: "config_reload" (ConfigReloadArgs) => ConfigReloadResult,
     ToolAccessListing: "tools" (EmptyOperationArgs) => ToolAccessResult,
     ListTexts: "texts" (EmptyOperationArgs) => TextListing,
+    MarkTextsSeen: "texts_seen" (EmptyOperationArgs) => TextListing,
     ListProviders: "list_providers" (EmptyOperationArgs) => ProviderListing,
     ListProviderModels: "list_provider_models" (ProviderModelsArgs) => ProviderModelListing,
     RefreshProviderModels: "refresh_provider_models" (ProviderArgs) => ProviderRefreshed,

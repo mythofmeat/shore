@@ -1,14 +1,14 @@
 import { describe, expect, test } from "bun:test";
 
 import { useApp } from "./app.ts";
-import { acting, mount } from "./dom.ts";
+import { acting, button, click, mount } from "./dom.ts";
 
 const app = useApp();
 
 const settle = async () => { await acting(() => Bun.sleep(5)); };
 
 const entry = (name: string, owner: string, extra: Record<string, unknown> = {}) => ({
-  name, place: `Where ${name} goes.`, owner, required: false, wording: `${name} wording`, shipped: `${name} wording`, file: null, error: null, values: [], ...extra,
+  name, place: `Where ${name} goes.`, owner, required: false, wording: `${name} wording`, shipped: `${name} wording`, file: null, error: null, values: [], changed: false, previous: null, ...extra,
 });
 
 const TEXTS = [
@@ -56,5 +56,33 @@ describe("the texts page", () => {
     const failed = await page("ada", () => { throw new Error("the list could not be made"); });
     expect(failed.host.querySelector(".form-error")?.textContent).toContain("the list could not be made");
     expect(rows(failed.host)).toEqual([]);
+  });
+
+  test("a text an update reworded or added is marked, with Shore's wording before, until the user marks them seen", async () => {
+    const changed = [
+      entry("wake", "shore", { changed: true, previous: "Wake up.", wording: "Wake, please.", shipped: "Wake, please." }),
+      entry("wake_turn", "shore", { changed: true }),
+      entry("time", "yours"),
+    ];
+    let marked = false;
+    const view = await page("ada", () => ({ texts: marked ? changed.map((text) => ({ ...text, changed: false, previous: null })) : changed }));
+    app.answer((request) => {
+      if (request["name"] === "texts_seen") { marked = true; return { texts: [] }; }
+      return request["name"] === "texts" ? { texts: marked ? changed.map((text) => ({ ...text, changed: false, previous: null })) : changed } : undefined;
+    });
+    expect(rows(view.host).map(([summary]) => summary)).toEqual(["wake · Shore’s wording · changed in an update", "wake_turn · Shore’s wording · new in an update", "time · Your wording"]);
+    expect(rows(view.host)[0]?.[1]).toEqual([["Where", "Where wake goes."], ["In use", "Wake, please."], ["Shore’s before", "Wake up."]]);
+    expect(view.host.textContent).toContain("2 of Shore’s texts in use are new or reworded since you last marked them seen.");
+    const before = app.socket().sent.length;
+    await click(button(view.host, "Mark as seen"));
+    await settle();
+    expect(app.sent(before).map((request) => request["name"])).toEqual(["texts_seen", "texts"]);
+    expect(rows(view.host).map(([summary]) => summary)).toEqual(["wake · Shore’s wording", "wake_turn · Shore’s wording", "time · Your wording"]);
+    expect([...view.host.querySelectorAll("button")].map((item) => item.textContent)).not.toContain("Mark as seen");
+  });
+
+  test("one changed text is counted as one", async () => {
+    const view = await page("ada", () => ({ texts: [entry("wake", "shore", { changed: true, previous: "Wake up." })] }));
+    expect(view.host.textContent).toContain("1 of Shore’s texts in use is new or reworded since you last marked them seen.");
   });
 });

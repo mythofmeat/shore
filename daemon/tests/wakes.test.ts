@@ -55,6 +55,8 @@ import { testTmp } from "./support/tmp.ts";
 import { promptedAppConfig } from "./support/prompt_list.ts";
 import { Texts } from "../src/texts/texts.ts";
 import { parameterText, TEXT_SPECS, TEXTS, toolText, type TextSpec } from "../src/texts/registry.ts";
+import { seenWordings } from "../src/texts/seen.ts";
+import { writeState } from "../src/storage/store.ts";
 import { ALL_TOOLS } from "../src/tools/registry.ts";
 
 const MINUTE = 60_000;
@@ -4547,5 +4549,17 @@ test("a wake whose text the user pointed at a file that can't be read is skipped
     expect(runtime.autonomy.log("ada", 10).map((event) => [event.kind, event.detail]).at(-1)).toEqual([
       "call_failed", `Wake skipped: text "wake" could not be read at ${missing}: ENOENT: no such file or directory, open '${missing}'`,
     ]);
+  });
+});
+
+test("a runtime keeps the wording it first runs with, the list shows Shore's texts an update reworded until they are marked seen, and marking them seen answers with the list as it is now", async () => {
+  await withCharacter(async ({ data, command }) => {
+    expect(seenWordings(data)).toEqual(Object.fromEntries(TEXTS.map((spec) => [spec.name, spec.shipped])));
+    writeState(data, "texts_seen.json", JSON.stringify({ ...seenWordings(data), wake: "Wake up." }));
+    const listed = async (name: string) => (await command(name, {}) as unknown as { data: { texts: { name: string; changed: boolean; previous: string | null }[] } }).data.texts;
+    expect((await listed("texts")).filter((text) => text.changed).map((text) => [text.name, text.previous])).toEqual([["wake", "Wake up."]]);
+    expect((await listed("texts_seen")).filter((text) => text.changed)).toEqual([]);
+    expect((await listed("texts")).filter((text) => text.changed)).toEqual([]);
+    expect(seenWordings(data)?.["wake"]).toBe(required(TEXT_SPECS.get("wake")).shipped);
   });
 });

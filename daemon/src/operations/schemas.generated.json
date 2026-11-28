@@ -7603,6 +7603,15 @@
               "items": {
                 "$ref": "#/$defs/TextValue"
               }
+            },
+            "changed": {
+              "type": "boolean"
+            },
+            "previous": {
+              "type": [
+                "string",
+                "null"
+              ]
             }
           },
           "required": [
@@ -7614,7 +7623,126 @@
             "shipped",
             "file",
             "error",
-            "values"
+            "values",
+            "changed",
+            "previous"
+          ]
+        },
+        "TextOwner": {
+          "type": "string",
+          "enum": [
+            "shore",
+            "yours",
+            "off",
+            "cli"
+          ]
+        },
+        "TextValue": {
+          "type": "object",
+          "properties": {
+            "name": {
+              "type": "string"
+            },
+            "about": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "name",
+            "about"
+          ]
+        }
+      }
+    }
+  },
+  {
+    "name": "texts_seen",
+    "input": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "title": "EmptyOperationArgs",
+      "type": "object",
+      "additionalProperties": false
+    },
+    "output": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "title": "TextListing",
+      "type": "object",
+      "properties": {
+        "texts": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/TextEntry"
+          }
+        }
+      },
+      "required": [
+        "texts"
+      ],
+      "$defs": {
+        "TextEntry": {
+          "type": "object",
+          "properties": {
+            "name": {
+              "type": "string"
+            },
+            "place": {
+              "type": "string"
+            },
+            "owner": {
+              "$ref": "#/$defs/TextOwner"
+            },
+            "required": {
+              "type": "boolean"
+            },
+            "wording": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "shipped": {
+              "type": "string"
+            },
+            "file": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "error": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "values": {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/TextValue"
+              }
+            },
+            "changed": {
+              "type": "boolean"
+            },
+            "previous": {
+              "type": [
+                "string",
+                "null"
+              ]
+            }
+          },
+          "required": [
+            "name",
+            "place",
+            "owner",
+            "required",
+            "wording",
+            "shipped",
+            "file",
+            "error",
+            "values",
+            "changed",
+            "previous"
           ]
         },
         "TextOwner": {

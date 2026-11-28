@@ -5,12 +5,15 @@ import { join } from "node:path";
 import { loadConfig } from "../src/config/loader.ts";
 import { configSchema } from "../src/config/schema.ts";
 import { listTexts } from "../src/texts/listing.ts";
-import { parameterText, shippedText, TEXT_SPECS, toolText } from "../src/texts/registry.ts";
+import { parameterText, shippedText, TEXT_SPECS, TEXTS, toolText } from "../src/texts/registry.ts";
 import { renderTemplate } from "../src/texts/template.ts";
 import { Texts } from "../src/texts/texts.ts";
 import { ALL_TOOLS, renderedTools } from "../src/tools/registry.ts";
 import { required } from "../src/util/required.ts";
 import { testTmp } from "./support/tmp.ts";
+import { markTextsSeen, noteFirstTexts, seenWordings } from "../src/texts/seen.ts";
+import { writeState } from "../src/storage/store.ts";
+import { initializeDatabase } from "../src/storage/database.ts";
 
 const render = (template: string, values: Record<string, string> = {}): string => renderTemplate(template, new Map(Object.entries(values)));
 
@@ -104,11 +107,11 @@ test("config points a text at a file or switches it off, and refuses a name Shor
 test("the list names every text with whose wording is in use, a file of the user's that can't be read with why, and the CLI's own texts", async () => {
   const dir = await mkdtemp(testTmp("texts-list-"));
   await writeFile(join(dir, "time.md"), "[now: {{now}}]\n");
-  const listed = listTexts({ app: { texts: { time: "time.md", status: false, label: "gone.md" } }, dirs: { config: dir } }).texts;
+  const listed = listTexts({ app: { texts: { time: "time.md", status: false, label: "gone.md" } }, dirs: { config: dir } }, undefined).texts;
   const row = (name: string) => required(listed.find((entry) => entry.name === name));
   expect(row("time")).toEqual({
     name: "time", place: required(TEXT_SPECS.get("time")).where, owner: "yours", required: false, wording: "[now: {{now}}]", shipped: "[{{now}}]",
-    file: join(dir, "time.md"), error: null, values: [{ name: "now", about: "the time, like Friday 2026-10-30 · 12:00 PM" }],
+    file: join(dir, "time.md"), error: null, values: [{ name: "now", about: "the time, like Friday 2026-10-30 · 12:00 PM" }], changed: false, previous: null,
   });
   expect([row("status").owner, row("status").wording, row("status").shipped]).toEqual(["off", null, "[Their status: {{statuses}}]"]);
   expect([row("label").owner, row("label").wording, row("label").required, row("label").error]).toEqual(["yours", null, true, `text "label" could not be read at ${join(dir, "gone.md")}: ENOENT: no such file or directory, open '${join(dir, "gone.md")}'`]);
@@ -119,8 +122,39 @@ test("the list names every text with whose wording is in use, a file of the user
   expect(identity).toEqual({
     name: "cli_identity", owner: "cli", required: false,
     wording: "You are a Claude agent, built on Anthropic's Claude Agent SDK.", shipped: "You are a Claude agent, built on Anthropic's Claude Agent SDK.", file: null, error: null, values: [],
+    changed: false, previous: null,
   });
   expect(row("cli_nudges").wording).toContain("Your tool call was malformed and could not be parsed. Please retry.");
+});
+
+test("a text of Shore's whose wording changed since it was last marked seen says so with the wording before, a new one says it is new, and one the user replaced or switched off says nothing", async () => {
+  const dir = await mkdtemp(testTmp("texts-seen-"));
+  await writeFile(join(dir, "time.md"), "[now: {{now}}]\n");
+  const seen = Object.fromEntries(TEXTS.filter((spec) => spec.name !== "wake_turn").map((spec) => [spec.name, spec.shipped]));
+  const listed = listTexts({ app: { texts: { time: "time.md", status: false } }, dirs: { config: dir } }, {
+    ...seen, wake: "Wake up.", time: "[old {{now}}]", status: "[old status]",
+  }).texts;
+  const row = (name: string) => required(listed.find((entry) => entry.name === name));
+  expect([row("wake").changed, row("wake").previous]).toEqual([true, "Wake up."]);
+  expect([row("wake_turn").changed, row("wake_turn").previous]).toEqual([true, null]);
+  expect([row("time").changed, row("time").previous, row("status").changed, row("status").previous]).toEqual([false, null, false, null]);
+  expect([row("picture").changed, row("picture").previous, row("cli_identity").changed]).toEqual([false, null, false]);
+  expect(listed.filter((entry) => entry.changed).map((entry) => entry.name).sort()).toEqual(["wake", "wake_turn"]);
+});
+
+test("Shore keeps the wording it first runs with, keeps it until the user marks the list seen, and then keeps the wording it has now", async () => {
+  const data = await mkdtemp(testTmp("texts-seen-data-"));
+  initializeDatabase(data);
+  expect(seenWordings(data)).toBeUndefined();
+  writeState(data, "texts_seen.json", JSON.stringify({ wake: "Wake up." }));
+  noteFirstTexts(data);
+  expect(seenWordings(data)).toEqual({ wake: "Wake up." });
+  markTextsSeen(data);
+  expect(seenWordings(data)).toEqual(Object.fromEntries(TEXTS.map((spec) => [spec.name, spec.shipped])));
+  const fresh = await mkdtemp(testTmp("texts-seen-fresh-"));
+  initializeDatabase(fresh);
+  noteFirstTexts(fresh);
+  expect(seenWordings(fresh)).toEqual(Object.fromEntries(TEXTS.map((spec) => [spec.name, spec.shipped])));
 });
 
 test("each text's key in config says where the text goes, and whether it can be switched off, and no other key takes a text's description", () => {

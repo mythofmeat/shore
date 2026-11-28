@@ -2,4 +2,4 @@
 import type { TextOwner } from "./TextOwner";
 import type { TextValue } from "./TextValue";
 
-export type TextEntry = { name: string, place: string, owner: TextOwner, required: boolean, wording: string | null, shipped: string, file: string | null, error: string | null, values: Array<TextValue>, };
+export type TextEntry = { name: string, place: string, owner: TextOwner, required: boolean, wording: string | null, shipped: string, file: string | null, error: string | null, values: Array<TextValue>, changed: boolean, previous: string | null, };

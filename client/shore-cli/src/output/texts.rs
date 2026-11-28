@@ -14,6 +14,15 @@ fn owner_word(owner: &TextOwner) -> &'static str {
     }
 }
 
+fn whose(text: &TextEntry) -> String {
+    let owner = owner_word(&text.owner);
+    match (text.changed, &text.previous) {
+        (false, _) => owner.to_owned(),
+        (true, Some(_)) => format!("{owner}, changed"),
+        (true, None) => format!("{owner}, new"),
+    }
+}
+
 fn write_block<W: Write>(out: &mut W, title: &str, body: &str) {
     key_line(out, 0, title);
     for line in body.lines() {
@@ -27,16 +36,20 @@ pub(crate) fn write_list<W: Write>(out: &mut W, listing: &TextListing) {
     for text in &listing.texts {
         rows.add_noted(
             &text.name,
-            owner_word(&text.owner),
+            &whose(text),
             &text.place,
-            Tone::Plain,
+            if text.changed {
+                Tone::Warn
+            } else {
+                Tone::Plain
+            },
         );
     }
     rows.write(out);
 }
 
 pub(crate) fn write_text<W: Write>(out: &mut W, text: &TextEntry) {
-    section(out, &text.name, Some(owner_word(&text.owner)));
+    section(out, &text.name, Some(&whose(text)));
     let mut rows = Rows::new();
     rows.add("where", &text.place);
     if let Some(file) = &text.file {
@@ -60,6 +73,10 @@ pub(crate) fn write_text<W: Write>(out: &mut W, text: &TextEntry) {
     if text.wording.as_deref() != Some(text.shipped.as_str()) {
         blank(out);
         write_block(out, "Shore's wording", &text.shipped);
+    }
+    if let Some(previous) = &text.previous {
+        blank(out);
+        write_block(out, "Shore's wording before an update changed it", previous);
     }
 }
 
