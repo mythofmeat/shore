@@ -164,6 +164,35 @@ import t__tools__threads__threads__answers__change_pins from "../../prompts/tool
 import t__tools__threads__threads__answers__sealed_until_form from "../../prompts/tools/threads/threads/answers/sealed_until_form.md" with { type: "text" };
 import t__tools__threads__threads__answers__seal_unavailable from "../../prompts/tools/threads/threads/answers/seal_unavailable.md" with { type: "text" };
 import t__tools__threads__threads__answers__sealed from "../../prompts/tools/threads/threads/answers/sealed.md" with { type: "text" };
+import t__tools__autonomy__list_triggers__answers__heading from "../../prompts/tools/autonomy/list_triggers/answers/heading.md" with { type: "text" };
+import t__tools__autonomy__list_triggers__answers__none from "../../prompts/tools/autonomy/list_triggers/answers/none.md" with { type: "text" };
+import t__tools__autonomy__list_triggers__answers__entry from "../../prompts/tools/autonomy/list_triggers/answers/entry.md" with { type: "text" };
+import t__tools__autonomy__list_triggers__answers__problems from "../../prompts/tools/autonomy/list_triggers/answers/problems.md" with { type: "text" };
+import t__tools__autonomy__list_triggers__answers__asked from "../../prompts/tools/autonomy/list_triggers/answers/asked.md" with { type: "text" };
+import t__tools__autonomy__list_triggers__answers__asked_entry from "../../prompts/tools/autonomy/list_triggers/answers/asked_entry.md" with { type: "text" };
+import t__tools__autonomy__list_triggers__answers__unavailable from "../../prompts/tools/autonomy/list_triggers/answers/unavailable.md" with { type: "text" };
+import t__tools__autonomy__list_triggers__answers__wakes from "../../prompts/tools/autonomy/list_triggers/answers/wakes.md" with { type: "text" };
+import t__tools__autonomy__list_triggers__answers__never_wakes from "../../prompts/tools/autonomy/list_triggers/answers/never_wakes.md" with { type: "text" };
+import t__tools__autonomy__list_triggers__answers__status_changes from "../../prompts/tools/autonomy/list_triggers/answers/status_changes.md" with { type: "text" };
+import t__tools__autonomy__list_triggers__answers__quiet_for from "../../prompts/tools/autonomy/list_triggers/answers/quiet_for.md" with { type: "text" };
+import t__tools__autonomy__list_triggers__answers__switched_off from "../../prompts/tools/autonomy/list_triggers/answers/switched_off.md" with { type: "text" };
+import t__tools__autonomy__list_triggers__answers__every from "../../prompts/tools/autonomy/list_triggers/answers/every.md" with { type: "text" };
+import t__tools__autonomy__list_triggers__answers__at from "../../prompts/tools/autonomy/list_triggers/answers/at.md" with { type: "text" };
+import t__tools__autonomy__list_triggers__answers__once from "../../prompts/tools/autonomy/list_triggers/answers/once.md" with { type: "text" };
+import t__tools__autonomy__list_triggers__answers__follows from "../../prompts/tools/autonomy/list_triggers/answers/follows.md" with { type: "text" };
+import t__tools__autonomy__list_triggers__answers__if_prints from "../../prompts/tools/autonomy/list_triggers/answers/if_prints.md" with { type: "text" };
+import t__tools__autonomy__list_triggers__answers__runs from "../../prompts/tools/autonomy/list_triggers/answers/runs.md" with { type: "text" };
+import t__tools__autonomy__list_triggers__answers__reason from "../../prompts/tools/autonomy/list_triggers/answers/reason.md" with { type: "text" };
+import t__tools__autonomy__list_triggers__answers__between from "../../prompts/tools/autonomy/list_triggers/answers/between.md" with { type: "text" };
+import t__tools__autonomy__list_triggers__answers__limit from "../../prompts/tools/autonomy/list_triggers/answers/limit.md" with { type: "text" };
+import t__tools__autonomy__list_triggers__answers__cooldown from "../../prompts/tools/autonomy/list_triggers/answers/cooldown.md" with { type: "text" };
+import t__tools__autonomy__list_triggers__answers__next from "../../prompts/tools/autonomy/list_triggers/answers/next.md" with { type: "text" };
+import t__tools__autonomy__list_triggers__answers__never_fired from "../../prompts/tools/autonomy/list_triggers/answers/never_fired.md" with { type: "text" };
+import t__tools__autonomy__list_triggers__answers__fired from "../../prompts/tools/autonomy/list_triggers/answers/fired.md" with { type: "text" };
+import t__tools__autonomy__list_triggers__answers__check_failing from "../../prompts/tools/autonomy/list_triggers/answers/check_failing.md" with { type: "text" };
+import t__tools__autonomy__list_triggers__answers__check_not_run from "../../prompts/tools/autonomy/list_triggers/answers/check_not_run.md" with { type: "text" };
+import t__tools__autonomy__list_triggers__answers__checked_quiet from "../../prompts/tools/autonomy/list_triggers/answers/checked_quiet.md" with { type: "text" };
+import t__tools__autonomy__list_triggers__answers__starts from "../../prompts/tools/autonomy/list_triggers/answers/starts.md" with { type: "text" };
 import messages__earlier_not_shown from "../../prompts/messages/earlier_not_shown.md" with { type: "text" };
 import messages__opened_by_you from "../../prompts/messages/opened_by_you.md" with { type: "text" };
 import messages__picture_gone from "../../prompts/messages/picture_gone.md" with { type: "text" };
@@ -570,6 +599,38 @@ export const THREADS_TOOL_TEXTS: readonly TextSpec[] = [
   text("threads_sealed", t__tools__threads__threads__answers__sealed, "What threads answers once it starts a sealed thread.", { name: "its id", label: "its label", opens: "when the seal comes off", user: "the user's name", folder: "the folder for what the character makes for it" }),
 ];
 
+export const TRIGGERS_TOOL_TEXTS: readonly TextSpec[] = [
+  text("triggers_heading", t__tools__autonomy__list_triggers__answers__heading, "The first line of what list_triggers answers.", { file: "the triggers file", off: "set while the user has the character's triggers off", user: "the user's name" }),
+  text("triggers_none", t__tools__autonomy__list_triggers__answers__none, "In what list_triggers answers when there are no triggers."),
+  text("triggers_entry", t__tools__autonomy__list_triggers__answers__entry, "Each trigger in what list_triggers answers.", { name: "the trigger's name", does: "what it does, its parts as the triggers_ texts have them, with \", \" between them", status: "how it stands, its parts with \" · \" between them" }),
+  text("triggers_problems", t__tools__autonomy__list_triggers__answers__problems, "In what list_triggers answers, for triggers that can't run.", { problems: "a line for each: - why" }),
+  text("triggers_asked", t__tools__autonomy__list_triggers__answers__asked, "In what list_triggers answers, for asked-for wakes still waiting.", { asked: "a line for each, as triggers_asked_entry has it" }),
+  text("triggers_asked_entry", t__tools__autonomy__list_triggers__answers__asked_entry, "Each asked-for wake in triggers_asked.", { thread: "the thread it is for", does: "the wake, as wake_asked_for has it", status: "when it starts, as triggers_starts has it" }),
+  must("triggers_unavailable", t__tools__autonomy__list_triggers__answers__unavailable, "list_triggers' error where there are no triggers to list, as in a subagent."),
+  text("triggers_wakes", t__tools__autonomy__list_triggers__answers__wakes, "In a trigger's description, when it wakes the character.", { thread: "the thread it wakes the character in, when it has one" }),
+  text("triggers_never_wakes", t__tools__autonomy__list_triggers__answers__never_wakes, "In a trigger's description, when it never wakes the character."),
+  text("triggers_status_changes", t__tools__autonomy__list_triggers__answers__status_changes, "In a trigger's description, when it fires on a change of status.", { user: "the user's name" }),
+  text("triggers_quiet_for", t__tools__autonomy__list_triggers__answers__quiet_for, "In a trigger's description, when it fires once the user has been quiet.", { user: "the user's name", length: "a length of time, like 30m or 2h" }),
+  text("triggers_switched_off", t__tools__autonomy__list_triggers__answers__switched_off, "In a trigger's status, when the user switched it off.", { user: "the user's name" }),
+  text("triggers_every", t__tools__autonomy__list_triggers__answers__every, "In a trigger's description, when it fires every so often.", { length: "a length of time, like 30m or 2h" }),
+  text("triggers_at", t__tools__autonomy__list_triggers__answers__at, "In a trigger's description, when it fires at a time of day.", { every_day: "set when it fires every day", days: "the days it fires, like Mon, Thu", time: "the time, like 08:30" }),
+  text("triggers_once", t__tools__autonomy__list_triggers__answers__once, "In a trigger's description, when it fires once.", { at: "when" }),
+  text("triggers_follows", t__tools__autonomy__list_triggers__answers__follows, "In a trigger's description, when it fires after another.", { trigger: "the other trigger" }),
+  text("triggers_if_prints", t__tools__autonomy__list_triggers__answers__if_prints, "In a trigger's description, when its check decides whether it wakes the character.", { check: "the check" }),
+  text("triggers_runs", t__tools__autonomy__list_triggers__answers__runs, "In a trigger's description, when it only runs its check.", { check: "the check" }),
+  text("triggers_reason", t__tools__autonomy__list_triggers__answers__reason, "In a trigger's description, its reason.", { reason: "the reason" }),
+  text("triggers_between", t__tools__autonomy__list_triggers__answers__between, "In a trigger's description, the hours it may fire in.", { from: "the start, like 08:00", to: "the end, like 22:00" }),
+  text("triggers_limit", t__tools__autonomy__list_triggers__answers__limit, "In a trigger's description, how long its wake may run.", { length: "a length of time, like 30m or 2h" }),
+  text("triggers_cooldown", t__tools__autonomy__list_triggers__answers__cooldown, "In a trigger's description, how often it may fire.", { length: "a length of time, like 30m or 2h" }),
+  text("triggers_next", t__tools__autonomy__list_triggers__answers__next, "In a trigger's status, when it fires next.", { at: "when" }),
+  text("triggers_never_fired", t__tools__autonomy__list_triggers__answers__never_fired, "In a trigger's status, when it has never fired."),
+  text("triggers_fired", t__tools__autonomy__list_triggers__answers__fired, "In a trigger's status, how often it has fired.", { count: "how many times", one: "set when it fired once", at: "when it last fired" }),
+  text("triggers_check_failing", t__tools__autonomy__list_triggers__answers__check_failing, "In a trigger's status, when its check fails.", { at: "when it was last tried, when it has been", problem: "why" }),
+  text("triggers_check_not_run", t__tools__autonomy__list_triggers__answers__check_not_run, "In a trigger's status, when its check hasn't run."),
+  text("triggers_checked_quiet", t__tools__autonomy__list_triggers__answers__checked_quiet, "In a trigger's status, when its check last printed nothing.", { at: "when" }),
+  text("triggers_starts", t__tools__autonomy__list_triggers__answers__starts, "When an asked-for wake starts, in triggers_asked_entry.", { at: "when, when it was given a time" }),
+];
+
 const GUIDE_VALUES = { user: "the user's name", tools_off: "the tools a topic names that are off" };
 
 export const GUIDE_TEXTS: readonly TextSpec[] = [
@@ -627,7 +688,7 @@ export const TOOL_TEXTS: readonly TextSpec[] = Object.entries(TOOL_TEXTS_SHIPPED
 
 export const READ_TEXT_NAMES: readonly string[] = READ_TEXTS.map((spec) => spec.name);
 
-export const TEXTS: readonly TextSpec[] = [...MESSAGE_TEXTS, ...SYSTEM_TEXTS, ...WAKE_TEXTS, ...TOOL_TEXTS, ...OTHER_TEXTS, ...IMAGE_TEXTS, ...READ_TEXTS, ...MCP_TEXTS, ...SEND_TEXTS, ...ARG_TEXTS, ...WAKE_TOOL_TEXTS, ...TOOL_COMMON_TEXTS, ...ARG_COMMON_TEXTS, ...THREADS_TOOL_TEXTS, ...GUIDE_TEXTS];
+export const TEXTS: readonly TextSpec[] = [...MESSAGE_TEXTS, ...SYSTEM_TEXTS, ...WAKE_TEXTS, ...TOOL_TEXTS, ...OTHER_TEXTS, ...IMAGE_TEXTS, ...READ_TEXTS, ...MCP_TEXTS, ...SEND_TEXTS, ...ARG_TEXTS, ...WAKE_TOOL_TEXTS, ...TOOL_COMMON_TEXTS, ...ARG_COMMON_TEXTS, ...THREADS_TOOL_TEXTS, ...TRIGGERS_TOOL_TEXTS, ...GUIDE_TEXTS];
 
 export const TEXT_SPECS: ReadonlyMap<string, TextSpec> = new Map(TEXTS.map((spec) => [spec.name, spec]));
 

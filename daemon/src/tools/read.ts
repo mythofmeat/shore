@@ -200,11 +200,12 @@ async function readText(texts: Texts, file: FileHandle, path: string, offset: nu
   const lineCut = texts.render("read_line_cut", { chars: String(lineLimit) });
   const emit = (newline: boolean): boolean => {
     if (number < offset) return true;
-    const rendered = `${number}\t${line.replace(/\r$/, "")}${lineChars > lineLimit && lineCut !== undefined ? ` ${lineCut}` : ""}`;
+    const cut = lineChars > lineLimit;
+    const rendered = `${number}\t${line.replace(/\r$/, "")}${cut && lineCut !== undefined ? ` ${lineCut}` : ""}`;
     const length = Array.from(rendered).length + 1;
     if (lines.length > 0 && (lines.length >= limit || outputChars + length > budget)) return false;
     lines.push(rendered);
-    const text = line + (newline && lineChars <= lineLimit ? "\n" : "");
+    const text = line + (newline && !cut ? "\n" : "");
     renderedChars += rendered.length + 1;
     lineEnds.push({ source: lineStart + text.length, output: renderedChars });
     const previous = ranges.at(-1);
@@ -228,7 +229,7 @@ async function readText(texts: Texts, file: FileHandle, path: string, offset: nu
         line = "";
         lineChars = 0;
       } else {
-        if (number >= offset && (lines.length >= limit || outputChars >= budget)) return false;
+        if (lines.length >= limit || outputChars >= budget) return false;
         lineChars += 1;
         if (number >= offset && lineChars <= lineLimit) line += char;
       }

@@ -18,6 +18,9 @@ import type { TriggersStatusReport } from "../protocol/TriggersStatusReport.ts";
 import type { TriggersView } from "../autonomy/trigger_loop.ts";
 import { hostZone } from "../ledger/zoned.ts";
 import { describeAsked, describeTrigger, userVoice } from "../tools/list_triggers.ts";
+import { Texts } from "../texts/texts.ts";
+
+const SHIPPED_TEXTS = new Texts();
 
 type Args = OperationInput<"error_log">;
 
@@ -84,9 +87,9 @@ export function triggersWire(view: TriggersView, character: string, active: bool
   return {
     enabled: view.enabled,
     ...(next === undefined ? {} : { next_wake: { ...next.next, at: rfc3339(next.at) } }),
-    triggers: view.triggers.map((each) => describeTrigger(each, userVoice(character), timeZone)),
+    triggers: view.triggers.map((each) => describeTrigger(SHIPPED_TEXTS, each, userVoice(character), timeZone)),
     not_running: view.problems,
-    asked: view.asked.map((firing) => describeAsked(firing, timeZone)),
+    asked: view.asked.map((firing) => describeAsked(SHIPPED_TEXTS, firing, timeZone)),
   };
 }
 

@@ -185,7 +185,7 @@ export async function dispatchTool(
       });
 
     case "list_triggers":
-      return handleListTriggers(ctx.triggers?.(), ctx.userName ?? "the user");
+      return handleListTriggers(ctx.texts, ctx.triggers?.(), ctx.userName ?? "the user");
 
     case "wake_in_thread": {
       const handOff = ctx.wakeInThread;

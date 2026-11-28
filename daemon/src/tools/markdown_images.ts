@@ -29,7 +29,7 @@ interface ImageRef {
 }
 
 function localImagePath(texts: Texts, url: string, documentPath: string): string | undefined {
-  const target = url.split(/[?#]/, 1)[0] ?? "";
+  const target = url.split(/[?#]/)[0] ?? "";
   const path = decodeURIComponent(target);
   if (path === "" || /^[a-z][a-z0-9+.-]*:/i.test(path) || path.startsWith("//") || path.startsWith("\\\\")) return undefined;
   if (path.includes("\0")) throw new Error(texts.always("read_md_nul"));
@@ -102,7 +102,7 @@ export async function expandMarkdownImages(
   const payload: ToolResultPayload = { value: page.output, media: [], extra: [], notes };
   try {
     const bytes = await readBoundedFile(file, path, MAX_MARKDOWN_IMAGE_SOURCE_BYTES, "Markdown image source", signal);
-    const source = new TextDecoder("utf-8", { fatal: true }).decode(bytes);
+    const source = new TextDecoder().decode(bytes);
     if (page.ranges.some((range) => source.slice(range.start, range.end) !== range.text)) throw new Error(texts.always("read_md_changed"));
     const refs = imageRefs(source, page);
     let names: Promise<WorkspaceNames> | undefined;

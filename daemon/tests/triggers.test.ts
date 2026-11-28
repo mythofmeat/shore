@@ -9,6 +9,7 @@ import { handleListTriggers } from "../src/tools/list_triggers.ts";
 import { rejectionOf } from "./support/outcome.ts";
 import { testTmp } from "./support/tmp.ts";
 import { coolingDown, inItsHours, nextAt, parseTriggers, scheduledAt, triggerTimes, type Trigger, type TriggerWhen } from "../src/autonomy/triggers.ts";
+import { Texts } from "../src/texts/texts.ts";
 
 const MINUTE = 60_000;
 const HOUR = 60 * MINUTE;
@@ -402,7 +403,7 @@ async function shown(body: string, status: Partial<Omit<TriggerView, "trigger">>
   const trigger = only(body);
   if (typeof trigger === "string") throw new Error(trigger);
   const view: TriggersView = { enabled: true, problems: [], triggers: [{ trigger, off: false, problem: undefined, fired: 0, lastFiredAt: undefined, checkedAt: undefined, nextAt: undefined, ...status }], asked: [] };
-  return (await handleListTriggers(Promise.resolve(view), "eve", "UTC")).split("\n\n").slice(1).join("\n\n");
+  return (await handleListTriggers(new Texts(), Promise.resolve(view), "eve", "UTC")).split("\n\n").slice(1).join("\n\n");
 }
 
 test("the list says when each trigger fires, what it does, and what limits it", async () => {
@@ -442,17 +443,17 @@ test("the list says of a check when it last ran and whether it printed nothing o
 test("the list covers every trigger and those that aren't running, and says so when there are none or the character's triggers are off", async () => {
   const parsed = parse('[show]\nat = "Sat 20:00"\nreason = "The show."\n\n[recap]\nfollows = "show"\ncheck = "recap.sh"\nwake = false\n\n[lamp]\nreason = "r"\n');
   const view: TriggersView = { enabled: true, problems: parsed.problems, triggers: parsed.triggers.map((trigger) => ({ trigger, off: false, problem: undefined, fired: 0, lastFiredAt: undefined, checkedAt: undefined, nextAt: undefined })), asked: [] };
-  expect(await handleListTriggers(Promise.resolve(view), "eve", "UTC")).toBe([
+  expect(await handleListTriggers(new Texts(), Promise.resolve(view), "eve", "UTC")).toBe([
     "Your triggers, from TRIGGERS.toml in your workspace root.",
     'show: Sat at 20:00, wakes you, "The show.", at most every 1h\n  never fired',
     "recap: after `show`, runs `recap.sh`, never wakes you\n  never fired · its check hasn't run yet",
     "Not running:\n- `lamp` isn't running: it needs exactly one of `every`, `at`, `on`, `when` or `follows` to say when it fires",
   ].join("\n\n"));
-  expect(await handleListTriggers(Promise.resolve({ enabled: true, triggers: [], problems: [], asked: [] }), "eve", "UTC")).toBe("Your triggers, from TRIGGERS.toml in your workspace root.\n\nYou have none there yet, so no trigger wakes you.");
-  expect(await handleListTriggers(Promise.resolve({ enabled: false, triggers: [], problems: ["`lamp` isn't running: why"], asked: [] }), "eve", "UTC")).toBe(
+  expect(await handleListTriggers(new Texts(), Promise.resolve({ enabled: true, triggers: [], problems: [], asked: [] }), "eve", "UTC")).toBe("Your triggers, from TRIGGERS.toml in your workspace root.\n\nYou have none there yet, so no trigger wakes you.");
+  expect(await handleListTriggers(new Texts(), Promise.resolve({ enabled: false, triggers: [], problems: ["`lamp` isn't running: why"], asked: [] }), "eve", "UTC")).toBe(
     "Your triggers, from TRIGGERS.toml in your workspace root. eve has your triggers switched off, so nothing fires.\n\nNot running:\n- `lamp` isn't running: why",
   );
-  expect(String(await rejectionOf(handleListTriggers(undefined, "eve", "UTC")))).toContain("triggers are not available in this context");
+  expect(String(await rejectionOf(handleListTriggers(new Texts(), undefined, "eve", "UTC")))).toContain("triggers are not available in this context");
 });
 
 test("the list ends with the wakes the character asked for that haven't started, each with when it starts", async () => {
@@ -461,7 +462,7 @@ test("the list ends with the wakes the character asked for that haven't started,
     { name: "", from: "main", reason: "Tell part two.", at, thread: "ring", startsAt: at + 5 * HOUR },
     { name: "", from: "ring", reason: "Water them.", at: at + 60_000, thread: "garden" },
   ];
-  expect(await handleListTriggers(Promise.resolve({ enabled: true, triggers: [], problems: [], asked }), "eve", "UTC")).toBe([
+  expect(await handleListTriggers(new Texts(), Promise.resolve({ enabled: true, triggers: [], problems: [], asked }), "eve", "UTC")).toBe([
     "Your triggers, from TRIGGERS.toml in your workspace root.",
     "You have none there yet, so no trigger wakes you.",
     "Wakes you asked for with `wake_in_thread` that haven't started:\n" +

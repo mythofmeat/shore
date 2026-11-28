@@ -4,7 +4,7 @@ import { openRegularFile, readBoundedFile } from "./file_access.ts";
 import type { ToolMediaItem } from "./media.ts";
 import { MAX_IMAGE_BYTES } from "../llm/images.ts";
 import { DEFAULT_IMAGE_LIMITS, ORIGINAL_IMAGE_SETTINGS, reduceImage } from "../llm/prepare_images.ts";
-import { firstVideoFrame } from "./video.ts";
+import { firstVideoFrame, MEDIA_HEADER_BYTES } from "./video.ts";
 import type { Texts } from "../texts/texts.ts";
 
 export const MAX_READ_IMAGE_BYTES = 64 * 1024 * 1024;
@@ -47,7 +47,7 @@ export async function readImageAt(texts: Texts, path: string, accept: (bytes: nu
   const file = await openRegularFile(path);
   try {
     if (!accept((await file.stat()).size)) return undefined;
-    const header = Buffer.alloc(12);
+    const header = Buffer.alloc(MEDIA_HEADER_BYTES);
     const head = await file.read(header, 0, header.length, 0);
     const mime = imageMime(header.subarray(0, head.bytesRead));
     if (mime === undefined) throw new ToolIoError(texts.always("read_image_data", { path }));
