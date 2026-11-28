@@ -108,6 +108,24 @@ describe("a menu", () => {
     expect(other?.defaultPrevented).toBe(false);
   });
 
+  test("an item with a description shows it under its label, named by the label alone and described by the rest", async () => {
+    const { Menu } = await controls();
+    const view = await mount(<Menu label="Key" defaultOpen items={[
+      { label: "Pick keys automatically", description: "First that works, in order", onSelect: () => {} },
+      { label: "Pick logins automatically", description: "One with room", onSelect: () => {} },
+      { label: "Sort by activity", detail: "On", onSelect: () => {} },
+    ]} />);
+    const [first, second, plain] = [...view.host.querySelectorAll("[role=menuitem]")];
+    const parts = (item: Element | undefined) => {
+      const [label, description] = [item?.querySelector(".menu-text > .menu-label"), item?.querySelector(".menu-text > .menu-description")];
+      return [label?.textContent, description?.textContent, label?.id !== "" && item?.getAttribute("aria-labelledby") === label?.id, description?.id !== "" && item?.getAttribute("aria-describedby") === description?.id];
+    };
+    expect([parts(first), parts(second), first?.getAttribute("aria-labelledby") === second?.getAttribute("aria-labelledby")]).toEqual([
+      ["Pick keys automatically", "First that works, in order", true, true], ["Pick logins automatically", "One with room", true, true], false,
+    ]);
+    expect([plain?.querySelector(".menu-text"), plain?.querySelector(".menu-label")?.textContent, plain?.querySelector(".menu-detail")?.textContent, plain?.hasAttribute("aria-labelledby"), plain?.hasAttribute("aria-describedby")]).toEqual([null, "Sort by activity", "On", false, false]);
+  });
+
   test("takes its own trigger, placement and icon, and can be opened by an event while mounted", async () => {
     const { Menu } = await controls();
     const view = await mount(<Menu label="Model" items={[{ label: "Opus", onSelect: () => {} }]} trigger={<span>Opus</span>} triggerClassName="chip" align="start" placement="above" openEvent="shore:test-open" />);

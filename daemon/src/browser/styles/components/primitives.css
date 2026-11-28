@@ -130,7 +130,13 @@
   white-space: nowrap;
 }
 
-.menu-detail {
+.menu-text {
+  display: flex;
+  flex-direction: column;
+}
+
+.menu-detail,
+.menu-description {
   color: var(--text-3);
   font-size: var(--text-sm);
 }
