@@ -63,8 +63,8 @@ describe("a menu", () => {
     expect(document.activeElement?.textContent).toBe("RenameR");
     expect(view.host.querySelector("[role=separator]")?.className).toBe("menu-separator");
     const items = [...(list?.querySelectorAll("[role=menuitem]") ?? [])] as HTMLButtonElement[];
-    expect(items.map((item) => [item.textContent, item.className, item.disabled, item.querySelector("svg") !== null, item.querySelector(".menu-detail")?.textContent ?? null])).toEqual([
-      ["Disabled", "", true, false, null], ["RenameR", "", false, true, "R"], ["Delete", "danger", false, false, null],
+    expect(items.map((item) => [item.textContent, item.className, item.disabled, item.querySelector("svg")?.getAttribute("width") ?? null, item.querySelector(".menu-detail")?.textContent ?? null])).toEqual([
+      ["Disabled", "", true, null, null], ["RenameR", "", false, "16", "R"], ["Delete", "danger", false, null, null],
     ]);
     await acting(() => { items[1]?.click(); });
     expect(chosen).toEqual(["rename"]);
@@ -139,6 +139,20 @@ describe("a menu", () => {
     expect(() => { dispatchEvent(new Event("shore:test-open")); }).not.toThrow();
   });
 
+  test("listens for presses outside only while it is open, and for no window event when it has no open event", async () => {
+    const { Menu } = await controls();
+    const [adds, removes, events] = [spyOn(document, "addEventListener"), spyOn(document, "removeEventListener"), spyOn(window, "addEventListener")];
+    restores.push(() => { adds.mockRestore(); removes.mockRestore(); events.mockRestore(); });
+    const presses = (spy: typeof adds) => spy.mock.calls.filter(([type]) => type === "pointerdown").map(([, listener]) => listener);
+    const view = await mount(<Menu label="Model" items={[{ label: "Opus", onSelect: () => {} }]} />);
+    const trigger = view.host.querySelector("button");
+    expect([presses(adds).length, events.mock.calls.filter(([type]) => type === undefined).length]).toEqual([0, 0]);
+    await acting(() => { trigger?.click(); });
+    expect([view.host.querySelector("[role=menu]") !== null, presses(adds).length, presses(removes).length]).toEqual([true, 1, 0]);
+    await acting(() => { trigger?.click(); });
+    expect([view.host.querySelector("[role=menu]"), presses(adds).length, presses(removes)]).toEqual([null, 1, presses(adds)]);
+  });
+
   test("an open event stops opening it once it is gone", async () => {
     const { Menu } = await controls();
     const adds = spyOn(window, "removeEventListener");
@@ -165,6 +179,8 @@ describe("a menu at a point", () => {
     expect([...(list?.querySelectorAll("[role=menuitem]") ?? [])].map((item) => item.className)).toEqual(["", "", "danger"]);
     await view.update(<PointMenu label="Message" items={items} at={{ x: 40, y: 2000 }} close={() => { closed.push("closed"); }} />);
     expect([list?.style.left, list?.style.top]).toEqual(["40px", `${String(innerHeight - 58)}px`]);
+    await view.update(<PointMenu label="Message" items={items} at={{ x: 2, y: 20 }} close={() => { closed.push("closed"); }} />);
+    expect([list?.style.left, list?.style.top]).toEqual(["8px", "20px"]);
     await acting(() => { labelled(list ?? document.body, "CopyC").click(); });
     expect([chosen, closed]).toEqual([["copy"], ["closed"]]);
   });
@@ -196,8 +212,9 @@ describe("a menu at a point", () => {
     }
     expect([closes, outer]).toEqual([5, 0]);
     for (const [direction, expected] of [["ArrowDown", "Quote"], ["ArrowDown", "Edit"], ["ArrowDown", "Copy"], ["ArrowUp", "Edit"], ["ArrowUp", "Quote"]] as const) {
-      await acting(() => { key(document.activeElement ?? list, direction); });
-      expect(document.activeElement?.textContent).toBe(expected);
+      let event: KeyboardEvent | undefined;
+      await acting(() => { event = key(document.activeElement ?? list, direction); });
+      expect([document.activeElement?.textContent, event?.defaultPrevented]).toEqual([expected, true]);
     }
     const plain = key(document.activeElement ?? list, "a");
     expect(plain.defaultPrevented).toBe(false);
@@ -208,6 +225,16 @@ describe("a menu at a point", () => {
     expect(document.activeElement).toBe(opener);
     await acting(() => { dispatchEvent(new Event("resize")); document.body.dispatchEvent(new PointerEvent("pointerdown", { bubbles: true })); dispatchEvent(new Event("blur")); });
     expect(closes, "nothing is listening once it is gone").toBe(5);
+  });
+
+  test("closes with the newest close it was given", async () => {
+    const { PointMenu } = await controls();
+    const closed: string[] = [];
+    const items = [{ label: "Copy", onSelect: () => {} }];
+    const view = await mount(<PointMenu label="Message" items={items} at={{ x: 10, y: 10 }} close={() => { closed.push("first"); }} />);
+    await view.update(<PointMenu label="Message" items={items} at={{ x: 10, y: 10 }} close={() => { closed.push("second"); }} />);
+    await acting(() => { dispatchEvent(new Event("resize")); });
+    expect(closed).toEqual(["second"]);
   });
 
   test("leaves the focus alone when what opened it is gone", async () => {

@@ -1,4 +1,4 @@
-import { useEffect, useId, useLayoutEffect, useRef, useState, type ButtonHTMLAttributes, type KeyboardEvent, type ReactNode } from "react";
+import { useCallback, useEffect, useId, useRef, useState, type ButtonHTMLAttributes, type KeyboardEvent, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 import { Icon, type IconName } from "./icons.tsx";
 
@@ -60,13 +60,14 @@ export function Menu({ label, items, trigger, triggerLabel, triggerClassName = "
 }
 
 export function PointMenu({ label, items, at, close }: { label: string; items: readonly MenuItem[]; at: { x: number; y: number }; close: () => void }) {
-  const list = useRef<HTMLDivElement>(null);
+  const list = useRef<HTMLDivElement | null>(null);
   const [place, setPlace] = useState(at);
   const closing = useRef(close);
   closing.current = close;
-  useLayoutEffect(() => {
-    const box = list.current?.getBoundingClientRect();
-    if (box === undefined) return;
+  const placed = useCallback((node: HTMLDivElement | null) => {
+    list.current = node;
+    if (node === null) return;
+    const box = node.getBoundingClientRect();
     setPlace({ x: Math.max(8, Math.min(at.x, innerWidth - box.width - 8)), y: Math.max(8, Math.min(at.y, innerHeight - box.height - 8)) });
   }, [at.x, at.y]);
   useEffect(() => {
@@ -95,7 +96,7 @@ export function PointMenu({ label, items, at, close }: { label: string; items: r
     if (event.key === "ArrowDown") { event.preventDefault(); move(1); }
     if (event.key === "ArrowUp") { event.preventDefault(); move(-1); }
   };
-  return createPortal(<div className="menu-list point" role="menu" aria-label={label} ref={list} style={{ left: place.x, top: place.y }} onKeyDown={onKeyDown} onContextMenu={(event) => event.preventDefault()}>
+  return createPortal(<div className="menu-list point" role="menu" aria-label={label} ref={placed} style={{ left: place.x, top: place.y }} onKeyDown={onKeyDown} onContextMenu={(event) => event.preventDefault()}>
     {items.map((item, index) => item === "separator" ? <div key={index} className="menu-separator" role="separator" /> :
       <MenuButton key={index} item={item} choose={() => { close(); item.onSelect(); }} />)}
   </div>, document.body);
