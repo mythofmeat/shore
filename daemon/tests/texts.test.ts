@@ -59,7 +59,7 @@ test("a text is Shore's wording until config points it at a file, which is read 
 test("texts sent elsewhere as their overrides alone come back with the same wording, switched off where they were", async () => {
   const dir = await mkdtemp(testTmp("texts-overrides-"));
   await writeFile(join(dir, "time.md"), "[at {{now}}]\n");
-  const overrides = new Texts({ time: "time.md", status: false }, dir).overrides(["time", "status", "wake_running"]);
+  const overrides = new Texts({ time: "time.md", status: false }, dir).overrides();
   expect(overrides).toEqual({ time: "[at {{now}}]", status: null });
   const back = Texts.from(overrides);
   expect([back.render("time", { now: "noon" }), back.render("status"), back.wording("wake_running")]).toEqual(["[at noon]", undefined, required(TEXT_SPECS.get("wake_running")).shipped]);

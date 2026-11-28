@@ -14,6 +14,7 @@ import { noisePng } from "./support/test_images.ts";
 import { SQUARE_WEBM_16X16_ONE_SECOND } from "./support/tiny_videos.ts";
 import { toolMediaOf } from "../src/tools/media.ts";
 import { rejectionOf } from "./support/outcome.ts";
+import { required } from "../src/util/required.ts";
 import { sizedImage } from "./support/sized_image.ts";
 import { testTmp } from "./support/tmp.ts";
 
@@ -268,7 +269,7 @@ describe("where a read stops", () => {
     let abortAt: { count: number; controller: AbortController } | undefined;
     const real = fileAccess.openRegularFile;
     const spy = spyOn(fileAccess, "openRegularFile").mockImplementation(async (path) => {
-      const handle = await real(path);
+      const handle = required(await real(path));
       const original = handle.read.bind(handle);
       handle.read = async (...args: Parameters<typeof handle.read>) => {
         reads += 1;

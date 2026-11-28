@@ -101,7 +101,7 @@ export async function expandMarkdownImages(
   };
   const payload: ToolResultPayload = { value: page.output, media: [], extra: [], notes };
   try {
-    const bytes = await readBoundedFile(file, path, MAX_MARKDOWN_IMAGE_SOURCE_BYTES, "Markdown image source", signal);
+    const bytes = await readBoundedFile(texts, file, path, MAX_MARKDOWN_IMAGE_SOURCE_BYTES, "file_kind_markdown", signal);
     const source = new TextDecoder().decode(bytes);
     if (page.ranges.some((range) => source.slice(range.start, range.end) !== range.text)) throw new Error(texts.always("read_md_changed"));
     const refs = imageRefs(source, page);

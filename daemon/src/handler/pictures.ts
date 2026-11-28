@@ -4,7 +4,7 @@ import { embedsIn, type Embed } from "../engine/embeds.ts";
 import type { ContentBlock, ImageRef } from "../engine/types.ts";
 import { isSentVideo, keepSentPicture, keepSentVideo, shownPicturePath } from "../storage/sent_pictures.ts";
 import type { CharacterWorkspace } from "../tools/character_workspace.ts";
-import { CANNOT_BE_SENT, type PictureLookup } from "../tools/message_pictures.ts";
+import type { PictureLookup } from "../tools/message_pictures.ts";
 import type { NotificationPicture } from "../notifications.ts";
 import { imageMime } from "../tools/read_image.ts";
 import { videoMime } from "../tools/video.ts";
@@ -38,7 +38,7 @@ function messageEmbeds(texts: readonly string[]): Embed[] {
 async function lookUp(embeds: readonly Embed[], workspace: CharacterWorkspace, signal?: AbortSignal): Promise<PictureLookup[]> {
   const wanted = embeds.slice(0, MAX_SENT_PICTURES);
   if (wanted.length === 0) return [];
-  return await workspace.call("pictures", { workspaceDir: workspace.dir, targets: wanted.map(({ target, wikilink }) => ({ target, wikilink })) }, signal);
+  return await workspace.call("pictures", { workspaceDir: workspace.dir, targets: wanted.map(({ target, wikilink }) => ({ target, wikilink })), texts: workspace.texts.overrides() }, signal);
 }
 
 function unsent(embed: Embed, problem: string): ImageRef {
@@ -59,13 +59,13 @@ async function keepBytes(path: string, bytes: Buffer, sender: PictureSender, sig
   const video = videoMime(bytes);
   if (video !== undefined) return await keepSentVideo(sender.dir, bytes, video, async () => await firstFrame(path, sender, signal));
   const mime = imageMime(bytes.subarray(0, 12));
-  if (mime === undefined) throw new Error(CANNOT_BE_SENT);
+  if (mime === undefined) throw new Error(sender.workspace.texts.always("picture_send_type"));
   return await keepSentPicture(sender.dir, bytes, mime);
 }
 
 async function keep(embed: Embed, path: string, sender: PictureSender, signal?: AbortSignal): Promise<ImageRef> {
   const [read] = await sender.workspace.call("readFiles", { paths: [path] }, signal);
-  if (read === undefined || "error" in read) throw new Error(read?.error.message ?? "it could not be read");
+  if (read === undefined || "error" in read) throw new Error(read?.error.message ?? sender.workspace.texts.always("picture_send_unreadable"));
   const bytes = Buffer.from(read.data, "base64");
   return {
     path: await keepBytes(path, bytes, sender, signal),

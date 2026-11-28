@@ -30,7 +30,6 @@ import type { Message } from "../engine/types.ts";
 import type { NewSealedThread } from "../engine/sealed.ts";
 import type { ThreadRecord } from "../engine/threads.ts";
 import type { Texts } from "../texts/texts.ts";
-import { READ_TEXT_NAMES } from "../texts/registry.ts";
 
 export interface ToolContext {
   texts: Texts;
@@ -139,7 +138,7 @@ export async function dispatchTool(
       return decodeToolValue(await workspace.call("read", {
         input: args,
         workspaceDir: ctx.workspaceDir,
-        texts: ctx.texts.overrides(READ_TEXT_NAMES),
+        texts: ctx.texts.overrides(),
         ...(ctx.maxResultChars === undefined ? {} : { maxChars: ctx.maxResultChars }),
         ...(ctx.maxInlineImageBytes === undefined ? {} : { maxImageBytes: ctx.maxInlineImageBytes }),
         ...(ctx.images === undefined ? {} : { images: ctx.images }),
@@ -147,7 +146,7 @@ export async function dispatchTool(
     case "edit":
     case "apply_patch": {
       const write = () => withPromptChanges(ctx.texts, workspace,
-        () => name === "edit" ? workspace.call("edit", { input: args, workspaceDir: ctx.workspaceDir }, ctx.signal) : handleApplyPatch(args, workspace, ctx.signal), ctx.deferEdit);
+        () => name === "edit" ? workspace.call("edit", { input: args, workspaceDir: ctx.workspaceDir, texts: ctx.texts.overrides() }, ctx.signal) : handleApplyPatch(args, workspace, ctx.signal), ctx.deferEdit);
       return await (ctx.trackWorkspaceWrite?.(name, input, write) ?? write());
     }
     case "chat_logs":

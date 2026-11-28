@@ -1,6 +1,6 @@
 import type { FileHandle } from "node:fs/promises";
 import { ToolIoError } from "./errors.ts";
-import { openRegularFile, readBoundedFile } from "./file_access.ts";
+import { openFileToRead, readBoundedFile } from "./file_access.ts";
 import type { ToolMediaItem } from "./media.ts";
 import { MAX_IMAGE_BYTES } from "../llm/images.ts";
 import { DEFAULT_IMAGE_LIMITS, ORIGINAL_IMAGE_SETTINGS, reduceImage } from "../llm/prepare_images.ts";
@@ -27,7 +27,7 @@ async function withinImageLimit(texts: Texts, path: string, image: ToolMediaItem
 }
 
 export async function readImage(texts: Texts, file: FileHandle, path: string, mime: string, signal?: AbortSignal): Promise<{ description: string; image: ToolMediaItem }> {
-  const data = await readBoundedFile(file, path, MAX_READ_IMAGE_BYTES, "image", signal);
+  const data = await readBoundedFile(texts, file, path, MAX_READ_IMAGE_BYTES, "file_kind_image", signal);
   const metadata = await new Bun.Image(data).metadata().catch(() => undefined);
   if (metadata === undefined) throw new ToolIoError(texts.always("read_not_decoded", { path }));
   const description = texts.render("read_image", { path, type: mime, width: String(metadata.width), height: String(metadata.height), bytes: String(data.length) }) ?? "";
@@ -44,7 +44,7 @@ export async function readVideoFrame(texts: Texts, file: FileHandle, path: strin
 
 export async function readImageAt(texts: Texts, path: string, accept: (bytes: number) => boolean, signal?: AbortSignal): Promise<ToolMediaItem | undefined> {
   signal?.throwIfAborted();
-  const file = await openRegularFile(path);
+  const file = await openFileToRead(texts, path);
   try {
     if (!accept((await file.stat()).size)) return undefined;
     const header = Buffer.alloc(MEDIA_HEADER_BYTES);

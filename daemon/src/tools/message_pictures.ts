@@ -6,6 +6,7 @@ import { imageMime, MAX_READ_IMAGE_BYTES } from "./read_image.ts";
 import { MEDIA_HEADER_BYTES, videoMime } from "./video.ts";
 import { embeddedPicture, PICTURES_AND_VIDEOS, workspaceNames, type WorkspaceNames } from "./workspace_names.ts";
 import { MAX_SENT_VIDEO_BYTES } from "../storage/sent_pictures.ts";
+import { Texts, type TextOverrides } from "../texts/texts.ts";
 
 export interface PictureTarget {
   target: string;
@@ -13,8 +14,6 @@ export interface PictureTarget {
 }
 
 export type PictureLookup = { path: string } | { problem: string } | null;
-
-export const CANNOT_BE_SENT = "it is not a PNG, JPEG, GIF or WebP picture, or an MP4 or WebM video";
 
 async function exists(path: string): Promise<boolean> {
   try {
@@ -25,8 +24,9 @@ async function exists(path: string): Promise<boolean> {
   }
 }
 
-async function checked(path: string): Promise<{ path: string }> {
+async function checked(texts: Texts, path: string): Promise<{ path: string }> {
   const file = await openRegularFile(path);
+  if (file === undefined) throw new Error(texts.always("file_not_regular", { path }));
   try {
     const size = (await file.stat()).size;
     const header = Buffer.alloc(MEDIA_HEADER_BYTES);
@@ -34,8 +34,8 @@ async function checked(path: string): Promise<{ path: string }> {
     const sniffed = header.subarray(0, head.bytesRead);
     const video = videoMime(sniffed) !== undefined;
     const limit = video ? MAX_SENT_VIDEO_BYTES : MAX_READ_IMAGE_BYTES;
-    if (size > limit) throw new Error(`it is ${String(size)} bytes, over the ${String(limit)}-byte limit for ${video ? "videos" : "pictures"}`);
-    if (!video && imageMime(sniffed) === undefined) throw new Error(CANNOT_BE_SENT);
+    if (size > limit) throw new Error(texts.always("picture_send_too_big", { bytes: String(size), limit: String(limit), video: video ? "yes" : undefined }));
+    if (!video && imageMime(sniffed) === undefined) throw new Error(texts.always("picture_send_type"));
     return { path };
   } finally {
     await file.close();
@@ -43,9 +43,10 @@ async function checked(path: string): Promise<{ path: string }> {
 }
 
 export async function lookUpPictures(
-  { workspaceDir, targets }: { workspaceDir: string; targets: PictureTarget[] },
+  { workspaceDir, targets, texts: overrides }: { workspaceDir: string; targets: PictureTarget[]; texts: TextOverrides },
   signal?: AbortSignal,
 ): Promise<PictureLookup[]> {
+  const texts = Texts.from(overrides);
   let names: Promise<WorkspaceNames> | undefined;
   const found = () => names ??= workspaceNames(workspaceDir, signal);
   const results: PictureLookup[] = [];
@@ -54,11 +55,11 @@ export async function lookUpPictures(
     try {
       const requested = resolve(workspaceDir, target);
       if (!wikilink && await exists(requested)) {
-        results.push(await checked(requested));
+        results.push(await checked(texts, requested));
         continue;
       }
       const path = await embeddedPicture(await found(), target, MAX_LISTED_MEDIA_NOTES, PICTURES_AND_VIDEOS);
-      results.push(path === undefined ? null : await checked(path));
+      results.push(path === undefined ? null : await checked(texts, path));
     } catch (error) {
       signal?.throwIfAborted();
       results.push({ problem: error instanceof Error ? error.message : String(error) });

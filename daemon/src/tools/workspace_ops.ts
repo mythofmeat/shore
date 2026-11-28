@@ -19,8 +19,8 @@ export type EncodedToolValue = { value: unknown } | { media: ToolResultPayload }
 
 export interface WorkspaceOpTable {
   read: (args: { input: Record<string, unknown>; workspaceDir: string; texts: TextOverrides; maxChars?: number; maxImageBytes?: number; images?: ImagesConfig }, signal?: AbortSignal) => Promise<EncodedToolValue>;
-  edit: (args: { input: Record<string, unknown>; workspaceDir: string }, signal?: AbortSignal) => Promise<string>;
-  pictures: (args: { workspaceDir: string; targets: PictureTarget[] }, signal?: AbortSignal) => Promise<PictureLookup[]>;
+  edit: (args: { input: Record<string, unknown>; workspaceDir: string; texts: TextOverrides }, signal?: AbortSignal) => Promise<string>;
+  pictures: (args: { workspaceDir: string; targets: PictureTarget[]; texts: TextOverrides }, signal?: AbortSignal) => Promise<PictureLookup[]>;
   firstFrame: (args: { path: string }, signal?: AbortSignal) => Promise<string | null>;
   locateFiles: (args: { workspaceDir: string; files: string[] }, signal?: AbortSignal) => Promise<{ paths: string[]; problems: string[] }>;
   listFiles: (args: { workspaceDir: string }, signal?: AbortSignal) => Promise<string[]>;
@@ -63,7 +63,7 @@ async function pruneEmptyParents(root: string, path: string): Promise<void> {
 export const WORKSPACE_OPS: WorkspaceOpTable = {
   read: async ({ input, workspaceDir, texts, maxChars, maxImageBytes, images }, signal) =>
     encodeToolValue(await handleRead(input, workspaceDir, Texts.from(texts), signal, maxChars, maxImageBytes, images)),
-  edit: async ({ input, workspaceDir }, signal) => await handleEdit(input, workspaceDir, signal),
+  edit: async ({ input, workspaceDir, texts }, signal) => await handleEdit(Texts.from(texts), input, workspaceDir, signal),
   pictures: async (args, signal) => await lookUpPictures(args, signal),
   firstFrame: async ({ path }, signal) => (await firstVideoFrame(path, signal))?.toString("base64") ?? null,
   locateFiles: async ({ workspaceDir, files }, signal) => await locateWorkspaceFiles(files, workspaceDir, signal),

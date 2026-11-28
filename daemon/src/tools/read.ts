@@ -2,7 +2,7 @@ import { readFile, stat, type FileHandle } from "node:fs/promises";
 import { extname, join, relative, sep } from "node:path";
 import { carryToolMedia, DEFAULT_MAX_INLINE_IMAGE_BYTES, toolMediaOf } from "./media.ts";
 import { InvalidArgs, ToolIoError } from "./errors.ts";
-import { filePath, openRegularFile } from "./file_access.ts";
+import { filePath, openFileToRead } from "./file_access.ts";
 import { IMAGE_EXTENSIONS, imageMime, readImage, readVideoFrame } from "./read_image.ts";
 import { MEDIA_HEADER_BYTES, videoMime } from "./video.ts";
 import { expandMarkdownImages, type TextPage } from "./markdown_images.ts";
@@ -146,7 +146,7 @@ export async function handleRead(
   maxImageBytes = DEFAULT_MAX_INLINE_IMAGE_BYTES, images: ImagesConfig = defaultImagesConfig(),
 ): Promise<unknown> {
   signal?.throwIfAborted();
-  const requested = filePath(input, workspaceDir);
+  const requested = filePath(texts, input, workspaceDir);
   const offset = (input.offset ?? 1) as number;
   const limit = (input.limit ?? MAX_READ_LINES) as number;
   const original = input.original === true;
@@ -155,7 +155,7 @@ export async function handleRead(
     if (input.offset !== undefined || input.limit !== undefined || original) throw new InvalidArgs(texts.always("read_folder_options"));
     return withNote((await readFolder(texts, path, resultBudget(maxChars), signal)).text, note);
   }
-  const file = await openRegularFile(path);
+  const file = await openFileToRead(texts, path);
   try {
     const header = Buffer.alloc(MEDIA_HEADER_BYTES);
     const head = await file.read(header, 0, header.length, 0);

@@ -57,8 +57,8 @@ export class Texts {
     return texts;
   }
 
-  overrides(names: readonly string[]): TextOverrides {
-    return Object.fromEntries(names.filter((name) => this.#wording.has(name)).map((name) => [name, this.#wording.get(name) ?? null]));
+  overrides(): TextOverrides {
+    return Object.fromEntries([...this.#wording].map(([name, wording]) => [name, wording ?? null]));
   }
 
   wording(name: string): string | undefined {

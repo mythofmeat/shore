@@ -193,6 +193,25 @@ import t__tools__autonomy__list_triggers__answers__check_failing from "../../pro
 import t__tools__autonomy__list_triggers__answers__check_not_run from "../../prompts/tools/autonomy/list_triggers/answers/check_not_run.md" with { type: "text" };
 import t__tools__autonomy__list_triggers__answers__checked_quiet from "../../prompts/tools/autonomy/list_triggers/answers/checked_quiet.md" with { type: "text" };
 import t__tools__autonomy__list_triggers__answers__starts from "../../prompts/tools/autonomy/list_triggers/answers/starts.md" with { type: "text" };
+import t__tools__workspace__files__path_form from "../../prompts/tools/workspace/files/path_form.md" with { type: "text" };
+import t__tools__workspace__files__no_workspace from "../../prompts/tools/workspace/files/no_workspace.md" with { type: "text" };
+import t__tools__workspace__files__not_regular from "../../prompts/tools/workspace/files/not_regular.md" with { type: "text" };
+import t__tools__workspace__files__too_big from "../../prompts/tools/workspace/files/too_big.md" with { type: "text" };
+import t__tools__workspace__files__changed from "../../prompts/tools/workspace/files/changed.md" with { type: "text" };
+import t__tools__workspace__files__kind_image from "../../prompts/tools/workspace/files/kind_image.md" with { type: "text" };
+import t__tools__workspace__files__kind_markdown from "../../prompts/tools/workspace/files/kind_markdown.md" with { type: "text" };
+import t__tools__workspace__edit__answers__same from "../../prompts/tools/workspace/edit/answers/same.md" with { type: "text" };
+import t__tools__workspace__edit__answers__not_file from "../../prompts/tools/workspace/edit/answers/not_file.md" with { type: "text" };
+import t__tools__workspace__edit__answers__not_utf8 from "../../prompts/tools/workspace/edit/answers/not_utf8.md" with { type: "text" };
+import t__tools__workspace__edit__answers__binary from "../../prompts/tools/workspace/edit/answers/binary.md" with { type: "text" };
+import t__tools__workspace__edit__answers__no_match from "../../prompts/tools/workspace/edit/answers/no_match.md" with { type: "text" };
+import t__tools__workspace__edit__answers__many_matches from "../../prompts/tools/workspace/edit/answers/many_matches.md" with { type: "text" };
+import t__tools__workspace__edit__answers__changed from "../../prompts/tools/workspace/edit/answers/changed.md" with { type: "text" };
+import t__tools__workspace__edit__answers__stalled from "../../prompts/tools/workspace/edit/answers/stalled.md" with { type: "text" };
+import t__tools__workspace__edit__answers__done from "../../prompts/tools/workspace/edit/answers/done.md" with { type: "text" };
+import t__messages__sending__unreadable from "../../prompts/messages/sending/unreadable.md" with { type: "text" };
+import t__messages__sending__too_big from "../../prompts/messages/sending/too_big.md" with { type: "text" };
+import t__messages__sending__type from "../../prompts/messages/sending/type.md" with { type: "text" };
 import messages__earlier_not_shown from "../../prompts/messages/earlier_not_shown.md" with { type: "text" };
 import messages__opened_by_you from "../../prompts/messages/opened_by_you.md" with { type: "text" };
 import messages__picture_gone from "../../prompts/messages/picture_gone.md" with { type: "text" };
@@ -519,8 +538,6 @@ export const MCP_TEXTS: readonly TextSpec[] = [
   text("mcp_resource_link", mcp__resource_link, "In an MCP tool's result, a link to a resource.", { name: "its name, when the server gave one", uri: MCP_URI, type: MCP_TYPE }),
 ];
 
-export const MCP_TEXT_NAMES: readonly string[] = MCP_TEXTS.map((spec) => spec.name);
-
 export const SEND_TEXTS: readonly TextSpec[] = [
   text("send_queued", t__tools__autonomy__send_message__answers__queued, "What send_message answers once a message is waiting to go.", { here: "set when it goes in the thread the character is in", thread: "the thread it goes in", wake: "set when the character is in a wake", push: "set when it goes with a push", user: "the user's name" }),
   must("send_in_reply", t__tools__autonomy__send_message__answers__in_reply, "send_message's error for a message to the thread the character is answering the user in.", { user: "the user's name" }),
@@ -631,6 +648,34 @@ export const TRIGGERS_TOOL_TEXTS: readonly TextSpec[] = [
   text("triggers_starts", t__tools__autonomy__list_triggers__answers__starts, "When an asked-for wake starts, in triggers_asked_entry.", { at: "when, when it was given a time" }),
 ];
 
+export const FILE_TEXTS: readonly TextSpec[] = [
+  must("file_path_form", t__tools__workspace__files__path_form, "The error of read and edit for a file_path that is blank or has a NUL byte in it."),
+  must("file_no_workspace", t__tools__workspace__files__no_workspace, "The error of a tool that works in the workspace when the character has none."),
+  must("file_not_regular", t__tools__workspace__files__not_regular, "read's error for something that isn't a file, like a device.", { path: "the file's path" }),
+  must("file_too_big", t__tools__workspace__files__too_big, "read's error for a picture, or a Markdown file it looks for pictures in, too big to read.", { path: "the file's path", kind: "what it is, as file_kind_image or file_kind_markdown has it", limit: "how many bytes it can be" }),
+  must("file_changed", t__tools__workspace__files__changed, "read's error for a picture, or a Markdown file it looks for pictures in, that changed while it was read.", { path: "the file's path", kind: "what it is, as file_kind_image or file_kind_markdown has it" }),
+  must("file_kind_image", t__tools__workspace__files__kind_image, "What file_too_big and file_changed call a picture."),
+  must("file_kind_markdown", t__tools__workspace__files__kind_markdown, "What file_too_big and file_changed call a Markdown file read looks for pictures in."),
+];
+
+export const EDIT_TEXTS: readonly TextSpec[] = [
+  must("edit_same", t__tools__workspace__edit__answers__same, "edit's error when old_string and new_string are the same."),
+  must("edit_not_file", t__tools__workspace__edit__answers__not_file, "edit's error for something that isn't a file.", { path: "the file's path" }),
+  must("edit_not_utf8", t__tools__workspace__edit__answers__not_utf8, "edit's error for a file that isn't UTF-8 text.", { path: "the file's path" }),
+  must("edit_binary", t__tools__workspace__edit__answers__binary, "edit's error for a file with a NUL byte in it.", { path: "the file's path" }),
+  must("edit_no_match", t__tools__workspace__edit__answers__no_match, "edit's error when old_string isn't in the file.", { path: "the file's path" }),
+  must("edit_many_matches", t__tools__workspace__edit__answers__many_matches, "edit's error when old_string is in the file more than once and replace_all isn't set.", { path: "the file's path" }),
+  must("edit_changed", t__tools__workspace__edit__answers__changed, "edit's error when the file changes while it is checked.", { path: "the file's path" }),
+  must("edit_stalled", t__tools__workspace__edit__answers__stalled, "edit's error when writing the file stops part way.", { path: "the file's path" }),
+  text("edit_done", t__tools__workspace__edit__answers__done, "What edit answers once it has changed the file.", { path: "the file's path", count: "how many it replaced", one: "set when it replaced one" }),
+];
+
+export const PICTURE_SEND_TEXTS: readonly TextSpec[] = [
+  must("picture_send_unreadable", t__messages__sending__unreadable, "Why a picture the character put in a message can't be sent, when its file can't be read and says no more."),
+  must("picture_send_too_big", t__messages__sending__too_big, "Why a picture or video the character put in a message can't be sent, when it is too big.", { bytes: "how many bytes it is", limit: "how many it can be", video: "set when it is a video" }),
+  must("picture_send_type", t__messages__sending__type, "Why a file the character put in a message as a picture can't be sent, when it isn't one."),
+];
+
 const GUIDE_VALUES = { user: "the user's name", tools_off: "the tools a topic names that are off" };
 
 export const GUIDE_TEXTS: readonly TextSpec[] = [
@@ -686,9 +731,7 @@ export const TOOL_TEXTS: readonly TextSpec[] = Object.entries(TOOL_TEXTS_SHIPPED
   ...Object.entries(parameters).map(([parameter, shipped]) => text(parameterText(tool, parameter), shipped, `The description of the ${parameter} parameter of ${tool}.`, TOOL_VALUES)),
 ]);
 
-export const READ_TEXT_NAMES: readonly string[] = READ_TEXTS.map((spec) => spec.name);
-
-export const TEXTS: readonly TextSpec[] = [...MESSAGE_TEXTS, ...SYSTEM_TEXTS, ...WAKE_TEXTS, ...TOOL_TEXTS, ...OTHER_TEXTS, ...IMAGE_TEXTS, ...READ_TEXTS, ...MCP_TEXTS, ...SEND_TEXTS, ...ARG_TEXTS, ...WAKE_TOOL_TEXTS, ...TOOL_COMMON_TEXTS, ...ARG_COMMON_TEXTS, ...THREADS_TOOL_TEXTS, ...TRIGGERS_TOOL_TEXTS, ...GUIDE_TEXTS];
+export const TEXTS: readonly TextSpec[] = [...MESSAGE_TEXTS, ...SYSTEM_TEXTS, ...WAKE_TEXTS, ...TOOL_TEXTS, ...OTHER_TEXTS, ...IMAGE_TEXTS, ...READ_TEXTS, ...MCP_TEXTS, ...SEND_TEXTS, ...ARG_TEXTS, ...WAKE_TOOL_TEXTS, ...TOOL_COMMON_TEXTS, ...ARG_COMMON_TEXTS, ...THREADS_TOOL_TEXTS, ...TRIGGERS_TOOL_TEXTS, ...FILE_TEXTS, ...EDIT_TEXTS, ...PICTURE_SEND_TEXTS, ...GUIDE_TEXTS];
 
 export const TEXT_SPECS: ReadonlyMap<string, TextSpec> = new Map(TEXTS.map((spec) => [spec.name, spec]));
 
