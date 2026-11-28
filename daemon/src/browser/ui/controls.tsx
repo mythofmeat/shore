@@ -1,4 +1,4 @@
-import { useEffect, useId, useLayoutEffect, useRef, useState, type ButtonHTMLAttributes, type KeyboardEvent, type ReactNode } from "react";
+import { useCallback, useEffect, useId, useRef, useState, type ButtonHTMLAttributes, type KeyboardEvent, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 import { Icon, type IconName } from "./icons.tsx";
 
@@ -6,7 +6,17 @@ export function IconButton({ icon, label, size = 18, className = "", ...props }:
   return <button type="button" className={`icon-button ${className}`} aria-label={label} title={label} {...props}><Icon name={icon} size={size} /></button>;
 }
 
-export type MenuItem = { label: string; icon?: IconName; onSelect: () => void; danger?: boolean; disabled?: boolean; detail?: string } | "separator";
+export type MenuItem = { label: string; icon?: IconName; onSelect: () => void; danger?: boolean; disabled?: boolean; detail?: string; description?: string } | "separator";
+
+function MenuButton({ item, choose }: { item: Exclude<MenuItem, "separator">; choose: () => void }) {
+  const id = useId();
+  const described = item.description === undefined ? {} : { "aria-labelledby": `${id}-label`, "aria-describedby": `${id}-description` };
+  return <button type="button" role="menuitem" className={item.danger === true ? "danger" : ""} disabled={item.disabled} {...described} onClick={choose}>
+    {item.icon === undefined ? null : <Icon name={item.icon} size={16} />}
+    {item.description === undefined ? <span className="menu-label">{item.label}</span> : <span className="menu-text"><span className="menu-label" id={`${id}-label`}>{item.label}</span><span className="menu-description" id={`${id}-description`}>{item.description}</span></span>}
+    {item.detail === undefined ? null : <span className="menu-detail">{item.detail}</span>}
+  </button>;
+}
 
 export function Menu({ label, items, trigger, triggerLabel, triggerClassName = "icon-button", align = "end", placement = "below", openEvent, defaultOpen = false, icon = "more" }: {
   label: string; items: readonly MenuItem[]; trigger?: ReactNode; triggerLabel?: string; triggerClassName?: string; align?: "start" | "end"; placement?: "below" | "above"; openEvent?: string; defaultOpen?: boolean; icon?: IconName;
@@ -44,21 +54,20 @@ export function Menu({ label, items, trigger, triggerLabel, triggerClassName = "
     </button>
     {open ? <div className={`menu-list align-${align} ${placement}`} role="menu" id={id} aria-label={label} ref={list}>
       {items.map((item, index) => item === "separator" ? <div key={index} className="menu-separator" role="separator" /> :
-        <button key={index} type="button" role="menuitem" className={item.danger === true ? "danger" : ""} disabled={item.disabled} onClick={() => { setOpen(false); item.onSelect(); }}>
-          {item.icon === undefined ? null : <Icon name={item.icon} size={16} />}<span className="menu-label">{item.label}</span>{item.detail === undefined ? null : <span className="menu-detail">{item.detail}</span>}
-        </button>)}
+        <MenuButton key={index} item={item} choose={() => { setOpen(false); item.onSelect(); }} />)}
     </div> : null}
   </div>;
 }
 
 export function PointMenu({ label, items, at, close }: { label: string; items: readonly MenuItem[]; at: { x: number; y: number }; close: () => void }) {
-  const list = useRef<HTMLDivElement>(null);
+  const list = useRef<HTMLDivElement | null>(null);
   const [place, setPlace] = useState(at);
   const closing = useRef(close);
   closing.current = close;
-  useLayoutEffect(() => {
-    const box = list.current?.getBoundingClientRect();
-    if (box === undefined) return;
+  const placed = useCallback((node: HTMLDivElement | null) => {
+    list.current = node;
+    if (node === null) return;
+    const box = node.getBoundingClientRect();
     setPlace({ x: Math.max(8, Math.min(at.x, innerWidth - box.width - 8)), y: Math.max(8, Math.min(at.y, innerHeight - box.height - 8)) });
   }, [at.x, at.y]);
   useEffect(() => {
@@ -87,11 +96,9 @@ export function PointMenu({ label, items, at, close }: { label: string; items: r
     if (event.key === "ArrowDown") { event.preventDefault(); move(1); }
     if (event.key === "ArrowUp") { event.preventDefault(); move(-1); }
   };
-  return createPortal(<div className="menu-list point" role="menu" aria-label={label} ref={list} style={{ left: place.x, top: place.y }} onKeyDown={onKeyDown} onContextMenu={(event) => event.preventDefault()}>
+  return createPortal(<div className="menu-list point" role="menu" aria-label={label} ref={placed} style={{ left: place.x, top: place.y }} onKeyDown={onKeyDown} onContextMenu={(event) => event.preventDefault()}>
     {items.map((item, index) => item === "separator" ? <div key={index} className="menu-separator" role="separator" /> :
-      <button key={index} type="button" role="menuitem" className={item.danger === true ? "danger" : ""} disabled={item.disabled} onClick={() => { close(); item.onSelect(); }}>
-        {item.icon === undefined ? null : <Icon name={item.icon} size={16} />}<span className="menu-label">{item.label}</span>{item.detail === undefined ? null : <span className="menu-detail">{item.detail}</span>}
-      </button>)}
+      <MenuButton key={index} item={item} choose={() => { close(); item.onSelect(); }} />)}
   </div>, document.body);
 }
 
