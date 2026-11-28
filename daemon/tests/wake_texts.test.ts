@@ -34,10 +34,22 @@ test("a wake is warned a sixth of its limit before the end, and never more than 
 });
 
 test("a length of time is spelled in the largest unit that fits it evenly, down to seconds under a minute", () => {
-  expect([0, 1, 59, 60, 61, 119, 120, 1500, 3599, 3600, 6300, 7200].map((secs) => spanPhrase(secs * 1000))).toEqual([
+  expect([0, 1, 59, 60, 61, 119, 120, 1500, 3599, 3600, 6300, 7200].map((secs) => spanPhrase(new Texts(), secs * 1000))).toEqual([
     "0 seconds", "1 second", "59 seconds", "1 minute", "1 minute", "1 minute", "2 minutes", "25 minutes", "59 minutes", "1 hour", "105 minutes", "2 hours",
   ]);
-  expect(spanPhrase(59_999)).toBe("59 seconds");
+  expect(spanPhrase(new Texts(), 59_999)).toBe("59 seconds");
+});
+
+test("a wake's limits and the time it has left are worded as exact_length and time_left say, and a minute left is about a minute", () => {
+  expect(wakeWrapUpText(new Texts(), MINUTE, 2, "eve")).toStartWith("[System nudge: this wake stops in about a minute or after 2 more rounds, ");
+  const theirs = Texts.from({
+    exact_length: "{{#if seconds}}{{seconds}} s{{/if}}{{#if minutes}}{{minutes}} min{{/if}}{{#if hours}}{{hours}} h{{/if}}",
+    time_left: "{{#if minutes}}~{{minutes}} min{{else}}under a min{{/if}}",
+  });
+  expect(wakeWrapUpText(theirs, 4 * MINUTE, 3, "eve")).toStartWith("[System nudge: this wake stops in ~4 min or after 3 more rounds, ");
+  expect(wakeWrapUpText(theirs, 30_000, 1, "eve")).toStartWith("[System nudge: this wake stops in under a min or after this round, ");
+  expect(wakeStoppedNote(theirs, { why: "time" }, "eve", 2 * 60 * MINUTE, [])).toBe("[This wake reached its limit of 2 h, and Shore stopped it here.]");
+  expect([30_000, 25 * MINUTE].map((ms) => spanPhrase(theirs, ms))).toEqual(["30 s", "25 min"]);
 });
 
 test("a wake's wrap-up nudge says how long is left, how many rounds, and that the next wake starts fresh", () => {
@@ -234,7 +246,7 @@ test("a dry run doesn't hand a wake over, start a thread or call an outside tool
   const data = await mkdtemp(testTmp("shore-wake-texts-"));
   await createThread(data, "ada", "ring", "2026-11-01T00:00:00Z");
   const ctx: ToolContext = {
-    texts: new Texts(),
+    texts: new Texts(), userName: "eve",
     workspaceDir: "/nowhere", characterName: "ada", characterDataDir: "/nowhere", conversationDir: "/nowhere",
     historyDbPath: join(data, "shore.db"), configDir: "/nowhere", dryRun: true, thread: "main",
     wakeInThread: (request) => {
@@ -262,7 +274,7 @@ test("a dry run doesn't hand a wake over, start a thread or call an outside tool
   expect(asked).toEqual([]);
   expect(String(await dispatchTool("list_triggers", {}, ctx))).toContain("You have none there yet, so no trigger wakes you.");
   expect(await dispatchTool("wake_in_thread", { thread: "ring", reason: "r" }, { ...ctx, dryRun: false })).toBe(
-    'Shore will wake you in "ring" for up to 30 minutes, once this turn is over and the user has been quiet there for 10 minutes.',
+    'Shore will wake you in "ring" for up to 30 minutes, once this turn is over and eve has been quiet there for 10 minutes.',
   );
   expect(asked).toEqual([{ thread: "ring", reason: "r", limitMs: undefined, overwrite: false }]);
 });

@@ -1,0 +1,1 @@
+{{#if seconds}}{{seconds}} {{#if one}}second{{else}}seconds{{/if}}{{/if}}{{#if minutes}}{{minutes}} {{#if one}}minute{{else}}minutes{{/if}}{{/if}}{{#if hours}}{{hours}} {{#if one}}hour{{else}}hours{{/if}}{{/if}}

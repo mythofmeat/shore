@@ -67,7 +67,7 @@ export function wakeStartsAt(texts: Texts, value: unknown, now: number, timeZone
   const text = typeof value === "string" ? value.trim() : "";
   const at = atDateTime(text, timeZone) ?? afterLength(text, now);
   if (at === undefined) throw new InvalidArgs(texts.always("wake_when_form"));
-  if (at <= now) throw new InvalidArgs(texts.always("wake_when_past", { when: formatWallClock(at, timeZone), now: formatWallClock(now, timeZone) }));
+  if (at <= now) throw new InvalidArgs(texts.always("wake_when_past", { when: formatWallClock(texts, at, timeZone), now: formatWallClock(texts, now, timeZone) }));
   return at;
 }
 
@@ -95,8 +95,8 @@ export function wakeInThreadRequest(texts: Texts, input: Record<string, unknown>
 function askedFor(texts: Texts, waiting: WaitingWake, timeZone: string): string | undefined {
   return texts.render("wake_asked_for", {
     from: waiting.from ?? "",
-    at: formatWallClock(waiting.at, timeZone),
-    starts: waiting.startsAt === undefined ? undefined : formatWallClock(waiting.startsAt, timeZone),
+    at: formatWallClock(texts, waiting.at, timeZone),
+    starts: waiting.startsAt === undefined ? undefined : formatWallClock(texts, waiting.startsAt, timeZone),
     reason: waiting.reason,
   });
 }
@@ -136,10 +136,10 @@ export function handleWakeInThread(
   if (outcome.kind === "waiting") throw new ToolIoError(texts.always("wake_waiting", { thread, asked: askedFor(texts, outcome.waiting, timeZone) }));
   return texts.render("wake_queued", {
     thread,
-    limit: spanPhrase(outcome.limitMs ?? DEFAULT_WAKE_LIMIT_MS),
-    at: request.startsAt === undefined ? undefined : formatWallClock(request.startsAt, timeZone),
+    limit: spanPhrase(texts, outcome.limitMs ?? DEFAULT_WAKE_LIMIT_MS),
+    at: request.startsAt === undefined ? undefined : formatWallClock(texts, request.startsAt, timeZone),
     user: userName,
-    quiet: spanPhrase(WAKE_QUIET_MS),
+    quiet: spanPhrase(texts, WAKE_QUIET_MS),
     replaced: outcome.replaced === undefined ? undefined : askedFor(texts, outcome.replaced, timeZone),
   }) ?? "";
 }

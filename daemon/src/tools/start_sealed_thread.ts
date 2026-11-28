@@ -38,5 +38,5 @@ export async function handleStartSealedThread(
     if (e instanceof ThreadError) throw startRefusal(texts, e, request.id, userName);
     throw e;
   }
-  return texts.render("threads_sealed", { name: request.id, label: request.label, opens: formatWallClock(Date.parse(started.unsealAt), timeZone), user: userName, folder: started.filesDir }) ?? "";
+  return texts.render("threads_sealed", { name: request.id, label: request.label, opens: formatWallClock(texts, Date.parse(started.unsealAt), timeZone), user: userName, folder: started.filesDir }) ?? "";
 }

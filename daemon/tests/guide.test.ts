@@ -71,7 +71,7 @@ test("a topic the guide doesn't have is refused with the ones it does, and so is
   });
 
   const bare: ToolContext = {
-    texts: new Texts(),
+    texts: new Texts(), userName: "eve",
     workspaceDir: "/nowhere", characterName: "ada", characterDataDir: "/nowhere", conversationDir: "/nowhere",
     historyDbPath: "/nowhere/shore.db", configDir: "/nowhere",
   };

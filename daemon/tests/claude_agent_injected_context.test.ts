@@ -152,7 +152,7 @@ test("a long tool result reaches the model as Shore made it, whole or cut once, 
   };
   const phase = toolPhase({
     ctx: {
-      texts: new Texts(),
+      texts: new Texts(), userName: "eve",
       workspaceDir: workspace, characterName: "heidi", characterDataDir: dir,
       conversationDir: dir, historyDbPath: join(dir, "history.db"), configDir: dir,
     },

@@ -1,0 +1,1 @@
+{{#if sunday}}Sunday{{/if}}{{#if monday}}Monday{{/if}}{{#if tuesday}}Tuesday{{/if}}{{#if wednesday}}Wednesday{{/if}}{{#if thursday}}Thursday{{/if}}{{#if friday}}Friday{{/if}}{{#if saturday}}Saturday{{/if}}

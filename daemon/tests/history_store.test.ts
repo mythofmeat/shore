@@ -203,7 +203,7 @@ test("a compaction remains readable after its JSONL recovery copy is removed", a
   expect(await reader.readSegment(0)).toEqual(messages);
   reader.close();
 
-  const options = { texts: new Texts(), character: "ada", dbPath, timeZone: "Australia/Canberra" };
+  const options = { texts: new Texts(), userName: "user", character: "ada", dbPath, timeZone: "Australia/Canberra" };
   expect(await handleSearchChatLogs({ query: "hello", all_time: true }, characterDir, options)).toBe([
     "hello: 1 match, showing 1–1, best match first",
     "",
@@ -250,7 +250,7 @@ test("chat logs show where each picture the user sent is kept, or just its name 
     "compact-2",
   );
 
-  const options = { texts: new Texts(), character: "ada", dbPath, timeZone: "Australia/Canberra" };
+  const options = { texts: new Texts(), userName: "user", character: "ada", dbPath, timeZone: "Australia/Canberra" };
   expect(await handleSearchChatLogs({ query: "IMG_0955", all_time: true }, characterDir, options)).toBe([
     "IMG_0955: 1 match, showing 1–1, best match first",
     "",
@@ -299,7 +299,7 @@ test("chat logs show and search pictures in the user's wording of picture, embed
   await writeFile(join(config, "picture.md"), "(photo {{path}})\n");
   await writeFile(join(config, "sent.md"), "(sent {{#if video}}clip{{else}}photo{{/if}} {{name}})\n");
   await writeFile(join(config, "unsent.md"), "(missing {{#if video}}clip{{else}}photo{{/if}} {{name}})\n");
-  const options = (texts: Texts) => ({ texts, character: "ada", dbPath: dirs.dbPath, timeZone: "Australia/Canberra" });
+  const options = (texts: Texts) => ({ texts, userName: "user", character: "ada", dbPath: dirs.dbPath, timeZone: "Australia/Canberra" });
   const using = (texts: Texts): Texts => {
     useCharacterTexts((character) => character === "ada" ? texts : new Texts());
     return texts;
@@ -358,7 +358,7 @@ test("a page of chat logs holds what fits in 12,000 characters as they are shown
   }));
   await archiveMain(dirs, messages);
 
-  const page = (await handleReadChatLogs({ start: "2026-08-13", end: "2026-08-13" }, characterDir, { texts: new Texts(), character: "ada", dbPath, timeZone: "Australia/Canberra" })).split("\n");
+  const page = (await handleReadChatLogs({ start: "2026-08-13", end: "2026-08-13" }, characterDir, { texts: new Texts(), userName: "user", character: "ada", dbPath, timeZone: "Australia/Canberra" })).split("\n");
 
   expect(page[0]).toBe("main, 2026-08-13 → 2026-08-13: messages 1–44 of 45 (Australia/Canberra)");
   expect(page.filter((line) => line === label)).toHaveLength(44);
@@ -369,7 +369,7 @@ test("the chat log index is put in place readable by the daemon alone, and close
   const dirs = historyDirs();
   const { dataDir, characterDir, dbPath } = dirs;
   await archiveMain(dirs, [message("u1", "hello"), message("a1", "hi")]);
-  const options = { texts: new Texts(), character: "ada", dbPath, timeZone: "Australia/Canberra", indexPath: join(dataDir, "chat_logs.db") };
+  const options = { texts: new Texts(), userName: "user", character: "ada", dbPath, timeZone: "Australia/Canberra", indexPath: join(dataDir, "chat_logs.db") };
   const renameSync = fs.renameSync;
   const modesPutInPlace: number[] = [];
   const placing = spyOn(fs, "renameSync").mockImplementation((from, to) => {

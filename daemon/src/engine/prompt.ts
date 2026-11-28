@@ -11,7 +11,7 @@ import { isToolResultOnly } from "./message_store.ts";
 import { pinnedCommand } from "./threads.ts";
 import { DEFAULT_MAX_CONTEXT_TOKENS, DEFAULT_MAX_OUTPUT_TOKENS } from "../config/model_defaults.ts";
 import { renderTemplate } from "../texts/template.ts";
-import type { Texts } from "../texts/texts.ts";
+import type { Texts, TextValues } from "../texts/texts.ts";
 
 export const COMPACT_BEFORE_TRIM_FRACTION = 0.9;
 
@@ -113,7 +113,7 @@ export function assemblePrompt(
 
 function threadBlock(texts: Texts, thread: ThreadPrompt, vars: ReadonlyMap<string, string>, timeZone: string): string | undefined {
   const created = Date.parse(thread.created_at);
-  const started = Number.isNaN(created) ? thread.created_at : required(formatWallClock(created, timeZone).split(" · ")[0]);
+  const started = Number.isNaN(created) ? thread.created_at : required(formatWallClock(texts, created, timeZone).split(" · ")[0]);
   return texts.render("thread", {
     user: vars.get("user"),
     char: vars.get("char"),
@@ -238,47 +238,34 @@ export function estimateHistoryTokens(
   return messages.reduce((total, message) => total + estimateMessageTokens(message, tier), 0);
 }
 
-const WEEKDAYS = [
-  "Sunday",
-  "Monday",
-  "Tuesday",
-  "Wednesday",
-  "Thursday",
-  "Friday",
-  "Saturday",
-];
+const WEEKDAYS = ["sunday", "monday", "tuesday", "wednesday", "thursday", "friday", "saturday"];
 
 const pad2 = (n: number): string => String(n).padStart(2, "0");
 
-function gapPhrase(gapSecs: number): string {
-  if (gapSecs < ONE_AND_HALF_HOURS_SECS) return "about an hour";
-  if (gapSecs < EIGHTEEN_HOURS_SECS) {
-    return `${Math.round(gapSecs / SECS_PER_HOUR)} hours`;
-  }
-  if (gapSecs < THIRTY_SIX_HOURS_SECS) return "about a day";
-  return `${Math.round(gapSecs / SECS_PER_DAY)} days`;
+function gapPhrase(texts: Texts, gapSecs: number): string {
+  return lengthPhrase(texts, Math.max(gapSecs, SECS_PER_HOUR));
 }
 
-export function lengthPhrase(gapSecs: number): string {
+function lengthUnit(gapSecs: number): TextValues {
   if (gapSecs < SECS_PER_HOUR) {
-    const minutes = Math.max(1, Math.round(gapSecs / 60));
-    return minutes === 1 ? "a minute" : `${String(minutes)} minutes`;
+    const minutes = Math.round(gapSecs / 60);
+    return minutes <= 1 ? { a_minute: "yes" } : { minutes: String(minutes) };
   }
-  if (gapSecs < ONE_AND_HALF_HOURS_SECS) return "about an hour";
-  if (gapSecs < EIGHTEEN_HOURS_SECS) return `${String(Math.round(gapSecs / SECS_PER_HOUR))} hours`;
-  if (gapSecs < THIRTY_SIX_HOURS_SECS) return "about a day";
-  return `${String(Math.round(gapSecs / SECS_PER_DAY))} days`;
+  if (gapSecs < ONE_AND_HALF_HOURS_SECS) return { about_an_hour: "yes" };
+  if (gapSecs < EIGHTEEN_HOURS_SECS) return { hours: String(Math.round(gapSecs / SECS_PER_HOUR)) };
+  if (gapSecs < THIRTY_SIX_HOURS_SECS) return { about_a_day: "yes" };
+  return { days: String(Math.round(gapSecs / SECS_PER_DAY)) };
 }
 
-export function agoPhrase(gapSecs: number): string {
-  return `${lengthPhrase(gapSecs)} ago`;
+export function lengthPhrase(texts: Texts, gapSecs: number): string {
+  return texts.render("length", { a_minute: undefined, minutes: undefined, about_an_hour: undefined, hours: undefined, about_a_day: undefined, days: undefined, ...lengthUnit(gapSecs) }) ?? "";
 }
 
-function lastElsewhere(elsewhere: Message["last_elsewhere"], instantMs: number): { last_thread: string; last_length: string } | undefined {
+function lastElsewhere(texts: Texts, elsewhere: Message["last_elsewhere"], instantMs: number): { last_thread: string; last_length: string } | undefined {
   if (elsewhere === undefined) return undefined;
   const at = parseRfc3339(elsewhere.at);
   if (at === undefined) return undefined;
-  return { last_thread: elsewhere.thread, last_length: lengthPhrase(gapSeconds(at, instantMs)) };
+  return { last_thread: elsewhere.thread, last_length: lengthPhrase(texts, gapSeconds(at, instantMs)) };
 }
 
 function formatTimeMarker(
@@ -288,33 +275,33 @@ function formatTimeMarker(
   timeZone: string,
   elsewhere?: Message["last_elsewhere"],
 ): string | undefined {
-  const now = formatWallClock(instantMs, timeZone);
+  const now = formatWallClock(texts, instantMs, timeZone);
   if (gapSecs === undefined || gapSecs < TIME_GAP_THRESHOLD_SECS) return texts.render("time", { now });
-  return texts.render("time_later", { gap: gapPhrase(gapSecs), now, ...lastElsewhere(elsewhere, instantMs) });
+  return texts.render("time_later", { gap: gapPhrase(texts, gapSecs), now, ...lastElsewhere(texts, elsewhere, instantMs) });
 }
 
 export function statusesText(texts: Texts, presence: NonNullable<Message["presence"]>, at: number): string {
-  return presence.statuses.flatMap((status) => texts.render("status_item", { status: status.status, length: lengthPhrase(gapSeconds(Date.parse(status.set_at), at)) }) ?? []).join(", ");
+  return presence.statuses.flatMap((status) => texts.render("status_item", { status: status.status, length: lengthPhrase(texts, gapSeconds(Date.parse(status.set_at), at)) }) ?? []).join(", ");
 }
 
 export function presenceText(texts: Texts, presence: NonNullable<Message["presence"]>, at: number): string | undefined {
-  if (presence.statuses.length === 0) return texts.render("status_cleared", { length: lengthPhrase(gapSeconds(Date.parse(presence.changed_at), at)) });
+  if (presence.statuses.length === 0) return texts.render("status_cleared", { length: lengthPhrase(texts, gapSeconds(Date.parse(presence.changed_at), at)) });
   return texts.render("status", { statuses: statusesText(texts, presence, at) });
 }
 
 export function wakeRunningText(texts: Texts, running: NonNullable<Message["wake_running"]>, timeZone: string): string | undefined {
-  const since = formatWallClock(Date.parse(running.started_at), timeZone);
+  const since = formatWallClock(texts, Date.parse(running.started_at), timeZone);
   return running.thread === undefined ? texts.render("wake_running_own_time", { since }) : texts.render("wake_running", { thread: running.thread, since });
 }
 
-export function formatWallClock(instantMs: number, timeZone: string): string {
+export function formatWallClock(texts: Texts, instantMs: number, timeZone: string): string {
   const naive = naiveInZone(instantMs, timeZone);
   const { year, month, day, hour } = partsOf(naive);
   const d = new Date(naive);
-  const weekday = required(WEEKDAYS[d.getUTCDay()]);
+  const weekday = texts.render("weekday", Object.fromEntries(WEEKDAYS.map((name, index) => [name, index === d.getUTCDay() ? "yes" : undefined])));
   const hour12 = hour % 12 === 0 ? 12 : hour % 12;
   const meridiem = hour < 12 ? "AM" : "PM";
-  return `${weekday} ${String(year).padStart(4, "0")}-${pad2(month)}-${pad2(day)} · ${hour12}:${pad2(d.getUTCMinutes())} ${meridiem}`;
+  return `${weekday === undefined ? "" : `${weekday} `}${String(year).padStart(4, "0")}-${pad2(month)}-${pad2(day)} · ${hour12}:${pad2(d.getUTCMinutes())} ${meridiem}`;
 }
 
 export function wallClockMarker(
@@ -475,5 +462,5 @@ function syntheticUserTurn(text: string): PromptMessage {
 }
 
 export function wakeMarker(texts: Texts, instantMs: number | undefined, mode: UserTimestampMode, timeZone: string): string {
-  return texts.always("wake_turn", { at: mode === "never" || instantMs === undefined ? undefined : formatWallClock(instantMs, timeZone) });
+  return texts.always("wake_turn", { at: mode === "never" || instantMs === undefined ? undefined : formatWallClock(texts, instantMs, timeZone) });
 }

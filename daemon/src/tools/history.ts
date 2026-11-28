@@ -102,7 +102,7 @@ export interface ChatLogOptions {
   thread?: string | undefined;
   fresh?: boolean | undefined;
   indexPath?: string | undefined;
-  userName?: string | undefined;
+  userName: string;
   timeZone?: string | undefined;
   now?: (() => number) | undefined;
 }
@@ -116,7 +116,7 @@ interface View {
 }
 
 function viewOf(options: ChatLogOptions): View {
-  const user = options.userName ?? "user";
+  const user = options.userName;
   return {
     texts: options.texts,
     zone: options.timeZone ?? hostZone(),

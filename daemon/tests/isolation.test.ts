@@ -73,7 +73,7 @@ async function freshWorkspace(passEnv: string[] = [], root = join(ROOT, "workspa
 async function context(workspace: CharacterWorkspace): Promise<ToolContext> {
   const data = await privateDir("isolation-data");
   return {
-    texts: new Texts(),
+    texts: new Texts(), userName: "eve",
     workspaceDir: workspace.dir, workspace, characterName: "Ada", characterDataDir: join(data, "ada"),
     conversationDir: data, historyDbPath: join(data, "shore.db"), configDir: data,
   };

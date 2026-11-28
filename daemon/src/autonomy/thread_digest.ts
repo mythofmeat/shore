@@ -72,7 +72,7 @@ function cut(texts: Texts, text: string): string {
 function entry(texts: Texts, message: Message, userName: string, timeZone: string): string | undefined {
   const speaker = message.role === "user" ? "digest_user" : message.origin === "autonomous" ? "digest_you_wake" : "digest_you";
   const at = timeOf(message);
-  return texts.render(speaker, { user: userName, at: Number.isNaN(at) ? undefined : formatWallClock(at, timeZone), text: cut(texts, spoken(message, texts) ?? "") });
+  return texts.render(speaker, { user: userName, at: Number.isNaN(at) ? undefined : formatWallClock(texts, at, timeZone), text: cut(texts, spoken(message, texts) ?? "") });
 }
 
 export async function threadDigest(

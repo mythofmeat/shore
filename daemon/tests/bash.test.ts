@@ -21,7 +21,7 @@ async function world() {
   const root = await mkdtemp(join(tmpdir(), "shore-bash-"));
   const workspaceDir = join(root, "workspace");
   const ctx: ToolContext = {
-    texts: new Texts(),
+    texts: new Texts(), userName: "eve",
     workspaceDir, characterName: "Juniper Vale", characterDataDir: root,
     conversationDir: root, historyDbPath: join(root, "history.db"), configDir: root,
   };

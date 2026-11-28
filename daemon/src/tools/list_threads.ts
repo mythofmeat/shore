@@ -3,7 +3,7 @@ import { characterDataDir } from "../config/dirs.ts";
 import { sealedThreads } from "../engine/sealed_list.ts";
 import { folderOf } from "../engine/thread_layout.ts";
 import { defaultThreadsIndex, homeThread, readThreadsIndex, threadActivities, threadAway, wakesThread, type ThreadActivity, type ThreadRecord } from "../engine/threads.ts";
-import { agoPhrase, formatWallClock } from "../engine/prompt.ts";
+import { formatWallClock, lengthPhrase } from "../engine/prompt.ts";
 import { hostZone } from "../ledger/zoned.ts";
 import type { Texts } from "../texts/texts.ts";
 
@@ -17,9 +17,9 @@ export interface ListThreadsOptions {
   now?: () => number;
 }
 
-function when(at: string | undefined, zone: string): string | undefined {
+function when(texts: Texts, at: string | undefined, zone: string): string | undefined {
   const ms = at === undefined ? Number.NaN : Date.parse(at);
-  return Number.isNaN(ms) ? undefined : formatWallClock(ms, zone);
+  return Number.isNaN(ms) ? undefined : formatWallClock(texts, ms, zone);
 }
 
 function described(
@@ -41,9 +41,9 @@ function described(
     pins: record.pins === undefined || record.pins.length === 0 ? undefined : record.pins.join(", "),
     by_you: record.created_by === "character" ? "yes" : undefined,
     user: options.userName,
-    started: when(record.created_at, zone) ?? record.created_at,
-    last: Number.isNaN(lastMs) ? undefined : formatWallClock(lastMs, zone),
-    ago: Number.isNaN(lastMs) ? undefined : agoPhrase((nowMs - lastMs) / 1000),
+    started: when(options.texts, record.created_at, zone) ?? record.created_at,
+    last: Number.isNaN(lastMs) ? undefined : formatWallClock(options.texts, lastMs, zone),
+    length: Number.isNaN(lastMs) ? undefined : lengthPhrase(options.texts, (nowMs - lastMs) / 1000),
   });
 }
 

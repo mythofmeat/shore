@@ -77,7 +77,7 @@ test("a sub-agent runs on the character's own config with the turn's frames, cal
   ].join("\n"));
   await mkdir(join(root, "data", "ada", "threads", "main"), { recursive: true });
   const parent: ToolContext = {
-    texts: new Texts(), characterName: "ada", workspaceDir: join(root, "workspace"), characterDataDir: join(root, "data", "ada"),
+    texts: new Texts(), userName: "eve", characterName: "ada", workspaceDir: join(root, "workspace"), characterDataDir: join(root, "data", "ada"),
     conversationDir: join(root, "data", "ada", "threads", "main"), historyDbPath: join(root, "data", "shore.db"), configDir: root, conversation: [],
   };
   const seen: SidecarRequest[] = [];

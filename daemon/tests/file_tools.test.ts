@@ -17,7 +17,7 @@ async function world() {
   const workspaceDir = join(root, "workspace");
   await mkdir(workspaceDir);
   const ctx: ToolContext = {
-    texts: new Texts(),
+    texts: new Texts(), userName: "eve",
     workspaceDir, characterName: "Ada", characterDataDir: root, cacheDir: join(root, "cache"),
     conversationDir: root, historyDbPath: join(root, "history.db"), configDir: root,
   };

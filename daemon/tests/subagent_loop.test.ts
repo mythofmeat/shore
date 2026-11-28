@@ -83,7 +83,7 @@ async function configWith(
 
 function contextIn(root: string): ToolContext {
   return {
-    texts: new Texts(),
+    texts: new Texts(), userName: "eve",
     workspaceDir: join(root, "config", "characters", "ada", "workspace"),
     characterDataDir: join(root, "data", "ada"),
     conversationDir: "",

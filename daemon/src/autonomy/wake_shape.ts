@@ -1,6 +1,6 @@
 import { formatWallClock } from "../engine/prompt.ts";
 import type { TriggerFiring, WakeNews } from "./runner.ts";
-import type { Texts } from "../texts/texts.ts";
+import { Texts, type TextValues } from "../texts/texts.ts";
 
 export type WireRole = "user" | "assistant" | "system";
 
@@ -11,25 +11,31 @@ export interface WireMessageLike {
 
 export type ToolUse = readonly [string, string, unknown];
 
-export function timeLeftPhrase(ms: number): string {
+export function timeLeftText(texts: Texts, ms: number): string {
   const minutes = Math.floor(ms / 60_000);
-  if (minutes < 1) return "less than a minute";
-  return minutes === 1 ? "about a minute" : `about ${String(minutes)} minutes`;
+  return texts.render("time_left", { minutes: minutes < 1 ? undefined : String(minutes), one: minutes === 1 ? "yes" : undefined }) ?? "";
+}
+
+export function timeLeftPhrase(ms: number): string {
+  return timeLeftText(new Texts(), ms);
 }
 
 export function userWroteNote(texts: Texts, at: number, userName: string, timeZone: string): string | undefined {
-  return texts.render("user_wrote", { user: userName, at: formatWallClock(at, timeZone) });
+  return texts.render("user_wrote", { user: userName, at: formatWallClock(texts, at, timeZone) });
 }
 
-export function spanPhrase(ms: number): string {
-  const secs = Math.trunc(ms / 1000);
-  const counted = (count: number, unit: string): string => `${String(count)} ${unit}${count === 1 ? "" : "s"}`;
-  if (secs < 60) return counted(secs, "second");
-  return secs % 3600 === 0 ? counted(secs / 3600, "hour") : counted(Math.trunc(secs / 60), "minute");
+function exactValues(secs: number): TextValues {
+  const counted = (unit: string, count: number): TextValues => ({ seconds: undefined, minutes: undefined, hours: undefined, [unit]: String(count), one: count === 1 ? "yes" : undefined });
+  if (secs < 60) return counted("seconds", secs);
+  return secs % 3600 === 0 ? counted("hours", secs / 3600) : counted("minutes", Math.trunc(secs / 60));
+}
+
+export function spanPhrase(texts: Texts, ms: number): string {
+  return texts.render("exact_length", exactValues(Math.trunc(ms / 1000))) ?? "";
 }
 
 export function triggerFiredNote(texts: Texts, firing: TriggerFiring, timeZone: string): string | undefined {
-  const at = formatWallClock(firing.at, timeZone);
+  const at = formatWallClock(texts, firing.at, timeZone);
   if (firing.byHand === true) return texts.render("fired_by_hand", { at });
   if (firing.seal === true) return texts.render("fired_seal", { at, reason: firing.reason });
   return firing.from === undefined

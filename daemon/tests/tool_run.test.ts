@@ -10,7 +10,7 @@ import { BUILTIN_TOOL_SCHEMAS } from "./support/builtin_tool_schemas.ts";
 function execution(ctx: Partial<ToolContext>, frames: ServerMessage[] = [], times: number[] = []): ToolExecution {
   return {
     sendDirect: (frame) => frames.push(frame),
-    ctx: { texts: new Texts(), characterName: "ada", workspaceDir: "/nowhere", characterDataDir: "/nowhere", conversationDir: "/nowhere", historyDbPath: "/nowhere/h.db", configDir: "/nowhere", ...ctx },
+    ctx: { texts: new Texts(), userName: "eve", characterName: "ada", workspaceDir: "/nowhere", characterDataDir: "/nowhere", conversationDir: "/nowhere", historyDbPath: "/nowhere/h.db", configDir: "/nowhere", ...ctx },
     limits: { timeout_ms: 0, max_result_chars: 0 },
     now: () => "2026-11-24T00:00:00Z",
     newMessageId: () => "m_1",

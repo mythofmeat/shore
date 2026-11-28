@@ -473,6 +473,10 @@ import tools__workspace__read__limit from "../../prompts/tools/workspace/read/li
 import tools__workspace__read__offset from "../../prompts/tools/workspace/read/offset.md" with { type: "text" };
 import tools__workspace__read__original from "../../prompts/tools/workspace/read/original.md" with { type: "text" };
 import tools__workspace__read__read from "../../prompts/tools/workspace/read/read.md" with { type: "text" };
+import values__exact_length from "../../prompts/values/exact_length.md" with { type: "text" };
+import values__length from "../../prompts/values/length.md" with { type: "text" };
+import values__time_left from "../../prompts/values/time_left.md" with { type: "text" };
+import values__weekday from "../../prompts/values/weekday.md" with { type: "text" };
 
 export interface TextSpec {
   name: string;
@@ -491,8 +495,9 @@ function must(name: string, shipped: string, where: string, values: Record<strin
   return text(name, shipped, where, values, true);
 }
 
-const WHEN = "the time, like Friday 2026-10-30 · 12:00 PM";
-const LENGTH = "a length of time, like 5 minutes, about an hour or 3 days";
+const WHEN = "the time, like Friday 2026-10-30 · 12:00 PM, with the day named as weekday has it";
+const LENGTH = "a length of time, as length has it, like 5 minutes, about an hour or 3 days";
+const EXACT = "as exact_length has it";
 const CALLS = "how many tool calls, like 1 tool call or 3 tool calls";
 const WORKING = {
   calls: CALLS,
@@ -520,7 +525,7 @@ export const MESSAGE_TEXTS: readonly TextSpec[] = [
   text("status_cleared", messages__status_cleared, "In place of status when the user has cleared their statuses.", { length: `how long ago: ${LENGTH}` }),
   text("time", messages__time, "At the start of a user's message: the time, when chat.user_timestamps says one is due.", { now: WHEN }),
   text("time_later", messages__time_later, "In place of time after a gap of half an hour or more.", {
-    gap: "how long it has been, like about an hour, 3 hours or about a day",
+    gap: "how long it has been, as length has it, like about an hour, 3 hours or about a day",
     now: WHEN,
     last_thread: "the other thread the user was last in, when it was another one",
     last_length: `how long ago they were last there: ${LENGTH}`,
@@ -539,6 +544,35 @@ export const MESSAGE_TEXTS: readonly TextSpec[] = [
     take: "set when the user asked for another take",
     reason: "why the user asked for it again, when they said",
     attempts: "the earlier attempts",
+  }),
+];
+
+const DAY = (name: string): string => `set on a ${name}`;
+
+export const VALUE_TEXTS: readonly TextSpec[] = [
+  text("length", values__length, "How long it has been, rounded: in status_item, status_cleared, time_later, the last_wrote_ texts and threads_entry. One of its values is set.", {
+    a_minute: "set when it rounds to a minute or less",
+    minutes: "how many minutes it rounds to, when that is more than one and it is under an hour",
+    about_an_hour: "set from an hour to an hour and a half, and in time_later's gap from half an hour",
+    hours: "how many hours it rounds to, from an hour and a half to 18 hours",
+    about_a_day: "set from 18 to 36 hours",
+    days: "how many days it rounds to, from 36 hours on",
+  }),
+  text("exact_length", values__exact_length, "A length of time Shore's settings give: a wake's time limit, when it is told to wrap up, how long the user has to be quiet before a stopped wake is picked up, and a pinned command's time limit. One of seconds, minutes and hours is set.", {
+    seconds: "how many seconds, when it is under a minute",
+    minutes: "how many whole minutes, when it is a minute or more and not a whole number of hours",
+    hours: "how many hours, when it is a whole number of them",
+    one: "set when that number is 1",
+  }),
+  text("time_left", values__time_left, "How long a wake has left, in wrap_up.", { minutes: "how many whole minutes, when there is at least one", one: "set when there is one" }),
+  text("weekday", values__weekday, "The day's name at the start of every time Shore writes for the model, like the time line's. One of its values is set.", {
+    sunday: DAY("Sunday"),
+    monday: DAY("Monday"),
+    tuesday: DAY("Tuesday"),
+    wednesday: DAY("Wednesday"),
+    thursday: DAY("Thursday"),
+    friday: DAY("Friday"),
+    saturday: DAY("Saturday"),
   }),
 ];
 
@@ -565,10 +599,10 @@ const WAKE_VALUES = {
   user: "the user's name",
   thread: "the thread the wake is in",
   home: "the home thread",
-  time_limit: "how long the wake may run",
-  wrap_up_after: "when it is told to wrap up",
+  time_limit: `how long the wake may run, ${EXACT}`,
+  wrap_up_after: `when it is told to wrap up, ${EXACT}`,
   max_rounds: "how many rounds of tool use it may have, when there is a limit",
-  resume_after: "how long the user has to be quiet before a wake they stopped is picked up again",
+  resume_after: `how long the user has to be quiet before a wake they stopped is picked up again, ${EXACT}`,
   working_thread: "the thread its working is kept in, when it isn't kept here",
   working_here: "set when its working is kept in this thread",
   send_message: "set when send_message is on",
@@ -590,7 +624,7 @@ export const WAKE_TEXTS: readonly TextSpec[] = [
   text("digest_you", autonomy__digest_you, "A message of the character's in what a wake is shown of its thread.", SPEAKER),
   text("digest_you_wake", autonomy__digest_you_wake, "A message the character sent from a wake, in what a wake is shown of its thread.", SPEAKER),
   text("digest_cut", autonomy__digest_cut, "A long message cut short in what a wake is shown of its thread.", { text: "its first 4,000 characters" }),
-  text("last_wake_time", autonomy__last_wake_time, "In a wake's opening, when the last wake in its thread reached its time limit.", { limit: "its time limit", ...LAST_WAKE }),
+  text("last_wake_time", autonomy__last_wake_time, "In a wake's opening, when the last wake in its thread reached its time limit.", { limit: `its time limit, ${EXACT}`, ...LAST_WAKE }),
   text("last_wake_rounds", autonomy__last_wake_rounds, "The same, when it used up its rounds of tool use.", LAST_WAKE),
   text("last_wake_interrupted", autonomy__last_wake_interrupted, "The same, when the user's message stopped it.", LAST_WAKE),
   text("last_wake_failed", autonomy__last_wake_failed, "The same, when it failed.", { error: "the error", ...LAST_WAKE }),
@@ -608,13 +642,13 @@ export const WAKE_TEXTS: readonly TextSpec[] = [
   text("wake", autonomy__wake, "The end of a wake's opening.", WAKE_VALUES),
   text("user_wrote", autonomy__user_wrote, "At a wake's next step, when the user has written in another thread.", { user: "the user's name", at: "when" }),
   text("wrap_up", autonomy__wrap_up, "At a wake's step once it is time to wrap up.", {
-    time_left: "how long it has left, like about 5 minutes",
+    time_left: "how long it has left, as time_left has it, like about 5 minutes",
     last_round: "set when this is its last round",
     rounds: "how many rounds it has left, counting this one",
     user: "the user's name",
   }),
-  text("stopped_interrupted", autonomy__stopped_interrupted, "Left in a thread when the user's message stopped a wake there.", { user: "the user's name", quiet: "how long they have to be quiet before it is picked up again", triggers: "set when triggers alone set the wake off, so changing them in TRIGGERS.toml can call the pick-up off" }),
-  text("stopped_time", autonomy__stopped_time, "Left in a thread when a wake reached its time limit.", { limit: "its time limit" }),
+  text("stopped_interrupted", autonomy__stopped_interrupted, "Left in a thread when the user's message stopped a wake there.", { user: "the user's name", quiet: `how long they have to be quiet before it is picked up again, ${EXACT}`, triggers: "set when triggers alone set the wake off, so changing them in TRIGGERS.toml can call the pick-up off" }),
+  text("stopped_time", autonomy__stopped_time, "Left in a thread when a wake reached its time limit.", { limit: `its time limit, ${EXACT}` }),
   text("stopped_rounds", autonomy__stopped_rounds, "Left in a thread when a wake used up its rounds of tool use."),
   text("stopped_failed", autonomy__stopped_failed, "Left in a thread when a wake failed.", { error: "the error" }),
   must("tool_cut_off", autonomy__tool_cut_off, "The result of a tool call a wake made that was cut off when the wake ended."),
@@ -749,7 +783,7 @@ export const WAKE_TOOL_TEXTS: readonly TextSpec[] = [
   must("wake_no_thread", t__tools__autonomy__wake_in_thread__answers__no_thread, "wake_in_thread's error for a thread the character doesn't have.", { thread: "the thread named" }),
   must("wake_in_wakes", t__tools__autonomy__wake_in_thread__answers__in_wakes, "wake_in_thread's error for the wakes thread.", { thread: "the wakes thread" }),
   must("wake_waiting", t__tools__autonomy__wake_in_thread__answers__waiting, "wake_in_thread's error for a thread that already has a wake waiting, without `overwrite`.", { thread: "the thread", asked: "the wake that was waiting, as wake_asked_for has it" }),
-  text("wake_queued", t__tools__autonomy__wake_in_thread__answers__queued, "What wake_in_thread answers once a wake is asked for.", { thread: "the thread", limit: "how long the wake may run", at: "when it starts, when it was given a time", user: "the user's name", quiet: "how long the user has to be quiet in that thread first", replaced: "the wake that was waiting, as wake_asked_for has it, when this one takes its place" }),
+  text("wake_queued", t__tools__autonomy__wake_in_thread__answers__queued, "What wake_in_thread answers once a wake is asked for.", { thread: "the thread", limit: `how long the wake may run, ${EXACT}`, at: "when it starts, when it was given a time", user: "the user's name", quiet: `how long the user has to be quiet in that thread first, ${EXACT}`, replaced: "the wake that was waiting, as wake_asked_for has it, when this one takes its place" }),
 ];
 
 export const TOOL_COMMON_TEXTS: readonly TextSpec[] = [
@@ -763,7 +797,7 @@ export const ARG_COMMON_TEXTS: readonly TextSpec[] = [
 
 export const THREADS_TOOL_TEXTS: readonly TextSpec[] = [
   text("threads_home", t__tools__threads__threads__answers__home, "The first line of what threads lists.", { home: "the home thread", here: "set when the character is in it", thread: "the thread the character is in", sealed: "set when that thread is sealed" }),
-  text("threads_entry", t__tools__threads__threads__answers__entry, "Each thread in what threads lists.", { thread: "its id", label: "its label, when it has one", marks: "what is true of it, as the threads_mark_ texts have it, with \", \" between them", compaction: "set when it compacts", purpose: "its purpose, when it has one", pins: "its pins, with \", \" between them, when it has any", by_you: "set when the character started it", user: "the user's name", started: "when it was started", last: "when the user last wrote there, when they have", ago: "how long ago that was, like 3 hours ago" }),
+  text("threads_entry", t__tools__threads__threads__answers__entry, "Each thread in what threads lists.", { thread: "its id", label: "its label, when it has one", marks: "what is true of it, as the threads_mark_ texts have it, with \", \" between them", compaction: "set when it compacts", purpose: "its purpose, when it has one", pins: "its pins, with \", \" between them, when it has any", by_you: "set when the character started it", user: "the user's name", started: "when it was started", last: "when the user last wrote there, when they have", length: `how long ago that was: ${LENGTH}` }),
   text("threads_mark_home", t__tools__threads__threads__answers__mark_home, "In threads_entry's marks, for the home thread."),
   text("threads_mark_here", t__tools__threads__threads__answers__mark_here, "In threads_entry's marks, for the thread the character is in."),
   text("threads_mark_wakes", t__tools__threads__threads__answers__mark_wakes, "In threads_entry's marks, for the wakes thread."),
@@ -904,7 +938,7 @@ export const PIN_TEXTS: readonly TextSpec[] = [
   text("pin_output_cut", t__engine__pins__output_cut, "After the part of a pinned command's output that fits, when the rest doesn't.", { limit: "how much a pin can be: a size, like 32 KB", total: "how much it printed" }),
   text("pin_killed", t__engine__pins__killed, "After a pinned command's output when it was killed."),
   text("pin_exit_status", t__engine__pins__exit_status, "After a pinned command's output when it failed.", { code: "its exit status" }),
-  text("pin_timed_out", t__engine__pins__timed_out, "In place of a pinned command's output when it ran out of time.", { limit: "its time limit, like 30 seconds" }),
+  text("pin_timed_out", t__engine__pins__timed_out, "In place of a pinned command's output when it ran out of time.", { limit: `its time limit, ${EXACT}, like 30 seconds` }),
   text("pin_not_run", t__engine__pins__not_run, "In place of a pinned command's output when it couldn't be run.", { error: "why" }),
   text("pin_silent", t__engine__pins__silent, "In place of a pinned command's output when it printed nothing."),
   text("pin_file_unshown", t__engine__pins__file_unshown, "In place of a pinned file that isn't text.", { path: "the file", reason: "why, as pin_is_picture or pin_not_utf8 has it" }),
@@ -1117,7 +1151,7 @@ export const TOOL_TEXTS: readonly TextSpec[] = Object.entries(TOOL_TEXTS_SHIPPED
   ...Object.entries(parameters).map(([parameter, shipped]) => text(parameterText(tool, parameter), shipped, `The description of the ${parameter} parameter of ${tool}.`, TOOL_VALUES)),
 ]);
 
-export const TEXTS: readonly TextSpec[] = [...MESSAGE_TEXTS, ...SYSTEM_TEXTS, ...WAKE_TEXTS, ...TOOL_TEXTS, ...OTHER_TEXTS, ...IMAGE_TEXTS, ...READ_TEXTS, ...MCP_TEXTS, ...SEND_TEXTS, ...ARG_TEXTS, ...WAKE_TOOL_TEXTS, ...TOOL_COMMON_TEXTS, ...ARG_COMMON_TEXTS, ...THREADS_TOOL_TEXTS, ...TRIGGERS_TOOL_TEXTS, ...FILE_TEXTS, ...EDIT_TEXTS, ...PICTURE_SEND_TEXTS, ...TOOL_RESULT_TEXTS, ...TOOL_OUTPUT_TEXTS, ...MCP_ERROR_TEXTS, ...TOOL_ARG_TEXTS, ...PIN_TEXTS, ...MISC_TOOL_TEXTS, ...LOGS_TEXTS, ...SEAL_TEXTS, ...NAME_TEXTS, ...THREAD_REFUSAL_TEXTS, ...TRIGGER_FILE_TEXTS, ...THREAD_FOLDER_TEXTS, ...GUIDE_TEXTS];
+export const TEXTS: readonly TextSpec[] = [...MESSAGE_TEXTS, ...VALUE_TEXTS, ...SYSTEM_TEXTS, ...WAKE_TEXTS, ...TOOL_TEXTS, ...OTHER_TEXTS, ...IMAGE_TEXTS, ...READ_TEXTS, ...MCP_TEXTS, ...SEND_TEXTS, ...ARG_TEXTS, ...WAKE_TOOL_TEXTS, ...TOOL_COMMON_TEXTS, ...ARG_COMMON_TEXTS, ...THREADS_TOOL_TEXTS, ...TRIGGERS_TOOL_TEXTS, ...FILE_TEXTS, ...EDIT_TEXTS, ...PICTURE_SEND_TEXTS, ...TOOL_RESULT_TEXTS, ...TOOL_OUTPUT_TEXTS, ...MCP_ERROR_TEXTS, ...TOOL_ARG_TEXTS, ...PIN_TEXTS, ...MISC_TOOL_TEXTS, ...LOGS_TEXTS, ...SEAL_TEXTS, ...NAME_TEXTS, ...THREAD_REFUSAL_TEXTS, ...TRIGGER_FILE_TEXTS, ...THREAD_FOLDER_TEXTS, ...GUIDE_TEXTS];
 
 export const TEXT_SPECS: ReadonlyMap<string, TextSpec> = new Map(TEXTS.map((spec) => [spec.name, spec]));
 

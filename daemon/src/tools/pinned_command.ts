@@ -29,7 +29,7 @@ export async function pinnedCommandText(workspace: CharacterWorkspace, character
   try {
     output = await workspace.run("bash", [...BASH_ARGS, command], { cwd: root, env: bashEnvironment(character, root, root), signal: limit });
   } catch (error) {
-    if (limit.aborted) return texts.render("pin_timed_out", { limit: spanPhrase(workspace.tools.checkLimitMs) }) ?? "";
+    if (limit.aborted) return texts.render("pin_timed_out", { limit: spanPhrase(texts, workspace.tools.checkLimitMs) }) ?? "";
     return texts.render("pin_not_run", { error: error instanceof Error ? error.message : String(error) }) ?? "";
   }
   const said = printed(texts, output);

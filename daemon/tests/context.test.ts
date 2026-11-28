@@ -10,6 +10,7 @@ import { emptyCatalog, type ResolvedModel } from "../src/config/models.ts";
 import { configView } from "../src/config/preferences.ts";
 import { ProviderRegistry } from "../src/config/providers.ts";
 import { formatWallClock } from "../src/engine/prompt.ts";
+import { Texts } from "../src/texts/texts.ts";
 import { NO_PRIOR_CONTEXT } from "../src/engine/segments.ts";
 import type { Message } from "../src/engine/types.ts";
 import { buildChatShapeRequestFromDisk } from "../src/handler/context.ts";
@@ -140,6 +141,6 @@ test("the times on the user's messages are given in the zone asked for", async (
   const { sent } = await world();
   const zone = hostZone() === "Pacific/Chatham" ? "Asia/Kolkata" : "Pacific/Chatham";
   const shown = await sent([said("hello")], { timeZone: zone });
-  expect(shown).toContain(formatWallClock(AT, zone));
-  expect(shown).not.toContain(formatWallClock(AT, hostZone()));
+  expect(shown).toContain(formatWallClock(new Texts(), AT, zone));
+  expect(shown).not.toContain(formatWallClock(new Texts(), AT, hostZone()));
 });
