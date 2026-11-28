@@ -38,6 +38,7 @@ import { redoTurns, restorePaths, undoTurns, WorkspaceRecorder, workspaceChanges
 import { setTestEnv } from "./support/env.ts";
 import { testTmp } from "./support/tmp.ts";
 import { Texts } from "../src/texts/texts.ts";
+import { errorText } from "../src/tools/errors.ts";
 
 const ROOT = process.env["SHORE_ISOLATION_ROOT"] ?? "";
 const USER = process.env["SHORE_ISOLATION_USER"] ?? "";
@@ -86,7 +87,7 @@ async function failure(work: Promise<unknown>): Promise<string> {
   try {
     await work;
   } catch (error) {
-    return error instanceof Error ? error.message : String(error);
+    return errorText(new Texts(), error);
   }
   throw new Error("expected the call to fail");
 }
