@@ -191,9 +191,7 @@ export class McpClient {
     } else if (typeof args === "object" && !Array.isArray(args)) {
       argumentsMap = args as Record<string, unknown>;
     } else {
-      throw new McpError(
-        `invalid arguments for MCP tool '${tool}': expected a JSON object, got ${JSON.stringify(args)}`,
-      );
+      throw new McpError(texts.always("mcp_bad_arguments", { tool, args: JSON.stringify(args) }));
     }
 
     let result: Awaited<ReturnType<Client["callTool"]>>;
@@ -208,18 +206,13 @@ export class McpClient {
       );
     } catch (e) {
       if (signal?.aborted === true) {
-        throw new McpCancelled(
-          `MCP tool '${tool}' on '${this.serverName}' was asked to stop. MCP cancellation ` +
-            `is a notification the server never acknowledges, so whether it stopped is ` +
-            `not observable from here.`,
-          repeatable,
-        );
+        throw new McpCancelled(texts.always("mcp_cancelled", { tool, server: this.serverName }), repeatable);
       }
-      throw new McpTransportError(`MCP request to '${this.serverName}': ${String(e)}`);
+      throw new McpTransportError(texts.always("mcp_request_failed", { server: this.serverName, error: String(e) }));
     }
 
     if (result.isError === true) {
-      throw new McpError(`MCP tool '${tool}' returned an error: ${flattenText(texts, result)}`);
+      throw new McpError(texts.always("mcp_tool_error", { tool, error: flattenText(texts, result) }));
     }
     return carryToolMedia(interpretResult(texts, result));
   }
@@ -279,7 +272,7 @@ export function interpretResult(texts: Texts, result: Record<string, unknown>): 
 }
 
 export function flattenText(texts: Texts, result: Record<string, unknown>): string {
-  return renderPayload(interpretResult(texts, result));
+  return renderPayload(texts, interpretResult(texts, result));
 }
 
 function given(value: unknown): string | undefined {

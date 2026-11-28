@@ -53,9 +53,9 @@ describe("the edit tool", () => {
   test("refuses each malformed request before touching the file: the tool's schema refuses wrong types, and edit refuses a change to the same text", async () => {
     const { dir, note } = await workspace();
     for (const input of [{ old_string: 5, new_string: "x" }, { old_string: "", new_string: "x" }, { old_string: "one", new_string: 5 }, { old_string: "one", new_string: "1", replace_all: "yes" }]) {
-      expect(schemaViolation(BUILTIN_TOOL_SCHEMAS.get("edit"), { file_path: "note.md", ...input })).toBeString();
+      expect(schemaViolation(new Texts(), BUILTIN_TOOL_SCHEMAS.get("edit"), { file_path: "note.md", ...input })).toBeString();
     }
-    expect(schemaViolation(BUILTIN_TOOL_SCHEMAS.get("edit"), { file_path: "note.md", old_string: "one", new_string: "1", replace_all: true })).toBeUndefined();
+    expect(schemaViolation(new Texts(), BUILTIN_TOOL_SCHEMAS.get("edit"), { file_path: "note.md", old_string: "one", new_string: "1", replace_all: true })).toBeUndefined();
     expect(await outcomeOf(handleEdit(new Texts(), { file_path: "note.md", old_string: "one", new_string: "one" }, dir))).toThrow("invalid args: old_string and new_string are identical; no change requested");
     expect(await outcomeOf(handleEdit(new Texts(), { file_path: "  ", old_string: "one", new_string: "1" }, dir))).toThrow("invalid args: file_path must be a non-empty string without NUL bytes");
     expect(await outcomeOf(handleEdit(new Texts(), { file_path: "note.md", old_string: "one", new_string: "1" }, ""))).toThrow("invalid args: workspace not configured");

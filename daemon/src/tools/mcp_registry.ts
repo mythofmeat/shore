@@ -473,7 +473,7 @@ export class McpRegistry {
     const client = surface.clients.get(def.server);
     if (client === undefined) {
       await this.reviveClient(def.server);
-      throw new McpTransportError(`MCP server '${def.server}' is unavailable`);
+      throw new McpTransportError(texts.always("mcp_unavailable", { server: def.server }));
     }
     try {
       return await client.call(def.tool, args, texts, signal, def.repeatable);

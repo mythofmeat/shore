@@ -17,7 +17,7 @@ test("a bash result says which prompt files it changed, and nothing of it when n
 });
 
 test("an activity heatmap and a model history with nothing in them say so", () => {
-  const heatmap = { days: 7, messages_in_window: 0, total_messages: 5 } as unknown as HeatmapResult;
+  const heatmap = { days: 7, messages_in_window: 0, total_messages: 5, has_sufficient_data: false, engagement_score: 0, sessions_per_day: 0, hours: [], weekdays: [] } as unknown as HeatmapResult;
   expect(formatToolOutput(new Texts(), "activity_heatmap", heatmap)).toBe("Activity over 7 days: 0 messages (5 total)\nNo activity data in this window.");
   const history = { character: "ada", time_zone: "UTC", time_range: {}, models: [] } as unknown as ModelHistoryResult;
   expect(formatToolOutput(new Texts(), "model_history", history)).toBe("Model history for ada (UTC)\nNo model usage in this range.");

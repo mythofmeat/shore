@@ -32,7 +32,6 @@ import {
 } from "./dispatch.ts";
 import {
   MAX_INLINE_TOOL_IMAGES,
-  MAX_LISTED_MEDIA_NOTES,
   reductionNote,
   toolMediaOf,
   type ToolMediaItem,
@@ -41,6 +40,9 @@ import {
 import { schemaViolation, type ToolSchemas } from "./validate.ts";
 import { toolResultText } from "../llm/types.ts";
 import { base64Bytes } from "../util/base64.ts";
+import { errorText } from "./errors.ts";
+import { listSome } from "./media.ts";
+import type { Texts } from "../texts/texts.ts";
 
 export interface ToolExecution {
   sendDirect: (message: ServerMessage) => void;
@@ -82,7 +84,7 @@ export async function runToolUse(
   const clock = exec.monotonicMs ?? Date.now;
   const startedAt = clock();
 
-  const rejection = argumentRejection(toolUse, exec.schemas);
+  const rejection = argumentRejection(exec.ctx.texts, toolUse, exec.schemas);
   if (rejection !== undefined) {
     shoreLog.warn(`shore: rejected a ${toolUse.name} call — ${rejection}`);
     const rejectedMs = clock() - startedAt;
@@ -116,7 +118,7 @@ export async function runToolUse(
     rawOutput = joinLines([formatToolOutput(exec.ctx.texts, toolUse.name, okValue), ...(payload?.extra ?? [])]);
     isError = ["bash", "apply_patch"].includes(toolUse.name) && (okValue as BashResult).exit_code !== 0;
   } catch (e) {
-    rawOutput = e instanceof Error ? e.message : String(e);
+    rawOutput = errorText(exec.ctx.texts, e);
     const patchNote = toolUse.name === "apply_patch" ? exec.ctx.texts.render("patch_failed") : undefined;
     if (patchNote !== undefined) rawOutput += `\n${patchNote}`;
     isError = true;
@@ -212,7 +214,7 @@ async function attachToolMedia(
 
   for (const [index, item] of payload.media.entries()) {
     const saved = await saveToolMedia(item, exec, toolUse);
-    const unsaved = saved === undefined ? [`[${item.label}: a separate media copy could not be saved]`] : [];
+    const unsaved = [saved === undefined ? exec.ctx.texts.render("tool_media_unsaved", { label: item.label }) : undefined].filter((note) => note !== undefined);
     if (saved !== undefined) {
       exec.sendDirect({
         type: "send_image",
@@ -247,8 +249,8 @@ async function attachToolMedia(
         continue;
       }
       const note = toolImageNote(item, reduced, exec, toolUse);
-      const file = saved === undefined || item.path !== undefined ? "" : `; its file is ${saved.path}`;
-      const notes = [...unsaved, ...(note === undefined ? [] : [note]), `[${item.label} attached${file}]`];
+      const attachedNote = exec.ctx.texts.render("tool_media_attached", { label: item.label, file: saved === undefined || item.path !== undefined ? undefined : saved.path });
+      const notes = [...unsaved, note, attachedNote].filter((each) => each !== undefined);
       attached.placed.push({ block, notes, ...(item.at === undefined ? {} : { at: item.at }) });
       inlinedBytes += bytes;
       attached.images.push({ ...original, data: block.source.data });
@@ -259,11 +261,13 @@ async function attachToolMedia(
       attached.failed = true;
       attached.images.push(original);
       attached.notes.push(...unsaved);
-      attached.notes.push(`[${item.label} not sent to the model: ${error instanceof Error ? error.message : String(error)}]`);
+      const failed = exec.ctx.texts.render("tool_media_failed", { label: item.label, error: error instanceof Error ? error.message : String(error) });
+      if (failed !== undefined) attached.notes.push(failed);
     }
   }
 
-  if (skipped.length > 0) attached.notes.push(skippedNote(skipped, maxBytes));
+  const skippedText = skipped.length > 0 ? skippedNote(exec.ctx.texts, skipped, maxBytes) : undefined;
+  if (skippedText !== undefined) attached.notes.push(skippedText);
   return attached;
 }
 
@@ -280,7 +284,7 @@ function toolImageNote(item: ToolMediaItem, reduced: ReducedImage, exec: ToolExe
   const fromFile = item.reducedFrom === undefined ? reduced : { ...reduced, original: item.reducedFrom, changed: true };
   if (toolUse.name !== "read" || !fromFile.changed || !read.tell_model) return undefined;
   const limits = exec.imageLimits ?? DEFAULT_IMAGE_LIMITS;
-  return reductionNote({
+  return reductionNote(exec.ctx.texts, {
     item,
     reduced: fromFile,
     tier: limits.tier,
@@ -289,13 +293,8 @@ function toolImageNote(item: ToolMediaItem, reduced: ReducedImage, exec: ToolExe
   });
 }
 
-function skippedNote(labels: readonly string[], maxBytes: number): string {
-  const listed = labels.slice(0, MAX_LISTED_MEDIA_NOTES).join(", ");
-  const more = labels.length > MAX_LISTED_MEDIA_NOTES ? ` and ${String(labels.length - MAX_LISTED_MEDIA_NOTES)} more` : "";
-  const reason = maxBytes === 0
-    ? "inline images are disabled for this tool"
-    : `at most ${String(MAX_INLINE_TOOL_IMAGES)} images and ${String(maxBytes)} bytes of prepared image data are sent per tool result`;
-  return `[${listed}${more} not sent to the model: ${reason}]`;
+function skippedNote(texts: Texts, labels: readonly string[], maxBytes: number): string | undefined {
+  return texts.render("tool_media_skipped", { labels: listSome(texts, labels), off: maxBytes === 0 ? "yes" : undefined, images: String(MAX_INLINE_TOOL_IMAGES), bytes: String(maxBytes) });
 }
 
 async function saveToolMedia(
@@ -319,27 +318,25 @@ async function saveToolMedia(
   }
 }
 
-function notOffered(name: string, schemas: ToolSchemas): string {
+function notOffered(texts: Texts, name: string, schemas: ToolSchemas): string {
   const now = TOOLS_NOW_PART_OF.get(name);
   return now !== undefined && schemas.has(now)
-    ? `it is part of the \`${now}\` tool now, ${now === "send_message" ? "as its `push`" : "which takes an `action`"}`
-    : "this tool is not available in the current tool set";
+    ? texts.always("tool_merged", { tool: now, push: now === "send_message" ? "yes" : undefined })
+    : texts.always("tool_not_offered");
 }
 
 export function argumentRejection(
+  texts: Texts,
   toolUse: ToolUseEvent,
   schemas: ToolSchemas | undefined,
 ): string | undefined {
+  const unparsed = toolUse.input_error === undefined ? undefined : texts.always("tool_arg_json", { why: toolUse.input_error, chars: String(toolUse.input_length ?? 0) });
   const reason =
-    toolUse.input_error ?? (schemas !== undefined && !schemas.has(toolUse.name)
-      ? notOffered(toolUse.name, schemas)
-      : schemaViolation(schemas?.get(toolUse.name), toolUse.input));
+    unparsed ?? (schemas !== undefined && !schemas.has(toolUse.name)
+      ? notOffered(texts, toolUse.name, schemas)
+      : schemaViolation(texts, schemas?.get(toolUse.name), toolUse.input));
   if (reason === undefined) return undefined;
-  return (
-    `The call to ${toolUse.name} was not run because ${reason}. ` +
-    `Nothing was executed and no state changed. Issue the call again with complete, ` +
-    `well-formed arguments.`
-  );
+  return texts.always("tool_rejected", { tool: toolUse.name, reason });
 }
 
 function emitToolResult(

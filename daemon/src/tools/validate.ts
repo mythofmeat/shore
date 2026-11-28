@@ -1,6 +1,7 @@
 import Ajv, { type ErrorObject, type ValidateFunction } from "ajv";
 import Ajv2020 from "ajv/dist/2020.js";
 import addFormats from "ajv-formats";
+import type { Texts } from "../texts/texts.ts";
 
 const ajvOptions = {
   addUsedSchema: false,
@@ -97,51 +98,37 @@ export function schemasFrom(
 }
 
 export function schemaViolation(
+  texts: Texts,
   schema: CompiledToolSchema | Record<string, unknown> | undefined,
   input: unknown,
 ): string | undefined {
   if (schema === undefined) return undefined;
-  if (!isJsonObject(input)) {
-    return `the arguments must be a JSON object, not ${describeJson(input)}`;
-  }
+  if (!isJsonObject(input)) return texts.always("tool_arg_not_object", { given: describeJson(input) });
 
   const compiled =
     schema instanceof CompiledToolSchema ? schema : compileToolSchema("<anonymous>", schema);
   if (compiled.validate(input)) return undefined;
 
   const errors = compiled.validate.errors ?? [];
-  if (errors.length === 0) return "the arguments did not match the tool's JSON Schema";
-  return errors.map(describeValidationError).join("; ");
+  if (errors.length === 0) return texts.always("tool_arg_mismatch");
+  return errors.map((error) => describeValidationError(texts, error)).join("; ");
 }
 
-function describeValidationError(error: ErrorObject): string {
-  if (error.keyword === "required") {
-    const missing = stringParam(error, "missingProperty");
-    return `the required argument ${quotePath(error.instancePath, missing)} was missing`;
-  }
-  if (error.keyword === "additionalProperties") {
-    const extra = stringParam(error, "additionalProperty");
-    return `argument ${quotePath(error.instancePath, extra)} is not allowed`;
-  }
+function describeValidationError(texts: Texts, error: ErrorObject): string {
+  if (error.keyword === "required") return texts.always("tool_arg_missing", { argument: quotePath(error.instancePath, stringParam(error, "missingProperty")) });
+  if (error.keyword === "additionalProperties") return texts.always("tool_arg_extra", { argument: quotePath(error.instancePath, stringParam(error, "additionalProperty")) });
 
-  const path = quotePath(error.instancePath);
+  const argument = quotePath(error.instancePath);
   if (error.keyword === "type") {
-    const expected = stringParam(error, "type");
-    return `argument ${path} must be ${article(expected)} ${expected}`;
+    const type = stringParam(error, "type");
+    return texts.always("tool_arg_type", { argument, an: /^[aeiou]/i.test(type) ? "yes" : undefined, type });
   }
   if (error.keyword === "enum") {
     const allowedValues = errorParam(error, "allowedValues");
-    const allowed = Array.isArray(allowedValues)
-      ? allowedValues.map((value) => JSON.stringify(value)).join(", ")
-      : "one of the declared values";
-    return `argument ${path} must be one of ${allowed}`;
+    return texts.always("tool_arg_enum", { argument, allowed: Array.isArray(allowedValues) ? allowedValues.map((value) => JSON.stringify(value)).join(", ") : undefined });
   }
-  if (error.keyword === "format") {
-    const format = stringParam(error, "format");
-    return `argument ${path} must match the ${JSON.stringify(format)} format`;
-  }
-
-  return `argument ${path} ${error.message ?? `failed the ${error.keyword} constraint`}`;
+  if (error.keyword === "format") return texts.always("tool_arg_format", { argument, format: JSON.stringify(stringParam(error, "format")) });
+  return texts.always("tool_arg_other", { argument, problem: error.message, keyword: error.keyword });
 }
 
 function quotePath(instancePath: string, child?: string): string {
@@ -167,10 +154,6 @@ function stringParam(error: ErrorObject, name: string): string {
 function errorParam(error: ErrorObject, name: string): unknown {
   const params = error.params as Record<string, unknown>;
   return params[name];
-}
-
-function article(word: string): "a" | "an" {
-  return /^[aeiou]/i.test(word) ? "an" : "a";
 }
 
 function isSchemaObject(value: unknown): value is Record<string, unknown> {

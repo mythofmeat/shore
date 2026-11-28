@@ -212,6 +212,41 @@ import t__tools__workspace__edit__answers__done from "../../prompts/tools/worksp
 import t__messages__sending__unreadable from "../../prompts/messages/sending/unreadable.md" with { type: "text" };
 import t__messages__sending__too_big from "../../prompts/messages/sending/too_big.md" with { type: "text" };
 import t__messages__sending__type from "../../prompts/messages/sending/type.md" with { type: "text" };
+import t__tools__results__invalid_args from "../../prompts/tools/results/invalid_args.md" with { type: "text" };
+import t__tools__results__io from "../../prompts/tools/results/io.md" with { type: "text" };
+import t__tools__results__not_implemented from "../../prompts/tools/results/not_implemented.md" with { type: "text" };
+import t__tools__results__timed_out from "../../prompts/tools/results/timed_out.md" with { type: "text" };
+import t__tools__results__timed_out_unconfirmed from "../../prompts/tools/results/timed_out_unconfirmed.md" with { type: "text" };
+import t__tools__results__stderr from "../../prompts/tools/results/stderr.md" with { type: "text" };
+import t__tools__results__rejected from "../../prompts/tools/results/rejected.md" with { type: "text" };
+import t__tools__results__merged from "../../prompts/tools/results/merged.md" with { type: "text" };
+import t__tools__results__not_offered from "../../prompts/tools/results/not_offered.md" with { type: "text" };
+import t__tools__results__media_unsaved from "../../prompts/tools/results/media_unsaved.md" with { type: "text" };
+import t__tools__results__media_attached from "../../prompts/tools/results/media_attached.md" with { type: "text" };
+import t__tools__results__media_failed from "../../prompts/tools/results/media_failed.md" with { type: "text" };
+import t__tools__results__media_skipped from "../../prompts/tools/results/media_skipped.md" with { type: "text" };
+import t__tools__results__media_left_out from "../../prompts/tools/results/media_left_out.md" with { type: "text" };
+import t__tools__results__media_full from "../../prompts/tools/results/media_full.md" with { type: "text" };
+import t__tools__results__media_reduced from "../../prompts/tools/results/media_reduced.md" with { type: "text" };
+import t__tools__results__media_tokens from "../../prompts/tools/results/media_tokens.md" with { type: "text" };
+import t__tools__results__list_and_more from "../../prompts/tools/results/list_and_more.md" with { type: "text" };
+import t__tools__results__output__bash from "../../prompts/tools/results/output/bash.md" with { type: "text" };
+import t__tools__results__output__activity from "../../prompts/tools/results/output/activity.md" with { type: "text" };
+import t__tools__results__output__model_history from "../../prompts/tools/results/output/model_history.md" with { type: "text" };
+import t__mcp__errors__tool_error from "../../prompts/mcp/errors/tool_error.md" with { type: "text" };
+import t__mcp__errors__request_failed from "../../prompts/mcp/errors/request_failed.md" with { type: "text" };
+import t__mcp__errors__bad_arguments from "../../prompts/mcp/errors/bad_arguments.md" with { type: "text" };
+import t__mcp__errors__cancelled from "../../prompts/mcp/errors/cancelled.md" with { type: "text" };
+import t__mcp__errors__unavailable from "../../prompts/mcp/errors/unavailable.md" with { type: "text" };
+import t__tools__arguments__schema__json from "../../prompts/tools/arguments/schema/json.md" with { type: "text" };
+import t__tools__arguments__schema__not_object from "../../prompts/tools/arguments/schema/not_object.md" with { type: "text" };
+import t__tools__arguments__schema__mismatch from "../../prompts/tools/arguments/schema/mismatch.md" with { type: "text" };
+import t__tools__arguments__schema__missing from "../../prompts/tools/arguments/schema/missing.md" with { type: "text" };
+import t__tools__arguments__schema__extra from "../../prompts/tools/arguments/schema/extra.md" with { type: "text" };
+import t__tools__arguments__schema__type from "../../prompts/tools/arguments/schema/type.md" with { type: "text" };
+import t__tools__arguments__schema__enum from "../../prompts/tools/arguments/schema/enum.md" with { type: "text" };
+import t__tools__arguments__schema__format from "../../prompts/tools/arguments/schema/format.md" with { type: "text" };
+import t__tools__arguments__schema__other from "../../prompts/tools/arguments/schema/other.md" with { type: "text" };
 import messages__earlier_not_shown from "../../prompts/messages/earlier_not_shown.md" with { type: "text" };
 import messages__opened_by_you from "../../prompts/messages/opened_by_you.md" with { type: "text" };
 import messages__picture_gone from "../../prompts/messages/picture_gone.md" with { type: "text" };
@@ -676,6 +711,53 @@ export const PICTURE_SEND_TEXTS: readonly TextSpec[] = [
   must("picture_send_type", t__messages__sending__type, "Why a file the character put in a message as a picture can't be sent, when it isn't one."),
 ];
 
+export const TOOL_RESULT_TEXTS: readonly TextSpec[] = [
+  must("tool_invalid_args", t__tools__results__invalid_args, "A tool's result when it refuses what it was given.", { error: "why, as one of the tool's errors has it" }),
+  must("tool_io", t__tools__results__io, "A tool's result when what it does fails.", { error: "why, as one of the tool's errors has it" }),
+  must("tool_not_implemented", t__tools__results__not_implemented, "A tool's result when Shore can't run it here.", { tool: "the tool" }),
+  must("tool_timed_out", t__tools__results__timed_out, "A tool's result when it ran out of time and stopped.", { seconds: "how many seconds it had", stopped: "set when what it printed before it stopped is known", output: "what it printed, its errors after tool_stderr" }),
+  must("tool_timed_out_unconfirmed", t__tools__results__timed_out_unconfirmed, "A tool's result when it ran out of time and hasn't said it stopped.", { seconds: "how many seconds it had" }),
+  text("tool_stderr", t__tools__results__stderr, "Before what a command wrote to its errors, in bash's result and in tool_timed_out.", { stderr: "what it wrote" }),
+  must("tool_rejected", t__tools__results__rejected, "A tool's result when Shore refuses the call before running it.", { tool: "the tool", reason: "why, as the tool_arg_ texts, tool_merged or tool_not_offered have it" }),
+  must("tool_merged", t__tools__results__merged, "Why a call to a tool that is now part of another is refused.", { tool: "the tool it is part of", push: "set when it is send_message's push" }),
+  must("tool_not_offered", t__tools__results__not_offered, "Why a call to a tool that is off is refused."),
+  text("tool_media_unsaved", t__tools__results__media_unsaved, "After a tool's result when Shore couldn't keep a copy of one of its pictures.", { label: "what it is, like a picture's path or its type and size" }),
+  text("tool_media_attached", t__tools__results__media_attached, "After a picture a tool's result sends.", { label: "what it is, like a picture's path or its type and size", file: "the file Shore keeps it in, when it has none of its own" }),
+  text("tool_media_failed", t__tools__results__media_failed, "After a tool's result, for a picture that couldn't be sent.", { label: "what it is, like a picture's path or its type and size", error: "why" }),
+  text("tool_media_skipped", t__tools__results__media_skipped, "After a tool's result, for pictures past what one result sends.", { labels: "the pictures, as list_and_more has them", off: "set when pictures are off for this tool", images: "how many pictures one result sends", bytes: "how many bytes of them" }),
+  text("tool_media_left_out", t__tools__results__media_left_out, "In an MCP tool's error, for each picture it sent.", { label: "what it is, like a picture's path or its type and size" }),
+  text("tool_media_full", t__tools__results__media_full, "After a picture read sends whole when asked for with original.", { label: "what it is, like a picture's path or its type and size", original: "the picture as it is, like 4000×3000 PNG", sent: "what was sent, with what it costs as tool_media_tokens has it", first_frame: "set when it is an animation" }),
+  text("tool_media_reduced", t__tools__results__media_reduced, "After a picture read made smaller to send, when images.read.tell_model is on.", { label: "what it is, like a picture's path or its type and size", original: "the picture as it is, with what it would cost", sent: "what was sent, with what it costs", first_frame: "set when it is an animation", offer: "set when images.read.allow_original is on", path: "the picture's file, when it isn't its label" }),
+  text("tool_media_tokens", t__tools__results__media_tokens, "What a picture costs, in tool_media_full and tool_media_reduced.", { count: "how many tokens", one: "set when it is one" }),
+  text("tool_list_and_more", t__tools__results__list_and_more, "A list cut short, in tool_media_skipped and read's notes on Markdown pictures.", { list: "the first few, with \", \" between them", count: "how many more" }),
+];
+
+export const TOOL_OUTPUT_TEXTS: readonly TextSpec[] = [
+  text("output_bash", t__tools__results__output__bash, "bash's result.", { code: "its exit status, when it exited", workdir: "where it ran", stdout: "what it printed", stderr: "what it wrote to its errors, after tool_stderr", reload: "prompt_reload, when it changed a file in the prompt" }),
+  text("output_activity", t__tools__results__output__activity, "activity_heatmap's result.", { days: "how many days it looked back", messages: "messages in them", total: "messages in all", empty: "set when there were none in them", thin: "set when there are too few to go by", engagement: "the engagement score", sessions: "sessions a day", hours: "a line for each hour", weekdays: "a line for each day of the week" }),
+  text("output_model_history", t__tools__results__output__model_history, "model_history's result.", { character: "the character", zone: "the time zone", range: "set when it was given a range", from: "the start it was given", to: "the end it was given", none: "set when no model was used in it", rows: "a line for each model" }),
+];
+
+export const MCP_ERROR_TEXTS: readonly TextSpec[] = [
+  must("mcp_tool_error", t__mcp__errors__tool_error, "An MCP tool's result when the server says the call failed.", { tool: "the tool", error: "what the server sent" }),
+  must("mcp_request_failed", t__mcp__errors__request_failed, "An MCP tool's result when the request to its server fails.", { server: "the server", error: "why" }),
+  must("mcp_bad_arguments", t__mcp__errors__bad_arguments, "An MCP tool's result for arguments that aren't an object.", { tool: "the tool", args: "what it was given, as JSON" }),
+  must("mcp_cancelled", t__mcp__errors__cancelled, "An MCP tool's result when it was stopped.", { tool: "the tool", server: "the server" }),
+  must("mcp_unavailable", t__mcp__errors__unavailable, "An MCP tool's result when its server isn't connected.", { server: "the server" }),
+];
+
+export const TOOL_ARG_TEXTS: readonly TextSpec[] = [
+  must("tool_arg_json", t__tools__arguments__schema__json, "In tool_rejected, when the model's arguments weren't JSON.", { why: "what the JSON parser said", chars: "how many characters arrived" }),
+  must("tool_arg_not_object", t__tools__arguments__schema__not_object, "In tool_rejected, when the arguments weren't an object.", { given: "what they were, like an array or null" }),
+  must("tool_arg_mismatch", t__tools__arguments__schema__mismatch, "In tool_rejected, when the arguments don't fit the tool's schema and the checker says no more."),
+  must("tool_arg_missing", t__tools__arguments__schema__missing, "In tool_rejected, for each argument the tool needs that wasn't given; they are joined with \"; \".", { argument: "the argument, in backticks" }),
+  must("tool_arg_extra", t__tools__arguments__schema__extra, "In tool_rejected, for each argument the tool doesn't take.", { argument: "the argument, in backticks" }),
+  must("tool_arg_type", t__tools__arguments__schema__type, "In tool_rejected, for an argument of the wrong type.", { argument: "the argument, in backticks", an: "set when the type starts with a vowel", type: "the type it must be, like string" }),
+  must("tool_arg_enum", t__tools__arguments__schema__enum, "In tool_rejected, for an argument that isn't one of the values the tool takes.", { argument: "the argument, in backticks", allowed: "the values, with \", \" between them" }),
+  must("tool_arg_format", t__tools__arguments__schema__format, "In tool_rejected, for an argument in the wrong format.", { argument: "the argument, in backticks", format: "the format, in quotes" }),
+  must("tool_arg_other", t__tools__arguments__schema__other, "In tool_rejected, for any other way an argument doesn't fit.", { argument: "the argument, in backticks", problem: "what the schema checker said", keyword: "the rule it broke" }),
+];
+
 const GUIDE_VALUES = { user: "the user's name", tools_off: "the tools a topic names that are off" };
 
 export const GUIDE_TEXTS: readonly TextSpec[] = [
@@ -731,7 +813,7 @@ export const TOOL_TEXTS: readonly TextSpec[] = Object.entries(TOOL_TEXTS_SHIPPED
   ...Object.entries(parameters).map(([parameter, shipped]) => text(parameterText(tool, parameter), shipped, `The description of the ${parameter} parameter of ${tool}.`, TOOL_VALUES)),
 ]);
 
-export const TEXTS: readonly TextSpec[] = [...MESSAGE_TEXTS, ...SYSTEM_TEXTS, ...WAKE_TEXTS, ...TOOL_TEXTS, ...OTHER_TEXTS, ...IMAGE_TEXTS, ...READ_TEXTS, ...MCP_TEXTS, ...SEND_TEXTS, ...ARG_TEXTS, ...WAKE_TOOL_TEXTS, ...TOOL_COMMON_TEXTS, ...ARG_COMMON_TEXTS, ...THREADS_TOOL_TEXTS, ...TRIGGERS_TOOL_TEXTS, ...FILE_TEXTS, ...EDIT_TEXTS, ...PICTURE_SEND_TEXTS, ...GUIDE_TEXTS];
+export const TEXTS: readonly TextSpec[] = [...MESSAGE_TEXTS, ...SYSTEM_TEXTS, ...WAKE_TEXTS, ...TOOL_TEXTS, ...OTHER_TEXTS, ...IMAGE_TEXTS, ...READ_TEXTS, ...MCP_TEXTS, ...SEND_TEXTS, ...ARG_TEXTS, ...WAKE_TOOL_TEXTS, ...TOOL_COMMON_TEXTS, ...ARG_COMMON_TEXTS, ...THREADS_TOOL_TEXTS, ...TRIGGERS_TOOL_TEXTS, ...FILE_TEXTS, ...EDIT_TEXTS, ...PICTURE_SEND_TEXTS, ...TOOL_RESULT_TEXTS, ...TOOL_OUTPUT_TEXTS, ...MCP_ERROR_TEXTS, ...TOOL_ARG_TEXTS, ...GUIDE_TEXTS];
 
 export const TEXT_SPECS: ReadonlyMap<string, TextSpec> = new Map(TEXTS.map((spec) => [spec.name, spec]));
 

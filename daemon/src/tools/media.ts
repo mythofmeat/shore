@@ -2,6 +2,7 @@ import { MAX_IMAGE_BYTES } from "../llm/images.ts";
 import type { ImageDimensions } from "../llm/image_dimensions.ts";
 import { sentImageTokens, type ImageTier } from "../llm/image_tokens.ts";
 import type { ImageVersion, ReducedImage } from "../llm/prepare_images.ts";
+import type { Texts } from "../texts/texts.ts";
 
 const CARRIER = Symbol("shore.tool_media");
 
@@ -60,17 +61,17 @@ export function payloadText(value: unknown): string {
   return JSON.stringify(value) ?? "";
 }
 
-export function renderPayload(payload: ToolResultPayload): string {
+export function renderPayload(texts: Texts, payload: ToolResultPayload): string {
   const head = payloadText(payload.value);
   const parts = head === "" ? [] : [head];
   parts.push(...payload.extra, ...(payload.notes ?? []));
-  for (const item of payload.media) parts.push(`[${item.label} returned, not included here]`);
-  return parts.join("\n");
+  for (const item of payload.media) parts.push(texts.render("tool_media_left_out", { label: item.label }) ?? "");
+  return parts.filter((part) => part !== "").join("\n");
 }
 
-export function renderToolValue(value: unknown): string {
-  const payload = toolMediaOf(value);
-  return payload === undefined ? payloadText(value) : renderPayload(payload);
+export function listSome(texts: Texts, items: readonly string[]): string {
+  const shown = items.slice(0, MAX_LISTED_MEDIA_NOTES).join(", ");
+  return items.length > MAX_LISTED_MEDIA_NOTES ? texts.render("tool_list_and_more", { list: shown, count: String(items.length - MAX_LISTED_MEDIA_NOTES) }) ?? shown : shown;
 }
 
 const FORMAT_NAMES: Record<string, string> = {
@@ -86,9 +87,9 @@ function describeVersion(version: ImageVersion): string {
   return size === undefined ? format : `${String(size.width)}×${String(size.height)} ${format}`;
 }
 
-function tokenCost(dimensions: ImageDimensions | undefined, tier: ImageTier): string {
+function tokenCost(texts: Texts, dimensions: ImageDimensions | undefined, tier: ImageTier): string {
   const tokens = sentImageTokens(dimensions, tier);
-  return `${tokens.toLocaleString("en-US")} ${tokens === 1 ? "token" : "tokens"}`;
+  return texts.render("tool_media_tokens", { count: tokens.toLocaleString("en-US"), one: tokens === 1 ? "yes" : undefined }) ?? "";
 }
 
 export interface ReductionNote {
@@ -99,16 +100,17 @@ export interface ReductionNote {
   offerOriginal: boolean;
 }
 
-export function reductionNote({ item, reduced, tier, fullSize, offerOriginal }: ReductionNote): string {
-  const firstFrame = reduced.original.mediaType === "image/gif" ? ", first frame only" : "";
-  const sent = `${describeVersion(reduced.sent)} (${tokenCost(reduced.sent.dimensions, tier)})`;
-  if (item.original === true) {
-    return `[${item.label}: ${describeVersion(reduced.original)} sent at ${sent}, the full resolution this model accepts${firstFrame}.]`;
-  }
-  const original = `${describeVersion(reduced.original)} (${tokenCost(fullSize, tier)})`;
+export function reductionNote(texts: Texts, { item, reduced, tier, fullSize, offerOriginal }: ReductionNote): string | undefined {
+  const firstFrame = reduced.original.mediaType === "image/gif" ? "yes" : undefined;
+  const sent = `${describeVersion(reduced.sent)} (${tokenCost(texts, reduced.sent.dimensions, tier)})`;
+  if (item.original === true) return texts.render("tool_media_full", { label: item.label, original: describeVersion(reduced.original), sent, first_frame: firstFrame });
   const path = item.path ?? item.label;
-  const offer = !offerOriginal ? "" : path === item.label
-    ? " Read it with original: true for the full image."
-    : ` Read ${path} with original: true for the full image.`;
-  return `[${item.label}: reduced from ${original} to ${sent}${firstFrame}.${offer}]`;
+  return texts.render("tool_media_reduced", {
+    label: item.label,
+    original: `${describeVersion(reduced.original)} (${tokenCost(texts, fullSize, tier)})`,
+    sent,
+    first_frame: firstFrame,
+    offer: offerOriginal ? "yes" : undefined,
+    path: path === item.label ? undefined : path,
+  });
 }

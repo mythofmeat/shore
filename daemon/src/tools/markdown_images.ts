@@ -8,6 +8,7 @@ import { base64Bytes } from "../util/base64.ts";
 import { readImageAt } from "./read_image.ts";
 import { embeddedPicture, workspaceNames, type WorkspaceNames } from "./workspace_names.ts";
 import type { Texts } from "../texts/texts.ts";
+import { listSome } from "./media.ts";
 
 const MAX_MARKDOWN_IMAGE_SOURCE_BYTES = 1024 * 1024;
 
@@ -34,11 +35,6 @@ function localImagePath(texts: Texts, url: string, documentPath: string): string
   if (path === "" || /^[a-z][a-z0-9+.-]*:/i.test(path) || path.startsWith("//") || path.startsWith("\\\\")) return undefined;
   if (path.includes("\0")) throw new Error(texts.always("read_md_nul"));
   return resolve(dirname(documentPath), path);
-}
-
-function listSome(items: readonly string[]): string {
-  const more = items.length > MAX_LISTED_MEDIA_NOTES ? ` and ${String(items.length - MAX_LISTED_MEDIA_NOTES)} more` : "";
-  return items.slice(0, MAX_LISTED_MEDIA_NOTES).join(", ") + more;
 }
 
 function wikilinkImages(source: string, node: Text, visible: (start: number, end: number) => boolean): ImageRef[] {
@@ -87,8 +83,8 @@ function afterLineOf(page: TextPage, end: number): number | undefined {
 
 function overBudgetNote(texts: Texts, urls: readonly string[], maxImageBytes: number): string | undefined {
   return maxImageBytes === 0
-    ? texts.render("read_md_images_off", { images: listSome(urls) })
-    : texts.render("read_md_images_over", { images: listSome(urls), bytes: String(maxImageBytes) });
+    ? texts.render("read_md_images_off", { images: listSome(texts, urls) })
+    : texts.render("read_md_images_over", { images: listSome(texts, urls), bytes: String(maxImageBytes) });
 }
 
 export async function expandMarkdownImages(
