@@ -207,37 +207,75 @@ test.describe("on a touch screen", () => {
   });
 });
 
-interface Lined { getBoundingClientRect: () => { height: number }; ownerDocument: { defaultView: { getComputedStyle: (part: Lined) => { lineHeight: string } } | null; createRange: () => { selectNodeContents: (part: Lined) => void; getBoundingClientRect: () => { left: number } } } }
+interface Styled { ownerDocument: { defaultView: { getComputedStyle: (part: Styled) => { color: string; fontSize: string } } | null } }
+const looks = (part: Styled) => { const style = part.ownerDocument.defaultView?.getComputedStyle(part); return [style?.color, Number.parseFloat(style?.fontSize ?? "0")] as const; };
+const midline = (edges: Edges) => (edges.top + edges.bottom) / 2;
 
-test("the line on how near the thread is to compaction sits just above the message box, on one line inside its width, with its text in line with the box's, at the largest text and on the narrowest phone", async ({ page }) => {
+test("the context chip sits in the top bar without widening it, at the largest text and the narrowest desktop, and its dialog lines each limit up with its bar, on the narrowest phone too", async ({ page }) => {
   const finish = await watchPage(page);
   await signIn(page);
   await createCharacter(page, "petrel");
   await send(page, "hello there");
-  const line = page.locator(".context-use");
-  await expect(line).toContainText("Next compaction:");
-  const measure = async (where: string) => {
-    const [around, words, box, text] = await Promise.all([edgesOf(line), line.evaluate((part: Lined) => {
-      const style = part.ownerDocument.defaultView?.getComputedStyle(part);
-      const range = part.ownerDocument.createRange();
-      range.selectNodeContents(part);
-      return { height: part.getBoundingClientRect().height, lineHeight: Number.parseFloat(style?.lineHeight ?? "0"), textLeft: range.getBoundingClientRect().left };
-    }), edgesOf(page.locator(".composer")), edgesOf(page.getByLabel("Message", { exact: true }))]);
-    expect(around.left, `${where}: inside the box's width on the left`).toBeGreaterThanOrEqual(box.left - 0.5);
-    expect(around.right, `${where}: inside the box's width on the right`).toBeLessThanOrEqual(box.right + 0.5);
-    expect(box.top - around.bottom, `${where}: just above the box`).toBeGreaterThanOrEqual(0);
-    expect(box.top - around.bottom, `${where}: just above the box`).toBeLessThanOrEqual(4);
-    expect(words.height, `${where}: one line`).toBeLessThanOrEqual(words.lineHeight * 1.5);
-    expect(Math.abs(words.textLeft - text.left), `${where}: its text starts where the box's does`).toBeLessThanOrEqual(2);
+  const chip = page.getByRole("button", { name: /^Context \d+%$/ });
+  const dialog = page.getByRole("dialog", { name: "Compact context" });
+  const measureDialog = async (where: string, oneLine: boolean) => {
+    const rows = dialog.locator(".context-limit");
+    await expect(rows).toHaveCount(3);
+    expect(await dialog.locator("form").evaluate(spill), `${where}: nothing spills out of the dialog`).toBe(0);
+    const [rule, list] = await Promise.all([edgesOf(dialog.locator(".context-limits > p")), edgesOf(dialog.locator(".context-limit-list"))]);
+    expect(list.top - rule.bottom, `${where}: the limits sit a little under the rule`).toBeGreaterThanOrEqual(8);
+    expect(list.top - rule.bottom, `${where}: the limits sit a little under the rule`).toBeLessThanOrEqual(12);
+    const [ruleLooks, nameLooks, valueLooks] = await Promise.all([dialog.locator(".context-limits > p").evaluate(looks), rows.first().locator("dt").evaluate(looks), rows.first().locator("dd").evaluate(looks)]);
+    expect(nameLooks[1], `${where}: the limits are smaller than the rule`).toBeLessThan(ruleLooks[1]);
+    expect(nameLooks[0], `${where}: a limit's name is quieter than its value`).not.toBe(valueLooks[0]);
+    let above: Edges | undefined;
+    for (const index of [0, 1, 2]) {
+      const row = rows.nth(index);
+      const [name, value, words, bar] = await Promise.all([edgesOf(row.locator("dt")), edgesOf(row.locator("dd")), edgesOf(row.locator("dd > span").first()), edgesOf(row.locator(".budget-chip-bar"))]);
+      expect(value.right, `${where}: row ${String(index)}'s value ends at the list's right edge`).toBeCloseTo(list.right, 0);
+      expect([bar.right, bar.right - bar.left], `${where}: row ${String(index)}'s bar is last and full width`).toEqual([value.right, 56]);
+      expect(Math.abs(midline(bar) - midline(words)), `${where}: row ${String(index)}'s bar sits on its number's midline`).toBeLessThanOrEqual(1);
+      expect(bar.left - words.right, `${where}: row ${String(index)}'s bar keeps a little way from its number`).toBeCloseTo(10, 0);
+      if (oneLine) expect(Math.abs(midline(name) - midline(value)), `${where}: row ${String(index)} is one line`).toBeLessThanOrEqual(1);
+      expect(name.right <= value.left || name.bottom <= value.top, `${where}: row ${String(index)}'s name ends before its value or above it`).toBe(true);
+      if (name.bottom <= value.top) expect(value.top - name.bottom, `${where}: row ${String(index)}'s value sits a little under its name`).toBeCloseTo(2, 0);
+      expect(name.right, `${where}: row ${String(index)}'s name stays inside the list`).toBeLessThanOrEqual(list.right);
+      const top = Math.min(name.top, value.top);
+      if (above !== undefined) expect(top - above.bottom, `${where}: row ${String(index)} sits just under the one before`).toBeGreaterThanOrEqual(4);
+      if (above !== undefined) expect(top - above.bottom, `${where}: row ${String(index)} sits just under the one before`).toBeLessThanOrEqual(8);
+      above = { ...value, top, bottom: Math.max(name.bottom, value.bottom) };
+    }
   };
-  await measure("default text");
+  await chip.click();
+  await measureDialog("desktop", true);
+  await dialog.getByRole("button", { name: "Cancel" }).click();
+
+  await createThread(page, "petrel", "a-very-long-thread-name-that-goes-on-and-on-and-on");
+  const measureBar = async (where: string) => {
+    const bar = page.locator(".topbar");
+    expect(await bar.evaluate(spill), `${where}: nothing spills out of the top bar`).toBe(0);
+    expect(await chip.evaluate(spill), `${where}: the chip is not squeezed`).toBe(0);
+    const [title, shown, options] = await Promise.all([edgesOf(page.locator(".topbar-title")), edgesOf(chip), edgesOf(page.getByRole("button", { name: "Thread options" }))]);
+    expect(title.right, `${where}: the thread's name stops before the chip`).toBeLessThanOrEqual(shown.left);
+    expect(shown.right, `${where}: the chip ends before the options button`).toBeLessThanOrEqual(options.left);
+    expect(Math.abs(midline(shown) - midline(options)), `${where}: the chip sits on the options button's midline`).toBeLessThanOrEqual(1);
+  };
+  await measureBar("default text");
   await page.evaluate("localStorage.setItem('shore.font-size', 'larger')");
   await page.reload();
-  await expect(line).toContainText("Next compaction:");
-  await measure("largest text");
+  await expect(chip).toBeVisible();
+  await measureBar("largest text");
+  await page.setViewportSize({ width: 870, height: 700 });
+  await expect(page.getByRole("complementary", { name: "Characters and threads" })).toBeVisible();
+  await measureBar("narrowest desktop");
+
+  await page.getByRole("button", { name: "main", exact: true }).click();
   await page.setViewportSize({ width: 280, height: 653 });
   await expect(page.locator(".shell")).toHaveAttribute("data-layout", "mobile");
-  await measure("narrowest phone");
+  await expect(chip).toBeHidden();
+  await page.getByRole("button", { name: "Thread options" }).click();
+  await page.getByRole("menuitem", { name: "Compact context…" }).click();
+  await measureDialog("narrowest phone", false);
   await finish();
 });
 
