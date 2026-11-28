@@ -109,9 +109,7 @@ export function schemaViolation(
     schema instanceof CompiledToolSchema ? schema : compileToolSchema("<anonymous>", schema);
   if (compiled.validate(input)) return undefined;
 
-  const errors = compiled.validate.errors ?? [];
-  if (errors.length === 0) return texts.always("tool_arg_mismatch");
-  return errors.map((error) => describeValidationError(texts, error)).join("; ");
+  return (compiled.validate.errors ?? []).map((error) => describeValidationError(texts, error)).join("; ");
 }
 
 function describeValidationError(texts: Texts, error: ErrorObject): string {
@@ -124,8 +122,7 @@ function describeValidationError(texts: Texts, error: ErrorObject): string {
     return texts.always("tool_arg_type", { argument, an: /^[aeiou]/i.test(type) ? "yes" : undefined, type });
   }
   if (error.keyword === "enum") {
-    const allowedValues = errorParam(error, "allowedValues");
-    return texts.always("tool_arg_enum", { argument, allowed: Array.isArray(allowedValues) ? allowedValues.map((value) => JSON.stringify(value)).join(", ") : undefined });
+    return texts.always("tool_arg_enum", { argument, allowed: (errorParam(error, "allowedValues") as unknown[]).map((value) => JSON.stringify(value)).join(", ") });
   }
   if (error.keyword === "format") return texts.always("tool_arg_format", { argument, format: JSON.stringify(stringParam(error, "format")) });
   return texts.always("tool_arg_other", { argument, problem: error.message, keyword: error.keyword });

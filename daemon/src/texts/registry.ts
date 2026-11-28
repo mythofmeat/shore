@@ -240,7 +240,6 @@ import t__mcp__errors__cancelled from "../../prompts/mcp/errors/cancelled.md" wi
 import t__mcp__errors__unavailable from "../../prompts/mcp/errors/unavailable.md" with { type: "text" };
 import t__tools__arguments__schema__json from "../../prompts/tools/arguments/schema/json.md" with { type: "text" };
 import t__tools__arguments__schema__not_object from "../../prompts/tools/arguments/schema/not_object.md" with { type: "text" };
-import t__tools__arguments__schema__mismatch from "../../prompts/tools/arguments/schema/mismatch.md" with { type: "text" };
 import t__tools__arguments__schema__missing from "../../prompts/tools/arguments/schema/missing.md" with { type: "text" };
 import t__tools__arguments__schema__extra from "../../prompts/tools/arguments/schema/extra.md" with { type: "text" };
 import t__tools__arguments__schema__type from "../../prompts/tools/arguments/schema/type.md" with { type: "text" };
@@ -892,7 +891,6 @@ export const MCP_ERROR_TEXTS: readonly TextSpec[] = [
 export const TOOL_ARG_TEXTS: readonly TextSpec[] = [
   must("tool_arg_json", t__tools__arguments__schema__json, "In tool_rejected, when the model's arguments weren't JSON.", { why: "what the JSON parser said", chars: "how many characters arrived" }),
   must("tool_arg_not_object", t__tools__arguments__schema__not_object, "In tool_rejected, when the arguments weren't an object.", { given: "what they were, like an array or null" }),
-  must("tool_arg_mismatch", t__tools__arguments__schema__mismatch, "In tool_rejected, when the arguments don't fit the tool's schema and the checker says no more."),
   must("tool_arg_missing", t__tools__arguments__schema__missing, "In tool_rejected, for each argument the tool needs that wasn't given; they are joined with \"; \".", { argument: "the argument, in backticks" }),
   must("tool_arg_extra", t__tools__arguments__schema__extra, "In tool_rejected, for each argument the tool doesn't take.", { argument: "the argument, in backticks" }),
   must("tool_arg_type", t__tools__arguments__schema__type, "In tool_rejected, for an argument of the wrong type.", { argument: "the argument, in backticks", an: "set when the type starts with a vowel", type: "the type it must be, like string" }),

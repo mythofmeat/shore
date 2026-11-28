@@ -58,6 +58,14 @@ describe("runToolUse", () => {
     expect(frames.some((f) => f.type === "tool_result" &&  f.is_error)).toBe(true);
   });
 
+  test("arguments that weren't JSON say why and how many characters arrived, none when that wasn't counted", async () => {
+    const { exec } = harness();
+    const counted = await runToolUse({ id: "t1", name: "read", input: {}, input_error: "Unexpected end of input", input_length: 9 }, exec);
+    expect((counted.block as { content: string }).content).toContain("the arguments were not valid JSON (Unexpected end of input); 9 characters arrived");
+    const uncounted = await runToolUse({ id: "t2", name: "read", input: {}, input_error: "Unexpected end of input" }, exec);
+    expect((uncounted.block as { content: string }).content).toContain("the arguments were not valid JSON (Unexpected end of input); 0 characters arrived");
+  });
+
   test("a call missing a required argument is refused before dispatch", async () => {
     const { exec } = harness();
     const { block } = await runToolUse({ id: "t2", name: "read", input: {} }, exec);

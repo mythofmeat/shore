@@ -6,6 +6,10 @@ import { asCharacterWorkspace, type CharacterWorkspace } from "./character_works
 import { InvalidArgs, ToolIoError } from "./errors.ts";
 import type { Texts } from "../texts/texts.ts";
 
+async function executable(path: string): Promise<boolean> {
+  return await access(path, constants.X_OK).then(() => true, () => false);
+}
+
 async function patchExecutable(texts: Texts): Promise<string> {
   const override = process.env.SHORE_APPLY_PATCH_PATH;
   if (override !== undefined) {
@@ -14,18 +18,16 @@ async function patchExecutable(texts: Texts): Promise<string> {
   }
   const name = process.platform === "win32" ? "shore-apply-patch.exe" : "shore-apply-patch";
   const candidates = [join(dirname(process.execPath), name), join(import.meta.dir, "../../dist", name)];
-  for (const path of candidates) {
-    try { await access(path, constants.X_OK); return path; } catch { continue; }
-  }
+  for (const path of candidates) if (await executable(path)) return path;
   throw new ToolIoError(texts.always("patch_helper_missing"));
 }
 
 export async function handleApplyPatch(input: Record<string, unknown>, target: string | CharacterWorkspace, signal?: AbortSignal): Promise<unknown> {
   signal?.throwIfAborted();
-  const patch = input.patch;
+  const patch = input.patch as string;
   const workspace = asCharacterWorkspace(target);
   const texts = workspace.texts;
-  if (typeof patch !== "string" || patch.trim() === "" || patch.includes("\0")) throw new InvalidArgs(texts.always("patch_form"));
+  if (patch.trim() === "" || patch.includes("\0")) throw new InvalidArgs(texts.always("patch_form"));
   if (workspace.dir === "") throw new InvalidArgs(texts.always("file_no_workspace"));
   const helper = await patchExecutable(texts);
   const workdir = resolve(workspace.dir);
