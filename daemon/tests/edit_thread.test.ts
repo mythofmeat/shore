@@ -49,13 +49,15 @@ const messages: Message[] = [{
   timestamp: NOW,
 }];
 
-async function setup(files: Record<string, string>) {
+async function setup(files: Record<string, string>, texts: Record<string, string> = {}) {
   const root = testTmp(`edit-thread-${crypto.randomUUID()}`);
   const dirs = { config: join(root, "config"), data: join(root, "data"), cache: join(root, "cache"), runtime: join(root, "run") };
   for (const dir of Object.values(dirs)) await mkdir(dir, { recursive: true });
   initializeDatabase(dirs.data);
   const app = promptedAppConfig();
   app.chat.display_name = "Sam";
+  for (const [name, wording] of Object.entries(texts)) await writeFile(join(dirs.config, `${name}.md`), wording);
+  app.texts = Object.fromEntries(Object.keys(texts).map((name) => [name, `${name}.md`]));
   const config: LoadedConfig = { app, models: emptyCatalog(), providers: ProviderRegistry.empty(), dirs, rawTable: undefined };
   const workspace = characterWorkspace(config, "frank").dir;
   for (const [path, content] of Object.entries({ "SOUL.md": "Frank", ...files })) {
@@ -125,6 +127,20 @@ describe("the character editing a thread", () => {
     expect(await outcomeOf(edit({ name: "nowhere", label: "Somewhere" }))).toThrow(`no thread "nowhere" for frank`);
     expect(await stored("main")).toEqual(home);
     expect(await stored("nowhere")).toBeUndefined();
+  });
+
+  test("the character is refused in the character's own words for them, while the thread's own error keeps Shore's", async () => {
+    const { registry, edit } = await setup({}, {
+      threads_home_edit: "{{thread}} is home, {{character}}.",
+      threads_pins_unloadable: "{{#if one}}one pin{{else}}pins{{/if}} won't load:\n{{problems}}",
+      threads_pin_leaves: "{{pin}} is outside.",
+      threads_pin_in_prompt: "{{path}} is always there.",
+    });
+    await registry.createThread("frank", "story", { label: "Lighthouse" });
+    expect(await outcomeOf(edit({ name: "main", label: "Home" }))).toThrow('"main" is home, frank.');
+    expect(await outcomeOf(registry.editThreadAsCharacter("frank", "main", { label: "Home" }))).toThrow('thread "main" is the home thread for frank, so only the user');
+    expect(await outcomeOf(edit({ name: "story", pins: ["../away.md"] }))).toThrow('one pin won\'t load:\n- "../away.md" is outside.');
+    expect(await outcomeOf(edit({ name: "story", pins: ["../away.md", "SOUL.md"] }))).toThrow('pins won\'t load:\n- "../away.md" is outside.\n- SOUL.md is always there.');
   });
 
   test("a thread the user locks refuses her and says so, while the user can still change it, until it's unlocked", async () => {

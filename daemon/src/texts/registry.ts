@@ -343,6 +343,19 @@ import t__tools__workspace__names__tried_as from "../../prompts/tools/workspace/
 import t__tools__workspace__names__link_failed from "../../prompts/tools/workspace/names/link_failed.md" with { type: "text" };
 import t__messages__sending__too_many from "../../prompts/messages/sending/too_many.md" with { type: "text" };
 import t__messages__sending__problem from "../../prompts/messages/sending/problem.md" with { type: "text" };
+import t__tools__threads__threads__answers__exists from "../../prompts/tools/threads/threads/answers/exists.md" with { type: "text" };
+import t__tools__threads__threads__answers__not_found from "../../prompts/tools/threads/threads/answers/not_found.md" with { type: "text" };
+import t__tools__threads__threads__answers__home_edit from "../../prompts/tools/threads/threads/answers/home_edit.md" with { type: "text" };
+import t__tools__threads__threads__answers__seal_past from "../../prompts/tools/threads/threads/answers/seal_past.md" with { type: "text" };
+import t__tools__threads__threads__answers__pin_command_empty from "../../prompts/tools/threads/threads/answers/pin_command_empty.md" with { type: "text" };
+import t__tools__threads__threads__answers__pin_command_lines from "../../prompts/tools/threads/threads/answers/pin_command_lines.md" with { type: "text" };
+import t__tools__threads__threads__answers__pin_path_empty from "../../prompts/tools/threads/threads/answers/pin_path_empty.md" with { type: "text" };
+import t__tools__threads__threads__answers__pin_leaves from "../../prompts/tools/threads/threads/answers/pin_leaves.md" with { type: "text" };
+import t__tools__threads__threads__answers__pin_bang from "../../prompts/tools/threads/threads/answers/pin_bang.md" with { type: "text" };
+import t__tools__threads__threads__answers__pins_too_many from "../../prompts/tools/threads/threads/answers/pins_too_many.md" with { type: "text" };
+import t__tools__threads__threads__answers__pins_no_bash from "../../prompts/tools/threads/threads/answers/pins_no_bash.md" with { type: "text" };
+import t__tools__threads__threads__answers__pin_in_prompt from "../../prompts/tools/threads/threads/answers/pin_in_prompt.md" with { type: "text" };
+import t__tools__threads__threads__answers__pins_unloadable from "../../prompts/tools/threads/threads/answers/pins_unloadable.md" with { type: "text" };
 import messages__earlier_not_shown from "../../prompts/messages/earlier_not_shown.md" with { type: "text" };
 import messages__opened_by_you from "../../prompts/messages/opened_by_you.md" with { type: "text" };
 import messages__picture_gone from "../../prompts/messages/picture_gone.md" with { type: "text" };
@@ -965,6 +978,22 @@ export const NAME_TEXTS: readonly TextSpec[] = [
   must("names_link_failed", t__tools__workspace__names__link_failed, "read's error for a link it can't follow.", { link: "the link", error: "why" }),
 ];
 
+export const THREAD_REFUSAL_TEXTS: readonly TextSpec[] = [
+  must("threads_exists", t__tools__threads__threads__answers__exists, "threads' error for a name another thread has.", { thread: "the thread's name, in quotes", character: "the character's name" }),
+  must("threads_not_found", t__tools__threads__threads__answers__not_found, "The error for a thread the character doesn't have, or has on hold or archived.", { thread: "the thread's name, in quotes", character: "the character's name" }),
+  must("threads_home_edit", t__tools__threads__threads__answers__home_edit, "threads' error for an edit of the home thread.", { thread: "the thread's name, in quotes", character: "the character's name" }),
+  must("threads_seal_past", t__tools__threads__threads__answers__seal_past, "threads' error for a sealed thread that would open at a time already gone."),
+  must("threads_pin_command_empty", t__tools__threads__threads__answers__pin_command_empty, "threads' error for a pin that is only a !."),
+  must("threads_pin_command_lines", t__tools__threads__threads__answers__pin_command_lines, "threads' error for a command pin of more than one line.", { pin: "the pin, in quotes" }),
+  must("threads_pin_path_empty", t__tools__threads__threads__answers__pin_path_empty, "threads' error for a pin with no path."),
+  must("threads_pin_leaves", t__tools__threads__threads__answers__pin_leaves, "threads' error for a pin with .. in its path.", { pin: "the pin, in quotes" }),
+  must("threads_pin_bang", t__tools__threads__threads__answers__pin_bang, "threads' error for a file whose path starts with !.", { path: "the file" }),
+  must("threads_pins_too_many", t__tools__threads__threads__answers__pins_too_many, "threads' error for more pins than a thread can have.", { count: "how many it can have" }),
+  must("threads_pins_no_bash", t__tools__threads__threads__answers__pins_no_bash, "threads' error for a command pin added by a character without bash.", { pins: "the command pins, with \", \" between them" }),
+  must("threads_pin_in_prompt", t__tools__threads__threads__answers__pin_in_prompt, "Why a file can't be pinned, in threads_pins_unloadable, when it is a prompt file.", { path: "the file" }),
+  must("threads_pins_unloadable", t__tools__threads__threads__answers__pins_unloadable, "threads' error for pins it can't find or load.", { one: "set when it is one pin", problems: "each pin's problem, after \"- \", one to a line" }),
+];
+
 const GUIDE_VALUES = { user: "the user's name", tools_off: "the tools a topic names that are off" };
 
 export const GUIDE_TEXTS: readonly TextSpec[] = [
@@ -1020,7 +1049,7 @@ export const TOOL_TEXTS: readonly TextSpec[] = Object.entries(TOOL_TEXTS_SHIPPED
   ...Object.entries(parameters).map(([parameter, shipped]) => text(parameterText(tool, parameter), shipped, `The description of the ${parameter} parameter of ${tool}.`, TOOL_VALUES)),
 ]);
 
-export const TEXTS: readonly TextSpec[] = [...MESSAGE_TEXTS, ...SYSTEM_TEXTS, ...WAKE_TEXTS, ...TOOL_TEXTS, ...OTHER_TEXTS, ...IMAGE_TEXTS, ...READ_TEXTS, ...MCP_TEXTS, ...SEND_TEXTS, ...ARG_TEXTS, ...WAKE_TOOL_TEXTS, ...TOOL_COMMON_TEXTS, ...ARG_COMMON_TEXTS, ...THREADS_TOOL_TEXTS, ...TRIGGERS_TOOL_TEXTS, ...FILE_TEXTS, ...EDIT_TEXTS, ...PICTURE_SEND_TEXTS, ...TOOL_RESULT_TEXTS, ...TOOL_OUTPUT_TEXTS, ...MCP_ERROR_TEXTS, ...TOOL_ARG_TEXTS, ...PIN_TEXTS, ...MISC_TOOL_TEXTS, ...LOGS_TEXTS, ...SEAL_TEXTS, ...NAME_TEXTS, ...GUIDE_TEXTS];
+export const TEXTS: readonly TextSpec[] = [...MESSAGE_TEXTS, ...SYSTEM_TEXTS, ...WAKE_TEXTS, ...TOOL_TEXTS, ...OTHER_TEXTS, ...IMAGE_TEXTS, ...READ_TEXTS, ...MCP_TEXTS, ...SEND_TEXTS, ...ARG_TEXTS, ...WAKE_TOOL_TEXTS, ...TOOL_COMMON_TEXTS, ...ARG_COMMON_TEXTS, ...THREADS_TOOL_TEXTS, ...TRIGGERS_TOOL_TEXTS, ...FILE_TEXTS, ...EDIT_TEXTS, ...PICTURE_SEND_TEXTS, ...TOOL_RESULT_TEXTS, ...TOOL_OUTPUT_TEXTS, ...MCP_ERROR_TEXTS, ...TOOL_ARG_TEXTS, ...PIN_TEXTS, ...MISC_TOOL_TEXTS, ...LOGS_TEXTS, ...SEAL_TEXTS, ...NAME_TEXTS, ...THREAD_REFUSAL_TEXTS, ...GUIDE_TEXTS];
 
 export const TEXT_SPECS: ReadonlyMap<string, TextSpec> = new Map(TEXTS.map((spec) => [spec.name, spec]));
 

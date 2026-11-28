@@ -2,7 +2,7 @@ import { mkdir } from "node:fs/promises";
 
 import { characterDataDir, threadDataDir } from "../config/dirs.ts";
 import { keepSealedThreads, sealedThreads, type SealedThread } from "./sealed_list.ts";
-import { assertThreadId, createThread, ensureThreads, readThreadsIndex, requireNameFree, startReadMarkBefore, ThreadError, threadRecord, type ThreadsIndex } from "./threads.ts";
+import { assertThreadId, createThread, ensureThreads, readThreadsIndex, requireNameFree, startReadMarkBefore, ThreadError, threadRecord, threadRefusal, type ThreadsIndex } from "./threads.ts";
 
 export interface NewSealedThread {
   id: string;
@@ -14,14 +14,14 @@ export async function sealThread(data: string, character: string, request: NewSe
   assertThreadId(request.id);
   const label = request.label.trim();
   if (label === "") throw new ThreadError("invalid_seal", "a sealed thread needs a label, which is all your other threads see of it");
-  if (!(request.unsealAt > now)) throw new ThreadError("invalid_seal", "a sealed thread has to open at a time that is still to come");
+  if (!(request.unsealAt > now)) throw threadRefusal("invalid_seal", "threads_seal_past");
   const characterDir = characterDataDir(data, character);
   const created = new Date(now).toISOString();
   const index = await ensureThreads(data, character, created);
   const sealed = sealedThreads(characterDir);
   requireNameFree(index, character, request.id);
   if (sealed.some((each) => each.id === request.id)) {
-    throw new ThreadError("exists", `thread ${JSON.stringify(request.id)} already exists for ${character}`);
+    throw threadRefusal("exists", "threads_exists", { thread: JSON.stringify(request.id), character });
   }
   await mkdir(threadDataDir(data, character, request.id), { recursive: true });
   startReadMarkBefore(data, character, request.id, now);

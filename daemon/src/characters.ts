@@ -43,7 +43,7 @@ import {
   unarchiveThread,
   setThreadPurpose,
   threadRecord,
-  ThreadError,
+  threadRefusal,
   writeThreadsIndex,
   type ArchiveThreadOptions,
   type NewThread,
@@ -222,7 +222,7 @@ export class CharacterRegistry {
     const id = thread ?? this.homeThread(name);
     const index = this.#threads.get(name);
     if (thread !== undefined && index !== undefined && threadRecord(index, thread) === undefined) {
-      throw new ThreadError("not_found", `no thread ${JSON.stringify(thread)} for ${name}`);
+      throw threadRefusal("not_found", "threads_not_found", { thread: JSON.stringify(thread), character: name });
     }
     const key = engineKey(name, id);
     const existing = this.#engines.get(key);
@@ -311,7 +311,7 @@ export class CharacterRegistry {
 
   #unsealed(name: string, id: string): string {
     if (sealedIn(characterDataDir(this.#dataDir, name), id) === undefined) return id;
-    throw new ThreadError("exists", `thread ${JSON.stringify(id)} already exists for ${name}`);
+    throw threadRefusal("exists", "threads_exists", { thread: JSON.stringify(id), character: name });
   }
 
   #runsCommands(name: string): boolean {
@@ -320,7 +320,7 @@ export class CharacterRegistry {
 
   async #threadPins(name: string, pins: readonly string[], signal?: AbortSignal): Promise<string[]> {
     const workspace = characterWorkspace(this.#globalConfig, name);
-    return await resolveThreadPins(pins, async (requested) =>
+    return await resolveThreadPins(workspace.texts, pins, async (requested) =>
       await workspace.call("locateFiles", { workspaceDir: workspace.dir, files: requested, texts: workspace.texts.overrides() }, signal), workspace.promptFiles);
   }
 

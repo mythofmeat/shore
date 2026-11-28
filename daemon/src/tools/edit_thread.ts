@@ -1,5 +1,5 @@
 import { InvalidArgs, ToolIoError } from "./errors.ts";
-import { ThreadError, type ThreadEdit, type ThreadRecord } from "../engine/threads.ts";
+import { ThreadError, threadErrorText, type ThreadEdit, type ThreadRecord } from "../engine/threads.ts";
 import type { Texts } from "../texts/texts.ts";
 
 export interface EditThreadRequest extends ThreadEdit {
@@ -58,7 +58,7 @@ export async function handleEditThread(
   } catch (e) {
     if (!(e instanceof ThreadError)) throw e;
     if (e.kind === "locked") throw new ToolIoError(texts.always("threads_locked", { user: userName, name: request.name }));
-    throw new ToolIoError(e.message);
+    throw new ToolIoError(threadErrorText(texts, e));
   }
   return texts.render("threads_changed", { name: request.name, changes: changes(texts, request, record).join("; "), user: userName }) ?? "";
 }

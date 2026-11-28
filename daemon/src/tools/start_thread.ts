@@ -1,6 +1,6 @@
 import { InvalidArgs, ToolIoError } from "./errors.ts";
 import { cleanFolderName } from "../engine/thread_layout.ts";
-import { isValidThreadId, MAX_THREAD_ID_LENGTH, ThreadError } from "../engine/threads.ts";
+import { isValidThreadId, MAX_THREAD_ID_LENGTH, ThreadError, threadErrorText } from "../engine/threads.ts";
 import type { Texts } from "../texts/texts.ts";
 
 export interface StartThreadRequest {
@@ -44,7 +44,7 @@ export function startThreadRequest(texts: Texts, input: Record<string, unknown>)
 
 export function startRefusal(texts: Texts, e: ThreadError, name: unknown, userName: string): ToolIoError {
   if (e.kind === "archived") return new ToolIoError(texts.always("threads_name_archived", { user: userName, name: JSON.stringify(name) }));
-  if (e.kind !== "on_hold") return new ToolIoError(e.message);
+  if (e.kind !== "on_hold") return new ToolIoError(threadErrorText(texts, e));
   return new ToolIoError(texts.always("threads_name_on_hold", { user: userName, name: JSON.stringify(name) }));
 }
 
