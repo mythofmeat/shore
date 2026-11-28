@@ -33,6 +33,7 @@ test("a compacting thread lists each limit it has, how full each is, and when th
   const { context_tokens: _unknown, ...unseen } = USE;
   expect([contextLimits(unseen)[1], contextPercent(unseen)]).toEqual([{ name: "Everything sent last time", value: "? of 150k tokens", fraction: undefined }, 48]);
   expect(contextLimits({ ...USE, max_turns: 0, max_context_tokens: 0 }).map((limit) => limit.name)).toEqual(["Messages"]);
+  expect(contextLimits({ ...USE, max_turns: 1, max_context_tokens: 1 }).map((limit) => [limit.name, limit.value])).toEqual([["Turns", "12 of 1"], ["Everything sent last time", "81k of 1 tokens"], ["Messages", "52k of 108k tokens"]]);
   expect([contextRule({ ...USE, min_turns: 2 }), contextRule({ ...USE, min_turns: 1 })]).toEqual([
     "Older turns are archived after the reply that reaches any of these. Not before 2 turns, unless the messages fill up.",
     "Older turns are archived after the reply that reaches any of these.",
