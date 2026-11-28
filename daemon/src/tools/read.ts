@@ -64,7 +64,7 @@ async function locate(texts: Texts, input: Record<string, unknown>, requested: s
   const name = relative(workspaceDir, requested);
   const folder = await isFolder(requested);
   const looked = folder ? !/[\\/]$/.test(value) : await missing(requested);
-  if (!looked || name === "" || name === ".." || name.startsWith(`..${sep}`)) return { path: requested };
+  if (!looked || name.startsWith(`..${sep}`)) return { path: requested };
   try {
     const found = await namedFile(await workspaceNames(workspaceDir, signal), name.split(sep), !folder);
     return await withIndex({ path: found.path, note: texts.render(folder ? "read_found_folder" : "read_found", { asked: value, link: found.link }) });

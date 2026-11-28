@@ -10,7 +10,7 @@ import { handleRead } from "../src/tools/read.ts";
 import * as readImageModule from "../src/tools/read_image.ts";
 import * as workspaceNamesModule from "../src/tools/workspace_names.ts";
 import * as prepareImages from "../src/llm/prepare_images.ts";
-import { noisePng } from "./support/test_images.ts";
+import { noisePng, withTextChunk } from "./support/test_images.ts";
 import { SQUARE_WEBM_16X16_ONE_SECOND } from "./support/tiny_videos.ts";
 import { toolMediaOf } from "../src/tools/media.ts";
 import { rejectionOf } from "./support/outcome.ts";
@@ -194,6 +194,7 @@ describe("reading a picture", () => {
     const off = { ...defaultImagesConfig(), read: { ...defaultImagesConfig().read, allow_original: false } };
     expect(String(await rejectionOf(handleRead({ file_path: "lamp.png", original: true }, dir, shipped, undefined, 50_000, undefined, off)))).toContain("original is turned off by images.read.allow_original");
     expect(toolMediaOf(await handleRead({ file_path: "lamp.png", original: true }, dir, shipped))?.media[0]?.original).toBe(true);
+    expect(toolMediaOf(await handleRead({ file_path: "lamp.png" }, dir, shipped))?.media[0]?.reducedFrom).toBeUndefined();
     expect(await refused(dir, { file_path: "notes.txt", original: true })).toContain("original applies only to image files");
     expect(await refused(dir, { file_path: "fake.png" })).toContain(`${join(dir, "fake.png")}: invalid or unsupported image data`);
   });
@@ -295,6 +296,23 @@ describe("where a read stops", () => {
     }
   });
 
+  test("a read stops at the line after its limit or after what a result can hold, without reading on through that line", async () => {
+    const long = "b".repeat(100_000);
+    const pastLimit = await workspace({ "limit.txt": `a\n${long}\n` });
+    const head = [...Array.from({ length: 4 }, () => "c".repeat(40)), "d".repeat(25)];
+    const fills = head.reduce((sum, line, i) => sum + `${String(i + 1)}\t${line}`.length + 1, 0);
+    const pastBudget = await workspace({ "budget.txt": `${head.join("\n")}\n${long}\n` });
+    const reads = counted();
+    try {
+      expect(await read(pastLimit, { file_path: "limit.txt", limit: 1 })).toBe(`${join(pastLimit, "limit.txt")}: lines 1–1\n1\ta\nPartial view. Continue with offset=2 and limit=1.`);
+      expect(reads.reads()).toBe(2);
+      expect((await read(pastBudget, { file_path: "budget.txt" }, shipped, 512 + fills)).split("\n").at(-1)).toBe("Partial view. Continue with offset=6 and limit=2000.");
+      expect(reads.reads()).toBe(4);
+    } finally {
+      reads.restore();
+    }
+  });
+
   test("a read stopped part way through a file stops between its reads of it", async () => {
     const big = Array.from({ length: 300 }, () => "w".repeat(300)).join("\n");
     const dir = await workspace({ "big.txt": `${big}\n` });
@@ -346,12 +364,12 @@ describe("where a read stops", () => {
       lines.push(line);
       used += `${String(n)}\t${line}`.length + 1;
     }
-    const last = 49_488 - used - `${String(lines.length + 1)}\t`.length - 1;
+    const last = 49_489 - used - `${String(lines.length + 1)}\t`.length - 1;
     lines.push("v".repeat(last), "after");
     const full = await workspace({ "full.txt": `${lines.join("\n")}\n` });
     const page = String(await handleRead({ file_path: "full.txt" }, full, shipped)).split("\n");
-    expect(page.at(-2)).toBe(`${String(lines.length - 1)}\t${"v".repeat(last)}`);
-    expect(page.at(-1)).toBe(`Partial view. Continue with offset=${String(lines.length)} and limit=2000.`);
+    expect(page.at(-2)).toBe(`${String(lines.length - 2)}\t${"w".repeat(100)}`);
+    expect(page.at(-1)).toBe(`Partial view. Continue with offset=${String(lines.length - 1)} and limit=2000.`);
   });
 
   test("a file that ends part way through a character is not UTF-8", async () => {
@@ -405,6 +423,7 @@ describe("finding what to read, at the edges", () => {
     const stopped = new AbortController();
     stopped.abort();
     expect(await rejectionOf(handleRead({ file_path: "a.md" }, dir, shipped, stopped.signal))).toBe(stopped.signal.reason);
+    expect(await rejectionOf(handleRead({ file_path: "  " }, dir, shipped, stopped.signal))).toBe(stopped.signal.reason);
   });
 
   test("a folder's INDEX.md is followed by the folder's listing when it just fits, and by a note when it doesn't", async () => {
@@ -496,8 +515,9 @@ describe("pictures in a Markdown file, at the edges", () => {
       failing.abort();
       return Promise.reject(new Error("interrupted"));
     });
+    await writeFile(join(dir, "one.md"), "![](a.png)\n");
     try {
-      expect(await rejectionOf(handleRead({ file_path: "note.md" }, dir, shipped, failing.signal))).toBe(failing.signal.reason);
+      expect(await rejectionOf(handleRead({ file_path: "one.md" }, dir, shipped, failing.signal))).toBe(failing.signal.reason);
     } finally {
       broken.mockRestore();
     }
@@ -519,6 +539,10 @@ describe("pictures read at their edges", () => {
     const big = await noisePng(1500, 1400);
     expect(big.length).toBeGreaterThan(5 * 1024 * 1024);
     const dir = await workspace({ "big.png": big, "broken.png": Buffer.concat([Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]), Buffer.alloc(40)]), "fake.png": "plain words", "note.md": "![](fake.png)\n" });
+    const small = await noisePng(40, 40);
+    await writeFile(join(dir, "limit.png"), withTextChunk(small, 5 * 1024 * 1024 - small.length - 18));
+    expect((await Bun.file(join(dir, "limit.png")).bytes()).length).toBe(5 * 1024 * 1024);
+    expect(toolMediaOf(await handleRead({ file_path: "limit.png" }, dir, shipped))?.media[0]?.reducedFrom).toBeUndefined();
     const reduced = toolMediaOf(await handleRead({ file_path: "big.png" }, dir, shipped));
     expect(Buffer.from(reduced?.media[0]?.data ?? "", "base64").length).toBeLessThanOrEqual(5 * 1024 * 1024);
     expect(reduced?.media[0]?.reducedFrom).toBeDefined();
