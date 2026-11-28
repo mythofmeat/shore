@@ -1,16 +1,17 @@
 import { expect, test } from "bun:test";
-import { mkdtemp } from "node:fs/promises";
+import { mkdtemp, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 
 import { runCheck, type CheckOutcome } from "../src/autonomy/trigger_check.ts";
+import type { TextsSource } from "../src/texts/texts.ts";
 import { CharacterWorkspace } from "../src/tools/character_workspace.ts";
 import { rejectionOf } from "./support/outcome.ts";
 import { testTmp } from "./support/tmp.ts";
 
-async function check(command: string, options: { limitMs?: number; signal?: AbortSignal; dir?: string } = {}): Promise<{ outcome: CheckOutcome; dir: string }> {
+async function check(command: string, options: { limitMs?: number; signal?: AbortSignal; dir?: string; texts?: TextsSource } = {}): Promise<{ outcome: CheckOutcome; dir: string }> {
   const dir = options.dir ?? await mkdtemp(testTmp("shore-trigger-check-"));
   const outcome = await runCheck({
-    workspace: new CharacterWorkspace(dir),
+    workspace: new CharacterWorkspace(dir, undefined, [], options.texts),
     character: "ada",
     trigger: "tide-table",
     command,
@@ -32,6 +33,15 @@ test("a check that prints nothing is quiet, and one that prints something fires 
 test("what a check printed is cut at 2,000 characters, counting characters and not bytes", async () => {
   expect((await check("for i in $(seq 2000); do printf 🕯; done")).outcome).toEqual({ kind: "fired", output: "🕯".repeat(2000) });
   expect((await check("for i in $(seq 2001); do printf 🕯; done")).outcome).toEqual({ kind: "fired", output: `${"🕯".repeat(2000)}… [cut]` });
+});
+
+test("a check's words are the character's own, and Shore's when the character's file for one can't be read", async () => {
+  const config = await mkdtemp(testTmp("shore-trigger-check-texts-"));
+  await writeFile(join(config, "failed.md"), "the check gave up ({{code}})\n");
+  const texts = (file: string): TextsSource => ({ app: { texts: { check_failed: file } }, dirs: { config } });
+  expect((await check("exit 4", { texts: texts("failed.md") })).outcome).toEqual({ kind: "failed", problem: "the check gave up (4)" });
+  expect((await check("exit 4", { texts: texts("gone.md") })).outcome).toEqual({ kind: "failed", problem: "it exited with status 4" });
+  expect((await check("echo still here", { texts: texts("gone.md") })).outcome).toEqual({ kind: "fired", output: "still here" });
 });
 
 test("a check that exits with an error has failed, whatever it printed, and says what it wrote to stderr", async () => {

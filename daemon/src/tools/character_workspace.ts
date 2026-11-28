@@ -90,7 +90,11 @@ export class CharacterWorkspace {
   }
 
   get texts(): Texts {
-    return this.#texts === undefined ? new Texts() : Texts.of(this.#texts);
+    try {
+      return this.#texts === undefined ? new Texts() : Texts.of(this.#texts);
+    } catch {
+      return new Texts();
+    }
   }
 
   get isolated(): boolean {
