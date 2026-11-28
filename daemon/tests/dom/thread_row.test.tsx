@@ -20,7 +20,7 @@ async function row(shown: Shown = {}) {
   const outside: string[] = [];
   const thread = shown.thread ?? SIDE;
   const view = await mount(<div onDragOver={() => outside.push("over")} onDrop={() => outside.push("drop")}>
-    <ThreadRow thread={thread} character="ada" label={thread.label ?? thread.id} current={shown.current ?? false} unread={shown.unread ?? 0} drafted={shown.drafted ?? false} replying={shown.replying ?? false} opening={shown.opening ?? false}
+    <ThreadRow thread={thread} label={thread.label ?? thread.id} current={shown.current ?? false} unread={shown.unread ?? 0} drafted={shown.drafted ?? false} replying={shown.replying ?? false} opening={shown.opening ?? false}
       ready={shown.ready ?? true} select={() => selected.push(1)} neighbours={NEIGHBOURS} drop={(id, after) => dropped.push([id, after])} />
   </div>);
   const box = () => view.host.querySelector(".thread-row");

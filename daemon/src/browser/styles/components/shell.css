@@ -228,6 +228,23 @@ button.sidebar-search:hover {
   font-weight: 600;
 }
 
+.sidebar-item.thread.folder.system {
+  font-weight: 400;
+}
+
+.sidebar-divider {
+  margin: 6px 10px 6px 48px;
+  border: 0;
+  border-top: 1px solid var(--line);
+}
+
+.character-new-thread {
+  position: absolute;
+  right: 34px;
+  width: 26px;
+  height: 26px;
+}
+
 .thread-folder .thread-row:not(.folder-row) .sidebar-item.thread {
   padding-left: 62px;
 }
@@ -248,8 +265,12 @@ button.sidebar-search:hover {
 }
 
 @media (hover: hover) {
-  .folder-row .sidebar-item {
+  .folder-row .sidebar-item:not(.system) {
     padding-right: 36px;
+  }
+
+  .character-row.open .sidebar-item {
+    padding-right: 64px;
   }
 
   .thread-row:hover .sidebar-time,
@@ -260,7 +281,8 @@ button.sidebar-search:hover {
 }
 
 @media (hover: none) {
-  .thread-more {
+  .thread-more,
+  .character-new-thread {
     position: static;
     flex-shrink: 0;
     opacity: 1;
@@ -474,6 +496,20 @@ button.sidebar-search:hover {
   min-height: 44px;
   padding-left: 52px;
   font-size: calc(14.5px * var(--font-scale));
+}
+
+.shell[data-layout="mobile"] .sidebar-divider {
+  margin-left: 52px;
+}
+
+.shell[data-layout="mobile"] .character-new-thread {
+  right: calc(var(--touch) + 8px);
+}
+
+@media (hover: hover) {
+  .shell[data-layout="mobile"] .character-row.open .sidebar-item {
+    padding-right: calc(2 * var(--touch) + 12px);
+  }
 }
 
 .connection {

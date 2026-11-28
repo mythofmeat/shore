@@ -14,6 +14,7 @@ const settle = async () => { await acting(() => Bun.sleep(5)); };
 const thread = (id: string, extra: Partial<ThreadView> = {}): ThreadView => ({ id, created_at: "2026-11-01T00:00:00Z", compaction: false, home: false, current: false, ...extra });
 const HOME = thread("story", { home: true, current: true, unread: 5 });
 const FOLDERS = ["A", "B", "C", "D"].map((name) => ({ name }));
+let threadsStarted = 0;
 
 function serve(): void {
   app.answer((request) => {
@@ -32,7 +33,7 @@ async function sidebar(over: Partial<ChromeSnapshot> = {}) {
   app.restores.push(() => { for (const name of collapsedFolders.of("ada")) collapsedFolders.toggle("ada", name); });
   serve();
   const make = async (next: Partial<ChromeSnapshot>): Promise<ChromeSnapshot> => ({ ...chromeOf(undefined, app.state().workspace.getSnapshot()), status: "ready", character: "ada", thread: "story", threads: [HOME], ...over, ...next });
-  const element = async (next: Partial<ChromeSnapshot>) => <Sidebar state={await make(next)} mobile={false} close={() => {}} collapse={() => {}} newCharacter={() => {}} newThread={() => {}} openSwitcher={() => {}} />;
+  const element = async (next: Partial<ChromeSnapshot>) => <Sidebar state={await make(next)} mobile={false} close={() => {}} collapse={() => {}} newCharacter={() => {}} newThread={() => { threadsStarted += 1; }} openSwitcher={() => {}} />;
   const view = await mount(await element({}));
   await settle();
   const rows = () => [...view.host.querySelectorAll(".sidebar-threads > .thread-row, .sidebar-threads .thread-folder > .thread-row")];
@@ -103,12 +104,12 @@ test("a shut folder counts its threads' unread messages and still shows the open
   expect([view.names(), view.badge("A")]).toEqual([["story", "A", "old"], "3"]);
 });
 
-test("threads on hold sit in a group of their own after the new-thread button; shut, it counts their unread messages and still shows the open one", async () => {
+test("threads on hold sit in a group of their own below a line under the folders; shut, it counts their unread messages and still shows the open one", async () => {
   const threads = [HOME, thread("side"), thread("paused", { on_hold: true, unread: 2, folder: "A" }), thread("stalled", { on_hold: true, unread: 1, last_active: "2026-11-05T00:00:00Z" })];
   const view = await sidebar({ threads, folders: [{ name: "A" }] });
   expect(view.names()).toEqual(["story", "side", "A", "On hold", "stalled", "paused"]);
   const list = [...view.host.querySelectorAll(".sidebar-threads > *")];
-  expect(list.slice(-2).map((each) => each.getAttribute("aria-label") ?? each.textContent)).toEqual(["New thread", "On hold"]);
+  expect(list.slice(-3).map((each) => each.tagName === "HR" ? "line" : each.getAttribute("aria-label"))).toEqual(["Folder A", "line", "On hold"]);
   expect([view.badge("On hold"), view.badge("stalled"), view.badge("paused")]).toEqual([null, "1", "2"]);
   await click(view.named("On hold")?.querySelector("button.folder"));
   expect([view.names(), view.badge("On hold")]).toEqual([["story", "side", "A", "On hold"], "3"]);
@@ -116,9 +117,9 @@ test("threads on hold sit in a group of their own after the new-thread button; s
   expect([view.names(), view.badge("On hold")]).toEqual([["story", "side", "A", "On hold", "paused"], "1"]);
 });
 
-test("archived threads sit last in a group that starts shut and counts them, shut still shows the open one, and opened lists them latest first", async () => {
+test("archived threads sit last in a group with the archive icon that starts shut and counts them, shut still shows the open one, and opened lists them latest first", async () => {
   const { Icon } = await import("../../src/browser/ui/icons.tsx");
-  const drawn = async (name: "chevronDown" | "chevronRight") => {
+  const drawn = async (name: "archive") => {
     const icon = await mount(<Icon name={name} size={14} />);
     const html = icon.host.innerHTML;
     await icon.unmount();
@@ -130,10 +131,10 @@ test("archived threads sit last in a group that starts shut and counts them, shu
   const shown = () => [group()?.getAttribute("aria-expanded"), group()?.querySelector("svg")?.outerHTML, view.named("Archived")?.querySelector(".sidebar-time")?.textContent ?? null];
   expect(view.names()).toEqual(["story", "side", "On hold", "paused", "Archived"]);
   expect([...view.host.querySelectorAll(".sidebar-threads > *")].at(-1)?.getAttribute("aria-label")).toBe("Archived");
-  expect(shown()).toEqual(["false", await drawn("chevronRight"), "2"]);
+  expect(shown()).toEqual(["false", await drawn("archive"), "2"]);
   expect(group()?.textContent).toBe("Archived2(2 threads)");
   await click(group());
-  expect([view.names(), ...shown()]).toEqual([["story", "side", "On hold", "paused", "Archived", "gone", "long-gone"], "true", await drawn("chevronDown"), null]);
+  expect([view.names(), ...shown()]).toEqual([["story", "side", "On hold", "paused", "Archived", "gone", "long-gone"], "true", await drawn("archive"), null]);
   await click(group());
   await view.rerender({ thread: "long-gone" });
   expect(view.names()).toEqual(["story", "side", "On hold", "paused", "Archived", "long-gone"]);
@@ -147,8 +148,10 @@ test("archived threads sit last in a group that starts shut and counts them, shu
   await click([...document.body.querySelectorAll<HTMLButtonElement>("[role=menu] [role=menuitem]")].find((item) => item.textContent === "Unarchive"));
   await settle();
   expect(sent(since, "unarchive_thread")).toEqual([{ name: "long-gone" }]);
+  await view.rerender({ threads: [HOME, thread("side"), thread("gone", { archived: "2026-11-02T00:00:00Z" })] });
+  expect([...view.host.querySelectorAll(".sidebar-threads > *")].slice(-2).map((each) => each.tagName === "HR" ? "line" : each.getAttribute("aria-label")), "archived threads alone get the line too").toEqual(["line", "Archived"]);
   await view.rerender({ threads: [HOME, thread("side")] });
-  expect(view.named("Archived"), "no archived threads, no group").toBeUndefined();
+  expect([view.named("Archived"), view.host.querySelector("hr")], "no archived or held threads, no group and no line").toEqual([undefined, null]);
 });
 
 test("a shut folder and the shut group of threads on hold count their threads marked for later apart from their unread messages", async () => {
@@ -164,9 +167,9 @@ test("a shut folder and the shut group of threads on hold count their threads ma
   expect([later("A"), later("On hold")], "nothing marked, nothing counted").toEqual([null, null]);
 });
 
-test("the group of threads on hold says whether it is open with its chevron, shut shows no count when nothing is unread, and its threads keep to the order they were last active in", async () => {
+test("the group of threads on hold shows the pause icon open or shut, shut shows no count when nothing is unread, and its threads keep to the order they were last active in", async () => {
   const { Icon } = await import("../../src/browser/ui/icons.tsx");
-  const chevron = async (name: "chevronDown" | "chevronRight") => {
+  const icon = async (name: "pause") => {
     const drawn = await mount(<Icon name={name} size={14} />);
     const html = drawn.host.innerHTML;
     await drawn.unmount();
@@ -175,11 +178,11 @@ test("the group of threads on hold says whether it is open with its chevron, shu
   const view = await sidebar({ threads: [HOME, thread("stalled", { on_hold: true, last_active: "2026-11-05T00:00:00Z" }), thread("paused", { on_hold: true })], manualOrder: true });
   const toggle = () => view.named("On hold")?.querySelector("button.folder");
   const shows = () => [toggle()?.getAttribute("aria-expanded"), toggle()?.querySelector("svg")?.outerHTML, view.badge("On hold")];
-  expect(shows()).toEqual(["true", await chevron("chevronDown"), null]);
+  expect(shows()).toEqual(["true", await icon("pause"), null]);
   const moves = (await view.menu("Options for paused")).filter((item) => item.textContent.startsWith("Move ") && !item.textContent.includes("folder")).map((item) => [item.textContent, item.disabled]);
   expect(moves, "held threads keep to the order they were last active in").toEqual([]);
   await click(toggle());
-  expect(shows()).toEqual(["false", await chevron("chevronRight"), null]);
+  expect(shows()).toEqual(["false", await icon("pause"), null]);
 });
 
 test("a thread on hold can't be dragged out of its group, and nothing can be dropped on one", async () => {
@@ -275,13 +278,21 @@ test("a folder dragged onto another lands before or after it by where it is drop
   expect(view.named("A")?.getAttribute("draggable"), "nothing can be dragged until the daemon is ready").toBe("false");
 });
 
-test("a new thread can be started once the daemon is ready", async () => {
+test("a new thread is started from the + on the open character's row once the daemon is ready, and nowhere in the list of threads", async () => {
   const { Icon } = await import("../../src/browser/ui/icons.tsx");
-  const plus = await mount(<Icon name="plus" size={14} />);
+  const plus = await mount(<Icon name="plus" size={16} />);
   const drawn = plus.host.innerHTML;
   await plus.unmount();
-  const ready = await sidebar();
-  expect([button(ready.host, "New thread").disabled, button(ready.host, "New thread").querySelector("svg")?.outerHTML]).toEqual([false, drawn]);
+  const ready = await sidebar({ characters: [{ name: "ada" }, { name: "bea" }] });
+  const rows = [...ready.host.querySelectorAll(".character-row")];
+  const offered = rows.map((row) => [row.querySelector(".sidebar-name")?.textContent, [...row.querySelectorAll("button")].some((each) => each.getAttribute("aria-label") === "New thread")]);
+  expect(offered, "only the open character has one").toEqual([["ada", true], ["bea", false]]);
+  expect(() => button(ready.host.querySelector(".sidebar-threads") ?? ready.host, "New thread")).toThrow("no button named New thread");
+  const start = button(ready.host, "New thread");
+  expect([start.disabled, start.querySelector("svg")?.outerHTML]).toEqual([false, drawn]);
+  const before = threadsStarted;
+  await click(start);
+  expect(threadsStarted - before).toBe(1);
   await ready.unmount();
   const waiting = await sidebar({ status: "reconnecting" });
   expect(button(waiting.host, "New thread").disabled).toBe(true);

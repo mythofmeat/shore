@@ -189,10 +189,78 @@ test("another character's unread replies and threads marked for later count on i
   await finish();
 });
 
+interface Weighted { ownerDocument: { defaultView: { getComputedStyle: (part: Weighted) => { fontWeight: string } } | null } }
+const weightOf = async (part: Locator) => await part.evaluate((label: Weighted) => label.ownerDocument.defaultView?.getComputedStyle(label).fontWeight);
+
+async function rowAction(page: Page, label: string, item: string): Promise<void> {
+  await page.getByRole("button", { name: `Options for ${label}`, exact: true }).click();
+  await page.getByRole("menuitem", { name: item }).click();
+}
+
+test("the open character's + starts a thread from its row, after its name and before its options button, and threads on hold and archived sit below a line under the folders, unlike a folder, at the largest text and on the narrowest phone", async ({ page }) => {
+  const finish = await watchPage(page);
+  const long = "a-character-whose-name-runs-on-past-the-sidebar";
+  await signIn(page);
+  await createCharacter(page, long);
+  for (const name of ["kept", "paused", "gone"]) await createThread(page, long, name);
+  await page.getByRole("button", { name: long, exact: true }).click({ button: "right" });
+  await page.getByRole("menuitem", { name: "New folder…" }).click();
+  const newFolder = page.getByRole("dialog", { name: "New folder" });
+  await newFolder.getByLabel("Name").fill("Shelf");
+  await newFolder.getByRole("button", { name: "Create", exact: true }).click();
+  await expect(newFolder).toBeHidden();
+  await rowAction(page, "kept", "Move to folder…");
+  const move = page.getByRole("dialog", { name: "Move “kept”" });
+  await move.getByRole("combobox").selectOption("Shelf");
+  await move.getByRole("button", { name: "Move", exact: true }).click();
+  await expect(move).toBeHidden();
+  await rowAction(page, "paused", "Put on hold");
+  await rowAction(page, "gone", "Archive…");
+  const archive = page.getByRole("dialog", { name: "Archive “gone”?" });
+  await archive.getByRole("button", { name: "Archive", exact: true }).click();
+  await expect(archive).toBeHidden();
+  const character = page.locator(".character-row.open");
+  const item = character.locator(".sidebar-item");
+  const folder = page.getByRole("group", { name: "Folder Shelf" }).locator(".folder-row .sidebar-item");
+  const held = page.getByRole("group", { name: "On hold" }).locator(".folder-row .sidebar-item");
+  const archived = page.getByRole("group", { name: "Archived" }).locator(".folder-row .sidebar-item");
+  await expect(archived.locator(".sidebar-time")).toHaveText("1");
+
+  const measure = async (where: string) => {
+    await page.mouse.move(0, 0);
+    const [shelf, line, hold, icon, count, time] = await Promise.all([edgesOf(folder), edgesOf(page.locator(".sidebar-divider")), edgesOf(held), edgesOf(held.locator("svg")),
+      edgesOf(archived.locator(".sidebar-time")), edgesOf(page.locator(".sidebar-threads > .thread-row .sidebar-time").first())]);
+    expect(line.top, `${where}: the line sits below the folders`).toBeGreaterThanOrEqual(shelf.bottom);
+    expect(line.bottom, `${where}: and above the threads on hold`).toBeLessThanOrEqual(hold.top);
+    expect(Math.abs(line.left - icon.left), `${where}: the line starts where the groups' icons do`).toBeLessThanOrEqual(1);
+    expect(Math.abs(count.right - time.right), `${where}: the shut Archived group's count lines up with the threads' times`).toBeLessThanOrEqual(1);
+    expect(await weightOf(held.locator(".sidebar-name")), `${where}: a group's name isn't drawn like a folder's`).not.toBe(await weightOf(folder.locator(".sidebar-name")));
+    await character.hover();
+    const [around, name, start, more] = await Promise.all([edgesOf(item), edgesOf(item.locator(".sidebar-name")), edgesOf(character.getByRole("button", { name: "New thread", exact: true })), edgesOf(character.locator(".thread-more"))]);
+    expect(name.right, `${where}: the name ends before the + starts`).toBeLessThanOrEqual(start.left);
+    expect(start.right, `${where}: the + ends before the options button starts`).toBeLessThanOrEqual(more.left);
+    expect(more.right, `${where}: the options button stays inside the row`).toBeLessThanOrEqual(around.right);
+    expect(Math.abs((start.top + start.bottom) / 2 - (around.top + around.bottom) / 2), `${where}: the + sits on the row's midline`).toBeLessThanOrEqual(1.5);
+  };
+  await measure("default text");
+  await page.evaluate("localStorage.setItem('shore.font-size', 'larger')");
+  await page.reload();
+  await expect(archived.locator(".sidebar-time")).toHaveText("1");
+  await measure("largest text");
+  await page.setViewportSize({ width: 280, height: 653 });
+  await page.getByRole("button", { name: /^Open sidebar/ }).click();
+  await expect.poll(async () => (await edgesOf(page.locator("aside.sidebar"))).left, "the drawer has slid in").toBe(0);
+  await measure("narrowest phone");
+
+  await character.getByRole("button", { name: "New thread", exact: true }).click();
+  await expect(page.getByRole("dialog", { name: `New thread with ${long}` })).toBeVisible();
+  await finish();
+});
+
 test.describe("on a touch screen", () => {
   test.use({ isMobile: true, hasTouch: true, viewport: { width: 1000, height: 700 } });
 
-  test("each row shows its options button after its time without a hover", async ({ page }) => {
+  test("each row shows its options button after its time without a hover, and the open character's + sits between its row and its options button", async ({ page }) => {
     const finish = await watchPage(page);
     await signIn(page);
     await createCharacter(page, "plover");
@@ -203,6 +271,10 @@ test.describe("on a touch screen", () => {
     expect(time.right).toBeLessThanOrEqual(options.left);
     expect(options.right).toBeLessThanOrEqual(around.right);
     expect(await more.evaluate((button: { ownerDocument: { defaultView: { getComputedStyle: (part: unknown) => { opacity: string } } | null } }) => button.ownerDocument.defaultView?.getComputedStyle(button).opacity)).toBe("1");
+    const character = page.locator(".character-row.open");
+    const [item, start, characterMore] = await Promise.all([edgesOf(character.locator(".sidebar-item")), edgesOf(character.getByRole("button", { name: "New thread", exact: true })), edgesOf(character.locator(".thread-more"))]);
+    expect(item.right, "the character's + comes after its row").toBeLessThanOrEqual(start.left);
+    expect(start.right, "and before its options button").toBeLessThanOrEqual(characterMore.left);
     await finish();
   });
 });

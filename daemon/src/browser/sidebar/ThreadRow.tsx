@@ -67,20 +67,19 @@ export function UnreadBadge({ count }: { count: number }) {
   </span>;
 }
 
-export function rowIcon(thread: ThreadView, character: string): { name: IconName; says: string } | undefined {
+export function rowIcon(thread: ThreadView): { name: IconName; says: string } | undefined {
   if (thread.home) return { name: "home", says: "home" };
-  if (thread.wakes === true) return { name: "clock", says: "where wakes are kept" };
-  return thread.created_by === "character" ? { name: "spark", says: `started by ${character}` } : undefined;
+  return thread.wakes === true ? { name: "clock", says: "where wakes are kept" } : undefined;
 }
 
-export function ThreadRow({ thread, character, label, current, unread, drafted, replying, opening, ready, select, neighbours, drop }: {
-  thread: ThreadView; character: string; label: string; current: boolean; unread: number; drafted: boolean; replying: boolean; opening: boolean; ready: boolean; select: () => void; neighbours: ThreadNeighbours;
+export function ThreadRow({ thread, label, current, unread, drafted, replying, opening, ready, select, neighbours, drop }: {
+  thread: ThreadView; label: string; current: boolean; unread: number; drafted: boolean; replying: boolean; opening: boolean; ready: boolean; select: () => void; neighbours: ThreadNeighbours;
   drop: (dragged: string, after: boolean) => void;
 }) {
   const menu = useRowMenu();
   const [target, setTarget] = useState<"before" | "after" | null>(null);
   const movable = !thread.home && thread.archived === undefined;
-  const icon = rowIcon(thread, character);
+  const icon = rowIcon(thread);
   const time = rowTime(thread.last_active, useNow());
   const open = () => { if (ready && !menu.swallowClick()) select(); };
   return <div className={`thread-row ${menu.at === null ? "" : "menu-open"} ${target === null ? "" : `drop-${target}`}`} draggable={movable && ready && !TOUCH_ONLY} {...menu.handlers}
