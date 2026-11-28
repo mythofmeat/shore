@@ -47,7 +47,6 @@ import { Diagnostics } from "./diagnostics.ts";
 import { closeWorkspaceHelpers } from "./tools/character_workspace.ts";
 import type { ToolContext } from "./tools/dispatch.ts";
 import { subagentRunner } from "./tools/subagent_loop.ts";
-import { Ledger } from "./ledger/store.ts";
 import { backfillLedgerCosts } from "./ledger/usage.ts";
 import { setNanoGptSubscription, setSubscriptionProviders } from "./ledger/store.ts";
 import { claudeLoginSettingsOf, DEFAULT_SUBSCRIPTION_PROVIDERS } from "./config/providers.ts";
@@ -135,7 +134,6 @@ export async function createRuntime(options: RuntimeOptions): Promise<ShoreRunti
   const notifier = new NotificationService(config.app.notifications);
   const snapshotGate = new SnapshotGate();
   const callStore = openCallStore(config);
-  ensureLedger(config);
 
   const providers = captureProviders(options.providers, callStore);
   const uninstallWireCapture = installCallStoreWireCapture(callStore);
@@ -400,10 +398,6 @@ function installCallStoreWireCapture(store: CallStore | undefined): () => void {
   return installWireCapture((exchange) => {
     store.recordHttpCall(exchange);
   });
-}
-
-function ensureLedger(config: LoadedConfig): void {
-  Ledger.create(rustJoin(config.dirs.data, "shore.db")).close();
 }
 
 export function mcpConfigView(
