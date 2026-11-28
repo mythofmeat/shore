@@ -384,6 +384,9 @@ import t__tools__autonomy__list_triggers__file__limit_short from "../../prompts/
 import t__tools__autonomy__list_triggers__file__self from "../../prompts/tools/autonomy/list_triggers/file/self.md" with { type: "text" };
 import t__tools__autonomy__list_triggers__file__lost from "../../prompts/tools/autonomy/list_triggers/file/lost.md" with { type: "text" };
 import t__tools__autonomy__list_triggers__file__loop from "../../prompts/tools/autonomy/list_triggers/file/loop.md" with { type: "text" };
+import t__tools__threads__threads__folders__empty from "../../prompts/tools/threads/threads/folders/empty.md" with { type: "text" };
+import t__tools__threads__threads__folders__long from "../../prompts/tools/threads/threads/folders/long.md" with { type: "text" };
+import t__tools__threads__threads__folders__control from "../../prompts/tools/threads/threads/folders/control.md" with { type: "text" };
 import messages__earlier_not_shown from "../../prompts/messages/earlier_not_shown.md" with { type: "text" };
 import messages__opened_by_you from "../../prompts/messages/opened_by_you.md" with { type: "text" };
 import messages__picture_gone from "../../prompts/messages/picture_gone.md" with { type: "text" };
@@ -1053,6 +1056,12 @@ export const TRIGGER_FILE_TEXTS: readonly TextSpec[] = [
   must("trigger_file_loop", t__tools__autonomy__list_triggers__file__loop, "Why a trigger in TRIGGERS.toml isn't running, in what list_triggers answers: triggers that follow each other round in a loop.", { trigger: "the one it follows" }),
 ];
 
+export const THREAD_FOLDER_TEXTS: readonly TextSpec[] = [
+  must("threads_folder_empty", t__tools__threads__threads__folders__empty, "threads' error for a folder name that is blank."),
+  must("threads_folder_long", t__tools__threads__threads__folders__long, "threads' error for a folder name that is too long.", { max: "how long it can be" }),
+  must("threads_folder_control", t__tools__threads__threads__folders__control, "threads' error for a folder name with a control character in it."),
+];
+
 const GUIDE_VALUES = { user: "the user's name", tools_off: "the tools a topic names that are off" };
 
 export const GUIDE_TEXTS: readonly TextSpec[] = [
@@ -1108,7 +1117,7 @@ export const TOOL_TEXTS: readonly TextSpec[] = Object.entries(TOOL_TEXTS_SHIPPED
   ...Object.entries(parameters).map(([parameter, shipped]) => text(parameterText(tool, parameter), shipped, `The description of the ${parameter} parameter of ${tool}.`, TOOL_VALUES)),
 ]);
 
-export const TEXTS: readonly TextSpec[] = [...MESSAGE_TEXTS, ...SYSTEM_TEXTS, ...WAKE_TEXTS, ...TOOL_TEXTS, ...OTHER_TEXTS, ...IMAGE_TEXTS, ...READ_TEXTS, ...MCP_TEXTS, ...SEND_TEXTS, ...ARG_TEXTS, ...WAKE_TOOL_TEXTS, ...TOOL_COMMON_TEXTS, ...ARG_COMMON_TEXTS, ...THREADS_TOOL_TEXTS, ...TRIGGERS_TOOL_TEXTS, ...FILE_TEXTS, ...EDIT_TEXTS, ...PICTURE_SEND_TEXTS, ...TOOL_RESULT_TEXTS, ...TOOL_OUTPUT_TEXTS, ...MCP_ERROR_TEXTS, ...TOOL_ARG_TEXTS, ...PIN_TEXTS, ...MISC_TOOL_TEXTS, ...LOGS_TEXTS, ...SEAL_TEXTS, ...NAME_TEXTS, ...THREAD_REFUSAL_TEXTS, ...TRIGGER_FILE_TEXTS, ...GUIDE_TEXTS];
+export const TEXTS: readonly TextSpec[] = [...MESSAGE_TEXTS, ...SYSTEM_TEXTS, ...WAKE_TEXTS, ...TOOL_TEXTS, ...OTHER_TEXTS, ...IMAGE_TEXTS, ...READ_TEXTS, ...MCP_TEXTS, ...SEND_TEXTS, ...ARG_TEXTS, ...WAKE_TOOL_TEXTS, ...TOOL_COMMON_TEXTS, ...ARG_COMMON_TEXTS, ...THREADS_TOOL_TEXTS, ...TRIGGERS_TOOL_TEXTS, ...FILE_TEXTS, ...EDIT_TEXTS, ...PICTURE_SEND_TEXTS, ...TOOL_RESULT_TEXTS, ...TOOL_OUTPUT_TEXTS, ...MCP_ERROR_TEXTS, ...TOOL_ARG_TEXTS, ...PIN_TEXTS, ...MISC_TOOL_TEXTS, ...LOGS_TEXTS, ...SEAL_TEXTS, ...NAME_TEXTS, ...THREAD_REFUSAL_TEXTS, ...TRIGGER_FILE_TEXTS, ...THREAD_FOLDER_TEXTS, ...GUIDE_TEXTS];
 
 export const TEXT_SPECS: ReadonlyMap<string, TextSpec> = new Map(TEXTS.map((spec) => [spec.name, spec]));
 

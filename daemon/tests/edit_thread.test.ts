@@ -10,6 +10,7 @@ import { emptyCatalog, type ResolvedModel } from "../src/config/models.ts";
 import { ProviderRegistry } from "../src/config/providers.ts";
 import { NO_PRIOR_CONTEXT } from "../src/engine/segments.ts";
 import { readThreadsIndex, type ThreadRecord } from "../src/engine/threads.ts";
+import { cleanFolderName, MAX_FOLDER_NAME_LENGTH } from "../src/engine/thread_layout.ts";
 import type { Message } from "../src/engine/types.ts";
 import { editCharacterThread } from "../src/handler/edit_thread.ts";
 import { buildGenerationRequest } from "../src/handler/setup.ts";
@@ -141,6 +142,9 @@ describe("the character editing a thread", () => {
     expect(await outcomeOf(registry.editThreadAsCharacter("frank", "main", { label: "Home" }))).toThrow('thread "main" is the home thread for frank, so only the user');
     expect(await outcomeOf(edit({ name: "story", pins: ["../away.md"] }))).toThrow('one pin won\'t load:\n- "../away.md" is outside.');
     expect(await outcomeOf(edit({ name: "story", pins: ["../away.md", "SOUL.md"] }))).toThrow('pins won\'t load:\n- "../away.md" is outside.\n- SOUL.md is always there.');
+    expect(await outcomeOf(registry.setThreadPins("frank", "story", ["../away.md"]))).toThrow('nothing changed, because a pin can\'t be loaded:\n- the pinned file "../away.md" leaves the workspace');
+    expect(await outcomeOf(registry.createThread("frank", "user-made", { label: "Mine", pins: ["../away.md"] }))).toThrow("nothing changed, because a pin can't be loaded");
+    expect(await outcomeOf(registry.createThread("frank", "its-own", { label: "Its", pins: ["../away.md"], created_by: "character" }))).toThrow('one pin won\'t load:\n- "../away.md" is outside.');
   });
 
   test("a thread the user locks refuses her and says so, while the user can still change it, until it's unlocked", async () => {
@@ -193,6 +197,17 @@ describe("what the threads tool is given", () => {
     for (const pins of ["notes.md", [1]]) {
       expect(() => startThreadRequest(new Texts(), { name: "story", label: "Lighthouse", pins })).toThrow("pins must be a list of workspace paths and !commands");
     }
+  });
+
+  test("a new thread's folder name that is too long or has a control character is refused in the character's words for it", () => {
+    const long = "x".repeat(MAX_FOLDER_NAME_LENGTH + 1);
+    expect(() => startThreadRequest(new Texts(), { name: "story", label: "Lighthouse", folder: long })).toThrow(`a folder name can be at most ${String(MAX_FOLDER_NAME_LENGTH)} characters`);
+    expect(() => startThreadRequest(new Texts(), { name: "story", label: "Lighthouse", folder: "a\u0007b" })).toThrow("a folder name can't contain control characters");
+    const mine = Texts.from({ threads_folder_long: "FOLDER {{max}}", threads_folder_control: "CONTROL" });
+    expect(() => startThreadRequest(mine, { name: "story", label: "Lighthouse", folder: long })).toThrow(new RegExp(`^FOLDER ${String(MAX_FOLDER_NAME_LENGTH)}$`));
+    expect(() => startThreadRequest(mine, { name: "story", label: "Lighthouse", folder: "a\u0007b" })).toThrow(/^CONTROL$/);
+    expect(() => cleanFolderName("  ")).toThrow(/^a folder needs a name$/);
+    expect(startThreadRequest(mine, { name: "story", label: "Lighthouse", folder: " Stories " })).toMatchObject({ folder: "Stories" });
   });
 
   test("an edit or a new thread where threads can't be changed says so, and a failure that isn't about the thread is passed on as it is", async () => {

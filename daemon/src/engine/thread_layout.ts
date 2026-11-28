@@ -1,5 +1,5 @@
 import type { ThreadFolder, ThreadRecord, ThreadsIndex } from "./threads.ts";
-import { homeThread, ThreadError } from "./threads.ts";
+import { homeThread, ThreadError, threadRefusal } from "./threads.ts";
 
 export const MAX_FOLDER_NAME_LENGTH = 64;
 
@@ -113,9 +113,9 @@ export function setThreadsSort(index: ThreadsIndex, byActivity: boolean, activit
 
 export function cleanFolderName(raw: string): string {
   const name = raw.trim();
-  if (name === "") throw new ThreadError("invalid_folder", "a folder needs a name");
-  if (name.length > MAX_FOLDER_NAME_LENGTH) throw new ThreadError("invalid_folder", `a folder name can be at most ${String(MAX_FOLDER_NAME_LENGTH)} characters`);
-  if (/\p{Cc}/u.test(name)) throw new ThreadError("invalid_folder", "a folder name can't contain control characters");
+  if (name === "") throw threadRefusal("invalid_folder", "threads_folder_empty");
+  if (name.length > MAX_FOLDER_NAME_LENGTH) throw threadRefusal("invalid_folder", "threads_folder_long", { max: String(MAX_FOLDER_NAME_LENGTH) });
+  if (/\p{Cc}/u.test(name)) throw threadRefusal("invalid_folder", "threads_folder_control");
   return name;
 }
 

@@ -19,6 +19,14 @@ function text(texts: Texts, input: Record<string, unknown>, field: string): stri
   return trimmed === "" ? undefined : trimmed;
 }
 
+function folderName(texts: Texts, raw: string): string {
+  try {
+    return cleanFolderName(raw);
+  } catch (e) {
+    throw new ThreadError((e as ThreadError).kind, threadErrorText(texts, e as ThreadError));
+  }
+}
+
 export function startThreadRequest(texts: Texts, input: Record<string, unknown>): StartThreadRequest {
   const name = text(texts, input, "name");
   if (name === undefined || !isValidThreadId(name)) throw new InvalidArgs(texts.always("threads_name_form", { max: String(MAX_THREAD_ID_LENGTH) }));
@@ -29,7 +37,7 @@ export function startThreadRequest(texts: Texts, input: Record<string, unknown>)
   const purpose = text(texts, input, "purpose");
   const opening = text(texts, input, "opening");
   const named = text(texts, input, "folder");
-  const folder = named === undefined ? undefined : cleanFolderName(named);
+  const folder = named === undefined ? undefined : folderName(texts, named);
   const given = pins?.map((pin) => pin.trim()).filter((pin) => pin !== "") ?? [];
   return {
     name,
