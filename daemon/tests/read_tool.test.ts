@@ -10,13 +10,14 @@ import { handleRead } from "../src/tools/read.ts";
 import * as readImageModule from "../src/tools/read_image.ts";
 import * as workspaceNamesModule from "../src/tools/workspace_names.ts";
 import * as prepareImages from "../src/llm/prepare_images.ts";
-import { noisePng, withTextChunk } from "./support/test_images.ts";
+import { noisePng, transparentPng, withTextChunk } from "./support/test_images.ts";
 import { SQUARE_WEBM_16X16_ONE_SECOND } from "./support/tiny_videos.ts";
 import { toolMediaOf } from "../src/tools/media.ts";
 import { rejectionOf } from "./support/outcome.ts";
 import { required } from "../src/util/required.ts";
 import { sizedImage } from "./support/sized_image.ts";
 import { testTmp } from "./support/tmp.ts";
+import * as video from "../src/tools/video.ts";
 
 async function workspace(files: Record<string, string | Buffer> = {}): Promise<string> {
   const dir = await mkdtemp(testTmp("read-tool-"));
@@ -556,11 +557,17 @@ describe("pictures read at their edges", () => {
     expect(toolMediaOf(await handleRead({ file_path: "note.md" }, dir, shipped))?.notes).toEqual([`[Markdown image fake.png not attached: io: ${join(dir, "fake.png")}: invalid or unsupported image data]`]);
   });
 
-  test("a video is described and its first frame sent, and a picture asked for after a stop is not read", async () => {
+  test("a video is described and its first frame sent, one whose frame can't be had is refused, and a picture asked for after a stop is not read", async () => {
     const dir = await workspace({ "clip.webm": Buffer.from(SQUARE_WEBM_16X16_ONE_SECOND, "base64") });
-    const value = toolMediaOf(await handleRead({ file_path: "clip.webm" }, dir, shipped));
-    expect(String(value?.value)).toMatch(/: video\/webm, \d+ bytes; this is its first frame$/);
-    expect(value?.media.map((item) => item.mime_type)).toEqual(["image/png"]);
+    const frame = spyOn(video, "firstVideoFrame").mockResolvedValueOnce(transparentPng(16, 16)).mockResolvedValueOnce(undefined);
+    try {
+      const value = toolMediaOf(await handleRead({ file_path: "clip.webm" }, dir, shipped));
+      expect(String(value?.value)).toMatch(/: video\/webm, \d+ bytes; this is its first frame$/);
+      expect(value?.media.map((item) => item.mime_type)).toEqual(["image/png"]);
+      expect(await refused(dir, { file_path: "clip.webm" })).toMatch(/^ToolIoError: io: .*clip\.webm: video\/webm, \d+ bytes; its first frame could not be read, because ffmpeg is missing or could not decode it$/);
+    } finally {
+      frame.mockRestore();
+    }
     const stopped = new AbortController();
     stopped.abort();
     expect(await rejectionOf(readImageModule.readImageAt(shipped, join(dir, "clip.webm"), () => true, stopped.signal))).toBe(stopped.signal.reason);
