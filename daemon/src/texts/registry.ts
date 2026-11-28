@@ -333,6 +333,16 @@ import t__tools__history__chat_logs__answers__day_first from "../../prompts/tool
 import t__tools__history__chat_logs__answers__day_wakes from "../../prompts/tools/history/chat_logs/answers/day_wakes.md" with { type: "text" };
 import t__tools__history__chat_logs__answers__day_no_reply from "../../prompts/tools/history/chat_logs/answers/day_no_reply.md" with { type: "text" };
 import t__tools__threads__threads__answers__seal_folder from "../../prompts/tools/threads/threads/answers/seal_folder.md" with { type: "text" };
+import t__tools__workspace__names__many from "../../prompts/tools/workspace/names/many.md" with { type: "text" };
+import t__tools__workspace__names__none from "../../prompts/tools/workspace/names/none.md" with { type: "text" };
+import t__tools__workspace__names__not_shown from "../../prompts/tools/workspace/names/not_shown.md" with { type: "text" };
+import t__tools__workspace__names__picture from "../../prompts/tools/workspace/names/picture.md" with { type: "text" };
+import t__tools__workspace__names__picture_or_video from "../../prompts/tools/workspace/names/picture_or_video.md" with { type: "text" };
+import t__tools__workspace__names__no_file from "../../prompts/tools/workspace/names/no_file.md" with { type: "text" };
+import t__tools__workspace__names__tried_as from "../../prompts/tools/workspace/names/tried_as.md" with { type: "text" };
+import t__tools__workspace__names__link_failed from "../../prompts/tools/workspace/names/link_failed.md" with { type: "text" };
+import t__messages__sending__too_many from "../../prompts/messages/sending/too_many.md" with { type: "text" };
+import t__messages__sending__problem from "../../prompts/messages/sending/problem.md" with { type: "text" };
 import messages__earlier_not_shown from "../../prompts/messages/earlier_not_shown.md" with { type: "text" };
 import messages__opened_by_you from "../../prompts/messages/opened_by_you.md" with { type: "text" };
 import messages__picture_gone from "../../prompts/messages/picture_gone.md" with { type: "text" };
@@ -795,6 +805,8 @@ export const PICTURE_SEND_TEXTS: readonly TextSpec[] = [
   must("picture_send_unreadable", t__messages__sending__unreadable, "Why a picture the character put in a message can't be sent, when its file can't be read and says no more."),
   must("picture_send_too_big", t__messages__sending__too_big, "Why a picture or video the character put in a message can't be sent, when it is too big.", { bytes: "how many bytes it is", limit: "how many it can be", video: "set when it is a video" }),
   must("picture_send_type", t__messages__sending__type, "Why a file the character put in a message as a picture can't be sent, when it isn't one."),
+  must("picture_send_too_many", t__messages__sending__too_many, "Why a picture the character put in a message can't be sent, when the message has too many.", { count: "how many are sent" }),
+  must("picture_send_problem", t__messages__sending__problem, "Each picture in send_refused and start_refused.", { picture: "the picture as the message has it", problem: "why it can't be sent" }),
 ];
 
 export const TOOL_RESULT_TEXTS: readonly TextSpec[] = [
@@ -942,6 +954,17 @@ export const SEAL_TEXTS: readonly TextSpec[] = [
   must("threads_seal_folder", t__tools__threads__threads__answers__seal_folder, "threads' error when a sealed thread's folder can't be made.", { folder: "the folder", error: "why" }),
 ];
 
+export const NAME_TEXTS: readonly TextSpec[] = [
+  must("names_many", t__tools__workspace__names__many, "Why a link to a file or folder by name can't be followed when more than one fits it.", { count: "how many fit", folders: "set when they are folders", shown: "links to the first few, with \", \" between them", more: "how many more fit, when not all are shown" }),
+  must("names_none", t__tools__workspace__names__none, "Why a link to a file or folder by name can't be followed when nothing fits it.", { file: "set when a file was looked for", folder: "set when a folder was looked for", close: "links to names close to it, with \", \" between them, when there are any" }),
+  must("names_not_shown", t__tools__workspace__names__not_shown, "Why a link to a picture can't be shown when what it names isn't one.", { folder: "set when it names a folder", path: "what it names", kind: "what it should be, as names_picture or names_picture_or_video has it", suggestion: "a link to a picture with the same name, when there is one" }),
+  must("names_picture", t__tools__workspace__names__picture, "What names_not_shown says a picture in a Markdown file should be."),
+  must("names_picture_or_video", t__tools__workspace__names__picture_or_video, "What names_not_shown says a picture in a message should be."),
+  must("names_no_file", t__tools__workspace__names__no_file, "Why a link like [[]] can't be followed."),
+  must("names_tried_as", t__tools__workspace__names__tried_as, "Why read can't find a file by its name, after it tried the path as a link.", { link: "the link it tried", error: "why that failed" }),
+  must("names_link_failed", t__tools__workspace__names__link_failed, "read's error for a link it can't follow.", { link: "the link", error: "why" }),
+];
+
 const GUIDE_VALUES = { user: "the user's name", tools_off: "the tools a topic names that are off" };
 
 export const GUIDE_TEXTS: readonly TextSpec[] = [
@@ -997,7 +1020,7 @@ export const TOOL_TEXTS: readonly TextSpec[] = Object.entries(TOOL_TEXTS_SHIPPED
   ...Object.entries(parameters).map(([parameter, shipped]) => text(parameterText(tool, parameter), shipped, `The description of the ${parameter} parameter of ${tool}.`, TOOL_VALUES)),
 ]);
 
-export const TEXTS: readonly TextSpec[] = [...MESSAGE_TEXTS, ...SYSTEM_TEXTS, ...WAKE_TEXTS, ...TOOL_TEXTS, ...OTHER_TEXTS, ...IMAGE_TEXTS, ...READ_TEXTS, ...MCP_TEXTS, ...SEND_TEXTS, ...ARG_TEXTS, ...WAKE_TOOL_TEXTS, ...TOOL_COMMON_TEXTS, ...ARG_COMMON_TEXTS, ...THREADS_TOOL_TEXTS, ...TRIGGERS_TOOL_TEXTS, ...FILE_TEXTS, ...EDIT_TEXTS, ...PICTURE_SEND_TEXTS, ...TOOL_RESULT_TEXTS, ...TOOL_OUTPUT_TEXTS, ...MCP_ERROR_TEXTS, ...TOOL_ARG_TEXTS, ...PIN_TEXTS, ...MISC_TOOL_TEXTS, ...LOGS_TEXTS, ...SEAL_TEXTS, ...GUIDE_TEXTS];
+export const TEXTS: readonly TextSpec[] = [...MESSAGE_TEXTS, ...SYSTEM_TEXTS, ...WAKE_TEXTS, ...TOOL_TEXTS, ...OTHER_TEXTS, ...IMAGE_TEXTS, ...READ_TEXTS, ...MCP_TEXTS, ...SEND_TEXTS, ...ARG_TEXTS, ...WAKE_TOOL_TEXTS, ...TOOL_COMMON_TEXTS, ...ARG_COMMON_TEXTS, ...THREADS_TOOL_TEXTS, ...TRIGGERS_TOOL_TEXTS, ...FILE_TEXTS, ...EDIT_TEXTS, ...PICTURE_SEND_TEXTS, ...TOOL_RESULT_TEXTS, ...TOOL_OUTPUT_TEXTS, ...MCP_ERROR_TEXTS, ...TOOL_ARG_TEXTS, ...PIN_TEXTS, ...MISC_TOOL_TEXTS, ...LOGS_TEXTS, ...SEAL_TEXTS, ...NAME_TEXTS, ...GUIDE_TEXTS];
 
 export const TEXT_SPECS: ReadonlyMap<string, TextSpec> = new Map(TEXTS.map((spec) => [spec.name, spec]));
 

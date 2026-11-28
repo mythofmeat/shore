@@ -55,10 +55,10 @@ async function locate(texts: Texts, input: Record<string, unknown>, requested: s
   const link = WORKSPACE_LINK.exec(value);
   if (link !== null) {
     try {
-      return await withIndex({ path: await linkedFile(await workspaceNames(workspaceDir, signal), link[1] === "!", link[2] ?? "") });
+      return await withIndex({ path: await linkedFile(texts, await workspaceNames(workspaceDir, signal), link[1] === "!", link[2] ?? "") });
     } catch (error) {
       signal?.throwIfAborted();
-      throw new ToolIoError(`${value}: ${error instanceof Error ? error.message : String(error)}`);
+      throw new ToolIoError(texts.always("names_link_failed", { link: value, error: error instanceof Error ? error.message : String(error) }));
     }
   }
   const name = relative(workspaceDir, requested);
@@ -66,7 +66,7 @@ async function locate(texts: Texts, input: Record<string, unknown>, requested: s
   const looked = folder ? !/[\\/]$/.test(value) : await missing(requested);
   if (!looked || name.startsWith(`..${sep}`)) return { path: requested };
   try {
-    const found = await namedFile(await workspaceNames(workspaceDir, signal), name.split(sep), !folder);
+    const found = await namedFile(texts, await workspaceNames(workspaceDir, signal), name.split(sep), !folder);
     return await withIndex({ path: found.path, note: texts.render(folder ? "read_found_folder" : "read_found", { asked: value, link: found.link }) });
   } catch (error) {
     signal?.throwIfAborted();
@@ -80,8 +80,8 @@ const messageOf = (error: unknown) => error instanceof Error ? error.message : S
 async function promptFile(texts: Texts, value: string, workspaceDir: string, names: () => Promise<WorkspaceNames>): Promise<string> {
   const link = WORKSPACE_LINK.exec(value);
   if (link !== null) {
-    const found = await linkedFile(await names(), link[1] === "!", link[2] ?? "").catch((error: unknown) => {
-      throw new Error(`${value}: ${messageOf(error)}`);
+    const found = await linkedFile(texts, await names(), link[1] === "!", link[2] ?? "").catch((error: unknown) => {
+      throw new Error(texts.always("names_link_failed", { link: value, error: messageOf(error) }));
     });
     if (!await isFolder(found)) return found;
     const index = join(found, FOLDER_INDEX);
@@ -92,7 +92,7 @@ async function promptFile(texts: Texts, value: string, workspaceDir: string, nam
   const stats = await stat(path).catch(() => undefined);
   if (stats?.isFile() === true) return path;
   if (stats !== undefined) throw new Error(texts.always("pin_not_file", { file: value, folder: stats.isDirectory() ? "yes" : undefined }));
-  const hint = await namedFile(await names(), value.split("/"), false).then((found) => ({ link: found.link }), (error: unknown) => ({ why: messageOf(error) }));
+  const hint = await namedFile(texts, await names(), value.split("/"), false).then((found) => ({ link: found.link }), (error: unknown) => ({ why: messageOf(error) }));
   throw new Error(texts.always("pin_missing", { file: value, ...hint }));
 }
 

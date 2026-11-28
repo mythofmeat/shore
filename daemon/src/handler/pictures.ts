@@ -16,7 +16,9 @@ export interface PictureSender {
   dir: string;
 }
 
-const TOO_MANY = `only the first ${String(MAX_SENT_PICTURES)} pictures in a message are sent`;
+function tooMany(workspace: CharacterWorkspace): { problem: string } {
+  return { problem: workspace.texts.always("picture_send_too_many", { count: String(MAX_SENT_PICTURES) }) };
+}
 
 function message(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
@@ -86,7 +88,7 @@ export async function sendPictures(texts: readonly string[], sender: PictureSend
   }
   const images: ImageRef[] = [];
   for (const [index, embed] of embeds.entries()) {
-    const found = index < MAX_SENT_PICTURES ? lookups[index] : { problem: TOO_MANY };
+    const found = index < MAX_SENT_PICTURES ? lookups[index] : tooMany(sender.workspace);
     if (found === null || found === undefined) continue;
     if ("problem" in found) {
       images.push(unsent(embed, found.problem));
@@ -106,8 +108,8 @@ export async function pictureProblems(texts: readonly string[], workspace: Chara
   const embeds = messageEmbeds(texts);
   const lookups = await lookUp(embeds, workspace, signal);
   return embeds.flatMap((embed, index) => {
-    const found = index < MAX_SENT_PICTURES ? lookups[index] : { problem: TOO_MANY };
-    return found !== null && found !== undefined && "problem" in found ? [`${embed.source}: ${found.problem}`] : [];
+    const found = index < MAX_SENT_PICTURES ? lookups[index] : tooMany(workspace);
+    return found !== null && found !== undefined && "problem" in found ? [workspace.texts.always("picture_send_problem", { picture: embed.source, problem: found.problem })] : [];
   });
 }
 
