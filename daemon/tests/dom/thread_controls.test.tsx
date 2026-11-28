@@ -22,7 +22,7 @@ async function quiet(): Promise<void> {
   await acting(() => { for (const shown of toasts.getSnapshot()) toasts.dismiss(shown.id); });
 }
 
-test("only home, the Wakes thread and threads the character started show an icon; home stays where it is, and any other thread can be dragged and offers to become home or move", async () => {
+test("only home and the Wakes thread show an icon; home stays where it is, and any other thread can be dragged and offers to become home or move", async () => {
   const { ThreadRow, threadMenuItems } = await import("../../src/browser/sidebar/ThreadRow.tsx");
   const { Icon } = await import("../../src/browser/ui/icons.tsx");
   const neighbours = { up: undefined, down: undefined, atEnd: true, byActivity: false };
@@ -30,14 +30,14 @@ test("only home, the Wakes thread and threads the character started show an icon
   expect(offered(HOME)).toEqual(["Thread settings…", "Fork…", "Mark as read", "Mark for later", "Archive…"]);
   expect(offered(SIDE)).toEqual(["Thread settings…", "Fork…", "Mark as read", "Mark for later", "Put on hold", "Make home", "Move up", "Move down", "Move to folder…", "Archive…"]);
 
-  const icon = async (name: "home" | "clock" | "spark", says: string) => {
+  const icon = async (name: "home" | "clock", says: string) => {
     const drawn = await mount(<Icon name={name} size={14} />);
     const html = drawn.host.innerHTML;
     await drawn.unmount();
     return [html, says];
   };
   const row = async (thread: ThreadView) => {
-    const view = await mount(<ThreadRow thread={thread} character="ada" label={thread.id} current={false} unread={0} drafted={false} replying={false} opening={false} ready select={() => {}} neighbours={neighbours} drop={() => {}} />);
+    const view = await mount(<ThreadRow thread={thread} label={thread.id} current={false} unread={0} drafted={false} replying={false} opening={false} ready select={() => {}} neighbours={neighbours} drop={() => {}} />);
     const shown = [view.host.querySelector(".thread-row")?.getAttribute("draggable"), [view.host.querySelector(".sidebar-item .sidebar-icon")?.innerHTML, view.host.querySelector(".sidebar-item")?.getAttribute("aria-description") ?? null]];
     await view.unmount();
     return shown;
@@ -45,8 +45,7 @@ test("only home, the Wakes thread and threads the character started show an icon
   expect(await row(HOME)).toEqual(["false", await icon("home", "home")]);
   expect(await row({ ...HOME, wakes: true }), "home goes by home first").toEqual(["false", await icon("home", "home")]);
   expect(await row({ ...SIDE, wakes: true })).toEqual(["true", await icon("clock", "where wakes are kept")]);
-  expect(await row({ ...SIDE, created_by: "character" })).toEqual(["true", await icon("spark", "started by ada")]);
-  expect(await row({ ...SIDE, created_by: "user" }), "an icon for everything says nothing").toEqual(["true", ["", null]]);
+  expect(await row({ ...SIDE, created_by: "character" }), "who started a thread isn't worth a mark").toEqual(["true", ["", null]]);
   expect(await row(SIDE)).toEqual(["true", ["", null]]);
 });
 
@@ -113,7 +112,7 @@ test("a thread is marked for later or has its mark cleared from its menu, which 
   const drawn = flag.host.innerHTML;
   await flag.unmount();
   const row = async (thread: ThreadView) => {
-    const view = await mount(<ThreadRow thread={thread} character="ada" label={thread.id} current={false} unread={0} drafted={false} replying={false} opening={false} ready select={() => {}} neighbours={{ up: undefined, down: undefined, atEnd: true, byActivity: false }} drop={() => {}} />);
+    const view = await mount(<ThreadRow thread={thread} label={thread.id} current={false} unread={0} drafted={false} replying={false} opening={false} ready select={() => {}} neighbours={{ up: undefined, down: undefined, atEnd: true, byActivity: false }} drop={() => {}} />);
     const shown = view.host.querySelector(".sidebar-later")?.outerHTML ?? null;
     await view.unmount();
     return shown;
