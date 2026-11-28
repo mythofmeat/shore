@@ -50,7 +50,7 @@ pub(crate) struct Cli {
     )]
     pub thread: Option<String>,
 
-    /// The daemon's address, such as https://shore.example or my-computer:7340 (overrides discovery)
+    /// The daemon's address, such as https://shore.example or my-computer (port 7340 unless given); overrides discovery
     #[arg(long, env = "SHORE_ADDR", help_heading = LEADING_HEADING)]
     pub addr: Option<String>,
 
@@ -592,7 +592,7 @@ pub(crate) enum CliCommand {
     /// choose one
     #[command(name = "sign-in", display_order = 13)]
     SignIn {
-        /// The daemon's address, such as https://shore.example or my-computer:7340
+        /// The daemon's address, such as https://shore.example or my-computer (port 7340 unless given)
         #[arg(value_name = "ADDRESS")]
         address: String,
 
