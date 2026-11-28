@@ -117,7 +117,7 @@ function CharacterRow({ state, character, threads, selected, openingThis, ready,
     { label: "Sort threads by activity", icon: "refresh", ...(state.manualOrder ? {} : { detail: "On" }), onSelect: () => { void workspace.actions.run("thread_sort", { by_activity: state.manualOrder }).then((listing) => workspace.applyThreadListing(listing)).catch((error: unknown) => toasts.show(errorText(error), "error")); }, disabled: !ready },
   ];
   const openable = character.name === state.character;
-  return <div className={`thread-row character-row ${openable ? "open" : ""} ${menu.at === null ? "" : "menu-open"}`} {...(openable ? menu.handlers : {})}>
+  return <div className={`thread-row character-row ${menu.at === null ? "" : "menu-open"}`} {...(openable ? menu.handlers : {})}>
     <button type="button" className={`sidebar-item character ${selected ? "on" : ""}`} aria-current={selected ? "true" : undefined} aria-busy={openingThis} disabled={!ready} onClick={() => { if (!menu.swallowClick()) select(); }}>
       <Avatar name={character.name} avatar={character.avatar} size={30} selected={selected} /><span className="sidebar-name">{character.name}</span>
       {openingThis ? <span className="sidebar-replying"><span className="spinner" aria-hidden="true" /><span className="sr-only">(opening)</span></span> : null}

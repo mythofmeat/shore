@@ -269,7 +269,7 @@ button.sidebar-search:hover {
     padding-right: 36px;
   }
 
-  .character-row.open .sidebar-item {
+  .character-row:has(.character-new-thread) .sidebar-item {
     padding-right: 64px;
   }
 
@@ -507,7 +507,7 @@ button.sidebar-search:hover {
 }
 
 @media (hover: hover) {
-  .shell[data-layout="mobile"] .character-row.open .sidebar-item {
+  .shell[data-layout="mobile"] .character-row:has(.character-new-thread) .sidebar-item {
     padding-right: calc(2 * var(--touch) + 12px);
   }
 }

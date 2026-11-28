@@ -219,7 +219,7 @@ test("the open character's + starts a thread from its row, after its name and be
   const archive = page.getByRole("dialog", { name: "Archive “gone”?" });
   await archive.getByRole("button", { name: "Archive", exact: true }).click();
   await expect(archive).toBeHidden();
-  const character = page.locator(".character-row.open");
+  const character = page.locator(".character-row", { has: page.getByRole("button", { name: "New thread", exact: true }) });
   const item = character.locator(".sidebar-item");
   const folder = page.getByRole("group", { name: "Folder Shelf" }).locator(".folder-row .sidebar-item");
   const held = page.getByRole("group", { name: "On hold" }).locator(".folder-row .sidebar-item");
@@ -271,7 +271,7 @@ test.describe("on a touch screen", () => {
     expect(time.right).toBeLessThanOrEqual(options.left);
     expect(options.right).toBeLessThanOrEqual(around.right);
     expect(await more.evaluate((button: { ownerDocument: { defaultView: { getComputedStyle: (part: unknown) => { opacity: string } } | null } }) => button.ownerDocument.defaultView?.getComputedStyle(button).opacity)).toBe("1");
-    const character = page.locator(".character-row.open");
+    const character = page.locator(".character-row", { has: page.getByRole("button", { name: "New thread", exact: true }) });
     const [item, start, characterMore] = await Promise.all([edgesOf(character.locator(".sidebar-item")), edgesOf(character.getByRole("button", { name: "New thread", exact: true })), edgesOf(character.locator(".thread-more"))]);
     expect(item.right, "the character's + comes after its row").toBeLessThanOrEqual(start.left);
     expect(start.right, "and before its options button").toBeLessThanOrEqual(characterMore.left);
