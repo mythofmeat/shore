@@ -1,0 +1,1 @@
+Started the thread "{{name}}" ({{label}}).{{#if opening}} Your opening message is waiting there.{{/if}} It's in {{#if folder}}the "{{folder}}" folder of {{/if}}{{user}}'s thread list, and {{user}} decides when to switch to it; you're still in this thread.

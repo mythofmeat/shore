@@ -162,28 +162,28 @@ describe("the character editing a thread", () => {
 
 describe("what the threads tool is given", () => {
   test("an edit needs the thread's name and something to change, and pins given as a list of text", () => {
-    expect(() => editThreadRequest({ label: "Lighthouse" })).toThrow("name is required: the id of the thread to change");
-    expect(() => editThreadRequest({ name: "story" })).toThrow("give at least one of label, purpose or pins to change");
+    expect(() => editThreadRequest(new Texts(), { label: "Lighthouse" })).toThrow("name is required: the id of the thread to change");
+    expect(() => editThreadRequest(new Texts(), { name: "story" })).toThrow("give at least one of label, purpose or pins to change");
     for (const pins of ["notes.md", [1]]) {
-      expect(() => editThreadRequest({ name: "story", pins })).toThrow("pins must be a list of workspace paths and !commands");
+      expect(() => editThreadRequest(new Texts(), { name: "story", pins })).toThrow("pins must be a list of workspace paths and !commands");
     }
   });
 
   test("a new thread needs a name it can be stored under and a label, and pins given as a list of text", () => {
     const named = "name must be letters, digits, dot, dash or underscore, starting with a letter or digit, at most";
-    expect(() => startThreadRequest({ label: "Lighthouse" })).toThrow(named);
-    expect(() => startThreadRequest({ name: "../story", label: "Lighthouse" })).toThrow(named);
-    expect(() => startThreadRequest({ name: "story" })).toThrow("label is required");
+    expect(() => startThreadRequest(new Texts(), { label: "Lighthouse" })).toThrow(named);
+    expect(() => startThreadRequest(new Texts(), { name: "../story", label: "Lighthouse" })).toThrow(named);
+    expect(() => startThreadRequest(new Texts(), { name: "story" })).toThrow("label is required");
     for (const pins of ["notes.md", [1]]) {
-      expect(() => startThreadRequest({ name: "story", label: "Lighthouse", pins })).toThrow("pins must be a list of workspace paths and !commands");
+      expect(() => startThreadRequest(new Texts(), { name: "story", label: "Lighthouse", pins })).toThrow("pins must be a list of workspace paths and !commands");
     }
   });
 
   test("an edit or a new thread where threads can't be changed says so, and a failure that isn't about the thread is passed on as it is", async () => {
-    expect(await outcomeOf(handleEditThread({ name: "story", label: "Lighthouse" }, undefined, "Sam"))).toThrow("threads can't be edited from here");
-    expect(await outcomeOf(handleStartThread({ name: "story", label: "Lighthouse" }, undefined, "Sam"))).toThrow("threads can't be started from here");
+    expect(await outcomeOf(handleEditThread(new Texts(), { name: "story", label: "Lighthouse" }, undefined, "Sam"))).toThrow("threads can't be edited from here");
+    expect(await outcomeOf(handleStartThread(new Texts(), { name: "story", label: "Lighthouse" }, undefined, "Sam"))).toThrow("threads can't be started from here");
     const failure = new Error("the disk is full");
-    expect(await rejectionOf(handleEditThread({ name: "story", label: "Lighthouse" }, async () => await Promise.reject(failure), "Sam"))).toBe(failure);
-    expect(await rejectionOf(handleStartThread({ name: "story", label: "Lighthouse" }, async () => await Promise.reject(failure), "Sam"))).toBe(failure);
+    expect(await rejectionOf(handleEditThread(new Texts(), { name: "story", label: "Lighthouse" }, async () => await Promise.reject(failure), "Sam"))).toBe(failure);
+    expect(await rejectionOf(handleStartThread(new Texts(), { name: "story", label: "Lighthouse" }, async () => await Promise.reject(failure), "Sam"))).toBe(failure);
   });
 });

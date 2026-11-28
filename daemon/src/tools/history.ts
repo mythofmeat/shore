@@ -381,7 +381,7 @@ export async function handleChatLogs(
   conversationDir: string,
   options: ChatLogOptions,
 ): Promise<string> {
-  const action = actionOf(input, CHAT_LOG_TAKES);
+  const action = actionOf(options.texts, input, CHAT_LOG_TAKES);
   if (action === "list") return await handleListChatLogs(input, options);
   return action === "search"
     ? await handleSearchChatLogs(input, conversationDir, options)

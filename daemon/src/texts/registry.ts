@@ -134,6 +134,36 @@ import t__tools__autonomy__wake_in_thread__answers__no_thread from "../../prompt
 import t__tools__autonomy__wake_in_thread__answers__in_wakes from "../../prompts/tools/autonomy/wake_in_thread/answers/in_wakes.md" with { type: "text" };
 import t__tools__autonomy__wake_in_thread__answers__waiting from "../../prompts/tools/autonomy/wake_in_thread/answers/waiting.md" with { type: "text" };
 import t__tools__autonomy__wake_in_thread__answers__queued from "../../prompts/tools/autonomy/wake_in_thread/answers/queued.md" with { type: "text" };
+import t__tools__common__dry_run from "../../prompts/tools/common/dry_run.md" with { type: "text" };
+import t__tools__arguments__string from "../../prompts/tools/arguments/string.md" with { type: "text" };
+import t__tools__arguments__action from "../../prompts/tools/arguments/action.md" with { type: "text" };
+import t__tools__arguments__misplaced from "../../prompts/tools/arguments/misplaced.md" with { type: "text" };
+import t__tools__threads__threads__answers__home from "../../prompts/tools/threads/threads/answers/home.md" with { type: "text" };
+import t__tools__threads__threads__answers__entry from "../../prompts/tools/threads/threads/answers/entry.md" with { type: "text" };
+import t__tools__threads__threads__answers__mark_home from "../../prompts/tools/threads/threads/answers/mark_home.md" with { type: "text" };
+import t__tools__threads__threads__answers__mark_here from "../../prompts/tools/threads/threads/answers/mark_here.md" with { type: "text" };
+import t__tools__threads__threads__answers__mark_wakes from "../../prompts/tools/threads/threads/answers/mark_wakes.md" with { type: "text" };
+import t__tools__threads__threads__answers__mark_locked from "../../prompts/tools/threads/threads/answers/mark_locked.md" with { type: "text" };
+import t__tools__threads__threads__answers__mark_folder from "../../prompts/tools/threads/threads/answers/mark_folder.md" with { type: "text" };
+import t__tools__threads__threads__answers__sealed_takes from "../../prompts/tools/threads/threads/answers/sealed_takes.md" with { type: "text" };
+import t__tools__threads__threads__answers__name_form from "../../prompts/tools/threads/threads/answers/name_form.md" with { type: "text" };
+import t__tools__threads__threads__answers__label_required from "../../prompts/tools/threads/threads/answers/label_required.md" with { type: "text" };
+import t__tools__threads__threads__answers__pins_form from "../../prompts/tools/threads/threads/answers/pins_form.md" with { type: "text" };
+import t__tools__threads__threads__answers__name_archived from "../../prompts/tools/threads/threads/answers/name_archived.md" with { type: "text" };
+import t__tools__threads__threads__answers__name_on_hold from "../../prompts/tools/threads/threads/answers/name_on_hold.md" with { type: "text" };
+import t__tools__threads__threads__answers__start_unavailable from "../../prompts/tools/threads/threads/answers/start_unavailable.md" with { type: "text" };
+import t__tools__threads__threads__answers__started from "../../prompts/tools/threads/threads/answers/started.md" with { type: "text" };
+import t__tools__threads__threads__answers__edit_no_name from "../../prompts/tools/threads/threads/answers/edit_no_name.md" with { type: "text" };
+import t__tools__threads__threads__answers__edit_nothing from "../../prompts/tools/threads/threads/answers/edit_nothing.md" with { type: "text" };
+import t__tools__threads__threads__answers__edit_unavailable from "../../prompts/tools/threads/threads/answers/edit_unavailable.md" with { type: "text" };
+import t__tools__threads__threads__answers__locked from "../../prompts/tools/threads/threads/answers/locked.md" with { type: "text" };
+import t__tools__threads__threads__answers__changed from "../../prompts/tools/threads/threads/answers/changed.md" with { type: "text" };
+import t__tools__threads__threads__answers__change_label from "../../prompts/tools/threads/threads/answers/change_label.md" with { type: "text" };
+import t__tools__threads__threads__answers__change_purpose from "../../prompts/tools/threads/threads/answers/change_purpose.md" with { type: "text" };
+import t__tools__threads__threads__answers__change_pins from "../../prompts/tools/threads/threads/answers/change_pins.md" with { type: "text" };
+import t__tools__threads__threads__answers__sealed_until_form from "../../prompts/tools/threads/threads/answers/sealed_until_form.md" with { type: "text" };
+import t__tools__threads__threads__answers__seal_unavailable from "../../prompts/tools/threads/threads/answers/seal_unavailable.md" with { type: "text" };
+import t__tools__threads__threads__answers__sealed from "../../prompts/tools/threads/threads/answers/sealed.md" with { type: "text" };
 import messages__earlier_not_shown from "../../prompts/messages/earlier_not_shown.md" with { type: "text" };
 import messages__opened_by_you from "../../prompts/messages/opened_by_you.md" with { type: "text" };
 import messages__picture_gone from "../../prompts/messages/picture_gone.md" with { type: "text" };
@@ -501,6 +531,45 @@ export const WAKE_TOOL_TEXTS: readonly TextSpec[] = [
   text("wake_queued", t__tools__autonomy__wake_in_thread__answers__queued, "What wake_in_thread answers once a wake is asked for.", { thread: "the thread", limit: "how long the wake may run", at: "when it starts, when it was given a time", user: "the user's name", quiet: "how long the user has to be quiet in that thread first", replaced: "the wake that was waiting, as wake_asked_for has it, when this one takes its place" }),
 ];
 
+export const TOOL_COMMON_TEXTS: readonly TextSpec[] = [
+  must("tool_dry_run", t__tools__common__dry_run, "The error of a tool, or one of its actions, that would change something, when it is called in a dry run.", { tool: "the tool, and its action when it has one" }),
+];
+
+export const ARG_COMMON_TEXTS: readonly TextSpec[] = [
+  must("arg_string", t__tools__arguments__string, "A tool's error for an argument that should be words and isn't.", { field: "the argument" }),
+  must("arg_action", t__tools__arguments__action, "The error of a tool that takes an action, for one it doesn't take.", { actions: "its actions, with \", \" between them" }),
+  must("arg_misplaced", t__tools__arguments__misplaced, "The error of a tool that takes an action, for each argument given that belongs to another; they are joined with \"; \".", { field: "the argument", actions: "the actions it goes with, each in backticks, with \" or \" between them", action: "the action given" }),
+];
+
+export const THREADS_TOOL_TEXTS: readonly TextSpec[] = [
+  text("threads_home", t__tools__threads__threads__answers__home, "The first line of what threads lists.", { home: "the home thread", here: "set when the character is in it", thread: "the thread the character is in", sealed: "set when that thread is sealed" }),
+  text("threads_entry", t__tools__threads__threads__answers__entry, "Each thread in what threads lists.", { thread: "its id", label: "its label, when it has one", marks: "what is true of it, as the threads_mark_ texts have it, with \", \" between them", compaction: "set when it compacts", purpose: "its purpose, when it has one", pins: "its pins, with \", \" between them, when it has any", by_you: "set when the character started it", user: "the user's name", started: "when it was started", last: "when the user last wrote there, when they have", ago: "how long ago that was, like 3 hours ago" }),
+  text("threads_mark_home", t__tools__threads__threads__answers__mark_home, "In threads_entry's marks, for the home thread."),
+  text("threads_mark_here", t__tools__threads__threads__answers__mark_here, "In threads_entry's marks, for the thread the character is in."),
+  text("threads_mark_wakes", t__tools__threads__threads__answers__mark_wakes, "In threads_entry's marks, for the wakes thread."),
+  text("threads_mark_locked", t__tools__threads__threads__answers__mark_locked, "In threads_entry's marks, for a thread the user locked."),
+  text("threads_mark_folder", t__tools__threads__threads__answers__mark_folder, "In threads_entry's marks, for a thread in a folder.", { folder: "the folder" }),
+  must("threads_sealed_takes", t__tools__threads__threads__answers__sealed_takes, "threads' error for a sealed thread started with arguments only an open one takes.", { fields: "the arguments given, with \" or \" between them", user: "the user's name" }),
+  must("threads_name_form", t__tools__threads__threads__answers__name_form, "threads' error for a new thread's name that can't be a thread's id.", { max: "how long a name can be" }),
+  must("threads_label_required", t__tools__threads__threads__answers__label_required, "threads' error for a new thread with no label."),
+  must("threads_pins_form", t__tools__threads__threads__answers__pins_form, "threads' error for pins that aren't a list of words."),
+  must("threads_name_archived", t__tools__threads__threads__answers__name_archived, "threads' error for a new thread named like an archived one.", { user: "the user's name", name: "the name, in quotes" }),
+  must("threads_name_on_hold", t__tools__threads__threads__answers__name_on_hold, "threads' error for a new thread named like one on hold.", { user: "the user's name", name: "the name, in quotes" }),
+  must("threads_start_unavailable", t__tools__threads__threads__answers__start_unavailable, "threads' error for start where no thread can be started, as in a subagent."),
+  text("threads_started", t__tools__threads__threads__answers__started, "What threads answers once it starts a thread.", { name: "its id", label: "its label", opening: "set when it was given an opening message", folder: "the folder it is in, when it is in one", user: "the user's name" }),
+  must("threads_edit_no_name", t__tools__threads__threads__answers__edit_no_name, "threads' error for edit with no thread named."),
+  must("threads_edit_nothing", t__tools__threads__threads__answers__edit_nothing, "threads' error for edit with nothing to change."),
+  must("threads_edit_unavailable", t__tools__threads__threads__answers__edit_unavailable, "threads' error for edit where no thread can be changed, as in a subagent."),
+  must("threads_locked", t__tools__threads__threads__answers__locked, "threads' error for edit of a thread the user locked.", { user: "the user's name", name: "the thread" }),
+  text("threads_changed", t__tools__threads__threads__answers__changed, "What threads answers once it changes a thread.", { name: "the thread", changes: "what changed, as the threads_change_ texts have it, with \"; \" between them", user: "the user's name" }),
+  text("threads_change_label", t__tools__threads__threads__answers__change_label, "In threads_changed, for its label.", { label: "the label now, when it has one" }),
+  text("threads_change_purpose", t__tools__threads__threads__answers__change_purpose, "In threads_changed, for its purpose.", { set: "set when it has one now" }),
+  text("threads_change_pins", t__tools__threads__threads__answers__change_pins, "In threads_changed, for its pins.", { pins: "its pins now, with \", \" between them, when it has any" }),
+  must("threads_sealed_until_form", t__tools__threads__threads__answers__sealed_until_form, "threads' error for a `sealed_until` it can't read."),
+  must("threads_seal_unavailable", t__tools__threads__threads__answers__seal_unavailable, "threads' error for a sealed thread where none can be started, as in a subagent."),
+  text("threads_sealed", t__tools__threads__threads__answers__sealed, "What threads answers once it starts a sealed thread.", { name: "its id", label: "its label", opens: "when the seal comes off", user: "the user's name", folder: "the folder for what the character makes for it" }),
+];
+
 const GUIDE_VALUES = { user: "the user's name", tools_off: "the tools a topic names that are off" };
 
 export const GUIDE_TEXTS: readonly TextSpec[] = [
@@ -558,7 +627,7 @@ export const TOOL_TEXTS: readonly TextSpec[] = Object.entries(TOOL_TEXTS_SHIPPED
 
 export const READ_TEXT_NAMES: readonly string[] = READ_TEXTS.map((spec) => spec.name);
 
-export const TEXTS: readonly TextSpec[] = [...MESSAGE_TEXTS, ...SYSTEM_TEXTS, ...WAKE_TEXTS, ...TOOL_TEXTS, ...OTHER_TEXTS, ...IMAGE_TEXTS, ...READ_TEXTS, ...MCP_TEXTS, ...SEND_TEXTS, ...ARG_TEXTS, ...WAKE_TOOL_TEXTS, ...GUIDE_TEXTS];
+export const TEXTS: readonly TextSpec[] = [...MESSAGE_TEXTS, ...SYSTEM_TEXTS, ...WAKE_TEXTS, ...TOOL_TEXTS, ...OTHER_TEXTS, ...IMAGE_TEXTS, ...READ_TEXTS, ...MCP_TEXTS, ...SEND_TEXTS, ...ARG_TEXTS, ...WAKE_TOOL_TEXTS, ...TOOL_COMMON_TEXTS, ...ARG_COMMON_TEXTS, ...THREADS_TOOL_TEXTS, ...GUIDE_TEXTS];
 
 export const TEXT_SPECS: ReadonlyMap<string, TextSpec> = new Map(TEXTS.map((spec) => [spec.name, spec]));
 

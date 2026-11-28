@@ -31,16 +31,16 @@ async function refused(work: Promise<unknown> | (() => unknown)): Promise<string
 
 test("a tool with actions takes one of them, and says which action a field given to the wrong one goes with", async () => {
   const takes = { list: [], start: ["name", "label", "opening"], edit: ["name", "label"] } as const;
-  expect(actionOf({ action: "list" }, takes)).toBe("list");
-  expect(actionOf({ action: "start", name: "ring", label: "Ring", opening: "hello" }, takes)).toBe("start");
-  expect(actionOf({ action: "edit", name: "ring", colour: "red" }, takes)).toBe("edit");
+  expect(actionOf(new Texts(), { action: "list" }, takes)).toBe("list");
+  expect(actionOf(new Texts(), { action: "start", name: "ring", label: "Ring", opening: "hello" }, takes)).toBe("start");
+  expect(actionOf(new Texts(), { action: "edit", name: "ring", colour: "red" }, takes)).toBe("edit");
   const wrong = "invalid args: action must be one of list, start, edit";
-  expect(await refused(() => actionOf({}, takes))).toBe(wrong);
-  expect(await refused(() => actionOf({ action: "remove" }, takes))).toBe(wrong);
-  expect(await refused(() => actionOf({ action: 5 }, takes))).toBe(wrong);
-  expect(await refused(() => actionOf({ action: "list", name: "ring" }, takes))).toBe("invalid args: `name` goes with `start` or `edit`, not `list`");
-  expect(await refused(() => actionOf({ action: "edit", name: "ring", opening: "hello" }, takes))).toBe("invalid args: `opening` goes with `start`, not `edit`");
-  expect(await refused(() => actionOf({ action: "list", label: "Ring", opening: "hello" }, takes))).toBe(
+  expect(await refused(() => actionOf(new Texts(), {}, takes))).toBe(wrong);
+  expect(await refused(() => actionOf(new Texts(), { action: "remove" }, takes))).toBe(wrong);
+  expect(await refused(() => actionOf(new Texts(), { action: 5 }, takes))).toBe(wrong);
+  expect(await refused(() => actionOf(new Texts(), { action: "list", name: "ring" }, takes))).toBe("invalid args: `name` goes with `start` or `edit`, not `list`");
+  expect(await refused(() => actionOf(new Texts(), { action: "edit", name: "ring", opening: "hello" }, takes))).toBe("invalid args: `opening` goes with `start`, not `edit`");
+  expect(await refused(() => actionOf(new Texts(), { action: "list", label: "Ring", opening: "hello" }, takes))).toBe(
     "invalid args: `label` goes with `start` or `edit`, not `list`; `opening` goes with `start`, not `list`",
   );
 });

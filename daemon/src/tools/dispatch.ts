@@ -129,7 +129,7 @@ export async function dispatchTool(
   ctx: ToolContext,
 ): Promise<unknown> {
   if (ctx.dryRun && (["bash", "edit", "apply_patch", "wake_in_thread"].includes(name) || name.startsWith("mcp__"))) {
-    throw new ToolIoError(`${name} blocked: dry-run tools cannot change files or external state`);
+    throw new ToolIoError(ctx.texts.always("tool_dry_run", { tool: name }));
   }
   const args = (input ?? {}) as ToolInput;
   const workspace = ctx.workspace ?? new CharacterWorkspace(ctx.workspaceDir);

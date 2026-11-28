@@ -25,25 +25,26 @@ function when(at: string | undefined, zone: string): string | undefined {
 function described(
   record: ThreadRecord,
   activity: ThreadActivity | undefined,
-  marks: string[],
+  marks: (string | undefined)[],
   options: ListThreadsOptions,
   zone: string,
   nowMs: number,
-): string {
-  const user = options.userName;
-  const name = record.label === undefined ? record.id : `${record.id} "${record.label}"`;
-  const started = when(record.created_at, zone) ?? record.created_at;
+): string | undefined {
   const lastMs = Date.parse(activity?.last_user ?? "");
-  const lines = [
-    `${name}${marks.length === 0 ? "" : ` (${marks.join(", ")})`} · compaction ${record.compaction ? "on" : "off"}`,
-    ...(record.purpose === undefined ? [] : [`  purpose: ${record.purpose}`]),
-    ...(record.pins === undefined || record.pins.length === 0 ? [] : [`  pins: ${record.pins.join(", ")}`]),
-    `  started by ${record.created_by === "character" ? "you" : user} on ${started}`,
-    Number.isNaN(lastMs)
-      ? `  ${user} hasn't written here yet`
-      : `  ${user} last wrote here ${formatWallClock(lastMs, zone)}, ${agoPhrase((nowMs - lastMs) / 1000)}`,
-  ];
-  return lines.join("\n");
+  const shown = marks.filter((mark) => mark !== undefined);
+  return options.texts.render("threads_entry", {
+    thread: record.id,
+    label: record.label,
+    marks: shown.length === 0 ? undefined : shown.join(", "),
+    compaction: record.compaction ? "yes" : undefined,
+    purpose: record.purpose,
+    pins: record.pins === undefined || record.pins.length === 0 ? undefined : record.pins.join(", "),
+    by_you: record.created_by === "character" ? "yes" : undefined,
+    user: options.userName,
+    started: when(record.created_at, zone) ?? record.created_at,
+    last: Number.isNaN(lastMs) ? undefined : formatWallClock(lastMs, zone),
+    ago: Number.isNaN(lastMs) ? undefined : agoPhrase((nowMs - lastMs) / 1000),
+  });
 }
 
 export async function handleListThreads(options: ListThreadsOptions): Promise<string> {
@@ -58,14 +59,17 @@ export async function handleListThreads(options: ListThreadsOptions): Promise<st
   const seen = index.threads.filter((thread) => threadAway(thread) === undefined || thread.id === current);
   const activity = await threadActivities(options.dataDir, options.character, seen.map((thread) => thread.id));
   const threads = [...seen].sort((a, b) => Number(b.id === home) - Number(a.id === home));
-  const shown = threads.map((record) => described(record, activity.get(record.id), [
-    ...(record.id === home ? ["home"] : []),
-    ...(record.id === current ? ["you're here"] : []),
-    ...(record.id === wakes ? ["where Shore keeps the working from your wakes"] : []),
-    ...(record.locked === true ? ["locked"] : []),
-    ...[folderOf(index, record.id)].flatMap((folder) => folder === undefined ? [] : [`in the folder "${folder}"`]),
-  ], options, zone, nowMs));
-  const where = current === home ? `You're in it.` : `You're in "${current}"${sealedHere === undefined ? "" : ", which is sealed"}.`;
-  const kept = sealedListNote(options.texts, sealed, zone);
-  return [`Your home thread is "${home}". ${where}`, ...shown, ...(kept === undefined ? [] : [kept])].join("\n\n");
+  const texts = options.texts;
+  const shown = threads.map((record) => {
+    const folder = folderOf(index, record.id);
+    return described(record, activity.get(record.id), [
+      record.id === home ? texts.render("threads_mark_home") : undefined,
+      record.id === current ? texts.render("threads_mark_here") : undefined,
+      record.id === wakes ? texts.render("threads_mark_wakes") : undefined,
+      record.locked === true ? texts.render("threads_mark_locked") : undefined,
+      folder === undefined ? undefined : texts.render("threads_mark_folder", { folder }),
+    ], options, zone, nowMs);
+  });
+  const heading = texts.render("threads_home", { home, here: current === home ? "yes" : undefined, thread: current, sealed: sealedHere === undefined ? undefined : "yes" });
+  return [heading, ...shown, sealedListNote(texts, sealed, zone)].filter((part) => part !== undefined).join("\n\n");
 }

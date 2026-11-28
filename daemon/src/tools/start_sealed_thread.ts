@@ -5,40 +5,38 @@ import { isValidThreadId, MAX_THREAD_ID_LENGTH, ThreadError } from "../engine/th
 import { asNaive, resolveInZone } from "../ledger/zoned.ts";
 import { InvalidArgs, ToolIoError } from "./errors.ts";
 import { startRefusal } from "./start_thread.ts";
+import type { Texts } from "../texts/texts.ts";
 
 export interface StartedSealedThread {
   unsealAt: string;
   filesDir: string;
 }
 
-export function sealedThreadRequest(input: Record<string, unknown>, timeZone: string): NewSealedThread {
+export function sealedThreadRequest(texts: Texts, input: Record<string, unknown>, timeZone: string): NewSealedThread {
   const id = typeof input["name"] === "string" ? input["name"].trim() : "";
-  if (!isValidThreadId(id)) {
-    throw new InvalidArgs(`name must be letters, digits, dot, dash or underscore, starting with a letter or digit, at most ${String(MAX_THREAD_ID_LENGTH)} characters`);
-  }
+  if (!isValidThreadId(id)) throw new InvalidArgs(texts.always("threads_name_form", { max: String(MAX_THREAD_ID_LENGTH) }));
   const label = typeof input["label"] === "string" ? input["label"].trim() : "";
-  if (label === "") throw new InvalidArgs("label is required");
+  if (label === "") throw new InvalidArgs(texts.always("threads_label_required"));
   const local = localDateTime(input["sealed_until"]);
-  if (local === undefined) throw new InvalidArgs('sealed_until must be a local date and 24-hour time, like "2026-12-24 08:00"');
+  if (local === undefined) throw new InvalidArgs(texts.always("threads_sealed_until_form"));
   return { id, label, unsealAt: resolveInZone(asNaive(local), timeZone) };
 }
 
 export async function handleStartSealedThread(
+  texts: Texts,
   input: Record<string, unknown>,
   seal: ((request: NewSealedThread) => Promise<StartedSealedThread>) | undefined,
   userName: string,
   timeZone: string,
 ): Promise<string> {
-  if (seal === undefined) throw new ToolIoError("sealed threads can't be started from here");
-  const request = sealedThreadRequest(input, timeZone);
+  if (seal === undefined) throw new ToolIoError(texts.always("threads_seal_unavailable"));
+  const request = sealedThreadRequest(texts, input, timeZone);
   let started: StartedSealedThread;
   try {
     started = await seal(request);
   } catch (e) {
-    if (e instanceof ThreadError) throw startRefusal(e, request.id, userName);
+    if (e instanceof ThreadError) throw startRefusal(texts, e, request.id, userName);
     throw e;
   }
-  const opens = formatWallClock(Date.parse(started.unsealAt), timeZone);
-  return `Sealed the thread "${request.id}" (${request.label}) until ${opens}. ${userName} can't see it until then, and your other turns are shown only its label and that time. ` +
-    `\`wake_in_thread\` takes you into it. Keep what you make for it in ${started.filesDir}, which is outside your workspace.`;
+  return texts.render("threads_sealed", { name: request.id, label: request.label, opens: formatWallClock(Date.parse(started.unsealAt), timeZone), user: userName, folder: started.filesDir }) ?? "";
 }
