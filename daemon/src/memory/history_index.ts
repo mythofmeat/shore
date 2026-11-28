@@ -9,7 +9,7 @@ import { deriveContentFromBlocks, isToolResultOnly } from "../engine/message_sto
 import { isAutonomousNote } from "../engine/threads.ts";
 import { pictureText } from "../engine/embeds.ts";
 import type { Message } from "../engine/types.ts";
-import type { Texts } from "../texts/texts.ts";
+import { characterTexts, type Texts } from "../texts/texts.ts";
 import { letOthersRun } from "../util/let_others_run.ts";
 import { versionOf } from "../engine/versions.ts";
 
@@ -187,7 +187,8 @@ function messageKey(message: Message, text: string): string {
   return versionOf(message) ?? `${message.msg_id}\0${createHash("sha256").update(text).digest("hex")}`;
 }
 
-async function readCorpus(ref: CharacterHistoryRef, texts: Texts): Promise<Item[]> {
+async function readCorpus(ref: CharacterHistoryRef): Promise<Item[]> {
+  const texts = characterTexts(ref.character);
   const reader = await CharacterHistoryReader.load(ref);
   try {
     const entries = reader.entries();
@@ -246,20 +247,20 @@ async function readCorpus(ref: CharacterHistoryRef, texts: Texts): Promise<Item[
   }
 }
 
-async function sourceFingerprint(ref: CharacterHistoryRef, texts: Texts): Promise<string> {
+async function sourceFingerprint(ref: CharacterHistoryRef): Promise<string> {
   const reader = await CharacterHistoryReader.load(ref);
   try {
-    return `${SCHEMA_VERSION}:${wordingsDigest(texts)}:${reader.archiveDigest()}`;
+    return `${SCHEMA_VERSION}:${wordingsDigest(characterTexts(ref.character))}:${reader.archiveDigest()}`;
   } finally {
     reader.close();
   }
 }
 
-async function readStableCorpus(ref: CharacterHistoryRef, texts: Texts, initial: string): Promise<{ items: Item[]; fingerprint: string }> {
+async function readStableCorpus(ref: CharacterHistoryRef, initial: string): Promise<{ items: Item[]; fingerprint: string }> {
   let before = initial;
   for (let attempt = 0; attempt < 3; attempt += 1) {
-    const items = await readCorpus(ref, texts);
-    const after = await sourceFingerprint(ref, texts);
+    const items = await readCorpus(ref);
+    const after = await sourceFingerprint(ref);
     if (after === before) return { items, fingerprint: after };
     before = after;
   }
@@ -321,10 +322,10 @@ async function writeIndex(path: string, items: Item[], fingerprint: string): Pro
   }
 }
 
-export async function refreshHistoryIndex(ref: CharacterHistoryRef, path: string, texts: Texts, force = false): Promise<boolean> {
-  const fingerprint = await sourceFingerprint(ref, texts);
+export async function refreshHistoryIndex(ref: CharacterHistoryRef, path: string, force = false): Promise<boolean> {
+  const fingerprint = await sourceFingerprint(ref);
   if (!force && builtFingerprint(path) === fingerprint) return false;
-  const { items, fingerprint: settled } = await readStableCorpus(ref, texts, fingerprint);
+  const { items, fingerprint: settled } = await readStableCorpus(ref, fingerprint);
   await writeIndex(path, items, settled);
   return true;
 }

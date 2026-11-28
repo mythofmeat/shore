@@ -7,13 +7,13 @@ import { historyIndexSection } from "../src/commands/history_index.ts";
 import { archiveKey, threadDataDir } from "../src/config/dirs.ts";
 import { HISTORY_DB_FILE, HistoryStore, type SegmentEntry } from "../src/engine/history_store.ts";
 import type { Message } from "../src/engine/types.ts";
-import { HistoryIndex, refreshHistoryIndex } from "../src/memory/history_index.ts";
+import { HistoryIndex, refreshHistoryIndex, refreshLiveRows, type LiveThread } from "../src/memory/history_index.ts";
+import { Texts } from "../src/texts/texts.ts";
 import { initializeDatabase } from "../src/storage/database.ts";
 import { required } from "../src/util/required.ts";
 import { handlesUnder } from "./support/handles.ts";
 import { outcomeOf } from "./support/outcome.ts";
 import { testTmp } from "./support/tmp.ts";
-import { Texts } from "../src/texts/texts.ts";
 
 function message(id: string, text: string, minute: number | string, extra: Partial<Message> = {}): Message {
   const timestamp = typeof minute === "string" ? minute : new Date(Date.parse("2026-11-01T09:00:00Z") + minute * 60_000).toISOString();
@@ -53,7 +53,7 @@ async function archive(): Promise<Archive> {
       }
     },
     index: async () => {
-      await refreshHistoryIndex(ref, indexPath, new Texts());
+      await refreshHistoryIndex(ref, indexPath);
       return HistoryIndex.open(indexPath);
     },
   };
@@ -87,7 +87,7 @@ describe("rebuilding the chat log index", () => {
       return read.call(this, character, idx);
     });
     try {
-      expect(await refreshHistoryIndex(w.ref, w.indexPath, new Texts(), true)).toBe(true);
+      expect(await refreshHistoryIndex(w.ref, w.indexPath, true)).toBe(true);
     } finally {
       counter.stop();
       spy.mockRestore();
@@ -99,7 +99,7 @@ describe("rebuilding the chat log index", () => {
   test("writes the new index beside the old one, which answers searches until every message is in, and lets other work run between messages", async () => {
     const w = await archive();
     w.put("main", 0, [message("u1", "the lighthouse", 0), message("a1", "its keeper", 1)]);
-    await refreshHistoryIndex(w.ref, w.indexPath, new Texts());
+    await refreshHistoryIndex(w.ref, w.indexPath);
     w.put("main", 1, [message("u2", "the harbour", 2), message("a2", "the ferry", 3), message("u3", "the boathouse", 4)]);
     const searchable = (): number => {
       const index = HistoryIndex.open(w.indexPath);
@@ -118,7 +118,7 @@ describe("rebuilding the chat log index", () => {
     };
     setImmediate(watch);
     try {
-      expect(await refreshHistoryIndex(w.ref, w.indexPath, new Texts())).toBe(true);
+      expect(await refreshHistoryIndex(w.ref, w.indexPath)).toBe(true);
     } finally {
       spinning = false;
     }
@@ -130,20 +130,20 @@ describe("rebuilding the chat log index", () => {
   test("leaves an index that matches the archive as it is, unless told to build it again", async () => {
     const w = await archive();
     w.put("main", 0, [message("u1", "the lighthouse", 0)]);
-    expect(await refreshHistoryIndex(w.ref, w.indexPath, new Texts())).toBe(true);
+    expect(await refreshHistoryIndex(w.ref, w.indexPath)).toBe(true);
     const built = statSync(w.indexPath);
-    expect(await refreshHistoryIndex(w.ref, w.indexPath, new Texts())).toBe(false);
+    expect(await refreshHistoryIndex(w.ref, w.indexPath)).toBe(false);
     expect(statSync(w.indexPath).ino).toBe(built.ino);
-    expect(await refreshHistoryIndex(w.ref, w.indexPath, new Texts(), true)).toBe(true);
+    expect(await refreshHistoryIndex(w.ref, w.indexPath, true)).toBe(true);
     expect(statSync(w.indexPath).ino).not.toBe(built.ino);
   });
 
   test("closes the archive and the new index once it is built", async () => {
     const w = await archive();
     w.put("main", 0, [message("u1", "the lighthouse", 0)]);
-    await refreshHistoryIndex(w.ref, w.indexPath, new Texts());
+    await refreshHistoryIndex(w.ref, w.indexPath);
     const open = handlesUnder(w.root);
-    for (let round = 0; round < 3; round += 1) await refreshHistoryIndex(w.ref, w.indexPath, new Texts(), true);
+    for (let round = 0; round < 3; round += 1) await refreshHistoryIndex(w.ref, w.indexPath, true);
     expect(handlesUnder(w.root)).toBe(open);
   });
 
@@ -151,12 +151,12 @@ describe("rebuilding the chat log index", () => {
     const w = await archive();
     w.put("main", 0, [message("u1", "the lighthouse", 0)]);
     await mkdir(w.indexPath);
-    expect(await outcomeOf(refreshHistoryIndex(w.ref, w.indexPath, new Texts()))).toThrow();
+    expect(await outcomeOf(refreshHistoryIndex(w.ref, w.indexPath))).toThrow();
     expect(readdirSync(w.cache)).toEqual(["chat_logs.db"]);
     const elsewhere = join(w.root, "locked");
     await mkdir(elsewhere, { mode: 0o500 });
     try {
-      expect(await outcomeOf(refreshHistoryIndex(w.ref, join(elsewhere, "chat_logs.db"), new Texts()))).toThrow("unable to open database file");
+      expect(await outcomeOf(refreshHistoryIndex(w.ref, join(elsewhere, "chat_logs.db")))).toThrow("unable to open database file");
     } finally {
       await chmod(elsewhere, 0o700);
     }
@@ -167,7 +167,7 @@ describe("rebuilding the chat log index", () => {
     const w = await archive();
     w.put("main", 0, [message("u1", "the lighthouse", 0)]);
     for (const name of ["history_search.db", "history_search.db-wal", "history_search.db-shm"]) writeFileSync(join(w.cache, name), "");
-    await refreshHistoryIndex(w.ref, w.indexPath, new Texts());
+    await refreshHistoryIndex(w.ref, w.indexPath);
     expect(readdirSync(w.cache)).toEqual(["chat_logs.db"]);
   });
 });
@@ -238,6 +238,96 @@ describe("what the chat log index holds", () => {
     const index = await w.index();
     try {
       expect(index.search("words", "anchor", {}, "oldest", 10, 0).map((hit) => [hit.msg_id, hit.ts])).toEqual([["u1", 0], ["u2", 0]]);
+    } finally {
+      index.close();
+    }
+  });
+});
+
+describe("rows from conversations still being held", () => {
+  const live = (thread: string, messages: Message[]): LiveThread => ({ thread, raw: JSON.stringify(messages), messages });
+  const rows = (index: HistoryIndex, thread: string) => index.range(thread, 0, Number.MAX_SAFE_INTEGER, 0, 100);
+
+  test("a live thread is indexed after the archive in each thread, from the first row in one with none, and refreshing again with the same rows and texts changes nothing", async () => {
+    const w = await archive();
+    w.put("main", 0, [message("u1", "the lighthouse door", 0), message("a1", "repainted", 1)]);
+    (await w.index()).close();
+    const texts = new Texts();
+    const threads = [
+      live("main", [message("u2", "and the lamp", 2), message("a2", "lit", "not a time")]),
+      live("garden", [message("u3", "beans", 3), message("a3", "up", 4)]),
+    ];
+    expect(refreshLiveRows(w.indexPath, "main", threads, texts)).toBe(true);
+    const index = HistoryIndex.open(w.indexPath);
+    try {
+      expect(rows(index, "main").map((row) => [row.msg_id, row.seq, row.run, row.live])).toEqual([["u1", 1, 0, 0], ["a1", 2, 0, 0], ["u2", 3, 0, 1], ["a2", 4, 0, 1]]);
+      expect(rows(index, "garden").map((row) => [row.msg_id, row.seq, row.run])).toEqual([["u3", 1, 0], ["a3", 2, 0]]);
+      expect(required(index.find("a2")).ts).toBe(Date.parse("2026-11-01T09:02:00Z"));
+      const all = [...rows(index, "main"), ...rows(index, "garden")].map((row) => row.id).sort((a, b) => a - b);
+      expect(all).toEqual([1, 2, 3, 4, 5, 6]);
+    } finally {
+      index.close();
+    }
+    expect(refreshLiveRows(w.indexPath, "main", threads, texts)).toBe(false);
+    expect(refreshLiveRows(w.indexPath, "main", threads, new Texts({ picture: false }))).toBe(true);
+  });
+
+  test("a garden thread's first live row counts from nothing when the archive holds none of it", async () => {
+    const w = await archive();
+    (await w.index()).close();
+    refreshLiveRows(w.indexPath, "main", [live("garden", [message("u3", "beans", "not a time")])], new Texts());
+    const index = HistoryIndex.open(w.indexPath);
+    try {
+      expect(rows(index, "garden").map((row) => [row.msg_id, row.seq, row.run, row.ts])).toEqual([["u3", 1, 0, 0]]);
+    } finally {
+      index.close();
+    }
+  });
+
+  test("notes, empty messages and a message seen twice in a thread are left out, and one already archived in its thread is not indexed again", async () => {
+    const w = await archive();
+    w.put("main", 0, [message("u1", "the lighthouse door", 0)]);
+    (await w.index()).close();
+    refreshLiveRows(w.indexPath, "main", [live("main", [
+      message("u1", "the lighthouse door", 0),
+      message("u9", "a note from a wake", 1, { origin: "autonomous" }),
+      message("u2", "", 2),
+      message("u3", "twice", 3),
+      message("u3", "twice", 3),
+    ])], new Texts());
+    const index = HistoryIndex.open(w.indexPath);
+    try {
+      expect(rows(index, "main").map((row) => row.msg_id)).toEqual(["u1", "u3"]);
+    } finally {
+      index.close();
+    }
+  });
+
+  test("a live message the archive or another live thread already holds is a copy of the first, and a live row that changes leaves no trace in search", async () => {
+    const w = await archive();
+    w.put("main", 0, [message("u1", "the lighthouse door", 0)]);
+    w.put("story", 0, [message("u1", "the lighthouse door", 0)]);
+    (await w.index()).close();
+    refreshLiveRows(w.indexPath, "main", [
+      live("garden", [message("u1", "the lighthouse door", 0), message("u5", "shared bean", 5)]),
+      live("notes", [message("u5", "shared bean", 5)]),
+    ], new Texts());
+    let index = HistoryIndex.open(w.indexPath);
+    try {
+      const original = required(index.find("u1", "main"));
+      expect(required(index.find("u1", "story")).copy_of).toBe(original.id);
+      expect(required(index.find("u1", "garden")).copy_of).toBe(original.id);
+      const bean = required(index.find("u5", "garden"));
+      expect([bean.copy_of, required(index.find("u5", "notes")).copy_of]).toEqual([null, bean.id]);
+      expect(ids(index.search("words", "bean", {}, "newest", 10, 0))).toEqual(["u5"]);
+    } finally {
+      index.close();
+    }
+    refreshLiveRows(w.indexPath, "main", [live("garden", [message("u6", "pea", 6)])], new Texts());
+    index = HistoryIndex.open(w.indexPath);
+    try {
+      expect(index.search("words", "bean", {}, "newest", 10, 0)).toEqual([]);
+      expect(ids(index.search("words", "pea", {}, "newest", 10, 0))).toEqual(["u6"]);
     } finally {
       index.close();
     }

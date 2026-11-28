@@ -189,7 +189,7 @@ describe.skipIf(!READY)("a character whose tools run as its own user", () => {
     };
     const [own, others, unshared] = [await sent(USER), await sent(OTHER), await sent("cal")];
     const chatLogs = historyIndexPath(cache, USER);
-    await refreshHistoryIndex({ character: USER, dbPath: join(base, "data", "shore.db"), mainConversationDir: join(base, "data", USER, "threads", "main") }, chatLogs, new Texts(), true);
+    await refreshHistoryIndex({ character: USER, dbPath: join(base, "data", "shore.db"), mainConversationDir: join(base, "data", USER, "threads", "main") }, chatLogs, true);
 
     await sharePictureFolders(config, [USER, OTHER, "cal"]);
 

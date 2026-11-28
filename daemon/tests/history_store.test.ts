@@ -13,7 +13,7 @@ import { initializeDatabase } from "../src/storage/database.ts";
 import { handleReadChatLogs, handleSearchChatLogs } from "../src/tools/history.ts";
 import { testTmp } from "./support/tmp.ts";
 import { outcomeOf } from "./support/outcome.ts";
-import { Texts } from "../src/texts/texts.ts";
+import { Texts, useCharacterTexts } from "../src/texts/texts.ts";
 
 function message(id: string, content: string): Message {
   return {
@@ -289,16 +289,24 @@ test("chat logs show and search pictures in the user's wording of picture, embed
   await writeFile(join(config, "sent.md"), "(sent {{#if video}}clip{{else}}photo{{/if}} {{name}})\n");
   await writeFile(join(config, "unsent.md"), "(missing {{#if video}}clip{{else}}photo{{/if}} {{name}})\n");
   const options = (texts: Texts) => ({ texts, character: "ada", dbPath: dirs.dbPath, timeZone: "Australia/Canberra" });
-  const theirs = new Texts({ picture: "picture.md", embed_sent: "sent.md", embed_not_sent: "unsent.md" }, config);
-  const read = async (texts: Texts) => (await handleReadChatLogs({ around: "u1" }, dirs.characterDir, options(texts))).split("\n").slice(3).filter((line) => line !== "" && !line.includes("  ada  "));
-  expect(await read(theirs)).toEqual([`(photo ${kept})`, "(photo gone.png)", "the lamp", "mine (sent photo cat.png) and (sent clip walk.mp4) but not (missing photo lost.png) or (missing clip lost.webm)"]);
-  expect(await handleSearchChatLogs({ query: "photo", all_time: true }, dirs.characterDir, options(theirs))).toContain("u1");
+  const using = (texts: Texts): Texts => {
+    useCharacterTexts((character) => character === "ada" ? texts : new Texts());
+    return texts;
+  };
+  try {
+    const theirs = using(new Texts({ picture: "picture.md", embed_sent: "sent.md", embed_not_sent: "unsent.md" }, config));
+    const read = async (texts: Texts) => (await handleReadChatLogs({ around: "u1" }, dirs.characterDir, options(texts))).split("\n").slice(3).filter((line) => line !== "" && !line.includes("  ada  "));
+    expect(await read(theirs)).toEqual([`(photo ${kept})`, "(photo gone.png)", "the lamp", "mine (sent photo cat.png) and (sent clip walk.mp4) but not (missing photo lost.png) or (missing clip lost.webm)"]);
+    expect(await handleSearchChatLogs({ query: "photo", all_time: true }, dirs.characterDir, options(theirs))).toContain("u1");
 
-  await writeFile(join(config, "picture.md"), "(snap {{path}})\n");
-  const changed = new Texts({ picture: "picture.md", embed_sent: false, embed_not_sent: false }, config);
-  expect(await read(changed)).toEqual([`(snap ${kept})`, "(snap gone.png)", "the lamp", "mine  and  but not  or"]);
-  expect(await handleSearchChatLogs({ query: "snap", all_time: true }, dirs.characterDir, options(changed))).toContain("u1");
-  expect(await read(new Texts({ picture: false }, config))).toEqual(["the lamp", "mine [picture: cat.png] and [video: walk.mp4] but not [picture not sent: lost.png] or [video not sent: lost.webm]"]);
+    await writeFile(join(config, "picture.md"), "(snap {{path}})\n");
+    const changed = using(new Texts({ picture: "picture.md", embed_sent: false, embed_not_sent: false }, config));
+    expect(await read(changed)).toEqual([`(snap ${kept})`, "(snap gone.png)", "the lamp", "mine  and  but not  or"]);
+    expect(await handleSearchChatLogs({ query: "snap", all_time: true }, dirs.characterDir, options(changed))).toContain("u1");
+    expect(await read(using(new Texts({ picture: false }, config)))).toEqual(["the lamp", "mine [picture: cat.png] and [video: walk.mp4] but not [picture not sent: lost.png] or [video not sent: lost.webm]"]);
+  } finally {
+    useCharacterTexts(() => new Texts());
+  }
 });
 
 function historyDirs(): { dataDir: string; characterDir: string; dbPath: string } {

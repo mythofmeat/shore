@@ -160,7 +160,7 @@ async function withIndex<T>(conversationDir: string, options: ChatLogOptions, ru
   const ref = { mainConversationDir: conversationDir, dbPath: options.dbPath, character: options.character };
   const refreshed = async (force: boolean): Promise<HistoryIndex> => {
     await withHistoryIndexLock(path, async () => {
-      await refreshHistoryIndex(ref, path, options.texts, force);
+      await refreshHistoryIndex(ref, path, force);
       refreshLiveRows(path, options.thread ?? "main", await unseenThreads(options), options.texts);
     });
     return HistoryIndex.open(path).keptApart(await wakesThreadOf(options));
