@@ -112,10 +112,10 @@ function chatLogOptions(ctx: ToolContext): ChatLogOptions {
     character: ctx.characterName,
     dbPath: ctx.historyDbPath,
     dataDir: dirname(ctx.historyDbPath),
-    ...(ctx.thread === undefined ? {} : { thread: ctx.thread }),
-    ...(ctx.fresh === undefined ? {} : { fresh: ctx.fresh }),
-    ...(ctx.historyIndexPath === undefined ? {} : { indexPath: ctx.historyIndexPath }),
-    ...(ctx.userName === undefined ? {} : { userName: ctx.userName }),
+    thread: ctx.thread,
+    fresh: ctx.fresh,
+    indexPath: ctx.historyIndexPath,
+    userName: ctx.userName,
   };
 }
 

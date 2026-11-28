@@ -17,6 +17,7 @@ import { assemblePrompt, formatWallClock, type PromptParams } from "../src/engin
 import type { History } from "../src/protocol/History.ts";
 import { archiveAndRetain } from "../src/memory/compaction/archive.ts";
 import { readDurable } from "../src/storage/files.ts";
+import { rejectionOf } from "./support/outcome.ts";
 import { NO_PRIOR_CONTEXT } from "../src/engine/segments.ts";
 import type { ContentBlock, ImageRef, Message, MessageNote } from "../src/engine/types.ts";
 import { withAttemptNoted } from "../src/handler/attempts.ts";
@@ -405,4 +406,34 @@ test("a new history file reclaims space as it goes and lets readers in while it 
   expect(db.query("PRAGMA auto_vacuum").get()).toEqual({ auto_vacuum: 2 });
   expect(db.query("PRAGMA journal_mode").get()).toEqual({ journal_mode: "wal" });
   db.close();
+});
+
+test("an archived page counts the pictures it lists in what it read, and an archived tool result's words are the message's content", async () => {
+  const { engine, data } = await engineWith([
+    said("u1", "user", "look", 0, { images: [{ path: "/cache/lamp.png", name: "lamp.png" }] }),
+    said("a1", "assistant", [{ type: "tool_use", id: "t1", name: "read", input: {} }], 1),
+    said("u2", "user", [{ type: "tool_result", tool_use_id: "t1", content: "the file says hello" }], 2),
+  ]);
+  const threadDir = join(data, "ada", "threads", "main");
+  await archiveAndRetain(threadDir, { dbPath: join(data, HISTORY_DB_FILE), archiveKey: "ada" }, 0, readDurable(join(threadDir, "active.jsonl")));
+  await engine.reload();
+  const body = (blocks: ContentBlock[]): number => Buffer.byteLength(JSON.stringify(blocks));
+  const page = required(engine.displayHistoryPage(0, undefined, { kind: "count", value: 10 }));
+  const bodies = body([{ type: "text", text: "look" }]) + body([{ type: "tool_use", id: "t1", name: "read", input: {} }]) + body([{ type: "tool_result", tool_use_id: "t1", content: "the file says hello" }]);
+  expect(page.metrics.decoded_body_bytes).toBeGreaterThan(bodies);
+  expect(required((await engine.segments().readSegment(0))[2]).content).toBe("the file says hello");
+});
+
+test("an archived message whose stored body is gone can't be read, and says which body it was", async () => {
+  const { engine, data } = await engineWith([said("u1", "user", "hello", 0)]);
+  const threadDir = join(data, "ada", "threads", "main");
+  await archiveAndRetain(threadDir, { dbPath: join(data, HISTORY_DB_FILE), archiveKey: "ada" }, 0, readDurable(join(threadDir, "active.jsonl")));
+  await engine.reload();
+  const db = new Database(join(data, HISTORY_DB_FILE));
+  try {
+    db.run("DELETE FROM history_blobs");
+  } finally {
+    db.close();
+  }
+  expect(String(await rejectionOf(engine.segments().readSegment(0)))).toMatch(/^MissingBody: history blob [0-9a-f]+ is missing$/);
 });

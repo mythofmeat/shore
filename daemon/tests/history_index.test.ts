@@ -323,10 +323,11 @@ describe("rows from conversations still being held", () => {
     } finally {
       index.close();
     }
-    refreshLiveRows(w.indexPath, "main", [live("garden", [message("u6", "pea", 6)])], new Texts());
+    refreshLiveRows(w.indexPath, "main", [live("garden", [message("u6", "pea", 6), message("u7", "pod", 7), message("u8", "stalk", 8)])], new Texts());
     index = HistoryIndex.open(w.indexPath);
     try {
       expect(index.search("words", "bean", {}, "newest", 10, 0)).toEqual([]);
+      expect(index.search("words", "lighthouse", {}, "newest", 10, 0).map((hit) => [hit.msg_id, hit.thread])).toEqual([["u1", "main"]]);
       expect(ids(index.search("words", "pea", {}, "newest", 10, 0))).toEqual(["u6"]);
     } finally {
       index.close();

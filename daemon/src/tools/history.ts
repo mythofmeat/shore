@@ -102,13 +102,13 @@ export interface ChatLogOptions {
   texts: Texts;
   character: string;
   dbPath: string;
-  dataDir?: string;
-  thread?: string;
-  fresh?: boolean;
-  indexPath?: string;
-  userName?: string;
-  timeZone?: string;
-  now?: () => number;
+  dataDir?: string | undefined;
+  thread?: string | undefined;
+  fresh?: boolean | undefined;
+  indexPath?: string | undefined;
+  userName?: string | undefined;
+  timeZone?: string | undefined;
+  now?: (() => number) | undefined;
 }
 
 interface View {

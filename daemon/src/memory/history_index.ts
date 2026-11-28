@@ -356,7 +356,7 @@ export function refreshLiveRows(path: string, caller: string, threads: readonly 
       const seenInThread = new Set<string>();
       for (const row of db.query("SELECT id, thread, key, copy_of FROM messages").all() as { id: number; thread: string; key: string; copy_of: number | null }[]) {
         seenInThread.add(`${row.thread}\0${row.key}`);
-        if (row.copy_of === null && !originals.has(row.key)) originals.set(row.key, row.id);
+        if (row.copy_of === null) originals.set(row.key, row.id);
       }
       const cursors = new Map((db.query("SELECT thread, MAX(seq) AS seq, MAX(run) AS run, MAX(ts) AS ts FROM messages GROUP BY thread").all() as { thread: string; seq: number; run: number; ts: number }[])
         .map((row) => [row.thread, { seq: row.seq, run: row.run, ts: row.ts }]));

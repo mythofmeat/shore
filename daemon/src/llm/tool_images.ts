@@ -1,7 +1,7 @@
 import type { ContentBlock } from "../engine/types.ts";
 import type { SidecarProvider, SidecarRequest, StreamEvent, WireMessage } from "./types.ts";
 import { capRequestImages, countImageBlocks, isImageRejection, stripImageBlocks, textOnlyReason } from "./image_support.ts";
-import { Texts } from "../texts/texts.ts";
+import { requestTexts } from "./images.ts";
 
 export interface ImagePolicy {
   support: (request: SidecarRequest) => boolean | undefined;
@@ -13,7 +13,7 @@ export function withToolImages(provider: SidecarProvider, policy: ImagePolicy): 
   let refused = false;
   let capWarned = false;
   const project = (req: SidecarRequest): SidecarRequest => {
-    const texts = req.texts ?? new Texts();
+    const texts = requestTexts(req);
     if (!refused && policy.support(req) !== false) {
       const capped = capRequestImages(texts, req.messages);
       if (capped.stripped === 0) return req;
@@ -45,14 +45,14 @@ export function withToolImages(provider: SidecarProvider, policy: ImagePolicy): 
       yield* provider.stream(project(req), signal);
     }
   };
+  const native = provider.streamWithTools?.bind(provider);
   return {
     stream,
     generate: (req, signal) => provider.generate(project(req), signal),
-    ...(provider.streamWithTools === undefined ? {} : {
+    ...(native === undefined ? {} : {
       streamWithTools: (req, tools, signal, options) => {
         const originals = new Map<string, ContentBlock>();
-        if (provider.streamWithTools === undefined) throw new Error("Native tool stream is unavailable");
-        return provider.streamWithTools(project(req), {
+        return native(project(req), {
           ...tools,
           runTool: async (use) => {
             const result = await tools.runTool(use);

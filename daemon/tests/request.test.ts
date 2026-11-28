@@ -118,3 +118,18 @@ describe("the settings a provider is handed with a request", () => {
     ]).toEqual([false, false, false, true, true, false, false]);
   });
 });
+
+describe("what a built request carries", () => {
+  const built = (over: Partial<ResolvedModel>) => buildRequest(model({ api_key_env: "KEY", ...over }), INPUTS, { KEY: "sk" }).request;
+
+  test("its base URL, temperature and top_p when the model has them, and no such fields when it doesn't", () => {
+    const set = built({ base_url: "https://llm.example/v1", temperature: 0.4, top_p: 0.9 });
+    expect([set.base_url, set.temperature, set.top_p]).toEqual(["https://llm.example/v1", 0.4, 0.9]);
+    expect(["base_url", "temperature", "top_p"].filter((key) => key in built({}))).toEqual([]);
+    expect(built({ temperature: 0 }).temperature).toBe(0);
+  });
+
+  test("a NanoGPT model on the Gemini sdk is refused before any request is made", () => {
+    expect(() => built({ provider_key: "nanogpt", sdk: "gemini" })).toThrow("NanoGPT does not expose the native Gemini API");
+  });
+});
