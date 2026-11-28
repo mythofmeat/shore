@@ -187,19 +187,18 @@ async function suggestions(names: WorkspaceNames, links: readonly Link[], embed:
 async function lookUp(texts: Texts, names: WorkspaceNames, links: readonly Link[], embed: Embeddable | undefined, maxListed: number): Promise<{ file: NamedFile; link: Link }> {
   for (const link of links) {
     const found = await fitting(names, link);
-    const [only] = found;
-    if (only !== undefined && found.length === 1) return { file: only, link };
-    if (found.length > 1) {
-      const shown = await Promise.all(found.slice(0, maxListed).map((file) => linkTo(names, file, link.folder, embed !== undefined)));
-      const more = found.length > shown.length ? String(found.length - shown.length) : undefined;
-      throw new Error(texts.always("names_many", { count: String(found.length), folders: link.folder ? "yes" : undefined, shown: shown.join(", "), more }));
-    }
+    const [only, ...others] = found;
+    if (only === undefined) continue;
+    if (others.length === 0) return { file: only, link };
+    const shown = await Promise.all(found.slice(0, maxListed).map((file) => linkTo(names, file, link.folder, embed !== undefined)));
+    const more = found.length > shown.length ? String(found.length - shown.length) : undefined;
+    throw new Error(texts.always("names_many", { count: String(found.length), folders: link.folder ? "yes" : undefined, shown: shown.join(", "), more }));
   }
   const close = await suggestions(names, links, embed);
   throw new Error(texts.always("names_none", {
     file: links.some((link) => !link.folder) ? "yes" : undefined,
     folder: links.some((link) => link.folder) ? "yes" : undefined,
-    close: close.length > 0 ? close.join(", ") : undefined,
+    close: close.join(", "),
   }));
 }
 
@@ -228,7 +227,7 @@ export async function linkedFile(texts: Texts, names: WorkspaceNames, embed: boo
   return join(names.root, (await lookUp(texts, names, [link], embed ? PICTURES : undefined, Number.POSITIVE_INFINITY)).file.path);
 }
 
-export async function namedFile(texts: Texts, names: WorkspaceNames, parts: readonly string[], findFolders = true): Promise<Found> {
+export async function namedFile(texts: Texts, names: WorkspaceNames, parts: readonly string[], findFolders: boolean): Promise<Found> {
   const link: Link = { anchored: false, folder: false, folders: parts.slice(0, -1), name: parts.at(-1) ?? "" };
   try {
     const found = await lookUp(texts, names, findFolders ? [link, { ...link, folder: true }] : [link], undefined, Number.POSITIVE_INFINITY);
